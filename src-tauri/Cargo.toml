@@ -1,0 +1,37 @@
+[package]
+name = "prompt-saver"
+version = "1.3.2"
+description = "Local offline prompt manager"
+authors = ["BG Coding"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "prompt_saver_lib"
+# Desktop-only: rlib suffices (staticlib/cdylib are for mobile targets).
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+arboard = "3"
+rfd = "0.15"
+sys-locale = "0.3"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.52"
+
+# Smallest possible release binary.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+# NOTE: unwind (not "abort") so a single command panic rejects the call
+# instead of hard-crashing the whole app. Robustness > a few KB of size.
+strip = true
+incremental = false

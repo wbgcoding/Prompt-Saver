@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Prompt Saver</title>
+  <link rel="stylesheet" href="styles/main.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="brand">
+      <img class="logo" src="assets/icon.svg" alt="" width="26" height="26" />
+      <span class="title">Prompt Saver</span>
+      <nav id="views" class="views hidden"></nav>
+    </div>
+    <button id="gear" class="icon-btn" data-i18n-title="settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <path fill="currentColor" d="M19.14 12.94a7.49 7.49 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.3 7.3 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.6 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.49 7.49 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.42.32.66.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.24.1.52.02.66-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"/>
+      </svg>
+    </button>
+  </header>
+
+  <section class="grid-wrap">
+    <div id="grid" class="grid"></div>
+  </section>
+
+  <footer class="composer">
+    <textarea id="input" class="input" rows="1" data-i18n-ph="promptPh" aria-label="Prompt text"></textarea>
+    <button id="save" class="primary-btn" data-i18n="save" disabled>Save</button>
+  </footer>
+
+  <!-- Overflow tray: prompts without a grid cell -->
+  <button id="tray" class="tray-btn hidden" data-i18n-title="unplaced">
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <path fill="currentColor" d="M4 5h16v4h-2V7H6v10h12v-2h2v4H4V5Zm10 4 4 3-4 3v-2H9v-2h5V9Z"/>
+    </svg>
+    <span id="tray-count" class="tray-count">0</span>
+  </button>
+  <div id="tray-menu" class="ctx hidden"></div>
+
+  <!-- Name / edit modal -->
+  <div id="modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <h2 id="modal-title" class="modal-title">Name this prompt</h2>
+      <input id="modal-name" class="modal-input" type="text" data-i18n-ph="namePh" maxlength="80" />
+      <textarea id="modal-text" class="modal-input modal-text hidden" rows="6" data-i18n-ph="promptPh"></textarea>
+      <div id="color-row" class="swatches"></div>
+      <div class="modal-actions">
+        <button id="modal-cancel" class="ghost-btn" data-i18n="cancel">Cancel</button>
+        <button id="modal-confirm" class="primary-btn" data-i18n="save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings panel -->
+  <div id="settings" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 class="modal-title" data-i18n="settings">Settings</h2>
+        <button id="settings-close" class="icon-btn" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="two-col">
+        <label class="field">
+          <span data-i18n="theme">Theme</span>
+          <select id="theme-select" class="modal-input">
+            <option value="system" data-i18n="themeSystem">System</option>
+            <option value="light" data-i18n="themeLight">Light</option>
+            <option value="dark" data-i18n="themeDark">Dark</option>
+          </select>
+        </label>
+        <label class="field">
+          <span data-i18n="language">Language</span>
+          <select id="lang-select" class="modal-input">
+            <option value="auto" data-i18n="langAuto">Automatic</option>
+            <option value="en">English</option>
+            <option value="de">Deutsch</option>
+            <option value="es">Español</option>
+            <option value="fr">Français</option>
+            <option value="it">Italiano</option>
+            <option value="pt">Português</option>
+            <option value="pl">Polski</option>
+            <option value="ru">Русский</option>
+            <option value="zh">中文</option>
+            <option value="ja">日本語</option>
+          </select>
+        </label>
+      </div>
+      <div class="field">
+        <span data-i18n="tileText">Prompt text (font · size)</span>
+        <div class="font-row">
+          <select id="tile-font" class="modal-input">
+            <option value="system" data-i18n="fontSystem">System</option>
+            <option value="arial">Arial</option>
+            <option value="verdana">Verdana</option>
+            <option value="tahoma">Tahoma</option>
+            <option value="georgia">Georgia</option>
+            <option value="times">Times New Roman</option>
+            <option value="mono">Consolas</option>
+            <option value="courier">Courier New</option>
+            <option value="script" data-i18n="fontScript">Handwriting</option>
+            <option value="impact">Impact</option>
+          </select>
+          <select id="tile-size" class="modal-input">
+            <option value="0" data-i18n="langAuto">Automatic</option>
+            <option value="13" data-i18n="sizeSmall">Small</option>
+            <option value="15" data-i18n="sizeMedium">Medium</option>
+            <option value="18" data-i18n="sizeLarge">Large</option>
+            <option value="22" data-i18n="sizeXL">Extra large</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <span data-i18n="viewsLabel">Views (max 20)</span>
+        <div id="views-editor" class="views-editor"></div>
+        <button id="view-add" class="ghost-btn" data-i18n="addView">+ Add view</button>
+      </div>
+      <label class="field switch-field">
+        <span data-i18n="minimizeOnClose">Minimize to background on close</span>
+        <input id="opt-minimize" type="checkbox" class="switch" />
+      </label>
+      <label class="field switch-field">
+        <span data-i18n="autostart">Start automatically at login</span>
+        <input id="opt-autostart" type="checkbox" class="switch" />
+      </label>
+      <label class="field switch-field">
+        <span data-i18n="startMinimized">Start minimized on autostart</span>
+        <input id="opt-startmin" type="checkbox" class="switch" />
+      </label>
+      <div class="field">
+        <span data-i18n="importExport">Import / export prompts</span>
+        <div class="export-row">
+          <button id="import-btn" class="ghost-btn" data-i18n="import">Import</button>
+          <button id="export-csv" class="ghost-btn">CSV</button>
+          <button id="export-txt" class="ghost-btn">TXT</button>
+        </div>
+      </div>
+      <div class="field">
+        <button id="delete-all" class="ghost-btn danger-btn" data-i18n="deleteAll">Delete all prompts</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Context menu for a tile -->
+  <div id="ctx" class="ctx hidden" role="menu">
+    <button data-act="edit" role="menuitem" data-i18n="edit">Edit</button>
+    <button data-act="hide" role="menuitem" data-i18n="hideInView">Hide in this view</button>
+    <button data-act="pin" role="menuitem" data-i18n="toggleFloating">Toggle floating button</button>
+    <button data-act="delete" role="menuitem" class="danger" data-i18n="delete">Delete</button>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script type="module" src="main.js"></script>
+</body>
+</html>

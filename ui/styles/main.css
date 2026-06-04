@@ -1,0 +1,590 @@
+/* ---- Theme tokens ---- */
+:root {
+  --bg: #f7f7f8;
+  --surface: #ffffff;
+  --surface-2: #f0f0f2;
+  --fg: #1a1a1a;
+  --muted: #6b7280;
+  --border: #e3e3e7;
+  --accent: #2563eb;
+  --accent-fg: #ffffff;
+  --danger: #dc2626;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --radius: 10px;
+  --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --gap: 8px;
+}
+:root[data-theme="dark"] {
+  --bg: #1b1b1d;
+  --surface: #242427;
+  --surface-2: #2d2d31;
+  --fg: #f3f3f3;
+  --muted: #9ca3af;
+  --border: #38383d;
+  --accent: #3b82f6;
+  --accent-fg: #ffffff;
+  --danger: #ef4444;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--fg);
+  overflow: hidden;
+  transition: background var(--transition), color var(--transition);
+}
+body { display: flex; flex-direction: column; height: 100vh; }
+
+/* ---- Header ---- */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.logo { display: block; border-radius: 7px; }
+/* line-height = logo height -> text sits vertically centered next to it */
+.title { font-weight: 600; font-size: 16px; letter-spacing: 0.2px; white-space: nowrap; line-height: 26px; }
+
+/* View switcher buttons (hidden while only one view exists) */
+.views { display: flex; gap: 6px; margin-left: 12px; overflow-x: auto; scrollbar-width: none; }
+.views::-webkit-scrollbar { display: none; }
+.view-btn {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.view-btn:hover { border-color: var(--accent); color: var(--fg); }
+.view-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.icon-btn {
+  display: inline-flex;
+  padding: 6px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), transform var(--transition);
+}
+.icon-btn:hover { background: var(--surface-2); color: var(--fg); }
+.icon-btn:active { transform: scale(0.92); }
+
+/* ---- Grid (fills the window; cells stretch, lines hidden unless dragging) ---- */
+.grid-wrap {
+  flex: 1 1 auto;
+  overflow: hidden;
+  padding: 10px;
+  min-height: 0; /* allow flex child to shrink */
+}
+.grid {
+  display: grid;
+  gap: var(--gap);
+  width: 100%;
+  height: 100%;
+  /* grid-template set inline by JS: repeat(cols, 1fr) / repeat(rows, 1fr) */
+}
+
+.cell {
+  border: 1px dashed transparent;
+  border-radius: 10px;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  transition: border-color var(--transition), background var(--transition);
+}
+/* Grid lines only appear while a tile is being dragged. */
+body.drag-active .cell { border-color: var(--border); }
+body.drag-active .cell.drag-over {
+  border-color: var(--accent);
+  border-style: solid;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* ---- Tile (quick-copy button, stretches with its cell) ---- */
+.tile {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition), opacity var(--transition);
+}
+.tile:hover { border-color: var(--accent); box-shadow: var(--shadow); }
+.tile:active { transform: scale(0.97); }
+.tile.dragging { opacity: 0.45; cursor: grabbing; z-index: 5; }
+
+/* Hover-revealed actions button. */
+.tile-menu {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  min-height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition), color var(--transition), border-color var(--transition);
+}
+.tile:hover .tile-menu { opacity: 1; }
+.tile-menu:hover { color: var(--accent); border-color: var(--accent); }
+
+/* Brief visual feedback after copying. */
+.tile.copied {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+}
+/* Small "Copied!" bubble at the bottom edge of the tile. */
+.copy-pop {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%) translateY(2px);
+  padding: 2px 9px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0;
+  animation: copy-pop 900ms ease forwards;
+}
+@keyframes copy-pop {
+  0% { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  15% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.tile-name {
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  text-align: center;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  /* Wrap at word boundaries; break inside a word only when it cannot fit. */
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+  /* >= the font's natural line box, otherwise descenders (g, j, p, y)
+     overflow the line and get clipped at the bottom edge. */
+  line-height: 1.28;
+  /* User-configurable, applies to saved prompt tiles only. */
+  font-family: var(--tile-font, inherit);
+  font-size: var(--tile-size, 15px);
+}
+/* Auto-fit mode: no line clamp — JS picks the largest size where the FULL
+   wrapped text fits the tile (width drives word breaks, height the limit). */
+.tile-name.fit {
+  display: block;
+  width: 100%;
+  -webkit-line-clamp: unset;
+  /* Auto-fit guarantees the text fits -> no clipping needed; lets the last
+     line's descenders render fully even with sub-pixel rounding. */
+  overflow: visible;
+}
+
+/* Live drag ghost following the cursor. */
+.drag-ghost {
+  position: fixed;
+  inset: auto;
+  left: 0;
+  top: 0;
+  z-index: 120;
+  margin: 0;
+  opacity: 0.85;
+  pointer-events: none;
+  box-shadow: var(--shadow);
+  transition: none;
+}
+.tile.dragging { opacity: 0.25; }
+
+/* ---- Composer ---- */
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  flex: 0 0 auto;
+}
+.input {
+  flex: 1;
+  resize: none;
+  min-height: 40px;
+  max-height: 160px;
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  outline: none;
+  overflow-y: auto;
+  transition: border-color var(--transition);
+}
+.input:focus { border-color: var(--accent); }
+/* No visible scrollbar; wheel/keys still scroll past the max height. */
+.input { scrollbar-width: none; }
+.input::-webkit-scrollbar { display: none; width: 0; }
+
+/* Match number inputs to the tool: kill native spin buttons completely. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+  margin: 0;
+}
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
+/* ---- Per-view grid size inputs (views editor) ---- */
+.view-grid { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.grid-mini {
+  width: 46px;
+  padding: 9px 4px;
+  text-align: center;
+  font: inherit;
+  color: var(--fg);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  transition: border-color var(--transition);
+}
+.grid-mini:focus { border-color: var(--accent); }
+.view-grid .times { color: var(--muted); font-size: 12px; }
+
+/* ---- Buttons ---- */
+.primary-btn {
+  padding: 10px 18px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter var(--transition), transform var(--transition), opacity var(--transition);
+}
+.primary-btn:hover:not(:disabled) { filter: brightness(1.08); }
+.primary-btn:active:not(:disabled) { transform: scale(0.97); }
+.primary-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.ghost-btn {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+.ghost-btn:hover { background: var(--surface-2); border-color: var(--accent); }
+
+/* ---- Overlays / modals ---- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 50;
+  animation: fade-in var(--transition);
+}
+.modal {
+  width: min(520px, 92vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  animation: pop-in var(--transition);
+}
+.modal::-webkit-scrollbar { width: 6px; }
+.modal::-webkit-scrollbar-track { background: transparent; }
+.modal::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+/* Header (title + close X) stays readable while the settings body scrolls. */
+.modal-head {
+  position: sticky;
+  top: -20px;            /* counter the modal padding */
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -20px 0 0;
+  padding: 16px 0 8px;
+  background: var(--surface);
+}
+.modal-head .modal-title { margin: 0; padding: 0; position: static; }
+.modal-title { margin: 0; font-size: 16px; }
+.font-row { display: flex; gap: 8px; }
+.font-row .modal-input { flex: 1; }
+.two-col { display: flex; gap: 8px; }
+.two-col .field { flex: 1; }
+
+/* ---- Color swatches (prompt color picker) ---- */
+.swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  cursor: pointer;
+  padding: 0;
+  transition: transform var(--transition), border-color var(--transition);
+}
+.swatch:hover { transform: scale(1.12); }
+.swatch.sel { border-color: var(--fg); transform: scale(1.12); }
+.swatch.none { background: var(--surface-2); position: relative; }
+.swatch.none::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, transparent 45%, var(--danger) 45%, var(--danger) 55%, transparent 55%);
+}
+
+/* Tinted tiles: colored background, white text. */
+.tile.tinted { color: #fff; }
+.tile.tinted .tile-menu {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: transparent;
+  color: #fff;
+}
+.modal-input {
+  width: 100%;
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--fg);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  transition: border-color var(--transition);
+}
+.modal-input:focus { border-color: var(--accent); }
+.modal-text { resize: vertical; min-height: 110px; max-height: 280px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field > span { color: var(--muted); font-size: 12px; }
+.export-row { display: flex; gap: 8px; }
+.export-row .ghost-btn { flex: 1; }
+
+.grid-size { display: flex; align-items: center; gap: 8px; }
+.grid-size .modal-input { width: 72px; text-align: center; }
+.grid-size .times { color: var(--muted); }
+.grid-size .ghost-btn { margin-left: auto; }
+
+/* ---- Overflow tray (floating, top-right) ---- */
+.tray-btn {
+  position: fixed;
+  top: 56px;
+  right: 14px;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 20px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: filter var(--transition), transform var(--transition);
+}
+.tray-btn:hover { filter: brightness(1.08); }
+.tray-btn:active { transform: scale(0.95); }
+.tray-count {
+  min-width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.25);
+  font-size: 11px;
+}
+.tray-item { display: flex; align-items: center; gap: 8px; }
+.tray-item .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: 0 0 auto;
+}
+.ctx .hint {
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* ---- Views editor (settings) ---- */
+.views-editor { display: flex; flex-direction: column; gap: 6px; }
+.view-row { display: flex; gap: 6px; align-items: center; }
+.view-row .modal-input { flex: 1; }
+.view-row .icon-btn { flex: 0 0 auto; border: 1px solid var(--border); border-radius: 8px; }
+.view-row .icon-btn:hover { color: var(--danger); border-color: var(--danger); }
+.view-row .icon-btn.confirm {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+/* ---- Switch toggles ---- */
+.switch-field {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+}
+.switch-field > span { font-size: 13px; color: var(--fg); }
+.switch {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 40px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  position: relative;
+  cursor: pointer;
+  outline: none;
+  transition: background var(--transition), border-color var(--transition);
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform var(--transition), background var(--transition);
+}
+.switch:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.switch:checked::after {
+  background: #fff;
+  transform: translateX(18px);
+}
+
+/* Danger button (two-step confirm) */
+.danger-btn:hover { border-color: var(--danger); color: var(--danger); }
+.danger-btn.confirm {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+/* ---- Context menu ---- */
+.ctx {
+  position: fixed;
+  z-index: 70;
+  min-width: 180px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  animation: pop-in var(--transition);
+}
+.ctx button {
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.ctx button:hover { background: var(--surface-2); }
+.ctx button.danger:hover { color: var(--danger); }
+
+/* ---- Toast ---- */
+.toast {
+  position: fixed;
+  bottom: 76px;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  padding: 8px 16px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition), transform var(--transition);
+  z-index: 60;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.hidden { display: none !important; }
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pop-in { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
