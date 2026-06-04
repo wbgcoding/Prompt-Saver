@@ -142,7 +142,8 @@ body.drag-active .cell.drag-over {
 }
 .tile:hover { border-color: var(--accent); box-shadow: var(--shadow); }
 .tile:active { transform: scale(0.97); }
-.tile.dragging { opacity: 0.45; cursor: grabbing; z-index: 5; }
+/* No press-scale while dragging -> text stays rock-steady. */
+.tile.dragging { opacity: 0.45; cursor: grabbing; z-index: 5; transform: none !important; }
 
 /* Hover-revealed actions button. */
 .tile-menu {
@@ -237,7 +238,10 @@ body.drag-active .cell.drag-over {
   opacity: 0.85;
   pointer-events: none;
   box-shadow: var(--shadow);
+  /* Follow the cursor 1:1 — the inherited transform transition would make
+     the ghost (and its text) lag elastically behind. */
   transition: none;
+  transform-origin: top left;
 }
 .tile.dragging { opacity: 0.25; }
 

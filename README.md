@@ -25,8 +25,10 @@ From the [latest release](../../releases/latest):
 
 | File | What it is |
 |---|---|
-| `Prompt.Saver_x64-setup.exe` | **Installer** – installs for the current user, with desktop / start menu shortcuts and "run after install" |
+| `Prompt.Saver_x64-setup.exe` | **Installer** – choose all users (admin) or current user only, desktop / start menu shortcuts and "run after install" included (all optional) |
 | `prompt-saver.exe` | **Portable** – single standalone exe, no installation |
+
+Full version history: [CHANGELOG.md](CHANGELOG.md)
 
 Both need the Microsoft WebView2 runtime (preinstalled on Windows 11 and current Windows 10; the app offers the official installer automatically if it is missing).
 
@@ -64,7 +66,3 @@ npm run build              # portable exe + NSIS installer
 - [Tauri 2](https://tauri.app) (Rust backend, WebView2 frontend)
 - Vanilla HTML/CSS/JS — no bundler, no framework
 - `arboard` (clipboard), `rfd` (native dialogs), `winreg` (autostart), `sys-locale` (language detection)
-
-## License
-
-MIT
