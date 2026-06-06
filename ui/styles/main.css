@@ -501,6 +501,14 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .update-row { display: flex; align-items: center; gap: 10px; }
 .update-row .ghost-btn { flex: 1; }
 .update-status { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.auto-update {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  font-size: 12px;
+  cursor: pointer;
+}
 
 /* ---- Prompt library ---- */
 .library-list { display: flex; flex-direction: column; gap: 6px; }

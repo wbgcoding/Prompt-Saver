@@ -3,6 +3,16 @@
 All notable changes to **Prompt Saver**. Download the latest version from the
 [releases page](../../releases/latest).
 
+## 1.6.0 (2026-06-06)
+
+### Added
+- **Auto update toggle** in the settings (on by default), with a tooltip
+  explaining the once-a-day check
+
+### Improved
+- Updates now install **fully automatically**: silent installer, no clicks,
+  the app restarts itself on the new version
+
 ## 1.5.0 (2026-06-06)
 
 ### Added

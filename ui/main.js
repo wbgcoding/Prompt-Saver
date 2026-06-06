@@ -124,6 +124,8 @@ const I18N = {
     updateFailed: "Update check failed",
     updateAvailable: "Update {v} available",
     installNow: "Install now",
+    autoUpdate: "Auto update",
+    autoUpdateHint: "Checks for a new version once a day",
     gridSize: "Grid size",
     deleteConfirm: "Really delete?",
   },
@@ -188,6 +190,8 @@ const I18N = {
     updateFailed: "Updateprüfung fehlgeschlagen",
     updateAvailable: "Update {v} verfügbar",
     installNow: "Jetzt installieren",
+    autoUpdate: "Auto-Update",
+    autoUpdateHint: "Prüft einmal täglich auf eine neue Version",
     gridSize: "Rastergröße",
     deleteConfirm: "Wirklich löschen?",
   },
@@ -252,6 +256,8 @@ const I18N = {
     updateFailed: "Error al buscar actualizaciones",
     updateAvailable: "Actualización {v} disponible",
     installNow: "Instalar ahora",
+    autoUpdate: "Actualización automática",
+    autoUpdateHint: "Busca una nueva versión una vez al día",
     gridSize: "Tamaño de la cuadrícula",
     deleteConfirm: "¿Eliminar realmente?",
   },
@@ -316,6 +322,8 @@ const I18N = {
     updateFailed: "Échec de la recherche de mises à jour",
     updateAvailable: "Mise à jour {v} disponible",
     installNow: "Installer maintenant",
+    autoUpdate: "Mise à jour auto",
+    autoUpdateHint: "Recherche une nouvelle version une fois par jour",
     gridSize: "Taille de la grille",
     deleteConfirm: "Vraiment supprimer ?",
   },
@@ -380,6 +388,8 @@ const I18N = {
     updateFailed: "Controllo aggiornamenti non riuscito",
     updateAvailable: "Aggiornamento {v} disponibile",
     installNow: "Installa ora",
+    autoUpdate: "Aggiornamento autom.",
+    autoUpdateHint: "Controlla una nuova versione una volta al giorno",
     gridSize: "Dimensione griglia",
     deleteConfirm: "Eliminare davvero?",
   },
@@ -444,6 +454,8 @@ const I18N = {
     updateFailed: "Falha ao verificar atualizações",
     updateAvailable: "Atualização {v} disponível",
     installNow: "Instalar agora",
+    autoUpdate: "Atualização automática",
+    autoUpdateHint: "Verifica uma nova versão uma vez por dia",
     gridSize: "Tamanho da grade",
     deleteConfirm: "Excluir mesmo?",
   },
@@ -508,6 +520,8 @@ const I18N = {
     updateFailed: "Sprawdzanie aktualizacji nie powiodło się",
     updateAvailable: "Dostępna aktualizacja {v}",
     installNow: "Zainstaluj teraz",
+    autoUpdate: "Auto-aktualizacja",
+    autoUpdateHint: "Sprawdza nową wersję raz dziennie",
     gridSize: "Rozmiar siatki",
     deleteConfirm: "Na pewno usunąć?",
   },
@@ -572,6 +586,8 @@ const I18N = {
     updateFailed: "Не удалось проверить обновления",
     updateAvailable: "Доступно обновление {v}",
     installNow: "Установить сейчас",
+    autoUpdate: "Автообновление",
+    autoUpdateHint: "Проверяет новую версию раз в день",
     gridSize: "Размер сетки",
     deleteConfirm: "Точно удалить?",
   },
@@ -636,6 +652,8 @@ const I18N = {
     updateFailed: "检查更新失败",
     updateAvailable: "有可用更新 {v}",
     installNow: "立即安装",
+    autoUpdate: "自动更新",
+    autoUpdateHint: "每天检查一次新版本",
     gridSize: "网格大小",
     deleteConfirm: "确定删除？",
   },
@@ -700,6 +718,8 @@ const I18N = {
     updateFailed: "更新の確認に失敗しました",
     updateAvailable: "アップデート {v} があります",
     installNow: "今すぐインストール",
+    autoUpdate: "自動更新",
+    autoUpdateHint: "1日1回新しいバージョンを確認",
     gridSize: "グリッドサイズ",
     deleteConfirm: "本当に削除？",
   },
@@ -1685,6 +1705,9 @@ function bind() {
     }
     updateBtn.disabled = false;
   });
+  $("opt-autoupdate").addEventListener("change", (e) => {
+    invoke("set_auto_update", { enabled: e.target.checked });
+  });
   listen("update-available", (e) => {
     offerUpdate(e.payload);
     toast(t("updateAvailable").replace("{v}", e.payload.version), {
@@ -1714,6 +1737,7 @@ async function init() {
   $("opt-minimize").checked = settings.minimize_to_tray === true;
   $("opt-autostart").checked = settings.autostart === true;
   $("opt-startmin").checked = settings.start_minimized === true;
+  $("opt-autoupdate").checked = settings.auto_update !== false;
   $("tile-font").value = settings.tile_font || "system";
   $("tile-size").value = String(settings.tile_size ?? 0);
   invoke("app_version").then((v) => { $("update-status").textContent = `v${v}`; }).catch(() => {});

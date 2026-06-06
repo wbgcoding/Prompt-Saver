@@ -104,6 +104,8 @@ struct Settings {
     autostart: bool,
     #[serde(default)]
     start_minimized: bool,
+    #[serde(default = "default_on")]
+    auto_update: bool,
     #[serde(default = "default_language")]
     language: String,
     #[serde(default = "default_tile_font")]
@@ -132,6 +134,9 @@ fn default_cols() -> u32 {
 fn default_rows() -> u32 {
     4
 }
+fn default_on() -> bool {
+    true
+}
 fn default_language() -> String {
     "auto".to_string()
 }
@@ -153,6 +158,7 @@ impl Default for Settings {
             minimize_to_tray: false,
             autostart: false,
             start_minimized: false,
+            auto_update: true,
             language: default_language(),
             tile_font: default_tile_font(),
             tile_size: default_tile_size(),
@@ -1035,6 +1041,13 @@ fn updater_check() -> Option<UpdateInfo> {
 }
 
 #[tauri::command]
+fn set_auto_update(app: AppHandle, state: State<Db>, enabled: bool) {
+    let mut store = lock(&state);
+    store.settings.auto_update = enabled;
+    save_settings(&app, &store.settings);
+}
+
+#[tauri::command]
 fn app_version() -> String {
     APP_VERSION.to_string()
 }
@@ -1054,7 +1067,8 @@ async fn check_update() -> Result<UpdateInfo, String> {
     }
 }
 
-// Download the installer to %TEMP%, launch it and quit so it can replace us.
+// Download the installer to %TEMP%, run it fully silent (/S), restart the
+// app afterwards and quit so the installer can replace the binaries.
 #[tauri::command]
 async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
     if !url.starts_with("https://github.com/") {
@@ -1071,9 +1085,28 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
         .take(UPDATE_MAX_BYTES)
         .read_to_end(&mut bytes)
         .map_err(|e| e.to_string())?;
-    let path = std::env::temp_dir().join("prompt-saver-setup.exe");
-    fs::write(&path, &bytes).map_err(|e| e.to_string())?;
-    std::process::Command::new(&path).spawn().map_err(|e| e.to_string())?;
+    let installer = std::env::temp_dir().join("prompt-saver-setup.exe");
+    fs::write(&installer, &bytes).map_err(|e| e.to_string())?;
+
+    // Helper script: silent install, relaunch the app, clean up after itself.
+    let app_exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let script = std::env::temp_dir().join("prompt-saver-update.cmd");
+    let content = format!(
+        "@echo off\r\n\"{}\" /S\r\nstart \"\" \"{}\"\r\ndel \"%~f0\"\r\n",
+        installer.display(),
+        app_exe.display()
+    );
+    fs::write(&script, content).map_err(|e| e.to_string())?;
+
+    let mut cmd = std::process::Command::new("cmd");
+    cmd.args(["/C", &script.to_string_lossy()]);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // no console window
+    }
+    cmd.spawn().map_err(|e| e.to_string())?;
+
     if let Some(state) = app.try_state::<Db>() {
         let store = state.lock().unwrap_or_else(|e| e.into_inner());
         save_settings(&app, &store.settings);
@@ -1817,13 +1850,19 @@ pub fn run() {
                 open_floating(&handle, prompt);
             }
 
-            // Update check: shortly after launch, then once a day.
+            // Update check: shortly after launch, then once a day (if enabled).
             let h2 = handle.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_secs(30));
                 loop {
-                    if let Some(info) = updater_check() {
-                        let _ = h2.emit("update-available", info);
+                    let enabled = h2
+                        .try_state::<Db>()
+                        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.auto_update)
+                        .unwrap_or(true);
+                    if enabled {
+                        if let Some(info) = updater_check() {
+                            let _ = h2.emit("update-available", info);
+                        }
                     }
                     std::thread::sleep(std::time::Duration::from_secs(24 * 60 * 60));
                 }
@@ -1857,6 +1896,7 @@ pub fn run() {
             app_version,
             check_update,
             install_update,
+            set_auto_update,
             set_minimize_on_close,
             set_autostart,
             set_start_minimized,
