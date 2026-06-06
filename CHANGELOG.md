@@ -3,6 +3,12 @@
 All notable changes to **Prompt Saver**. Download the latest version from the
 [releases page](../../releases/latest).
 
+## 1.6.3 (2026-06-06)
+
+### Fixed
+- The auto-update label in the settings no longer wraps in languages with
+  longer wording
+
 ## 1.6.2 (2026-06-06)
 
 ### Improved

@@ -508,6 +508,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   flex: 0 0 auto;
   font-size: 12px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 /* ---- Prompt library ---- */
