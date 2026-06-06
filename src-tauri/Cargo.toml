@@ -1,6 +1,6 @@
 [package]
 name = "prompt-saver"
-version = "1.4.0"
+version = "1.5.0"
 description = "Local offline prompt manager"
 authors = ["BG Coding"]
 edition = "2021"
@@ -23,6 +23,7 @@ arboard = "3"
 rfd = "0.15"
 sys-locale = "0.3"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+ureq = { version = "2", default-features = false, features = ["tls"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"

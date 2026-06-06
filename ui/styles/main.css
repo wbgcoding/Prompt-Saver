@@ -154,6 +154,7 @@ body.drag-active .cell.drag-over {
   font-size: 13px;
   cursor: pointer;
   user-select: none;
+  overflow: hidden; /* hard guarantee: content can never poke outside */
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition), opacity var(--transition);
 }
@@ -497,6 +498,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .field > span { color: var(--muted); font-size: 12px; }
 .export-row { display: flex; gap: 8px; }
 .export-row .ghost-btn { flex: 1; }
+.update-row { display: flex; align-items: center; gap: 10px; }
+.update-row .ghost-btn { flex: 1; }
+.update-status { color: var(--muted); font-size: 12px; white-space: nowrap; }
 
 /* ---- Prompt library ---- */
 .library-list { display: flex; flex-direction: column; gap: 6px; }
@@ -662,6 +666,20 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   z-index: 60;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.actionable { pointer-events: auto; display: flex; align-items: center; gap: 10px; }
+.toast-btn {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.22);
+  color: var(--accent-fg);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.toast-btn:hover { background: rgba(255, 255, 255, 0.35); }
 
 .hidden { display: none !important; }
 

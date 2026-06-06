@@ -1,15 +1,15 @@
 {
   "name": "prompt-saver",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Local offline prompt manager with floating quick-copy buttons",
   "author": "BG Coding",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build",
-    "release:commit": "git add -A && git commit -m \"Prompt Saver 1.4.0: image prompts, icon images, sharper scaling, startup polish\"",
+    "release:commit": "git add -A && git commit -m \"Prompt Saver 1.5.0: auto updater, overflow-proof tiles\"",
     "release:push": "git push -u origin master",
-    "release:publish": "gh release create v1.4.0 src-tauri/target/release/prompt-saver.exe \"src-tauri/target/release/bundle/nsis/Prompt Saver_1.4.0_x64-setup.exe\" --title \"Prompt Saver 1.4.0\" --notes-file docs/release-notes.md"
+    "release:publish": "gh release create v1.5.0 src-tauri/target/release/prompt-saver.exe \"src-tauri/target/release/bundle/nsis/Prompt Saver_1.5.0_x64-setup.exe\" --title \"Prompt Saver 1.5.0\" --notes-file docs/release-notes.md"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.1.0"

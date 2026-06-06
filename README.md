@@ -17,6 +17,7 @@ A tiny, fully offline Windows tool for storing your favorite prompts and copying
 - **10 languages** – auto-detected from the system (EN fallback): EN, DE, ES, FR, IT, PT, PL, RU, ZH, JA
 - **Import / export** – CSV or TXT including views, layouts, colors and language; re-import restores everything
 - **Runs in the background** – optional minimize-to-tray on close, autostart at login (optionally minimized)
+- **Auto updates** – daily check for new releases with one-click install (also manually via Settings → Updates)
 - **Light / dark / system theme** with live OS detection
 - **100% local** – data stored as JSON in `%APPDATA%`, no network, no telemetry
 - **Tiny** – ~3 MB exe (Tauri / Rust), uses the Windows WebView2 runtime

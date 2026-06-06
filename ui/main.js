@@ -117,6 +117,13 @@ const I18N = {
     imageNamePh: "Image name",
     addIcon: "Image as icon",
     removeImage: "Remove image",
+    updates: "Updates",
+    checkUpdate: "Check for updates",
+    upToDate: "You're up to date",
+    installUpdate: "Install version {v}",
+    updateFailed: "Update check failed",
+    updateAvailable: "Update {v} available",
+    installNow: "Install now",
     gridSize: "Grid size",
     deleteConfirm: "Really delete?",
   },
@@ -174,6 +181,13 @@ const I18N = {
     imageNamePh: "Bild-Name",
     addIcon: "Bild als Icon",
     removeImage: "Bild entfernen",
+    updates: "Updates",
+    checkUpdate: "Nach Updates suchen",
+    upToDate: "Auf dem neuesten Stand",
+    installUpdate: "Version {v} installieren",
+    updateFailed: "Updateprüfung fehlgeschlagen",
+    updateAvailable: "Update {v} verfügbar",
+    installNow: "Jetzt installieren",
     gridSize: "Rastergröße",
     deleteConfirm: "Wirklich löschen?",
   },
@@ -231,6 +245,13 @@ const I18N = {
     imageNamePh: "Nombre de la imagen",
     addIcon: "Imagen como icono",
     removeImage: "Quitar imagen",
+    updates: "Actualizaciones",
+    checkUpdate: "Buscar actualizaciones",
+    upToDate: "Estás al día",
+    installUpdate: "Instalar versión {v}",
+    updateFailed: "Error al buscar actualizaciones",
+    updateAvailable: "Actualización {v} disponible",
+    installNow: "Instalar ahora",
     gridSize: "Tamaño de la cuadrícula",
     deleteConfirm: "¿Eliminar realmente?",
   },
@@ -288,6 +309,13 @@ const I18N = {
     imageNamePh: "Nom de l'image",
     addIcon: "Image comme icône",
     removeImage: "Retirer l'image",
+    updates: "Mises à jour",
+    checkUpdate: "Rechercher des mises à jour",
+    upToDate: "Vous êtes à jour",
+    installUpdate: "Installer la version {v}",
+    updateFailed: "Échec de la recherche de mises à jour",
+    updateAvailable: "Mise à jour {v} disponible",
+    installNow: "Installer maintenant",
     gridSize: "Taille de la grille",
     deleteConfirm: "Vraiment supprimer ?",
   },
@@ -345,6 +373,13 @@ const I18N = {
     imageNamePh: "Nome dell'immagine",
     addIcon: "Immagine come icona",
     removeImage: "Rimuovi immagine",
+    updates: "Aggiornamenti",
+    checkUpdate: "Cerca aggiornamenti",
+    upToDate: "Sei aggiornato",
+    installUpdate: "Installa versione {v}",
+    updateFailed: "Controllo aggiornamenti non riuscito",
+    updateAvailable: "Aggiornamento {v} disponibile",
+    installNow: "Installa ora",
     gridSize: "Dimensione griglia",
     deleteConfirm: "Eliminare davvero?",
   },
@@ -402,6 +437,13 @@ const I18N = {
     imageNamePh: "Nome da imagem",
     addIcon: "Imagem como ícone",
     removeImage: "Remover imagem",
+    updates: "Atualizações",
+    checkUpdate: "Verificar atualizações",
+    upToDate: "Você está atualizado",
+    installUpdate: "Instalar versão {v}",
+    updateFailed: "Falha ao verificar atualizações",
+    updateAvailable: "Atualização {v} disponível",
+    installNow: "Instalar agora",
     gridSize: "Tamanho da grade",
     deleteConfirm: "Excluir mesmo?",
   },
@@ -459,6 +501,13 @@ const I18N = {
     imageNamePh: "Nazwa obrazu",
     addIcon: "Obraz jako ikona",
     removeImage: "Usuń obraz",
+    updates: "Aktualizacje",
+    checkUpdate: "Sprawdź aktualizacje",
+    upToDate: "Wszystko aktualne",
+    installUpdate: "Zainstaluj wersję {v}",
+    updateFailed: "Sprawdzanie aktualizacji nie powiodło się",
+    updateAvailable: "Dostępna aktualizacja {v}",
+    installNow: "Zainstaluj teraz",
     gridSize: "Rozmiar siatki",
     deleteConfirm: "Na pewno usunąć?",
   },
@@ -516,6 +565,13 @@ const I18N = {
     imageNamePh: "Название изображения",
     addIcon: "Изображение как значок",
     removeImage: "Убрать изображение",
+    updates: "Обновления",
+    checkUpdate: "Проверить обновления",
+    upToDate: "У вас последняя версия",
+    installUpdate: "Установить версию {v}",
+    updateFailed: "Не удалось проверить обновления",
+    updateAvailable: "Доступно обновление {v}",
+    installNow: "Установить сейчас",
     gridSize: "Размер сетки",
     deleteConfirm: "Точно удалить?",
   },
@@ -573,6 +629,13 @@ const I18N = {
     imageNamePh: "图片名称",
     addIcon: "图片作为图标",
     removeImage: "移除图片",
+    updates: "更新",
+    checkUpdate: "检查更新",
+    upToDate: "已是最新版本",
+    installUpdate: "安装版本 {v}",
+    updateFailed: "检查更新失败",
+    updateAvailable: "有可用更新 {v}",
+    installNow: "立即安装",
     gridSize: "网格大小",
     deleteConfirm: "确定删除？",
   },
@@ -630,6 +693,13 @@ const I18N = {
     imageNamePh: "画像名",
     addIcon: "画像をアイコンに",
     removeImage: "画像を削除",
+    updates: "更新",
+    checkUpdate: "アップデートを確認",
+    upToDate: "最新の状態です",
+    installUpdate: "バージョン {v} をインストール",
+    updateFailed: "更新の確認に失敗しました",
+    updateAvailable: "アップデート {v} があります",
+    installNow: "今すぐインストール",
     gridSize: "グリッドサイズ",
     deleteConfirm: "本当に削除？",
   },
@@ -697,7 +767,10 @@ function fitTileText(tile) {
   const cached = fitCache.get(key);
   if (cached) {
     name.style.fontSize = `${cached}px`;
-    return;
+    // Trust but verify: a cached size measured under different conditions
+    // (startup, DPI change) must never overflow the tile.
+    if (name.scrollHeight <= maxH && name.scrollWidth <= maxW) return;
+    fitCache.delete(key);
   }
   // Largest size where the wrapped text fits. Width must compare against
   // maxW exactly: the block is width:100%, so scrollWidth only exceeds it
@@ -745,16 +818,30 @@ function watchDpr() {
 }
 watchDpr();
 
-function toast(msg) {
+function hideToast() {
+  toastEl.classList.remove("show");
+  setTimeout(() => toastEl.classList.add("hidden"), 200);
+}
+
+// Optional action: { label, onClick } adds a button and keeps the toast longer.
+function toast(msg, action = null) {
   toastEl.textContent = msg;
+  toastEl.classList.toggle("actionable", !!action);
+  if (action) {
+    const btn = document.createElement("button");
+    btn.className = "toast-btn";
+    btn.textContent = action.label;
+    btn.addEventListener("click", () => {
+      hideToast();
+      action.onClick();
+    });
+    toastEl.appendChild(btn);
+  }
   toastEl.classList.remove("hidden");
   void toastEl.offsetWidth;
   toastEl.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
-    toastEl.classList.remove("show");
-    setTimeout(() => toastEl.classList.add("hidden"), 200);
-  }, 1400);
+  toastTimer = setTimeout(hideToast, action ? 12000 : 1400);
 }
 
 function autoGrow(el) {
@@ -1575,6 +1662,40 @@ function bind() {
     else if (!settingsEl.classList.contains("hidden")) settingsEl.classList.add("hidden");
   });
 
+  // Updates: manual check in the settings + daily background notification.
+  let updateInfo = null;
+  const updateBtn = $("update-btn");
+  const updateStatus = $("update-status");
+  const offerUpdate = (info) => {
+    updateInfo = info;
+    updateBtn.textContent = t("installUpdate").replace("{v}", info.version);
+  };
+  updateBtn.addEventListener("click", async () => {
+    updateBtn.disabled = true;
+    try {
+      if (updateInfo?.available) {
+        await invoke("install_update", { url: updateInfo.url }); // app exits
+        return;
+      }
+      const info = await invoke("check_update");
+      if (info.available) offerUpdate(info);
+      else updateStatus.textContent = t("upToDate");
+    } catch {
+      updateStatus.textContent = t("updateFailed");
+    }
+    updateBtn.disabled = false;
+  });
+  listen("update-available", (e) => {
+    offerUpdate(e.payload);
+    toast(t("updateAvailable").replace("{v}", e.payload.version), {
+      label: t("installNow"),
+      onClick: () =>
+        invoke("install_update", { url: e.payload.url }).catch(() =>
+          toast(t("updateFailed"))
+        ),
+    });
+  });
+
   listen("theme-changed", (e) => applyTheme(e.payload));
   // "Edit prompt" chosen in a floating pill's right-click menu.
   listen("edit-prompt", (e) => editPrompt(String(e.payload)));
@@ -1595,6 +1716,7 @@ async function init() {
   $("opt-startmin").checked = settings.start_minimized === true;
   $("tile-font").value = settings.tile_font || "system";
   $("tile-size").value = String(settings.tile_size ?? 0);
+  invoke("app_version").then((v) => { $("update-status").textContent = `v${v}`; }).catch(() => {});
   applyTileStyle();
   autoGrow(inputEl);
   inputEl.focus();

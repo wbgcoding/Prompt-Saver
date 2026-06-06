@@ -3,6 +3,18 @@
 All notable changes to **Prompt Saver**. Download the latest version from the
 [releases page](../../releases/latest).
 
+## 1.5.0 (2026-06-06)
+
+### Added
+- **Automatic updates**: the app checks GitHub once a day for a new release
+  and shows a notification with an **Install now** button; you can also check
+  and install manually under Settings → Updates
+- Current version is shown in the settings
+
+### Fixed
+- Tile text can no longer overflow its button when resizing the window right
+  after startup — sizes are re-validated and tiles clip as a hard guarantee
+
 ## 1.4.0 (2026-06-06)
 
 ### Added

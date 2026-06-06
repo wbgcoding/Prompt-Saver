@@ -982,6 +982,106 @@ async fn resize_float_menu(
     Ok(())
 }
 
+// ---------- Updates (GitHub releases) ----------
+
+const UPDATE_API: &str = "https://api.github.com/repos/wbgcoding/Prompt-Saver/releases/latest";
+const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+const UPDATE_MAX_BYTES: u64 = 100 * 1024 * 1024;
+
+#[derive(Serialize, Clone)]
+struct UpdateInfo {
+    available: bool,
+    version: String,
+    url: String,
+}
+
+// Latest release tag + installer asset URL, None on any failure (offline,
+// private repo, rate limit) — update checks must never disturb the app.
+fn fetch_latest() -> Option<(String, String)> {
+    let body = ureq::get(UPDATE_API)
+        .set("User-Agent", "PromptSaver")
+        .timeout(std::time::Duration::from_secs(10))
+        .call()
+        .ok()?
+        .into_string()
+        .ok()?;
+    let json: serde_json::Value = serde_json::from_str(&body).ok()?;
+    let tag = json["tag_name"].as_str()?.trim_start_matches('v').to_string();
+    let url = json["assets"].as_array()?.iter().find_map(|a| {
+        let name = a["name"].as_str()?;
+        if name.ends_with("-setup.exe") {
+            a["browser_download_url"].as_str().map(String::from)
+        } else {
+            None
+        }
+    })?;
+    Some((tag, url))
+}
+
+fn version_newer(latest: &str, current: &str) -> bool {
+    let parse = |s: &str| -> Vec<u64> {
+        s.split('.').map(|p| p.parse().unwrap_or(0)).collect()
+    };
+    parse(latest) > parse(current)
+}
+
+fn updater_check() -> Option<UpdateInfo> {
+    let (version, url) = fetch_latest()?;
+    version_newer(&version, APP_VERSION).then(|| UpdateInfo {
+        available: true,
+        version,
+        url,
+    })
+}
+
+#[tauri::command]
+fn app_version() -> String {
+    APP_VERSION.to_string()
+}
+
+#[tauri::command]
+async fn check_update() -> Result<UpdateInfo, String> {
+    match fetch_latest() {
+        Some((version, url)) => {
+            let available = version_newer(&version, APP_VERSION);
+            Ok(UpdateInfo {
+                available,
+                version: if available { version } else { APP_VERSION.to_string() },
+                url: if available { url } else { String::new() },
+            })
+        }
+        None => Err("update check failed".to_string()),
+    }
+}
+
+// Download the installer to %TEMP%, launch it and quit so it can replace us.
+#[tauri::command]
+async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
+    if !url.starts_with("https://github.com/") {
+        return Err("invalid update source".to_string());
+    }
+    let resp = ureq::get(&url)
+        .set("User-Agent", "PromptSaver")
+        .timeout(std::time::Duration::from_secs(300))
+        .call()
+        .map_err(|e| e.to_string())?;
+    let mut bytes = Vec::new();
+    use std::io::Read;
+    resp.into_reader()
+        .take(UPDATE_MAX_BYTES)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
+    let path = std::env::temp_dir().join("prompt-saver-setup.exe");
+    fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    std::process::Command::new(&path).spawn().map_err(|e| e.to_string())?;
+    if let Some(state) = app.try_state::<Db>() {
+        let store = state.lock().unwrap_or_else(|e| e.into_inner());
+        save_settings(&app, &store.settings);
+    }
+    app.exit(0);
+    Ok(())
+}
+
 // Called by the frontend once the first render + text fit is complete.
 #[tauri::command]
 fn show_main_window(app: AppHandle) {
@@ -1716,6 +1816,18 @@ pub fn run() {
             for prompt in &to_restore {
                 open_floating(&handle, prompt);
             }
+
+            // Update check: shortly after launch, then once a day.
+            let h2 = handle.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(30));
+                loop {
+                    if let Some(info) = updater_check() {
+                        let _ = h2.emit("update-available", info);
+                    }
+                    std::thread::sleep(std::time::Duration::from_secs(24 * 60 * 60));
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1742,6 +1854,9 @@ pub fn run() {
             resize_float_menu,
             edit_prompt_request,
             show_main_window,
+            app_version,
+            check_update,
+            install_update,
             set_minimize_on_close,
             set_autostart,
             set_start_minimized,
