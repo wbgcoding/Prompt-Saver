@@ -79,6 +79,42 @@ body { display: flex; flex-direction: column; height: 100vh; }
 
 .header-actions { display: flex; align-items: center; gap: 4px; }
 
+/* ---- Collapsible bars ---- */
+body.no-header .header { display: none; }
+body.no-composer .composer { display: none; }
+.bar-toggle { opacity: 0.45; }
+.bar-toggle:hover { opacity: 1; }
+/* Bottom toggle: same height as the Save button -> shared center line. */
+.composer .bar-toggle {
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+}
+/* Subtle floating buttons to bring a hidden bar back. */
+.bar-restore {
+  position: fixed;
+  right: 8px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0.4;
+  transition: opacity var(--transition), color var(--transition);
+}
+.bar-restore:hover { opacity: 1; color: var(--fg); }
+.bar-restore-top { top: 8px; }
+.bar-restore-bottom { bottom: 8px; }
+/* Out of the way while dragging a tile. */
+body.drag-active .bar-restore { opacity: 0.1; pointer-events: none; }
+
 .icon-btn {
   display: inline-flex;
   padding: 6px;
@@ -288,10 +324,14 @@ body.drag-active .cell.drag-over {
   background: var(--bg);
   flex: 0 0 auto;
 }
-/* Image button in the composer bar — stays vertically centered regardless of textarea height */
+/* Image button: compact frame around the icon, centered on the Save line. */
 .composer-img-btn {
   flex: 0 0 auto;
-  align-self: center;
+  width: 34px;
+  height: 34px;
+  margin-bottom: 3px; /* (40px Save height - 34px) / 2 */
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
@@ -398,7 +438,8 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   animation: pop-in var(--transition);
 }
 .modal::-webkit-scrollbar { width: 6px; }
-.modal::-webkit-scrollbar-track { background: transparent; }
+/* Track margin keeps the bar inside the rounded corners. */
+.modal::-webkit-scrollbar-track { background: transparent; margin: 14px 0; }
 .modal::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 /* Header (title + close X) stays readable while the settings body scrolls. */
 .modal-head {
@@ -414,8 +455,6 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 .modal-head .modal-title { margin: 0; padding: 0; position: static; }
 .modal-title { margin: 0; font-size: 16px; }
-.font-row { display: flex; gap: 8px; }
-.font-row .modal-input { flex: 1; }
 .two-col { display: flex; gap: 8px; }
 .two-col .field { flex: 1; }
 
@@ -655,6 +694,42 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .ctx button.danger:hover { color: var(--danger); }
 .ctx button.confirm,
 .ctx button.confirm:hover { background: var(--danger); color: #fff; }
+
+/* ---- Grid-size picker popup ---- */
+.num-pop {
+  position: fixed;
+  z-index: 130;
+  display: flex;
+  flex-direction: column;
+  min-width: 56px;
+  max-height: 176px; /* ~7 rows, rest scrolls */
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+.num-pop::-webkit-scrollbar { width: 6px; }
+.num-pop::-webkit-scrollbar-track { background: transparent; margin: 6px 0; }
+.num-pop::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
+.num-pop button {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  text-align: center;
+  cursor: pointer;
+}
+.num-pop button:hover { background: var(--surface-2); }
+.num-pop button.sel {
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 600;
+}
 
 /* ---- Toast ---- */
 .toast {

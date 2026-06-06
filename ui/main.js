@@ -72,7 +72,8 @@ const I18N = {
     themeDark: "Dark",
     language: "Language",
     langAuto: "Automatic",
-    tileText: "Prompt text (font · size)",
+    tileFont: "Font",
+    tileSize: "Text size",
     fontSystem: "System",
     fontScript: "Handwriting",
     sizeSmall: "Small",
@@ -127,6 +128,8 @@ const I18N = {
     installNow: "Install now",
     autoUpdate: "Auto update",
     autoUpdateHint: "Checks for a new version once a day",
+    hideBar: "Hide bar",
+    showBar: "Show bar",
     gridSize: "Grid size",
     deleteConfirm: "Really delete?",
   },
@@ -138,7 +141,8 @@ const I18N = {
     themeDark: "Dunkel",
     language: "Sprache",
     langAuto: "Automatisch",
-    tileText: "Prompt-Text (Schrift · Größe)",
+    tileFont: "Schriftart",
+    tileSize: "Textgröße",
     fontSystem: "System",
     fontScript: "Handschrift",
     sizeSmall: "Klein",
@@ -193,6 +197,8 @@ const I18N = {
     installNow: "Jetzt installieren",
     autoUpdate: "Auto-Update",
     autoUpdateHint: "Prüft einmal täglich auf eine neue Version",
+    hideBar: "Leiste ausblenden",
+    showBar: "Leiste einblenden",
     gridSize: "Rastergröße",
     deleteConfirm: "Wirklich löschen?",
   },
@@ -204,7 +210,8 @@ const I18N = {
     themeDark: "Oscuro",
     language: "Idioma",
     langAuto: "Automático",
-    tileText: "Texto del prompt (fuente · tamaño)",
+    tileFont: "Fuente",
+    tileSize: "Tamaño del texto",
     fontSystem: "Sistema",
     fontScript: "Manuscrita",
     sizeSmall: "Pequeño",
@@ -259,6 +266,8 @@ const I18N = {
     installNow: "Instalar ahora",
     autoUpdate: "Actualización automática",
     autoUpdateHint: "Busca una nueva versión una vez al día",
+    hideBar: "Ocultar barra",
+    showBar: "Mostrar barra",
     gridSize: "Tamaño de la cuadrícula",
     deleteConfirm: "¿Eliminar realmente?",
   },
@@ -270,7 +279,8 @@ const I18N = {
     themeDark: "Sombre",
     language: "Langue",
     langAuto: "Automatique",
-    tileText: "Texte du prompt (police · taille)",
+    tileFont: "Police",
+    tileSize: "Taille du texte",
     fontSystem: "Système",
     fontScript: "Manuscrite",
     sizeSmall: "Petit",
@@ -325,6 +335,8 @@ const I18N = {
     installNow: "Installer maintenant",
     autoUpdate: "Mise à jour auto",
     autoUpdateHint: "Recherche une nouvelle version une fois par jour",
+    hideBar: "Masquer la barre",
+    showBar: "Afficher la barre",
     gridSize: "Taille de la grille",
     deleteConfirm: "Vraiment supprimer ?",
   },
@@ -336,7 +348,8 @@ const I18N = {
     themeDark: "Scuro",
     language: "Lingua",
     langAuto: "Automatico",
-    tileText: "Testo del prompt (font · dimensione)",
+    tileFont: "Font",
+    tileSize: "Dimensione del testo",
     fontSystem: "Sistema",
     fontScript: "Corsivo",
     sizeSmall: "Piccolo",
@@ -391,6 +404,8 @@ const I18N = {
     installNow: "Installa ora",
     autoUpdate: "Aggiornamento autom.",
     autoUpdateHint: "Controlla una nuova versione una volta al giorno",
+    hideBar: "Nascondi barra",
+    showBar: "Mostra barra",
     gridSize: "Dimensione griglia",
     deleteConfirm: "Eliminare davvero?",
   },
@@ -402,7 +417,8 @@ const I18N = {
     themeDark: "Escuro",
     language: "Idioma",
     langAuto: "Automático",
-    tileText: "Texto do prompt (fonte · tamanho)",
+    tileFont: "Fonte",
+    tileSize: "Tamanho do texto",
     fontSystem: "Sistema",
     fontScript: "Manuscrita",
     sizeSmall: "Pequeno",
@@ -457,6 +473,8 @@ const I18N = {
     installNow: "Instalar agora",
     autoUpdate: "Atualização automática",
     autoUpdateHint: "Verifica uma nova versão uma vez por dia",
+    hideBar: "Ocultar barra",
+    showBar: "Mostrar barra",
     gridSize: "Tamanho da grade",
     deleteConfirm: "Excluir mesmo?",
   },
@@ -468,7 +486,8 @@ const I18N = {
     themeDark: "Ciemny",
     language: "Język",
     langAuto: "Automatycznie",
-    tileText: "Tekst promptu (czcionka · rozmiar)",
+    tileFont: "Czcionka",
+    tileSize: "Rozmiar tekstu",
     fontSystem: "Systemowa",
     fontScript: "Odręczna",
     sizeSmall: "Mały",
@@ -523,6 +542,8 @@ const I18N = {
     installNow: "Zainstaluj teraz",
     autoUpdate: "Auto-aktualizacja",
     autoUpdateHint: "Sprawdza nową wersję raz dziennie",
+    hideBar: "Ukryj pasek",
+    showBar: "Pokaż pasek",
     gridSize: "Rozmiar siatki",
     deleteConfirm: "Na pewno usunąć?",
   },
@@ -534,7 +555,8 @@ const I18N = {
     themeDark: "Тёмная",
     language: "Язык",
     langAuto: "Автоматически",
-    tileText: "Текст промпта (шрифт · размер)",
+    tileFont: "Шрифт",
+    tileSize: "Размер текста",
     fontSystem: "Системный",
     fontScript: "Рукописный",
     sizeSmall: "Мелкий",
@@ -589,6 +611,8 @@ const I18N = {
     installNow: "Установить сейчас",
     autoUpdate: "Автообновление",
     autoUpdateHint: "Проверяет новую версию раз в день",
+    hideBar: "Скрыть панель",
+    showBar: "Показать панель",
     gridSize: "Размер сетки",
     deleteConfirm: "Точно удалить?",
   },
@@ -600,7 +624,8 @@ const I18N = {
     themeDark: "深色",
     language: "语言",
     langAuto: "自动",
-    tileText: "提示词文本（字体 · 大小）",
+    tileFont: "字体",
+    tileSize: "文字大小",
     fontSystem: "系统",
     fontScript: "手写",
     sizeSmall: "小",
@@ -655,6 +680,8 @@ const I18N = {
     installNow: "立即安装",
     autoUpdate: "自动更新",
     autoUpdateHint: "每天检查一次新版本",
+    hideBar: "隐藏栏",
+    showBar: "显示栏",
     gridSize: "网格大小",
     deleteConfirm: "确定删除？",
   },
@@ -666,7 +693,8 @@ const I18N = {
     themeDark: "ダーク",
     language: "言語",
     langAuto: "自動",
-    tileText: "プロンプト文字（フォント · サイズ）",
+    tileFont: "フォント",
+    tileSize: "文字サイズ",
     fontSystem: "システム",
     fontScript: "手書き",
     sizeSmall: "小",
@@ -721,6 +749,8 @@ const I18N = {
     installNow: "今すぐインストール",
     autoUpdate: "自動更新",
     autoUpdateHint: "1日1回新しいバージョンを確認",
+    hideBar: "バーを隠す",
+    showBar: "バーを表示",
     gridSize: "グリッドサイズ",
     deleteConfirm: "本当に削除？",
   },
@@ -874,6 +904,86 @@ function autoGrow(el) {
 
 const cellKey = (c, r) => `${c},${r}`;
 
+// ---- Grid-size value picker ----
+// Scrollable popup under a grid-size input: lists every value with a
+// visible scrollbar, highlights and centers the current selection.
+const numPop = document.createElement("div");
+numPop.className = "num-pop hidden";
+document.body.appendChild(numPop);
+let popInput = null;
+let popApply = null;
+
+function renderNumPop() {
+  const v = clampGrid(popInput.value, 1);
+  numPop.innerHTML = "";
+  let selected = null;
+  for (let i = 1; i <= GRID_MAX; i++) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.textContent = i;
+    if (i === v) {
+      row.className = "sel";
+      selected = row;
+    }
+    row.addEventListener("pointerdown", (e) => {
+      e.preventDefault(); // keep the input focused
+      popInput.value = i;
+      closeNumPop(true);
+    });
+    numPop.appendChild(row);
+  }
+  if (selected) selected.scrollIntoView({ block: "center" });
+}
+
+function openNumPop(input, apply) {
+  popInput = input;
+  popApply = apply;
+  const r = input.getBoundingClientRect();
+  numPop.style.left = `${Math.min(r.left, window.innerWidth - 70)}px`;
+  numPop.style.top = `${r.bottom + 4}px`;
+  // Unhide first: centering the selection needs a laid-out list.
+  numPop.classList.remove("hidden");
+  renderNumPop();
+}
+
+function closeNumPop(apply) {
+  if (!popInput) return;
+  numPop.classList.add("hidden");
+  const done = popApply;
+  popInput = null;
+  popApply = null;
+  if (apply && done) done();
+}
+
+// Combo behaviour: typing stays possible, focus opens the picker,
+// wheel / arrow keys step through the values, blur or Enter applies.
+function attachGridPicker(input, apply) {
+  input.addEventListener("focus", () => openNumPop(input, apply));
+  // Re-open on click even when the input kept focus after a pick.
+  // Apply a still-open sibling picker first (pointerdown fires before blur).
+  input.addEventListener("pointerdown", () => {
+    if (popInput === input) return;
+    closeNumPop(true);
+    openNumPop(input, apply);
+  });
+  input.addEventListener("input", () => { if (popInput === input) renderNumPop(); });
+  input.addEventListener("blur", () => { if (popInput === input) closeNumPop(true); });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") input.blur();
+    else if (e.key === "Escape") closeNumPop(false);
+  });
+  input.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
+      input.value = clampGrid(Number(input.value) + (e.deltaY > 0 ? 1 : -1), 1);
+      if (popInput === input) renderNumPop();
+      else openNumPop(input, apply);
+    },
+    { passive: false }
+  );
+}
+
 // Two-step confirmation: first call arms the button and returns false,
 // the second call (while armed) returns true.
 function armButton(btn, confirmLabel) {
@@ -885,6 +995,25 @@ function armButton(btn, confirmLabel) {
 function disarmButton(btn, label) {
   btn.classList.remove("confirm");
   btn.textContent = label;
+}
+
+// ---- Collapsible bars (header / composer) ----
+function applyBars() {
+  const header = settings.show_header !== false;
+  const composer = settings.show_composer !== false;
+  document.body.classList.toggle("no-header", !header);
+  document.body.classList.toggle("no-composer", !composer);
+  $("show-top").classList.toggle("hidden", header);
+  $("show-bottom").classList.toggle("hidden", composer);
+  // The grid area changed size — re-fit the tile text.
+  requestAnimationFrame(fitAllTiles);
+}
+
+function setBars(header, composer) {
+  settings.show_header = header;
+  settings.show_composer = composer;
+  invoke("set_bars", { header, composer }).catch(() => {});
+  applyBars();
 }
 
 // ---- View helpers ----
@@ -1413,8 +1542,8 @@ function renderViewsEditor() {
       renderViewsEditor();
       if (v.id === settings.active_view) await renderGrid(true);
     };
-    colsIn.addEventListener("change", applyGrid);
-    rowsIn.addEventListener("change", applyGrid);
+    attachGridPicker(colsIn, applyGrid);
+    attachGridPicker(rowsIn, applyGrid);
     const times = document.createElement("span");
     times.className = "times";
     times.textContent = "×";
@@ -1572,8 +1701,14 @@ function bind() {
     settings = await invoke("set_view_grid", { id: view.id, cols, rows });
     await renderGrid(true);
   };
-  $("qg-cols").addEventListener("change", applyQuickGrid);
-  $("qg-rows").addEventListener("change", applyQuickGrid);
+  attachGridPicker($("qg-cols"), applyQuickGrid);
+  attachGridPicker($("qg-rows"), applyQuickGrid);
+
+  // Show/hide the top and bottom bars.
+  $("hide-top").addEventListener("click", () => setBars(false, settings.show_composer !== false));
+  $("show-top").addEventListener("click", () => setBars(true, settings.show_composer !== false));
+  $("hide-bottom").addEventListener("click", () => setBars(settings.show_header !== false, false));
+  $("show-bottom").addEventListener("click", () => setBars(settings.show_header !== false, true));
 
   $("library-btn").addEventListener("click", () => {
     renderLibrary();
@@ -1740,6 +1875,7 @@ async function init() {
   applyI18n();
   applyTheme(await invoke("current_theme"));
   bind();
+  applyBars();
   await renderGrid();
   $("theme-select").value = settings.theme;
   $("lang-select").value = settings.language || "auto";

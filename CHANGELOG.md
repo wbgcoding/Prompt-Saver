@@ -3,6 +3,20 @@
 All notable changes to **Prompt Saver**. Download the latest version from the
 [releases page](../../releases/latest).
 
+## 1.7.0 (2026-06-06)
+
+### Added
+- **Collapsible bars**: subtle arrows hide the top bar and the input bar —
+  the grid grows to use the freed space, the choice survives restarts, and
+  small floating arrows bring each bar back
+- **Grid-size picker**: the size fields open a scrollable dropdown with all
+  values; the current one is highlighted and the mouse wheel steps through
+
+### Improved
+- Settings: font and text size now have their own labelled dropdowns
+- The settings scrollbar stays inside the rounded corners
+- The image and hide buttons in the input bar line up with the Save button
+
 ## 1.6.3 (2026-06-06)
 
 ### Fixed

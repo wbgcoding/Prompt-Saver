@@ -106,6 +106,10 @@ struct Settings {
     start_minimized: bool,
     #[serde(default = "default_on")]
     auto_update: bool,
+    #[serde(default = "default_on")]
+    show_header: bool,
+    #[serde(default = "default_on")]
+    show_composer: bool,
     #[serde(default = "default_language")]
     language: String,
     #[serde(default = "default_tile_font")]
@@ -159,6 +163,8 @@ impl Default for Settings {
             autostart: false,
             start_minimized: false,
             auto_update: true,
+            show_header: true,
+            show_composer: true,
             language: default_language(),
             tile_font: default_tile_font(),
             tile_size: default_tile_size(),
@@ -1055,6 +1061,14 @@ fn updater_check() -> Option<UpdateInfo> {
 }
 
 #[tauri::command]
+fn set_bars(app: AppHandle, state: State<Db>, header: bool, composer: bool) {
+    let mut store = lock(&state);
+    store.settings.show_header = header;
+    store.settings.show_composer = composer;
+    save_settings(&app, &store.settings);
+}
+
+#[tauri::command]
 fn set_auto_update(app: AppHandle, state: State<Db>, enabled: bool) {
     let mut store = lock(&state);
     store.settings.auto_update = enabled;
@@ -1924,6 +1938,7 @@ pub fn run() {
             check_update,
             install_update,
             set_auto_update,
+            set_bars,
             set_minimize_on_close,
             set_autostart,
             set_start_minimized,
