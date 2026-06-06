@@ -3,6 +3,12 @@
 All notable changes to **Prompt Saver**. Download the latest version from the
 [releases page](../../releases/latest).
 
+## 1.6.2 (2026-06-06)
+
+### Improved
+- Upgrading over an existing installation no longer asks about the previous
+  version — it is removed automatically (your prompts and settings are kept)
+
 ## 1.6.1 (2026-06-06)
 
 ### Fixed

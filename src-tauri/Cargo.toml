@@ -1,6 +1,6 @@
 [package]
 name = "prompt-saver"
-version = "1.6.1"
+version = "1.6.2"
 description = "Local offline prompt manager"
 authors = ["BG Coding"]
 edition = "2021"
