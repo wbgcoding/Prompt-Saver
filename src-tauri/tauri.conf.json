@@ -32,7 +32,8 @@
       "nsis": {
         "installMode": "both",
         "installerIcon": "icons/icon.ico",
-        "languages": ["German", "English"]
+        "languages": ["German", "English"],
+        "template": "installer.nsi"
       }
     },
     "icon": [
