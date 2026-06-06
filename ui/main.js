@@ -9,8 +9,7 @@ const saveBtn = $("save");
 const toastEl = $("toast");
 const ctxEl = $("ctx");
 const settingsEl = $("settings");
-const trayBtn = $("tray");
-const trayMenu = $("tray-menu");
+const libraryEl = $("library");
 const viewsEl = $("views");
 const modal = {
   root: $("modal"),
@@ -19,16 +18,28 @@ const modal = {
   text: $("modal-text"),
   cancel: $("modal-cancel"),
   confirm: $("modal-confirm"),
+  delete: $("modal-delete"),
+  imgWrap: $("modal-img-wrap"),
+  img: $("modal-img"),
+  showImage: $("modal-show-image"),
+  showText: $("modal-show-text"),
+  replaceImg: $("modal-replace-img"),
+  removeImg: $("modal-remove-img"),
+  addIcon: $("modal-add-icon"),
 };
 
 const DRAG_THRESHOLD = 5;
 const INPUT_MAX = 160; // keep in sync with .input max-height
 const MAX_VIEWS = 20;
+const GRID_MAX = 20; // keep in sync with backend GRID_MAX
+const PREVIEW_MAX = 220; // tooltip preview length of the prompt text
+
+const clampGrid = (n, fallback) =>
+  Math.min(GRID_MAX, Math.max(1, Math.round(Number(n) || fallback)));
 
 // Cached state (refreshed by renderGrid).
 let prompts = [];
 let settings = { theme: "system", views: [], active_view: "" };
-let overflow = []; // prompts without a cell in the active view's current grid
 
 let modalState = null;
 let ctxId = null;
@@ -36,9 +47,9 @@ let drag = null;
 let toastTimer = null;
 let deleteAllTimer = null;
 
-// ---- Global error surfacing ----
-window.addEventListener("error", (e) => toast(`Error: ${e.message}`));
-window.addEventListener("unhandledrejection", (e) => toast(`Error: ${e.reason}`));
+// Surface unexpected errors as a toast instead of failing silently.
+window.addEventListener("error", (e) => toast(String(e.message)));
+window.addEventListener("unhandledrejection", (e) => toast(String(e.reason)));
 
 // Right-click is disabled everywhere inside the app (tiles re-enable it).
 window.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -47,6 +58,8 @@ const DOTS =
   '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm0 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm0 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/></svg>';
 const CROSS =
   '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>';
+const GRID_PLUS =
+  '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm12 0h2v3h3v2h-3v3h-2v-3h-3v-2h3v-3Z"/></svg>';
 
 // ---- i18n (EN fallback, DE auto-detected) ----
 const I18N = {
@@ -60,8 +73,6 @@ const I18N = {
     langAuto: "Automatic",
     tileText: "Prompt text (font · size)",
     fontSystem: "System",
-    fontSerif: "Serif",
-    fontMono: "Monospace",
     fontScript: "Handwriting",
     sizeSmall: "Small",
     sizeMedium: "Medium",
@@ -89,13 +100,25 @@ const I18N = {
     editModalTitle: "Edit prompt",
     namePh: "Prompt name",
     promptPh: "Type a prompt…",
-    unplaced: "Unplaced prompts",
-    trayHint: "Click: place in free cell · Drag onto grid: place/swap",
+    addToLayout: "Add to layout",
     gridFull: "Grid is full – drag onto a tile to swap",
     tileTooltip: "Click: copy  |  Drag: move  |  Right-click: menu",
     actions: "Actions",
     exportFailed: "Export failed",
     copied: "Copied!",
+    library: "All prompts",
+    libraryEmpty: "No prompts saved yet",
+    addImage: "Add image",
+    showImageBtn: "Image",
+    showTextBtn: "Text",
+    replaceImage: "Replace",
+    imageModalTitle: "Name this image",
+    imageEditTitle: "Edit image",
+    imageNamePh: "Image name",
+    addIcon: "Image as icon",
+    removeImage: "Remove image",
+    gridSize: "Grid size",
+    deleteConfirm: "Really delete?",
   },
   de: {
     settings: "Einstellungen",
@@ -107,8 +130,6 @@ const I18N = {
     langAuto: "Automatisch",
     tileText: "Prompt-Text (Schrift · Größe)",
     fontSystem: "System",
-    fontSerif: "Serife",
-    fontMono: "Monospace",
     fontScript: "Handschrift",
     sizeSmall: "Klein",
     sizeMedium: "Mittel",
@@ -136,13 +157,25 @@ const I18N = {
     editModalTitle: "Prompt bearbeiten",
     namePh: "Prompt-Name",
     promptPh: "Prompt eingeben…",
-    unplaced: "Nicht platzierte Prompts",
-    trayHint: "Klick: in freie Zelle · Auf Raster ziehen: platzieren/tauschen",
+    addToLayout: "Zum Layout hinzufügen",
     gridFull: "Raster ist voll – zum Tauschen auf ein Feld ziehen",
     tileTooltip: "Klick: kopieren  |  Ziehen: verschieben  |  Rechtsklick: Menü",
     actions: "Aktionen",
     exportFailed: "Export fehlgeschlagen",
     copied: "Kopiert!",
+    library: "Alle Prompts",
+    libraryEmpty: "Noch keine Prompts gespeichert",
+    addImage: "Bild hinzufügen",
+    showImageBtn: "Bild",
+    showTextBtn: "Text",
+    replaceImage: "Ersetzen",
+    imageModalTitle: "Bild benennen",
+    imageEditTitle: "Bild bearbeiten",
+    imageNamePh: "Bild-Name",
+    addIcon: "Bild als Icon",
+    removeImage: "Bild entfernen",
+    gridSize: "Rastergröße",
+    deleteConfirm: "Wirklich löschen?",
   },
   es: {
     settings: "Ajustes",
@@ -154,8 +187,6 @@ const I18N = {
     langAuto: "Automático",
     tileText: "Texto del prompt (fuente · tamaño)",
     fontSystem: "Sistema",
-    fontSerif: "Serif",
-    fontMono: "Monoespaciada",
     fontScript: "Manuscrita",
     sizeSmall: "Pequeño",
     sizeMedium: "Mediano",
@@ -183,13 +214,25 @@ const I18N = {
     editModalTitle: "Editar prompt",
     namePh: "Nombre del prompt",
     promptPh: "Escribe un prompt…",
-    unplaced: "Prompts sin colocar",
-    trayHint: "Clic: celda libre · Arrastrar a la cuadrícula: colocar/intercambiar",
+    addToLayout: "Añadir al diseño",
     gridFull: "Cuadrícula llena: arrastra sobre una celda para intercambiar",
     tileTooltip: "Clic: copiar  |  Arrastrar: mover  |  Clic derecho: menú",
     actions: "Acciones",
     exportFailed: "Error al exportar",
     copied: "¡Copiado!",
+    library: "Todos los prompts",
+    libraryEmpty: "Aún no hay prompts guardados",
+    addImage: "Añadir imagen",
+    showImageBtn: "Imagen",
+    showTextBtn: "Texto",
+    replaceImage: "Reemplazar",
+    imageModalTitle: "Nombra esta imagen",
+    imageEditTitle: "Editar imagen",
+    imageNamePh: "Nombre de la imagen",
+    addIcon: "Imagen como icono",
+    removeImage: "Quitar imagen",
+    gridSize: "Tamaño de la cuadrícula",
+    deleteConfirm: "¿Eliminar realmente?",
   },
   fr: {
     settings: "Paramètres",
@@ -201,8 +244,6 @@ const I18N = {
     langAuto: "Automatique",
     tileText: "Texte du prompt (police · taille)",
     fontSystem: "Système",
-    fontSerif: "Serif",
-    fontMono: "Monospace",
     fontScript: "Manuscrite",
     sizeSmall: "Petit",
     sizeMedium: "Moyen",
@@ -230,13 +271,25 @@ const I18N = {
     editModalTitle: "Modifier le prompt",
     namePh: "Nom du prompt",
     promptPh: "Saisir un prompt…",
-    unplaced: "Prompts non placés",
-    trayHint: "Clic : cellule libre · Glisser sur la grille : placer/échanger",
+    addToLayout: "Ajouter à la grille",
     gridFull: "Grille pleine – glissez sur une case pour échanger",
     tileTooltip: "Clic : copier  |  Glisser : déplacer  |  Clic droit : menu",
     actions: "Actions",
     exportFailed: "Échec de l'export",
     copied: "Copié !",
+    library: "Tous les prompts",
+    libraryEmpty: "Aucun prompt enregistré",
+    addImage: "Ajouter une image",
+    showImageBtn: "Image",
+    showTextBtn: "Texte",
+    replaceImage: "Remplacer",
+    imageModalTitle: "Nommer cette image",
+    imageEditTitle: "Modifier l'image",
+    imageNamePh: "Nom de l'image",
+    addIcon: "Image comme icône",
+    removeImage: "Retirer l'image",
+    gridSize: "Taille de la grille",
+    deleteConfirm: "Vraiment supprimer ?",
   },
   it: {
     settings: "Impostazioni",
@@ -248,8 +301,6 @@ const I18N = {
     langAuto: "Automatico",
     tileText: "Testo del prompt (font · dimensione)",
     fontSystem: "Sistema",
-    fontSerif: "Serif",
-    fontMono: "Monospace",
     fontScript: "Corsivo",
     sizeSmall: "Piccolo",
     sizeMedium: "Medio",
@@ -277,13 +328,25 @@ const I18N = {
     editModalTitle: "Modifica prompt",
     namePh: "Nome del prompt",
     promptPh: "Scrivi un prompt…",
-    unplaced: "Prompt non posizionati",
-    trayHint: "Clic: cella libera · Trascina sulla griglia: posiziona/scambia",
+    addToLayout: "Aggiungi alla griglia",
     gridFull: "Griglia piena: trascina su una cella per scambiare",
     tileTooltip: "Clic: copia  |  Trascina: sposta  |  Clic destro: menu",
     actions: "Azioni",
     exportFailed: "Esportazione non riuscita",
     copied: "Copiato!",
+    library: "Tutti i prompt",
+    libraryEmpty: "Nessun prompt salvato",
+    addImage: "Aggiungi immagine",
+    showImageBtn: "Immagine",
+    showTextBtn: "Testo",
+    replaceImage: "Sostituisci",
+    imageModalTitle: "Assegna nome all'immagine",
+    imageEditTitle: "Modifica immagine",
+    imageNamePh: "Nome dell'immagine",
+    addIcon: "Immagine come icona",
+    removeImage: "Rimuovi immagine",
+    gridSize: "Dimensione griglia",
+    deleteConfirm: "Eliminare davvero?",
   },
   pt: {
     settings: "Configurações",
@@ -295,8 +358,6 @@ const I18N = {
     langAuto: "Automático",
     tileText: "Texto do prompt (fonte · tamanho)",
     fontSystem: "Sistema",
-    fontSerif: "Serif",
-    fontMono: "Monoespaçada",
     fontScript: "Manuscrita",
     sizeSmall: "Pequeno",
     sizeMedium: "Médio",
@@ -324,13 +385,25 @@ const I18N = {
     editModalTitle: "Editar prompt",
     namePh: "Nome do prompt",
     promptPh: "Digite um prompt…",
-    unplaced: "Prompts não posicionados",
-    trayHint: "Clique: célula livre · Arraste para a grade: posicionar/trocar",
+    addToLayout: "Adicionar à grade",
     gridFull: "Grade cheia – arraste sobre uma célula para trocar",
     tileTooltip: "Clique: copiar  |  Arrastar: mover  |  Clique direito: menu",
     actions: "Ações",
     exportFailed: "Falha na exportação",
     copied: "Copiado!",
+    library: "Todos os prompts",
+    libraryEmpty: "Nenhum prompt salvo ainda",
+    addImage: "Adicionar imagem",
+    showImageBtn: "Imagem",
+    showTextBtn: "Texto",
+    replaceImage: "Substituir",
+    imageModalTitle: "Nomear esta imagem",
+    imageEditTitle: "Editar imagem",
+    imageNamePh: "Nome da imagem",
+    addIcon: "Imagem como ícone",
+    removeImage: "Remover imagem",
+    gridSize: "Tamanho da grade",
+    deleteConfirm: "Excluir mesmo?",
   },
   pl: {
     settings: "Ustawienia",
@@ -342,8 +415,6 @@ const I18N = {
     langAuto: "Automatycznie",
     tileText: "Tekst promptu (czcionka · rozmiar)",
     fontSystem: "Systemowa",
-    fontSerif: "Szeryfowa",
-    fontMono: "Monospace",
     fontScript: "Odręczna",
     sizeSmall: "Mały",
     sizeMedium: "Średni",
@@ -371,13 +442,25 @@ const I18N = {
     editModalTitle: "Edytuj prompt",
     namePh: "Nazwa promptu",
     promptPh: "Wpisz prompt…",
-    unplaced: "Nieumieszczone prompty",
-    trayHint: "Klik: wolna komórka · Przeciągnij na siatkę: umieść/zamień",
+    addToLayout: "Dodaj do siatki",
     gridFull: "Siatka pełna – przeciągnij na kafelek, aby zamienić",
     tileTooltip: "Klik: kopiuj  |  Przeciągnij: przenieś  |  PPM: menu",
     actions: "Akcje",
     exportFailed: "Eksport nie powiódł się",
     copied: "Skopiowano!",
+    library: "Wszystkie prompty",
+    libraryEmpty: "Brak zapisanych promptów",
+    addImage: "Dodaj obraz",
+    showImageBtn: "Obraz",
+    showTextBtn: "Tekst",
+    replaceImage: "Zamień",
+    imageModalTitle: "Nazwij ten obraz",
+    imageEditTitle: "Edytuj obraz",
+    imageNamePh: "Nazwa obrazu",
+    addIcon: "Obraz jako ikona",
+    removeImage: "Usuń obraz",
+    gridSize: "Rozmiar siatki",
+    deleteConfirm: "Na pewno usunąć?",
   },
   ru: {
     settings: "Настройки",
@@ -389,8 +472,6 @@ const I18N = {
     langAuto: "Автоматически",
     tileText: "Текст промпта (шрифт · размер)",
     fontSystem: "Системный",
-    fontSerif: "С засечками",
-    fontMono: "Моноширинный",
     fontScript: "Рукописный",
     sizeSmall: "Мелкий",
     sizeMedium: "Средний",
@@ -418,13 +499,25 @@ const I18N = {
     editModalTitle: "Изменить промпт",
     namePh: "Название промпта",
     promptPh: "Введите промпт…",
-    unplaced: "Неразмещённые промпты",
-    trayHint: "Клик: свободная ячейка · Перетащите на сетку: разместить/поменять",
+    addToLayout: "Добавить в сетку",
     gridFull: "Сетка заполнена – перетащите на плитку для обмена",
     tileTooltip: "Клик: копировать  |  Перетащить: переместить  |  ПКМ: меню",
     actions: "Действия",
     exportFailed: "Ошибка экспорта",
     copied: "Скопировано!",
+    library: "Все промпты",
+    libraryEmpty: "Промптов пока нет",
+    addImage: "Добавить изображение",
+    showImageBtn: "Изображение",
+    showTextBtn: "Текст",
+    replaceImage: "Заменить",
+    imageModalTitle: "Назовите изображение",
+    imageEditTitle: "Изменить изображение",
+    imageNamePh: "Название изображения",
+    addIcon: "Изображение как значок",
+    removeImage: "Убрать изображение",
+    gridSize: "Размер сетки",
+    deleteConfirm: "Точно удалить?",
   },
   zh: {
     settings: "设置",
@@ -436,8 +529,6 @@ const I18N = {
     langAuto: "自动",
     tileText: "提示词文本（字体 · 大小）",
     fontSystem: "系统",
-    fontSerif: "衬线",
-    fontMono: "等宽",
     fontScript: "手写",
     sizeSmall: "小",
     sizeMedium: "中",
@@ -465,13 +556,25 @@ const I18N = {
     editModalTitle: "编辑提示词",
     namePh: "提示词名称",
     promptPh: "输入提示词…",
-    unplaced: "未放置的提示词",
-    trayHint: "点击：放入空格 · 拖到网格：放置/交换",
+    addToLayout: "添加到网格",
     gridFull: "网格已满 – 拖到方块上交换",
     tileTooltip: "点击：复制  |  拖动：移动  |  右键：菜单",
     actions: "操作",
     exportFailed: "导出失败",
     copied: "已复制！",
+    library: "全部提示词",
+    libraryEmpty: "还没有保存的提示词",
+    addImage: "添加图片",
+    showImageBtn: "图片",
+    showTextBtn: "文本",
+    replaceImage: "替换",
+    imageModalTitle: "为图片命名",
+    imageEditTitle: "编辑图片",
+    imageNamePh: "图片名称",
+    addIcon: "图片作为图标",
+    removeImage: "移除图片",
+    gridSize: "网格大小",
+    deleteConfirm: "确定删除？",
   },
   ja: {
     settings: "設定",
@@ -483,8 +586,6 @@ const I18N = {
     langAuto: "自動",
     tileText: "プロンプト文字（フォント · サイズ）",
     fontSystem: "システム",
-    fontSerif: "明朝",
-    fontMono: "等幅",
     fontScript: "手書き",
     sizeSmall: "小",
     sizeMedium: "中",
@@ -512,13 +613,25 @@ const I18N = {
     editModalTitle: "プロンプトを編集",
     namePh: "プロンプト名",
     promptPh: "プロンプトを入力…",
-    unplaced: "未配置のプロンプト",
-    trayHint: "クリック：空きセルへ · グリッドへドラッグ：配置/入替",
+    addToLayout: "グリッドに追加",
     gridFull: "グリッドが満杯 – タイルにドラッグして入替",
     tileTooltip: "クリック：コピー  |  ドラッグ：移動  |  右クリック：メニュー",
     actions: "操作",
     exportFailed: "エクスポートに失敗しました",
     copied: "コピーしました！",
+    library: "すべてのプロンプト",
+    libraryEmpty: "保存されたプロンプトはありません",
+    addImage: "画像を追加",
+    showImageBtn: "画像",
+    showTextBtn: "テキスト",
+    replaceImage: "置き換え",
+    imageModalTitle: "画像に名前を付ける",
+    imageEditTitle: "画像を編集",
+    imageNamePh: "画像名",
+    addIcon: "画像をアイコンに",
+    removeImage: "画像を削除",
+    gridSize: "グリッドサイズ",
+    deleteConfirm: "本当に削除？",
   },
 };
 // Resolved at init from settings.language ("auto" -> OS language). EN fallback.
@@ -542,8 +655,11 @@ function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
 }
 
-// Tile color palette ("" = default surface).
-const COLORS = ["", "#3b82f6", "#22c55e", "#ef4444", "#f59e0b", "#8b5cf6", "#ec4899", "#14b8a6", "#64748b"];
+// Tile color palette ("" = default surface), full spectrum, one modal row.
+const COLORS = [
+  "", "#ef4444", "#f97316", "#f59e0b", "#eab308", "#22c55e", "#14b8a6",
+  "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6", "#ec4899", "#64748b",
+];
 
 // Font options for saved prompt tiles (all Windows system fonts).
 const FONTS = {
@@ -567,13 +683,11 @@ function applyTileStyle() {
   fitCache.clear(); // font metrics changed -> cached fit sizes are stale
 }
 
-// Auto-fit: grow/shrink each tile's text so the WHOLE text is visible at the
-// largest possible size.
-// Cache fit results per (text, cell size); same-size cells with the same text
-// skip the measuring loop entirely. Cleared on font change / grown too large.
+// Auto-fit cache per (text, cell size); cleared on font changes.
 const fitCache = new Map();
 
 function fitTileText(tile) {
+  if (tile.classList.contains("has-image")) return;
   const name = tile.querySelector(".tile-name");
   if (!name) return;
   name.classList.add("fit");
@@ -585,12 +699,9 @@ function fitTileText(tile) {
     name.style.fontSize = `${cached}px`;
     return;
   }
-  // Binary search for the LARGEST size where the fully wrapped text fits:
-  // height = all lines visible (text wraps freely); width check ONLY catches
-  // a single unbreakable word overflowing the tile. NOTE: the block is
-  // width:100%, so scrollWidth always equals maxW unless a word overflows —
-  // any "maxW - x" margin here would make the check always fail and collapse
-  // the search to the 8px minimum.
+  // Largest size where the wrapped text fits. Width must compare against
+  // maxW exactly: the block is width:100%, so scrollWidth only exceeds it
+  // when a single unbreakable word overflows.
   const fits = (s) => {
     name.style.fontSize = `${s}px`;
     return name.scrollHeight <= maxH && name.scrollWidth <= maxW;
@@ -619,6 +730,21 @@ window.addEventListener("resize", () => {
   fitRaf = requestAnimationFrame(fitAllTiles);
 });
 
+// Re-fit when the window moves to a monitor with a different scale factor —
+// sizes measured under the old DPI are no longer valid.
+function watchDpr() {
+  matchMedia(`(resolution: ${devicePixelRatio}dppx)`).addEventListener(
+    "change",
+    () => {
+      fitCache.clear();
+      fitAllTiles();
+      watchDpr();
+    },
+    { once: true }
+  );
+}
+watchDpr();
+
 function toast(msg) {
   toastEl.textContent = msg;
   toastEl.classList.remove("hidden");
@@ -639,6 +765,19 @@ function autoGrow(el) {
 }
 
 const cellKey = (c, r) => `${c},${r}`;
+
+// Two-step confirmation: first call arms the button and returns false,
+// the second call (while armed) returns true.
+function armButton(btn, confirmLabel) {
+  if (btn.classList.contains("confirm")) return true;
+  btn.classList.add("confirm");
+  btn.textContent = confirmLabel;
+  return false;
+}
+function disarmButton(btn, label) {
+  btn.classList.remove("confirm");
+  btn.textContent = label;
+}
 
 // ---- View helpers ----
 function activeView() {
@@ -676,18 +815,17 @@ function normalizeLayout(view) {
       changed = true;
     }
   }
-  // Unplaced prompts stay in the overflow tray. No auto-fill: per-grid-size
-  // arrangements and freshly created (empty) views must stay untouched.
+  // Unplaced prompts stay reachable via the library. No auto-fill: saved
+  // per-grid-size arrangements must stay untouched.
   view.layouts[gridKeyOf(view)] = layout;
   return changed;
 }
 
 // ---- Render ----
-// skipFetch: caller already updated the local state (drag/hide hot path) —
-// render instantly without an IPC roundtrip.
+// skipFetch: caller already updated the local state (drag/hide hot path).
 async function renderGrid(skipFetch = false) {
   if (!skipFetch) {
-    const s = await invoke("get_state"); // one roundtrip for prompts + settings
+    const s = await invoke("get_state");
     prompts = s.prompts;
     settings = s.settings;
   }
@@ -700,13 +838,13 @@ async function renderGrid(skipFetch = false) {
   const layout = layoutOf(view);
   gridEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
   gridEl.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+  $("qg-cols").value = cols;
+  $("qg-rows").value = rows;
 
   const byCell = new Map();
-  overflow = [];
   for (const p of prompts) {
     const cell = layout[p.id];
     if (cell) byCell.set(cellKey(...cell), p);
-    else overflow.push(p);
   }
 
   // Build off-DOM, attach once (1 reflow instead of cols*rows).
@@ -726,7 +864,6 @@ async function renderGrid(skipFetch = false) {
   gridEl.appendChild(frag);
 
   renderViews();
-  renderTray();
   fitAllTiles();
 }
 
@@ -751,9 +888,24 @@ function buildTile(p) {
   const tile = document.createElement("div");
   tile.className = "tile";
   tile.dataset.id = p.id;
-  tile.title = `${p.name}\n${t("tileTooltip")}`;
+  const preview = p.text.length > PREVIEW_MAX ? `${p.text.slice(0, PREVIEW_MAX)}…` : p.text;
+  tile.title = preview
+    ? `${p.name}\n\n${preview}\n\n${t("tileTooltip")}`
+    : `${p.name}\n${t("tileTooltip")}`;
 
-  if (p.color) {
+  if (p.show_image && p.image) {
+    tile.classList.add("has-image");
+    // The chosen color tints the border area around the image.
+    if (p.color) {
+      tile.style.background = p.color;
+      tile.style.borderColor = p.color;
+    }
+    const img = document.createElement("img");
+    img.className = "tile-img";
+    img.src = p.image;
+    img.draggable = false;
+    tile.appendChild(img);
+  } else if (p.color) {
     tile.classList.add("tinted");
     tile.style.background = p.color;
     tile.style.borderColor = p.color;
@@ -788,57 +940,6 @@ function buildTile(p) {
   return tile;
 }
 
-// ---- Overflow tray ----
-function renderTray() {
-  trayBtn.classList.toggle("hidden", overflow.length === 0);
-  $("tray-count").textContent = overflow.length;
-  if (overflow.length === 0) trayMenu.classList.add("hidden");
-
-  trayMenu.innerHTML = "";
-  const hint = document.createElement("div");
-  hint.className = "hint";
-  hint.textContent = t("trayHint");
-  trayMenu.appendChild(hint);
-
-  for (const p of overflow) {
-    const item = document.createElement("button");
-    item.className = "tray-item";
-    item.title = p.text;
-
-    const dot = document.createElement("span");
-    dot.className = "dot";
-    const label = document.createElement("span");
-    label.textContent = p.name;
-    item.append(dot, label);
-
-    item.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0) return;
-      drag = { id: p.id, startX: e.clientX, startY: e.clientY, moved: false, el: item };
-    });
-    item.addEventListener("click", async () => {
-      const view = activeView();
-      const occupied = new Map(
-        Object.entries(layoutOf(view)).map(([id, c]) => [cellKey(...c), id])
-      );
-      const free = firstFree(occupied, view.cols, view.rows);
-      if (!free) { toast(t("gridFull")); return; }
-      await placeTile(p.id, free[0], free[1]);
-    });
-    trayMenu.appendChild(item);
-  }
-}
-
-function toggleTrayMenu() {
-  if (trayMenu.classList.contains("hidden")) {
-    trayMenu.classList.remove("hidden");
-    const r = trayBtn.getBoundingClientRect();
-    trayMenu.style.top = `${r.bottom + 6}px`;
-    trayMenu.style.left = `${Math.max(8, r.right - trayMenu.offsetWidth)}px`;
-  } else {
-    trayMenu.classList.add("hidden");
-  }
-}
-
 // ---- Pointer-based drag to any cell ----
 function cellAt(x, y) {
   return document.elementFromPoint(x, y)?.closest(".cell") || null;
@@ -867,7 +968,8 @@ window.addEventListener("pointermove", (e) => {
     drag.moved = true;
     drag.el.classList.add("dragging");
     document.body.classList.add("drag-active");
-    trayMenu.classList.add("hidden");
+    // Dragging out of the library: hide the overlay so the grid is visible.
+    if (drag.fromLibrary) libraryEl.classList.add("hidden");
     // Live ghost: a clone of the tile follows the cursor.
     const r = drag.el.getBoundingClientRect();
     drag.offX = drag.startX - r.left;
@@ -923,9 +1025,8 @@ function showCopied(tile) {
   setTimeout(() => pop.remove(), 950);
 }
 
-// Place a tile at [col,row] in the active view. Swaps with the occupant if the
-// source had a cell; otherwise (from tray) the occupant moves to the tray.
-// Renders instantly from local state; persistence runs in the background.
+// Place a tile at [col,row]; swaps with the occupant. Renders from local
+// state immediately, persistence runs in the background.
 async function placeTile(id, col, row) {
   const view = activeView();
   const layout = { ...layoutOf(view) };
@@ -946,6 +1047,8 @@ async function placeTile(id, col, row) {
 // ---- Context menu ----
 function openCtx(id, x, y) {
   ctxId = id;
+  // Reset an armed delete confirmation from a previous open.
+  disarmButton(ctxEl.querySelector('[data-act="delete"]'), t("delete"));
   ctxEl.classList.remove("hidden");
   const w = ctxEl.offsetWidth, h = ctxEl.offsetHeight;
   ctxEl.style.left = `${Math.min(x, window.innerWidth - w - 4)}px`;
@@ -960,29 +1063,77 @@ function closeCtx() {
 function renderSwatches(selected) {
   const row = $("color-row");
   row.innerHTML = "";
-  for (const c of COLORS) {
+  const isCustom = !!selected && !COLORS.includes(selected);
+
+  const mkSwatch = (cls, bg) => {
     const sw = document.createElement("button");
     sw.type = "button";
-    sw.className = "swatch" + (c === "" ? " none" : "") + (c === selected ? " sel" : "");
-    if (c) sw.style.background = c;
+    sw.className = `swatch ${cls}`.trim();
+    if (bg) sw.style.background = bg;
+    row.appendChild(sw);
+    return sw;
+  };
+
+  // "No color" first, then the free color picker, then the palette.
+  const none = mkSwatch("none" + (selected === "" ? " sel" : ""));
+  none.addEventListener("click", () => {
+    modalState.color = "";
+    renderSwatches("");
+  });
+
+  const picker = $("color-pick");
+  const custom = mkSwatch("custom" + (isCustom ? " sel" : ""), isCustom ? selected : "");
+  custom.addEventListener("click", () => {
+    picker.value = /^#[0-9a-f]{6}$/i.test(selected) ? selected : "#3b82f6";
+    picker.click();
+  });
+
+  for (const c of COLORS.slice(1)) {
+    const sw = mkSwatch(c === selected ? "sel" : "", c);
     sw.addEventListener("click", () => {
       modalState.color = c;
       renderSwatches(c);
     });
-    row.appendChild(sw);
   }
 }
 
-function openModal({ mode, id, name = "", text = "", color = "", title }) {
-  modalState = { mode, id, color };
+function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, title }) {
+  modalState = { mode, id, color, image, showImage, copyImage };
   modal.title.textContent = title;
   modal.name.value = name;
   modal.text.value = text;
-  modal.text.classList.toggle("hidden", mode !== "edit");
+  syncModalImageUi(mode);
+  modal.delete.classList.toggle("hidden", mode !== "edit");
+  disarmButton(modal.delete, t("delete"));
   renderSwatches(color);
   modal.root.classList.remove("hidden");
   modal.name.focus();
   modal.name.select();
+}
+
+// Keep all image-related modal controls consistent with modalState.
+function syncModalImageUi(mode) {
+  const { image, showImage, copyImage } = modalState;
+  const hasImg = !!image;
+  // Pure image prompts have no text field — the name doubles as the copy text.
+  modal.text.classList.toggle("hidden", mode !== "edit" || copyImage);
+  modal.name.placeholder = copyImage ? t("imageNamePh") : t("namePh");
+  modal.imgWrap.classList.toggle("hidden", !hasImg);
+  modal.addIcon.classList.toggle("hidden", hasImg);
+  // The image of an image prompt cannot be removed, only replaced.
+  modal.removeImg.classList.toggle("hidden", copyImage);
+  if (hasImg) {
+    modal.img.src = image;
+    modal.showImage.classList.toggle("active", showImage);
+    modal.showText.classList.toggle("active", !showImage);
+  }
+}
+
+async function startImageCreate() {
+  const img = await invoke("get_clipboard_image");
+  const data = img || await invoke("pick_image_file");
+  if (!data) return;
+  openModal({ mode: "image-create", title: t("imageModalTitle"), image: data, showImage: true, copyImage: true });
 }
 function closeModal() {
   modal.root.classList.add("hidden");
@@ -1000,16 +1151,27 @@ async function confirmModal() {
   if (!name) { modal.name.focus(); return; }
 
   const color = modalState.color || "";
+  const image = modalState.image || "";
+  // NOTE: Tauri expects camelCase keys for snake_case Rust args.
+  const showImage = image ? modalState.showImage : false;
+  const copyImage = image ? modalState.copyImage : false;
   if (modalState.mode === "create") {
-    await invoke("add_prompt", { name, text: inputEl.value.trim(), color });
+    const text = inputEl.value.trim();
+    if (!text) { closeModal(); return; }
+    await invoke("add_prompt", { name, text, color, image, showImage, copyImage });
     inputEl.value = "";
     autoGrow(inputEl);
     saveBtn.disabled = true;
+  } else if (modalState.mode === "image-create") {
+    // The name doubles as the copy text when the tile is switched to "Text".
+    await invoke("add_prompt", { name, text: name, color, image, showImage, copyImage });
   } else {
-    await invoke("update_prompt", { id: modalState.id, name, text: modal.text.value, color });
+    const text = copyImage ? name : modal.text.value;
+    await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage });
   }
   closeModal();
   await renderGrid();
+  if (!libraryEl.classList.contains("hidden")) renderLibrary();
 }
 
 async function editPrompt(id) {
@@ -1021,8 +1183,83 @@ async function editPrompt(id) {
       name: p.name,
       text: p.text,
       color: p.color || "",
-      title: t("editModalTitle"),
+      image: p.image || "",
+      showImage: p.show_image || false,
+      copyImage: p.copy_image || false,
+      title: p.copy_image ? t("imageEditTitle") : t("editModalTitle"),
     });
+  }
+}
+
+// ---- Prompt library (all prompts, click to edit) ----
+function renderLibrary() {
+  const list = $("library-list");
+  list.innerHTML = "";
+  if (!prompts.length) {
+    const empty = document.createElement("div");
+    empty.className = "hint";
+    empty.textContent = t("libraryEmpty");
+    list.appendChild(empty);
+    return;
+  }
+  const placed = new Set(Object.keys(layoutOf(activeView())));
+  for (const p of prompts) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "lib-item";
+    row.title = t("edit");
+
+    const body = document.createElement("span");
+    body.className = "lib-body";
+    const name = document.createElement("span");
+    name.className = "lib-name";
+    name.textContent = p.name;
+    const text = document.createElement("span");
+    text.className = "lib-text";
+    text.textContent = p.text;
+    body.append(name, text);
+
+    // Image prompts get a thumbnail, text prompts the color dot.
+    if (p.show_image && p.image) {
+      const thumb = document.createElement("img");
+      thumb.className = "lib-thumb";
+      thumb.src = p.image;
+      thumb.draggable = false;
+      row.append(thumb, body);
+    } else {
+      const dot = document.createElement("span");
+      dot.className = "dot";
+      if (p.color) dot.style.background = p.color;
+      row.append(dot, body);
+    }
+
+    // Place on the current layout: drag the row onto the grid, or one click.
+    row.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || e.target.closest(".lib-add")) return;
+      drag = { id: p.id, startX: e.clientX, startY: e.clientY, moved: false, el: row, fromLibrary: true };
+    });
+    if (!placed.has(p.id)) {
+      const add = document.createElement("span");
+      add.className = "icon-btn lib-add";
+      add.title = t("addToLayout");
+      add.innerHTML = GRID_PLUS;
+      add.addEventListener("pointerdown", (e) => e.stopPropagation());
+      add.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const view = activeView();
+        const occupied = new Map(
+          Object.entries(layoutOf(view)).map(([id, c]) => [cellKey(...c), id])
+        );
+        const free = firstFree(occupied, view.cols, view.rows);
+        if (!free) { toast(t("gridFull")); return; }
+        await placeTile(p.id, free[0], free[1]);
+        renderLibrary();
+      });
+      row.appendChild(add);
+    }
+
+    row.addEventListener("click", () => editPrompt(p.id));
+    list.appendChild(row);
   }
 }
 
@@ -1055,15 +1292,15 @@ function renderViewsEditor() {
       n.className = "grid-mini";
       n.type = "number";
       n.min = 1;
-      n.max = 20;
+      n.max = GRID_MAX;
       n.value = value;
       return n;
     };
     const colsIn = mkNum(v.cols);
     const rowsIn = mkNum(v.rows);
     const applyGrid = async () => {
-      const cols = Math.min(20, Math.max(1, Math.round(Number(colsIn.value) || v.cols)));
-      const rows = Math.min(20, Math.max(1, Math.round(Number(rowsIn.value) || v.rows)));
+      const cols = clampGrid(colsIn.value, v.cols);
+      const rows = clampGrid(rowsIn.value, v.rows);
       settings = await invoke("set_view_grid", { id: v.id, cols, rows });
       renderViewsEditor();
       if (v.id === settings.active_view) await renderGrid(true);
@@ -1130,19 +1367,13 @@ async function runImport() {
 
 async function deleteAll() {
   const btn = $("delete-all");
-  if (!btn.classList.contains("confirm")) {
-    btn.classList.add("confirm");
-    btn.textContent = t("deleteAllConfirm");
+  if (!armButton(btn, t("deleteAllConfirm"))) {
     clearTimeout(deleteAllTimer);
-    deleteAllTimer = setTimeout(() => {
-      btn.classList.remove("confirm");
-      btn.textContent = t("deleteAll");
-    }, 3000);
+    deleteAllTimer = setTimeout(() => disarmButton(btn, t("deleteAll")), 3000);
     return;
   }
   clearTimeout(deleteAllTimer);
-  btn.classList.remove("confirm");
-  btn.textContent = t("deleteAll");
+  disarmButton(btn, t("deleteAll"));
   await invoke("delete_all_data");
   location.reload(); // full re-init: default theme, views, toggles, grid
 }
@@ -1161,12 +1392,88 @@ function bind() {
   modal.confirm.addEventListener("click", confirmModal);
   modal.cancel.addEventListener("click", closeModal);
   modal.name.addEventListener("keydown", (e) => { if (e.key === "Enter") confirmModal(); });
-  // pointerdown (not click): selecting text that ends outside an input must not close.
+
+  // Image / Text display toggle (text mode shows the name on the tile).
+  modal.showImage.addEventListener("click", () => {
+    if (!modalState) return;
+    modalState.showImage = true;
+    syncModalImageUi(modalState.mode);
+  });
+  modal.showText.addEventListener("click", () => {
+    if (!modalState) return;
+    modalState.showImage = false;
+    syncModalImageUi(modalState.mode);
+  });
+  modal.replaceImg.addEventListener("click", async () => {
+    if (!modalState) return;
+    const data = await invoke("pick_image_file");
+    if (!data) return;
+    modalState.image = data;
+    modalState.showImage = true;
+    syncModalImageUi(modalState.mode);
+  });
+  // Icon image for a text prompt: shown on the tile, never copied.
+  modal.addIcon.addEventListener("click", async () => {
+    if (!modalState) return;
+    const data = await invoke("pick_image_file");
+    if (!data) return;
+    modalState.image = data;
+    modalState.showImage = true;
+    modalState.copyImage = false;
+    syncModalImageUi(modalState.mode);
+  });
+  modal.removeImg.addEventListener("click", () => {
+    if (!modalState) return;
+    modalState.image = "";
+    modalState.showImage = false;
+    syncModalImageUi(modalState.mode);
+  });
+
+  // Image button in the composer bar.
+  $("image-btn").addEventListener("click", startImageCreate);
+
+  // Free color choice from the native color-wheel dialog.
+  $("color-pick").addEventListener("input", (e) => {
+    if (!modalState) return;
+    modalState.color = e.target.value;
+    renderSwatches(modalState.color);
+  });
+  // Delete from the edit dialog, with the same two-step confirmation.
+  modal.delete.addEventListener("click", async () => {
+    if (!modalState || modalState.mode !== "edit") return;
+    if (!armButton(modal.delete, t("deleteConfirm"))) return;
+    const id = modalState.id;
+    closeModal();
+    await invoke("delete_prompt", { id });
+    await renderGrid();
+    if (!libraryEl.classList.contains("hidden")) renderLibrary();
+  });
   modal.root.addEventListener("pointerdown", (e) => { if (e.target === modal.root) closeModal(); });
 
   $("gear").addEventListener("click", () => {
     renderViewsEditor();
     settingsEl.classList.remove("hidden");
+  });
+
+  // Quick grid-size control (top-right of the layout, active view).
+  const applyQuickGrid = async () => {
+    const view = activeView();
+    const cols = clampGrid($("qg-cols").value, view.cols);
+    const rows = clampGrid($("qg-rows").value, view.rows);
+    if (cols === view.cols && rows === view.rows) return;
+    settings = await invoke("set_view_grid", { id: view.id, cols, rows });
+    await renderGrid(true);
+  };
+  $("qg-cols").addEventListener("change", applyQuickGrid);
+  $("qg-rows").addEventListener("change", applyQuickGrid);
+
+  $("library-btn").addEventListener("click", () => {
+    renderLibrary();
+    libraryEl.classList.remove("hidden");
+  });
+  $("library-close").addEventListener("click", () => libraryEl.classList.add("hidden"));
+  libraryEl.addEventListener("pointerdown", (e) => {
+    if (e.target === libraryEl) libraryEl.classList.add("hidden");
   });
   $("settings-close").addEventListener("click", () => settingsEl.classList.add("hidden"));
   // pointerdown (not click): selecting text that ends outside an input must not close.
@@ -1206,7 +1513,6 @@ function bind() {
   $("export-csv").addEventListener("click", () => runExport("csv"));
   $("export-txt").addEventListener("click", () => runExport("txt"));
   $("delete-all").addEventListener("click", deleteAll);
-  trayBtn.addEventListener("click", toggleTrayMenu);
 
   const themeSelect = $("theme-select");
   themeSelect.addEventListener("change", async () => {
@@ -1231,23 +1537,28 @@ function bind() {
   $("tile-size").addEventListener("change", tileStyleChanged);
 
   ctxEl.addEventListener("click", async (e) => {
-    const act = e.target.closest("button")?.dataset.act;
+    const btn = e.target.closest("button");
+    const act = btn?.dataset.act;
     if (!act || !ctxId) return;
     const id = ctxId;
+    if (act === "delete") {
+      if (!armButton(btn, t("deleteConfirm"))) return;
+      closeCtx();
+      await invoke("delete_prompt", { id });
+      await renderGrid();
+      return;
+    }
     closeCtx();
     if (act === "edit") {
       await editPrompt(id);
     } else if (act === "hide") {
-      // Remove from the active view's current grid -> behaves like unplaced (tray).
+      // Remove from the active view's grid; stays available in the library.
       const view = activeView();
       const layout = { ...layoutOf(view) };
       delete layout[id];
       view.layouts[gridKeyOf(view)] = layout;
       invoke("set_layout", { layout }).catch((e) => toast(String(e)));
       await renderGrid(true);
-    } else if (act === "delete") {
-      await invoke("delete_prompt", { id });
-      await renderGrid();
     } else if (act === "pin") {
       await invoke("toggle_floating", { id });
     }
@@ -1255,16 +1566,12 @@ function bind() {
 
   document.addEventListener("pointerdown", (e) => {
     if (!ctxEl.classList.contains("hidden") && !ctxEl.contains(e.target)) closeCtx();
-    if (!trayMenu.classList.contains("hidden") &&
-        !trayMenu.contains(e.target) && !trayBtn.contains(e.target)) {
-      trayMenu.classList.add("hidden");
-    }
   });
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (!ctxEl.classList.contains("hidden")) closeCtx();
-    else if (!trayMenu.classList.contains("hidden")) trayMenu.classList.add("hidden");
     else if (!modal.root.classList.contains("hidden")) closeModal();
+    else if (!libraryEl.classList.contains("hidden")) libraryEl.classList.add("hidden");
     else if (!settingsEl.classList.contains("hidden")) settingsEl.classList.add("hidden");
   });
 
@@ -1291,6 +1598,13 @@ async function init() {
   applyTileStyle();
   autoGrow(inputEl);
   inputEl.focus();
+  // Reveal the window only after the first fully fitted paint — the user
+  // never sees the text sizing itself.
+  requestAnimationFrame(() => {
+    fitCache.clear();
+    fitAllTiles();
+    requestAnimationFrame(() => invoke("show_main_window").catch(() => {}));
+  });
 }
 
 init();

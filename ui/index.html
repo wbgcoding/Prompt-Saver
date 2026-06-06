@@ -12,11 +12,24 @@
       <span class="title">Prompt Saver</span>
       <nav id="views" class="views hidden"></nav>
     </div>
-    <button id="gear" class="icon-btn" data-i18n-title="settings" aria-label="Settings">
-      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-        <path fill="currentColor" d="M19.14 12.94a7.49 7.49 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.3 7.3 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.6 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.49 7.49 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.42.32.66.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.24.1.52.02.66-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"/>
-      </svg>
-    </button>
+    <div class="header-actions">
+      <!-- Quick grid-size control for the active view -->
+      <div id="quick-grid" class="quick-grid" data-i18n-title="gridSize">
+        <input id="qg-cols" class="grid-mini" type="number" min="1" max="20" aria-label="Columns" />
+        <span class="times">×</span>
+        <input id="qg-rows" class="grid-mini" type="number" min="1" max="20" aria-label="Rows" />
+      </div>
+      <button id="library-btn" class="icon-btn" data-i18n-title="library" aria-label="All prompts">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path fill="currentColor" d="M4 6h2v2H4V6Zm4 0h12v2H8V6ZM4 11h2v2H4v-2Zm4 0h12v2H8v-2ZM4 16h2v2H4v-2Zm4 0h12v2H8v-2Z"/>
+        </svg>
+      </button>
+      <button id="gear" class="icon-btn" data-i18n-title="settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path fill="currentColor" d="M19.14 12.94a7.49 7.49 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.3 7.3 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.6 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.49 7.49 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.42.32.66.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.24.1.52.02.66-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"/>
+        </svg>
+      </button>
+    </div>
   </header>
 
   <section class="grid-wrap">
@@ -24,30 +37,54 @@
   </section>
 
   <footer class="composer">
+    <button id="image-btn" class="icon-btn composer-img-btn" data-i18n-title="addImage" aria-label="Add image">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <path fill="currentColor" d="M21 3H3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H3V5h18v14Zm-5.5-9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0ZM8.5 14l2-2.5 2 2.5 2.5-3 3.5 5H5l3.5-4.5Z"/>
+      </svg>
+    </button>
     <textarea id="input" class="input" rows="1" data-i18n-ph="promptPh" aria-label="Prompt text"></textarea>
     <button id="save" class="primary-btn" data-i18n="save" disabled>Save</button>
   </footer>
-
-  <!-- Overflow tray: prompts without a grid cell -->
-  <button id="tray" class="tray-btn hidden" data-i18n-title="unplaced">
-    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-      <path fill="currentColor" d="M4 5h16v4h-2V7H6v10h12v-2h2v4H4V5Zm10 4 4 3-4 3v-2H9v-2h5V9Z"/>
-    </svg>
-    <span id="tray-count" class="tray-count">0</span>
-  </button>
-  <div id="tray-menu" class="ctx hidden"></div>
 
   <!-- Name / edit modal -->
   <div id="modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal">
       <h2 id="modal-title" class="modal-title">Name this prompt</h2>
       <input id="modal-name" class="modal-input" type="text" data-i18n-ph="namePh" maxlength="80" />
+      <!-- Image preview + display toggle (visible only when prompt has an image) -->
+      <div id="modal-img-wrap" class="modal-img-wrap hidden">
+        <img id="modal-img" class="modal-preview-img" src="" alt="" draggable="false" />
+        <div class="modal-display-row">
+          <button type="button" id="modal-show-image" class="ghost-btn" data-i18n="showImageBtn">Image</button>
+          <button type="button" id="modal-show-text" class="ghost-btn" data-i18n="showTextBtn">Text</button>
+          <button type="button" id="modal-replace-img" class="ghost-btn" data-i18n="replaceImage">Replace</button>
+          <button type="button" id="modal-remove-img" class="ghost-btn danger-btn" data-i18n="removeImage">Remove image</button>
+        </div>
+      </div>
+      <button type="button" id="modal-add-icon" class="ghost-btn hidden" data-i18n="addIcon">Image as icon</button>
       <textarea id="modal-text" class="modal-input modal-text hidden" rows="6" data-i18n-ph="promptPh"></textarea>
       <div id="color-row" class="swatches"></div>
+      <input id="color-pick" class="color-pick" type="color" tabindex="-1" aria-hidden="true" />
       <div class="modal-actions">
+        <button id="modal-delete" class="ghost-btn danger-btn hidden" data-i18n="delete">Delete</button>
         <button id="modal-cancel" class="ghost-btn" data-i18n="cancel">Cancel</button>
         <button id="modal-confirm" class="primary-btn" data-i18n="save">Save</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Prompt library: every saved prompt, click to edit -->
+  <div id="library" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 class="modal-title" data-i18n="library">All prompts</h2>
+        <button id="library-close" class="icon-btn" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <div id="library-list" class="library-list"></div>
     </div>
   </div>
 

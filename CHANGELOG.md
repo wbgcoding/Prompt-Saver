@@ -3,17 +3,51 @@
 All notable changes to **Prompt Saver**. Download the latest version from the
 [releases page](../../releases/latest).
 
-## 1.3.3 — HotFix (2026-06-04)
+## 1.4.0 (2026-06-06)
+
+### Added
+- **Image prompts**: the image button next to the input saves a picture from
+  the clipboard (or via file dialog) — clicking the tile copies the image,
+  ready to paste anywhere
+- **Icon images**: any text prompt can show a picture on its tile instead of
+  the name (the click still copies the text)
+- Tiles and floating buttons display images edge to edge; the chosen color
+  frames grid tiles, floating image buttons are borderless square boxes with
+  much larger S / M / L sizes
+- High-quality scaling (up to 1024 px, Lanczos) keeps images sharp
 
 ### Fixed
+- The window now appears only after the first fully sized layout — no more
+  visible text resizing on startup
+- The "Copied!" overlay on floating image buttons matches the visible image
+
+## 1.3.3 — HotFix (2026-06-04)
+
+### Added
+- **Prompt library**: new list button in the header shows every saved prompt
+  with its full text — click an entry to edit, drag it onto the grid or use
+  its add button to place it on the current layout
+- **Quick grid size**: columns × rows of the active view directly in the
+  header, next to the library button
+- **More colors**: full-spectrum palette (12 colors) plus a free color picker
+- Delete option inside the edit dialog
+- Hovering a prompt button shows the stored text (what gets copied)
+  in the tooltip
+
+### Fixed
+- Wrong text size right after starting on monitors with display scaling
 - Tile text no longer shifts while dragging a prompt — the drag ghost now
   follows the cursor exactly and the picked-up tile keeps its size
 - Letters with descenders (g, j, p, y) are no longer cut off at the bottom
   edge of prompt buttons
+- Words are no longer cut mid-word: text hyphenates where possible,
+  otherwise the font shrinks to fit
 
 ### Improved
 - The installer now lets you choose between **installing for all users**
   (asks for administrator rights) or **only for the current user**
+- Deleting a prompt always asks for a second confirmation
+- The overflow tray is gone — unplaced prompts live in the prompt library
 
 ## 1.3.2 (2026-06-04)
 

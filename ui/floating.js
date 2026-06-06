@@ -46,6 +46,7 @@ let menuOpen = false;
 // Same sizing rules as the grid: fixed size -> same px; auto-fit -> largest
 // size whose single line still fits the pill.
 function fitPill() {
+  if (pill.classList.contains("has-image")) return; // no label to fit
   if (tileSize > 0) {
     label.style.fontSize = Math.round(tileSize * scale) + "px";
     return;
@@ -95,21 +96,65 @@ async function applySettings() {
 let fitRaf = 0;
 window.addEventListener("resize", () => {
   cancelAnimationFrame(fitRaf);
-  fitRaf = requestAnimationFrame(fitPill);
+  fitRaf = requestAnimationFrame(() => {
+    fitPill();
+    layoutImageFeedback();
+  });
 });
 
 const DRAG_THRESHOLD = 4;
 let drag = null; // {x, y, moved}
 let copiedTimer = null;
 
+// Width/height ratio of the pill image (0 = text pill).
+let imgRatio = 0;
+
+// Size the "Copied!" overlay to exactly cover the visible (contained) image.
+function layoutImageFeedback() {
+  const fb = document.getElementById("feedback");
+  if (!imgRatio) {
+    fb.style.inset = "";
+    fb.style.width = "";
+    fb.style.height = "";
+    return;
+  }
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  let w = W;
+  let h = W / imgRatio;
+  if (h > H) { h = H; w = H * imgRatio; }
+  fb.style.inset = `${(H - h) / 2}px auto auto ${(W - w) / 2}px`;
+  fb.style.width = `${w}px`;
+  fb.style.height = `${h}px`;
+}
+
+// Apply name, color and (optionally) the image onto the pill.
+function applyPrompt(p) {
+  label.textContent = p.name;
+  pill.title = p.name;
+  if (p.show_image && p.image) {
+    pill.classList.add("has-image");
+    pill.style.background = "";
+    pill.style.backgroundImage = `url(${p.image})`;
+    const im = new Image();
+    im.onload = () => {
+      imgRatio = im.naturalWidth / im.naturalHeight || 1;
+      layoutImageFeedback();
+    };
+    im.src = p.image;
+  } else {
+    pill.classList.remove("has-image");
+    pill.style.backgroundImage = "";
+    pill.style.background = p.color || "";
+    imgRatio = 0;
+    layoutImageFeedback();
+  }
+  fitPill();
+}
+
 async function loadName() {
   const p = await invoke("get_prompt", { id: promptId });
-  if (p) {
-    label.textContent = p.name;
-    pill.title = p.name;
-    if (p.color) pill.style.background = p.color;
-    fitPill();
-  }
+  if (p) applyPrompt(p);
 }
 
 function showCopied() {
@@ -188,14 +233,9 @@ window.addEventListener("mouseup", async () => {
   if (!wasDrag && (await invoke("copy_prompt", { id: promptId }))) showCopied();
 });
 
-// Refresh label when the prompt is edited in the main window.
+// Refresh pill when the prompt is edited in the main window.
 listen("prompt-updated", (e) => {
-  if (e.payload && e.payload.id === promptId) {
-    label.textContent = e.payload.name;
-    pill.title = e.payload.name;
-    pill.style.background = e.payload.color || "";
-    fitPill();
-  }
+  if (e.payload && e.payload.id === promptId) applyPrompt(e.payload);
 });
 
 listen("theme-changed", (e) => document.documentElement.setAttribute("data-theme", e.payload));

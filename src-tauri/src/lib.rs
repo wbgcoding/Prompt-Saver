@@ -1,6 +1,7 @@
 // Prompt Saver backend (Tauri v2). Local JSON storage, clipboard, import/export,
 // multiple views, frameless floating quick-copy windows. No network, 100% offline.
 
+use image::imageops::FilterType;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -44,6 +45,16 @@ struct Prompt {
     // Optional tile color (hex); empty = default surface color.
     #[serde(default)]
     color: String,
+    // Optional PNG data URL (scaled to ≤1024px); empty = no image.
+    #[serde(default)]
+    image: String,
+    // When true the tile shows the image instead of the name text.
+    #[serde(default)]
+    show_image: bool,
+    // True = clicking copies the image itself; false = the image is only an
+    // icon and clicking copies the text.
+    #[serde(default)]
+    copy_image: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -159,6 +170,9 @@ const GRID_MAX: u32 = 20;
 const MAX_VIEWS: usize = 20;
 const FLOAT_W: f64 = 160.0;
 const FLOAT_H: f64 = 48.0;
+const FLOAT_IMG: f64 = 180.0; // square box for image pills: S 135 / M 180 / L 252
+const FLOAT_MENU_W: f64 = 220.0;
+const FLOAT_MENU_H: f64 = 168.0;
 const AUTOSTART_KEY: &str = "PromptSaver";
 
 fn grid_key(cols: u32, rows: u32) -> String {
@@ -322,10 +336,15 @@ fn load_store(app: &AppHandle) -> Store {
     let dir = data_dir(app);
     let mut settings: Settings = read_json(&dir.join("settings.json"));
     settings.migrate();
-    Store {
-        prompts: read_json(&dir.join("prompts.json")),
-        settings,
+    let mut prompts: Vec<Prompt> = read_json(&dir.join("prompts.json"));
+    // Migration: image prompts saved before copy_image existed copied the
+    // image on click — keep that behaviour (name doubled as the text).
+    for p in &mut prompts {
+        if !p.image.is_empty() && !p.copy_image && (p.text.is_empty() || p.text == p.name) {
+            p.copy_image = true;
+        }
     }
+    Store { prompts, settings }
 }
 
 fn gen_id() -> String {
@@ -393,15 +412,26 @@ fn float_scale_of(settings: &Settings, id: &str) -> f64 {
     if s.is_finite() { s.clamp(0.5, 2.0) } else { 1.0 }
 }
 
+// Pill window size: square box for image pills, classic pill for text.
+fn pill_dims(is_image: bool, scale: f64) -> (f64, f64) {
+    if is_image {
+        (FLOAT_IMG * scale, FLOAT_IMG * scale)
+    } else {
+        (FLOAT_W * scale, FLOAT_H * scale)
+    }
+}
+
+fn is_image_prompt(p: &Prompt) -> bool {
+    p.show_image && !p.image.is_empty()
+}
+
 fn open_floating(app: &AppHandle, prompt: &Prompt) {
     let label = flabel(&prompt.id);
     if app.get_webview_window(&label).is_some() {
         return;
     }
 
-    // IMPORTANT: never call Tauri window APIs (default_pos -> primary_monitor)
-    // while holding the Db lock — on the main thread that can pump the message
-    // loop into our own event handlers, which lock the same mutex = deadlock.
+    // Never call Tauri window APIs while holding the Db lock (deadlock risk).
     let (saved, scale, count) = {
         let state: State<Db> = app.state();
         let store = lock(&state);
@@ -419,9 +449,10 @@ fn open_floating(app: &AppHandle, prompt: &Prompt) {
         save_settings(app, &store.settings);
     }
 
+    let (pw, ph) = pill_dims(is_image_prompt(prompt), scale);
     let win = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("floating.html".into()))
         .title(&prompt.name)
-        .inner_size(FLOAT_W * scale, FLOAT_H * scale)
+        .inner_size(pw, ph)
         .decorations(false)
         .transparent(true)
         .always_on_top(true)
@@ -465,12 +496,92 @@ fn close_floating_window(app: &AppHandle, id: &str) {
     }
 }
 
-// ---------- Prompt commands ----------
+// ---------- Image helpers ----------
+
+fn base64_encode(data: &[u8]) -> String {
+    const B: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
+    for c in data.chunks(3) {
+        let n = ((c[0] as u32) << 16)
+            | ((*c.get(1).unwrap_or(&0) as u32) << 8)
+            | (*c.get(2).unwrap_or(&0) as u32);
+        out.push(B[((n >> 18) & 63) as usize] as char);
+        out.push(B[((n >> 12) & 63) as usize] as char);
+        out.push(if c.len() > 1 { B[((n >> 6) & 63) as usize] as char } else { '=' });
+        out.push(if c.len() > 2 { B[(n & 63) as usize] as char } else { '=' });
+    }
+    out
+}
+
+fn base64_decode(s: &str) -> Vec<u8> {
+    const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let bytes: Vec<u8> = s.bytes().filter(|&b| b != b'=').collect();
+    let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
+    for c in bytes.chunks(4) {
+        let v: Vec<u32> = c.iter()
+            .filter_map(|&b| B64.iter().position(|&x| x == b).map(|i| i as u32))
+            .collect();
+        if v.len() >= 2 { out.push(((v[0] << 2) | (v[1] >> 4)) as u8); }
+        if v.len() >= 3 { out.push(((v[1] << 4) | (v[2] >> 2)) as u8); }
+        if v.len() >= 4 { out.push(((v[2] << 6) |  v[3]      ) as u8); }
+    }
+    out
+}
+
+fn copy_image_to_clipboard(data_url: &str) -> bool {
+    let b64 = data_url.trim_start_matches("data:image/png;base64,");
+    let bytes = base64_decode(b64);
+    if bytes.is_empty() { return false; }
+    let img = match image::load_from_memory(&bytes) {
+        Ok(img) => img.to_rgba8(),
+        Err(_) => return false,
+    };
+    let (w, h) = img.dimensions();
+    let img_data = arboard::ImageData {
+        width: w as usize,
+        height: h as usize,
+        bytes: img.into_raw().into(),
+    };
+    arboard::Clipboard::new().and_then(|mut c| c.set_image(img_data)).is_ok()
+}
+
+fn scale_and_encode(img: image::DynamicImage) -> String {
+    // High quality: generous max size + Lanczos filtering keeps tiles sharp.
+    const MAX: u32 = 1024;
+    let img = if img.width() > MAX || img.height() > MAX {
+        img.resize(MAX, MAX, FilterType::Lanczos3)
+    } else {
+        img
+    };
+    let mut buf = std::io::Cursor::new(Vec::<u8>::new());
+    if img.write_to(&mut buf, image::ImageFormat::Png).is_ok() {
+        format!("data:image/png;base64,{}", base64_encode(buf.get_ref()))
+    } else {
+        String::new()
+    }
+}
 
 #[tauri::command]
-fn list_prompts(state: State<Db>) -> Vec<Prompt> {
-    lock(&state).prompts.clone()
+fn get_clipboard_image() -> Option<String> {
+    let mut cb = arboard::Clipboard::new().ok()?;
+    let data = cb.get_image().ok()?;
+    let bytes: Vec<u8> = data.bytes.into_owned();
+    let img = image::RgbaImage::from_raw(data.width as u32, data.height as u32, bytes)?;
+    let result = scale_and_encode(image::DynamicImage::ImageRgba8(img));
+    if result.is_empty() { None } else { Some(result) }
 }
+
+#[tauri::command]
+fn pick_image_file() -> Option<String> {
+    let path = rfd::FileDialog::new()
+        .add_filter("Image", &["png", "jpg", "jpeg", "webp", "bmp"])
+        .pick_file()?;
+    let img = image::open(&path).ok()?;
+    let result = scale_and_encode(img);
+    if result.is_empty() { None } else { Some(result) }
+}
+
+// ---------- Prompt commands ----------
 
 #[tauri::command]
 fn get_prompt(state: State<Db>, id: String) -> Option<Prompt> {
@@ -500,12 +611,18 @@ fn add_prompt(
     name: String,
     text: String,
     color: String,
+    image: Option<String>,
+    show_image: Option<bool>,
+    copy_image: Option<bool>,
 ) -> Prompt {
     let prompt = Prompt {
         id: gen_id(),
         name,
         text,
         color,
+        image: image.unwrap_or_default(),
+        show_image: show_image.unwrap_or(false),
+        copy_image: copy_image.unwrap_or(false),
     };
     {
         let mut store = lock(&state);
@@ -529,6 +646,9 @@ fn update_prompt(
     name: String,
     text: String,
     color: String,
+    image: Option<String>,
+    show_image: Option<bool>,
+    copy_image: Option<bool>,
 ) -> Option<Prompt> {
     let updated = {
         let mut store = lock(&state);
@@ -538,6 +658,9 @@ fn update_prompt(
                 p.name = name;
                 p.text = text;
                 p.color = color;
+                if let Some(img) = image { p.image = img; }
+                if let Some(si) = show_image { p.show_image = si; }
+                if let Some(ci) = copy_image { p.copy_image = ci; }
                 let clone = p.clone();
                 save_prompts(&app, &store);
                 Some(clone)
@@ -547,6 +670,12 @@ fn update_prompt(
     };
     if let Some(p) = &updated {
         let _ = app.emit("prompt-updated", p.clone());
+        // An open pill switches between text pill and image box live.
+        if let Some(win) = app.get_webview_window(&flabel(&p.id)) {
+            let scale = float_scale_of(&lock(&state).settings, &p.id);
+            let (w, h) = pill_dims(is_image_prompt(p), scale);
+            let _ = win.set_size(tauri::LogicalSize::new(w, h));
+        }
     }
     updated
 }
@@ -767,22 +896,21 @@ fn set_theme(app: AppHandle, state: State<Db>, theme: String) -> String {
 
 #[tauri::command]
 fn copy_prompt(state: State<Db>, id: String) -> bool {
-    let text = {
+    let prompt = {
         let store = lock(&state);
-        store.prompts.iter().find(|p| p.id == id).map(|p| p.text.clone())
+        store.prompts.iter().find(|p| p.id == id).cloned()
     };
-    match text {
-        Some(t) => arboard::Clipboard::new()
-            .and_then(|mut c| c.set_text(t))
+    match prompt {
+        Some(p) if p.copy_image && !p.image.is_empty() => copy_image_to_clipboard(&p.image),
+        Some(p) => arboard::Clipboard::new()
+            .and_then(|mut c| c.set_text(p.text))
             .is_ok(),
         None => false,
     }
 }
 
-// MUST be async: Tauri v2 runs sync commands on the main thread, and building
-// a webview window there blocks the message loop WebView2 needs to finish the
-// creation — a guaranteed deadlock on Windows. As an async command this runs
-// on a worker thread and Tauri dispatches the creation to the event loop.
+// Must stay async: window creation from a sync command deadlocks on Windows
+// (sync commands run on the main thread, which WebView2 needs free).
 #[tauri::command]
 async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: String) -> Result<bool, String> {
     if app.get_webview_window(&flabel(&id)).is_some() {
@@ -818,13 +946,15 @@ async fn set_float_scale(
     scale: f64,
 ) -> Result<(), String> {
     let scale = if scale.is_finite() { scale.clamp(0.5, 2.0) } else { 1.0 };
-    {
+    let is_img = {
         let mut store = lock(&state);
         store.settings.float_scale.insert(id.clone(), scale);
         save_settings(&app, &store.settings);
-    }
+        store.prompts.iter().find(|p| p.id == id).map(is_image_prompt).unwrap_or(false)
+    };
     if let Some(win) = app.get_webview_window(&flabel(&id)) {
-        let _ = win.set_size(tauri::LogicalSize::new(FLOAT_W * scale, FLOAT_H * scale));
+        let (w, h) = pill_dims(is_img, scale);
+        let _ = win.set_size(tauri::LogicalSize::new(w, h));
     }
     Ok(())
 }
@@ -837,16 +967,33 @@ async fn resize_float_menu(
     id: String,
     open: bool,
 ) -> Result<(), String> {
-    let scale = float_scale_of(&lock(&state).settings, &id);
+    let (scale, is_img) = {
+        let store = lock(&state);
+        (
+            float_scale_of(&store.settings, &id),
+            store.prompts.iter().find(|p| p.id == id).map(is_image_prompt).unwrap_or(false),
+        )
+    };
     if let Some(win) = app.get_webview_window(&flabel(&id)) {
-        let (w, h) = if open {
-            ((FLOAT_W * scale).max(220.0), 168.0)
-        } else {
-            (FLOAT_W * scale, FLOAT_H * scale)
-        };
+        let (pw, ph) = pill_dims(is_img, scale);
+        let (w, h) = if open { (pw.max(FLOAT_MENU_W), FLOAT_MENU_H) } else { (pw, ph) };
         let _ = win.set_size(tauri::LogicalSize::new(w, h));
     }
     Ok(())
+}
+
+// Called by the frontend once the first render + text fit is complete.
+#[tauri::command]
+fn show_main_window(app: AppHandle) {
+    if std::env::args().any(|a| a == "--minimized") {
+        return;
+    }
+    if let Some(w) = app.get_webview_window("main") {
+        if !w.is_visible().unwrap_or(false) {
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
+    }
 }
 
 // "Edit prompt" from a pill: bring up the main window and open its edit modal.
@@ -855,11 +1002,6 @@ async fn edit_prompt_request(app: AppHandle, id: String) -> Result<(), String> {
     show_main(&app);
     let _ = app.emit("edit-prompt", id);
     Ok(())
-}
-
-#[tauri::command]
-fn is_floating_open(app: AppHandle, id: String) -> bool {
-    app.get_webview_window(&flabel(&id)).is_some()
 }
 
 // ---------- Background / autostart ----------
@@ -1279,6 +1421,9 @@ fn import_prompts(app: AppHandle, state: State<Db>) -> Result<usize, String> {
             name: item.name,
             text: item.text,
             color: item.color,
+            image: String::new(),
+            show_image: false,
+            copy_image: false,
         };
         apply_positions(&mut store.settings, &prompt.id, &item.positions);
         store.prompts.push(prompt);
@@ -1310,9 +1455,8 @@ fn centered_on_primary(main: &tauri::WebviewWindow, width: u32, height: u32) -> 
     WindowGeom { x: 100, y: 100, width, height }
 }
 
-// First start ONLY: 50% of the primary monitor, centered. Afterwards the saved
-// size is always kept; if its monitor is gone, only the position is re-centered
-// on the primary monitor.
+// First start: 50% of the primary monitor, centered. Afterwards the saved size
+// is kept; if its monitor is gone, only the position is re-centered.
 fn resolve_geometry(main: &tauri::WebviewWindow, saved: Option<WindowGeom>) -> WindowGeom {
     if let Some(g) = saved {
         if g.width > 0 && g.height > 0 {
@@ -1355,10 +1499,8 @@ fn update_geom<F: FnOnce(&mut WindowGeom)>(handle: &AppHandle, f: F) {
 
 // ---------- App entry ----------
 
-// The exe itself is fully portable; its only external requirement is the
-// WebView2 runtime (preinstalled on Windows 11 and current Windows 10).
-// If it is missing, offer the official Microsoft installer instead of
-// failing with a cryptic error.
+// WebView2 runtime is the only external requirement; offer the official
+// installer if it is missing instead of failing with a cryptic error.
 #[cfg(windows)]
 fn ensure_webview2() -> bool {
     if tauri::webview_version().is_ok() {
@@ -1439,8 +1581,19 @@ pub fn run() {
                 let geom = resolve_geometry(&main, saved_geom);
                 let _ = main.set_size(PhysicalSize::new(geom.width, geom.height));
                 let _ = main.set_position(PhysicalPosition::new(geom.x, geom.y));
+                // The window is revealed by the frontend (show_main_window) once
+                // the first layout pass is done — no visible text re-sizing.
+                // Safety net: show after 1.5s even if the frontend never calls.
                 if !start_hidden {
-                    let _ = main.show();
+                    let h = handle.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(1500));
+                        if let Some(w) = h.get_webview_window("main") {
+                            if !w.is_visible().unwrap_or(true) {
+                                let _ = w.show();
+                            }
+                        }
+                    });
                 }
                 if let Some(state) = handle.try_state::<Db>() {
                     state.lock().unwrap_or_else(|e| e.into_inner()).settings.window = Some(geom);
@@ -1566,7 +1719,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            list_prompts,
             get_prompt,
             add_prompt,
             update_prompt,
@@ -1589,12 +1741,14 @@ pub fn run() {
             set_float_scale,
             resize_float_menu,
             edit_prompt_request,
-            is_floating_open,
+            show_main_window,
             set_minimize_on_close,
             set_autostart,
             set_start_minimized,
             export_prompts,
-            import_prompts
+            import_prompts,
+            get_clipboard_image,
+            pick_image_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

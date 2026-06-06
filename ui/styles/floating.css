@@ -52,6 +52,22 @@ html, body {
 .pill:active { transform: scale(0.96); }
 .pill.dragging { cursor: grabbing; }
 
+/* Image pill: borderless square box showing the WHOLE picture. */
+.pill.has-image {
+  background-color: transparent;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  border: none;
+  border-radius: 10px;
+  padding: 0;
+}
+.pill.has-image .label { display: none; }
+.pill.has-image .feedback {
+  border-radius: 10px;
+  font-size: 12px;
+}
+
 .label, .feedback {
   white-space: nowrap;
   overflow: hidden;
@@ -79,9 +95,7 @@ html, body {
   flex-direction: column;
   gap: 4px;
   width: 100%;
-  /* Auto height: the panel only covers its items, leftover window space
-     stays transparent (no empty row at the bottom). */
-  height: auto;
+  height: auto; /* leftover window space stays transparent */
   padding: 8px;
   border-radius: 14px;
   background: var(--menu-bg);
