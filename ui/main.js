@@ -46,6 +46,7 @@ let ctxId = null;
 let drag = null;
 let toastTimer = null;
 let deleteAllTimer = null;
+let versionLabel = ""; // "v1.6.0", shown in the update status
 
 // Surface unexpected errors as a toast instead of failing silently.
 window.addEventListener("error", (e) => toast(String(e.message)));
@@ -1684,8 +1685,15 @@ function bind() {
 
   // Updates: manual check in the settings + daily background notification.
   let updateInfo = null;
+  let statusTimer = null;
   const updateBtn = $("update-btn");
   const updateStatus = $("update-status");
+  // Temporary status message; falls back to the version label after 5s.
+  const flashStatus = (txt) => {
+    updateStatus.textContent = txt;
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => { updateStatus.textContent = versionLabel; }, 5000);
+  };
   const offerUpdate = (info) => {
     updateInfo = info;
     updateBtn.textContent = t("installUpdate").replace("{v}", info.version);
@@ -1699,9 +1707,10 @@ function bind() {
       }
       const info = await invoke("check_update");
       if (info.available) offerUpdate(info);
-      else updateStatus.textContent = t("upToDate");
-    } catch {
-      updateStatus.textContent = t("updateFailed");
+      else flashStatus(t("upToDate"));
+    } catch (err) {
+      flashStatus(t("updateFailed"));
+      toast(String(err));
     }
     updateBtn.disabled = false;
   });
@@ -1713,8 +1722,8 @@ function bind() {
     toast(t("updateAvailable").replace("{v}", e.payload.version), {
       label: t("installNow"),
       onClick: () =>
-        invoke("install_update", { url: e.payload.url }).catch(() =>
-          toast(t("updateFailed"))
+        invoke("install_update", { url: e.payload.url }).catch((err) =>
+          toast(String(err))
         ),
     });
   });
@@ -1740,7 +1749,10 @@ async function init() {
   $("opt-autoupdate").checked = settings.auto_update !== false;
   $("tile-font").value = settings.tile_font || "system";
   $("tile-size").value = String(settings.tile_size ?? 0);
-  invoke("app_version").then((v) => { $("update-status").textContent = `v${v}`; }).catch(() => {});
+  invoke("app_version").then((v) => {
+    versionLabel = `v${v}`;
+    $("update-status").textContent = versionLabel;
+  }).catch(() => {});
   applyTileStyle();
   autoGrow(inputEl);
   inputEl.focus();

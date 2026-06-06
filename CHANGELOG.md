@@ -3,6 +3,16 @@
 All notable changes to **Prompt Saver**. Download the latest version from the
 [releases page](../../releases/latest).
 
+## 1.6.1 (2026-06-06)
+
+### Fixed
+- Installing an update via the notification or the settings no longer fails —
+  the silent installer now starts reliably and the app restarts itself
+- The update check runs right after launch (was: 30 seconds later)
+- No more white flash at the window edges while resizing
+- "You're up to date" in the settings makes way for the version number
+  after a few seconds
+
 ## 1.6.0 (2026-06-06)
 
 ### Added

@@ -367,6 +367,19 @@ fn lock<'a>(state: &'a State<'a, Db>) -> std::sync::MutexGuard<'a, Store> {
 
 // ---------- Theme ----------
 
+// Native window background = theme background, so the area exposed while
+// resizing never flashes white.
+fn apply_window_bg(app: &AppHandle, theme: &str) {
+    if let Some(win) = app.get_webview_window("main") {
+        let color = if theme == "dark" {
+            tauri::webview::Color(27, 27, 29, 255) // --bg dark #1b1b1d
+        } else {
+            tauri::webview::Color(247, 247, 248, 255) // --bg light #f7f7f8
+        };
+        let _ = win.set_background_color(Some(color));
+    }
+}
+
 fn effective_theme(app: &AppHandle, pref: &str) -> String {
     match pref {
         "light" | "dark" => pref.to_string(),
@@ -896,6 +909,7 @@ fn set_theme(app: AppHandle, state: State<Db>, theme: String) -> String {
         save_settings(&app, &store.settings);
     }
     let effective = effective_theme(&app, &theme);
+    apply_window_bg(&app, &effective);
     let _ = app.emit("theme-changed", effective.clone());
     effective
 }
@@ -1078,15 +1092,15 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
         .set("User-Agent", "PromptSaver")
         .timeout(std::time::Duration::from_secs(300))
         .call()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("download: {}", e))?;
     let mut bytes = Vec::new();
     use std::io::Read;
     resp.into_reader()
         .take(UPDATE_MAX_BYTES)
         .read_to_end(&mut bytes)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("read: {}", e))?;
     let installer = std::env::temp_dir().join("prompt-saver-setup.exe");
-    fs::write(&installer, &bytes).map_err(|e| e.to_string())?;
+    fs::write(&installer, &bytes).map_err(|e| format!("save installer: {}", e))?;
 
     // Helper script: silent install, relaunch the app, clean up after itself.
     let app_exe = std::env::current_exe().map_err(|e| e.to_string())?;
@@ -1096,7 +1110,7 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
         installer.display(),
         app_exe.display()
     );
-    fs::write(&script, content).map_err(|e| e.to_string())?;
+    fs::write(&script, content).map_err(|e| format!("save script: {}", e))?;
 
     let mut cmd = std::process::Command::new("cmd");
     cmd.args(["/C", &script.to_string_lossy()]);
@@ -1105,13 +1119,17 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000); // no console window
     }
-    cmd.spawn().map_err(|e| e.to_string())?;
+    cmd.spawn().map_err(|e| format!("start installer: {}", e))?;
 
-    if let Some(state) = app.try_state::<Db>() {
-        let store = state.lock().unwrap_or_else(|e| e.into_inner());
-        save_settings(&app, &store.settings);
-    }
-    app.exit(0);
+    // Exit slightly delayed so this command's reply still reaches the UI.
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(800));
+        if let Some(state) = app.try_state::<Db>() {
+            let store = state.lock().unwrap_or_else(|e| e.into_inner());
+            save_settings(&app, &store.settings);
+        }
+        app.exit(0);
+    });
     Ok(())
 }
 
@@ -1714,6 +1732,14 @@ pub fn run() {
                 let geom = resolve_geometry(&main, saved_geom);
                 let _ = main.set_size(PhysicalSize::new(geom.width, geom.height));
                 let _ = main.set_position(PhysicalPosition::new(geom.x, geom.y));
+                {
+                    let pref = handle
+                        .try_state::<Db>()
+                        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.theme.clone())
+                        .unwrap_or_else(|| "system".to_string());
+                    let eff = effective_theme(&handle, &pref);
+                    apply_window_bg(&handle, &eff);
+                }
                 // The window is revealed by the frontend (show_main_window) once
                 // the first layout pass is done — no visible text re-sizing.
                 // Safety net: show after 1.5s even if the frontend never calls.
@@ -1760,6 +1786,7 @@ pub fn run() {
                                 .clone();
                             if pref == "system" {
                                 let eff = effective_theme(&handle2, &pref);
+                                apply_window_bg(&handle2, &eff);
                                 let _ = handle2.emit("theme-changed", eff);
                             }
                         }
@@ -1850,10 +1877,10 @@ pub fn run() {
                 open_floating(&handle, prompt);
             }
 
-            // Update check: shortly after launch, then once a day (if enabled).
+            // Update check: right after launch, then once a day (if enabled).
             let h2 = handle.clone();
             std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_secs(30));
+                std::thread::sleep(std::time::Duration::from_secs(2));
                 loop {
                     let enabled = h2
                         .try_state::<Db>()
