@@ -4,11 +4,15 @@
   <meta charset="UTF-8" />
   <title>Prompt</title>
   <link rel="stylesheet" href="styles/floating.css" />
+  <link rel="stylesheet" href="styles/media.css" />
 </head>
 <body>
   <button id="pill" class="pill" type="button">
+    <video id="video" class="pill-video hidden" muted loop autoplay playsinline></video>
     <span id="label" class="label">Prompt</span>
-    <span id="feedback" class="feedback">Kopiert!</span>
+    <span id="caption" class="pill-caption hidden"></span>
+    <span id="feedback" class="feedback"></span>
+    <span id="file-error" class="file-error"></span>
   </button>
 
   <!-- Right-click menu: size presets, edit prompt, remove pill -->
@@ -18,6 +22,11 @@
       <button type="button" data-scale="0.75">S</button>
       <button type="button" data-scale="1">M</button>
       <button type="button" data-scale="1.4">L</button>
+      <button id="menu-close" type="button" class="menu-close">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+        </svg>
+      </button>
     </div>
     <button id="menu-edit" type="button">Edit prompt</button>
     <button id="menu-remove" type="button" class="danger">Remove</button>

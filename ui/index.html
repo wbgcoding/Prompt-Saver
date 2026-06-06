@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <title>Prompt Saver</title>
   <link rel="stylesheet" href="styles/main.css" />
+  <link rel="stylesheet" href="styles/media.css" />
 </head>
 <body>
   <header class="header">
@@ -15,21 +16,21 @@
     <div class="header-actions">
       <!-- Quick grid-size control for the active view -->
       <div id="quick-grid" class="quick-grid" data-i18n-title="gridSize">
-        <input id="qg-cols" class="grid-mini" type="number" min="1" max="20" aria-label="Columns" />
+        <input id="qg-cols" class="grid-mini" type="number" min="1" max="20" data-i18n-aria="gridSize" />
         <span class="times">×</span>
-        <input id="qg-rows" class="grid-mini" type="number" min="1" max="20" aria-label="Rows" />
+        <input id="qg-rows" class="grid-mini" type="number" min="1" max="20" data-i18n-aria="gridSize" />
       </div>
-      <button id="library-btn" class="icon-btn" data-i18n-title="library" aria-label="All prompts">
+      <button id="library-btn" class="icon-btn" data-i18n-title="library" data-i18n-aria="library">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
           <path fill="currentColor" d="M4 6h2v2H4V6Zm4 0h12v2H8V6ZM4 11h2v2H4v-2Zm4 0h12v2H8v-2ZM4 16h2v2H4v-2Zm4 0h12v2H8v-2Z"/>
         </svg>
       </button>
-      <button id="gear" class="icon-btn" data-i18n-title="settings" aria-label="Settings">
+      <button id="gear" class="icon-btn" data-i18n-title="settings" data-i18n-aria="settings">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
           <path fill="currentColor" d="M19.14 12.94a7.49 7.49 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.3 7.3 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.6 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.49 7.49 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.42.32.66.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.24.1.52.02.66-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"/>
         </svg>
       </button>
-      <button id="hide-top" class="icon-btn bar-toggle" data-i18n-title="hideBar" aria-label="Hide bar">
+      <button id="hide-top" class="icon-btn bar-toggle" data-i18n-title="hideBar" data-i18n-aria="hideBar">
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
           <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 14l6-6 6 6"/>
         </svg>
@@ -38,12 +39,12 @@
   </header>
 
   <!-- Restore buttons for hidden bars -->
-  <button id="show-top" class="bar-restore bar-restore-top hidden" data-i18n-title="showBar" aria-label="Show bar">
+  <button id="show-top" class="bar-restore bar-restore-top hidden" data-i18n-title="showBar" data-i18n-aria="showBar">
     <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
       <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 10l6 6 6-6"/>
     </svg>
   </button>
-  <button id="show-bottom" class="bar-restore bar-restore-bottom hidden" data-i18n-title="showBar" aria-label="Show bar">
+  <button id="show-bottom" class="bar-restore bar-restore-bottom hidden" data-i18n-title="showBar" data-i18n-aria="showBar">
     <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
       <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 14l6-6 6 6"/>
     </svg>
@@ -54,14 +55,14 @@
   </section>
 
   <footer class="composer">
-    <button id="image-btn" class="icon-btn composer-img-btn" data-i18n-title="addImage" aria-label="Add image">
+    <button id="file-btn" class="icon-btn composer-img-btn" data-i18n-title="addFile" data-i18n-aria="addFile">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-        <path fill="currentColor" d="M21 3H3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 16H3V5h18v14Zm-5.5-9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0ZM8.5 14l2-2.5 2 2.5 2.5-3 3.5 5H5l3.5-4.5Z"/>
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21.2 11.2l-8.4 8.4a5.5 5.5 0 0 1-7.8-7.8l8.4-8.4a3.7 3.7 0 0 1 5.2 5.2l-8.4 8.4a1.9 1.9 0 0 1-2.6-2.6l7.7-7.7"/>
       </svg>
     </button>
-    <textarea id="input" class="input" rows="1" data-i18n-ph="promptPh" aria-label="Prompt text"></textarea>
+    <textarea id="input" class="input" rows="1" data-i18n-ph="promptPh" data-i18n-aria="promptPh"></textarea>
     <button id="save" class="primary-btn" data-i18n="save" disabled>Save</button>
-    <button id="hide-bottom" class="icon-btn bar-toggle" data-i18n-title="hideBar" aria-label="Hide bar">
+    <button id="hide-bottom" class="icon-btn bar-toggle" data-i18n-title="hideBar" data-i18n-aria="hideBar">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
         <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 10l6 6 6-6"/>
       </svg>
@@ -76,17 +77,45 @@
       <!-- Image preview + display toggle (visible only when prompt has an image) -->
       <div id="modal-img-wrap" class="modal-img-wrap hidden">
         <img id="modal-img" class="modal-preview-img" src="" alt="" draggable="false" />
+        <video id="modal-video" class="modal-preview-img hidden" muted loop autoplay playsinline></video>
         <div class="modal-display-row">
-          <button type="button" id="modal-show-image" class="ghost-btn" data-i18n="showImageBtn">Image</button>
+          <button type="button" id="modal-show-image" class="ghost-btn" data-i18n="showImageBtn">Preview</button>
           <button type="button" id="modal-show-text" class="ghost-btn" data-i18n="showTextBtn">Text</button>
-          <button type="button" id="modal-replace-img" class="ghost-btn" data-i18n="replaceImage">Replace</button>
-          <button type="button" id="modal-remove-img" class="ghost-btn danger-btn" data-i18n="removeImage">Remove image</button>
+          <button type="button" id="modal-replace-img" class="ghost-btn" data-i18n="replaceMedia">Replace media</button>
+          <button type="button" id="modal-remove-img" class="ghost-btn danger-btn" data-i18n="removeImage">Remove media</button>
+        </div>
+        <!-- Optional caption shown over the media tile + its text size -->
+        <div class="caption-row">
+          <input id="modal-caption" class="modal-input" type="text" maxlength="80" data-i18n-ph="captionPh" />
+          <!-- Options filled by JS: default + 10..40 -->
+          <select id="modal-caption-size" class="modal-input caption-size" data-i18n-title="tileSize"></select>
         </div>
       </div>
       <button type="button" id="modal-add-icon" class="ghost-btn hidden" data-i18n="addIcon">Image as icon</button>
+      <!-- Attached file row (visible only when the prompt has a file) -->
+      <div id="modal-file-wrap" class="modal-file-wrap hidden">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21.2 11.2l-8.4 8.4a5.5 5.5 0 0 1-7.8-7.8l8.4-8.4a3.7 3.7 0 0 1 5.2 5.2l-8.4 8.4a1.9 1.9 0 0 1-2.6-2.6l7.7-7.7"/>
+        </svg>
+        <span id="modal-file-name" class="modal-file-name"></span>
+        <button type="button" id="modal-replace-file" class="ghost-btn" data-i18n="replaceImage">Replace</button>
+      </div>
+      <p id="modal-file-hint" class="modal-hint hidden" data-i18n="fileHint">Only the file path is saved.</p>
       <textarea id="modal-text" class="modal-input modal-text hidden" rows="6" data-i18n-ph="promptPh"></textarea>
+      <!-- Per-tile font/size overrides (create + edit) -->
+      <div id="modal-style-row" class="two-col">
+        <label class="field">
+          <span data-i18n="tileFont">Font</span>
+          <!-- Options filled by JS from the shared font catalog -->
+          <select id="modal-font" class="modal-input"></select>
+        </label>
+        <label class="field">
+          <span data-i18n="tileSize">Text size</span>
+          <!-- Options filled by JS: Like settings + Automatic + 10..40 -->
+          <select id="modal-size" class="modal-input"></select>
+        </label>
+      </div>
       <div id="color-row" class="swatches"></div>
-      <input id="color-pick" class="color-pick" type="color" tabindex="-1" aria-hidden="true" />
       <div class="modal-actions">
         <button id="modal-delete" class="ghost-btn danger-btn hidden" data-i18n="delete">Delete</button>
         <button id="modal-cancel" class="ghost-btn" data-i18n="cancel">Cancel</button>
@@ -100,7 +129,7 @@
     <div class="modal">
       <div class="modal-head">
         <h2 class="modal-title" data-i18n="library">All prompts</h2>
-        <button id="library-close" class="icon-btn" aria-label="Close">
+        <button id="library-close" class="icon-btn" data-i18n-aria="close">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
             <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
           </svg>
@@ -115,7 +144,7 @@
     <div class="modal">
       <div class="modal-head">
         <h2 class="modal-title" data-i18n="settings">Settings</h2>
-        <button id="settings-close" class="icon-btn" aria-label="Close">
+        <button id="settings-close" class="icon-btn" data-i18n-aria="close">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
             <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
           </svg>
@@ -128,6 +157,19 @@
             <option value="system" data-i18n="themeSystem">System</option>
             <option value="light" data-i18n="themeLight">Light</option>
             <option value="dark" data-i18n="themeDark">Dark</option>
+            <option value="programmer" data-i18n="themeProgrammer">Programmer</option>
+            <option value="ai" data-i18n="themeAi">AI Enthusiast</option>
+            <option value="cyberpunk" data-i18n="themeCyberpunk">Cyberpunk</option>
+            <option value="retro" data-i18n="themeRetro">Retro</option>
+            <option value="mono" data-i18n="themeMono">Black &amp; White</option>
+            <option value="gradient" data-i18n="themeGradient">Gradient</option>
+            <option value="sunset" data-i18n="themeSunset">Sunset</option>
+            <option value="ocean" data-i18n="themeOcean">Ocean</option>
+            <option value="forest" data-i18n="themeForest">Forest</option>
+            <option value="lavender" data-i18n="themeLavender">Lavender</option>
+            <option value="candy" data-i18n="themeCandy">Candy</option>
+            <option value="coffee" data-i18n="themeCoffee">Coffee</option>
+            <option value="midnight" data-i18n="themeMidnight">Midnight</option>
           </select>
         </label>
         <label class="field">
@@ -144,34 +186,29 @@
             <option value="ru">Русский</option>
             <option value="zh">中文</option>
             <option value="ja">日本語</option>
+            <option value="nl">Nederlands</option>
+            <option value="tr">Türkçe</option>
+            <option value="ko">한국어</option>
+            <option value="hi">हिन्दी</option>
+            <option value="id">Bahasa Indonesia</option>
+            <option value="vi">Tiếng Việt</option>
+            <option value="cs">Čeština</option>
+            <option value="uk">Українська</option>
+            <option value="sv">Svenska</option>
+            <option value="ro">Română</option>
           </select>
         </label>
       </div>
       <div class="two-col">
         <label class="field">
           <span data-i18n="tileFont">Font</span>
-          <select id="tile-font" class="modal-input">
-            <option value="system" data-i18n="fontSystem">System</option>
-            <option value="arial">Arial</option>
-            <option value="verdana">Verdana</option>
-            <option value="tahoma">Tahoma</option>
-            <option value="georgia">Georgia</option>
-            <option value="times">Times New Roman</option>
-            <option value="mono">Consolas</option>
-            <option value="courier">Courier New</option>
-            <option value="script" data-i18n="fontScript">Handwriting</option>
-            <option value="impact">Impact</option>
-          </select>
+          <!-- Options filled by JS from the shared font catalog -->
+          <select id="tile-font" class="modal-input"></select>
         </label>
         <label class="field">
           <span data-i18n="tileSize">Text size</span>
-          <select id="tile-size" class="modal-input">
-            <option value="0" data-i18n="langAuto">Automatic</option>
-            <option value="13" data-i18n="sizeSmall">Small</option>
-            <option value="15" data-i18n="sizeMedium">Medium</option>
-            <option value="18" data-i18n="sizeLarge">Large</option>
-            <option value="22" data-i18n="sizeXL">Extra large</option>
-          </select>
+          <!-- Options filled by JS: Automatic + 10..40 in steps of 2 -->
+          <select id="tile-size" class="modal-input"></select>
         </label>
       </div>
       <div class="field">
@@ -195,8 +232,8 @@
         <span data-i18n="importExport">Import / export prompts</span>
         <div class="export-row">
           <button id="import-btn" class="ghost-btn" data-i18n="import">Import</button>
-          <button id="export-csv" class="ghost-btn">CSV</button>
-          <button id="export-txt" class="ghost-btn">TXT</button>
+          <button id="export-csv" class="ghost-btn" data-i18n="exportCsv">CSV export</button>
+          <button id="export-txt" class="ghost-btn" data-i18n="exportTxt">TXT export</button>
         </div>
       </div>
       <div class="field">

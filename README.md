@@ -11,15 +11,16 @@ A tiny, fully offline Windows tool for storing your favorite prompts and copying
 - **Prompt library** – header button lists every saved prompt; edit it there, drag it onto the grid or add it with one click
 - **Multiple views** – up to 20 named pages, each with its own grid size and layout (quick size control in the header)
 - **Floating buttons** – pin any prompt as a frameless, transparent, always-on-top pill; click to copy from anywhere, drag to reposition, right-click for size / edit / remove; positions survive restarts
-- **Images** – save a picture from the clipboard or a file and paste it anywhere with one click; or give any text prompt an icon image on its tile
-- **Per-prompt colors** – tint tiles and floating pills from a color palette (frames image tiles)
-- **Auto-fit text** – tile text grows to fill the button (or pick a fixed size and one of 10 fonts)
-- **10 languages** – auto-detected from the system (EN fallback): EN, DE, ES, FR, IT, PT, PL, RU, ZH, JA
-- **Import / export** – CSV or TXT including views, layouts, colors and language; re-import restores everything
+- **Images, GIFs & videos** – save a picture from the clipboard or a file and paste it anywhere with one click; attach any file by path; give any prompt a media icon and an optional caption
+- **Video player** – looping previews on tiles **and** floating buttons with play/pause, scrubber, loop toggle and a volume slider; volume, mute and loop are remembered per prompt
+- **Per-prompt colors** – tint tiles and floating pills from a palette or a custom color picker (frames media)
+- **Auto-fit text** – tile text grows to fill the button (or pick a fixed size and one of 20 fonts, per prompt if you like)
+- **20 languages** – auto-detected from the system (EN fallback): EN, DE, ES, FR, IT, PT, PL, RU, ZH, JA, NL, TR, KO, HI, ID, VI, CS, UK, SV, RO
+- **Import / export** – CSV or TXT including views, layouts, colors, styles and language; re-import restores everything
 - **Runs in the background** – optional minimize-to-tray on close, autostart at login (optionally minimized)
 - **Auto updates** – daily check for new releases with one-click install (also manually via Settings → Updates)
 - **Distraction-free mode** – hide the top and bottom bars with subtle arrows; the grid takes over the freed space
-- **Light / dark / system theme** with live OS detection
+- **16 themes** – light / dark / system (live OS detection) plus Programmer, AI, Cyberpunk, Retro, Gradient and more
 - **100% local** – data stored as JSON in `%APPDATA%`, no network, no telemetry
 - **Tiny** – ~3 MB exe (Tauri / Rust), uses the Windows WebView2 runtime
 

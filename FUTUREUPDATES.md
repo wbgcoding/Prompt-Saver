@@ -1,0 +1,6 @@
+## Zukünftig implementieren:
+
+- speichere daten in appdata in einer datenbank
+- füge screenshot feature hinzu um eine Ansicht ähnlich wie beim Snipping Tool zu öffnen wo alles etwas ausgegraut ist und man entweder ein Fenster anklickt oder man einen Bereich markiert um einen Screenshot vom gewählten Bereich zu machen, der Screenshot soll in der Ablage gespeichert werden und im Hauptlayout soll ein Popup aufgehen mit einem text wie "Screenshot ist in deiner Zwischenablage. Als Button speichern?" (passe den text an!) mit der auswahl ja nein (wenn man auf hintergrund drückt ist wie nein), bei ja soll der Screenshot als Button übernommen werden (achte auf den Dateityp!); der echte screenshot soll im User Ordner im standard screenshot ordner gespeichert werden; der button dafür soll links von der byro klammer sein mit einem passenden icon ähnlich wie snipping tool. Das eigene snippingtool soll modern aussehen, flüssig laufen und ein gutes intuitives layout bieten!
+- Mache das Logo schöner!
+- 

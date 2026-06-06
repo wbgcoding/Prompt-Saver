@@ -11,7 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{
-    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl,
+    AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewUrl,
     WebviewWindowBuilder, WindowEvent,
 };
 
@@ -25,7 +25,7 @@ fn show_main(app: &AppHandle) {
                 .settings
                 .window;
             if let Some(g) = geom {
-                let _ = win.set_size(PhysicalSize::new(g.width, g.height));
+                let _ = win.set_size(tauri::LogicalSize::new(g.width, g.height));
                 let _ = win.set_position(PhysicalPosition::new(g.x, g.y));
             }
         }
@@ -55,6 +55,22 @@ struct Prompt {
     // icon and clicking copies the text.
     #[serde(default)]
     copy_image: bool,
+    // Attached file: clicking puts the file itself on the clipboard.
+    #[serde(default)]
+    file_path: String,
+    // Gif/video used as the tile icon only — shown, never copied.
+    #[serde(default)]
+    icon_path: String,
+    // Optional caption shown over media tiles (size 0 = default).
+    #[serde(default)]
+    caption: String,
+    #[serde(default)]
+    caption_size: u32,
+    // Per-tile style overrides; empty / 0 = follow the global settings.
+    #[serde(default)]
+    font: String,
+    #[serde(default)]
+    font_size: u32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -87,6 +103,14 @@ struct View {
     layouts: HashMap<String, HashMap<String, [u32; 2]>>,
 }
 
+#[derive(Serialize, Deserialize, Clone, Copy)]
+struct VideoPrefs {
+    volume: u32, // 0..=100
+    muted: bool,
+    #[serde(rename = "loop")]
+    looped: bool,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 struct Settings {
     #[serde(default = "default_theme")]
@@ -96,6 +120,9 @@ struct Settings {
     // Per-floating-button size factor (1.0 = default).
     #[serde(default)]
     float_scale: HashMap<String, f64>,
+    // Per-prompt video player state (volume, mute, loop), grid and pill.
+    #[serde(default)]
+    video_prefs: HashMap<String, VideoPrefs>,
     #[serde(default)]
     window: Option<WindowGeom>,
     #[serde(default)]
@@ -158,6 +185,7 @@ impl Default for Settings {
             theme: default_theme(),
             floating: HashMap::new(),
             float_scale: HashMap::new(),
+            video_prefs: HashMap::new(),
             window: None,
             minimize_to_tray: false,
             autostart: false,
@@ -180,24 +208,51 @@ impl Default for Settings {
 const GRID_MIN: u32 = 1;
 const GRID_MAX: u32 = 20;
 const MAX_VIEWS: usize = 20;
-const FLOAT_W: f64 = 160.0;
-const FLOAT_H: f64 = 48.0;
-const FLOAT_IMG: f64 = 180.0; // square box for image pills: S 135 / M 180 / L 252
-const FLOAT_MENU_W: f64 = 220.0;
-const FLOAT_MENU_H: f64 = 168.0;
+const FLOAT_W: f64 = 360.0;
+const FLOAT_H: f64 = 80.0; // flat pill shape, clearly wider than tall
+const FLOAT_IMG: f64 = 400.0; // square box for image pills: S 300 / M 400 / L 560
+const FLOAT_MENU_W: f64 = 230.0;
+const FLOAT_MENU_H: f64 = 200.0;
 const AUTOSTART_KEY: &str = "PromptSaver";
 
 fn grid_key(cols: u32, rows: u32) -> String {
     format!("{}x{}", cols, rows)
 }
 
-fn is_german() -> bool {
-    sys_locale::get_locale()
-        .map(|l| l.to_lowercase().starts_with("de"))
-        .unwrap_or(false)
+// WebView2-missing dialog texts; shown before settings exist, so the OS
+// locale decides (same language set as the UI).
+fn webview2_texts(lang: &str) -> (&'static str, &'static str) {
+    match lang {
+        "de" => ("WebView2 Runtime fehlt", "Prompt Saver benötigt die Microsoft WebView2 Runtime.\n\nJetzt herunterladen und installieren? Danach Prompt Saver einfach erneut starten."),
+        "es" => ("Falta WebView2 Runtime", "Prompt Saver necesita Microsoft WebView2 Runtime.\n\n¿Descargarlo e instalarlo ahora? Después, simplemente inicia Prompt Saver de nuevo."),
+        "fr" => ("WebView2 Runtime manquant", "Prompt Saver nécessite Microsoft WebView2 Runtime.\n\nLe télécharger et l'installer maintenant ? Relancez ensuite simplement Prompt Saver."),
+        "it" => ("WebView2 Runtime mancante", "Prompt Saver richiede Microsoft WebView2 Runtime.\n\nScaricarlo e installarlo ora? Dopo, riavvia semplicemente Prompt Saver."),
+        "pt" => ("WebView2 Runtime ausente", "O Prompt Saver precisa do Microsoft WebView2 Runtime.\n\nBaixar e instalar agora? Depois, basta iniciar o Prompt Saver novamente."),
+        "pl" => ("Brak środowiska WebView2", "Prompt Saver wymaga Microsoft WebView2 Runtime.\n\nPobrać i zainstalować teraz? Następnie po prostu uruchom Prompt Saver ponownie."),
+        "ru" => ("Отсутствует WebView2 Runtime", "Prompt Saver требуется Microsoft WebView2 Runtime.\n\nСкачать и установить сейчас? После этого просто запустите Prompt Saver снова."),
+        "zh" => ("缺少 WebView2 运行时", "Prompt Saver 需要 Microsoft WebView2 运行时。\n\n现在下载并安装吗？安装后重新启动 Prompt Saver 即可。"),
+        "ja" => ("WebView2 ランタイムがありません", "Prompt Saver には Microsoft WebView2 ランタイムが必要です。\n\n今すぐダウンロードしてインストールしますか？その後、Prompt Saver を再起動してください。"),
+        "nl" => ("WebView2-runtime ontbreekt", "Prompt Saver heeft de Microsoft WebView2-runtime nodig.\n\nNu downloaden en installeren? Start Prompt Saver daarna gewoon opnieuw."),
+        "tr" => ("WebView2 çalışma zamanı eksik", "Prompt Saver, Microsoft WebView2 çalışma zamanına ihtiyaç duyar.\n\nŞimdi indirilip kurulsun mu? Ardından Prompt Saver'ı yeniden başlatmanız yeterli."),
+        "ko" => ("WebView2 런타임 없음", "Prompt Saver에는 Microsoft WebView2 런타임이 필요합니다.\n\n지금 다운로드하여 설치할까요? 설치 후 Prompt Saver를 다시 시작하면 됩니다."),
+        "hi" => ("WebView2 रनटाइम मौजूद नहीं है", "Prompt Saver को Microsoft WebView2 रनटाइम की आवश्यकता है।\n\nअभी डाउनलोड और इंस्टॉल करें? उसके बाद बस Prompt Saver फिर से शुरू करें।"),
+        "id" => ("WebView2 Runtime tidak ditemukan", "Prompt Saver memerlukan Microsoft WebView2 Runtime.\n\nUnduh dan pasang sekarang? Setelah itu cukup jalankan Prompt Saver lagi."),
+        "vi" => ("Thiếu WebView2 Runtime", "Prompt Saver cần Microsoft WebView2 Runtime.\n\nTải xuống và cài đặt ngay? Sau đó chỉ cần khởi động lại Prompt Saver."),
+        "cs" => ("Chybí WebView2 Runtime", "Prompt Saver vyžaduje Microsoft WebView2 Runtime.\n\nStáhnout a nainstalovat nyní? Poté stačí Prompt Saver znovu spustit."),
+        "uk" => ("Відсутній WebView2 Runtime", "Prompt Saver потребує Microsoft WebView2 Runtime.\n\nЗавантажити та встановити зараз? Після цього просто запустіть Prompt Saver знову."),
+        "sv" => ("WebView2-runtime saknas", "Prompt Saver behöver Microsoft WebView2-runtime.\n\nLadda ner och installera nu? Starta sedan bara Prompt Saver igen."),
+        "ro" => ("Lipsește WebView2 Runtime", "Prompt Saver are nevoie de Microsoft WebView2 Runtime.\n\nDescărcați și instalați acum? Apoi porniți pur și simplu Prompt Saver din nou."),
+        _ => ("WebView2 runtime missing", "Prompt Saver needs the Microsoft WebView2 runtime.\n\nDownload and install it now? Simply start Prompt Saver again afterwards."),
+    }
 }
 
 // Resolve the effective UI language code ("auto" -> OS locale), EN fallback.
+// Supported UI languages besides English (keep in sync with ui/i18n.js).
+const LANG_CODES: [&str; 19] = [
+    "de", "es", "fr", "it", "pt", "pl", "ru", "zh", "ja", "nl", "tr", "ko", "hi", "id", "vi",
+    "cs", "uk", "sv", "ro",
+];
+
 fn resolve_lang(pref: &str) -> &'static str {
     let raw = if pref != "auto" {
         pref.to_string()
@@ -205,23 +260,11 @@ fn resolve_lang(pref: &str) -> &'static str {
         sys_locale::get_locale().unwrap_or_default()
     };
     let low = raw.to_lowercase();
-    for code in ["de", "es", "fr", "it", "pt", "pl", "ru", "zh", "ja"] {
-        if low.starts_with(code) {
-            // Return the matching static str.
-            return match code {
-                "de" => "de",
-                "es" => "es",
-                "fr" => "fr",
-                "it" => "it",
-                "pt" => "pt",
-                "pl" => "pl",
-                "ru" => "ru",
-                "zh" => "zh",
-                _ => "ja",
-            };
-        }
-    }
-    "en"
+    LANG_CODES
+        .iter()
+        .find(|code| low.starts_with(**code))
+        .copied()
+        .unwrap_or("en")
 }
 
 // Tray menu labels per language.
@@ -236,6 +279,16 @@ fn tray_labels(lang: &str) -> (&'static str, &'static str) {
         "ru" => ("Открыть", "Выход"),
         "zh" => ("打开", "退出"),
         "ja" => ("開く", "終了"),
+        "nl" => ("Openen", "Afsluiten"),
+        "tr" => ("Aç", "Çıkış"),
+        "ko" => ("열기", "종료"),
+        "hi" => ("खोलें", "बंद करें"),
+        "id" => ("Buka", "Keluar"),
+        "vi" => ("Mở", "Thoát"),
+        "cs" => ("Otevřít", "Ukončit"),
+        "uk" => ("Відкрити", "Вийти"),
+        "sv" => ("Öppna", "Avsluta"),
+        "ro" => ("Deschide", "Ieșire"),
         _ => ("Open", "Quit"),
     }
 }
@@ -252,14 +305,25 @@ fn home_name(lang: &str) -> &'static str {
         "ru" => "Главная",
         "zh" => "主页",
         "ja" => "ホーム",
-        _ => "Home", // en + it
+        "tr" => "Ana sayfa",
+        "ko" => "홈",
+        "hi" => "होम",
+        "id" => "Beranda",
+        "vi" => "Trang chủ",
+        "cs" => "Domů",
+        "uk" => "Головна",
+        "sv" => "Hem",
+        "ro" => "Acasă",
+        _ => "Home", // en + it + nl
     }
 }
 
 // Every possible default name -> a view still carrying one was never renamed.
-const HOME_NAMES: [&str; 9] = [
+const HOME_NAMES: [&str; 18] = [
     "Home", "Startseite", "Inicio", "Accueil", "Início",
     "Strona główna", "Главная", "主页", "ホーム",
+    "Ana sayfa", "홈", "होम", "Beranda", "Trang chủ",
+    "Domů", "Головна", "Hem", "Acasă",
 ];
 
 impl Settings {
@@ -377,10 +441,23 @@ fn lock<'a>(state: &'a State<'a, Db>) -> std::sync::MutexGuard<'a, Store> {
 // resizing never flashes white.
 fn apply_window_bg(app: &AppHandle, theme: &str) {
     if let Some(win) = app.get_webview_window("main") {
-        let color = if theme == "dark" {
-            tauri::webview::Color(27, 27, 29, 255) // --bg dark #1b1b1d
-        } else {
-            tauri::webview::Color(247, 247, 248, 255) // --bg light #f7f7f8
+        // Matches the --bg token of each theme in main.css.
+        let color = match theme {
+            "dark" => tauri::webview::Color(27, 27, 29, 255),
+            "programmer" => tauri::webview::Color(13, 17, 23, 255),
+            "ai" => tauri::webview::Color(12, 8, 23, 255),
+            "gradient" => tauri::webview::Color(109, 40, 217, 255),
+            "sunset" => tauri::webview::Color(255, 247, 237, 255),
+            "ocean" => tauri::webview::Color(238, 249, 254, 255),
+            "forest" => tauri::webview::Color(240, 253, 244, 255),
+            "midnight" => tauri::webview::Color(15, 23, 42, 255),
+            "cyberpunk" => tauri::webview::Color(10, 10, 18, 255),
+            "retro" => tauri::webview::Color(26, 18, 8, 255),
+            "mono" => tauri::webview::Color(250, 250, 250, 255),
+            "lavender" => tauri::webview::Color(245, 243, 255, 255),
+            "candy" => tauri::webview::Color(253, 242, 248, 255),
+            "coffee" => tauri::webview::Color(247, 241, 232, 255),
+            _ => tauri::webview::Color(247, 247, 248, 255),
         };
         let _ = win.set_background_color(Some(color));
     }
@@ -388,7 +465,10 @@ fn apply_window_bg(app: &AppHandle, theme: &str) {
 
 fn effective_theme(app: &AppHandle, pref: &str) -> String {
     match pref {
-        "light" | "dark" => pref.to_string(),
+        "light" | "dark" | "programmer" | "ai" | "gradient" | "sunset" | "ocean" | "forest"
+        | "midnight" | "cyberpunk" | "retro" | "mono" | "lavender" | "candy" | "coffee" => {
+            pref.to_string()
+        }
         _ => app
             .get_webview_window("main")
             .and_then(|w| w.theme().ok())
@@ -446,8 +526,24 @@ fn pill_dims(is_image: bool, scale: f64) -> (f64, f64) {
     }
 }
 
+// Gif/video attachments render straight from their path (no stored preview).
+fn media_path(path: &str) -> bool {
+    let lower = path.to_lowercase();
+    [".gif", ".mp4", ".webm", ".m4v", ".mov"].iter().any(|e| lower.ends_with(e))
+}
+
 fn is_image_prompt(p: &Prompt) -> bool {
-    p.show_image && !p.image.is_empty()
+    p.show_image && (!p.image.is_empty() || media_path(&p.file_path) || media_path(&p.icon_path))
+}
+
+// All file dialogs are parented to the main window: the window is blocked
+// until the dialog is closed, so a second dialog can never stack on top.
+fn file_dialog(app: &AppHandle) -> rfd::FileDialog {
+    let dlg = rfd::FileDialog::new();
+    match app.get_webview_window("main") {
+        Some(win) => dlg.set_parent(&win),
+        None => dlg,
+    }
 }
 
 fn open_floating(app: &AppHandle, prompt: &Prompt) {
@@ -497,10 +593,13 @@ fn open_floating(app: &AppHandle, prompt: &Prompt) {
         let pid = prompt.id.clone();
         win.on_window_event(move |event| match event {
             WindowEvent::Moved(p) => {
+                // Fires for every pixel during a drag — never block the move
+                // loop on a busy store; the next event carries the position.
                 if let Some(state) = app2.try_state::<Db>() {
-                    let mut store = state.lock().unwrap_or_else(|e| e.into_inner());
-                    if store.settings.floating.contains_key(&pid) {
-                        store.settings.floating.insert(pid.clone(), Pos { x: p.x, y: p.y });
+                    if let Ok(mut store) = state.try_lock() {
+                        if store.settings.floating.contains_key(&pid) {
+                            store.settings.floating.insert(pid.clone(), Pos { x: p.x, y: p.y });
+                        }
                     }
                 }
             }
@@ -586,8 +685,10 @@ fn scale_and_encode(img: image::DynamicImage) -> String {
     }
 }
 
+// Async: dialogs and clipboard reads run off the main thread — the window
+// stays responsive and the pickers open without a noticeable delay.
 #[tauri::command]
-fn get_clipboard_image() -> Option<String> {
+async fn get_clipboard_image() -> Option<String> {
     let mut cb = arboard::Clipboard::new().ok()?;
     let data = cb.get_image().ok()?;
     let bytes: Vec<u8> = data.bytes.into_owned();
@@ -596,14 +697,75 @@ fn get_clipboard_image() -> Option<String> {
     if result.is_empty() { None } else { Some(result) }
 }
 
+// ---------- File clipboard (CF_HDROP) ----------
+
+// Put a file on the clipboard, exactly like Ctrl+C in Explorer.
+#[cfg(windows)]
+fn set_clipboard_file(path: &str) -> bool {
+    if !std::path::Path::new(path).exists() {
+        return false;
+    }
+    // DROPFILES header (20 bytes) + UTF-16 path + double NUL terminator.
+    let wide: Vec<u16> = path.encode_utf16().chain([0, 0]).collect();
+    let mut data = vec![0u8; 20 + wide.len() * 2];
+    data[0] = 20; // pFiles: offset of the path list
+    data[16] = 1; // fWide: UTF-16
+    for (i, w) in wide.iter().enumerate() {
+        let b = w.to_le_bytes();
+        data[20 + i * 2] = b[0];
+        data[21 + i * 2] = b[1];
+    }
+    let Ok(_clip) = clipboard_win::Clipboard::new_attempts(10) else {
+        return false;
+    };
+    const CF_HDROP: u32 = 15;
+    clipboard_win::raw::empty().is_ok() && clipboard_win::raw::set(CF_HDROP, &data).is_ok()
+}
+
+#[cfg(not(windows))]
+fn set_clipboard_file(_path: &str) -> bool {
+    false
+}
+
+// First file currently on the clipboard (copied in Explorer), if any.
 #[tauri::command]
-fn pick_image_file() -> Option<String> {
-    let path = rfd::FileDialog::new()
-        .add_filter("Image", &["png", "jpg", "jpeg", "webp", "bmp"])
-        .pick_file()?;
+async fn get_clipboard_file_path() -> Option<String> {
+    #[cfg(windows)]
+    {
+        clipboard_win::get_clipboard::<Vec<String>, _>(clipboard_win::formats::FileList)
+            .ok()?
+            .into_iter()
+            .next()
+    }
+    #[cfg(not(windows))]
+    None
+}
+
+#[tauri::command]
+async fn pick_file_path(app: AppHandle) -> Option<String> {
+    file_dialog(&app)
+        .pick_file()
+        .map(|p| p.to_string_lossy().to_string())
+}
+
+// Preview for an attached file that happens to be an image.
+#[tauri::command]
+async fn load_image_file(path: String) -> Option<String> {
     let img = image::open(&path).ok()?;
     let result = scale_and_encode(img);
     if result.is_empty() { None } else { Some(result) }
+}
+
+// IDs of prompts whose attached file OR media icon is gone (polled by the UI).
+#[tauri::command]
+fn missing_files(state: State<Db>) -> Vec<String> {
+    let gone = |path: &str| !path.is_empty() && !std::path::Path::new(path).exists();
+    lock(&state)
+        .prompts
+        .iter()
+        .filter(|p| gone(&p.file_path) || gone(&p.icon_path))
+        .map(|p| p.id.clone())
+        .collect()
 }
 
 // ---------- Prompt commands ----------
@@ -639,6 +801,12 @@ fn add_prompt(
     image: Option<String>,
     show_image: Option<bool>,
     copy_image: Option<bool>,
+    file_path: Option<String>,
+    icon_path: Option<String>,
+    caption: Option<String>,
+    caption_size: Option<u32>,
+    font: Option<String>,
+    font_size: Option<u32>,
 ) -> Prompt {
     let prompt = Prompt {
         id: gen_id(),
@@ -648,6 +816,12 @@ fn add_prompt(
         image: image.unwrap_or_default(),
         show_image: show_image.unwrap_or(false),
         copy_image: copy_image.unwrap_or(false),
+        file_path: file_path.unwrap_or_default(),
+        icon_path: icon_path.unwrap_or_default(),
+        caption: caption.unwrap_or_default(),
+        caption_size: clamp_caption_size(caption_size.unwrap_or(0)),
+        font: font.unwrap_or_default(),
+        font_size: clamp_font_size(font_size.unwrap_or(0)),
     };
     {
         let mut store = lock(&state);
@@ -674,6 +848,12 @@ fn update_prompt(
     image: Option<String>,
     show_image: Option<bool>,
     copy_image: Option<bool>,
+    file_path: Option<String>,
+    icon_path: Option<String>,
+    caption: Option<String>,
+    caption_size: Option<u32>,
+    font: Option<String>,
+    font_size: Option<u32>,
 ) -> Option<Prompt> {
     let updated = {
         let mut store = lock(&state);
@@ -686,18 +866,30 @@ fn update_prompt(
                 if let Some(img) = image { p.image = img; }
                 if let Some(si) = show_image { p.show_image = si; }
                 if let Some(ci) = copy_image { p.copy_image = ci; }
+                if let Some(fp) = file_path { p.file_path = fp; }
+                if let Some(ip) = icon_path { p.icon_path = ip; }
+                if let Some(c) = caption { p.caption = c; }
+                if let Some(cs) = caption_size { p.caption_size = clamp_caption_size(cs); }
+                if let Some(f) = font { p.font = f; }
+                if let Some(fs) = font_size {
+                    p.font_size = clamp_font_size(fs);
+                }
                 let clone = p.clone();
                 save_prompts(&app, &store);
-                Some(clone)
+                let scale = float_scale_of(&store.settings, &id);
+                Some((clone, scale))
             }
             None => None,
         }
+    };
+    let (updated, scale) = match updated {
+        Some((p, s)) => (Some(p), s),
+        None => (None, 1.0),
     };
     if let Some(p) = &updated {
         let _ = app.emit("prompt-updated", p.clone());
         // An open pill switches between text pill and image box live.
         if let Some(win) = app.get_webview_window(&flabel(&p.id)) {
-            let scale = float_scale_of(&lock(&state).settings, &p.id);
             let (w, h) = pill_dims(is_image_prompt(p), scale);
             let _ = win.set_size(tauri::LogicalSize::new(w, h));
         }
@@ -718,6 +910,7 @@ fn delete_prompt(app: AppHandle, state: State<Db>, id: String) -> bool {
     }
     store.settings.floating.remove(&id);
     store.settings.float_scale.remove(&id);
+    store.settings.video_prefs.remove(&id);
     let changed = store.prompts.len() != before;
     if changed {
         save_prompts(&app, &store);
@@ -750,19 +943,36 @@ fn delete_all_data(app: AppHandle, state: State<Db>) {
     save_settings(&app, &store.settings);
 }
 
-// UI language preference: "auto" | "en" | "de".
+// UI language preference: "auto" or one of LANG_CODES.
 #[tauri::command]
 fn set_language(app: AppHandle, state: State<Db>, lang: String) {
-    let mut store = lock(&state);
-    store.settings.language = lang;
-    // Start page still has a default name -> translate it along.
-    let home = home_name(resolve_lang(&store.settings.language));
-    for view in &mut store.settings.views {
-        if HOME_NAMES.contains(&view.name.as_str()) {
-            view.name = home.to_string();
+    let resolved = {
+        let mut store = lock(&state);
+        store.settings.language = lang;
+        let resolved = resolve_lang(&store.settings.language);
+        // Start page still has a default name -> translate it along.
+        let home = home_name(resolved);
+        for view in &mut store.settings.views {
+            if HOME_NAMES.contains(&view.name.as_str()) {
+                view.name = home.to_string();
+            }
+        }
+        save_settings(&app, &store.settings);
+        resolved
+    };
+    // Live updates without a restart: tray menu + floating pills.
+    let (open_label, quit_label) = tray_labels(resolved);
+    if let Some(tray) = app.tray_by_id("tray") {
+        if let (Ok(show), Ok(quit)) = (
+            MenuItem::with_id(&app, "show", open_label, true, None::<&str>),
+            MenuItem::with_id(&app, "quit", quit_label, true, None::<&str>),
+        ) {
+            if let Ok(menu) = Menu::with_items(&app, &[&show, &quit]) {
+                let _ = tray.set_menu(Some(menu));
+            }
         }
     }
-    save_settings(&app, &store.settings);
+    let _ = app.emit("language-changed", resolved);
 }
 
 // Font family + size for the saved prompt tiles only. size 0 = auto-fit.
@@ -770,7 +980,7 @@ fn set_language(app: AppHandle, state: State<Db>, lang: String) {
 fn set_tile_style(app: AppHandle, state: State<Db>, font: String, size: u32) {
     let mut store = lock(&state);
     store.settings.tile_font = font;
-    store.settings.tile_size = if size == 0 { 0 } else { size.clamp(8, 32) };
+    store.settings.tile_size = if size == 0 { 0 } else { size.clamp(10, 40) };
     save_settings(&app, &store.settings);
 }
 
@@ -794,21 +1004,58 @@ fn set_view_grid(app: AppHandle, state: State<Db>, id: String, cols: u32, rows: 
     let Some(view) = store.settings.views.iter_mut().find(|v| v.id == id) else {
         return store.settings.clone();
     };
+    let (old_cols, old_rows) = (view.cols, view.rows);
     let old_key = grid_key(view.cols, view.rows);
     view.cols = cols.clamp(GRID_MIN, GRID_MAX);
     view.rows = rows.clamp(GRID_MIN, GRID_MAX);
     let new_key = grid_key(view.cols, view.rows);
-    // First visit of this size: seed it with the fitting part of the previous
-    // arrangement. Already-saved sizes keep their stored arrangement untouched.
-    if new_key != old_key && !view.layouts.contains_key(&new_key) {
-        if let Some(old) = view.layouts.get(&old_key) {
-            let (c_max, r_max) = (view.cols, view.rows);
-            let seeded: HashMap<String, [u32; 2]> = old
-                .iter()
-                .filter(|(_, cell)| cell[0] < c_max && cell[1] < r_max)
-                .map(|(k, v)| (k.clone(), *v))
-                .collect();
-            view.layouts.insert(new_key, seeded);
+    if new_key != old_key {
+        if view.cols >= old_cols && view.rows >= old_rows {
+            // Growing: the grid expands around the current arrangement.
+            // Saved layouts double as backups — prompts that an earlier
+            // shrink pushed out return to their remembered spots (largest
+            // arrangement first, only onto free cells).
+            let merged = {
+                let mut merged = view.layouts.get(&old_key).cloned().unwrap_or_default();
+                let mut occupied: std::collections::HashSet<[u32; 2]> =
+                    merged.values().copied().collect();
+                let mut saved: Vec<_> = view.layouts.iter().collect();
+                saved.sort_by_key(|(key, _)| {
+                    std::cmp::Reverse(
+                        key.split_once('x')
+                            .and_then(|(c, r)| {
+                                Some(c.parse::<u64>().ok()? * r.parse::<u64>().ok()?)
+                            })
+                            .unwrap_or(0),
+                    )
+                });
+                for (_, layout) in saved {
+                    for (id, cell) in layout {
+                        if cell[0] < view.cols
+                            && cell[1] < view.rows
+                            && !merged.contains_key(id)
+                            && !occupied.contains(cell)
+                        {
+                            merged.insert(id.clone(), *cell);
+                            occupied.insert(*cell);
+                        }
+                    }
+                }
+                merged
+            };
+            view.layouts.insert(new_key, merged);
+        } else if !view.layouts.contains_key(&new_key) {
+            // Shrinking, first visit: seed with the fitting part of the
+            // previous arrangement. Saved sizes keep their arrangement.
+            if let Some(old) = view.layouts.get(&old_key) {
+                let (c_max, r_max) = (view.cols, view.rows);
+                let seeded: HashMap<String, [u32; 2]> = old
+                    .iter()
+                    .filter(|(_, cell)| cell[0] < c_max && cell[1] < r_max)
+                    .map(|(k, v)| (k.clone(), *v))
+                    .collect();
+                view.layouts.insert(new_key, seeded);
+            }
         }
     }
     save_settings(&app, &store.settings);
@@ -928,6 +1175,7 @@ fn copy_prompt(state: State<Db>, id: String) -> bool {
     };
     match prompt {
         Some(p) if p.copy_image && !p.image.is_empty() => copy_image_to_clipboard(&p.image),
+        Some(p) if !p.file_path.is_empty() => set_clipboard_file(&p.file_path),
         Some(p) => arboard::Clipboard::new()
             .and_then(|mut c| c.set_text(p.text))
             .is_ok(),
@@ -963,13 +1211,15 @@ async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: String) -> Re
     }
 }
 
-// Size factor of one pill; resizes the live window and persists the choice.
+// Size factor of one pill; persists the choice. resize=false leaves the
+// window alone (the menu flow sizes it itself, avoiding a visible jump).
 #[tauri::command]
 async fn set_float_scale(
     app: AppHandle,
     state: State<'_, Db>,
     id: String,
     scale: f64,
+    resize: Option<bool>,
 ) -> Result<(), String> {
     let scale = if scale.is_finite() { scale.clamp(0.5, 2.0) } else { 1.0 };
     let is_img = {
@@ -978,20 +1228,58 @@ async fn set_float_scale(
         save_settings(&app, &store.settings);
         store.prompts.iter().find(|p| p.id == id).map(is_image_prompt).unwrap_or(false)
     };
+    if resize.unwrap_or(true) {
+        if let Some(win) = app.get_webview_window(&flabel(&id)) {
+            let (w, h) = pill_dims(is_img, scale);
+            let _ = win.set_size(tauri::LogicalSize::new(w, h));
+        }
+    }
+    Ok(())
+}
+
+// Text pills grow with their label: the frontend measures the text and
+// requests a matching window width (height stays the pill height).
+#[tauri::command]
+async fn resize_float_pill(
+    app: AppHandle,
+    state: State<'_, Db>,
+    id: String,
+    width: f64,
+) -> Result<(), String> {
+    let scale = float_scale_of(&lock(&state).settings, &id);
     if let Some(win) = app.get_webview_window(&flabel(&id)) {
-        let (w, h) = pill_dims(is_img, scale);
-        let _ = win.set_size(tauri::LogicalSize::new(w, h));
+        let w = if width.is_finite() { width.clamp(135.0, 960.0) } else { FLOAT_W * scale };
+        let _ = win.set_size(tauri::LogicalSize::new(w, FLOAT_H * scale));
     }
     Ok(())
 }
 
 // Grow the pill window while its context menu is open; shrink back on close.
+// Media pills: the window matches the media's aspect ratio (no invisible
+// click area beyond the visible video/image).
+#[tauri::command]
+async fn resize_float_media(app: AppHandle, id: String, width: f64, height: f64) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window(&flabel(&id)) {
+        if width.is_finite() && height.is_finite() {
+            let w = width.clamp(60.0, 960.0);
+            let h = height.clamp(60.0, 960.0);
+            let _ = win.set_size(tauri::LogicalSize::new(w, h));
+        }
+    }
+    Ok(())
+}
+
+// Menu open: the window grows to pill + menu so the pill stays visible and
+// size changes preview live. width/height carry the pill's CURRENT box
+// (text pills are wider than the default when their label is long).
 #[tauri::command]
 async fn resize_float_menu(
     app: AppHandle,
     state: State<'_, Db>,
     id: String,
     open: bool,
+    width: Option<f64>,
+    height: Option<f64>,
 ) -> Result<(), String> {
     let (scale, is_img) = {
         let store = lock(&state);
@@ -1001,11 +1289,24 @@ async fn resize_float_menu(
         )
     };
     if let Some(win) = app.get_webview_window(&flabel(&id)) {
-        let (pw, ph) = pill_dims(is_img, scale);
-        let (w, h) = if open { (pw.max(FLOAT_MENU_W), FLOAT_MENU_H) } else { (pw, ph) };
+        let (dw, dh) = pill_dims(is_img, scale);
+        let pw = width.filter(|v| v.is_finite()).unwrap_or(dw).clamp(135.0, 960.0);
+        let ph = height.filter(|v| v.is_finite()).unwrap_or(dh).clamp(40.0, 960.0);
+        let (w, h) = if open { (pw.max(FLOAT_MENU_W), ph + FLOAT_MENU_H) } else { (pw, ph) };
         let _ = win.set_size(tauri::LogicalSize::new(w, h));
     }
     Ok(())
+}
+
+// Persist the per-prompt video player state (volume, mute, loop).
+#[tauri::command]
+fn set_video_prefs(app: AppHandle, state: State<Db>, id: String, volume: u32, muted: bool, looped: bool) {
+    let mut store = lock(&state);
+    store
+        .settings
+        .video_prefs
+        .insert(id, VideoPrefs { volume: volume.min(100), muted, looped });
+    save_settings(&app, &store.settings);
 }
 
 // ---------- Updates (GitHub releases) ----------
@@ -1261,50 +1562,97 @@ fn view_def_lines(settings: &Settings) -> Vec<String> {
         .collect()
 }
 
+fn csv_row(cells: &[&str]) -> String {
+    cells.iter().map(|c| csv_cell(c)).collect::<Vec<_>>().join(";")
+}
+
+// Exported UI preferences (one key=value per line in the @settings block).
+// Machine-specific options (autostart, window geometry) stay local.
+fn settings_lines(s: &Settings) -> String {
+    format!(
+        "language={}\ntheme={}\ntile_font={}\ntile_size={}\nminimize_to_tray={}\nauto_update={}\nshow_header={}\nshow_composer={}",
+        s.language,
+        s.theme,
+        s.tile_font,
+        s.tile_size,
+        s.minimize_to_tray as u8,
+        s.auto_update as u8,
+        s.show_header as u8,
+        s.show_composer as u8
+    )
+}
+
 fn to_csv(prompts: &[Prompt], settings: &Settings) -> String {
-    let mut rows = vec![format!(
-        "{};{};{};{}",
-        csv_cell("name"),
-        csv_cell("text"),
-        csv_cell("positions"),
-        csv_cell("color")
-    )];
-    rows.push(format!(
-        "{};{};{};{}",
-        csv_cell("@settings"),
-        csv_cell(&format!("language={}", settings.language)),
-        csv_cell(""),
-        csv_cell("")
-    ));
-    rows.push(format!(
-        "{};{};{};{}",
-        csv_cell("@views"),
-        csv_cell(&view_def_lines(settings).join("\n")),
-        csv_cell(""),
-        csv_cell("")
-    ));
+    let head = [
+        "name", "text", "positions", "color", "font", "size", "file", "icon", "show", "copy",
+        "image", "caption", "capsize",
+    ];
+    let pad = |a: &str, b: &str| {
+        let mut cells = vec![a.to_string(), b.to_string()];
+        cells.resize(head.len(), String::new());
+        csv_row(&cells.iter().map(|c| c.as_str()).collect::<Vec<_>>())
+    };
+    let mut rows = vec![
+        csv_row(&head),
+        pad("@settings", &settings_lines(settings)),
+        pad("@views", &view_def_lines(settings).join("\n")),
+    ];
     for p in prompts {
         let positions = position_lines(settings, &p.id).join("\n");
-        rows.push(format!(
-            "{};{};{};{}",
-            csv_cell(&p.name),
-            csv_cell(&p.text),
-            csv_cell(&positions),
-            csv_cell(&p.color)
-        ));
+        rows.push(csv_row(&[
+            &p.name,
+            &p.text,
+            &positions,
+            &p.color,
+            &p.font,
+            &p.font_size.to_string(),
+            &p.file_path,
+            &p.icon_path,
+            if p.show_image { "1" } else { "0" },
+            if p.copy_image { "1" } else { "0" },
+            &p.image,
+            &p.caption,
+            &p.caption_size.to_string(),
+        ]));
     }
     rows.join("\r\n")
 }
 
 fn to_txt(prompts: &[Prompt], settings: &Settings) -> String {
     let mut blocks = vec![
-        format!("@settings\nlanguage={}", settings.language),
+        format!("@settings\n{}", settings_lines(settings)),
         format!("@views\n{}", view_def_lines(settings).join("\n")),
     ];
     blocks.extend(prompts.iter().map(|p| {
         let mut block = format!("### {}\n{}", p.name, p.text);
         if !p.color.is_empty() {
             block.push_str(&format!("\n@color {}", p.color));
+        }
+        // Per-tile style: "@style <font-key|-> <size>" ("-" = default font).
+        if !p.font.is_empty() || p.font_size > 0 {
+            let font = if p.font.is_empty() { "-" } else { &p.font };
+            block.push_str(&format!("\n@style {} {}", font, p.font_size));
+        }
+        if !p.file_path.is_empty() {
+            block.push_str(&format!("\n@file {}", p.file_path));
+        }
+        if !p.icon_path.is_empty() {
+            block.push_str(&format!("\n@icon {}", p.icon_path));
+        }
+        if !p.caption.is_empty() {
+            block.push_str(&format!("\n@caption {}", p.caption));
+        }
+        if p.caption_size > 0 {
+            block.push_str(&format!("\n@capsize {}", p.caption_size));
+        }
+        if p.show_image || p.copy_image {
+            block.push_str(&format!(
+                "\n@flags {} {}",
+                p.show_image as u8, p.copy_image as u8
+            ));
+        }
+        if !p.image.is_empty() {
+            block.push_str(&format!("\n@imagedata {}", p.image));
         }
         let positions = position_lines(settings, &p.id);
         if !positions.is_empty() {
@@ -1317,7 +1665,7 @@ fn to_txt(prompts: &[Prompt], settings: &Settings) -> String {
 }
 
 #[tauri::command]
-fn export_prompts(state: State<Db>, format: String) -> Result<usize, String> {
+fn export_prompts(app: AppHandle, state: State<Db>, format: String) -> Result<usize, String> {
     let (content, count) = {
         let store = lock(&state);
         let content = match format.as_str() {
@@ -1327,7 +1675,7 @@ fn export_prompts(state: State<Db>, format: String) -> Result<usize, String> {
         };
         (content, store.prompts.len())
     };
-    let file = rfd::FileDialog::new()
+    let file = file_dialog(&app)
         .set_file_name(format!("prompts.{}", format))
         .add_filter(format.to_uppercase(), &[format.as_str()])
         .save_file();
@@ -1381,21 +1729,63 @@ struct ImportedPrompt {
     name: String,
     text: String,
     color: String,
+    font: String,
+    font_size: u32,
+    file_path: String,
+    icon_path: String,
+    caption: String,
+    caption_size: u32,
+    show_image: bool,
+    copy_image: bool,
+    image: String,
     positions: Vec<String>, // "ViewName|6x5=c,r"
+}
+
+// 0 = follow settings, 1 = auto-fit, otherwise a fixed pixel size.
+fn clamp_font_size(size: u32) -> u32 {
+    if size <= 1 { size } else { size.clamp(10, 40) }
+}
+
+// Caption: 0 = default size, 1 = auto-scale, otherwise fixed 10..40.
+fn clamp_caption_size(size: u32) -> u32 {
+    if size <= 1 { size } else { size.clamp(10, 40) }
 }
 
 #[derive(Default)]
 struct ImportData {
     language: Option<String>,
+    theme: Option<String>,
+    tile_font: Option<String>,
+    tile_size: Option<u32>,
+    minimize_to_tray: Option<bool>,
+    auto_update: Option<bool>,
+    show_header: Option<bool>,
+    show_composer: Option<bool>,
     view_defs: Vec<String>,
     prompts: Vec<ImportedPrompt>,
 }
 
-// "language=de" style lines from an @settings block.
+// "key=value" lines from an @settings block.
 fn parse_settings_lines(lines: &str, data: &mut ImportData) {
+    let flag = |v: &str| Some(v.trim() == "1");
     for line in lines.lines() {
-        if let Some(v) = line.trim().strip_prefix("language=") {
+        let line = line.trim();
+        if let Some(v) = line.strip_prefix("language=") {
             data.language = Some(v.trim().to_string());
+        } else if let Some(v) = line.strip_prefix("theme=") {
+            data.theme = Some(v.trim().to_string());
+        } else if let Some(v) = line.strip_prefix("tile_font=") {
+            data.tile_font = Some(v.trim().to_string());
+        } else if let Some(v) = line.strip_prefix("tile_size=") {
+            data.tile_size = v.trim().parse().ok();
+        } else if let Some(v) = line.strip_prefix("minimize_to_tray=") {
+            data.minimize_to_tray = flag(v);
+        } else if let Some(v) = line.strip_prefix("auto_update=") {
+            data.auto_update = flag(v);
+        } else if let Some(v) = line.strip_prefix("show_header=") {
+            data.show_header = flag(v);
+        } else if let Some(v) = line.strip_prefix("show_composer=") {
+            data.show_composer = flag(v);
         }
     }
 }
@@ -1423,14 +1813,63 @@ fn parse_txt(content: &str) -> ImportData {
             ),
             None => (body, Vec::new()),
         };
+        // Strip trailing metadata lines in reverse write order:
+        // @imagedata, @flags, @icon, @file, @style, @color.
+        let (body, image) = match body.rsplit_once("\n@imagedata ") {
+            Some((t, v)) => (t.to_string(), v.trim().to_string()),
+            None => (body.to_string(), String::new()),
+        };
+        let (body, show_image, copy_image) = match body.rsplit_once("\n@flags ") {
+            Some((t, v)) => {
+                let mut parts = v.split_whitespace();
+                let show = parts.next() == Some("1");
+                let copy = parts.next() == Some("1");
+                (t.to_string(), show, copy)
+            }
+            None => (body, false, false),
+        };
+        let (body, caption_size) = match body.rsplit_once("\n@capsize ") {
+            Some((t, v)) => (t.to_string(), v.trim().parse().unwrap_or(0)),
+            None => (body, 0),
+        };
+        let (body, caption) = match body.rsplit_once("\n@caption ") {
+            Some((t, v)) => (t.to_string(), v.trim().to_string()),
+            None => (body, String::new()),
+        };
+        let (body, icon_path) = match body.rsplit_once("\n@icon ") {
+            Some((t, v)) => (t.to_string(), v.trim().to_string()),
+            None => (body, String::new()),
+        };
+        let (body, file_path) = match body.rsplit_once("\n@file ") {
+            Some((t, f)) => (t.to_string(), f.trim().to_string()),
+            None => (body, String::new()),
+        };
+        let (body, font, font_size) = match body.rsplit_once("\n@style ") {
+            Some((t, s)) => {
+                let mut parts = s.split_whitespace();
+                let font = parts.next().filter(|f| *f != "-").unwrap_or("").to_string();
+                let size = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+                (t.to_string(), font, size)
+            }
+            None => (body, String::new(), 0),
+        };
         let (text, color) = match body.rsplit_once("\n@color ") {
             Some((t, c)) => (t.to_string(), c.trim().to_string()),
-            None => (body.to_string(), String::new()),
+            None => (body, String::new()),
         };
         data.prompts.push(ImportedPrompt {
             name: name.trim().to_string(),
             text,
             color,
+            font,
+            font_size,
+            file_path,
+            icon_path,
+            caption,
+            caption_size,
+            show_image,
+            copy_image,
+            image,
             positions,
         });
     }
@@ -1512,24 +1951,10 @@ fn apply_positions(settings: &mut Settings, id: &str, positions: &[String]) {
     }
 }
 
-#[tauri::command]
-fn import_prompts(app: AppHandle, state: State<Db>) -> Result<usize, String> {
-    let file = rfd::FileDialog::new()
-        .add_filter("Prompts", &["csv", "txt"])
-        .pick_file();
-    let Some(path) = file else {
-        return Err("canceled".to_string());
-    };
-    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-
-    let is_csv = path
-        .extension()
-        .map(|e| e.to_string_lossy().to_lowercase() == "csv")
-        .unwrap_or(false);
-
-    let data: ImportData = if is_csv {
-        let mut data = ImportData::default();
-        for row in parse_csv(&content).into_iter().skip(1) {
+// Our own CSV export format back into import data.
+fn parse_csv_data(content: &str) -> ImportData {
+    let mut data = ImportData::default();
+    for row in parse_csv(content).into_iter().skip(1) {
             if row.is_empty() || row[0].trim().is_empty() {
                 continue;
             }
@@ -1557,6 +1982,18 @@ fn import_prompts(app: AppHandle, state: State<Db>) -> Result<usize, String> {
                 name: row[0].trim().to_string(),
                 text: row[1].clone(),
                 color: row.get(3).map(|c| c.trim().to_string()).unwrap_or_default(),
+                font: row.get(4).map(|f| f.trim().to_string()).unwrap_or_default(),
+                font_size: row
+                    .get(5)
+                    .and_then(|s| s.trim().parse().ok())
+                    .unwrap_or(0),
+                file_path: row.get(6).map(|f| f.trim().to_string()).unwrap_or_default(),
+                icon_path: row.get(7).map(|f| f.trim().to_string()).unwrap_or_default(),
+                show_image: row.get(8).map(|v| v.trim() == "1").unwrap_or(false),
+                copy_image: row.get(9).map(|v| v.trim() == "1").unwrap_or(false),
+                image: row.get(10).map(|v| v.trim().to_string()).unwrap_or_default(),
+                caption: row.get(11).map(|v| v.trim().to_string()).unwrap_or_default(),
+                caption_size: row.get(12).and_then(|v| v.trim().parse().ok()).unwrap_or(0),
                 positions: row
                     .get(2)
                     .map(|p| {
@@ -1564,11 +2001,24 @@ fn import_prompts(app: AppHandle, state: State<Db>) -> Result<usize, String> {
                     })
                     .unwrap_or_default(),
             });
-        }
-        data
-    } else {
-        parse_txt(&content)
+    }
+    data
+}
+
+#[tauri::command]
+fn import_prompts(app: AppHandle, state: State<Db>) -> Result<usize, String> {
+    let file = file_dialog(&app)
+        .add_filter("Prompts", &["csv", "txt"])
+        .pick_file();
+    let Some(path) = file else {
+        return Err("canceled".to_string());
     };
+    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let is_csv = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase() == "csv")
+        .unwrap_or(false);
+    let data = if is_csv { parse_csv_data(&content) } else { parse_txt(&content) };
 
     if data.prompts.is_empty() && data.view_defs.is_empty() {
         return Err("no prompts found".to_string());
@@ -1578,6 +2028,27 @@ fn import_prompts(app: AppHandle, state: State<Db>) -> Result<usize, String> {
     if let Some(lang) = &data.language {
         store.settings.language = lang.clone();
     }
+    if let Some(theme) = &data.theme {
+        store.settings.theme = theme.clone();
+    }
+    if let Some(font) = &data.tile_font {
+        store.settings.tile_font = font.clone();
+    }
+    if let Some(size) = data.tile_size {
+        store.settings.tile_size = if size == 0 { 0 } else { size.clamp(10, 40) };
+    }
+    if let Some(v) = data.minimize_to_tray {
+        store.settings.minimize_to_tray = v;
+    }
+    if let Some(v) = data.auto_update {
+        store.settings.auto_update = v;
+    }
+    if let Some(v) = data.show_header {
+        store.settings.show_header = v;
+    }
+    if let Some(v) = data.show_composer {
+        store.settings.show_composer = v;
+    }
     apply_view_defs(&mut store.settings, &data.view_defs);
     let count = data.prompts.len();
     for item in data.prompts {
@@ -1586,15 +2057,27 @@ fn import_prompts(app: AppHandle, state: State<Db>) -> Result<usize, String> {
             name: item.name,
             text: item.text,
             color: item.color,
-            image: String::new(),
-            show_image: false,
-            copy_image: false,
+            image: item.image,
+            show_image: item.show_image,
+            copy_image: item.copy_image,
+            file_path: item.file_path,
+            icon_path: item.icon_path,
+            caption: item.caption,
+            caption_size: clamp_caption_size(item.caption_size),
+            font: item.font,
+            font_size: clamp_font_size(item.font_size),
         };
         apply_positions(&mut store.settings, &prompt.id, &item.positions);
         store.prompts.push(prompt);
     }
     save_prompts(&app, &store);
     save_settings(&app, &store.settings);
+    let pref = store.settings.theme.clone();
+    drop(store);
+    // An imported theme applies immediately (window background + UI event).
+    let effective = effective_theme(&app, &pref);
+    apply_window_bg(&app, &effective);
+    let _ = app.emit("theme-changed", effective);
     Ok(count)
 }
 
@@ -1608,42 +2091,56 @@ fn point_on_monitor(monitors: &[tauri::Monitor], x: i32, y: i32) -> bool {
     })
 }
 
-// Center a window of the given size on the primary monitor.
+// NOTE: WindowGeom.width/height are LOGICAL pixels (DPI-independent) — a
+// physically stored size grew by the monitor's scale factor on every start.
+// Position stays physical (global desktop coordinates).
+
+// Center a window of the given LOGICAL size on the primary monitor.
 fn centered_on_primary(main: &tauri::WebviewWindow, width: u32, height: u32) -> WindowGeom {
     if let Some(m) = main.primary_monitor().ok().flatten() {
         let p = m.position();
         let s = m.size();
-        let x = p.x + (s.width.saturating_sub(width) / 2) as i32;
-        let y = p.y + (s.height.saturating_sub(height) / 2) as i32;
+        let pw = (width as f64 * m.scale_factor()) as u32;
+        let ph = (height as f64 * m.scale_factor()) as u32;
+        let x = p.x + (s.width.saturating_sub(pw) / 2) as i32;
+        let y = p.y + (s.height.saturating_sub(ph) / 2) as i32;
         return WindowGeom { x, y, width, height };
     }
     WindowGeom { x: 100, y: 100, width, height }
 }
 
 // First start: 50% of the primary monitor, centered. Afterwards the saved size
-// is kept; if its monitor is gone, only the position is re-centered.
+// is kept (capped at the monitor); if its monitor is gone, re-center.
 fn resolve_geometry(main: &tauri::WebviewWindow, saved: Option<WindowGeom>) -> WindowGeom {
-    if let Some(g) = saved {
-        if g.width > 0 && g.height > 0 {
-            let monitors = main.available_monitors().unwrap_or_default();
-            let cx = g.x + (g.width as i32) / 2;
-            let cy = g.y + (g.height as i32) / 2;
-            if point_on_monitor(&monitors, cx, cy) {
-                return g;
-            }
-            return centered_on_primary(main, g.width, g.height);
-        }
-    }
-    // First start: 50% x 50% of the primary screen, centered.
-    let (width, height) = main
+    // Hard cap: the window can never start larger than the primary monitor.
+    let cap = main
         .primary_monitor()
         .ok()
         .flatten()
         .map(|m| {
             let s = m.size();
-            ((s.width / 2).max(400), (s.height / 2).max(300))
+            (
+                (s.width as f64 / m.scale_factor()) as u32,
+                (s.height as f64 / m.scale_factor()) as u32,
+            )
         })
-        .unwrap_or((900, 600));
+        .unwrap_or((u32::MAX, u32::MAX));
+    if let Some(mut g) = saved {
+        if g.width > 0 && g.height > 0 {
+            g.width = g.width.min(cap.0);
+            g.height = g.height.min(cap.1);
+            let monitors = main.available_monitors().unwrap_or_default();
+            if point_on_monitor(&monitors, g.x + 40, g.y + 20) {
+                return g;
+            }
+            return centered_on_primary(main, g.width, g.height);
+        }
+    }
+    // First start: 50% x 50% of the primary screen (logical), centered.
+    let (width, height) = (
+        (cap.0 / 2).max(400).min(cap.0),
+        (cap.1 / 2).max(300).min(cap.1),
+    );
     centered_on_primary(main, width, height)
 }
 
@@ -1671,17 +2168,7 @@ fn ensure_webview2() -> bool {
     if tauri::webview_version().is_ok() {
         return true;
     }
-    let (title, msg) = if is_german() {
-        (
-            "WebView2 Runtime fehlt",
-            "Prompt Saver benötigt die Microsoft WebView2 Runtime.\n\nJetzt herunterladen und installieren? Danach Prompt Saver einfach erneut starten.",
-        )
-    } else {
-        (
-            "WebView2 runtime missing",
-            "Prompt Saver needs the Microsoft WebView2 runtime.\n\nDownload and install it now? Simply start Prompt Saver again afterwards.",
-        )
-    };
+    let (title, msg) = webview2_texts(resolve_lang("auto"));
     let answer = rfd::MessageDialog::new()
         .set_level(rfd::MessageLevel::Warning)
         .set_title(title)
@@ -1744,7 +2231,7 @@ pub fn run() {
 
             if let Some(main) = app.get_webview_window("main") {
                 let geom = resolve_geometry(&main, saved_geom);
-                let _ = main.set_size(PhysicalSize::new(geom.width, geom.height));
+                let _ = main.set_size(tauri::LogicalSize::new(geom.width, geom.height));
                 let _ = main.set_position(PhysicalPosition::new(geom.x, geom.y));
                 {
                     let pref = handle
@@ -1784,9 +2271,16 @@ pub fn run() {
                     }
                     WindowEvent::Resized(s) => {
                         if s.width > 0 && s.height > 0 {
+                            // Store LOGICAL pixels — physical values re-scaled
+                            // by the monitor factor on every start.
+                            let scale = handle2
+                                .get_webview_window("main")
+                                .and_then(|w| w.scale_factor().ok())
+                                .unwrap_or(1.0);
+                            let logical = s.to_logical::<f64>(scale);
                             update_geom(&handle2, |g| {
-                                g.width = s.width;
-                                g.height = s.height;
+                                g.width = logical.width.round() as u32;
+                                g.height = logical.height.round() as u32;
                             });
                         }
                     }
@@ -1852,7 +2346,7 @@ pub fn run() {
             let show_item = MenuItem::with_id(app, "show", open_label, true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", quit_label, true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
-            let mut tray = TrayIconBuilder::new()
+            let mut tray = TrayIconBuilder::with_id("tray")
                 .tooltip("Prompt Saver")
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
@@ -1931,7 +2425,10 @@ pub fn run() {
             copy_prompt,
             toggle_floating,
             set_float_scale,
+            resize_float_pill,
+            resize_float_media,
             resize_float_menu,
+            set_video_prefs,
             edit_prompt_request,
             show_main_window,
             app_version,
@@ -1945,8 +2442,162 @@ pub fn run() {
             export_prompts,
             import_prompts,
             get_clipboard_image,
-            pick_image_file
+            get_clipboard_file_path,
+            pick_file_path,
+            load_image_file,
+            missing_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_prompts() -> Vec<Prompt> {
+        vec![
+            Prompt {
+                id: "p1".into(),
+                name: "Mail".into(),
+                text: "Hello\nWorld".into(),
+                color: "#ef4444".into(),
+                image: "data:image/png;base64,QUJD".into(),
+                show_image: true,
+                copy_image: true,
+                file_path: String::new(),
+                icon_path: String::new(),
+                caption: String::new(),
+                caption_size: 0,
+                font: "mono".into(),
+                font_size: 24,
+            },
+            Prompt {
+                id: "p2".into(),
+                name: "Doc".into(),
+                text: "Doc".into(),
+                color: String::new(),
+                image: String::new(),
+                show_image: true,
+                copy_image: false,
+                file_path: "C:\\tmp\\report.pdf".into(),
+                icon_path: "C:\\tmp\\clip.mp4".into(),
+                caption: "Mein Untertitel".into(),
+                caption_size: 18,
+                font: String::new(),
+                font_size: 1,
+            },
+        ]
+    }
+
+    fn sample_settings() -> Settings {
+        let mut s = Settings::default();
+        s.migrate();
+        s
+    }
+
+    #[test]
+    fn txt_roundtrip_keeps_every_field() {
+        let out = to_txt(&sample_prompts(), &sample_settings());
+        let data = parse_txt(&out);
+        assert_eq!(data.prompts.len(), 2);
+        let p1 = &data.prompts[0];
+        assert_eq!(p1.name, "Mail");
+        assert_eq!(p1.text, "Hello\nWorld");
+        assert_eq!(p1.color, "#ef4444");
+        assert_eq!(p1.font, "mono");
+        assert_eq!(p1.font_size, 24);
+        assert_eq!(p1.image, "data:image/png;base64,QUJD");
+        assert!(p1.show_image && p1.copy_image);
+        let p2 = &data.prompts[1];
+        assert_eq!(p2.font, "");
+        assert_eq!(p2.font_size, 1);
+        assert_eq!(p2.file_path, "C:\\tmp\\report.pdf");
+        assert_eq!(p2.icon_path, "C:\\tmp\\clip.mp4");
+        assert_eq!(p2.caption, "Mein Untertitel");
+        assert_eq!(p2.caption_size, 18);
+        assert!(p2.show_image && !p2.copy_image);
+    }
+
+    #[test]
+    fn csv_roundtrip_keeps_every_field() {
+        let out = to_csv(&sample_prompts(), &sample_settings());
+        let rows = parse_csv(&out);
+        // header + @settings + @views + 2 prompts
+        assert_eq!(rows.len(), 5);
+        assert_eq!(rows[3][0], "Mail");
+        assert_eq!(rows[3][4], "mono");
+        assert_eq!(rows[3][5], "24");
+        assert_eq!(rows[3][8], "1");
+        assert_eq!(rows[3][9], "1");
+        assert_eq!(rows[3][10], "data:image/png;base64,QUJD");
+        assert_eq!(rows[4][6], "C:\\tmp\\report.pdf");
+        assert_eq!(rows[4][7], "C:\\tmp\\clip.mp4");
+        assert_eq!(rows[4][11], "Mein Untertitel");
+        assert_eq!(rows[4][12], "18");
+    }
+
+    #[test]
+    fn csv_export_feeds_import_parser_losslessly() {
+        let mut s = sample_settings();
+        s.language = "de".into();
+        s.theme = "coffee".into();
+        let out = to_csv(&sample_prompts(), &s);
+        let data = parse_csv_data(&out);
+        assert_eq!(data.language.as_deref(), Some("de"));
+        assert_eq!(data.theme.as_deref(), Some("coffee"));
+        assert_eq!(data.prompts.len(), 2);
+        let p1 = &data.prompts[0];
+        assert!(p1.show_image && p1.copy_image);
+        assert_eq!(p1.image, "data:image/png;base64,QUJD");
+        assert_eq!(p1.text, "Hello\nWorld");
+        let p2 = &data.prompts[1];
+        assert_eq!(p2.file_path, "C:\\tmp\\report.pdf");
+        assert_eq!(p2.icon_path, "C:\\tmp\\clip.mp4");
+        assert_eq!(p2.caption, "Mein Untertitel");
+        assert_eq!(p2.caption_size, 18);
+    }
+
+    #[test]
+    fn settings_block_roundtrip() {
+        let mut s = sample_settings();
+        s.language = "de".into();
+        s.theme = "midnight".into();
+        s.tile_font = "georgia".into();
+        s.tile_size = 18;
+        s.minimize_to_tray = true;
+        s.auto_update = false;
+        s.show_header = false;
+        s.show_composer = true;
+        let out = to_txt(&[], &s);
+        let data = parse_txt(&out);
+        assert_eq!(data.language.as_deref(), Some("de"));
+        assert_eq!(data.theme.as_deref(), Some("midnight"));
+        assert_eq!(data.tile_font.as_deref(), Some("georgia"));
+        assert_eq!(data.tile_size, Some(18));
+        assert_eq!(data.minimize_to_tray, Some(true));
+        assert_eq!(data.auto_update, Some(false));
+        assert_eq!(data.show_header, Some(false));
+        assert_eq!(data.show_composer, Some(true));
+    }
+
+    #[test]
+    fn old_exports_without_style_still_parse() {
+        let txt = "### Old\nSome text\n@color #123456";
+        let data = parse_txt(txt);
+        assert_eq!(data.prompts.len(), 1);
+        assert_eq!(data.prompts[0].text, "Some text");
+        assert_eq!(data.prompts[0].color, "#123456");
+        assert_eq!(data.prompts[0].font, "");
+        assert_eq!(data.prompts[0].font_size, 0);
+        assert_eq!(data.prompts[0].file_path, "");
+    }
+
+    #[test]
+    fn font_size_clamped() {
+        assert_eq!(clamp_font_size(0), 0);
+        assert_eq!(clamp_font_size(1), 1);
+        assert_eq!(clamp_font_size(8), 10);
+        assert_eq!(clamp_font_size(99), 40);
+    }
 }

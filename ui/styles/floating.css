@@ -3,6 +3,7 @@
   --pill-bg: rgba(37, 99, 235, 0.96);
   --pill-fg: #ffffff;
   --pill-ok: rgba(22, 163, 74, 0.97);
+  --danger: #dc2626;
   --menu-bg: rgba(255, 255, 255, 0.98);
   --menu-fg: #1f2430;
   --menu-line: rgba(0, 0, 0, 0.08);
@@ -13,6 +14,76 @@
   --menu-bg: rgba(32, 36, 44, 0.98);
   --menu-fg: #e8eaf0;
   --menu-line: rgba(255, 255, 255, 0.1);
+}
+:root[data-theme="programmer"] {
+  --pill-bg: rgba(63, 185, 80, 0.96);
+  --pill-fg: #06150b;
+  --menu-bg: rgba(22, 27, 34, 0.98);
+  --menu-fg: #c9d1d9;
+  --menu-line: rgba(255, 255, 255, 0.1);
+}
+:root[data-theme="ai"] {
+  --pill-bg: rgba(168, 85, 247, 0.96);
+  --menu-bg: rgba(23, 16, 40, 0.98);
+  --menu-fg: #ede9fe;
+  --menu-line: rgba(255, 255, 255, 0.12);
+}
+:root[data-theme="gradient"] {
+  --pill-bg: linear-gradient(135deg, #4f46e5, #9333ea, #db2777, #9333ea);
+  --menu-bg: rgba(76, 29, 149, 0.96);
+  --menu-fg: #f5f3ff;
+  --menu-line: rgba(255, 255, 255, 0.14);
+}
+/* Text pills drift through the gradient like the main window. */
+:root[data-theme="gradient"] .pill:not(.has-image) {
+  background-size: 300% 300%;
+  animation: gradient-drift 10s ease-in-out infinite;
+}
+@keyframes gradient-drift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+:root[data-theme="sunset"] {
+  --pill-bg: rgba(249, 115, 22, 0.96);
+}
+:root[data-theme="ocean"] {
+  --pill-bg: rgba(2, 132, 199, 0.96);
+}
+:root[data-theme="forest"] {
+  --pill-bg: rgba(22, 163, 74, 0.96);
+}
+:root[data-theme="midnight"] {
+  --pill-bg: rgba(56, 189, 248, 0.96);
+  --pill-fg: #07273a;
+  --menu-bg: rgba(30, 41, 59, 0.98);
+  --menu-fg: #e2e8f0;
+  --menu-line: rgba(255, 255, 255, 0.1);
+}
+:root[data-theme="cyberpunk"] {
+  --pill-bg: rgba(255, 45, 120, 0.95);
+  --menu-bg: rgba(20, 20, 31, 0.98);
+  --menu-fg: #e0e7ff;
+  --menu-line: rgba(255, 255, 255, 0.12);
+}
+:root[data-theme="retro"] {
+  --pill-bg: rgba(255, 176, 0, 0.95);
+  --pill-fg: #1a1208;
+  --menu-bg: rgba(36, 26, 13, 0.98);
+  --menu-fg: #ffb000;
+  --menu-line: rgba(255, 176, 0, 0.18);
+}
+:root[data-theme="mono"] {
+  --pill-bg: rgba(17, 17, 17, 0.95);
+}
+:root[data-theme="lavender"] {
+  --pill-bg: rgba(124, 58, 237, 0.95);
+}
+:root[data-theme="candy"] {
+  --pill-bg: rgba(236, 72, 153, 0.95);
+}
+:root[data-theme="coffee"] {
+  --pill-bg: rgba(139, 94, 52, 0.95);
 }
 
 * { box-sizing: border-box; }
@@ -36,26 +107,34 @@ html, body {
   justify-content: center;
   width: 100%;
   height: 100%;
-  padding: 0 14px;
+  padding: 0 24px;
   border: none;
-  border-radius: 24px;
+  border-radius: 999px; /* fully rounded at any pill size */
   background: var(--pill-bg);
   color: var(--pill-fg);
   font: inherit;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 16px;
   cursor: inherit;
   /* No box-shadow: it painted a visible halo around the pill. */
   transition: transform var(--transition), filter var(--transition);
 }
 .pill:hover { filter: brightness(1.08); }
 .pill:active { transform: scale(0.96); }
-.pill.dragging { cursor: grabbing; }
+/* No transforms or animated repaints while the OS moves the window. */
+.pill.dragging {
+  cursor: grabbing;
+  transform: none !important;
+  filter: none !important;
+  transition: none;
+}
 
-/* Image pill: borderless square box showing the WHOLE picture. */
+/* Image pill: the window is sized to the image's exact aspect ratio, so a
+   full stretch shows every pixel and fills the whole button — no crop, no
+   letterbox (see pillBox in floating.js). */
 .pill.has-image {
   background-color: transparent;
-  background-size: contain;
+  background-size: 100% 100%;
   background-repeat: no-repeat;
   background-position: center;
   border: none;
@@ -63,18 +142,92 @@ html, body {
   padding: 0;
 }
 .pill.has-image .label { display: none; }
+/* Optional caption over media pills. */
+.pill-caption {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 6px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 14px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* Automatic caption size scales with the pill width (window = pill). */
+.pill-caption.auto { font-size: clamp(10px, 7vw, 40px); }
+/* The caption yields while the video control bar is shown in its place. */
+.pill-caption.bar-open { opacity: 0; }
+
+/* Video control bar (same .media-* look as the grid tiles). It sits next to
+   the pill button and is fixed to the lower window edge. */
+.media-bar {
+  position: fixed;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+/* Bar internals (buttons, scrubber, volume popup) live in media.css. */
+
+/* Looping video pill (same exact-fill behaviour as the image pill). */
+.pill-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  border-radius: 10px;
+  pointer-events: none;
+}
 .pill.has-image .feedback {
   border-radius: 10px;
-  font-size: 12px;
+  font-size: 16px;
 }
 
 .label, .feedback {
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   max-width: 100%;
   transition: opacity var(--transition);
 }
+/* Never clip glyphs vertically (script fonts have huge descenders); the
+   window itself bounds overlong text, the width tracks the label anyway. */
+.label { overflow: visible; }
+.feedback { overflow: hidden; text-overflow: ellipsis; }
+/* Full-pill error overlay while the attached file is gone. */
+.file-error {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  /* Window IS the pill: scale with width AND height so nothing clips. */
+  font-size: clamp(12px, min(14vw, 30vh), 72px);
+  line-height: 1.1;
+  font-weight: 800;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+.pill.file-missing .file-error { display: flex; }
+.pill.has-image .file-error { border-radius: 10px; }
 .feedback {
   position: absolute;
   inset: 0;
@@ -82,19 +235,29 @@ html, body {
   align-items: center;
   justify-content: center;
   background: var(--pill-ok);
-  border-radius: 24px;
-  font-size: 11px; /* small, independent of the fitted label size */
+  border-radius: 999px;
+  font-size: 16px; /* small, independent of the label size */
   opacity: 0;
 }
 .pill.copied .label { opacity: 0; }
 .pill.copied .feedback { opacity: 1; }
 
-/* Right-click menu (replaces the pill while open) */
+/* Right-click menu shown BELOW the still-visible pill. */
+body.menu-open {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+body.menu-open .pill { flex: 0 0 auto; }
 .menu {
+  position: relative;
+  z-index: 10; /* always clickable, whatever the pill media overlays */
   display: flex;
   flex-direction: column;
   gap: 4px;
   width: 100%;
+  max-width: 230px; /* matches the backend menu width */
   height: auto; /* leftover window space stays transparent */
   padding: 8px;
   border-radius: 14px;
@@ -106,16 +269,16 @@ html, body {
 .menu button {
   border: none;
   border-radius: 8px;
-  padding: 7px 10px;
+  padding: 8px 12px;
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 13px;
+  font-size: 15px;
   text-align: left;
   cursor: pointer;
 }
 .menu button:hover { background: var(--menu-line); }
-.menu .danger { color: #dc2626; }
+.menu .danger { color: var(--danger); }
 
 .size-row {
   display: flex;
@@ -125,13 +288,13 @@ html, body {
   border-bottom: 1px solid var(--menu-line);
 }
 .size-label {
-  flex: 1;
-  font-size: 12px;
+  font-size: 14px;
   opacity: 0.75;
   padding-left: 4px;
+  margin-right: 4px; /* S/M/L sit right next to the label */
 }
 .size-row button {
-  width: 34px;
+  width: 38px;
   text-align: center;
   font-weight: 600;
 }
@@ -139,5 +302,18 @@ html, body {
   background: var(--pill-bg);
   color: #fff;
 }
+/* X in the top row closing the menu. */
+.size-row .menu-close {
+  width: 28px;
+  margin-left: auto; /* X stays pinned to the top-right corner */
+  padding: 8px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+}
+.size-row .menu-close:hover { opacity: 1; }
 
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

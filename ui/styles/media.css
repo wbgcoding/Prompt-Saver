@@ -1,0 +1,56 @@
+/* Video control bar internals, shared by the grid tiles (main.css positions
+   the bar inside the tile) and the floating pills (floating.css fixes it to
+   the window edge). */
+.media-btn {
+  display: flex;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: #fff;
+  cursor: pointer;
+}
+.media-btn:hover { opacity: 0.75; }
+.media-seek {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  margin: 0;
+  accent-color: #fff;
+  cursor: pointer;
+}
+.media-time {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* Vertical volume slider above the sound button (visible while hovered). */
+.media-sound { position: relative; display: flex; }
+.media-vol-pop {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%);
+  display: none;
+  padding: 8px 6px 6px; /* top padding bridges the hover gap to the button */
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.75);
+}
+.media-sound:hover .media-vol-pop,
+.media-sound.dragging .media-vol-pop { display: flex; }
+/* Generous invisible hitbox so the popup doesn't vanish on small detours —
+   top/sides only, so it never covers the sound button below. */
+.media-vol-pop::before {
+  content: "";
+  position: absolute;
+  inset: -14px -14px 0;
+}
+.media-vol {
+  position: relative; /* above the ::before hitbox, keeps receiving clicks */
+  width: 14px;
+  height: 64px;
+  margin: 0;
+  writing-mode: vertical-lr;
+  direction: rtl; /* slider grows upwards */
+  accent-color: #fff;
+  cursor: pointer;
+}

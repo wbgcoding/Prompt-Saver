@@ -26,6 +26,207 @@
   --danger: #ef4444;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
+/* Programmer: terminal look — near-black panels, console green, monospace UI. */
+:root[data-theme="programmer"] {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface-2: #21262d;
+  --fg: #c9d1d9;
+  --muted: #8b949e;
+  --border: #30363d;
+  --accent: #3fb950;
+  --accent-fg: #06150b;
+  --danger: #f85149;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+:root[data-theme="programmer"] body {
+  font-family: Consolas, "Cascadia Mono", monospace;
+}
+/* AI Enthusiast: deep space purple with a neon glow around accents. */
+:root[data-theme="ai"] {
+  --bg: #0c0817;
+  --surface: #171028;
+  --surface-2: #221739;
+  --fg: #ede9fe;
+  --muted: #a78bda;
+  --border: #3b2a63;
+  --accent: #a855f7;
+  --accent-fg: #ffffff;
+  --danger: #fb7185;
+  --shadow: 0 8px 28px rgba(168, 85, 247, 0.35);
+}
+/* Gradient: full-color backdrop, frosted-glass surfaces, warm accent. */
+:root[data-theme="gradient"] {
+  --bg: #6d28d9;
+  --surface: rgba(255, 255, 255, 0.16);
+  --surface-2: rgba(255, 255, 255, 0.24);
+  --fg: #ffffff;
+  --muted: rgba(255, 255, 255, 0.72);
+  --border: rgba(255, 255, 255, 0.28);
+  --accent: #fbbf24;
+  --accent-fg: #3b2300;
+  --danger: #fecaca;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+:root[data-theme="gradient"] body {
+  background: linear-gradient(130deg, #4f46e5, #9333ea, #db2777, #f59e0b, #db2777, #9333ea);
+  background-size: 300% 300%;
+  animation: gradient-drift 16s ease-in-out infinite;
+}
+@keyframes gradient-drift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme="gradient"] body { animation: none; }
+}
+:root[data-theme="gradient"] .header,
+:root[data-theme="gradient"] .composer {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+}
+/* Popups get a SOLID backdrop: the sticky modal header must fully cover the
+   content scrolling underneath it (translucency made it bleed through). */
+:root[data-theme="gradient"] .modal,
+:root[data-theme="gradient"] .modal-head,
+:root[data-theme="gradient"] .ctx,
+:root[data-theme="gradient"] .num-pop {
+  background: #4c1d95;
+}
+/* Sunset: warm peach tones, golden-hour orange accent. */
+:root[data-theme="sunset"] {
+  --bg: #fff7ed;
+  --surface: #ffffff;
+  --surface-2: #ffedd5;
+  --fg: #431407;
+  --muted: #b45309;
+  --border: #fed7aa;
+  --accent: #f97316;
+  --accent-fg: #ffffff;
+  --danger: #dc2626;
+  --shadow: 0 8px 24px rgba(249, 115, 22, 0.15);
+}
+/* Ocean: airy sky blues, calm sea accent. */
+:root[data-theme="ocean"] {
+  --bg: #eef9fe;
+  --surface: #ffffff;
+  --surface-2: #e0f2fe;
+  --fg: #0c4a6e;
+  --muted: #64748b;
+  --border: #bae6fd;
+  --accent: #0284c7;
+  --accent-fg: #ffffff;
+  --danger: #dc2626;
+  --shadow: 0 8px 24px rgba(2, 132, 199, 0.15);
+}
+/* Forest: soft greens, natural and easy on the eyes. */
+:root[data-theme="forest"] {
+  --bg: #f0fdf4;
+  --surface: #ffffff;
+  --surface-2: #dcfce7;
+  --fg: #14532d;
+  --muted: #6a8d70;
+  --border: #bbf7d0;
+  --accent: #16a34a;
+  --accent-fg: #ffffff;
+  --danger: #dc2626;
+  --shadow: 0 8px 24px rgba(22, 163, 74, 0.15);
+}
+/* Midnight: cozy deep navy with a soft sky-blue accent. */
+:root[data-theme="midnight"] {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface-2: #283548;
+  --fg: #e2e8f0;
+  --muted: #94a3b8;
+  --border: #334155;
+  --accent: #38bdf8;
+  --accent-fg: #07273a;
+  --danger: #f87171;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+/* Cyberpunk: neon pink on a night-city black. */
+:root[data-theme="cyberpunk"] {
+  --bg: #0a0a12;
+  --surface: #14141f;
+  --surface-2: #1d1d2e;
+  --fg: #e0e7ff;
+  --muted: #7a7a9e;
+  --border: #2e2e4a;
+  --accent: #ff2d78;
+  --accent-fg: #ffffff;
+  --danger: #ff5d5d;
+  --shadow: 0 8px 28px rgba(255, 45, 120, 0.35);
+}
+/* Retro: amber phosphor on CRT-dark, typewriter type. */
+:root[data-theme="retro"] {
+  --bg: #1a1208;
+  --surface: #241a0d;
+  --surface-2: #2f2310;
+  --fg: #ffb000;
+  --muted: #a8842c;
+  --border: #4a3a14;
+  --accent: #ffb000;
+  --accent-fg: #1a1208;
+  --danger: #ff6b4a;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+:root[data-theme="retro"] body {
+  font-family: "Courier New", Consolas, monospace;
+}
+/* Black & White: clean monochrome, zero distraction. */
+:root[data-theme="mono"] {
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-2: #f0f0f0;
+  --fg: #111111;
+  --muted: #767676;
+  --border: #dddddd;
+  --accent: #111111;
+  --accent-fg: #ffffff;
+  --danger: #b91c1c;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+/* Lavender: gentle violet pastels. */
+:root[data-theme="lavender"] {
+  --bg: #f5f3ff;
+  --surface: #ffffff;
+  --surface-2: #ede9fe;
+  --fg: #4c1d95;
+  --muted: #7c6f9f;
+  --border: #ddd6fe;
+  --accent: #7c3aed;
+  --accent-fg: #ffffff;
+  --danger: #dc2626;
+  --shadow: 0 8px 24px rgba(124, 58, 237, 0.15);
+}
+/* Candy: playful pink sweetness. */
+:root[data-theme="candy"] {
+  --bg: #fdf2f8;
+  --surface: #ffffff;
+  --surface-2: #fce7f3;
+  --fg: #831843;
+  --muted: #b25f8f;
+  --border: #fbcfe8;
+  --accent: #ec4899;
+  --accent-fg: #ffffff;
+  --danger: #dc2626;
+  --shadow: 0 8px 24px rgba(236, 72, 153, 0.15);
+}
+/* Coffee: cozy café browns. */
+:root[data-theme="coffee"] {
+  --bg: #f7f1e8;
+  --surface: #fffaf3;
+  --surface-2: #efe5d6;
+  --fg: #3e2b1f;
+  --muted: #8a7260;
+  --border: #e0d2bd;
+  --accent: #8b5e34;
+  --accent-fg: #ffffff;
+  --danger: #dc2626;
+  --shadow: 0 8px 24px rgba(139, 94, 52, 0.18);
+}
 
 * { box-sizing: border-box; }
 html, body {
@@ -195,7 +396,9 @@ body.drag-active .cell.drag-over {
   transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition), opacity var(--transition);
 }
 .tile:hover { border-color: var(--accent); box-shadow: var(--shadow); }
-.tile:active { transform: scale(0.97); }
+/* No press-scale while the pointer is in the video-control zone
+   (.media-hover) — works on every WebView2 build, unlike :has(). */
+.tile:active:not(.media-hover) { transform: scale(0.97); }
 /* No press-scale while dragging, keeps the text steady. */
 .tile.dragging { opacity: 0.25; cursor: grabbing; z-index: 5; transform: none !important; }
 
@@ -297,6 +500,95 @@ body.drag-active .cell.drag-over {
   /* Never cut words: hyphenate where possible, otherwise the overflowing
      word makes the fit check fail and the font shrinks. */
   overflow-wrap: normal;
+  /* Optical centering: trim the leading to cap height / baseline so a single
+     line doesn't sit visually low (fonts reserve more space below). */
+  text-box-trim: trim-both;
+  text-box-edge: cap alphabetic;
+}
+
+/* Video tiles: cached wrapper + looping preview + hover control bar. */
+.tile-media {
+  position: absolute;
+  inset: 0;
+}
+.tile-video {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: calc(100% - 10px);
+  height: calc(100% - 10px);
+  object-fit: cover;
+  border-radius: 7px;
+  pointer-events: none;
+}
+.media-bar {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+/* Visible only while the mouse is in the lower zone of the tile.
+   Bar internals (buttons, scrubber, volume popup) live in media.css. */
+.tile.media-hover .media-bar { opacity: 1; }
+
+/* Optional caption over media tiles; hides while the control bar shows. */
+.tile-caption {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 4;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 11px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  transition: opacity var(--transition);
+}
+.tile.media-hover .tile-caption { opacity: 0; }
+/* Automatic caption size scales with the tile width. */
+.tile-caption.auto { font-size: clamp(10px, 8cqi, 40px); }
+
+/* Type badge: small translucent file/image marker in the corner. */
+.tile-type {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 3;
+  display: flex;
+  opacity: 0.4;
+  pointer-events: none;
+}
+.tile.has-image .tile-type {
+  color: #fff;
+  opacity: 0.75;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.65));
+}
+
+/* Off-screen measurement ruler used by the auto-fit (fixed position keeps
+   the subpixel context identical for every measurement). */
+.tile-ruler {
+  position: fixed;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+  font-weight: 600; /* matches .tile */
 }
 
 /* Live drag ghost following the cursor. */
@@ -483,15 +775,81 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .swatch.custom:not([style*="background"]) {
   background: conic-gradient(#ef4444, #f59e0b, #eab308, #22c55e, #06b6d4, #3b82f6, #8b5cf6, #ec4899, #ef4444);
 }
-.color-pick {
+/* ---- Custom color picker popup ---- */
+.color-pop {
+  position: fixed;
+  z-index: 140;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 216px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.cp-sv {
+  position: relative;
+  height: 130px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  cursor: crosshair;
+  touch-action: none;
+}
+.cp-knob {
   position: absolute;
-  width: 0;
-  height: 0;
-  padding: 0;
-  border: 0;
-  opacity: 0;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+  transform: translate(-50%, -50%);
   pointer-events: none;
 }
+.cp-hue {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 10px;
+  margin: 0;
+  border-radius: 5px;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  cursor: pointer;
+}
+.cp-hue::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+.cp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cp-preview {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+}
+.cp-hex {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+}
+.cp-hex:focus { border-color: var(--accent); }
 
 /* Tinted tiles: colored background, white text. */
 .tile.tinted { color: #fff; }
@@ -527,6 +885,67 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   background: var(--surface-2);
 }
 .modal-display-row { display: flex; gap: 8px; }
+
+/* Attached file row inside the save/edit modal */
+.modal-file-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.modal-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+/* Caption text + its size select side by side. */
+.caption-row {
+  display: flex;
+  gap: 8px;
+}
+.caption-row .modal-input { flex: 1; min-width: 0; }
+/* The select sizes itself to its widest option ("Like settings" etc. in any
+   language) instead of clipping at a fixed width. */
+.caption-row .caption-size { flex: 0 0 auto; width: auto; max-width: 55%; }
+
+.modal-hint {
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* Full-tile error overlay while the attached file is gone. */
+.tile { container-type: size; }
+.tile-error {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--danger);
+  color: #fff;
+  /* Scales with the tile width: fills most of the button. */
+  /* Width AND height aware: wide flat tiles must not clip the bottom line. */
+  font-size: clamp(12px, min(19cqi, 26cqb), 64px);
+  line-height: 1.12;
+  font-weight: 800;
+  text-align: center;
+  overflow-wrap: break-word;
+  pointer-events: none;
+}
+.tile.file-missing { border-color: var(--danger); }
+.tile.file-missing .tile-error { display: flex; }
 /* Active state for Image / Text toggle buttons */
 .modal-display-row .ghost-btn.active {
   background: var(--accent);
@@ -702,7 +1121,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   display: flex;
   flex-direction: column;
   min-width: 56px;
-  max-height: 176px; /* ~7 rows, rest scrolls */
+  max-height: 240px; /* up to 8 rows at the larger font, scrollbar only when needed */
   overflow-y: auto;
   padding: 4px;
   background: var(--surface);
@@ -719,8 +1138,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   border-radius: 6px;
   background: transparent;
   color: var(--fg);
-  font: inherit;
-  font-size: 12px;
+  font: inherit; /* same size as the select that opened the popup */
   text-align: center;
   cursor: pointer;
 }
