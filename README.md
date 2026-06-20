@@ -27,7 +27,7 @@ A tiny, fully offline Windows tool for storing your favorite prompts and copying
 - **Distraction-free mode** – hide the top and bottom bars with subtle arrows; the grid takes over the freed space
 - **16 themes** – light / dark / system (live OS detection) plus Programmer, AI, Cyberpunk, Retro, Gradient and more
 - **100% local** – data stored locally in `%APPDATA%`, no network, no telemetry
-- **Tiny** – ~3 MB exe (Tauri / Rust), uses the Windows WebView2 runtime
+- **Compact** – ~8 MB installer (Tauri / Rust), uses the Windows WebView2 runtime
 
 ## Download
 
