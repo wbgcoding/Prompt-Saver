@@ -129,17 +129,24 @@ html, body {
   transition: none;
 }
 
-/* Image pill: the window is sized to the image's exact aspect ratio, so a
-   full stretch shows every pixel and fills the whole button — no crop, no
-   letterbox (see pillBox in floating.js). */
+/* Image pill: the window is sized to the image's aspect ratio. The media uses
+   object-fit:contain, so even if the OS forces a slightly different window box
+   the whole picture always shows — never cropped, never under the frame. */
 .pill.has-image {
-  background-color: transparent;
-  background-size: 100% 100%;
-  background-repeat: no-repeat;
-  background-position: center;
+  background: transparent;
   border: none;
   border-radius: 10px;
   padding: 0;
+}
+/* Still image: fills the button, always fully visible (contain). */
+.pill-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 10px;
+  pointer-events: none;
 }
 .pill.has-image .label { display: none; }
 /* Optional caption over media pills. */
@@ -189,7 +196,7 @@ html, body {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: fill;
+  object-fit: contain;
   border-radius: 10px;
   pointer-events: none;
 }
@@ -206,7 +213,19 @@ html, body {
 /* Never clip glyphs vertically (script fonts have huge descenders); the
    window itself bounds overlong text, the width tracks the label anyway. */
 .label { overflow: visible; }
-.feedback { overflow: hidden; text-overflow: ellipsis; }
+.feedback {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--pill-ok);
+  border-radius: 999px;
+  font-size: 16px; /* small, independent of the label size */
+  opacity: 0;
+}
 /* Full-pill error overlay while the attached file is gone. */
 .file-error {
   position: absolute;
@@ -228,27 +247,16 @@ html, body {
 }
 .pill.file-missing .file-error { display: flex; }
 .pill.has-image .file-error { border-radius: 10px; }
-.feedback {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--pill-ok);
-  border-radius: 999px;
-  font-size: 16px; /* small, independent of the label size */
-  opacity: 0;
-}
 .pill.copied .label { opacity: 0; }
 .pill.copied .feedback { opacity: 1; }
 
 /* Right-click menu shown BELOW the still-visible pill. */
-body.menu-open {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
+body.menu-open { display: flex; align-items: center; gap: 6px; }
+/* Menu sits on whichever side has room; pill keeps its place, menu centered. */
+body.menu-below { flex-direction: column; }
+body.menu-above { flex-direction: column-reverse; }
+body.menu-right { flex-direction: row; }
+body.menu-left { flex-direction: row-reverse; }
 body.menu-open .pill { flex: 0 0 auto; }
 .menu {
   position: relative;
@@ -313,6 +321,22 @@ body.menu-open .pill { flex: 0 0 auto; }
   opacity: 0.7;
 }
 .size-row .menu-close:hover { opacity: 1; }
+
+/* Resize grips around the window edges/corners (content scales with size).
+   Above the menu (z 10) so the edges/corners on the menu's side stay grabbable;
+   the 7px strips sit within the menu's 8px padding, so its buttons stay clickable
+   (grabbing a grip collapses the menu and resizes the pill). */
+.resize { position: fixed; inset: 0; z-index: 11; pointer-events: none; }
+.resize .rz { position: absolute; pointer-events: auto; }
+.pill.dragging ~ .resize { display: none; }
+.rz-n { top: 0; left: 12px; right: 12px; height: 7px; cursor: ns-resize; }
+.rz-s { bottom: 0; left: 12px; right: 12px; height: 7px; cursor: ns-resize; }
+.rz-e { right: 0; top: 12px; bottom: 12px; width: 7px; cursor: ew-resize; }
+.rz-w { left: 0; top: 12px; bottom: 12px; width: 7px; cursor: ew-resize; }
+.rz-ne { top: 0; right: 0; width: 14px; height: 14px; cursor: nesw-resize; }
+.rz-nw { top: 0; left: 0; width: 14px; height: 14px; cursor: nwse-resize; }
+.rz-se { bottom: 0; right: 0; width: 14px; height: 14px; cursor: nwse-resize; }
+.rz-sw { bottom: 0; left: 0; width: 14px; height: 14px; cursor: nesw-resize; }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }

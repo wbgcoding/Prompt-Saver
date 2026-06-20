@@ -12,7 +12,7 @@
   <!-- Window -->
   <rect width="880" height="600" rx="10" fill="#1b1b1d"/>
 
-  <!-- Header: logo, title, view switcher, gear -->
+  <!-- Header: logo, title, view switcher, header actions -->
   <line x1="0" y1="50" x2="880" y2="50" stroke="#38383d"/>
   <rect x="16" y="12" width="26" height="26" rx="7" fill="url(#logo)"/>
   <path d="M22 19h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-6l-4 3v-3h-4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z" fill="#fff"/>
@@ -25,10 +25,20 @@
   <rect x="304" y="13" width="56" height="24" rx="12" fill="none" stroke="#38383d"/>
   <text x="332" y="29" fill="#9ca3af" font-size="12" text-anchor="middle">Mail</text>
 
-  <path d="M840 17c4.5 0 8 3.6 8 8s-3.5 8-8 8-8-3.6-8-8 3.5-8 8-8Z" fill="none" stroke="#9ca3af" stroke-width="2"/>
-  <circle cx="840" cy="25" r="3" fill="#9ca3af"/>
+  <!-- Header action icons: library, screenshot (camera), settings -->
+  <g fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <!-- library / list -->
+    <path d="M748 19h12M748 25h12M748 31h12"/>
+    <!-- screenshot / camera -->
+    <rect x="784" y="18" width="20" height="15" rx="3"/>
+    <path d="M790 18l2-3h4l2 3"/>
+    <circle cx="794" cy="26" r="3.4"/>
+    <!-- settings / gear -->
+    <path d="M840 17c4.5 0 8 3.6 8 8s-3.5 8-8 8-8-3.6-8-8 3.5-8 8-8Z"/>
+    <circle cx="840" cy="25" r="3" fill="#9ca3af"/>
+  </g>
 
-  <!-- Grid 5x4, free placement, per-prompt colors, auto-fit text -->
+  <!-- Grid 5x4: free placement, per-prompt colors, auto-fit text, media tiles -->
   <g font-weight="600" text-anchor="middle">
     <!-- row 1 -->
     <rect x="18" y="64" width="162" height="100" rx="10" fill="#1e3a8a" stroke="#3b82f6"/>
@@ -37,7 +47,7 @@
     <text x="271" y="120" fill="#f3f3f3" font-size="19">Bug Report</text>
     <rect x="362" y="64" width="162" height="100" rx="10" fill="#7f1d1d" stroke="#38383d"/>
     <text x="443" y="112" fill="#f3f3f3" font-size="17">Translate</text>
-    <text x="443" y="134" fill="#f3f3f3" font-size="17">EN → DE</text>
+    <text x="443" y="134" fill="#f3f3f3" font-size="17">EN &#8594; DE</text>
     <rect x="534" y="64" width="162" height="100" rx="10" fill="#242427" stroke="#38383d"/>
     <text x="615" y="120" fill="#f3f3f3" font-size="19">Summarize</text>
     <rect x="706" y="64" width="162" height="100" rx="10" fill="#14532d" stroke="#38383d"/>
@@ -47,31 +57,47 @@
     <text x="99" y="228" fill="#f3f3f3" font-size="19">Unit Tests</text>
     <rect x="190" y="172" width="162" height="100" rx="10" fill="#4c1d95" stroke="#38383d"/>
     <text x="271" y="228" fill="#f3f3f3" font-size="18">E-Mail Draft</text>
+    <!-- copied! confirmation bubble -->
     <rect x="362" y="172" width="162" height="100" rx="10" fill="#16a34a"/>
     <text x="443" y="222" fill="#ffffff" font-size="18">Meeting Notes</text>
     <rect x="395" y="244" width="96" height="20" rx="10" fill="#3b82f6"/>
     <text x="443" y="258" fill="#fff" font-size="11">Copied!</text>
     <rect x="534" y="172" width="162" height="100" rx="10" fill="#242427" stroke="#38383d"/>
     <text x="615" y="228" fill="#f3f3f3" font-size="18">Regex Helper</text>
+    <!-- media tile: a saved screenshot with a caption -->
+    <rect x="706" y="172" width="162" height="100" rx="10" fill="#0b1220" stroke="#f59e0b"/>
+    <g transform="translate(787 210)" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="-22" y="-16" width="44" height="32" rx="4"/>
+      <circle cx="-9" cy="-4" r="4"/>
+      <path d="M-22 12l13-12 9 8 6-5 16 11"/>
+    </g>
+    <rect x="724" y="244" width="126" height="20" rx="10" fill="#000" fill-opacity="0.55"/>
+    <text x="787" y="258" fill="#f3f3f3" font-size="11">Screenshot</text>
     <!-- row 3 -->
     <rect x="18" y="280" width="162" height="100" rx="10" fill="#713f12" stroke="#38383d"/>
     <text x="99" y="336" fill="#f3f3f3" font-size="19">Brainstorm</text>
     <rect x="190" y="280" width="162" height="100" rx="10" fill="#242427" stroke="#38383d"/>
     <text x="271" y="328" fill="#f3f3f3" font-size="17">Commit</text>
     <text x="271" y="350" fill="#f3f3f3" font-size="17">Message</text>
+    <rect x="362" y="280" width="162" height="100" rx="10" fill="#1e3a8a" stroke="#38383d"/>
+    <text x="443" y="336" fill="#f3f3f3" font-size="18">Release Notes</text>
   </g>
 
   <!-- Composer -->
   <line x1="0" y1="534" x2="880" y2="534" stroke="#38383d"/>
-  <rect x="16" y="546" width="744" height="40" rx="10" fill="#242427" stroke="#38383d"/>
-  <text x="30" y="571" fill="#9ca3af" font-size="13">Type a prompt…</text>
+  <rect x="16" y="546" width="700" height="40" rx="10" fill="#242427" stroke="#38383d"/>
+  <text x="30" y="571" fill="#9ca3af" font-size="13">Type a prompt&#8230;</text>
+  <!-- attach / screenshot buttons next to Save -->
+  <g fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M735 558l-9 9a4 4 0 0 0 6 6l9-9a6 6 0 0 0-9-9l-9 9" transform="translate(-2 0)"/>
+  </g>
   <rect x="772" y="546" width="92" height="40" rx="10" fill="#3b82f6"/>
   <text x="818" y="571" fill="#fff" font-size="14" font-weight="600" text-anchor="middle">Save</text>
 
-  <!-- Floating pill (always on top, over any app) -->
-  <g filter="url(#shadow)">
-    <rect x="650" y="420" width="170" height="48" rx="24" fill="#3b82f6"/>
-    <text x="735" y="450" fill="#fff" font-size="15" font-weight="600" text-anchor="middle">Code Review</text>
+  <!-- Floating pill (always on top, adjustable opacity) -->
+  <g filter="url(#shadow)" opacity="0.82">
+    <rect x="650" y="416" width="170" height="48" rx="24" fill="#3b82f6"/>
+    <text x="735" y="446" fill="#fff" font-size="15" font-weight="600" text-anchor="middle">Code Review</text>
   </g>
-  <text x="735" y="492" fill="#9ca3af" font-size="11" text-anchor="middle">floating quick-copy button</text>
+  <text x="735" y="488" fill="#9ca3af" font-size="11" text-anchor="middle">floating quick-copy button</text>
 </svg>

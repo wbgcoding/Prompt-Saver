@@ -8,6 +8,7 @@
 </head>
 <body>
   <button id="pill" class="pill" type="button">
+    <img id="img" class="pill-img hidden" alt="" draggable="false" />
     <video id="video" class="pill-video hidden" muted loop autoplay playsinline></video>
     <span id="label" class="label">Prompt</span>
     <span id="caption" class="pill-caption hidden"></span>
@@ -15,13 +16,25 @@
     <span id="file-error" class="file-error"></span>
   </button>
 
+  <!-- Edge/corner grips to resize the pill (content scales with it). -->
+  <div id="resize" class="resize">
+    <div class="rz rz-n"></div>
+    <div class="rz rz-s"></div>
+    <div class="rz rz-e"></div>
+    <div class="rz rz-w"></div>
+    <div class="rz rz-ne"></div>
+    <div class="rz rz-nw"></div>
+    <div class="rz rz-se"></div>
+    <div class="rz rz-sw"></div>
+  </div>
+
   <!-- Right-click menu: size presets, edit prompt, remove pill -->
   <div id="menu" class="menu hidden">
     <div class="size-row">
       <span id="size-label" class="size-label">Size</span>
-      <button type="button" data-scale="0.75">S</button>
-      <button type="button" data-scale="1">M</button>
-      <button type="button" data-scale="1.4">L</button>
+      <button type="button" data-scale="1.25">S</button>
+      <button type="button" data-scale="2">M</button>
+      <button type="button" data-scale="3">L</button>
       <button id="menu-close" type="button" class="menu-close">
         <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
           <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>

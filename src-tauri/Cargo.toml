@@ -1,6 +1,6 @@
 [package]
 name = "prompt-saver"
-version = "1.8.0"
+version = "2.2.0"
 description = "Local offline prompt manager"
 authors = ["BG Coding"]
 edition = "2021"
@@ -17,24 +17,35 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-single-instance = "2"
+# Async timer to re-assert snip overlay geometry after the per-monitor DPI settle.
+tokio = { version = "1", features = ["time"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 arboard = "3"
 rfd = "0.15"
 sys-locale = "0.3"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico", "tiff", "tga", "gif"] }
 ureq = { version = "2", default-features = false, features = ["tls"] }
+# Screen capture for the built-in snipping tool (pure Rust, no external dll).
+xcap = "0.0.14"
+# Local SQLite store (bundled engine — no system dependency).
+rusqlite = { version = "0.32", features = ["bundled"] }
+# Render the first page of an attached PDF as a preview image. Binds the
+# pdfium library dynamically at runtime (shipped as a resource next to the exe).
+pdfium-render = "0.8"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
 clipboard-win = "5"
 
-# Smallest possible release binary.
+# Small release binary, but tuned for much faster builds:
+# thin LTO + parallel codegen cut compile time a lot for a few KB more size.
 [profile.release]
 opt-level = "z"
-lto = true
-codegen-units = 1
+lto = "thin"
+codegen-units = 16
 # NOTE: unwind (not "abort") so a single command panic rejects the call
 # instead of hard-crashing the whole app. Robustness > a few KB of size.
 strip = true
-incremental = false
+# Incremental caches codegen between builds — big win on repeat release builds.
+incremental = true

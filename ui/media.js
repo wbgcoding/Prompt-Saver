@@ -1,8 +1,14 @@
 // Attached-media detection shared by the grid and the floating pills.
 // Stills get a stored preview, gifs/videos render straight from their path.
-export const IMAGE_EXT = /\.(png|jpe?g|webp|bmp)$/i;
+// Still images: every raster format the backend `image` crate can decode
+// (re-encoded to a stored preview, so WebView2 always renders it).
+export const IMAGE_EXT = /\.(png|apng|jpe?g|jfif|pjpe?g|pjp|webp|bmp|ico|tiff?|tga)$/i;
+// Animated GIF keeps its own branch (rendered from the path, not re-encoded).
 export const GIF_EXT = /\.gif$/i;
-export const VIDEO_EXT = /\.(mp4|webm|m4v|mov)$/i;
+// Video: every container WebView2 (Chromium) plays back natively. Formats it
+// cannot decode (mkv, avi, wmv, flv, heic, raw, …) fall through to
+// mediaKind() === "" and are reported to the user as unsupported.
+export const VIDEO_EXT = /\.(mp4|m4v|mov|webm|ogv|ogg|ogm)$/i;
 
 export const mediaKind = (path) =>
   IMAGE_EXT.test(path) ? "image"
@@ -32,11 +38,18 @@ const fmtTime = (s) => {
   return `${m}:${String(sec).padStart(2, "0")}`;
 };
 
+// Global fallbacks (expert menu) used when a prompt has no saved player state.
+let MEDIA_DEFAULTS = { volume: 100, muted: true, looped: true };
+export function setMediaDefaults(d) {
+  MEDIA_DEFAULTS = { ...MEDIA_DEFAULTS, ...d };
+}
+
 // Restore a saved player state (volume 0..100, mute, loop) onto a video.
+// Missing per-prompt values fall back to the configured global defaults.
 export function applyVideoPrefs(video, prefs) {
-  video.volume = (prefs?.volume ?? 100) / 100;
-  video.muted = prefs?.muted !== false; // default muted
-  video.loop = prefs?.looped !== false; // default looping
+  video.volume = (prefs?.volume ?? MEDIA_DEFAULTS.volume) / 100;
+  video.muted = prefs?.muted ?? MEDIA_DEFAULTS.muted;
+  video.loop = prefs?.looped ?? MEDIA_DEFAULTS.looped;
   video.dispatchEvent(new Event("prefs-applied"));
 }
 

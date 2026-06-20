@@ -1,17 +1,19 @@
-// Prompt Saver backend (Tauri v2). Local JSON storage, clipboard, import/export,
+// Prompt Saver backend (Tauri v2). Local SQLite storage, clipboard, import/export,
 // multiple views, frameless floating quick-copy windows. No network, 100% offline.
 
 use image::imageops::FilterType;
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{
-    AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewUrl,
+    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl,
     WebviewWindowBuilder, WindowEvent,
 };
 
@@ -101,6 +103,9 @@ struct View {
     // "6x5" -> promptId -> [col,row]
     #[serde(default)]
     layouts: HashMap<String, HashMap<String, [u32; 2]>>,
+    // Optional tab color (hex); empty = default.
+    #[serde(default)]
+    color: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -131,8 +136,29 @@ struct Settings {
     autostart: bool,
     #[serde(default)]
     start_minimized: bool,
+    // Keep the main window above all other windows (except while minimized).
+    #[serde(default)]
+    always_on_top: bool,
     #[serde(default = "default_on")]
     auto_update: bool,
+    // Update versions the user chose to skip — never offered again.
+    #[serde(default)]
+    skipped_versions: Vec<String>,
+    // Expert toggles: feature key -> enabled. A missing key means enabled, so
+    // every feature is on by default and only explicit `false` disables it.
+    #[serde(default)]
+    ui_flags: HashMap<String, bool>,
+    // Expert numeric tweaks: key -> value. A missing key uses the frontend default.
+    #[serde(default)]
+    ui_values: HashMap<String, f64>,
+    // Expert string options (e.g. copy-feedback font). Missing key = default.
+    #[serde(default)]
+    ui_texts: HashMap<String, String>,
+    // Recently copied prompts (most recent first, with timestamp) + copy counts.
+    #[serde(default)]
+    copy_log: Vec<CopyEntry>,
+    #[serde(default)]
+    usage: HashMap<String, u32>,
     #[serde(default = "default_on")]
     show_header: bool,
     #[serde(default = "default_on")]
@@ -190,7 +216,14 @@ impl Default for Settings {
             minimize_to_tray: false,
             autostart: false,
             start_minimized: false,
+            always_on_top: false,
             auto_update: true,
+            skipped_versions: Vec::new(),
+            ui_flags: HashMap::new(),
+            ui_values: HashMap::new(),
+            ui_texts: HashMap::new(),
+            copy_log: Vec::new(),
+            usage: HashMap::new(),
             show_header: true,
             show_composer: true,
             language: default_language(),
@@ -206,13 +239,14 @@ impl Default for Settings {
 }
 
 const GRID_MIN: u32 = 1;
-const GRID_MAX: u32 = 20;
-const MAX_VIEWS: usize = 20;
+// Hard safety ceilings. The default-facing limits are 20 (enforced in the UI via
+// the expert values gridMax / maxViews); these only cap how far those expert
+// overrides can be pushed, so old data and extreme settings can't break things.
+const GRID_MAX: u32 = 100;
+const MAX_VIEWS: usize = 100;
 const FLOAT_W: f64 = 360.0;
 const FLOAT_H: f64 = 80.0; // flat pill shape, clearly wider than tall
 const FLOAT_IMG: f64 = 400.0; // square box for image pills: S 300 / M 400 / L 560
-const FLOAT_MENU_W: f64 = 230.0;
-const FLOAT_MENU_H: f64 = 200.0;
 const AUTOSTART_KEY: &str = "PromptSaver";
 
 fn grid_key(cols: u32, rows: u32) -> String {
@@ -343,6 +377,7 @@ impl Settings {
                 cols: self.legacy_cols,
                 rows: self.legacy_rows,
                 layouts,
+                color: String::new(),
             });
         }
         if !self.views.iter().any(|v| v.id == self.active_view) {
@@ -400,26 +435,127 @@ fn write_json<T: Serialize>(path: &PathBuf, data: &T) {
     }
 }
 
+// ---------- SQLite store ----------
+// Prompts live one-per-row (ordered); settings are a single JSON row. The DB
+// is the source of truth; the legacy JSON files are imported once on upgrade
+// and otherwise only used as a fallback if the DB cannot be opened.
+
+fn db_conn(app: &AppHandle) -> Option<Connection> {
+    let conn = Connection::open(data_dir(app).join("data.db")).ok()?;
+    conn.execute_batch(
+        "PRAGMA journal_mode=WAL;
+         CREATE TABLE IF NOT EXISTS prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+         CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+    )
+    .ok()?;
+    Some(conn)
+}
+
+fn db_write_prompts(conn: &mut Connection, prompts: &[Prompt]) -> rusqlite::Result<()> {
+    let tx = conn.transaction()?;
+    tx.execute("DELETE FROM prompts", [])?;
+    {
+        let mut stmt = tx.prepare("INSERT INTO prompts(id, ord, data) VALUES(?1, ?2, ?3)")?;
+        for (i, p) in prompts.iter().enumerate() {
+            let data = serde_json::to_string(p).unwrap_or_default();
+            stmt.execute(params![p.id, i as i64, data])?;
+        }
+    }
+    tx.commit()
+}
+
+fn db_write_settings(conn: &Connection, settings: &Settings) -> rusqlite::Result<()> {
+    let json = serde_json::to_string(settings).unwrap_or_default();
+    conn.execute(
+        "INSERT INTO meta(key, value) VALUES('settings', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = ?1",
+        params![json],
+    )?;
+    Ok(())
+}
+
+fn db_load(conn: &Connection) -> (Vec<Prompt>, Option<Settings>) {
+    let mut prompts = Vec::new();
+    if let Ok(mut stmt) = conn.prepare("SELECT data FROM prompts ORDER BY ord") {
+        if let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) {
+            for data in rows.flatten() {
+                if let Ok(p) = serde_json::from_str::<Prompt>(&data) {
+                    prompts.push(p);
+                }
+            }
+        }
+    }
+    let settings = conn
+        .query_row("SELECT value FROM meta WHERE key='settings'", [], |r| {
+            r.get::<_, String>(0)
+        })
+        .ok()
+        .and_then(|s| serde_json::from_str::<Settings>(&s).ok());
+    (prompts, settings)
+}
+
 fn save_prompts(app: &AppHandle, store: &Store) {
+    if let Some(mut conn) = db_conn(app) {
+        if db_write_prompts(&mut conn, &store.prompts).is_ok() {
+            return;
+        }
+    }
     write_json(&data_dir(app).join("prompts.json"), &store.prompts);
 }
 
 fn save_settings(app: &AppHandle, settings: &Settings) {
+    if let Some(conn) = db_conn(app) {
+        if db_write_settings(&conn, settings).is_ok() {
+            return;
+        }
+    }
     write_json(&data_dir(app).join("settings.json"), settings);
 }
 
-fn load_store(app: &AppHandle) -> Store {
-    let dir = data_dir(app);
-    let mut settings: Settings = read_json(&dir.join("settings.json"));
-    settings.migrate();
-    let mut prompts: Vec<Prompt> = read_json(&dir.join("prompts.json"));
-    // Migration: image prompts saved before copy_image existed copied the
-    // image on click — keep that behaviour (name doubled as the text).
-    for p in &mut prompts {
+// Pre-1.9 builds saved image prompts without copy_image but copied on click.
+fn migrate_prompts(prompts: &mut [Prompt]) {
+    for p in prompts {
         if !p.image.is_empty() && !p.copy_image && (p.text.is_empty() || p.text == p.name) {
             p.copy_image = true;
         }
     }
+}
+
+fn load_store(app: &AppHandle) -> Store {
+    let dir = data_dir(app);
+    if let Some(conn) = db_conn(app) {
+        let (mut prompts, settings_opt) = db_load(&conn);
+        let mut settings = settings_opt.clone().unwrap_or_default();
+        // Empty DB but legacy JSON present → import it once, then own the data.
+        if prompts.is_empty() && settings_opt.is_none() {
+            let j_settings: Settings = read_json(&dir.join("settings.json"));
+            let j_prompts: Vec<Prompt> = read_json(&dir.join("prompts.json"));
+            if !j_prompts.is_empty() || dir.join("settings.json").exists() {
+                let prompts_ok = db_conn(app)
+                    .map(|mut c2| db_write_prompts(&mut c2, &j_prompts).is_ok())
+                    .unwrap_or(false);
+                let settings_ok = db_write_settings(&conn, &j_settings).is_ok();
+                // Once the data is safely in the DB, drop the legacy JSON files so
+                // the import never runs again and stale copies cannot diverge.
+                if prompts_ok && settings_ok {
+                    let _ = fs::remove_file(dir.join("prompts.json"));
+                    let _ = fs::remove_file(dir.join("settings.json"));
+                }
+            }
+            prompts = j_prompts;
+            settings = j_settings;
+        }
+        settings.migrate();
+        prune_history(&mut settings);
+        migrate_prompts(&mut prompts);
+        return Store { prompts, settings };
+    }
+    // Fallback: DB unavailable → read the JSON files directly.
+    let mut settings: Settings = read_json(&dir.join("settings.json"));
+    settings.migrate();
+    prune_history(&mut settings);
+    let mut prompts: Vec<Prompt> = read_json(&dir.join("prompts.json"));
+    migrate_prompts(&mut prompts);
     Store { prompts, settings }
 }
 
@@ -487,16 +623,6 @@ fn flabel(id: &str) -> String {
     format!("float-{}", id)
 }
 
-// Append a line to the diagnostic log in %TEMP%.
-fn log_debug(msg: &str) {
-    let path = std::env::temp_dir().join("prompt-saver-panic.log");
-    let _ = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-        .and_then(|mut f| std::io::Write::write_all(&mut f, format!("{}\n", msg).as_bytes()));
-}
-
 // New pills spawn at the top-left of the primary monitor, cascaded slightly
 // so several pills never fully overlap.
 fn default_pos(app: &AppHandle, index: usize) -> Pos {
@@ -527,9 +653,12 @@ fn pill_dims(is_image: bool, scale: f64) -> (f64, f64) {
 }
 
 // Gif/video attachments render straight from their path (no stored preview).
+// Keep in sync with GIF_EXT / VIDEO_EXT in ui/media.js.
 fn media_path(path: &str) -> bool {
     let lower = path.to_lowercase();
-    [".gif", ".mp4", ".webm", ".m4v", ".mov"].iter().any(|e| lower.ends_with(e))
+    [".gif", ".mp4", ".m4v", ".mov", ".webm", ".ogv", ".ogg", ".ogm"]
+        .iter()
+        .any(|e| lower.ends_with(e))
 }
 
 fn is_image_prompt(p: &Prompt) -> bool {
@@ -582,10 +711,10 @@ fn open_floating(app: &AppHandle, prompt: &Prompt) {
         .shadow(false)
         .build();
 
-    if let Err(e) = &win {
-        log_debug(&format!("floating window create failed: {}", e));
-    }
     if let Ok(win) = win {
+        // Transparent native backdrop: resizing never flashes a white/opaque
+        // rectangle behind the rounded pill (mirrors apply_window_bg for main).
+        let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
         let _ = win.set_position(PhysicalPosition::new(pos.x, pos.y));
         let _ = win.show();
 
@@ -639,15 +768,21 @@ fn base64_encode(data: &[u8]) -> String {
 
 fn base64_decode(s: &str) -> Vec<u8> {
     const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let bytes: Vec<u8> = s.bytes().filter(|&b| b != b'=').collect();
+    let bytes: Vec<u8> = s.bytes().filter(|&b| b != b'=' && !b.is_ascii_whitespace()).collect();
     let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
     for c in bytes.chunks(4) {
-        let v: Vec<u32> = c.iter()
-            .filter_map(|&b| B64.iter().position(|&x| x == b).map(|i| i as u32))
-            .collect();
-        if v.len() >= 2 { out.push(((v[0] << 2) | (v[1] >> 4)) as u8); }
-        if v.len() >= 3 { out.push(((v[1] << 4) | (v[2] >> 2)) as u8); }
-        if v.len() >= 4 { out.push(((v[2] << 6) |  v[3]      ) as u8); }
+        // Any byte outside the alphabet means the input is corrupt: fail cleanly
+        // instead of dropping it and silently shifting every following group.
+        let mut v = [0u32; 4];
+        for (i, &b) in c.iter().enumerate() {
+            match B64.iter().position(|&x| x == b) {
+                Some(p) => v[i] = p as u32,
+                None => return Vec::new(),
+            }
+        }
+        if c.len() >= 2 { out.push(((v[0] << 2) | (v[1] >> 4)) as u8); }
+        if c.len() >= 3 { out.push(((v[1] << 4) | (v[2] >> 2)) as u8); }
+        if c.len() >= 4 { out.push(((v[2] << 6) |  v[3]      ) as u8); }
     }
     out
 }
@@ -756,6 +891,41 @@ async fn load_image_file(path: String) -> Option<String> {
     if result.is_empty() { None } else { Some(result) }
 }
 
+// Locate the pdfium library shipped next to the exe (installed build) or in the
+// project/target dir during development.
+fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
+    let name = "pdfium.dll";
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join(name));
+        }
+    }
+    if let Ok(res) = app.path().resource_dir() {
+        candidates.push(res.join(name));
+    }
+    candidates.into_iter().find(|p| p.exists())
+}
+
+// Render the first page of a PDF to a preview image (data URL). Returns None if
+// pdfium is unavailable or the file cannot be read — the caller then keeps the
+// PDF as a plain file attachment without a preview.
+#[tauri::command]
+async fn pdf_preview(app: AppHandle, path: String) -> Option<String> {
+    use pdfium_render::prelude::*;
+    let lib = pdfium_lib_path(&app)?;
+    let bindings = Pdfium::bind_to_library(lib).ok()?;
+    let pdfium = Pdfium::new(bindings);
+    let document = pdfium.load_pdf_from_file(&path, None).ok()?;
+    let page = document.pages().get(0).ok()?;
+    let config = PdfRenderConfig::new()
+        .set_target_width(1000)
+        .set_maximum_height(1400);
+    let image = page.render_with_config(&config).ok()?.as_image();
+    let result = scale_and_encode(image);
+    if result.is_empty() { None } else { Some(result) }
+}
+
 // IDs of prompts whose attached file OR media icon is gone (polled by the UI).
 #[tauri::command]
 fn missing_files(state: State<Db>) -> Vec<String> {
@@ -770,9 +940,10 @@ fn missing_files(state: State<Db>) -> Vec<String> {
 
 // ---------- Prompt commands ----------
 
+// Async: clones one prompt that may carry a large base64 image — off the UI thread.
 #[tauri::command]
-fn get_prompt(state: State<Db>, id: String) -> Option<Prompt> {
-    lock(&state).prompts.iter().find(|p| p.id == id).cloned()
+async fn get_prompt(state: State<'_, Db>, id: String) -> Result<Option<Prompt>, String> {
+    Ok(lock(&state).prompts.iter().find(|p| p.id == id).cloned())
 }
 
 // First free [col,row] in row-major order; None if the grid is full.
@@ -791,10 +962,12 @@ fn first_free_cell(view: &View) -> Option<[u32; 2]> {
     None
 }
 
+// Async: persisting all prompts (base64 images) to SQLite must not block the UI
+// thread — a sync command runs on it and froze the window while saving.
 #[tauri::command]
-fn add_prompt(
+async fn add_prompt(
     app: AppHandle,
-    state: State<Db>,
+    state: State<'_, Db>,
     name: String,
     text: String,
     color: String,
@@ -807,7 +980,7 @@ fn add_prompt(
     caption_size: Option<u32>,
     font: Option<String>,
     font_size: Option<u32>,
-) -> Prompt {
+) -> Result<Prompt, String> {
     let prompt = Prompt {
         id: gen_id(),
         name,
@@ -834,13 +1007,14 @@ fn add_prompt(
         save_prompts(&app, &store);
         save_settings(&app, &store.settings);
     }
-    prompt
+    Ok(prompt)
 }
 
+// Async: same reason as add_prompt — the SQLite write stays off the UI thread.
 #[tauri::command]
-fn update_prompt(
+async fn update_prompt(
     app: AppHandle,
-    state: State<Db>,
+    state: State<'_, Db>,
     id: String,
     name: String,
     text: String,
@@ -854,7 +1028,7 @@ fn update_prompt(
     caption_size: Option<u32>,
     font: Option<String>,
     font_size: Option<u32>,
-) -> Option<Prompt> {
+) -> Result<Option<Prompt>, String> {
     let updated = {
         let mut store = lock(&state);
         let found = store.prompts.iter_mut().find(|p| p.id == id);
@@ -894,35 +1068,40 @@ fn update_prompt(
             let _ = win.set_size(tauri::LogicalSize::new(w, h));
         }
     }
-    updated
+    Ok(updated)
 }
 
+// Async: keeps the prompt-table rewrite off the UI thread.
 #[tauri::command]
-fn delete_prompt(app: AppHandle, state: State<Db>, id: String) -> bool {
+async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result<bool, String> {
     close_floating_window(&app, &id);
-    let mut store = lock(&state);
-    let before = store.prompts.len();
-    store.prompts.retain(|p| p.id != id);
-    for view in &mut store.settings.views {
-        for layout in view.layouts.values_mut() {
-            layout.remove(&id);
+    let changed = {
+        let mut store = lock(&state);
+        let before = store.prompts.len();
+        store.prompts.retain(|p| p.id != id);
+        for view in &mut store.settings.views {
+            for layout in view.layouts.values_mut() {
+                layout.remove(&id);
+            }
         }
-    }
-    store.settings.floating.remove(&id);
-    store.settings.float_scale.remove(&id);
-    store.settings.video_prefs.remove(&id);
-    let changed = store.prompts.len() != before;
-    if changed {
-        save_prompts(&app, &store);
-        save_settings(&app, &store.settings);
-    }
-    changed
+        store.settings.floating.remove(&id);
+        store.settings.float_scale.remove(&id);
+        store.settings.video_prefs.remove(&id);
+        let changed = store.prompts.len() != before;
+        if changed {
+            save_prompts(&app, &store);
+            save_settings(&app, &store.settings);
+        }
+        changed
+    };
+    Ok(changed)
 }
 
 // Factory reset: wipe all prompts AND all settings (views, theme, window,
 // behaviour, fonts) and remove the autostart registry entry.
+// Async: window closes + a full prompts/settings rewrite stay off the UI thread.
 #[tauri::command]
-fn delete_all_data(app: AppHandle, state: State<Db>) {
+async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
     let labels: Vec<String> = app
         .webview_windows()
         .keys()
@@ -935,12 +1114,15 @@ fn delete_all_data(app: AppHandle, state: State<Db>) {
         }
     }
     let _ = apply_autostart(false, false);
-    let mut store = lock(&state);
-    store.prompts.clear();
-    store.settings = Settings::default();
-    store.settings.migrate();
-    save_prompts(&app, &store);
-    save_settings(&app, &store.settings);
+    {
+        let mut store = lock(&state);
+        store.prompts.clear();
+        store.settings = Settings::default();
+        store.settings.migrate();
+        save_prompts(&app, &store);
+        save_settings(&app, &store.settings);
+    }
+    Ok(())
 }
 
 // UI language preference: "auto" or one of LANG_CODES.
@@ -987,13 +1169,15 @@ fn set_tile_style(app: AppHandle, state: State<Db>, font: String, size: u32) {
 // ---------- Grid / layout commands (per active view) ----------
 
 // Replace the placement map of the active view's current grid size.
+// Async: fires on every drag/hide — keep the settings write off the UI thread.
 #[tauri::command]
-fn set_layout(app: AppHandle, state: State<Db>, layout: HashMap<String, [u32; 2]>) {
+async fn set_layout(app: AppHandle, state: State<'_, Db>, layout: HashMap<String, [u32; 2]>) -> Result<(), String> {
     let mut store = lock(&state);
     let view = store.settings.active_view_mut();
     let key = grid_key(view.cols, view.rows);
     view.layouts.insert(key, layout);
     save_settings(&app, &store.settings);
+    Ok(())
 }
 
 // Change the active view's grid dimensions. The arrangement saved for the new
@@ -1065,7 +1249,7 @@ fn set_view_grid(app: AppHandle, state: State<Db>, id: String, cols: u32, rows: 
 // ---------- View commands ----------
 
 #[tauri::command]
-fn add_view(app: AppHandle, state: State<Db>, name: String) -> Result<Settings, String> {
+fn add_view(app: AppHandle, state: State<Db>, name: String, color: String) -> Result<Settings, String> {
     let mut store = lock(&state);
     if store.settings.views.len() >= MAX_VIEWS {
         return Err(format!("max {} views", MAX_VIEWS));
@@ -1081,6 +1265,7 @@ fn add_view(app: AppHandle, state: State<Db>, name: String) -> Result<Settings, 
         cols: default_cols(),
         rows: default_rows(),
         layouts: HashMap::new(),
+        color: color.trim().to_string(),
     };
     store.settings.active_view = view.id.clone();
     store.settings.views.push(view);
@@ -1096,6 +1281,17 @@ fn rename_view(app: AppHandle, state: State<Db>, id: String, name: String) -> Se
         if !trimmed.is_empty() {
             view.name = trimmed.to_string();
         }
+    }
+    save_settings(&app, &store.settings);
+    store.settings.clone()
+}
+
+// Set a view's tab color (hex); empty string clears it back to default.
+#[tauri::command]
+fn set_view_color(app: AppHandle, state: State<Db>, id: String, color: String) -> Settings {
+    let mut store = lock(&state);
+    if let Some(view) = store.settings.views.iter_mut().find(|v| v.id == id) {
+        view.color = color.trim().to_string();
     }
     save_settings(&app, &store.settings);
     store.settings.clone()
@@ -1139,13 +1335,15 @@ struct AppState {
     settings: Settings,
 }
 
+// Async: cloning every prompt (incl. large base64 images) must not run on the
+// UI thread — a big library would otherwise stall the window on each render.
 #[tauri::command]
-fn get_state(state: State<Db>) -> AppState {
+async fn get_state(state: State<'_, Db>) -> Result<AppState, String> {
     let store = lock(&state);
-    AppState {
+    Ok(AppState {
         prompts: store.prompts.clone(),
         settings: store.settings.clone(),
-    }
+    })
 }
 
 #[tauri::command]
@@ -1167,20 +1365,112 @@ fn set_theme(app: AppHandle, state: State<Db>, theme: String) -> String {
     effective
 }
 
+// Async: encoding + writing a large image to the clipboard stays off the UI thread.
 #[tauri::command]
-fn copy_prompt(state: State<Db>, id: String) -> bool {
+async fn copy_prompt(state: State<'_, Db>, id: String) -> Result<bool, String> {
     let prompt = {
         let store = lock(&state);
         store.prompts.iter().find(|p| p.id == id).cloned()
     };
-    match prompt {
+    Ok(match prompt {
         Some(p) if p.copy_image && !p.image.is_empty() => copy_image_to_clipboard(&p.image),
         Some(p) if !p.file_path.is_empty() => set_clipboard_file(&p.file_path),
         Some(p) => arboard::Clipboard::new()
             .and_then(|mut c| c.set_text(p.text))
             .is_ok(),
         None => false,
+    })
+}
+
+// Put arbitrary text on the clipboard — used after filling prompt placeholders.
+#[tauri::command]
+async fn copy_text(text: String) -> bool {
+    arboard::Clipboard::new()
+        .and_then(|mut c| c.set_text(text))
+        .is_ok()
+}
+
+// Hard ceiling for the copy-history length; the live limit is the expert value
+// historyMax (default 50).
+const COPY_HISTORY_MAX: usize = 200;
+
+// One copy-history entry: which prompt + when (unix seconds).
+#[derive(Serialize, Deserialize, Clone)]
+struct CopyEntry {
+    id: String,
+    ts: u64,
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+// Retention window in seconds from the expert "history retention" setting
+// (days; default 7). 0 or negative means keep forever.
+fn history_max_age(settings: &Settings) -> Option<u64> {
+    let days = settings.ui_values.get("historyDays").copied().unwrap_or(7.0);
+    if days <= 0.0 {
+        None
+    } else {
+        Some(days as u64 * 86_400)
     }
+}
+
+// Drop copy-history entries older than the retention window (auto-delete).
+fn prune_history(settings: &mut Settings) {
+    if let Some(max_age) = history_max_age(settings) {
+        let now = now_secs();
+        settings.copy_log.retain(|e| now.saturating_sub(e.ts) <= max_age);
+    }
+}
+
+// Record a copy in the history + usage stats (called by the UI after any copy).
+#[tauri::command]
+async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String) -> Result<(), String> {
+    let mut store = lock(&state);
+    // Respect the privacy toggle (expert menu): off = don't track.
+    if store.settings.ui_flags.get("copyHistory") == Some(&false) {
+        return Ok(());
+    }
+    if !store.prompts.iter().any(|p| p.id == id) {
+        return Ok(());
+    }
+    *store.settings.usage.entry(id.clone()).or_insert(0) += 1;
+    // Timestamp storage is a privacy toggle (default on).
+    let ts = if store.settings.ui_flags.get("historyTimestamps") == Some(&false) {
+        0
+    } else {
+        now_secs()
+    };
+    // History length is an expert value (default 50, ceiling COPY_HISTORY_MAX).
+    let cap = store
+        .settings
+        .ui_values
+        .get("historyMax")
+        .copied()
+        .unwrap_or(50.0)
+        .clamp(0.0, COPY_HISTORY_MAX as f64) as usize;
+    store.settings.copy_log.retain(|e| e.id != id);
+    if cap > 0 {
+        store.settings.copy_log.insert(0, CopyEntry { id, ts });
+        store.settings.copy_log.truncate(cap);
+    }
+    prune_history(&mut store.settings);
+    save_settings(&app, &store.settings);
+    Ok(())
+}
+
+// Wipe copy history + usage counters (privacy / journal "clear").
+#[tauri::command]
+async fn clear_copy_history(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
+    let mut store = lock(&state);
+    store.settings.copy_log.clear();
+    store.settings.usage.clear();
+    save_settings(&app, &store.settings);
+    Ok(())
 }
 
 // Must stay async: window creation from a sync command deadlocks on Windows
@@ -1221,7 +1511,7 @@ async fn set_float_scale(
     scale: f64,
     resize: Option<bool>,
 ) -> Result<(), String> {
-    let scale = if scale.is_finite() { scale.clamp(0.5, 2.0) } else { 1.0 };
+    let scale = if scale.is_finite() { scale.clamp(0.3, 8.0) } else { 1.0 };
     let is_img = {
         let mut store = lock(&state);
         store.settings.float_scale.insert(id.clone(), scale);
@@ -1237,19 +1527,22 @@ async fn set_float_scale(
     Ok(())
 }
 
-// Text pills grow with their label: the frontend measures the text and
-// requests a matching window width (height stays the pill height).
+// Text pills grow with their label: the frontend measures the text and requests
+// the matching window box (width and height, kept pill-shaped so it never rounds
+// into a circle).
 #[tauri::command]
 async fn resize_float_pill(
     app: AppHandle,
     state: State<'_, Db>,
     id: String,
     width: f64,
+    height: f64,
 ) -> Result<(), String> {
     let scale = float_scale_of(&lock(&state).settings, &id);
     if let Some(win) = app.get_webview_window(&flabel(&id)) {
-        let w = if width.is_finite() { width.clamp(135.0, 960.0) } else { FLOAT_W * scale };
-        let _ = win.set_size(tauri::LogicalSize::new(w, FLOAT_H * scale));
+        let w = if width.is_finite() { width.clamp(80.0, 8000.0) } else { FLOAT_W * scale };
+        let h = if height.is_finite() { height.clamp(40.0, 8000.0) } else { FLOAT_H * scale };
+        let _ = win.set_size(tauri::LogicalSize::new(w, h));
     }
     Ok(())
 }
@@ -1261,52 +1554,782 @@ async fn resize_float_pill(
 async fn resize_float_media(app: AppHandle, id: String, width: f64, height: f64) -> Result<(), String> {
     if let Some(win) = app.get_webview_window(&flabel(&id)) {
         if width.is_finite() && height.is_finite() {
-            let w = width.clamp(60.0, 960.0);
-            let h = height.clamp(60.0, 960.0);
+            let w = width.clamp(48.0, 4000.0);
+            let h = height.clamp(48.0, 4000.0);
             let _ = win.set_size(tauri::LogicalSize::new(w, h));
         }
     }
     Ok(())
 }
 
-// Menu open: the window grows to pill + menu so the pill stays visible and
-// size changes preview live. width/height carry the pill's CURRENT box
-// (text pills are wider than the default when their label is long).
-#[tauri::command]
-async fn resize_float_menu(
-    app: AppHandle,
-    state: State<'_, Db>,
-    id: String,
-    open: bool,
-    width: Option<f64>,
-    height: Option<f64>,
-) -> Result<(), String> {
-    let (scale, is_img) = {
-        let store = lock(&state);
-        (
-            float_scale_of(&store.settings, &id),
-            store.prompts.iter().find(|p| p.id == id).map(is_image_prompt).unwrap_or(false),
-        )
+// Move AND resize a floating window in ONE OS call so the resize stays smooth.
+// Tauri's separate set_position + set_size leave a one-frame intermediate state
+// (new position, old size) that flickers the edges while dragging a grip.
+#[cfg(windows)]
+fn set_float_bounds_native(win: &tauri::WebviewWindow, x: f64, y: f64, w: f64, h: f64) -> bool {
+    #[link(name = "user32")]
+    extern "system" {
+        fn SetWindowPos(hwnd: isize, after: isize, x: i32, y: i32, cx: i32, cy: i32, flags: u32) -> i32;
+    }
+    const SWP_NOZORDER: u32 = 0x0004;
+    const SWP_NOACTIVATE: u32 = 0x0010;
+    let hwnd = match win.hwnd() {
+        Ok(h) => h.0 as isize,
+        Err(_) => return false,
     };
-    if let Some(win) = app.get_webview_window(&flabel(&id)) {
-        let (dw, dh) = pill_dims(is_img, scale);
-        let pw = width.filter(|v| v.is_finite()).unwrap_or(dw).clamp(135.0, 960.0);
-        let ph = height.filter(|v| v.is_finite()).unwrap_or(dh).clamp(40.0, 960.0);
-        let (w, h) = if open { (pw.max(FLOAT_MENU_W), ph + FLOAT_MENU_H) } else { (pw, ph) };
-        let _ = win.set_size(tauri::LogicalSize::new(w, h));
+    let s = win.scale_factor().unwrap_or(1.0);
+    let (px, py, cx, cy) = (
+        (x * s).round() as i32,
+        (y * s).round() as i32,
+        (w * s).round() as i32,
+        (h * s).round() as i32,
+    );
+    unsafe { SetWindowPos(hwnd, 0, px, py, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE) != 0 }
+}
+
+// Set a floating window's position AND size together (logical px). Used by the
+// edge/corner resize so the grabbed edge tracks the cursor 1:1.
+#[tauri::command]
+async fn set_float_bounds(app: AppHandle, id: String, x: f64, y: f64, width: f64, height: f64) -> Result<(), String> {
+    if [x, y, width, height].iter().all(|v| v.is_finite()) {
+        if let Some(win) = app.get_webview_window(&flabel(&id)) {
+            let w = width.clamp(48.0, 8000.0);
+            let h = height.clamp(48.0, 8000.0);
+            #[cfg(windows)]
+            if set_float_bounds_native(&win, x, y, w, h) {
+                return Ok(());
+            }
+            let _ = win.set_position(tauri::LogicalPosition::new(x, y));
+            let _ = win.set_size(tauri::LogicalSize::new(w, h));
+        }
     }
     Ok(())
 }
 
 // Persist the per-prompt video player state (volume, mute, loop).
+// Async: can fire while scrubbing — keep the settings write off the UI thread.
 #[tauri::command]
-fn set_video_prefs(app: AppHandle, state: State<Db>, id: String, volume: u32, muted: bool, looped: bool) {
+async fn set_video_prefs(app: AppHandle, state: State<'_, Db>, id: String, volume: u32, muted: bool, looped: bool) -> Result<(), String> {
     let mut store = lock(&state);
     store
         .settings
         .video_prefs
         .insert(id, VideoPrefs { volume: volume.min(100), muted, looped });
     save_settings(&app, &store.settings);
+    Ok(())
+}
+
+// ---------- Snipping tool ----------
+// open_snip freezes the active monitor, shows a transparent overlay window for
+// the user to mark a region, then capture_region crops the frozen image,
+// copies it to the clipboard, saves a PNG and hands the crop to the main UI.
+
+// One frozen monitor: its capture plus its global physical origin and size.
+struct MonitorCap {
+    image: image::RgbaImage,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+struct SnipState(Mutex<Vec<MonitorCap>>);
+
+// Close every per-monitor overlay window and bring the floating pills back.
+fn close_all_snip(app: &AppHandle) {
+    for (label, win) in app.webview_windows() {
+        if label.starts_with("snip-") {
+            let _ = win.close();
+        }
+    }
+    set_app_windows_hidden(app, false);
+    remove_snip_preview();
+}
+
+// Hide (or restore) the app's own windows — the main window and floating pills —
+// around a snip, so a screenshot never contains Prompt Saver itself (this also
+// reveals whatever the main window was covering, e.g. Task Manager).
+fn set_app_windows_hidden(app: &AppHandle, hidden: bool) {
+    for (label, win) in app.webview_windows() {
+        if label == "main" || label.starts_with("float-") {
+            let _ = if hidden { win.hide() } else { win.show() };
+        }
+    }
+}
+
+// Hide (or re-show) only the snip overlay(s). Used by the window-capture
+// workaround, which needs to grab the LIVE desktop — the overlay (showing the
+// frozen image) would otherwise be what gets captured.
+fn set_snip_overlay_hidden(app: &AppHandle, hidden: bool) {
+    for (label, win) in app.webview_windows() {
+        if label.starts_with("snip-") {
+            let _ = if hidden { win.hide() } else { win.show() };
+        }
+    }
+}
+
+// The snip preview JPEG is written to a temp file and shown via the asset
+// protocol — far quicker than passing a multi-MB base64 data URL through IPC and
+// decoding it in the overlay. A rotating name avoids any stale webview cache.
+static SNIP_PREVIEW_SEQ: AtomicU64 = AtomicU64::new(0);
+static SNIP_PREVIEW_FILE: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+fn write_snip_preview(jpeg: &[u8]) -> Option<String> {
+    let seq = SNIP_PREVIEW_SEQ.fetch_add(1, Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!("promptsaver-snip-{}.jpg", seq));
+    fs::write(&path, jpeg).ok()?;
+    if let Some(old) = SNIP_PREVIEW_FILE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .replace(path.clone())
+    {
+        let _ = fs::remove_file(old);
+    }
+    Some(path.to_string_lossy().into_owned())
+}
+
+fn remove_snip_preview() {
+    if let Some(p) = SNIP_PREVIEW_FILE.lock().unwrap_or_else(|e| e.into_inner()).take() {
+        let _ = fs::remove_file(p);
+    }
+}
+
+#[derive(Serialize)]
+struct SnipBg {
+    // Preview source: a temp-file path (is_file=true, loaded via convertFileSrc)
+    // or a base64 data URL fallback (is_file=false).
+    src: String,
+    is_file: bool,
+    // Full stitched dimensions (the display image may be downscaled); the
+    // frontend maps coordinates against these, so crops stay full-resolution.
+    width: u32,
+    height: u32,
+}
+
+#[derive(Serialize, Clone)]
+struct SnipResult {
+    data_url: String,
+    path: String,
+}
+
+// A selectable top-level window in stitched-image physical pixels.
+#[derive(Serialize)]
+struct SnipWindow {
+    id: u32,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+
+// ---- Fast screen capture via GDI (one BitBlt; no per-monitor DXGI setup) ----
+
+// Capture a screen rectangle (global physical px) with GDI BitBlt. Immediate (no
+// DXGI latency) and includes every visible window — elevated ones too.
+#[cfg(windows)]
+fn capture_screen_rect(x: i32, y: i32, w: i32, h: i32) -> Option<image::RgbaImage> {
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetDC(hwnd: isize) -> isize;
+        fn ReleaseDC(hwnd: isize, hdc: isize) -> i32;
+    }
+    #[link(name = "gdi32")]
+    extern "system" {
+        fn CreateCompatibleDC(hdc: isize) -> isize;
+        fn CreateCompatibleBitmap(hdc: isize, w: i32, h: i32) -> isize;
+        fn SelectObject(hdc: isize, h: isize) -> isize;
+        fn BitBlt(dst: isize, x: i32, y: i32, w: i32, h: i32, src: isize, sx: i32, sy: i32, rop: u32) -> i32;
+        fn DeleteObject(h: isize) -> i32;
+        fn DeleteDC(hdc: isize) -> i32;
+        fn GetDIBits(hdc: isize, hbm: isize, start: u32, lines: u32, bits: *mut u8, bmi: *mut BmInfo, usage: u32) -> i32;
+    }
+    #[repr(C)]
+    struct BmHeader {
+        size: u32, width: i32, height: i32, planes: u16, bit_count: u16,
+        compression: u32, size_image: u32, x_ppm: i32, y_ppm: i32, clr_used: u32, clr_important: u32,
+    }
+    #[repr(C)]
+    struct BmInfo { header: BmHeader, colors: [u32; 3] }
+    const SRCCOPY: u32 = 0x00CC_0020;
+    if w <= 0 || h <= 0 {
+        return None;
+    }
+    unsafe {
+        let screen = GetDC(0);
+        if screen == 0 {
+            return None;
+        }
+        let mem = CreateCompatibleDC(screen);
+        let bmp = CreateCompatibleBitmap(screen, w, h);
+        let old = SelectObject(mem, bmp);
+        // SRCCOPY only (no CAPTUREBLT — it forces a slow full recomposite). The
+        // DWM-composited desktop already includes every normal/elevated window.
+        let blt_ok = BitBlt(mem, 0, 0, w, h, screen, x, y, SRCCOPY) != 0;
+        // Deselect the bitmap before GetDIBits (required by the API).
+        let _ = SelectObject(mem, old);
+        let mut buf = vec![0u8; (w as usize) * (h as usize) * 4];
+        let mut bmi = BmInfo {
+            header: BmHeader {
+                size: std::mem::size_of::<BmHeader>() as u32,
+                width: w,
+                height: -h, // negative => top-down rows
+                planes: 1,
+                bit_count: 32,
+                compression: 0,
+                size_image: 0,
+                x_ppm: 0,
+                y_ppm: 0,
+                clr_used: 0,
+                clr_important: 0,
+            },
+            colors: [0; 3],
+        };
+        let got = if blt_ok {
+            GetDIBits(mem, bmp, 0, h as u32, buf.as_mut_ptr(), &mut bmi, 0)
+        } else {
+            0
+        };
+        DeleteObject(bmp);
+        DeleteDC(mem);
+        ReleaseDC(0, screen);
+        if got == 0 {
+            return None;
+        }
+        // GDI returns BGRA; convert to RGBA and force opaque alpha.
+        for px in buf.chunks_exact_mut(4) {
+            px.swap(0, 2);
+            px[3] = 255;
+        }
+        image::RgbaImage::from_raw(w as u32, h as u32, buf)
+    }
+}
+
+// Whole virtual desktop via GDI → (image, origin_x, origin_y) global physical px.
+#[cfg(windows)]
+fn capture_desktop() -> Option<(image::RgbaImage, i32, i32)> {
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetSystemMetrics(n: i32) -> i32;
+    }
+    const SM_XVIRTUALSCREEN: i32 = 76;
+    const SM_YVIRTUALSCREEN: i32 = 77;
+    const SM_CXVIRTUALSCREEN: i32 = 78;
+    const SM_CYVIRTUALSCREEN: i32 = 79;
+    let (vx, vy, vw, vh) = unsafe {
+        (
+            GetSystemMetrics(SM_XVIRTUALSCREEN),
+            GetSystemMetrics(SM_YVIRTUALSCREEN),
+            GetSystemMetrics(SM_CXVIRTUALSCREEN),
+            GetSystemMetrics(SM_CYVIRTUALSCREEN),
+        )
+    };
+    let img = capture_screen_rect(vx, vy, vw, vh)?;
+    Some((img, vx, vy))
+}
+
+// Freeze the whole desktop into one image (global physical px). Fast GDI path on
+// Windows; per-monitor xcap stitch as a fallback (and on other platforms).
+fn freeze_desktop() -> Result<(image::RgbaImage, i32, i32), String> {
+    #[cfg(windows)]
+    if let Some(res) = capture_desktop() {
+        return Ok(res);
+    }
+    let mut caps = Vec::new();
+    {
+        let monitors = xcap::Monitor::all().map_err(|e| e.to_string())?;
+        for m in &monitors {
+            if let Ok(image) = m.capture_image() {
+                caps.push((image, m.x(), m.y(), m.width(), m.height()));
+            }
+        }
+    }
+    if caps.is_empty() {
+        return Err("capture failed".to_string());
+    }
+    let min_x = caps.iter().map(|c| c.1).min().unwrap_or(0);
+    let min_y = caps.iter().map(|c| c.2).min().unwrap_or(0);
+    let max_x = caps.iter().map(|c| c.1 + c.3 as i32).max().unwrap_or(0);
+    let max_y = caps.iter().map(|c| c.2 + c.4 as i32).max().unwrap_or(0);
+    let total_w = (max_x - min_x).max(1) as u32;
+    let total_h = (max_y - min_y).max(1) as u32;
+    let mut canvas = image::RgbaImage::new(total_w, total_h);
+    for (image, x, y, _, _) in &caps {
+        image::imageops::replace(&mut canvas, image, (*x - min_x) as i64, (*y - min_y) as i64);
+    }
+    Ok((canvas, min_x, min_y))
+}
+
+// Freeze the desktop and open a single overlay spanning all screens. The
+// frontend maps the cursor by ratio against the displayed frozen image, so the
+// selection is pixel-exact on any DPI mix AND can be dragged across monitors.
+#[tauri::command]
+async fn open_snip(app: AppHandle, state: State<'_, SnipState>) -> Result<(), String> {
+    if let Some((_, w)) = app
+        .webview_windows()
+        .into_iter()
+        .find(|(l, _)| l.starts_with("snip-"))
+    {
+        let _ = w.set_focus();
+        return Ok(());
+    }
+    // Hide our own windows BEFORE freezing so they're never in the capture and
+    // the target underneath (e.g. Task Manager behind the main window) is
+    // revealed. A short settle lets the hide reach the screen first.
+    set_app_windows_hidden(&app, true);
+    tokio::time::sleep(std::time::Duration::from_millis(45)).await;
+    let (canvas, min_x, min_y) = freeze_desktop()?;
+    let (total_w, total_h) = canvas.dimensions();
+    // Store the frozen desktop as the single entry; its origin is (min_x,min_y).
+    *state.0.lock().unwrap_or_else(|e| e.into_inner()) = vec![MonitorCap {
+        image: canvas,
+        x: min_x,
+        y: min_y,
+        width: total_w,
+        height: total_h,
+    }];
+
+    // One opaque overlay covering the whole virtual desktop (shows the frozen
+    // stitched screenshot — far more reliable than a transparent surface).
+    // Borderless (WS_POPUP) so the client area starts exactly at the virtual
+    // desktop origin — no frame inset, no left gap. shadow(false) drops the DWM
+    // shadow. Not resizable/maximizable/minimizable + no drag region in the page
+    // => the user cannot move it; no snap-back handler needed (that handler
+    // fought tao's own placement and caused the visible drift).
+    let win = WebviewWindowBuilder::new(&app, "snip-0", WebviewUrl::App("snip.html".into()))
+        .title("")
+        .decorations(false)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .visible(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+    // Physical placement = exact virtual-desktop coverage (size first, then
+    // position, so the final op is the position a resize could otherwise nudge).
+    let _ = win.set_size(PhysicalSize::new(total_w, total_h));
+    let _ = win.set_position(PhysicalPosition::new(min_x, min_y));
+    let _ = win.show();
+    // Re-assert once after the window settles on its monitors (WM_DPICHANGED).
+    tokio::time::sleep(std::time::Duration::from_millis(60)).await;
+    let _ = win.set_size(PhysicalSize::new(total_w, total_h));
+    let _ = win.set_position(PhysicalPosition::new(min_x, min_y));
+    let _ = win.set_focus();
+    Ok(())
+}
+
+// Visible top-level windows overlapping the virtual desktop, topmost first, in
+// stitched-image physical pixels — for hover highlight + single-window capture.
+#[tauri::command]
+fn snip_windows(state: State<SnipState>, index: usize) -> Vec<SnipWindow> {
+    // Read the stitched origin/bounds, then drop the lock before the OS-wide
+    // window enumeration so the snip state isn't held during the slow Win32 calls.
+    let (ox, oy, ow, oh) = {
+        let guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
+        match guard.get(index) {
+            Some(c) => (c.x, c.y, c.width as i32, c.height as i32),
+            None => return Vec::new(),
+        }
+    };
+    let mut out = Vec::new();
+    if let Ok(windows) = xcap::Window::all() {
+        for w in windows {
+            if w.is_minimized() || w.title().is_empty() {
+                continue;
+            }
+            let (gx, gy, ww, wh) = (w.x(), w.y(), w.width() as i32, w.height() as i32);
+            if ww <= 0 || wh <= 0 {
+                continue;
+            }
+            // Keep only windows overlapping the virtual desktop.
+            if gx >= ox + ow || gy >= oy + oh || gx + ww <= ox || gy + wh <= oy {
+                continue;
+            }
+            // Local to the stitched image.
+            out.push(SnipWindow {
+                id: w.id(),
+                x: gx - ox,
+                y: gy - oy,
+                width: ww as u32,
+                height: wh as u32,
+            });
+        }
+    }
+    out
+}
+
+// The frozen monitor capture as a data URL, only for the overlay preview — JPEG
+// (no alpha needed) encodes far faster than PNG, so the overlay opens quicker.
+// The saved/copied crop still comes from the lossless in-memory image.
+// Async: the full-frame clone + JPEG encode (tens of MB) must not run on the UI
+// thread. The image is cloned out under the lock, then encoded lock-free.
+#[tauri::command]
+async fn snip_background(state: State<'_, SnipState>, index: usize) -> Result<Option<SnipBg>, String> {
+    let (img, full_w, full_h) = {
+        let guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
+        match guard.get(index) {
+            Some(c) => (c.image.clone(), c.width, c.height),
+            None => return Ok(None),
+        }
+    };
+    // Display copy only — the marked crop always comes from the full-res in-memory
+    // image. The preview stays full-resolution (crisp) up to a large cap; only an
+    // extreme multi-monitor span is downscaled (fast box filter) to keep the JPEG
+    // sane. The old cost was a Triangle resize (~1s), not the resolution, so full
+    // res here still encodes in well under half a second.
+    const DISPLAY_MAX: u32 = 10240;
+    let longest = full_w.max(full_h);
+    let disp = if longest > DISPLAY_MAX {
+        let r = DISPLAY_MAX as f32 / longest as f32;
+        image::imageops::thumbnail(
+            &img,
+            ((full_w as f32 * r) as u32).max(1),
+            ((full_h as f32 * r) as u32).max(1),
+        )
+    } else {
+        img
+    };
+    let rgb = image::DynamicImage::ImageRgba8(disp).into_rgb8();
+    let mut buf = std::io::Cursor::new(Vec::<u8>::new());
+    {
+        let mut enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, 80);
+        if enc.encode_image(&rgb).is_err() {
+            return Ok(None);
+        }
+    }
+    // Prefer a temp file (loaded via the asset protocol); fall back to a base64
+    // data URL only if the file write fails.
+    let jpeg = buf.into_inner();
+    let (src, is_file) = match write_snip_preview(&jpeg) {
+        Some(path) => (path, true),
+        None => (format!("data:image/jpeg;base64,{}", base64_encode(&jpeg)), false),
+    };
+    Ok(Some(SnipBg { src, is_file, width: full_w, height: full_h }))
+}
+
+#[tauri::command]
+fn snip_cancel(app: AppHandle, state: State<SnipState>) {
+    close_all_snip(&app);
+    state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
+}
+
+// Save a screenshot PNG into the user's Pictures\Screenshots folder.
+fn save_screenshot(png: &[u8]) -> String {
+    let base = std::env::var("USERPROFILE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir());
+    let dir = base.join("Pictures").join("Screenshots");
+    let _ = fs::create_dir_all(&dir);
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let path = dir.join(format!("PromptSaver-{}.png", ts));
+    if fs::write(&path, png).is_ok() {
+        path.to_string_lossy().to_string()
+    } else {
+        String::new()
+    }
+}
+
+// Encode, copy to clipboard, save a PNG, close the overlay and notify the UI.
+fn finalize_capture(app: &AppHandle, crop: image::RgbaImage) -> Result<(), String> {
+    let (cw, ch) = crop.dimensions();
+    if cw == 0 || ch == 0 {
+        return Err("empty region".to_string());
+    }
+    let mut buf = std::io::Cursor::new(Vec::<u8>::new());
+    image::DynamicImage::ImageRgba8(crop.clone())
+        .write_to(&mut buf, image::ImageFormat::Png)
+        .map_err(|e| e.to_string())?;
+    let png = buf.into_inner();
+    let data_url = format!("data:image/png;base64,{}", base64_encode(&png));
+
+    let _ = arboard::Clipboard::new().and_then(|mut c| {
+        c.set_image(arboard::ImageData {
+            width: cw as usize,
+            height: ch as usize,
+            bytes: crop.into_raw().into(),
+        })
+    });
+    let path = save_screenshot(&png);
+
+    close_all_snip(app);
+    app.state::<SnipState>()
+        .0
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clear();
+    let _ = app.emit("snip-captured", SnipResult { data_url, path });
+    Ok(())
+}
+
+// Crop an image at a physical-pixel rect (clamped to its bounds).
+fn crop_rgba(img: &image::RgbaImage, x: i32, y: i32, width: u32, height: u32) -> Option<image::RgbaImage> {
+    let (iw, ih) = img.dimensions();
+    let cx = x.max(0) as u32;
+    let cy = y.max(0) as u32;
+    let cw = width.min(iw.saturating_sub(cx));
+    let ch = height.min(ih.saturating_sub(cy));
+    if cw == 0 || ch == 0 {
+        return None;
+    }
+    Some(image::imageops::crop_imm(img, cx, cy, cw, ch).to_image())
+}
+
+// Crop the frozen monitor capture at a physical-pixel rect.
+fn crop_frozen(
+    state: &State<SnipState>,
+    index: usize,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+) -> Option<image::RgbaImage> {
+    let guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
+    crop_rgba(&guard.get(index)?.image, x, y, width, height)
+}
+
+// Min/max luminance over a 4×4 sample grid (used by the capture quality checks).
+fn luma_range(img: &image::RgbaImage) -> Option<(i32, i32)> {
+    let (w, h) = img.dimensions();
+    if w == 0 || h == 0 {
+        return None;
+    }
+    let (mut min_l, mut max_l) = (255i32, 0i32);
+    for gy in 0..4u32 {
+        for gx in 0..4u32 {
+            let px = (gx * (w - 1) / 3).min(w - 1);
+            let py = (gy * (h - 1) / 3).min(h - 1);
+            let p = img.get_pixel(px, py);
+            let l = (p[0] as i32 + p[1] as i32 + p[2] as i32) / 3;
+            min_l = min_l.min(l);
+            max_l = max_l.max(l);
+        }
+    }
+    Some((min_l, max_l))
+}
+
+// True when a direct PrintWindow capture looks blocked — near black OR perfectly
+// uniform. Used only to decide whether to fall back to the frozen screen, where a
+// uniform-but-valid window still ends up captured.
+fn capture_looks_bad(img: &image::RgbaImage) -> bool {
+    match luma_range(img) {
+        Some((min_l, max_l)) => max_l < 12 || max_l - min_l < 4,
+        None => true,
+    }
+}
+
+// True when the FINAL crop is unusable — empty or pure black. Protected windows
+// (Task Manager, secured dialogs) that even the frozen screen could not capture
+// end up black; such a defective image must never be saved (we error instead).
+fn capture_is_blank(img: &image::RgbaImage) -> bool {
+    match luma_range(img) {
+        Some((_, max_l)) => max_l < 12,
+        None => true,
+    }
+}
+
+// Crop the frozen capture (physical pixels) and finalize.
+#[tauri::command]
+async fn capture_region(
+    app: AppHandle,
+    state: State<'_, SnipState>,
+    index: usize,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+) -> Result<(), String> {
+    let crop = crop_frozen(&state, index, x, y, width, height).ok_or("empty region")?;
+    finalize_capture(&app, crop)
+}
+
+// Top-level windows stacked ABOVE the target that overlap its rect (global
+// physical px), topmost first. These are what hide the target on the frozen
+// desktop; the capture workaround minimizes them. Windows without a caption
+// (overlays, shell surfaces, our own title-less snip overlay) are skipped.
+#[cfg(windows)]
+fn occluders_above(id: u32, tx: i32, ty: i32, tw: i32, th: i32) -> Vec<isize> {
+    #[repr(C)]
+    struct RectW { left: i32, top: i32, right: i32, bottom: i32 }
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetTopWindow(hwnd: isize) -> isize;
+        fn GetWindow(hwnd: isize, cmd: u32) -> isize;
+        fn IsWindowVisible(hwnd: isize) -> i32;
+        fn IsIconic(hwnd: isize) -> i32;
+        fn GetWindowRect(hwnd: isize, r: *mut RectW) -> i32;
+        fn GetWindowTextLengthW(hwnd: isize) -> i32;
+    }
+    const GW_HWNDNEXT: u32 = 2;
+    let (tl, tt, tr, tb) = (tx, ty, tx + tw, ty + th);
+    let mut out = Vec::new();
+    let mut found = false;
+    unsafe {
+        let mut h = GetTopWindow(0);
+        while h != 0 {
+            if h as u32 == id {
+                found = true;
+                break; // everything after the target sits behind it
+            }
+            if IsWindowVisible(h) != 0 && IsIconic(h) == 0 && GetWindowTextLengthW(h) > 0 {
+                let mut r = RectW { left: 0, top: 0, right: 0, bottom: 0 };
+                if GetWindowRect(h, &mut r) != 0
+                    && r.left < tr && r.right > tl && r.top < tb && r.bottom > tt
+                {
+                    out.push(h);
+                }
+            }
+            h = GetWindow(h, GW_HWNDNEXT);
+        }
+    }
+    // Target's z-position unknown (cloaked/child): don't minimize blindly.
+    if !found { out.clear(); }
+    out
+}
+
+#[cfg(windows)]
+fn show_window(hwnd: isize, cmd: i32) {
+    #[link(name = "user32")]
+    extern "system" {
+        fn ShowWindow(hwnd: isize, cmd: i32) -> i32;
+    }
+    unsafe { ShowWindow(hwnd, cmd); }
+}
+
+// True when the window belongs to a higher-integrity / elevated process (e.g.
+// Task Manager). Such windows block PrintWindow, which can return a misleading
+// part-black image instead of failing cleanly — so we skip the direct path for
+// them and capture via the frozen desktop / minimize workaround, which work
+// regardless of elevation. Heuristic: a medium-integrity caller cannot open an
+// elevated process for PROCESS_QUERY_INFORMATION (access denied).
+#[cfg(windows)]
+fn window_is_protected(id: u32) -> bool {
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetWindowThreadProcessId(hwnd: isize, pid: *mut u32) -> u32;
+    }
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
+        fn CloseHandle(h: isize) -> i32;
+    }
+    const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
+    unsafe {
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(id as isize, &mut pid);
+        if pid == 0 {
+            return false;
+        }
+        let h = OpenProcess(PROCESS_QUERY_INFORMATION, 0, pid);
+        if h == 0 {
+            true
+        } else {
+            CloseHandle(h);
+            false
+        }
+    }
+}
+
+// Capture the chosen window. PrintWindow first — it grabs the window's own
+// content, excluding anything stacked on top (clean for normal windows).
+// Protected/elevated windows (e.g. Task Manager) block PrintWindow. If nothing
+// covers the target, crop the frozen desktop (taken with our windows hidden) —
+// a GDI grab contains even elevated windows, with no flicker. If other windows
+// DO cover it, the freeze has them baked in, so run the workaround: hide our
+// overlay, minimize the covering windows, grab the now-clear area live, then
+// restore them.
+#[tauri::command]
+async fn capture_window(app: AppHandle, state: State<'_, SnipState>, id: u32) -> Result<(), String> {
+    let protected = {
+        #[cfg(windows)]
+        {
+            window_is_protected(id)
+        }
+        #[cfg(not(windows))]
+        {
+            false
+        }
+    };
+    // 1. Direct PrintWindow — best for normal windows (own content, no overlays).
+    // Skipped for elevated windows: PrintWindow is unreliable there and can pass
+    // the quality check with a wrong image, so route them to the robust paths.
+    let direct = if protected {
+        None
+    } else {
+        xcap::Window::all()
+            .ok()
+            .and_then(|ws| ws.into_iter().find(|w| w.id() == id))
+            .and_then(|w| w.capture_image().ok())
+            .filter(|im| !capture_looks_bad(im))
+    };
+    if let Some(im) = direct {
+        return finalize_capture(&app, im);
+    }
+
+    // Target's global physical rect + frozen-image origin.
+    let rect = xcap::Window::all()
+        .ok()
+        .and_then(|ws| ws.into_iter().find(|w| w.id() == id))
+        .map(|w| (w.x(), w.y(), w.width() as i32, w.height() as i32));
+    let (wx, wy, ww, wh) = match rect {
+        Some(r) => r,
+        None => return Err("blocked".to_string()),
+    };
+    let origin = {
+        let g = state.0.lock().unwrap_or_else(|e| e.into_inner());
+        g.first().map(|c| (c.x, c.y))
+    };
+
+    #[cfg(windows)]
+    {
+        let occ = occluders_above(id, wx, wy, ww, wh);
+
+        // 2. Unobstructed: the frozen desktop already shows the target cleanly.
+        if occ.is_empty() {
+            if let Some((ox, oy)) = origin {
+                if let Some(im) = crop_frozen(&state, 0, wx - ox, wy - oy, ww as u32, wh as u32) {
+                    if !capture_is_blank(&im) {
+                        return finalize_capture(&app, im);
+                    }
+                }
+            }
+        }
+
+        // 3. Workaround: minimize the covering windows, grab the cleared area live.
+        const SW_SHOWMINNOACTIVE: i32 = 7;
+        const SW_SHOWNOACTIVATE: i32 = 4;
+        set_snip_overlay_hidden(&app, true);
+        for &o in &occ {
+            show_window(o, SW_SHOWMINNOACTIVE);
+        }
+        // Let the minimize animation finish (so the area is truly clear) and the
+        // desktop recompose before grabbing.
+        tokio::time::sleep(std::time::Duration::from_millis(if occ.is_empty() { 40 } else { 280 })).await;
+        let grab = capture_screen_rect(wx, wy, ww, wh);
+        for &o in occ.iter().rev() {
+            show_window(o, SW_SHOWNOACTIVATE);
+        }
+        match grab {
+            Some(im) if !capture_is_blank(&im) => finalize_capture(&app, im),
+            _ => {
+                set_snip_overlay_hidden(&app, false);
+                Err("blocked".to_string())
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let img = origin
+            .and_then(|(ox, oy)| crop_frozen(&state, 0, wx - ox, wy - oy, ww as u32, wh as u32))
+            .filter(|im| !capture_is_blank(im));
+        match img {
+            Some(im) => finalize_capture(&app, im),
+            None => Err("blocked".to_string()),
+        }
+    }
 }
 
 // ---------- Updates (GitHub releases) ----------
@@ -1315,16 +2338,24 @@ const UPDATE_API: &str = "https://api.github.com/repos/wbgcoding/Prompt-Saver/re
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 const UPDATE_MAX_BYTES: u64 = 100 * 1024 * 1024;
 
+// Spawn a child process without flashing a console window.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 #[derive(Serialize, Clone)]
 struct UpdateInfo {
     available: bool,
     version: String,
     url: String,
+    // Release changelog (GitHub release body); empty when none was published.
+    notes: String,
+    // True when this version is on the user's skip list (manual check only).
+    skipped: bool,
 }
 
-// Latest release tag + installer asset URL, None on any failure (offline,
-// private repo, rate limit) — update checks must never disturb the app.
-fn fetch_latest() -> Option<(String, String)> {
+// Latest release tag, installer asset URL and changelog body. None on any
+// failure (offline, private repo, rate limit) — checks never disturb the app.
+fn fetch_latest() -> Option<(String, String, String)> {
     let body = ureq::get(UPDATE_API)
         .set("User-Agent", "PromptSaver")
         .timeout(std::time::Duration::from_secs(10))
@@ -1342,22 +2373,34 @@ fn fetch_latest() -> Option<(String, String)> {
             None
         }
     })?;
-    Some((tag, url))
+    let notes = json["body"].as_str().unwrap_or("").trim().to_string();
+    Some((tag, url, notes))
 }
 
 fn version_newer(latest: &str, current: &str) -> bool {
     let parse = |s: &str| -> Vec<u64> {
         s.split('.').map(|p| p.parse().unwrap_or(0)).collect()
     };
-    parse(latest) > parse(current)
+    // Compare component-wise, zero-padding the shorter version, so "1.9" and
+    // "1.9.0" rank equal instead of one being treated as newer.
+    let (a, b) = (parse(latest), parse(current));
+    for i in 0..a.len().max(b.len()) {
+        let (x, y) = (a.get(i).copied().unwrap_or(0), b.get(i).copied().unwrap_or(0));
+        if x != y {
+            return x > y;
+        }
+    }
+    false
 }
 
 fn updater_check() -> Option<UpdateInfo> {
-    let (version, url) = fetch_latest()?;
+    let (version, url, notes) = fetch_latest()?;
     version_newer(&version, APP_VERSION).then(|| UpdateInfo {
         available: true,
         version,
         url,
+        notes,
+        skipped: false,
     })
 }
 
@@ -1382,17 +2425,64 @@ fn app_version() -> String {
 }
 
 #[tauri::command]
-async fn check_update() -> Result<UpdateInfo, String> {
+async fn check_update(state: State<'_, Db>) -> Result<UpdateInfo, String> {
     match fetch_latest() {
-        Some((version, url)) => {
+        Some((version, url, notes)) => {
             let available = version_newer(&version, APP_VERSION);
+            let skipped = available && lock(&state).settings.skipped_versions.contains(&version);
             Ok(UpdateInfo {
                 available,
                 version: if available { version } else { APP_VERSION.to_string() },
                 url: if available { url } else { String::new() },
+                notes: if available { notes } else { String::new() },
+                skipped,
             })
         }
         None => Err("update check failed".to_string()),
+    }
+}
+
+// Toggle an expert feature flag (enabled = feature on).
+#[tauri::command]
+fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
+    let mut store = lock(&state);
+    store.settings.ui_flags.insert(key, enabled);
+    save_settings(&app, &store.settings);
+}
+
+// Set an expert numeric value (CSS var / behaviour tweak).
+#[tauri::command]
+fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
+    let mut store = lock(&state);
+    store.settings.ui_values.insert(key, value);
+    save_settings(&app, &store.settings);
+}
+
+// Set an expert string option (e.g. the copy-feedback font key).
+#[tauri::command]
+fn set_ui_text(app: AppHandle, state: State<Db>, key: String, value: String) {
+    let mut store = lock(&state);
+    store.settings.ui_texts.insert(key, value);
+    save_settings(&app, &store.settings);
+}
+
+// Clear all expert overrides back to the shipped defaults.
+#[tauri::command]
+fn reset_expert(app: AppHandle, state: State<Db>) {
+    let mut store = lock(&state);
+    store.settings.ui_flags.clear();
+    store.settings.ui_values.clear();
+    store.settings.ui_texts.clear();
+    save_settings(&app, &store.settings);
+}
+
+// Add a version to the skip list — it will not be offered again.
+#[tauri::command]
+fn skip_version(app: AppHandle, state: State<Db>, version: String) {
+    let mut store = lock(&state);
+    if !store.settings.skipped_versions.contains(&version) {
+        store.settings.skipped_versions.push(version);
+        save_settings(&app, &store.settings);
     }
 }
 
@@ -1400,7 +2490,8 @@ async fn check_update() -> Result<UpdateInfo, String> {
 // app afterwards and quit so the installer can replace the binaries.
 #[tauri::command]
 async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
-    if !url.starts_with("https://github.com/") {
+    // Only our own signed release assets — not any github.com URL.
+    if !url.starts_with("https://github.com/wbgcoding/Prompt-Saver/releases/download/") {
         return Err("invalid update source".to_string());
     }
     let resp = ureq::get(&url)
@@ -1432,7 +2523,7 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000); // no console window
+        cmd.creation_flags(CREATE_NO_WINDOW);
     }
     cmd.spawn().map_err(|e| format!("start installer: {}", e))?;
 
@@ -1507,6 +2598,18 @@ fn set_minimize_on_close(app: AppHandle, state: State<Db>, enabled: bool) {
     let mut store = lock(&state);
     store.settings.minimize_to_tray = enabled;
     save_settings(&app, &store.settings);
+}
+
+#[tauri::command]
+fn set_always_on_top(app: AppHandle, state: State<Db>, enabled: bool) {
+    {
+        let mut store = lock(&state);
+        store.settings.always_on_top = enabled;
+        save_settings(&app, &store.settings);
+    }
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.set_always_on_top(enabled);
+    }
 }
 
 #[tauri::command]
@@ -1664,8 +2767,9 @@ fn to_txt(prompts: &[Prompt], settings: &Settings) -> String {
     blocks.join("\n\n---\n\n")
 }
 
+// Async: building the export (base64 images) + writing it stays off the UI thread.
 #[tauri::command]
-fn export_prompts(app: AppHandle, state: State<Db>, format: String) -> Result<usize, String> {
+async fn export_prompts(app: AppHandle, state: State<'_, Db>, format: String) -> Result<usize, String> {
     let (content, count) = {
         let store = lock(&state);
         let content = match format.as_str() {
@@ -1901,6 +3005,7 @@ fn apply_view_defs(settings: &mut Settings, defs: &[String]) {
                     cols,
                     rows,
                     layouts: HashMap::new(),
+                    color: String::new(),
                 });
             }
             None => {}
@@ -1933,6 +3038,7 @@ fn apply_positions(settings: &mut Settings, id: &str, positions: &[String]) {
                     cols: kcols.clamp(GRID_MIN, GRID_MAX),
                     rows: krows.clamp(GRID_MIN, GRID_MAX),
                     layouts: HashMap::new(),
+                    color: String::new(),
                 });
                 settings.views.len() - 1
             }
@@ -2005,8 +3111,9 @@ fn parse_csv_data(content: &str) -> ImportData {
     data
 }
 
+// Async: parsing + persisting an import stays off the UI thread.
 #[tauri::command]
-fn import_prompts(app: AppHandle, state: State<Db>) -> Result<usize, String> {
+async fn import_prompts(app: AppHandle, state: State<'_, Db>) -> Result<usize, String> {
     let file = file_dialog(&app)
         .add_filter("Prompts", &["csv", "txt"])
         .pick_file();
@@ -2178,7 +3285,6 @@ fn ensure_webview2() -> bool {
     if answer == rfd::MessageDialogResult::Yes {
         // Official Evergreen bootstrapper download.
         use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         let _ = std::process::Command::new("cmd")
             .args(["/C", "start", "", "https://go.microsoft.com/fwlink/p/?LinkId=2124703"])
             .creation_flags(CREATE_NO_WINDOW)
@@ -2192,17 +3298,8 @@ pub fn run() {
     if !ensure_webview2() {
         return;
     }
-    // Capture any panic (with location) to a log file for diagnosis.
-    std::panic::set_hook(Box::new(|info| {
-        let msg = format!("{}\n", info);
-        eprintln!("{}", msg);
-        let path = std::env::temp_dir().join("prompt-saver-panic.log");
-        let _ = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
-            .and_then(|mut f| std::io::Write::write_all(&mut f, msg.as_bytes()));
-    }));
+    // Surface panics on stderr (visible in a dev console) without writing files.
+    std::panic::set_hook(Box::new(|info| eprintln!("{}", info)));
 
     tauri::Builder::default()
         // Only one instance app-wide (keyed by app identifier, independent of
@@ -2223,8 +3320,10 @@ pub fn run() {
             let saved_geom = store.settings.window;
             let autostart = store.settings.autostart;
             let start_min = store.settings.start_minimized;
+            let on_top = store.settings.always_on_top;
 
             app.manage(Mutex::new(store));
+            app.manage(SnipState(Mutex::new(Vec::new())));
 
             // Launched by autostart with --minimized: stay in the tray.
             let start_hidden = std::env::args().any(|a| a == "--minimized");
@@ -2233,6 +3332,9 @@ pub fn run() {
                 let geom = resolve_geometry(&main, saved_geom);
                 let _ = main.set_size(tauri::LogicalSize::new(geom.width, geom.height));
                 let _ = main.set_position(PhysicalPosition::new(geom.x, geom.y));
+                if on_top {
+                    let _ = main.set_always_on_top(true);
+                }
                 {
                     let pref = handle
                         .try_state::<Db>()
@@ -2249,7 +3351,8 @@ pub fn run() {
                     std::thread::spawn(move || {
                         std::thread::sleep(std::time::Duration::from_millis(1500));
                         if let Some(w) = h.get_webview_window("main") {
-                            if !w.is_visible().unwrap_or(true) {
+                            // Show on uncertainty too — this is the safety net.
+                            if !w.is_visible().unwrap_or(false) {
                                 let _ = w.show();
                             }
                         }
@@ -2396,7 +3499,21 @@ pub fn run() {
                         .unwrap_or(true);
                     if enabled {
                         if let Some(info) = updater_check() {
-                            let _ = h2.emit("update-available", info);
+                            // Honour the skip list: a skipped version never
+                            // pops up on its own, only on a manual check.
+                            let skipped = h2
+                                .try_state::<Db>()
+                                .map(|s| {
+                                    s.lock()
+                                        .unwrap_or_else(|e| e.into_inner())
+                                        .settings
+                                        .skipped_versions
+                                        .contains(&info.version)
+                                })
+                                .unwrap_or(false);
+                            if !skipped {
+                                let _ = h2.emit("update-available", info);
+                            }
                         }
                     }
                     std::thread::sleep(std::time::Duration::from_secs(24 * 60 * 60));
@@ -2416,6 +3533,7 @@ pub fn run() {
             set_view_grid,
             add_view,
             rename_view,
+            set_view_color,
             delete_view,
             set_active_view,
             get_settings,
@@ -2423,11 +3541,14 @@ pub fn run() {
             current_theme,
             set_theme,
             copy_prompt,
+            copy_text,
+            record_copy,
+            clear_copy_history,
             toggle_floating,
             set_float_scale,
             resize_float_pill,
             resize_float_media,
-            resize_float_menu,
+            set_float_bounds,
             set_video_prefs,
             edit_prompt_request,
             show_main_window,
@@ -2437,6 +3558,19 @@ pub fn run() {
             set_auto_update,
             set_bars,
             set_minimize_on_close,
+            set_always_on_top,
+            set_ui_flag,
+            set_ui_value,
+            set_ui_text,
+            reset_expert,
+            skip_version,
+            open_snip,
+            snip_background,
+            snip_windows,
+            snip_cancel,
+            capture_region,
+            capture_window,
+            pdf_preview,
             set_autostart,
             set_start_minimized,
             export_prompts,
@@ -2494,6 +3628,40 @@ mod tests {
         let mut s = Settings::default();
         s.migrate();
         s
+    }
+
+    // Settings JSON from an older version: unknown/removed fields (copy_history,
+    // a future field) are ignored and every missing field defaults — never a total
+    // parse failure that would wipe the user's settings.
+    #[test]
+    fn old_settings_json_migrates() {
+        let json = r#"{
+            "theme":"dark","language":"de","minimize_to_tray":true,
+            "copy_history":["a","b"],"ui_flags":{"floating":false},
+            "tile_size":18,"removed_future_field":42
+        }"#;
+        let s: Settings = serde_json::from_str(json).expect("old settings must still parse");
+        assert_eq!(s.theme, "dark");
+        assert_eq!(s.language, "de");
+        assert!(s.minimize_to_tray);
+        assert_eq!(s.ui_flags.get("floating"), Some(&false));
+        assert_eq!(s.tile_size, 18);
+        assert!(s.copy_log.is_empty()); // new field defaults
+        assert!(s.usage.is_empty());
+        assert!(s.auto_update); // missing field -> default_on
+    }
+
+    // Prompt JSON from an older version: removed field (favorite) ignored, missing
+    // new fields default; the prompt still loads.
+    #[test]
+    fn old_prompt_json_migrates() {
+        let json = r#"{"id":"x1","name":"Old","text":"hi","favorite":true,"show_image":true}"#;
+        let p: Prompt = serde_json::from_str(json).expect("old prompt must still parse");
+        assert_eq!(p.id, "x1");
+        assert_eq!(p.name, "Old");
+        assert!(p.show_image);
+        assert_eq!(p.color, ""); // missing -> default
+        assert_eq!(p.caption_size, 0);
     }
 
     #[test]
@@ -2591,6 +3759,35 @@ mod tests {
         assert_eq!(data.prompts[0].font, "");
         assert_eq!(data.prompts[0].font_size, 0);
         assert_eq!(data.prompts[0].file_path, "");
+    }
+
+    #[test]
+    fn version_compare_pads_components() {
+        assert!(version_newer("1.9.0", "1.8.9"));
+        assert!(version_newer("2.0", "1.9.9"));
+        assert!(!version_newer("1.9", "1.9.0")); // equal once padded
+        assert!(!version_newer("1.9.0", "1.9"));
+        assert!(!version_newer("1.8.0", "1.9.0"));
+        assert!(version_newer("1.10.0", "1.9.0")); // numeric, not lexical
+    }
+
+    #[test]
+    fn snip_preview_rotates_and_cleans() {
+        let p1 = write_snip_preview(b"first").expect("write1");
+        assert!(std::path::Path::new(&p1).exists());
+        let p2 = write_snip_preview(b"second").expect("write2");
+        assert_ne!(p1, p2);
+        assert!(!std::path::Path::new(&p1).exists(), "previous preview deleted");
+        assert!(std::path::Path::new(&p2).exists());
+        remove_snip_preview();
+        assert!(!std::path::Path::new(&p2).exists(), "cleanup removes file");
+    }
+
+    #[test]
+    fn base64_roundtrip_and_reject() {
+        let data = b"\x00\x01\x02\xff\xfe hello";
+        assert_eq!(base64_decode(&base64_encode(data)), data);
+        assert!(base64_decode("not valid base64!@#").is_empty());
     }
 
     #[test]

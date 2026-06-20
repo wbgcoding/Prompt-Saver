@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capabilities for main window and floating quick-copy buttons",
-  "windows": ["main", "float-*"],
+  "windows": ["main", "float-*", "snip-*"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

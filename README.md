@@ -8,7 +8,12 @@ A tiny, fully offline Windows tool for storing your favorite prompts and copying
 
 - **Prompt grid** – free placement on a per-view grid (1×1 up to 20×20, default 5×4), drag tiles anywhere, swap by dropping; layouts are remembered per grid size
 - **One-click copy** – click a tile and the prompt text is in your clipboard ("Copied!" bubble confirms)
-- **Prompt library** – header button lists every saved prompt; edit it there, drag it onto the grid or add it with one click
+- **Searchable library** – the header list searches every saved prompt; copy with one click, edit with the pencil icon, drag onto the grid, filter by color or type, and optionally close right after copying
+- **Screenshot tool** – a camera button captures a screen region or a whole window (even protected ones like the Task Manager) and turns it into a copy button; the capture overlay opens instantly
+- **Prompt variables** – write `{{Name}}` placeholders and fill them in when you copy
+- **Copy history** – a journal of recently copied and most-used prompts with optional timestamps and an adjustable retention time (can be turned off for privacy)
+- **Drag & drop** – drop a file, image or text onto the window to create a button right away
+- **Expert menu** – tabs for Features / Appearance / Privacy / Media: size scaling for UI, popups, icons and buttons, hide the logo or title, the "Copied!" text size and font, floating-button opacity, history settings and a guarded reset
 - **Multiple views** – up to 20 named pages, each with its own grid size and layout (quick size control in the header)
 - **Floating buttons** – pin any prompt as a frameless, transparent, always-on-top pill; click to copy from anywhere, drag to reposition, right-click for size / edit / remove; positions survive restarts
 - **Images, GIFs & videos** – save a picture from the clipboard or a file and paste it anywhere with one click; attach any file by path; give any prompt a media icon and an optional caption
@@ -21,7 +26,7 @@ A tiny, fully offline Windows tool for storing your favorite prompts and copying
 - **Auto updates** – daily check for new releases with one-click install (also manually via Settings → Updates)
 - **Distraction-free mode** – hide the top and bottom bars with subtle arrows; the grid takes over the freed space
 - **16 themes** – light / dark / system (live OS detection) plus Programmer, AI, Cyberpunk, Retro, Gradient and more
-- **100% local** – data stored as JSON in `%APPDATA%`, no network, no telemetry
+- **100% local** – data stored locally in `%APPDATA%`, no network, no telemetry
 - **Tiny** – ~3 MB exe (Tauri / Rust), uses the Windows WebView2 runtime
 
 ## Download
@@ -45,7 +50,8 @@ Both need the Microsoft WebView2 runtime (preinstalled on Windows 11 and current
 | Copy a prompt | Click its tile ("Copied!" bubble) |
 | Move a tile | Drag it to any grid cell; drop on an occupied cell to swap |
 | Edit / hide / pin / delete | Right-click a tile (or hover **⋮**); deleting asks twice |
-| All prompts | List icon in the header: view, edit and place every prompt |
+| All prompts | List icon in the header: search, edit and place every prompt |
+| Screenshot | Camera icon in the header: drag a region or click a window to save it as a copy button |
 | Floating button | "Toggle floating button" in the tile menu; right-click the pill for options |
 | Views | Buttons next to the title; manage them in the settings |
 | Settings | Gear icon: theme, language, fonts, views & grid sizes, background behaviour, autostart, import/export, reset |

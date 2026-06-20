@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title></title>
+  <link rel="stylesheet" href="styles/snip.css" />
+</head>
+<body>
+  <!-- Sharp frozen capture; four dim rectangles frame the selection so the
+       selected area stays fully sharp (no second image / no clip-path on a huge
+       bitmap — that was the lag source). -->
+  <img id="snip-bg" class="snip-bg" alt="" draggable="false" />
+  <div id="snip-mask-top" class="snip-mask"></div>
+  <div id="snip-mask-bottom" class="snip-mask"></div>
+  <div id="snip-mask-left" class="snip-mask"></div>
+  <div id="snip-mask-right" class="snip-mask"></div>
+  <div id="snip-box" class="snip-box hidden"><span id="snip-size" class="snip-size"></span></div>
+  <div id="snip-hint" class="snip-hint"></div>
+  <script type="module" src="snip.js"></script>
+</body>
+</html>

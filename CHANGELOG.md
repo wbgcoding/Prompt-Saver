@@ -3,6 +3,50 @@
 All notable changes to **Prompt Saver**. Download the latest version from the
 [releases page](../../releases/latest).
 
+## 2.2.0 (2026-06-20)
+
+A big update: a built-in screenshot tool, a searchable prompt library, prompt
+variables, a copy history, a much larger expert menu, and smoother, sharper
+floating buttons.
+
+### Added
+- **Screenshot tool**: a camera button captures a screen region or a whole
+  window — even protected ones like the Task Manager — and turns it straight
+  into a copy button. The capture overlay opens instantly.
+- **Searchable prompt library**: the header list is now a search box over all
+  your prompts — type to filter, copy with one click, edit with the pencil
+  icon, and optionally close the library right after copying. Filter by color
+  or type.
+- **Prompt variables**: write `{{Name}}` placeholders in a prompt and you're
+  asked to fill them in when you copy it.
+- **Copy history**: a journal of recently copied and most-used prompts with
+  optional timestamps and an adjustable retention time — and it can be turned
+  off completely for privacy.
+- **Drag & drop**: drop a file, image or text onto the window to create a
+  button right away.
+- **Expert menu, reorganised and expanded**: tidy tabs (Features / Appearance /
+  Privacy / Media) with size scaling for the UI, popups, icons and buttons,
+  options to hide the logo or the title, the **"Copied!" text size and font**,
+  **floating-button opacity**, history settings, and a guarded reset.
+- **Auto-fit "Copied!" text**: the confirmation text scales to the button or
+  floating pill (or pick a fixed size and font).
+
+### Improved
+- The screenshot overlay now opens **instantly** instead of taking a few
+  seconds.
+- Floating text buttons resize **smoothly** and always keep their text fully
+  visible — they never collapse into a circle and never clip; text and button
+  scale up together to the screen size.
+- You can drag a floating button only on the visible pill, not on the
+  invisible area around its rounded corners.
+- All 20 languages are fully translated, including every new menu and option.
+
+### Fixed
+- Right-clicking a floating button no longer changes its size.
+- Screenshot capture works for windows that previously came out blank.
+- The update check no longer mis-orders version numbers.
+- Various small layout and resize glitches on the floating buttons.
+
 ## 1.8.0 (2026-06-07)
 
 ### Added
