@@ -1,7 +1,12 @@
 <svg width="880" height="600" viewBox="0 0 880 600" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, system-ui, sans-serif">
   <defs>
-    <linearGradient id="logo" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#4f8df9"/>
+    <linearGradient id="logo" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#5b9bff"/>
+      <stop offset="0.5" stop-color="#3b6ef6"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="media" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b6ef6"/>
       <stop offset="1" stop-color="#7c3aed"/>
     </linearGradient>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
@@ -9,15 +14,25 @@
     </filter>
   </defs>
 
-  <!-- Window -->
+  <!-- Window (dark theme) -->
   <rect width="880" height="600" rx="10" fill="#1b1b1d"/>
 
-  <!-- Header: logo, title, view switcher, header actions -->
+  <!-- Header -->
   <line x1="0" y1="50" x2="880" y2="50" stroke="#38383d"/>
-  <rect x="16" y="12" width="26" height="26" rx="7" fill="url(#logo)"/>
-  <path d="M22 19h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-6l-4 3v-3h-4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z" fill="#fff"/>
+
+  <!-- Logo: blue/purple rounded square, white chat bubble with a chevron + sparkle -->
+  <g transform="translate(16 12) scale(0.0508)">
+    <rect x="24" y="24" width="464" height="464" rx="136" fill="url(#logo)"/>
+    <g transform="translate(25.6 25.6) scale(0.9)">
+      <path d="M118 80h276a54 54 0 0 1 54 54v157a54 54 0 0 1-54 54H236L138 430a16 16 0 0 1-27-12.8V345h7a54 54 0 0 1-54-54V134a54 54 0 0 1 54-54Z" fill="#ffffff"/>
+      <path d="M160 154l67 59-67 59" fill="none" stroke="#4338ca" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="266" y="245" width="105" height="40" rx="20" fill="#4338ca"/>
+      <path d="M419 38l15 36.6 36.6 15-36.6 15L419 141l-15-36.4-36.6-15 36.6-15Z" fill="#ffe066"/>
+    </g>
+  </g>
   <text x="52" y="31" fill="#f3f3f3" font-size="16" font-weight="600">Prompt Saver</text>
 
+  <!-- View tabs -->
   <rect x="166" y="13" width="62" height="24" rx="12" fill="#3b82f6"/>
   <text x="197" y="29" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Home</text>
   <rect x="234" y="13" width="64" height="24" rx="12" fill="none" stroke="#38383d"/>
@@ -25,20 +40,34 @@
   <rect x="304" y="13" width="56" height="24" rx="12" fill="none" stroke="#38383d"/>
   <text x="332" y="29" fill="#9ca3af" font-size="12" text-anchor="middle">Mail</text>
 
-  <!-- Header action icons: library, screenshot (camera), settings -->
-  <g fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <!-- library / list -->
-    <path d="M748 19h12M748 25h12M748 31h12"/>
-    <!-- screenshot / camera -->
-    <rect x="784" y="18" width="20" height="15" rx="3"/>
-    <path d="M790 18l2-3h4l2 3"/>
-    <circle cx="794" cy="26" r="3.4"/>
-    <!-- settings / gear -->
-    <path d="M840 17c4.5 0 8 3.6 8 8s-3.5 8-8 8-8-3.6-8-8 3.5-8 8-8Z"/>
-    <circle cx="840" cy="25" r="3" fill="#9ca3af"/>
+  <!-- Header actions: grid size · library · history · pin · settings -->
+  <g fill="#9ca3af">
+    <rect x="648" y="16" width="26" height="18" rx="5" fill="#242427" stroke="#38383d"/>
+    <text x="661" y="29" font-size="12" text-anchor="middle">5</text>
+    <text x="682" y="29" font-size="12" text-anchor="middle">×</text>
+    <rect x="690" y="16" width="26" height="18" rx="5" fill="#242427" stroke="#38383d"/>
+    <text x="703" y="29" font-size="12" text-anchor="middle">4</text>
+  </g>
+  <line x1="726" y1="15" x2="726" y2="35" stroke="#38383d"/>
+  <!-- library (list) -->
+  <g transform="translate(738 16) scale(0.75)" fill="#9ca3af">
+    <path d="M4 6h2v2H4V6Zm4 0h12v2H8V6ZM4 11h2v2H4v-2Zm4 0h12v2H8v-2ZM4 16h2v2H4v-2Zm4 0h12v2H8v-2Z"/>
+  </g>
+  <!-- history (clock) -->
+  <g transform="translate(770 16) scale(0.75)" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 8v4l3 2M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4"/>
+  </g>
+  <line x1="800" y1="15" x2="800" y2="35" stroke="#38383d"/>
+  <!-- always-on-top (pin) -->
+  <g transform="translate(812 16) scale(0.75)" fill="#9ca3af">
+    <path d="M16 3.2 20.8 8l-1.7 1.7-.9-.2-3.2 3.2.5 4.1-1.4 1L9.6 14l-5.4 5.4-1.2-1.2L8.4 13 4 8.6l1-1.4 4.1.5 3.2-3.2-.2-.9L16 3.2Z"/>
+  </g>
+  <!-- settings (gear) -->
+  <g transform="translate(844 16) scale(0.75)" fill="#9ca3af">
+    <path d="M19.14 12.94a7.49 7.49 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.3 7.3 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.6 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.49 7.49 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.42.32.66.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.24.1.52.02.66-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"/>
   </g>
 
-  <!-- Grid 5x4: free placement, per-prompt colors, auto-fit text, media tiles -->
+  <!-- Grid 5x4: free placement, per-prompt colors, auto-fit text, a media tile -->
   <g font-weight="600" text-anchor="middle">
     <!-- row 1 -->
     <rect x="18" y="64" width="162" height="100" rx="10" fill="#1e3a8a" stroke="#3b82f6"/>
@@ -57,22 +86,17 @@
     <text x="99" y="228" fill="#f3f3f3" font-size="19">Unit Tests</text>
     <rect x="190" y="172" width="162" height="100" rx="10" fill="#4c1d95" stroke="#38383d"/>
     <text x="271" y="228" fill="#f3f3f3" font-size="18">E-Mail Draft</text>
-    <!-- copied! confirmation bubble -->
+    <!-- copy confirmation -->
     <rect x="362" y="172" width="162" height="100" rx="10" fill="#16a34a"/>
     <text x="443" y="222" fill="#ffffff" font-size="18">Meeting Notes</text>
     <rect x="395" y="244" width="96" height="20" rx="10" fill="#3b82f6"/>
     <text x="443" y="258" fill="#fff" font-size="11">Copied!</text>
     <rect x="534" y="172" width="162" height="100" rx="10" fill="#242427" stroke="#38383d"/>
     <text x="615" y="228" fill="#f3f3f3" font-size="18">Regex Helper</text>
-    <!-- media tile: a saved screenshot with a caption -->
-    <rect x="706" y="172" width="162" height="100" rx="10" fill="#0b1220" stroke="#f59e0b"/>
-    <g transform="translate(787 210)" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="-22" y="-16" width="44" height="32" rx="4"/>
-      <circle cx="-9" cy="-4" r="4"/>
-      <path d="M-22 12l13-12 9 8 6-5 16 11"/>
-    </g>
-    <rect x="724" y="244" width="126" height="20" rx="10" fill="#000" fill-opacity="0.55"/>
-    <text x="787" y="258" fill="#f3f3f3" font-size="11">Screenshot</text>
+    <!-- media tile: a saved image with caption, frame in its colour -->
+    <rect x="706" y="172" width="162" height="100" rx="10" fill="url(#media)" stroke="#f59e0b"/>
+    <rect x="724" y="244" width="126" height="20" rx="10" fill="#000" fill-opacity="0.5"/>
+    <text x="787" y="258" fill="#f3f3f3" font-size="11">Logo.png</text>
     <!-- row 3 -->
     <rect x="18" y="280" width="162" height="100" rx="10" fill="#713f12" stroke="#38383d"/>
     <text x="99" y="336" fill="#f3f3f3" font-size="19">Brainstorm</text>
@@ -83,19 +107,24 @@
     <text x="443" y="336" fill="#f3f3f3" font-size="18">Release Notes</text>
   </g>
 
-  <!-- Composer -->
+  <!-- Composer: screenshot + attach buttons, input, Save -->
   <line x1="0" y1="534" x2="880" y2="534" stroke="#38383d"/>
-  <rect x="16" y="546" width="700" height="40" rx="10" fill="#242427" stroke="#38383d"/>
-  <text x="30" y="571" fill="#9ca3af" font-size="13">Type a prompt&#8230;</text>
-  <!-- attach / screenshot buttons next to Save -->
-  <g fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M735 558l-9 9a4 4 0 0 0 6 6l9-9a6 6 0 0 0-9-9l-9 9" transform="translate(-2 0)"/>
+  <!-- screenshot (camera) -->
+  <g transform="translate(24 557) scale(0.75)" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 7h2.5L7 4h6l1.5 3H21v13H3V7Z"/>
+    <circle cx="12" cy="13" r="3.5"/>
   </g>
-  <rect x="772" y="546" width="92" height="40" rx="10" fill="#3b82f6"/>
-  <text x="818" y="571" fill="#fff" font-size="14" font-weight="600" text-anchor="middle">Save</text>
+  <!-- attach file (paperclip) -->
+  <g transform="translate(54 557) scale(0.75)" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21.2 11.2l-8.4 8.4a5.5 5.5 0 0 1-7.8-7.8l8.4-8.4a3.7 3.7 0 0 1 5.2 5.2l-8.4 8.4a1.9 1.9 0 0 1-2.6-2.6l7.7-7.7"/>
+  </g>
+  <rect x="84" y="546" width="676" height="40" rx="10" fill="#242427" stroke="#38383d"/>
+  <text x="100" y="571" fill="#9ca3af" font-size="13">Type a prompt&#8230;</text>
+  <rect x="768" y="546" width="96" height="40" rx="10" fill="#3b82f6"/>
+  <text x="816" y="571" fill="#fff" font-size="14" font-weight="600" text-anchor="middle">Save</text>
 
-  <!-- Floating pill (always on top, adjustable opacity) -->
-  <g filter="url(#shadow)" opacity="0.82">
+  <!-- Floating pill: always on top, adjustable opacity -->
+  <g filter="url(#shadow)" opacity="0.85">
     <rect x="650" y="416" width="170" height="48" rx="24" fill="#3b82f6"/>
     <text x="735" y="446" fill="#fff" font-size="15" font-weight="600" text-anchor="middle">Code Review</text>
   </g>
