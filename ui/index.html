@@ -7,10 +7,10 @@
   <link rel="stylesheet" href="styles/media.css" />
 </head>
 <body>
-  <header class="header">
-    <div class="brand">
-      <img class="logo" src="assets/icon.svg" alt="" width="26" height="26" />
-      <span class="title">Prompt Saver</span>
+  <header class="header" data-tauri-drag-region>
+    <div class="brand" data-tauri-drag-region>
+      <img class="logo" id="app-logo" src="assets/icon.svg" alt="" width="26" height="26" data-i18n-title="openRepo" />
+      <span class="title" data-tauri-drag-region>Prompt Saver</span>
       <button id="fav-view-btn" class="fav-view-toggle hidden" type="button" data-i18n-title="favViewTitle" data-i18n-aria="favViewTitle">★</button>
       <nav id="views" class="views hidden"></nav>
     </div>
@@ -22,17 +22,7 @@
         <input id="qg-rows" class="grid-mini" type="number" min="1" max="20" data-i18n-aria="gridSize" />
       </div>
       <span class="header-sep" aria-hidden="true"></span>
-      <!-- Content actions: chain · library · history -->
-      <button id="chain-btn" class="icon-btn chain-toggle" type="button" aria-pressed="false" data-i18n-title="chainTooltip" data-i18n-aria="chainTooltip">
-        <!-- Off: broken link (bar split). Active: joined link (solid bar). First click
-             outlines the button, second click fills it with the accent colour. -->
-        <svg class="chain-icon chain-open" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-          <path transform="rotate(-45 12 12)" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h1.6M14.4 12H16"/>
-        </svg>
-        <svg class="chain-icon chain-closed" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-          <path transform="rotate(-45 12 12)" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h8"/>
-        </svg>
-      </button>
+      <!-- Content actions: library · history -->
       <button id="library-btn" class="icon-btn" data-i18n-title="library" data-i18n-aria="library">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
           <path fill="currentColor" d="M4 6h2v2H4V6Zm4 0h12v2H8V6ZM4 11h2v2H4v-2Zm4 0h12v2H8v-2ZM4 16h2v2H4v-2Zm4 0h12v2H8v-2Z"/>
@@ -43,18 +33,58 @@
           <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 2M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4"/>
         </svg>
       </button>
-      <span class="header-sep" aria-hidden="true"></span>
+      <!-- F21 clipboard inbox (shown only while the watcher is on and non-empty) -->
+      <button id="clip-btn" class="icon-btn clip-inbox-btn hidden" data-i18n-title="clipInbox" data-i18n-aria="clipInbox">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 4h6a1 1 0 0 1 1 1v1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h1V5a1 1 0 0 1 1-1Zm0 2v1h6V6M9 4h6"/>
+        </svg>
+        <span id="clip-badge" class="clip-badge">0</span>
+      </button>
+      <!-- Prompt chaining, sitting just left of the window/app controls -->
+      <button id="chain-btn" class="icon-btn chain-toggle" type="button" aria-pressed="false" data-i18n-title="chainTooltip" data-i18n-aria="chainTooltip">
+        <!-- Off: broken link (bar split). Active: joined link (solid bar). First click
+             outlines the button, second click fills it with the accent colour. -->
+        <svg class="chain-icon chain-open" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+          <path transform="rotate(-45 12 12)" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h1.6M14.4 12H16"/>
+        </svg>
+        <svg class="chain-icon chain-closed" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+          <path transform="rotate(-45 12 12)" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h8"/>
+        </svg>
+      </button>
       <!-- Window / app: always-on-top · settings -->
-      <button id="pin-top" class="icon-btn pin-toggle" data-i18n-title="alwaysOnTop" data-i18n-aria="alwaysOnTop">
+      <button id="pin-top" class="icon-btn pin-toggle" aria-pressed="false" data-i18n-title="alwaysOnTop" data-i18n-aria="alwaysOnTop">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
           <path fill="currentColor" d="M16 3.2 20.8 8l-1.7 1.7-.9-.2-3.2 3.2.5 4.1-1.4 1L9.6 14l-5.4 5.4-1.2-1.2L8.4 13 4 8.6l1-1.4 4.1.5 3.2-3.2-.2-.9L16 3.2Z"/>
         </svg>
       </button>
-      <button id="gear" class="icon-btn" data-i18n-title="settings" data-i18n-aria="settings">
+      <button id="gear" class="icon-btn" data-i18n-aria="settings">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
           <path fill="currentColor" d="M19.14 12.94a7.49 7.49 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.3 7.3 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.6 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.49 7.49 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.42.32.66.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.24.1.52.02.66-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"/>
         </svg>
       </button>
+      <!-- Custom window controls (native OS titlebar is disabled) -->
+      <div class="win-controls" role="group">
+        <button id="win-min" class="win-btn" type="button" data-i18n-aria="winMinimize">
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M6 12h12"/>
+          </svg>
+        </button>
+        <button id="win-max" class="win-btn" type="button" data-i18n-aria="winMaximize">
+          <svg class="win-ico-max" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <rect x="6" y="6" width="12" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          </svg>
+          <svg class="win-ico-restore" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M9 9V7.5A1.5 1.5 0 0 1 10.5 6h6A1.5 1.5 0 0 1 18 7.5v6A1.5 1.5 0 0 1 16.5 15H15"/>
+            <rect x="6" y="9" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          </svg>
+        </button>
+        <button id="win-close" class="win-btn win-close" type="button" data-i18n-aria="winClose">
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M7 7l10 10M17 7 7 17"/>
+          </svg>
+        </button>
+      </div>
+      <!-- Hide-bar chevron: far right so it lines up vertically with the composer's. -->
       <button id="hide-top" class="icon-btn bar-toggle" data-i18n-title="hideBar" data-i18n-aria="hideBar">
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
           <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 14l6-6 6 6"/>
@@ -105,9 +135,16 @@
     <div class="modal">
       <div class="modal-titlebar">
         <h2 id="modal-title" class="modal-title">Name this prompt</h2>
+        <button id="modal-close-x" class="icon-btn modal-x" type="button" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-name-row">
+        <input id="modal-name" class="modal-input" type="text" data-i18n-ph="namePh" maxlength="80" />
         <button type="button" id="modal-fav" class="modal-fav-star" aria-pressed="false" data-i18n-title="favoriteToggle" data-i18n-aria="favoriteToggle">★</button>
       </div>
-      <input id="modal-name" class="modal-input" type="text" data-i18n-ph="namePh" maxlength="80" />
       <!-- Image preview + display toggle (visible only when prompt has an image) -->
       <div id="modal-img-wrap" class="modal-img-wrap hidden">
         <div class="modal-media-stage">
@@ -141,6 +178,8 @@
         <p id="modal-vars-hint" class="modal-hint modal-vars-hint hidden" data-i18n="varsHint">Tip: {#{VariableName}#} is asked when copying.</p>
       </div>
       <textarea id="modal-text" class="modal-input modal-text hidden" rows="6" data-i18n-ph="promptPh"></textarea>
+      <!-- Live length readout (chars / words / ~tokens), expert-tunable -->
+      <div id="modal-length" class="modal-length hidden" aria-hidden="true"></div>
       <!-- Per-tile font/size overrides (create + edit) -->
       <div id="modal-style-row" class="two-col">
         <label class="field">
@@ -155,9 +194,18 @@
         </label>
       </div>
       <div id="color-row" class="swatches"></div>
+      <!-- F7 version history (collapsed by default; edit mode + text prompts only) -->
+      <div id="modal-history" class="modal-collapse hidden">
+        <button type="button" id="modal-history-head" class="modal-collapse-head" aria-expanded="false">
+          <span data-i18n="historyTitle">Version history</span>
+          <svg class="collapse-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+        <div id="modal-history-body" class="modal-collapse-body hidden"></div>
+      </div>
       <div class="modal-actions">
         <button id="modal-delete" class="ghost-btn danger-btn hidden" data-i18n="delete">Delete</button>
-        <button id="modal-cancel" class="ghost-btn" data-i18n="cancel">Cancel</button>
         <button id="modal-confirm" class="primary-btn" data-i18n="save">Save</button>
       </div>
     </div>
@@ -166,11 +214,79 @@
   <!-- Fill-in dialog for {#{placeholders}#} when copying a prompt -->
   <div id="vars-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal modal-narrow">
-      <h2 id="vars-title" class="modal-title">Fill in</h2>
+      <div class="modal-head">
+        <h2 id="vars-title" class="modal-title">Fill in</h2>
+        <button id="vars-close" class="icon-btn" type="button" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
       <div id="vars-fields" class="vars-fields"></div>
       <div class="modal-actions">
-        <button id="vars-cancel" class="ghost-btn">Cancel</button>
         <button id="vars-ok" class="primary-btn">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- F21 clipboard inbox -->
+  <div id="clip-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 class="modal-title" data-i18n="clipInbox">Clipboard inbox</h2>
+        <div class="modal-head-actions">
+          <!-- Pause/resume collecting without leaving the inbox -->
+          <button id="clip-toggle" type="button" class="icon-btn watch-toggle" data-i18n-title="flagClipWatcher" data-i18n-aria="flagClipWatcher">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 3.6v7.2"/>
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M17.4 6.3a7.2 7.2 0 1 1-10.8 0"/>
+            </svg>
+          </button>
+          <button id="clip-clear" type="button" class="head-toggle" data-i18n="clearAll">Clear all</button>
+          <button id="clip-close" class="icon-btn" data-i18n-aria="close">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div id="clip-list" class="clip-list"></div>
+    </div>
+  </div>
+
+  <!-- F6 duplicate finder -->
+  <div id="dupes-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 class="modal-title" data-i18n="dupTitle">Find duplicates</h2>
+        <div class="modal-head-actions">
+          <button id="dupes-rescan" type="button" class="head-toggle" data-i18n="dupRescan">Rescan</button>
+          <button id="dupes-close" class="icon-btn" data-i18n-aria="close">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div id="dupes-body" class="dupes-body"></div>
+    </div>
+  </div>
+
+  <!-- Backups: settings, diagnostics and the restore list (opened from settings) -->
+  <div id="backup-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 class="modal-title" data-i18n="expGroupBackup">Backups</h2>
+        <button id="backup-close" class="icon-btn" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="backup-body">
+        <div id="backup-panel" class="expert-custom"></div>
+        <h3 class="stat-section backup-split" data-i18n="expGroupStats">Usage statistics</h3>
+        <div id="stats-panel" class="expert-custom"></div>
       </div>
     </div>
   </div>
@@ -181,10 +297,15 @@
       <div class="modal-head">
         <h2 class="modal-title" data-i18n="library">All prompts</h2>
         <div class="modal-head-actions">
+          <label class="head-sort">
+            <span class="cols-label" data-i18n="sortBy">Sort</span>
+            <select id="library-sort" class="lib-sort" data-i18n-aria="sortBy"></select>
+          </label>
           <div class="cols-control">
             <span class="cols-label" data-i18n="libraryColumns">Columns</span>
             <div id="lib-cols-seg" class="seg-toggle" role="group" data-i18n-aria="libraryColumns"></div>
           </div>
+          <button id="library-select-btn" type="button" class="head-toggle" aria-pressed="false" data-i18n="selectMode">Select</button>
           <button id="library-close-toggle" type="button" class="head-toggle" aria-pressed="true" data-i18n="closeAfterCopy">Close after copy</button>
           <button id="library-close" class="icon-btn" data-i18n-aria="close">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -206,6 +327,23 @@
         <div id="library-colors" class="lib-colors" data-i18n-title="filterColor"></div>
       </div>
       <div id="library-list" class="library-list"></div>
+      <!-- F8 batch action bar (visible only in selection mode) -->
+      <div id="lib-batch-bar" class="lib-batch-bar hidden">
+        <span id="lib-batch-count" class="lib-batch-count"></span>
+        <button id="lib-batch-all" type="button" class="ghost-btn" data-i18n="selectAll">All</button>
+        <button id="lib-batch-none" type="button" class="ghost-btn" data-i18n="selectNone">None</button>
+        <span class="lib-batch-sep" aria-hidden="true"></span>
+        <div id="lib-batch-colors" class="lib-colors lib-batch-colors" data-i18n-title="batchColor"></div>
+        <button id="lib-batch-fav" type="button" class="ghost-btn" data-i18n="batchFavorite">★</button>
+        <button id="lib-batch-unfav" type="button" class="ghost-btn" data-i18n="batchUnfavorite">☆</button>
+        <select id="lib-batch-view" class="lib-sort" data-i18n-aria="batchView"></select>
+        <button id="lib-batch-addview" type="button" class="ghost-btn" data-i18n="batchAddView">Add</button>
+        <button id="lib-batch-removeview" type="button" class="ghost-btn" data-i18n="batchRemoveView">Remove</button>
+        <span class="lib-batch-sep" aria-hidden="true"></span>
+        <button id="lib-batch-csv" type="button" class="ghost-btn" data-i18n="exportCsv">CSV</button>
+        <button id="lib-batch-txt" type="button" class="ghost-btn" data-i18n="exportTxt">TXT</button>
+        <button id="lib-batch-delete" type="button" class="ghost-btn danger-btn" data-i18n="delete">Delete</button>
+      </div>
     </div>
   </div>
 
@@ -257,7 +395,7 @@
         </button>
       </div>
       <div id="settings-main">
-      <div class="two-col">
+      <div class="three-col">
         <label class="field">
           <span data-i18n="theme">Theme</span>
           <select id="theme-select" class="modal-input">
@@ -305,51 +443,65 @@
             <option value="ro">Română</option>
           </select>
         </label>
-      </div>
-      <div class="two-col">
         <label class="field">
           <span data-i18n="tileFont">Font</span>
           <!-- Options filled by JS from the shared font catalog -->
           <select id="tile-font" class="modal-input"></select>
         </label>
         <label class="field">
+          <span data-i18n="valUiScale">UI size</span>
+          <!-- Options filled by JS: scale presets -->
+          <select id="ui-scale" class="modal-input"></select>
+        </label>
+        <label class="field">
+          <span data-i18n="valIconScale">Icon size</span>
+          <select id="icon-scale" class="modal-input"></select>
+        </label>
+        <!-- Text size sits in the third column, directly under Font. -->
+        <label class="field">
           <span data-i18n="tileSize">Text size</span>
           <!-- Options filled by JS: Automatic + 10..40 in steps of 2 -->
           <select id="tile-size" class="modal-input"></select>
         </label>
       </div>
-      <div class="field">
-        <div class="views-head">
-          <span data-i18n="viewsLabel">Views</span>
-          <label class="favview-toggle" data-i18n-title="favViewOption" data-i18n-aria="favViewOption">
-            <span data-i18n="favViewTitle">Favorites view</span>
-            <input id="opt-favview" type="checkbox" class="switch" />
-          </label>
-        </div>
-        <div id="views-editor" class="views-editor"></div>
-        <button id="view-add" class="ghost-btn" data-i18n="addView">+ Add view</button>
+      <div class="switch-grid">
+        <label class="field switch-field">
+          <span data-i18n="alwaysOnTop">Always on top</span>
+          <input id="opt-ontop" type="checkbox" class="switch" />
+        </label>
+        <label class="field switch-field">
+          <span data-i18n="minimizeOnClose">Minimize to background on close</span>
+          <input id="opt-minimize" type="checkbox" class="switch" />
+        </label>
+        <label class="field switch-field">
+          <span data-i18n="autostart">Start automatically at login</span>
+          <input id="opt-autostart" type="checkbox" class="switch" />
+        </label>
+        <label class="field switch-field">
+          <span data-i18n="startMinimized">Start minimized on autostart</span>
+          <input id="opt-startmin" type="checkbox" class="switch" />
+        </label>
+        <label class="field switch-field" data-i18n-title="tipAutoPaste">
+          <span data-i18n="autoPasteSetting">Auto-paste on double-click</span>
+          <input id="opt-autopaste" type="checkbox" class="switch" />
+        </label>
+        <label class="field switch-field" data-i18n-title="tipTooltips">
+          <span data-i18n="showTooltips">Show tooltips on hover</span>
+          <input id="opt-tooltips" type="checkbox" class="switch" />
+        </label>
+        <label class="field switch-field" data-i18n-title="tipScreenshotFolder">
+          <span data-i18n="screenshotToFolder">Always save screenshots to the Screenshots folder</span>
+          <input id="opt-screenshot-folder" type="checkbox" class="switch" />
+        </label>
+        <!-- Clipboard inbox lives in the expert menu + toolbar right-click only now;
+             Favorites view takes its slot here. -->
+        <label class="field switch-field" data-i18n-title="favViewOption">
+          <span data-i18n="favViewTitle">Favorites view</span>
+          <input id="opt-favview" type="checkbox" class="switch" />
+        </label>
       </div>
-      <label class="field switch-field">
-        <span data-i18n="alwaysOnTop">Always on top</span>
-        <input id="opt-ontop" type="checkbox" class="switch" />
-      </label>
-      <label class="field switch-field">
-        <span data-i18n="minimizeOnClose">Minimize to background on close</span>
-        <input id="opt-minimize" type="checkbox" class="switch" />
-      </label>
-      <label class="field switch-field">
-        <span data-i18n="autostart">Start automatically at login</span>
-        <input id="opt-autostart" type="checkbox" class="switch" />
-      </label>
-      <label class="field switch-field">
-        <span data-i18n="startMinimized">Start minimized on autostart</span>
-        <input id="opt-startmin" type="checkbox" class="switch" />
-      </label>
-      <label class="field switch-field">
-        <span data-i18n="screenshotToFolder">Always save screenshots to the Screenshots folder</span>
-        <input id="opt-screenshot-folder" type="checkbox" class="switch" />
-      </label>
-      <div class="field">
+      <!-- Global hotkey: its own full-width row directly under the toggle grid. -->
+      <div class="field field-inline">
         <span data-i18n="hotkeyLabel">Global hotkey (opens the Prompt list)</span>
         <div class="hotkey-row">
           <input id="opt-hotkey" class="modal-input" type="text" readonly data-i18n-ph="hotkeyPh" data-i18n-aria="hotkeyLabel" />
@@ -357,34 +509,31 @@
         </div>
       </div>
       <div id="impexp-field" class="field">
-        <span data-i18n="importExport">Import / export prompts</span>
         <div class="export-row">
-          <button id="import-btn" class="ghost-btn" data-i18n="import">Import</button>
+          <button id="import-btn" class="ghost-btn" data-i18n="import">Import prompts</button>
           <button id="export-csv" class="ghost-btn" data-i18n="exportCsv">CSV export</button>
           <button id="export-txt" class="ghost-btn" data-i18n="exportTxt">TXT export</button>
         </div>
-        <span class="impexp-sub" data-i18n="importExportAll">Backup everything (settings & prompts)</span>
         <div class="export-row">
-          <button id="import-all" class="ghost-btn" data-i18n="importAll">Import all</button>
-          <button id="export-all" class="ghost-btn" data-i18n="exportAll">Export all</button>
+          <button id="export-all" class="ghost-btn" data-i18n="backupSave">Save backup</button>
+          <button id="import-all" class="ghost-btn" data-i18n="backupImport">Import backup</button>
         </div>
       </div>
       <div id="updates-field" class="field">
-        <span data-i18n="updates">Updates</span>
         <div class="update-row">
-          <span id="update-status" class="update-status"></span>
-          <button id="update-btn" class="ghost-btn" data-i18n="checkUpdate">Check for updates</button>
           <label class="auto-update" data-i18n-title="autoUpdateHint">
             <span data-i18n="autoUpdate">Auto update</span>
             <input id="opt-autoupdate" type="checkbox" class="switch" />
           </label>
+          <button id="update-btn" class="ghost-btn" data-i18n="checkUpdate">Check for updates</button>
+          <button id="update-version" type="button" class="update-version" data-i18n-title="openReleases"></button>
+          <button id="settings-backup-btn" class="ghost-btn update-backup-btn" data-i18n="settingsBackupBtn" data-i18n-title="tipSettingsBackup">Backups</button>
         </div>
       </div>
-      <div class="field">
-        <button id="delete-all" class="ghost-btn danger-btn" data-i18n="deleteAll">Delete all prompts</button>
-      </div>
-      <div class="field">
+      <div class="field settings-btn-row">
         <button id="expert-open" class="ghost-btn" data-i18n="expertMenu">Expert menu</button>
+        <button id="reset-settings" class="ghost-btn danger-btn" data-i18n="resetSettings">Reset settings</button>
+        <button id="delete-data" class="ghost-btn danger-btn" data-i18n="deleteData">Delete all data</button>
       </div>
       </div><!-- /settings-main -->
       <div id="settings-expert" class="hidden">
@@ -403,22 +552,29 @@
   <!-- Add / rename / delete a view -->
   <div id="view-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal modal-narrow">
-      <div class="modal-head">
+      <div class="modal-titlebar">
         <h2 id="view-modal-title" class="modal-title" data-i18n="addView">Add view</h2>
-        <button id="view-modal-close" class="icon-btn" data-i18n-aria="close">
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <button id="view-modal-close" class="icon-btn modal-x" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
             <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
           </svg>
         </button>
       </div>
       <input id="view-modal-name" class="modal-input" type="text" maxlength="30" data-i18n-ph="viewNamePh" />
+      <div id="view-modal-grid-field" class="view-color-field hidden">
+        <span data-i18n="viewGrid">Grid (columns × rows)</span>
+        <span class="view-grid">
+          <input id="view-modal-cols" class="grid-mini" type="number" min="1" />
+          <span class="times">×</span>
+          <input id="view-modal-rows" class="grid-mini" type="number" min="1" />
+        </span>
+      </div>
       <div class="view-color-field">
         <span data-i18n="viewColor">Color</span>
         <div id="view-color-row" class="swatches"></div>
       </div>
       <div class="modal-actions">
         <button id="view-modal-delete" class="ghost-btn danger-btn hidden" data-i18n="delete">Delete</button>
-        <button id="view-modal-cancel" class="ghost-btn" data-i18n="cancel">Cancel</button>
         <button id="view-modal-confirm" class="primary-btn" data-i18n="save">Save</button>
       </div>
     </div>
@@ -461,12 +617,13 @@
         <span data-i18n="snipSaveCopied">Screenshot copied to clipboard.</span>
         <span data-i18n="snipSaveKeep">Keep it as a button?</span>
       </p>
-      <label class="field switch-field snip-folder-field">
-        <span data-i18n="screenshotToFolder">Save screenshots to the Screenshots folder</span>
-        <input id="snip-save-folder" type="checkbox" class="switch" />
-      </label>
       <div class="modal-actions">
         <button id="snip-modal-retry" class="ghost-btn" data-i18n="snipRetry">New screenshot</button>
+        <!-- Folder toggle sits at the bottom, immediately left of "Save as…". -->
+        <label class="snip-folder-inline" data-i18n-title="tipScreenshotFolder">
+          <span data-i18n="screenshotToFolder">Save screenshots to the Screenshots folder</span>
+          <input id="snip-save-folder" type="checkbox" class="switch" />
+        </label>
         <button id="snip-modal-saveas" class="ghost-btn" data-i18n="screenshotSaveAs">Save as…</button>
         <button id="snip-modal-yes" class="primary-btn" data-i18n="snipKeepBtn">Save as button</button>
       </div>
@@ -476,8 +633,16 @@
   <!-- Generic confirm dialog (e.g. discard unsaved changes) -->
   <div id="confirm-modal" class="overlay hidden" role="alertdialog" aria-modal="true">
     <div class="modal modal-narrow">
-      <h2 id="confirm-title" class="modal-title"></h2>
+      <div class="confirm-head">
+        <span id="confirm-icon" class="confirm-icon hidden" aria-hidden="true"></span>
+        <h2 id="confirm-title" class="modal-title"></h2>
+      </div>
       <p id="confirm-msg" class="confirm-msg"></p>
+      <!-- Optional input row (e.g. the password of a protected backup) -->
+      <div id="confirm-input-row" class="confirm-input-row hidden">
+        <input id="confirm-input" class="modal-input" type="password" autocomplete="off" />
+        <button id="confirm-input-eye" class="icon-btn pw-eye" type="button" tabindex="-1"></button>
+      </div>
       <div class="modal-actions">
         <button id="confirm-cancel" class="ghost-btn"></button>
         <button id="confirm-ok" class="primary-btn danger-confirm"></button>

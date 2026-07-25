@@ -1,6 +1,6 @@
 [package]
 name = "prompt-saver"
-version = "2.4.1"
+version = "2.6.2"
 description = "Local offline prompt manager"
 authors = ["BG Coding"]
 edition = "2021"
@@ -28,6 +28,16 @@ rfd = "0.15"
 sys-locale = "0.3"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico", "tiff", "tga", "gif"] }
 ureq = { version = "2", default-features = false, features = ["tls"] }
+# Verify the SHA-256 of a downloaded update against the hash published in the release.
+sha2 = "0.10"
+# Encrypted single-file backups: AES-256-GCM + Argon2id password KDF (pure Rust, no
+# system/OpenSSL dependency). Default backups use a fixed key (portable); an optional
+# user password derives a stronger key.
+aes-gcm = "0.10"
+argon2 = "0.5"
+rand = "0.8"
+# Backups are compressed before they are written (snapshots) or encrypted (.psb).
+flate2 = "1"
 # Screen capture for the built-in snipping tool (pure Rust, no external dll).
 xcap = "0.0.14"
 # Fast snip preview: SIMD JPEG (jpeg-encoder) + rayon to parallelize the BGRA→RGBA

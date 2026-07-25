@@ -20,7 +20,7 @@ const modal = {
   title: $("modal-title"),
   name: $("modal-name"),
   text: $("modal-text"),
-  cancel: $("modal-cancel"),
+  closeX: $("modal-close-x"),
   confirm: $("modal-confirm"),
   delete: $("modal-delete"),
   fav: $("modal-fav"),
@@ -72,13 +72,29 @@ let libQuery = ""; // prompt library search text
 let libType = "all"; // prompt library type filter
 let libColor = "all"; // prompt library color filter
 let libFav = false; // prompt library "favorites only" filter
+// F8 batch operations state.
+let libSelectMode = false;
+let libSelected = new Set();
+let libLastId = null;          // anchor for shift-click range select
+let libDisplayOrder = [];      // ids in current display order (for range select)
+let gridDirty = false;         // batch ops changed prompts; rebuild grid on library close
 let journalQuery = ""; // copy-history search text
 let journalType = "all"; // copy-history type filter
 let journalColor = "all"; // copy-history color filter
 let toastTimer = null;
 let deleteAllTimer = null;
+let resetSettingsTimer = null;
 let expertResetTimer = null;
-let versionLabel = ""; // "v1.6.0", shown in the update status
+let versionLabel = ""; // "Version 1.6.0", shown as the clickable releases link
+
+// Hide the settings modal and reset the Updates status line back to the version
+// number — unless a real update is pending (the "update available" state stays).
+// So a transient "already newest version" message doesn't linger after reopening.
+function hideSettings() {
+  settingsEl.classList.add("hidden");
+  const uv = $("update-version");
+  if (uv && versionLabel && !uv.classList.contains("update-avail")) uv.textContent = versionLabel;
+}
 
 // Surface unexpected errors as a toast instead of failing silently.
 window.addEventListener("error", (e) => toast(String(e.message)));
@@ -94,7 +110,7 @@ const CROSS =
 const GRID_PLUS =
   '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm12 0h2v3h3v2h-3v3h-2v-3h-3v-2h3v-3Z"/></svg>';
 const PLUS_ICON =
-  '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z"/></svg>';
+  '<svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>';
 // Corner badges marking what a tile copies (attached file / image).
 const ICON_FILE =
   '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21.2 11.2l-8.4 8.4a5.5 5.5 0 0 1-7.8-7.8l8.4-8.4a3.7 3.7 0 0 1 5.2 5.2l-8.4 8.4a1.9 1.9 0 0 1-2.6-2.6l7.7-7.7"/></svg>';
@@ -302,23 +318,27 @@ function hideToast() {
   setTimeout(() => toastEl.classList.add("hidden"), 200);
 }
 
+// Default toast icon (checkmark badge). Static, developer-controlled SVG.
+const TOAST_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+
 // Optional action: { label, onClick } adds a button and keeps the toast longer.
+// Every toast is now the same themed card (icon badge + message), matching the
+// update notification, so nothing looks like the old flat pill.
 function toast(msg, action = null) {
+  toastEl.textContent = "";
+  // Only actionable toasts capture clicks; plain ones stay click-through so they
+  // never block the UI underneath. The card layout lives on the base .toast now.
   toastEl.classList.toggle("actionable", !!action);
   toastEl.classList.toggle("update", !!(action && action.variant === "update"));
+  const ico = document.createElement("span");
+  ico.className = "toast-ico";
+  ico.innerHTML = (action && action.icon) ? action.icon : TOAST_ICON;
+  toastEl.appendChild(ico);
+  const label = document.createElement("span");
+  label.className = "toast-msg";
+  label.textContent = msg;
+  toastEl.appendChild(label);
   if (action) {
-    // Richer layout: optional icon badge + message + action button.
-    toastEl.textContent = "";
-    if (action.icon) {
-      const ico = document.createElement("span");
-      ico.className = "toast-ico";
-      ico.innerHTML = action.icon; // static, developer-controlled SVG
-      toastEl.appendChild(ico);
-    }
-    const label = document.createElement("span");
-    label.className = "toast-msg";
-    label.textContent = msg;
-    toastEl.appendChild(label);
     const btn = document.createElement("button");
     btn.className = "toast-btn";
     btn.textContent = action.label;
@@ -327,8 +347,6 @@ function toast(msg, action = null) {
       action.onClick();
     });
     toastEl.appendChild(btn);
-  } else {
-    toastEl.textContent = msg;
   }
   toastEl.classList.remove("hidden");
   void toastEl.offsetWidth;
@@ -377,9 +395,11 @@ function renderNumPop() {
   if (selected) selected.scrollIntoView({ block: "center" });
 }
 
-// CSS `zoom` on <body> (UI scale) shifts JS-positioned fixed popups; divide anchor
-// coords by it so popups stay aligned at any uiScale (no-op at 100%).
-const uiZoom = () => parseFloat(getComputedStyle(document.body).zoom) || 1;
+// UI scale now uses the WebView's NATIVE zoom (set from Rust, like Ctrl +/-), which
+// keeps event coords and getBoundingClientRect in one coordinate space — so
+// JS-positioned fixed popups need no compensation. Kept as a hook (always 1) so the
+// existing `/ z` call sites stay no-ops instead of being ripped out everywhere.
+const uiZoom = () => 1;
 
 function openNumPop(input, apply) {
   popInput = input;
@@ -575,32 +595,6 @@ function closeColorPop() {
   colorPop.classList.add("hidden");
 }
 
-// Floating preset palette anchored to a swatch button (views editor rows).
-const swatchPop = document.createElement("div");
-swatchPop.className = "swatch-pop swatches hidden";
-document.body.appendChild(swatchPop);
-function openSwatchPop(anchor, selected, onPick) {
-  buildSwatches(
-    swatchPop,
-    selected,
-    (hex) => { onPick(hex); closeSwatchPop(); },
-    (a, cur) => openColorPop(anchor, cur, (hex) => onPick(hex))
-  );
-  swatchPop.classList.remove("hidden");
-  const r = anchor.getBoundingClientRect();
-  const w = swatchPop.offsetWidth;
-  const z = uiZoom();
-  swatchPop.style.left = `${Math.min(r.left, window.innerWidth - w - 8) / z}px`;
-  swatchPop.style.top = `${(r.bottom + 6) / z}px`;
-}
-function closeSwatchPop() {
-  swatchPop.classList.add("hidden");
-}
-document.addEventListener("pointerdown", (e) => {
-  if (swatchPop.classList.contains("hidden")) return;
-  if (!swatchPop.contains(e.target) && !e.target.closest(".view-color-dot")) closeSwatchPop();
-});
-
 function cpDrag(e) {
   const r = cpSv.getBoundingClientRect();
   cp.s = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
@@ -675,6 +669,7 @@ const FLAG_LABELS = {
   tileHover: "flagTileHover",
   tilePreview: "flagTilePreview",
   iconTooltips: "flagIconTooltips",
+  tooltipDelay: "flagTooltipDelay",
   tooltipTimeout: "flagTooltipTimeout",
   typeBadges: "flagTypeBadges",
   captions: "flagCaptions",
@@ -702,6 +697,8 @@ const FLAG_LABELS = {
   confirmDiscard: "flagConfirmDiscard",
   showLogo: "flagShowLogo",
   showTitle: "flagShowTitle",
+  showLibrary: "library",   // top-bar library button visibility (toolbar menu)
+  showJournal: "journal",   // top-bar copy-history button visibility (toolbar menu)
   chainPrompts: "flagChainPrompts",
   showUpdates: "flagShowUpdates",
   importExport: "flagImportExport",
@@ -726,9 +723,23 @@ const FLAG_LABELS = {
   favViewReorder: "flagFavViewReorder",
   tileShadow: "flagTileShadow",
   tilePressScale: "flagTilePressScale",
+  tileHoverLift: "flagTileHoverLift",
   copyFlash: "flagCopyFlash",
   headerSeparators: "flagHeaderSeparators",
   cleanupFiles: "flagCleanupFiles",
+  // New features (default on).
+  lengthCounter: "flagLengthCounter",   // F16
+  smartSort: "flagSmartSort",           // F10
+  fuzzySearch: "flagFuzzySearch",       // F18
+  batchOps: "flagBatchOps",             // F8
+  promptHistory: "flagPromptHistory",   // F7
+  usageStats: "flagUsageStats",         // F11
+  dupFinder: "flagDupFinder",           // F6
+  dupImportCheck: "flagDupImportCheck", // F6
+  autoBackup: "flagAutoBackup",         // F2
+  autoPaste: "flagAutoPaste",           // F19 — normal setting now (default on)
+  // Checks at launch, but only while the normal auto-update setting is on.
+  checkUpdateOnStart: "flagCheckUpdateOnStart",
 };
 const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -749,7 +760,6 @@ const OPT_FLAG_LABELS = {
   // Appearance extras
   compactTiles: "flagCompactTiles",
   tileGradient: "flagTileGradient",
-  tileHoverLift: "flagTileHoverLift",
   accentHeader: "flagAccentHeader",
   frostedModals: "flagFrostedModals",
   hideScrollbars: "flagHideScrollbars",
@@ -765,6 +775,19 @@ const OPT_FLAG_LABELS = {
   dimMedia: "flagDimMedia",
   mediaBorder: "flagMediaBorder",
   roundMedia: "flagRoundMedia",
+  // New features (default off).
+  autoPasteEnter: "flagAutoPasteEnter", // F19
+  clipWatcher: "flagClipWatcher",       // F21
+  backupGfs: "flagBackupGfs",           // F2 period-based retention
+  // v2.6.0 additions (all default off → "(Standard Aus)").
+  editorMonospace: "flagEditorMonospace",       // monospace editor textarea
+  dimToolbar: "flagDimToolbar",                 // header dims until hovered
+  closeOnCopy: "flagCloseOnCopy",               // hide window after copying a prompt
+  dedupCopyLog: "flagDedupCopyLog",             // skip identical consecutive copies
+  autoBackupBeforeWipe: "flagAutoBackupBeforeWipe", // backup before reset/delete
+  // Keep the clipboard-inbox and copy-history buttons in the toolbar even while
+  // their feature is switched off, so the feature can be paused, not hidden.
+  pausedIcons: "flagPausedIcons",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const optFlag = (key) => settings.ui_flags?.[key] === true;
@@ -798,6 +821,9 @@ const EXPERT_VALUES = {
   videoVolume: { label: "valVideoVolume", min: 0, max: 100, step: 5, def: 100, unit: "%", gate: "!videoMuted" },
   animSpeed: { label: "valAnimSpeed", min: 0, max: 1000, step: 10, def: 150, unit: "ms", gate: "animations" },
   gridGap: { label: "valGridGap", min: 0, max: 60, step: 1, def: 8, unit: "px" },
+  gridPad: { label: "valGridPad", min: 0, max: 40, step: 1, def: 10, unit: "px" },
+  modalRadius: { label: "valModalRadius", min: 0, max: 28, step: 1, def: 14, unit: "px" },
+  overlayDim: { label: "valOverlayDim", min: 0, max: 80, step: 5, def: 40, unit: "%" },
   bubbleMs: { label: "valBubbleMs", min: 300, max: 6000, step: 50, def: 950, unit: "ms" },
   toastMs: { label: "valToastMs", min: 800, max: 10000, step: 100, def: 1400, unit: "ms" },
   previewLen: { label: "valPreviewLen", min: 0, max: 4000, step: 20, def: 600, unit: "" },
@@ -806,13 +832,16 @@ const EXPERT_VALUES = {
   floatOpacity: { label: "valFloatOpacity", min: 20, max: 100, step: 5, def: 100, unit: "%", gate: "floating" },
   // Custom tile tooltip max width (it wraps + grows taller instead of widening).
   tooltipWidth: { label: "valTooltipWidth", min: 180, max: 640, step: 10, def: 340, unit: "px", gate: "tilePreview" },
+  // How long the pointer must rest on an element before its tooltip appears, so a
+  // casual sweep across the window shows nothing (paired with tooltipDelay).
+  tooltipDelayMs: { label: "valTooltipDelay", min: 100, max: 2000, step: 50, def: 500, unit: "ms", gate: "tooltipDelay" },
   // How long the hover tooltip stays before auto-hiding (paired with tooltipTimeout).
   tooltipTimeoutMs: { label: "valTooltipTimeout", min: 2000, max: 60000, step: 1000, def: 15000, unit: "ms", gate: "tooltipTimeout" },
   // Appearance scales (percent, 100 = unchanged). Applied as CSS zoom.
   uiScale: { label: "valUiScale", min: 50, max: 300, step: 5, def: 100, unit: "%" },
   modalScale: { label: "valModalScale", min: 60, max: 300, step: 5, def: 100, unit: "%" },
   composerScale: { label: "valComposerScale", min: 60, max: 300, step: 5, def: 100, unit: "%" },
-  iconScale: { label: "valIconScale", min: 60, max: 300, step: 5, def: 100, unit: "%" },
+  iconScale: { label: "valIconScale", min: 50, max: 300, step: 5, def: 100, unit: "%" },
   primaryScale: { label: "valPrimaryScale", min: 60, max: 300, step: 5, def: 100, unit: "%" },
   // Max length for prompt names + captions (raise it for long labels).
   nameMaxLen: { label: "valNameMaxLen", min: 20, max: 1000, step: 10, def: 80, unit: "" },
@@ -839,7 +868,7 @@ const EXPERT_VALUES = {
   tileRadius: { label: "valTileRadius", min: 0, max: 30, step: 1, def: 10, unit: "px" },
   tileBorderWidth: { label: "valTileBorderWidth", min: 0, max: 6, step: 1, def: 1, unit: "px" },
   // Tile hover-lift travel (paired with the tileHoverLift toggle).
-  hoverLift: { label: "valHoverLift", min: 1, max: 12, step: 1, def: 2, unit: "px", gate: "tileHoverLift" },
+  hoverLift: { label: "valHoverLift", min: 1, max: 12, step: 1, def: 1, unit: "px", gate: "tileHoverLift" },
   // Header vertical padding + screenshot-preview max height.
   headerPadY: { label: "valHeaderPadY", min: 2, max: 30, step: 1, def: 10, unit: "px" },
   snipPreviewVh: { label: "valSnipPreviewVh", min: 30, max: 92, step: 1, def: 74, unit: "%", gate: "screenshot" },
@@ -855,16 +884,60 @@ const EXPERT_VALUES = {
   mediaDimOpacity: { label: "valMediaDim", min: 10, max: 95, step: 5, def: 80, unit: "%", gate: "dimMedia" },
   // Rounded-media corner radius (paired with the roundMedia toggle).
   mediaRadius: { label: "valMediaRadius", min: 0, max: 24, step: 1, def: 8, unit: "px", gate: "roundMedia" },
+  // F7 prompt version history: versions kept per prompt.
+  historyPerPrompt: { label: "valHistoryPerPrompt", min: 5, max: 100, step: 5, def: 20, unit: "", gate: "promptHistory" },
+  // F11 usage statistics: how many rows the top-N lists show.
+  statsTopN: { label: "valStatsTopN", min: 5, max: 100, step: 1, def: 10, unit: "", gate: "usageStats" },
+  // F6 duplicate finder: similarity threshold.
+  dupThreshold: { label: "valDupThreshold", min: 70, max: 100, step: 1, def: 90, unit: "%", gate: "dupFinder" },
+  // F2 automatic backups: how many rotating snapshots to keep.
+  backupKeep: { label: "valBackupKeep", min: 1, max: 50, step: 1, def: 10, unit: "", gate: "autoBackup" },
+  // F2 GFS retention tiers (kept per distinct day / week / month).
+  backupDaily: { label: "valBackupDaily", min: 0, max: 30, step: 1, def: 3, unit: "", gate: "backupGfs" },
+  backupWeekly: { label: "valBackupWeekly", min: 0, max: 52, step: 1, def: 4, unit: "", gate: "backupGfs" },
+  backupMonthly: { label: "valBackupMonthly", min: 0, max: 60, step: 1, def: 12, unit: "", gate: "backupGfs" },
+  // F19 auto-paste: SetForeground→Ctrl+V delay + double-click window.
+  autoPasteDelayMs: { label: "valAutoPasteDelay", min: 30, max: 300, step: 10, def: 80, unit: "ms", gate: "autoPaste" },
+  dblClickMs: { label: "valDblClick", min: 200, max: 600, step: 20, def: 400, unit: "ms", gate: "autoPaste" },
+  // F21 clipboard watcher: min length + inbox cap.
+  clipMinChars: { label: "valClipMin", min: 1, max: 100, step: 1, def: 3, unit: "", gate: "clipWatcher" },
+  clipInboxMax: { label: "valClipMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "clipWatcher" },
+  // Keyboard grid focus fades this long after the window loses focus.
+  kbFocusFadeMs: { label: "valKbFocusFade", min: 500, max: 10000, step: 500, def: 2000, unit: "ms", gate: "keyboardNav" },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
 const EXPERT_SELECTS = {
-  historyDays: { label: "valHistoryDays", options: [1, 3, 7, 30], def: 7, unit: "d", gate: "copyHistory" },
+  historyDays: { label: "valHistoryDays", options: [0, 7, 30, 90, 365], def: 0, unit: "d", zeroLabel: "retentionForever", gate: "copyHistory" },
+  // F2 backup interval (hours) — a preset-or-custom select right under backupKeep.
+  backupIntervalH: { label: "valBackupInterval", options: [6, 12, 24, 48, 168], def: 24, unit: "h", gate: "autoBackup" },
 };
+
+// Build a simple string-enum dropdown backed by ui_texts (default when unset).
+// `opts` is [[value, i18nLabelKey], …]. Used by expert enum params.
+function enumDropdown(key, labelKey, opts, def, gate) {
+  return {
+    label: labelKey,
+    gate,
+    options: () => opts.map(([v, lk]) => [v, t(lk)]),
+    get: () => settings.ui_texts?.[key] || def,
+    set: async (v) => {
+      settings.ui_texts = { ...(settings.ui_texts || {}), [key]: v };
+      try { await invoke("set_ui_text", { key, value: v }); } catch (e) { toast(String(e)); }
+      applyValues();
+    },
+  };
+}
 
 // Dropdowns like the settings' text-size / font selects. copySize lives in
 // ui_values (0 = auto-fit to the button), copyFont in ui_texts ("" = default).
 const EXPERT_DROPDOWNS = {
+  // F16 live counter unit selection.
+  counterUnits: enumDropdown("counterUnits", "valCounterUnits",
+    [["all", "optAll"], ["chars", "lenChars"], ["words", "lenWords"], ["tokens", "lenTokens"]], "all", "lengthCounter"),
+  // F18 fuzzy-search typo tolerance.
+  fuzzyMaxTypos: enumDropdown("fuzzyMaxTypos", "valFuzzyTypos",
+    [["auto", "optAuto"], ["1", "opt1"], ["2", "opt2"]], "auto", "fuzzySearch"),
   copySize: {
     label: "valCopySize",
     options: () => {
@@ -898,37 +971,45 @@ const EXPERT_DROPDOWNS = {
 // Expert menu organised into tabs (it has grown large — tabs keep it tidy).
 const EXPERT_TABS = [
   { title: "expTabGeneral", groups: [
-    { title: "expGroupCreate", flags: ["fileAttach", "screenshot", "pasteMedia", "dragDrop", "promptVars", "varDefaults"], values: ["snipPreviewVh"] },
-    { title: "expGroupWorkspace", flags: ["multiView", "quickGrid", "floating", "pinButton", "barToggles", "showLogo", "showTitle", "keyboardNav", "headerSeparators"], values: ["viewBorder", "floatOpacity"] },
-    { title: "expGroupSystem", flags: ["showUpdates", "importExport"] },
+    { title: "expGroupCreate", flags: ["fileAttach", "screenshot", "pasteMedia", "dragDrop", "promptVars", "varDefaults", "lengthCounter", "promptHistory", "storeFiles", "editorMonospace"], values: ["snipPreviewVh", "historyPerPrompt"], dropdowns: ["counterUnits"], paths: ["screenshotDir"] },
+    { title: "expGroupWorkspace", flags: ["floating", "keyboardNav", "headerSeparators", "dimToolbar"], values: ["floatOpacity", "kbFocusFadeMs"] },
+    { title: "expGroupSystem", flags: ["showUpdates", "checkUpdateOnStart"] },
   ] },
   { title: "expTabTiles", groups: [
-    { title: "expGroupTiles", flags: ["tileMenu", "tileHover", "tilePreview", "iconTooltips", "tooltipTimeout", "typeBadges", "captions", "copyBubble", "copyFlash", "tileReorder", "tileShadow", "tilePressScale", "chainPrompts", "chainLock"], values: ["copyCooldownMs", "tileRadius", "tileBorderWidth", "tooltipWidth", "tooltipTimeoutMs"] },
-    { title: "expGroupFavorites", flags: ["favViewButton", "favViewReorder"], values: ["favStarSize", "favMaxCols"] },
-    { title: "expGroupExtras", flags: ["storeFiles", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow"] },
+    // Split by what a setting actually does: acting on a tile, the hover tooltip,
+    // and pure looks. One 26-entry blob made everything hard to find.
+    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "copyBubble", "copyFlash", "closeOnCopy", "chainPrompts", "chainLock", "autoPasteEnter"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"] },
+    { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipDelay", "tooltipTimeout"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
+    { title: "expGroupTileLook", flags: ["tileHover", "tileHoverLift", "tilePressScale", "tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow"], values: ["hoverLift", "tileRadius", "tileBorderWidth"] },
+    { title: "expGroupFavorites", flags: ["favorites", "favViewButton", "favViewReorder"], values: ["favStarSize", "favMaxCols"] },
   ] },
   { title: "expTabAppearance", groups: [
     { title: "expGroupScale", values: ["uiScale", "modalScale", "composerScale", "iconScale", "primaryScale"] },
-    { title: "expGroupVisual", flags: ["animations"], values: ["animSpeed", "gridGap", "headerPadY"], dropdowns: ["copySize", "copyFont"] },
+    { title: "expGroupVisual", flags: ["animations", "accentHeader", "hideScrollbars", "accentScrollbar", "smoothScroll", "frostedModals"], values: ["animSpeed", "gridGap", "gridPad", "headerPadY", "modalRadius", "overlayDim", "scrollbarWidth", "frostedBlur"], dropdowns: ["copySize", "copyFont"] },
     { title: "expGroupColors", palette: true },
     { title: "expGroupLimits", values: ["maxViews", "gridMax", "previewLen", "nameMaxLen", "bubbleMs", "toastMs"] },
-    { title: "expGroupExtrasLook", flags: ["compactTiles", "tileGradient", "tileHoverLift", "accentHeader", "hideScrollbars", "accentScrollbar", "smoothScroll", "frostedModals"], values: ["hoverLift", "scrollbarWidth", "frostedBlur"] },
   ] },
   { title: "expTabLibrary", groups: [
-    { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "libraryTypeFilter", "colorFilter", "favorites", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "libraryColsToggle", "confirmDiscard"], values: ["searchRecentMax", "libraryMaxCols", "libraryWidth"] },
-    { title: "expGroupPrivacy", flags: ["captureExclusion", "copyHistory", "historyTimestamps", "historyGrouped", "cleanupFiles"], values: ["historyMax", "journalLimit"], selects: ["historyDays"], paths: ["screenshotDir", "dataDir"] },
-    { title: "expGroupJournal", flags: ["journalSearch", "journalTypeFilter", "journalColorFilter", "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"] },
-    { title: "expGroupExtrasPrivacy", flags: ["blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
+    { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "libraryColsToggle", "confirmDiscard"], values: ["searchRecentMax", "libraryMaxCols", "libraryWidth"], dropdowns: ["fuzzyMaxTypos"] },
+    // Everything that records or shows copy history lives with the history view.
+    { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalLimit"], selects: ["historyDays"] },
+    { title: "expGroupPrivacy", flags: ["captureExclusion", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
   ] },
   { title: "expTabMedia", groups: [
-    { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop"], values: ["videoVolume"] },
-    { title: "expGroupExtrasMedia", flags: ["grayscaleMedia", "dimMedia", "mediaBorder", "roundMedia"], values: ["mediaDimOpacity", "mediaRadius"] },
+    { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "grayscaleMedia", "dimMedia", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaDimOpacity", "mediaRadius"] },
+  ] },
+  { title: "expTabTools", groups: [
+    // Toolbar button visibility (mirrors the header right-click tool list).
+    { title: "expGroupToolbar", flags: ["multiView", "quickGrid", "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons"], values: ["viewBorder"] },
+    { title: "expGroupData", flags: ["dupFinder", "dupImportCheck", "autoBackupBeforeWipe", "cleanupFiles", "importExport"], values: ["dupThreshold"], paths: ["dataDir"],
+      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }] },
+    { title: "expGroupClipboard", flags: ["clipWatcher"], values: ["clipMinChars", "clipInboxMax"] },
   ] },
 ];
 
 const flag = (key) => settings.ui_flags?.[key] !== false;
 const val = (key) => {
-  const cfg = EXPERT_VALUES[key];
+  const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key]; // selects live in ui_values too
   const raw = settings.ui_values?.[key];
   const v = Number.isFinite(raw) ? raw : cfg.def;
   // Clamp to the setting's own range so no stored/imported value can push a
@@ -955,16 +1036,28 @@ function applyFlags() {
   if (chainMode && !flag("chainPrompts")) setChainMode(false); // killed in expert menu
   if (chainLock && !flag("chainLock")) { chainLock = false; $("chain-btn")?.classList.remove("chain-locked"); }
   applyValues();
+  refreshClipInbox(); // F21: reflect the watcher toggle + badge count
 }
 
 // Apply every numeric tweak to its live target (CSS vars + JS constants).
+let _lastUiZoom = null; // last native-zoom factor pushed to the backend (throttle)
 function applyValues() {
   const root = document.documentElement.style;
   root.setProperty("--transition", `${val("animSpeed")}ms cubic-bezier(0.4, 0, 0.2, 1)`);
   root.setProperty("--gap", `${val("gridGap")}px`);
+  root.setProperty("--grid-pad", `${val("gridPad")}px`);
+  root.setProperty("--modal-radius", `${val("modalRadius")}px`);
+  root.setProperty("--overlay-dim", String(val("overlayDim") / 100));
   root.setProperty("--view-border", `${val("viewBorder")}px`);
-  // Appearance scales (CSS zoom; 1 = unchanged).
-  root.setProperty("--ui-zoom", val("uiScale") / 100);
+  // Appearance scales. UI scale drives the WebView's native zoom (robust); the rest
+  // stay CSS `zoom` on their own elements (1 = unchanged). Only push the native zoom
+  // when it actually changed — applyValues runs on every slider tick, and a redundant
+  // IPC per tick would flood the backend while dragging an unrelated value.
+  const uiZoomFactor = val("uiScale") / 100;
+  if (uiZoomFactor !== _lastUiZoom) {
+    _lastUiZoom = uiZoomFactor;
+    invoke("set_ui_zoom", { factor: uiZoomFactor }).catch(() => {});
+  }
   root.setProperty("--modal-zoom", val("modalScale") / 100);
   root.setProperty("--composer-zoom", val("composerScale") / 100);
   root.setProperty("--icon-zoom", val("iconScale") / 100);
@@ -996,11 +1089,56 @@ function applyValues() {
   setMediaDefaults({ volume: val("videoVolume"), muted: flag("videoMuted"), looped: flag("videoLoop") });
 }
 
+// Expert settings whose name alone doesn't explain what they do get a themed
+// tooltip (the hover engine picks up [title] and styles it). Key -> i18n tip key,
+// convention tip<Key>. Self-explanatory settings are deliberately left out.
+const EXPERT_TIPS = [
+  // General / creating
+  "storeFiles", "varDefaults", "lengthCounter", "promptHistory", "editorMonospace",
+  "checkUpdateOnStart", "showUpdates", "importExport", "dimToolbar", "keyboardNav",
+  "headerSeparators", "floating",
+  // Tiles / copying
+  "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale",
+  "tileReorder", "chainPrompts", "chainLock", "autoPasteEnter", "closeOnCopy",
+  "tooltipDelay", "tooltipTimeout", "iconTooltips",
+  // Appearance
+  "frostedModals", "accentHeader", "accentScrollbar", "hideScrollbars", "smoothScroll",
+  "compactTiles", "tileHoverLift", "gridLines", "pausedIcons",
+  // Library / privacy
+  "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus",
+  "closeAfterCopy", "libraryCloseToggle", "libraryColsToggle", "confirmDiscard",
+  "captureExclusion", "copyHistory", "historyTimestamps", "historyGrouped",
+  "dedupCopyLog", "cleanupFiles", "dimUnhovered", "blurTilesUntilHover",
+  "blurMediaUntilHover", "hideTileNames",
+  // Tools / data
+  "dupFinder", "dupImportCheck", "autoBackupBeforeWipe", "clipWatcher", "backupGfs",
+  "usageStats",
+  // Values that need a unit/behaviour explanation
+  "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "kbFocusFadeMs", "snipPreviewVh",
+  "historyPerPrompt", "dupThreshold", "clipMinChars", "clipInboxMax", "historyMax",
+  "journalLimit", "previewLen", "nameMaxLen", "searchRecentMax", "maxViews", "gridMax",
+  "viewBorder", "statsTopN",
+];
+const EXPERT_TIP_SET = new Set(EXPERT_TIPS);
+// Attach the tooltip for `key` to a rendered expert row, if one is defined.
+function withTip(row, key) {
+  if (!EXPERT_TIP_SET.has(key)) return row;
+  const tipKey = `tip${key[0].toUpperCase()}${key.slice(1)}`;
+  const tip = t(tipKey);
+  // t() falls back to the key name itself, so never show a raw "tipFoo" as a tooltip.
+  if (tip && tip !== tipKey) row.title = tip; // hover engine themes any [title]
+  return row;
+}
+
 function flagRow(key) {
   const row = document.createElement("label");
   row.className = "field switch-field";
+  withTip(row, key);
   const span = document.createElement("span");
   span.textContent = t(flagLabelKey(key));
+  // Features that ship OFF by default (opt-in flags) get a "(Standard Aus)" tag so it's
+  // clear at a glance which settings are additions beyond the standard configuration.
+  if (OPT_FLAG_KEYS.includes(key)) span.textContent += ` ${t("defaultOff")}`;
   const input = document.createElement("input");
   input.type = "checkbox";
   input.className = "switch";
@@ -1014,29 +1152,39 @@ function flagRow(key) {
       toast(String(err));
     }
     applyFlags();
-    renderExpert(); // reveal/hide this feature's gated parameter rows live
+    if (GATING_FLAGS.has(key)) renderExpert(); // reveal/hide its parameter rows live
     renderViews();
-    await renderGrid(true);
+    // Only these two flags change what a tile contains; the rest are body classes,
+    // so a full grid rebuild (and its flash) is unnecessary.
+    if (key === "tilePreview" || key === "captions") await renderGrid(true);
+    else fitAllTiles();
   });
   row.append(span, input);
   return row;
 }
 
-// Live slider preview: reflect the value visually while dragging (CSS vars + one
-// grid re-render per frame), then persist it on release.
+// Almost every expert value only drives a CSS variable, so rebuilding the whole grid
+// for it threw away and recreated every tile — visible as a flash through the
+// translucent settings overlay. Only these actually change tile DOM.
+const GRID_DOM_VALUES = new Set(["previewLen", "gridMax"]);
+// Re-fit the tile text to the new box size without touching the DOM.
+const refreshTiles = (key) => (GRID_DOM_VALUES.has(key) ? renderGrid(true) : (fitAllTiles(), undefined));
+
+// Live slider preview: reflect the value visually while dragging (CSS vars + at most
+// one refit per frame), then persist it on release.
 let liveRenderQueued = false;
 function previewValue(key, value) {
   settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
   applyValues();
   if (liveRenderQueued) return;
   liveRenderQueued = true;
-  requestAnimationFrame(() => { liveRenderQueued = false; renderGrid(true); });
+  requestAnimationFrame(() => { liveRenderQueued = false; refreshTiles(key); });
 }
 async function commitValue(key, value) {
   settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
   try { await invoke("set_ui_value", { key, value }); } catch (err) { toast(String(err)); }
   applyValues();
-  await renderGrid(true);
+  await refreshTiles(key);
 }
 
 function valueRow(key) {
@@ -1044,6 +1192,7 @@ function valueRow(key) {
   const fmt = (v) => `${v}${cfg.unit}`;
   const row = document.createElement("div");
   row.className = "field value-field";
+  withTip(row, key);
   const head = document.createElement("div");
   head.className = "value-head";
   const span = document.createElement("span");
@@ -1084,7 +1233,8 @@ function selectRow(key) {
   const cfg = EXPERT_SELECTS[key];
   const cur = Number.isFinite(settings.ui_values?.[key]) ? settings.ui_values[key] : cfg.def;
   const row = document.createElement("div");
-  row.className = "field value-field";
+  row.className = "field value-field expert-dropdown-row"; // label left of the dropdown
+  withTip(row, key);
   const head = document.createElement("div");
   head.className = "value-head";
   const span = document.createElement("span");
@@ -1095,7 +1245,8 @@ function selectRow(key) {
   for (const o of cfg.options) {
     const opt = document.createElement("option");
     opt.value = String(o);
-    opt.textContent = `${o}${cfg.unit}`;
+    // A 0-stop can carry a special label (e.g. retention "∞ forever") instead of "0d".
+    opt.textContent = o === 0 && cfg.zeroLabel ? t(cfg.zeroLabel) : `${o}${cfg.unit}`;
     sel.appendChild(opt);
   }
   const customOpt = document.createElement("option");
@@ -1138,7 +1289,8 @@ function selectRow(key) {
 function dropdownRow(key) {
   const cfg = EXPERT_DROPDOWNS[key];
   const row = document.createElement("div");
-  row.className = "field value-field";
+  row.className = "field value-field expert-dropdown-row"; // label left of the dropdown
+  withTip(row, key);
   const head = document.createElement("div");
   head.className = "value-head";
   const span = document.createElement("span");
@@ -1166,6 +1318,7 @@ let defaultScreenshotDir = "";
 const EXPERT_PATHS = {
   screenshotDir: {
     label: "valScreenshotDir",
+    gate: "screenshot", // no folder picker when the screenshot tool is off
     get: () => settings.ui_texts?.screenshotDir || defaultScreenshotDir,
     change: async () => {
       const dir = await invoke("pick_folder").catch(() => null);
@@ -1306,7 +1459,18 @@ const EXPERT_LABEL_KEYS = {
   paths: (k) => EXPERT_PATHS[k].label,
 };
 // The def a given setting kind lives in — so its optional `gate` can be read.
-const EXPERT_DEFS = { values: EXPERT_VALUES, selects: EXPERT_SELECTS, dropdowns: EXPERT_DROPDOWNS };
+const EXPERT_DEFS = { values: EXPERT_VALUES, selects: EXPERT_SELECTS, dropdowns: EXPERT_DROPDOWNS, paths: EXPERT_PATHS };
+// Flags that own gated rows. Only those change the menu's shape when toggled, so
+// only those need a re-render — the rest are body classes and re-rendering the
+// whole tab for them just made the list flicker.
+const GATING_FLAGS = new Set(
+  [
+    ...Object.values(EXPERT_DEFS).flatMap((defs) => Object.values(defs).map((d) => d.gate)),
+    ...EXPERT_TABS.flatMap((tab) => tab.groups.flatMap((g) => (g.actions || []).map((a) => a.gate))),
+  ].filter(Boolean).map((g) => g.replace(/^!/, ""))
+);
+// Expert-menu action buttons (id -> handler); populated by the features that own them.
+const EXPERT_ACTIONS = {};
 // A search matches if the term is in the active language OR in English — English
 // is the lingua franca, so a non-native speaker's query still finds the setting.
 function i18nHit(key, q) {
@@ -1314,21 +1478,27 @@ function i18nHit(key, q) {
 }
 
 // The "off by default" extras groups start folded (kept tidy until wanted).
-const DEFAULT_COLLAPSED_GROUPS = ["expGroupExtras", "expGroupExtrasLook", "expGroupExtrasPrivacy", "expGroupExtrasMedia"];
+const DEFAULT_COLLAPSED_GROUPS = [];
 // Collapsed expert categories, persisted as a JSON title list in ui_texts. Unset
-// (first ever open) → the extras groups collapsed; after that the stored list wins.
+// (first ever open) → everything expanded; after that the stored list wins.
 function expertCollapsedSet() {
   const stored = settings.ui_texts?.expertCollapsed;
   if (stored == null) return new Set(DEFAULT_COLLAPSED_GROUPS);
   try { return new Set(JSON.parse(stored)); } catch (_) { return new Set(); }
 }
-function toggleExpertGroup(title) {
+// Collapsing is a pure CSS state, so flip the class on the section itself. Going
+// through renderExpert() rebuilt the whole tab (and re-fetched the backup/stats
+// panels), which flashed on every click.
+function toggleExpertGroup(title, sec, fill) {
   const set = expertCollapsedSet();
-  set.has(title) ? set.delete(title) : set.add(title);
+  const collapsed = !set.has(title); // the state we are switching to
+  collapsed ? set.add(title) : set.delete(title);
   const value = JSON.stringify([...set]);
   settings.ui_texts = { ...(settings.ui_texts || {}), expertCollapsed: value };
   invoke("set_ui_text", { key: "expertCollapsed", value }).catch(() => {});
-  renderExpert();
+  if (!sec) { renderExpert(); return; }
+  sec.classList.toggle("collapsed", collapsed);
+  if (!collapsed) fill?.(); // custom panels fill on first open
 }
 
 function renderExpert() {
@@ -1372,7 +1542,8 @@ function renderExpert() {
       const dropdowns = keep("dropdowns");
       const paths = keep("paths");
       const palette = group.palette && (!searching || groupHit || i18nHit("expGroupColors", q));
-      if (searching && !flags.length && !values.length && !selects.length && !dropdowns.length && !paths.length && !palette) continue;
+      const actions = (group.actions || []).filter((a) => searching ? (groupHit || i18nHit(a.label, q)) : gateOpen(a.gate));
+      if (searching && !flags.length && !values.length && !selects.length && !dropdowns.length && !paths.length && !palette && !actions.length) continue;
       shown++;
       // Categories collapse on click (persisted); searching always shows them.
       const isCollapsed = !searching && collapsed.has(group.title);
@@ -1383,7 +1554,7 @@ function renderExpert() {
       head.textContent = t(group.title);
       if (!searching) {
         head.classList.add("collapsible");
-        head.addEventListener("click", () => toggleExpertGroup(group.title));
+        head.addEventListener("click", () => toggleExpertGroup(group.title, sec));
       }
       sec.appendChild(head);
       if (searching) {
@@ -1400,13 +1571,19 @@ function renderExpert() {
           return g && g[0] !== "!" && (group.flags || []).includes(g) ? g : null;
         };
         const owned = {};
-        const orphan = { values: [], selects: [] };
-        for (const k of values) { const o = ownerIn("values", k); (o ? (owned[o] ||= []) : orphan.values).push(["values", k]); }
-        for (const k of selects) { const o = ownerIn("selects", k); (o ? (owned[o] ||= []) : orphan.selects).push(["selects", k]); }
-        const render = ([kind, k]) => sec.appendChild(kind === "selects" ? selectRow(k) : valueRow(k));
+        const orphan = { values: [], selects: [], paths: [] };
+        for (const kind of ["values", "selects", "paths"]) {
+          for (const k of { values, selects, paths }[kind]) {
+            const o = ownerIn(kind, k);
+            (o ? (owned[o] ||= []) : orphan[kind]).push([kind, k]);
+          }
+        }
+        const ROW = { selects: selectRow, paths: pathRow, values: valueRow };
+        const render = ([kind, k]) => sec.appendChild(ROW[kind](k));
         for (const key of flags) { sec.appendChild(flagRow(key)); (owned[key] || []).forEach(render); }
         orphan.values.forEach(render);
         orphan.selects.forEach(render);
+        orphan.paths.forEach(render);
       }
       if (dropdowns.length) {
         const pair = document.createElement("div");
@@ -1414,8 +1591,16 @@ function renderExpert() {
         for (const key of dropdowns) pair.appendChild(dropdownRow(key));
         sec.appendChild(pair);
       }
-      for (const key of paths) sec.appendChild(pathRow(key));
+      if (searching) for (const key of paths) sec.appendChild(pathRow(key));
       if (palette) sec.appendChild(paletteRow());
+      for (const a of actions) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ghost-btn expert-action";
+        btn.textContent = t(a.label);
+        btn.addEventListener("click", () => EXPERT_ACTIONS[a.id]?.());
+        sec.appendChild(btn);
+      }
       box.appendChild(sec);
     }
   }
@@ -1451,6 +1636,9 @@ function showExpertPage(on) {
   $("settings-main").classList.toggle("hidden", on);
   $("settings-expert").classList.toggle("hidden", !on);
   $("expert-back").classList.toggle("hidden", !on);
+  // Expert rows are single-line; keep the panel ~2 columns wide instead of the
+  // wider 3-across settings width.
+  settingsEl.classList.toggle("expert-active", on);
   $("settings-title").textContent = on ? t("expertMenu") : t("settings");
   if (on) renderExpert();
 }
@@ -1720,8 +1908,10 @@ const viewModal = {
   title: $("view-modal-title"),
   name: $("view-modal-name"),
   colorRow: $("view-color-row"),
+  gridField: $("view-modal-grid-field"),
+  cols: $("view-modal-cols"),
+  rows: $("view-modal-rows"),
   confirm: $("view-modal-confirm"),
-  cancel: $("view-modal-cancel"),
   delete: $("view-modal-delete"),
   close: $("view-modal-close"),
 };
@@ -1741,9 +1931,18 @@ function openViewModal(view) {
   viewModalId = view ? view.id : null;
   viewModalColor = view ? (view.color || "") : "";
   // The add-view label carries a leading "+"; the popup title drops it.
-  viewModal.title.textContent = view ? t("renameView") : t("addView").replace(/^\+\s*/, "");
+  viewModal.title.textContent = view ? t("editViewTitle") : t("addView").replace(/^\+\s*/, "");
   viewModal.name.value = view ? view.name : "";
   renderViewColor();
+  // Grid size (columns × rows) is editable only for an existing view — a new one
+  // starts at the default and can be resized here afterwards.
+  viewModal.gridField.classList.toggle("hidden", !view);
+  if (view) {
+    const gm = val("gridMax");
+    viewModal.cols.max = gm; viewModal.rows.max = gm;
+    viewModal.cols.value = String(view.cols);
+    viewModal.rows.value = String(view.rows);
+  }
   // Delete only when editing and at least two views remain.
   const canDelete = !!view && settings.views.length > 1;
   viewModal.delete.classList.toggle("hidden", !canDelete);
@@ -1764,7 +1963,12 @@ async function confirmViewModal() {
   try {
     if (viewModalId) {
       await invoke("rename_view", { id: viewModalId, name });
-      settings = await invoke("set_view_color", { id: viewModalId, color: viewModalColor });
+      await invoke("set_view_color", { id: viewModalId, color: viewModalColor });
+      // Apply the grid size too (clamped to the expert gridMax).
+      const view = settings.views.find((v) => v.id === viewModalId);
+      const cols = clampGrid(viewModal.cols.value, view?.cols ?? 1);
+      const rows = clampGrid(viewModal.rows.value, view?.rows ?? 1);
+      settings = await invoke("set_view_grid", { id: viewModalId, cols, rows });
     } else {
       settings = await invoke("add_view", { name, color: viewModalColor });
     }
@@ -1774,7 +1978,6 @@ async function confirmViewModal() {
   }
   closeViewModal();
   renderViews();
-  renderViewsEditor();
   await renderGrid(true);
 }
 
@@ -1885,13 +2088,68 @@ function onChainClick() {
 // name + preview + hint layout.
 let tipEl = null;
 let tipCur = null;   // element the tooltip is currently anchored to
-let tipTimer = null;
+let tipTimer = null;   // auto-hide (AFK) timer once a tip is shown
+let tipShowTimer = null; // hover show-delay timer before a tip appears
+let tipPending = null;   // element whose tip is scheduled but not yet shown
 let tipExpired = null; // element whose tooltip timed out; suppressed until another is hovered
+let tipPtrX = 0, tipPtrY = 0; // last pointer position (a delayed tip places here)
+function clearTipShow() {
+  if (tipShowTimer) { clearTimeout(tipShowTimer); tipShowTimer = null; }
+  tipPending = null;
+}
 function hideTileTip() {
   tipCur = null;
+  clearTipShow();
   if (tipTimer) { clearTimeout(tipTimer); tipTimer = null; }
   tipEl?.classList.remove("show");
 }
+// A greyed clear-X inside a text field: brightens on hover, empties the field on
+// click. Wraps the input so the button can sit at its right edge.
+const CLEAR_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M7 7l10 10M17 7 7 17"/></svg>';
+// Dialog icons: a stack of records for the data take-over, a padlock for the
+// password prompt.
+const TAKEOVER_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7.5" ry="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4.5 5.5v13c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-13M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/></svg>';
+const LOCK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.6" fill="currentColor"/></svg>';
+// Reveal toggle for password fields (backup settings + the restore prompt).
+const EYE_SVG ='<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+function wireClear(el) {
+  if (!el || el.dataset.clearWired || el.readOnly) return;
+  const isTa = el.tagName === "TEXTAREA";
+  if (!isTa) {
+    const type = (el.getAttribute("type") || "text").toLowerCase();
+    if (!["text", "search", "number", ""].includes(type)) return;
+    if (el.classList.contains("grid-mini")) return; // too tiny for an X
+  }
+  el.dataset.clearWired = "1";
+  const wrap = document.createElement("span");
+  wrap.className = "clear-wrap" + (isTa ? " clear-wrap-ta" : "");
+  el.parentNode.insertBefore(wrap, el);
+  wrap.appendChild(el);
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "clear-btn";
+  btn.tabIndex = -1;
+  btn.setAttribute("aria-label", t("clearField"));
+  btn.innerHTML = CLEAR_SVG;
+  wrap.appendChild(btn);
+  const upd = () => btn.classList.toggle("show", !!el.value);
+  el.addEventListener("input", upd);
+  btn.addEventListener("mousedown", (e) => e.preventDefault()); // keep focus
+  btn.addEventListener("click", () => {
+    el.value = "";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.focus();
+    upd();
+  });
+  upd();
+}
+// Wire every text/number input + textarea (idempotent) — call again after any render
+// that creates new fields (expert menu, dialogs, backups panel).
+function wireClearButtons(root = document) {
+  const sel = "input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=range]), textarea";
+  for (const el of root.querySelectorAll(sel)) wireClear(el);
+}
+
 function wireTooltips() {
   tipEl = document.createElement("div");
   tipEl.className = "tile-tip";
@@ -1902,48 +2160,112 @@ function wireTooltips() {
   const bodyEl = tipEl.querySelector(".tile-tip-body");
   const hintEl = tipEl.querySelector(".tile-tip-hint");
   const OFF = 16, PAD = 12;
-  const place = (e) => {
+  const placeAt = (cx, cy) => {
     const r = tipEl.getBoundingClientRect();
-    let x = e.clientX + OFF;
-    let y = e.clientY + OFF;
-    if (x + r.width + PAD > innerWidth) x = e.clientX - OFF - r.width;
-    if (y + r.height + PAD > innerHeight) y = e.clientY - OFF - r.height;
+    let x = cx + OFF;
+    let y = cy + OFF;
+    if (x + r.width + PAD > innerWidth) x = cx - OFF - r.width;
+    if (y + r.height + PAD > innerHeight) y = cy - OFF - r.height;
     const z = uiZoom(); // fixed popup lives inside the zoomed body
     tipEl.style.left = `${Math.max(PAD, x) / z}px`;
     tipEl.style.top = `${Math.max(PAD, y) / z}px`;
   };
-  document.addEventListener("pointerover", (e) => {
-    if (drag) return; // no hover hints mid-drag
-    const el = e.target.closest?.("[data-tip-name], [data-tip], [title]");
-    if (!el) { if (tipCur) hideTileTip(); return; }
-    if (el.hasAttribute("title")) { el.dataset.tip = el.getAttribute("title"); el.removeAttribute("title"); }
+  // Actually reveal the tip for `el` (called immediately or after the show-delay).
+  const showNow = (el) => {
     const rich = !!el.dataset.tipName;
-    if (!rich && !flag("iconTooltips")) { hideTileTip(); return; } // icon hints off
     const name = el.dataset.tipName || el.dataset.tip || "";
-    if (!name) { hideTileTip(); return; }
-    if (el === tipCur) return;     // already showing on this element
-    if (el === tipExpired) return; // timed out here — hover elsewhere to reset
+    if (!name) return;
     tipExpired = null;
     tipCur = el;
     // Plain (icon/label) tooltips get a compact single-line style; tiles get the
     // richer name + preview + hint box.
     tipEl.classList.toggle("plain", !rich);
-    nameEl.textContent = name;
-    bodyEl.textContent = rich ? (el.dataset.tipBody || "") : "";
-    hintEl.textContent = rich ? t("tileTooltip") : "";
-    place(e);
+    if (rich) {
+      nameEl.textContent = name;
+      bodyEl.textContent = el.dataset.tipBody || "";
+      hintEl.textContent = t("tileTooltip") + (flag("autoPaste") ? " · " + t("autoPasteHint") : "");
+    } else {
+      // Plain setting/icon tip: break "<lead sentence>. <details>" into two tidy
+      // paragraphs (e.g. the "Expert menu: …" clause drops onto its own line).
+      const sp = name.indexOf(". ");
+      if (sp > 0 && sp < name.length - 2) {
+        nameEl.textContent = name.slice(0, sp + 1);
+        bodyEl.textContent = name.slice(sp + 2);
+      } else {
+        nameEl.textContent = name;
+        bodyEl.textContent = "";
+      }
+      hintEl.textContent = "";
+    }
+    placeAt(tipPtrX, tipPtrY);
     tipEl.classList.add("show");
     // AFK cleanness: auto-hide after the timeout, then don't reshow on this same
     // element until the pointer visits a different one.
     if (flag("tooltipTimeout")) {
       tipTimer = setTimeout(() => { tipExpired = el; hideTileTip(); }, val("tooltipTimeoutMs"));
     }
+  };
+  document.addEventListener("pointerover", (e) => {
+    if (drag) return; // no hover hints mid-drag
+    if (!flag("tooltipsEnabled")) { if (tipCur || tipPending) hideTileTip(); return; } // master switch off
+    const el = e.target.closest?.("[data-tip-name], [data-tip], [title]");
+    // Minimize/maximize/close never get a hint — they are universally understood
+    // and a tooltip right under the cursor there is only in the way.
+    if (!el || el.closest(".win-controls")) { if (tipCur) hideTileTip(); clearTipShow(); return; }
+    if (el.hasAttribute("title")) { el.dataset.tip = el.getAttribute("title"); el.removeAttribute("title"); }
+    const rich = !!el.dataset.tipName;
+    if (!rich && !flag("iconTooltips")) { hideTileTip(); return; } // icon hints off
+    const name = el.dataset.tipName || el.dataset.tip || "";
+    if (!name) { hideTileTip(); return; }
+    if (el === tipCur) return;     // already showing on this element
+    if (el === tipPending) return; // already scheduled for this element
+    if (el === tipExpired) return; // timed out here — hover elsewhere to reset
+    // New target: drop any pending/showing tip, then (re)arm the show-delay so
+    // casually sweeping the pointer across the window shows nothing.
+    clearTipShow();
+    if (tipCur && tipCur !== el) hideTileTip();
+    tipPtrX = e.clientX; tipPtrY = e.clientY;
+    const delay = flag("tooltipDelay") ? val("tooltipDelayMs") : 0;
+    if (delay <= 0) { showNow(el); return; }
+    tipPending = el;
+    tipShowTimer = setTimeout(() => {
+      tipShowTimer = null;
+      if (tipPending === el) { tipPending = null; showNow(el); }
+    }, delay);
   });
-  document.addEventListener("pointermove", (e) => { if (tipCur) place(e); });
+  document.addEventListener("pointermove", (e) => {
+    tipPtrX = e.clientX; tipPtrY = e.clientY;
+    if (tipCur) placeAt(e.clientX, e.clientY);
+  });
   document.addEventListener("pointerout", (e) => {
+    if (tipPending && !tipPending.contains(e.relatedTarget)) clearTipShow();
     if (tipCur && !tipCur.contains(e.relatedTarget)) hideTileTip();
   });
   document.addEventListener("pointerdown", hideTileTip); // out of the way while clicking/dragging
+}
+
+// ---- Custom window controls (the native OS titlebar is disabled in
+// tauri.conf.json, so minimize / maximize / close live in the header). close()
+// fires the same CloseRequested event the native X did, so tray behaviour is kept.
+async function wireWindowControls() {
+  const win = window.__TAURI__?.window?.getCurrentWindow?.();
+  if (!win) return;
+  const syncMax = async () => {
+    try {
+      const max = await win.isMaximized();
+      document.body.classList.toggle("win-maximized", max);
+      const b = $("win-max");
+      if (b) { b.title = t(max ? "winRestore" : "winMaximize"); delete b.dataset.tip; }
+    } catch (_) {}
+  };
+  $("win-min")?.addEventListener("click", () => { win.minimize().catch(() => {}); });
+  $("win-max")?.addEventListener("click", async () => {
+    try { await win.toggleMaximize(); } catch (_) {}
+    syncMax();
+  });
+  $("win-close")?.addEventListener("click", () => { win.close().catch(() => {}); });
+  try { await win.onResized(syncMax); } catch (_) {}
+  syncMax();
 }
 
 // Themed recent-searches dropdown for a search field, replacing the browser's
@@ -2011,9 +2333,13 @@ function wireSearchSuggest(input, storeKey) {
     // Divide by the body zoom (uiScale): fixed popups live inside the zoomed body.
     const z = uiZoom();
     const r = input.getBoundingClientRect();
+    // Size to the terms (short), not the full search field — a full-width bar over a
+    // wide library search looked oversized. Clamp: at least 220px, at most the field.
     pop.style.left = `${r.left / z}px`;
     pop.style.top = `${(r.bottom + 4) / z}px`;
-    pop.style.width = `${r.width / z}px`;
+    pop.style.width = "";
+    pop.style.minWidth = `${Math.min(220, r.width / z)}px`;
+    pop.style.maxWidth = `${r.width / z}px`;
     pop.classList.remove("hidden");
   };
   // Open on an explicit click/type, NOT on the focus the dialog may grab on open.
@@ -2366,12 +2692,19 @@ window.addEventListener("pointerup", async (e) => {
     if (el.classList.contains("tile")) {
       const p = prompts.find((x) => x.id === id);
       if (chainMode) { if (p) await toggleChainPick(p); return; } // pick (asks vars), don't copy
-      if (copyOnCooldown(id)) return; // same prompt copied moments ago
+      // A prompt with variables ALWAYS routes through the dialog — the double-click
+      // paste shortcut would otherwise fire on the 2nd click and paste stale clipboard
+      // without ever asking for the variables. A click only copies, never pastes.
       if (p && flag("promptVars") && !p.copy_image && !p.file_path && extractVars(p.text).length) {
         await copyTextWithVars(p, el);
-      } else if (await invoke("copy_prompt", { id }).catch((e) => { toast(String(e)); return false; })) {
+        return;
+      }
+      if (autoPasteDouble(id)) { await autoPasteNow(el); return; } // F19: 2nd fast click pastes
+      if (copyOnCooldown(id)) return; // same prompt copied moments ago
+      if (await invoke("copy_prompt", { id }).catch((e) => { toast(String(e)); return false; })) {
         showCopied(el);
         recordCopy(id);
+        maybeCloseOnCopy();
       }
     }
     return;
@@ -2402,7 +2735,7 @@ function styleCopyText(el, maxW, maxH, cap) {
 }
 
 // Flash + small "Copied!" bubble at the bottom of the tile.
-function showCopied(tile) {
+function showCopied(tile, label) {
   tile.classList.add("copied");
   setTimeout(() => tile.classList.remove("copied"), 350);
   if (!flag("copyBubble")) return; // border flash stays; bubble is optional
@@ -2411,10 +2744,31 @@ function showCopied(tile) {
   // Match the fade animation to the (expert-tunable) bubble lifetime so it never
   // gets cut off early or lingers invisibly after the CSS fade ends.
   pop.style.animationDuration = `${BUBBLE_MS}ms`;
-  pop.textContent = t("copied");
+  pop.textContent = label || t("copied");
   tile.appendChild(pop);
   styleCopyText(pop, tile.clientWidth * 0.8, tile.clientHeight * 0.45, 26);
   setTimeout(() => pop.remove(), BUBBLE_MS);
+}
+
+// ---- F19 auto-paste: a fast second activation of the SAME prompt pastes the
+// just-copied text into the last external window instead of re-copying. Enter on a
+// focused tile copies + pastes in one press. All gated by the autoPaste opt-flag.
+let lastActivate = { id: null, t: 0 };
+function autoPasteDouble(id) {
+  if (!flag("autoPaste")) return false;
+  const now = performance.now();
+  const dbl = lastActivate.id === id && (now - lastActivate.t) <= val("dblClickMs");
+  lastActivate = dbl ? { id: null, t: 0 } : { id, t: now };
+  return dbl;
+}
+async function autoPasteNow(el) {
+  try {
+    await invoke("paste_into_previous", { delayMs: Math.round(val("autoPasteDelayMs")), enter: optFlag("autoPasteEnter") });
+    if (el) showCopied(el, t("pasted")); else toast(t("pasted"));
+  } catch (e) {
+    const m = String(e);
+    toast(m === "no-target" ? t("pasteNoTarget") : m === "focus-failed" ? t("pasteFocusFail") : m);
+  }
 }
 
 // Pure layout move: the tile element is re-parented as-is — its fitted text
@@ -2470,6 +2824,85 @@ function closeCtx() {
   ctxEl.classList.add("hidden");
   ctxId = null;
 }
+
+// ---- Right-click toolbar menu: quickly toggle the optional top-bar tools on/off
+// (a shortcut into the expert flags that govern which header buttons are shown). ----
+const TOOLBAR_TOOLS = ["multiView", "favViewButton", "quickGrid", "showLibrary", "showJournal", "clipWatcher", "chainPrompts", "pinButton", "barToggles", "showLogo", "showTitle"];
+const TB_CHECK = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7"/></svg>';
+// Little glyph shown beside each tool name so the menu reads at a glance.
+const tbIcon = (d, fill) => `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path ${fill ? 'fill="currentColor"' : 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'} d="${d}"/></svg>`;
+// Raw wrapper for icons needing a per-path transform (e.g. the diagonal chain).
+const tbWrap = (inner) => `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">${inner}</svg>`;
+// Tool-menu icons mirror the real toolbar buttons so the menu reads the same as
+// the header (chain + pin stay diagonal; library/journal/clip match 1:1).
+const TOOL_ICONS = {
+  multiView: tbIcon("M9 4h11v11H9z M4 9h11v11H4z"), // two overlapping frames = multiple views
+  favViewButton: tbIcon("M12 3.5l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.9l-5.1 2.6 1-5.7-4.1-4 5.7-.8z", true),
+  quickGrid: tbIcon("M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"),
+  showLibrary: tbIcon("M4 6h2v2H4V6Zm4 0h12v2H8V6ZM4 11h2v2H4v-2Zm4 0h12v2H8v-2ZM4 16h2v2H4v-2Zm4 0h12v2H8v-2Z", true),
+  showJournal: tbIcon("M12 8v4l3 2M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4"),
+  clipWatcher: tbIcon("M9 4h6a1 1 0 0 1 1 1v1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h1V5a1 1 0 0 1 1-1Zm0 2v1h6V6M9 4h6"),
+  chainPrompts: tbWrap('<path transform="rotate(-45 12 12)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h8"/>'),
+  pinButton: tbIcon("M16 3.2 20.8 8l-1.7 1.7-.9-.2-3.2 3.2.5 4.1-1.4 1L9.6 14l-5.4 5.4-1.2-1.2L8.4 13 4 8.6l1-1.4 4.1.5 3.2-3.2-.2-.9L16 3.2Z", true),
+  barToggles: tbIcon("M6 9l6 6 6-6"),
+  showLogo: tbIcon("M4 5h16v14H4zM7 15l3.5-3.5 3 3 2.5-2.5 2 2M8.6 10a1.4 1.4 0 1 1-2.8 0 1.4 1.4 0 0 1 2.8 0"),
+  showTitle: tbIcon("M6 7V5h12v2M12 5v14M9 19h6"),
+};
+const toolbarMenu = document.createElement("div");
+toolbarMenu.className = "ctx toolbar-menu hidden";
+toolbarMenu.setAttribute("role", "menu");
+document.body.appendChild(toolbarMenu);
+const toolFlagOn = (key) => (OPT_FLAG_KEYS.includes(key) ? optFlag(key) : flag(key));
+function buildToolbarMenu() {
+  toolbarMenu.innerHTML = "";
+  const head = document.createElement("div");
+  head.className = "toolbar-menu-head";
+  head.textContent = t("toolbarMenuTitle");
+  toolbarMenu.appendChild(head);
+  for (const key of TOOLBAR_TOOLS) {
+    const on = toolFlagOn(key);
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "toolbar-item" + (on ? " on" : "");
+    b.role = "menuitemcheckbox";
+    b.setAttribute("aria-checked", String(on));
+    const check = document.createElement("span");
+    check.className = "tb-check";
+    check.innerHTML = on ? TB_CHECK : "";
+    const icon = document.createElement("span");
+    icon.className = "tb-icon";
+    icon.innerHTML = TOOL_ICONS[key] || "";
+    const label = document.createElement("span");
+    label.textContent = t(FLAG_LABELS[key] || OPT_FLAG_LABELS[key]);
+    b.append(check, icon, label);
+    b.addEventListener("click", async () => {
+      const next = !toolFlagOn(key);
+      settings.ui_flags = { ...(settings.ui_flags || {}), [key]: next };
+      await invoke("set_ui_flag", { key, enabled: next }).catch((e) => toast(String(e)));
+      // The ★ button only shows/works when the favorites-view feature is on, so
+      // enabling it from the toolbar turns the feature on too (otherwise the menu
+      // shows a checkmark but no star appears).
+      if (key === "favViewButton" && next && !favViewEnabled()) {
+        settings.ui_flags.favView = true;
+        await invoke("set_ui_flag", { key: "favView", enabled: true }).catch((e) => toast(String(e)));
+      }
+      applyFlags();
+      renderViews();
+      refreshFavViewUi();
+      buildToolbarMenu(); // reflect the new state, keep the menu open
+    });
+    toolbarMenu.appendChild(b);
+  }
+}
+function openToolbarMenu(x, y) {
+  buildToolbarMenu();
+  toolbarMenu.classList.remove("hidden");
+  const z = uiZoom();
+  const w = toolbarMenu.offsetWidth, h = toolbarMenu.offsetHeight;
+  toolbarMenu.style.left = `${Math.min(x, window.innerWidth - w - 6) / z}px`;
+  toolbarMenu.style.top = `${Math.min(y + 4, window.innerHeight - h - 6) / z}px`;
+}
+function closeToolbarMenu() { toolbarMenu.classList.add("hidden"); }
 
 // ---- Modal ----
 // Reusable palette: "no color" + free picker + presets, into any container.
@@ -2588,6 +3021,7 @@ function promptVarsDialog(vars) {
     fields.appendChild(label);
     return input;
   });
+  wireClearButtons(fields); // clear-X on the variable inputs
   // Save/forget remembered values on confirm (never on cancel).
   const persistRemembered = () => {
     if (!useRemember) return;
@@ -2603,14 +3037,18 @@ function promptVarsDialog(vars) {
     }
   };
   $("vars-ok").textContent = t("varsCopy");
-  $("vars-cancel").textContent = t("cancel");
   varsCleanup?.(null);
   root.classList.remove("hidden");
   inputs[0]?.focus();
   return new Promise((resolve) => {
     const ok = $("vars-ok");
-    const cancel = $("vars-cancel");
+    const cancel = $("vars-close");
     const collect = () => Object.fromEntries(inputs.map((i) => [i.dataset.var, i.value]));
+    // The click/keypress that OPENED this dialog is still in flight: arm the
+    // backdrop + Enter close handlers only on the next frame so that same event
+    // can't immediately dismiss the dialog (it was flashing shut instantly).
+    let armed = false;
+    requestAnimationFrame(() => { armed = true; });
     const done = (val) => {
       root.classList.add("hidden");
       ok.removeEventListener("click", onOk);
@@ -2622,10 +3060,10 @@ function promptVarsDialog(vars) {
     };
     const onOk = () => { persistRemembered(); done(collect()); };
     const onCancel = () => done(null);
-    const onBg = (e) => { if (e.target === root) done(null); };
+    const onBg = (e) => { if (armed && e.target === root) done(null); };
     const onKey = (e) => {
       if (e.key === "Escape") done(null);
-      else if (e.key === "Enter") { persistRemembered(); done(collect()); }
+      else if (e.key === "Enter" && armed) { persistRemembered(); done(collect()); }
     };
     varsCleanup = done;
     ok.addEventListener("click", onOk);
@@ -2687,25 +3125,71 @@ function prettyAccel(accel) {
   return accel.split("+").map((p) => (MOD_LABELS[p] ? MOD_LABELS[p]() : p)).join(" + ");
 }
 
-// Copy a text prompt after filling its placeholders.
-async function copyTextWithVars(p, el) {
+// Copy a text prompt after filling its placeholders. `allowPaste` is only set by
+// activations that mean "paste" (Enter on a focused tile); a plain click copies
+// and nothing else, exactly like a prompt without variables.
+async function copyTextWithVars(p, el, allowPaste = false) {
+  // A double-click can never reach the tile a second time — the dialog already
+  // covers it, and that second press used to land on the overlay and dismiss it.
+  // Swallow it instead and treat it as the double-click it was: fill in the
+  // variables, then paste.
+  let quickSecond = false;
+  const overlay = $("vars-modal");
+  const onSecond = (e) => {
+    if (e.target !== overlay) return; // a press inside the dialog is real input
+    e.stopPropagation();
+    quickSecond = true;
+  };
+  overlay.addEventListener("pointerdown", onSecond, true); // capture: before the dismiss
+  const stopArming = setTimeout(() => overlay.removeEventListener("pointerdown", onSecond, true), val("dblClickMs"));
   const values = await promptVarsDialog(extractVars(p.text));
+  clearTimeout(stopArming);
+  overlay.removeEventListener("pointerdown", onSecond, true);
   if (!values) return;
   const ok = await invoke("copy_text", { text: fillVars(p.text, values) })
     .catch((e) => { toast(String(e)); return false; });
-  if (ok) { showCopied(el); recordCopy(p.id); }
+  if (ok) {
+    showCopied(el);
+    recordCopy(p.id);
+    if ((allowPaste || quickSecond) && flag("autoPaste")) await autoPasteNow(el);
+    maybeCloseOnCopy();
+  }
 }
 
 // ---- Keyboard navigation: arrow keys move a focus ring across the grid,
 // Enter/Space copies the focused tile (feature-gated by keyboardNav).
 let kbFocus = null;
+let kbFadeTimer = null;
 function focusTile(id) {
+  clearTimeout(kbFadeTimer);
   kbFocus = id;
   for (const el of gridEl.querySelectorAll(".tile")) el.classList.toggle("kb-focus", el.dataset.id === id);
+  for (const el of gridEl.querySelectorAll(".tile.kb-leaving")) el.classList.remove("kb-leaving");
   gridEl.querySelector(`.tile[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" });
 }
+// Clears the focus ring. `fade` smoothly transitions it out (used on window blur).
+function clearKbFocus(fade) {
+  const el = kbFocus ? gridEl.querySelector(`.tile[data-id="${CSS.escape(kbFocus)}"]`) : null;
+  kbFocus = null;
+  for (const t of gridEl.querySelectorAll(".tile.kb-focus")) t.classList.remove("kb-focus");
+  if (fade && el) {
+    el.classList.add("kb-leaving");
+    setTimeout(() => el.classList.remove("kb-leaving"), 520);
+  }
+}
+// The keyboard focus ring fades a short while after the window loses focus, so a
+// left-behind highlight doesn't linger over other apps (delay is expert-tunable;
+// the fade-out itself is a smooth 480ms CSS transition).
+window.addEventListener("blur", () => {
+  if (!kbFocus || !flag("keyboardNav")) return;
+  clearTimeout(kbFadeTimer);
+  kbFadeTimer = setTimeout(() => clearKbFocus(true), val("kbFocusFadeMs"));
+});
+window.addEventListener("focus", () => { clearTimeout(kbFadeTimer); });
 function moveKbFocus(dc, dr) {
-  const layout = layoutOf(activeView());
+  // Use whichever layout the grid is currently showing — the favorites view lays out
+  // from favLayoutMap(), not the active view, so arrow keys must follow that.
+  const layout = favView ? favLayoutMap() : layoutOf(activeView());
   const cells = Object.entries(layout);
   if (!cells.length) return;
   if (!kbFocus || !layout[kbFocus]) { focusTile(cells[0][0]); return; }
@@ -2729,11 +3213,18 @@ async function activateTile(id) {
   if (chainMode) { await toggleChainPick(p); return; }
   if (copyOnCooldown(id)) return;
   if (flag("promptVars") && !p.copy_image && !p.file_path && extractVars(p.text).length) {
-    await copyTextWithVars(p, el);
+    await copyTextWithVars(p, el, true); // Enter means copy + paste
   } else if (await invoke("copy_prompt", { id }).catch((e) => { toast(String(e)); return false; })) {
     if (el) showCopied(el);
     recordCopy(id);
+    if (flag("autoPaste")) await autoPasteNow(el); // F19: Enter = copy + paste
+    maybeCloseOnCopy();
   }
+}
+// Expert opt: hide the window to the tray right after a prompt copy.
+function maybeCloseOnCopy() {
+  if (!optFlag("closeOnCopy")) return;
+  try { window.__TAURI__?.window?.getCurrentWindow?.()?.hide?.().catch?.(() => {}); } catch { /* no-op */ }
 }
 
 function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, title }) {
@@ -2761,6 +3252,660 @@ function openModal({ mode, id, name = "", text = "", color = "", image = "", sho
   modal.name.select();
 }
 
+// ---- F16: live length counter (chars / words / ~tokens) in the editor ----
+let lenRaf = 0;
+function updateLenCounter() {
+  const el = $("modal-length");
+  if (!el) return;
+  const on = flag("lengthCounter") && !modal.text.classList.contains("hidden");
+  el.classList.toggle("hidden", !on);
+  if (!on) return;
+  const s = modal.text.value;
+  const chars = [...s].length; // code points, so emoji count as one
+  const words = (s.trim().match(/\S+/g) || []).length;
+  const tokens = Math.ceil(chars / 4); // rough heuristic, labeled with "~"
+  const nf = (n) => n.toLocaleString(LANG);
+  const units = txt("counterUnits") || "all";
+  const parts = [];
+  if (units === "all" || units === "chars") parts.push(`${nf(chars)} ${t("lenChars")}`);
+  if (units === "all" || units === "words") parts.push(`${nf(words)} ${t("lenWords")}`);
+  if (units === "all" || units === "tokens") parts.push(`~${nf(tokens)} ${t("lenTokens")}`);
+  el.textContent = parts.join(" · ");
+}
+function scheduleLenCounter() {
+  if (lenRaf) return;
+  lenRaf = requestAnimationFrame(() => { lenRaf = 0; updateLenCounter(); });
+}
+
+// ---- F7 version history: render the collapsible list in the editor ----
+async function loadHistory(id) {
+  const body = $("modal-history-body");
+  if (!body || !id) return;
+  body.innerHTML = "";
+  let list = [];
+  try { list = await invoke("list_versions", { promptId: id }); } catch (_) {}
+  if (!list.length) {
+    const e = document.createElement("div");
+    e.className = "hint";
+    e.textContent = t("historyEmpty");
+    body.appendChild(e);
+    return;
+  }
+  for (const v of list) {
+    const row = document.createElement("div");
+    row.className = "hist-row";
+    const head = document.createElement("div");
+    head.className = "hist-head";
+    const time = document.createElement("span");
+    time.className = "hist-time";
+    time.textContent = new Date(v.ts * 1000).toLocaleString(LANG);
+    const prev = document.createElement("span");
+    prev.className = "hist-preview";
+    prev.textContent = (v.name ? v.name + " — " : "") + (v.text || "").slice(0, 80);
+    // Explicit expand chevron (collapsed by default) → reveals the COMPLETE text.
+    const expand = document.createElement("button");
+    expand.type = "button";
+    expand.className = "hist-expand";
+    expand.setAttribute("aria-expanded", "false");
+    expand.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>';
+    const restore = document.createElement("button");
+    restore.type = "button";
+    restore.className = "ghost-btn hist-restore";
+    restore.textContent = t("historyRestore");
+    restore.addEventListener("click", async () => {
+      try {
+        const p = await invoke("restore_version", { versionId: v.id });
+        if (p) {
+          const idx = prompts.findIndex((x) => x.id === p.id);
+          if (idx >= 0) prompts[idx] = p;
+          modal.name.value = p.name;
+          modal.text.value = p.text;
+          updateLenCounter();
+          toast(t("historyRestored"));
+          await renderGrid(true);
+          loadHistory(id); // the restore itself added a fresh snapshot
+        }
+      } catch (err) { toast(String(err)); }
+    });
+    head.append(time, prev, expand, restore);
+    const full = document.createElement("div");
+    full.className = "hist-full hidden";
+    full.textContent = v.text || "";
+    const toggle = () => {
+      const open = !full.classList.toggle("hidden");
+      expand.setAttribute("aria-expanded", String(open));
+      row.classList.toggle("open", open);
+    };
+    expand.addEventListener("click", toggle);
+    prev.addEventListener("click", toggle); // clicking the preview also expands
+    row.append(head, full);
+    body.appendChild(row);
+  }
+}
+
+// ---- F11 usage statistics dashboard (opened from the expert menu) ----
+function statSection(text) {
+  const h = document.createElement("div");
+  h.className = "stat-section";
+  h.textContent = text;
+  return h;
+}
+async function renderStatsPanel(body) {
+  // Feature toggle + (when on) the top-N field share one row.
+  const on = flag("usageStats");
+  // Fetch BEFORE clearing — otherwise the panel paints empty during the await,
+  // which read as a flash on every re-render.
+  let s = null;
+  if (on) {
+    try { s = await invoke("usage_stats", { topN: Math.round(val("statsTopN")) }); }
+    catch (e) { toast(String(e)); return; }
+  }
+  body.innerHTML = "";
+  const headRow = document.createElement("div"); headRow.className = "stats-head-row";
+  const sw = document.createElement("label"); sw.className = "field switch-field";
+  const swl = document.createElement("span"); swl.textContent = t("flagUsageStats");
+  const swi = document.createElement("input"); swi.type = "checkbox"; swi.className = "switch"; swi.checked = on;
+  swi.addEventListener("change", async () => { await saveBackupSetting("flag", "usageStats", swi.checked); renderStatsPanel(body); });
+  sw.append(swl, swi); headRow.appendChild(sw);
+  if (on) {
+    // Top-N param (how many prompts the "most used" chart lists), right of the toggle.
+    const topRow = document.createElement("label"); topRow.className = "field backup-set-row stats-topn-row";
+    const trl = document.createElement("span"); trl.textContent = t("valStatsTopN");
+    const tri = document.createElement("input"); tri.type = "number"; tri.min = 5; tri.max = 100; tri.className = "modal-input"; tri.value = String(val("statsTopN"));
+    tri.addEventListener("change", async () => { const v = Math.max(5, Math.min(100, Number(tri.value) || 10)); tri.value = String(v); await saveBackupSetting("value", "statsTopN", v); renderStatsPanel(body); });
+    topRow.append(trl, tri); headRow.appendChild(topRow);
+  }
+  body.appendChild(headRow);
+  if (!on) return;
+  const nf = (n) => Number(n).toLocaleString(LANG);
+  const cards = document.createElement("div");
+  cards.className = "stat-cards";
+  const card = (label, value) => {
+    const c = document.createElement("div"); c.className = "stat-card";
+    const v = document.createElement("div"); v.className = "stat-val"; v.textContent = value;
+    const l = document.createElement("div"); l.className = "stat-label"; l.textContent = label;
+    c.append(v, l); return c;
+  };
+  // Four rows of four, each row one topic: what you have, what is in it, how much
+  // it gets used, and what that says about the collection.
+  cards.append(
+    // — Inventory —
+    card(t("statTotalPrompts"), nf(s.total_prompts)),
+    card(t("statViews"), nf((settings.views || []).length)),
+    card(t("statFavorites"), nf(s.favorites)),
+    card(t("statColored"), nf(s.colored)),
+    // — Content —
+    card(t("statWithMedia"), nf(prompts.filter((p) => p.image || p.file_path || p.copy_image).length)),
+    card(t("statWithVars"), nf(prompts.filter((p) => extractVars(p.text || "").length > 0).length)),
+    card(t("statChars"), nf(s.total_chars)),
+    card(t("statAvgLen"), s.total_prompts ? nf(Math.round(s.total_chars / s.total_prompts)) : "—"),
+    // — Copy activity —
+    card(t("statTotalCopies"), nf(s.total_copies)),
+    card(t("statCopies7"), s.history_on ? nf(s.copies7) : "—"),
+    card(t("statCopies30"), s.history_on ? nf(s.copies30) : "—"),
+    card(t("statPerDay"), s.history_on ? (s.copies30 / 30).toFixed(1) : "—"),
+    // — What that says about the collection —
+    card(t("statAvg"), s.used_count ? s.avg_copies.toFixed(1) : "—"),
+    card(t("statTopCopies"), s.top && s.top.length ? nf(s.top[0].count) : "—"),
+    card(t("statUsedShare"), s.total_prompts ? `${Math.round((s.used_count / s.total_prompts) * 100)} %` : "—"),
+    card(t("statUnused"), nf(s.unused)),
+  );
+  body.appendChild(cards);
+  // Info rows: last-used + longest prompt.
+  const info = document.createElement("div");
+  info.className = "stat-views";
+  const infoRow = (label, value) => {
+    const r = document.createElement("div"); r.className = "stat-view-row";
+    const l = document.createElement("span"); l.textContent = label;
+    const v = document.createElement("span"); v.className = "stat-view-count"; v.textContent = value;
+    r.append(l, v); return r;
+  };
+  if (s.recent_ts) info.appendChild(infoRow(t("statRecent"), `${s.recent_name} · ${new Date(s.recent_ts * 1000).toLocaleDateString(LANG)}`));
+  if (s.longest_chars) info.appendChild(infoRow(t("statLongest"), `${s.longest_name} · ${nf(s.longest_chars)} ${t("lenChars")}`));
+  if (info.childElementCount) { body.appendChild(statSection(t("statOverview"))); body.appendChild(info); }
+  // Type breakdown as proportional bars.
+  if (s.types.length) {
+    body.appendChild(statSection(t("statTypes")));
+    const list = document.createElement("div"); list.className = "stat-bars";
+    const typeLabel = { text: "statTypeText", image: "filterImage", video: "filterVideo", pdf: "filterPdf", file: "filterFile" };
+    const maxT = Math.max(...s.types.map((x) => x.count), 1);
+    for (const ty of s.types) {
+      const row = document.createElement("div"); row.className = "stat-bar-row";
+      const name = document.createElement("span"); name.className = "stat-bar-name"; name.textContent = t(typeLabel[ty.name] || ty.name);
+      const track = document.createElement("div"); track.className = "stat-bar-track";
+      const fill = document.createElement("div"); fill.className = "stat-bar-fill";
+      fill.style.width = `${Math.max(4, (ty.count / maxT) * 100)}%`;
+      track.appendChild(fill);
+      const cnt = document.createElement("span"); cnt.className = "stat-bar-count"; cnt.textContent = nf(ty.count);
+      row.append(name, track, cnt);
+      list.appendChild(row);
+    }
+    body.appendChild(list);
+  }
+  if (s.top.length) {
+    body.appendChild(statSection(t("statTop")));
+    const list = document.createElement("div"); list.className = "stat-bars";
+    const max = s.top[0].count || 1;
+    for (const b of s.top) {
+      const row = document.createElement("div"); row.className = "stat-bar-row";
+      const name = document.createElement("span"); name.className = "stat-bar-name"; name.textContent = b.name;
+      const track = document.createElement("div"); track.className = "stat-bar-track";
+      const fill = document.createElement("div"); fill.className = "stat-bar-fill";
+      fill.style.width = `${Math.max(4, (b.count / max) * 100)}%`;
+      track.appendChild(fill);
+      const cnt = document.createElement("span"); cnt.className = "stat-bar-count"; cnt.textContent = nf(b.count);
+      row.append(name, track, cnt);
+      list.appendChild(row);
+    }
+    body.appendChild(list);
+  }
+  if (s.never_used.length) {
+    body.appendChild(statSection(t("statCleanup")));
+    const list = document.createElement("div"); list.className = "stat-cleanup";
+    for (const b of s.never_used) {
+      const item = document.createElement("button");
+      item.type = "button"; item.className = "stat-cleanup-item"; item.textContent = b.name;
+      item.title = t("statJump");
+      item.addEventListener("click", () => jumpToPrompt(b.name));
+      list.appendChild(item);
+    }
+    body.appendChild(list);
+  }
+  if (s.per_view.length) {
+    body.appendChild(statSection(t("statPerView")));
+    const list = document.createElement("div"); list.className = "stat-views";
+    for (const v of s.per_view) {
+      const row = document.createElement("div"); row.className = "stat-view-row";
+      const name = document.createElement("span"); name.textContent = v.name;
+      const cnt = document.createElement("span"); cnt.className = "stat-view-count"; cnt.textContent = nf(v.count);
+      row.append(name, cnt);
+      list.appendChild(row);
+    }
+    body.appendChild(list);
+  }
+  wireClearButtons(body); // clear-X on the top-N field
+}
+function jumpToPrompt(name) {
+  settingsEl.classList.add("hidden");
+  $("library-btn").click(); // resets + opens the library
+  libQuery = name || "";
+  $("library-q").value = libQuery;
+  renderLibrary();
+}
+// Inline expert panels (backups + statistics) — filled on demand by renderExpert.
+
+// ---- F6 duplicate finder ----
+async function openDupes() {
+  $("dupes-modal").classList.remove("hidden");
+  await scanDupes();
+}
+async function scanDupes() {
+  const body = $("dupes-body");
+  body.innerHTML = "";
+  const loading = document.createElement("div");
+  loading.className = "hint";
+  loading.textContent = t("dupScanning");
+  body.appendChild(loading);
+  let groups;
+  try { groups = await invoke("find_duplicates", { threshold: Math.round(val("dupThreshold")) }); }
+  catch (e) { toast(String(e)); body.innerHTML = ""; return; }
+  body.innerHTML = "";
+  if (!groups.length) {
+    const e = document.createElement("div");
+    e.className = "hint";
+    e.textContent = t("dupNone");
+    body.appendChild(e);
+    return;
+  }
+  for (const g of groups) {
+    const card = document.createElement("div");
+    card.className = "dup-group";
+    const head = document.createElement("div");
+    head.className = "dup-head";
+    const score = document.createElement("span");
+    score.className = "dup-score";
+    score.textContent = `${Math.round(g.score * 100)}%`;
+    head.appendChild(score);
+    card.appendChild(head);
+    const cols = document.createElement("div");
+    cols.className = "dup-cols";
+    for (const m of g.members) {
+      const col = document.createElement("div");
+      col.className = "dup-col";
+      const name = document.createElement("div");
+      name.className = "dup-name";
+      name.textContent = m.name;
+      const meta = document.createElement("div");
+      meta.className = "dup-meta";
+      meta.textContent = `${t("dupUsage")}: ${m.usage.toLocaleString(LANG)}` + (m.views.length ? ` · ${m.views.join(", ")}` : "");
+      const txt = document.createElement("div");
+      txt.className = "dup-text";
+      txt.textContent = m.text;
+      const keep = document.createElement("button");
+      keep.type = "button";
+      keep.className = "ghost-btn dup-keep";
+      keep.textContent = t("dupKeep");
+      keep.addEventListener("click", () => keepOneDup(g, m.id));
+      col.append(name, meta, txt, keep);
+      cols.appendChild(col);
+    }
+    card.appendChild(cols);
+    const actions = document.createElement("div");
+    actions.className = "dup-actions";
+    const ignore = document.createElement("button");
+    ignore.type = "button";
+    ignore.className = "ghost-btn";
+    ignore.textContent = t("dupIgnore");
+    ignore.addEventListener("click", async () => {
+      await invoke("ignore_dups", { ids: g.members.map((m) => m.id) }).catch((e) => toast(String(e)));
+      scanDupes();
+    });
+    actions.appendChild(ignore);
+    card.appendChild(actions);
+    body.appendChild(card);
+  }
+}
+async function keepOneDup(group, keepId) {
+  const remove = group.members.filter((m) => m.id !== keepId).map((m) => m.id);
+  if (!remove.length) return;
+  const ok = await confirmDialog({ title: t("dupKeep"), message: t("dupKeepConfirm").replace("{n}", String(remove.length)), confirmLabel: t("delete") });
+  if (!ok) return;
+  try {
+    const gone = new Set(remove);
+    settings = await invoke("batch_prompts", { ids: remove, action: "delete", color: null, favorite: null, viewId: null });
+    prompts = prompts.filter((p) => !gone.has(p.id));
+  } catch (e) { toast(String(e)); return; }
+  renderViews();
+  await renderGrid(true);
+  scanDupes();
+}
+// F6 import hook: after an import, flag near-duplicates with a toast linking to the tool.
+async function maybeDupImportToast() {
+  if (!flag("dupFinder") || !flag("dupImportCheck")) return;
+  try {
+    const groups = await invoke("find_duplicates", { threshold: Math.round(val("dupThreshold")) });
+    if (groups.length) toast(t("dupImportToast").replace("{n}", String(groups.length)));
+  } catch (_) {}
+}
+EXPERT_ACTIONS["dupes-open"] = openDupes;
+
+// ---- F2 backups & restore ----
+function fmtBytes(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+function prettyStamp(name) {
+  const [d, tm] = String(name).split("_");
+  return tm ? `${d} ${tm.replace(/-/g, ":")}` : d;
+}
+function parseStamp(name) {
+  const [d, tm] = String(name).split("_");
+  if (!d) return null;
+  const dt = new Date(`${d}T${(tm || "00-00-00").replace(/-/g, ":")}`);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+async function saveBackupSetting(kind, key, value) {
+  if (kind === "flag") {
+    settings.ui_flags = { ...(settings.ui_flags || {}), [key]: value };
+    await invoke("set_ui_flag", { key, enabled: value }).catch((e) => toast(String(e)));
+    applyFlags();
+  } else {
+    settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
+    await invoke("set_ui_value", { key, value }).catch((e) => toast(String(e)));
+    applyValues();
+  }
+}
+// Backups live in their own dialog (opened from settings), not in the expert menu:
+// the page carries settings, diagnostics and a restore list and needs the room.
+function openBackups() {
+  $("backup-modal").classList.remove("hidden");
+  renderBackupPanel($("backup-panel"));
+  renderStatsPanel($("stats-panel"));
+}
+function closeBackups() {
+  $("backup-modal").classList.add("hidden");
+}
+
+// Remembered UI state (which panel sections are expanded). Kept in ui_flags so it
+// survives a restart; the key is not in OPT_FLAG_LABELS, so it never shows up as an
+// expert toggle and applyFlags() ignores it.
+async function saveUiState(key, on) {
+  settings.ui_flags = { ...(settings.ui_flags || {}), [key]: on };
+  await invoke("set_ui_flag", { key, enabled: on }).catch(() => {});
+}
+async function renderBackupPanel(body) {
+  // Fetch BEFORE clearing: emptying the panel and only then awaiting lets the browser
+  // paint the empty state for a frame, which showed up as a visible flash on every
+  // re-render (backup now, value change …).
+  let backups;
+  try { backups = await invoke("list_backups"); }
+  catch (e) { toast(String(e)); return; }
+  body.innerHTML = "";
+  const nf = (n) => Number(n).toLocaleString(LANG);
+  const card = (l, v, small) => {
+    const c = document.createElement("div"); c.className = "stat-card";
+    const vv = document.createElement("div"); vv.className = "stat-val" + (small ? " stat-val-sm" : ""); vv.textContent = v;
+    const ll = document.createElement("div"); ll.className = "stat-label"; ll.textContent = l;
+    c.append(vv, ll); return c;
+  };
+  // Date/time card: date on top, time below (no comma), a touch larger than the
+  // plain small value so the timestamps read clearly.
+  const dtCard = (l, d) => {
+    const c = document.createElement("div"); c.className = "stat-card";
+    const vv = document.createElement("div"); vv.className = "stat-val stat-dt";
+    if (d) {
+      const dd = document.createElement("div"); dd.className = "dt-date"; dd.textContent = d.toLocaleDateString(LANG);
+      const tt = document.createElement("div"); tt.className = "dt-time"; tt.textContent = d.toLocaleTimeString(LANG);
+      vv.append(dd, tt);
+    } else { vv.textContent = "—"; }
+    const ll = document.createElement("div"); ll.className = "stat-label"; ll.textContent = l;
+    c.append(vv, ll); return c;
+  };
+  // Collapsible section head (chevron), toggles the given content element and
+  // remembers the last state under `stateKey`.
+  const collapseHead = (labelText, contentEl, stateKey) => {
+    const open = optFlag(stateKey);
+    const h = document.createElement("button");
+    h.type = "button";
+    h.className = "stat-section backup-list-head" + (open ? " open" : "");
+    const s = document.createElement("span"); s.textContent = labelText; h.appendChild(s);
+    h.insertAdjacentHTML("beforeend", '<svg class="collapse-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>');
+    contentEl.classList.toggle("hidden", !open);
+    h.addEventListener("click", () => {
+      const o = !contentEl.classList.toggle("hidden");
+      h.classList.toggle("open", o);
+      saveUiState(stateKey, o);
+    });
+    return h;
+  };
+
+  const fmtInterval = (h) => (h < 24 ? `${h} h` : `${h / 24} d`); // ≥24h shown in days
+  const gfsSum = () => Math.max(1, Math.min(50, val("backupDaily") + val("backupWeekly") + val("backupMonthly")));
+  const numRow = (labelKey, key, min, max, onSet) => {
+    const l = document.createElement("label"); l.className = "field backup-set-row";
+    const s = document.createElement("span"); s.textContent = t(labelKey);
+    const i = document.createElement("input"); i.type = "number"; i.min = min; i.max = max; i.className = "modal-input"; i.value = String(val(key));
+    i.addEventListener("change", async () => { const v = Math.max(min, Math.min(max, Number(i.value) || min)); i.value = String(v); await onSet(v); });
+    l.append(s, i); return l;
+  };
+
+  // ---- Settings ---- (auto-backup always runs; the interval controls how often)
+  body.appendChild(statSection(t("backupSettings")));
+  const set = document.createElement("div"); set.className = "backup-settings";
+  // "Backup now" + interval + (unless GFS) keep, all on one row — backup-now first.
+  const row2 = document.createElement("div"); row2.className = "backup-two-col";
+  const nowBtn = document.createElement("button"); nowBtn.type = "button"; nowBtn.className = "ghost-btn backup-now-btn"; nowBtn.textContent = t("backupNow");
+  nowBtn.addEventListener("click", async () => {
+    try { await invoke("create_backup", { keep: Math.round(val("backupKeep")) }); toast(t("backupDone")); }
+    catch (e) { toast(String(e)); }
+    await saveUiState("backupListOpen", true); // reveal the fresh backup right away
+    renderBackupPanel(body);
+  });
+  row2.appendChild(nowBtn);
+  const iv = document.createElement("label"); iv.className = "field backup-set-row backup-interval-row";
+  const ivl = document.createElement("span"); ivl.textContent = t("valBackupInterval");
+  const ivs = document.createElement("select"); ivs.className = "modal-input";
+  for (const h of [6, 12, 24, 48, 168]) { const o = document.createElement("option"); o.value = String(h); o.textContent = fmtInterval(h); ivs.appendChild(o); }
+  ivs.value = String(val("backupIntervalH"));
+  ivs.addEventListener("change", async () => { await saveBackupSetting("value", "backupIntervalH", Number(ivs.value)); renderBackupPanel(body); });
+  iv.append(ivl, ivs); row2.appendChild(iv);
+  if (!optFlag("backupGfs")) {
+    row2.appendChild(numRow("valBackupKeep", "backupKeep", 1, 50, (v) => saveBackupSetting("value", "backupKeep", v)));
+  }
+  set.appendChild(row2);
+  // Period-based retention (GFS): keep N per day / week / month.
+  const gsw = document.createElement("label"); gsw.className = "field switch-field";
+  const gswl = document.createElement("span"); gswl.textContent = t("flagBackupGfs");
+  const gswi = document.createElement("input"); gswi.type = "checkbox"; gswi.className = "switch"; gswi.checked = optFlag("backupGfs");
+  gswi.addEventListener("change", async () => {
+    await saveBackupSetting("flag", "backupGfs", gswi.checked);
+    if (gswi.checked) await saveBackupSetting("value", "backupKeep", gfsSum()); // keep = sum of tiers
+    renderBackupPanel(body);
+  });
+  gsw.append(gswl, gswi); set.appendChild(gsw);
+  if (optFlag("backupGfs")) {
+    const tiers = document.createElement("div"); tiers.className = "backup-three-col";
+    const onTier = (key) => async (v) => { await saveBackupSetting("value", key, v); await saveBackupSetting("value", "backupKeep", gfsSum()); };
+    tiers.appendChild(numRow("valBackupDaily", "backupDaily", 0, 30, onTier("backupDaily")));
+    tiers.appendChild(numRow("valBackupWeekly", "backupWeekly", 0, 52, onTier("backupWeekly")));
+    tiers.appendChild(numRow("valBackupMonthly", "backupMonthly", 0, 60, onTier("backupMonthly")));
+    set.appendChild(tiers);
+  }
+  // Optional backup password. Without one, backups use a fixed key and restore on any
+  // PC; with one they need exactly this password. The stored password is never sent
+  // back to the UI — the eye only reveals what was just typed in this session.
+  const pwRow = document.createElement("div"); pwRow.className = "field backup-pw-row";
+  const pwLabel = document.createElement("span"); pwLabel.textContent = t("backupPasswordLabel");
+  const pwWrap = document.createElement("div"); pwWrap.className = "backup-pw-wrap";
+  const pwIn = document.createElement("input");
+  pwIn.type = "password"; pwIn.className = "modal-input"; pwIn.maxLength = 128;
+  pwIn.autocomplete = "new-password";
+  const hasPw = await invoke("has_backup_password").catch(() => false);
+  pwIn.placeholder = hasPw ? t("backupPasswordSetPh") : t("backupPasswordPh");
+  const eye = document.createElement("button");
+  eye.type = "button"; eye.className = "icon-btn backup-pw-eye";
+  eye.setAttribute("aria-label", t("showPassword"));
+  eye.innerHTML = EYE_SVG;
+  // Reveals what is typed right now. A stored password is never loaded back into
+  // the field, so there is nothing secret to leak here.
+  eye.addEventListener("click", () => {
+    const show = pwIn.type === "password";
+    pwIn.type = show ? "text" : "password";
+    eye.setAttribute("aria-label", t(show ? "hidePassword" : "showPassword"));
+  });
+  // Saving happens ONLY through this button — leaving the field must never change
+  // the password by accident.
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "ghost-btn backup-pw-save";
+  save.textContent = t("save");
+  save.addEventListener("click", async () => {
+    const pw = pwIn.value;
+    try {
+      await invoke("set_backup_password", { password: pw });
+      toast(pw ? t("backupPasswordWarn") : t("backupPasswordCleared"));
+      pwIn.value = "";
+      pwIn.type = "password";
+      pwIn.placeholder = pw ? t("backupPasswordSetPh") : t("backupPasswordPh");
+    } catch (e) { toast(String(e)); }
+  });
+  pwWrap.append(pwIn, eye);
+  pwRow.append(pwLabel, pwWrap, save);
+  set.appendChild(pwRow);
+  body.appendChild(set);
+
+  // ---- Diagnostics (collapsible) ----
+  const total = backups.reduce((s, b) => s + b.size, 0);
+  const newest = backups.length ? parseStamp(backups[0].name) : null;
+  const oldest = backups.length ? parseStamp(backups[backups.length - 1].name) : null;
+  const sizes = backups.map((b) => b.size);
+  const cards = document.createElement("div"); cards.className = "stat-cards";
+  const recent = backups.filter((b) => {
+    const d = parseStamp(b.name);
+    return d && Date.now() - d.getTime() <= 7 * 86400000;
+  }).length;
+  // Row 1 answers "what do I have and from when", row 2 "when is the next one and
+  // how much space does this cost".
+  cards.append(
+    card(t("backupCount"), nf(backups.length)),
+    card(t("backupThisWeek"), nf(recent)),
+    card(t("backupSpan"), newest && oldest
+      ? `${nf(Math.max(0, Math.round((newest - oldest) / 86400000)))} d`
+      : "—"),
+    dtCard(t("backupOldest"), oldest),
+    dtCard(t("backupNewest"), newest),
+    dtCard(t("backupNext"), newest ? new Date(newest.getTime() + val("backupIntervalH") * 3600000) : null),
+    card(t("backupTotalSize"), fmtBytes(total)),
+    card(t("backupAvgSize"), backups.length ? fmtBytes(Math.round(total / backups.length)) : "—"),
+    card(t("backupLargest"), backups.length ? fmtBytes(Math.max(...sizes)) : "—"),
+    card(t("backupSmallest"), backups.length ? fmtBytes(Math.min(...sizes)) : "—"),
+  );
+  body.append(collapseHead(t("backupDiag"), cards, "backupDiagOpen"), cards);
+
+  // ---- List (opened right after a manual backup, otherwise last known state) ----
+  const list = document.createElement("div"); list.className = "backups-list";
+  const listHead = collapseHead(`${t("backupList")} (${backups.length})`, list, "backupListOpen");
+  if (!backups.length) {
+    const e = document.createElement("div"); e.className = "hint"; e.textContent = t("backupsEmpty");
+    list.appendChild(e);
+  } else {
+    for (const b of backups) {
+      const row = document.createElement("div"); row.className = "backup-row";
+      const name = document.createElement("span"); name.className = "backup-name"; name.textContent = prettyStamp(b.name);
+      const size = document.createElement("span"); size.className = "backup-size"; size.textContent = fmtBytes(b.size);
+      const restore = document.createElement("button"); restore.type = "button"; restore.className = "ghost-btn"; restore.textContent = t("backupRestore");
+      restore.addEventListener("click", () => restoreBackup(b.name));
+      const del = document.createElement("button"); del.type = "button"; del.className = "ghost-btn danger-btn"; del.textContent = t("delete");
+      del.addEventListener("click", async () => {
+        if (!armButton(del, `${t("delete")}?`)) { setTimeout(() => disarmButton(del, t("delete")), DISARM_MS); return; }
+        await invoke("delete_backup", { name: b.name }).catch((e) => toast(String(e)));
+        await saveUiState("backupListOpen", true); // stay in the list after delete
+        renderBackupPanel(body);
+      });
+      row.append(name, size, restore, del);
+      list.appendChild(row);
+    }
+  }
+  body.append(listHead, list);
+  wireClearButtons(body); // clear-X on the number fields
+}
+async function restoreBackup(name) {
+  const ok = await confirmDialog({ title: t("backupRestore"), message: t("backupRestoreConfirm"), confirmLabel: t("backupRestore") });
+  if (!ok) return;
+  try { await invoke("restore_backup", { name, keep: Math.round(val("backupKeep")) }); }
+  catch (e) { toast(String(e)); } // on success the app relaunches
+}
+
+// ---- F21 clipboard inbox ----
+let clipCount = 0; // number of collected clipboard items currently waiting in the inbox
+function updateClipBadge() {
+  const btn = $("clip-btn");
+  if (!btn) return;
+  // The icon stays while the watcher runs — or always, if the user asked to keep
+  // the paused buttons around (expert: pausedIcons).
+  btn.classList.toggle("hidden", !optFlag("clipWatcher") && !optFlag("pausedIcons"));
+  const tgl = $("clip-toggle");
+  if (tgl) tgl.classList.toggle("active", optFlag("clipWatcher"));
+  const badge = $("clip-badge");
+  badge.classList.toggle("hidden", clipCount <= 0); // only the number hides at 0
+  badge.textContent = clipCount > 99 ? "99+" : String(clipCount);
+}
+async function refreshClipInbox() {
+  if (!optFlag("clipWatcher")) { clipCount = 0; updateClipBadge(); return; }
+  let items = [];
+  try { items = await invoke("clip_inbox_list"); } catch (_) {}
+  clipCount = items.length; // the badge shows how many collected items are waiting
+  updateClipBadge();
+  if (!$("clip-modal").classList.contains("hidden")) renderClipList(items);
+}
+function renderClipList(items) {
+  const list = $("clip-list");
+  list.innerHTML = "";
+  if (!items.length) {
+    const e = document.createElement("div");
+    e.className = "hint";
+    e.textContent = t("clipEmpty");
+    list.appendChild(e);
+    return;
+  }
+  for (const it of items) {
+    const row = document.createElement("div");
+    row.className = "clip-row";
+    const time = document.createElement("span");
+    time.className = "clip-time";
+    time.textContent = new Date(it.ts * 1000).toLocaleString(LANG);
+    const prev = document.createElement("div");
+    prev.className = "clip-preview";
+    prev.textContent = it.text;
+    const actions = document.createElement("div");
+    actions.className = "clip-actions";
+    const save = document.createElement("button");
+    save.type = "button"; save.className = "ghost-btn"; save.textContent = t("clipSave");
+    save.addEventListener("click", () => {
+      $("clip-modal").classList.add("hidden");
+      openModal({ mode: "create", text: it.text, title: t("nameModalTitle") });
+    });
+    const copy = document.createElement("button");
+    copy.type = "button"; copy.className = "ghost-btn"; copy.textContent = t("clipCopy");
+    copy.addEventListener("click", () => { invoke("copy_text", { text: it.text }).then(() => toast(t("copied"))).catch((e) => toast(String(e))); });
+    const dismiss = document.createElement("button");
+    dismiss.type = "button"; dismiss.className = "ghost-btn"; dismiss.textContent = t("clipDismiss");
+    dismiss.addEventListener("click", async () => { await invoke("clip_inbox_dismiss", { id: it.id }).catch((e) => toast(String(e))); refreshClipInbox(); });
+    actions.append(save, copy, dismiss);
+    row.append(time, prev, actions);
+    list.appendChild(row);
+  }
+}
+async function openClipInbox() {
+  let items = [];
+  try { items = await invoke("clip_inbox_list"); } catch (_) {}
+  clipCount = items.length; // badge stays until items are dismissed/cleared
+  updateClipBadge();
+  renderClipList(items);
+  $("clip-modal").classList.remove("hidden");
+}
+
 // Keep all image/file modal controls consistent with modalState.
 function syncModalImageUi(mode) {
   const { image, showImage, copyImage, filePath, iconPath } = modalState;
@@ -2778,6 +3923,17 @@ function syncModalImageUi(mode) {
   modal.text.classList.toggle("hidden", !textVisible);
   modal.textBar.classList.toggle("hidden", !(textVisible && flag("promptVars")));
   modal.varsHint.classList.toggle("hidden", !(textVisible && flag("promptVars")));
+  updateLenCounter();
+  // F7: version history only for existing text prompts; reset to collapsed on open.
+  const histOn = mode === "edit" && textVisible && flag("promptHistory");
+  $("modal-history").classList.toggle("hidden", !histOn);
+  if (histOn) {
+    $("modal-history-body").classList.add("hidden");
+    $("modal-history-body").innerHTML = "";
+    $("modal-history-head").setAttribute("aria-expanded", "false");
+    $("modal-history").classList.remove("open");
+    modal.root.classList.remove("history-open");
+  }
   modal.name.placeholder = filePath
     ? t(kind === "video" ? "videoNamePh" : kind ? "imageNamePh" : "fileNamePh")
     : copyImage ? t("imageNamePh") : t("namePh");
@@ -2892,15 +4048,31 @@ function closeModal() {
 }
 
 // Themed yes/no dialog. Resolves true on confirm, false on cancel / dismiss.
+// `icon` puts an SVG above the title, `input` turns it into a one-field prompt
+// (then it resolves to the entered string, or null when dismissed).
 let confirmCleanup = null;
-function confirmDialog({ title, message, confirmLabel, cancelLabel }) {
+function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input, danger = true }) {
   const root = $("confirm-modal");
   $("confirm-title").textContent = title;
   $("confirm-msg").textContent = message;
+  const iconEl = $("confirm-icon");
+  iconEl.innerHTML = icon || "";
+  iconEl.classList.toggle("hidden", !icon);
+  const row = $("confirm-input-row");
+  const field = $("confirm-input");
+  const eye = $("confirm-input-eye");
+  row.classList.toggle("hidden", !input);
   const ok = $("confirm-ok");
   const cancel = $("confirm-cancel");
+  ok.classList.toggle("danger-confirm", danger);
   ok.textContent = confirmLabel;
   cancel.textContent = cancelLabel || t("cancel");
+  if (input) {
+    field.value = "";
+    field.type = "password";
+    field.placeholder = input.placeholder || "";
+    eye.innerHTML = EYE_SVG;
+  }
   confirmCleanup?.(false); // resolve any stale dialog first
   root.classList.remove("hidden");
   return new Promise((resolve) => {
@@ -2909,18 +4081,36 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel }) {
       ok.removeEventListener("click", onOk);
       cancel.removeEventListener("click", onCancel);
       root.removeEventListener("pointerdown", onBg);
+      field.removeEventListener("keydown", onKey);
+      eye.removeEventListener("click", onEye);
       confirmCleanup = null;
       resolve(val);
     };
-    const onOk = () => done(true);
-    const onCancel = () => done(false);
-    const onBg = (e) => { if (e.target === root) done(false); };
+    const finish = (okPressed) => done(input ? (okPressed ? field.value : null) : okPressed);
+    const onOk = () => finish(true);
+    const onCancel = () => finish(false);
+    const onBg = (e) => { if (e.target === root) finish(false); };
+    const onKey = (e) => { if (e.key === "Enter") { e.preventDefault(); finish(true); } };
+    const onEye = () => { field.type = field.type === "password" ? "text" : "password"; };
     ok.addEventListener("click", onOk);
     cancel.addEventListener("click", onCancel);
     root.addEventListener("pointerdown", onBg);
+    field.addEventListener("keydown", onKey);
+    eye.addEventListener("click", onEye);
     confirmCleanup = done;
-    ok.focus();
+    (input ? field : ok).focus();
   });
+}
+
+// Same dialog with nothing to decide: one button, used to report a result.
+async function infoDialog(title, message, icon) {
+  const cancel = $("confirm-cancel");
+  cancel.classList.add("hidden");
+  try {
+    await confirmDialog({ title, message, confirmLabel: t("close"), icon, danger: false });
+  } finally {
+    cancel.classList.remove("hidden");
+  }
 }
 
 // Ask before dismissing the modal via the background. A new save dialog (text,
@@ -3111,13 +4301,94 @@ function setLibType(type) {
   setActiveFilter($("library-types"), ".lib-type", "type", type);
 }
 
+// ---- F18 fuzzy search: tiered scoring (exact > prefix > fuzzy) over the same
+// fields the plain search used. Fuzzy only kicks in when no substring hit exists,
+// so the common case short-circuits and stays cheap on 1000+ prompts.
+function fuzzyMaxTyposFor(term) {
+  const raw = settings.ui_texts?.fuzzyMaxTypos || "auto";
+  if (raw === "1") return 1;
+  if (raw === "2") return 2;
+  return term.length <= 5 ? 1 : 2; // auto
+}
+// Bounded Levenshtein: returns max+1 as soon as every cell exceeds max (early out).
+function editDistWithin(a, b, max) {
+  const la = a.length, lb = b.length;
+  if (Math.abs(la - lb) > max) return max + 1;
+  let prev = Array.from({ length: lb + 1 }, (_, j) => j);
+  for (let i = 1; i <= la; i++) {
+    const cur = new Array(lb + 1);
+    cur[0] = i;
+    let rowMin = i;
+    const ca = a.charCodeAt(i - 1);
+    for (let j = 1; j <= lb; j++) {
+      const cost = ca === b.charCodeAt(j - 1) ? 0 : 1;
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+      if (cur[j] < rowMin) rowMin = cur[j];
+    }
+    if (rowMin > max) return max + 1;
+    prev = cur;
+  }
+  return prev[lb];
+}
+// Weighted match score for the active query. score 0 = no match; fuzzy = true when
+// only the typo-tolerant tier matched (rendered dimmed).
+// Per-render memo: libSearchScore is called for every prompt in the filter, TWICE
+// per comparison in the sort, and once more per row for the fuzzy class. Fuzzy mode
+// runs bounded edit-distance over every token, so recomputing 3×/keystroke lagged.
+// Cache is cleared at the top of each renderLibrary (see below).
+let libScoreCache = new Map();
+function libSearchScore(p) {
+  const hit = libScoreCache.get(p.id);
+  if (hit) return hit;
+  const res = computeLibSearchScore(p);
+  libScoreCache.set(p.id, res);
+  return res;
+}
+function computeLibSearchScore(p) {
+  const q = libQuery.trim().toLowerCase();
+  if (!q) return { score: 1, fuzzy: false };
+  const fields = [[(p.name || "").toLowerCase(), 3], [(p.text || "").toLowerCase(), 1], [(p.file_path || "").toLowerCase(), 1]];
+  let best = 0;
+  for (const [val, w] of fields) {
+    if (val && val.includes(q)) { const s = (val.startsWith(q) ? 120 : 100) * w; if (s > best) best = s; }
+  }
+  if (best) return { score: best, fuzzy: false };
+  if (!flag("fuzzySearch")) return { score: 0, fuzzy: false };
+  // Tokenize on any non-alphanumeric so "code," / "code." / code blocks split into
+  // clean words (scripts without spaces, e.g. CJK, stay one token — substring wins).
+  const qWords = fuzzyTokens(q);
+  if (!qWords.length) return { score: 0, fuzzy: false };
+  for (const [val, w] of fields) {
+    if (!val) continue;
+    const words = fuzzyTokens(val);
+    let matched = 0;
+    for (const qw of qWords) {
+      const max = fuzzyMaxTyposFor(qw);
+      if (words.some((vw) => fuzzyWordHit(qw, vw, max))) matched++;
+    }
+    if (matched === qWords.length) { const s = 40 * w; if (s > best) best = s; }
+  }
+  return { score: best, fuzzy: best > 0 };
+}
+// Split into alphanumeric tokens (Unicode-aware).
+function fuzzyTokens(s) {
+  return s.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+}
+// A query word matches a field word by substring, whole-word edit distance, or —
+// for longer field words — edit distance against its leading prefix ("cde"→"code",
+// "cde"→"codebase").
+function fuzzyWordHit(qw, vw, max) {
+  if (vw.includes(qw)) return true;
+  if (editDistWithin(qw, vw, max) <= max) return true;
+  if (vw.length > qw.length + max) return editDistWithin(qw, vw.slice(0, qw.length + max), max) <= max;
+  return false;
+}
+
 function libMatches(p) {
   if (libFav && !p.favorite) return false;
   if (libType !== "all" && promptType(p) !== libType) return false;
   if (libColor !== "all" && (p.color || "") !== libColor) return false;
-  const q = libQuery.trim().toLowerCase();
-  if (!q) return true;
-  return [p.name, p.text, p.file_path].some((s) => (s || "").toLowerCase().includes(q));
+  return libSearchScore(p).score > 0;
 }
 
 // Color-filter dots (once per wrap). "All" + every palette color. Shared by the
@@ -3146,9 +4417,55 @@ function setLibColor(color) {
   setActiveFilter($("library-colors"), ".lib-color", "color", color);
 }
 
+// F10 smart sort: order the library list. The usage-based options gate on smartSort.
+function libSortMode() {
+  const raw = settings.ui_texts?.librarySort || "default";
+  if ((raw === "mostUsed" || raw === "recentUsed") && !flag("smartSort")) return "default";
+  return raw;
+}
+function sortLibraryItems(items) {
+  const mode = libSortMode();
+  const q = libQuery.trim();
+  const nameOf = (p) => libLabel(p).toLowerCase();
+  const byName = (a, b) => nameOf(a).localeCompare(nameOf(b), LANG);
+  if (mode === "default") {
+    // Default + active query = relevance order (exact/prefix above fuzzy).
+    if (q) items.sort((a, b) => (libSearchScore(b).score - libSearchScore(a).score) || byName(a, b));
+    return;
+  }
+  if (mode === "name") { items.sort(byName); return; }
+  // Usage/recency desc; unused (0) fall last, ties resolve by name — all stable.
+  if (mode === "mostUsed") {
+    items.sort((a, b) => ((settings.usage?.[b.id] || 0) - (settings.usage?.[a.id] || 0)) || byName(a, b));
+  } else if (mode === "recentUsed") {
+    items.sort((a, b) => ((settings.last_used?.[b.id] || 0) - (settings.last_used?.[a.id] || 0)) || byName(a, b));
+  }
+}
+function fillLibrarySort() {
+  const sel = $("library-sort");
+  if (!sel) return;
+  const opts = [["default", "sortDefault"], ["name", "sortName"]];
+  if (flag("smartSort")) opts.push(["mostUsed", "sortMostUsed"], ["recentUsed", "sortRecentUsed"]);
+  sel.innerHTML = "";
+  for (const [v, k] of opts) {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = t(k);
+    sel.appendChild(o);
+  }
+  sel.value = libSortMode();
+}
+
+// Close the library and flush any deferred grid rebuild from batch edits.
+function hideLibrary() {
+  libraryEl.classList.add("hidden");
+  if (gridDirty) { gridDirty = false; renderGrid(true); }
+}
+
 function renderLibrary() {
   const list = $("library-list");
   list.innerHTML = "";
+  libScoreCache.clear(); // fresh scores each render (query / prompt content may have changed)
+  fillLibrarySort();
   syncLibraryCols();
   if (_libObs) _libObs.disconnect();
   _libObs = makeVideoObserver();
@@ -3164,6 +4481,7 @@ function renderLibrary() {
   }
   // Hidden filters keep their default state, so this is inert when they are off.
   const items = prompts.filter(libMatches);
+  sortLibraryItems(items); // F10 chosen sort (stable), before the favorites float
   // Favorites float to the top (stable otherwise) when the feature is on.
   if (flag("favorites")) items.sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0));
   if (!items.length) {
@@ -3174,11 +4492,18 @@ function renderLibrary() {
     return;
   }
   const placed = new Set(Object.keys(layoutOf(activeView())));
+  libDisplayOrder = items.map((p) => p.id); // F8: range-select uses display order
   for (const p of items) {
     const row = document.createElement("button");
     row.type = "button";
     row.className = "lib-item";
-    row.title = t("copy");
+    row.dataset.id = p.id; // F8: in-place selection toggle finds the row by id
+    // F18: dim rows that only matched via the typo-tolerant tier.
+    if (libQuery.trim() && libSearchScore(p).fuzzy) row.classList.add("lib-fuzzy");
+    // F8: selection state (the checkbox itself is a CSS ::before, shown while the
+    // list carries the .selecting class — so toggling select mode never re-renders).
+    if (libSelectMode && libSelected.has(p.id)) row.classList.add("lib-selected");
+    row.title = libSelectMode ? "" : t("copy");
 
     const body = document.createElement("span");
     body.className = "lib-body";
@@ -3195,6 +4520,7 @@ function renderLibrary() {
 
     // Place on the current layout: drag the row onto the grid, or one click.
     row.addEventListener("pointerdown", (e) => {
+      if (libSelectMode) return; // no drag while multi-selecting
       if (e.button !== 0 || e.target.closest(".lib-add, .lib-edit, .lib-fav")) return;
       drag = { id: p.id, startX: e.clientX, startY: e.clientY, moved: false, el: row, fromLibrary: true };
     });
@@ -3243,9 +4569,124 @@ function renderLibrary() {
     edit.addEventListener("click", (e) => { e.stopPropagation(); editPrompt(p.id); });
     row.appendChild(edit);
 
-    // Click copies the prompt; optionally closes the library afterwards.
-    row.addEventListener("click", () => libraryCopy(p));
+    // Click copies the prompt (or toggles selection in batch mode).
+    row.addEventListener("click", (e) => {
+      if (libSelectMode) { toggleLibSelect(p.id, e.shiftKey); return; }
+      libraryCopy(p);
+    });
     list.appendChild(row);
+  }
+}
+
+// ---- F8 batch operations ----
+function setLibSelectMode(on) {
+  libSelectMode = on;
+  if (!on) { libSelected.clear(); libLastId = null; }
+  const btn = $("library-select-btn");
+  btn?.classList.toggle("active", on);
+  btn?.setAttribute("aria-pressed", String(on));
+  $("lib-batch-bar").classList.toggle("hidden", !on);
+  // Toggle the checkbox column via a class — no list rebuild (instant on 1000s).
+  $("library-list").classList.toggle("selecting", on);
+  if (on) { buildBatchColors(); fillBatchViews(); }
+  applyLibSelectionDom();
+  updateBatchBar();
+}
+function toggleLibSelect(id, shift) {
+  if (shift && libLastId && libDisplayOrder.includes(libLastId) && libDisplayOrder.includes(id)) {
+    const a = libDisplayOrder.indexOf(libLastId), b = libDisplayOrder.indexOf(id);
+    const [lo, hi] = a < b ? [a, b] : [b, a];
+    const add = !libSelected.has(id); // extend using the target's new state
+    for (let i = lo; i <= hi; i++) { if (add) libSelected.add(libDisplayOrder[i]); else libSelected.delete(libDisplayOrder[i]); }
+  } else {
+    if (libSelected.has(id)) libSelected.delete(id); else libSelected.add(id);
+  }
+  libLastId = id;
+  applyLibSelectionDom(); // in-place class toggle — no full re-render (fast on 1000s)
+  updateBatchBar();
+}
+// Reflect the current selection onto the visible rows without rebuilding the list.
+function applyLibSelectionDom() {
+  for (const row of $("library-list").querySelectorAll(".lib-item")) {
+    row.classList.toggle("lib-selected", libSelected.has(row.dataset.id));
+  }
+}
+function updateBatchBar() {
+  const n = libSelected.size;
+  $("lib-batch-count").textContent = t("selectedCount").replace("{n}", n.toLocaleString(LANG));
+  const bar = $("lib-batch-bar");
+  bar.querySelectorAll("button, select").forEach((el) => {
+    if (["lib-batch-all", "lib-batch-none"].includes(el.id)) return; // always usable
+    el.disabled = n === 0;
+  });
+}
+function buildBatchColors() {
+  const wrap = $("lib-batch-colors");
+  if (!wrap || wrap.childElementCount) return;
+  const mk = (color, cls) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `lib-color ${cls}`.trim();
+    b.dataset.color = color;
+    if (color && color !== "none") b.style.background = color;
+    b.title = color === "none" ? t("colorNone") : color;
+    return b;
+  };
+  wrap.appendChild(mk("none", "lib-color-all"));
+  for (const c of COLORS) if (c) wrap.appendChild(mk(c, ""));
+}
+function fillBatchViews() {
+  const sel = $("lib-batch-view");
+  if (!sel) return;
+  sel.innerHTML = "";
+  for (const v of settings.views || []) {
+    const o = document.createElement("option");
+    o.value = v.id; o.textContent = v.name;
+    sel.appendChild(o);
+  }
+  if (settings.active_view) sel.value = settings.active_view;
+}
+async function doBatch(action, extra = {}) {
+  const ids = [...libSelected];
+  if (!ids.length) return;
+  const idset = new Set(ids);
+  try {
+    // Backend now returns ONLY settings (no prompt echo) — so a batch over
+    // image-heavy prompts no longer re-serialises every base64 blob over IPC.
+    settings = await invoke("batch_prompts", {
+      ids, action,
+      color: extra.color ?? null,
+      favorite: extra.favorite ?? null,
+      viewId: extra.viewId ?? null,
+    });
+  } catch (e) { toast(String(e)); return; }
+  // Mirror the change onto the local prompt list ourselves.
+  if (action === "delete") prompts = prompts.filter((p) => !idset.has(p.id));
+  else if (action === "favorite") { for (const p of prompts) if (idset.has(p.id)) p.favorite = extra.favorite ?? true; }
+  else if (action === "color") { for (const p of prompts) if (idset.has(p.id)) p.color = extra.color ?? ""; }
+  // The grid sits hidden behind the library modal — rebuilding it (a full fit-text
+  // pass) is deferred until the library closes.
+  gridDirty = true;
+  if (action === "delete") {
+    // Remove the deleted rows in place instead of rebuilding the whole list.
+    for (const id of ids) $("library-list").querySelector(`.lib-item[data-id="${CSS.escape(id)}"]`)?.remove();
+    libDisplayOrder = libDisplayOrder.filter((x) => !idset.has(x));
+    libSelected.clear(); libLastId = null;
+  } else {
+    // favorite/color/view can reorder or change row content → one rebuild.
+    if (action === "addView" || action === "removeView") renderViews();
+    renderLibrary();
+  }
+  updateBatchBar();
+}
+async function batchExport(format) {
+  const ids = [...libSelected];
+  if (!ids.length) return;
+  try {
+    const n = await invoke("export_prompts", { format, ids });
+    toast(t("exportDone").replace("{n}", String(n)));
+  } catch (e) {
+    if (String(e) !== "canceled") toast(String(e));
   }
 }
 
@@ -3264,11 +4705,15 @@ async function copyResolved(p) {
 }
 
 async function libraryCopy(p) {
+  const hasVars = flag("promptVars") && !p.copy_image && !p.file_path && extractVars(p.text).length > 0;
+  // Variable prompts skip the double-click shortcut: they must reach the dialog
+  // (copyResolved) so the variables get asked before copy + auto-paste.
+  if (!hasVars && autoPasteDouble(p.id)) { await autoPasteNow(null); return; } // F19: 2nd fast click pastes
   if (copyOnCooldown(p.id)) return;
   if (!(await copyResolved(p))) return;
   recordCopy(p.id);
   toast(t("copied"));
-  if (flag("closeAfterCopy")) libraryEl.classList.add("hidden");
+  if (flag("closeAfterCopy")) hideLibrary();
 }
 
 // Reflect the close-after-copy flag on the library header toggle.
@@ -3505,101 +4950,9 @@ async function openJournal() {
 
 
 // ---- Settings: views editor ----
-function renderViewsEditor() {
-  const editor = $("views-editor");
-  editor.innerHTML = "";
-  for (const v of settings.views) {
-    const row = document.createElement("div");
-    row.className = "view-row";
-
-    const input = document.createElement("input");
-    input.className = "modal-input";
-    input.type = "text";
-    input.maxLength = 30;
-    input.value = v.name;
-    input.placeholder = t("viewNamePh");
-    input.addEventListener("change", async () => {
-      settings = await invoke("rename_view", { id: v.id, name: input.value });
-      renderViews();
-      renderViewsEditor();
-    });
-    row.appendChild(input);
-
-    // Per-view grid size (columns × rows), applied on change.
-    const grid = document.createElement("span");
-    grid.className = "view-grid";
-    const mkNum = (value) => {
-      const n = document.createElement("input");
-      n.className = "grid-mini";
-      n.type = "number";
-      n.min = 1;
-      n.max = val("gridMax");
-      n.value = value;
-      return n;
-    };
-    const colsIn = mkNum(v.cols);
-    const rowsIn = mkNum(v.rows);
-    const applyGrid = async () => {
-      const cols = clampGrid(colsIn.value, v.cols);
-      const rows = clampGrid(rowsIn.value, v.rows);
-      settings = await invoke("set_view_grid", { id: v.id, cols, rows });
-      renderViewsEditor();
-      if (v.id === settings.active_view) await renderGrid(true);
-    };
-    attachGridPicker(colsIn, applyGrid);
-    attachGridPicker(rowsIn, applyGrid);
-    const times = document.createElement("span");
-    times.className = "times";
-    times.textContent = "×";
-    grid.append(colsIn, times, rowsIn);
-    row.appendChild(grid);
-
-    // Per-view tab color: a swatch dot opening the preset palette.
-    const colorDot = document.createElement("button");
-    colorDot.type = "button";
-    colorDot.className = "swatch view-color-dot" + (v.color ? "" : " none");
-    if (v.color) colorDot.style.background = v.color;
-    colorDot.title = t("viewColor");
-    colorDot.addEventListener("click", () => {
-      openSwatchPop(colorDot, v.color || "", async (hex) => {
-        settings = await invoke("set_view_color", { id: v.id, color: hex });
-        renderViews();
-        renderViewsEditor();
-      });
-    });
-    row.appendChild(colorDot);
-
-    if (settings.views.length > 1) {
-      const del = document.createElement("button");
-      del.className = "icon-btn";
-      del.innerHTML = CROSS;
-      del.title = t("delete");
-      // Two-step confirm: first click arms (red), second click deletes.
-      del.addEventListener("click", async () => {
-        if (!del.classList.contains("confirm")) {
-          del.classList.add("confirm");
-          del.title = `${t("delete")}?`;
-          setTimeout(() => {
-            del.classList.remove("confirm");
-            del.title = t("delete");
-          }, DISARM_MS);
-          return;
-        }
-        try {
-          settings = await invoke("delete_view", { id: v.id });
-          renderViewsEditor();
-          await renderGrid(true);
-        } catch (err) {
-          toast(String(err));
-        }
-      });
-      row.appendChild(del);
-    }
-    editor.appendChild(row);
-  }
-  // At the limit the add button disappears entirely.
-  $("view-add").classList.toggle("hidden", settings.views.length >= val("maxViews"));
-}
+// Views are managed straight from the top view tabs: the "+" adds one, a
+// right-click opens the view popup (rename, grid size, color, delete). The old
+// settings-page views editor was removed.
 
 // ---- Settings actions ----
 async function runExport(format) {
@@ -3624,15 +4977,19 @@ async function runImport() {
     $("theme-select").value = settings.theme || "system";
     $("tile-font").value = settings.tile_font || "system";
     $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
+    fillScaleSelect("ui-scale", "uiScale");
+    fillScaleSelect("icon-scale", "iconScale");
     $("opt-minimize").checked = settings.minimize_to_tray === true;
     $("opt-screenshot-folder").checked = settings.ui_flags?.screenshotSave === true;
+    $("opt-tooltips").checked = settings.ui_flags?.tooltipsEnabled !== false;
+    $("opt-autopaste").checked = settings.ui_flags?.autoPaste !== false;
     $("opt-autoupdate").checked = settings.auto_update !== false;
     applyTheme(await invoke("current_theme"));
     applyTileStyle();
     applyBars();
     await renderGrid(true); // re-render with the new tile style
-    renderViewsEditor();
     toast(`${count} ${t("imported")}`);
+    maybeDupImportToast(); // F6: flag near-duplicates the import may have introduced
   } catch (err) {
     if (String(err) !== "canceled") toast(t("importFailed"));
   }
@@ -3648,28 +5005,95 @@ async function runExportAll() {
 }
 
 async function runImportAll() {
-  try {
-    const count = await withDialog(() => invoke("import_all"));
-    if (count == null) return;
-    // Settings were replaced wholesale (window, hotkey, theme, toggles…) — a full
-    // reload re-applies every one of them cleanly instead of poking each control.
-    location.reload();
-  } catch (err) {
-    if (String(err) !== "canceled") toast(t("importFailed"));
+  const path = await withDialog(() => invoke("pick_backup_file")).catch(() => null);
+  if (!path) return;
+  // The file stays picked while the password is retried, so a typo does not send
+  // the user back through the file picker.
+  let password = null;
+  let asked = false;
+  for (;;) {
+    try {
+      const res = await invoke("import_all", { path, password });
+      await reloadEverything();
+      await infoDialog(t("backupImport"), t("importAllDone").replace("{f}", res.name).replace("{n}", res.count));
+      return;
+    } catch (err) {
+      const m = String(err);
+      if (!/password/i.test(m)) {
+        await infoDialog(t("importFailed"), m); // the reason, not just "failed"
+        return;
+      }
+      password = await confirmDialog({
+        title: t("backupPwTitle"),
+        message: asked ? t("backupPwWrong") : t("backupPwBody"),
+        confirmLabel: t("backupRestore"),
+        cancelLabel: t("cancel"),
+        icon: LOCK_SVG,
+        input: { placeholder: t("backupPasswordLabel") },
+        danger: false,
+      });
+      asked = true;
+      if (password === null) return; // dismissed
+    }
   }
 }
 
-async function deleteAll() {
-  const btn = $("delete-all");
-  if (!armButton(btn, t("deleteAllConfirm"))) {
+// Portable start with an installed copy's store present: offer to adopt it. Runs
+// after the window is up, so the dialog already has the theme and language.
+async function offerTakeover() {
+  const src = await invoke("takeover_offer").catch(() => null);
+  if (!src) return;
+  const adopt = await confirmDialog({
+    title: t("takeoverTitle"),
+    message: t("takeoverBody").replace("{path}", src),
+    confirmLabel: t("takeoverAdopt"),
+    cancelLabel: t("takeoverSkip"),
+    icon: TAKEOVER_SVG,
+    danger: false,
+  });
+  try {
+    await invoke("takeover_apply", { adopt });
+  } catch (e) {
+    toast(String(e));
+    return;
+  }
+  if (adopt) await reloadEverything();
+}
+
+// Delete all DATA (prompts, versions, copy history, clip inbox) — settings kept.
+async function deleteData() {
+  const btn = $("delete-data");
+  if (!armButton(btn, t("deleteDataConfirm"))) {
     clearTimeout(deleteAllTimer);
-    deleteAllTimer = setTimeout(() => disarmButton(btn, t("deleteAll")), DISARM_MS);
+    deleteAllTimer = setTimeout(() => disarmButton(btn, t("deleteData")), DISARM_MS);
     return;
   }
   clearTimeout(deleteAllTimer);
-  disarmButton(btn, t("deleteAll"));
+  disarmButton(btn, t("deleteData"));
+  await maybeBackupBeforeWipe();
   await invoke("delete_all_data");
-  location.reload(); // full re-init: default theme, views, toggles, grid
+  await reloadEverything(); // in place: a page reload repaints the whole window
+}
+
+// Expert opt: take a safety backup before a destructive reset/delete.
+async function maybeBackupBeforeWipe() {
+  if (!optFlag("autoBackupBeforeWipe")) return;
+  try { await invoke("create_backup", { keep: Math.round(val("backupKeep")) }); } catch { /* best-effort */ }
+}
+
+// Reset all SETTINGS to defaults (theme, views, toggles, expert values) — prompts kept.
+async function resetSettings() {
+  const btn = $("reset-settings");
+  if (!armButton(btn, t("resetSettingsConfirm"))) {
+    clearTimeout(resetSettingsTimer);
+    resetSettingsTimer = setTimeout(() => disarmButton(btn, t("resetSettings")), DISARM_MS);
+    return;
+  }
+  clearTimeout(resetSettingsTimer);
+  disarmButton(btn, t("resetSettings"));
+  await maybeBackupBeforeWipe();
+  await invoke("reset_settings");
+  await reloadEverything(); // in place: a page reload repaints the whole window
 }
 
 // ---- Wire events ----
@@ -3708,7 +5132,7 @@ function bind() {
   saveBtn.addEventListener("click", startCreate);
 
   modal.confirm.addEventListener("click", confirmModal);
-  modal.cancel.addEventListener("click", closeModal);
+  modal.closeX.addEventListener("click", closeModal);
   modal.fav.addEventListener("click", () => {
     const on = modal.fav.classList.toggle("active");
     modal.fav.setAttribute("aria-pressed", String(on));
@@ -3717,6 +5141,27 @@ function bind() {
   modal.img.addEventListener("click", () => { if (modal.img.src) openLightbox(modal.img.src, false); });
   modal.video.addEventListener("click", () => { if (modal.video.src) openLightbox(modal.video.src, true); });
   modal.name.addEventListener("keydown", (e) => { if (e.key === "Enter") confirmModal(); });
+  modal.text.addEventListener("input", scheduleLenCounter); // F16 live length readout
+  // F7 version-history collapsible.
+  $("modal-history-head").addEventListener("click", () => {
+    const body = $("modal-history-body");
+    const open = !body.classList.toggle("hidden");
+    $("modal-history-head").setAttribute("aria-expanded", String(open));
+    $("modal-history").classList.toggle("open", open);
+    // In tall (text-edit) mode the textarea flex-grows and eats the height the open
+    // history needs; history-open caps it (CSS) so the list + Save row stay reachable.
+    modal.root.classList.toggle("history-open", open);
+    if (open) {
+      loadHistory(modalState?.id);
+      // Scroll the modal's own scroll container to the bottom so the freshly opened
+      // history (and the Save row below it) come fully into view on small windows.
+      // scrollIntoView("nearest") only nudged the already-visible head, hence unreliable.
+      const scroller = $("modal-history").closest(".modal");
+      if (scroller) requestAnimationFrame(() => requestAnimationFrame(() => {
+        scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
+      }));
+    }
+  });
 
   // Image / Text display toggle (text mode shows the name on the tile).
   modal.showImage.addEventListener("click", () => {
@@ -3921,7 +5366,6 @@ function bind() {
 
   $("gear").addEventListener("click", () => {
     showExpertPage(false); // always open on the main page
-    renderViewsEditor();
     settingsEl.classList.remove("hidden");
   });
   $("expert-open").addEventListener("click", () => {
@@ -3971,6 +5415,11 @@ function bind() {
     setLibColor("all");
     libFav = false;
     $("library-fav").classList.remove("active");
+    // Always open in normal (non-select) mode.
+    libSelectMode = false; libSelected.clear(); libLastId = null;
+    $("library-select-btn").classList.remove("active");
+    $("library-select-btn").setAttribute("aria-pressed", "false");
+    $("lib-batch-bar").classList.add("hidden");
     syncLibraryToggle();
     renderLibrary();
     libraryEl.classList.remove("hidden");
@@ -3985,6 +5434,11 @@ function bind() {
   });
   $("library-q").addEventListener("input", (e) => { libQuery = e.target.value; renderLibrary(); });
   wireSearchSuggest($("library-q"), "recentSearchLib");
+  $("library-sort").addEventListener("change", (e) => { // F10
+    settings.ui_texts = { ...(settings.ui_texts || {}), librarySort: e.target.value };
+    invoke("set_ui_text", { key: "librarySort", value: e.target.value }).catch((err) => toast(String(err)));
+    renderLibrary();
+  });
   $("library-types").addEventListener("click", (e) => {
     if (e.target.closest("#library-fav")) {
       libFav = !libFav;
@@ -3999,10 +5453,59 @@ function bind() {
     const btn = e.target.closest(".lib-color");
     if (btn) { setLibColor(btn.dataset.color); renderLibrary(); }
   });
-  $("library-close").addEventListener("click", () => libraryEl.classList.add("hidden"));
-  libraryEl.addEventListener("pointerdown", (e) => {
-    if (e.target === libraryEl) libraryEl.classList.add("hidden");
+  // F8 batch operations wiring.
+  $("library-select-btn").addEventListener("click", () => setLibSelectMode(!libSelectMode));
+  $("lib-batch-all").addEventListener("click", () => { for (const id of libDisplayOrder) libSelected.add(id); applyLibSelectionDom(); updateBatchBar(); });
+  $("lib-batch-none").addEventListener("click", () => { libSelected.clear(); libLastId = null; applyLibSelectionDom(); updateBatchBar(); });
+  $("lib-batch-colors").addEventListener("click", (e) => {
+    const b = e.target.closest(".lib-color");
+    if (b) doBatch("color", { color: b.dataset.color === "none" ? "" : b.dataset.color });
   });
+  $("lib-batch-fav").addEventListener("click", () => doBatch("favorite", { favorite: true }));
+  $("lib-batch-unfav").addEventListener("click", () => doBatch("favorite", { favorite: false }));
+  $("lib-batch-addview").addEventListener("click", () => doBatch("addView", { viewId: $("lib-batch-view").value }));
+  $("lib-batch-removeview").addEventListener("click", () => doBatch("removeView", { viewId: $("lib-batch-view").value }));
+  $("lib-batch-csv").addEventListener("click", () => batchExport("csv"));
+  $("lib-batch-txt").addEventListener("click", () => batchExport("txt"));
+  $("lib-batch-delete").addEventListener("click", async () => {
+    const n = libSelected.size;
+    if (!n) return;
+    const ok = await confirmDialog({ title: t("delete"), message: t("batchDeleteConfirm").replace("{n}", String(n)), confirmLabel: t("delete") });
+    if (ok) doBatch("delete");
+  });
+  // Esc leaves selection mode before it closes the library (capture beats the overlay).
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && libSelectMode && !libraryEl.classList.contains("hidden")) {
+      e.stopPropagation();
+      setLibSelectMode(false);
+    }
+  }, true);
+  $("library-close").addEventListener("click", hideLibrary);
+  libraryEl.addEventListener("pointerdown", (e) => {
+    if (e.target === libraryEl) hideLibrary();
+  });
+  // F6 duplicate finder modal (backups + statistics are now inline expert panels).
+  $("dupes-close").addEventListener("click", () => $("dupes-modal").classList.add("hidden"));
+  $("dupes-modal").addEventListener("pointerdown", (e) => { if (e.target === $("dupes-modal")) $("dupes-modal").classList.add("hidden"); });
+  $("dupes-rescan").addEventListener("click", () => scanDupes());
+  // F21 clipboard inbox.
+  $("clip-btn").addEventListener("click", openClipInbox);
+  // Pause/resume collecting straight from the inbox — same switch as the expert one.
+  $("clip-toggle").addEventListener("click", async () => {
+    const on = !optFlag("clipWatcher");
+    settings.ui_flags = { ...(settings.ui_flags || {}), clipWatcher: on };
+    try { await invoke("set_ui_flag", { key: "clipWatcher", enabled: on }); }
+    catch (e) { toast(String(e)); }
+    applyFlags();
+    await refreshClipInbox();
+    updateClipBadge();
+  });
+  $("clip-close").addEventListener("click", () => $("clip-modal").classList.add("hidden"));
+  $("clip-modal").addEventListener("pointerdown", (e) => { if (e.target === $("clip-modal")) $("clip-modal").classList.add("hidden"); });
+  $("clip-clear").addEventListener("click", async () => { await invoke("clip_inbox_clear").catch((e) => toast(String(e))); refreshClipInbox(); });
+  listen("clip-inbox-changed", () => refreshClipInbox());
+  // Clicking the app logo opens the project's GitHub page (drag still moves the window).
+  $("app-logo")?.addEventListener("click", () => invoke("open_repo").catch((e) => toast(String(e))));
 
   // Copy history & usage journal.
   const journalEl = $("journal");
@@ -4036,18 +5539,19 @@ function bind() {
     settings.last_used = {};
     await loadJournal();
   });
-  $("settings-close").addEventListener("click", () => settingsEl.classList.add("hidden"));
+  $("settings-close").addEventListener("click", hideSettings);
   // pointerdown (not click): selecting text that ends outside an input must not close.
-  settingsEl.addEventListener("pointerdown", (e) => { if (e.target === settingsEl) settingsEl.classList.add("hidden"); });
-
-  $("view-add").addEventListener("click", () => openViewModal(null));
+  settingsEl.addEventListener("pointerdown", (e) => { if (e.target === settingsEl) hideSettings(); });
 
   // View add / rename / delete popup.
   viewModal.confirm.addEventListener("click", confirmViewModal);
+  // Grid size uses the same dropdown number picker as the main layout; values are
+  // applied on Save, so the pick callback is a no-op here.
+  attachGridPicker(viewModal.cols, () => {});
+  attachGridPicker(viewModal.rows, () => {});
   viewModal.name.addEventListener("keydown", (e) => {
     if (e.key === "Enter") confirmViewModal();
   });
-  viewModal.cancel.addEventListener("click", closeViewModal);
   viewModal.close.addEventListener("click", closeViewModal);
   viewModal.root.addEventListener("pointerdown", (e) => {
     if (e.target === viewModal.root) closeViewModal();
@@ -4066,7 +5570,6 @@ function bind() {
     }
     closeViewModal();
     renderViews();
-    renderViewsEditor();
     await renderGrid(true);
   });
 
@@ -4077,6 +5580,17 @@ function bind() {
     settings.ui_flags = { ...(settings.ui_flags || {}), screenshotSave: e.target.checked };
     invoke("set_ui_flag", { key: "screenshotSave", enabled: e.target.checked }).catch((err) => toast(String(err)));
   });
+  // Master tooltip switch (default on): off = no hover tooltips anywhere.
+  $("opt-tooltips").addEventListener("change", (e) => {
+    settings.ui_flags = { ...(settings.ui_flags || {}), tooltipsEnabled: e.target.checked };
+    invoke("set_ui_flag", { key: "tooltipsEnabled", enabled: e.target.checked }).catch((err) => toast(String(err)));
+  });
+  // F19 auto-paste (default on): normal setting; enter-after stays in the expert menu.
+  $("opt-autopaste").addEventListener("change", (e) => {
+    settings.ui_flags = { ...(settings.ui_flags || {}), autoPaste: e.target.checked };
+    invoke("set_ui_flag", { key: "autoPaste", enabled: e.target.checked }).catch((err) => toast(String(err)));
+  });
+  // F21 clipboard inbox is toggled from the expert menu + toolbar right-click only.
   $("opt-autostart").addEventListener("change", async (e) => {
     try {
       await invoke("set_autostart", { enabled: e.target.checked });
@@ -4099,6 +5613,7 @@ function bind() {
     settings.always_on_top = on;
     $("opt-ontop").checked = on;
     $("pin-top").classList.toggle("active", on);
+    $("pin-top").setAttribute("aria-pressed", String(on));
     invoke("set_always_on_top", { enabled: on }).catch((err) => toast(String(err)));
   };
   $("opt-ontop").addEventListener("change", (e) => setOnTop(e.target.checked));
@@ -4144,7 +5659,13 @@ function bind() {
   $("export-txt").addEventListener("click", () => runExport("txt"));
   $("import-all").addEventListener("click", runImportAll);
   $("export-all").addEventListener("click", runExportAll);
-  $("delete-all").addEventListener("click", deleteAll);
+  $("reset-settings").addEventListener("click", resetSettings);
+  $("delete-data").addEventListener("click", deleteData);
+  $("settings-backup-btn").addEventListener("click", openBackups);
+  $("backup-close").addEventListener("click", closeBackups);
+  $("backup-modal").addEventListener("pointerdown", (e) => {
+    if (e.target === $("backup-modal")) closeBackups();
+  });
 
   const themeSelect = $("theme-select");
   themeSelect.addEventListener("change", async () => {
@@ -4163,7 +5684,6 @@ function bind() {
     $("tile-font").value = settings.tile_font || "system";
     $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
     await renderGrid(); // fresh state: tooltips + a renamed default view
-    renderViewsEditor();
     if (!libraryEl.classList.contains("hidden")) renderLibrary();
   });
 
@@ -4187,6 +5707,20 @@ function bind() {
   attachSelectPicker(modal.fontSel);
   attachSelectPicker($("theme-select"));
   attachSelectPicker($("lang-select"));
+
+  // UI size + icon size: percentage-preset selects mirroring the expert scales.
+  fillScaleSelect("ui-scale", "uiScale");
+  fillScaleSelect("icon-scale", "iconScale");
+  const scaleChanged = (key) => async (e) => {
+    const v = Number(e.target.value);
+    settings.ui_values = { ...(settings.ui_values || {}), [key]: v };
+    await invoke("set_ui_value", { key, value: v }).catch((err) => toast(String(err)));
+    applyValues();
+  };
+  $("ui-scale").addEventListener("change", scaleChanged("uiScale"));
+  $("icon-scale").addEventListener("change", scaleChanged("iconScale"));
+  attachSelectPicker($("ui-scale"));
+  attachSelectPicker($("icon-scale"));
 
   ctxEl.addEventListener("click", async (e) => {
     const btn = e.target.closest("button");
@@ -4218,36 +5752,54 @@ function bind() {
 
   document.addEventListener("pointerdown", (e) => {
     if (!ctxEl.classList.contains("hidden") && !ctxEl.contains(e.target)) closeCtx();
+    if (!toolbarMenu.classList.contains("hidden") && !toolbarMenu.contains(e.target)) closeToolbarMenu();
+  });
+  // Right-click anywhere in the header actions → toggle which top-bar tools show.
+  document.querySelector(".header-actions")?.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openToolbarMenu(e.clientX, e.clientY);
   });
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
+    if (!toolbarMenu.classList.contains("hidden")) { closeToolbarMenu(); return; }
     if (!$("lightbox").classList.contains("hidden")) closeLightbox();
     else if (confirmCleanup) confirmCleanup(false);
+    // The variable-fill dialog has its own keydown handler; consume Escape here so the
+    // chain doesn't ALSO close the library/journal underneath it.
+    else if (varsCleanup) { /* vars dialog closes itself */ }
     else if (!colorPop.classList.contains("hidden")) closeColorPop();
     else if (!ctxEl.classList.contains("hidden")) closeCtx();
     else if (!$("update-modal").classList.contains("hidden")) $("update-modal").classList.add("hidden");
     else if (!$("snip-modal").classList.contains("hidden")) $("snip-modal").classList.add("hidden");
     else if (!viewModal.root.classList.contains("hidden")) closeViewModal();
     else if (!modal.root.classList.contains("hidden")) confirmDiscardIfDirty().then((ok) => { if (ok) closeModal(); });
-    else if (!libraryEl.classList.contains("hidden")) libraryEl.classList.add("hidden");
-    else if (!settingsEl.classList.contains("hidden")) settingsEl.classList.add("hidden");
+    else if (!$("clip-modal").classList.contains("hidden")) $("clip-modal").classList.add("hidden");
+    else if (!$("dupes-modal").classList.contains("hidden")) $("dupes-modal").classList.add("hidden");
+    else if (!$("backup-modal").classList.contains("hidden")) closeBackups();
+    else if (!journalEl.classList.contains("hidden")) journalEl.classList.add("hidden");
+    else if (!libraryEl.classList.contains("hidden")) hideLibrary();
+    else if (!settingsEl.classList.contains("hidden")) hideSettings();
   });
 
   // Updates: manual check in the settings + daily background notification.
   let updateInfo = null;
-  let statusTimer = null;
   const updateBtn = $("update-btn");
-  const updateStatus = $("update-status");
-  // Temporary status message; falls back to the version label after 5s.
-  const flashStatus = (txt) => {
-    updateStatus.textContent = txt;
-    clearTimeout(statusTimer);
-    statusTimer = setTimeout(() => { updateStatus.textContent = versionLabel; }, 5000);
-  };
+  const updateVersion = $("update-version");
+  // The status line (left of the button) is the version by default, and switches to
+  // "Update to X available" once an update is found (manual OR auto). The button text
+  // never changes — it always offers a fresh manual check.
   const offerUpdate = (info) => {
     updateInfo = info;
-    updateBtn.textContent = t("installUpdate").replace("{v}", info.version);
+    updateVersion.textContent = t("updateAvailableBtn").replace("{v}", info.version);
+    updateVersion.classList.add("update-avail");
   };
+  // Clicking the status line: open the update dialog if one is pending, else the
+  // GitHub releases page.
+  updateVersion.addEventListener("click", () => {
+    if (updateInfo?.available) openUpdateModal(updateInfo);
+    else invoke("open_repo", { page: "releases" }).catch((e) => toast(String(e)));
+  });
 
   // Changelog popup shown before any install (manual check or daily toast).
   const updateModal = {
@@ -4270,18 +5822,21 @@ function bind() {
   const closeUpdateModal = () => updateModal.root.classList.add("hidden");
 
   updateBtn.addEventListener("click", async () => {
-    if (updateInfo?.available) { openUpdateModal(updateInfo); return; }
     updateBtn.disabled = true;
     try {
       const info = await invoke("check_update");
-      if (info.available) openUpdateModal(info);
-      else flashStatus(t("upToDate"));
+      if (info.available) offerUpdate(info);          // status → "Update to X available"
+      else { updateVersion.textContent = t("upToDate"); updateVersion.classList.remove("update-avail"); }
     } catch (err) {
-      flashStatus(t("updateFailed"));
       toast(String(err));
     }
     updateBtn.disabled = false;
   });
+  // Silently check for updates at launch and surface any in the status line. Only
+  // when update checking is enabled at all — the normal setting is the master switch.
+  if (flag("checkUpdateOnStart") && settings.auto_update !== false) {
+    invoke("check_update").then((info) => { if (info?.available) offerUpdate(info); }).catch(() => {});
+  }
   updateModal.install.addEventListener("click", async () => {
     updateModal.install.disabled = true;
     try {
@@ -4296,7 +5851,8 @@ function bind() {
     if (!v) return;
     try { await invoke("skip_version", { version: v }); } catch (err) { toast(String(err)); }
     updateInfo = null;
-    updateBtn.textContent = t("checkUpdate");
+    updateVersion.textContent = versionLabel;
+    updateVersion.classList.remove("update-avail");
     closeUpdateModal();
     toast(t("versionSkipped").replace("{v}", v));
   });
@@ -4324,6 +5880,23 @@ function bind() {
   listen("theme-changed", (e) => applyTheme(e.payload));
   // "Edit prompt" chosen in a floating pill's right-click menu.
   listen("edit-prompt", (e) => editPrompt(String(e.payload)));
+}
+
+// Fill a UI/icon size select with percentage presets (plus the current value if it
+// was fine-tuned in the expert menu), then select the current value.
+const SCALE_PRESETS = [50, 75, 90, 100, 110, 125, 150];
+function fillScaleSelect(id, key) {
+  const sel = $(id);
+  if (!sel) return;
+  const cur = Math.round(val(key));
+  sel.innerHTML = "";
+  for (const p of [...new Set([...SCALE_PRESETS, cur])].sort((a, b) => a - b)) {
+    const o = document.createElement("option");
+    o.value = String(p);
+    o.textContent = `${p} %`;
+    sel.appendChild(o);
+  }
+  sel.value = String(cur);
 }
 
 // Fill both text-size selects: special options + 10..40 in steps of 2.
@@ -4414,28 +5987,17 @@ async function init() {
     applyTheme(await invoke("current_theme"));
     bind();
     wireTooltips();
+    wireWindowControls();
+    wireClearButtons();
     wireLightbox();
     setupDragDrop();
     applyFlags();
     applyBars();
     await renderGrid();
-    $("theme-select").value = settings.theme;
-    $("lang-select").value = settings.language || "auto";
-    $("opt-minimize").checked = settings.minimize_to_tray === true;
-    $("opt-screenshot-folder").checked = settings.ui_flags?.screenshotSave === true;
-    $("opt-autostart").checked = settings.autostart === true;
-    $("opt-startmin").checked = settings.start_minimized === true;
-    $("opt-ontop").checked = settings.always_on_top === true;
-    $("opt-favview").checked = favViewEnabled();
-    refreshFavViewUi();
-    $("opt-hotkey").value = prettyAccel(settings.hotkey);
-    $("pin-top").classList.toggle("active", settings.always_on_top === true);
-    $("opt-autoupdate").checked = settings.auto_update !== false;
-    $("tile-font").value = settings.tile_font || "system";
-    $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
+    syncSettingsControls();
     invoke("app_version").then((v) => {
-      versionLabel = `v${v}`;
-      $("update-status").textContent = versionLabel;
+      versionLabel = t("versionInstalled").replace("{v}", v);
+      $("update-version").textContent = versionLabel;
     }).catch(() => {});
     invoke("current_data_dir").then((d) => { currentDataDir = d || ""; }).catch(() => {});
     invoke("default_screenshot_dir").then((d) => { defaultScreenshotDir = d || ""; }).catch(() => {});
@@ -4453,9 +6015,54 @@ async function init() {
     // Reveal only after the first fitted paint — the user never sees text sizing.
     requestAnimationFrame(() => {
       try { fitCache.clear(); fitAllTiles(); } catch (_) {}
-      requestAnimationFrame(() => invoke("show_main_window").catch(() => {}));
+      requestAnimationFrame(() => {
+        // Ask about adopting an installed store only once the themed window is up.
+        invoke("show_main_window").catch(() => {}).finally(() => offerTakeover());
+      });
     });
   }
+}
+
+// Push the loaded settings into the settings-dialog controls.
+function syncSettingsControls() {
+    $("theme-select").value = settings.theme;
+    $("lang-select").value = settings.language || "auto";
+    $("opt-minimize").checked = settings.minimize_to_tray === true;
+    $("opt-screenshot-folder").checked = settings.ui_flags?.screenshotSave === true;
+    $("opt-tooltips").checked = settings.ui_flags?.tooltipsEnabled !== false;
+    $("opt-autopaste").checked = settings.ui_flags?.autoPaste !== false;
+    $("opt-autostart").checked = settings.autostart === true;
+    $("opt-startmin").checked = settings.start_minimized === true;
+    $("opt-ontop").checked = settings.always_on_top === true;
+    $("opt-favview").checked = favViewEnabled();
+    refreshFavViewUi();
+    $("opt-hotkey").value = prettyAccel(settings.hotkey);
+    $("pin-top").classList.toggle("active", settings.always_on_top === true);
+    $("pin-top").setAttribute("aria-pressed", String(settings.always_on_top === true));
+    $("opt-autoupdate").checked = settings.auto_update !== false;
+    $("tile-font").value = settings.tile_font || "system";
+    $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
+    applyTileStyle();
+}
+
+// Re-read the store and re-apply everything a full import replaced (theme, language,
+// flags, views, prompts, controls). Reloading the page would do the same but repaints
+// the whole window, which reads as a flicker.
+async function reloadEverything() {
+  settings = await invoke("get_settings");
+  loadPalette();
+  LANG = resolveLang(settings.language);
+  applyI18n();
+  fillSizeSelects();
+  fillFontSelects();
+  applyTheme(await invoke("current_theme").catch(() => settings.theme));
+  applyFlags();
+  applyBars();
+  await renderGrid(); // WITH the fetch: the prompts themselves were replaced too
+  syncSettingsControls();
+  wireClearButtons();
+  fitCache.clear();
+  fitAllTiles();
 }
 
 init();

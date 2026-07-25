@@ -3,6 +3,196 @@
 All notable changes to **Prompt Saver**. Download the latest version from the
 [releases page](../../releases/latest).
 
+## 2.6.2 (2026-07-26)
+
+Backups get their own window, their own encryption and a lot less disk space. The
+expert menu was re-sorted from scratch, the portable version is now a single file,
+and a long list of rough edges is gone.
+
+### Added
+- **Backups window** — the Backups button in the settings opens a page of its own:
+  interval and retention, diagnostics, the restore list and the usage statistics,
+  all in one place instead of buried in the expert menu.
+- **Encrypted backups** — exported backups are AES-256-GCM encrypted. By default a
+  built-in key is used, so a backup still restores on any PC. Set an optional
+  **backup password** to protect new backups with a key derived from it; older
+  backups keep whatever protected them.
+- **Password prompt when restoring** — if a backup file needs a different password
+  than the stored one, the app asks for it (with a reveal toggle) and lets you retry
+  without picking the file again.
+- **Compressed backups** — snapshots and exported files are compressed, which takes
+  a backup down to a fraction of its former size. Ten snapshots are kept by default,
+  so it adds up. Older, uncompressed backups still restore.
+- **Portable start asks about your data** — starting the portable version next to an
+  existing installation offers to take those prompts along or to start empty.
+  Nothing is moved or deleted either way.
+- **Split reset buttons** — "Delete all data" and "Reset settings" are separate
+  actions now, so you can clear one without losing the other, optionally with a
+  safety backup first.
+- **Pause the clipboard watcher from the inbox** — a switch in the inbox window
+  starts and stops collecting.
+- **New expert options**, all off by default: monospace editor, dim the toolbar
+  until hovered, hide the window after copying, skip duplicate entries in the copy
+  history, back up before a reset, and keep the buttons of switched-off features in
+  the toolbar.
+- **50 % option** for UI and icon size, for very high-resolution screens.
+
+### Improved
+- **The portable version is a single file.** The PDF preview library is built into
+  the exe, so nothing has to travel next to it any more.
+- **The installer runs through in one pass** — choosing "for all users" no longer
+  makes it restart itself halfway through. It asks for permission once at the start.
+  A portable installation now lands in its own folder next to the setup file.
+- **Expert menu re-sorted** — the oversized "Tiles" block is split into *Tiles &
+  copying*, *Tooltips* and *Tile appearance*; copy-history options sit with the copy
+  history; folder settings sit with the feature they belong to. 77 settings whose
+  name alone does not explain them now have a tooltip, in all 20 languages.
+- **Richer backup diagnostics and statistics** — backups this week, the period the
+  kept backups cover, copies per day, the most-used prompt, the share of prompts
+  ever used and the average prompt length.
+- **Tiles lift slightly on hover** by default, and update checks at launch are on
+  by default (both switchable).
+- Restoring a backup no longer reloads the window; it confirms which file was
+  imported and how many prompts came back, or shows why it failed.
+- Settings screen: shorter, without redundant sub-headings. The update row holds
+  auto-update, the check button, the version and the Backups button in one line.
+- Tool icons in the toolbar menu match the real buttons, expert dropdowns are
+  themed with their label on the left, and the backup page remembers which sections
+  were expanded.
+
+### Fixed
+- The version history in the editor is fully reachable on small windows, and only
+  as tall as its contents.
+- No more flicker when changing a setting, taking a backup, or collapsing a
+  category in the expert menu.
+- "Reset settings" kept the backup password instead of discarding it — losing it
+  would have made every password-protected backup unreadable.
+- Copying a prompt with variables follows the same rule as every other prompt now:
+  a plain click copies, a fast second click or Enter also pastes. Double-clicking
+  such a prompt works again.
+- The backup password field shows one reveal icon instead of two, and is saved with
+  its own button instead of whenever the field lost focus.
+- Minimize, maximize, close and the settings button no longer show tooltips, and
+  close no longer turns red on hover.
+- Tiles keep their press animation while the pointer is over them.
+- Folder settings in the expert menu follow their feature switch, and scrollbars
+  keep an even margin in the remaining dialogs.
+
+## 2.5.0 (2026-07-11)
+
+A big feature release: a custom window frame, smarter search and sorting, batch
+editing, version history, backups, statistics, a duplicate finder, auto-paste and
+a clipboard inbox — plus finer tooltip control. Everything new has an on/off switch
+in the expert menu, in all 20 languages.
+
+### Added
+- **Custom title bar** — the native Windows frame is gone; minimize, maximize and
+  close now live in the app's own top-right corner and follow every theme.
+- **Automatic backups & restore** — rotating snapshots of your whole store, taken
+  on start and on demand, with settings, diagnostics and a restore list all on the
+  expert **Backups** page. Optional period-based (day/week/month) retention.
+- **Version history** — every prompt keeps a history of its previous name/text;
+  open the collapsible **History** row in the editor to preview and restore.
+- **Batch operations** — a **Select** mode in the library: multi-select (with
+  Shift-range) to set color, (un)favorite, add/remove from a view, export or
+  delete many prompts at once.
+- **Usage statistics** — a dashboard on the expert **Backups** page with copy
+  totals, most-used bars, cleanup candidates and per-view counts.
+- **Duplicate finder** — find near-duplicate prompts (expert · Tools), compare
+  side by side, keep one, or mark a pair as "not a duplicate".
+- **Fuzzy library search** — typo-tolerant search ("promt" still finds "prompt").
+- **Smart sort** — sort the library by **Most used** or **Recently used**.
+- **Auto-paste** — a fast double-click (or Enter) on a tile, library row or pill
+  copies **and** pastes into the last app you used (opt-in).
+- **Clipboard inbox** — an optional watcher (normal settings toggle; capture
+  length + inbox size in the expert menu) that collects text you copy anywhere,
+  so you can save the good bits as prompts.
+- **Live length counter** — chars · words · ~tokens under the editor textarea.
+
+### Improved
+- **Tooltips** now wait for an adjustable hover delay before appearing, so moving
+  the mouse across the window no longer flashes every hint. A plain **Show
+  tooltips** switch was added to the normal settings, above the screenshot toggle.
+  Setting tooltips that point to expert options now break onto a tidy second line.
+- **Click the app logo** to open the project's GitHub page; **click the version**
+  next to *Check for updates* to open the releases page. After a check the version
+  line reads the result ("Latest version already installed" / "Update to X available").
+- **Settings** popup is wider and tidier: theme / language / font / text size / UI
+  size / icon size sit three across; the on/off toggles fill two columns; full-width
+  field labels moved to the left of their control. The per-page views editor is gone
+  (views are managed from the top view tabs — the "+" adds one, right-click a tab to
+  rename, resize its grid via dropdowns, recolor or delete); the **Favorites view**
+  toggle moved into the toggle grid.
+- **Right-click the top toolbar** to toggle *every* top-bar button — library, copy
+  history, chain, pin, clipboard inbox, favorites, view tabs, quick grid, logo, title
+  (everything except Settings). Each entry shows its own icon, and the menu scrolls if
+  the window is too short.
+- **Image tiles** now fill the whole button edge-to-edge and stay put while the
+  window is resized.
+- **Batch operations** are faster — the backend no longer echoes every prompt back
+  over the bridge after a bulk change; the library search no longer re-scores every
+  prompt three times per keystroke.
+- Prompts with **variables** always ask for them before copy + auto-paste.
+- **Icon size** now also scales the bottom prompt field, the Save button and the top
+  view tabs and grid-size boxes, so the toolbars stay balanced instead of the icons
+  dwarfing what sits beside them.
+- **Settings** layout refinements: text size sits under font in the third column, the
+  global hotkey is its own row under the toggles, "Updates" is a left-aligned heading,
+  and the expert menu keeps a compact two-column width.
+- **Updating / reinstalling** removes the previous version automatically and silently —
+  no leftover uninstaller window, and your prompts and settings in AppData are kept.
+- **Expert menu** reorganised: the scattered "Extras" groups are dissolved into their
+  proper categories, every default-off feature is tagged **(Standard aus)**, and new
+  sliders were added (grid padding, popup corner radius, backdrop dimming).
+- **Statistics** show more: views, media prompts and variable prompts; the backups page
+  gained largest/smallest-backup diagnostics, a tidier settings row, and an always-on
+  auto-backup with "Backup now" beside the interval.
+- **Screenshot dialog** always fits without scrolling (the preview scales down), and the
+  save-to-folder toggle sits inline at the bottom.
+
+### Fixed
+- **Copy history no longer empties itself.** The retention window defaulted to 7 days,
+  which silently deleted entries for anyone who copied less than weekly. It now **keeps
+  forever** by default (bounded only by the entry count), with an "∞ forever" option
+  plus 7 / 30 / 90 / 365-day choices in the expert menu.
+- **UI size** scaling no longer breaks the layout — it uses the WebView's native zoom,
+  which keeps popups, the grid and hit-testing aligned at every scale.
+- The **clipboard inbox** icon shows a numbered badge whenever collected items are
+  waiting, instead of clearing the count the first time you open it.
+- The **Updates** line returns to showing the version number after you close settings,
+  so a transient "already newest" message doesn't linger.
+- The **view editor** dialog's close ✕ matches the other modals (and is a bit larger),
+  and the title-bar **★** favorites toggle is a touch larger.
+- The **settings popup** sizes to its content and centres — no empty band at the bottom
+  on a large window — while still capping at the window height and scrolling inside.
+- **Delete all prompts** and **Expert menu** reliably share one row (delete left, expert
+  right); a later CSS rule had been stacking them.
+- Keyboard focus now shows a **themed focus ring** on every button and chip instead of the
+  WebView's off-theme blue outline.
+- The **"Favorites only"** filter chip keeps its gold highlight and the **"Clear history"**
+  button shows its red styling again (two more CSS cascade fixes).
+- **Escape** now closes the copy-history panel too, and closing the variable-fill dialog no
+  longer also closes the library behind it.
+
+### Security & reliability
+- The **updater** verifies the download is a real Windows executable before running it.
+- A **failed save** (e.g. disk full, where both the database and JSON fallback fail) is now
+  written to the crash log instead of being lost silently.
+- **Screenshot deletion** is constrained to the screenshot folder — a matching file name can
+  no longer point it at another location.
+- **Signed-strength update check**: the auto-updater now verifies the downloaded installer's
+  **SHA-256** against the hash published with each release before running it.
+- **Update download** URL is now strictly pinned to the exact release path (rejects
+  `..`, `\`, encoded traversal, wrong host or non-`.exe`) and refuses a truncated file.
+- **Never lose prompts**: rows that fail to decrypt (e.g. after a Windows profile move
+  or password reset) no longer get wiped by the next save — prompt writes are locked
+  and the raw store is copied to `data.db.locked.bak` instead.
+- **Clipboard inbox** honours the password-manager opt-out format, so copied secrets
+  are not captured; its watcher can no longer deadlock the app when toggled quickly.
+- Hardened `import all` (malformed backups can't crash the app), the "move data
+  folder" cleanup (only ever deletes the folder just moved away from), the asset
+  scope (store files are denied), and removed an unused window-creation permission.
+
 ## 2.4.1 (2026-07-11)
 
 ### Improved

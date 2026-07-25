@@ -124,7 +124,11 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
   !define MULTIUSER_INSTALLMODE_DEFAULT_REGISTRY_VALUENAME "CurrentUser"
   !define MULTIUSER_INSTALLMODEPAGE_SHOWUSERNAME
   !define MULTIUSER_INSTALLMODE_FUNCTION RestorePreviousInstallLocation
-  !define MULTIUSER_EXECUTIONLEVEL Highest
+  ; Admin, not Highest: "Highest" starts unelevated and RE-LAUNCHES the installer
+  ; the moment "all users" is picked, which looks like the setup restarting itself
+  ; mid-flow. Asking for elevation up front keeps it a single run (the all-users /
+  ; just-me choice still works, it only decides the location + registry hive).
+  !define MULTIUSER_EXECUTIONLEVEL Admin
   !include MultiUser.nsh
 !endif
 
@@ -260,10 +264,11 @@ Function PageReinstall
   ${EndIf}
 
   ; Skip showing the page if passive.
-  ; Upgrades also skip it: the previous version is uninstalled automatically
-  ; (user data is kept), see PageLeaveReinstall.
+  ; Upgrades and same-version reinstalls also skip it: the previous version is
+  ; uninstalled automatically (user data is kept), see PageLeaveReinstall.
   ${If} $PassiveMode = 1
   ${OrIf} $R0 = 1
+  ${OrIf} $R0 = 0
     Call PageLeaveReinstall
   ${Else}
     nsDialogs::Create 1018
@@ -320,9 +325,10 @@ Function PageLeaveReinstall
     Goto reinst_done
   ${EndIf}
 
-  ; Upgrades always uninstall the previous version automatically,
-  ; without asking. User data in AppData is not touched.
+  ; Upgrades AND same-version reinstalls always uninstall the previous version
+  ; automatically, without asking. User data in AppData is not touched.
   ${If} $R0 = 1
+  ${OrIf} $R0 = 0
     Goto reinst_uninstall
   ${EndIf}
 
@@ -362,6 +368,7 @@ Function PageLeaveReinstall
       ReadRegStr $R1 SHCTX "${UNINSTKEY}" "UninstallString"
       ${IfThen} $UpdateMode = 1 ${|} StrCpy $R1 "$R1 /UPDATE" ${|} ; append /UPDATE
       ${IfThen} $PassiveMode = 1 ${|} StrCpy $R1 "$R1 /P" ${|} ; append /P
+      StrCpy $R1 "$R1 /S" ; silent: the auto-uninstall of the old version shows no window (data kept)
       StrCpy $R1 "$R1 _?=$4" ; append uninstall directory
       ExecWait '$R1' $0
     ${EndIf}
@@ -428,11 +435,12 @@ Function PageDirBrowse
     ${NSD_SetText} $DirField "$1"
   ${EndIf}
 FunctionEnd
-; Portable on -> default to the folder this setup runs from; off -> standard path.
+; Portable on -> own subfolder next to this setup (never loose files in e.g.
+; the Downloads folder); off -> standard path.
 Function PageDirPortable
   ${NSD_GetState} $PortableCheckbox $0
   ${If} $0 = ${BST_CHECKED}
-    ${NSD_SetText} $DirField "$EXEDIR"
+    ${NSD_SetText} $DirField "$EXEDIR\${PRODUCTNAME}"
   ${Else}
     ${NSD_SetText} $DirField "$INSTDIR"
   ${EndIf}

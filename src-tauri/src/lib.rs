@@ -191,6 +191,9 @@ struct Settings {
     // Expert string options (e.g. copy-feedback font). Missing key = default.
     #[serde(default)]
     ui_texts: HashMap<String, String>,
+    // F6: prompt-id pairs (sorted) the user marked "not a duplicate" — never regrouped.
+    #[serde(default)]
+    dup_ignored: Vec<[String; 2]>,
     // Legacy in-blob copy history. Read once on upgrade to migrate into the
     // dedicated `copy_log` table, then never written back (the table owns it so
     // a million-entry history never bloats this encrypted settings blob).
@@ -266,6 +269,7 @@ impl Default for Settings {
             ui_flags: HashMap::new(),
             ui_values: HashMap::new(),
             ui_texts: HashMap::new(),
+            dup_ignored: Vec::new(),
             copy_log: Vec::new(),
             usage: HashMap::new(),
             last_used: HashMap::new(),
@@ -452,6 +456,11 @@ impl Settings {
 struct Store {
     prompts: Vec<Prompt>,
     settings: Settings,
+    // Set when db_load found encrypted prompt rows it could NOT decrypt (e.g. DPAPI
+    // failed after a profile move / password reset). While true, save_prompts refuses
+    // to rewrite the prompts table so a full DELETE+INSERT can never destroy the rows
+    // that are present-but-unreadable. The raw data.db is snapshotted aside on detect.
+    prompts_locked: bool,
 }
 
 type Db = Mutex<Store>;
@@ -465,7 +474,6 @@ fn default_data_dir(app: &AppHandle) -> PathBuf {
     if is_portable() {
         if let Some(dir) = portable_data_dir() {
             if fs::create_dir_all(&dir).is_ok() {
-                migrate_appdata_data(app, &dir);
                 return dir;
             }
         }
@@ -486,25 +494,22 @@ fn portable_data_dir() -> Option<PathBuf> {
     std::env::current_exe().ok()?.parent().map(|d| d.to_path_buf())
 }
 
-// First portable launch after an AppData install: copy the store beside the exe
-// once (non-destructive — the AppData copy stays as a backup) so no data is lost.
-fn migrate_appdata_data(app: &AppHandle, portable: &std::path::Path) {
-    if portable.join("data.db").exists() {
-        return;
-    }
+// Files that make up a store, in copy order.
+const STORE_FILES: [&str; 3] = ["data.db", "prompts.json", "settings.json"];
+
+// The installed copy's store, if this is a portable run and one exists elsewhere.
+// Nothing is copied here: the app asks first (see `takeover_offer`), in its own
+// window, so the question inherits the theme and language instead of being a bare
+// system box before anything is loaded.
+fn appdata_store_dir(app: &AppHandle, portable: &std::path::Path) -> Option<PathBuf> {
     let src = std::env::var_os("APPDATA")
         .map(PathBuf::from)
         .map(|p| p.join(DATA_FOLDER))
-        .or_else(|| app.path().app_data_dir().ok());
-    if let Some(src) = src {
-        if src.as_path() != portable {
-            for f in ["data.db", "prompts.json", "settings.json"] {
-                if src.join(f).exists() {
-                    let _ = fs::copy(src.join(f), portable.join(f));
-                }
-            }
-        }
+        .or_else(|| app.path().app_data_dir().ok())?;
+    if src.as_path() == portable {
+        return None;
     }
+    STORE_FILES.iter().any(|f| src.join(f).exists()).then_some(src)
 }
 
 // One-time move of the store from the old identifier-based folder
@@ -555,14 +560,16 @@ fn read_json<T: for<'de> Deserialize<'de> + Default>(path: &PathBuf) -> T {
     }
 }
 
-// Atomic write: temp file then rename, so a crash never truncates data.
-fn write_json<T: Serialize>(path: &PathBuf, data: &T) {
+// Atomic write: temp file then rename, so a crash never truncates data. Returns
+// whether the data actually reached disk, so callers can log a persist failure.
+fn write_json<T: Serialize>(path: &PathBuf, data: &T) -> bool {
     if let Ok(json) = serde_json::to_string_pretty(data) {
         let tmp = path.with_extension("tmp");
         if fs::write(&tmp, json).is_ok() {
-            let _ = fs::rename(&tmp, path);
+            return fs::rename(&tmp, path).is_ok();
         }
     }
+    false
 }
 
 // ---------- SQLite store ----------
@@ -652,7 +659,10 @@ fn db_conn(app: &AppHandle) -> Option<Connection> {
          CREATE TABLE IF NOT EXISTS prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
          CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
          CREATE TABLE IF NOT EXISTS copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
-         CREATE INDEX IF NOT EXISTS idx_copy_log_ts ON copy_log(ts);",
+         CREATE INDEX IF NOT EXISTS idx_copy_log_ts ON copy_log(ts);
+         CREATE TABLE IF NOT EXISTS prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL);
+         CREATE INDEX IF NOT EXISTS idx_pv_prompt ON prompt_versions(prompt_id);
+         CREATE TABLE IF NOT EXISTS clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);",
     )
     .ok()?;
     Some(conn)
@@ -681,17 +691,26 @@ fn db_write_settings(conn: &Connection, settings: &Settings) -> rusqlite::Result
     Ok(())
 }
 
-fn db_load(conn: &Connection) -> (Vec<Prompt>, Option<Settings>, bool) {
+// Returns (prompts, settings, any_plaintext, decrypt_failures). `decrypt_failures`
+// counts rows that WERE encrypted (ENC_PREFIX) but could not be decrypted/parsed —
+// the caller must then avoid any destructive rewrite of the prompts table.
+fn db_load(conn: &Connection) -> (Vec<Prompt>, Option<Settings>, bool, usize) {
     let mut prompts = Vec::new();
     let mut plaintext = false; // any legacy unencrypted row → re-save once to encrypt
+    let mut failures = 0usize;
     if let Ok(mut stmt) = conn.prepare("SELECT data FROM prompts ORDER BY ord") {
         if let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) {
             for data in rows.flatten() {
-                if !data.starts_with(ENC_PREFIX) {
+                let encrypted = data.starts_with(ENC_PREFIX);
+                if !encrypted {
                     plaintext = true;
                 }
-                if let Ok(p) = serde_json::from_str::<Prompt>(&dec_str(&data)) {
-                    prompts.push(p);
+                match serde_json::from_str::<Prompt>(&dec_str(&data)) {
+                    Ok(p) => prompts.push(p),
+                    // An encrypted row that won't decrypt/parse is present-but-unreadable;
+                    // a plaintext row that won't parse is genuinely corrupt (not a key issue).
+                    Err(_) if encrypted => failures += 1,
+                    Err(_) => {}
                 }
             }
         }
@@ -705,7 +724,7 @@ fn db_load(conn: &Connection) -> (Vec<Prompt>, Option<Settings>, bool) {
         plaintext = true;
     }
     let settings = raw.and_then(|s| serde_json::from_str::<Settings>(&dec_str(&s)).ok());
-    (prompts, settings, plaintext)
+    (prompts, settings, plaintext, failures)
 }
 
 // Append one copy event, then trim to the cap and the retention window. The cap
@@ -756,13 +775,116 @@ fn db_recent_copies(conn: &Connection, limit: usize, grouped: bool) -> Vec<CopyE
     out
 }
 
+// ---- F7 prompt version history ----
+// Snapshots of a prompt's previous name/text, encrypted like the prompt rows. The
+// table lives in data.db (not the settings blob) so history never bloats settings.
+#[derive(Serialize)]
+struct PromptVersion {
+    id: i64,
+    ts: u64,
+    name: String,
+    text: String,
+}
+
+fn history_enabled(settings: &Settings) -> bool {
+    settings.ui_flags.get("promptHistory") != Some(&false) // on by default
+}
+fn history_cap(settings: &Settings) -> usize {
+    settings.ui_values.get("historyPerPrompt").copied().unwrap_or(20.0).clamp(5.0, 100.0) as usize
+}
+
+fn db_add_version(conn: &Connection, prompt_id: &str, ts: u64, name: &str, text: &str, cap: usize) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO prompt_versions(prompt_id, ts, name, text) VALUES(?1, ?2, ?3, ?4)",
+        params![prompt_id, ts as i64, enc_str(name), enc_str(text)],
+    )?;
+    // Keep only the newest `cap` snapshots for this prompt.
+    conn.execute(
+        "DELETE FROM prompt_versions WHERE prompt_id = ?1 AND id NOT IN
+            (SELECT id FROM prompt_versions WHERE prompt_id = ?1 ORDER BY id DESC LIMIT ?2)",
+        params![prompt_id, cap as i64],
+    )?;
+    Ok(())
+}
+fn db_list_versions(conn: &Connection, prompt_id: &str) -> Vec<PromptVersion> {
+    let mut out = Vec::new();
+    if let Ok(mut stmt) = conn.prepare("SELECT id, ts, name, text FROM prompt_versions WHERE prompt_id = ?1 ORDER BY id DESC") {
+        if let Ok(rows) = stmt.query_map(params![prompt_id], |r| {
+            Ok(PromptVersion {
+                id: r.get::<_, i64>(0)?,
+                ts: r.get::<_, i64>(1)? as u64,
+                name: dec_str(&r.get::<_, String>(2)?),
+                text: dec_str(&r.get::<_, String>(3)?),
+            })
+        }) {
+            out.extend(rows.flatten());
+        }
+    }
+    out
+}
+fn db_get_version(conn: &Connection, id: i64) -> Option<(String, String, String)> {
+    conn.query_row(
+        "SELECT prompt_id, name, text FROM prompt_versions WHERE id = ?1",
+        params![id],
+        |r| Ok((r.get::<_, String>(0)?, dec_str(&r.get::<_, String>(1)?), dec_str(&r.get::<_, String>(2)?))),
+    )
+    .ok()
+}
+fn db_delete_versions(conn: &Connection, prompt_id: &str) {
+    let _ = conn.execute("DELETE FROM prompt_versions WHERE prompt_id = ?1", params![prompt_id]);
+}
+
+// ---- F21 clipboard watcher ----
+#[derive(Serialize)]
+struct ClipItem {
+    id: i64,
+    ts: u64,
+    text: String,
+}
+fn text_hash(s: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    s.hash(&mut h);
+    h.finish()
+}
+fn db_add_clip(conn: &Connection, ts: u64, text: &str, cap: usize) -> rusqlite::Result<()> {
+    conn.execute("INSERT INTO clip_inbox(ts, text) VALUES(?1, ?2)", params![ts as i64, enc_str(text)])?;
+    conn.execute(
+        "DELETE FROM clip_inbox WHERE id <= (SELECT MAX(id) FROM clip_inbox) - ?1",
+        params![cap as i64],
+    )?;
+    Ok(())
+}
+fn db_list_clips(conn: &Connection) -> Vec<ClipItem> {
+    let mut out = Vec::new();
+    if let Ok(mut stmt) = conn.prepare("SELECT id, ts, text FROM clip_inbox ORDER BY id DESC") {
+        if let Ok(rows) = stmt.query_map([], |r| {
+            Ok(ClipItem { id: r.get::<_, i64>(0)?, ts: r.get::<_, i64>(1)? as u64, text: dec_str(&r.get::<_, String>(2)?) })
+        }) {
+            out.extend(rows.flatten());
+        }
+    }
+    out
+}
+
 fn save_prompts(app: &AppHandle, store: &Store) {
+    // Safety valve: if some rows failed to decrypt at load, the in-memory list is a
+    // SUBSET of what's on disk. Rewriting the table (DELETE + re-INSERT) would delete
+    // the unreadable rows permanently — so we refuse to persist prompt changes at all
+    // until the situation is resolved. Prompt edits this session simply won't stick.
+    if store.prompts_locked {
+        return;
+    }
     if let Some(mut conn) = db_conn(app) {
         if db_write_prompts(&mut conn, &store.prompts).is_ok() {
             return;
         }
     }
-    write_json(&data_dir(app).join("prompts.json"), &store.prompts);
+    // Last resort: JSON fallback. If even that fails (disk full / permission), the
+    // change is lost — leave a diagnosable trace instead of failing silently.
+    if !write_json(&data_dir(app).join("prompts.json"), &store.prompts) {
+        append_crash_log("persist failed: prompts could not be written to the database or the JSON fallback");
+    }
 }
 
 fn save_settings(app: &AppHandle, settings: &Settings) {
@@ -771,7 +893,9 @@ fn save_settings(app: &AppHandle, settings: &Settings) {
             return;
         }
     }
-    write_json(&data_dir(app).join("settings.json"), settings);
+    if !write_json(&data_dir(app).join("settings.json"), settings) {
+        append_crash_log("persist failed: settings could not be written to the database or the JSON fallback");
+    }
 }
 
 // Pre-1.9 builds saved image prompts without copy_image but copied on click.
@@ -786,7 +910,19 @@ fn migrate_prompts(prompts: &mut [Prompt]) {
 fn load_store(app: &AppHandle) -> Store {
     let dir = data_dir(app);
     if let Some(mut conn) = db_conn(app) {
-        let (mut prompts, settings_opt, needs_mig) = db_load(&conn);
+        let (mut prompts, settings_opt, needs_mig, decrypt_fails) = db_load(&conn);
+        // Some encrypted rows would not decrypt → preserve the raw DB and lock writes.
+        if decrypt_fails > 0 {
+            let db_path = dir.join("data.db");
+            let bak = dir.join("data.db.locked.bak");
+            if !bak.exists() {
+                let _ = fs::copy(&db_path, &bak);
+            }
+            append_crash_log(&format!(
+                "{} prompt row(s) failed to decrypt; prompt writes locked, raw DB copied to data.db.locked.bak",
+                decrypt_fails
+            ));
+        }
         let mut settings = settings_opt.clone().unwrap_or_default();
         // Empty DB but legacy JSON present → import it once, then own the data.
         if prompts.is_empty() && settings_opt.is_none() {
@@ -859,7 +995,7 @@ fn load_store(app: &AppHandle) -> Store {
         let cutoff = history_max_age(&settings).map(|age| now_secs().saturating_sub(age));
         let _ = db_trim_copy(&conn, cap, cutoff);
         migrate_prompts(&mut prompts);
-        let store = Store { prompts, settings };
+        let store = Store { prompts, settings, prompts_locked: decrypt_fails > 0 };
         if needs_mig || migrated_log {
             // One-time: re-encrypt legacy plaintext rows / drop the migrated log from the blob.
             save_prompts(app, &store);
@@ -873,7 +1009,7 @@ fn load_store(app: &AppHandle) -> Store {
     prune_history(&mut settings);
     let mut prompts: Vec<Prompt> = read_json(&dir.join("prompts.json"));
     migrate_prompts(&mut prompts);
-    Store { prompts, settings }
+    Store { prompts, settings, prompts_locked: false }
 }
 
 fn gen_id() -> String {
@@ -1076,7 +1212,7 @@ fn close_floating_window(app: &AppHandle, id: &str) {
 
 fn base64_encode(data: &[u8]) -> String {
     const B: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     for c in data.chunks(3) {
         let n = ((c[0] as u32) << 16)
             | ((*c.get(1).unwrap_or(&0) as u32) << 8)
@@ -1235,8 +1371,21 @@ async fn load_image_file(path: String) -> Option<String> {
     if result.is_empty() { None } else { Some(result) }
 }
 
-// Locate the pdfium library shipped next to the exe (installed build) or in the
-// project/target dir during development.
+// pdfium is only needed for PDF previews, and it is a plain DLL — so it travels
+// inside the exe and is unpacked on first use. That keeps the portable build a
+// single self-contained file instead of "exe plus a DLL you must not lose".
+static PDFIUM_DLL: &[u8] = include_bytes!("../pdfium.dll");
+
+// Where the embedded copy is unpacked. Versioned, so a newer build never binds
+// against a stale DLL left behind by an older one.
+fn pdfium_cache_path() -> PathBuf {
+    std::env::temp_dir()
+        .join("prompt-saver")
+        .join(format!("pdfium-{APP_VERSION}.dll"))
+}
+
+// A DLL next to the exe wins (lets a user drop in a newer pdfium); otherwise the
+// embedded copy is written to the cache path once and reused.
 fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
     let name = "pdfium.dll";
     let mut candidates: Vec<PathBuf> = Vec::new();
@@ -1248,7 +1397,20 @@ fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
     if let Ok(res) = app.path().resource_dir() {
         candidates.push(res.join(name));
     }
-    candidates.into_iter().find(|p| p.exists())
+    if let Some(found) = candidates.into_iter().find(|p| p.exists()) {
+        return Some(found);
+    }
+    let cached = pdfium_cache_path();
+    // Size check catches a truncated write from an interrupted first run.
+    if fs::metadata(&cached).map(|m| m.len() as usize).ok() == Some(PDFIUM_DLL.len()) {
+        return Some(cached);
+    }
+    fs::create_dir_all(cached.parent()?).ok()?;
+    if let Err(e) = fs::write(&cached, PDFIUM_DLL) {
+        eprintln!("pdfium unpack failed: {e}"); // preview is skipped, app keeps running
+        return None;
+    }
+    Some(cached)
 }
 
 // Render the first page of a PDF to a preview image (data URL). Returns None if
@@ -1458,9 +1620,20 @@ async fn update_prompt(
         let store_files = store_files_enabled(&store);
         let file_path = file_path.map(|p| if store_files { store_attached_file(&app, &p) } else { p });
         let icon_path = icon_path.map(|p| if store_files { store_attached_file(&app, &p) } else { p });
+        // F7: read history settings before the mutable prompt borrow (a MutexGuard
+        // can't be split into disjoint field borrows).
+        let hist_on = history_enabled(&store.settings);
+        let hist_cap = history_cap(&store.settings);
         let found = store.prompts.iter_mut().find(|p| p.id == id);
         match found {
             Some(p) => {
+                // F7: snapshot the previous name/text before overwriting, if changed.
+                if hist_on && (p.name != name || p.text != text) {
+                    let (old_name, old_text) = (p.name.clone(), p.text.clone());
+                    if let Some(c) = db_conn(&app) {
+                        let _ = db_add_version(&c, &id, now_secs(), &old_name, &old_text, hist_cap);
+                    }
+                }
                 p.name = name;
                 p.text = text;
                 p.color = color;
@@ -1500,6 +1673,43 @@ async fn update_prompt(
     Ok(updated)
 }
 
+// F7: list a prompt's version snapshots (newest first).
+#[tauri::command]
+async fn list_versions(app: AppHandle, prompt_id: String) -> Result<Vec<PromptVersion>, String> {
+    Ok(db_conn(&app).map(|c| db_list_versions(&c, &prompt_id)).unwrap_or_default())
+}
+
+// F7: restore a snapshot. The current state is snapshotted first, so a restore is
+// itself undoable and nothing is ever lost.
+#[tauri::command]
+async fn restore_version(app: AppHandle, state: State<'_, Db>, version_id: i64) -> Result<Option<Prompt>, String> {
+    let restored = {
+        let mut store = lock(&state);
+        let record = match db_conn(&app).and_then(|c| db_get_version(&c, version_id)) {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+        let (pid, name, text) = record;
+        let cap = history_cap(&store.settings);
+        if let Some(p) = store.prompts.iter_mut().find(|p| p.id == pid) {
+            if let Some(c) = db_conn(&app) {
+                let _ = db_add_version(&c, &pid, now_secs(), &p.name, &p.text, cap);
+            }
+            p.name = name;
+            p.text = text;
+            let clone = p.clone();
+            save_prompts(&app, &store);
+            Some(clone)
+        } else {
+            None
+        }
+    };
+    if let Some(p) = &restored {
+        let _ = app.emit("prompt-updated", p.clone());
+    }
+    Ok(restored)
+}
+
 // Star / unstar a prompt in the library.
 #[tauri::command]
 fn set_favorite(app: AppHandle, state: State<Db>, id: String, favorite: bool) {
@@ -1531,10 +1741,107 @@ async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Resu
             save_prompts(&app, &store);
             save_settings(&app, &store.settings);
             cleanup_orphan_files(&app, &store); // drop the deleted prompt's stored copies
+            if let Some(c) = db_conn(&app) { db_delete_versions(&c, &id); } // F7 cascade
         }
         changed
     };
     Ok(changed)
+}
+
+// F8 batch operations: apply one action to many prompts in a SINGLE store pass
+// (no per-item save loop, so 100+ selected prompts never stall the UI). Returns the
+// fresh state so the caller re-renders once. Actions: delete / favorite / color /
+// addView / removeView.
+#[tauri::command]
+async fn batch_prompts(
+    app: AppHandle,
+    state: State<'_, Db>,
+    ids: Vec<String>,
+    action: String,
+    color: Option<String>,
+    favorite: Option<bool>,
+    view_id: Option<String>,
+) -> Result<Settings, String> {
+    if action == "delete" {
+        // Tauri window calls must stay OUTSIDE the store mutex (deadlock trap).
+        for id in &ids {
+            close_floating_window(&app, id);
+        }
+    }
+    let idset: std::collections::HashSet<&str> = ids.iter().map(|s| s.as_str()).collect();
+    let mut store = lock(&state);
+    match action.as_str() {
+        "delete" => {
+            store.prompts.retain(|p| !idset.contains(p.id.as_str()));
+            for view in &mut store.settings.views {
+                for layout in view.layouts.values_mut() {
+                    layout.retain(|k, _| !idset.contains(k.as_str()));
+                }
+            }
+            for id in &ids {
+                store.settings.floating.remove(id);
+                store.settings.float_scale.remove(id);
+                store.settings.video_prefs.remove(id);
+            }
+            save_prompts(&app, &store);
+            save_settings(&app, &store.settings);
+            cleanup_orphan_files(&app, &store);
+            if let Some(c) = db_conn(&app) { for id in &ids { db_delete_versions(&c, id); } } // F7 cascade
+        }
+        "favorite" => {
+            let fav = favorite.unwrap_or(true);
+            for p in store.prompts.iter_mut() {
+                if idset.contains(p.id.as_str()) {
+                    p.favorite = fav;
+                }
+            }
+            save_prompts(&app, &store);
+        }
+        "color" => {
+            let c = color.unwrap_or_default();
+            for p in store.prompts.iter_mut() {
+                if idset.contains(p.id.as_str()) {
+                    p.color = c.clone();
+                }
+            }
+            save_prompts(&app, &store);
+        }
+        "addView" | "removeView" => {
+            let vid = view_id.unwrap_or_default();
+            if let Some(view) = store.settings.views.iter_mut().find(|v| v.id == vid) {
+                let (cols, rows) = (view.cols, view.rows);
+                let key = format!("{}x{}", cols, rows);
+                let layout = view.layouts.entry(key).or_default();
+                if action == "removeView" {
+                    for id in &ids {
+                        layout.remove(id);
+                    }
+                } else {
+                    let mut occupied: std::collections::HashSet<(u32, u32)> =
+                        layout.values().map(|c| (c[0], c[1])).collect();
+                    for id in &ids {
+                        if layout.contains_key(id) {
+                            continue;
+                        }
+                        'find: for row in 0..rows {
+                            for col in 0..cols {
+                                if !occupied.contains(&(col, row)) {
+                                    layout.insert(id.clone(), [col, row]);
+                                    occupied.insert((col, row));
+                                    break 'find;
+                                }
+                            }
+                        }
+                    }
+                }
+                save_settings(&app, &store.settings);
+            }
+        }
+        _ => return Err("bad-action".into()),
+    }
+    // Return only the (small) settings: the caller mutates its local prompt list
+    // in place, so we never re-serialise every prompt's base64 image over IPC.
+    Ok(store.settings.clone())
 }
 
 // Factory reset: wipe all prompts AND all settings (views, theme, window,
@@ -1553,15 +1860,100 @@ async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Result<(), Str
             let _ = win.close();
         }
     }
-    let _ = apply_autostart(false, false);
     {
         let mut store = lock(&state);
         store.prompts.clear();
+        store.prompts_locked = false; // explicit wipe overrides the decrypt-failure lock
+        save_prompts(&app, &store);
+        // Data-only wipe: keep every setting, drop the derived data tables.
+        if let Some(c) = db_conn(&app) {
+            let _ = c.execute("DELETE FROM prompt_versions", []); // F7 history
+            let _ = c.execute("DELETE FROM copy_log", []); // copy history
+            let _ = c.execute("DELETE FROM clip_inbox", []); // F21 inbox
+        }
+    }
+    Ok(())
+}
+
+// Reset every SETTING to its default (theme, views/layouts, toggles, expert values)
+// while keeping the stored prompts intact. The front-end reloads so each default
+// re-applies cleanly; cleared views make normalizeLayout re-place the kept prompts.
+#[tauri::command]
+async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
+    let labels: Vec<String> = app
+        .webview_windows()
+        .keys()
+        .filter(|l| l.starts_with("float-"))
+        .cloned()
+        .collect();
+    for label in labels {
+        if let Some(win) = app.get_webview_window(&label) {
+            let _ = win.close();
+        }
+    }
+    let _ = apply_autostart(false, false);
+    {
+        let mut store = lock(&state);
+        let prompts = std::mem::take(&mut store.prompts); // keep the prompts
+        // The backup password is a key, not a preference: dropping it would make
+        // every password-protected backup permanently unreadable.
+        let backup_pw = store.settings.ui_texts.remove(BACKUP_PW_KEY);
         store.settings = Settings::default();
         store.settings.migrate();
-        save_prompts(&app, &store);
+        if let Some(pw) = backup_pw {
+            store.settings.ui_texts.insert(BACKUP_PW_KEY.to_string(), pw);
+        }
+        store.prompts = prompts;
         save_settings(&app, &store.settings);
     }
+    Ok(())
+}
+
+// Remembers that the take-over question was answered, so it is asked exactly once.
+const TAKEOVER_ASKED: &str = "takeoverAsked";
+
+// Portable run, own store still empty, an installed store present elsewhere →
+// the UI offers to adopt it. Returns the folder to name in the dialog.
+#[tauri::command]
+fn takeover_offer(app: AppHandle, state: State<Db>) -> Option<String> {
+    if !is_portable() {
+        return None;
+    }
+    {
+        let store = lock(&state);
+        if store.settings.ui_flags.get(TAKEOVER_ASKED) == Some(&true)
+            || !store.prompts.is_empty()
+        {
+            return None;
+        }
+    }
+    let dir = data_dir(&app);
+    appdata_store_dir(&app, &dir).map(|p| p.display().to_string())
+}
+
+// Answer to that question. `adopt` copies the installed store beside the exe (the
+// original stays untouched) and reloads it; either way the question is settled.
+#[tauri::command]
+fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool) -> Result<(), String> {
+    let dir = data_dir(&app);
+    if adopt {
+        let src = appdata_store_dir(&app, &dir).ok_or("no-source")?;
+        for f in STORE_FILES {
+            if src.join(f).exists() {
+                fs::copy(src.join(f), dir.join(f)).map_err(|e| e.to_string())?;
+            }
+        }
+        // The freshly copied database supersedes whatever the empty one wrote, so
+        // its write-ahead files must not survive into the new one.
+        let _ = fs::remove_file(dir.join("data.db-wal"));
+        let _ = fs::remove_file(dir.join("data.db-shm"));
+        // One lock for both steps: taking it twice would deadlock.
+        let fresh = load_store(&app);
+        *lock(&state) = fresh;
+    }
+    let mut store = lock(&state);
+    store.settings.ui_flags.insert(TAKEOVER_ASKED.to_string(), true);
+    save_settings(&app, &store.settings);
     Ok(())
 }
 
@@ -1820,6 +2212,586 @@ async fn get_state(state: State<'_, Db>) -> Result<AppState, String> {
     })
 }
 
+// ---- F11 usage statistics ----
+#[derive(Serialize)]
+struct StatBar {
+    id: String,
+    name: String,
+    count: u32,
+}
+#[derive(Serialize)]
+struct ViewCount {
+    name: String,
+    count: usize,
+}
+#[derive(Serialize)]
+struct UsageStats {
+    total_prompts: usize,
+    total_copies: u64,
+    copies7: u64,
+    copies30: u64,
+    favorites: usize,
+    unused: usize,
+    used_count: usize,
+    avg_copies: f64,
+    total_chars: u64,
+    colored: usize,
+    recent_name: String,
+    recent_ts: u64,
+    longest_name: String,
+    longest_chars: usize,
+    types: Vec<ViewCount>,
+    top: Vec<StatBar>,
+    never_used: Vec<StatBar>,
+    per_view: Vec<ViewCount>,
+    history_on: bool,
+}
+
+// Coarse type of a prompt for the statistics breakdown.
+fn prompt_stat_type(p: &Prompt) -> &'static str {
+    if !p.file_path.is_empty() {
+        let lc = p.file_path.to_lowercase();
+        if [".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"].iter().any(|e| lc.ends_with(e)) {
+            "video"
+        } else if lc.ends_with(".pdf") {
+            "pdf"
+        } else if [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff", ".tga", ".ico"].iter().any(|e| lc.ends_with(e)) {
+            "image"
+        } else {
+            "file"
+        }
+    } else if !p.image.is_empty() {
+        "image"
+    } else {
+        "text"
+    }
+}
+
+// Aggregate everything in Rust so a 1000-prompt library returns one compact struct.
+#[tauri::command]
+async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Result<UsageStats, String> {
+    let store = lock(&state);
+    let usage = &store.settings.usage;
+    let last_used = &store.settings.last_used;
+    let name_of = |p: &Prompt| -> String {
+        if !p.name.is_empty() {
+            p.name.clone()
+        } else if !p.text.is_empty() {
+            p.text.chars().take(40).collect()
+        } else {
+            p.id.clone()
+        }
+    };
+    let total_prompts = store.prompts.len();
+    let total_copies: u64 = usage.values().map(|v| *v as u64).sum();
+    let favorites = store.prompts.iter().filter(|p| p.favorite).count();
+    let used_count = store.prompts.iter().filter(|p| usage.get(&p.id).copied().unwrap_or(0) > 0).count();
+    let unused = total_prompts.saturating_sub(used_count);
+    let avg_copies = if used_count > 0 { total_copies as f64 / used_count as f64 } else { 0.0 };
+    let total_chars: u64 = store.prompts.iter().map(|p| p.text.chars().count() as u64).sum();
+    let colored = store.prompts.iter().filter(|p| !p.color.is_empty()).count();
+    let (mut recent_name, mut recent_ts) = (String::new(), 0u64);
+    for p in &store.prompts {
+        let lu = last_used.get(&p.id).copied().unwrap_or(0);
+        if lu > recent_ts { recent_ts = lu; recent_name = name_of(p); }
+    }
+    let (mut longest_name, mut longest_chars) = (String::new(), 0usize);
+    for p in &store.prompts {
+        let c = p.text.chars().count();
+        if c > longest_chars { longest_chars = c; longest_name = name_of(p); }
+    }
+    let mut type_counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    for p in &store.prompts {
+        *type_counts.entry(prompt_stat_type(p)).or_insert(0) += 1;
+    }
+    let types: Vec<ViewCount> = ["text", "image", "video", "pdf", "file"]
+        .iter()
+        .filter_map(|k| {
+            let c = type_counts.get(k).copied().unwrap_or(0);
+            if c > 0 { Some(ViewCount { name: (*k).to_string(), count: c }) } else { None }
+        })
+        .collect();
+    let mut used: Vec<&Prompt> = store
+        .prompts
+        .iter()
+        .filter(|p| usage.get(&p.id).copied().unwrap_or(0) > 0)
+        .collect();
+    used.sort_by(|a, b| {
+        let ua = usage.get(&a.id).copied().unwrap_or(0);
+        let ub = usage.get(&b.id).copied().unwrap_or(0);
+        ub.cmp(&ua).then_with(|| name_of(a).to_lowercase().cmp(&name_of(b).to_lowercase()))
+    });
+    let top: Vec<StatBar> = used
+        .iter()
+        .take(top_n)
+        .map(|p| StatBar { id: p.id.clone(), name: name_of(p), count: usage.get(&p.id).copied().unwrap_or(0) })
+        .collect();
+    let now = now_secs();
+    let cutoff30 = now.saturating_sub(30 * 86400);
+    let mut never_used: Vec<StatBar> = store
+        .prompts
+        .iter()
+        .filter(|p| {
+            let u = usage.get(&p.id).copied().unwrap_or(0);
+            let lu = last_used.get(&p.id).copied().unwrap_or(0);
+            u == 0 || lu < cutoff30
+        })
+        .map(|p| StatBar { id: p.id.clone(), name: name_of(p), count: usage.get(&p.id).copied().unwrap_or(0) })
+        .collect();
+    never_used.truncate(top_n.max(10) * 2);
+    let per_view: Vec<ViewCount> = store
+        .settings
+        .views
+        .iter()
+        .map(|v| {
+            let key = format!("{}x{}", v.cols, v.rows);
+            let count = v.layouts.get(&key).map(|l| l.len()).unwrap_or(0);
+            ViewCount { name: v.name.clone(), count }
+        })
+        .collect();
+    let (copies7, copies30) = db_conn(&app)
+        .map(|c| {
+            let c7 = c
+                .query_row("SELECT COUNT(*) FROM copy_log WHERE ts >= ?1", params![now.saturating_sub(7 * 86400) as i64], |r| r.get::<_, i64>(0))
+                .unwrap_or(0) as u64;
+            let c30 = c
+                .query_row("SELECT COUNT(*) FROM copy_log WHERE ts >= ?1", params![cutoff30 as i64], |r| r.get::<_, i64>(0))
+                .unwrap_or(0) as u64;
+            (c7, c30)
+        })
+        .unwrap_or((0, 0));
+    let history_on = store.settings.ui_flags.get("copyHistory") != Some(&false);
+    Ok(UsageStats {
+        total_prompts,
+        total_copies,
+        copies7,
+        copies30,
+        favorites,
+        unused,
+        used_count,
+        avg_copies,
+        total_chars,
+        colored,
+        recent_name,
+        recent_ts,
+        longest_name,
+        longest_chars,
+        types,
+        top,
+        never_used,
+        per_view,
+        history_on,
+    })
+}
+
+// ---- F6 duplicate finder ----
+#[derive(Serialize)]
+struct DupMember {
+    id: String,
+    name: String,
+    text: String,
+    usage: u32,
+    views: Vec<String>,
+}
+#[derive(Serialize)]
+struct DupGroup {
+    score: f64,
+    members: Vec<DupMember>,
+}
+
+fn normalize_dup(s: &str) -> String {
+    s.to_lowercase().split_whitespace().collect::<Vec<_>>().join(" ")
+}
+fn dup_trigrams(s: &str) -> std::collections::HashSet<[char; 3]> {
+    let chars: Vec<char> = s.chars().collect();
+    let mut set = std::collections::HashSet::new();
+    for w in chars.windows(3) {
+        set.insert([w[0], w[1], w[2]]);
+    }
+    set
+}
+fn dup_dice(a: &std::collections::HashSet<[char; 3]>, b: &std::collections::HashSet<[char; 3]>) -> f64 {
+    if a.is_empty() || b.is_empty() {
+        return 0.0;
+    }
+    let inter = a.iter().filter(|t| b.contains(*t)).count();
+    2.0 * inter as f64 / (a.len() + b.len()) as f64
+}
+fn uf_find(parent: &mut [usize], mut x: usize) -> usize {
+    while parent[x] != x {
+        parent[x] = parent[parent[x]];
+        x = parent[x];
+    }
+    x
+}
+
+// Find near-duplicate prompts by trigram/Dice similarity. Rayon-parallel over the
+// upper-triangle of pairs; 1000 prompts finish well under a second.
+#[tauri::command]
+async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<DupGroup>, String> {
+    use rayon::prelude::*;
+    use std::collections::{HashMap as Map, HashSet as Set};
+    let store = lock(&state);
+    let thr = (threshold / 100.0).clamp(0.0, 1.0);
+    let items: Vec<(&Prompt, String)> = store
+        .prompts
+        .iter()
+        .map(|p| {
+            let base = if !p.text.is_empty() { p.text.as_str() } else { p.name.as_str() };
+            (p, normalize_dup(base))
+        })
+        .filter(|(_, n)| n.chars().count() >= 3)
+        .collect();
+    let n = items.len();
+    if n < 2 {
+        return Ok(Vec::new());
+    }
+    let grams: Vec<Set<[char; 3]>> = items.par_iter().map(|(_, s)| dup_trigrams(s)).collect();
+    let ignored: Set<(String, String)> = store
+        .settings
+        .dup_ignored
+        .iter()
+        .map(|p| {
+            let (a, b) = (p[0].clone(), p[1].clone());
+            if a <= b { (a, b) } else { (b, a) }
+        })
+        .collect();
+    let edges: Vec<(usize, usize, f64)> = (0..n)
+        .into_par_iter()
+        .flat_map(|i| {
+            let gi = &grams[i];
+            let mut local = Vec::new();
+            for j in (i + 1)..n {
+                let d = dup_dice(gi, &grams[j]);
+                if d >= thr {
+                    let (a, b) = (&items[i].0.id, &items[j].0.id);
+                    let key = if a <= b { (a.clone(), b.clone()) } else { (b.clone(), a.clone()) };
+                    if !ignored.contains(&key) {
+                        local.push((i, j, d));
+                    }
+                }
+            }
+            local
+        })
+        .collect();
+    // Union-find into connected components; track the strongest edge per group.
+    let mut parent: Vec<usize> = (0..n).collect();
+    let mut best: Map<usize, f64> = Map::new();
+    for &(i, j, _) in &edges {
+        let (ri, rj) = (uf_find(&mut parent, i), uf_find(&mut parent, j));
+        if ri != rj {
+            parent[ri] = rj;
+        }
+    }
+    for &(i, _, d) in &edges {
+        let r = uf_find(&mut parent, i);
+        let e = best.entry(r).or_insert(0.0);
+        if d > *e {
+            *e = d;
+        }
+    }
+    let mut groups: Map<usize, Vec<usize>> = Map::new();
+    for i in 0..n {
+        let r = uf_find(&mut parent, i);
+        if best.contains_key(&r) {
+            groups.entry(r).or_default().push(i);
+        }
+    }
+    // Precompute view membership: prompt id -> view names containing it.
+    let mut in_views: Map<&str, Vec<String>> = Map::new();
+    for v in &store.settings.views {
+        let mut seen: Set<&str> = Set::new();
+        for layout in v.layouts.values() {
+            for id in layout.keys() {
+                if seen.insert(id.as_str()) {
+                    in_views.entry(id.as_str()).or_default().push(v.name.clone());
+                }
+            }
+        }
+    }
+    let mut out: Vec<DupGroup> = groups
+        .into_iter()
+        .filter(|(_, m)| m.len() >= 2)
+        .map(|(root, idxs)| {
+            let members = idxs
+                .iter()
+                .map(|&i| {
+                    let p = items[i].0;
+                    DupMember {
+                        id: p.id.clone(),
+                        name: if p.name.is_empty() { p.text.chars().take(40).collect() } else { p.name.clone() },
+                        text: p.text.clone(),
+                        usage: store.settings.usage.get(&p.id).copied().unwrap_or(0),
+                        views: in_views.get(p.id.as_str()).cloned().unwrap_or_default(),
+                    }
+                })
+                .collect();
+            DupGroup { score: best.get(&root).copied().unwrap_or(0.0), members }
+        })
+        .collect();
+    out.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    Ok(out)
+}
+
+// F6: mark all pairwise combinations of these prompt ids as "not duplicates".
+#[tauri::command]
+async fn ignore_dups(app: AppHandle, state: State<'_, Db>, ids: Vec<String>) -> Result<(), String> {
+    let mut store = lock(&state);
+    let mut existing: std::collections::HashSet<(String, String)> = store
+        .settings
+        .dup_ignored
+        .iter()
+        .map(|p| (p[0].clone(), p[1].clone()))
+        .collect();
+    for a in 0..ids.len() {
+        for b in (a + 1)..ids.len() {
+            let (x, y) = if ids[a] <= ids[b] { (ids[a].clone(), ids[b].clone()) } else { (ids[b].clone(), ids[a].clone()) };
+            if existing.insert((x.clone(), y.clone())) {
+                store.settings.dup_ignored.push([x, y]);
+            }
+        }
+    }
+    save_settings(&app, &store.settings);
+    Ok(())
+}
+
+// ---- F2 automatic backups & restore ----
+#[derive(Serialize)]
+struct BackupInfo {
+    name: String,
+    size: u64,
+}
+fn backups_dir(app: &AppHandle) -> std::path::PathBuf {
+    data_dir(app).join("backups")
+}
+// A backup folder name is a local_stamp() (digits, '-', '_') — reject anything with
+// path separators or traversal so a crafted name can never escape the backups dir.
+fn valid_backup_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.contains('/')
+        && !name.contains('\\')
+        && !name.contains("..")
+        && name.chars().all(|c| c.is_ascii_digit() || c == '-' || c == '_')
+}
+fn list_backups_impl(app: &AppHandle) -> Vec<BackupInfo> {
+    let dir = backups_dir(app);
+    let mut out: Vec<BackupInfo> = fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            let size = backup_db_file(&e.path())
+                .and_then(|p| fs::metadata(p).ok())
+                .map(|m| m.len())
+                .unwrap_or(0);
+            BackupInfo { name, size }
+        })
+        .collect();
+    out.sort_by(|a, b| b.name.cmp(&a.name)); // newest first (stamp sorts chronologically)
+    out
+}
+// Grandfather-father-son retention: keep the newest N backups per time tier.
+struct GfsConfig {
+    daily: usize,
+    weekly: usize,
+    monthly: usize,
+}
+fn gfs_from_settings(s: &Settings) -> Option<GfsConfig> {
+    if s.ui_flags.get("backupGfs") != Some(&true) {
+        return None;
+    }
+    let g = |k: &str, d: f64| s.ui_values.get(k).copied().unwrap_or(d).max(0.0) as usize;
+    Some(GfsConfig { daily: g("backupDaily", 3.0), weekly: g("backupWeekly", 4.0), monthly: g("backupMonthly", 12.0) })
+}
+// Days since 1970-01-01 for a proleptic Gregorian date (Hinnant's algorithm).
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = (if y >= 0 { y } else { y - 399 }) / 400;
+    let yoe = y - era * 400;
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe - 719468
+}
+// (day, week, month) tier keys from a backup folder name "YYYY-MM-DD_HH-MM-SS".
+fn backup_date_keys(name: &str) -> Option<(i64, i64, i64)> {
+    let date = name.split('_').next()?;
+    let mut it = date.split('-');
+    let y: i64 = it.next()?.parse().ok()?;
+    let m: i64 = it.next()?.parse().ok()?;
+    let d: i64 = it.next()?.parse().ok()?;
+    let days = days_from_civil(y, m, d);
+    Some((days, days.div_euclid(7), y * 12 + m))
+}
+fn rotate_backups(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) {
+    use std::collections::HashSet;
+    let dir = backups_dir(app);
+    let mut names: Vec<String> = fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .collect();
+    names.sort(); // oldest first (names are timestamps → chronological)
+    if let Some(g) = gfs {
+        // Newest-first walk; for each tier keep the newest backup per distinct
+        // day / week / month up to that tier's count.
+        let mut desc = names.clone();
+        desc.reverse();
+        let pick = |count: usize, idx: usize| -> Vec<String> {
+            let mut seen: HashSet<i64> = HashSet::new();
+            let mut out = Vec::new();
+            if count == 0 {
+                return out;
+            }
+            for n in &desc {
+                if let Some(keys) = backup_date_keys(n) {
+                    let k = [keys.0, keys.1, keys.2][idx];
+                    if seen.insert(k) {
+                        out.push(n.clone());
+                        if seen.len() >= count {
+                            break;
+                        }
+                    }
+                }
+            }
+            out
+        };
+        let mut keep_set: HashSet<String> = HashSet::new();
+        for n in pick(g.daily, 0) { keep_set.insert(n); }
+        for n in pick(g.weekly, 1) { keep_set.insert(n); }
+        for n in pick(g.monthly, 2) { keep_set.insert(n); }
+        for n in &names {
+            if !keep_set.contains(n) {
+                let _ = fs::remove_dir_all(dir.join(n));
+            }
+        }
+    } else if names.len() > keep {
+        for name in &names[..names.len() - keep] {
+            let _ = fs::remove_dir_all(dir.join(name));
+        }
+    }
+}
+// Consistent snapshot of data.db via VACUUM INTO (WAL-safe, no locking games). Writes
+// a temp file first and renames on success, so a failure leaves no partial snapshot.
+// A snapshot is stored gzipped: a vacuumed store is mostly JSON text, so this
+// takes a few MB down to a fraction of that — and ten of them are kept by default.
+// `data.db` (uncompressed) is still accepted so older backups keep working.
+const BACKUP_DB_GZ: &str = "data.db.gz";
+
+fn backup_db_file(folder: &std::path::Path) -> Option<PathBuf> {
+    let gz = folder.join(BACKUP_DB_GZ);
+    if gz.exists() {
+        return Some(gz);
+    }
+    let plain = folder.join("data.db");
+    plain.exists().then_some(plain)
+}
+
+fn gzip_to(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
+    use flate2::{write::GzEncoder, Compression};
+    let raw = fs::read(src).map_err(|e| e.to_string())?;
+    let mut enc = GzEncoder::new(Vec::new(), Compression::best());
+    std::io::Write::write_all(&mut enc, &raw).map_err(|e| e.to_string())?;
+    let packed = enc.finish().map_err(|e| e.to_string())?;
+    fs::write(dest, packed).map_err(|e| e.to_string())
+}
+
+fn gunzip_to(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
+    use flate2::read::GzDecoder;
+    let packed = fs::read(src).map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    std::io::Read::read_to_end(&mut GzDecoder::new(&packed[..]), &mut out)
+        .map_err(|e| e.to_string())?;
+    fs::write(dest, out).map_err(|e| e.to_string())
+}
+
+fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<String, String> {
+    let src = data_dir(app).join("data.db");
+    if !src.exists() {
+        return Err("no-store".into());
+    }
+    let name = local_stamp();
+    let folder = backups_dir(app).join(&name);
+    fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+    let tmp = folder.join("data.db.tmp");
+    let dest = folder.join(BACKUP_DB_GZ);
+    let _ = fs::remove_file(&tmp);
+    {
+        let conn = Connection::open(&src).map_err(|e| e.to_string())?;
+        conn.execute("VACUUM INTO ?1", params![tmp.to_string_lossy()]).map_err(|e| e.to_string())?;
+    }
+    // Compress the vacuumed copy, then drop the raw one — never leave both behind.
+    let packed = gzip_to(&tmp, &dest);
+    let _ = fs::remove_file(&tmp);
+    packed?;
+    rotate_backups(app, keep.clamp(1, 50), gfs);
+    Ok(name)
+}
+fn newest_backup_age(app: &AppHandle) -> Option<u64> {
+    let dir = backups_dir(app);
+    let mut newest: Option<std::time::SystemTime> = None;
+    for e in fs::read_dir(&dir).into_iter().flatten().flatten() {
+        if let Ok(m) = e.metadata() {
+            if let Ok(t) = m.modified() {
+                if newest.map_or(true, |n| t > n) {
+                    newest = Some(t);
+                }
+            }
+        }
+    }
+    newest.and_then(|t| t.elapsed().ok()).map(|d| d.as_secs())
+}
+
+#[tauri::command]
+async fn list_backups(app: AppHandle) -> Result<Vec<BackupInfo>, String> {
+    Ok(list_backups_impl(&app))
+}
+
+#[tauri::command]
+async fn create_backup(app: AppHandle, state: State<'_, Db>, keep: usize) -> Result<String, String> {
+    let store = lock(&state); // no writes race with the VACUUM read
+    let gfs = gfs_from_settings(&store.settings);
+    do_backup(&app, keep, gfs)
+}
+
+#[tauri::command]
+async fn delete_backup(app: AppHandle, name: String) -> Result<(), String> {
+    if !valid_backup_name(&name) {
+        return Err("bad-name".into());
+    }
+    fs::remove_dir_all(backups_dir(&app).join(&name)).map_err(|e| e.to_string())
+}
+
+// Restore: snapshot the current store first (safety), swap data.db, drop the stale
+// WAL/SHM, then relaunch so nothing can half-apply.
+#[tauri::command]
+async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep: usize) -> Result<(), String> {
+    if !valid_backup_name(&name) {
+        return Err("bad-name".into());
+    }
+    let Some(backup_db) = backup_db_file(&backups_dir(&app).join(&name)) else {
+        return Err("missing".into());
+    };
+    {
+        let store = lock(&state);
+        let gfs = gfs_from_settings(&store.settings);
+        let _ = do_backup(&app, keep, gfs); // pre-restore safety snapshot
+        let dir = data_dir(&app);
+        let target = dir.join("data.db");
+        if backup_db.extension().is_some_and(|e| e == "gz") {
+            gunzip_to(&backup_db, &target)?;
+        } else {
+            fs::copy(&backup_db, &target).map_err(|e| e.to_string())?; // pre-2.6 snapshot
+        }
+        let _ = fs::remove_file(dir.join("data.db-wal"));
+        let _ = fs::remove_file(dir.join("data.db-shm"));
+    }
+    app.restart();
+}
+
 #[tauri::command]
 fn current_theme(app: AppHandle, state: State<Db>) -> String {
     let pref = lock(&state).settings.theme.clone();
@@ -1849,9 +2821,10 @@ async fn copy_prompt(state: State<'_, Db>, id: String) -> Result<bool, String> {
     Ok(match prompt {
         Some(p) if p.copy_image && !p.image.is_empty() => copy_image_to_clipboard(&p.image),
         Some(p) if !p.file_path.is_empty() => set_clipboard_file(&p.file_path),
-        Some(p) => arboard::Clipboard::new()
-            .and_then(|mut c| c.set_text(p.text))
-            .is_ok(),
+        Some(p) => {
+            note_own_copy(&p.text); // F21: don't echo our own copy into the inbox
+            arboard::Clipboard::new().and_then(|mut c| c.set_text(p.text)).is_ok()
+        }
         None => false,
     })
 }
@@ -1859,6 +2832,7 @@ async fn copy_prompt(state: State<'_, Db>, id: String) -> Result<bool, String> {
 // Put arbitrary text on the clipboard — used after filling prompt placeholders.
 #[tauri::command]
 async fn copy_text(text: String) -> bool {
+    note_own_copy(&text); // F21
     arboard::Clipboard::new()
         .and_then(|mut c| c.set_text(text))
         .is_ok()
@@ -1884,9 +2858,11 @@ fn now_secs() -> u64 {
 }
 
 // Retention window in seconds from the expert "history retention" setting
-// (days; default 7). 0 or negative means keep forever.
+// (days). Default 0 = keep forever: the copy history is bounded by its entry
+// count (historyMax), so a time-based prune would only surprise users who copy
+// infrequently by silently emptying "recently copied". 0 or negative = forever.
 fn history_max_age(settings: &Settings) -> Option<u64> {
-    let days = settings.ui_values.get("historyDays").copied().unwrap_or(7.0);
+    let days = settings.ui_values.get("historyDays").copied().unwrap_or(0.0);
     if days <= 0.0 {
         None
     } else {
@@ -1905,12 +2881,14 @@ fn prune_history(settings: &mut Settings) {
 // Record a copy in the history + usage stats (called by the UI after any copy).
 #[tauri::command]
 async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String) -> Result<(), String> {
-    let (entry, cap, cutoff) = {
+    let (entry, cap, cutoff, dedup) = {
         let mut store = lock(&state);
         // Respect the privacy toggle (expert menu): off = don't track.
         if store.settings.ui_flags.get("copyHistory") == Some(&false) {
             return Ok(());
         }
+        // Expert opt: skip logging a copy identical to the previous one.
+        let dedup = store.settings.ui_flags.get("dedupCopyLog") == Some(&true);
         if !store.prompts.iter().any(|p| p.id == id) {
             return Ok(());
         }
@@ -1934,11 +2912,19 @@ async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String) -> Result
             .clamp(0.0, COPY_HISTORY_MAX as f64) as usize;
         let cutoff = history_max_age(&store.settings).map(|age| now_secs().saturating_sub(age));
         save_settings(&app, &store.settings);
-        (CopyEntry { id, ts }, cap, cutoff)
+        (CopyEntry { id, ts }, cap, cutoff, dedup)
     };
     // The history itself lives in its own table — appended outside the lock so a
     // huge log never blocks other DB work and never bloats the settings blob.
     if let Some(conn) = db_conn(&app) {
+        if dedup {
+            let last: Option<String> = conn
+                .query_row("SELECT id FROM copy_log ORDER BY rowid DESC LIMIT 1", [], |r| r.get(0))
+                .ok();
+            if last.as_deref() == Some(entry.id.as_str()) {
+                return Ok(()); // identical consecutive copy — don't add another row
+            }
+        }
         let _ = db_append_copy(&conn, &entry, cap, cutoff);
     }
     Ok(())
@@ -2116,6 +3102,332 @@ fn set_capture_exclusion(win: &tauri::WebviewWindow, excluded: bool) {
 
 #[cfg(not(windows))]
 fn set_capture_exclusion(_win: &tauri::WebviewWindow, _excluded: bool) {}
+
+// ---- F19 auto-paste: track the last EXTERNAL foreground window so a copied prompt
+// can be pasted straight into it. A WinEvent hook records every foreground change;
+// WINEVENT_SKIPOWNPROCESS drops our own windows, so the stored handle is always the
+// app the user was working in (covers grid tiles, library rows AND the no-activate
+// floating pills, whose click never steals foreground).
+#[cfg(windows)]
+mod autopaste {
+    use std::sync::atomic::{AtomicIsize, Ordering};
+    use std::time::Duration;
+
+    static LAST_FG: AtomicIsize = AtomicIsize::new(0);
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn SetWinEventHook(min: u32, max: u32, hmod: isize, cb: WinEventProc, pid: u32, tid: u32, flags: u32) -> isize;
+        fn GetForegroundWindow() -> isize;
+        fn SetForegroundWindow(hwnd: isize) -> i32;
+        fn IsWindow(hwnd: isize) -> i32;
+        fn keybd_event(vk: u8, scan: u8, flags: u32, extra: usize);
+    }
+    type WinEventProc = unsafe extern "system" fn(isize, u32, isize, i32, i32, u32, u32);
+
+    const EVENT_SYSTEM_FOREGROUND: u32 = 0x0003;
+    const WINEVENT_OUTOFCONTEXT: u32 = 0x0000;
+    const WINEVENT_SKIPOWNPROCESS: u32 = 0x0002;
+    const KEYEVENTF_KEYUP: u32 = 0x0002;
+    const VK_CONTROL: u8 = 0x11;
+    const VK_RETURN: u8 = 0x0D;
+    const VK_V: u8 = 0x56;
+    const OBJID_WINDOW: i32 = 0;
+
+    unsafe extern "system" fn on_foreground(_h: isize, _e: u32, hwnd: isize, id_object: i32, _c: i32, _t: u32, _ms: u32) {
+        if id_object == OBJID_WINDOW && hwnd != 0 {
+            LAST_FG.store(hwnd, Ordering::Relaxed);
+        }
+    }
+
+    // Install on the calling (main/UI) thread; its OUTOFCONTEXT callback is delivered
+    // by that thread's message loop, which tao already pumps. Handle is leaked for
+    // the app lifetime (unhooked automatically at process exit).
+    pub fn install_hook() {
+        unsafe {
+            SetWinEventHook(
+                EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, 0,
+                on_foreground, 0, 0,
+                WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+            );
+        }
+    }
+
+    // Bring the stored external window to the foreground; returns its handle so the
+    // caller can wait out the settle delay before sending the keystrokes.
+    pub fn begin_paste() -> Result<isize, String> {
+        let hwnd = LAST_FG.load(Ordering::Relaxed);
+        if hwnd == 0 || unsafe { IsWindow(hwnd) } == 0 {
+            return Err("no-target".into());
+        }
+        unsafe { SetForegroundWindow(hwnd); }
+        Ok(hwnd)
+    }
+
+    // After the delay: verify the target really took focus (elevated/UIPI windows
+    // refuse it), then synthesize Ctrl+V and, optionally, Enter.
+    pub fn finish_paste(hwnd: isize, send_enter: bool) -> Result<(), String> {
+        if unsafe { GetForegroundWindow() } != hwnd {
+            return Err("focus-failed".into());
+        }
+        unsafe {
+            keybd_event(VK_CONTROL, 0, 0, 0);
+            keybd_event(VK_V, 0, 0, 0);
+            keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0);
+            keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
+            if send_enter {
+                std::thread::sleep(Duration::from_millis(20));
+                keybd_event(VK_RETURN, 0, 0, 0);
+                keybd_event(VK_RETURN, 0, KEYEVENTF_KEYUP, 0);
+            }
+        }
+        Ok(())
+    }
+}
+
+// F19: paste the current clipboard into the last external window. The delay lets the
+// target window finish taking focus before Ctrl+V; kept off the UI thread via tokio.
+#[tauri::command]
+async fn paste_into_previous(delay_ms: u64, enter: bool) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let hwnd = autopaste::begin_paste()?;
+        tokio::time::sleep(std::time::Duration::from_millis(delay_ms.clamp(10, 1000))).await;
+        autopaste::finish_paste(hwnd, enter)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (delay_ms, enter);
+        Err("unsupported".into())
+    }
+}
+
+// ---- F21 clipboard watcher: a message-only window with AddClipboardFormatListener
+// (event-driven, no polling). New external TEXT is appended to the clip_inbox table;
+// our own copies and consecutive duplicates are skipped. Off by default; toggling it
+// registers/unregisters the listener with no leaked handle.
+#[cfg(windows)]
+mod clipwatch {
+    use super::{db_add_clip, db_conn, lock, now_secs, text_hash, Db};
+    use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU64, Ordering};
+    use std::sync::Mutex;
+    use tauri::{AppHandle, Emitter, Manager};
+
+    static WATCHER: Mutex<Option<std::thread::JoinHandle<()>>> = Mutex::new(None);
+    static WATCHER_APP: Mutex<Option<AppHandle>> = Mutex::new(None);
+    static WATCHER_HWND: AtomicIsize = AtomicIsize::new(0);
+    // Set by stop() so a thread that has not yet entered its message loop tears down
+    // immediately instead of blocking join() forever (fast on/off toggle deadlock).
+    static WATCHER_STOP: AtomicBool = AtomicBool::new(false);
+    static LAST_OWN: AtomicU64 = AtomicU64::new(0);
+    static LAST_INSERTED: AtomicU64 = AtomicU64::new(0);
+
+    const WM_DESTROY: u32 = 0x0002;
+    const WM_CLIPBOARDUPDATE: u32 = 0x031D;
+    const HWND_MESSAGE: isize = -3;
+
+    #[repr(C)]
+    struct Msg {
+        hwnd: isize,
+        message: u32,
+        wparam: usize,
+        lparam: isize,
+        time: u32,
+        pt_x: i32,
+        pt_y: i32,
+    }
+    type WndProc = unsafe extern "system" fn(isize, u32, usize, isize) -> isize;
+    #[repr(C)]
+    struct WndClassW {
+        style: u32,
+        wndproc: Option<WndProc>,
+        cls_extra: i32,
+        wnd_extra: i32,
+        hinstance: isize,
+        hicon: isize,
+        hcursor: isize,
+        hbr: isize,
+        menu: *const u16,
+        class_name: *const u16,
+    }
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn RegisterClassW(c: *const WndClassW) -> u16;
+        fn CreateWindowExW(ex: u32, class: *const u16, name: *const u16, style: u32, x: i32, y: i32, w: i32, h: i32, parent: isize, menu: isize, inst: isize, param: *const core::ffi::c_void) -> isize;
+        fn DefWindowProcW(hwnd: isize, msg: u32, w: usize, l: isize) -> isize;
+        fn GetMessageW(msg: *mut Msg, hwnd: isize, min: u32, max: u32) -> i32;
+        fn TranslateMessage(msg: *const Msg) -> i32;
+        fn DispatchMessageW(msg: *const Msg) -> isize;
+        fn AddClipboardFormatListener(hwnd: isize) -> i32;
+        fn RemoveClipboardFormatListener(hwnd: isize) -> i32;
+        fn PostMessageW(hwnd: isize, msg: u32, w: usize, l: isize) -> i32;
+        fn PostQuitMessage(code: i32);
+        fn DestroyWindow(hwnd: isize) -> i32;
+        fn RegisterClipboardFormatW(name: *const u16) -> u32;
+        fn IsClipboardFormatAvailable(format: u32) -> i32;
+    }
+
+    fn wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    // Record the hash of text WE just put on the clipboard, so the watcher ignores it.
+    pub fn note_own(text: &str) {
+        LAST_OWN.store(text_hash(text.trim()), Ordering::Relaxed);
+    }
+
+    fn on_clipboard_update() {
+        // Poison-tolerant locks: a panic elsewhere must never turn a clipboard event
+        // into a process abort (this runs inside an extern "system" wndproc).
+        let app = match WATCHER_APP.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+            Some(a) => a,
+            None => return,
+        };
+        let (min, cap, enabled) = {
+            let state = app.state::<Db>();
+            let store = lock(&state);
+            let enabled = store.settings.ui_flags.get("clipWatcher") == Some(&true);
+            let min = store.settings.ui_values.get("clipMinChars").copied().unwrap_or(3.0).max(1.0) as usize;
+            let cap = store.settings.ui_values.get("clipInboxMax").copied().unwrap_or(50.0).clamp(10.0, 200.0) as usize;
+            (min, cap, enabled)
+        };
+        if !enabled {
+            return;
+        }
+        // Respect the clipboard opt-out format password managers (KeePass, 1Password, …)
+        // set so their copied secrets never land in monitors / history.
+        unsafe {
+            let excl = RegisterClipboardFormatW(wide("ExcludeClipboardContentFromMonitorProcessing").as_ptr());
+            if excl != 0 && IsClipboardFormatAvailable(excl) != 0 {
+                return;
+            }
+        }
+        // Text only — image/file clipboard payloads are ignored.
+        let text = match arboard::Clipboard::new().and_then(|mut c| c.get_text()) {
+            Ok(t) => t,
+            Err(_) => return,
+        };
+        let trimmed = text.trim();
+        if trimmed.chars().count() < min {
+            return;
+        }
+        let h = text_hash(trimmed);
+        if h == LAST_OWN.load(Ordering::Relaxed) || h == LAST_INSERTED.load(Ordering::Relaxed) {
+            return;
+        }
+        LAST_INSERTED.store(h, Ordering::Relaxed);
+        if let Some(conn) = db_conn(&app) {
+            let _ = db_add_clip(&conn, now_secs(), trimmed, cap);
+        }
+        let _ = app.emit("clip-inbox-changed", ());
+    }
+
+    unsafe extern "system" fn wndproc(hwnd: isize, msg: u32, w: usize, l: isize) -> isize {
+        match msg {
+            WM_CLIPBOARDUPDATE => {
+                // A panic must not unwind across this extern "system" boundary (→ abort).
+                let _ = std::panic::catch_unwind(on_clipboard_update);
+                0
+            }
+            WM_DESTROY => {
+                RemoveClipboardFormatListener(hwnd);
+                PostQuitMessage(0);
+                0
+            }
+            _ => DefWindowProcW(hwnd, msg, w, l),
+        }
+    }
+
+    pub fn start(app: AppHandle) {
+        let mut g = WATCHER.lock().unwrap_or_else(|e| e.into_inner());
+        if g.is_some() {
+            return; // already running
+        }
+        WATCHER_STOP.store(false, Ordering::Release);
+        *WATCHER_APP.lock().unwrap_or_else(|e| e.into_inner()) = Some(app);
+        let handle = std::thread::spawn(|| unsafe {
+            let class = wide("PromptSaverClipWatch");
+            let name = wide("psclip");
+            let wc = WndClassW {
+                style: 0,
+                wndproc: Some(wndproc),
+                cls_extra: 0,
+                wnd_extra: 0,
+                hinstance: 0,
+                hicon: 0,
+                hcursor: 0,
+                hbr: 0,
+                menu: std::ptr::null(),
+                class_name: class.as_ptr(),
+            };
+            RegisterClassW(&wc); // ok if already registered from a previous cycle
+            let hwnd = CreateWindowExW(0, class.as_ptr(), name.as_ptr(), 0, 0, 0, 0, 0, HWND_MESSAGE, 0, 0, std::ptr::null());
+            if hwnd == 0 {
+                return;
+            }
+            AddClipboardFormatListener(hwnd);
+            WATCHER_HWND.store(hwnd, Ordering::Release);
+            // stop() may have fired before the window existed (its PostMessage would
+            // have been lost) — tear down now instead of blocking on GetMessageW forever.
+            if WATCHER_STOP.load(Ordering::Acquire) {
+                RemoveClipboardFormatListener(hwnd);
+                DestroyWindow(hwnd);
+                WATCHER_HWND.store(0, Ordering::Release);
+                return;
+            }
+            let mut msg: Msg = std::mem::zeroed();
+            while GetMessageW(&mut msg, 0, 0, 0) > 0 {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        });
+        *g = Some(handle);
+    }
+
+    pub fn stop() {
+        // Signal first: a thread still starting up will see this right after it
+        // publishes its hwnd and exit on its own (see start()).
+        WATCHER_STOP.store(true, Ordering::Release);
+        let hwnd = WATCHER_HWND.swap(0, Ordering::AcqRel);
+        if hwnd != 0 {
+            // WM_CLOSE -> DefWindowProc destroys -> WM_DESTROY -> PostQuitMessage.
+            unsafe { PostMessageW(hwnd, 0x0010, 0, 0); }
+        }
+        if let Some(h) = WATCHER.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            let _ = h.join();
+        }
+        *WATCHER_APP.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+}
+
+// No-op own-copy note on non-Windows.
+#[cfg(windows)]
+fn note_own_copy(text: &str) {
+    clipwatch::note_own(text);
+}
+#[cfg(not(windows))]
+fn note_own_copy(_text: &str) {}
+
+// F21: list / dismiss / clear the clipboard inbox.
+#[tauri::command]
+async fn clip_inbox_list(app: AppHandle) -> Result<Vec<ClipItem>, String> {
+    Ok(db_conn(&app).map(|c| db_list_clips(&c)).unwrap_or_default())
+}
+#[tauri::command]
+async fn clip_inbox_dismiss(app: AppHandle, id: i64) -> Result<(), String> {
+    if let Some(c) = db_conn(&app) {
+        let _ = c.execute("DELETE FROM clip_inbox WHERE id = ?1", params![id]);
+    }
+    Ok(())
+}
+#[tauri::command]
+async fn clip_inbox_clear(app: AppHandle) -> Result<(), String> {
+    if let Some(c) = db_conn(&app) {
+        let _ = c.execute("DELETE FROM clip_inbox", []);
+    }
+    Ok(())
+}
 
 // Set a floating window's position AND size together (logical px). Used by the
 // edge/corner resize so the grabbed edge tracks the cursor 1:1.
@@ -2769,16 +4081,27 @@ async fn save_screenshot_as(app: AppHandle, data_url: String) -> Result<Option<S
 // off). Safety: only ever removes our own Screenshot-*.jpg (or legacy
 // PromptSaver-*.png) files.
 #[tauri::command]
-async fn delete_screenshot_file(path: String) -> bool {
+async fn delete_screenshot_file(state: State<'_, Db>, path: String) -> Result<bool, String> {
     let p = std::path::Path::new(&path);
     let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let ours = (name.starts_with("Screenshot-") && name.ends_with(".jpg"))
         || (name.starts_with("PromptSaver-") && name.ends_with(".png"));
-    if ours && p.is_file() {
-        fs::remove_file(p).is_ok()
-    } else {
-        false
+    if !ours || !p.is_file() {
+        return Ok(false);
     }
+    // Defense in depth: only ever delete inside a folder we actually save screenshots
+    // to (the configured/default screenshot dir, or temp) — never an arbitrary location
+    // a matching file name could otherwise point at.
+    let parent = match p.parent().and_then(|d| d.canonicalize().ok()) {
+        Some(d) => d,
+        None => return Ok(false),
+    };
+    let custom = lock(&state).settings.ui_texts.get("screenshotDir").cloned().unwrap_or_default();
+    let allowed = [screenshot_dir(&custom), std::env::temp_dir()];
+    let in_allowed = allowed
+        .iter()
+        .any(|d| d.canonicalize().map(|c| c == parent).unwrap_or(false));
+    Ok(in_allowed && fs::remove_file(p).is_ok())
 }
 
 // Default screenshot folder path (shown greyed in the expert menu when no custom
@@ -2802,6 +4125,11 @@ fn current_data_dir(app: AppHandle) -> String {
     data_dir(&app).to_string_lossy().to_string()
 }
 
+// The exact folder the last set_data_dir moved AWAY from — the only directory
+// delete_data_dir is allowed to clean, so the webview can never point that command
+// at another app's folder full of same-named files (settings.json / data.db).
+static LAST_OLD_DATA_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
+
 // Redirect the store to a new folder (applies on next launch). Adopts an existing
 // store in the target if present, otherwise copies the current one across. The old
 // data is left untouched; the caller may offer to delete it. Returns the old path.
@@ -2818,6 +4146,8 @@ async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: String) -> Resu
     if new == current {
         return Ok(old);
     }
+    // Remember which folder we are leaving — the only one delete_data_dir may clean.
+    *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(current.clone());
     // Flush the live state to the current location first.
     {
         let store = lock(&state);
@@ -2853,6 +4183,16 @@ async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: String) -> Resu
 async fn delete_data_dir(path: String) -> bool {
     let dir = PathBuf::from(&path);
     if !dir.is_dir() {
+        return false;
+    }
+    // Only ever clean the folder set_data_dir just moved away from — never an
+    // arbitrary webview-supplied directory that happens to hold same-named files.
+    let allowed = LAST_OLD_DATA_DIR
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .is_some_and(|p| *p == dir);
+    if !allowed {
         return false;
     }
     let mut ok = true;
@@ -3215,6 +4555,39 @@ async fn capture_window(app: AppHandle, state: State<'_, SnipState>, id: u32) ->
     }
 }
 
+// Open the project's GitHub page in the default browser (app logo → repo,
+// version label → releases). The URLs are hardcoded — the webview can never open
+// an arbitrary address.
+#[tauri::command]
+fn open_repo(page: Option<String>) -> Result<(), String> {
+    let url = match page.as_deref() {
+        Some("releases") => "https://github.com/wbgcoding/Prompt-Saver/releases",
+        _ => "https://github.com/wbgcoding/Prompt-Saver",
+    };
+    let mut cmd = std::process::Command::new("cmd");
+    cmd.args(["/C", "start", "", url]);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd.spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// Scale the whole main-window UI with the browser's native zoom (like Ctrl +/-).
+// Native zoom keeps event coordinates and getBoundingClientRect in one coordinate
+// space, so — unlike a CSS `zoom` on <body> — it never desyncs popup positioning
+// or grid hit-testing. Clamped to the slider's 50–300% range.
+#[tauri::command]
+fn set_ui_zoom(app: AppHandle, factor: f64) -> Result<(), String> {
+    let f = factor.clamp(0.5, 3.0);
+    if let Some(win) = app.get_webview_window("main") {
+        win.set_zoom(f).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 // ---------- Updates (GitHub releases) ----------
 
 const UPDATE_API: &str = "https://api.github.com/repos/wbgcoding/Prompt-Saver/releases/latest";
@@ -3278,7 +4651,7 @@ fn version_newer(latest: &str, current: &str) -> bool {
 
 fn updater_check() -> Option<UpdateInfo> {
     let (version, url, notes) = fetch_latest()?;
-    version_newer(&version, APP_VERSION).then(|| UpdateInfo {
+    version_newer(&version, APP_VERSION).then_some(UpdateInfo {
         available: true,
         version,
         url,
@@ -3329,6 +4702,7 @@ async fn check_update(state: State<'_, Db>) -> Result<UpdateInfo, String> {
 #[tauri::command]
 fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
     let is_capture = key == CAPTURE_FLAG_KEY;
+    let is_clip = key == "clipWatcher"; // F21
     {
         let mut store = lock(&state);
         store.settings.ui_flags.insert(key, enabled);
@@ -3339,6 +4713,15 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
     if is_capture {
         for (_label, win) in app.webview_windows() {
             set_capture_exclusion(&win, enabled);
+        }
+    }
+    // F21: start/stop the clipboard listener as the toggle flips (no leaked handle).
+    #[cfg(windows)]
+    if is_clip {
+        if enabled {
+            clipwatch::start(app.clone());
+        } else {
+            clipwatch::stop();
         }
     }
 }
@@ -3386,12 +4769,38 @@ fn skip_version(app: AppHandle, state: State<Db>, version: String) {
     }
 }
 
+// Strictly pin an update download URL to `<repo>/releases/download/<tag>/<asset>.exe`.
+// A bare `starts_with` prefix check is not enough: the URL crate (and Windows) treat
+// `..` and `\` as path separators, so `.../releases/download/../../attacker/...` would
+// pass a prefix check yet resolve to a different repo. Reject every escape vector and
+// require exactly the two trailing path segments (tag / asset), no query or fragment.
+fn valid_update_url(url: &str) -> bool {
+    const PREFIX: &str = "https://github.com/wbgcoding/Prompt-Saver/releases/download/";
+    let rest = match url.strip_prefix(PREFIX) {
+        Some(r) => r,
+        None => return false,
+    };
+    let low = rest.to_ascii_lowercase();
+    if rest.contains("..") || rest.contains('\\') || rest.contains("//")
+        || rest.contains(':') || rest.contains('@') || rest.contains('?')
+        || rest.contains('#') || low.contains("%2e") || low.contains("%2f")
+        || low.contains("%5c")
+    {
+        return false;
+    }
+    let mut segs = rest.splitn(3, '/');
+    let tag = segs.next().unwrap_or("");
+    let asset = segs.next().unwrap_or("");
+    let extra = segs.next();
+    !tag.is_empty() && !asset.is_empty() && extra.is_none() && low.ends_with(".exe")
+}
+
 // Download the installer to %TEMP%, run it fully silent (/S), restart the
 // app afterwards and quit so the installer can replace the binaries.
 #[tauri::command]
 async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
-    // Only our own signed release assets — not any github.com URL.
-    if !url.starts_with("https://github.com/wbgcoding/Prompt-Saver/releases/download/") {
+    // Only our own release assets under the exact pinned repo path — not any github.com URL.
+    if !valid_update_url(&url) {
         return Err("invalid update source".to_string());
     }
     let resp = ureq::get(&url)
@@ -3405,6 +4814,39 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
         .take(UPDATE_MAX_BYTES)
         .read_to_end(&mut bytes)
         .map_err(|e| format!("read: {}", e))?;
+    // A file that exactly hit the cap was almost certainly truncated — never run a
+    // partial installer.
+    if bytes.len() as u64 >= UPDATE_MAX_BYTES {
+        return Err("installer too large / truncated".to_string());
+    }
+    // Sanity-check the download is actually a Windows executable (PE "MZ" header)
+    // before we ever run it — a corruption/wrong-format guard. NOTE: this is not
+    // cryptographic authentication; integrity today rests on TLS to the pinned repo
+    // path. Publishing a per-release SHA-256 (or code-signing) and verifying it here
+    // is the next hardening step.
+    if bytes.len() < 2 || &bytes[0..2] != b"MZ" {
+        return Err("downloaded file is not a valid installer".to_string());
+    }
+    // Integrity (Option A): verify the SHA-256 against the hash published beside the
+    // installer in the release (`<installer>.sha256`, same pinned path). A PRESENT hash
+    // that mismatches always aborts; a release that ships no hash file proceeds (so the
+    // updater still works for any release that predates the hash convention).
+    if let Ok(resp) = ureq::get(&format!("{}.sha256", url))
+        .set("User-Agent", "PromptSaver")
+        .timeout(std::time::Duration::from_secs(30))
+        .call()
+    {
+        if let Ok(text) = resp.into_string() {
+            let want = text.split_whitespace().next().unwrap_or("").to_ascii_lowercase();
+            if want.len() == 64 && want.chars().all(|c| c.is_ascii_hexdigit()) {
+                use sha2::{Digest, Sha256};
+                let got = format!("{:x}", Sha256::digest(&bytes));
+                if got != want {
+                    return Err("update hash mismatch — download rejected".to_string());
+                }
+            }
+        }
+    }
     // Stage into a fresh, uniquely-named temp subdir so a local attacker can't pre-plant
     // the installer/script at a predictable path (TOCTOU).
     let stamp = SystemTime::now()
@@ -3623,15 +5065,23 @@ fn to_txt(prompts: &[Prompt]) -> String {
 
 // Async: building the export (base64 images) + writing it stays off the UI thread.
 #[tauri::command]
-async fn export_prompts(app: AppHandle, state: State<'_, Db>, format: String) -> Result<usize, String> {
+async fn export_prompts(app: AppHandle, state: State<'_, Db>, format: String, ids: Option<Vec<String>>) -> Result<usize, String> {
     let (content, count) = {
         let store = lock(&state);
+        // F8: an explicit id list exports only the selection; otherwise everything.
+        let selected: Vec<Prompt> = match &ids {
+            Some(list) if !list.is_empty() => {
+                let set: std::collections::HashSet<&str> = list.iter().map(|s| s.as_str()).collect();
+                store.prompts.iter().filter(|p| set.contains(p.id.as_str())).cloned().collect()
+            }
+            _ => store.prompts.clone(),
+        };
         let content = match format.as_str() {
-            "csv" => to_csv(&store.prompts),
-            "txt" => to_txt(&store.prompts),
+            "csv" => to_csv(&selected),
+            "txt" => to_txt(&selected),
             _ => return Err(format!("Unsupported format: {}", format)),
         };
-        (content, store.prompts.len())
+        (content, selected.len())
     };
     let file = file_dialog(&app)
         .set_file_name(format!("prompts.{}", format))
@@ -3965,39 +5415,227 @@ struct Backup {
     settings: Settings,
 }
 
+// ---------- Encrypted single-file backups (S7) ----------
+// Format: b"PSB1" | mode(1) | [salt(16) if mode==1] | nonce(12) | AES-256-GCM ciphertext.
+// mode 0 = fixed key (portable: any install restores it). mode 1 = user password
+// (Argon2id(password + pepper, salt)). Old plaintext .json backups are still read.
+const BACKUP_MAGIC: &[u8; 4] = b"PSB1";
+// Fixed obfuscation key — MUST stay identical across all versions or old fixed-key
+// backups become unreadable. Not a secret (open source); it only keeps backups from
+// being plainly readable while staying restorable on any machine.
+const BACKUP_FIXED_KEY: [u8; 32] = [
+    0x8f, 0x2a, 0x41, 0xd7, 0x63, 0x1c, 0xb9, 0x05, 0xe4, 0x77, 0x38, 0xaa, 0x1e, 0x90, 0x6d, 0xc2,
+    0x54, 0x0b, 0xf3, 0x82, 0x9c, 0x2d, 0x71, 0x48, 0xba, 0x66, 0x0f, 0xd5, 0x37, 0xe1, 0x59, 0x84,
+];
+// Appended to the user's password before the KDF to harden brute force ("extend by code").
+const BACKUP_PEPPER: &[u8] = b"prompt-saver::backup::pepper::v1";
+const BACKUP_PW_MAX: usize = 128; // password length ceiling (bounds KDF input)
+const BACKUP_PW_KEY: &str = "backupPw"; // ui_texts slot (DPAPI-sealed via enc_str)
+
+fn backup_derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32], String> {
+    use argon2::Argon2;
+    let mut input = Vec::with_capacity(password.len() + BACKUP_PEPPER.len());
+    input.extend_from_slice(password.as_bytes());
+    input.extend_from_slice(BACKUP_PEPPER);
+    let mut key = [0u8; 32];
+    Argon2::default()
+        .hash_password_into(&input, salt, &mut key)
+        .map_err(|e| e.to_string())?;
+    Ok(key)
+}
+
+// A backup is JSON, so deflating it before encryption shrinks the file to a
+// fraction. Compression must happen BEFORE encryption — ciphertext does not
+// compress. Modes 2/3 mark a deflated payload; 0/1 stay readable forever.
+fn deflate(raw: &[u8]) -> Result<Vec<u8>, String> {
+    use flate2::{write::DeflateEncoder, Compression};
+    let mut enc = DeflateEncoder::new(Vec::new(), Compression::best());
+    std::io::Write::write_all(&mut enc, raw).map_err(|e| e.to_string())?;
+    enc.finish().map_err(|e| e.to_string())
+}
+
+fn inflate(packed: &[u8]) -> Result<Vec<u8>, String> {
+    use flate2::read::DeflateDecoder;
+    let mut out = Vec::new();
+    std::io::Read::read_to_end(&mut DeflateDecoder::new(packed), &mut out)
+        .map_err(|_| "corrupt backup".to_string())?;
+    Ok(out)
+}
+
+fn backup_encrypt(plain: &[u8], password: Option<&str>) -> Result<Vec<u8>, String> {
+    use aes_gcm::aead::{Aead, KeyInit};
+    use aes_gcm::{Aes256Gcm, Key, Nonce};
+    use rand::RngCore;
+    let body = deflate(plain)?;
+    let mut out = Vec::with_capacity(body.len() + 64);
+    out.extend_from_slice(BACKUP_MAGIC);
+    let mut nonce = [0u8; 12];
+    rand::rngs::OsRng.fill_bytes(&mut nonce);
+    let key_bytes: [u8; 32] = match password {
+        Some(pw) => {
+            out.push(3); // password + deflate
+            let mut salt = [0u8; 16];
+            rand::rngs::OsRng.fill_bytes(&mut salt);
+            let k = backup_derive_key(pw, &salt)?;
+            out.extend_from_slice(&salt);
+            k
+        }
+        None => {
+            out.push(2); // fixed key + deflate
+            BACKUP_FIXED_KEY
+        }
+    };
+    out.extend_from_slice(&nonce);
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
+    let ct = cipher
+        .encrypt(Nonce::from_slice(&nonce), body.as_slice())
+        .map_err(|_| "backup encryption failed".to_string())?;
+    out.extend_from_slice(&ct);
+    Ok(out)
+}
+
+// Ok(Some(json)) = decrypted; Ok(None) = not our format (caller tries plaintext JSON);
+// Err("password-required") = a password-mode backup and no/failed key.
+fn backup_decrypt(data: &[u8], password: Option<&str>) -> Result<Option<Vec<u8>>, String> {
+    use aes_gcm::aead::{Aead, KeyInit};
+    use aes_gcm::{Aes256Gcm, Key, Nonce};
+    if data.len() < 5 || &data[0..4] != BACKUP_MAGIC {
+        return Ok(None);
+    }
+    // 0/1 = uncompressed (pre-2.6.0 files), 2/3 = deflated payload.
+    let packed = matches!(data[4], 2 | 3);
+    let (key_bytes, rest): ([u8; 32], &[u8]) = match data[4] {
+        0 | 2 => (BACKUP_FIXED_KEY, &data[5..]),
+        1 | 3 => {
+            if data.len() < 21 {
+                return Err("corrupt backup".to_string());
+            }
+            let pw = password.ok_or_else(|| "password-required".to_string())?;
+            (backup_derive_key(pw, &data[5..21])?, &data[21..])
+        }
+        _ => return Err("unknown backup format".to_string()),
+    };
+    if rest.len() < 12 {
+        return Err("corrupt backup".to_string());
+    }
+    let (nonce, ct) = rest.split_at(12);
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
+    let body = cipher
+        .decrypt(Nonce::from_slice(nonce), ct)
+        .map_err(|_| {
+            if password.is_some() {
+                "wrong password or corrupt backup".to_string()
+            } else {
+                "password-required".to_string()
+            }
+        })?;
+    Ok(Some(if packed { inflate(&body)? } else { body }))
+}
+
+// Store (DPAPI-sealed) or clear the optional backup password. Never returned in clear.
+#[tauri::command]
+async fn set_backup_password(app: AppHandle, state: State<'_, Db>, password: String) -> Result<(), String> {
+    if password.len() > BACKUP_PW_MAX {
+        return Err("password too long".to_string());
+    }
+    {
+        let mut store = lock(&state);
+        if password.is_empty() {
+            store.settings.ui_texts.remove(BACKUP_PW_KEY);
+        } else {
+            store
+                .settings
+                .ui_texts
+                .insert(BACKUP_PW_KEY.to_string(), enc_str(&password));
+        }
+        save_settings(&app, &store.settings);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn has_backup_password(state: State<'_, Db>) -> Result<bool, String> {
+    let store = lock(&state);
+    Ok(store
+        .settings
+        .ui_texts
+        .get(BACKUP_PW_KEY)
+        .map(|v| !v.is_empty())
+        .unwrap_or(false))
+}
+
+// The clear backup password for this machine (sealed → dec_str), if one is set.
+fn stored_backup_password(store: &Store) -> Option<String> {
+    store
+        .settings
+        .ui_texts
+        .get(BACKUP_PW_KEY)
+        .map(|v| dec_str(v))
+        .filter(|s| !s.is_empty())
+}
+
 #[tauri::command]
 async fn export_all(app: AppHandle, state: State<'_, Db>) -> Result<usize, String> {
-    let (json, count) = {
+    let (json, count, password) = {
         let store = lock(&state);
         let backup = Backup {
             prompts: store.prompts.clone(),
             settings: store.settings.clone(),
         };
         let json = serde_json::to_string_pretty(&backup).map_err(|e| e.to_string())?;
-        (json, store.prompts.len())
+        (json, store.prompts.len(), stored_backup_password(&store))
     };
+    // Always encrypted: fixed key by default (restorable anywhere), user password if set.
+    let blob = backup_encrypt(json.as_bytes(), password.as_deref())?;
     let file = file_dialog(&app)
-        .set_file_name("prompt-saver-backup.json")
-        .add_filter("Prompt Saver backup", &["json"])
+        .set_file_name("prompt-saver-backup.psb")
+        .add_filter("Prompt Saver backup", &["psb", "json"])
         .save_file();
     match file {
         Some(path) => {
-            fs::write(&path, json).map_err(|e| e.to_string())?;
+            fs::write(&path, blob).map_err(|e| e.to_string())?;
             Ok(count)
         }
         None => Err("canceled".to_string()),
     }
 }
 
+// What a full import restored — the UI names the file in its confirmation.
+#[derive(Serialize)]
+struct ImportSummary {
+    name: String,
+    count: usize,
+}
+
 #[tauri::command]
-async fn import_all(app: AppHandle, state: State<'_, Db>) -> Result<usize, String> {
-    let file = file_dialog(&app)
-        .add_filter("Prompt Saver backup", &["json"])
-        .pick_file();
-    let Some(path) = file else {
-        return Err("canceled".to_string());
+async fn pick_backup_file(app: AppHandle) -> Option<String> {
+    file_dialog(&app)
+        .add_filter("Prompt Saver backup", &["psb", "json"])
+        .pick_file()
+        .map(|p| p.display().to_string())
+}
+
+// The file is picked separately so a wrong password can be retried on the SAME
+// file instead of sending the user back through the picker.
+#[tauri::command]
+async fn import_all(
+    app: AppHandle,
+    state: State<'_, Db>,
+    path: String,
+    password: Option<String>,
+) -> Result<ImportSummary, String> {
+    let path = PathBuf::from(path);
+    let raw = fs::read(&path).map_err(|e| e.to_string())?;
+    // Try the caller-supplied password first, else the one stored for this machine.
+    let pw = password.filter(|p| !p.is_empty()).or_else(|| {
+        let store = lock(&state);
+        stored_backup_password(&store)
+    });
+    // Encrypted (PSB1) or a legacy plaintext .json backup.
+    let content = match backup_decrypt(&raw, pw.as_deref())? {
+        Some(plain) => String::from_utf8(plain).map_err(|_| "corrupt backup".to_string())?,
+        None => String::from_utf8(raw).map_err(|_| "not a Prompt Saver backup".to_string())?,
     };
-    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let backup: Backup =
         serde_json::from_str(&content).map_err(|_| "not a Prompt Saver backup".to_string())?;
 
@@ -4012,6 +5650,11 @@ async fn import_all(app: AppHandle, state: State<'_, Db>) -> Result<usize, Strin
         }
         migrate_prompts(&mut store.prompts);
         store.settings = backup.settings;
+        // migrate() fills defaults and guarantees at least one view — without it a
+        // hand-edited backup with "views": [] makes active_view_mut index [0] panic
+        // on the next mutation (and poisons the Db mutex).
+        store.settings.migrate();
+        store.prompts_locked = false; // a full import supersedes any decrypt lock
         save_prompts(&app, &store);
         save_settings(&app, &store.settings);
         (
@@ -4032,7 +5675,13 @@ async fn import_all(app: AppHandle, state: State<'_, Db>) -> Result<usize, Strin
             let _ = gs.register(sc);
         }
     }
-    Ok(count)
+    Ok(ImportSummary {
+        name: path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default(),
+        count,
+    })
 }
 
 // ---------- Window geometry ----------
@@ -4101,7 +5750,14 @@ fn resolve_geometry(main: &tauri::WebviewWindow, saved: Option<WindowGeom>) -> W
 // Persist a partial geometry update in memory (flushed to disk on close).
 fn update_geom<F: FnOnce(&mut WindowGeom)>(handle: &AppHandle, f: F) {
     if let Some(state) = handle.try_state::<Db>() {
-        let mut store = state.lock().unwrap_or_else(|e| e.into_inner());
+        // try_lock, never block: this runs on the event-loop thread for every move/
+        // resize tick. If the store is busy (e.g. a backup VACUUM holds the lock), skip
+        // this update — the next move/resize event carries the current geometry anyway.
+        let mut store = match state.try_lock() {
+            Ok(g) => g,
+            Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
+            Err(std::sync::TryLockError::WouldBlock) => return,
+        };
         let mut g = store.settings.window.unwrap_or(WindowGeom {
             x: 0,
             y: 0,
@@ -4267,9 +5923,44 @@ pub fn run() {
             let capture_excl = capture_excluded(&store.settings);
             let hotkey = store.settings.hotkey.clone();
 
+            // F2 auto-backup config (read before the store is moved into state).
+            let auto_backup = store.settings.ui_flags.get("autoBackup") != Some(&false);
+            let backup_keep = store.settings.ui_values.get("backupKeep").copied().unwrap_or(10.0).clamp(1.0, 50.0) as usize;
+            let backup_interval_h: u64 = store
+                .settings
+                .ui_values
+                .get("backupIntervalH")
+                .copied()
+                .filter(|v| *v >= 1.0)
+                .unwrap_or(24.0) as u64;
+            let clip_on = store.settings.ui_flags.get("clipWatcher") == Some(&true); // F21, off by default
+            let backup_gfs = gfs_from_settings(&store.settings); // F2 GFS retention
+
             app.manage(Mutex::new(store));
             app.manage(SnipState(Mutex::new(Vec::new())));
             app.manage(SnipPreview(Arc::new(Mutex::new(None))));
+
+            // F19 auto-paste: start tracking the last external foreground window.
+            #[cfg(windows)]
+            autopaste::install_hook();
+
+            // F21: start the clipboard watcher only if the user opted in.
+            #[cfg(windows)]
+            if clip_on {
+                clipwatch::start(handle.clone());
+            }
+
+            // F2: on start, take a fresh backup if the newest one is older than the
+            // interval. Off the UI thread so it never delays the first paint.
+            if auto_backup {
+                let h = handle.clone();
+                std::thread::spawn(move || {
+                    let interval = backup_interval_h.saturating_mul(3600);
+                    if newest_backup_age(&h).map_or(true, |age| age >= interval) {
+                        let _ = do_backup(&h, backup_keep, backup_gfs);
+                    }
+                });
+            }
 
             // Re-arm the saved global hotkey (ignored if unset or invalid).
             if !hotkey.is_empty() {
@@ -4501,7 +6192,23 @@ pub fn run() {
             update_prompt,
             set_favorite,
             delete_prompt,
+            batch_prompts,
+            list_versions,
+            restore_version,
+            usage_stats,
+            find_duplicates,
+            ignore_dups,
+            list_backups,
+            create_backup,
+            delete_backup,
+            restore_backup,
+            clip_inbox_list,
+            clip_inbox_dismiss,
+            clip_inbox_clear,
+            open_repo,
+            set_ui_zoom,
             delete_all_data,
+            reset_settings,
             set_language,
             set_tile_style,
             set_layout,
@@ -4557,6 +6264,11 @@ pub fn run() {
             import_prompts,
             export_all,
             import_all,
+            pick_backup_file,
+            takeover_offer,
+            takeover_apply,
+            set_backup_password,
+            has_backup_password,
             get_clipboard_image,
             get_clipboard_file_path,
             pick_file_path,
@@ -4569,7 +6281,8 @@ pub fn run() {
             pick_folder,
             current_data_dir,
             set_data_dir,
-            delete_data_dir
+            delete_data_dir,
+            paste_into_previous
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -4580,11 +6293,186 @@ mod tests {
     use super::*;
 
     #[test]
+    fn update_url_pin_rejects_escapes() {
+        // The one legit shape is accepted.
+        assert!(valid_update_url(
+            "https://github.com/wbgcoding/Prompt-Saver/releases/download/v2.5.0/Prompt-Saver_2.5.0_x64-setup.exe"
+        ));
+        // Path-traversal to another repo, still github.com and still prefix-matching.
+        assert!(!valid_update_url(
+            "https://github.com/wbgcoding/Prompt-Saver/releases/download/../../attacker/repo/releases/download/v1/x-setup.exe"
+        ));
+        // Encoded dot-segment, backslash, extra scheme/authority, query, non-exe.
+        assert!(!valid_update_url("https://github.com/wbgcoding/Prompt-Saver/releases/download/%2e%2e/x/y-setup.exe"));
+        assert!(!valid_update_url("https://github.com/wbgcoding/Prompt-Saver/releases/download/v1\\x/y-setup.exe"));
+        assert!(!valid_update_url("https://github.com/wbgcoding/Prompt-Saver/releases/download/v1/y-setup.exe?x=1"));
+        assert!(!valid_update_url("https://github.com/wbgcoding/Prompt-Saver/releases/download/v1/y.txt"));
+        assert!(!valid_update_url("http://github.com/wbgcoding/Prompt-Saver/releases/download/v1/y-setup.exe"));
+        // Extra path segments beyond tag/asset.
+        assert!(!valid_update_url("https://github.com/wbgcoding/Prompt-Saver/releases/download/v1/sub/y-setup.exe"));
+    }
+
+    #[test]
     fn store_crypt_roundtrip() {
         let secret = "prompt with sécret 🔐 {#{x}#}";
         assert_eq!(dec_str(&enc_str(secret)), secret);
         // Legacy plaintext (no prefix) passes through unchanged for migration.
         assert_eq!(dec_str("legacy plaintext"), "legacy plaintext");
+    }
+
+    #[test]
+    fn history_retention_defaults_to_forever() {
+        // Regression: the default used to be 7 days, which silently emptied the copy
+        // history for anyone who copied less than weekly. Default is now keep-forever.
+        let mut s = Settings::default();
+        assert_eq!(history_max_age(&s), None, "no historyDays set => keep forever");
+        s.ui_values.insert("historyDays".into(), 0.0);
+        assert_eq!(history_max_age(&s), None, "0 => keep forever");
+        s.ui_values.insert("historyDays".into(), 7.0);
+        assert_eq!(history_max_age(&s), Some(7 * 86_400), "explicit days still prune");
+    }
+
+    #[test]
+    fn backup_fixed_key_roundtrip_is_portable() {
+        // Default backups carry no password: any install must be able to restore them.
+        let plain = br#"{"prompts":[],"settings":{}}"#;
+        let blob = backup_encrypt(plain, None).expect("encrypt");
+        assert_eq!(&blob[0..4], BACKUP_MAGIC, "header magic");
+        assert_eq!(blob[4], 2, "mode 2 = fixed key + compressed");
+        assert_ne!(&blob[5..], &plain[..], "payload is not stored in the clear");
+        let out = backup_decrypt(&blob, None).expect("decrypt").expect("psb format");
+        assert_eq!(out, plain);
+    }
+
+    #[test]
+    fn backup_password_roundtrip_and_wrong_password_fails() {
+        let plain = b"secret prompts";
+        let blob = backup_encrypt(plain, Some("correct horse")).expect("encrypt");
+        assert_eq!(blob[4], 3, "mode 3 = password + compressed");
+        let out = backup_decrypt(&blob, Some("correct horse")).expect("decrypt").expect("psb");
+        assert_eq!(out, plain);
+        assert!(backup_decrypt(&blob, Some("wrong")).is_err(), "wrong password rejected");
+        assert!(backup_decrypt(&blob, None).is_err(), "missing password rejected");
+        // The fixed key must NOT open a password-protected backup.
+        assert!(backup_decrypt(&blob, Some("")).is_err());
+    }
+
+    #[test]
+    fn backups_are_compressed_and_old_ones_still_open() {
+        // Repetitive JSON is what a real backup looks like; it must shrink a lot.
+        let plain = br#"{"prompts":[{"id":"a","name":"Review","text":"Review the code."}]}"#
+            .repeat(40);
+        let blob = backup_encrypt(&plain, None).expect("encrypt");
+        assert_eq!(blob[4], 2, "mode 2 = fixed key + compressed");
+        assert!(blob.len() * 4 < plain.len(), "compressed to well under a quarter");
+        assert_eq!(backup_decrypt(&blob, None).expect("decrypt").expect("psb"), plain);
+
+        // An uncompressed mode-0 file (written before 2.6.0) must still restore.
+        let mut legacy = Vec::from(&BACKUP_MAGIC[..]);
+        legacy.push(0);
+        {
+            use aes_gcm::aead::{Aead, KeyInit};
+            use aes_gcm::{Aes256Gcm, Key, Nonce};
+            let nonce = [7u8; 12];
+            legacy.extend_from_slice(&nonce);
+            let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&BACKUP_FIXED_KEY));
+            legacy.extend_from_slice(&cipher.encrypt(Nonce::from_slice(&nonce), &plain[..]).unwrap());
+        }
+        assert_eq!(backup_decrypt(&legacy, None).expect("decrypt").expect("psb"), plain);
+    }
+
+    #[test]
+    fn password_errors_stay_recognisable_for_the_ui() {
+        // The restore flow decides whether to show the password prompt by matching
+        // "password" in the error text. Rewording these would silently disable it.
+        let blob = backup_encrypt(b"x", Some("pw")).expect("encrypt");
+        let missing = backup_decrypt(&blob, None).unwrap_err();
+        let wrong = backup_decrypt(&blob, Some("nope")).unwrap_err();
+        assert_eq!(missing, "password-required");
+        for msg in [&missing, &wrong] {
+            assert!(msg.to_lowercase().contains("password"), "must mention password: {msg}");
+        }
+        // A backup without a password must NOT trigger the prompt.
+        let fixed = backup_encrypt(b"x", None).expect("encrypt");
+        assert!(backup_decrypt(&fixed, None).is_ok(), "fixed-key backup opens silently");
+    }
+
+    #[test]
+    fn reset_settings_leaves_a_usable_state() {
+        // reset_settings replaces the settings with Settings::default() + migrate().
+        // If that produced no view, the first grid mutation would index views[0] and
+        // panic (the same trap import_all guards against), leaving a dead app.
+        let mut s = Settings::default();
+        s.migrate();
+        assert!(!s.views.is_empty(), "reset must leave at least one view");
+        assert!(
+            s.views.iter().any(|v| v.id == s.active_view),
+            "active_view must point at an existing view"
+        );
+        assert_eq!(s.views[0].cols, default_cols());
+        assert_eq!(s.views[0].rows, default_rows());
+        assert_eq!(s.theme, default_theme(), "theme back to default");
+        assert!(s.ui_flags.is_empty() && s.ui_values.is_empty(), "expert tweaks cleared");
+    }
+
+    #[test]
+    fn reset_settings_keeps_the_backup_password() {
+        // Mirrors what reset_settings does with the store's settings. The sealed
+        // backup password must survive: without it every password-protected
+        // backup on disk would be undecryptable.
+        let mut old = Settings::default();
+        old.theme = "gradient".into();
+        old.ui_texts.insert(BACKUP_PW_KEY.to_string(), "sealed-blob".into());
+        old.ui_texts.insert("screenshotDir".to_string(), "C:/shots".into());
+
+        let backup_pw = old.ui_texts.remove(BACKUP_PW_KEY);
+        let mut fresh = Settings::default();
+        fresh.migrate();
+        if let Some(pw) = backup_pw {
+            fresh.ui_texts.insert(BACKUP_PW_KEY.to_string(), pw);
+        }
+
+        assert_eq!(fresh.ui_texts.get(BACKUP_PW_KEY).map(String::as_str), Some("sealed-blob"));
+        assert!(!fresh.ui_texts.contains_key("screenshotDir"), "other texts are reset");
+        assert_eq!(fresh.theme, default_theme());
+    }
+
+    #[test]
+    fn delete_all_data_clears_data_tables_only() {
+        // The data-only wipe must empty every derived table but touch no settings.
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+             CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+             CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
+             CREATE TABLE prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL);
+             CREATE TABLE clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);
+             INSERT INTO prompts VALUES('a', 0, '{}');
+             INSERT INTO meta VALUES('settings', '{\"theme\":\"ocean\"}');
+             INSERT INTO copy_log VALUES(1, 'a');
+             INSERT INTO prompt_versions(prompt_id, ts, name, text) VALUES('a', 1, 'n', 't');
+             INSERT INTO clip_inbox(ts, text) VALUES(1, 'clip');",
+        )
+        .unwrap();
+        // Exactly the statements delete_all_data issues.
+        for table in ["prompt_versions", "copy_log", "clip_inbox"] {
+            conn.execute(&format!("DELETE FROM {table}"), []).unwrap();
+        }
+        conn.execute("DELETE FROM prompts", []).unwrap();
+        let count = |t: &str| -> i64 {
+            conn.query_row(&format!("SELECT COUNT(*) FROM {t}"), [], |r| r.get(0)).unwrap()
+        };
+        assert_eq!(count("prompts"), 0);
+        assert_eq!(count("copy_log"), 0);
+        assert_eq!(count("prompt_versions"), 0);
+        assert_eq!(count("clip_inbox"), 0);
+        assert_eq!(count("meta"), 1, "settings must survive a data-only wipe");
+    }
+
+    #[test]
+    fn backup_decrypt_passes_through_legacy_plaintext() {
+        // Old .json backups have no PSB1 header — the caller falls back to plain JSON.
+        assert!(backup_decrypt(br#"{"prompts":[]}"#, None).expect("no error").is_none());
     }
 
     #[test]

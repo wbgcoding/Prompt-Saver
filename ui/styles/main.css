@@ -17,7 +17,7 @@
      CSS zooms (body ui-scale × modal-scale) so the modal never exceeds the viewport
      and its action buttons stay reachable at raised appearance scales. Identity at
      the default 100%. */
-  --full-modal-h: calc((100vh - 24px) / (var(--modal-zoom, 1) * var(--ui-zoom, 1)));
+  --full-modal-h: calc((100vh - 24px) / var(--modal-zoom, 1));
 }
 :root[data-theme="dark"] {
   --bg: #1b1b1d;
@@ -239,12 +239,23 @@ html, body {
   height: 100%;
   font-family: "Segoe UI", system-ui, sans-serif;
   font-size: 14px;
-  background: var(--bg);
   color: var(--fg);
   overflow: hidden;
   transition: background var(--transition), color var(--transition);
 }
-body { display: flex; flex-direction: column; height: 100vh; }
+/* The window itself is transparent (decorations off) so the body can round its own
+   corners a little softer than the Windows default; the transparent corner triangles
+   fall outside the radius. Square again while maximized. */
+html { background: transparent; }
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  border-radius: 12px;
+  overflow: hidden;
+}
+body.win-maximized { border-radius: 0; }
 
 /* ---- Header ---- */
 .header {
@@ -256,13 +267,16 @@ body { display: flex; flex-direction: column; height: 100vh; }
   flex: 0 0 auto;
 }
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; }
-.logo { display: block; border-radius: 7px; flex: 0 0 auto; }
+.logo { display: block; border-radius: 7px; flex: 0 0 auto; cursor: pointer; }
+.logo:hover { filter: brightness(1.12); }
 /* line-height = logo height -> text sits vertically centered next to it.
    Truncates instead of pushing the header actions off-screen on narrow windows. */
 .title { font-weight: 600; font-size: 16px; letter-spacing: 0.2px; white-space: nowrap; line-height: 26px; overflow: hidden; text-overflow: ellipsis; min-width: 0; user-select: none; }
 /* Expert toggles: hide the header logo / title independently. */
 body.noflag-showLogo .logo { display: none; }
 body.noflag-showTitle .title { display: none; }
+body.noflag-showLibrary #library-btn { display: none; }
+body.noflag-showJournal #journal-btn { display: none; }
 
 /* Favorites-view star, hugging the title / first view (negative margin trims the
    brand's 10px gap right down); size is expert-tunable. */
@@ -287,8 +301,6 @@ body.noflag-showTitle .title { display: none; }
 .fav-view-toggle:hover { color: var(--accent); }
 .fav-view-toggle.active { color: var(--accent); }
 /* Settings "Views" heading row: title left, favorites-view toggle on the right. */
-.views-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.favview-toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; flex: 0 0 auto; }
 /* Placeholder shown when the favorites view has no starred prompts yet. */
 .fav-empty {
   grid-column: 1 / -1;
@@ -304,11 +316,11 @@ body.noflag-showTitle .title { display: none; }
 .view-btn {
   padding: 5px 12px;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 13px;
   background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -336,9 +348,10 @@ body.noflag-showTitle .title { display: none; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 5px 8px;
+  padding: 5px 9px;
   color: var(--muted);
 }
+.view-add-top > svg { width: 17px; height: 17px; }
 .view-add-top:hover { color: var(--accent); }
 
 .header-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
@@ -397,18 +410,62 @@ body.drag-active .bar-restore { opacity: 0.1; pointer-events: none; }
    close to the button edge instead of floating in a wide margin. */
 .header-actions .icon-btn { padding: 4px; }
 .header-actions .icon-btn > svg { width: 22px; height: 22px; }
-.header-actions #hide-top > svg { width: 20px; height: 20px; }
+/* Hide-bar chevrons (top + bottom + the restore buttons) share one bolder look. */
+.header-actions #hide-top > svg,
+.composer #hide-bottom > svg,
+.bar-restore > svg { width: 22px; height: 22px; }
+.header-actions #hide-top > svg path,
+.composer #hide-bottom > svg path,
+.bar-restore > svg path { stroke-width: 2.6px; }
 /* Chain: tighter padding + a slightly larger, diagonal glyph so the link reads
    clearly and the button stays the same size as its neighbours (not bigger). */
 .header-actions .chain-toggle { padding: 3px; }
 .header-actions .chain-toggle > svg.chain-icon { width: 24px; height: 24px; }
+
+/* ---- Custom window controls (native OS titlebar disabled) ---- */
+.win-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  margin-left: 6px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+.win-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+/* Bigger, bolder glyphs so the window controls carry the same weight as the other
+   header icons (which are ~22px filled paths). */
+.win-btn svg { width: 19px; height: 19px; }
+.win-btn svg path, .win-btn svg rect { stroke-width: 2.3px; }
+.win-btn:hover { background: var(--surface-2); color: var(--fg); }
+.win-btn:active { background: color-mix(in srgb, var(--surface-2) 70%, var(--border)); }
+/* Close hovers like every other window control — no red wash. */
+/* Maximize/restore icon swap driven by the window state class on <body>. */
+.win-ico-restore { display: none; }
+body.win-maximized .win-ico-max { display: none; }
+body.win-maximized .win-ico-restore { display: inline; }
+/* When the top bar is hidden the controls go with it (mirrors the other actions);
+   the show-bar restore chevron brings them back. */
 
 /* ---- Grid (fills the window; cells stretch, lines hidden unless dragging) ---- */
 .grid-wrap {
   position: relative;
   flex: 1 1 auto;
   overflow: hidden;
-  padding: 10px;
+  padding: var(--grid-pad, 10px);
   min-height: 0; /* allow flex child to shrink */
 }
 
@@ -476,12 +533,17 @@ body.drag-active .cell.drag-over {
   user-select: none;
   overflow: hidden; /* hard guarantee: content can never poke outside */
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transform: translateY(var(--tile-lift, 0px)) scale(var(--tile-press, 1));
   transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition), opacity var(--transition);
 }
 .tile:hover { border-color: var(--accent); box-shadow: var(--shadow); }
+/* Hover lift and press scale compose through variables. A plain `transform` on the
+   :hover rule outranks the :active rule (same specificity, later in the file), which
+   silently killed the press feedback for anyone hovering — i.e. always. */
+.tile:hover { --tile-lift: calc(var(--hover-lift, 1px) * -1); }
 /* No press-scale while the pointer is in the video-control zone
    (.media-hover) — works on every WebView2 build, unlike :has(). */
-.tile:active:not(.media-hover) { transform: scale(0.97); }
+.tile:active:not(.media-hover) { --tile-press: 0.97; }
 /* No press-scale while dragging, keeps the text steady. */
 .tile.dragging { opacity: 0.25; cursor: grabbing; z-index: 5; transform: none !important; }
 
@@ -561,15 +623,15 @@ body.drag-active .cell.drag-over {
 .tile.has-image { overflow: hidden; }
 .tile.has-image .tile-name { display: none; }
 .tile-img {
-  /* Replaced elements keep their intrinsic size with inset alone —
-     explicit width/height make the image track the tile size. */
+  /* Fill the WHOLE button edge-to-edge and stay put on resize: explicit inset-0
+     width/height + object-fit:cover means the image always covers the tile at any
+     size (the chosen color shows through the tile's border, not a mat). */
   position: absolute;
-  top: 5px;
-  left: 5px;
-  width: calc(100% - 10px);
-  height: calc(100% - 10px);
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  border-radius: 7px;
+  border-radius: inherit;
   pointer-events: none;
   user-select: none;
 }
@@ -596,12 +658,11 @@ body.drag-active .cell.drag-over {
 }
 .tile-video {
   position: absolute;
-  top: 5px;
-  left: 5px;
-  width: calc(100% - 10px);
-  height: calc(100% - 10px);
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  border-radius: 7px;
+  border-radius: inherit;
   pointer-events: none;
 }
 .media-bar {
@@ -702,14 +763,18 @@ body.drag-active .cell.drag-over {
 /* Image button: compact frame around the icon, centered on the Save line. */
 .composer-img-btn {
   flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
-  margin-bottom: 3px; /* (40px Save height - 34px) / 2 */
+  width: 36px;
+  height: 36px;
+  margin-bottom: 2px; /* (40px Save height - 36px) / 2 */
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
+/* Bottom-left tools (screenshot / attachment) carry the same icon weight as the
+   header icons. */
+.composer-img-btn > svg { width: 22px; height: 22px; }
+.composer-img-btn > svg path, .composer-img-btn > svg circle { stroke-width: 2.3px; }
 .input {
   flex: 1;
   resize: none;
@@ -789,14 +854,30 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   position: fixed;
   inset: 0;
   display: flex;
-  align-items: center;
+  /* `safe center` keeps small dialogs centered but, when a dialog is taller than the
+     viewport (e.g. an expanded version history on a short window), falls back to
+     top-alignment so the overlay can scroll all the way to the bottom actions. */
+  align-items: safe center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
+  overflow-y: auto;
+  padding: 12px 0;
+  background: rgba(0, 0, 0, var(--overlay-dim, 0.4));
   z-index: 50;
   animation: fade-in var(--transition);
 }
 /* Edit dialog stacks above the prompt library. */
 #modal.overlay { z-index: 55; }
+/* Feature modals opened from inside settings/expert must sit ABOVE the settings
+   overlay (both were z-index 50, so they rendered behind it). Below vars/confirm. */
+#dupes-modal.overlay,
+#clip-modal.overlay { z-index: 65; }
+/* Wide enough that the title, the on/off switch and "Clear all" stay on one line. */
+#clip-modal .modal { width: min(580px, 92vw); }
+/* Recording on/off: greyed out while paused, accent-filled while collecting. */
+.watch-toggle { color: var(--muted); }
+.watch-toggle:hover { color: var(--fg); }
+.watch-toggle.active { color: var(--accent-fg); background: var(--accent); }
+.watch-toggle.active:hover { background: color-mix(in srgb, var(--accent) 85%, #000); color: var(--accent-fg); }
 /* Variable-fill dialog stacks above the library/journal it was opened from. */
 #vars-modal.overlay { z-index: 70; }
 /* Confirm dialog stacks above everything (incl. the edit modal). */
@@ -815,7 +896,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   padding: 20px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--modal-radius, 14px);
   box-shadow: var(--shadow);
   animation: pop-in var(--transition);
 }
@@ -825,13 +906,17 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
    size never jumps with the number of prompts; the list scrolls inside. */
 #library .modal { width: min(var(--lib-width, 900px), 95vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden; }
 /* Copy history fills the window height too; the lists scroll inside it. */
-#journal .modal { width: min(900px, 95vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden; }
+#journal .modal { width: min(980px, 95vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden; }
 #journal-search { flex: 0 0 auto; }
 .head-clear { color: var(--danger); }
 .head-clear:hover { border-color: var(--danger); }
 /* Settings/expert fills the window height so switching expert tabs never resizes
    the popup (content scrolls inside instead). */
-#settings .modal { height: var(--full-modal-h); max-height: var(--full-modal-h); }
+/* Settings sizes to its content (no dead space on a tall window) but never taller than
+   the window — the inner body scrolls when it would overflow. Centred by the overlay. */
+#settings .modal { width: min(760px, 94vw); height: auto; max-height: calc(100vh - 24px); }
+/* Expert page: single-line rows only need ~2 columns of width, not the full 3-across. */
+#settings.expert-active .modal { width: min(600px, 94vw); }
 /* Labels/headings in settings aren't selectable (accidental selection looked odd);
    the actual editable fields stay selectable. */
 #settings { user-select: none; }
@@ -840,6 +925,24 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
    possible; the textarea grows to take all the free space. */
 #modal.tall .modal { height: var(--full-modal-h); max-height: var(--full-modal-h); }
 #modal.tall .modal-text { flex: 1 1 auto; min-height: 120px; max-height: none; resize: none; }
+/* With the version history open the textarea must stop hogging the height, or the
+   expanded list + Save row get pushed out of reach on short windows. Cap it and let
+   the modal scroll to the history instead.
+   The clear-X wrapper is the real flex item (wireClear moves the textarea into it),
+   so the cap must sit on the wrapper — a rule on .modal-text alone loses the cascade
+   to the .clear-wrap-ta > .modal-text rule further down and does nothing. */
+#modal.tall.history-open .clear-wrap-ta,
+#modal.tall.history-open .clear-wrap-ta > .modal-text { flex: 0 1 auto; min-height: 96px; max-height: 26vh; }
+/* A flex item that has its own overflow gets an automatic minimum size of ZERO, so on
+   a short window flexbox squeezed the open history down to a sliver instead of letting
+   the dialog scroll — which is why the list stayed out of reach. Pin the rows that must
+   keep their natural height; the modal (overflow-y:auto) then scrolls to reach them. */
+#modal .modal-titlebar,
+#modal .modal-name-row,
+#modal #modal-style-row,
+#modal #color-row,
+#modal #modal-history,
+#modal .modal-actions { flex: 0 0 auto; }
 /* Themed scrollbar for the prompt textarea. */
 .modal-text::-webkit-scrollbar { width: var(--sb-width, 12px); }
 .modal-text::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
@@ -914,6 +1017,13 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   outline-offset: 2px;
   box-shadow: 0 0 0 2px var(--surface), 0 0 0 5px var(--accent), 0 0 14px 2px var(--accent);
 }
+/* Leaving state: the ring fades out smoothly (used when the window loses focus). */
+.tile.kb-leaving {
+  outline: 3px solid transparent;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px transparent, 0 0 0 5px transparent, 0 0 14px 2px transparent;
+  transition: outline-color 480ms ease, box-shadow 480ms ease;
+}
 /* Order badge (1, 2, 3 …) on a chained button, pinned top-left. */
 .tile-chain-badge {
   position: absolute;
@@ -945,13 +1055,38 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .flag-boldTileNames .tile-name { font-weight: 800; }
 .flag-monospaceTiles .tile-name { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
 .flag-italicTiles .tile-name { font-style: italic; }
+/* v2.6.0 opt features */
+.flag-editorMonospace .modal-text { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+.flag-dimToolbar .header { opacity: 0.5; transition: opacity var(--transition); }
+.flag-dimToolbar .header:hover, .flag-dimToolbar .header:focus-within { opacity: 1; }
 .flag-tileTextShadow .tile-name { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 /* Appearance extras */
 .flag-compactTiles .tile { padding: 2px; }
 .flag-tileGradient .tile:not(.has-image) { background: linear-gradient(160deg, var(--surface), var(--surface-2)); }
-.flag-tileHoverLift .tile:hover { transform: translateY(calc(var(--hover-lift, 2px) * -1)); }
 .flag-accentHeader .header { background: color-mix(in srgb, var(--accent) 8%, var(--bg)); }
 .flag-frostedModals .overlay { backdrop-filter: blur(var(--frosted-blur, 4px)); }
+/* GLOBAL themed scrollbar — every scrollable element gets the same look, so the
+   browser's default ugly bar never appears anywhere. A transparent 3px border with
+   background-clip keeps the thumb visually inset on ANY container background (surface,
+   bg, surface-2 …). Elements that hide their scrollbar (.input, .views) win by their
+   higher-specificity rules. */
+::-webkit-scrollbar { width: var(--sb-width, 12px); height: var(--sb-width, 12px); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; border: 3px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); border: 3px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* Scroll bodies in the feature popups reach the modal's inner edges so the
+   scrollbar sits flush at the right border, while the content keeps symmetric 20px
+   padding on both sides (matches the modal's own padding). */
+.dupes-body, .clip-list {
+  margin-left: -20px;
+  margin-right: -20px;
+  padding-left: 20px;
+  padding-right: 20px;
+  scrollbar-gutter: stable;
+}
+
 /* `scrollbar-width` (standard) toggles + reverts cleanly; `display:none` beats the
    per-element `width` rules (different property) so styled scrollbars hide too. */
 .flag-hideScrollbars, .flag-hideScrollbars * { scrollbar-width: none; }
@@ -989,7 +1124,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   color: var(--fg);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.34);
+  box-shadow: var(--shadow);
   font-size: 12.5px;
   line-height: 1.45;
   white-space: pre-wrap;
@@ -1014,7 +1149,8 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .noflag-headerSeparators .header-sep { display: none; }
 .noflag-tileShadow .tile,
 .noflag-tileShadow .tile:hover { box-shadow: none !important; }
-.noflag-tilePressScale .tile:active:not(.media-hover) { transform: none !important; }
+.noflag-tilePressScale .tile:active:not(.media-hover) { --tile-press: 1; }
+.noflag-tileHoverLift .tile:hover { --tile-lift: 0px; }
 .noflag-copyFlash .tile.copied { border-color: var(--border); background: var(--surface); }
 /* Screenshot keep-as-button popup: scales with the Prompt Saver window so the
    preview is as large as possible while keeping a comfortable margin. */
@@ -1022,12 +1158,17 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .snip-preview {
   display: block;
   max-width: 100%;
-  max-height: var(--snip-preview-vh, 74vh);
+  /* Cap so the header + question + actions always fit without scrolling: never taller
+     than the modal's 88vh minus the ~210px of chrome around it (the expert
+     snip-preview-vh is the upper bound). */
+  max-height: min(var(--snip-preview-vh, 74vh), calc(88vh - 210px));
   margin: 0 auto;
   border-radius: 10px;
   border: 1px solid var(--border);
   object-fit: contain;
 }
+/* Screenshot-folder toggle, inline at the left of the "Save as…" button. */
+.snip-folder-inline { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg); }
 /* Two-line question under the preview. */
 .snip-question { margin: 0; text-align: center; line-height: 1.5; }
 .snip-question span { display: block; }
@@ -1099,12 +1240,31 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .expert-tab:hover { border-color: var(--accent); }
 .expert-tab.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 
-/* Expert appearance scales — CSS zoom (1 = unchanged, the default). */
-body { zoom: var(--ui-zoom, 1); }
+/* Appearance scales — CSS zoom on their own elements (1 = unchanged, the default).
+   UI scale is the exception: it drives the WebView's native zoom from Rust instead. */
 .modal { zoom: var(--modal-zoom, 1); }
 .composer { zoom: var(--composer-zoom, 1); }
 .icon-btn { zoom: var(--icon-zoom, 1); }
 .primary-btn { zoom: var(--primary-zoom, 1); }
+/* Icon scale also grows the bottom composer input and the top view pills/star/＋, so
+   the toolbars stay balanced instead of scaled icons dwarfing the field/tabs beside
+   them (default 1 = no change). */
+.composer .input { zoom: var(--icon-zoom, 1); }
+.composer .primary-btn { zoom: var(--icon-zoom, 1); }
+.quick-grid { zoom: var(--icon-zoom, 1); }
+.view-btn,
+.view-add-top,
+.fav-view-toggle { zoom: var(--icon-zoom, 1); }
+/* Keyboard-only focus ring, themed — replaces WebView2's default blue outline that
+   clashes with most of the 16 themes. Mouse clicks don't trigger :focus-visible. */
+.icon-btn:focus-visible, .ghost-btn:focus-visible, .primary-btn:focus-visible,
+.view-btn:focus-visible, .view-add-top:focus-visible, .fav-view-toggle:focus-visible,
+.lib-type:focus-visible, .head-toggle:focus-visible, .seg-btn:focus-visible,
+.expert-tab:focus-visible, .tile:focus-visible, .switch:focus-visible,
+.win-btn:focus-visible, .swatch:focus-visible, .toolbar-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* Update changelog popup. */
 .update-warn {
@@ -1162,6 +1322,12 @@ body { zoom: var(--ui-zoom, 1); }
 /* Favorite star in the create/edit modal title bar (replaces the old toggle row). */
 .modal-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .modal-titlebar .modal-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modal-x { flex: 0 0 auto; color: var(--muted); }
+.modal-x:hover { color: var(--fg); }
+/* Name input + favorite star on one row (star moved out of the titlebar). */
+.modal-name-row { display: flex; align-items: center; gap: 8px; }
+.modal-name-row .clear-wrap, .modal-name-row > #modal-name { flex: 1 1 auto; min-width: 0; }
+.modal-name-row .modal-fav-star { flex: 0 0 auto; }
 .modal-fav-star {
   flex: 0 0 auto;
   border: none;
@@ -1214,6 +1380,19 @@ body { zoom: var(--ui-zoom, 1); }
 .lib-thumb { cursor: zoom-in; }
 .two-col { display: flex; gap: 8px; }
 .two-col .field { flex: 1; }
+/* Top settings selects laid out three across. */
+.three-col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+/* Inline field: label on the left (white, like the toggles), control on the right —
+   keeps single inputs from stretching to the full popup width. The `.field.` prefix is
+   required: the base `.field { flex-direction: column }` rule sits LATER in the file, so
+   without the extra class it would win on equal specificity and stack the row. */
+.field.field-inline { flex-direction: row; align-items: center; justify-content: space-between; gap: 16px; }
+.field.field-inline > span { color: var(--fg); font-size: 13px; }
+.field.field-inline .hotkey-row { flex: 0 1 320px; }
+/* Delete-all + expert-menu buttons share one row (delete left, expert right) — same
+   `.field.` specificity guard so the column default can't stack them. */
+.field.settings-btn-row { flex-direction: row; gap: 10px; }
+.field.settings-btn-row > button { flex: 1; }
 /* Settings body: rows stack with comfortable, even spacing (close, not touching). */
 /* Settings/expert: the head (and, for expert, the search + tabs) stays fixed; only
    the body scrolls, so nothing bleeds past the header. */
@@ -1285,20 +1464,8 @@ body { zoom: var(--ui-zoom, 1); }
 /* View color: label + palette in the view dialog. */
 .view-color-field { display: flex; flex-direction: column; gap: 6px; }
 .view-color-field > span { color: var(--muted); font-size: 12px; }
-/* Compact color dot in each views-editor row. */
-.view-color-dot { flex: 0 0 auto; }
-/* Floating preset palette anchored to a color dot. */
-.swatch-pop {
-  position: fixed;
-  z-index: 140;
-  width: max-content;
-  max-width: calc(100vw - 16px);
-  padding: 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: var(--shadow);
-}
+/* View grid picker (columns × rows) in the view dialog. */
+.view-color-field > .view-grid { align-self: flex-start; }
 /* ---- Custom color picker popup ---- */
 .color-pop {
   position: fixed;
@@ -1456,6 +1623,254 @@ body { zoom: var(--ui-zoom, 1); }
   font-size: 11px;
   line-height: 1.4;
 }
+/* F16 live length readout: dimmed line right under the editor textarea. */
+.modal-length {
+  margin: -4px 2px 0;
+  text-align: right;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  user-select: none;
+}
+/* Expert-menu action buttons (open Statistics / Backups / Duplicates). */
+.expert-action { width: 100%; margin-top: 4px; }
+
+/* Clear-X inside text / number fields + textareas. The wrapper is block by default
+   (safe inside the column-flex modals — never grows vertically); flex rows opt in. */
+.clear-wrap { position: relative; display: block; min-width: 0; }
+.clear-wrap.clear-wrap-ta { display: flex; }
+.clear-wrap > input, .clear-wrap > textarea { width: 100%; }
+.clear-wrap > input { padding-right: 34px; }
+.clear-wrap > textarea { padding-right: 32px; }
+/* Wrapped number fields drop the native spinners — the X takes their place. */
+.clear-wrap > input[type=number]::-webkit-inner-spin-button,
+.clear-wrap > input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.library-search .clear-wrap, #journal-search .clear-wrap, .caption-row .clear-wrap, .hotkey-row .clear-wrap { flex: 1 1 auto; }
+.backup-set-row .clear-wrap { flex: 0 0 auto; width: 110px; }
+/* Composer + editor textareas keep their flex-grow role through the wrapper. */
+.composer .clear-wrap-ta { flex: 1 1 auto; }
+#modal.tall .clear-wrap-ta { flex: 1 1 auto; min-height: 0; }
+#modal.tall .clear-wrap-ta > .modal-text { flex: 1 1 auto; min-height: 120px; max-height: none; }
+.clear-btn {
+  position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+  width: 24px; height: 24px; display: grid; place-items: center;
+  border: none; border-radius: 6px; background: transparent; color: var(--muted);
+  opacity: 0; pointer-events: none; cursor: pointer;
+  transition: opacity var(--transition), color var(--transition), background var(--transition);
+}
+.clear-wrap-ta .clear-btn { top: 9px; transform: none; }
+.clear-btn.show { opacity: 0.55; pointer-events: auto; }
+.clear-btn.show:hover { opacity: 1; color: var(--fg); background: var(--surface-2); }
+
+/* F7 collapsible version history (shared collapse styling). */
+.modal-collapse { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.modal-collapse-head {
+  width: 100%;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px;
+  border: none; background: var(--surface-2);
+  color: var(--fg); font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer;
+}
+.modal-collapse-head:hover { color: var(--accent); }
+.collapse-chevron { transition: transform var(--transition); flex: 0 0 auto; }
+.modal-collapse.open .collapse-chevron { transform: rotate(180deg); }
+/* Height follows the content — only the CAP is fixed, so a short list leaves no
+   empty band under it. The viewport fraction keeps a long list from pushing the
+   Save row away, and the 120px floor stops the cap from collapsing to a sliver on
+   a very short window (the dialog scrolls there instead). */
+.modal-collapse-body { max-height: min(240px, max(120px, 34vh)); overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+.hist-row {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 6px 8px; border-radius: 6px; background: var(--surface);
+}
+.hist-head { display: flex; align-items: center; gap: 8px; }
+.hist-time { font-size: 11px; color: var(--muted); flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.hist-preview { font-size: 12px; color: var(--fg); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.hist-expand {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; border: none; border-radius: 6px;
+  background: transparent; color: var(--muted); cursor: pointer;
+  transition: color var(--transition), background var(--transition);
+}
+.hist-expand:hover { color: var(--fg); background: var(--surface-2); }
+.hist-expand svg { transition: transform var(--transition); }
+.hist-row.open .hist-expand svg { transform: rotate(180deg); }
+.hist-restore { flex: 0 0 auto; padding: 3px 8px; font-size: 12px; }
+.hist-full { margin-top: 2px; padding: 8px 10px; border-radius: 6px; background: var(--bg); color: var(--fg); font-size: 12px; white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow-y: auto; }
+
+/* Inline expert panels (backups + statistics) — lay their sub-widgets out in a
+   column; the expert menu's own scroll box handles overflow (no nested scroller). */
+.expert-custom { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+.expert-custom .switch-field { padding: 3px 0; }
+.expert-custom .stat-section { margin-top: 6px; }
+.expert-custom .stat-cards { margin-top: 2px; }
+
+/* F11 usage statistics dashboard. */
+.stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+/* Fixed column counts inside the backups dialog so both grids come out as full
+   rows (diagnostics 10 = 2x5, statistics 16 = 4x4) instead of a ragged last row.
+   Narrow windows fall back to the auto-fit above. */
+@media (min-width: 640px) {
+  #backup-panel .stat-cards { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  #stats-panel .stat-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.stat-card { padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); text-align: center; }
+.stat-val { font-size: 24px; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; }
+.stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.stat-section { font-size: 13px; font-weight: 700; color: var(--fg); border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+.stat-bars { display: flex; flex-direction: column; gap: 6px; }
+.stat-bar-row { display: flex; align-items: center; gap: 8px; }
+.stat-bar-name { flex: 0 0 34%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.stat-bar-track { flex: 1 1 auto; height: 12px; border-radius: 6px; background: var(--surface-2); overflow: hidden; }
+.stat-bar-fill { height: 100%; border-radius: 6px; background: var(--accent); }
+.stat-bar-count { flex: 0 0 auto; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 32px; text-align: right; }
+.stat-cleanup { display: flex; flex-wrap: wrap; gap: 6px; }
+.stat-cleanup-item {
+  padding: 4px 10px; border: 1px solid var(--border); border-radius: 14px;
+  background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer;
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.stat-cleanup-item:hover { border-color: var(--accent); color: var(--fg); }
+.stat-views { display: flex; flex-direction: column; gap: 4px; }
+.stat-view-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; padding: 3px 2px; }
+.stat-view-count { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* F6 duplicate finder. */
+.dupes-body { max-height: 70vh; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 12px; }
+/* Backups dialog: wider than a plain popup — it holds the backup settings, the
+   diagnostics cards, the restore list and the usage statistics — and it scrolls
+   inside its body so the title row and the close X stay put. Above the settings
+   overlay it was opened from, like the other feature dialogs. */
+#backup-modal.overlay { z-index: 65; }
+#backup-modal .modal { width: min(700px, 94vw); overflow: hidden; }
+/* The scroller reaches the modal's right + bottom edge (negative margin, inset
+   re-added as padding) so the scrollbar hugs the far edge instead of floating in
+   a band of surface — same trick as the settings/expert lists. */
+.backup-body {
+  max-height: 74vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  margin: 0 -20px -20px 0;
+  padding: 0 20px 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.backup-body::-webkit-scrollbar { width: var(--sb-width, 12px); }
+.backup-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
+.backup-body::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+.backup-body::-webkit-scrollbar-track { background: transparent; }
+/* One rhythm for both panels: a section head always sits the same distance above
+   its content, and the cards below it line up with the rows above. */
+.backup-body .expert-custom { gap: 10px; margin-top: 0; }
+.backup-body .stat-section { margin-top: 2px; }
+.backup-body .expert-custom > .stat-section:first-child { margin-top: 0; }
+.backup-body .stat-cards { margin-top: 0; }
+/* Divider between the backup half and the statistics half. */
+.backup-split { margin: 2px 0 0; padding-top: 12px; border-top: 1px solid var(--border); border-bottom: none; }
+.dup-group { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--surface-2); }
+.dup-head { display: flex; justify-content: flex-end; margin-bottom: 6px; }
+.dup-score { font-size: 12px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); padding: 2px 8px; border-radius: 10px; }
+.dup-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.dup-col { display: flex; flex-direction: column; gap: 4px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.dup-name { font-size: 13px; font-weight: 600; color: var(--fg); }
+.dup-meta { font-size: 11px; color: var(--muted); }
+.dup-text { font-size: 12px; color: var(--fg); white-space: pre-wrap; max-height: 120px; overflow-y: auto; opacity: 0.85; }
+.dup-keep { align-self: flex-start; padding: 3px 10px; font-size: 12px; }
+.dup-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+/* F2 backups & restore. */
+.stat-val-sm { font-size: 13px !important; font-weight: 600 !important; }
+/* Date/time diagnostic card: date over time, no comma, a touch larger for legibility. */
+.stat-dt { display: flex; flex-direction: column; gap: 1px; line-height: 1.25; }
+.stat-dt .dt-date { font-size: 15px; font-weight: 700; }
+.stat-dt .dt-time { font-size: 13px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.backup-settings { display: flex; flex-direction: column; gap: 8px; }
+.backup-set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* The base `.field { flex-direction: column }` sits later in the file at equal
+   specificity, so a plain `.backup-set-row` would still stack label-over-input.
+   This higher-specificity rule keeps the label to the LEFT of the field.
+   (The GFS tier rule below re-sets column for its narrow inputs — it wins by order.) */
+.field.backup-set-row { flex-direction: row; }
+.backup-set-row > span { font-size: 13px; }
+.backup-set-row .modal-input { flex: 0 0 auto; width: auto; min-width: 90px; }
+/* Backup-now + interval + keep sit left-aligned, each only as wide as its content. */
+.backup-two-col { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.backup-two-col > .backup-set-row { flex: 0 0 auto; justify-content: flex-start; gap: 8px; }
+.backup-two-col .backup-set-row .modal-input { min-width: 72px; }
+.backup-two-col .backup-set-row .clear-wrap { width: 88px; }
+.backup-now-btn { flex: 0 0 auto; }
+.backup-three-col { display: flex; gap: 8px; }
+.backup-three-col > .backup-set-row { flex: 1 1 0; flex-direction: column; align-items: stretch; gap: 4px; }
+.backup-three-col .modal-input, .backup-three-col .clear-wrap { width: 100%; min-width: 0; }
+/* Usage-stats toggle + top-N field share one row (toggle left, field right). */
+/* Optional backup password: label left, field + eye button right. */
+.field.backup-pw-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
+.backup-pw-row > span { font-size: 13px; }
+.backup-pw-wrap { position: relative; flex: 0 1 240px; display: flex; align-items: center; }
+.backup-pw-wrap .modal-input { padding-right: 36px; }
+.backup-pw-eye { position: absolute; right: 4px; width: 28px; height: 28px; }
+.backup-pw-eye:disabled { opacity: 0.35; pointer-events: none; }
+/* Saving the backup password is an explicit click, never a side effect of leaving
+   the field — so the button sits right next to it. */
+.backup-pw-save { flex: 0 0 auto; }
+/* WebView2 draws its OWN reveal button inside password fields, which showed up as
+   a second eye next to the themed one. */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear { display: none; }
+
+/* Confirm dialog: optional icon above the title and an optional input row. */
+.confirm-head { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.confirm-icon { color: var(--accent); display: grid; place-items: center; }
+.confirm-icon svg { width: 34px; height: 34px; }
+.confirm-head .modal-title { text-align: center; }
+/* The body keeps the line breaks the translation puts in. */
+.confirm-msg { white-space: pre-line; }
+.confirm-input-row { position: relative; display: flex; align-items: center; }
+.confirm-input-row .modal-input { flex: 1 1 auto; padding-right: 36px; }
+.pw-eye { position: absolute; right: 4px; width: 28px; height: 28px; }
+/* One row, two equal columns: the toggle left, the top-list length right. As a
+   flex row the number field ran past the edge while space was left on the left. */
+.stats-head-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 16px; }
+.stats-head-row > .switch-field { min-width: 0; }
+.stats-head-row > .stats-topn-row { min-width: 0; justify-content: space-between; gap: 8px; }
+.stats-topn-row .modal-input { min-width: 0; width: 100%; }
+.stats-topn-row .clear-wrap { flex: 0 1 90px; width: auto; }
+.backup-list-head {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  background: transparent; border: none; border-bottom: 1px solid var(--border);
+  padding: 0 0 4px; cursor: pointer; color: var(--fg); font: inherit; font-size: 13px; font-weight: 700;
+}
+.backup-list-head .collapse-chevron { transition: transform var(--transition); flex: 0 0 auto; }
+.backup-list-head.open .collapse-chevron { transform: rotate(180deg); }
+.backups-list { display: flex; flex-direction: column; gap: 6px; }
+.backup-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.backup-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-variant-numeric: tabular-nums; }
+.backup-size { flex: 0 0 auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.backup-row .ghost-btn { flex: 0 0 auto; padding: 3px 10px; font-size: 12px; }
+
+/* F21 clipboard inbox. */
+.clip-inbox-btn { position: relative; }
+.clip-badge {
+  position: absolute; top: -2px; right: -2px;
+  display: grid; place-items: center;
+  min-width: 16px; height: 16px; padding: 0 3px;
+  border-radius: 8px; background: var(--accent); color: var(--accent-fg);
+  font-size: 9px; font-weight: 700; line-height: 1;
+  pointer-events: none;
+}
+.clip-list { max-height: 66vh; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 6px; }
+.clip-row { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.clip-time { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.clip-preview {
+  font-size: 13px; color: var(--fg); white-space: pre-wrap; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.clip-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.clip-actions .ghost-btn { padding: 3px 10px; font-size: 12px; }
 
 /* Prompt-variable fill dialog */
 .modal-text-bar { display: flex; align-items: center; gap: 8px; }
@@ -1527,7 +1942,6 @@ body { zoom: var(--ui-zoom, 1); }
 .journal-filters { display: flex; gap: 12px; align-items: flex-start; flex-wrap: nowrap; }
 .journal-filters > #journal-colors { flex: 1 1 auto; min-width: 0; }
 .journal-col { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.journal-empty { grid-column: 1 / -1; }
 .journal-body::-webkit-scrollbar { width: var(--sb-width, 12px); }
 .journal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
 .journal-body::-webkit-scrollbar-thumb:hover { background: var(--muted); }
@@ -1550,13 +1964,31 @@ body { zoom: var(--ui-zoom, 1); }
 
 /* Expert preset dropdown + free-entry number */
 .expert-select { width: auto; min-width: 120px; align-self: flex-start; }
+/* Themed, rounded select with a custom chevron (drops the raw OS triangle so the
+   dropdowns match the rest of the layout). */
+.expert-select {
+  appearance: none; -webkit-appearance: none;
+  padding-right: 30px;
+  border-radius: 10px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 14px;
+}
+/* Label to the LEFT of every expert dropdown (was stacked above). */
+.field.expert-dropdown-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.expert-dropdown-row .value-head { flex: 1 1 auto; min-width: 0; }
+.expert-dropdown-row .expert-select { align-self: auto; flex: 0 0 auto; min-width: 140px; }
+.expert-dropdown-row .expert-num { margin-top: 0; flex: 0 0 92px; }
 .path-out { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.75; font-size: 12px; }
 .path-btns { display: flex; gap: 8px; margin-top: 4px; }
 .path-btns .ghost-btn { flex: 1; }
 .expert-num { width: 90px; margin-top: 6px; }
 
 /* Header icons hidden when their feature flag is off */
-.noflag-copyHistory #journal-btn { display: none; }
+/* Hidden when copy history is off — unless the user keeps paused buttons around. */
+.noflag-copyHistory:not(.flag-pausedIcons) #journal-btn { display: none; }
 .noflag-colorFilter #library-colors { display: none; }
 
 /* Drag & drop highlight while a file/text hovers the window */
@@ -1606,10 +2038,21 @@ body.drag-over::after {
 .export-row + .export-row { margin-top: 6px; }
 .export-row .ghost-btn { flex: 1; }
 /* Sub-heading for the second (whole-backup) export row. */
-.impexp-sub { display: block; margin-top: 10px; color: var(--muted); font-size: 12px; }
 .update-row { display: flex; align-items: center; gap: 10px; }
-.update-row .ghost-btn { flex: 1; }
-.update-status { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.update-row .ghost-btn { flex: 0 0 auto; }
+/* Backup shortcut sits at the far right of the update row. */
+.update-backup-btn { margin-left: auto; }
+/* Clickable version/status label (left of the check button) → releases page, or the
+   update dialog once an update is pending. */
+.update-version {
+  flex: 0 1 auto;
+  background: none; border: none; padding: 0;
+  color: var(--muted); font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; text-align: left; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.update-version:hover { color: var(--fg); text-decoration: underline; }
+.update-version.update-avail { color: var(--accent); }
 .auto-update {
   display: flex;
   align-items: center;
@@ -1658,6 +2101,40 @@ body.drag-over::after {
   transition: border-color var(--transition);
 }
 .lib-item:hover { border-color: var(--accent); }
+/* F18: rows that only matched via the fuzzy tier read dimmer than exact hits. */
+.lib-item.lib-fuzzy { opacity: 0.6; }
+.lib-item.lib-fuzzy:hover { opacity: 1; }
+/* F8 batch selection: checkbox + selected state + action bar. */
+.noflag-batchOps #library-select-btn { display: none; }
+/* Selection checkbox is a pure-CSS ::before shown only while the list is in select
+   mode — toggling the mode is a single class change, never a re-render. */
+.library-list.selecting .lib-item::before {
+  content: "";
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px;
+  border: 2px solid var(--border);
+  border-radius: 5px;
+  margin-right: 4px;
+  font-size: 12px; font-weight: 700; line-height: 1;
+  color: var(--accent-fg);
+}
+.library-list.selecting .lib-item.lib-selected::before {
+  content: "✓";
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.library-list.selecting .lib-item.lib-selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.lib-batch-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 10px 2px 2px; margin-top: 8px;
+  border-top: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.lib-batch-count { font-size: 12px; font-weight: 600; color: var(--fg); margin-right: 2px; }
+.lib-batch-sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px; }
+.lib-batch-colors { display: inline-flex; gap: 4px; }
+.lib-batch-bar .ghost-btn:disabled, .lib-batch-bar select:disabled { opacity: 0.4; pointer-events: none; }
 .lib-item .dot {
   width: 10px;
   height: 10px;
@@ -1715,8 +2192,26 @@ body.drag-over::after {
 }
 .head-toggle:hover { border-color: var(--accent); }
 .head-toggle.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+/* "Clear history" is a .head-toggle AND .head-clear; the base .head-toggle colour above
+   would win at equal specificity, so re-assert the danger colour more specifically. */
+.head-toggle.head-clear { color: var(--danger); }
+.head-toggle.head-clear:hover { border-color: var(--danger); }
 .noflag-libraryCloseToggle #library-close-toggle { display: none; }
 .noflag-libraryColsToggle .cols-control { display: none; }
+/* F10 library sort dropdown. */
+.head-sort { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.lib-sort {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lib-sort:hover { border-color: var(--accent); }
 /* Library columns: "Spalten" + a 1..N segmented toggle. */
 .cols-control { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .cols-label { color: var(--muted); font-size: 12px; }
@@ -1764,7 +2259,7 @@ body.drag-over::after {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
+  box-shadow: var(--shadow);
 }
 .search-suggest::-webkit-scrollbar { width: var(--sb-width, 12px); }
 .search-suggest::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
@@ -1818,6 +2313,9 @@ body.drag-over::after {
 }
 .lib-type:hover { border-color: var(--accent); color: var(--fg); }
 .lib-type.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+/* The favorites-only chip is also a .lib-type, whose later .active rule would win at
+   equal specificity — keep its gold highlight with a more specific selector. */
+.lib-type.lib-fav-chip.active { background: #f5b301; border-color: #f5b301; color: #1a1a1a; }
 
 /* Expert: copy text-size + font dropdowns share one row. */
 #expert-search { margin-bottom: 10px; }
@@ -1826,9 +2324,9 @@ body.drag-over::after {
 .hotkey-row .ghost-btn { flex: 0 0 auto; }
 .vars-remember { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: var(--muted); cursor: pointer; }
 .vars-remember .switch { flex: 0 0 auto; }
-.dropdown-pair { display: flex; gap: 12px; }
-.dropdown-pair .field { flex: 1; min-width: 0; }
-.dropdown-pair .expert-select { width: 100%; min-width: 0; align-self: stretch; }
+/* Paired dropdowns now stack full-width so each keeps the label-left layout. */
+.dropdown-pair { display: flex; flex-direction: column; gap: 6px; }
+.dropdown-pair .field { min-width: 0; }
 
 /* Editable colour palette (expert > Appearance). */
 .palette-field { gap: 10px; }
@@ -1853,20 +2351,6 @@ body.drag-over::after {
 /* Attached-file row icon slot */
 .modal-file-icon { display: inline-flex; flex: 0 0 auto; }
 
-/* ---- Views editor (settings) ---- */
-.views-editor { display: flex; flex-direction: column; gap: 6px; }
-/* Add-view button sits clearly apart from the rows, like the buttons below. */
-#view-add { margin-top: 8px; }
-.view-row { display: flex; gap: 6px; align-items: center; }
-.view-row .modal-input { flex: 1; }
-.view-row .icon-btn { flex: 0 0 auto; border: 1px solid var(--border); border-radius: 8px; }
-.view-row .icon-btn:hover { color: var(--danger); border-color: var(--danger); }
-.view-row .icon-btn.confirm {
-  background: var(--danger);
-  border-color: var(--danger);
-  color: #fff;
-}
-
 /* ---- Switch toggles ---- */
 .switch-field {
   flex-direction: row;
@@ -1876,6 +2360,11 @@ body.drag-over::after {
   cursor: pointer;
 }
 .switch-field > span { font-size: 13px; color: var(--fg); }
+/* Settings toggles laid out in two even columns (wider popup). Long labels wrap
+   within their cell instead of being cut off; the switch stays pinned right. */
+.switch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; align-items: center; }
+.switch-grid .switch-field { align-items: center; }
+.switch-grid .switch-field > span { white-space: normal; line-height: 1.3; }
 .switch {
   appearance: none;
   -webkit-appearance: none;
@@ -1947,6 +2436,19 @@ body.drag-over::after {
 .ctx button.confirm,
 .ctx button.confirm:hover { background: var(--danger); color: #fff; }
 
+/* Right-click toolbar menu (enable/disable the top-bar tools). */
+.toolbar-menu { min-width: 232px; z-index: 90; max-height: min(72vh, 460px); overflow-y: auto; }
+.toolbar-menu-head {
+  padding: 4px 10px 7px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
+  color: var(--muted);
+}
+.toolbar-item { display: flex; align-items: center; gap: 9px; }
+.tb-check { flex: 0 0 16px; display: inline-flex; align-items: center; justify-content: center; color: var(--accent); }
+.tb-icon { flex: 0 0 17px; display: inline-flex; align-items: center; justify-content: center; color: var(--fg); }
+.toolbar-item:not(.on) > span:last-child { color: var(--muted); }
+.toolbar-item:not(.on) .tb-icon { color: var(--muted); }
+
 /* ---- Grid-size picker popup ---- */
 .num-pop {
   position: fixed;
@@ -1983,17 +2485,24 @@ body.drag-over::after {
 }
 
 /* ---- Toast ---- */
+/* Toast: a compact themed card (icon badge + message), the same visual language as
+   the update notification — never the old flat accent pill. */
 .toast {
   position: fixed;
   bottom: 76px;
   left: 50%;
   transform: translateX(-50%) translateY(8px);
-  padding: 8px 16px;
-  background: var(--accent);
-  color: var(--accent-fg);
-  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(92vw, 440px);
+  padding: 10px 15px 10px 11px;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   box-shadow: var(--shadow);
   opacity: 0;
   pointer-events: none;
@@ -2005,20 +2514,33 @@ body.drag-over::after {
 /* No composer bar: sit near the bottom edge instead of floating over empty grid. */
 body.no-composer .toast { bottom: 18px; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-.toast.actionable { pointer-events: auto; display: flex; align-items: center; gap: 10px; }
+.toast.actionable { pointer-events: auto; }
+.toast-ico {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+.toast-ico svg { display: block; }
+.toast-msg { font-size: 13px; font-weight: 600; line-height: 1.3; }
 .toast-btn {
-  padding: 4px 12px;
+  flex: 0 0 auto;
+  padding: 7px 14px;
   border: none;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.22);
+  border-radius: 11px;
+  background: var(--accent);
   color: var(--accent-fg);
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
 }
-.toast-btn:hover { background: rgba(255, 255, 255, 0.35); }
+.toast-btn:hover { filter: brightness(1.08); }
 
 /* Update notification: a prominent, theme-aware card (icon badge + install
    button) instead of the flat accent pill — more present, still theme-adapted. */
@@ -2031,7 +2553,7 @@ body.no-composer .toast { bottom: 18px; }
   color: var(--fg);
   border: 1px solid var(--border);
   border-radius: 16px;
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.34);
+  box-shadow: var(--shadow);
 }
 .toast.update .toast-ico {
   flex: 0 0 auto;

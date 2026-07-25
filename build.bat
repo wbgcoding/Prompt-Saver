@@ -73,8 +73,11 @@ set "DIST=%~dp0dist"
 if not exist "%DIST%" mkdir "%DIST%"
 copy /y "%EXE%" "%DIST%\Prompt Saver.exe" >nul || echo [WARN] Could not update the portable exe in dist - is it currently running? Close it and rebuild.
 if defined INSTALLER copy /y "%INSTALLER%" "%DIST%\" >nul
-rem pdfium.dll next to the portable exe so PDF previews work standalone.
-if exist "%~dp0src-tauri\target\release\pdfium.dll" copy /y "%~dp0src-tauri\target\release\pdfium.dll" "%DIST%\" >nul
+rem SHA-256 sidecar for the installer (the auto-updater verifies "<installer>.sha256"
+rem before running the download). Upload it alongside the installer on the GitHub release.
+if defined INSTALLER for %%I in ("%INSTALLER%") do powershell -NoProfile -Command "$h=(Get-FileHash -Algorithm SHA256 '%%~fI').Hash.ToLower(); [IO.File]::WriteAllText('%DIST%\%%~nxI.sha256', $h)"
+rem pdfium.dll is compiled INTO the exe (see pdfium_lib_path in lib.rs) and unpacked
+rem on first use, so nothing has to travel next to the portable exe any more.
 
 echo.
 echo ============================================
@@ -87,6 +90,9 @@ if defined INSTALLER (
 )
 echo ============================================
 echo.
+rem Automation / piped runs set PS_NONINTERACTIVE=1 to skip every interactive wait
+rem (choice/timeout hang when there is no console attached).
+if defined PS_NONINTERACTIVE goto :end
 rem Offer to open the output folder, but never block: default to "no" after 10s
 rem so the window can close itself unattended.
 choice /c YN /t 10 /d N /m "Open output folder (closes automatically)"
@@ -97,12 +103,14 @@ goto :end
 :fail
 echo.
 echo Build FAILED. Check the messages above.
+if defined PS_NONINTERACTIVE exit /b 1
 echo This window closes automatically in 30 seconds...
 timeout /t 30 >nul
 exit /b 1
 
 :end
 echo.
+if defined PS_NONINTERACTIVE exit /b 0
 echo Closing automatically in 8 seconds...
 timeout /t 8 >nul
 exit /b 0

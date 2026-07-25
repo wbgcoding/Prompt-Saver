@@ -1,6 +1,6 @@
 {
   "name": "prompt-saver",
-  "version": "2.4.1",
+  "version": "2.6.2",
   "description": "Local offline prompt manager with floating quick-copy buttons",
   "author": "BG Coding",
   "scripts": {

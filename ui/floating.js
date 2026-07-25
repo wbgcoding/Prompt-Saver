@@ -25,6 +25,8 @@ let copyFont = ""; // expert copy-text font key ("" = pill font)
 let pFont = ""; // per-prompt overrides ("" / 0 = follow settings)
 let cooldownMs = 2000; // re-copy throttle for this pill (expert value)
 let lastCopyTs = 0;
+// F19 auto-paste on this pill (all default off; a fast second click pastes).
+let apOn = false, apEnter = false, apDelay = 80, apDblMs = 400, lastPillTs = 0;
 let pSize = 0;
 let pCaptionSize = 0; // per-prompt caption size (0 = default, 1 = auto)
 let menuOpen = false;
@@ -152,6 +154,12 @@ async function applySettings() {
   copySize = Number(s.ui_values?.copySize) || 0;
   const cd = Number(s.ui_values?.copyCooldownMs);
   cooldownMs = Number.isFinite(cd) ? cd : 2000;
+  apOn = s.ui_flags?.autoPaste !== false; // default on
+  apEnter = s.ui_flags?.autoPasteEnter === true;
+  const apd = Number(s.ui_values?.autoPasteDelayMs);
+  apDelay = Number.isFinite(apd) ? apd : 80;
+  const adb = Number(s.ui_values?.dblClickMs);
+  apDblMs = Number.isFinite(adb) ? adb : 400;
   copyFont = s.ui_texts?.copyFont || "";
   document.getElementById("feedback").style.fontFamily = FONTS[copyFont] || "";
   const op = Number(s.ui_values?.floatOpacity);
@@ -562,10 +570,15 @@ window.addEventListener("mouseup", async () => {
     ensureVideoPlaying();
   } else if (menuOpen) {
     closeMenu(); // a click on the pill closes the open menu
+  } else if (apOn && lastPillTs && Date.now() - lastPillTs <= apDblMs) {
+    // F19: fast second click pastes the just-copied text into the last app.
+    lastPillTs = 0;
+    invoke("paste_into_previous", { delayMs: apDelay, enter: apEnter }).catch(() => {});
   } else if (cooldownMs && Date.now() - lastCopyTs < cooldownMs) {
     // Same pill copied moments ago — throttle to avoid accidental repeats.
   } else if (await invoke("copy_prompt", { id: promptId }).catch(() => false)) {
     lastCopyTs = Date.now();
+    lastPillTs = Date.now(); // arm the double-click paste window
     showCopied();
     invoke("record_copy", { id: promptId }).catch(() => {});
   }
