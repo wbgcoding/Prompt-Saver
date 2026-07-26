@@ -117,6 +117,54 @@ PROBE = """
         out.errors.push('a single click on a variable prompt pasted into the previous app');
       }
     }
+    // F9 view groups: a group is one folder tab, its popover lists the members,
+    // picking one marks the group active and names the view on the tab, and taking
+    // a view back out gives it its own tab again.
+    const viewTabs = () => [...document.querySelectorAll('#views .view-btn:not(.view-add-top)')];
+    const groupTab = () => viewTabs().find(b => b.dataset.groupId);
+    if (!groupTab()) {
+      out.errors.push('the view group has no folder tab');
+    } else if (viewTabs().length !== 3) {
+      out.errors.push('the tab bar shows ' + viewTabs().length + ' tabs instead of 3');
+    } else {
+      groupTab().click();
+      await sleep(250);
+      const rows = [...document.querySelectorAll('.view-group-pop .view-group-item')];
+      if (rows.length !== 2) {
+        out.errors.push('the group popover lists ' + rows.length + ' views instead of 2');
+      } else {
+        rows[1].click();
+        await sleep(450);
+        const gt = groupTab();
+        if (!gt || !gt.classList.contains('active')) {
+          out.errors.push('a view picked from the group did not mark the group tab active');
+        } else if (!gt.querySelector('.view-group-current')) {
+          out.errors.push('the group tab does not name the active view');
+        }
+        groupTab().click();
+        await sleep(250);
+        const outBtn = document.querySelector('.view-group-pop .view-group-item .view-group-out');
+        if (!outBtn) {
+          out.errors.push('a group row has no button to leave the group');
+        } else {
+          outBtn.click();
+          await sleep(450);
+          if (viewTabs().length !== 4) {
+            out.errors.push('leaving the group did not give the view its own tab back');
+          }
+        }
+      }
+      const gt2 = groupTab();
+      if (gt2) {
+        gt2.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+        await sleep(200);
+        const menu = document.querySelector('.tab-menu:not(.hidden)');
+        const items = menu ? menu.querySelectorAll('button').length : 0;
+        if (items !== 3) out.errors.push('the group menu has ' + items + ' entries instead of 3');
+        document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        await sleep(150);
+      }
+    }
     document.getElementById('settings').classList.remove('hidden');
     // Custom themes: the stored one is offered in the theme list, the editor opens
     // with a colour row per themable token, and editing previews on the spot.

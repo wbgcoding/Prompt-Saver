@@ -354,6 +354,54 @@ body.noflag-showJournal #journal-btn { display: none; }
 .view-add-top > svg { width: 17px; height: 17px; }
 .view-add-top:hover { color: var(--accent); }
 
+/* ---- View groups (F9): one folder tab per group + its member popover ---- */
+.view-group-btn { display: inline-flex; align-items: center; gap: 6px; }
+/* Name of the active view inside the group, so a collapsed folder still says
+   which page is on screen. */
+.view-group-current {
+  padding-left: 6px;
+  border-left: 1px solid currentColor;
+  font-weight: 500;
+  opacity: 0.85;
+}
+.view-group-chev { display: inline-flex; align-items: center; opacity: 0.7; }
+/* Drag feedback: the dragged tab fades, the tab under the cursor lights up. */
+.view-btn.tab-dragging { opacity: 0.45; }
+.view-btn.tab-drop { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.view-group-pop {
+  min-width: 210px;
+  z-index: 90;
+  /* Expert menu: how many rows fit before the list scrolls. */
+  max-height: calc(var(--view-group-rows, 8) * 34px + 12px);
+  overflow-y: auto;
+}
+.view-group-item { display: flex; align-items: center; gap: 8px; }
+.view-group-item-name {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.view-group-item:not(.on) .view-group-item-name { color: var(--muted); }
+.view-group-item.on .view-group-item-name { font-weight: 600; }
+.view-group-dot { flex: 0 0 9px; width: 9px; height: 9px; border-radius: 50%; }
+.view-group-out {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 5px;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity var(--transition), color var(--transition);
+}
+.view-group-item:hover .view-group-out { opacity: 1; }
+.view-group-out:hover { color: var(--accent); }
+
 .header-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
 /* Thin divider grouping the header actions. */
 .header-sep { width: 1px; height: 18px; flex: 0 0 auto; margin: 0 3px; background: var(--border); }

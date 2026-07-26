@@ -26,15 +26,38 @@ const SETTINGS = {
   theme: "dark", language: "en", floating: {}, float_scale: {}, video_prefs: {},
   window: null, minimize_to_tray: false, autostart: false, start_minimized: false,
   always_on_top: false, hotkey: "", auto_update: true, skipped_versions: [],
-  // Tags and custom themes ship off; the stub turns them on so the smoke run
-  // covers that UI too.
-  ui_flags: { tags: true, customThemes: true }, ui_values: {}, ui_texts: {}, dup_ignored: [],
+  // Tags, custom themes and view groups ship off; the stub turns them on so the
+  // smoke run covers that UI too.
+  ui_flags: { tags: true, customThemes: true, viewGroups: true }, ui_values: {}, ui_texts: {}, dup_ignored: [],
   tag_colors: { work: "#3b82f6" },
   custom_themes: [{ id: "ct1", name: "Neon", base: "dark", vars: { accent: "#ff00aa" } }],
   tile_font: "system", tile_size: 0,
-  views: [{ id: "home", name: "Home", cols: 4, rows: 3, layouts: { "4x3": LAYOUT }, color: "" }],
+  views: [
+    { id: "home", name: "Home", cols: 4, rows: 3, layouts: { "4x3": LAYOUT }, color: "" },
+    { id: "work", name: "Work", cols: 4, rows: 3, layouts: {}, color: "#ef4444" },
+    { id: "notes", name: "Notes", cols: 4, rows: 3, layouts: {}, color: "" },
+    { id: "archive", name: "Archive", cols: 4, rows: 3, layouts: {}, color: "" },
+  ],
+  // Two of the four views live in a folder tab, so the tab bar shows both shapes.
+  view_groups: [{ id: "g1", name: "Docs", color: "", view_ids: ["notes", "archive"] }],
   active_view: "home",
 };
+
+const clone = () => JSON.parse(JSON.stringify(SETTINGS));
+
+// Mirror of the backend's normalize_view_groups: no unknown ids, no view in two
+// groups, no empty group left behind.
+function normalizeGroups() {
+  const taken = new Set();
+  for (const g of SETTINGS.view_groups) {
+    g.view_ids = g.view_ids.filter((id) => {
+      if (taken.has(id) || !SETTINGS.views.some((v) => v.id === id)) return false;
+      taken.add(id);
+      return true;
+    });
+  }
+  SETTINGS.view_groups = SETTINGS.view_groups.filter((g) => g.view_ids.length);
+}
 
 const RESULTS = {
   get_settings: () => JSON.parse(JSON.stringify(SETTINGS)),
@@ -95,6 +118,33 @@ const RESULTS = {
     ].join("\n"),
   }),
   get_prompt: (a) => PROMPTS.find((p) => p.id === (a && a.id)) || PROMPTS[0],
+  set_active_view: (a) => {
+    if (SETTINGS.views.some((v) => v.id === (a && a.id))) SETTINGS.active_view = a.id;
+    return clone();
+  },
+  // The view-group commands answer with the settings blob, like the real backend.
+  save_view_group: (a) => {
+    const ids = (a && a.viewIds) || [];
+    for (const g of SETTINGS.view_groups) {
+      if (g.id !== (a && a.id)) g.view_ids = g.view_ids.filter((v) => !ids.includes(v));
+    }
+    const at = SETTINGS.view_groups.find((g) => g.id === (a && a.id));
+    if (at) { at.name = a.name; at.color = a.color; at.view_ids = ids; }
+    else SETTINGS.view_groups.push({ id: "g" + (SETTINGS.view_groups.length + 1), name: a.name, color: a.color, view_ids: ids });
+    normalizeGroups();
+    return clone();
+  },
+  set_view_group_member: (a) => {
+    for (const g of SETTINGS.view_groups) g.view_ids = g.view_ids.filter((v) => v !== (a && a.viewId));
+    const target = SETTINGS.view_groups.find((g) => g.id === (a && a.groupId));
+    if (target) target.view_ids.push(a.viewId);
+    normalizeGroups();
+    return clone();
+  },
+  delete_view_group: (a) => {
+    SETTINGS.view_groups = SETTINGS.view_groups.filter((g) => g.id !== (a && a.id));
+    return clone();
+  },
   // The tag commands answer with the settings blob, like the real backend.
   rename_tag: () => JSON.parse(JSON.stringify(SETTINGS)),
   delete_tag: () => JSON.parse(JSON.stringify(SETTINGS)),
