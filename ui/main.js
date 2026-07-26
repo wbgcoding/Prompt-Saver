@@ -42,6 +42,10 @@ const modal = {
   sizeSel: $("modal-size"),
   textBar: $("modal-text-bar"),
   varsHint: $("modal-vars-hint"),
+  mdBar: $("modal-md-bar"),
+  mdToggle: $("modal-md-toggle"),
+  mdToggleLabel: $("modal-md-toggle-label"),
+  mdPreview: $("modal-md-preview"),
 };
 
 const DRAG_THRESHOLD = 5;
@@ -799,6 +803,7 @@ const FLAG_LABELS = {
   dynVars: "flagDynVars",               // F12 self-filling placeholder names
   choiceVars: "flagChoiceVars",         // F13 {#{name|a,b}#} dropdown variables
   choiceRemember: "flagChoiceRemember", // F13 reopen a choice on its last pick
+  codeHighlight: "flagCodeHighlight",   // F15 syntax colours in the preview's code blocks
   // Checks at launch, but only while the normal auto-update setting is on.
   checkUpdateOnStart: "flagCheckUpdateOnStart",
 };
@@ -852,6 +857,7 @@ const OPT_FLAG_LABELS = {
   // their feature is switched off, so the feature can be paused, not hidden.
   pausedIcons: "flagPausedIcons",
   viewGroups: "flagViewGroups",                 // F9 folder tabs for views
+  mdPreview: "flagMdPreview",                   // F14 rendered Markdown preview in the editor
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const optFlag = (key) => settings.ui_flags?.[key] === true;
@@ -975,6 +981,8 @@ const EXPERT_VALUES = {
   customThemeMax: { label: "valCustomThemeMax", min: 1, max: 20, step: 1, def: 8, unit: "", gate: "customThemes" },
   // F9 how many views a group popover lists before it starts scrolling.
   viewGroupMaxRows: { label: "valViewGroupMaxRows", min: 4, max: 12, step: 1, def: 8, unit: "", gate: "viewGroups" },
+  // F15 code text size inside the Markdown preview.
+  hlFontPx: { label: "valHlFontPx", min: 10, max: 18, step: 1, def: 13, unit: "px", gate: "codeHighlight" },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -1019,6 +1027,9 @@ const EXPERT_DROPDOWNS = {
   // F12: how the self-filling date/time placeholders are written.
   dateStyle: enumDropdown("dateStyle", "valDateStyle", STYLE_OPTS, "short", "dynVars"),
   timeStyle: enumDropdown("timeStyle", "valTimeStyle", STYLE_OPTS, "short", "dynVars"),
+  // F14: preview replaces the textarea, or sits next to it.
+  mdPreviewMode: enumDropdown("mdPreviewMode", "valMdPreviewMode",
+    [["toggle", "optMdToggle"], ["split", "optMdSplit"]], "toggle", "mdPreview"),
   copySize: {
     label: "valCopySize",
     options: () => {
@@ -1053,6 +1064,8 @@ const EXPERT_DROPDOWNS = {
 const EXPERT_TABS = [
   { title: "expTabGeneral", groups: [
     { title: "expGroupCreate", flags: ["fileAttach", "screenshot", "pasteMedia", "dragDrop", "promptVars", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "lengthCounter", "promptHistory", "storeFiles", "editorMonospace"], values: ["snipPreviewVh", "historyPerPrompt"], dropdowns: ["counterUnits", "dateStyle", "timeStyle"], paths: ["screenshotDir"] },
+    // F14/F15 belong together: the highlighter only ever paints inside the preview.
+    { title: "expGroupPreview", flags: ["mdPreview", "codeHighlight"], values: ["hlFontPx"], dropdowns: ["mdPreviewMode"] },
     { title: "expGroupWorkspace", flags: ["floating", "keyboardNav", "headerSeparators", "dimToolbar"], values: ["floatOpacity", "kbFocusFadeMs"] },
     { title: "expGroupSystem", flags: ["showUpdates", "checkUpdateOnStart"] },
   ] },
@@ -1164,6 +1177,7 @@ function applyValues() {
   root.setProperty("--dim-media", val("mediaDimOpacity") / 100);
   root.setProperty("--media-radius", `${val("mediaRadius")}px`);
   root.setProperty("--tag-chip-px", `${val("tagChipPx")}px`);
+  root.setProperty("--hl-font-px", `${val("hlFontPx")}px`);
   root.setProperty("--view-group-rows", String(val("viewGroupMaxRows")));
   BUBBLE_MS = val("bubbleMs");
   TOAST_MS = val("toastMs");
@@ -1183,6 +1197,7 @@ const EXPERT_TIPS = [
   // General / creating
   "storeFiles", "varDefaults", "dynVars", "choiceVars", "choiceRemember",
   "lengthCounter", "promptHistory", "editorMonospace",
+  "mdPreview", "mdPreviewMode", "codeHighlight", "hlFontPx",
   "checkUpdateOnStart", "showUpdates", "importExport", "dimToolbar", "keyboardNav",
   "headerSeparators", "floating",
   // Tiles / copying
@@ -3836,6 +3851,8 @@ function openModal({ mode, id, name = "", text = "", color = "", image = "", sho
   modal.fav.setAttribute("aria-pressed", String(!!favorite));
   modal.name.value = name;
   modal.text.value = text;
+  mdPreviewOn = false; // every prompt opens in the editor, never in the preview
+  mdLastText = null;
   modal.caption.value = caption;
   modal.captionSize.value = String(normSize(captionSize) || 0);
   updateCaptionPreview();
@@ -3863,7 +3880,9 @@ let lenRaf = 0;
 function updateLenCounter() {
   const el = $("modal-length");
   if (!el) return;
-  const on = flag("lengthCounter") && !modal.text.classList.contains("hidden");
+  // Still a text prompt while the F14 preview stands in for the textarea.
+  const on = flag("lengthCounter") &&
+    !(modal.text.classList.contains("hidden") && modal.mdPreview.classList.contains("hidden"));
   el.classList.toggle("hidden", !on);
   if (!on) return;
   const s = modal.text.value;
@@ -3881,6 +3900,241 @@ function updateLenCounter() {
 function scheduleLenCounter() {
   if (lenRaf) return;
   lenRaf = requestAnimationFrame(() => { lenRaf = 0; updateLenCounter(); });
+}
+
+// ---- F14 Markdown preview + F15 code highlighting (editor) ----
+// The prompt body is untrusted text. It is HTML-escaped ONCE, up front, and every
+// transform below only ever slices that escaped string, so nothing a user types can
+// come out as markup. A link keeps its label as plain styled text and never becomes
+// an <a>, which is why no href/src exists for a click to follow.
+const MD_MAX_CHARS = 100000; // past this the preview is cut, so split-mode typing stays smooth
+// A single huge fence is rendered plain: an unterminated block comment makes the
+// lazy scan quadratic, and nobody reads 20k characters of colour anyway.
+const HL_MAX_CHARS = 20000;
+const MD_ESC_RE = /[&<>"']/g;
+const MD_ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+const mdEsc = (s) => String(s).replace(MD_ESC_RE, (c) => MD_ESC_MAP[c]);
+
+// F15 token patterns. They run against the ESCAPED code, which is why quotes and
+// angle brackets appear as &quot; / &#39; / &lt; here. Deliberately best-effort:
+// anything the scanner does not recognise stays plain, so malformed code still renders.
+const HL_DQ = String.raw`&quot;(?:\\.|&(?!quot;)|[^&\\\n])*&quot;`;
+const HL_SQ = String.raw`&#39;(?:\\.|&(?!#39;)|[^&\\\n])*&#39;`;
+const HL_BT = "`(?:\\\\.|[^`\\\\])*`";
+const HL_BLOCK_C = String.raw`/\*[\s\S]*?(?:\*/|$)`;
+const HL_NUM = String.raw`\b(?:0[xXbBoO][0-9a-fA-F_]+|\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?)\w*`;
+const hlLine = (mark) => `${mark}[^\\n]*`;
+const hlWords = (w) => String.raw`\b(?:${w})\b`;
+const HL_CLASSES = ["cmt", "str", "num", "kw", "fn"];
+const HL_RULES = {
+  js: { rules: [
+    ["cmt", `${hlLine("//")}|${HL_BLOCK_C}`],
+    ["str", `${HL_BT}|${HL_DQ}|${HL_SQ}`],
+    ["num", HL_NUM],
+    ["kw", hlWords("const|let|var|function|return|if|else|for|while|do|switch|case|break|continue|default|class|extends|super|new|delete|typeof|instanceof|in|of|this|null|undefined|true|false|async|await|import|export|from|as|try|catch|finally|throw|yield|void|static|interface|type|enum|implements|public|private|protected|readonly|declare|namespace|number|string|boolean|any|unknown|never")],
+    ["fn", String.raw`\b[A-Za-z_$][\w$]*(?=\s*\()`],
+  ] },
+  py: { rules: [
+    ["cmt", hlLine("#")],
+    ["str", `(?:&quot;){3}[\\s\\S]*?(?:(?:&quot;){3}|$)|(?:&#39;){3}[\\s\\S]*?(?:(?:&#39;){3}|$)|${HL_DQ}|${HL_SQ}`],
+    ["num", HL_NUM],
+    ["kw", hlWords("def|class|return|if|elif|else|for|while|break|continue|pass|import|from|as|with|try|except|finally|raise|lambda|yield|global|nonlocal|assert|del|in|is|not|and|or|None|True|False|self|async|await|match|case")],
+    ["fn", String.raw`\b[A-Za-z_]\w*(?=\s*\()`],
+  ] },
+  html: { rules: [
+    ["cmt", String.raw`&lt;!--[\s\S]*?(?:--&gt;|$)`],
+    ["str", `${HL_DQ}|${HL_SQ}`],
+    ["kw", String.raw`&lt;/?[A-Za-z][\w:.-]*|/?&gt;`],
+    ["fn", String.raw`[A-Za-z_:][\w:.-]*(?=\s*=)`],
+  ] },
+  css: { rules: [
+    ["cmt", HL_BLOCK_C],
+    ["str", `${HL_DQ}|${HL_SQ}`],
+    ["num", String.raw`#[0-9a-fA-F]{3,8}\b|-?\b\d*\.?\d+(?:px|em|rem|%|vh|vw|vmin|vmax|ms|s|deg|fr|ch|pt)?\b`],
+    ["kw", String.raw`@[a-zA-Z-]+|[-a-zA-Z]+(?=\s*:)`],
+    ["fn", String.raw`[.#]?[-\w]+(?=\s*[{,])|::?[a-z-]+`],
+  ] },
+  json: { rules: [
+    // A string followed by a colon is a key; plain strings keep the string colour.
+    ["kw", `${HL_DQ}(?=\\s*:)|${hlWords("true|false|null")}`],
+    ["str", HL_DQ],
+    ["num", String.raw`-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b`],
+  ] },
+  sql: { flags: "i", rules: [
+    ["cmt", `${hlLine("--")}|${HL_BLOCK_C}`],
+    ["str", `${HL_SQ}|${HL_DQ}`],
+    ["num", String.raw`\b\d+(?:\.\d+)?\b`],
+    ["kw", hlWords("select|from|where|insert|into|values|update|set|delete|create|table|alter|drop|index|view|join|inner|left|right|full|outer|cross|on|group|by|order|having|limit|offset|distinct|as|and|or|not|null|is|in|between|like|exists|union|all|case|when|then|else|end|primary|key|foreign|references|default|unique|constraint|asc|desc|with|returning")],
+    ["fn", String.raw`\b[A-Za-z_]\w*(?=\s*\()`],
+  ] },
+  bash: { rules: [
+    ["cmt", hlLine("#")],
+    ["str", `${HL_DQ}|${HL_SQ}`],
+    ["num", String.raw`\b\d+\b`],
+    ["kw", hlWords("if|then|elif|else|fi|for|in|do|done|while|until|case|esac|function|return|local|export|readonly|set|unset|shift|source|echo|cd|exit|trap|declare|sudo")],
+    ["fn", String.raw`\$\{[^}\n]*\}|\$[A-Za-z_]\w*|\$[0-9@*#?]`],
+  ] },
+  rust: { rules: [
+    ["cmt", `${hlLine("//")}|${HL_BLOCK_C}`],
+    // A lifetime ('a) has no closing quote, so it simply falls through to plain.
+    ["str", `${HL_DQ}|` + String.raw`&#39;(?:\\.|[^&\\\n])&#39;`],
+    ["num", String.raw`\b(?:0[xXbBoO][0-9a-fA-F_]+|\d[\d_]*(?:\.\d+)?)(?:[iuf](?:8|16|32|64|128|size))?\b`],
+    ["kw", hlWords("fn|let|mut|const|static|struct|enum|impl|trait|pub|use|mod|match|if|else|for|while|loop|return|break|continue|as|where|in|ref|move|dyn|unsafe|async|await|type|crate|self|Self|super|true|false|Some|None|Ok|Err")],
+    ["fn", String.raw`#!?\[[^\]\n]*\]|\b[a-z_]\w*(?=\s*\()|\b[A-Z]\w*\b`],
+  ] },
+};
+// Fence tag -> ruleset. An unknown or missing tag renders as plain code.
+const HL_ALIAS = {
+  js: "js", javascript: "js", jsx: "js", mjs: "js", node: "js",
+  ts: "js", typescript: "js", tsx: "js",
+  py: "py", python: "py",
+  html: "html", htm: "html", xml: "html", svg: "html", vue: "html",
+  css: "css", scss: "css", sass: "css", less: "css",
+  json: "json", jsonc: "json",
+  sql: "sql", mysql: "sql", psql: "sql", postgres: "sql", sqlite: "sql",
+  sh: "bash", bash: "bash", shell: "bash", zsh: "bash", console: "bash",
+  rs: "rust", rust: "rust",
+};
+// One regex per language, compiled once — never per keystroke.
+const HL_RE = Object.fromEntries(Object.entries(HL_RULES).map(([id, def]) => [
+  id,
+  new RegExp(def.rules.map(([cls, src]) => `(?<${cls}>${src})`).join("|"), `g${def.flags || ""}`),
+]));
+
+// Wrap recognised tokens of already-escaped code in themed spans.
+function hlCode(escCode, lang) {
+  const re = HL_RE[lang];
+  if (!re) return escCode;
+  re.lastIndex = 0;
+  let out = "", last = 0, m;
+  while ((m = re.exec(escCode))) {
+    if (!m[0]) { re.lastIndex++; continue; } // never spin on a zero-length match
+    out += escCode.slice(last, m.index);
+    const cls = HL_CLASSES.find((c) => m.groups[c] !== undefined);
+    out += `<span class="hl-${cls}">${m[0]}</span>`;
+    last = re.lastIndex;
+  }
+  return out + escCode.slice(last);
+}
+
+const MD_FENCE = /^\s{0,3}(`{3,}|~{3,})\s*([A-Za-z0-9+#._-]*)\s*$/;
+const MD_HEAD = /^\s{0,3}(#{1,6})\s+(.*)$/;
+const MD_HR = /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/;
+const MD_QUOTE = /^\s{0,3}&gt;\s?(.*)$/; // ">" is already escaped at this point
+const MD_UL = /^\s{0,3}[-*+]\s+(.*)$/;
+const MD_OL = /^\s{0,3}\d{1,9}[.)]\s+(.*)$/;
+const MD_INLINE = /`([^`\n]+)`|\[([^\]\n]*)\]\([^)\n]*\)|\*\*([^*\n]+)\*\*|__([^_\n]+)__|\*([^*\n]+)\*|_([^_\n]+)_/g;
+
+function mdInline(s) {
+  MD_INLINE.lastIndex = 0;
+  let out = "", last = 0, m;
+  while ((m = MD_INLINE.exec(s))) {
+    out += s.slice(last, m.index);
+    if (m[1] !== undefined) out += `<code class="md-inline-code">${m[1]}</code>`;
+    else if (m[2] !== undefined) out += `<span class="md-link">${m[2]}</span>`; // label only, no target
+    else if (m[3] !== undefined || m[4] !== undefined) out += `<strong>${m[3] ?? m[4]}</strong>`;
+    else out += `<em>${m[5] ?? m[6]}</em>`;
+    last = MD_INLINE.lastIndex;
+  }
+  return out + s.slice(last);
+}
+
+function renderMarkdown(text) {
+  const cut = text.length > MD_MAX_CHARS;
+  const src = mdEsc((cut ? text.slice(0, MD_MAX_CHARS) : text).replace(/\r\n?/g, "\n"));
+  const lines = src.split("\n");
+  const out = [];
+  let para = [], quote = [], list = "";
+  // Prompt text lives on its line breaks, so a wrapped paragraph keeps them as <br>
+  // instead of being reflowed into one run the way a prose renderer would.
+  const flushPara = () => { if (para.length) { out.push(`<p>${para.map(mdInline).join("<br>")}</p>`); para = []; } };
+  const flushQuote = () => { if (quote.length) { out.push(`<blockquote>${quote.map(mdInline).join("<br>")}</blockquote>`); quote = []; } };
+  const flushList = () => { if (list) { out.push(`</${list}>`); list = ""; } };
+  const flushAll = () => { flushPara(); flushQuote(); flushList(); };
+  const highlight = flag("codeHighlight");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const fence = MD_FENCE.exec(line);
+    if (fence) {
+      flushAll();
+      const mark = fence[1][0];
+      const lang = HL_ALIAS[fence[2].toLowerCase()] || "";
+      const closes = (l) => { const s = l.trim(); return s.length >= 3 && !s.split("").some((c) => c !== mark); };
+      const body = [];
+      i++;
+      while (i < lines.length && !closes(lines[i])) body.push(lines[i++]);
+      const code = body.join("\n");
+      const colour = lang && highlight && code.length <= HL_MAX_CHARS;
+      out.push(`<pre class="md-code"><code>${colour ? hlCode(code, lang) : code}</code></pre>`);
+      continue; // the loop's own i++ steps over the closing fence
+    }
+    if (!line.trim()) { flushAll(); continue; }
+    const head = MD_HEAD.exec(line);
+    if (head) { flushAll(); const n = head[1].length; out.push(`<h${n}>${mdInline(head[2])}</h${n}>`); continue; }
+    if (MD_HR.test(line)) { flushAll(); out.push("<hr>"); continue; }
+    const q = MD_QUOTE.exec(line);
+    if (q) { flushPara(); flushList(); quote.push(q[1]); continue; }
+    const ul = MD_UL.exec(line);
+    const ol = ul ? null : MD_OL.exec(line);
+    if (ul || ol) {
+      flushPara(); flushQuote();
+      const want = ul ? "ul" : "ol";
+      if (list !== want) { flushList(); out.push(`<${want}>`); list = want; }
+      out.push(`<li>${mdInline((ul || ol)[1])}</li>`);
+      continue;
+    }
+    flushQuote(); flushList();
+    para.push(line.trim());
+  }
+  flushAll();
+  if (cut) out.push(`<p class="md-trunc">${mdEsc(t("mdTruncated"))}</p>`);
+  return out.join("");
+}
+
+// Preview state: true = the rendered pane stands in for the textarea (toggle layout).
+let mdPreviewOn = false;
+let mdRaf = 0;
+let mdTimer = 0;
+let mdLastText = null;
+const mdSplit = () => (txt("mdPreviewMode") || "toggle") === "split";
+
+function renderMdPreview(force) {
+  const box = modal.mdPreview;
+  if (!box || box.classList.contains("hidden")) return;
+  const s = modal.text.value;
+  if (!force && s === mdLastText) return;
+  mdLastText = s;
+  // The only innerHTML in this feature, and it is fed a string assembled purely from
+  // escaped slices plus literal tags — see renderMarkdown.
+  box.innerHTML = renderMarkdown(s);
+}
+function scheduleMdPreview() {
+  if (mdRaf || modal.mdPreview.classList.contains("hidden")) return;
+  // rAF paces the re-render at one per frame while typing; the timer is the safety
+  // net for a window that produces no frames at all, so the pane never goes stale.
+  const run = () => {
+    cancelAnimationFrame(mdRaf);
+    clearTimeout(mdTimer);
+    mdRaf = 0;
+    renderMdPreview();
+  };
+  mdRaf = requestAnimationFrame(run);
+  mdTimer = setTimeout(run, 100);
+}
+
+// Bring toolbar, textarea and preview in line with the flags and the picked layout.
+function syncMdUi(textVisible) {
+  const on = textVisible && optFlag("mdPreview");
+  const split = on && mdSplit();
+  if (!on) mdPreviewOn = false;
+  const showPreview = on && (split || mdPreviewOn);
+  modal.root.classList.toggle("md-split", split);
+  modal.mdBar.classList.toggle("hidden", !on || split); // the split needs no switch
+  modal.mdPreview.classList.toggle("hidden", !showPreview);
+  if (textVisible) modal.text.classList.toggle("hidden", on && !split && mdPreviewOn);
+  modal.mdToggle.setAttribute("aria-pressed", String(mdPreviewOn));
+  modal.mdToggleLabel.textContent = t(mdPreviewOn ? "mdEditBtn" : "mdPreviewBtn");
+  if (showPreview) renderMdPreview(true);
 }
 
 // ---- F7 version history: render the collapsible list in the editor ----
@@ -4609,6 +4863,7 @@ function syncModalImageUi(mode) {
   modal.textBar.classList.toggle("hidden", !varsUi);
   modal.varsHint.classList.toggle("hidden", !varsUi);
   if (varsUi) renderVarHelper(); // F12/F13 chips + insert row follow their flags
+  syncMdUi(textVisible);         // F14 preview toolbar + rendered pane
   updateLenCounter();
   // F7: version history only for existing text prompts; reset to collapsed on open.
   const histOn = mode === "edit" && textVisible && flag("promptHistory");
@@ -6513,6 +6768,21 @@ function bind() {
   modal.video.addEventListener("click", () => { if (modal.video.src) openLightbox(modal.video.src, true); });
   modal.name.addEventListener("keydown", (e) => { if (e.key === "Enter") confirmModal(); });
   modal.text.addEventListener("input", scheduleLenCounter); // F16 live length readout
+  modal.text.addEventListener("input", scheduleMdPreview);  // F14 live preview (rAF-throttled)
+  // F14: swap textarea and preview, keeping roughly the same spot in the text.
+  modal.mdToggle.addEventListener("click", () => {
+    const from = mdPreviewOn ? modal.mdPreview : modal.text;
+    const span = from.scrollHeight - from.clientHeight;
+    const ratio = span > 0 ? from.scrollTop / span : 0;
+    mdPreviewOn = !mdPreviewOn;
+    syncMdUi(true); // the switch only exists while the textarea is in play
+    const to = mdPreviewOn ? modal.mdPreview : modal.text;
+    requestAnimationFrame(() => {
+      const s = to.scrollHeight - to.clientHeight;
+      to.scrollTop = s > 0 ? Math.round(ratio * s) : 0;
+      if (!mdPreviewOn) to.focus();
+    });
+  });
   // F7 version-history collapsible.
   $("modal-history-head").addEventListener("click", () => {
     const body = $("modal-history-body");

@@ -214,6 +214,110 @@ PROBE = """
       const cm2 = document.getElementById('confirm-modal');
       if (!cm2.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
     }
+    // F14/F15: the preview renders every Markdown construct, colours the fenced code
+    // blocks, and — the part that matters — shows injected markup as literal text.
+    const openEditor = async (id) => {
+      const el = [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === id);
+      if (!el) return false;
+      el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(200);
+      const edit = document.querySelector('#ctx [data-act="edit"]');
+      if (!edit) return false;
+      edit.click();
+      await sleep(400);
+      return !document.getElementById('modal').classList.contains('hidden');
+    };
+    if (!await openEditor('p7')) {
+      out.errors.push('the Markdown prompt did not open in the editor');
+    } else {
+      const prev = document.getElementById('modal-md-preview');
+      const ta = document.getElementById('modal-text');
+      if (document.getElementById('modal-md-bar').classList.contains('hidden')) {
+        out.errors.push('the Markdown preview switch is missing');
+      }
+      await click('modal-md-toggle');
+      if (prev.classList.contains('hidden')) {
+        out.errors.push('the Markdown preview did not open');
+      } else {
+        if (!ta.classList.contains('hidden')) {
+          out.errors.push('the text field is still shown although the preview took its place');
+        }
+        for (const pair of [['h1', 'heading 1'], ['h2', 'heading 2'], ['strong', 'bold'],
+                            ['em', 'italic'], ['code.md-inline-code', 'inline code'],
+                            ['ul li', 'bullet list'], ['ol li', 'numbered list'],
+                            ['blockquote', 'quote'], ['hr', 'rule'],
+                            ['pre.md-code', 'code block'], ['.md-link', 'link']]) {
+          if (!prev.querySelector(pair[0])) out.errors.push('the preview does not render ' + pair[1]);
+        }
+        // Nothing the user types may become an element that loads or navigates.
+        if (prev.querySelector('a, img, script, iframe, [href], [src], [onerror], [onmouseover]')) {
+          out.errors.push('the preview emitted an element that can load or navigate');
+        }
+        if (window.xssRan !== undefined) out.errors.push('script injected through a prompt ran');
+        const shown = prev.textContent;
+        for (const literal of ['<script>', 'onerror', '<b onmouseover', 'javascript:alert(1)', 'click me']) {
+          if (!shown.includes(literal)) out.errors.push('injected markup is not shown literally: ' + literal);
+        }
+        // F15: nine fenced blocks, eight of them tagged; the untagged one stays plain.
+        const blocks = [...prev.querySelectorAll('pre.md-code')];
+        if (blocks.length !== 9) {
+          out.errors.push('the preview shows ' + blocks.length + ' code blocks instead of 9');
+        } else {
+          blocks.forEach((b, i) => {
+            const coloured = b.querySelectorAll('[class^="hl-"]').length;
+            if (i === 8 && coloured) out.errors.push('an untagged code block was coloured anyway');
+            if (i !== 8 && !coloured) out.errors.push('code block ' + (i + 1) + ' got no syntax colours');
+          });
+        }
+        // Typing has to reach the preview on the next frame.
+        ta.value = '# live update';
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(200);
+        if (prev.textContent.trim() !== 'live update') {
+          out.errors.push('the preview does not follow the text: ' + prev.textContent.slice(0, 40));
+        }
+      }
+      await click('modal-md-toggle');
+      if (ta.classList.contains('hidden')) out.errors.push('switching back did not restore the text field');
+      await click('modal-close-x');
+      await sleep(250);
+      const cm3 = document.getElementById('confirm-modal');
+      if (!cm3.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+    }
+    // The other layout: the expert dropdown puts both panes on screen at once.
+    document.getElementById('settings').classList.remove('hidden');
+    await click('expert-open');
+    const mdSel = [...document.querySelectorAll('#expert-flags select.expert-select')]
+      .find(s => [...s.options].some(o => o.value === 'split'));
+    if (!mdSel) {
+      out.errors.push('the preview layout dropdown is missing from the expert menu');
+    } else {
+      mdSel.value = 'split';
+      mdSel.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(250);
+      await click('expert-back');
+      document.getElementById('settings').classList.add('hidden');
+      if (!await openEditor('p7')) {
+        out.errors.push('the editor did not reopen for the split layout');
+      } else {
+        const text = document.getElementById('modal-text');
+        const prev2 = document.getElementById('modal-md-preview');
+        if (!document.getElementById('modal').classList.contains('md-split')) {
+          out.errors.push('the split layout was not applied');
+        }
+        if (text.classList.contains('hidden') || prev2.classList.contains('hidden')) {
+          out.errors.push('the split layout does not show text field and preview together');
+        } else if (innerWidth > 640) {
+          const tr = text.getBoundingClientRect(), pr = prev2.getBoundingClientRect();
+          if (pr.left < tr.right - 1) out.errors.push('the split panes are not side by side');
+        }
+        if (!document.getElementById('modal-md-bar').classList.contains('hidden')) {
+          out.errors.push('the split layout still offers the switch button');
+        }
+        await click('modal-close-x');
+        await sleep(250);
+      }
+    }
     // F9 view groups: a group is one folder tab, its popover lists the members,
     // picking one marks the group active and names the view on the tab, and taking
     // a view back out gives it its own tab again.

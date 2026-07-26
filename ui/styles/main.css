@@ -18,6 +18,14 @@
      and its action buttons stay reachable at raised appearance scales. Identity at
      the default 100%. */
   --full-modal-h: calc((100vh - 24px) / var(--modal-zoom, 1));
+  /* F15 code-token colours for the Markdown preview. These defaults suit the light
+     themes; every theme whose surface would swallow them overrides them below. */
+  --hl-cmt: #6a737d;
+  --hl-str: #0a7d33;
+  --hl-num: #b45309;
+  --hl-kw: #8250df;
+  --hl-fn: #0550ae;
+  --hl-font-px: 13px;
 }
 :root[data-theme="dark"] {
   --bg: #1b1b1d;
@@ -30,6 +38,11 @@
   --accent-fg: #ffffff;
   --danger: #ef4444;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --hl-cmt: #8b949e;
+  --hl-str: #7ee787;
+  --hl-num: #ffa657;
+  --hl-kw: #ff7b72;
+  --hl-fn: #79c0ff;
 }
 /* Programmer: terminal look — near-black panels, console green, monospace UI. */
 :root[data-theme="programmer"] {
@@ -43,6 +56,11 @@
   --accent-fg: #06150b;
   --danger: #f85149;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  --hl-cmt: #8b949e;
+  --hl-str: #a5d6ff;
+  --hl-num: #79c0ff;
+  --hl-kw: #ff7b72;
+  --hl-fn: #d2a8ff;
 }
 :root[data-theme="programmer"] body {
   font-family: Consolas, "Cascadia Mono", monospace;
@@ -59,6 +77,11 @@
   --accent-fg: #ffffff;
   --danger: #fb7185;
   --shadow: 0 8px 28px rgba(168, 85, 247, 0.35);
+  --hl-cmt: #9179c4;
+  --hl-str: #86efac;
+  --hl-num: #fbbf24;
+  --hl-kw: #f0abfc;
+  --hl-fn: #93c5fd;
 }
 /* Gradient: full-color backdrop, frosted-glass surfaces, warm accent. */
 :root[data-theme="gradient"] {
@@ -72,6 +95,13 @@
   --accent-fg: #3b2300;
   --danger: #fecaca;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  /* The frosted surfaces sit on a saturated backdrop, so the code block gets its own
+     dark panel (below) and the tokens are picked to read on that. */
+  --hl-cmt: rgba(255, 255, 255, 0.62);
+  --hl-str: #bbf7d0;
+  --hl-num: #fed7aa;
+  --hl-kw: #fde047;
+  --hl-fn: #bfdbfe;
 }
 :root[data-theme="gradient"] body {
   background: linear-gradient(130deg, #4f46e5, #9333ea, #db2777, #f59e0b, #db2777, #9333ea);
@@ -150,6 +180,11 @@
   --accent-fg: #07273a;
   --danger: #f87171;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --hl-cmt: #7c8ba1;
+  --hl-str: #a5f3fc;
+  --hl-num: #fcd34d;
+  --hl-kw: #f9a8d4;
+  --hl-fn: #93c5fd;
 }
 /* Cyberpunk: neon pink on a night-city black. */
 :root[data-theme="cyberpunk"] {
@@ -163,6 +198,11 @@
   --accent-fg: #ffffff;
   --danger: #ff5d5d;
   --shadow: 0 8px 28px rgba(255, 45, 120, 0.35);
+  --hl-cmt: #6f6f96;
+  --hl-str: #7dd3fc;
+  --hl-num: #fbbf24;
+  --hl-kw: #ff5d9e;
+  --hl-fn: #a5b4fc;
 }
 /* Retro: amber phosphor on CRT-dark, typewriter type. */
 :root[data-theme="retro"] {
@@ -176,6 +216,12 @@
   --accent-fg: #1a1208;
   --danger: #ff6b4a;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  /* Phosphor screens were one colour: vary brightness, not hue. */
+  --hl-cmt: #9c7a28;
+  --hl-str: #ffd280;
+  --hl-num: #ffc247;
+  --hl-kw: #fff0c0;
+  --hl-fn: #e59a00;
 }
 :root[data-theme="retro"] body {
   font-family: "Courier New", Consolas, monospace;
@@ -192,6 +238,12 @@
   --accent-fg: #ffffff;
   --danger: #b91c1c;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  /* Colour would break the point of this theme: separate the tokens by value only. */
+  --hl-cmt: #949494;
+  --hl-str: #3f3f3f;
+  --hl-num: #5e5e5e;
+  --hl-kw: #111111;
+  --hl-fn: #6d6d6d;
 }
 /* Lavender: gentle violet pastels. */
 :root[data-theme="lavender"] {
@@ -994,12 +1046,95 @@ body.library-front #modal.overlay { z-index: 67; }
 #modal #modal-style-row,
 #modal #color-row,
 #modal #modal-history,
+#modal #modal-md-bar,
 #modal .modal-actions { flex: 0 0 auto; }
 /* Themed scrollbar for the prompt textarea. */
 .modal-text::-webkit-scrollbar { width: var(--sb-width, 12px); }
 .modal-text::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
 .modal-text::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 .modal-text::-webkit-scrollbar-track { background: transparent; }
+
+/* ---- F14 Markdown preview / F15 syntax colours ---- */
+.modal-md-bar { display: flex; gap: 8px; }
+.md-toggle { display: inline-flex; align-items: center; gap: 6px; }
+/* The wrapper is invisible to layout unless the split is picked, so every flex rule
+   the editor already had keeps applying to the textarea unchanged. */
+.modal-text-wrap { display: contents; }
+.md-preview {
+  padding: 10px 12px;
+  min-height: 110px;
+  max-height: 280px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  color: var(--fg);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+#modal.tall .md-preview { flex: 1 1 auto; min-height: 120px; max-height: none; }
+#modal.tall.history-open .md-preview { flex: 0 1 auto; min-height: 96px; max-height: 26vh; }
+/* Split layout: the textarea keeps the left half, the rendered pane takes the right. */
+#modal.md-split .modal-text-wrap { display: flex; gap: 8px; flex: 1 1 auto; min-height: 0; }
+#modal.md-split .modal-text-wrap > .clear-wrap-ta,
+#modal.md-split .modal-text-wrap > .md-preview { flex: 1 1 0; min-width: 0; }
+@media (max-width: 620px) {
+  #modal.md-split .modal-text-wrap { flex-direction: column; }
+}
+.md-preview::-webkit-scrollbar { width: var(--sb-width, 12px); }
+.md-preview::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface-2); }
+.md-preview::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+.md-preview::-webkit-scrollbar-track { background: transparent; }
+.md-preview > :first-child { margin-top: 0; }
+.md-preview > :last-child { margin-bottom: 0; }
+.md-preview h1, .md-preview h2, .md-preview h3,
+.md-preview h4, .md-preview h5, .md-preview h6 { margin: 12px 0 6px; line-height: 1.3; font-weight: 700; }
+.md-preview h1 { font-size: 1.5em; }
+.md-preview h2 { font-size: 1.3em; }
+.md-preview h3 { font-size: 1.15em; }
+.md-preview h4, .md-preview h5, .md-preview h6 { font-size: 1em; }
+.md-preview p { margin: 0 0 8px; }
+.md-preview ul, .md-preview ol { margin: 0 0 8px; padding-left: 22px; }
+.md-preview li { margin: 2px 0; }
+.md-preview blockquote {
+  margin: 0 0 8px;
+  padding: 3px 0 3px 10px;
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+}
+.md-preview hr { margin: 10px 0; border: none; border-top: 1px solid var(--border); }
+/* Links are shown, never followed — the renderer emits no href at all. */
+.md-preview .md-link { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.md-preview .md-trunc { color: var(--muted); font-style: italic; }
+.md-preview .md-inline-code, .md-preview .md-code {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: var(--hl-font-px, 13px);
+}
+.md-preview .md-inline-code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.md-preview .md-code {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  white-space: pre;
+}
+.md-preview .md-code code { font: inherit; }
+/* Frosted surfaces are far too bright for code: give the block its own dark panel. */
+:root[data-theme="gradient"] .md-preview .md-code,
+:root[data-theme="gradient"] .md-preview .md-inline-code { background: rgba(0, 0, 0, 0.3); }
+.hl-cmt { color: var(--hl-cmt); font-style: italic; }
+.hl-str { color: var(--hl-str); }
+.hl-num { color: var(--hl-num); }
+.hl-kw { color: var(--hl-kw); font-weight: 600; }
+.hl-fn { color: var(--hl-fn); }
 
 /* Expert menu: caution line on the left + reset button on the right. */
 .expert-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }

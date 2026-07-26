@@ -109,9 +109,13 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html") -> Path
       <button type="button" id="modal-var-add" class="ghost-btn">Insert</button></div>
     <p id="modal-vars-dyn-hint" class="modal-hint">These names fill themselves in and are never asked for.</p>
     <p id="modal-vars-choice-hint" class="modal-hint">Options turn the variable into a dropdown.</p></div>
-  <span class="clear-wrap clear-wrap-ta">
-    <textarea id="modal-text" class="modal-input modal-text" rows="6">Review the following code.</textarea>
-    <button type="button" class="clear-btn show">x</button></span>
+  <div id="modal-md-bar" class="modal-md-bar hidden">
+    <button type="button" id="modal-md-toggle" class="ghost-btn md-toggle">Preview</button></div>
+  <div id="modal-text-wrap" class="modal-text-wrap">
+    <span class="clear-wrap clear-wrap-ta">
+      <textarea id="modal-text" class="modal-input modal-text" rows="6">Review the following code.</textarea>
+      <button type="button" class="clear-btn show">x</button></span>
+    <div id="modal-md-preview" class="md-preview hidden"></div></div>
   <div id="modal-length" class="modal-length">26 chars</div>
   <div id="modal-style-row" class="two-col">
     <label class="field"><span>Font</span><select class="modal-input"><option>Default</option></select></label>

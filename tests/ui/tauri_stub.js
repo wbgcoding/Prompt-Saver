@@ -6,6 +6,76 @@ window.addEventListener("error", (e) => window.__SMOKE_ERRORS__.push("error: " +
 window.addEventListener("unhandledrejection", (e) =>
   window.__SMOKE_ERRORS__.push("rejection: " + (e.reason && (e.reason.stack || e.reason.message) || e.reason)));
 
+// F14/F15: one prompt carries every Markdown construct, a fenced block per supported
+// language, and the injection attempts the preview must render as literal text.
+const MD_SAMPLE = [
+  "# Heading one",
+  "## Heading two",
+  "",
+  "Plain text with **bold**, *italic*, `inline code` and a [link](https://example.invalid).",
+  "",
+  "- first bullet",
+  "- second bullet",
+  "",
+  "1. first step",
+  "2. second step",
+  "",
+  "> quoted line",
+  "",
+  "---",
+  "",
+  "```js",
+  "// comment",
+  "const greet = (name) => `hi ${name}`;",
+  "greet(\"world\");",
+  "```",
+  "",
+  "```python",
+  "# comment",
+  "def greet(name):",
+  "    return 'hi'",
+  "```",
+  "",
+  "```html",
+  "<!-- comment -->",
+  "<a class=\"x\">link</a>",
+  "```",
+  "",
+  "```css",
+  "/* comment */",
+  ".tile { color: #ff0000; }",
+  "```",
+  "",
+  "```json",
+  "{ \"name\": \"demo\", \"ok\": true }",
+  "```",
+  "",
+  "```sql",
+  "-- comment",
+  "SELECT name FROM prompts;",
+  "```",
+  "",
+  "```bash",
+  "# comment",
+  "for f in *.txt; do echo ok; done",
+  "```",
+  "",
+  "```rust",
+  "// comment",
+  "fn main() { let n = 42; }",
+  "```",
+  "",
+  "```",
+  "no language tag, stays plain",
+  "```",
+  "",
+  "<script>window.xssRan = 1;</script>",
+  "<img src=x onerror=window.xssRan=1>",
+  "<b onmouseover=alert(1)>raw html</b>",
+  "[click me](javascript:alert(1))",
+  "Bare javascript:alert(1) stays text.",
+].join("\n");
+
 const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   id: "p" + i,
   name: "Prompt " + (i + 1),
@@ -17,7 +87,9 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
       ? "Meeting on {#{date}#} at {#{time}#}: {#{clipboard}#}"
       : i === 5
         ? "Write a {#{tone|formal,casual,witty}#} note about {#{Topic}#}."
-        : "Example prompt body number " + (i + 1) + ".",
+        : i === 7
+          ? MD_SAMPLE
+          : "Example prompt body number " + (i + 1) + ".",
   color: ["#3b82f6", "#ef4444", "#10b981", "#f59e0b"][i % 4],
   favorite: i % 5 === 0,
   // Two shared tags plus untagged prompts, so a filter chip visibly narrows the list.
@@ -31,9 +103,10 @@ const SETTINGS = {
   theme: "dark", language: "en", floating: {}, float_scale: {}, video_prefs: {},
   window: null, minimize_to_tray: false, autostart: false, start_minimized: false,
   always_on_top: false, hotkey: "", auto_update: true, skipped_versions: [],
-  // Tags, custom themes and view groups ship off; the stub turns them on so the
-  // smoke run covers that UI too.
-  ui_flags: { tags: true, customThemes: true, viewGroups: true }, ui_values: {}, ui_texts: {}, dup_ignored: [],
+  // Tags, custom themes, view groups and the Markdown preview ship off; the stub
+  // turns them on so the smoke run covers that UI too.
+  ui_flags: { tags: true, customThemes: true, viewGroups: true, mdPreview: true },
+  ui_values: {}, ui_texts: {}, dup_ignored: [],
   tag_colors: { work: "#3b82f6" },
   custom_themes: [{ id: "ct1", name: "Neon", base: "dark", vars: { accent: "#ff00aa" } }],
   tile_font: "system", tile_size: 0,
