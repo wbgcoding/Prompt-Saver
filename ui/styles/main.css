@@ -1985,9 +1985,33 @@ input[type="password"]::-ms-clear { display: none; }
 .clip-actions .ghost-btn { padding: 3px 10px; font-size: 12px; }
 
 /* Prompt-variable fill dialog */
-.modal-text-bar { display: flex; align-items: center; gap: 8px; }
+.modal-text-bar { display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
 .modal-vars-hint { flex: 1; min-width: 0; margin: 0; }
 .vars-fields { display: flex; flex-direction: column; gap: 10px; margin-bottom: 4px; }
+/* A choice variable renders the same themed select as the expert dropdowns. */
+.vars-select { width: 100%; }
+
+/* F12/F13 editor helper: reserved-name chips + the name/options insert row. */
+.vars-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.vars-chip {
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition);
+}
+.vars-chip:hover { border-color: var(--accent); color: var(--fg); }
+.vars-new { display: flex; align-items: center; gap: 6px; }
+.vars-new .modal-input { min-width: 0; padding: 3px 8px; font-size: 12px; }
+.vars-new-name { flex: 1 1 40%; }
+.vars-new-opts { flex: 1 1 60%; }
+.vars-new .ghost-btn { flex: 0 0 auto; padding: 3px 10px; font-size: 12px; }
+.modal-text-bar .modal-hint { margin: 0; }
 
 .lib-section {
   font-size: 11px;

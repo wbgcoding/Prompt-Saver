@@ -796,6 +796,9 @@ const FLAG_LABELS = {
   dupImportCheck: "flagDupImportCheck", // F6
   autoBackup: "flagAutoBackup",         // F2
   autoPaste: "flagAutoPaste",           // F19 — normal setting now (default on)
+  dynVars: "flagDynVars",               // F12 self-filling placeholder names
+  choiceVars: "flagChoiceVars",         // F13 {#{name|a,b}#} dropdown variables
+  choiceRemember: "flagChoiceRemember", // F13 reopen a choice on its last pick
   // Checks at launch, but only while the normal auto-update setting is on.
   checkUpdateOnStart: "flagCheckUpdateOnStart",
 };
@@ -981,6 +984,10 @@ const EXPERT_SELECTS = {
   backupIntervalH: { label: "valBackupInterval", options: [6, 12, 24, 48, 168], def: 24, unit: "h", gate: "autoBackup" },
 };
 
+// F12 date/time width, shared by both style dropdowns. "iso" is the only entry
+// that bypasses Intl and always writes the machine format.
+const STYLE_OPTS = [["short", "optStyleShort"], ["medium", "optStyleMedium"], ["long", "optStyleLong"], ["iso", "optStyleIso"]];
+
 // Build a simple string-enum dropdown backed by ui_texts (default when unset).
 // `opts` is [[value, i18nLabelKey], …]. Used by expert enum params.
 function enumDropdown(key, labelKey, opts, def, gate) {
@@ -1009,6 +1016,9 @@ const EXPERT_DROPDOWNS = {
   // F1: how several selected tag filters combine.
   tagFilterMode: enumDropdown("tagFilterMode", "valTagFilterMode",
     [["and", "optTagAnd"], ["or", "optTagOr"]], "and", "tags"),
+  // F12: how the self-filling date/time placeholders are written.
+  dateStyle: enumDropdown("dateStyle", "valDateStyle", STYLE_OPTS, "short", "dynVars"),
+  timeStyle: enumDropdown("timeStyle", "valTimeStyle", STYLE_OPTS, "short", "dynVars"),
   copySize: {
     label: "valCopySize",
     options: () => {
@@ -1042,7 +1052,7 @@ const EXPERT_DROPDOWNS = {
 // Expert menu organised into tabs (it has grown large — tabs keep it tidy).
 const EXPERT_TABS = [
   { title: "expTabGeneral", groups: [
-    { title: "expGroupCreate", flags: ["fileAttach", "screenshot", "pasteMedia", "dragDrop", "promptVars", "varDefaults", "lengthCounter", "promptHistory", "storeFiles", "editorMonospace"], values: ["snipPreviewVh", "historyPerPrompt"], dropdowns: ["counterUnits"], paths: ["screenshotDir"] },
+    { title: "expGroupCreate", flags: ["fileAttach", "screenshot", "pasteMedia", "dragDrop", "promptVars", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "lengthCounter", "promptHistory", "storeFiles", "editorMonospace"], values: ["snipPreviewVh", "historyPerPrompt"], dropdowns: ["counterUnits", "dateStyle", "timeStyle"], paths: ["screenshotDir"] },
     { title: "expGroupWorkspace", flags: ["floating", "keyboardNav", "headerSeparators", "dimToolbar"], values: ["floatOpacity", "kbFocusFadeMs"] },
     { title: "expGroupSystem", flags: ["showUpdates", "checkUpdateOnStart"] },
   ] },
@@ -1171,7 +1181,8 @@ function applyValues() {
 // convention tip<Key>. Self-explanatory settings are deliberately left out.
 const EXPERT_TIPS = [
   // General / creating
-  "storeFiles", "varDefaults", "lengthCounter", "promptHistory", "editorMonospace",
+  "storeFiles", "varDefaults", "dynVars", "choiceVars", "choiceRemember",
+  "lengthCounter", "promptHistory", "editorMonospace",
   "checkUpdateOnStart", "showUpdates", "importExport", "dimToolbar", "keyboardNav",
   "headerSeparators", "floating",
   // Tiles / copying
@@ -2434,10 +2445,10 @@ async function toggleChainPick(p) {
   } else {
     // Resolve {#{variables}#} right when the button is picked into the chain.
     let text = p.text || p.name || "";
-    if (flag("promptVars") && extractVars(p.text).length) {
-      const values = await promptVarsDialog(extractVars(p.text));
-      if (!values) return; // cancelled → leave it unselected
-      text = fillVars(p.text, values);
+    if (varTokens(p).length) {
+      const filled = await resolveVars(p.text);
+      if (filled === null) return; // cancelled → leave it unselected
+      text = filled;
     }
     chainSel.push(p.id);
     chainTexts.set(p.id, text);
@@ -3093,16 +3104,16 @@ window.addEventListener("pointerup", async (e) => {
     if (el.classList.contains("tile")) {
       const p = prompts.find((x) => x.id === id);
       if (chainMode) { if (p) await toggleChainPick(p); return; } // pick (asks vars), don't copy
-      // A prompt with variables ALWAYS routes through the dialog — the double-click
-      // paste shortcut would otherwise fire on the 2nd click and paste stale clipboard
-      // without ever asking for the variables. A click only copies, never pastes.
-      if (p && flag("promptVars") && !p.copy_image && !p.file_path && extractVars(p.text).length) {
+      // A prompt that still needs input ALWAYS routes through the dialog — the
+      // double-click paste shortcut would otherwise fire on the 2nd click and paste
+      // stale clipboard without ever asking. A click only copies, never pastes.
+      if (p && dialogTokens(p).length) {
         await copyTextWithVars(p, el);
         return;
       }
       if (autoPasteDouble(id)) { await autoPasteNow(el); return; } // F19: 2nd fast click pastes
       if (copyOnCooldown(id)) return; // same prompt copied moments ago
-      if (await invoke("copy_prompt", { id }).catch((e) => { toast(String(e)); return false; })) {
+      if (p && await copyResolved(p)) {
         showCopied(el);
         recordCopy(id);
         maybeCloseOnCopy();
@@ -3372,8 +3383,9 @@ function modalSnapshot() {
 
 // ---- Prompt variables ({#{placeholder}#}) ----
 // The {#{ ... }#} fence is deliberately uncommon so a literal "{{" pasted from a
-// code block is never mistaken for a variable.
-const VAR_RE = /\{#\{\s*([^}\n]{1,60}?)\s*\}#\}/g;
+// code block is never mistaken for a variable. The 200-char body leaves room for
+// a choice variable's option list (F13), not just a name.
+const VAR_RE = /\{#\{\s*([^}\n]{1,200}?)\s*\}#\}/g;
 function extractVars(text) {
   const seen = [];
   for (const m of (text || "").matchAll(VAR_RE)) {
@@ -3384,53 +3396,241 @@ function extractVars(text) {
 }
 const fillVars = (text, values) => text.replace(VAR_RE, (_, k) => values[k.trim()] ?? "");
 
+// F13: a token is either a plain name or `name|opt,opt,…`. Options are trimmed and
+// empty ones dropped; a comma always starts the next option, so an option can never
+// contain one. A bar without a usable name or option list stays an ordinary
+// text variable — the whole token is then its name, so the placeholder still fills.
+function parseVar(token) {
+  const raw = String(token).trim();
+  const bar = raw.indexOf("|");
+  if (bar < 0 || !flag("choiceVars")) return { name: raw, options: [] };
+  const name = raw.slice(0, bar).trim();
+  const options = raw.slice(bar + 1).split(",").map((o) => o.trim()).filter(Boolean);
+  return name && options.length ? { name, options } : { name: raw, options: [] };
+}
+
+// F12: reserved names that fill themselves in at copy time, no dialog. They win
+// over a manual variable of the same name (documented in the editor's helper).
+const DYN_VARS = ["date", "time", "datetime", "weekday", "clipboard", "uuid"];
+const DYN_SET = new Set(DYN_VARS);
+const isDynVar = (name) => flag("dynVars") && DYN_SET.has(name);
+// The app language is a bare ISO code, which is already a valid BCP-47 tag; only
+// where the default region would be the wrong one is it spelled out. The app's
+// Portuguese is European, so "pt" must not fall back to the Brazilian default.
+const DYN_LOCALES = { pt: "pt-PT" };
+const dynLocale = () => DYN_LOCALES[LANG] || LANG;
+const pad2 = (n) => String(n).padStart(2, "0");
+const intlFmt = (opts) => {
+  try { return new Intl.DateTimeFormat(dynLocale(), opts); } catch (_) { return new Intl.DateTimeFormat("en", opts); }
+};
+function fmtDynDate(d, style) {
+  if (style === "iso") return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  return intlFmt({ dateStyle: style }).format(d);
+}
+function fmtDynTime(d, style) {
+  if (style === "iso") return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+  return intlFmt({ timeStyle: style }).format(d);
+}
+// RFC 4122 v4, lowercase — built from the platform RNG, no dependency.
+function uuidV4() {
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+// Clipboard text is foreign input pasted into the prompt: cap it so one runaway
+// copy can never blow up the clipboard payload.
+const CLIP_VAR_MAX = 100000;
+
+// Resolve one reserved name. `clip` is the clipboard text fetched once per copy.
+function dynValue(name, now, clip) {
+  const ds = txt("dateStyle") || "short";
+  const ts = txt("timeStyle") || "short";
+  switch (name) {
+    case "date": return fmtDynDate(now, ds);
+    case "time": return fmtDynTime(now, ts);
+    case "datetime": return `${fmtDynDate(now, ds)} ${fmtDynTime(now, ts)}`;
+    case "weekday": return intlFmt({ weekday: "long" }).format(now);
+    case "clipboard": return clip;
+    case "uuid": return uuidV4();
+    default: return "";
+  }
+}
+
+// The variable tokens of a prompt that are worth resolving at all (text prompts
+// only — an image/file prompt copies its media, not its text).
+const varTokens = (p) =>
+  (flag("promptVars") && p && !p.copy_image && !p.file_path ? extractVars(p.text) : []);
+// The subset the user still has to fill in by hand — the only reason to open a dialog.
+const dialogTokens = (p) => varTokens(p).filter((tok) => !isDynVar(parseVar(tok).name));
+
+// The one place every copy path goes through: reserved names resolve themselves,
+// the rest are asked for once. Returns the finished text, or null when the user
+// cancelled the fill-in dialog.
+async function resolveVars(text) {
+  const tokens = extractVars(text);
+  if (!tokens.length) return text;
+  const values = {};
+  const ask = [];
+  const dyn = [];
+  for (const tok of tokens) {
+    (isDynVar(parseVar(tok).name) ? dyn : ask).push(tok);
+  }
+  if (dyn.length) {
+    let clip = "";
+    if (dyn.some((tok) => parseVar(tok).name === "clipboard")) {
+      clip = String(await invoke("clipboard_text").catch(() => "") || "").slice(0, CLIP_VAR_MAX);
+      if (!clip) toast(t("clipVarEmpty")); // image/file payload, or an empty clipboard
+    }
+    const now = new Date();
+    for (const tok of dyn) values[tok] = dynValue(parseVar(tok).name, now, clip);
+  }
+  if (ask.length) {
+    const filled = await promptVarsDialog(ask);
+    if (!filled) return null;
+    Object.assign(values, filled);
+  }
+  return fillVars(text, values);
+}
+
+// ---- Editor variable helper ----
+// One-line explanation per reserved name, shown as the chip's tooltip.
+const DYN_TIPS = {
+  date: "dynDate", time: "dynTime", datetime: "dynDatetime",
+  weekday: "dynWeekday", clipboard: "dynClipboard", uuid: "dynUuid",
+};
+// A name or option must not carry the fence characters, or the token breaks.
+const cleanVarPart = (s) => s.replace(/[|{}\n]/g, "").trim();
+
+// Write a placeholder at the caret of the prompt textarea.
+function insertVarToken(body) {
+  const ta = modal.text;
+  const start = ta.selectionStart ?? ta.value.length;
+  const end = ta.selectionEnd ?? start;
+  const token = `{#{${body}}#}`;
+  ta.value = ta.value.slice(0, start) + token + ta.value.slice(end);
+  ta.focus();
+  ta.setSelectionRange(start + token.length, start + token.length);
+  ta.dispatchEvent(new Event("input", { bubbles: true })); // length counter + clear-X
+}
+
+// Rebuild the helper for the current feature flags (chips only with F12, the
+// options field only with F13).
+function renderVarHelper() {
+  const chips = $("modal-vars-chips");
+  const dyn = flag("dynVars");
+  chips.classList.toggle("hidden", !dyn);
+  $("modal-vars-dyn-hint").classList.toggle("hidden", !dyn);
+  chips.innerHTML = "";
+  if (dyn) {
+    for (const name of DYN_VARS) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "vars-chip";
+      b.textContent = name;
+      b.title = t(DYN_TIPS[name]); // hover engine themes any [title]
+      b.addEventListener("click", () => insertVarToken(name));
+      chips.appendChild(b);
+    }
+  }
+  const choice = flag("choiceVars");
+  $("modal-var-opts").classList.toggle("hidden", !choice);
+  $("modal-vars-choice-hint").classList.toggle("hidden", !choice);
+}
+
+function insertHelperVar() {
+  const nameEl = $("modal-var-name");
+  const optsEl = $("modal-var-opts");
+  const name = cleanVarPart(nameEl.value);
+  if (!name) { nameEl.focus(); return; }
+  const opts = flag("choiceVars")
+    ? optsEl.value.split(",").map(cleanVarPart).filter(Boolean)
+    : [];
+  insertVarToken(opts.length ? `${name}|${opts.join(",")}` : name);
+  nameEl.value = "";
+  optsEl.value = "";
+}
+$("modal-var-add").addEventListener("click", insertHelperVar);
+for (const id of ["modal-var-name", "modal-var-opts"]) {
+  $(id).addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault(); // Enter here inserts, it must not submit the editor
+    insertHelperVar();
+  });
+}
+
 // Fill-in dialog shown when copying a prompt that holds {#{placeholders}#}.
-// Resolves a {name: value} map, or null when cancelled.
+// `vars` are raw tokens; resolves a {token: value} map, or null when cancelled.
 let varsCleanup = null;
 function promptVarsDialog(vars) {
   const root = $("vars-modal");
   $("vars-title").textContent = t("varsTitle");
   const fields = $("vars-fields");
   fields.innerHTML = "";
-  // Remembered values are stored globally by variable name (expert: varDefaults).
+  // Remembered values are stored globally by variable NAME (expert: varDefaults);
+  // a choice variable keeps its last pick without a checkbox (expert: choiceRemember).
   const useRemember = flag("varDefaults");
+  const keepChoice = flag("choiceRemember");
   let remembered = {};
   try { remembered = JSON.parse(settings.ui_texts?.varDefaults || "{}"); } catch (_) { /* ignore */ }
-  const inputs = vars.map((name) => {
+  const rows = vars.map((token) => {
+    const { name, options } = parseVar(token);
     const label = document.createElement("label");
     label.className = "field";
     const span = document.createElement("span");
-    span.textContent = name;
-    const input = document.createElement("input");
-    input.className = "modal-input";
-    input.type = "text";
-    input.dataset.var = name;
-    if (useRemember && name in remembered) input.value = remembered[name];
-    label.append(span, input);
-    if (useRemember) {
-      const rem = document.createElement("label");
-      rem.className = "vars-remember";
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.className = "switch";
-      cb.checked = name in remembered;
-      cb.dataset.rem = name;
-      const rlbl = document.createElement("span");
-      rlbl.textContent = t("rememberValue");
-      rem.append(cb, rlbl);
-      label.appendChild(rem);
+    span.textContent = name; // textContent: a variable name is never markup
+    let control;
+    let cb = null;
+    if (options.length) {
+      control = document.createElement("select");
+      control.className = "modal-input expert-select vars-select";
+      for (const o of options) {
+        const opt = document.createElement("option");
+        opt.value = o;
+        opt.textContent = o;
+        control.appendChild(opt);
+      }
+      const last = keepChoice ? remembered[name] : null;
+      control.value = options.includes(last) ? last : options[0];
+      // A single option is a fixed value: still shown, but nothing to choose.
+      if (options.length === 1) control.disabled = true;
+      else attachSelectPicker(control); // themed popup, 8 rows then scroll
+      label.append(span, control);
+    } else {
+      control = document.createElement("input");
+      control.className = "modal-input";
+      control.type = "text";
+      if (useRemember && name in remembered) control.value = remembered[name];
+      label.append(span, control);
+      if (useRemember) {
+        const rem = document.createElement("label");
+        rem.className = "vars-remember";
+        cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.className = "switch";
+        cb.checked = name in remembered;
+        const rlbl = document.createElement("span");
+        rlbl.textContent = t("rememberValue");
+        rem.append(cb, rlbl);
+        label.appendChild(rem);
+      }
     }
     fields.appendChild(label);
-    return input;
+    return { token, name, choice: options.length > 0, control, cb };
   });
   wireClearButtons(fields); // clear-X on the variable inputs
-  // Save/forget remembered values on confirm (never on cancel).
+  // Save/forget remembered values on confirm (never on cancel). Entries for
+  // variables outside this dialog are carried over untouched.
   const persistRemembered = () => {
-    if (!useRemember) return;
-    const obj = {};
-    for (const i of inputs) {
-      const cb = fields.querySelector(`input[data-rem="${CSS.escape(i.dataset.var)}"]`);
-      if (cb?.checked) obj[i.dataset.var] = i.value;
+    const obj = { ...remembered };
+    for (const r of rows) {
+      if (r.choice) {
+        if (keepChoice) obj[r.name] = r.control.value;
+      } else if (useRemember) {
+        if (r.cb?.checked) obj[r.name] = r.control.value;
+        else delete obj[r.name];
+      }
     }
     const json = JSON.stringify(obj);
     if (json !== JSON.stringify(remembered)) {
@@ -3441,11 +3641,11 @@ function promptVarsDialog(vars) {
   $("vars-ok").textContent = t("varsCopy");
   varsCleanup?.(null);
   root.classList.remove("hidden");
-  inputs[0]?.focus();
+  rows[0]?.control.focus();
   return new Promise((resolve) => {
     const ok = $("vars-ok");
     const cancel = $("vars-close");
-    const collect = () => Object.fromEntries(inputs.map((i) => [i.dataset.var, i.value]));
+    const collect = () => Object.fromEntries(rows.map((r) => [r.token, r.control.value]));
     // The click/keypress that OPENED this dialog is still in flight: arm the
     // backdrop + Enter close handlers only on the next frame so that same event
     // can't immediately dismiss the dialog (it was flashing shut instantly).
@@ -3544,11 +3744,11 @@ async function copyTextWithVars(p, el, allowPaste = false) {
   };
   overlay.addEventListener("pointerdown", onSecond, true); // capture: before the dismiss
   const stopArming = setTimeout(() => overlay.removeEventListener("pointerdown", onSecond, true), val("dblClickMs"));
-  const values = await promptVarsDialog(extractVars(p.text));
+  const text = await resolveVars(p.text);
   clearTimeout(stopArming);
   overlay.removeEventListener("pointerdown", onSecond, true);
-  if (!values) return;
-  const ok = await invoke("copy_text", { text: fillVars(p.text, values) })
+  if (text === null) return;
+  const ok = await invoke("copy_text", { text })
     .catch((e) => { toast(String(e)); return false; });
   if (ok) {
     showCopied(el);
@@ -3614,9 +3814,9 @@ async function activateTile(id) {
   const el = gridEl.querySelector(`.tile[data-id="${CSS.escape(id)}"]`);
   if (chainMode) { await toggleChainPick(p); return; }
   if (copyOnCooldown(id)) return;
-  if (flag("promptVars") && !p.copy_image && !p.file_path && extractVars(p.text).length) {
+  if (dialogTokens(p).length) {
     await copyTextWithVars(p, el, true); // Enter means copy + paste
-  } else if (await invoke("copy_prompt", { id }).catch((e) => { toast(String(e)); return false; })) {
+  } else if (await copyResolved(p)) {
     if (el) showCopied(el);
     recordCopy(id);
     if (flag("autoPaste")) await autoPasteNow(el); // F19: Enter = copy + paste
@@ -4405,8 +4605,10 @@ function syncModalImageUi(mode) {
   // Full-height dialog only when editing a text prompt (max textarea space).
   modal.root.classList.toggle("tall", textVisible);
   modal.text.classList.toggle("hidden", !textVisible);
-  modal.textBar.classList.toggle("hidden", !(textVisible && flag("promptVars")));
-  modal.varsHint.classList.toggle("hidden", !(textVisible && flag("promptVars")));
+  const varsUi = textVisible && flag("promptVars");
+  modal.textBar.classList.toggle("hidden", !varsUi);
+  modal.varsHint.classList.toggle("hidden", !varsUi);
+  if (varsUi) renderVarHelper(); // F12/F13 chips + insert row follow their flags
   updateLenCounter();
   // F7: version history only for existing text prompts; reset to collapsed on open.
   const histOn = mode === "edit" && textVisible && flag("promptHistory");
@@ -5861,25 +6063,23 @@ async function batchExport(format) {
   }
 }
 
-// Copy a prompt from the library (handles {{variables}}), then optionally close.
-// Copy a prompt, asking for {{variables}} first when applicable. Returns false
-// if the copy failed or the user cancelled the variable dialog. Shared by the
-// library and the copy-history journal so both honour variable prompts.
+// Copy a prompt, filling {#{variables}#} first when applicable — reserved names
+// resolve silently, the rest go through the dialog. Returns false if the copy
+// failed or the user cancelled. The single copy entry point for every path that
+// does not run the dialog's own double-click handling (grid, library, journal).
 async function copyResolved(p) {
-  const useVars = flag("promptVars") && !p.copy_image && !p.file_path && extractVars(p.text).length;
-  if (useVars) {
-    const values = await promptVarsDialog(extractVars(p.text));
-    if (!values) return false;
-    return invoke("copy_text", { text: fillVars(p.text, values) }).catch(() => false);
+  if (varTokens(p).length) {
+    const text = await resolveVars(p.text);
+    if (text === null) return false;
+    return invoke("copy_text", { text }).catch(() => false);
   }
   return invoke("copy_prompt", { id: p.id }).catch((e) => { toast(String(e)); return false; });
 }
 
 async function libraryCopy(p) {
-  const hasVars = flag("promptVars") && !p.copy_image && !p.file_path && extractVars(p.text).length > 0;
-  // Variable prompts skip the double-click shortcut: they must reach the dialog
-  // (copyResolved) so the variables get asked before copy + auto-paste.
-  if (!hasVars && autoPasteDouble(p.id)) { await autoPasteNow(null); return; } // F19: 2nd fast click pastes
+  // Prompts that still need input skip the double-click shortcut: they must reach
+  // the dialog (copyResolved) so the variables get asked before copy + auto-paste.
+  if (!dialogTokens(p).length && autoPasteDouble(p.id)) { await autoPasteNow(null); return; } // F19: 2nd fast click pastes
   if (copyOnCooldown(p.id)) return;
   if (!(await copyResolved(p))) return;
   recordCopy(p.id);

@@ -73,6 +73,12 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html") -> Path
         for i in range(n_rows)
     )
     swatches = '<button type="button" class="swatch"></button>' * 10
+    # The F12/F13 variable helper sits above the textarea and wraps on a narrow
+    # dialog, so it has to count against the height the history is left with.
+    var_chips = "".join(
+        f'<button type="button" class="vars-chip">{n}</button>'
+        for n in ("date", "time", "datetime", "weekday", "clipboard", "uuid")
+    )
     # Tag chips wrap over several lines on a narrow dialog; the harness carries the
     # feature class so that extra row counts against the available height.
     tag_chips = "".join(
@@ -94,6 +100,15 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html") -> Path
     <input id="modal-name" class="modal-input" type="text" value="Code Review">
     <button type="button" class="clear-btn show">x</button></span>
     <button type="button" id="modal-fav" class="modal-fav-star">&#9733;</button></div>
+  <div id="modal-text-bar" class="modal-text-bar">
+    <p id="modal-vars-hint" class="modal-hint modal-vars-hint">Tip: a variable is asked when copying.</p>
+    <div id="modal-vars-chips" class="vars-chips">{var_chips}</div>
+    <div id="modal-vars-new" class="vars-new">
+      <input id="modal-var-name" class="modal-input vars-new-name" type="text">
+      <input id="modal-var-opts" class="modal-input vars-new-opts" type="text">
+      <button type="button" id="modal-var-add" class="ghost-btn">Insert</button></div>
+    <p id="modal-vars-dyn-hint" class="modal-hint">These names fill themselves in and are never asked for.</p>
+    <p id="modal-vars-choice-hint" class="modal-hint">Options turn the variable into a dropdown.</p></div>
   <span class="clear-wrap clear-wrap-ta">
     <textarea id="modal-text" class="modal-input modal-text" rows="6">Review the following code.</textarea>
     <button type="button" class="clear-btn show">x</button></span>

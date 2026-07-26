@@ -9,10 +9,15 @@ window.addEventListener("unhandledrejection", (e) =>
 const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   id: "p" + i,
   name: "Prompt " + (i + 1),
-  // One prompt carries a placeholder so the fill-in dialog gets exercised too.
+  // One prompt carries a placeholder so the fill-in dialog gets exercised too;
+  // p3 is dynamic-only (must NOT ask) and p5 mixes a choice with a text variable.
   text: i === 1
     ? "Translate {#{Text}#} into {#{Language}#}."
-    : "Example prompt body number " + (i + 1) + ".",
+    : i === 3
+      ? "Meeting on {#{date}#} at {#{time}#}: {#{clipboard}#}"
+      : i === 5
+        ? "Write a {#{tone|formal,casual,witty}#} note about {#{Topic}#}."
+        : "Example prompt body number " + (i + 1) + ".",
   color: ["#3b82f6", "#ef4444", "#10b981", "#f59e0b"][i % 4],
   favorite: i % 5 === 0,
   // Two shared tags plus untagged prompts, so a filter chip visibly narrows the list.
@@ -152,7 +157,9 @@ const RESULTS = {
   // The copy commands report success; the UI skips everything that follows a copy
   // (feedback, history, auto-paste) when they come back falsy.
   copy_prompt: () => true,
-  copy_text: () => true,
+  // The resolved text is kept so the probe can assert what the placeholders became.
+  copy_text: (a) => { window.__LAST_COPY__ = a && a.text; return true; },
+  clipboard_text: () => "CLIPTEXT",
   // Always offer the portable take-over so the dialog is exercised on every run.
   takeover_offer: () => "C:\\Users\\Example\\AppData\\Roaming\\Prompt-Saver",
   takeover_apply: () => null,

@@ -3392,6 +3392,15 @@ async fn copy_text(text: String) -> bool {
         .is_ok()
 }
 
+// F12 `{#{clipboard}#}`: the clipboard's current text for the placeholder resolver.
+// Empty when the clipboard holds no text at all (an image or file payload).
+#[tauri::command]
+async fn clipboard_text() -> String {
+    arboard::Clipboard::new()
+        .and_then(|mut c| c.get_text())
+        .unwrap_or_default()
+}
+
 // Safety ceiling for the copy-history length; the live limit is the expert value
 // historyMax (default 100, up to this ceiling). The history lives in its own
 // table with O(log n) append/trim, so even the ceiling stays fast on every copy.
@@ -6820,6 +6829,7 @@ pub fn run() {
             delete_custom_theme,
             copy_prompt,
             copy_text,
+            clipboard_text,
             record_copy,
             clear_copy_history,
             recent_copies,
@@ -7256,6 +7266,21 @@ mod tests {
         assert_eq!(rows[2][12], "18");
         assert_eq!(rows[1][13], "Work,E-Mail");
         assert_eq!(rows[2][13], "");
+    }
+
+    // F13: a choice variable is plain prompt text, so neither exporter may touch
+    // its `|` or its commas — a mangled token would silently lose the options.
+    #[test]
+    fn choice_variable_survives_txt_and_csv_export() {
+        const BODY: &str = "Write a {#{tone|formal,casual,witty}#} note about {#{Topic}#}.";
+        let mut prompts = sample_prompts();
+        prompts[0].text = BODY.into();
+        prompts[0].image = String::new(); // a text prompt, not the media sample
+        prompts[0].show_image = false;
+        prompts[0].copy_image = false;
+        assert_eq!(parse_txt(&to_txt(&prompts)).prompts[0].text, BODY);
+        assert_eq!(parse_csv(&to_csv(&prompts))[1][1], BODY);
+        assert_eq!(parse_csv_data(&to_csv(&prompts)).prompts[0].text, BODY);
     }
 
     #[test]

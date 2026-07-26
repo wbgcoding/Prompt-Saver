@@ -176,6 +176,18 @@
       <p id="modal-file-hint" class="modal-hint hidden" data-i18n="fileHint">Only the file path is saved.</p>
       <div id="modal-text-bar" class="modal-text-bar hidden">
         <p id="modal-vars-hint" class="modal-hint modal-vars-hint hidden" data-i18n="varsHint">Tip: {#{VariableName}#} is asked when copying.</p>
+        <!-- F12/F13 variable helper: the reserved names as insertable chips, plus a
+             name + options field that writes a placeholder at the caret. -->
+        <div id="modal-vars-chips" class="vars-chips hidden"></div>
+        <div id="modal-vars-new" class="vars-new">
+          <input id="modal-var-name" class="modal-input vars-new-name" type="text" maxlength="60"
+                 autocomplete="off" data-i18n-ph="varNamePh" data-i18n-aria="varNamePh" />
+          <input id="modal-var-opts" class="modal-input vars-new-opts hidden" type="text" maxlength="140"
+                 autocomplete="off" data-i18n-ph="varOptsPh" data-i18n-aria="varOptsPh" />
+          <button type="button" id="modal-var-add" class="ghost-btn" data-i18n="varsInsert">Insert</button>
+        </div>
+        <p id="modal-vars-dyn-hint" class="modal-hint hidden" data-i18n="varsDynHint"></p>
+        <p id="modal-vars-choice-hint" class="modal-hint hidden" data-i18n="varsChoiceHint"></p>
       </div>
       <textarea id="modal-text" class="modal-input modal-text hidden" rows="6" data-i18n-ph="promptPh"></textarea>
       <!-- Live length readout (chars / words / ~tokens), expert-tunable -->

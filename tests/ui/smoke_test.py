@@ -117,6 +117,103 @@ PROBE = """
         out.errors.push('a single click on a variable prompt pasted into the previous app');
       }
     }
+    // The chain button latches (off -> on -> infinite), so the two clicks above left
+    // it armed; a picked tile would go into the chain instead of being copied.
+    for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
+    if (document.body.classList.contains('chain-mode')) out.errors.push('chain mode could not be switched off');
+    // F12/F13: clicking a tile, but through the same real pointer sequence.
+    const clickTile = async (id) => {
+      const el = [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === id);
+      if (!el) return false;
+      for (const type of ['pointerdown', 'pointerup', 'click']) {
+        el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 1 }));
+      }
+      await sleep(400);
+      return true;
+    };
+    const varsHidden = () => document.getElementById('vars-modal').classList.contains('hidden');
+    // F12: a prompt whose placeholders all resolve themselves must never ask, and
+    // the copied text must carry no leftover {#{ }#} fence.
+    window.__LAST_COPY__ = undefined;
+    if (!await clickTile('p3')) {
+      out.errors.push('the dynamic-placeholder prompt is missing from the grid');
+    } else {
+      if (!varsHidden()) { out.errors.push('an automatic placeholder still opened the fill-in dialog'); await click('vars-close'); }
+      const copied = window.__LAST_COPY__ || '';
+      if (/\\{#\\{/.test(copied)) out.errors.push('an automatic placeholder was left unresolved: ' + copied);
+      if (!copied.includes('CLIPTEXT')) out.errors.push('the clipboard placeholder did not pick up the clipboard text');
+      if (!/Meeting on \\S/.test(copied)) out.errors.push('the date placeholder produced nothing');
+    }
+    // F13: a mixed prompt asks only for the manual variable and offers the choice
+    // as a themed dropdown; the pick lands in the copied text.
+    window.__LAST_COPY__ = undefined;
+    if (!await clickTile('p5')) {
+      out.errors.push('the choice-variable prompt is missing from the grid');
+    } else if (varsHidden()) {
+      out.errors.push('the mixed variable prompt did not open the fill-in dialog');
+    } else {
+      const sel = document.querySelector('#vars-fields select.vars-select');
+      const texts = document.querySelectorAll('#vars-fields input[type=text]');
+      if (!sel) {
+        out.errors.push('the choice variable is not rendered as a dropdown');
+      } else {
+        if ([...sel.options].map(o => o.value).join(',') !== 'formal,casual,witty') {
+          out.errors.push('the choice dropdown lists the wrong options');
+        }
+        if (sel.value !== 'formal') out.errors.push('the choice dropdown did not preselect the first option');
+        sel.value = 'witty';
+      }
+      if (texts.length !== 1) out.errors.push('the mixed dialog shows ' + texts.length + ' text fields instead of 1');
+      if (texts[0]) texts[0].value = 'Rust';
+      await click('vars-ok');
+      await sleep(250);
+      const copied = window.__LAST_COPY__ || '';
+      if (copied !== 'Write a witty note about Rust.') out.errors.push('the filled text is wrong: ' + copied);
+    }
+    // The chosen option must come back preselected on the next copy.
+    if (await clickTile('p5')) {
+      const sel2 = document.querySelector('#vars-fields select.vars-select');
+      if (!sel2 || sel2.value !== 'witty') out.errors.push('the last choice was not remembered');
+      await click('vars-close');
+      await sleep(200);
+    }
+    // The editor helper offers the reserved names as chips and writes a token.
+    const editTile = [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === 'p0');
+    if (editTile) {
+      editTile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(200);
+      const edit = document.querySelector('#ctx [data-act="edit"]');
+      if (edit) { edit.click(); await sleep(400); }
+    }
+    if (document.getElementById('modal').classList.contains('hidden')) {
+      out.tabs.push('(variable helper check skipped: the editor did not open)');
+    } else {
+      const chips = [...document.querySelectorAll('#modal-vars-chips .vars-chip')];
+      if (chips.length !== 6) {
+        out.errors.push('the editor lists ' + chips.length + ' automatic placeholders instead of 6');
+      } else if (chips.some(c => !c.title.trim())) {
+        out.errors.push('an automatic placeholder chip has no explanation');
+      }
+      const ta = document.getElementById('modal-text');
+      const before = ta.value;
+      chips[0] && chips[0].click();
+      await sleep(150);
+      if (ta.value === before || !ta.value.includes('{#{date}#}')) {
+        out.errors.push('clicking a placeholder chip did not insert it');
+      }
+      document.getElementById('modal-var-name').value = 'tone';
+      document.getElementById('modal-var-opts').value = ' formal , casual ,, ';
+      document.getElementById('modal-var-add').click();
+      await sleep(150);
+      if (!ta.value.includes('{#{tone|formal,casual}#}')) {
+        out.errors.push('the helper did not insert a choice variable: ' + ta.value);
+      }
+      await click('modal-close-x');
+      await sleep(250);
+      // Editing made the dialog dirty, so the discard confirmation may step in.
+      const cm2 = document.getElementById('confirm-modal');
+      if (!cm2.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+    }
     // F9 view groups: a group is one folder tab, its popover lists the members,
     // picking one marks the group active and names the view on the tab, and taking
     // a view back out gives it its own tab again.
