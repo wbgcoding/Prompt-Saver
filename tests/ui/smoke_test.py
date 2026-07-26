@@ -61,9 +61,32 @@ PROBE = """
       if (!/\\n/.test(msg)) out.errors.push('take-over dialog lost its line breaks');
       await click('confirm-cancel'); // "start empty"
     }
-    await click('open-library');
+    await click('library-btn');
+    // Tags: the filter row lists them, a chip narrows the list, the manager opens.
+    const chips = [...document.querySelectorAll('#library-tagbar .tag-filter')];
+    if (chips.length < 2) {
+      out.errors.push('the library tag filter row is empty');
+    } else {
+      const before = document.querySelectorAll('#library-list .lib-item').length;
+      chips[0].click();
+      await sleep(250);
+      const after = document.querySelectorAll('#library-list .lib-item').length;
+      if (after >= before) out.errors.push('a tag chip did not narrow the library list');
+      const active = document.querySelector('#library-tagbar .tag-filter.active');
+      if (!active) out.errors.push('the selected tag chip is not marked active');
+      else { active.click(); await sleep(200); }
+      const mgr = [...document.querySelectorAll('#library-tagbar .tag-action')].pop();
+      if (mgr) { mgr.click(); await sleep(250); }
+      const tm = document.getElementById('tag-modal');
+      if (tm.classList.contains('hidden')) {
+        out.errors.push('the tag manager did not open');
+      } else if (!document.querySelectorAll('#tag-modal-list .tag-manage-row').length) {
+        out.errors.push('the tag manager listed no tags');
+      }
+      await click('tag-modal-close');
+    }
     await click('library-close');
-    await click('open-journal');
+    await click('journal-btn');
     await click('journal-close');
     const tile = document.querySelector('#grid .tile');
     if (tile) { tile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })); await sleep(150); }

@@ -107,6 +107,10 @@ struct Prompt {
     // Marked as a favorite (starred) in the library.
     #[serde(default)]
     favorite: bool,
+    // F1: free-form tag names. Compared case-insensitively; the casing stored here
+    // is the one first used in the library (see sanitize_tags).
+    #[serde(default)]
+    tags: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -194,6 +198,10 @@ struct Settings {
     // F6: prompt-id pairs (sorted) the user marked "not a duplicate" — never regrouped.
     #[serde(default)]
     dup_ignored: Vec<[String; 2]>,
+    // F1: tag key (the lowercased name) -> chip color (#rrggbb). Keyed lowercase so a
+    // recased tag keeps its color. A tag without an entry renders neutral.
+    #[serde(default)]
+    tag_colors: HashMap<String, String>,
     // Legacy in-blob copy history. Read once on upgrade to migrate into the
     // dedicated `copy_log` table, then never written back (the table owns it so
     // a million-entry history never bloats this encrypted settings blob).
@@ -270,6 +278,7 @@ impl Default for Settings {
             ui_values: HashMap::new(),
             ui_texts: HashMap::new(),
             dup_ignored: Vec::new(),
+            tag_colors: HashMap::new(),
             copy_log: Vec::new(),
             usage: HashMap::new(),
             last_used: HashMap::new(),
@@ -1555,11 +1564,13 @@ async fn add_prompt(
     font: Option<String>,
     font_size: Option<u32>,
     favorite: Option<bool>,
+    tags: Option<Vec<String>>,
 ) -> Result<Prompt, String> {
     // One lock for the whole op so the storeFiles flag can't change mid-insert.
     let prompt = {
         let mut store = lock(&state);
         let store_files = store_files_enabled(&store);
+        let tags = sanitize_tags(tags.unwrap_or_default(), &canonical_tags(&store.prompts))?;
         let mut fp = file_path.unwrap_or_default();
         let mut ip = icon_path.unwrap_or_default();
         if store_files {
@@ -1581,6 +1592,7 @@ async fn add_prompt(
             font: font.unwrap_or_default(),
             font_size: clamp_font_size(font_size.unwrap_or(0)),
             favorite: favorite.unwrap_or(false),
+            tags,
         };
         let view = store.settings.active_view_mut();
         if let Some(cell) = first_free_cell(view) {
@@ -1614,10 +1626,15 @@ async fn update_prompt(
     font: Option<String>,
     font_size: Option<u32>,
     favorite: Option<bool>,
+    tags: Option<Vec<String>>,
 ) -> Result<Option<Prompt>, String> {
     let updated = {
         let mut store = lock(&state);
         let store_files = store_files_enabled(&store);
+        let tags = match tags {
+            Some(list) => Some(sanitize_tags(list, &canonical_tags(&store.prompts))?),
+            None => None,
+        };
         let file_path = file_path.map(|p| if store_files { store_attached_file(&app, &p) } else { p });
         let icon_path = icon_path.map(|p| if store_files { store_attached_file(&app, &p) } else { p });
         // F7: read history settings before the mutable prompt borrow (a MutexGuard
@@ -1649,6 +1666,7 @@ async fn update_prompt(
                     p.font_size = clamp_font_size(fs);
                 }
                 if let Some(fav) = favorite { p.favorite = fav; }
+                if let Some(t) = tags { p.tags = t; }
                 let clone = p.clone();
                 save_prompts(&app, &store);
                 cleanup_orphan_files(&app, &store); // a replaced attachment orphans its old copy
@@ -2076,6 +2094,177 @@ fn set_view_grid(app: AppHandle, state: State<Db>, id: String, cols: u32, rows: 
     }
     save_settings(&app, &store.settings);
     store.settings.clone()
+}
+
+// ---------- Tag commands (F1) ----------
+
+const MAX_TAG_LEN: usize = 60;
+const MAX_TAGS_PER_PROMPT: usize = 50;
+
+fn tag_key(name: &str) -> String {
+    name.trim().to_lowercase()
+}
+
+// Commas separate tags in the TXT/CSV exports and control characters would break the
+// line-based TXT format, so neither may appear inside a name.
+fn tag_chars_ok(name: &str) -> bool {
+    !name.contains(',') && !name.chars().any(|c| c.is_control())
+}
+
+// The casing each known tag is already stored with, so a tag typed as "work" joins
+// an existing "Work" instead of splitting into a second chip.
+fn canonical_tags(prompts: &[Prompt]) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    for p in prompts {
+        for t in &p.tags {
+            map.entry(tag_key(t)).or_insert_with(|| t.clone());
+        }
+    }
+    map
+}
+
+// Trim, drop blank entries, fold case-insensitive duplicates onto the casing the
+// library already uses. Over-long / over-many names are rejected, never truncated.
+fn sanitize_tags(input: Vec<String>, known: &HashMap<String, String>) -> Result<Vec<String>, String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for raw in input {
+        let name = raw.trim();
+        if name.is_empty() {
+            continue;
+        }
+        if name.chars().count() > MAX_TAG_LEN {
+            return Err(format!("tag name longer than {} characters", MAX_TAG_LEN));
+        }
+        if !tag_chars_ok(name) {
+            return Err("tag name contains a comma or a control character".to_string());
+        }
+        let key = tag_key(name);
+        if !seen.insert(key.clone()) {
+            continue;
+        }
+        out.push(known.get(&key).cloned().unwrap_or_else(|| name.to_string()));
+    }
+    if out.len() > MAX_TAGS_PER_PROMPT {
+        return Err(format!("more than {} tags on one prompt", MAX_TAGS_PER_PROMPT));
+    }
+    Ok(out)
+}
+
+// A single tag name argument: blank is an error here because the name IS the input.
+fn valid_tag_name(name: &str) -> Result<String, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("tag name is empty".to_string());
+    }
+    if name.chars().count() > MAX_TAG_LEN {
+        return Err(format!("tag name longer than {} characters", MAX_TAG_LEN));
+    }
+    if !tag_chars_ok(name) {
+        return Err("tag name contains a comma or a control character".to_string());
+    }
+    Ok(name.to_string())
+}
+
+// "" clears the chip color back to neutral; anything else must be #rrggbb.
+fn valid_tag_color(color: &str) -> Result<String, String> {
+    let c = color.trim();
+    if c.is_empty() {
+        return Ok(String::new());
+    }
+    let ok = c.len() == 7 && c.starts_with('#') && c[1..].chars().all(|ch| ch.is_ascii_hexdigit());
+    if ok {
+        Ok(c.to_lowercase())
+    } else {
+        Err("color must be #rrggbb".to_string())
+    }
+}
+
+// Swap one tag key for a new name across every prompt. Renaming onto a tag a prompt
+// already carries merges the two instead of duplicating it. Returns whether anything
+// changed, so an unused name costs no write.
+fn rename_tag_in(prompts: &mut [Prompt], old_key: &str, new: &str) -> bool {
+    let mut changed = false;
+    for p in prompts {
+        if !p.tags.iter().any(|t| tag_key(t) == old_key) {
+            continue;
+        }
+        let mut kept: Vec<String> = Vec::with_capacity(p.tags.len());
+        for t in std::mem::take(&mut p.tags) {
+            let name = if tag_key(&t) == old_key { new.to_string() } else { t };
+            if !kept.iter().any(|k| tag_key(k) == tag_key(&name)) {
+                kept.push(name);
+            }
+        }
+        p.tags = kept;
+        changed = true;
+    }
+    changed
+}
+
+// Drop one tag key from every prompt. Returns whether anything changed.
+fn remove_tag_from(prompts: &mut [Prompt], key: &str) -> bool {
+    let mut changed = false;
+    for p in prompts {
+        let before = p.tags.len();
+        p.tags.retain(|t| tag_key(t) != key);
+        changed |= p.tags.len() != before;
+    }
+    changed
+}
+
+// Replace `old` with `new` in every prompt and move the color entry, in ONE store
+// pass — a tag on hundreds of prompts must not turn into hundreds of round trips.
+// Idempotent, and renaming onto an existing tag merges the two.
+#[tauri::command]
+async fn rename_tag(
+    app: AppHandle,
+    state: State<'_, Db>,
+    old: String,
+    new: String,
+) -> Result<Settings, String> {
+    let old = valid_tag_name(&old)?;
+    let new = valid_tag_name(&new)?;
+    let (old_key, new_key) = (tag_key(&old), tag_key(&new));
+    let mut store = lock(&state);
+    let prompts_changed = rename_tag_in(&mut store.prompts, &old_key, &new);
+    if let Some(color) = store.settings.tag_colors.remove(&old_key) {
+        // The target's own color wins if it already has one — it is the surviving tag.
+        store.settings.tag_colors.entry(new_key).or_insert(color);
+    }
+    if prompts_changed {
+        save_prompts(&app, &store);
+    }
+    save_settings(&app, &store.settings);
+    Ok(store.settings.clone())
+}
+
+// Remove a tag from every prompt plus its color entry. Idempotent.
+#[tauri::command]
+async fn delete_tag(app: AppHandle, state: State<'_, Db>, name: String) -> Result<Settings, String> {
+    let key = tag_key(&valid_tag_name(&name)?);
+    let mut store = lock(&state);
+    let prompts_changed = remove_tag_from(&mut store.prompts, &key);
+    store.settings.tag_colors.remove(&key);
+    if prompts_changed {
+        save_prompts(&app, &store);
+    }
+    save_settings(&app, &store.settings);
+    Ok(store.settings.clone())
+}
+
+#[tauri::command]
+fn set_tag_color(app: AppHandle, state: State<Db>, name: String, color: String) -> Result<Settings, String> {
+    let key = tag_key(&valid_tag_name(&name)?);
+    let color = valid_tag_color(&color)?;
+    let mut store = lock(&state);
+    if color.is_empty() {
+        store.settings.tag_colors.remove(&key);
+    } else {
+        store.settings.tag_colors.insert(key, color);
+    }
+    save_settings(&app, &store.settings);
+    Ok(store.settings.clone())
 }
 
 // ---------- View commands ----------
@@ -5008,7 +5197,7 @@ fn csv_row(cells: &[&str]) -> String {
 fn to_csv(prompts: &[Prompt]) -> String {
     let head = [
         "name", "text", "positions", "color", "font", "size", "file", "icon", "show", "copy",
-        "image", "caption", "capsize",
+        "image", "caption", "capsize", "tags",
     ];
     let mut rows = vec![csv_row(&head)];
     for p in prompts {
@@ -5026,6 +5215,7 @@ fn to_csv(prompts: &[Prompt]) -> String {
             &p.image,
             &p.caption,
             &p.caption_size.to_string(),
+            &p.tags.join(","),
         ]));
     }
     rows.join("\r\n")
@@ -5036,6 +5226,9 @@ fn to_txt(prompts: &[Prompt]) -> String {
         let mut block = format!("### {}\n{}", p.name, p.text);
         if !p.color.is_empty() {
             block.push_str(&format!("\n@color {}", p.color));
+        }
+        if !p.tags.is_empty() {
+            block.push_str(&format!("\n@tags {}", p.tags.join(",")));
         }
         // Per-tile style: "@style <font-key|-> <size>" ("-" = default font).
         if !p.font.is_empty() || p.font_size > 0 {
@@ -5151,10 +5344,19 @@ struct ImportedPrompt {
     show_image: bool,
     copy_image: bool,
     image: String,
+    tags: Vec<String>,
     // Parsed from legacy exports so their @positions block is consumed cleanly;
     // grid layout is no longer imported (prompts-only import).
     #[allow(dead_code)]
     positions: Vec<String>,
+}
+
+// "a,b , c" -> ["a", "b", "c"]. Used by both import parsers; empty parts drop out.
+fn split_tag_list(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect()
 }
 
 // 0 = follow settings, 1 = auto-fit, otherwise a fixed pixel size.
@@ -5268,6 +5470,10 @@ fn parse_txt(content: &str) -> ImportData {
             }
             None => (body, String::new(), 0),
         };
+        let (body, tags) = match body.rsplit_once("\n@tags ") {
+            Some((t, v)) => (t.to_string(), split_tag_list(v)),
+            None => (body, Vec::new()),
+        };
         let (text, color) = match body.rsplit_once("\n@color ") {
             Some((t, c)) => (t.to_string(), c.trim().to_string()),
             None => (body, String::new()),
@@ -5285,6 +5491,7 @@ fn parse_txt(content: &str) -> ImportData {
             show_image,
             copy_image,
             image,
+            tags,
             positions,
         });
     }
@@ -5336,6 +5543,7 @@ fn parse_csv_data(content: &str) -> ImportData {
                 image: row.get(10).map(|v| v.trim().to_string()).unwrap_or_default(),
                 caption: row.get(11).map(|v| v.trim().to_string()).unwrap_or_default(),
                 caption_size: row.get(12).and_then(|v| v.trim().parse().ok()).unwrap_or(0),
+                tags: row.get(13).map(|v| split_tag_list(v)).unwrap_or_default(),
                 positions: row
                     .get(2)
                     .map(|p| {
@@ -5381,9 +5589,16 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>) -> Result<usize, S
         .map(|p| sig(&p.name, &p.text, &p.file_path, &p.image, p.copy_image))
         .collect();
     let mut count = 0usize;
+    // Grows while importing so tags introduced by the file itself also settle on one casing.
+    let mut known = canonical_tags(&store.prompts);
     for item in data.prompts {
         if !seen.insert(sig(&item.name, &item.text, &item.file_path, &item.image, item.copy_image)) {
             continue; // duplicate of an existing (or earlier imported) prompt
+        }
+        // A malformed tag in an imported file must not abort the whole import.
+        let tags = sanitize_tags(item.tags, &known).unwrap_or_default();
+        for t in &tags {
+            known.entry(tag_key(t)).or_insert_with(|| t.clone());
         }
         let prompt = Prompt {
             id: gen_id(),
@@ -5400,6 +5615,7 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>) -> Result<usize, S
             font: item.font,
             font_size: clamp_font_size(item.font_size),
             favorite: false,
+            tags,
         };
         store.prompts.push(prompt);
         count += 1;
@@ -6227,6 +6443,9 @@ pub fn run() {
             set_tile_style,
             set_layout,
             set_view_grid,
+            rename_tag,
+            delete_tag,
+            set_tag_color,
             add_view,
             rename_view,
             set_view_color,
@@ -6576,6 +6795,7 @@ mod tests {
                 font: "mono".into(),
                 font_size: 24,
                 favorite: false,
+                tags: vec!["Work".into(), "E-Mail".into()],
             },
             Prompt {
                 id: "p2".into(),
@@ -6592,6 +6812,7 @@ mod tests {
                 font: String::new(),
                 font_size: 1,
                 favorite: false,
+                tags: Vec::new(),
             },
         ]
     }
@@ -6651,6 +6872,8 @@ mod tests {
         assert_eq!(p2.caption, "Mein Untertitel");
         assert_eq!(p2.caption_size, 18);
         assert!(p2.show_image && !p2.copy_image);
+        assert_eq!(p1.tags, vec!["Work".to_string(), "E-Mail".to_string()]);
+        assert!(p2.tags.is_empty());
     }
 
     #[test]
@@ -6669,6 +6892,8 @@ mod tests {
         assert_eq!(rows[2][7], "C:\\tmp\\clip.mp4");
         assert_eq!(rows[2][11], "Mein Untertitel");
         assert_eq!(rows[2][12], "18");
+        assert_eq!(rows[1][13], "Work,E-Mail");
+        assert_eq!(rows[2][13], "");
     }
 
     #[test]
@@ -6680,11 +6905,13 @@ mod tests {
         assert!(p1.show_image && p1.copy_image);
         assert_eq!(p1.image, "data:image/png;base64,QUJD");
         assert_eq!(p1.text, "Hello\nWorld");
+        assert_eq!(p1.tags, vec!["Work".to_string(), "E-Mail".to_string()]);
         let p2 = &data.prompts[1];
         assert_eq!(p2.file_path, "C:\\tmp\\report.pdf");
         assert_eq!(p2.icon_path, "C:\\tmp\\clip.mp4");
         assert_eq!(p2.caption, "Mein Untertitel");
         assert_eq!(p2.caption_size, 18);
+        assert!(p2.tags.is_empty());
     }
 
     #[test]
@@ -6736,6 +6963,77 @@ mod tests {
         let data = b"\x00\x01\x02\xff\xfe hello";
         assert_eq!(base64_decode(&base64_encode(data)), data);
         assert!(base64_decode("not valid base64!@#").is_empty());
+    }
+
+    // F1: a file written before tags existed must import unchanged, with no tags.
+    #[test]
+    fn old_exports_without_tags_still_parse() {
+        let txt = "### Old\nSome text\n@color #123456\n@style mono 20";
+        let data = parse_txt(txt);
+        assert_eq!(data.prompts[0].text, "Some text");
+        assert_eq!(data.prompts[0].color, "#123456");
+        assert_eq!(data.prompts[0].font, "mono");
+        assert!(data.prompts[0].tags.is_empty());
+
+        // Same for a CSV row that stops before the tags column.
+        let csv = "\"name\";\"text\"\r\n\"Old\";\"Some text\"";
+        let data = parse_csv_data(csv);
+        assert_eq!(data.prompts.len(), 1);
+        assert!(data.prompts[0].tags.is_empty());
+    }
+
+    #[test]
+    fn tags_are_deduped_case_insensitively_keeping_known_casing() {
+        let known = canonical_tags(&sample_prompts()); // "Work", "E-Mail"
+        let out = sanitize_tags(
+            vec![" work ".into(), "WORK".into(), "".into(), "  ".into(), "New".into()],
+            &known,
+        )
+        .expect("valid tags");
+        assert_eq!(out, vec!["Work".to_string(), "New".to_string()]);
+        // An unknown tag keeps the casing it was typed with.
+        assert_eq!(sanitize_tags(vec!["MiXeD".into()], &HashMap::new()).unwrap(), vec!["MiXeD"]);
+    }
+
+    // One pass over the whole store, so a tag on many prompts stays one operation.
+    #[test]
+    fn renaming_a_tag_rewrites_every_prompt_at_once() {
+        let mut prompts = sample_prompts(); // p1: ["Work", "E-Mail"], p2: []
+        prompts[1].tags = vec!["work".into(), "Draft".into()];
+        assert!(rename_tag_in(&mut prompts, "work", "Job"));
+        assert_eq!(prompts[0].tags, vec!["Job".to_string(), "E-Mail".to_string()]);
+        assert_eq!(prompts[1].tags, vec!["Job".to_string(), "Draft".to_string()]);
+        // Renaming onto a tag the prompt already has merges instead of duplicating.
+        assert!(rename_tag_in(&mut prompts, "e-mail", "Job"));
+        assert_eq!(prompts[0].tags, vec!["Job".to_string()]);
+        // A name nobody uses changes nothing, so no save is triggered.
+        assert!(!rename_tag_in(&mut prompts, "nothing", "Else"));
+    }
+
+    #[test]
+    fn deleting_a_tag_clears_it_everywhere() {
+        let mut prompts = sample_prompts();
+        prompts[1].tags = vec!["WORK".into()];
+        assert!(remove_tag_from(&mut prompts, "work"));
+        assert_eq!(prompts[0].tags, vec!["E-Mail".to_string()]);
+        assert!(prompts[1].tags.is_empty());
+        assert!(!remove_tag_from(&mut prompts, "work")); // idempotent
+    }
+
+    #[test]
+    fn tag_input_is_validated() {
+        let empty = HashMap::new();
+        assert!(sanitize_tags(vec!["a".repeat(MAX_TAG_LEN + 1)], &empty).is_err());
+        assert!(sanitize_tags(vec!["a,b".into()], &empty).is_err()); // comma = separator
+        assert!(sanitize_tags(vec!["a\nb".into()], &empty).is_err()); // breaks the TXT format
+        assert!(sanitize_tags(vec!["a".repeat(MAX_TAG_LEN)], &empty).is_ok());
+        assert!(valid_tag_name("  ").is_err());
+        assert_eq!(valid_tag_name(" Work ").unwrap(), "Work");
+        // Colors: empty clears, #rrggbb is normalized, anything else is refused.
+        assert_eq!(valid_tag_color("  ").unwrap(), "");
+        assert_eq!(valid_tag_color("#AABBCC").unwrap(), "#aabbcc");
+        assert!(valid_tag_color("red").is_err());
+        assert!(valid_tag_color("#abc").is_err());
     }
 
     #[test]

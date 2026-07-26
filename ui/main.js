@@ -72,6 +72,7 @@ let libQuery = ""; // prompt library search text
 let libType = "all"; // prompt library type filter
 let libColor = "all"; // prompt library color filter
 let libFav = false; // prompt library "favorites only" filter
+const libTags = new Set(); // F1: selected tag filters, as lowercase tag keys
 // F8 batch operations state.
 let libSelectMode = false;
 let libSelected = new Set();
@@ -757,6 +758,7 @@ const OPT_FLAG_LABELS = {
   tileTextShadow: "flagTileTextShadow",
   // Library/search extras
   searchAutofocus: "flagSearchAutofocus",
+  tags: "flagTags",                     // F1 tags + library tag filter
   // Appearance extras
   compactTiles: "flagCompactTiles",
   tileGradient: "flagTileGradient",
@@ -905,6 +907,8 @@ const EXPERT_VALUES = {
   clipInboxMax: { label: "valClipMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "clipWatcher" },
   // Keyboard grid focus fades this long after the window loses focus.
   kbFocusFadeMs: { label: "valKbFocusFade", min: 500, max: 10000, step: 500, def: 2000, unit: "ms", gate: "keyboardNav" },
+  // F1 tag chip text size (editor, library filter row, manager).
+  tagChipPx: { label: "valTagChipPx", min: 10, max: 20, step: 1, def: 12, unit: "px", gate: "tags" },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -939,6 +943,9 @@ const EXPERT_DROPDOWNS = {
   // F18 fuzzy-search typo tolerance.
   fuzzyMaxTypos: enumDropdown("fuzzyMaxTypos", "valFuzzyTypos",
     [["auto", "optAuto"], ["1", "opt1"], ["2", "opt2"]], "auto", "fuzzySearch"),
+  // F1: how several selected tag filters combine.
+  tagFilterMode: enumDropdown("tagFilterMode", "valTagFilterMode",
+    [["and", "optTagAnd"], ["or", "optTagOr"]], "and", "tags"),
   copySize: {
     label: "valCopySize",
     options: () => {
@@ -992,6 +999,7 @@ const EXPERT_TABS = [
   ] },
   { title: "expTabLibrary", groups: [
     { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "libraryColsToggle", "confirmDiscard"], values: ["searchRecentMax", "libraryMaxCols", "libraryWidth"], dropdowns: ["fuzzyMaxTypos"] },
+    { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx"], dropdowns: ["tagFilterMode"] },
     // Everything that records or shows copy history lives with the history view.
     { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalLimit"], selects: ["historyDays"] },
     { title: "expGroupPrivacy", flags: ["captureExclusion", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
@@ -1037,6 +1045,8 @@ function applyFlags() {
   if (chainMode && !flag("chainPrompts")) setChainMode(false); // killed in expert menu
   if (chainLock && !flag("chainLock")) { chainLock = false; $("chain-btn")?.classList.remove("chain-locked"); }
   applyValues();
+  // An open library must follow a flag flip (the tag row appears/disappears).
+  if (prompts.length && !$("library")?.classList.contains("hidden")) renderLibrary();
   refreshClipInbox(); // F21: reflect the watcher toggle + badge count
 }
 
@@ -1079,6 +1089,7 @@ function applyValues() {
   root.setProperty("--dim-unhovered", val("dimOpacity") / 100);
   root.setProperty("--dim-media", val("mediaDimOpacity") / 100);
   root.setProperty("--media-radius", `${val("mediaRadius")}px`);
+  root.setProperty("--tag-chip-px", `${val("tagChipPx")}px`);
   BUBBLE_MS = val("bubbleMs");
   TOAST_MS = val("toastMs");
   PREVIEW_MAX = val("previewLen");
@@ -1108,6 +1119,7 @@ const EXPERT_TIPS = [
   // Library / privacy
   "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus",
   "closeAfterCopy", "libraryCloseToggle", "libraryColsToggle", "confirmDiscard",
+  "tags", "tagChipPx", "tagFilterMode",
   "captureExclusion", "copyHistory", "historyTimestamps", "historyGrouped",
   "dedupCopyLog", "cleanupFiles", "dimUnhovered", "blurTilesUntilHover",
   "blurMediaUntilHover", "hideTileNames",
@@ -2970,6 +2982,7 @@ function modalSnapshot() {
     modal.name.value, modal.text.value, modal.caption.value, modal.captionSize.value,
     modal.fontSel.value, modal.sizeSel.value, modalState.color || "", modalState.image || "",
     !!modalState.showImage, modalState.filePath || "", modalState.iconPath || "", modal.fav.classList.contains("active"),
+    modalState.tags || [],
   ]);
 }
 
@@ -3232,8 +3245,8 @@ function maybeCloseOnCopy() {
   try { window.__TAURI__?.window?.getCurrentWindow?.()?.hide?.().catch?.(() => {}); } catch { /* no-op */ }
 }
 
-function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, title }) {
-  modalState = { mode, id, color, image, showImage, copyImage, filePath, iconPath };
+function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], title }) {
+  modalState = { mode, id, color, image, showImage, copyImage, filePath, iconPath, tags: [...tags] };
   modal.title.textContent = title;
   modal.fav.classList.toggle("active", !!favorite);
   modal.fav.setAttribute("aria-pressed", String(!!favorite));
@@ -3248,6 +3261,10 @@ function openModal({ mode, id, name = "", text = "", color = "", image = "", sho
   modal.delete.classList.toggle("hidden", mode !== "edit");
   disarmButton(modal.delete, t("delete"));
   renderSwatches(color);
+  const tagInput = $("modal-tag-input");
+  if (tagInput) tagInput.value = "";
+  closeTagSuggest();
+  renderTagChips();
   // Show the dialog before wiring the preview so the <video>/<img> decode and
   // lay out in a visible context (a hidden element never renders a first frame).
   modal.root.classList.remove("hidden");
@@ -4124,6 +4141,8 @@ async function startFileFromClipboard() {
 }
 function closeModal() {
   closeColorPop();
+  closeTagSuggest();
+  closeTagPop();
   modal.root.classList.add("hidden");
   modal.video.removeAttribute("src"); // stop a playing preview
   modalState = null;
@@ -4151,10 +4170,13 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input,
   ok.textContent = confirmLabel;
   cancel.textContent = cancelLabel || t("cancel");
   if (input) {
-    field.value = "";
-    field.type = "password";
+    // Defaults to a masked field; `type: "text"` makes it a plain one-line prompt
+    // (renaming a tag), where the reveal eye has nothing to reveal.
+    field.type = input.type || "password";
+    field.value = input.value || "";
     field.placeholder = input.placeholder || "";
     eye.innerHTML = EYE_SVG;
+    eye.classList.toggle("hidden", field.type !== "password");
   }
   confirmCleanup?.(false); // resolve any stale dialog first
   root.classList.remove("hidden");
@@ -4182,6 +4204,7 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input,
     eye.addEventListener("click", onEye);
     confirmCleanup = done;
     (input ? field : ok).focus();
+    if (input && field.value) field.select();
   });
 }
 
@@ -4232,6 +4255,8 @@ async function confirmModal() {
   const font = modal.fontSel.value;
   const fontSize = Number(modal.sizeSel.value) || 0;
   const favorite = modal.fav.classList.contains("active");
+  // Sent even while the feature is off, so switching it off never drops stored tags.
+  const tags = modalState.tags || [];
   // NOTE: Tauri expects camelCase keys for snake_case Rust args.
   // Path media (gif/video icon or attachment) shows without a stored image.
   const showImage =
@@ -4241,16 +4266,16 @@ async function confirmModal() {
     if (modalState.mode === "create") {
       const text = modal.text.value.trim();
       if (!text) { closeModal(); return; }
-      await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite });
+      await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags });
       inputEl.value = "";
       autoGrow(inputEl);
       saveBtn.disabled = true;
     } else if (modalState.mode === "image-create" || modalState.mode === "file-create") {
       // The name doubles as the copy text when shown as text.
-      await invoke("add_prompt", { name, text: name, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite });
+      await invoke("add_prompt", { name, text: name, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags });
     } else {
       const text = copyImage || filePath ? name : modal.text.value;
-      await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite });
+      await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags });
     }
   } catch (err) {
     toast(String(err)); // keep the modal open so nothing typed is lost
@@ -4282,12 +4307,335 @@ async function editPrompt(id) {
       font: p.font || "",
       fontSize: p.font_size || 0,
       favorite: p.favorite || false,
+      tags: p.tags || [],
       title: p.file_path
         ? t(kind === "video" ? "videoEditTitle" : kind ? "imageEditTitle" : "fileEditTitle")
         : p.copy_image ? t("imageEditTitle") : t("editModalTitle"),
     });
   }
 }
+
+// ---- F1 tags: chips in the editor, filter row + manager in the library ----
+// Names are compared case-insensitively; the backend keeps one canonical casing
+// and stores chip colors under the lowercase key, so a recased tag keeps its color.
+const tagsOn = () => optFlag("tags");
+const tagKey = (name) => String(name ?? "").trim().toLowerCase();
+const tagColor = (name) => settings.tag_colors?.[tagKey(name)] || "";
+const TAG_MAX_LEN = 60; // keep in sync with MAX_TAG_LEN in lib.rs
+
+// Every tag in the library, first-seen casing, sorted for a stable filter row.
+function allTags() {
+  const seen = new Map();
+  for (const p of prompts) {
+    for (const name of p.tags || []) {
+      const key = tagKey(name);
+      if (key && !seen.has(key)) seen.set(key, name);
+    }
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b, LANG));
+}
+
+function tagUsage() {
+  const counts = new Map();
+  for (const p of prompts) {
+    for (const key of new Set((p.tags || []).map(tagKey))) {
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+  }
+  return counts;
+}
+
+// One chip. `as` picks the element so filter chips stay real buttons.
+function tagChipEl(name, as = "span") {
+  const chip = document.createElement(as);
+  chip.className = "tag-chip";
+  if (as === "button") chip.type = "button";
+  const color = tagColor(name);
+  if (color) {
+    chip.style.setProperty("--chip-color", color);
+    chip.classList.add("tag-colored");
+  }
+  const label = document.createElement("span");
+  label.className = "tag-chip-label";
+  label.textContent = name;
+  chip.append(label);
+  return chip;
+}
+
+// Shared floating layers: the type-ahead list and the per-chip palette.
+const tagSuggest = document.createElement("div");
+tagSuggest.className = "tag-suggest hidden";
+document.body.appendChild(tagSuggest);
+const tagPop = document.createElement("div");
+tagPop.className = "tag-pop hidden";
+tagPop.innerHTML = '<div class="swatches"></div>';
+document.body.appendChild(tagPop);
+
+function placePop(el, anchor) {
+  const r = anchor.getBoundingClientRect();
+  el.classList.remove("hidden");
+  const z = uiZoom();
+  el.style.left = `${Math.min(r.left, window.innerWidth - el.offsetWidth - 8) / z}px`;
+  el.style.top = `${(r.bottom + 4) / z}px`;
+}
+const closeTagSuggest = () => tagSuggest.classList.add("hidden");
+const closeTagPop = () => tagPop.classList.add("hidden");
+document.addEventListener("pointerdown", (e) => {
+  if (!tagSuggest.classList.contains("hidden") &&
+      !tagSuggest.contains(e.target) && e.target !== $("modal-tag-input")) closeTagSuggest();
+  if (!tagPop.classList.contains("hidden") &&
+      !tagPop.contains(e.target) && !e.target.closest(".tag-dot") && !e.target.closest(".color-pop")) closeTagPop();
+});
+
+// Palette for one tag. Colors are global (settings), so this writes through at once.
+function openTagColorPop(anchor, name, after) {
+  const box = tagPop.querySelector(".swatches");
+  const apply = async (hex) => {
+    try {
+      settings = await invoke("set_tag_color", { name, color: hex });
+    } catch (err) { toast(String(err)); return; }
+    after?.();
+  };
+  buildSwatches(box, tagColor(name), (hex) => { closeTagPop(); apply(hex); },
+    (swatch, cur) => openColorPop(swatch, cur, apply));
+  placePop(tagPop, anchor);
+}
+
+// ---- Editor: assigned chips + type-ahead input ----
+function renderTagChips() {
+  const box = $("modal-tag-chips");
+  if (!box || !modalState) return;
+  box.innerHTML = "";
+  for (const name of modalState.tags || []) {
+    const chip = tagChipEl(name);
+    const dot = document.createElement("button");
+    dot.type = "button";
+    dot.className = "tag-dot";
+    dot.title = t("tagColor");
+    dot.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openTagColorPop(dot, name, renderTagChips);
+    });
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "tag-x";
+    del.title = t("tagRemove");
+    del.setAttribute("aria-label", t("tagRemove"));
+    del.textContent = "×";
+    del.addEventListener("click", () => {
+      modalState.tags = modalState.tags.filter((n) => tagKey(n) !== tagKey(name));
+      renderTagChips();
+    });
+    chip.prepend(dot);
+    chip.append(del);
+    box.appendChild(chip);
+  }
+}
+
+// Add a typed name to the open editor. Returns false when it is unusable, so the
+// input can keep the text instead of silently swallowing it.
+function addTagToModal(raw) {
+  if (!modalState) return false;
+  const name = String(raw || "").trim();
+  if (!name || name.length > TAG_MAX_LEN || name.includes(",")) return false;
+  const key = tagKey(name);
+  if ((modalState.tags || []).some((n) => tagKey(n) === key)) return true; // already on
+  // Join the casing the library already uses instead of forking a near-duplicate.
+  const known = allTags().find((n) => tagKey(n) === key);
+  modalState.tags = [...(modalState.tags || []), known || name];
+  renderTagChips();
+  return true;
+}
+
+function renderTagSuggest() {
+  const input = $("modal-tag-input");
+  if (!input || !modalState) return;
+  const q = input.value.trim().toLowerCase();
+  const taken = new Set((modalState.tags || []).map(tagKey));
+  const hits = allTags()
+    .filter((n) => !taken.has(tagKey(n)) && (!q || tagKey(n).includes(q)))
+    .slice(0, 8);
+  tagSuggest.innerHTML = "";
+  if (!hits.length) { closeTagSuggest(); return; }
+  for (const name of hits) {
+    const item = tagChipEl(name, "button");
+    item.classList.add("tag-suggest-item");
+    item.addEventListener("click", () => {
+      addTagToModal(name);
+      input.value = "";
+      closeTagSuggest();
+      input.focus();
+    });
+    tagSuggest.appendChild(item);
+  }
+  placePop(tagSuggest, input);
+}
+
+function wireTagInput() {
+  const input = $("modal-tag-input");
+  if (!input) return;
+  const commit = () => {
+    // A pasted "a, b, c" splits into chips rather than being rejected as one name.
+    const parts = input.value.split(",");
+    const rest = parts.filter((p) => !addTagToModal(p));
+    input.value = rest.join(",").trim();
+    if (input.value) toast(t("tagInvalid"));
+    closeTagSuggest();
+  };
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); commit(); return; }
+    if (e.key === "Escape" && !tagSuggest.classList.contains("hidden")) {
+      e.stopPropagation(); // keep Escape from closing the whole editor
+      closeTagSuggest();
+      return;
+    }
+    if (e.key === "Backspace" && !input.value && modalState?.tags?.length) {
+      modalState.tags = modalState.tags.slice(0, -1);
+      renderTagChips();
+    }
+  });
+  input.addEventListener("input", () => {
+    if (input.value.includes(",")) { commit(); return; }
+    renderTagSuggest();
+  });
+  input.addEventListener("focus", renderTagSuggest);
+  input.addEventListener("blur", () => setTimeout(closeTagSuggest, 150)); // let a click land first
+}
+wireTagInput();
+
+// ---- Library: filter chips + manager ----
+function renderTagFilter() {
+  const bar = $("library-tagbar");
+  if (!bar) return;
+  bar.innerHTML = "";
+  if (!tagsOn()) { libTags.clear(); closeTagManager(); return; }
+  const names = allTags();
+  // A tag renamed or deleted elsewhere must not keep filtering the list.
+  const live = new Set(names.map(tagKey));
+  for (const key of [...libTags]) if (!live.has(key)) libTags.delete(key);
+  bar.classList.toggle("empty", !names.length);
+  if (!names.length) return;
+  for (const name of names) {
+    const chip = tagChipEl(name, "button");
+    chip.classList.add("tag-filter");
+    const on = libTags.has(tagKey(name));
+    chip.classList.toggle("active", on);
+    chip.setAttribute("aria-pressed", String(on));
+    chip.addEventListener("click", () => {
+      const key = tagKey(name);
+      if (libTags.has(key)) libTags.delete(key); else libTags.add(key);
+      renderLibrary();
+    });
+    bar.appendChild(chip);
+  }
+  if (libTags.size) {
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "tag-chip tag-action";
+    clear.textContent = t("tagClearFilter");
+    clear.addEventListener("click", () => { libTags.clear(); renderLibrary(); });
+    bar.appendChild(clear);
+  }
+  const manage = document.createElement("button");
+  manage.type = "button";
+  manage.className = "tag-chip tag-action";
+  manage.textContent = t("tagManager");
+  manage.addEventListener("click", openTagManager);
+  bar.appendChild(manage);
+}
+
+function openTagManager() {
+  $("tag-modal").classList.remove("hidden");
+  renderTagManager();
+}
+function closeTagManager() {
+  $("tag-modal").classList.add("hidden");
+  closeTagPop();
+}
+
+function renderTagManager() {
+  const list = $("tag-modal-list");
+  if (!list) return;
+  list.innerHTML = "";
+  const counts = tagUsage();
+  const names = allTags();
+  if (!names.length) {
+    const empty = document.createElement("div");
+    empty.className = "hint";
+    empty.textContent = t("tagNone");
+    list.appendChild(empty);
+    return;
+  }
+  // One backend pass per action, then a full state refetch — a tag on hundreds of
+  // prompts is rewritten in the store, never prompt by prompt from here.
+  const refresh = async () => {
+    await renderGrid();
+    renderTagManager();
+    renderLibrary();
+  };
+  for (const name of names) {
+    const row = document.createElement("div");
+    row.className = "tag-manage-row";
+    const dot = document.createElement("button");
+    dot.type = "button";
+    dot.className = "tag-dot";
+    dot.title = t("tagColor");
+    const color = tagColor(name);
+    if (color) dot.style.setProperty("--chip-color", color);
+    dot.classList.toggle("tag-colored", !!color);
+    dot.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openTagColorPop(dot, name, refresh);
+    });
+    const label = document.createElement("span");
+    label.className = "tag-manage-name";
+    label.textContent = name;
+    const count = document.createElement("span");
+    count.className = "tag-manage-count";
+    count.textContent = String(counts.get(tagKey(name)) || 0);
+    count.title = t("tagUsageCount");
+    const rename = document.createElement("button");
+    rename.type = "button";
+    rename.className = "ghost-btn";
+    rename.textContent = t("tagRename");
+    rename.addEventListener("click", async () => {
+      const next = await confirmDialog({
+        title: t("tagRenameTitle"),
+        message: name,
+        confirmLabel: t("save"),
+        danger: false,
+        input: { type: "text", value: name, placeholder: t("tagsPh") },
+      });
+      if (next == null || !next.trim() || tagKey(next) === tagKey(name)) return;
+      try { settings = await invoke("rename_tag", { old: name, new: next.trim() }); }
+      catch (err) { toast(String(err)); return; }
+      await refresh();
+    });
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "ghost-btn danger-btn";
+    del.textContent = t("delete");
+    del.addEventListener("click", async () => {
+      const ok = await confirmDialog({
+        title: t("tagDeleteTitle"),
+        message: t("tagDeleteMsg").replace("{name}", name),
+        confirmLabel: t("delete"),
+      });
+      if (!ok) return;
+      try { settings = await invoke("delete_tag", { name }); }
+      catch (err) { toast(String(err)); return; }
+      libTags.delete(tagKey(name));
+      await refresh();
+    });
+    row.append(dot, label, count, rename, del);
+    list.appendChild(row);
+  }
+}
+
+$("tag-modal-close")?.addEventListener("click", closeTagManager);
+$("tag-modal")?.addEventListener("pointerdown", (e) => {
+  if (e.target === $("tag-modal")) closeTagManager();
+});
 
 // ---- Prompt library (all prompts, click to edit) ----
 // Classify a prompt for the library type filter / thumbnails.
@@ -4431,6 +4779,8 @@ function computeLibSearchScore(p) {
   const q = libQuery.trim().toLowerCase();
   if (!q) return { score: 1, fuzzy: false };
   const fields = [[(p.name || "").toLowerCase(), 3], [(p.text || "").toLowerCase(), 1], [(p.file_path || "").toLowerCase(), 1]];
+  // A tag is a deliberate label, so it ranks between the name and the body.
+  if (tagsOn() && (p.tags || []).length) fields.push([p.tags.join(" ").toLowerCase(), 2]);
   let best = 0;
   for (const [val, w] of fields) {
     if (val && val.includes(q)) { const s = (val.startsWith(q) ? 120 : 100) * w; if (s > best) best = s; }
@@ -4471,7 +4821,19 @@ function libMatches(p) {
   if (libFav && !p.favorite) return false;
   if (libType !== "all" && promptType(p) !== libType) return false;
   if (libColor !== "all" && (p.color || "") !== libColor) return false;
+  if (!tagMatches(p)) return false;
   return libSearchScore(p).score > 0;
+}
+
+// F1: selected tag chips narrow the list, combined with search and the other
+// filters. AND (default) needs every chip, OR any of them.
+function tagMatches(p) {
+  if (!tagsOn() || !libTags.size) return true;
+  const own = new Set((p.tags || []).map(tagKey));
+  const wanted = [...libTags];
+  return (txt("tagFilterMode") || "and") === "or"
+    ? wanted.some((k) => own.has(k))
+    : wanted.every((k) => own.has(k));
 }
 
 // Color-filter dots (once per wrap). "All" + every palette color. Shared by the
@@ -4568,7 +4930,8 @@ function renderLibrary() {
   if (_libObs) _libObs.disconnect();
   _libObs = makeVideoObserver();
   _activeVidObs = _libObs;
-  const anyLibFilter = flag("librarySearch") || flag("libraryTypeFilter") || flag("colorFilter") || flag("favorites");
+  renderTagFilter();
+  const anyLibFilter = flag("librarySearch") || flag("libraryTypeFilter") || flag("colorFilter") || flag("favorites") || tagsOn();
   $("library-search").classList.toggle("hidden", !prompts.length || !anyLibFilter);
   if (!prompts.length) {
     const empty = document.createElement("div");
@@ -4612,6 +4975,12 @@ function renderLibrary() {
     text.className = "lib-text";
     text.textContent = p.file_path || p.text;
     body.append(name, text);
+    if (tagsOn() && (p.tags || []).length) {
+      const row2 = document.createElement("span");
+      row2.className = "lib-tags";
+      for (const tn of p.tags) row2.appendChild(tagChipEl(tn));
+      body.appendChild(row2);
+    }
 
     // Per-type preview: video plays inline, image/gif as a thumbnail, else a dot.
     row.append(thumbEl(p), body);
@@ -5867,6 +6236,8 @@ function bind() {
     // chain doesn't ALSO close the library/journal underneath it.
     else if (varsCleanup) { /* vars dialog closes itself */ }
     else if (!colorPop.classList.contains("hidden")) closeColorPop();
+    else if (!tagPop.classList.contains("hidden")) closeTagPop();
+    else if (!$("tag-modal").classList.contains("hidden")) closeTagManager();
     else if (!ctxEl.classList.contains("hidden")) closeCtx();
     else if (!$("update-modal").classList.contains("hidden")) $("update-modal").classList.add("hidden");
     else if (!$("snip-modal").classList.contains("hidden")) $("snip-modal").classList.add("hidden");

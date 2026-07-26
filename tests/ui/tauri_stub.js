@@ -15,6 +15,8 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
     : "Example prompt body number " + (i + 1) + ".",
   color: ["#3b82f6", "#ef4444", "#10b981", "#f59e0b"][i % 4],
   favorite: i % 5 === 0,
+  // Two shared tags plus untagged prompts, so a filter chip visibly narrows the list.
+  tags: i % 3 === 0 ? ["Work"] : i % 3 === 1 ? ["Draft", "Work"] : [],
 }));
 
 const LAYOUT = {};
@@ -24,7 +26,9 @@ const SETTINGS = {
   theme: "dark", language: "en", floating: {}, float_scale: {}, video_prefs: {},
   window: null, minimize_to_tray: false, autostart: false, start_minimized: false,
   always_on_top: false, hotkey: "", auto_update: true, skipped_versions: [],
-  ui_flags: {}, ui_values: {}, ui_texts: {}, dup_ignored: [],
+  // Tags ship off; the stub turns them on so the smoke run covers that UI too.
+  ui_flags: { tags: true }, ui_values: {}, ui_texts: {}, dup_ignored: [],
+  tag_colors: { work: "#3b82f6" },
   tile_font: "system", tile_size: 0,
   views: [{ id: "home", name: "Home", cols: 4, rows: 3, layouts: { "4x3": LAYOUT }, color: "" }],
   active_view: "home",
@@ -73,6 +77,10 @@ const RESULTS = {
     ].join("\n"),
   }),
   get_prompt: (a) => PROMPTS.find((p) => p.id === (a && a.id)) || PROMPTS[0],
+  // The tag commands answer with the settings blob, like the real backend.
+  rename_tag: () => JSON.parse(JSON.stringify(SETTINGS)),
+  delete_tag: () => JSON.parse(JSON.stringify(SETTINGS)),
+  set_tag_color: () => JSON.parse(JSON.stringify(SETTINGS)),
   // The copy commands report success; the UI skips everything that follows a copy
   // (feedback, history, auto-paste) when they come back falsy.
   copy_prompt: () => true,

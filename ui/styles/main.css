@@ -2632,6 +2632,107 @@ body.no-composer .toast { bottom: 18px; }
 }
 .toast.update .toast-btn:hover { background: var(--accent); filter: brightness(1.08); }
 
+/* ---- Tags: chips in the editor, filter row in the library, manager dialog ---- */
+/* Opt-in feature: without the flag the tag UI is gone, the stored tags stay. */
+body:not(.flag-tags) #modal-tags,
+body:not(.flag-tags) .lib-tagbar { display: none; }
+
+.modal-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.modal-tags-label { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
+.tag-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.tag-input { flex: 1 1 130px; min-width: 90px; }
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--fg);
+  font-size: var(--tag-chip-px, 12px);
+  line-height: 1.6;
+}
+.tag-chip.tag-colored {
+  border-color: var(--chip-color);
+  background: color-mix(in srgb, var(--chip-color) 22%, transparent);
+}
+.tag-chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.tag-chip { cursor: pointer; transition: border-color var(--transition), background var(--transition); }
+button.tag-chip:hover { border-color: var(--accent); }
+.tag-chip.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.tag-action { color: var(--muted); }
+
+.tag-dot {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--chip-color, var(--surface));
+  cursor: pointer;
+}
+.tag-dot.tag-colored { border-color: var(--chip-color); }
+.tag-x {
+  flex: 0 0 auto;
+  padding: 0 0 0 2px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.15em;
+  line-height: 1;
+  cursor: pointer;
+}
+.tag-x:hover { color: var(--danger); }
+
+/* Type-ahead list and the per-chip palette float above the dialog they belong to. */
+.tag-suggest, .tag-pop {
+  position: fixed;
+  z-index: 140;
+  max-width: min(340px, 92vw);
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+.tag-pop { z-index: 141; }
+.tag-suggest::-webkit-scrollbar { width: var(--sb-width, 12px); }
+.tag-suggest::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
+
+.lib-tagbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.lib-tagbar.empty { display: none; }
+.lib-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+
+#tag-modal.overlay { z-index: 68; }
+.tag-manager-list { display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow-y: auto; }
+.tag-manage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 2px;
+  border-bottom: 1px solid var(--border);
+}
+.tag-manage-row:last-child { border-bottom: none; }
+.tag-manage-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--tag-chip-px, 12px);
+}
+.tag-manage-count { flex: 0 0 auto; min-width: 22px; text-align: right; color: var(--muted); font-size: 12px; }
+.tag-manage-row .ghost-btn { flex: 0 0 auto; padding: 3px 10px; font-size: 12px; }
+
 .hidden { display: none !important; }
 
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }

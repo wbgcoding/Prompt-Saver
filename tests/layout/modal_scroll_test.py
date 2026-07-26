@@ -73,12 +73,20 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html") -> Path
         for i in range(n_rows)
     )
     swatches = '<button type="button" class="swatch"></button>' * 10
+    # Tag chips wrap over several lines on a narrow dialog; the harness carries the
+    # feature class so that extra row counts against the available height.
+    tag_chips = "".join(
+        f'<span class="tag-chip"><button type="button" class="tag-dot"></button>'
+        f'<span class="tag-chip-label">Tag {i}</span>'
+        f'<button type="button" class="tag-x">&times;</button></span>'
+        for i in range(6)
+    )
 
     # The .clear-wrap / .clear-wrap-ta spans mirror what wireClear() injects at
     # runtime -- the textarea wrapper is the actual flex item, so the harness is
     # only faithful with it in place.
     html = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<link rel="stylesheet" href="styles/main.css"><style>body{{margin:0}}</style></head><body>
+<link rel="stylesheet" href="styles/main.css"><style>body{{margin:0}}</style></head><body class="flag-tags">
 <div id="modal" class="overlay tall history-open" role="dialog" aria-modal="true"><div class="modal">
   <div class="modal-titlebar"><h2 class="modal-title">Edit prompt</h2>
     <button class="icon-btn modal-x" type="button">X</button></div>
@@ -94,6 +102,9 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html") -> Path
     <label class="field"><span>Font</span><select class="modal-input"><option>Default</option></select></label>
     <label class="field"><span>Text size</span><select class="modal-input"><option>Auto</option></select></label></div>
   <div id="color-row" class="swatches">{swatches}</div>
+  <div id="modal-tags" class="modal-tags"><span class="modal-tags-label">Tags</span>
+    <div id="modal-tag-chips" class="tag-chips">{tag_chips}</div>
+    <input id="modal-tag-input" class="modal-input tag-input" type="text"></div>
   <div id="modal-history" class="modal-collapse open">
     <button type="button" id="modal-history-head" class="modal-collapse-head" aria-expanded="true">
       <span>Version history</span></button>
