@@ -26,9 +26,11 @@ const SETTINGS = {
   theme: "dark", language: "en", floating: {}, float_scale: {}, video_prefs: {},
   window: null, minimize_to_tray: false, autostart: false, start_minimized: false,
   always_on_top: false, hotkey: "", auto_update: true, skipped_versions: [],
-  // Tags ship off; the stub turns them on so the smoke run covers that UI too.
-  ui_flags: { tags: true }, ui_values: {}, ui_texts: {}, dup_ignored: [],
+  // Tags and custom themes ship off; the stub turns them on so the smoke run
+  // covers that UI too.
+  ui_flags: { tags: true, customThemes: true }, ui_values: {}, ui_texts: {}, dup_ignored: [],
   tag_colors: { work: "#3b82f6" },
+  custom_themes: [{ id: "ct1", name: "Neon", base: "dark", vars: { accent: "#ff00aa" } }],
   tile_font: "system", tile_size: 0,
   views: [{ id: "home", name: "Home", cols: 4, rows: 3, layouts: { "4x3": LAYOUT }, color: "" }],
   active_view: "home",
@@ -38,6 +40,22 @@ const RESULTS = {
   get_settings: () => JSON.parse(JSON.stringify(SETTINGS)),
   get_state: () => ({ prompts: PROMPTS, settings: JSON.parse(JSON.stringify(SETTINGS)) }),
   current_theme: () => "dark",
+  theme_vars: () => ({ accent: "#ff00aa" }),
+  set_theme: () => "dark",
+  // Saving hands back the settings blob with the edited theme in place.
+  save_custom_theme: (a) => {
+    const list = SETTINGS.custom_themes;
+    const id = (a && a.id) || "ct" + (list.length + 1);
+    const theme = { id, name: (a && a.name) || "", base: (a && a.base) || "dark", vars: (a && a.vars) || {} };
+    const at = list.findIndex((c) => c.id === id);
+    if (at >= 0) list[at] = theme; else { list.push(theme); SETTINGS.theme = "custom:" + id; }
+    return JSON.parse(JSON.stringify(SETTINGS));
+  },
+  delete_custom_theme: (a) => {
+    SETTINGS.custom_themes = SETTINGS.custom_themes.filter((c) => c.id !== (a && a.id));
+    if (SETTINGS.theme === "custom:" + (a && a.id)) SETTINGS.theme = "system";
+    return JSON.parse(JSON.stringify(SETTINGS));
+  },
   app_version: () => "0.0.0",
   current_data_dir: () => "C:\\Data",
   default_screenshot_dir: () => "C:\\Pictures",

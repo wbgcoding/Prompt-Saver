@@ -141,8 +141,57 @@ function applyI18n() {
 }
 
 // ---- Helpers ----
-function applyTheme(theme) {
-  document.documentElement.setAttribute("data-theme", theme);
+// F3 custom themes: the colour tokens of the `:root` block in main.css that a
+// custom theme may override. Everything else stays with the inherited base theme.
+const THEME_VARS = ["bg", "surface", "surface-2", "fg", "muted", "border", "accent", "accent-fg", "danger"];
+// Editor layout: which tokens belong together, in the order they are shown.
+const THEME_VAR_GROUPS = [
+  ["themeGroupBg", ["bg"]],
+  ["themeGroupSurface", ["surface", "surface-2", "border"]],
+  ["themeGroupText", ["fg", "muted"]],
+  ["themeGroupAccent", ["accent", "accent-fg", "danger"]],
+];
+// The built-in themes a custom theme can inherit from ("system" is not one of
+// them — it has no rules of its own). Order matches the settings dropdown.
+const BUILTIN_THEMES = [
+  "light", "dark", "programmer", "ai", "cyberpunk", "retro", "mono", "gradient",
+  "sunset", "ocean", "forest", "lavender", "candy", "coffee", "midnight",
+];
+
+const customThemes = () => (optFlag("customThemes") ? settings.custom_themes || [] : []);
+const customThemeId = (pref) => (String(pref || "").startsWith("custom:") ? String(pref).slice(7) : "");
+const findCustomTheme = (pref) => customThemes().find((c) => c.id === customThemeId(pref)) || null;
+
+// Overrides of the active theme, straight from the local settings — the backend
+// sends the same set with every theme-changed event.
+function activeThemeVars() {
+  return findCustomTheme(settings.theme)?.vars || {};
+}
+
+// `theme` is always a built-in key (a custom theme resolves to its base first);
+// `vars` are the colour tokens layered on top as inline styles.
+function applyTheme(theme, vars) {
+  if (theme) document.documentElement.setAttribute("data-theme", theme);
+  applyThemeVars(vars ?? activeThemeVars());
+}
+
+// Inline overrides are the whole custom-theme mechanism, so always clear the full
+// set first — switching to a built-in theme must leave nothing behind.
+function applyThemeVars(vars) {
+  const style = document.documentElement.style;
+  for (const key of THEME_VARS) style.removeProperty(`--${key}`);
+  for (const [key, value] of Object.entries(vars || {})) {
+    if (THEME_VARS.includes(key) && HEX_RE.test(value)) style.setProperty(`--${key}`, value);
+  }
+}
+
+// Which built-in theme a preference renders as. A custom theme keeps its base even
+// while the feature is switched off, so the dropdown still shows something truthful.
+function themeBase(pref) {
+  const id = customThemeId(pref);
+  if (!id) return pref;
+  const raw = (settings.custom_themes || []).find((c) => c.id === id);
+  return raw && BUILTIN_THEMES.includes(raw.base) ? raw.base : "system";
 }
 
 // Tile color palette ("" = default surface), full spectrum, one modal row.
@@ -442,6 +491,13 @@ function openValuePop(anchor, items, current, onPick) {
     row.textContent = item.label;
     // Font entries preview themselves in their own typeface.
     if (item.font) row.style.fontFamily = item.font;
+    // A disabled option is a section separator, not a choice.
+    if (item.disabled) {
+      row.className = "sep";
+      row.disabled = true;
+      numPop.appendChild(row);
+      continue;
+    }
     if (String(item.value) === String(current)) {
       row.className = "sel";
       selected = row;
@@ -486,6 +542,7 @@ function attachSelectPicker(sel) {
       value: o.value,
       label: o.textContent,
       font: o.style.fontFamily,
+      disabled: o.disabled,
     }));
     openValuePop(sel, items, sel.value, (v) => {
       sel.value = v;
@@ -760,6 +817,7 @@ const OPT_FLAG_LABELS = {
   searchAutofocus: "flagSearchAutofocus",
   tags: "flagTags",                     // F1 tags + library tag filter
   // Appearance extras
+  customThemes: "flagCustomThemes",   // F3 theme editor + custom entries in the theme list
   compactTiles: "flagCompactTiles",
   tileGradient: "flagTileGradient",
   accentHeader: "flagAccentHeader",
@@ -909,6 +967,8 @@ const EXPERT_VALUES = {
   kbFocusFadeMs: { label: "valKbFocusFade", min: 500, max: 10000, step: 500, def: 2000, unit: "ms", gate: "keyboardNav" },
   // F1 tag chip text size (editor, library filter row, manager).
   tagChipPx: { label: "valTagChipPx", min: 10, max: 20, step: 1, def: 12, unit: "px", gate: "tags" },
+  // F3 how many custom themes may be stored (keeps the settings blob bounded).
+  customThemeMax: { label: "valCustomThemeMax", min: 1, max: 20, step: 1, def: 8, unit: "", gate: "customThemes" },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -994,7 +1054,7 @@ const EXPERT_TABS = [
   { title: "expTabAppearance", groups: [
     { title: "expGroupScale", values: ["uiScale", "modalScale", "composerScale", "iconScale", "primaryScale"] },
     { title: "expGroupVisual", flags: ["animations", "accentHeader", "hideScrollbars", "accentScrollbar", "smoothScroll", "frostedModals"], values: ["animSpeed", "gridGap", "gridPad", "headerPadY", "modalRadius", "overlayDim", "scrollbarWidth", "frostedBlur"], dropdowns: ["copySize", "copyFont"] },
-    { title: "expGroupColors", palette: true },
+    { title: "expGroupColors", flags: ["customThemes"], values: ["customThemeMax"], palette: true },
     { title: "expGroupLimits", values: ["maxViews", "gridMax", "previewLen", "nameMaxLen", "bubbleMs", "toastMs"] },
   ] },
   { title: "expTabLibrary", groups: [
@@ -1042,6 +1102,7 @@ function applyFlags() {
   for (const key of OPT_FLAG_KEYS) {
     document.body.classList.toggle(`flag-${key}`, optFlag(key));
   }
+  refreshCustomThemes(); // F3: the feature may have just been switched on or off
   if (chainMode && !flag("chainPrompts")) setChainMode(false); // killed in expert menu
   if (chainLock && !flag("chainLock")) { chainLock = false; $("chain-btn")?.classList.remove("chain-locked"); }
   applyValues();
@@ -1116,6 +1177,7 @@ const EXPERT_TIPS = [
   // Appearance
   "frostedModals", "accentHeader", "accentScrollbar", "hideScrollbars", "smoothScroll",
   "compactTiles", "tileHoverLift", "gridLines", "pausedIcons",
+  "customThemes", "customThemeMax",
   // Library / privacy
   "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus",
   "closeAfterCopy", "libraryCloseToggle", "libraryColsToggle", "confirmDiscard",
@@ -4637,6 +4699,326 @@ $("tag-modal")?.addEventListener("pointerdown", (e) => {
   if (e.target === $("tag-modal")) closeTagManager();
 });
 
+// ---- F3 custom theme editor ----
+const THEME_LABELS = {
+  light: "themeLight", dark: "themeDark", programmer: "themeProgrammer", ai: "themeAi",
+  cyberpunk: "themeCyberpunk", retro: "themeRetro", mono: "themeMono", gradient: "themeGradient",
+  sunset: "themeSunset", ocean: "themeOcean", forest: "themeForest", lavender: "themeLavender",
+  candy: "themeCandy", coffee: "themeCoffee", midnight: "themeMidnight",
+};
+const THEME_VAR_LABELS = {
+  bg: "themeVarBg", surface: "themeVarSurface", "surface-2": "themeVarSurface2",
+  fg: "themeVarFg", muted: "themeVarMuted", border: "themeVarBorder",
+  accent: "themeVarAccent", "accent-fg": "themeVarAccentFg", danger: "themeVarDanger",
+};
+
+// The theme tokens are authored as hex or rgba(), and a color picker needs hex.
+// Alpha is dropped — only a value the user actually overrides is ever stored.
+function cssColorToHex(value) {
+  const v = String(value || "").trim();
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(v);
+  if (hex) {
+    const d = hex[1];
+    return `#${(d.length === 3 ? [...d].map((c) => c + c).join("") : d)}`.toLowerCase();
+  }
+  const rgb = /^rgba?\(([^)]+)\)$/i.exec(v);
+  if (rgb) {
+    const parts = rgb[1].split(/[\s,/]+/).filter(Boolean).slice(0, 3);
+    if (parts.length === 3) {
+      const to = (p) => {
+        const n = p.endsWith("%") ? (parseFloat(p) * 255) / 100 : parseFloat(p);
+        return Math.max(0, Math.min(255, Math.round(n || 0))).toString(16).padStart(2, "0");
+      };
+      return `#${parts.map(to).join("")}`;
+    }
+  }
+  return "#808080"; // unreadable value: a neutral starting point beats a broken input
+}
+
+// The colours a base theme resolves to. Only :root carries the theme rules, so the
+// probe runs on the document element itself and restores its state right away —
+// no frame is painted in between, so nothing flickers.
+function baseThemeColors(base) {
+  const root = document.documentElement;
+  const prevTheme = root.getAttribute("data-theme");
+  const prevVars = THEME_VARS.map((key) => [key, root.style.getPropertyValue(`--${key}`)]);
+  root.setAttribute("data-theme", base);
+  for (const key of THEME_VARS) root.style.removeProperty(`--${key}`);
+  const style = getComputedStyle(root);
+  const out = {};
+  for (const key of THEME_VARS) out[key] = cssColorToHex(style.getPropertyValue(`--${key}`));
+  if (prevTheme != null) root.setAttribute("data-theme", prevTheme);
+  for (const [key, value] of prevVars) if (value) root.style.setProperty(`--${key}`, value);
+  return out;
+}
+
+// The theme being edited, and the state to return to when the editor is cancelled
+// (it previews on the real window, so cancelling has to undo it).
+let themeDraft = null;
+let themeRestore = null;
+
+function newThemeDraft() {
+  const current = document.documentElement.getAttribute("data-theme");
+  return {
+    id: "",
+    name: t("themeNewName"),
+    base: BUILTIN_THEMES.includes(current) ? current : "light",
+    vars: {},
+  };
+}
+
+function draftFrom(theme) {
+  return { id: theme.id, name: theme.name, base: theme.base, vars: { ...(theme.vars || {}) } };
+}
+
+// Live preview. Writing the variables costs a style recalc, which the browser
+// already coalesces into the next frame — no grid rebuild, no IPC, so dragging a
+// colour stays smooth without an extra throttle in front of it.
+function previewThemeDraft() {
+  if (!themeDraft) return;
+  document.documentElement.setAttribute("data-theme", themeDraft.base);
+  applyThemeVars(themeDraft.vars);
+}
+
+function openThemeEditor() {
+  if (!optFlag("customThemes")) return;
+  themeRestore = {
+    theme: document.documentElement.getAttribute("data-theme"),
+    vars: { ...activeThemeVars() },
+  };
+  const active = findCustomTheme(settings.theme);
+  themeDraft = active ? draftFrom(active) : newThemeDraft();
+  $("theme-modal").classList.remove("hidden");
+  renderThemeEditor();
+  previewThemeDraft();
+}
+
+function closeThemeEditor(revert = true) {
+  $("theme-modal").classList.add("hidden");
+  closeColorPop();
+  if (revert && themeRestore) applyTheme(themeRestore.theme, themeRestore.vars);
+  themeDraft = null;
+  themeRestore = null;
+}
+
+function renderThemeEditor() {
+  if (!themeDraft) return;
+  const target = $("theme-edit-target");
+  target.innerHTML = "";
+  const fresh = document.createElement("option");
+  fresh.value = "";
+  fresh.textContent = t("themeNew");
+  target.appendChild(fresh);
+  for (const theme of customThemes()) {
+    const opt = document.createElement("option");
+    opt.value = theme.id;
+    opt.textContent = theme.name;
+    target.appendChild(opt);
+  }
+  target.value = themeDraft.id;
+  $("theme-edit-name").value = themeDraft.name;
+  const baseSel = $("theme-edit-base");
+  baseSel.innerHTML = "";
+  for (const key of BUILTIN_THEMES) {
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = t(THEME_LABELS[key]);
+    baseSel.appendChild(opt);
+  }
+  baseSel.value = themeDraft.base;
+  $("theme-edit-delete").classList.toggle("hidden", !themeDraft.id);
+  renderThemeVars();
+}
+
+function renderThemeVars() {
+  const box = $("theme-edit-vars");
+  box.innerHTML = "";
+  const defaults = baseThemeColors(themeDraft.base);
+  for (const [groupKey, keys] of THEME_VAR_GROUPS) {
+    const head = document.createElement("div");
+    head.className = "theme-var-group";
+    head.textContent = t(groupKey);
+    box.appendChild(head);
+    for (const key of keys) box.appendChild(themeVarRow(key, defaults[key]));
+  }
+}
+
+function themeVarRow(key, fallback) {
+  const row = document.createElement("div");
+  row.className = "theme-var-row";
+  const name = document.createElement("span");
+  name.className = "theme-var-name";
+  name.textContent = t(THEME_VAR_LABELS[key]);
+  const swatch = document.createElement("button");
+  swatch.type = "button";
+  swatch.className = "theme-swatch";
+  const hex = document.createElement("input");
+  hex.type = "text";
+  hex.className = "modal-input theme-hex";
+  hex.maxLength = 7;
+  hex.spellcheck = false;
+  const reset = document.createElement("button");
+  reset.type = "button";
+  reset.className = "ghost-btn theme-var-reset";
+  reset.textContent = "×";
+  reset.title = t("themeVarReset");
+
+  const paint = () => {
+    const value = themeDraft.vars[key] || fallback;
+    swatch.style.background = value;
+    if (document.activeElement !== hex) hex.value = value;
+    const overridden = !!themeDraft.vars[key];
+    row.classList.toggle("overridden", overridden);
+    reset.disabled = !overridden;
+  };
+  const setVar = (value) => {
+    themeDraft.vars[key] = value;
+    paint();
+    previewThemeDraft();
+  };
+  const clearVar = () => {
+    delete themeDraft.vars[key];
+    hex.value = fallback;
+    paint();
+    previewThemeDraft();
+  };
+
+  swatch.addEventListener("click", () => openColorPop(swatch, themeDraft.vars[key] || fallback, setVar));
+  // Typing applies as soon as the value is a complete colour; an unfinished or
+  // invalid entry is rejected on blur and the last valid one comes back.
+  hex.addEventListener("input", () => {
+    hex.classList.remove("invalid");
+    if (HEX_RE.test(hex.value.trim())) setVar(hex.value.trim().toLowerCase());
+  });
+  hex.addEventListener("change", () => {
+    const raw = hex.value.trim();
+    if (!raw) { clearVar(); return; }
+    const value = raw[0] === "#" ? raw : `#${raw}`;
+    if (HEX_RE.test(value)) { setVar(value.toLowerCase()); return; }
+    hex.classList.add("invalid");
+    setTimeout(() => hex.classList.remove("invalid"), 900);
+    paint();
+  });
+  reset.addEventListener("click", clearVar);
+  paint();
+  row.append(name, swatch, hex, reset);
+  return row;
+}
+
+async function saveThemeDraft() {
+  if (!themeDraft) return;
+  const name = $("theme-edit-name").value.trim();
+  if (!name) {
+    toast(t("themeNameRequired"));
+    $("theme-edit-name").focus();
+    return;
+  }
+  themeDraft.name = name;
+  try {
+    settings = await invoke("save_custom_theme", {
+      id: themeDraft.id,
+      name,
+      base: themeDraft.base,
+      vars: themeDraft.vars,
+    });
+  } catch (err) {
+    toast(String(err));
+    return;
+  }
+  // A new theme is created active by the backend; editing an existing one switches
+  // to it, so the live preview simply carries on instead of snapping away.
+  const id = themeDraft.id || customThemeId(settings.theme);
+  const pref = `custom:${id}`;
+  if (settings.theme !== pref) {
+    settings.theme = pref;
+    await invoke("set_theme", { theme: pref }).catch((err) => toast(String(err)));
+  }
+  fillThemeSelect();
+  applyTheme(themeBase(pref));
+  closeThemeEditor(false);
+}
+
+async function deleteThemeDraft() {
+  if (!themeDraft?.id) return;
+  const ok = await confirmDialog({
+    title: t("themeDeleteTitle"),
+    message: t("themeDeleteMsg").replace("{name}", themeDraft.name),
+    confirmLabel: t("delete"),
+  });
+  if (!ok) return;
+  try {
+    settings = await invoke("delete_custom_theme", { id: themeDraft.id });
+  } catch (err) {
+    toast(String(err));
+    return;
+  }
+  fillThemeSelect();
+  // Deleting the active theme drops back to "system", which only the backend can
+  // resolve to light or dark.
+  applyTheme(await invoke("current_theme").catch(() => themeBase(settings.theme)));
+  closeThemeEditor(false);
+}
+
+// Settings dropdown: the built-in themes, then the custom ones under a separator.
+function fillThemeSelect() {
+  const sel = $("theme-select");
+  if (!sel) return;
+  for (const opt of [...sel.querySelectorAll("option.custom-theme")]) opt.remove();
+  const list = customThemes();
+  if (list.length) {
+    const sep = document.createElement("option");
+    sep.className = "custom-theme";
+    sep.disabled = true;
+    sep.textContent = t("themeCustomGroup");
+    sel.appendChild(sep);
+  }
+  for (const theme of list) {
+    const opt = document.createElement("option");
+    opt.className = "custom-theme";
+    opt.value = `custom:${theme.id}`;
+    opt.textContent = theme.name;
+    sel.appendChild(opt);
+  }
+  sel.value = settings.theme || "system";
+  // A parked custom theme (feature off) has no entry — show the base it renders as.
+  if (!sel.value) sel.value = themeBase(settings.theme);
+}
+
+// Re-apply after the feature was toggled: switching it off parks every custom theme
+// on its base theme without touching the stored data.
+function refreshCustomThemes() {
+  fillThemeSelect();
+  const base = themeBase(settings.theme);
+  if (customThemeId(settings.theme) && BUILTIN_THEMES.includes(base)) {
+    document.documentElement.setAttribute("data-theme", base);
+  }
+  applyThemeVars(activeThemeVars());
+}
+
+$("theme-edit-open")?.addEventListener("click", openThemeEditor);
+$("theme-modal-close")?.addEventListener("click", () => closeThemeEditor());
+$("theme-edit-cancel")?.addEventListener("click", () => closeThemeEditor());
+$("theme-modal")?.addEventListener("pointerdown", (e) => {
+  if (e.target === $("theme-modal")) closeThemeEditor();
+});
+$("theme-edit-save")?.addEventListener("click", saveThemeDraft);
+$("theme-edit-delete")?.addEventListener("click", deleteThemeDraft);
+$("theme-edit-name")?.addEventListener("input", (e) => {
+  if (themeDraft) themeDraft.name = e.target.value;
+});
+$("theme-edit-target")?.addEventListener("change", (e) => {
+  const theme = customThemes().find((c) => c.id === e.target.value);
+  themeDraft = theme ? draftFrom(theme) : newThemeDraft();
+  renderThemeEditor();
+  previewThemeDraft();
+});
+$("theme-edit-base")?.addEventListener("change", (e) => {
+  if (!themeDraft) return;
+  themeDraft.base = e.target.value;
+  renderThemeVars(); // the un-overridden colours now come from another theme
+  previewThemeDraft();
+});
+
 // ---- Prompt library (all prompts, click to edit) ----
 // Classify a prompt for the library type filter / thumbnails.
 function promptType(p) {
@@ -5441,7 +5823,7 @@ async function runImport() {
     fillSizeSelects();
     fillFontSelects();
     $("lang-select").value = settings.language || "auto";
-    $("theme-select").value = settings.theme || "system";
+    fillThemeSelect();
     $("tile-font").value = settings.tile_font || "system";
     $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
     fillScaleSelect("ui-scale", "uiScale");
@@ -6136,6 +6518,7 @@ function bind() {
 
   const themeSelect = $("theme-select");
   themeSelect.addEventListener("change", async () => {
+    settings.theme = themeSelect.value; // applyTheme reads the custom overrides from it
     applyTheme(await invoke("set_theme", { theme: themeSelect.value }));
   });
 
@@ -6148,6 +6531,7 @@ function bind() {
     // Re-fill the JS-built selects, then restore their current values.
     fillSizeSelects();
     fillFontSelects();
+    fillThemeSelect(); // the custom-theme separator is a translated label too
     $("tile-font").value = settings.tile_font || "system";
     $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
     await renderGrid(); // fresh state: tooltips + a renamed default view
@@ -6174,6 +6558,8 @@ function bind() {
   attachSelectPicker(modal.fontSel);
   attachSelectPicker($("theme-select"));
   attachSelectPicker($("lang-select"));
+  attachSelectPicker($("theme-edit-target"));
+  attachSelectPicker($("theme-edit-base"));
 
   // UI size + icon size: percentage-preset selects mirroring the expert scales.
   fillScaleSelect("ui-scale", "uiScale");
@@ -6411,7 +6797,7 @@ function bind() {
     });
   });
 
-  listen("theme-changed", (e) => applyTheme(e.payload));
+  listen("theme-changed", (e) => applyTheme(e.payload?.theme, e.payload?.vars));
   // "Edit prompt" chosen in a floating pill's right-click menu.
   listen("edit-prompt", (e) => editPrompt(String(e.payload)));
 }
@@ -6559,7 +6945,7 @@ async function init() {
 
 // Push the loaded settings into the settings-dialog controls.
 function syncSettingsControls() {
-    $("theme-select").value = settings.theme;
+    fillThemeSelect();
     $("lang-select").value = settings.language || "auto";
     $("opt-minimize").checked = settings.minimize_to_tray === true;
     $("opt-screenshot-folder").checked = settings.ui_flags?.screenshotSave === true;

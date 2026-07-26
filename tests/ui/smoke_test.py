@@ -118,6 +118,44 @@ PROBE = """
       }
     }
     document.getElementById('settings').classList.remove('hidden');
+    // Custom themes: the stored one is offered in the theme list, the editor opens
+    // with a colour row per themable token, and editing previews on the spot.
+    const themeSel = document.getElementById('theme-select');
+    if (![...themeSel.options].some(o => o.value === 'custom:ct1')) {
+      out.errors.push('the stored custom theme is missing from the theme list');
+    }
+    await click('theme-edit-open');
+    const tmodal = document.getElementById('theme-modal');
+    if (tmodal.classList.contains('hidden')) {
+      out.errors.push('the theme editor did not open');
+    } else {
+      const rows = [...document.querySelectorAll('#theme-edit-vars .theme-var-row')];
+      if (rows.length !== 9) out.errors.push('the theme editor shows ' + rows.length + ' colour rows instead of 9');
+      if (document.querySelectorAll('#theme-edit-vars .theme-var-group').length !== 4) {
+        out.errors.push('the theme colours are not split into four groups');
+      }
+      const hex = rows[0] && rows[0].querySelector('.theme-hex');
+      if (!hex) {
+        out.errors.push('a theme colour row has no hex field');
+      } else {
+        // A valid value applies live; an invalid one is rejected and rolled back.
+        hex.value = '#123456';
+        hex.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(120);
+        if (getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() !== '#123456') {
+          out.errors.push('editing a colour does not preview live');
+        }
+        hex.value = 'nonsense';
+        hex.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(120);
+        if (hex.value !== '#123456') out.errors.push('an invalid hex value was not rejected');
+      }
+      await click('theme-edit-cancel');
+      await sleep(150);
+      if (document.documentElement.style.getPropertyValue('--bg') === '#123456') {
+        out.errors.push('cancelling the theme editor kept the preview');
+      }
+    }
     await click('expert-open');
     for (const tb of [...document.querySelectorAll('.expert-tab')]) {
       tb.click();
@@ -309,6 +347,9 @@ PROBE = """
       }
       await click('update-modal-cancel');
     }
+    // Leave the theme editor open so the scans below measure its real layout.
+    document.getElementById('settings').classList.remove('hidden');
+    await click('theme-edit-open');
   } catch (e) { out.errors.push('probe: ' + e.message); }
   for (const el of document.querySelectorAll('.overlay *, #expert-flags *')) {
     const r = el.getBoundingClientRect();

@@ -17,6 +17,29 @@ const menu = document.getElementById("menu");
 const resizeEl = document.getElementById("resize");
 const rzCatch = document.getElementById("rz-catch");
 
+// F3 custom themes: the pill has its own tokens (floating.css), so the theme's
+// colours are mapped onto them — a floating button follows the same palette as
+// the main window instead of falling back to the base theme's colours.
+const FLOAT_THEME_MAP = {
+  accent: "--pill-bg",
+  "accent-fg": "--pill-fg",
+  surface: "--menu-bg",
+  fg: "--menu-fg",
+  border: "--menu-line",
+  danger: "--danger",
+};
+const FLOAT_HEX = /^#[0-9a-fA-F]{6}$/;
+
+function applyFloatTheme(theme, vars) {
+  if (theme) document.documentElement.setAttribute("data-theme", theme);
+  const style = document.documentElement.style;
+  for (const target of Object.values(FLOAT_THEME_MAP)) style.removeProperty(target);
+  for (const [key, value] of Object.entries(vars || {})) {
+    const target = FLOAT_THEME_MAP[key];
+    if (target && FLOAT_HEX.test(value)) style.setProperty(target, value);
+  }
+}
+
 let scale = 1;
 let tileSize = 0; // global text size setting (0 = auto)
 let globalFontKey = "system";
@@ -719,7 +742,7 @@ document.addEventListener("visibilitychange", () => {
   else ensureVideoPlaying();
 });
 
-listen("theme-changed", (e) => document.documentElement.setAttribute("data-theme", e.payload));
+listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 // Language switched in the settings — re-translate the pill texts in place.
 listen("language-changed", () => applySettings());
 
@@ -734,7 +757,7 @@ appWin.onScaleChanged(() => {
   // A transient IPC failure must not leave the pill blank/unstyled — guard each
   // step independently so the rest still runs.
   try {
-    document.documentElement.setAttribute("data-theme", await invoke("current_theme"));
+    applyFloatTheme(await invoke("current_theme"), await invoke("theme_vars"));
   } catch (_) {}
   applySettings().catch(() => {});
   loadName().catch(() => {});

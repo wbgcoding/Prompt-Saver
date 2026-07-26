@@ -371,6 +371,40 @@
     </div>
   </div>
 
+  <!-- F3 theme editor: inherit a built-in theme and override single colours -->
+  <div id="theme-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal modal-narrow">
+      <div class="modal-head">
+        <h2 class="modal-title" data-i18n="themeEditor">Theme editor</h2>
+        <button id="theme-modal-close" class="icon-btn" type="button" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="theme-edit-body">
+        <label class="field">
+          <span data-i18n="themeEditTarget">Theme</span>
+          <select id="theme-edit-target" class="modal-input"></select>
+        </label>
+        <label class="field">
+          <span data-i18n="themeName">Name</span>
+          <input id="theme-edit-name" class="modal-input" type="text" maxlength="40" spellcheck="false" data-i18n-ph="themeNamePh" />
+        </label>
+        <label class="field">
+          <span data-i18n="themeBase">Based on</span>
+          <select id="theme-edit-base" class="modal-input"></select>
+        </label>
+        <div id="theme-edit-vars" class="theme-var-list"></div>
+      </div>
+      <div class="modal-actions">
+        <button id="theme-edit-delete" class="ghost-btn danger-btn" type="button" data-i18n="delete">Delete</button>
+        <button id="theme-edit-cancel" class="ghost-btn" type="button" data-i18n="cancel">Cancel</button>
+        <button id="theme-edit-save" class="primary-btn" type="button" data-i18n="save">Save</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Copy history & usage journal -->
   <div id="journal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal">
@@ -420,8 +454,9 @@
       </div>
       <div id="settings-main">
       <div class="three-col">
-        <label class="field">
+        <div class="field theme-field">
           <span data-i18n="theme">Theme</span>
+          <div class="theme-row">
           <select id="theme-select" class="modal-input">
             <option value="system" data-i18n="themeSystem">System</option>
             <option value="light" data-i18n="themeLight">Light</option>
@@ -440,7 +475,16 @@
             <option value="coffee" data-i18n="themeCoffee">Coffee</option>
             <option value="midnight" data-i18n="themeMidnight">Midnight</option>
           </select>
-        </label>
+          <button id="theme-edit-open" class="icon-btn theme-edit-btn" type="button" data-i18n-title="themeEditor" data-i18n-aria="themeEditor">
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M12 3.2c-4.9 0-8.8 3.6-8.8 8.1 0 4.4 3.5 7.5 7.4 7.5 1.4 0 2.2-.8 2.2-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.4-.6-.4-1 0-.8.7-1.4 1.6-1.4h1.6c3 0 5.1-2 5.1-4.9 0-3-3.5-5.3-8.2-5.3Z"/>
+              <circle cx="7.6" cy="11.4" r="1.25" fill="currentColor"/>
+              <circle cx="11.1" cy="7.9" r="1.25" fill="currentColor"/>
+              <circle cx="15.6" cy="8.6" r="1.25" fill="currentColor"/>
+            </svg>
+          </button>
+          </div>
+        </div>
         <label class="field">
           <span data-i18n="language">Language</span>
           <select id="lang-select" class="modal-input">

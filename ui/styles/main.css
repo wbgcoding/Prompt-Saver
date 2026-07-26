@@ -2733,6 +2733,69 @@ button.tag-chip:hover { border-color: var(--accent); }
 .tag-manage-count { flex: 0 0 auto; min-width: 22px; text-align: right; color: var(--muted); font-size: 12px; }
 .tag-manage-row .ghost-btn { flex: 0 0 auto; padding: 3px 10px; font-size: 12px; }
 
+/* ---- F3 custom themes ---- */
+/* The editor button sits right of the theme dropdown, which gives up the width. */
+.theme-row { display: flex; align-items: center; gap: 6px; }
+.theme-row .modal-input { flex: 1 1 auto; min-width: 0; }
+.theme-edit-btn { flex: 0 0 auto; }
+body:not(.flag-customThemes) .theme-edit-btn { display: none; }
+
+#theme-modal.overlay { z-index: 68; }
+/* The colour list scrolls inside the dialog so Cancel/Save stay reachable at any
+   window height (a shrinking flex child would otherwise spill over them). */
+#theme-modal .modal { overflow: hidden; }
+#theme-modal .modal-actions { flex: 0 0 auto; }
+.theme-edit-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+}
+.theme-edit-body::-webkit-scrollbar { width: var(--sb-width, 12px); }
+.theme-edit-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
+.theme-var-list { display: flex; flex-direction: column; gap: 4px; }
+.theme-var-group {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.theme-var-row { display: flex; align-items: center; gap: 8px; }
+.theme-var-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+/* Overridden tokens are marked so it stays clear what the theme actually changes. */
+.theme-var-row.overridden .theme-var-name { color: var(--accent); }
+.theme-swatch {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+.theme-hex {
+  flex: 0 0 86px;
+  padding: 4px 6px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+}
+.theme-hex.invalid { border-color: var(--danger); }
+.theme-var-reset { flex: 0 0 auto; padding: 2px 7px; font-size: 12px; line-height: 1.4; }
+.theme-var-reset:disabled { opacity: 0; pointer-events: none; }
+.modal-actions #theme-edit-delete { margin-right: auto; }
+/* Separator row in the dropdown popup (built-in themes above, custom below). */
+.num-pop button.sep {
+  padding: 3px 10px;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: default;
+}
+.num-pop button.sep:hover { background: transparent; }
+
 .hidden { display: none !important; }
 
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }

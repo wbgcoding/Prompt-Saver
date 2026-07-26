@@ -154,6 +154,24 @@ struct VideoPrefs {
     looped: bool,
 }
 
+// F3: a user-defined theme. It inherits every rule of `base` (one of the built-in
+// themes) and overrides only the colour variables listed in `vars`.
+#[derive(Serialize, Deserialize, Clone)]
+struct CustomTheme {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default = "default_custom_base")]
+    base: String,
+    #[serde(default)]
+    vars: HashMap<String, String>,
+}
+
+fn default_custom_base() -> String {
+    "light".to_string()
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 struct Settings {
     #[serde(default = "default_theme")]
@@ -202,6 +220,10 @@ struct Settings {
     // recased tag keeps its color. A tag without an entry renders neutral.
     #[serde(default)]
     tag_colors: HashMap<String, String>,
+    // F3: user-defined themes. `theme` points at one of them with "custom:<id>";
+    // each carries only the variables that differ from its built-in base.
+    #[serde(default)]
+    custom_themes: Vec<CustomTheme>,
     // Legacy in-blob copy history. Read once on upgrade to migrate into the
     // dedicated `copy_log` table, then never written back (the table owns it so
     // a million-entry history never bloats this encrypted settings blob).
@@ -279,6 +301,7 @@ impl Default for Settings {
             ui_texts: HashMap::new(),
             dup_ignored: Vec::new(),
             tag_colors: HashMap::new(),
+            custom_themes: Vec::new(),
             copy_log: Vec::new(),
             usage: HashMap::new(),
             last_used: HashMap::new(),
@@ -1039,10 +1062,126 @@ fn lock<'a>(state: &'a State<'a, Db>) -> std::sync::MutexGuard<'a, Store> {
 
 // ---------- Theme ----------
 
+// Every theme that has its own rules in main.css. "system" is not in here: it
+// resolves to light/dark at runtime, and it is not a valid custom-theme base.
+const BUILTIN_THEMES: [&str; 15] = [
+    "light", "dark", "programmer", "ai", "gradient", "sunset", "ocean", "forest", "midnight",
+    "cyberpunk", "retro", "mono", "lavender", "candy", "coffee",
+];
+// The colour variables a custom theme may override — the `:root` colour tokens of
+// main.css. Everything else (shadow, radius, timings) stays with the base theme.
+const THEME_VAR_KEYS: [&str; 9] = [
+    "bg", "surface", "surface-2", "fg", "muted", "border", "accent", "accent-fg", "danger",
+];
+const MAX_THEME_NAME: usize = 40;
+// Hard ceiling for the user-configurable limit (expert value `customThemeMax`).
+const MAX_CUSTOM_THEMES: usize = 20;
+const DEFAULT_CUSTOM_THEMES: usize = 8;
+
+fn custom_theme_cap(settings: &Settings) -> usize {
+    let raw = settings
+        .ui_values
+        .get("customThemeMax")
+        .copied()
+        .filter(|v| v.is_finite())
+        .unwrap_or(DEFAULT_CUSTOM_THEMES as f64);
+    (raw.round() as i64).clamp(1, MAX_CUSTOM_THEMES as i64) as usize
+}
+
+fn valid_theme_name(name: &str) -> Result<String, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("theme name is empty".to_string());
+    }
+    if name.chars().count() > MAX_THEME_NAME {
+        return Err(format!("theme name longer than {} characters", MAX_THEME_NAME));
+    }
+    if name.chars().any(|c| c.is_control()) {
+        return Err("theme name contains a control character".to_string());
+    }
+    Ok(name.to_string())
+}
+
+// A custom theme may only inherit from a built-in one — never from another custom
+// theme, so inheritance can never chain or form a cycle.
+fn valid_theme_base(base: &str) -> Result<String, String> {
+    let base = base.trim();
+    if BUILTIN_THEMES.contains(&base) {
+        Ok(base.to_string())
+    } else {
+        Err("unknown base theme".to_string())
+    }
+}
+
+// Keep the known colour tokens with a valid #rrggbb value; an empty value means
+// "not overridden" and is dropped rather than stored.
+fn valid_theme_vars(vars: &HashMap<String, String>) -> Result<HashMap<String, String>, String> {
+    let mut out = HashMap::new();
+    for (key, value) in vars {
+        if !THEME_VAR_KEYS.contains(&key.as_str()) {
+            return Err(format!("unknown theme variable '{}'", key));
+        }
+        let color = valid_tag_color(value)?;
+        if !color.is_empty() {
+            out.insert(key.clone(), color);
+        }
+    }
+    Ok(out)
+}
+
+// Resolve a stored preference to a theme with real CSS rules: a custom theme
+// renders as its base plus the overridden variables.
+fn theme_base_of(settings: &Settings, pref: &str) -> String {
+    match pref.strip_prefix("custom:") {
+        Some(id) => settings
+            .custom_themes
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| c.base.clone())
+            .unwrap_or_else(default_theme),
+        None => pref.to_string(),
+    }
+}
+
+// Variable overrides of the active theme, or nothing at all: switching the feature
+// off in the expert menu parks the custom themes without deleting them.
+fn theme_vars_of(settings: &Settings) -> HashMap<String, String> {
+    if settings.ui_flags.get("customThemes") != Some(&true) {
+        return HashMap::new();
+    }
+    settings
+        .theme
+        .strip_prefix("custom:")
+        .and_then(|id| settings.custom_themes.iter().find(|c| c.id == id))
+        .map(|c| c.vars.clone())
+        .unwrap_or_default()
+}
+
+#[derive(Serialize, Clone)]
+struct ThemeState {
+    theme: String,
+    vars: HashMap<String, String>,
+}
+
+// Apply the active theme everywhere: native window background, main window and
+// every floating pill (they listen for the event).
+fn push_theme(app: &AppHandle, settings: &Settings) -> String {
+    let base = theme_base_of(settings, &settings.theme);
+    let effective = effective_theme(app, &base);
+    let vars = theme_vars_of(settings);
+    apply_window_bg(app, &effective, vars.get("bg").map(|s| s.as_str()));
+    let _ = app.emit("theme-changed", ThemeState { theme: effective.clone(), vars });
+    effective
+}
+
 // Native window background = theme background, so the area exposed while
-// resizing never flashes white.
-fn apply_window_bg(app: &AppHandle, theme: &str) {
+// resizing never flashes white. `custom_bg` is the active custom theme's override.
+fn apply_window_bg(app: &AppHandle, theme: &str, custom_bg: Option<&str>) {
     if let Some(win) = app.get_webview_window("main") {
+        if let Some(color) = custom_bg.and_then(hex_to_color) {
+            let _ = win.set_background_color(Some(color));
+            return;
+        }
         // Matches the --bg token of each theme in main.css.
         let color = match theme {
             "dark" => tauri::webview::Color(27, 27, 29, 255),
@@ -1065,22 +1204,32 @@ fn apply_window_bg(app: &AppHandle, theme: &str) {
     }
 }
 
-fn effective_theme(app: &AppHandle, pref: &str) -> String {
-    match pref {
-        "light" | "dark" | "programmer" | "ai" | "gradient" | "sunset" | "ocean" | "forest"
-        | "midnight" | "cyberpunk" | "retro" | "mono" | "lavender" | "candy" | "coffee" => {
-            pref.to_string()
-        }
-        _ => app
-            .get_webview_window("main")
-            .and_then(|w| w.theme().ok())
-            .map(|t| match t {
-                tauri::Theme::Dark => "dark",
-                _ => "light",
-            })
-            .unwrap_or("light")
-            .to_string(),
+fn hex_to_color(hex: &str) -> Option<tauri::webview::Color> {
+    let d = hex.strip_prefix('#')?;
+    if d.len() != 6 {
+        return None;
     }
+    let n = u32::from_str_radix(d, 16).ok()?;
+    Some(tauri::webview::Color(
+        (n >> 16) as u8,
+        ((n >> 8) & 0xff) as u8,
+        (n & 0xff) as u8,
+        255,
+    ))
+}
+
+fn effective_theme(app: &AppHandle, pref: &str) -> String {
+    if BUILTIN_THEMES.contains(&pref) {
+        return pref.to_string();
+    }
+    app.get_webview_window("main")
+        .and_then(|w| w.theme().ok())
+        .map(|t| match t {
+            tauri::Theme::Dark => "dark",
+            _ => "light",
+        })
+        .unwrap_or("light")
+        .to_string()
 }
 
 // ---------- Floating windows ----------
@@ -2988,21 +3137,80 @@ async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep
 
 #[tauri::command]
 fn current_theme(app: AppHandle, state: State<Db>) -> String {
-    let pref = lock(&state).settings.theme.clone();
-    effective_theme(&app, &pref)
+    let settings = lock(&state).settings.clone();
+    effective_theme(&app, &theme_base_of(&settings, &settings.theme))
+}
+
+// Colour overrides of the active theme; empty for every built-in one.
+#[tauri::command]
+fn theme_vars(state: State<Db>) -> HashMap<String, String> {
+    theme_vars_of(&lock(&state).settings)
 }
 
 #[tauri::command]
 fn set_theme(app: AppHandle, state: State<Db>, theme: String) -> String {
-    {
+    let settings = {
         let mut store = lock(&state);
-        store.settings.theme = theme.clone();
+        store.settings.theme = theme;
         save_settings(&app, &store.settings);
-    }
-    let effective = effective_theme(&app, &theme);
-    apply_window_bg(&app, &effective);
-    let _ = app.emit("theme-changed", effective.clone());
-    effective
+        store.settings.clone()
+    };
+    push_theme(&app, &settings)
+}
+
+// Create (empty id) or update one custom theme, then apply it. Every field is
+// validated here: the frontend is not the only way into this command.
+#[tauri::command]
+fn save_custom_theme(
+    app: AppHandle,
+    state: State<Db>,
+    id: String,
+    name: String,
+    base: String,
+    vars: HashMap<String, String>,
+) -> Result<Settings, String> {
+    let name = valid_theme_name(&name)?;
+    let base = valid_theme_base(&base)?;
+    let vars = valid_theme_vars(&vars)?;
+    let settings = {
+        let mut store = lock(&state);
+        match store.settings.custom_themes.iter_mut().find(|c| c.id == id) {
+            Some(theme) => {
+                theme.name = name;
+                theme.base = base;
+                theme.vars = vars;
+            }
+            None => {
+                let cap = custom_theme_cap(&store.settings);
+                if store.settings.custom_themes.len() >= cap {
+                    return Err(format!("max {} custom themes", cap));
+                }
+                let theme = CustomTheme { id: gen_id(), name, base, vars };
+                store.settings.theme = format!("custom:{}", theme.id);
+                store.settings.custom_themes.push(theme);
+            }
+        }
+        save_settings(&app, &store.settings);
+        store.settings.clone()
+    };
+    push_theme(&app, &settings);
+    Ok(settings)
+}
+
+// Drop a custom theme; deleting the active one falls back to the system theme.
+#[tauri::command]
+fn delete_custom_theme(app: AppHandle, state: State<Db>, id: String) -> Result<Settings, String> {
+    let settings = {
+        let mut store = lock(&state);
+        store.settings.custom_themes.retain(|c| c.id != id);
+        if store.settings.theme == format!("custom:{}", id) {
+            store.settings.theme = default_theme();
+        }
+        save_settings(&app, &store.settings);
+        store.settings.clone()
+    };
+    push_theme(&app, &settings);
+    Ok(settings)
 }
 
 // Async: encoding + writing a large image to the clipboard stays off the UI thread.
@@ -5621,11 +5829,9 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>) -> Result<usize, S
         count += 1;
     }
     save_prompts(&app, &store);
-    let pref = store.settings.theme.clone();
+    let settings = store.settings.clone();
     drop(store);
-    let effective = effective_theme(&app, &pref);
-    apply_window_bg(&app, &effective);
-    let _ = app.emit("theme-changed", effective);
+    push_theme(&app, &settings);
     Ok(count)
 }
 
@@ -5861,7 +6067,7 @@ async fn import_all(
     let backup: Backup =
         serde_json::from_str(&content).map_err(|_| "not a Prompt Saver backup".to_string())?;
 
-    let (theme, hotkey, count) = {
+    let (settings, hotkey, count) = {
         let mut store = lock(&state);
         store.prompts = backup.prompts;
         // A backup written by hand could miss ids; keep every prompt addressable.
@@ -5880,15 +6086,13 @@ async fn import_all(
         save_prompts(&app, &store);
         save_settings(&app, &store.settings);
         (
-            store.settings.theme.clone(),
+            store.settings.clone(),
             store.settings.hotkey.clone(),
             store.prompts.len(),
         )
     };
     // Re-apply the visible parts of the imported settings without a restart.
-    let effective = effective_theme(&app, &theme);
-    apply_window_bg(&app, &effective);
-    let _ = app.emit("theme-changed", effective);
+    push_theme(&app, &settings);
     {
         use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
         let gs = app.global_shortcut();
@@ -6212,12 +6416,13 @@ pub fn run() {
                     let _ = main.set_always_on_top(true);
                 }
                 {
-                    let pref = handle
+                    let settings = handle
                         .try_state::<Db>()
-                        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.theme.clone())
-                        .unwrap_or_else(|| "system".to_string());
-                    let eff = effective_theme(&handle, &pref);
-                    apply_window_bg(&handle, &eff);
+                        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.clone())
+                        .unwrap_or_default();
+                    let eff = effective_theme(&handle, &theme_base_of(&settings, &settings.theme));
+                    let vars = theme_vars_of(&settings);
+                    apply_window_bg(&handle, &eff, vars.get("bg").map(|s| s.as_str()));
                 }
                 // The window is revealed by the frontend (show_main_window) once
                 // the first layout pass is done — no visible text re-sizing.
@@ -6265,16 +6470,15 @@ pub fn run() {
                     }
                     WindowEvent::ThemeChanged(_) => {
                         if let Some(state) = handle2.try_state::<Db>() {
-                            let pref = state
+                            let settings = state
                                 .lock()
                                 .unwrap_or_else(|e| e.into_inner())
                                 .settings
-                                .theme
                                 .clone();
-                            if pref == "system" {
-                                let eff = effective_theme(&handle2, &pref);
-                                apply_window_bg(&handle2, &eff);
-                                let _ = handle2.emit("theme-changed", eff);
+                            // Only the "system" preference follows the OS; a custom
+                            // theme always inherits a fixed built-in base.
+                            if settings.theme == "system" {
+                                push_theme(&handle2, &settings);
                             }
                         }
                     }
@@ -6455,7 +6659,10 @@ pub fn run() {
             get_settings,
             get_state,
             current_theme,
+            theme_vars,
             set_theme,
+            save_custom_theme,
+            delete_custom_theme,
             copy_prompt,
             copy_text,
             record_copy,
@@ -7034,6 +7241,81 @@ mod tests {
         assert_eq!(valid_tag_color("#AABBCC").unwrap(), "#aabbcc");
         assert!(valid_tag_color("red").is_err());
         assert!(valid_tag_color("#abc").is_err());
+    }
+
+    #[test]
+    fn custom_theme_input_is_validated() {
+        assert!(valid_theme_name("  ").is_err());
+        assert_eq!(valid_theme_name("  Night  ").unwrap(), "Night");
+        assert!(valid_theme_name(&"a".repeat(MAX_THEME_NAME + 1)).is_err());
+        assert!(valid_theme_name("Night\nshift").is_err());
+        // A base must be a real built-in; "system" and another custom theme are not,
+        // so inheritance can never chain.
+        assert_eq!(valid_theme_base(" dark ").unwrap(), "dark");
+        assert!(valid_theme_base("system").is_err());
+        assert!(valid_theme_base("custom:abc").is_err());
+        let mut vars = HashMap::new();
+        vars.insert("accent".to_string(), "#AABBCC".to_string());
+        vars.insert("bg".to_string(), "  ".to_string()); // empty = not overridden
+        let clean = valid_theme_vars(&vars).unwrap();
+        assert_eq!(clean.get("accent").unwrap(), "#aabbcc");
+        assert!(!clean.contains_key("bg"));
+        vars.insert("shadow".to_string(), "#000000".to_string());
+        assert!(valid_theme_vars(&vars).is_err()); // not a themable colour token
+        let mut bad = HashMap::new();
+        bad.insert("accent".to_string(), "red".to_string());
+        assert!(valid_theme_vars(&bad).is_err());
+    }
+
+    #[test]
+    fn custom_theme_resolves_to_its_base() {
+        let mut settings = Settings::default();
+        settings.custom_themes.push(CustomTheme {
+            id: "t1".into(),
+            name: "Night".into(),
+            base: "dark".into(),
+            vars: HashMap::from([("accent".to_string(), "#ff0000".to_string())]),
+        });
+        settings.theme = "custom:t1".into();
+        assert_eq!(theme_base_of(&settings, &settings.theme), "dark");
+        // The feature ships off, so a stored custom theme stays parked until enabled.
+        assert!(theme_vars_of(&settings).is_empty());
+        settings.ui_flags.insert("customThemes".into(), true);
+        assert_eq!(theme_vars_of(&settings).get("accent").unwrap(), "#ff0000");
+        // A dangling reference falls back to the system theme instead of breaking.
+        settings.theme = "custom:gone".into();
+        assert_eq!(theme_base_of(&settings, &settings.theme), "system");
+        assert!(theme_vars_of(&settings).is_empty());
+        // Built-in preferences pass through untouched.
+        assert_eq!(theme_base_of(&settings, "mono"), "mono");
+    }
+
+    #[test]
+    fn custom_theme_cap_is_bounded() {
+        let mut settings = Settings::default();
+        assert_eq!(custom_theme_cap(&settings), DEFAULT_CUSTOM_THEMES);
+        settings.ui_values.insert("customThemeMax".into(), 3.0);
+        assert_eq!(custom_theme_cap(&settings), 3);
+        settings.ui_values.insert("customThemeMax".into(), 9999.0);
+        assert_eq!(custom_theme_cap(&settings), MAX_CUSTOM_THEMES);
+        settings.ui_values.insert("customThemeMax".into(), -5.0);
+        assert_eq!(custom_theme_cap(&settings), 1);
+        settings.ui_values.insert("customThemeMax".into(), f64::NAN);
+        assert_eq!(custom_theme_cap(&settings), DEFAULT_CUSTOM_THEMES);
+    }
+
+    #[test]
+    fn settings_without_custom_themes_still_load() {
+        // G4: an older settings blob has no `custom_themes` key at all.
+        let s: Settings = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
+        assert!(s.custom_themes.is_empty());
+        // A theme entry from a newer build with unknown extra fields keeps what it can.
+        let s: Settings = serde_json::from_str(
+            r##"{"custom_themes":[{"id":"a","name":"N","base":"mono","vars":{"bg":"#111111"},"future":1}]}"##,
+        )
+        .unwrap();
+        assert_eq!(s.custom_themes[0].base, "mono");
+        assert_eq!(s.custom_themes[0].vars.get("bg").unwrap(), "#111111");
     }
 
     #[test]
