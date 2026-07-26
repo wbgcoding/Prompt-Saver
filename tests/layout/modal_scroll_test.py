@@ -90,9 +90,10 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html") -> Path
 
     # The .clear-wrap / .clear-wrap-ta spans mirror what wireClear() injects at
     # runtime -- the textarea wrapper is the actual flex item, so the harness is
-    # only faithful with it in place.
+    # only faithful with it in place. The F17 notes row sits collapsed above the
+    # history, as it does when the editor opens.
     html = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<link rel="stylesheet" href="styles/main.css"><style>body{{margin:0}}</style></head><body class="flag-tags">
+<link rel="stylesheet" href="styles/main.css"><style>body{{margin:0}}</style></head><body class="flag-tags flag-promptNotes">
 <div id="modal" class="overlay tall history-open" role="dialog" aria-modal="true"><div class="modal">
   <div class="modal-titlebar"><h2 class="modal-title">Edit prompt</h2>
     <button class="icon-btn modal-x" type="button">X</button></div>
@@ -124,6 +125,11 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html") -> Path
   <div id="modal-tags" class="modal-tags"><span class="modal-tags-label">Tags</span>
     <div id="modal-tag-chips" class="tag-chips">{tag_chips}</div>
     <input id="modal-tag-input" class="modal-input tag-input" type="text"></div>
+  <div id="modal-notes" class="modal-collapse">
+    <button type="button" id="modal-notes-head" class="modal-collapse-head" aria-expanded="false">
+      <span>Notes</span></button>
+    <div id="modal-notes-body" class="modal-collapse-body hidden">
+      <textarea id="modal-notes-text" class="modal-input modal-notes-text" rows="3"></textarea></div></div>
   <div id="modal-history" class="modal-collapse open">
     <button type="button" id="modal-history-head" class="modal-collapse-head" aria-expanded="true">
       <span>Version history</span></button>

@@ -229,6 +229,19 @@
         <input id="modal-tag-input" class="modal-input tag-input" type="text" maxlength="60"
                autocomplete="off" data-i18n-ph="tagsPh" data-i18n-aria="tagsPh" />
       </div>
+      <!-- F17 private notes (collapsed by default; context for the user, never copied) -->
+      <div id="modal-notes" class="modal-collapse">
+        <button type="button" id="modal-notes-head" class="modal-collapse-head" aria-expanded="false">
+          <span data-i18n="notesTitle">Notes</span>
+          <svg class="collapse-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+        <div id="modal-notes-body" class="modal-collapse-body hidden">
+          <textarea id="modal-notes-text" class="modal-input modal-notes-text" rows="3" data-i18n-ph="notesPh"></textarea>
+          <p class="modal-hint modal-notes-hint" data-i18n="notesHint">Never copied — only shown here.</p>
+        </div>
+      </div>
       <!-- F7 version history (collapsed by default; edit mode + text prompts only) -->
       <div id="modal-history" class="modal-collapse hidden">
         <button type="button" id="modal-history-head" class="modal-collapse-head" aria-expanded="false">

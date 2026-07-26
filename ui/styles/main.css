@@ -1327,7 +1327,15 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .tile-tip-name { font-weight: 700; }
 .tile-tip-body { margin-top: 5px; opacity: 0.9; }
 .tile-tip-hint { margin-top: 7px; font-size: 11px; color: var(--muted); }
+/* F17 private note: its own dimmed section under the preview, separated by a rule
+   so it never reads as part of the prompt text. */
+.tile-tip-notes {
+  margin-top: 7px; padding-top: 6px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px; font-style: italic; color: var(--muted);
+}
 .tile-tip-body:empty,
+.tile-tip-notes:empty,
 .tile-tip-hint:empty { display: none; }
 /* Plain icon/label tooltip: compact, single line, lighter weight than a tile preview. */
 .tile-tip.plain { padding: 5px 9px; max-width: 300px; }
@@ -2843,6 +2851,10 @@ body.no-composer .toast { bottom: 18px; }
 /* Opt-in feature: without the flag the tag UI is gone, the stored tags stay. */
 body:not(.flag-tags) #modal-tags,
 body:not(.flag-tags) .lib-tagbar { display: none; }
+/* F17 private notes: the editor row only exists while the feature is on. */
+body:not(.flag-promptNotes) #modal-notes { display: none; }
+.modal-notes-text { resize: vertical; min-height: 64px; font-size: 13px; }
+.modal-notes-hint { margin: 4px 2px 0; }
 
 .modal-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .modal-tags-label { flex: 0 0 auto; color: var(--muted); font-size: 12px; }

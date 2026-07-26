@@ -94,6 +94,10 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   favorite: i % 5 === 0,
   // Two shared tags plus untagged prompts, so a filter chip visibly narrows the list.
   tags: i % 3 === 0 ? ["Work"] : i % 3 === 1 ? ["Draft", "Work"] : [],
+  // F17: exactly one prompt carries a private note, so the tooltip section and the
+  // library search can be checked against a prompt that has none. "Moonshot" appears
+  // in no name or body, so a search hit can only have come from the note.
+  notes: i === 0 ? "Moonshot idea — ask legal first.\nRewrite the ending." : "",
 }));
 
 const LAYOUT = {};
@@ -103,9 +107,9 @@ const SETTINGS = {
   theme: "dark", language: "en", floating: {}, float_scale: {}, video_prefs: {},
   window: null, minimize_to_tray: false, autostart: false, start_minimized: false,
   always_on_top: false, hotkey: "", auto_update: true, skipped_versions: [],
-  // Tags, custom themes, view groups and the Markdown preview ship off; the stub
-  // turns them on so the smoke run covers that UI too.
-  ui_flags: { tags: true, customThemes: true, viewGroups: true, mdPreview: true },
+  // Tags, custom themes, view groups, the Markdown preview and private notes ship
+  // off; the stub turns them on so the smoke run covers that UI too.
+  ui_flags: { tags: true, customThemes: true, viewGroups: true, mdPreview: true, promptNotes: true },
   ui_values: {}, ui_texts: {}, dup_ignored: [],
   tag_colors: { work: "#3b82f6" },
   custom_themes: [{ id: "ct1", name: "Neon", base: "dark", vars: { accent: "#ff00aa" } }],

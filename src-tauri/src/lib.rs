@@ -111,6 +111,10 @@ struct Prompt {
     // is the one first used in the library (see sanitize_tags).
     #[serde(default)]
     tags: Vec<String>,
+    // F17: private context for the user. Shown in the editor and (optionally) in the
+    // tile tooltip — never part of anything that reaches the clipboard.
+    #[serde(default)]
+    notes: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -1737,12 +1741,14 @@ async fn add_prompt(
     font_size: Option<u32>,
     favorite: Option<bool>,
     tags: Option<Vec<String>>,
+    notes: Option<String>,
 ) -> Result<Prompt, String> {
     // One lock for the whole op so the storeFiles flag can't change mid-insert.
     let prompt = {
         let mut store = lock(&state);
         let store_files = store_files_enabled(&store);
         let tags = sanitize_tags(tags.unwrap_or_default(), &canonical_tags(&store.prompts))?;
+        let notes = sanitize_notes(&notes.unwrap_or_default())?;
         let mut fp = file_path.unwrap_or_default();
         let mut ip = icon_path.unwrap_or_default();
         if store_files {
@@ -1765,6 +1771,7 @@ async fn add_prompt(
             font_size: clamp_font_size(font_size.unwrap_or(0)),
             favorite: favorite.unwrap_or(false),
             tags,
+            notes,
         };
         let view = store.settings.active_view_mut();
         if let Some(cell) = first_free_cell(view) {
@@ -1799,12 +1806,17 @@ async fn update_prompt(
     font_size: Option<u32>,
     favorite: Option<bool>,
     tags: Option<Vec<String>>,
+    notes: Option<String>,
 ) -> Result<Option<Prompt>, String> {
     let updated = {
         let mut store = lock(&state);
         let store_files = store_files_enabled(&store);
         let tags = match tags {
             Some(list) => Some(sanitize_tags(list, &canonical_tags(&store.prompts))?),
+            None => None,
+        };
+        let notes = match notes {
+            Some(text) => Some(sanitize_notes(&text)?),
             None => None,
         };
         let file_path = file_path.map(|p| if store_files { store_attached_file(&app, &p) } else { p });
@@ -1839,6 +1851,7 @@ async fn update_prompt(
                 }
                 if let Some(fav) = favorite { p.favorite = fav; }
                 if let Some(t) = tags { p.tags = t; }
+                if let Some(n) = notes { p.notes = n; }
                 let clone = p.clone();
                 save_prompts(&app, &store);
                 cleanup_orphan_files(&app, &store); // a replaced attachment orphans its old copy
@@ -2321,6 +2334,51 @@ fn sanitize_tags(input: Vec<String>, known: &HashMap<String, String>) -> Result<
         return Err(format!("more than {} tags on one prompt", MAX_TAGS_PER_PROMPT));
     }
     Ok(out)
+}
+
+// ---------- Private notes (F17) ----------
+
+// Generous ceiling: notes are a scratchpad, not a second prompt body. Rejecting
+// instead of truncating keeps the user's text from being silently cut in half.
+const MAX_NOTES_LEN: usize = 10_000;
+
+// Normalize line endings and enforce the ceiling. Notes may contain newlines —
+// the TXT exporter escapes them (see notes_escape).
+fn sanitize_notes(raw: &str) -> Result<String, String> {
+    let text = raw.replace("\r\n", "\n").replace('\r', "\n");
+    let text = text.trim().to_string();
+    if text.chars().count() > MAX_NOTES_LEN {
+        return Err(format!("note longer than {} characters", MAX_NOTES_LEN));
+    }
+    Ok(text)
+}
+
+// The TXT export is line-based, so a multi-line note is written on one line with
+// its newlines escaped. Backslashes are escaped too, or a note ending in "\" plus
+// a literal "n" would come back as a line break.
+fn notes_escape(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('\n', "\\n")
+}
+
+fn notes_unescape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('\\') => out.push('\\'),
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
 }
 
 // A single tag name argument: blank is an error here because the name IS the input.
@@ -3365,6 +3423,14 @@ fn delete_custom_theme(app: AppHandle, state: State<Db>, id: String) -> Result<S
     Ok(settings)
 }
 
+// F17: the single place that decides what text a copy puts on the clipboard. The
+// private notes are deliberately not part of it — every copy path goes through
+// here (or through copy_text with an already-resolved body), so a note can never
+// leak into the clipboard.
+fn copy_payload(p: &Prompt) -> &str {
+    &p.text
+}
+
 // Async: encoding + writing a large image to the clipboard stays off the UI thread.
 #[tauri::command]
 async fn copy_prompt(state: State<'_, Db>, id: String) -> Result<bool, String> {
@@ -3376,8 +3442,9 @@ async fn copy_prompt(state: State<'_, Db>, id: String) -> Result<bool, String> {
         Some(p) if p.copy_image && !p.image.is_empty() => copy_image_to_clipboard(&p.image),
         Some(p) if !p.file_path.is_empty() => set_clipboard_file(&p.file_path),
         Some(p) => {
-            note_own_copy(&p.text); // F21: don't echo our own copy into the inbox
-            arboard::Clipboard::new().and_then(|mut c| c.set_text(p.text)).is_ok()
+            let text = copy_payload(&p).to_string();
+            note_own_copy(&text); // F21: don't echo our own copy into the inbox
+            arboard::Clipboard::new().and_then(|mut c| c.set_text(text)).is_ok()
         }
         None => false,
     })
@@ -5566,7 +5633,7 @@ fn csv_row(cells: &[&str]) -> String {
 fn to_csv(prompts: &[Prompt]) -> String {
     let head = [
         "name", "text", "positions", "color", "font", "size", "file", "icon", "show", "copy",
-        "image", "caption", "capsize", "tags",
+        "image", "caption", "capsize", "tags", "notes",
     ];
     let mut rows = vec![csv_row(&head)];
     for p in prompts {
@@ -5585,6 +5652,9 @@ fn to_csv(prompts: &[Prompt]) -> String {
             &p.caption,
             &p.caption_size.to_string(),
             &p.tags.join(","),
+            // The CSV writer quotes every cell and doubles inner quotes, so a
+            // multi-line note travels verbatim — no escaping needed here.
+            &p.notes,
         ]));
     }
     rows.join("\r\n")
@@ -5595,6 +5665,9 @@ fn to_txt(prompts: &[Prompt]) -> String {
         let mut block = format!("### {}\n{}", p.name, p.text);
         if !p.color.is_empty() {
             block.push_str(&format!("\n@color {}", p.color));
+        }
+        if !p.notes.is_empty() {
+            block.push_str(&format!("\n@notes {}", notes_escape(&p.notes)));
         }
         if !p.tags.is_empty() {
             block.push_str(&format!("\n@tags {}", p.tags.join(",")));
@@ -5714,6 +5787,7 @@ struct ImportedPrompt {
     copy_image: bool,
     image: String,
     tags: Vec<String>,
+    notes: String,
     // Parsed from legacy exports so their @positions block is consumed cleanly;
     // grid layout is no longer imported (prompts-only import).
     #[allow(dead_code)]
@@ -5843,6 +5917,10 @@ fn parse_txt(content: &str) -> ImportData {
             Some((t, v)) => (t.to_string(), split_tag_list(v)),
             None => (body, Vec::new()),
         };
+        let (body, notes) = match body.rsplit_once("\n@notes ") {
+            Some((t, v)) => (t.to_string(), notes_unescape(v.trim())),
+            None => (body, String::new()),
+        };
         let (text, color) = match body.rsplit_once("\n@color ") {
             Some((t, c)) => (t.to_string(), c.trim().to_string()),
             None => (body, String::new()),
@@ -5861,6 +5939,7 @@ fn parse_txt(content: &str) -> ImportData {
             copy_image,
             image,
             tags,
+            notes,
             positions,
         });
     }
@@ -5913,6 +5992,7 @@ fn parse_csv_data(content: &str) -> ImportData {
                 caption: row.get(11).map(|v| v.trim().to_string()).unwrap_or_default(),
                 caption_size: row.get(12).and_then(|v| v.trim().parse().ok()).unwrap_or(0),
                 tags: row.get(13).map(|v| split_tag_list(v)).unwrap_or_default(),
+                notes: row.get(14).cloned().unwrap_or_default(),
                 positions: row
                     .get(2)
                     .map(|p| {
@@ -5985,6 +6065,8 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>) -> Result<usize, S
             font_size: clamp_font_size(item.font_size),
             favorite: false,
             tags,
+            // A note from a foreign file must not abort the import either.
+            notes: sanitize_notes(&item.notes).unwrap_or_default(),
         };
         store.prompts.push(prompt);
         count += 1;
@@ -7168,6 +7250,7 @@ mod tests {
                 font_size: 24,
                 favorite: false,
                 tags: vec!["Work".into(), "E-Mail".into()],
+                notes: "Ask Anna first.\nDeadline: Friday".into(),
             },
             Prompt {
                 id: "p2".into(),
@@ -7185,6 +7268,7 @@ mod tests {
                 font_size: 1,
                 favorite: false,
                 tags: Vec::new(),
+                notes: String::new(),
             },
         ]
     }
@@ -7367,6 +7451,79 @@ mod tests {
         let data = parse_csv_data(csv);
         assert_eq!(data.prompts.len(), 1);
         assert!(data.prompts[0].tags.is_empty());
+    }
+
+    // F17: a multi-line note survives both exporters, and a file written before
+    // notes existed still imports (with an empty note).
+    #[test]
+    fn notes_roundtrip_through_txt_and_csv() {
+        let prompts = sample_prompts();
+        let note = &prompts[0].notes;
+        assert!(note.contains('\n'), "the sample note must be multi-line");
+
+        let txt = to_txt(&prompts);
+        // The line-based format may never carry a raw newline inside the marker.
+        let marker = txt.lines().find(|l| l.starts_with("@notes ")).expect("@notes line");
+        assert!(marker.contains("\\n"), "the newline must be escaped: {marker}");
+        let data = parse_txt(&txt);
+        assert_eq!(&data.prompts[0].notes, note);
+        assert_eq!(data.prompts[0].text, "Hello\nWorld"); // marker did not eat the body
+        assert!(data.prompts[1].notes.is_empty());
+
+        let csv = to_csv(&prompts);
+        assert_eq!(parse_csv(&csv)[1][14], *note);
+        let data = parse_csv_data(&csv);
+        assert_eq!(&data.prompts[0].notes, note);
+        assert!(data.prompts[1].notes.is_empty());
+    }
+
+    #[test]
+    fn old_exports_without_notes_still_parse() {
+        let txt = "### Old\nSome text\n@color #123456\n@tags Work";
+        let data = parse_txt(txt);
+        assert_eq!(data.prompts[0].text, "Some text");
+        assert_eq!(data.prompts[0].color, "#123456");
+        assert!(data.prompts[0].notes.is_empty());
+
+        // A CSV row that stops before the notes column.
+        let csv = "\"name\";\"text\"\r\n\"Old\";\"Some text\"";
+        assert!(parse_csv_data(csv).prompts[0].notes.is_empty());
+    }
+
+    #[test]
+    fn notes_escaping_survives_backslashes() {
+        for raw in ["a\nb", "path C:\\n\\temp", "trailing\\", "\\n literal", ""] {
+            assert_eq!(notes_unescape(&notes_escape(raw)), raw, "roundtrip failed for {raw:?}");
+        }
+    }
+
+    #[test]
+    fn sanitize_notes_normalizes_and_bounds() {
+        assert_eq!(sanitize_notes("  a\r\nb\r  ").unwrap(), "a\nb");
+        assert!(sanitize_notes(&"x".repeat(MAX_NOTES_LEN)).is_ok());
+        assert!(sanitize_notes(&"x".repeat(MAX_NOTES_LEN + 1)).is_err());
+    }
+
+    // F17, the whole point of the feature: a note must never reach the clipboard —
+    // not through a single copy, and not through a chained multi-prompt copy.
+    #[test]
+    fn notes_never_reach_the_copied_payload() {
+        let mut prompts = sample_prompts();
+        prompts[1].notes = "internal only: budget 5000".into();
+        for p in &prompts {
+            let payload = copy_payload(p);
+            assert_eq!(payload, p.text);
+            for line in p.notes.lines().filter(|l| !l.trim().is_empty()) {
+                assert!(!payload.contains(line), "note leaked into a copy: {line}");
+            }
+        }
+        // The chain concatenates the same payloads, so it inherits the guarantee.
+        let chained = prompts.iter().map(|p| copy_payload(p)).collect::<Vec<_>>().join("\n\n");
+        for p in &prompts {
+            for line in p.notes.lines().filter(|l| !l.trim().is_empty()) {
+                assert!(!chained.contains(line), "note leaked into a chain copy: {line}");
+            }
+        }
     }
 
     #[test]

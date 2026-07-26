@@ -85,6 +85,21 @@ PROBE = """
       }
       await click('tag-modal-close');
     }
+    // F17: the search also looks inside the private notes. "Moonshot" lives only in
+    // one prompt's note, so a hit can only have come from there.
+    const q = document.getElementById('library-q');
+    if (!q) {
+      out.errors.push('the library has no search field');
+    } else {
+      q.value = 'moonshot';
+      q.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(300);
+      const hits = document.querySelectorAll('#library-list .lib-item').length;
+      if (hits !== 1) out.errors.push('searching a note matched ' + hits + ' prompts instead of 1');
+      q.value = '';
+      q.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(250);
+    }
     await click('library-close');
     await click('journal-btn');
     await click('journal-close');
@@ -97,6 +112,35 @@ PROBE = """
     await click('chain-btn');
     await click('clip-btn');
     await click('clip-close');
+    // F17: the note rides in the tile tooltip as its own dimmed section, and only
+    // for a prompt that actually has one.
+    const byId = (id) => [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === id);
+    const noteTile = byId('p0'), plainTile = byId('p2');
+    if (!noteTile || !plainTile) {
+      out.errors.push('the tiles for the note check are missing from the grid');
+    } else {
+      if (!noteTile.dataset.tipNotes) out.errors.push('a prompt with a note carries no tooltip note');
+      if (plainTile.dataset.tipNotes) out.errors.push('a prompt without a note carries a tooltip note anyway');
+      const noteSection = () => document.querySelector('.tile-tip .tile-tip-notes');
+      const hover = async (el, x) => {
+        el.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, clientX: x, clientY: 40 }));
+        await sleep(700); // longer than the tooltip show-delay
+      };
+      await hover(noteTile, 30);
+      const shown = noteSection();
+      if (!shown || !shown.textContent.includes('Moonshot')) {
+        out.errors.push('the tooltip shows no note: ' + (shown ? shown.textContent : 'section missing'));
+      } else if (getComputedStyle(shown).display === 'none') {
+        out.errors.push('the note section stays hidden although a note is set');
+      }
+      await hover(plainTile, 60);
+      const empty = noteSection();
+      if (empty && empty.textContent.trim()) {
+        out.errors.push('the tooltip shows a note for a prompt that has none');
+      }
+      document.body.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+      await sleep(200);
+    }
     // Copying the prompt with placeholders must open and close the fill-in dialog —
     // and a plain click must NOT paste into the previous app (that is what the
     // double-click / Enter shortcut is for).
@@ -207,6 +251,21 @@ PROBE = """
       await sleep(150);
       if (!ta.value.includes('{#{tone|formal,casual}#}')) {
         out.errors.push('the helper did not insert a choice variable: ' + ta.value);
+      }
+      // F17: the notes row opens collapsed, expands on click and holds the note.
+      const nRow = document.getElementById('modal-notes');
+      const nBody = document.getElementById('modal-notes-body');
+      if (!nRow || getComputedStyle(nRow).display === 'none') {
+        out.errors.push('the editor has no notes row');
+      } else if (!nBody.classList.contains('hidden')) {
+        out.errors.push('the notes row does not start collapsed');
+      } else {
+        document.getElementById('modal-notes-head').click();
+        await sleep(250);
+        if (nBody.classList.contains('hidden')) out.errors.push('the notes row did not expand');
+        if (!document.getElementById('modal-notes-text').value.includes('Moonshot')) {
+          out.errors.push('the editor did not load the stored note');
+        }
       }
       await click('modal-close-x');
       await sleep(250);
@@ -663,7 +722,9 @@ def main():
             proc = subprocess.run(
                 [browser, "--headless=new", "--disable-gpu", "--no-first-run",
                  f"--user-data-dir={tmp / ('profile-%s' % size_tag)}", "--allow-file-access-from-files",
-                 f"--window-size={w},{h}", "--virtual-time-budget=30000", "--dump-dom",
+                 # The probe walks more UI than it used to; 30s of virtual time ran
+                 # out mid-run on the smallest window and produced no result at all.
+                 f"--window-size={w},{h}", "--virtual-time-budget=45000", "--dump-dom",
                  page.as_uri()],
                 capture_output=True, text=True, timeout=240)
             m = re.search(r'<pre id="SMOKE">(\{.*?\})</pre>', proc.stdout, re.S)

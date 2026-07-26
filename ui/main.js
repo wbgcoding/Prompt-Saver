@@ -46,6 +46,10 @@ const modal = {
   mdToggle: $("modal-md-toggle"),
   mdToggleLabel: $("modal-md-toggle-label"),
   mdPreview: $("modal-md-preview"),
+  notes: $("modal-notes"),
+  notesHead: $("modal-notes-head"),
+  notesBody: $("modal-notes-body"),
+  notesText: $("modal-notes-text"),
 };
 
 const DRAG_THRESHOLD = 5;
@@ -804,6 +808,7 @@ const FLAG_LABELS = {
   choiceVars: "flagChoiceVars",         // F13 {#{name|a,b}#} dropdown variables
   choiceRemember: "flagChoiceRemember", // F13 reopen a choice on its last pick
   codeHighlight: "flagCodeHighlight",   // F15 syntax colours in the preview's code blocks
+  notesInTooltip: "flagNotesInTooltip", // F17 show the private note in the tile tooltip
   // Checks at launch, but only while the normal auto-update setting is on.
   checkUpdateOnStart: "flagCheckUpdateOnStart",
 };
@@ -858,6 +863,7 @@ const OPT_FLAG_LABELS = {
   pausedIcons: "flagPausedIcons",
   viewGroups: "flagViewGroups",                 // F9 folder tabs for views
   mdPreview: "flagMdPreview",                   // F14 rendered Markdown preview in the editor
+  promptNotes: "flagPromptNotes",               // F17 private notes row in the editor
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const optFlag = (key) => settings.ui_flags?.[key] === true;
@@ -983,6 +989,8 @@ const EXPERT_VALUES = {
   viewGroupMaxRows: { label: "valViewGroupMaxRows", min: 4, max: 12, step: 1, def: 8, unit: "", gate: "viewGroups" },
   // F15 code text size inside the Markdown preview.
   hlFontPx: { label: "valHlFontPx", min: 10, max: 18, step: 1, def: 13, unit: "px", gate: "codeHighlight" },
+  // F17 how much of a private note the tile tooltip shows (0 = the whole note).
+  notesTipLen: { label: "valNotesTipLen", min: 0, max: 2000, step: 20, def: 300, unit: "", gate: "notesInTooltip" },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -1063,7 +1071,7 @@ const EXPERT_DROPDOWNS = {
 // Expert menu organised into tabs (it has grown large — tabs keep it tidy).
 const EXPERT_TABS = [
   { title: "expTabGeneral", groups: [
-    { title: "expGroupCreate", flags: ["fileAttach", "screenshot", "pasteMedia", "dragDrop", "promptVars", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "lengthCounter", "promptHistory", "storeFiles", "editorMonospace"], values: ["snipPreviewVh", "historyPerPrompt"], dropdowns: ["counterUnits", "dateStyle", "timeStyle"], paths: ["screenshotDir"] },
+    { title: "expGroupCreate", flags: ["fileAttach", "screenshot", "pasteMedia", "dragDrop", "promptVars", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "lengthCounter", "promptHistory", "promptNotes", "notesInTooltip", "storeFiles", "editorMonospace"], values: ["snipPreviewVh", "historyPerPrompt", "notesTipLen"], dropdowns: ["counterUnits", "dateStyle", "timeStyle"], paths: ["screenshotDir"] },
     // F14/F15 belong together: the highlighter only ever paints inside the preview.
     { title: "expGroupPreview", flags: ["mdPreview", "codeHighlight"], values: ["hlFontPx"], dropdowns: ["mdPreviewMode"] },
     { title: "expGroupWorkspace", flags: ["floating", "keyboardNav", "headerSeparators", "dimToolbar"], values: ["floatOpacity", "kbFocusFadeMs"] },
@@ -1197,6 +1205,7 @@ const EXPERT_TIPS = [
   // General / creating
   "storeFiles", "varDefaults", "dynVars", "choiceVars", "choiceRemember",
   "lengthCounter", "promptHistory", "editorMonospace",
+  "promptNotes", "notesInTooltip", "notesTipLen",
   "mdPreview", "mdPreviewMode", "codeHighlight", "hlFontPx",
   "checkUpdateOnStart", "showUpdates", "importExport", "dimToolbar", "keyboardNav",
   "headerSeparators", "floating",
@@ -1235,6 +1244,9 @@ function withTip(row, key) {
   return row;
 }
 
+// Flags whose state changes the tile DOM itself (everything else is a body class).
+const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip"]);
+
 function flagRow(key) {
   const row = document.createElement("label");
   row.className = "field switch-field";
@@ -1259,9 +1271,9 @@ function flagRow(key) {
     applyFlags();
     if (GATING_FLAGS.has(key)) renderExpert(); // reveal/hide its parameter rows live
     renderViews();
-    // Only these two flags change what a tile contains; the rest are body classes,
+    // Only these flags change what a tile contains; the rest are body classes,
     // so a full grid rebuild (and its flash) is unnecessary.
-    if (key === "tilePreview" || key === "captions") await renderGrid(true);
+    if (TILE_DOM_FLAGS.has(key)) await renderGrid(true);
     else fitAllTiles();
   });
   row.append(span, input);
@@ -1271,7 +1283,7 @@ function flagRow(key) {
 // Almost every expert value only drives a CSS variable, so rebuilding the whole grid
 // for it threw away and recreated every tile — visible as a flash through the
 // translucent settings overlay. Only these actually change tile DOM.
-const GRID_DOM_VALUES = new Set(["previewLen", "gridMax"]);
+const GRID_DOM_VALUES = new Set(["previewLen", "gridMax", "notesTipLen"]);
 // Re-fit the tile text to the new box size without touching the DOM.
 const refreshTiles = (key) => (GRID_DOM_VALUES.has(key) ? renderGrid(true) : (fitAllTiles(), undefined));
 
@@ -2577,10 +2589,11 @@ function wireTooltips() {
   tipEl = document.createElement("div");
   tipEl.className = "tile-tip";
   tipEl.setAttribute("role", "tooltip");
-  tipEl.innerHTML = '<div class="tile-tip-name"></div><div class="tile-tip-body"></div><div class="tile-tip-hint"></div>';
+  tipEl.innerHTML = '<div class="tile-tip-name"></div><div class="tile-tip-body"></div><div class="tile-tip-notes"></div><div class="tile-tip-hint"></div>';
   document.body.appendChild(tipEl);
   const nameEl = tipEl.querySelector(".tile-tip-name");
   const bodyEl = tipEl.querySelector(".tile-tip-body");
+  const notesEl = tipEl.querySelector(".tile-tip-notes");
   const hintEl = tipEl.querySelector(".tile-tip-hint");
   const OFF = 16, PAD = 12;
   const placeAt = (cx, cy) => {
@@ -2606,6 +2619,8 @@ function wireTooltips() {
     if (rich) {
       nameEl.textContent = name;
       bodyEl.textContent = el.dataset.tipBody || "";
+      // textContent, so a note is shown as the literal text the user typed.
+      notesEl.textContent = el.dataset.tipNotes || "";
       hintEl.textContent = t("tileTooltip") + (flag("autoPaste") ? " · " + t("autoPasteHint") : "");
     } else {
       // Plain setting/icon tip: break "<lead sentence>. <details>" into two tidy
@@ -2618,6 +2633,7 @@ function wireTooltips() {
         nameEl.textContent = name;
         bodyEl.textContent = "";
       }
+      notesEl.textContent = "";
       hintEl.textContent = "";
     }
     placeAt(tipPtrX, tipPtrY);
@@ -2830,6 +2846,15 @@ function wireLightbox() {
   stage.addEventListener("pointercancel", endDrag);
 }
 
+// ---- F17 private notes: context the user keeps next to a prompt. Read in the
+// editor, the tile tooltip and the library search — never in any copy path.
+const notesOn = () => optFlag("promptNotes");
+// Cap what the tooltip shows so one long note can never fill the screen.
+const clipNote = (s) => {
+  const max = val("notesTipLen");
+  return max > 0 && s.length > max ? `${s.slice(0, max)}…` : s;
+};
+
 function buildTile(p) {
   const tile = document.createElement("div");
   tile.className = "tile";
@@ -2842,6 +2867,9 @@ function buildTile(p) {
   if (flag("tilePreview")) {
     tile.dataset.tipName = p.name;
     if (preview && preview !== p.name) tile.dataset.tipBody = preview;
+    // F17: the private note rides along as its own dimmed section (opt-out flag).
+    const note = notesOn() && flag("notesInTooltip") ? (p.notes || "").trim() : "";
+    if (note) tile.dataset.tipNotes = clipNote(note);
   }
 
   // Media on the tile: stored still, or gif/video from the icon/file path.
@@ -3392,7 +3420,7 @@ function modalSnapshot() {
     modal.name.value, modal.text.value, modal.caption.value, modal.captionSize.value,
     modal.fontSel.value, modal.sizeSel.value, modalState.color || "", modalState.image || "",
     !!modalState.showImage, modalState.filePath || "", modalState.iconPath || "", modal.fav.classList.contains("active"),
-    modalState.tags || [],
+    modalState.tags || [], modal.notesText.value,
   ]);
 }
 
@@ -3844,7 +3872,7 @@ function maybeCloseOnCopy() {
   try { window.__TAURI__?.window?.getCurrentWindow?.()?.hide?.().catch?.(() => {}); } catch { /* no-op */ }
 }
 
-function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], title }) {
+function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", title }) {
   modalState = { mode, id, color, image, showImage, copyImage, filePath, iconPath, tags: [...tags] };
   modal.title.textContent = title;
   modal.fav.classList.toggle("active", !!favorite);
@@ -3853,6 +3881,7 @@ function openModal({ mode, id, name = "", text = "", color = "", image = "", sho
   modal.text.value = text;
   mdPreviewOn = false; // every prompt opens in the editor, never in the preview
   mdLastText = null;
+  modal.notesText.value = notes;
   modal.caption.value = caption;
   modal.captionSize.value = String(normSize(captionSize) || 0);
   updateCaptionPreview();
@@ -4865,6 +4894,11 @@ function syncModalImageUi(mode) {
   if (varsUi) renderVarHelper(); // F12/F13 chips + insert row follow their flags
   syncMdUi(textVisible);         // F14 preview toolbar + rendered pane
   updateLenCounter();
+  // F17: notes are available for every prompt kind; always reopen collapsed so the
+  // dialog looks the same each time and a long note never pushes Save off screen.
+  modal.notesBody.classList.add("hidden");
+  modal.notesHead.setAttribute("aria-expanded", "false");
+  modal.notes.classList.remove("open");
   // F7: version history only for existing text prompts; reset to collapsed on open.
   const histOn = mode === "edit" && textVisible && flag("promptHistory");
   $("modal-history").classList.toggle("hidden", !histOn);
@@ -5096,8 +5130,10 @@ async function confirmModal() {
   const font = modal.fontSel.value;
   const fontSize = Number(modal.sizeSel.value) || 0;
   const favorite = modal.fav.classList.contains("active");
-  // Sent even while the feature is off, so switching it off never drops stored tags.
+  // Sent even while the feature is off, so switching it off never drops stored
+  // tags or notes.
   const tags = modalState.tags || [];
+  const notes = modal.notesText.value;
   // NOTE: Tauri expects camelCase keys for snake_case Rust args.
   // Path media (gif/video icon or attachment) shows without a stored image.
   const showImage =
@@ -5107,16 +5143,16 @@ async function confirmModal() {
     if (modalState.mode === "create") {
       const text = modal.text.value.trim();
       if (!text) { closeModal(); return; }
-      await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags });
+      await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes });
       inputEl.value = "";
       autoGrow(inputEl);
       saveBtn.disabled = true;
     } else if (modalState.mode === "image-create" || modalState.mode === "file-create") {
       // The name doubles as the copy text when shown as text.
-      await invoke("add_prompt", { name, text: name, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags });
+      await invoke("add_prompt", { name, text: name, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes });
     } else {
       const text = copyImage || filePath ? name : modal.text.value;
-      await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags });
+      await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes });
     }
   } catch (err) {
     toast(String(err)); // keep the modal open so nothing typed is lost
@@ -5149,6 +5185,7 @@ async function editPrompt(id) {
       fontSize: p.font_size || 0,
       favorite: p.favorite || false,
       tags: p.tags || [],
+      notes: p.notes || "",
       title: p.file_path
         ? t(kind === "video" ? "videoEditTitle" : kind ? "imageEditTitle" : "fileEditTitle")
         : p.copy_image ? t("imageEditTitle") : t("editModalTitle"),
@@ -5942,6 +5979,8 @@ function computeLibSearchScore(p) {
   const fields = [[(p.name || "").toLowerCase(), 3], [(p.text || "").toLowerCase(), 1], [(p.file_path || "").toLowerCase(), 1]];
   // A tag is a deliberate label, so it ranks between the name and the body.
   if (tagsOn() && (p.tags || []).length) fields.push([p.tags.join(" ").toLowerCase(), 2]);
+  // F17: a note is private context, so it matches but ranks below the prompt body.
+  if (notesOn() && p.notes) fields.push([p.notes.toLowerCase(), 0.5]);
   let best = 0;
   for (const [val, w] of fields) {
     if (val && val.includes(q)) { const s = (val.startsWith(q) ? 120 : 100) * w; if (s > best) best = s; }
@@ -6782,6 +6821,19 @@ function bind() {
       to.scrollTop = s > 0 ? Math.round(ratio * s) : 0;
       if (!mdPreviewOn) to.focus();
     });
+  });
+  // F17 private-notes collapsible (same convention as the version history).
+  modal.notesHead.addEventListener("click", () => {
+    const open = !modal.notesBody.classList.toggle("hidden");
+    modal.notesHead.setAttribute("aria-expanded", String(open));
+    modal.notes.classList.toggle("open", open);
+    if (open) {
+      modal.notesText.focus();
+      const scroller = modal.notes.closest(".modal");
+      if (scroller) requestAnimationFrame(() => requestAnimationFrame(() => {
+        scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
+      }));
+    }
   });
   // F7 version-history collapsible.
   $("modal-history-head").addEventListener("click", () => {
