@@ -5,6 +5,15 @@ All notable changes to **Prompt Saver**. Download the latest version from the
 
 ## Unreleased
 
+### Added
+- **Tags** — label prompts with free-form, colored tags. The editor gets a chip
+  row with type-ahead over existing tags and a per-chip color popover; the
+  library gets a filter row above the results (multi-select, switchable
+  between matching all or any of the picked tags) that combines with search
+  and the other filters, plus a small manager to rename, recolor or delete a
+  tag everywhere at once, with a usage count per tag. Tags travel with TXT and
+  CSV exports. Off by default (expert menu).
+
 ### Improved
 
 - The changelog in the update dialog is laid out instead of dumped: headings,
