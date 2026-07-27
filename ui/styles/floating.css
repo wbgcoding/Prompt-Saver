@@ -348,6 +348,171 @@ body.menu-open .pill { flex: 0 0 auto; }
 .pill.has-image ~ .resize .rz-catch,
 .pill.has-image ~ .resize .rz-hole { border-radius: 10px; }
 
+/* ---- F25 pill folders (folder.html) ----
+   The window IS the folder icon while the folder is closed; opening it only grows the
+   SAME window, and the icon is then moved to the offset the backend reports. Every
+   size scales with --folder-box, so one stylesheet covers every folder size. */
+.folder-body { --folder-box: 96px; position: relative; }
+.folder-icon {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--folder-box);
+  height: var(--folder-box);
+  padding: 6%;
+  border: none;
+  border-radius: 22%;
+  background: var(--menu-bg);
+  color: var(--menu-fg);
+  font: inherit;
+  cursor: inherit;
+  transition: transform var(--transition), filter var(--transition);
+}
+.folder-icon:hover { filter: brightness(1.08); }
+.folder-icon:active { transform: scale(0.96); }
+/* No transforms or animated repaints while the OS moves the window. */
+.folder-icon.dragging {
+  cursor: grabbing;
+  transform: none !important;
+  filter: none !important;
+  transition: none;
+}
+.folder-preview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 5%;
+  width: 100%;
+  height: 100%;
+}
+.folder-face,
+.member-face {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--pill-bg);
+  color: var(--pill-fg);
+  font-weight: 700;
+}
+.folder-face {
+  position: relative;
+  border-radius: 18%;
+  font-size: calc(var(--folder-box) / 7);
+}
+.face-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.face-text {
+  padding: 0 4%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.folder-badge {
+  position: absolute;
+  right: -3%;
+  top: -3%;
+  min-width: 28%;
+  height: 28%;
+  padding: 0 4%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--pill-bg);
+  color: var(--pill-fg);
+  font-size: calc(var(--folder-box) / 6);
+  font-weight: 700;
+  line-height: 1;
+}
+/* Optional label, laid over the lower edge of the icon (the window is the icon, so
+   it has no room below itself). */
+.folder-name {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  bottom: 4%;
+  padding: 1% 4%;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: calc(var(--folder-box) / 8);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Popover — the member grid or the folder menu. The window is already the right size
+   when this appears, so only the content fades and scales in (animSpeed). */
+.folder-pop,
+.folder-menu,
+.member-menu {
+  position: absolute;
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity var(--transition), transform var(--transition);
+}
+.folder-pop.shown,
+.folder-menu.shown { opacity: 1; transform: none; }
+.member-menu { opacity: 1; transform: none; transition: none; }
+.folder-body[data-side="below"] .folder-pop,
+.folder-body[data-side="below"] .folder-menu { transform-origin: top center; }
+.folder-body[data-side="above"] .folder-pop,
+.folder-body[data-side="above"] .folder-menu { transform-origin: bottom center; }
+.folder-body[data-side="right"] .folder-pop,
+.folder-body[data-side="right"] .folder-menu { transform-origin: left center; }
+.folder-body[data-side="left"] .folder-pop,
+.folder-body[data-side="left"] .folder-menu { transform-origin: right center; }
+.folder-pop {
+  border-radius: 14px;
+  background: var(--menu-bg);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+  cursor: default;
+}
+.folder-grid { display: grid; }
+.folder-member {
+  position: relative;
+  padding: 0;
+  border: none;
+  border-radius: 16%;
+  overflow: hidden;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  transition: transform var(--transition), opacity var(--transition);
+}
+.folder-member:hover { transform: scale(1.04); }
+.folder-member.dragging { opacity: 0.45; transform: none; }
+.member-face {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  font-size: 13px;
+  line-height: 1.15;
+}
+.member-face .face-text { white-space: normal; max-height: 100%; }
+.member-ok {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  background: var(--pill-ok);
+  color: #fff;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+.folder-member.copied .member-ok { opacity: 1; }
+/* Member menu: laid over the open grid, never wider than the popover it sits in. */
+.member-menu { z-index: 12; width: auto; min-width: 150px; }
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }

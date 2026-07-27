@@ -914,6 +914,67 @@ setTimeout(() => {
 """
 
 
+# F25: the folder window is the only place its UI is observable — the closed icon
+# (previews + count + label), the grid the window grows into, and Esc collapsing it.
+FOLDER_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const calls = () => window.__SMOKE_CALLS__ || [];
+  const until = async (fn) => { for (let i = 0; i < 80 && !fn(); i++) await sleep(100); return fn(); };
+  try {
+    // The window loads its state and its translations asynchronously.
+    await until(() => document.getElementById('badge').textContent !== '0');
+    const faces = document.querySelectorAll('#preview .folder-face').length;
+    if (faces !== 4) errs.push('the closed folder shows ' + faces + ' previews instead of 4');
+    const badge = document.getElementById('badge').textContent;
+    if (badge !== '5') errs.push('the count badge shows ' + badge + ' instead of 5');
+    const name = document.getElementById('fname');
+    if (name.classList.contains('hidden') || name.textContent !== 'Drafts') {
+      errs.push('the folder label is missing: ' + name.textContent);
+    }
+    // Opening: press and release on the icon, the gesture a click really is here.
+    const icon = document.getElementById('icon');
+    icon.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }));
+    const pop = document.getElementById('pop');
+    await until(() => !pop.classList.contains('hidden'));
+    if (pop.classList.contains('hidden')) errs.push('clicking the folder did not open it');
+    if (!calls().includes('expand_float_folder')) errs.push('opening the folder never resized its window');
+    if (!document.body.classList.contains('pop-open')) errs.push('the open folder is not marked open');
+    const tiles = [...document.querySelectorAll('#grid .folder-member')];
+    if (tiles.length !== 5) errs.push('the open folder shows ' + tiles.length + ' members instead of 5');
+    if (!tiles.length) {
+      errs.push('the open folder rendered no members at all');
+    } else {
+      if (!tiles[0].title) errs.push('a member tile carries no tooltip');
+      if (!tiles[0].querySelector('.member-ok')) errs.push('a member tile has no copy feedback');
+      if (!tiles[0].querySelector('.member-face')) errs.push('a member tile renders no face');
+      // A member click copies through the same path a pill uses.
+      tiles[0].dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, clientX: 10, clientY: 10 }));
+      await until(() => calls().includes('record_copy'));
+      if (!calls().includes('copy_prompt')) errs.push('clicking a member did not copy it');
+      if (!calls().includes('record_copy')) errs.push('a copy from a folder was not recorded');
+    }
+    // Esc collapses it again and shrinks the window back to the icon.
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await until(() => pop.classList.contains('hidden'));
+    if (!pop.classList.contains('hidden')) errs.push('Esc did not collapse the folder');
+    if (document.body.classList.contains('pop-open')) errs.push('the collapsed folder is still marked open');
+    if (!calls().includes('collapse_float_folder')) errs.push('collapsing never shrank the window back');
+  } catch (e) { errs.push('probe: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 def unescape(s):
     for a, b in (("&quot;", '"'), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
         s = s.replace(a, b)
@@ -965,18 +1026,22 @@ def main():
             if not (r["errors"] or r["overflow"] or r["rawKeys"]):
                 print("   ok")
 
-        # The secondary windows only need to boot without throwing.
-        for name, size in (("floating.html", (240, 60)), ("snip.html", (1280, 800))):
+        # The secondary windows only need to boot without throwing — except the folder
+        # window, whose whole UI lives here and nowhere else.
+        for name, size, probe, budget in (
+                ("floating.html", (240, 60), ERR_PROBE, 6000),
+                ("snip.html", (1280, 800), ERR_PROBE, 6000),
+                ("folder.html", (520, 420), FOLDER_PROBE, 15000)):
             side = tmp / "ui" / name
             side.write_text(
                 side.read_text(encoding="utf-8")
                 .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
-                .replace("</body>", ERR_PROBE + "</body>"),
+                .replace("</body>", probe + "</body>"),
                 encoding="utf-8")
             proc = subprocess.run(
                 [browser, "--headless=new", "--disable-gpu", "--no-first-run",
                  f"--user-data-dir={tmp / ('profile-%s' % name)}", "--allow-file-access-from-files",
-                 f"--window-size={size[0]},{size[1]}", "--virtual-time-budget=6000",
+                 f"--window-size={size[0]},{size[1]}", f"--virtual-time-budget={budget}",
                  "--dump-dom", side.as_uri()],
                 capture_output=True, text=True, timeout=180)
             m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)

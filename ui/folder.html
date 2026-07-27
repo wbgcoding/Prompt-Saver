@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Folder</title>
+  <link rel="stylesheet" href="styles/floating.css" />
+</head>
+<body class="folder-body">
+  <!-- Collapsed folder icon: up to four member previews in a 2x2 grid plus the
+       member count. Opening the folder only RESIZES this window (the icon keeps its
+       place inside it) — no member ever gets a window of its own. -->
+  <button id="icon" class="folder-icon" type="button">
+    <span id="preview" class="folder-preview"></span>
+    <span id="badge" class="folder-badge">0</span>
+    <span id="fname" class="folder-name hidden"></span>
+  </button>
+
+  <!-- Grid of member pills, placed by the backend layout (below/above/right/left). -->
+  <div id="pop" class="folder-pop hidden">
+    <div id="grid" class="folder-grid"></div>
+  </div>
+
+  <!-- Folder menu: size presets, rename, dissolve. Shares the popover slot, so the
+       window grows the same way for it as for the grid. -->
+  <div id="menu" class="menu folder-menu hidden">
+    <div class="size-row">
+      <span id="size-label" class="size-label">Size</span>
+      <button type="button" data-scale="1">S</button>
+      <button type="button" data-scale="1.5">M</button>
+      <button type="button" data-scale="2">L</button>
+      <button id="menu-close" type="button" class="menu-close">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+        </svg>
+      </button>
+    </div>
+    <button id="menu-rename" type="button">Rename</button>
+    <button id="menu-dissolve" type="button" class="danger">Dissolve folder</button>
+  </div>
+
+  <!-- Right-click menu of a single member, shown over the open grid. -->
+  <div id="member-menu" class="menu member-menu hidden">
+    <button id="mm-edit" type="button">Edit prompt</button>
+    <button id="mm-out" type="button" class="danger">Take out of folder</button>
+  </div>
+
+  <script type="module" src="folder.js"></script>
+</body>
+</html>

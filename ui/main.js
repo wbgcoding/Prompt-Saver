@@ -875,6 +875,7 @@ const OPT_FLAG_LABELS = {
   promptHotkeyPaste: "flagPromptHotkeyPaste",   // F20 hotkey also pastes into the last app
   dragOut: "flagDragOut",                       // F22 drag a prompt into another app
   trayFavs: "flagTrayFavs",                     // F23 favourites section in the tray menu
+  pillFolders: "flagPillFolders",               // F25 merge floating buttons into folders
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const optFlag = (key) => settings.ui_flags?.[key] === true;
@@ -917,6 +918,10 @@ const EXPERT_VALUES = {
   viewBorder: { label: "valViewBorder", min: 1, max: 12, step: 1, def: 3, unit: "px", gate: "multiView" },
   // Floating-button opacity (%). Floored at 20% so the pill never vanishes.
   floatOpacity: { label: "valFloatOpacity", min: 20, max: 100, step: 5, def: 100, unit: "%", gate: "floating" },
+  // F25: how close two floating buttons must be on drop to merge, and how wide the
+  // grid of an opened folder is. Both mirrored by the backend (merge_radius/folder_cols).
+  pillMergeRadius: { label: "valPillMergeRadius", min: 20, max: 80, step: 1, def: 40, unit: "px", gate: "pillFolders" },
+  folderGridCols: { label: "valFolderGridCols", min: 2, max: 5, step: 1, def: 3, unit: "", gate: "pillFolders" },
   // Custom tile tooltip max width (it wraps + grows taller instead of widening).
   tooltipWidth: { label: "valTooltipWidth", min: 180, max: 640, step: 10, def: 340, unit: "px", gate: "tilePreview" },
   // How long the pointer must rest on an element before its tooltip appears, so a
@@ -1091,7 +1096,7 @@ const EXPERT_TABS = [
     { title: "expGroupCreate", flags: ["fileAttach", "screenshot", "pasteMedia", "dragDrop", "promptVars", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "lengthCounter", "promptHistory", "promptNotes", "notesInTooltip", "storeFiles", "editorMonospace"], values: ["snipPreviewVh", "historyPerPrompt", "notesTipLen"], dropdowns: ["counterUnits", "dateStyle", "timeStyle"], paths: ["screenshotDir"] },
     // F14/F15 belong together: the highlighter only ever paints inside the preview.
     { title: "expGroupPreview", flags: ["mdPreview", "codeHighlight"], values: ["hlFontPx"], dropdowns: ["mdPreviewMode"] },
-    { title: "expGroupWorkspace", flags: ["floating", "keyboardNav", "headerSeparators", "dimToolbar"], values: ["floatOpacity", "kbFocusFadeMs"] },
+    { title: "expGroupWorkspace", flags: ["floating", "pillFolders", "keyboardNav", "headerSeparators", "dimToolbar"], values: ["floatOpacity", "pillMergeRadius", "folderGridCols", "kbFocusFadeMs"] },
     // F23: the quick-copy sections of the tray menu, each with its own entry count.
     { title: "expGroupTray", flags: ["trayRecent", "trayFavs"], values: ["trayRecentN", "trayFavN"] },
     { title: "expGroupSystem", flags: ["showUpdates", "checkUpdateOnStart"] },
@@ -1229,6 +1234,7 @@ const EXPERT_TIPS = [
   "trayRecent", "trayFavs", "trayRecentN", "trayFavN",
   "checkUpdateOnStart", "showUpdates", "importExport", "dimToolbar", "keyboardNav",
   "headerSeparators", "floating",
+  "pillFolders", "pillMergeRadius", "folderGridCols",
   // Tiles / copying
   "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale",
   "tileReorder", "chainPrompts", "chainLock", "autoPasteEnter", "closeOnCopy",
@@ -2566,6 +2572,8 @@ const CLEAR_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="
 // password prompt.
 const TAKEOVER_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7.5" ry="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4.5 5.5v13c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-13M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/></svg>';
 const LOCK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.6" fill="currentColor"/></svg>';
+// F25: a folder for the pill-folder rename dialog.
+const FOLDER_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.2l2 2.4h8.8A1.5 1.5 0 0 1 21 8.9v9.6a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5Z"/></svg>';
 // Reveal toggle for password fields (backup settings + the restore prompt).
 const EYE_SVG ='<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
 function wireClear(el) {
@@ -7844,6 +7852,22 @@ function bind() {
   listen("prompt-hotkey", (e) => onPromptHotkey(String(e.payload), optFlag("promptHotkeyPaste")));
   // F23: a quick-copy entry in the tray menu — same activation, never auto-paste.
   listen("prompt-tray-copy", (e) => onPromptHotkey(String(e.payload), false));
+  // F25: "Rename" in a pill folder's menu. The folder window hosts no themed dialog,
+  // so the name is asked for here and written back from here.
+  listen("folder-rename", async (e) => {
+    const id = String(e.payload?.id || "");
+    if (!id) return;
+    const name = await confirmDialog({
+      title: t("folderRenameTitle"),
+      message: t("folderRenameMsg"),
+      confirmLabel: t("save"),
+      icon: FOLDER_SVG,
+      danger: false,
+      input: { type: "text", value: String(e.payload?.name || "") },
+    });
+    if (name === null) return;
+    invoke("rename_float_folder", { id, name }).catch((err) => toast(String(err)));
+  });
 }
 
 // Fill a UI/icon size select with percentage presets (plus the current value if it

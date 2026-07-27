@@ -3,6 +3,8 @@
 // i18n is loaded lazily (dynamic import) so the pill window opens fast.
 import { FONTS, fitText } from "./fonts.js";
 import { mediaKind, buildMediaBar, applyVideoPrefs } from "./media.js";
+// F3 custom themes: shared with the folder window (floattheme.js).
+import { applyFloatTheme } from "./floattheme.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
@@ -16,29 +18,6 @@ const label = document.getElementById("label");
 const menu = document.getElementById("menu");
 const resizeEl = document.getElementById("resize");
 const rzCatch = document.getElementById("rz-catch");
-
-// F3 custom themes: the pill has its own tokens (floating.css), so the theme's
-// colours are mapped onto them — a floating button follows the same palette as
-// the main window instead of falling back to the base theme's colours.
-const FLOAT_THEME_MAP = {
-  accent: "--pill-bg",
-  "accent-fg": "--pill-fg",
-  surface: "--menu-bg",
-  fg: "--menu-fg",
-  border: "--menu-line",
-  danger: "--danger",
-};
-const FLOAT_HEX = /^#[0-9a-fA-F]{6}$/;
-
-function applyFloatTheme(theme, vars) {
-  if (theme) document.documentElement.setAttribute("data-theme", theme);
-  const style = document.documentElement.style;
-  for (const target of Object.values(FLOAT_THEME_MAP)) style.removeProperty(target);
-  for (const [key, value] of Object.entries(vars || {})) {
-    const target = FLOAT_THEME_MAP[key];
-    if (target && FLOAT_HEX.test(value)) style.setProperty(target, value);
-  }
-}
 
 let scale = 1;
 let tileSize = 0; // global text size setting (0 = auto)
@@ -57,6 +36,7 @@ let menuOpen = false;
 // app" from the plain drag, which moves this window.
 const DRAG_OUT_MODS = { ctrl: "ctrlKey", alt: "altKey", shift: "shiftKey" };
 let dragOutOn = false, dragOutMod = "ctrlKey";
+let foldersOn = false; // F25 pill folders (default off)
 let pText = "", pFile = "";
 const dragOutHeld = (e) => dragOutOn && e[dragOutMod] === true;
 
@@ -191,6 +171,7 @@ async function applySettings() {
   apDblMs = Number.isFinite(adb) ? adb : 400;
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
+  foldersOn = s.ui_flags?.pillFolders === true;
   copyFont = s.ui_texts?.copyFont || "";
   document.getElementById("feedback").style.fontFamily = FONTS[copyFont] || "";
   const op = Number(s.ui_values?.floatOpacity);
@@ -620,6 +601,10 @@ window.addEventListener("mouseup", async () => {
   if (wasDrag) {
     if (!menuOpen) applyPillSize(); // keep the menu+window when one is open
     ensureVideoPlaying();
+    // F25: ONE call per drag END — the pills are separate windows, so only the
+    // backend can tell whether this drop landed on another one. Nothing is sent
+    // while dragging, and a drag that ends nowhere near a pill simply gets `false`.
+    if (foldersOn && !menuOpen) invoke("float_folder_drop", { id: promptId }).catch(() => {});
   } else if (menuOpen) {
     closeMenu(); // a click on the pill closes the open menu
   } else if (apOn && lastPillTs && Date.now() - lastPillTs <= apDblMs) {

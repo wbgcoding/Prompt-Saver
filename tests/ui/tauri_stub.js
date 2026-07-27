@@ -116,7 +116,9 @@ const SETTINGS = {
   always_on_top: false, hotkey: "CommandOrControl+Shift+P", auto_update: true, skipped_versions: [],
   // Tags, custom themes, view groups, the Markdown preview and private notes ship
   // off; the stub turns them on so the smoke run covers that UI too.
-  ui_flags: { tags: true, customThemes: true, viewGroups: true, mdPreview: true, promptNotes: true },
+  // F25 is on too, so the expert menu renders its gated sliders and the folder
+  // window has something to draw.
+  ui_flags: { tags: true, customThemes: true, viewGroups: true, mdPreview: true, promptNotes: true, pillFolders: true },
   ui_values: {}, ui_texts: {}, dup_ignored: [],
   tag_colors: { work: "#3b82f6" },
   custom_themes: [{ id: "ct1", name: "Neon", base: "dark", vars: { accent: "#ff00aa" } }],
@@ -255,6 +257,24 @@ const RESULTS = {
     return { name: "Prompt Saver 2026-07-25.psb", count: 12, dropped_hotkeys: 2 };
   },
   focus_main_window: () => null,
+  // F25 pill folders: one folder with five members, so the closed icon has more
+  // previews than the 2x2 grid shows and the badge has a real count.
+  float_folder_state: () => ({ id: "f1", name: "Drafts", scale: 1, cols: 3, members: PROMPTS.slice(0, 5) }),
+  // The backend answers with the layout it applied to the window (logical px).
+  expand_float_folder: (a) => ({
+    side: "below",
+    icon_x: 0, icon_y: 0,
+    pop_x: 0, pop_y: 102,
+    width: Math.max(96, (a && a.width) || 96),
+    height: 102 + ((a && a.height) || 0),
+  }),
+  collapse_float_folder: () => null,
+  set_float_folder_scale: () => null,
+  dissolve_float_folder: () => null,
+  remove_folder_member: () => null,
+  rename_float_folder: () => null,
+  folder_rename_request: () => null,
+  float_folder_drop: () => false,
   // Screenshot overlay: no capture session, nothing to draw.
   snip_should_begin: () => false,
   snip_background: () => null,
@@ -273,8 +293,8 @@ const RESULTS = {
 };
 
 const noopWindow = {
-  // floating.js derives the prompt id from the window label.
-  label: "float-p0",
+  // floating.js derives the prompt id from the window label, folder.js the folder id.
+  label: location.pathname.endsWith("folder.html") ? "folder-f1" : "float-p0",
   listen: async () => () => {}, onCloseRequested: async () => () => {},
   onFocusChanged: async () => () => {}, onResized: async () => () => {},
   onMoved: async () => () => {}, onScaleChanged: async () => () => {},

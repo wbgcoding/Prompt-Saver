@@ -464,7 +464,7 @@ struct Prompt {
     hotkey: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
+#[derive(Serialize, Deserialize, Clone, Copy, Default)]
 struct Pos {
     x: i32,
     y: i32,
@@ -512,6 +512,29 @@ struct ViewGroup {
     view_ids: Vec<String>,
 }
 
+// F25: an Android-style folder holding several floating pills. It owns ONE window
+// (the folder icon; expanding only resizes it), so `pos` is the icon's top-left in
+// physical desktop pixels — the same space `Settings.floating` uses. A member keeps
+// its own `floating` entry so switching the feature off puts every pill back where
+// it was.
+#[derive(Serialize, Deserialize, Clone)]
+struct FloatFolder {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    pos: Pos,
+    #[serde(default = "default_folder_scale")]
+    scale: f64,
+    #[serde(default)]
+    members: Vec<String>,
+}
+
+fn default_folder_scale() -> f64 {
+    1.0
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy)]
 struct VideoPrefs {
     volume: u32, // 0..=100
@@ -547,6 +570,10 @@ struct Settings {
     // Per-floating-button size factor (1.0 = default).
     #[serde(default)]
     float_scale: HashMap<String, f64>,
+    // F25: pill folders. Kept even while the feature is switched off, so turning it
+    // back on restores the folders instead of losing them.
+    #[serde(default)]
+    float_folders: Vec<FloatFolder>,
     // Per-prompt video player state (volume, mute, loop), grid and pill.
     #[serde(default)]
     video_prefs: HashMap<String, VideoPrefs>,
@@ -657,6 +684,7 @@ impl Default for Settings {
             theme: default_theme(),
             floating: HashMap::new(),
             float_scale: HashMap::new(),
+            float_folders: Vec::new(),
             video_prefs: HashMap::new(),
             window: None,
             minimize_to_tray: false,
@@ -701,6 +729,10 @@ const MAX_GROUP_NAME: usize = 60;
 const FLOAT_W: f64 = 360.0;
 const FLOAT_H: f64 = 80.0; // flat pill shape, clearly wider than tall
 const FLOAT_IMG: f64 = 400.0; // square box for image pills: S 300 / M 400 / L 560
+// F25 pill folders.
+const MAX_FLOAT_FOLDERS: usize = 100;
+const MAX_FOLDER_NAME: usize = 40;
+const FOLDER_BOX: f64 = 96.0; // collapsed folder icon (square, logical px at scale 1)
 const AUTOSTART_KEY: &str = "PromptSaver";
 // Local data folder under %APPDATA%\Roaming. Used by the pre-app panic hook
 // (no AppHandle) and the store path; deliberately NOT the bundle identifier.
@@ -895,6 +927,15 @@ struct Store {
     // to rewrite the prompts table so a full DELETE+INSERT can never destroy the rows
     // that are present-but-unreadable. The raw data.db is snapshotted aside on detect.
     prompts_locked: bool,
+}
+
+impl Store {
+    // F25: keep the folder list valid against the CURRENT prompt list — one call after
+    // every mutation that can remove a prompt. Idempotent.
+    fn normalize_folders(&mut self) {
+        let ids: Vec<String> = self.prompts.iter().map(|p| p.id.clone()).collect();
+        normalize_float_folders(&mut self.settings.float_folders, &ids);
+    }
 }
 
 type Db = Mutex<Store>;
@@ -1429,7 +1470,8 @@ fn load_store(app: &AppHandle) -> Store {
         let cutoff = history_max_age(&settings).map(|age| now_secs().saturating_sub(age));
         let _ = db_trim_copy(&conn, cap, cutoff);
         migrate_prompts(&mut prompts);
-        let store = Store { prompts, settings, prompts_locked: decrypt_fails > 0 };
+        let mut store = Store { prompts, settings, prompts_locked: decrypt_fails > 0 };
+        store.normalize_folders(); // F25: drop members whose prompt is gone
         if needs_mig || migrated_log {
             // One-time: re-encrypt legacy plaintext rows / drop the migrated log from the blob.
             save_prompts(app, &store);
@@ -1443,7 +1485,9 @@ fn load_store(app: &AppHandle) -> Store {
     prune_history(&mut settings);
     let mut prompts: Vec<Prompt> = read_json(&dir.join("prompts.json"));
     migrate_prompts(&mut prompts);
-    Store { prompts, settings, prompts_locked: false }
+    let mut store = Store { prompts, settings, prompts_locked: false };
+    store.normalize_folders();
+    store
 }
 
 fn gen_id() -> String {
@@ -1765,6 +1809,454 @@ fn open_floating(app: &AppHandle, prompt: &Prompt) {
 fn close_floating_window(app: &AppHandle, id: &str) {
     if let Some(win) = app.get_webview_window(&flabel(id)) {
         let _ = win.close();
+    }
+}
+
+// ---------- F25: floating pill folders ----------
+
+fn folder_label(id: &str) -> String {
+    format!("folder-{}", id)
+}
+
+// Expert settings the backend needs. The feature ships OFF; the two parameters use
+// the same defaults and ranges as their sliders in the expert menu.
+fn folders_on(settings: &Settings) -> bool {
+    settings.ui_flags.get("pillFolders") == Some(&true)
+}
+fn merge_radius(settings: &Settings) -> f64 {
+    settings
+        .ui_values
+        .get("pillMergeRadius")
+        .copied()
+        .filter(|v| v.is_finite())
+        .unwrap_or(40.0)
+        .clamp(20.0, 80.0)
+}
+fn folder_cols(settings: &Settings) -> u32 {
+    settings
+        .ui_values
+        .get("folderGridCols")
+        .copied()
+        .filter(|v| v.is_finite())
+        .unwrap_or(3.0)
+        .clamp(2.0, 5.0) as u32
+}
+
+// A box in PHYSICAL desktop pixels — the one coordinate space every monitor shares,
+// whatever its DPI. Sizes are converted per window with its own scale factor, so a
+// mixed-DPI setup stays correct.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Rect {
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+}
+
+impl Rect {
+    fn right(&self) -> f64 {
+        self.x + self.w
+    }
+    fn bottom(&self) -> f64 {
+        self.y + self.h
+    }
+    fn center(&self) -> (f64, f64) {
+        (self.x + self.w / 2.0, self.y + self.h / 2.0)
+    }
+    fn overlaps(&self, o: &Rect) -> bool {
+        self.x < o.right() && o.x < self.right() && self.y < o.bottom() && o.y < self.bottom()
+    }
+}
+
+// Which pill the just-dropped one landed on: the NEAREST centre within `radius` whose
+// box ALSO really overlaps. Both conditions matter — the radius alone would fire for a
+// pill that merely sits nearby, the overlap alone for a long text pill whose far end
+// happens to touch. A short drag ends up far from every other pill and matches
+// nothing, which is what keeps a normal nudge from creating a folder. A centre
+// distance exactly equal to the radius still counts as a hit.
+fn merge_target<'a>(dragged: Rect, others: &'a [(String, Rect)], radius: f64) -> Option<&'a str> {
+    let (cx, cy) = dragged.center();
+    let mut best: Option<(f64, &str)> = None;
+    for (id, rect) in others {
+        if !dragged.overlaps(rect) {
+            continue;
+        }
+        let (ox, oy) = rect.center();
+        let dist = ((cx - ox).powi(2) + (cy - oy).powi(2)).sqrt();
+        if dist > radius {
+            continue;
+        }
+        if best.map_or(true, |(b, _)| dist < b) {
+            best = Some((dist, id.as_str()));
+        }
+    }
+    best.map(|(_, id)| id)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FolderSide {
+    Below,
+    Above,
+    Right,
+    Left,
+}
+
+impl FolderSide {
+    fn as_str(self) -> &'static str {
+        match self {
+            FolderSide::Below => "below",
+            FolderSide::Above => "above",
+            FolderSide::Right => "right",
+            FolderSide::Left => "left",
+        }
+    }
+}
+
+// Where an expanded folder ends up: the window that has to cover both the icon and
+// the popover, plus where each of them sits inside it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct FolderLayout {
+    side: FolderSide,
+    win: Rect,
+    icon: (f64, f64), // icon offset inside the window
+    pop: (f64, f64),  // popover offset inside the window
+}
+
+// Grow the folder window around its icon. The icon NEVER moves — it is what the user
+// clicked — so the popover goes on the first side with room (below, above, right,
+// left) and is then slid along its free axis until it lies inside the work area.
+// Everything is physical pixels of ONE monitor: pass that monitor's work rect and the
+// sizes already scaled by its factor, and edge flipping works the same on a second
+// screen at another DPI.
+fn folder_layout(icon: Rect, pop_w: f64, pop_h: f64, gap: f64, work: Rect) -> FolderLayout {
+    let side = if icon.bottom() + gap + pop_h <= work.bottom() {
+        FolderSide::Below
+    } else if icon.y - gap - pop_h >= work.y {
+        FolderSide::Above
+    } else if icon.right() + gap + pop_w <= work.right() {
+        FolderSide::Right
+    } else if icon.x - gap - pop_w >= work.x {
+        FolderSide::Left
+    } else if icon.y - work.y > work.bottom() - icon.bottom() {
+        // Nothing fits (a grid taller than the screen): keep the roomier half, so the
+        // first rows stay reachable instead of the popover hanging off the edge.
+        FolderSide::Above
+    } else {
+        FolderSide::Below
+    };
+    // A popover larger than the work area can only start at its edge.
+    let fit = |v: f64, lo: f64, hi: f64| if hi < lo { lo } else { v.max(lo).min(hi) };
+    let pop = match side {
+        FolderSide::Below | FolderSide::Above => {
+            let x = fit(icon.x + (icon.w - pop_w) / 2.0, work.x, work.right() - pop_w);
+            let y = if side == FolderSide::Below {
+                icon.bottom() + gap
+            } else {
+                icon.y - gap - pop_h
+            };
+            Rect { x, y: fit(y, work.y, work.bottom() - pop_h), w: pop_w, h: pop_h }
+        }
+        FolderSide::Right | FolderSide::Left => {
+            let y = fit(icon.y + (icon.h - pop_h) / 2.0, work.y, work.bottom() - pop_h);
+            let x = if side == FolderSide::Right {
+                icon.right() + gap
+            } else {
+                icon.x - gap - pop_w
+            };
+            Rect { x: fit(x, work.x, work.right() - pop_w), y, w: pop_w, h: pop_h }
+        }
+    };
+    let x = icon.x.min(pop.x);
+    let y = icon.y.min(pop.y);
+    let win = Rect {
+        x,
+        y,
+        w: icon.right().max(pop.right()) - x,
+        h: icon.bottom().max(pop.bottom()) - y,
+    };
+    FolderLayout {
+        side,
+        win,
+        icon: (icon.x - x, icon.y - y),
+        pop: (pop.x - x, pop.y - y),
+    }
+}
+
+// Keep a dropped pill fully inside the work area it was dropped on. A window larger
+// than the screen is pinned to the top-left corner instead of being pushed off it.
+fn clamp_to_work(work: Rect, w: f64, h: f64, x: f64, y: f64) -> (f64, f64) {
+    let fit = |v: f64, lo: f64, hi: f64| if hi < lo { lo } else { v.max(lo).min(hi) };
+    (
+        fit(x, work.x, work.right() - w),
+        fit(y, work.y, work.bottom() - h),
+    )
+}
+
+// Bring the folder list back to its invariants: only real prompt ids, no prompt in two
+// folders (the first folder listing it wins), a sane scale, and no folder left with
+// fewer than two members — that one dissolves, and its pill simply reappears at the
+// free position it kept all along. Runs on load and after every mutation. Idempotent.
+fn normalize_float_folders(folders: &mut Vec<FloatFolder>, prompt_ids: &[String]) {
+    let mut taken: Vec<String> = Vec::new();
+    for folder in folders.iter_mut() {
+        folder.scale = if folder.scale.is_finite() {
+            folder.scale.clamp(0.5, 3.0)
+        } else {
+            1.0
+        };
+        folder.members.retain(|id| {
+            let ok = prompt_ids.iter().any(|p| p == id) && !taken.contains(id);
+            if ok {
+                taken.push(id.clone());
+            }
+            ok
+        });
+    }
+    folders.retain(|f| f.members.len() >= 2);
+    folders.truncate(MAX_FLOAT_FOLDERS);
+}
+
+// Which pill windows and which folder windows should be open right now. While the
+// feature is off no folder exists on screen and every member is a plain pill again,
+// which is exactly how switching it off restores the free positions.
+fn float_window_plan(settings: &Settings, prompt_ids: &[String]) -> (Vec<String>, Vec<String>) {
+    let on = folders_on(settings);
+    let mut inside: Vec<&str> = Vec::new();
+    if on {
+        for folder in &settings.float_folders {
+            for member in &folder.members {
+                inside.push(member.as_str());
+            }
+        }
+    }
+    let pills = prompt_ids
+        .iter()
+        .filter(|id| settings.floating.contains_key(*id) && !inside.contains(&id.as_str()))
+        .cloned()
+        .collect();
+    let folders = if on {
+        settings.float_folders.iter().map(|f| f.id.clone()).collect()
+    } else {
+        Vec::new()
+    };
+    (pills, folders)
+}
+
+fn folder_name_of(name: &str) -> Result<String, String> {
+    let name: String = name
+        .trim()
+        .chars()
+        .filter(|c| !c.is_control())
+        .collect::<String>()
+        .trim()
+        .to_string();
+    if name.chars().count() > MAX_FOLDER_NAME {
+        return Err(format!("folder name longer than {} characters", MAX_FOLDER_NAME));
+    }
+    Ok(name)
+}
+
+// Where the icon sits inside an EXPANDED folder window (offset + size, physical px).
+// No entry = collapsed, i.e. the window IS the icon. In memory only: an open folder
+// never survives a restart.
+struct FolderExpand(Mutex<HashMap<String, Rect>>);
+
+fn folder_expansion(app: &AppHandle, id: &str) -> Option<Rect> {
+    let state = app.try_state::<FolderExpand>()?;
+    let map = state.0.lock().unwrap_or_else(|e| e.into_inner());
+    map.get(id).copied()
+}
+
+fn set_folder_expansion(app: &AppHandle, id: &str, icon: Option<Rect>) {
+    if let Some(state) = app.try_state::<FolderExpand>() {
+        let mut map = state.0.lock().unwrap_or_else(|e| e.into_inner());
+        match icon {
+            Some(r) => {
+                map.insert(id.to_string(), r);
+            }
+            None => {
+                map.remove(id);
+            }
+        }
+    }
+}
+
+// The folder icon's box on screen, whether the window is collapsed (window = icon) or
+// expanded (icon sits at a stored offset inside the grown window).
+fn folder_icon_rect(app: &AppHandle, id: &str, window: Rect) -> Rect {
+    match folder_expansion(app, id) {
+        Some(off) => Rect {
+            x: window.x + off.x,
+            y: window.y + off.y,
+            w: off.w,
+            h: off.h,
+        },
+        None => window,
+    }
+}
+
+// A window's box in physical desktop pixels.
+fn window_rect(win: &tauri::WebviewWindow) -> Option<Rect> {
+    let p = win.outer_position().ok()?;
+    let s = win.outer_size().ok()?;
+    Some(Rect {
+        x: p.x as f64,
+        y: p.y as f64,
+        w: s.width as f64,
+        h: s.height as f64,
+    })
+}
+
+// Work area (screen minus taskbar) of the monitor under a physical point. Falls back
+// to the primary monitor when the point lies in dead space between screens.
+fn work_rect_at(app: &AppHandle, x: f64, y: f64) -> Rect {
+    let win = app
+        .get_webview_window("main")
+        .or_else(|| app.webview_windows().into_values().next());
+    let monitor = win.as_ref().and_then(|w| {
+        w.monitor_from_point(x, y)
+            .ok()
+            .flatten()
+            .or_else(|| w.primary_monitor().ok().flatten())
+    });
+    match monitor {
+        Some(m) => {
+            let area = m.work_area();
+            Rect {
+                x: area.position.x as f64,
+                y: area.position.y as f64,
+                w: area.size.width as f64,
+                h: area.size.height as f64,
+            }
+        }
+        None => Rect { x: 0.0, y: 0.0, w: 1920.0, h: 1080.0 },
+    }
+}
+
+// Move AND resize in one OS call, in physical pixels (same reason as
+// set_float_bounds_native: two calls leave a visibly wrong intermediate frame).
+fn set_bounds_phys(win: &tauri::WebviewWindow, r: Rect) {
+    let (x, y) = (r.x.round() as i32, r.y.round() as i32);
+    let (w, h) = (r.w.round().max(1.0) as i32, r.h.round().max(1.0) as i32);
+    #[cfg(windows)]
+    if set_window_pos_phys(win, x, y, w, h) {
+        return;
+    }
+    let _ = win.set_position(PhysicalPosition::new(x, y));
+    let _ = win.set_size(PhysicalSize::new(w.max(1) as u32, h.max(1) as u32));
+}
+
+fn folder_box(scale: f64) -> f64 {
+    FOLDER_BOX * if scale.is_finite() { scale.clamp(0.5, 3.0) } else { 1.0 }
+}
+
+// One folder window, built exactly like a pill: frameless, transparent, always on top,
+// out of the taskbar and out of other apps' screen captures.
+fn open_folder_window(app: &AppHandle, folder: &FloatFolder) {
+    let label = folder_label(&folder.id);
+    if app.get_webview_window(&label).is_some() {
+        return;
+    }
+    // Never call Tauri window APIs while holding the Db lock (deadlock risk).
+    let excluded = {
+        let state: State<Db> = app.state();
+        let store = lock(&state);
+        capture_excluded(&store.settings)
+    };
+    let side = folder_box(folder.scale);
+    let win = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("folder.html".into()))
+        .title(&folder.name)
+        .inner_size(side, side)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .shadow(false)
+        .build();
+
+    if let Ok(win) = win {
+        let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
+        set_capture_exclusion(&win, excluded);
+        let _ = win.set_position(PhysicalPosition::new(folder.pos.x, folder.pos.y));
+        let _ = win.show();
+
+        let app2 = app.clone();
+        let fid = folder.id.clone();
+        win.on_window_event(move |event| match event {
+            WindowEvent::Moved(p) => {
+                // While the folder is open the window origin is NOT the icon, so the
+                // stored position follows the icon, not the grown box.
+                let off = folder_expansion(&app2, &fid).unwrap_or(Rect { x: 0.0, y: 0.0, w: 0.0, h: 0.0 });
+                if let Some(state) = app2.try_state::<Db>() {
+                    // Fires for every pixel of a drag — never block the move loop.
+                    if let Ok(mut store) = state.try_lock() {
+                        if let Some(f) = store.settings.float_folders.iter_mut().find(|f| f.id == fid) {
+                            f.pos = Pos {
+                                x: p.x + off.x.round() as i32,
+                                y: p.y + off.y.round() as i32,
+                            };
+                        }
+                    }
+                }
+            }
+            WindowEvent::Destroyed => {
+                set_folder_expansion(&app2, &fid, None);
+                if let Some(state) = app2.try_state::<Db>() {
+                    let store = state.lock().unwrap_or_else(|e| e.into_inner());
+                    save_settings(&app2, &store.settings);
+                }
+            }
+            _ => {}
+        });
+    }
+}
+
+// Open/close pill and folder windows until the desktop matches the stored plan. The
+// single place that turns settings into windows, so every mutation just calls it.
+// MUST NOT run while the store mutex is held — it creates and closes windows.
+fn sync_float_windows(app: &AppHandle) {
+    let (want_pills, want_folders, pills, folders) = {
+        let state: State<Db> = app.state();
+        let store = lock(&state);
+        let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+        let (want_pills, want_folders) = float_window_plan(&store.settings, &ids);
+        let pills: Vec<Prompt> = store
+            .prompts
+            .iter()
+            .filter(|p| want_pills.contains(&p.id))
+            .cloned()
+            .collect();
+        let folders: Vec<FloatFolder> = store
+            .settings
+            .float_folders
+            .iter()
+            .filter(|f| want_folders.contains(&f.id))
+            .cloned()
+            .collect();
+        (want_pills, want_folders, pills, folders)
+    };
+    for (label, win) in app.webview_windows() {
+        let stale = match (label.strip_prefix("float-"), label.strip_prefix("folder-")) {
+            (Some(id), _) => !want_pills.iter().any(|w| w == id),
+            (_, Some(id)) => !want_folders.iter().any(|w| w == id),
+            _ => false,
+        };
+        if stale {
+            let _ = win.close();
+        }
+    }
+    for prompt in &pills {
+        open_floating(app, prompt); // returns early when the window already exists
+    }
+    for folder in &folders {
+        open_folder_window(app, folder);
+    }
+    // Whatever changed the plan also changed what an open folder shows.
+    for label in app.webview_windows().keys() {
+        if label.starts_with("folder-") {
+            let _ = app.emit_to(label.as_str(), "folder-changed", ());
+        }
     }
 }
 
@@ -2355,6 +2847,7 @@ async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Resu
         store.settings.floating.remove(&id);
         store.settings.float_scale.remove(&id);
         store.settings.video_prefs.remove(&id);
+        store.normalize_folders(); // F25: and out of whatever folder held it
         let changed = store.prompts.len() != before;
         if changed {
             save_prompts(&app, &store);
@@ -2367,6 +2860,7 @@ async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Resu
     if changed {
         rearm_hotkeys(&app); // F20: a deleted prompt gives its accelerator back
         rebuild_tray(&app); // F23
+        sync_float_windows(&app); // F25: a folder left with one member dissolves
     }
     Ok(changed)
 }
@@ -2406,6 +2900,7 @@ async fn batch_prompts(
                 store.settings.float_scale.remove(id);
                 store.settings.video_prefs.remove(id);
             }
+            store.normalize_folders(); // F25
             save_prompts(&app, &store);
             save_settings(&app, &store.settings);
             cleanup_orphan_files(&app, &store);
@@ -2468,6 +2963,7 @@ async fn batch_prompts(
     drop(store); // never re-arm shortcuts while the store mutex is held
     if action == "delete" {
         rearm_hotkeys(&app); // F20: the deleted prompts give their accelerators back
+        sync_float_windows(&app); // F25: folders left too small dissolve
     }
     rebuild_tray(&app); // F23: one rebuild for the whole batch, not one per prompt
     Ok(settings)
@@ -2481,7 +2977,7 @@ async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Result<(), Str
     let labels: Vec<String> = app
         .webview_windows()
         .keys()
-        .filter(|l| l.starts_with("float-"))
+        .filter(|l| l.starts_with("float-") || l.starts_with("folder-")) // F25
         .cloned()
         .collect();
     for label in labels {
@@ -2493,7 +2989,9 @@ async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Result<(), Str
         let mut store = lock(&state);
         store.prompts.clear();
         store.prompts_locked = false; // explicit wipe overrides the decrypt-failure lock
+        store.normalize_folders(); // F25: no prompts left, so no folder survives
         save_prompts(&app, &store);
+        save_settings(&app, &store.settings);
         // Data-only wipe: keep every setting, drop the derived data tables.
         if let Some(c) = db_conn(&app) {
             let _ = c.execute("DELETE FROM prompt_versions", []); // F7 history
@@ -2514,7 +3012,7 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
     let labels: Vec<String> = app
         .webview_windows()
         .keys()
-        .filter(|l| l.starts_with("float-"))
+        .filter(|l| l.starts_with("float-") || l.starts_with("folder-")) // F25
         .cloned()
         .collect();
     for label in labels {
@@ -4008,14 +4506,27 @@ async fn recent_copies(app: AppHandle, limit: usize, grouped: bool) -> Vec<CopyE
 // (sync commands run on the main thread, which WebView2 needs free).
 #[tauri::command]
 async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: String) -> Result<bool, String> {
-    if app.get_webview_window(&flabel(&id)).is_some() {
+    // F25: a pill inside a folder has no window of its own, but it is still pinned —
+    // unpinning has to take it out of the folder as well.
+    let in_folder = {
+        let store = lock(&state);
+        folders_on(&store.settings)
+            && store.settings.float_folders.iter().any(|f| f.members.contains(&id))
+    };
+    if app.get_webview_window(&flabel(&id)).is_some() || in_folder {
         {
             let mut store = lock(&state);
             store.settings.floating.remove(&id);
             store.settings.float_scale.remove(&id);
+            for folder in store.settings.float_folders.iter_mut() {
+                folder.members.retain(|m| m != &id);
+            }
+            let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+            normalize_float_folders(&mut store.settings.float_folders, &ids);
             save_settings(&app, &store.settings);
         }
         close_floating_window(&app, &id);
+        sync_float_windows(&app); // a folder left with one member dissolves
         Ok(false)
     } else {
         let prompt = {
@@ -4097,7 +4608,7 @@ async fn resize_float_media(app: AppHandle, id: String, width: f64, height: f64)
 // Tauri's separate set_position + set_size leave a one-frame intermediate state
 // (new position, old size) that flickers the edges while dragging a grip.
 #[cfg(windows)]
-fn set_float_bounds_native(win: &tauri::WebviewWindow, x: f64, y: f64, w: f64, h: f64) -> bool {
+fn set_window_pos_phys(win: &tauri::WebviewWindow, x: i32, y: i32, w: i32, h: i32) -> bool {
     #[link(name = "user32")]
     extern "system" {
         fn SetWindowPos(hwnd: isize, after: isize, x: i32, y: i32, cx: i32, cy: i32, flags: u32) -> i32;
@@ -4108,14 +4619,19 @@ fn set_float_bounds_native(win: &tauri::WebviewWindow, x: f64, y: f64, w: f64, h
         Ok(h) => h.0 as isize,
         Err(_) => return false,
     };
+    unsafe { SetWindowPos(hwnd, 0, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE) != 0 }
+}
+
+#[cfg(windows)]
+fn set_float_bounds_native(win: &tauri::WebviewWindow, x: f64, y: f64, w: f64, h: f64) -> bool {
     let s = win.scale_factor().unwrap_or(1.0);
-    let (px, py, cx, cy) = (
+    set_window_pos_phys(
+        win,
         (x * s).round() as i32,
         (y * s).round() as i32,
         (w * s).round() as i32,
         (h * s).round() as i32,
-    );
-    unsafe { SetWindowPos(hwnd, 0, px, py, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE) != 0 }
+    )
 }
 
 // Expert privacy flag (Datenschutz tab). Missing = enabled, like every expert
@@ -4495,6 +5011,376 @@ async fn set_float_bounds(app: AppHandle, id: String, x: f64, y: f64, width: f64
             let _ = win.set_size(tauri::LogicalSize::new(w, h));
         }
     }
+    Ok(())
+}
+
+// ---------- F25: folder commands ----------
+
+// A pill was dropped after a drag: did it land on another pill or on a folder? The
+// check has to run HERE — the pills are separate OS windows, so only the backend knows
+// where they all are. Called ONCE per drag END, never while dragging.
+#[tauri::command]
+async fn float_folder_drop(app: AppHandle, state: State<'_, Db>, id: String) -> Result<bool, String> {
+    let (on, radius, full) = {
+        let store = lock(&state);
+        (
+            folders_on(&store.settings),
+            merge_radius(&store.settings),
+            store.settings.float_folders.len() >= MAX_FLOAT_FOLDERS,
+        )
+    };
+    if !on {
+        return Ok(false);
+    }
+    let win = match app.get_webview_window(&flabel(&id)) {
+        Some(w) => w,
+        None => return Ok(false),
+    };
+    let dragged = match window_rect(&win) {
+        Some(r) => r,
+        None => return Ok(false),
+    };
+    let dpi = win.scale_factor().unwrap_or(1.0);
+    let mut targets: Vec<(String, Rect)> = Vec::new();
+    for (label, other) in app.webview_windows() {
+        if label == flabel(&id) {
+            continue;
+        }
+        let rect = match window_rect(&other) {
+            Some(r) => r,
+            None => continue,
+        };
+        if let Some(pid) = label.strip_prefix("float-") {
+            targets.push((format!("p{}", pid), rect));
+        } else if let Some(fid) = label.strip_prefix("folder-") {
+            // An OPEN folder is hit-tested on its icon, never on the grid it grew.
+            targets.push((format!("f{}", fid), folder_icon_rect(&app, fid, rect)));
+        }
+    }
+    // The radius is a logical distance, so it follows the dragged pill's monitor.
+    let hit = match merge_target(dragged, &targets, radius * dpi) {
+        Some(h) => h.to_string(),
+        None => return Ok(false),
+    };
+    let (kind, key) = hit.split_at(1);
+    // A new folder needs its position first: working out which monitor the drop landed
+    // on is a Tauri call, and one of those under the store mutex is the deadlock shape.
+    let fresh = if kind == "f" {
+        None
+    } else {
+        if full {
+            return Ok(false);
+        }
+        let scale = {
+            let store = lock(&state);
+            float_scale_of(&store.settings, key)
+        };
+        // The new folder takes the target pill's place — centred on it, so it lands
+        // where the user aimed — and its icon size mirrors that pill's size.
+        let target = targets
+            .iter()
+            .find(|(t, _)| t == &hit)
+            .map(|(_, r)| *r)
+            .unwrap_or(dragged);
+        let side = folder_box(scale) * dpi;
+        let (cx, cy) = target.center();
+        let work = work_rect_at(&app, cx, cy);
+        let (x, y) = clamp_to_work(work, side, side, cx - side / 2.0, cy - side / 2.0);
+        Some(FloatFolder {
+            id: gen_id(),
+            name: String::new(),
+            pos: Pos { x: x.round() as i32, y: y.round() as i32 },
+            scale,
+            members: vec![key.to_string(), id.clone()],
+        })
+    };
+    {
+        let mut store = lock(&state);
+        match fresh {
+            Some(folder) => store.settings.float_folders.push(folder),
+            None => match store.settings.float_folders.iter_mut().find(|f| f.id == key) {
+                Some(folder) => {
+                    if !folder.members.iter().any(|m| m == &id) {
+                        folder.members.push(id.clone());
+                    }
+                }
+                None => return Ok(false),
+            },
+        }
+        let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+        normalize_float_folders(&mut store.settings.float_folders, &ids);
+        save_settings(&app, &store.settings);
+    }
+    sync_float_windows(&app);
+    Ok(true)
+}
+
+// Everything the folder window needs to draw itself.
+#[derive(Serialize)]
+struct FolderView {
+    id: String,
+    name: String,
+    scale: f64,
+    cols: u32,
+    members: Vec<Prompt>,
+}
+
+#[tauri::command]
+fn float_folder_state(state: State<Db>, id: String) -> Option<FolderView> {
+    let store = lock(&state);
+    let folder = store.settings.float_folders.iter().find(|f| f.id == id)?;
+    let members = folder
+        .members
+        .iter()
+        .filter_map(|m| store.prompts.iter().find(|p| &p.id == m).cloned())
+        .collect();
+    Some(FolderView {
+        id: folder.id.clone(),
+        name: folder.name.clone(),
+        scale: folder.scale,
+        cols: folder_cols(&store.settings),
+        members,
+    })
+}
+
+// The layout an expanded folder ended up with, in LOGICAL pixels for the webview.
+#[derive(Serialize)]
+struct FolderGeom {
+    side: String,
+    icon_x: f64,
+    icon_y: f64,
+    pop_x: f64,
+    pop_y: f64,
+    width: f64,
+    height: f64,
+}
+
+// Open the folder by growing its OWN window around the icon — no second window is
+// ever spawned, so z-order and focus stay exactly as simple as a single pill's. The
+// popover size comes in as logical pixels (what the webview measured) and is scaled
+// with THIS window's factor, so the same call is correct on a second monitor at a
+// different DPI.
+#[tauri::command]
+async fn expand_float_folder(
+    app: AppHandle,
+    id: String,
+    width: f64,
+    height: f64,
+    gap: f64,
+) -> Result<FolderGeom, String> {
+    if ![width, height, gap].iter().all(|v| v.is_finite() && *v >= 0.0) {
+        return Err("bad popover size".to_string());
+    }
+    let win = app
+        .get_webview_window(&folder_label(&id))
+        .ok_or_else(|| "unknown folder".to_string())?;
+    let dpi = win.scale_factor().unwrap_or(1.0);
+    let current = window_rect(&win).ok_or_else(|| "no window geometry".to_string())?;
+    let icon = folder_icon_rect(&app, &id, current);
+    let (cx, cy) = icon.center();
+    let work = work_rect_at(&app, cx, cy);
+    let layout = folder_layout(
+        icon,
+        (width * dpi).clamp(1.0, 20000.0),
+        (height * dpi).clamp(1.0, 20000.0),
+        gap * dpi,
+        work,
+    );
+    set_folder_expansion(
+        &app,
+        &id,
+        Some(Rect { x: layout.icon.0, y: layout.icon.1, w: icon.w, h: icon.h }),
+    );
+    set_bounds_phys(&win, layout.win);
+    Ok(FolderGeom {
+        side: layout.side.as_str().to_string(),
+        icon_x: layout.icon.0 / dpi,
+        icon_y: layout.icon.1 / dpi,
+        pop_x: layout.pop.0 / dpi,
+        pop_y: layout.pop.1 / dpi,
+        width: layout.win.w / dpi,
+        height: layout.win.h / dpi,
+    })
+}
+
+// Shrink the window back to the icon, wherever the icon currently is.
+#[tauri::command]
+async fn collapse_float_folder(app: AppHandle, state: State<'_, Db>, id: String) -> Result<(), String> {
+    let win = match app.get_webview_window(&folder_label(&id)) {
+        Some(w) => w,
+        None => return Ok(()),
+    };
+    let current = match window_rect(&win) {
+        Some(r) => r,
+        None => return Ok(()),
+    };
+    let icon = folder_icon_rect(&app, &id, current);
+    set_folder_expansion(&app, &id, None);
+    set_bounds_phys(&win, icon);
+    // The window may have been dragged while it was open, so store where the icon
+    // ended up rather than where the folder was opened.
+    let mut store = lock(&state);
+    if let Some(folder) = store.settings.float_folders.iter_mut().find(|f| f.id == id) {
+        folder.pos = Pos { x: icon.x.round() as i32, y: icon.y.round() as i32 };
+    }
+    save_settings(&app, &store.settings);
+    Ok(())
+}
+
+// Per-folder size, mirroring the per-pill float_scale.
+#[tauri::command]
+async fn set_float_folder_scale(
+    app: AppHandle,
+    state: State<'_, Db>,
+    id: String,
+    scale: f64,
+) -> Result<(), String> {
+    let scale = if scale.is_finite() { scale.clamp(0.5, 3.0) } else { 1.0 };
+    let pos = {
+        let mut store = lock(&state);
+        let found = store
+            .settings
+            .float_folders
+            .iter_mut()
+            .find(|f| f.id == id)
+            .map(|f| {
+                f.scale = scale;
+                f.pos
+            });
+        match found {
+            Some(p) => {
+                save_settings(&app, &store.settings);
+                p
+            }
+            None => return Err("unknown folder".to_string()),
+        }
+    };
+    if let Some(win) = app.get_webview_window(&folder_label(&id)) {
+        let dpi = win.scale_factor().unwrap_or(1.0);
+        let side = folder_box(scale) * dpi;
+        set_folder_expansion(&app, &id, None); // a size change closes the open grid
+        set_bounds_phys(&win, Rect { x: pos.x as f64, y: pos.y as f64, w: side, h: side });
+        let _ = app.emit_to(folder_label(&id).as_str(), "folder-changed", ());
+    }
+    Ok(())
+}
+
+// The optional label under the folder icon. Control characters are stripped: the name
+// also ends up as the window title.
+#[tauri::command]
+fn rename_float_folder(app: AppHandle, state: State<Db>, id: String, name: String) -> Result<(), String> {
+    let name = folder_name_of(&name)?;
+    {
+        let mut store = lock(&state);
+        match store.settings.float_folders.iter_mut().find(|f| f.id == id) {
+            Some(folder) => folder.name = name.clone(),
+            None => return Err("unknown folder".to_string()),
+        }
+        save_settings(&app, &store.settings);
+    }
+    if let Some(win) = app.get_webview_window(&folder_label(&id)) {
+        let _ = win.set_title(&name);
+    }
+    let _ = app.emit_to(folder_label(&id).as_str(), "folder-changed", ());
+    Ok(())
+}
+
+// A folder window has no themed dialog of its own, so the rename is asked for in the
+// MAIN window (confirmDialog) and applied from there — never a native message box.
+#[tauri::command]
+async fn folder_rename_request(app: AppHandle, state: State<'_, Db>, id: String) -> Result<(), String> {
+    let name = {
+        let store = lock(&state);
+        store
+            .settings
+            .float_folders
+            .iter()
+            .find(|f| f.id == id)
+            .map(|f| f.name.clone())
+    };
+    let name = name.ok_or_else(|| "unknown folder".to_string())?;
+    show_main(&app);
+    let _ = app.emit_to(
+        "main",
+        "folder-rename",
+        serde_json::json!({ "id": id, "name": name }),
+    );
+    Ok(())
+}
+
+// Dissolve a folder: every member goes back to being a free pill at its own stored
+// position. Nothing is deleted.
+#[tauri::command]
+async fn dissolve_float_folder(app: AppHandle, state: State<'_, Db>, id: String) -> Result<(), String> {
+    {
+        let mut store = lock(&state);
+        let before = store.settings.float_folders.len();
+        store.settings.float_folders.retain(|f| f.id != id);
+        if store.settings.float_folders.len() == before {
+            return Ok(());
+        }
+        save_settings(&app, &store.settings);
+    }
+    set_folder_expansion(&app, &id, None);
+    sync_float_windows(&app);
+    Ok(())
+}
+
+// A member was dragged out of the open folder: it becomes a free pill at the drop
+// point. x/y are the pointer's screen position in the webview's CSS pixels, converted
+// with the folder window's own scale factor and then clamped onto the work area it was
+// dropped on. Dropping the second-to-last member dissolves the folder (normalize).
+#[tauri::command]
+async fn remove_folder_member(
+    app: AppHandle,
+    state: State<'_, Db>,
+    folder_id: String,
+    id: String,
+    x: f64,
+    y: f64,
+) -> Result<(), String> {
+    if !x.is_finite() || !y.is_finite() {
+        return Err("bad drop position".to_string());
+    }
+    let dpi = app
+        .get_webview_window(&folder_label(&folder_id))
+        .and_then(|w| w.scale_factor().ok())
+        .unwrap_or(1.0);
+    let (px, py) = (x * dpi, y * dpi);
+    let (pw, ph) = {
+        let store = lock(&state);
+        let prompt = match store.prompts.iter().find(|p| p.id == id) {
+            Some(p) => p,
+            None => return Err("unknown prompt".to_string()),
+        };
+        if !store
+            .settings
+            .float_folders
+            .iter()
+            .any(|f| f.id == folder_id && f.members.contains(&id))
+        {
+            return Err("not a member of this folder".to_string());
+        }
+        pill_dims(is_image_prompt(prompt), float_scale_of(&store.settings, &id))
+    };
+    let work = work_rect_at(&app, px, py);
+    let (nx, ny) = clamp_to_work(work, pw * dpi, ph * dpi, px - pw * dpi / 2.0, py - ph * dpi / 2.0);
+    {
+        let mut store = lock(&state);
+        for folder in store.settings.float_folders.iter_mut() {
+            if folder.id == folder_id {
+                folder.members.retain(|m| m != &id);
+            }
+        }
+        store
+            .settings
+            .floating
+            .insert(id.clone(), Pos { x: nx.round() as i32, y: ny.round() as i32 });
+        let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+        normalize_float_folders(&mut store.settings.float_folders, &ids);
+        save_settings(&app, &store.settings);
+    }
+    sync_float_windows(&app);
     Ok(())
 }
 
@@ -5755,6 +6641,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
     let is_clip = key == "clipWatcher"; // F21
     let is_hotkeys = key == "promptHotkeys"; // F20
     let is_tray = key == "trayRecent" || key == "trayFavs"; // F23
+    let is_folders = key == "pillFolders"; // F25
     {
         let mut store = lock(&state);
         store.settings.ui_flags.insert(key, enabled);
@@ -5785,12 +6672,21 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
     if is_tray {
         apply_tray_menu(&app);
     }
+    // F25: switching folders off puts every member back on screen as its own pill (the
+    // folders themselves are kept, so switching it on again restores them). This is a
+    // SYNC command, so it runs on the main thread — opening and closing windows there
+    // is the documented way to deadlock WebView2, hence the hop onto the runtime.
+    if is_folders {
+        let handle = app.clone();
+        tauri::async_runtime::spawn(async move { sync_float_windows(&handle) });
+    }
 }
 
 // Set an expert numeric value (CSS var / behaviour tweak).
 #[tauri::command]
 fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
     let is_tray = key == "trayRecentN" || key == "trayFavN"; // F23
+    let is_folder_grid = key == "folderGridCols"; // F25
     {
         let mut store = lock(&state);
         store.settings.ui_values.insert(key, value);
@@ -5798,6 +6694,14 @@ fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
     }
     if is_tray {
         rebuild_tray(&app); // dragging a slider must not rebuild on every step
+    }
+    // F25: an open folder re-lays out its grid with the new column count.
+    if is_folder_grid {
+        for label in app.webview_windows().keys() {
+            if label.starts_with("folder-") {
+                let _ = app.emit_to(label.as_str(), "folder-changed", ());
+            }
+        }
     }
 }
 
@@ -6773,6 +7677,7 @@ async fn import_all(
         // it and let the summary say so.
         let app_hotkey = store.settings.hotkey.clone();
         let dropped = drop_colliding_hotkeys(&app_hotkey, &mut store.prompts);
+        store.normalize_folders(); // F25: the restored folders must match the restored prompts
         save_prompts(&app, &store);
         save_settings(&app, &store.settings);
         (store.settings.clone(), store.prompts.len(), dropped)
@@ -6781,6 +7686,7 @@ async fn import_all(
     push_theme(&app, &settings);
     rearm_hotkeys(&app);
     apply_tray_menu(&app); // F23: an import can bring new tray settings with it
+    sync_float_windows(&app); // F25: pills and folders follow the restored settings
     Ok(ImportSummary {
         name: path
             .file_name()
@@ -7028,12 +7934,6 @@ pub fn run() {
             let handle = app.handle().clone();
             let store = load_store(&handle);
 
-            let to_restore: Vec<Prompt> = store
-                .prompts
-                .iter()
-                .filter(|p| store.settings.floating.contains_key(&p.id))
-                .cloned()
-                .collect();
             let saved_geom = store.settings.window;
             let autostart = store.settings.autostart;
             let start_min = store.settings.start_minimized;
@@ -7046,6 +7946,7 @@ pub fn run() {
             app.manage(SnipState(Mutex::new(Vec::new())));
             app.manage(SnipPreview(Arc::new(Mutex::new(None))));
             app.manage(HotkeyTargets(Mutex::new(Vec::new()))); // F20
+            app.manage(FolderExpand(Mutex::new(HashMap::new()))); // F25
 
             // F19 auto-paste: start tracking the last external foreground window.
             #[cfg(windows)]
@@ -7268,9 +8169,8 @@ pub fn run() {
                 let _ = apply_autostart(true, start_min);
             }
 
-            for prompt in &to_restore {
-                open_floating(&handle, prompt);
-            }
+            // F25: one place decides which pills and which folders belong on screen.
+            sync_float_windows(&handle);
 
             // Pre-warm the snip overlay shortly after launch (off the startup hot
             // path) so even the FIRST screenshot opens instantly — the WebView2
@@ -7379,6 +8279,15 @@ pub fn run() {
             resize_float_pill,
             resize_float_media,
             set_float_bounds,
+            float_folder_drop,
+            float_folder_state,
+            expand_float_folder,
+            collapse_float_folder,
+            set_float_folder_scale,
+            rename_float_folder,
+            folder_rename_request,
+            dissolve_float_folder,
+            remove_folder_member,
             set_video_prefs,
             edit_prompt_request,
             show_main_window,
@@ -8439,5 +9348,319 @@ mod tests {
         for bad in ["show", "quit", "", "psc", "psc:", "PSC:x", "copy:x", ":x", "tray-head-recent"] {
             assert_eq!(tray_copy_target(bad), None, "accepted a bad menu id: {bad:?}");
         }
+    }
+
+    // ---- F25 pill folders ----
+
+    // A pill 200x80 at (x, y). Physical pixels, like every folder computation.
+    fn pill_at(x: f64, y: f64) -> Rect {
+        Rect { x, y, w: 200.0, h: 80.0 }
+    }
+
+    fn folder_of(id: &str, members: &[&str]) -> FloatFolder {
+        FloatFolder {
+            id: id.into(),
+            name: String::new(),
+            pos: Pos { x: 100, y: 100 },
+            scale: 1.0,
+            members: members.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    fn ids(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn a_drop_on_top_of_another_pill_merges() {
+        // Dropped 30px away: overlapping and inside the default 40px radius.
+        let dragged = pill_at(130.0, 100.0);
+        let others = vec![("other".to_string(), pill_at(100.0, 100.0))];
+        assert_eq!(merge_target(dragged, &others, 40.0), Some("other"));
+    }
+
+    #[test]
+    fn a_small_drag_never_merges() {
+        // The pill moved four pixels and touches nothing else — the case that must
+        // never turn a nudge into a folder.
+        let others = vec![
+            ("a".to_string(), pill_at(600.0, 100.0)),
+            ("b".to_string(), pill_at(100.0, 400.0)),
+        ];
+        assert_eq!(merge_target(pill_at(104.0, 100.0), &others, 40.0), None);
+        // And a pill that stayed exactly where it was matches nothing either.
+        assert_eq!(merge_target(pill_at(100.0, 100.0), &others, 40.0), None);
+    }
+
+    #[test]
+    fn merge_needs_both_the_radius_and_a_real_overlap() {
+        let target = pill_at(100.0, 100.0);
+        let others = vec![("other".to_string(), target)];
+        // Centre distance exactly on the radius still counts as a hit ...
+        assert_eq!(merge_target(pill_at(140.0, 100.0), &others, 40.0), Some("other"));
+        // ... one pixel further does not.
+        assert_eq!(merge_target(pill_at(141.0, 100.0), &others, 40.0), None);
+        // Overlapping but far apart at the centres (a long text pill whose end just
+        // touches) is not a merge either.
+        let wide = vec![("wide".to_string(), Rect { x: 0.0, y: 100.0, w: 260.0, h: 80.0 })];
+        assert!(pill_at(250.0, 100.0).overlaps(&wide[0].1));
+        assert_eq!(merge_target(pill_at(250.0, 100.0), &wide, 40.0), None);
+        // Two small pills close enough by centre distance but with a gap between them:
+        // near is not on top of, so nothing merges.
+        let small = Rect { x: 100.0, y: 100.0, w: 10.0, h: 10.0 };
+        let apart = vec![("apart".to_string(), Rect { x: 130.0, y: 100.0, w: 10.0, h: 10.0 })];
+        assert!(!small.overlaps(&apart[0].1));
+        assert_eq!(merge_target(small, &apart, 40.0), None);
+    }
+
+    #[test]
+    fn the_nearest_pill_wins_a_crowded_drop() {
+        let dragged = pill_at(100.0, 100.0);
+        let others = vec![
+            ("far".to_string(), pill_at(130.0, 100.0)),
+            ("near".to_string(), pill_at(110.0, 100.0)),
+            ("out".to_string(), pill_at(400.0, 100.0)),
+        ];
+        assert_eq!(merge_target(dragged, &others, 40.0), Some("near"));
+    }
+
+    #[test]
+    fn folder_invariants_are_restored_and_idempotent() {
+        let known = ids(&["a", "b", "c", "d", "e"]);
+        let mut folders = vec![
+            folder_of("f1", &["a", "gone", "b"]),
+            folder_of("f2", &["b", "c", "d"]), // b already belongs to f1
+            folder_of("f3", &["e"]),           // a single member is not a folder
+            folder_of("f4", &["ghost", "phantom"]),
+        ];
+        normalize_float_folders(&mut folders, &known);
+        assert_eq!(folders.len(), 2);
+        assert_eq!(folders[0].members, ids(&["a", "b"]));
+        assert_eq!(folders[1].id, "f2");
+        assert_eq!(folders[1].members, ids(&["c", "d"]));
+        // Running it again changes nothing.
+        let before: Vec<Vec<String>> = folders.iter().map(|f| f.members.clone()).collect();
+        normalize_float_folders(&mut folders, &known);
+        let after: Vec<Vec<String>> = folders.iter().map(|f| f.members.clone()).collect();
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn a_prompt_lives_in_at_most_one_folder() {
+        let known = ids(&["a", "b", "c"]);
+        let mut folders = vec![folder_of("f1", &["a", "b"]), folder_of("f2", &["a", "c"])];
+        normalize_float_folders(&mut folders, &known);
+        assert_eq!(folders[0].members, vec!["a", "b"]);
+        // f2 lost the duplicate and is down to one member, so it dissolves.
+        assert_eq!(folders.len(), 1);
+    }
+
+    #[test]
+    fn a_broken_folder_scale_is_clamped() {
+        let known = ids(&["a", "b"]);
+        let mut folders = vec![folder_of("f1", &["a", "b"])];
+        folders[0].scale = f64::NAN;
+        normalize_float_folders(&mut folders, &known);
+        assert_eq!(folders[0].scale, 1.0);
+        folders[0].scale = 99.0;
+        normalize_float_folders(&mut folders, &known);
+        assert_eq!(folders[0].scale, 3.0);
+    }
+
+    #[test]
+    fn deleting_a_prompt_purges_it_from_its_folder() {
+        let mut settings = Settings::default();
+        settings.ui_flags.insert("pillFolders".into(), true);
+        settings.float_folders = vec![folder_of("f1", &["a", "b", "c"]), folder_of("f2", &["d", "e"])];
+        // delete_prompt needs an AppHandle, so exercise the same steps it performs.
+        let mut alive = ids(&["a", "b", "c", "d", "e"]);
+        alive.retain(|p| p != "c");
+        normalize_float_folders(&mut settings.float_folders, &alive);
+        assert_eq!(settings.float_folders[0].members, vec!["a", "b"]);
+        // Losing a second member leaves one behind, so that folder dissolves and its
+        // pill goes back to the free position it never gave up.
+        alive.retain(|p| p != "d");
+        normalize_float_folders(&mut settings.float_folders, &alive);
+        assert_eq!(settings.float_folders.len(), 1);
+        assert_eq!(settings.float_folders[0].id, "f1");
+    }
+
+    #[test]
+    fn the_window_plan_follows_the_feature_flag() {
+        let mut settings = Settings::default();
+        for id in ["a", "b", "c"] {
+            settings.floating.insert(id.to_string(), Pos { x: 0, y: 0 });
+        }
+        settings.float_folders = vec![folder_of("f1", &["a", "b"])];
+        let known = ids(&["a", "b", "c"]);
+
+        // Off (the shipped default): every member is a plain pill again, no folder.
+        let (pills, folders) = float_window_plan(&settings, &known);
+        assert_eq!(pills, ids(&["a", "b", "c"]));
+        assert!(folders.is_empty());
+
+        // On: the members lose their own window, the folder gets one.
+        settings.ui_flags.insert("pillFolders".into(), true);
+        let (pills, folders) = float_window_plan(&settings, &known);
+        assert_eq!(pills, ids(&["c"]));
+        assert_eq!(folders, ids(&["f1"]));
+
+        // An unpinned prompt never gets a window, folder member or not.
+        settings.floating.remove("c");
+        let (pills, _) = float_window_plan(&settings, &known);
+        assert!(pills.is_empty());
+    }
+
+    #[test]
+    fn folder_expert_settings_use_their_slider_range() {
+        let s = Settings::default();
+        assert!(!folders_on(&s), "the feature ships off");
+        assert_eq!(merge_radius(&s), 40.0);
+        assert_eq!(folder_cols(&s), 3);
+        let mut s = Settings::default();
+        s.ui_values.insert("pillMergeRadius".into(), 9999.0);
+        s.ui_values.insert("folderGridCols".into(), 0.0);
+        assert_eq!(merge_radius(&s), 80.0);
+        assert_eq!(folder_cols(&s), 2);
+        s.ui_values.insert("pillMergeRadius".into(), f64::NAN);
+        assert_eq!(merge_radius(&s), 40.0);
+    }
+
+    #[test]
+    fn folder_names_are_trimmed_and_stripped() {
+        assert_eq!(folder_name_of("  Work  ").unwrap(), "Work");
+        assert_eq!(folder_name_of("").unwrap(), "");
+        // A pasted newline or control byte never reaches the window title.
+        assert_eq!(folder_name_of("Wo\nrk\u{7}").unwrap(), "Work");
+        assert!(folder_name_of(&"a".repeat(MAX_FOLDER_NAME)).is_ok());
+        assert!(folder_name_of(&"a".repeat(MAX_FOLDER_NAME + 1)).is_err());
+    }
+
+    // A 1920x1080 primary screen with a 40px taskbar at the bottom.
+    fn primary_work() -> Rect {
+        Rect { x: 0.0, y: 0.0, w: 1920.0, h: 1040.0 }
+    }
+
+    const ICON: f64 = 96.0;
+
+    fn icon_at(x: f64, y: f64) -> Rect {
+        Rect { x, y, w: ICON, h: ICON }
+    }
+
+    #[test]
+    fn a_folder_opens_below_when_there_is_room() {
+        let icon = icon_at(400.0, 200.0);
+        let l = folder_layout(icon, 260.0, 180.0, 6.0, primary_work());
+        assert_eq!(l.side, FolderSide::Below);
+        // The icon never moves: it still sits at its own screen position.
+        assert_eq!(l.win.x + l.icon.0, icon.x);
+        assert_eq!(l.win.y + l.icon.1, icon.y);
+        // The popover hangs under it, centred, with the gap in between.
+        assert_eq!(l.win.y + l.pop.1, icon.bottom() + 6.0);
+        assert_eq!(l.win.x + l.pop.0, icon.x + (ICON - 260.0) / 2.0);
+        // One window covers both.
+        assert_eq!(l.win.h, ICON + 6.0 + 180.0);
+        assert_eq!(l.win.w, 260.0);
+    }
+
+    #[test]
+    fn a_folder_at_the_bottom_edge_flips_above() {
+        let icon = icon_at(400.0, 900.0); // bottom at 996, work ends at 1040
+        let l = folder_layout(icon, 260.0, 180.0, 6.0, primary_work());
+        assert_eq!(l.side, FolderSide::Above);
+        assert_eq!(l.win.y + l.pop.1, icon.y - 6.0 - 180.0);
+        assert_eq!(l.win.x + l.icon.0, icon.x);
+        assert_eq!(l.win.y + l.icon.1, icon.y);
+        // Still fully inside the work area.
+        assert!(l.win.y >= primary_work().y && l.win.bottom() <= primary_work().bottom());
+    }
+
+    #[test]
+    fn a_tall_grid_in_the_middle_flips_sideways() {
+        // Neither below nor above fits a 900px grid, so it goes to the right ...
+        let icon = icon_at(400.0, 500.0);
+        let l = folder_layout(icon, 300.0, 900.0, 6.0, primary_work());
+        assert_eq!(l.side, FolderSide::Right);
+        assert_eq!(l.win.x + l.pop.0, icon.right() + 6.0);
+        // ... and to the left when the right edge is too close.
+        let icon = icon_at(1700.0, 500.0);
+        let l = folder_layout(icon, 300.0, 900.0, 6.0, primary_work());
+        assert_eq!(l.side, FolderSide::Left);
+        assert_eq!(l.win.x + l.pop.0, icon.x - 6.0 - 300.0);
+        assert!(l.win.x >= 0.0 && l.win.right() <= 1920.0);
+    }
+
+    #[test]
+    fn a_folder_in_a_corner_keeps_the_whole_popover_on_screen() {
+        let work = primary_work();
+        for icon in [icon_at(0.0, 0.0), icon_at(1824.0, 0.0), icon_at(0.0, 944.0), icon_at(1824.0, 944.0)] {
+            let l = folder_layout(icon, 400.0, 300.0, 6.0, work);
+            assert!(l.win.x >= work.x, "left edge escaped at {:?}", icon);
+            assert!(l.win.y >= work.y, "top edge escaped at {:?}", icon);
+            assert!(l.win.right() <= work.right(), "right edge escaped at {:?}", icon);
+            assert!(l.win.bottom() <= work.bottom(), "bottom edge escaped at {:?}", icon);
+            // Whatever had to move, it was never the icon.
+            assert_eq!(l.win.x + l.icon.0, icon.x);
+            assert_eq!(l.win.y + l.icon.1, icon.y);
+        }
+    }
+
+    #[test]
+    fn a_second_monitor_at_another_dpi_flips_on_its_own_edges() {
+        // A 150% 2560x1440 screen to the RIGHT of the primary one: its work area
+        // starts at x=1920, and every size arrives multiplied by 1.5.
+        let work = Rect { x: 1920.0, y: 0.0, w: 2560.0, h: 1380.0 };
+        let icon = Rect { x: 2000.0, y: 1200.0, w: ICON * 1.5, h: ICON * 1.5 };
+        let l = folder_layout(icon, 260.0 * 1.5, 180.0 * 1.5, 6.0 * 1.5, work);
+        // Below would run past that monitor's work area, so it flips there too.
+        assert_eq!(l.side, FolderSide::Above);
+        assert!(l.win.x >= work.x && l.win.right() <= work.right());
+        assert!(l.win.y >= work.y && l.win.bottom() <= work.bottom());
+        // A folder in that screen's top-left corner opens below and stays on it —
+        // the primary monitor to the left is never used as spare room.
+        let icon = Rect { x: 1930.0, y: 20.0, w: ICON * 1.5, h: ICON * 1.5 };
+        let l = folder_layout(icon, 600.0, 200.0, 9.0, work);
+        assert_eq!(l.side, FolderSide::Below);
+        assert!(l.win.x >= work.x, "the popover leaked onto the primary monitor");
+    }
+
+    #[test]
+    fn a_popover_larger_than_the_screen_still_starts_on_it() {
+        let work = primary_work();
+        let l = folder_layout(icon_at(900.0, 500.0), 4000.0, 4000.0, 6.0, work);
+        assert_eq!(l.win.x + l.pop.0, work.x);
+        assert_eq!(l.win.y + l.pop.1, work.y);
+    }
+
+    #[test]
+    fn a_dropped_pill_is_clamped_onto_its_work_area() {
+        let work = primary_work();
+        // Dropped past the right/bottom edge: pulled back so the whole pill shows.
+        assert_eq!(clamp_to_work(work, 200.0, 80.0, 1900.0, 1030.0), (1720.0, 960.0));
+        // Dropped past the top/left edge.
+        assert_eq!(clamp_to_work(work, 200.0, 80.0, -50.0, -20.0), (0.0, 0.0));
+        // Inside: untouched.
+        assert_eq!(clamp_to_work(work, 200.0, 80.0, 500.0, 400.0), (500.0, 400.0));
+        // A second monitor's origin is respected, not the desktop's.
+        let right = Rect { x: 1920.0, y: 0.0, w: 1280.0, h: 1000.0 };
+        assert_eq!(clamp_to_work(right, 200.0, 80.0, 1900.0, 10.0), (1920.0, 10.0));
+        // A window bigger than the screen is pinned to the corner instead of pushed off.
+        assert_eq!(clamp_to_work(work, 5000.0, 5000.0, 300.0, 300.0), (0.0, 0.0));
+    }
+
+    #[test]
+    fn settings_without_folders_still_load() {
+        // An older settings blob has no `float_folders` key at all.
+        let s: Settings = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
+        assert!(s.float_folders.is_empty());
+        // A folder from a newer build keeps the fields this version knows and fills in
+        // the ones it does not carry.
+        let s: Settings = serde_json::from_str(
+            r##"{"float_folders":[{"id":"f","name":"Work","members":["a","b"],"future":1}]}"##,
+        )
+        .unwrap();
+        assert_eq!(s.float_folders[0].name, "Work");
+        assert_eq!(s.float_folders[0].scale, 1.0);
+        assert_eq!(s.float_folders[0].pos.x, 0);
     }
 }
