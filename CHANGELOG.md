@@ -3,16 +3,62 @@
 All notable changes to **Prompt Saver**. Download the latest version from the
 [releases page](../../releases/latest).
 
-## Unreleased
+## 2.7.0 (2026-07-27)
+
+Thirteen new features: tags, custom themes, folders for view tabs and for
+floating buttons, self-filling and choice variables, a markdown preview with
+syntax colors, private notes, per-prompt hotkeys, drag-out into other apps, a
+tray quick-copy menu and a screen color picker. Everything new is an expert-menu
+switch, most of it off until you turn it on.
 
 ### Added
+
 - **Tags** — label prompts with free-form, colored tags. The editor gets a chip
   row with type-ahead over existing tags and a per-chip color popover; the
-  library gets a filter row above the results (multi-select, switchable
-  between matching all or any of the picked tags) that combines with search
-  and the other filters, plus a small manager to rename, recolor or delete a
-  tag everywhere at once, with a usage count per tag. Tags travel with TXT and
-  CSV exports. Off by default (expert menu).
+  library gets a filter row above the results (multi-select, switchable between
+  matching all or any of the picked tags) that combines with search and the
+  other filters, plus a small manager to rename, recolor or delete a tag
+  everywhere at once, with a usage count per tag. Tags travel with TXT and CSV
+  exports.
+- **Custom themes** — build your own theme on top of any of the 16 built-in
+  ones: a palette button beside the theme dropdown opens an editor with a color
+  input per themable value, grouped by background, surfaces, text and accent,
+  with a live preview while you edit. Saved themes appear in the dropdown under
+  a separator, and the floating buttons follow them too.
+- **View groups** — collect view tabs into a folder tab. Drag one tab onto
+  another to group them; the group tab opens a popover listing its views, and
+  its context menu renames, recolors or dissolves it. Ctrl+Tab cycles through
+  views in visual order.
+- **Self-filling variables** — `date`, `time`, `datetime`, `weekday`,
+  `clipboard` and `uuid` fill themselves in on copy, with no dialog; a prompt
+  mixing them with your own variables only asks for yours. Date and time follow
+  the app language, with the format switchable in the expert menu. The editor
+  lists all six as insertable chips with a one-line explanation each.
+- **Choice variables** — write `{#{tone|formal,casual,witty}#}` and the copy
+  dialog offers a dropdown instead of a text field, remembering your last pick.
+- **Markdown preview** — an eye button in the editor renders the prompt:
+  headings, lists, quotes, rules, emphasis and fenced code blocks, either
+  toggled or side by side. Code blocks are syntax-colored for JavaScript,
+  TypeScript, Python, HTML, CSS, JSON, SQL, Bash and Rust.
+- **Private notes** — a collapsible notes row on every prompt for context you
+  want to keep but never copy. Notes show as a dimmed section in the tile
+  tooltip, are found by the library search, and travel with TXT and CSV
+  exports — but never reach the clipboard through any copy path.
+- **Per-prompt hotkeys** — give a prompt its own global key combination that
+  copies it from anywhere, even with the app in the tray, and optionally pastes
+  it straight away. Conflicts with the app hotkey or another prompt are refused
+  in the editor.
+- **Drag-out** — hold Ctrl and drag a tile, a library row or a floating button
+  into any other app to drop its text there.
+- **Tray quick menu** — the tray icon's menu can list your recently used and
+  your favorite prompts; clicking one copies it without opening the window.
+- **Floating-button folders** — drag one floating button onto another and they
+  merge into a folder button showing up to four mini previews and a count. Click
+  it and it opens in place into a small grid; drag a member out to free it
+  again, and the folder dissolves when one is left.
+- **Color picker** — a pipette next to the screenshot button freezes the screen
+  and shows a magnified pixel grid with a live readout; click to copy the color
+  as hex, rgb or hsl. Nothing is saved — the value only goes to the clipboard.
 
 ### Improved
 
