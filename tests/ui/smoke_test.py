@@ -1177,7 +1177,11 @@ def main():
                  # out mid-run on the smallest window and produced no result at all.
                  f"--window-size={w},{h}", "--virtual-time-budget=45000", "--dump-dom",
                  page.as_uri()],
-                capture_output=True, text=True, timeout=240)
+                # The dumped DOM carries all 20 languages; without an explicit
+                # codec Windows decodes it as cp1252 and the reader thread dies,
+                # leaving stdout empty.
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=240)
             m = re.search(r'<pre id="SMOKE">(\{.*?\})</pre>', proc.stdout, re.S)
             if not m:
                 print(f"FAIL {w}x{h}: the UI produced no probe result")
@@ -1211,7 +1215,8 @@ def main():
                  f"--user-data-dir={tmp / ('profile-%s' % name)}", "--allow-file-access-from-files",
                  f"--window-size={size[0]},{size[1]}", f"--virtual-time-budget={budget}",
                  "--dump-dom", side.as_uri()],
-                capture_output=True, text=True, timeout=180)
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=180)
             m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
             errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
             print(f"-- {name}")

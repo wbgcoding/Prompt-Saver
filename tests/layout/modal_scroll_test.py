@@ -164,7 +164,9 @@ def measure(browser, tmp, url, size):
         [browser, "--headless=new", "--disable-gpu", "--no-first-run",
          f"--user-data-dir={tmp / ('profile-%d' % _run)}", "--allow-file-access-from-files",
          f"--window-size={size}", "--virtual-time-budget=3000", "--dump-dom", url],
-        capture_output=True, text=True, timeout=120,
+        # Without an explicit codec Windows decodes the dumped DOM as cp1252 and
+        # the reader thread dies on the first non-Latin-1 byte.
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
     )
     m = re.search(r'<pre id="RESULT">(\{.*?\})</pre>', proc.stdout, re.S)
     return json.loads(m.group(1)) if m else None
