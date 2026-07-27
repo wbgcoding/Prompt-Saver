@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{IconMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl,
@@ -546,6 +546,8 @@ fn os_user_name() -> String {
 
 // A prompt name ends up in an OS menu, so it is stripped and capped first.
 const TRAY_LABEL_MAX: usize = 40;
+// How far back from the cap tray_label may look for a word break.
+const TRAY_LABEL_WORD_BACK: usize = 12;
 // Namespace for the dynamic entries. Every other menu id is a fixed keyword, so a
 // click can be routed back to a prompt without ever guessing.
 const TRAY_COPY_PREFIX: &str = "psc:";
@@ -580,12 +582,21 @@ fn tray_cfg(settings: &Settings) -> TrayCfg {
 // Menu text for a prompt. Control characters (a pasted newline lands in the name)
 // collapse to spaces, `&` is doubled because a Win32 menu reads a single one as a
 // mnemonic, and the cut counts CHARACTERS — a byte cut would split a multi-byte
-// name in the middle of a character.
+// name in the middle of a character. An over-long name is cut back to the last word
+// break in the tail rather than mid-word, so the entry still reads as words.
 fn tray_label(name: &str) -> String {
     let flat: String = name.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
     let mut text = flat.split_whitespace().collect::<Vec<_>>().join(" ");
     if text.chars().count() > TRAY_LABEL_MAX {
-        text = text.chars().take(TRAY_LABEL_MAX - 1).collect();
+        let mut cut: String = text.chars().take(TRAY_LABEL_MAX - 1).collect();
+        if let Some(space) = cut.rfind(' ') {
+            // Only when the break is near the end — otherwise a single long word
+            // would shrink the label to almost nothing.
+            if cut[..space].chars().count() >= TRAY_LABEL_MAX - TRAY_LABEL_WORD_BACK {
+                cut.truncate(space);
+            }
+        }
+        text = cut.trim_end().to_string();
         text.push('…');
     }
     if text.is_empty() {
@@ -607,43 +618,226 @@ fn tray_copy_target(menu_id: &str) -> Option<&str> {
     }
 }
 
-// The two sections as (menu id, label) pairs: recent newest-first, favourites
-// alphabetical. Pure, so ordering, the caps and the truncation stay testable —
-// the menu API itself cannot be.
-fn tray_sections(
+// What a quick-copy entry actually delivers. It decides the entry's menu icon, so
+// the media kind of a prompt is readable straight from the tray.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum TrayKind {
+    Text,
+    Image,
+    Media,
+    File,
+}
+
+// The image fields are not exclusive: a picture can be the payload (copy_image), the
+// tile's face (show_image) or just a decoration next to the text. Only the first two
+// make the entry a picture — a decorated text prompt still copies text.
+fn tray_kind(p: &Prompt) -> TrayKind {
+    if !p.file_path.trim().is_empty() {
+        TrayKind::File
+    } else if !p.icon_path.trim().is_empty() {
+        TrayKind::Media
+    } else if !p.image.is_empty() && (p.copy_image || p.show_image) {
+        TrayKind::Image
+    } else {
+        TrayKind::Text
+    }
+}
+
+// One quick-copy entry, ready to become a menu item.
+#[derive(Clone, PartialEq, Eq, Debug)]
+struct TrayEntry {
+    id: String,
+    label: String,
+    kind: TrayKind,
+    // The prompt's own tile colour ("" = tint the icon by kind instead).
+    color: String,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum TraySection {
+    Favorites,
+    Recent,
+}
+
+// The menu's dynamic part, in the order it is drawn: pinned favourites first, then
+// recents — the Windows jump-list idiom, so the curated section never moves under
+// the user while the recents below it churn. A favourite is not repeated in the
+// recents; those backfill with the next unlisted prompt instead of leaving a gap.
+// Pure, so ordering, caps, dedupe and truncation stay testable — the menu API cannot.
+fn tray_plan(
     prompts: &[Prompt],
     last_used: &HashMap<String, u64>,
     cfg: &TrayCfg,
-) -> (Vec<(String, String)>, Vec<(String, String)>) {
-    let entry = |p: &Prompt| (tray_item_id(&p.id), tray_label(&p.name));
-    let mut recent = Vec::new();
+) -> Vec<(TraySection, Vec<TrayEntry>)> {
+    let entry = |p: &Prompt| TrayEntry {
+        id: tray_item_id(&p.id),
+        label: tray_label(&p.name),
+        kind: tray_kind(p),
+        color: p.color.clone(),
+    };
+    let mut out = Vec::new();
+    let mut listed: Vec<&str> = Vec::new();
+    if cfg.favs {
+        let mut starred: Vec<&Prompt> = prompts.iter().filter(|p| p.favorite).collect();
+        starred.sort_by_key(|p| (p.name.to_lowercase(), p.id.clone()));
+        starred.truncate(cfg.fav_n);
+        listed.extend(starred.iter().map(|p| p.id.as_str()));
+        let favs: Vec<TrayEntry> = starred.into_iter().map(entry).collect();
+        if !favs.is_empty() {
+            out.push((TraySection::Favorites, favs));
+        }
+    }
     if cfg.recent {
         let mut used: Vec<(&Prompt, u64)> = prompts
             .iter()
+            .filter(|p| !listed.contains(&p.id.as_str()))
             .filter_map(|p| last_used.get(&p.id).map(|ts| (p, *ts)))
             .collect();
         // Same second for two prompts: fall back to the name so the order is stable.
         used.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.name.cmp(&b.0.name)));
         used.truncate(cfg.recent_n);
-        recent = used.into_iter().map(|(p, _)| entry(p)).collect();
+        let recent: Vec<TrayEntry> = used.into_iter().map(|(p, _)| entry(p)).collect();
+        if !recent.is_empty() {
+            out.push((TraySection::Recent, recent));
+        }
     }
-    let mut favs = Vec::new();
-    if cfg.favs {
-        let mut starred: Vec<&Prompt> = prompts.iter().filter(|p| p.favorite).collect();
-        starred.sort_by_key(|p| (p.name.to_lowercase(), p.id.clone()));
-        starred.truncate(cfg.fav_n);
-        favs = starred.into_iter().map(entry).collect();
-    }
-    (recent, favs)
+    out
 }
 
-// One labelled section: a disabled header, the entries, a separator.
+// ---------- F23: menu icons ----------
+// A menu icon is a 16x16 chip: the prompt's tile colour (or the media kind's own
+// tint) with a glyph on top. It is FULLY OPAQUE on purpose. The Win32 menu path
+// turns an icon into a bitmap through a monochrome AND mask that is only built
+// correctly when every pixel is opaque, so a glyph with transparent padding comes
+// out striped instead of clean.
+const TRAY_ICON_PX: u32 = 16;
+
+fn hex_rgb(hex: &str) -> Option<[u8; 3]> {
+    let c = hex_to_color(hex.trim())?;
+    Some([c.0, c.1, c.2])
+}
+
+// Perceived brightness, 0..255 — decides whether the glyph is drawn light or dark.
+fn tray_luma(c: [u8; 3]) -> u32 {
+    (c[0] as u32 * 299 + c[1] as u32 * 587 + c[2] as u32 * 114) / 1000
+}
+
+// Blend `c` toward `to` by `amount` percent.
+fn tray_mix(c: [u8; 3], to: [u8; 3], amount: u32) -> [u8; 3] {
+    let f = |a: u8, b: u8| ((a as u32 * (100 - amount) + b as u32 * amount) / 100) as u8;
+    [f(c[0], to[0]), f(c[1], to[1]), f(c[2], to[2])]
+}
+
+fn tray_kind_tint(kind: TrayKind) -> [u8; 3] {
+    match kind {
+        TrayKind::Text => [90, 100, 114],
+        TrayKind::Image => [47, 111, 237],
+        TrayKind::Media => [139, 92, 246],
+        TrayKind::File => [224, 138, 30],
+    }
+}
+
+// A 16x16 chip under construction. Every write is bounds-checked, so a glyph that
+// runs over an edge is clipped instead of wrapping onto the next row.
+struct TrayChip {
+    px: Vec<u8>,
+}
+
+impl TrayChip {
+    fn new(fill: [u8; 3]) -> Self {
+        let n = (TRAY_ICON_PX * TRAY_ICON_PX) as usize;
+        let mut px = Vec::with_capacity(n * 4);
+        for _ in 0..n {
+            px.extend_from_slice(&[fill[0], fill[1], fill[2], 255]);
+        }
+        Self { px }
+    }
+    fn dot(&mut self, x: i32, y: i32, c: [u8; 3]) {
+        let n = TRAY_ICON_PX as i32;
+        if x < 0 || y < 0 || x >= n || y >= n {
+            return;
+        }
+        let i = ((y * n + x) * 4) as usize;
+        self.px[i] = c[0];
+        self.px[i + 1] = c[1];
+        self.px[i + 2] = c[2];
+    }
+    fn row(&mut self, x0: i32, x1: i32, y: i32, c: [u8; 3]) {
+        for x in x0..=x1 {
+            self.dot(x, y, c);
+        }
+    }
+    fn bar(&mut self, x0: i32, x1: i32, y0: i32, y1: i32, c: [u8; 3]) {
+        for y in y0..=y1 {
+            self.row(x0, x1, y, c);
+        }
+    }
+    fn frame(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, c: [u8; 3]) {
+        self.row(x0, x1, y0, c);
+        self.row(x0, x1, y1, c);
+        for y in y0..=y1 {
+            self.dot(x0, y, c);
+            self.dot(x1, y, c);
+        }
+    }
+}
+
+// The 16x16 RGBA chip for one entry. `color` is the prompt's tile colour; anything
+// unparseable falls back to the kind's own tint.
+fn tray_icon_pixels(kind: TrayKind, color: &str) -> Vec<u8> {
+    let fill = hex_rgb(color).unwrap_or_else(|| tray_kind_tint(kind));
+    let dark = tray_luma(fill) < 150;
+    let ink = if dark { [255, 255, 255] } else { [24, 26, 31] };
+    let edge = tray_mix(fill, if dark { [255, 255, 255] } else { [0, 0, 0] }, 28);
+    let mut chip = TrayChip::new(fill);
+    chip.frame(0, 0, 15, 15, edge);
+    match kind {
+        // Three text lines, the last one short — a paragraph at 16 px.
+        TrayKind::Text => {
+            chip.bar(4, 11, 4, 5, ink);
+            chip.bar(4, 11, 7, 8, ink);
+            chip.bar(4, 8, 10, 11, ink);
+        }
+        // Picture frame with a sun and a hill inside.
+        TrayKind::Image => {
+            chip.frame(3, 4, 12, 11, ink);
+            chip.bar(5, 6, 6, 7, ink);
+            for y in 7..=10 {
+                let half = y - 7;
+                chip.row((9 - half).max(4), (9 + half).min(11), y, ink);
+            }
+        }
+        // Play triangle: rows taper symmetrically toward the tip on the right.
+        TrayKind::Media => {
+            for y in 3i32..=12 {
+                let off = (2 * y - 15).abs(); // distance from the 7.5 centre, doubled
+                chip.row(5, 11 - (off * 6) / 9, y, ink);
+            }
+        }
+        // Page with a folded top-right corner and two ruled lines.
+        TrayKind::File => {
+            for y in 3..=13 {
+                let right = if y < 7 { 7 + (y - 3) } else { 11 };
+                chip.row(4, right, y, ink);
+            }
+            chip.bar(6, 9, 8, 8, fill);
+            chip.bar(6, 9, 11, 11, fill);
+        }
+    }
+    chip.px
+}
+
+fn tray_icon(kind: TrayKind, color: &str) -> tauri::image::Image<'static> {
+    tauri::image::Image::new_owned(tray_icon_pixels(kind, color), TRAY_ICON_PX, TRAY_ICON_PX)
+}
+
+// One labelled section: a greyed header, the entries with their icons, a separator.
 fn push_tray_section(
     app: &AppHandle,
     items: &mut Vec<Box<dyn IsMenuItem<tauri::Wry>>>,
     head_id: &str,
     title: &str,
-    entries: &[(String, String)],
+    entries: &[TrayEntry],
 ) {
     if entries.is_empty() {
         return;
@@ -651,8 +845,15 @@ fn push_tray_section(
     if let Ok(head) = MenuItem::with_id(app, head_id, title, false, None::<&str>) {
         items.push(Box::new(head));
     }
-    for (id, label) in entries {
-        if let Ok(item) = MenuItem::with_id(app, id.as_str(), label.as_str(), true, None::<&str>) {
+    for e in entries {
+        if let Ok(item) = IconMenuItem::with_id(
+            app,
+            e.id.as_str(),
+            e.label.as_str(),
+            true,
+            Some(tray_icon(e.kind, &e.color)),
+            None::<&str>,
+        ) {
             items.push(Box::new(item));
         }
     }
@@ -665,21 +866,26 @@ fn push_tray_section(
 // dropped before the first menu call — building a menu while holding it is the
 // classic deadlock shape here.
 fn apply_tray_menu(app: &AppHandle) {
-    let (lang, recent, favs) = match app.try_state::<Db>() {
+    let (lang, plan) = match app.try_state::<Db>() {
         Some(state) => {
             let store = lock(&state);
             let cfg = tray_cfg(&store.settings);
-            let (recent, favs) = tray_sections(&store.prompts, &store.settings.last_used, &cfg);
-            (resolve_lang(&store.settings.language), recent, favs)
+            let plan = tray_plan(&store.prompts, &store.settings.last_used, &cfg);
+            (resolve_lang(&store.settings.language), plan)
         }
         None => return,
     };
-    TRAY_EXTRAS.store(!recent.is_empty() || !favs.is_empty(), Ordering::SeqCst);
+    TRAY_EXTRAS.store(!plan.is_empty(), Ordering::SeqCst);
     let (open_label, quit_label) = tray_labels(lang);
     let (recent_title, favs_title) = tray_section_labels(lang);
     let mut items: Vec<Box<dyn IsMenuItem<tauri::Wry>>> = Vec::new();
-    push_tray_section(app, &mut items, "tray-head-recent", recent_title, &recent);
-    push_tray_section(app, &mut items, "tray-head-favs", favs_title, &favs);
+    for (section, entries) in &plan {
+        let (head_id, title) = match section {
+            TraySection::Favorites => ("tray-head-favs", favs_title),
+            TraySection::Recent => ("tray-head-recent", recent_title),
+        };
+        push_tray_section(app, &mut items, head_id, title, entries);
+    }
     let (Ok(show), Ok(quit)) = (
         MenuItem::with_id(app, "show", open_label, true, None::<&str>),
         MenuItem::with_id(app, "quit", quit_label, true, None::<&str>),
@@ -6132,14 +6338,23 @@ fn sample_frozen(caps: &[MonitorCap], x: i32, y: i32) -> Option<[u8; 3]> {
     Some([p[0], p[1], p[2]])
 }
 
-// RGBA capture -> tightly packed RGB. The overlay indexes this buffer directly for
-// the loupe, so dropping the always-opaque alpha takes a quarter off the one
-// transfer the picker makes.
-fn rgb_bytes(img: &image::RgbaImage) -> Vec<u8> {
+// One rectangular patch of the frozen desktop as packed RGB, row by row. The rect
+// must lie fully inside the image — a caller that clamped badly gets nothing back
+// rather than a silently shifted patch.
+fn crop_rgb(img: &image::RgbaImage, x: u32, y: u32, w: u32, h: u32) -> Vec<u8> {
+    let (iw, ih) = img.dimensions();
+    // Checked, so a wild x/y from the overlay can never wrap into a valid-looking rect.
+    let fits = |a: u32, len: u32, max: u32| a.checked_add(len).is_some_and(|end| end <= max);
+    if w == 0 || h == 0 || !fits(x, w, iw) || !fits(y, h, ih) {
+        return Vec::new();
+    }
     let raw = img.as_raw();
-    let mut out = Vec::with_capacity(raw.len() / 4 * 3);
-    for px in raw.chunks_exact(4) {
-        out.extend_from_slice(&px[..3]);
+    let mut out = Vec::with_capacity((w * h * 3) as usize);
+    for row in y..y + h {
+        let start = ((row * iw + x) * 4) as usize;
+        for px in raw[start..start + (w * 4) as usize].chunks_exact(4) {
+            out.extend_from_slice(&px[..3]);
+        }
     }
     out
 }
@@ -6151,16 +6366,26 @@ struct ColorPick {
     hex: String,
 }
 
-// Hand the overlay the frozen desktop as raw RGB, once per session. The loupe
-// redraws on every pointer move, so it must sample locally — a round trip per move
-// would make it unusable. Empty outside a pick session.
+// Longest tile edge the overlay may ask for. The loupe needs a few dozen pixels
+// around the cursor, so this is generous — but it is also the cap that stops a
+// bogus request from allocating a desktop-sized buffer.
+const PICK_TILE_MAX: u32 = 512;
+
+// Hand the overlay ONE patch of the frozen desktop as packed RGB (3 bytes per
+// pixel, row order). The loupe samples locally, so it caches a patch and only asks
+// again when the cursor nears its edge — shipping the whole desktop instead cost a
+// ~58 MB transfer on a multi-monitor setup, which is what made the picker slow to
+// open. Empty outside a pick session or for a rect that is not fully on the frame.
 #[tauri::command]
-fn pick_frame(state: State<SnipState>) -> tauri::ipc::Response {
-    if !PICK_ACTIVE.load(Ordering::SeqCst) {
+fn pick_tile(state: State<SnipState>, x: u32, y: u32, width: u32, height: u32) -> tauri::ipc::Response {
+    if !PICK_ACTIVE.load(Ordering::SeqCst) || width > PICK_TILE_MAX || height > PICK_TILE_MAX {
         return tauri::ipc::Response::new(Vec::new());
     }
     let guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
-    let bytes = guard.first().map(|c| rgb_bytes(&c.image)).unwrap_or_default();
+    let bytes = guard
+        .first()
+        .map(|c| crop_rgb(&c.image, x, y, width, height))
+        .unwrap_or_default();
     tauri::ipc::Response::new(bytes)
 }
 
@@ -6258,8 +6483,8 @@ async fn open_picker(
 ) -> Result<(), String> {
     let on = app
         .try_state::<Db>()
-        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_flags.get("colorPicker") == Some(&true))
-        .unwrap_or(false);
+        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_flags.get("colorPicker") != Some(&false))
+        .unwrap_or(true); // on by default: only an explicit false switches it off
     if !on {
         return Err("color picker is off".to_string());
     }
@@ -8907,7 +9132,7 @@ pub fn run() {
             skip_version,
             open_snip,
             open_picker,
-            pick_frame,
+            pick_tile,
             pick_color,
             snip_background,
             snip_present,
@@ -9951,6 +10176,14 @@ mod tests {
         TrayCfg { recent: true, recent_n, favs: true, fav_n }
     }
 
+    // The entries of one section of the plan, or an empty list if it is not drawn.
+    fn tray_part(plan: &[(TraySection, Vec<TrayEntry>)], want: TraySection) -> Vec<TrayEntry> {
+        plan.iter().find(|(s, _)| *s == want).map(|(_, e)| e.clone()).unwrap_or_default()
+    }
+    fn tray_names(entries: &[TrayEntry]) -> Vec<&str> {
+        entries.iter().map(|e| e.label.as_str()).collect()
+    }
+
     #[test]
     fn tray_settings_default_to_recent_only() {
         let cfg = tray_cfg(&Settings::default());
@@ -9967,8 +10200,7 @@ mod tests {
         let prompts = vec![tray_prompt("a", "A", true)];
         let mut used = HashMap::new();
         used.insert("a".to_string(), 10u64);
-        let (recent, favs) = tray_sections(&prompts, &used, &off);
-        assert!(recent.is_empty() && favs.is_empty());
+        assert!(tray_plan(&prompts, &used, &off).is_empty());
     }
 
     #[test]
@@ -9994,16 +10226,12 @@ mod tests {
             .map(|(k, v)| (k.to_string(), v))
             .collect();
         let cfg = tray_all_on(2, 10);
-        let (recent, _) = tray_sections(&prompts, &used, &cfg);
-        assert_eq!(
-            recent.iter().map(|(_, l)| l.as_str()).collect::<Vec<_>>(),
-            vec!["Two", "Three"],
-            "newest first, cut at trayRecentN"
-        );
+        let recent = tray_part(&tray_plan(&prompts, &used, &cfg), TraySection::Recent);
+        assert_eq!(tray_names(&recent), vec!["Two", "Three"], "newest first, cut at trayRecentN");
         // A prompt that was never copied has no entry in last_used and stays out.
-        let (all, _) = tray_sections(&prompts, &used, &tray_all_on(10, 10));
+        let all = tray_part(&tray_plan(&prompts, &used, &tray_all_on(10, 10)), TraySection::Recent);
         assert_eq!(all.len(), 3);
-        assert!(all.iter().all(|(id, _)| id != &tray_item_id("p4")));
+        assert!(all.iter().all(|e| e.id != tray_item_id("p4")));
     }
 
     #[test]
@@ -10011,8 +10239,8 @@ mod tests {
         let prompts = vec![tray_prompt("p1", "Beta", false), tray_prompt("p2", "Alpha", false)];
         let used: HashMap<String, u64> =
             [("p1", 50u64), ("p2", 50)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
-        let (recent, _) = tray_sections(&prompts, &used, &tray_all_on(10, 10));
-        assert_eq!(recent.iter().map(|(_, l)| l.as_str()).collect::<Vec<_>>(), vec!["Alpha", "Beta"]);
+        let recent = tray_part(&tray_plan(&prompts, &used, &tray_all_on(10, 10)), TraySection::Recent);
+        assert_eq!(tray_names(&recent), vec!["Alpha", "Beta"]);
     }
 
     #[test]
@@ -10023,11 +10251,106 @@ mod tests {
             tray_prompt("p3", "Middle", true),
             tray_prompt("p4", "Not starred", false),
         ];
-        let (_, favs) = tray_sections(&prompts, &HashMap::new(), &tray_all_on(5, 2));
-        assert_eq!(favs.iter().map(|(_, l)| l.as_str()).collect::<Vec<_>>(), vec!["Apple", "Middle"]);
-        let (_, all) = tray_sections(&prompts, &HashMap::new(), &tray_all_on(5, 10));
+        let favs =
+            tray_part(&tray_plan(&prompts, &HashMap::new(), &tray_all_on(5, 2)), TraySection::Favorites);
+        assert_eq!(tray_names(&favs), vec!["Apple", "Middle"]);
+        let all =
+            tray_part(&tray_plan(&prompts, &HashMap::new(), &tray_all_on(5, 10)), TraySection::Favorites);
         assert_eq!(all.len(), 3, "only starred prompts");
-        assert_eq!(all[2].0, tray_item_id("p1"), "case-insensitive sort puts zebra last");
+        assert_eq!(all[2].id, tray_item_id("p1"), "case-insensitive sort puts zebra last");
+    }
+
+    #[test]
+    fn the_pinned_section_is_drawn_first_and_never_repeated_below() {
+        let prompts = vec![
+            tray_prompt("p1", "Starred", true),
+            tray_prompt("p2", "Plain", false),
+            tray_prompt("p3", "Older", false),
+        ];
+        let used: HashMap<String, u64> = [("p1", 300u64), ("p2", 200), ("p3", 100)]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect();
+        let plan = tray_plan(&prompts, &used, &tray_all_on(2, 10));
+        assert_eq!(
+            plan.iter().map(|(s, _)| *s).collect::<Vec<_>>(),
+            vec![TraySection::Favorites, TraySection::Recent],
+            "pinned favourites sit above the churning recents"
+        );
+        assert_eq!(tray_names(&plan[0].1), vec!["Starred"]);
+        // p1 is the most recent too, but it is already pinned: the recents skip it and
+        // backfill with the next unlisted prompt instead of showing a duplicate.
+        assert_eq!(tray_names(&plan[1].1), vec!["Plain", "Older"]);
+    }
+
+    #[test]
+    fn a_tray_entry_carries_the_media_kind_its_icon_is_drawn_from() {
+        let mut plain = tray_prompt("p1", "Plain", false);
+        plain.file_path = String::new();
+        plain.icon_path = String::new();
+        plain.image = String::new();
+        plain.color = String::new();
+        assert_eq!(tray_kind(&plain), TrayKind::Text);
+
+        let mut decorated = plain.clone();
+        decorated.image = "data:image/png;base64,AAA".into();
+        decorated.show_image = false;
+        decorated.copy_image = false;
+        assert_eq!(tray_kind(&decorated), TrayKind::Text, "a decorated text prompt still copies text");
+
+        let mut shown = decorated.clone();
+        shown.show_image = true;
+        assert_eq!(tray_kind(&shown), TrayKind::Image);
+        let mut copied = decorated.clone();
+        copied.copy_image = true;
+        assert_eq!(tray_kind(&copied), TrayKind::Image);
+
+        let mut gif = shown.clone();
+        gif.icon_path = "C:/clip.gif".into();
+        assert_eq!(tray_kind(&gif), TrayKind::Media, "a gif/video icon outranks a still");
+
+        let mut doc = gif.clone();
+        doc.file_path = "C:/report.pdf".into();
+        assert_eq!(tray_kind(&doc), TrayKind::File, "an attachment is what the click delivers");
+
+        // The plan carries kind and colour through, so the menu never re-reads the store.
+        let mut coloured = doc.clone();
+        coloured.color = "#123456".into();
+        let plan = tray_plan(&[coloured], &HashMap::new(), &tray_all_on(5, 5));
+        assert!(plan.is_empty(), "not starred, never used");
+        let mut starred = doc.clone();
+        starred.favorite = true;
+        starred.color = "#123456".into();
+        let plan = tray_plan(&[starred], &HashMap::new(), &tray_all_on(5, 5));
+        assert_eq!(plan[0].1[0].kind, TrayKind::File);
+        assert_eq!(plan[0].1[0].color, "#123456");
+    }
+
+    #[test]
+    fn a_menu_icon_is_a_full_opaque_16x16_chip() {
+        // Opaque everywhere is not cosmetic: the Win32 icon->bitmap path only builds a
+        // correct mask when it is, so a transparent pixel would show up as a stripe.
+        for kind in [TrayKind::Text, TrayKind::Image, TrayKind::Media, TrayKind::File] {
+            let px = tray_icon_pixels(kind, "");
+            assert_eq!(px.len(), (TRAY_ICON_PX * TRAY_ICON_PX * 4) as usize);
+            assert!(px.chunks_exact(4).all(|p| p[3] == 255), "{kind:?} has a transparent pixel");
+        }
+        // Each media kind is visibly a different chip.
+        let mut seen: Vec<Vec<u8>> = Vec::new();
+        for kind in [TrayKind::Text, TrayKind::Image, TrayKind::Media, TrayKind::File] {
+            let px = tray_icon_pixels(kind, "");
+            assert!(!seen.contains(&px), "{kind:?} draws the same chip as another kind");
+            seen.push(px);
+        }
+        // The prompt's own colour wins over the kind tint, and the glyph flips to stay
+        // readable on it: dark ink on a near-white chip, light ink on a near-black one.
+        let white = tray_icon_pixels(TrayKind::Text, "#FFFFFF");
+        let black = tray_icon_pixels(TrayKind::Text, "#000000");
+        let ink = |px: &[u8], x: usize, y: usize| px[(y * 16 + x) * 4];
+        assert_eq!(ink(&white, 5, 4), 24, "dark glyph on a light chip");
+        assert_eq!(ink(&black, 5, 4), 255, "light glyph on a dark chip");
+        // A junk colour must not blank the icon; it falls back to the kind tint.
+        assert_eq!(tray_icon_pixels(TrayKind::Text, "not a colour"), tray_icon_pixels(TrayKind::Text, ""));
     }
 
     #[test]
@@ -10050,6 +10373,13 @@ mod tests {
         assert_eq!(tray_label("R&D"), "R&&D");
         // A nameless prompt still gets something clickable.
         assert!(!tray_label("   ").is_empty());
+        // An over-long name is cut back to the last word break near the cap, so the
+        // entry ends on a whole word instead of mid-word.
+        let cut = tray_label("Summarise this article into five concise bullet points");
+        assert_eq!(cut, "Summarise this article into five…");
+        // A single very long word has no usable break and is still cut hard.
+        let word = tray_label(&"x".repeat(60));
+        assert_eq!(word.chars().count(), TRAY_LABEL_MAX);
     }
 
     #[test]
@@ -10482,12 +10812,38 @@ mod tests {
     }
 
     #[test]
-    fn the_frame_handed_to_the_loupe_is_packed_rgb() {
+    fn the_tile_handed_to_the_loupe_is_packed_rgb() {
         let mut img = image::RgbaImage::new(2, 1);
         img.put_pixel(0, 0, image::Rgba([26, 43, 60, 255]));
         img.put_pixel(1, 0, image::Rgba([255, 128, 0, 128]));
         // Alpha is dropped: three bytes per pixel, in row order.
-        assert_eq!(rgb_bytes(&img), vec![26, 43, 60, 255, 128, 0]);
+        assert_eq!(crop_rgb(&img, 0, 0, 2, 1), vec![26, 43, 60, 255, 128, 0]);
+    }
+
+    #[test]
+    fn a_loupe_tile_reads_the_rows_it_was_asked_for() {
+        // 3x3 where every pixel encodes its own coordinate, so a wrong stride shows up.
+        let mut img = image::RgbaImage::new(3, 3);
+        for y in 0..3u32 {
+            for x in 0..3u32 {
+                img.put_pixel(x, y, image::Rgba([x as u8, y as u8, 9, 255]));
+            }
+        }
+        assert_eq!(
+            crop_rgb(&img, 1, 1, 2, 2),
+            vec![1, 1, 9, 2, 1, 9, 1, 2, 9, 2, 2, 9],
+            "the tile must be the requested rect, not the top-left corner"
+        );
+    }
+
+    #[test]
+    fn a_tile_that_leaves_the_frame_returns_nothing() {
+        let img = image::RgbaImage::new(4, 4);
+        assert!(crop_rgb(&img, 3, 0, 2, 1).is_empty()); // runs off the right edge
+        assert!(crop_rgb(&img, 0, 3, 1, 2).is_empty()); // runs off the bottom edge
+        assert!(crop_rgb(&img, 0, 0, 0, 4).is_empty()); // empty rect
+        assert!(crop_rgb(&img, u32::MAX, 0, 4, 4).is_empty()); // would wrap
+        assert_eq!(crop_rgb(&img, 0, 0, 4, 4).len(), 4 * 4 * 3); // the whole frame still fits
     }
 
     #[test]
@@ -10504,3 +10860,5 @@ mod tests {
         assert_eq!(j["pick_format"], serde_json::json!("rgb"));
     }
 }
+
+

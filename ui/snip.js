@@ -23,6 +23,7 @@ const dot = document.getElementById("pick-dot");
 const swatch = document.getElementById("pick-swatch");
 const readMain = document.getElementById("pick-main");
 const readAlt = document.getElementById("pick-alt");
+const readZoom = document.getElementById("pick-zoom");
 
 const MIN_REGION = 5; // CSS px; below this a drag counts as a click
 const WIN_RADIUS = 8; // rounded corners when highlighting a window
@@ -35,14 +36,22 @@ let FULL_W = 1, FULL_H = 1; // full stitched dimensions (display image may be sm
 // ---- F26 colour picker state ----
 // Same overlay, second mode: no selection, a loupe on the cursor instead.
 const LOUPE_CELLS = 15; // odd, so one cell is exactly the picked pixel
+const ZOOM_MIN = 4, ZOOM_MAX = 16; // same range as the loupeZoom expert slider
+// The frozen desktop is sampled through ONE cached patch around the cursor, not as a
+// whole. Handing the overlay the entire desktop meant a ~58 MB transfer on a
+// multi-monitor setup before the picker could show anything; a patch is ~110 KB and
+// arrives in a millisecond. It has to come from the frozen capture and not from the
+// displayed background: that background is a JPEG, whose chroma is subsampled, so
+// reading it back would not match a reference tool.
+const TILE = 192;       // patch edge in physical px (backend caps this at 512)
+const TILE_MARGIN = 48; // refetch once the cursor comes this close to the patch edge
 let pickMode = false;
 let pickZoom = 8;      // magnification (expert: loupeZoom)
 let pickFmt = "hex";   // output notation (expert: pickerFormat)
 let pickBusy = false;
-// The frozen desktop as packed RGB. The loupe redraws on every pointer move, so it
-// samples THIS buffer — a backend round trip per move would make it unusable. The
-// displayed background is a JPEG (lossy chroma), so it must never be the source.
-let frame = null;
+let tile = null;       // { x, y, w, h, px } in stitched-image physical pixels
+let tileBusy = false;
+let loupeLive = false; // a real pixel has been painted at least once this session
 let cur = null; // picked point, in stitched-image physical pixels
 
 // Seed hint/error text synchronously from the browser locale (en/de are the
@@ -52,12 +61,12 @@ const SEED = {
   en: {
     hint: "Drag a region · click a window · Esc to cancel",
     failed: "This window can't be captured. Try a region or another window.",
-    pick: "Click to copy the color · arrow keys move one pixel · Esc to cancel",
+    pick: "Click to copy the color · scroll or +/- to zoom · arrow keys move one pixel · Esc to cancel",
   },
   de: {
     hint: "Bereich ziehen · Fenster anklicken · Esc zum Abbrechen",
     failed: "Dieses Fenster kann nicht aufgenommen werden. Versuche einen Bereich oder ein anderes Fenster.",
-    pick: "Klicken kopiert die Farbe · Pfeiltasten bewegen ein Pixel · Esc zum Abbrechen",
+    pick: "Klicken kopiert die Farbe · Scrollen oder +/- zoomt · Pfeiltasten bewegen ein Pixel · Esc zum Abbrechen",
   },
 };
 const T = { ...((navigator.language || "en").toLowerCase().startsWith("de") ? SEED.de : SEED.en) };
@@ -77,7 +86,9 @@ function resetSession() {
   hint.textContent = T.hint;
   pickMode = false;
   pickBusy = false;
-  frame = null;
+  tile = null;
+  tileBusy = false;
+  loupeLive = false;
   cur = null;
   pendingMove = null;
   document.body.classList.remove("pick");
@@ -92,16 +103,19 @@ async function beginSession() {
   if (!b) { invoke("snip_cancel"); return; }
   FULL_W = b.width || 1;
   FULL_H = b.height || 1;
-  // Colour-pick mode: no selection chrome at all, and the frozen desktop is pulled
-  // in as raw pixels once (see `frame`).
+  // Colour-pick mode: no selection chrome at all, and the frozen desktop is sampled
+  // through a cached patch around the cursor (see `tile`).
   pickMode = !!b.pick;
   if (pickMode) {
-    pickZoom = Math.min(16, Math.max(4, Number(b.pick_zoom) || 8));
+    pickZoom = clampZoom(Number(b.pick_zoom) || 8);
+    readZoom.textContent = `${pickZoom}×`;
     pickFmt = b.pick_format || "hex";
     document.body.classList.add("pick");
     hint.textContent = T.pick;
     noDim();
-    loadFrame();
+    // Start on the middle of the desktop so the first patch is already on its way
+    // before the user moves; the very next pointer move corrects it.
+    setCur(Math.floor(FULL_W / 2), Math.floor(FULL_H / 2));
   }
   // Reveal the overlay only once the frozen image has decoded, so it never
   // appears blank first. onerror presents too, so a rare decode failure can't
@@ -217,9 +231,6 @@ fullDim();
 
 // ---- F26 colour picker ----
 
-// Pull the frozen desktop across once, as packed RGB. Sampling has to be local:
-// the loupe follows every pointer move, and the visible background is a JPEG whose
-// chroma is subsampled, so reading it back would not match a reference tool.
 // Raw command results arrive as an ArrayBuffer; accept the other shapes too rather
 // than leaving the picker mysteriously dead if the transport ever changes.
 function toBytes(buf) {
@@ -230,24 +241,56 @@ function toBytes(buf) {
   return null;
 }
 
-async function loadFrame() {
-  let buf;
-  try { buf = await invoke("pick_frame"); } catch { buf = null; }
-  const bytes = toBytes(buf);
-  if (!bytes || bytes.length < FULL_W * FULL_H * 3) { frame = null; return; }
-  frame = bytes;
-  // Start on the middle of the desktop so the loupe is on screen before the first
-  // move; the very next pointer move corrects it.
-  if (!cur) setCur(Math.floor(FULL_W / 2), Math.floor(FULL_H / 2));
-  else queueLoupe();
+// The patch that should be cached for a cursor at (cx, cy): TILE square, centred,
+// pushed fully inside the frozen desktop.
+function tileRectFor(cx, cy) {
+  const w = Math.min(TILE, FULL_W);
+  const h = Math.min(TILE, FULL_H);
+  return {
+    x: Math.min(FULL_W - w, Math.max(0, cx - (w >> 1))),
+    y: Math.min(FULL_H - h, Math.max(0, cy - (h >> 1))),
+    w,
+    h,
+  };
 }
 
-// One pixel of the frozen desktop, in stitched physical px. Null outside it — the
-// picker must never report a clamped neighbour as if it were the real pixel.
+// True once the cursor is close enough to an edge of the cached patch that the loupe
+// could run past it. An edge that IS the desktop edge never counts — there is nothing
+// further to fetch there, so a cursor parked in a corner must not refetch forever.
+function tileStale() {
+  if (!tile) return true;
+  const near = (v, lo, span, full) =>
+    (v - lo < TILE_MARGIN && lo > 0) || (lo + span - v <= TILE_MARGIN && lo + span < full);
+  return near(cur.x, tile.x, tile.w, FULL_W) || near(cur.y, tile.y, tile.h, FULL_H);
+}
+
+// Keep the cached patch under the cursor. Fire-and-forget: the loupe repaints when
+// the patch lands, so a fetch in flight never blocks a pointer move.
+async function ensureTile() {
+  if (tileBusy || !pickMode || !cur || !tileStale()) return;
+  const r = tileRectFor(cur.x, cur.y);
+  if (tile && tile.x === r.x && tile.y === r.y && tile.w === r.w && tile.h === r.h) return;
+  tileBusy = true;
+  let buf;
+  try {
+    buf = await invoke("pick_tile", { x: r.x, y: r.y, width: r.w, height: r.h });
+  } catch {
+    buf = null;
+  }
+  tileBusy = false;
+  const bytes = toBytes(buf);
+  if (!bytes || bytes.length < r.w * r.h * 3) return;
+  tile = { ...r, px: bytes };
+  drawLoupe();
+}
+
+// One pixel of the frozen desktop, in stitched physical px. Null when it is outside
+// the desktop OR simply not in the cached patch yet — the picker must never report a
+// neighbour, a clamped edge or a stale value as if it were the real pixel.
 function pixelAt(x, y) {
-  if (!frame || x < 0 || y < 0 || x >= FULL_W || y >= FULL_H) return null;
-  const i = (y * FULL_W + x) * 3;
-  return [frame[i], frame[i + 1], frame[i + 2]];
+  if (!tile || x < tile.x || y < tile.y || x >= tile.x + tile.w || y >= tile.y + tile.h) return null;
+  const i = ((y - tile.y) * tile.w + (x - tile.x)) * 3;
+  return [tile.px[i], tile.px[i + 1], tile.px[i + 2]];
 }
 
 const hex2 = (n) => n.toString(16).toUpperCase().padStart(2, "0");
@@ -312,7 +355,15 @@ function queueLoupe() {
 }
 
 function drawLoupe() {
-  if (!pickMode || !cur || !frame) return;
+  if (!pickMode || !cur) return;
+  ensureTile();
+  // Nothing to read yet (first patch still in flight, or the cursor outran it): keep
+  // the last painting rather than inventing a value, and repaint when the patch lands.
+  const centre = pixelAt(cur.x, cur.y);
+  if (!centre) {
+    if (loupeLive) placeLoupe();
+    return;
+  }
   const z = pickZoom;
   const half = (LOUPE_CELLS - 1) / 2;
   const size = LOUPE_CELLS * z;
@@ -350,15 +401,48 @@ function drawLoupe() {
   ctx.strokeStyle = "#fff";
   ctx.strokeRect(o + 0.5, o + 0.5, z - 1, z - 1);
 
-  const c = pixelAt(cur.x, cur.y) || [0, 0, 0];
+  const c = centre;
   const hex = rgbToHex(c[0], c[1], c[2]);
   swatch.style.background = hex;
   readMain.textContent = formatColor(pickFmt, c[0], c[1], c[2]);
   // Second line: hex is the one notation everyone recognises, so show it whenever
   // the chosen format is something else — and rgb() when hex is the format.
   readAlt.textContent = pickFmt === "hex" ? `rgb(${c[0]},${c[1]},${c[2]})` : hex;
+  loupeLive = true;
   placeLoupe();
 }
+
+// ---- Zoom ----
+// The magnification is an expert setting, but nobody looks there mid-pick — so the
+// overlay owns it too: wheel, or + / - for anyone without one. The last value is
+// written back to loupeZoom (debounced), so the next pick starts where this one ended
+// and the expert slider stays the single source of truth.
+const clampZoom = (z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z)));
+let zoomSave = 0;
+function saveZoom() {
+  if (!zoomSave) return;
+  clearTimeout(zoomSave);
+  zoomSave = 0;
+  invoke("set_ui_value", { key: "loupeZoom", value: pickZoom }).catch(() => {});
+}
+function setZoom(z) {
+  const n = clampZoom(z);
+  if (!pickMode || n === pickZoom) return;
+  pickZoom = n;
+  readZoom.textContent = `${n}×`;
+  queueLoupe();
+  if (zoomSave) clearTimeout(zoomSave);
+  zoomSave = setTimeout(saveZoom, 400);
+}
+window.addEventListener(
+  "wheel",
+  (e) => {
+    if (!pickMode || pickBusy) return;
+    e.preventDefault();
+    setZoom(pickZoom + (e.deltaY < 0 ? 1 : -1));
+  },
+  { passive: false }
+);
 
 // Park the loupe next to the picked point, flipping to the other side rather than
 // running off the desktop.
@@ -384,6 +468,7 @@ function placeLoupe() {
 async function pickHere() {
   if (pickBusy || !cur) return;
   pickBusy = true;
+  saveZoom(); // the overlay is about to close; a pending debounce would be lost
   try {
     await invoke("pick_color", { x: cur.x, y: cur.y });
   } catch {
@@ -492,13 +577,18 @@ window.addEventListener("mouseup", async (e) => {
 // the mouse cannot give on a scaled monitor. The OS cursor is hidden while picking,
 // so the crosshair we draw is the only pointer and it follows the keys.
 const NUDGE = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+const ZOOM_KEYS = { "+": 1, "=": 1, "-": -1, _: -1 };
 window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { invoke("snip_cancel"); return; }
+  if (e.key === "Escape") { saveZoom(); invoke("snip_cancel"); return; }
   if (!pickMode || pickBusy) return;
   const d = NUDGE[e.key];
+  const zk = ZOOM_KEYS[e.key];
   if (d && cur) {
     e.preventDefault();
     setCur(cur.x + d[0], cur.y + d[1]);
+  } else if (zk) {
+    e.preventDefault();
+    setZoom(pickZoom + zk);
   } else if (e.key === "Enter" || e.key === " ") {
     e.preventDefault();
     pickHere();

@@ -851,6 +851,7 @@ const FLAG_LABELS = {
   notesInTooltip: "flagNotesInTooltip", // F17 show the private note in the tile tooltip
   promptHotkeys: "flagPromptHotkeys",   // F20 per-prompt global hotkeys
   trayRecent: "flagTrayRecent",         // F23 "recently used" section in the tray menu
+  colorPicker: "flagColorPicker",       // F26 pipette — pick a screen colour to the clipboard
   // Checks at launch, but only while the normal auto-update setting is on.
   checkUpdateOnStart: "flagCheckUpdateOnStart",
 };
@@ -909,7 +910,6 @@ const OPT_FLAG_LABELS = {
   dragOut: "flagDragOut",                       // F22 drag a prompt into another app
   trayFavs: "flagTrayFavs",                     // F23 favourites section in the tray menu
   pillFolders: "flagPillFolders",               // F25 merge floating buttons into folders
-  colorPicker: "flagColorPicker",               // F26 pipette — pick a screen colour to the clipboard
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;

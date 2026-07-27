@@ -1504,7 +1504,18 @@ PICK_PROBE = """
     if (cmd === 'snip_background') {
       return { src: url, is_file: false, width: W, height: H, pick: true, pick_zoom: 6, pick_format: format };
     }
-    if (cmd === 'pick_frame') return rgb.buffer.slice(0);
+    // The overlay caches ONE patch around the cursor instead of the whole desktop;
+    // this mirrors the backend crop, including its refusal of a rect that runs off.
+    if (cmd === 'pick_tile') {
+      const { x, y, width, height } = args;
+      if (x < 0 || y < 0 || x + width > W || y + height > H) return new Uint8Array(0).buffer;
+      const out = new Uint8Array(width * height * 3);
+      for (let r = 0; r < height; r++) for (let c = 0; c < width; c++) {
+        const si = ((y + r) * W + (x + c)) * 3, di = (r * width + c) * 3;
+        out[di] = rgb[si]; out[di + 1] = rgb[si + 1]; out[di + 2] = rgb[si + 2];
+      }
+      return out.buffer;
+    }
     if (cmd === 'pick_color') return '#000000';
     return base(cmd, args);
   };
@@ -1532,8 +1543,11 @@ PICK_PROBE = """
   };
 
   try {
-    await until(() => called('pick_frame'));
-    if (!called('pick_frame')) errs.push('the picker never fetched the frozen frame');
+    await until(() => called('pick_tile'));
+    if (!called('pick_tile')) errs.push('the picker never fetched a frozen patch');
+    // Opening the picker must not pull the whole desktop across — that transfer is
+    // what made it slow to start.
+    if (called('pick_frame')) errs.push('the picker still transfers the whole frozen desktop');
     if (!document.body.classList.contains('pick')) errs.push('the overlay did not enter pick mode');
     moveTo(1, 0);
     await expect('#FF0000', 'hex');
@@ -1568,11 +1582,28 @@ PICK_PROBE = """
     await expect('#1A2B3C', 'clamped at the left edge');
     key('ArrowUp');
     await expect('#1A2B3C', 'clamped at the top edge');
+    // The hint has to name the controls, zoom included — the wheel is invisible
+    // otherwise and the expert slider is not where anyone looks mid-pick.
+    const hintTxt = document.getElementById('snip-hint').textContent;
+    if (!hintTxt.includes('+/-')) errs.push('the picker hint never mentions zoom: "' + hintTxt + '"');
+
+    // A shorter or longer value must NEVER resize the loupe — it used to jitter as
+    // the sampled pixel changed. Measured at one zoom, across all three notations.
+    const geo = [];
+    const box = () => {
+      const r = document.getElementById('pick-loupe').getBoundingClientRect();
+      return Math.round(r.width) + 'x' + Math.round(r.height);
+    };
+    const measure = async (px, want, tag) => { moveTo(px, 0); await expect(want, tag); geo.push([tag, box()]); };
+    await measure(6, '#010203', 'hex, dark pixel');
+    await measure(7, '#FFFFFF', 'hex, white pixel');
 
     await session('rgb');
     moveTo(1, 0);
     await expect('rgb(255,0,0)', 'rgb notation');
     if (alt() !== '#FF0000') errs.push('rgb mode shows "' + alt() + '" instead of the hex line');
+    await measure(6, 'rgb(1,2,3)', 'rgb, shortest value');
+    await measure(7, 'rgb(255,255,255)', 'rgb, longest value');
 
     await session('hsl');
     moveTo(1, 0);
@@ -1581,6 +1612,10 @@ PICK_PROBE = """
     await expect('hsl(0,0%,50%)', 'hsl of pure grey');
     moveTo(0, 0);
     await expect('hsl(210,40%,17%)', 'hsl with a real hue');
+    await measure(7, 'hsl(0,0%,100%)', 'hsl, short value');
+    await measure(0, 'hsl(210,40%,17%)', 'hsl, long value');
+    const sizes = [...new Set(geo.map((g) => g[1]))];
+    if (sizes.length !== 1) errs.push('the loupe resizes with the value: ' + JSON.stringify(geo));
 
     // A click copies the pixel under the crosshair, by image coordinate.
     moveTo(3, 0);
@@ -1597,7 +1632,40 @@ PICK_PROBE = """
       if (called(forbidden)) errs.push('picking a colour called ' + forbidden);
     }
 
+    // Zoom is reachable from the overlay itself: wheel, or +/- for anyone without one.
+    // It starts at the setting and is clamped to the same 4-16x range as the slider.
     await session('hex');
+    moveTo(1, 0);
+    await expect('#FF0000', 'zoom session');
+    const zoom = () => document.getElementById('pick-grid').width / 15;
+    const atZoom = async (want, what) => {
+      if (!await until(() => zoom() === want)) errs.push(what + ': ' + zoom() + 'x instead of ' + want + 'x');
+    };
+    await atZoom(6, 'the overlay did not start at the loupeZoom setting');
+    const wheel = (dy, n) => {
+      for (let i = 0; i < n; i++) {
+        window.dispatchEvent(new WheelEvent('wheel', { deltaY: dy, bubbles: true, cancelable: true }));
+      }
+    };
+    wheel(-100, 2);
+    await atZoom(8, 'two wheel notches up');
+    wheel(100, 3);
+    await atZoom(5, 'three wheel notches down');
+    wheel(100, 20);
+    await atZoom(4, 'the wheel ran past the 4x floor');
+    wheel(-100, 30);
+    await atZoom(16, 'the wheel ran past the 16x ceiling');
+    key('-'); key('-');
+    await atZoom(14, 'the - key');
+    key('+');
+    await atZoom(15, 'the + key');
+    // The zoom the user stops on is written back to the expert setting.
+    const savedZoom = () => seen.filter((c) => c[0] === 'set_ui_value' && c[1] && c[1].key === 'loupeZoom').pop();
+    if (!await until(() => savedZoom())) errs.push('the picker never persisted the zoom it ended on');
+    else if (savedZoom()[1].value !== 15) {
+      errs.push('the persisted zoom is ' + savedZoom()[1].value + ' instead of 15');
+    }
+
     key('Escape');
     await until(() => called('snip_cancel'));
     if (!called('snip_cancel')) errs.push('Esc did not cancel the picker');

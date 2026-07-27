@@ -1178,10 +1178,7 @@ body.library-front #modal.overlay { z-index: 67; }
 }
 .noflag-fileAttach #file-btn { display: none; }
 .noflag-screenshot #snip-btn { display: none; }
-/* F26 colour picker ships off, so the pipette only joins the composer bar once the
-   feature is switched on (opt-in flags expose a flag-<key> body class). */
-#picker-btn { display: none; }
-.flag-colorPicker #picker-btn { display: inline-flex; }
+.noflag-colorPicker #picker-btn { display: none; }
 .noflag-quickGrid #quick-grid { display: none; }
 .noflag-pinButton #pin-top { display: none; }
 .noflag-librarySearch #library-q { display: none; }
