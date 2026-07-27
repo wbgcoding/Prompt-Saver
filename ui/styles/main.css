@@ -1153,6 +1153,10 @@ body.library-front #modal.overlay { z-index: 67; }
 }
 .noflag-fileAttach #file-btn { display: none; }
 .noflag-screenshot #snip-btn { display: none; }
+/* F26 colour picker ships off, so the pipette only joins the composer bar once the
+   feature is switched on (opt-in flags expose a flag-<key> body class). */
+#picker-btn { display: none; }
+.flag-colorPicker #picker-btn { display: inline-flex; }
 .noflag-quickGrid #quick-grid { display: none; }
 .noflag-pinButton #pin-top { display: none; }
 .noflag-librarySearch #library-q { display: none; }
@@ -2810,6 +2814,9 @@ body.no-composer .toast { bottom: 18px; }
   color: var(--accent-fg);
 }
 .toast-ico svg { display: block; }
+/* F26: the copy confirmation carries the colour that was just picked, so the value
+   and the colour itself arrive together. The glyph flips to the readable ink. */
+.toast.tinted .toast-ico { background: var(--toast-tint); color: var(--toast-ink); }
 .toast-msg { font-size: 13px; font-weight: 600; line-height: 1.3; }
 .toast-btn {
   flex: 0 0 auto;

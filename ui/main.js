@@ -385,15 +385,32 @@ function hideToast() {
 // Default toast icon (checkmark badge). Static, developer-controlled SVG.
 const TOAST_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
 
+// Relative luminance -> the ink that stays readable on `hex` (WCAG's 0.179 split).
+function readableInk(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ""));
+  if (!m) return "#fff";
+  const n = parseInt(m[1], 16);
+  const lin = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const l = 0.2126 * lin(((n >> 16) & 255) / 255) + 0.7152 * lin(((n >> 8) & 255) / 255) + 0.0722 * lin((n & 255) / 255);
+  return l > 0.179 ? "#000" : "#fff";
+}
+
 // Optional action: { label, onClick } adds a button and keeps the toast longer.
+// `tint` (a #rrggbb) paints the icon badge in that colour — F26 uses it so the
+// picked colour is visible next to its value.
 // Every toast is now the same themed card (icon badge + message), matching the
 // update notification, so nothing looks like the old flat pill.
-function toast(msg, action = null) {
+function toast(msg, action = null, tint = "") {
   toastEl.textContent = "";
   // Only actionable toasts capture clicks; plain ones stay click-through so they
   // never block the UI underneath. The card layout lives on the base .toast now.
   toastEl.classList.toggle("actionable", !!action);
   toastEl.classList.toggle("update", !!(action && action.variant === "update"));
+  toastEl.classList.toggle("tinted", !!tint);
+  if (tint) {
+    toastEl.style.setProperty("--toast-tint", tint);
+    toastEl.style.setProperty("--toast-ink", readableInk(tint));
+  }
   const ico = document.createElement("span");
   ico.className = "toast-ico";
   ico.innerHTML = (action && action.icon) ? action.icon : TOAST_ICON;
@@ -876,6 +893,7 @@ const OPT_FLAG_LABELS = {
   dragOut: "flagDragOut",                       // F22 drag a prompt into another app
   trayFavs: "flagTrayFavs",                     // F23 favourites section in the tray menu
   pillFolders: "flagPillFolders",               // F25 merge floating buttons into folders
+  colorPicker: "flagColorPicker",               // F26 pipette — pick a screen colour to the clipboard
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const optFlag = (key) => settings.ui_flags?.[key] === true;
@@ -1010,6 +1028,8 @@ const EXPERT_VALUES = {
   hlFontPx: { label: "valHlFontPx", min: 10, max: 18, step: 1, def: 13, unit: "px", gate: "codeHighlight" },
   // F17 how much of a private note the tile tooltip shows (0 = the whole note).
   notesTipLen: { label: "valNotesTipLen", min: 0, max: 2000, step: 20, def: 300, unit: "", gate: "notesInTooltip" },
+  // F26 how far the picker's loupe magnifies the pixels around the cursor.
+  loupeZoom: { label: "valLoupeZoom", min: 4, max: 16, step: 1, def: 8, unit: "×", gate: "colorPicker" },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -1060,6 +1080,9 @@ const EXPERT_DROPDOWNS = {
   // F22: which key turns a press into a drag-out instead of the plain drag.
   dragOutModifier: enumDropdown("dragOutModifier", "valDragOutModifier",
     [["ctrl", "keyCtrl"], ["alt", "keyAlt"], ["shift", "keyShift"]], "ctrl", "dragOut"),
+  // F26: the notation the picked colour is copied in.
+  pickerFormat: enumDropdown("pickerFormat", "valPickerFormat",
+    [["hex", "optFmtHex"], ["rgb", "optFmtRgb"], ["hsl", "optFmtHsl"]], "hex", "colorPicker"),
   copySize: {
     label: "valCopySize",
     options: () => {
@@ -1093,7 +1116,9 @@ const EXPERT_DROPDOWNS = {
 // Expert menu organised into tabs (it has grown large — tabs keep it tidy).
 const EXPERT_TABS = [
   { title: "expTabGeneral", groups: [
-    { title: "expGroupCreate", flags: ["fileAttach", "screenshot", "pasteMedia", "dragDrop", "promptVars", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "lengthCounter", "promptHistory", "promptNotes", "notesInTooltip", "storeFiles", "editorMonospace"], values: ["snipPreviewVh", "historyPerPrompt", "notesTipLen"], dropdowns: ["counterUnits", "dateStyle", "timeStyle"], paths: ["screenshotDir"] },
+    // F26 sits with the screenshot tool: both are composer-bar capture tools, and
+    // its two parameters are gated on its own toggle.
+    { title: "expGroupCreate", flags: ["fileAttach", "screenshot", "pasteMedia", "dragDrop", "colorPicker", "promptVars", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "lengthCounter", "promptHistory", "promptNotes", "notesInTooltip", "storeFiles", "editorMonospace"], values: ["snipPreviewVh", "historyPerPrompt", "notesTipLen", "loupeZoom"], dropdowns: ["counterUnits", "dateStyle", "timeStyle", "pickerFormat"], paths: ["screenshotDir"] },
     // F14/F15 belong together: the highlighter only ever paints inside the preview.
     { title: "expGroupPreview", flags: ["mdPreview", "codeHighlight"], values: ["hlFontPx"], dropdowns: ["mdPreviewMode"] },
     { title: "expGroupWorkspace", flags: ["floating", "pillFolders", "keyboardNav", "headerSeparators", "dimToolbar"], values: ["floatOpacity", "pillMergeRadius", "folderGridCols", "kbFocusFadeMs"] },
@@ -1231,6 +1256,7 @@ const EXPERT_TIPS = [
   "lengthCounter", "promptHistory", "editorMonospace",
   "promptNotes", "notesInTooltip", "notesTipLen",
   "mdPreview", "mdPreviewMode", "codeHighlight", "hlFontPx",
+  "colorPicker", "pickerFormat", "loupeZoom",
   "trayRecent", "trayFavs", "trayRecentN", "trayFavN",
   "checkUpdateOnStart", "showUpdates", "importExport", "dimToolbar", "keyboardNav",
   "headerSeparators", "floating",
@@ -7115,6 +7141,16 @@ function bind() {
   // Snipping tool: open the overlay; the backend notifies us with the crop.
   $("snip-btn").addEventListener("click", () => {
     invoke("open_snip").catch((err) => toast(String(err)));
+  });
+
+  // F26 pipette: the same frozen-desktop overlay, in colour-pick mode. The result
+  // is a clipboard value only — no prompt is created and nothing enters the history.
+  $("picker-btn").addEventListener("click", () => {
+    invoke("open_picker").catch((err) => toast(String(err)));
+  });
+  listen("color-picked", (e) => {
+    const value = e.payload?.text || "";
+    if (value) toast(t("colorCopied").replace("{v}", value), null, e.payload?.hex || "");
   });
 
   // Chain mode: combine several text buttons into one clipboard copy. Single

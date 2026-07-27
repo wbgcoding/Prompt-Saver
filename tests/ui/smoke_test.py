@@ -316,6 +316,27 @@ PROBE = """
       const cm2 = document.getElementById('confirm-modal');
       if (!cm2.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
     }
+    // F26: the pipette is in the composer bar, and a picked colour reports back as a
+    // toast tinted with that colour.
+    const pickBtn = document.getElementById('picker-btn');
+    if (!pickBtn) out.errors.push('the colour picker button is missing');
+    else {
+      if (getComputedStyle(pickBtn).display === 'none') out.errors.push('the colour picker button stays hidden although the feature is on');
+      pickBtn.click();
+      await sleep(150);
+      if (!(window.__SMOKE_CALLS__ || []).includes('open_picker')) out.errors.push('the pipette did not open the picker');
+    }
+    window.__FIRE__('color-picked', { text: '#1A2B3C', hex: '#1A2B3C' });
+    await sleep(150);
+    const toastEl = document.getElementById('toast');
+    if (!toastEl.classList.contains('tinted')) out.errors.push('the picked colour did not tint its toast');
+    if (!(toastEl.textContent || '').includes('#1A2B3C')) {
+      out.errors.push('the picker toast reads "' + toastEl.textContent + '"');
+    }
+    if (toastEl.style.getPropertyValue('--toast-tint') !== '#1A2B3C') {
+      out.errors.push('the picker toast carries no colour');
+    }
+
     // F20: pressing a prompt hotkey runs the same activation a tile does — the copy
     // is recorded, and whether it also pastes follows the expert option alone.
     const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
@@ -914,6 +935,153 @@ setTimeout(() => {
 """
 
 
+# F26: the colour picker runs inside the snip overlay, so this is the only place it
+# is observable. A tiny frozen desktop of known pixels is handed to the overlay, then
+# the loupe readout is checked against it in all three notations, plus the arrow-key
+# nudge, the edge clamp, the click payload and Esc.
+PICK_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const until = async (fn) => { for (let i = 0; i < 80 && !fn(); i++) await sleep(50); return fn(); };
+  // 8x4 frozen desktop; row 0 is a known colour run, later rows rotate through it.
+  const W = 8, H = 4;
+  const COLORS = [[26,43,60],[255,0,0],[128,128,128],[255,128,0],[0,0,255],[0,255,0],[1,2,3],[255,255,255]];
+  const rgb = new Uint8Array(W * H * 3);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const c = COLORS[(x + y) % COLORS.length], i = (y * W + x) * 3;
+    rgb[i] = c[0]; rgb[i + 1] = c[1]; rgb[i + 2] = c[2];
+  }
+  // The overlay background must decode, so paint the same pixels into a data URL.
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(W, H);
+  for (let p = 0; p < W * H; p++) {
+    img.data[p * 4] = rgb[p * 3]; img.data[p * 4 + 1] = rgb[p * 3 + 1];
+    img.data[p * 4 + 2] = rgb[p * 3 + 2]; img.data[p * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  const url = cv.toDataURL('image/png');
+
+  let format = 'hex';
+  const seen = [];
+  const base = window.__TAURI__.core.invoke;
+  window.__TAURI__.core.invoke = async (cmd, args) => {
+    seen.push([cmd, args]);
+    if (cmd === 'snip_should_begin') return true;
+    if (cmd === 'snip_background') {
+      return { src: url, is_file: false, width: W, height: H, pick: true, pick_zoom: 6, pick_format: format };
+    }
+    if (cmd === 'pick_frame') return rgb.buffer.slice(0);
+    if (cmd === 'pick_color') return '#000000';
+    return base(cmd, args);
+  };
+  const called = (cmd) => seen.some((c) => c[0] === cmd);
+  const main = () => document.getElementById('pick-main').textContent;
+  const alt = () => document.getElementById('pick-alt').textContent;
+  const bg = () => document.getElementById('snip-bg').getBoundingClientRect();
+  // Aim at the middle of image pixel (px, py) — the same ratio mapping the overlay
+  // uses, which is what keeps it exact on a mixed-DPI desktop.
+  const moveTo = (px, py) => {
+    const r = bg();
+    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true,
+      clientX: r.left + (px + 0.5) * r.width / W, clientY: r.top + (py + 0.5) * r.height / H }));
+  };
+  const key = (k) => window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+  const session = async (fmt) => {
+    format = fmt;
+    window.__FIRE__('snip-begin');
+    await until(() => document.body.classList.contains('pick'));
+    await sleep(120);
+  };
+  const expect = async (want, what) => {
+    const ok = await until(() => main() === want);
+    if (!ok) errs.push(what + ': readout is "' + main() + '" instead of "' + want + '"');
+  };
+
+  try {
+    await until(() => called('pick_frame'));
+    if (!called('pick_frame')) errs.push('the picker never fetched the frozen frame');
+    if (!document.body.classList.contains('pick')) errs.push('the overlay did not enter pick mode');
+    moveTo(1, 0);
+    await expect('#FF0000', 'hex');
+    if (alt() !== 'rgb(255,0,0)') errs.push('the second readout line is "' + alt() + '" instead of rgb(255,0,0)');
+    const loupe = document.getElementById('pick-loupe');
+    if (loupe.classList.contains('hidden')) errs.push('the loupe stayed hidden');
+    if (document.getElementById('pick-dot').classList.contains('hidden')) errs.push('the crosshair stayed hidden');
+    const grid = document.getElementById('pick-grid');
+    if (grid.width !== 15 * 6) errs.push('the loupe grid is ' + grid.width + 'px wide, not 15 cells at 6x');
+    // The magnified grid must be centred on the picked pixel, not offset by a cell:
+    // read the cells back and compare them with the frame they came from.
+    const cell = (gx, gy) => {
+      const d = grid.getContext('2d').getImageData(gx * 6 + 3, gy * 6 + 3, 1, 1).data;
+      return [d[0], d[1], d[2]].join();
+    };
+    if (cell(7, 7) !== '255,0,0') errs.push('the centre cell of the loupe is ' + cell(7, 7) + ', not the picked pixel');
+    if (cell(8, 7) !== '128,128,128') errs.push('the cell right of centre is ' + cell(8, 7) + ', not the next pixel');
+    if (cell(6, 7) !== '26,43,60') errs.push('the cell left of centre is ' + cell(6, 7) + ', not the previous pixel');
+    if (cell(7, 8) !== '128,128,128') errs.push('the cell below centre is ' + cell(7, 8) + ', not the pixel one row down');
+    if (cell(7, 6) !== '0,0,0') errs.push('a cell above the desktop is ' + cell(7, 6) + ' instead of black');
+    if (getComputedStyle(document.body).cursor !== 'none') errs.push('the OS cursor is still shown while picking');
+    // The masks must be collapsed: a dimmed desktop would not match the colour read.
+    if (document.getElementById('snip-mask-top').getBoundingClientRect().height > 0) {
+      errs.push('the picker dimmed the desktop it is sampling');
+    }
+    // Arrow keys nudge exactly one pixel, and stop at the edge instead of wrapping.
+    key('ArrowRight');
+    await expect('#808080', 'one pixel right');
+    key('ArrowLeft'); key('ArrowLeft');
+    await expect('#1A2B3C', 'two pixels left');
+    key('ArrowLeft');
+    await expect('#1A2B3C', 'clamped at the left edge');
+    key('ArrowUp');
+    await expect('#1A2B3C', 'clamped at the top edge');
+
+    await session('rgb');
+    moveTo(1, 0);
+    await expect('rgb(255,0,0)', 'rgb notation');
+    if (alt() !== '#FF0000') errs.push('rgb mode shows "' + alt() + '" instead of the hex line');
+
+    await session('hsl');
+    moveTo(1, 0);
+    await expect('hsl(0,100%,50%)', 'hsl notation');
+    moveTo(2, 0);
+    await expect('hsl(0,0%,50%)', 'hsl of pure grey');
+    moveTo(0, 0);
+    await expect('hsl(210,40%,17%)', 'hsl with a real hue');
+
+    // A click copies the pixel under the crosshair, by image coordinate.
+    moveTo(3, 0);
+    await expect('hsl(30,100%,50%)', 'before the click');
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }));
+    await until(() => called('pick_color'));
+    const call = seen.filter((c) => c[0] === 'pick_color').pop();
+    if (!call) errs.push('the click never copied a colour');
+    else if (call[1].x !== 3 || call[1].y !== 0) {
+      errs.push('the click copied pixel ' + call[1].x + ',' + call[1].y + ' instead of 3,0');
+    }
+    // Nothing about a pick may reach the prompts or the copy history.
+    for (const forbidden of ['add_prompt', 'record_copy', 'copy_text', 'copy_prompt']) {
+      if (called(forbidden)) errs.push('picking a colour called ' + forbidden);
+    }
+
+    await session('hex');
+    key('Escape');
+    await until(() => called('snip_cancel'));
+    if (!called('snip_cancel')) errs.push('Esc did not cancel the picker');
+  } catch (e) { errs.push('probe: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # F25: the folder window is the only place its UI is observable — the closed icon
 # (previews + count + label), the grid the window grows into, and Esc collapsing it.
 FOLDER_PROBE = """
@@ -1030,7 +1198,7 @@ def main():
         # window, whose whole UI lives here and nowhere else.
         for name, size, probe, budget in (
                 ("floating.html", (240, 60), ERR_PROBE, 6000),
-                ("snip.html", (1280, 800), ERR_PROBE, 6000),
+                ("snip.html", (1280, 800), PICK_PROBE, 20000),
                 ("folder.html", (520, 420), FOLDER_PROBE, 15000)):
             side = tmp / "ui" / name
             side.write_text(

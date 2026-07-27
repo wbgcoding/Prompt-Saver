@@ -5424,6 +5424,10 @@ struct SnipPreview(Arc<Mutex<Option<Option<SnipBg>>>>);
 // window's existence — is what tells open_snip a snip is already in progress.
 static SNIP_ACTIVE: AtomicBool = AtomicBool::new(false);
 
+// F26: the running session is a colour pick (loupe overlay) rather than a region
+// snip. Both share the freeze + overlay pipeline; only the overlay's mode differs.
+static PICK_ACTIVE: AtomicBool = AtomicBool::new(false);
+
 // End the current snip session: HIDE (never close) the reusable overlay so its
 // warm WebView2 survives for the next snip, bring the app's own windows back, and
 // drop the temp preview. Closing the overlay is what forced every snip to pay the
@@ -5437,6 +5441,7 @@ fn close_all_snip(app: &AppHandle) {
     set_app_windows_hidden(app, false);
     remove_snip_preview();
     SNIP_ACTIVE.store(false, Ordering::SeqCst);
+    PICK_ACTIVE.store(false, Ordering::SeqCst);
 }
 
 // Hide (or restore) the app's own windows — the main window and floating pills —
@@ -5508,6 +5513,11 @@ struct SnipBg {
     // frontend maps coordinates against these, so crops stay full-resolution.
     width: u32,
     height: u32,
+    // F26: run the overlay as a colour picker instead of a region selector, with
+    // the loupe magnification and output notation the expert menu asks for.
+    pick: bool,
+    pick_zoom: u32,
+    pick_format: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -5666,9 +5676,159 @@ fn freeze_desktop() -> Result<(image::RgbaImage, i32, i32), String> {
     let total_h = (max_y - min_y).max(1) as u32;
     let mut canvas = image::RgbaImage::new(total_w, total_h);
     for (image, x, y, _, _) in &caps {
-        image::imageops::replace(&mut canvas, image, (*x - min_x) as i64, (*y - min_y) as i64);
+        image::imageops::replace(&mut canvas, image, stitch_offset(*x, min_x), stitch_offset(*y, min_y));
     }
     Ok((canvas, min_x, min_y))
+}
+
+// A monitor's global physical origin -> where its capture starts inside the
+// stitched frozen image. The virtual desktop's origin is negative as soon as a
+// monitor sits left of or above the primary, so this shift — not any DPI scale
+// factor — is what makes a pixel on a differently scaled second monitor address
+// the byte the capture actually holds. Every frozen coordinate is physical.
+fn stitch_offset(global: i32, origin: i32) -> i64 {
+    (global - origin) as i64
+}
+
+// ---------- F26: colour picker ----------
+// Same freeze + overlay as the snipping tool; the overlay just runs in pick mode.
+// The picked value goes to the CLIPBOARD ONLY — no prompt, no copy history.
+
+// Loupe magnification + output notation, straight from the expert menu.
+struct PickCfg {
+    zoom: u32,
+    format: String,
+}
+
+// Only the three notations the expert dropdown offers; anything else is hex.
+fn color_format(raw: &str) -> &'static str {
+    match raw {
+        "rgb" => "rgb",
+        "hsl" => "hsl",
+        _ => "hex",
+    }
+}
+
+fn pick_cfg(settings: &Settings) -> PickCfg {
+    PickCfg {
+        zoom: settings.ui_values.get("loupeZoom").copied().unwrap_or(8.0).clamp(4.0, 16.0) as u32,
+        format: color_format(settings.ui_texts.get("pickerFormat").map(String::as_str).unwrap_or("hex")).to_string(),
+    }
+}
+
+fn rgb_to_hex(r: u8, g: u8, b: u8) -> String {
+    format!("#{:02X}{:02X}{:02X}", r, g, b)
+}
+
+// RGB -> HSL as rounded integers (degrees, percent, percent). Grey has no hue, so
+// it reports 0°/0%; the hue wraps so 360° is always written as 0°.
+fn rgb_to_hsl(r: u8, g: u8, b: u8) -> (u32, u32, u32) {
+    let (rf, gf, bf) = (r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0);
+    let max = rf.max(gf).max(bf);
+    let min = rf.min(gf).min(bf);
+    let l = (max + min) / 2.0;
+    let d = max - min;
+    if d == 0.0 {
+        return (0, 0, (l * 100.0).round() as u32);
+    }
+    let s = d / (1.0 - (2.0 * l - 1.0).abs());
+    let h = if max == rf {
+        ((gf - bf) / d).rem_euclid(6.0)
+    } else if max == gf {
+        (bf - rf) / d + 2.0
+    } else {
+        (rf - gf) / d + 4.0
+    };
+    let deg = (h * 60.0).round().rem_euclid(360.0);
+    (deg as u32, (s * 100.0).round() as u32, (l * 100.0).round() as u32)
+}
+
+fn format_color(fmt: &str, r: u8, g: u8, b: u8) -> String {
+    match color_format(fmt) {
+        "rgb" => format!("rgb({},{},{})", r, g, b),
+        "hsl" => {
+            let (h, s, l) = rgb_to_hsl(r, g, b);
+            format!("hsl({},{}%,{}%)", h, s, l)
+        }
+        _ => rgb_to_hex(r, g, b),
+    }
+}
+
+// Read one pixel of the frozen desktop, addressed in stitched physical pixels.
+// Out-of-bounds returns None instead of clamping, so a bogus coordinate can never
+// silently copy the colour of some other pixel.
+fn sample_frozen(caps: &[MonitorCap], x: i32, y: i32) -> Option<[u8; 3]> {
+    let cap = caps.first()?;
+    if x < 0 || y < 0 || x >= cap.width as i32 || y >= cap.height as i32 {
+        return None;
+    }
+    let p = cap.image.get_pixel(x as u32, y as u32);
+    Some([p[0], p[1], p[2]])
+}
+
+// RGBA capture -> tightly packed RGB. The overlay indexes this buffer directly for
+// the loupe, so dropping the always-opaque alpha takes a quarter off the one
+// transfer the picker makes.
+fn rgb_bytes(img: &image::RgbaImage) -> Vec<u8> {
+    let raw = img.as_raw();
+    let mut out = Vec::with_capacity(raw.len() / 4 * 3);
+    for px in raw.chunks_exact(4) {
+        out.extend_from_slice(&px[..3]);
+    }
+    out
+}
+
+// What the main window needs to show the confirmation toast in the picked colour.
+#[derive(Serialize, Clone)]
+struct ColorPick {
+    text: String,
+    hex: String,
+}
+
+// Hand the overlay the frozen desktop as raw RGB, once per session. The loupe
+// redraws on every pointer move, so it must sample locally — a round trip per move
+// would make it unusable. Empty outside a pick session.
+#[tauri::command]
+fn pick_frame(state: State<SnipState>) -> tauri::ipc::Response {
+    if !PICK_ACTIVE.load(Ordering::SeqCst) {
+        return tauri::ipc::Response::new(Vec::new());
+    }
+    let guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
+    let bytes = guard.first().map(|c| rgb_bytes(&c.image)).unwrap_or_default();
+    tauri::ipc::Response::new(bytes)
+}
+
+// Sample the frozen desktop where the user clicked, format the value and put it on
+// the clipboard. Deliberately no record_copy and no prompt: a picked colour is a
+// clipboard result, nothing the app stores.
+#[tauri::command]
+async fn pick_color(app: AppHandle, state: State<'_, SnipState>, x: i32, y: i32) -> Result<String, String> {
+    if !PICK_ACTIVE.load(Ordering::SeqCst) {
+        return Err("no pick session".to_string());
+    }
+    let rgb = {
+        let guard = state.0.lock().unwrap_or_else(|e| e.into_inner());
+        sample_frozen(&guard, x, y)
+    }
+    .ok_or("point outside the captured desktop")?;
+    let fmt = app
+        .try_state::<Db>()
+        .map(|s| pick_cfg(&s.lock().unwrap_or_else(|e| e.into_inner()).settings).format)
+        .unwrap_or_else(|| "hex".to_string());
+    let text = format_color(&fmt, rgb[0], rgb[1], rgb[2]);
+    note_own_copy(&text); // F21: the picker's own copy must not land in the inbox
+    // Close only once the value is really on the clipboard, so a failure leaves the
+    // overlay up with its error banner instead of vanishing with nothing copied.
+    if arboard::Clipboard::new().and_then(|mut c| c.set_text(text.clone())).is_err() {
+        return Err("clipboard write failed".to_string());
+    }
+    close_all_snip(&app);
+    state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    let _ = app.emit(
+        "color-picked",
+        ColorPick { text: text.clone(), hex: rgb_to_hex(rgb[0], rgb[1], rgb[2]) },
+    );
+    Ok(text)
 }
 
 // Build the (hidden) snip overlay window — borderless WS_POPUP, no shadow, fixed
@@ -5717,6 +5877,35 @@ async fn open_snip(
     state: State<'_, SnipState>,
     preview: State<'_, SnipPreview>,
 ) -> Result<(), String> {
+    begin_capture(app, state, preview, false).await
+}
+
+// F26: the very same freeze + overlay, opened in colour-pick mode. Reusing the
+// pipeline is what makes the picker pixel-exact and DPI-correct for free — the
+// frozen frame is taken BEFORE the overlay shows, so the overlay is never in its
+// own capture source.
+#[tauri::command]
+async fn open_picker(
+    app: AppHandle,
+    state: State<'_, SnipState>,
+    preview: State<'_, SnipPreview>,
+) -> Result<(), String> {
+    let on = app
+        .try_state::<Db>()
+        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_flags.get("colorPicker") == Some(&true))
+        .unwrap_or(false);
+    if !on {
+        return Err("color picker is off".to_string());
+    }
+    begin_capture(app, state, preview, true).await
+}
+
+async fn begin_capture(
+    app: AppHandle,
+    state: State<'_, SnipState>,
+    preview: State<'_, SnipPreview>,
+    pick: bool,
+) -> Result<(), String> {
     // Atomically claim the session. If one is already active and its overlay still
     // exists, surface that instead of starting a second. (Stale flag with no
     // window — e.g. the overlay was destroyed — falls through: reclaim and start.)
@@ -5731,6 +5920,15 @@ async fn open_snip(
         }
         SNIP_ACTIVE.store(true, Ordering::SeqCst);
     }
+    PICK_ACTIVE.store(pick, Ordering::SeqCst);
+    // Loupe settings are read once here, while nothing else holds the store.
+    let cfg = if pick {
+        app.try_state::<Db>()
+            .map(|s| pick_cfg(&s.lock().unwrap_or_else(|e| e.into_inner()).settings))
+    } else {
+        None
+    }
+    .unwrap_or(PickCfg { zoom: 8, format: "hex".to_string() });
     // Wake the overlay's WebView2 NOW (off-screen) so a long-idle, background-throttled
     // webview un-throttles DURING the freeze+encode below. Without this head start the
     // icon path (overlay idle a while) lags behind a retry (whose webview was just
@@ -5766,7 +5964,15 @@ async fn open_snip(
                 Some(path) => (path, true),
                 None => (format!("data:image/jpeg;base64,{}", base64_encode(&j)), false),
             };
-            SnipBg { src, is_file, width: total_w, height: total_h }
+            SnipBg {
+                src,
+                is_file,
+                width: total_w,
+                height: total_h,
+                pick,
+                pick_zoom: cfg.zoom,
+                pick_format: cfg.format,
+            }
         });
         *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(bg);
     });
@@ -8306,6 +8512,9 @@ pub fn run() {
             reset_expert,
             skip_version,
             open_snip,
+            open_picker,
+            pick_frame,
+            pick_color,
             snip_background,
             snip_present,
             snip_should_begin,
@@ -9662,5 +9871,133 @@ mod tests {
         assert_eq!(s.float_folders[0].name, "Work");
         assert_eq!(s.float_folders[0].scale, 1.0);
         assert_eq!(s.float_folders[0].pos.x, 0);
+    }
+
+    // ---- F26 colour picker ----
+
+    #[test]
+    fn hex_is_uppercase_and_padded() {
+        assert_eq!(rgb_to_hex(26, 43, 60), "#1A2B3C");
+        assert_eq!(rgb_to_hex(0, 0, 0), "#000000");
+        assert_eq!(rgb_to_hex(255, 255, 255), "#FFFFFF");
+        assert_eq!(rgb_to_hex(1, 2, 3), "#010203"); // single digits keep their zero
+    }
+
+    #[test]
+    fn hsl_handles_the_degenerate_cases() {
+        // Pure grey: hue and saturation are undefined, so both report 0.
+        assert_eq!(rgb_to_hsl(128, 128, 128), (0, 0, 50));
+        assert_eq!(rgb_to_hsl(0, 0, 0), (0, 0, 0));
+        assert_eq!(rgb_to_hsl(255, 255, 255), (0, 0, 100));
+        // Pure red sits at 0°, never at 360°.
+        assert_eq!(rgb_to_hsl(255, 0, 0), (0, 100, 50));
+        // Just below red wraps back down instead of rounding up to 360.
+        assert_eq!(rgb_to_hsl(255, 0, 1).0, 0);
+        assert_eq!(rgb_to_hsl(0, 255, 0), (120, 100, 50));
+        assert_eq!(rgb_to_hsl(0, 0, 255), (240, 100, 50));
+        // Each of the three max branches, with rounded integer output.
+        assert_eq!(rgb_to_hsl(26, 43, 60), (210, 40, 17));
+        assert_eq!(rgb_to_hsl(255, 128, 0), (30, 100, 50));
+        assert_eq!(rgb_to_hsl(128, 0, 255), (270, 100, 50));
+    }
+
+    #[test]
+    fn every_format_writes_its_own_notation() {
+        assert_eq!(format_color("hex", 26, 43, 60), "#1A2B3C");
+        assert_eq!(format_color("rgb", 26, 43, 60), "rgb(26,43,60)");
+        assert_eq!(format_color("hsl", 26, 43, 60), "hsl(210,40%,17%)");
+        // An unknown or empty stored notation falls back to hex, never to nothing.
+        assert_eq!(format_color("", 26, 43, 60), "#1A2B3C");
+        assert_eq!(format_color("cmyk", 26, 43, 60), "#1A2B3C");
+    }
+
+    #[test]
+    fn picker_settings_are_clamped_to_their_range() {
+        let mut s = Settings::default();
+        let d = pick_cfg(&s);
+        assert_eq!((d.zoom, d.format.as_str()), (8, "hex"));
+        s.ui_values.insert("loupeZoom".into(), 99.0);
+        assert_eq!(pick_cfg(&s).zoom, 16);
+        s.ui_values.insert("loupeZoom".into(), 0.0);
+        assert_eq!(pick_cfg(&s).zoom, 4);
+        s.ui_texts.insert("pickerFormat".into(), "hsl".into());
+        assert_eq!(pick_cfg(&s).format, "hsl");
+        s.ui_texts.insert("pickerFormat".into(), "nonsense".into());
+        assert_eq!(pick_cfg(&s).format, "hex");
+    }
+
+    // A stitched frozen desktop for a mixed-DPI pair: a 2560x1440 monitor scaled to
+    // 150% sits LEFT of the 1920x1080 primary, so the virtual origin is negative.
+    // Physical pixels are what the capture holds — the scale factor never enters the
+    // mapping, which is exactly why the picker stays exact on either monitor.
+    fn mixed_dpi_desktop() -> (Vec<MonitorCap>, i64, i64) {
+        let (left_x, left_w, left_h) = (-2560i32, 2560u32, 1440u32);
+        let (right_x, right_w, right_h) = (0i32, 1920u32, 1080u32);
+        let origin_x = left_x.min(right_x);
+        let origin_y = 0;
+        let total_w = left_w + right_w;
+        let total_h = left_h.max(right_h);
+        let mut canvas = image::RgbaImage::from_pixel(total_w, total_h, image::Rgba([0, 0, 0, 255]));
+        let lx = stitch_offset(left_x, origin_x);
+        let rx = stitch_offset(right_x, origin_x);
+        // One marker pixel per monitor, at the monitor's own top-left corner.
+        canvas.put_pixel(lx as u32, 0, image::Rgba([26, 43, 60, 255]));
+        canvas.put_pixel(rx as u32, 0, image::Rgba([255, 128, 0, 255]));
+        // ...and one in the far bottom-right of the right-hand monitor.
+        canvas.put_pixel(rx as u32 + right_w - 1, right_h - 1, image::Rgba([1, 2, 3, 255]));
+        (
+            vec![MonitorCap { image: canvas, x: origin_x, y: origin_y, width: total_w, height: total_h }],
+            lx,
+            rx,
+        )
+    }
+
+    #[test]
+    fn stitch_offset_places_each_monitor_at_its_own_column() {
+        // Left monitor starts the image; the primary starts one full width in.
+        assert_eq!(stitch_offset(-2560, -2560), 0);
+        assert_eq!(stitch_offset(0, -2560), 2560);
+        // Vertical works the same, including a monitor above the primary.
+        assert_eq!(stitch_offset(-300, -300), 0);
+        assert_eq!(stitch_offset(0, -300), 300);
+    }
+
+    #[test]
+    fn sampling_hits_the_right_pixel_on_either_monitor() {
+        let (caps, lx, rx) = mixed_dpi_desktop();
+        assert_eq!(sample_frozen(&caps, lx as i32, 0), Some([26, 43, 60]));
+        assert_eq!(sample_frozen(&caps, rx as i32, 0), Some([255, 128, 0]));
+        assert_eq!(sample_frozen(&caps, rx as i32 + 1919, 1079), Some([1, 2, 3]));
+        // The neighbouring pixel is a different colour — no off-by-one smearing.
+        assert_eq!(sample_frozen(&caps, rx as i32 - 1, 0), Some([0, 0, 0]));
+        // Outside the desktop nothing is sampled at all (never a clamped neighbour).
+        assert_eq!(sample_frozen(&caps, -1, 0), None);
+        assert_eq!(sample_frozen(&caps, 0, -1), None);
+        assert_eq!(sample_frozen(&caps, 4480, 0), None);
+        assert_eq!(sample_frozen(&caps, 0, 1440), None);
+        assert_eq!(sample_frozen(&[], 0, 0), None);
+    }
+
+    #[test]
+    fn the_frame_handed_to_the_loupe_is_packed_rgb() {
+        let mut img = image::RgbaImage::new(2, 1);
+        img.put_pixel(0, 0, image::Rgba([26, 43, 60, 255]));
+        img.put_pixel(1, 0, image::Rgba([255, 128, 0, 128]));
+        // Alpha is dropped: three bytes per pixel, in row order.
+        assert_eq!(rgb_bytes(&img), vec![26, 43, 60, 255, 128, 0]);
+    }
+
+    #[test]
+    fn snip_background_still_loads_without_the_picker_fields() {
+        // The overlay reads the mode off SnipBg; serializing keeps the snake_case
+        // names snip.js indexes.
+        let bg = SnipBg {
+            src: "x".into(), is_file: true, width: 4, height: 2,
+            pick: true, pick_zoom: 12, pick_format: "rgb".into(),
+        };
+        let j = serde_json::to_value(&bg).unwrap();
+        assert_eq!(j["pick"], serde_json::json!(true));
+        assert_eq!(j["pick_zoom"], serde_json::json!(12));
+        assert_eq!(j["pick_format"], serde_json::json!("rgb"));
     }
 }

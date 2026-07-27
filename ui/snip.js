@@ -17,6 +17,12 @@ const mask = {
 const box = document.getElementById("snip-box");
 const sizeLabel = document.getElementById("snip-size");
 const hint = document.getElementById("snip-hint");
+const loupe = document.getElementById("pick-loupe");
+const grid = document.getElementById("pick-grid");
+const dot = document.getElementById("pick-dot");
+const swatch = document.getElementById("pick-swatch");
+const readMain = document.getElementById("pick-main");
+const readAlt = document.getElementById("pick-alt");
 
 const MIN_REGION = 5; // CSS px; below this a drag counts as a click
 const WIN_RADIUS = 8; // rounded corners when highlighting a window
@@ -26,6 +32,19 @@ let busy = false;
 let windows = []; // stitched-image physical px, topmost first
 let FULL_W = 1, FULL_H = 1; // full stitched dimensions (display image may be smaller)
 
+// ---- F26 colour picker state ----
+// Same overlay, second mode: no selection, a loupe on the cursor instead.
+const LOUPE_CELLS = 15; // odd, so one cell is exactly the picked pixel
+let pickMode = false;
+let pickZoom = 8;      // magnification (expert: loupeZoom)
+let pickFmt = "hex";   // output notation (expert: pickerFormat)
+let pickBusy = false;
+// The frozen desktop as packed RGB. The loupe redraws on every pointer move, so it
+// samples THIS buffer — a backend round trip per move would make it unusable. The
+// displayed background is a JPEG (lossy chroma), so it must never be the source.
+let frame = null;
+let cur = null; // picked point, in stitched-image physical pixels
+
 // Seed hint/error text synchronously from the browser locale (en/de are the
 // defaults) so a German user never sees an English flash; the async i18n load
 // below refines it for the user's actually-selected language.
@@ -33,10 +52,12 @@ const SEED = {
   en: {
     hint: "Drag a region · click a window · Esc to cancel",
     failed: "This window can't be captured. Try a region or another window.",
+    pick: "Click to copy the color · arrow keys move one pixel · Esc to cancel",
   },
   de: {
     hint: "Bereich ziehen · Fenster anklicken · Esc zum Abbrechen",
     failed: "Dieses Fenster kann nicht aufgenommen werden. Versuche einen Bereich oder ein anderes Fenster.",
+    pick: "Klicken kopiert die Farbe · Pfeiltasten bewegen ein Pixel · Esc zum Abbrechen",
   },
 };
 const T = { ...((navigator.language || "en").toLowerCase().startsWith("de") ? SEED.de : SEED.en) };
@@ -54,6 +75,14 @@ function resetSession() {
   sizeLabel.textContent = "";
   hint.classList.remove("hidden", "error");
   hint.textContent = T.hint;
+  pickMode = false;
+  pickBusy = false;
+  frame = null;
+  cur = null;
+  pendingMove = null;
+  document.body.classList.remove("pick");
+  loupe.classList.add("hidden");
+  dot.classList.add("hidden");
   fullDim();
 }
 
@@ -63,6 +92,17 @@ async function beginSession() {
   if (!b) { invoke("snip_cancel"); return; }
   FULL_W = b.width || 1;
   FULL_H = b.height || 1;
+  // Colour-pick mode: no selection chrome at all, and the frozen desktop is pulled
+  // in as raw pixels once (see `frame`).
+  pickMode = !!b.pick;
+  if (pickMode) {
+    pickZoom = Math.min(16, Math.max(4, Number(b.pick_zoom) || 8));
+    pickFmt = b.pick_format || "hex";
+    document.body.classList.add("pick");
+    hint.textContent = T.pick;
+    noDim();
+    loadFrame();
+  }
   // Reveal the overlay only once the frozen image has decoded, so it never
   // appears blank first. onerror presents too, so a rare decode failure can't
   // leave it stuck hidden; a timer is the final safety net in case a hidden
@@ -79,8 +119,11 @@ async function beginSession() {
   bg.onerror = present;
   bg.src = b.is_file ? convertFileSrc(b.src) : b.src;
   timer = setTimeout(present, 500);
-  // Hover highlight loads in the background — it must not gate the overlay.
-  invoke("snip_windows", { index: IDX }).then((w) => { windows = w || []; }).catch(() => { windows = []; });
+  // Hover highlight loads in the background — it must not gate the overlay. The
+  // picker has no window selection, so it never pays for the enumeration.
+  if (!pickMode) {
+    invoke("snip_windows", { index: IDX }).then((w) => { windows = w || []; }).catch(() => { windows = []; });
+  }
   // Localized hint/error text: load once, then reuse for every later session.
   if (i18nLoaded) return;
   i18nLoaded = true;
@@ -94,7 +137,8 @@ async function beginSession() {
       const d = I18N[lang] || I18N.en;
       T.hint = d.snipHint ?? I18N.en.snipHint;
       T.failed = d.snipFailed ?? I18N.en.snipFailed ?? T.failed;
-      if (!hint.classList.contains("error")) hint.textContent = T.hint;
+      T.pick = d.pickHint ?? I18N.en.pickHint ?? T.pick;
+      if (!hint.classList.contains("error")) hint.textContent = pickMode ? T.pick : T.hint;
     })
     .catch(() => {});
 }
@@ -128,7 +172,9 @@ function showError() {
   hint.textContent = T.failed;
   hint.classList.add("error");
   hint.classList.remove("hidden");
-  fullDim();
+  // Dimming while picking would stop the screen matching the colour being read.
+  if (pickMode) noDim();
+  else fullDim();
 }
 
 // Keep the selection [x,y,w,h] (CSS px) sharp by framing it with four dim
@@ -162,7 +208,189 @@ function fullDim() {
   place(mask.right, 0, 0, 0, 0);
   box.classList.add("hidden");
 }
+// Picking: no dim at all, so the desktop on screen matches the colour being read.
+function noDim() {
+  for (const m of Object.values(mask)) place(m, 0, 0, 0, 0);
+  box.classList.add("hidden");
+}
 fullDim();
+
+// ---- F26 colour picker ----
+
+// Pull the frozen desktop across once, as packed RGB. Sampling has to be local:
+// the loupe follows every pointer move, and the visible background is a JPEG whose
+// chroma is subsampled, so reading it back would not match a reference tool.
+// Raw command results arrive as an ArrayBuffer; accept the other shapes too rather
+// than leaving the picker mysteriously dead if the transport ever changes.
+function toBytes(buf) {
+  if (!buf) return null;
+  if (buf instanceof ArrayBuffer) return new Uint8Array(buf);
+  if (ArrayBuffer.isView(buf)) return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+  if (Array.isArray(buf)) return Uint8Array.from(buf);
+  return null;
+}
+
+async function loadFrame() {
+  let buf;
+  try { buf = await invoke("pick_frame"); } catch { buf = null; }
+  const bytes = toBytes(buf);
+  if (!bytes || bytes.length < FULL_W * FULL_H * 3) { frame = null; return; }
+  frame = bytes;
+  // Start on the middle of the desktop so the loupe is on screen before the first
+  // move; the very next pointer move corrects it.
+  if (!cur) setCur(Math.floor(FULL_W / 2), Math.floor(FULL_H / 2));
+  else queueLoupe();
+}
+
+// One pixel of the frozen desktop, in stitched physical px. Null outside it — the
+// picker must never report a clamped neighbour as if it were the real pixel.
+function pixelAt(x, y) {
+  if (!frame || x < 0 || y < 0 || x >= FULL_W || y >= FULL_H) return null;
+  const i = (y * FULL_W + x) * 3;
+  return [frame[i], frame[i + 1], frame[i + 2]];
+}
+
+const hex2 = (n) => n.toString(16).toUpperCase().padStart(2, "0");
+const rgbToHex = (r, g, b) => `#${hex2(r)}${hex2(g)}${hex2(b)}`;
+
+// Mirror of the backend's rgb_to_hsl (rounded ints; grey has no hue, red is 0°).
+// The readout has to be identical to what the click will copy, and it cannot ask
+// the backend per pointer move — so the same rounding lives on both sides.
+function rgbToHsl(r, g, b) {
+  const rf = r / 255, gf = g / 255, bf = b / 255;
+  const max = Math.max(rf, gf, bf), min = Math.min(rf, gf, bf);
+  const l = (max + min) / 2, d = max - min;
+  if (d === 0) return [0, 0, Math.round(l * 100)];
+  const s = d / (1 - Math.abs(2 * l - 1));
+  let h;
+  if (max === rf) h = ((gf - bf) / d) % 6;
+  else if (max === gf) h = (bf - rf) / d + 2;
+  else h = (rf - gf) / d + 4;
+  return [((Math.round(h * 60) % 360) + 360) % 360, Math.round(s * 100), Math.round(l * 100)];
+}
+
+function formatColor(fmt, r, g, b) {
+  if (fmt === "rgb") return `rgb(${r},${g},${b})`;
+  if (fmt === "hsl") { const [h, s, l] = rgbToHsl(r, g, b); return `hsl(${h},${s}%,${l}%)`; }
+  return rgbToHex(r, g, b);
+}
+
+// Move the picked point, clamped to the desktop (arrow keys must stop at the edge).
+function clampCur(x, y) {
+  cur = {
+    x: Math.min(FULL_W - 1, Math.max(0, x)),
+    y: Math.min(FULL_H - 1, Math.max(0, y)),
+  };
+}
+function setCur(x, y) {
+  clampCur(x, y);
+  queueLoupe();
+}
+
+// At most one redraw per frame — pointer moves and held arrow keys both fire far
+// faster than the screen refreshes. The timer is a backstop: this overlay is shown
+// from a parked webview whose frame production can still be paused for a moment,
+// and a loupe that never paints would leave the picker looking dead. Whichever
+// fires first cancels the other, so rAF stays the normal path.
+let loupeRaf = 0;
+let loupeTimer = 0;
+let pendingMove = null; // newest pointer position, applied when the redraw runs
+function runLoupe() {
+  if (loupeRaf) { cancelAnimationFrame(loupeRaf); loupeRaf = 0; }
+  if (loupeTimer) { clearTimeout(loupeTimer); loupeTimer = 0; }
+  if (pendingMove) {
+    const p = toImg(pendingMove.x, pendingMove.y);
+    pendingMove = null;
+    clampCur(Math.floor(p.x), Math.floor(p.y));
+  }
+  drawLoupe();
+}
+function queueLoupe() {
+  if (loupeRaf || loupeTimer) return;
+  loupeRaf = requestAnimationFrame(runLoupe);
+  loupeTimer = setTimeout(runLoupe, 100);
+}
+
+function drawLoupe() {
+  if (!pickMode || !cur || !frame) return;
+  const z = pickZoom;
+  const half = (LOUPE_CELLS - 1) / 2;
+  const size = LOUPE_CELLS * z;
+  if (grid.width !== size) { grid.width = size; grid.height = size; }
+  const ctx = grid.getContext("2d");
+  ctx.fillStyle = "#000"; // off-desktop cells stay black
+  ctx.fillRect(0, 0, size, size);
+  for (let gy = 0; gy < LOUPE_CELLS; gy++) {
+    for (let gx = 0; gx < LOUPE_CELLS; gx++) {
+      const c = pixelAt(cur.x + gx - half, cur.y + gy - half);
+      if (!c) continue;
+      ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+      ctx.fillRect(gx * z, gy * z, z, z);
+    }
+  }
+  // Cell separators, only once a cell is big enough for them to read as a grid.
+  if (z >= 6) {
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.16)";
+    ctx.beginPath();
+    for (let i = 1; i < LOUPE_CELLS; i++) {
+      ctx.moveTo(i * z + 0.5, 0);
+      ctx.lineTo(i * z + 0.5, size);
+      ctx.moveTo(0, i * z + 0.5);
+      ctx.lineTo(size, i * z + 0.5);
+    }
+    ctx.stroke();
+  }
+  // The picked pixel: a black ring around a white one, so the outline is visible
+  // whatever colour sits under it.
+  const o = half * z;
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "#000";
+  ctx.strokeRect(o - 0.5, o - 0.5, z + 1, z + 1);
+  ctx.strokeStyle = "#fff";
+  ctx.strokeRect(o + 0.5, o + 0.5, z - 1, z - 1);
+
+  const c = pixelAt(cur.x, cur.y) || [0, 0, 0];
+  const hex = rgbToHex(c[0], c[1], c[2]);
+  swatch.style.background = hex;
+  readMain.textContent = formatColor(pickFmt, c[0], c[1], c[2]);
+  // Second line: hex is the one notation everyone recognises, so show it whenever
+  // the chosen format is something else — and rgb() when hex is the format.
+  readAlt.textContent = pickFmt === "hex" ? `rgb(${c[0]},${c[1]},${c[2]})` : hex;
+  placeLoupe();
+}
+
+// Park the loupe next to the picked point, flipping to the other side rather than
+// running off the desktop.
+function placeLoupe() {
+  const p = toCss(cur.x, cur.y, 1, 1);
+  loupe.classList.remove("hidden");
+  dot.classList.remove("hidden");
+  dot.style.left = `${p.x}px`;
+  dot.style.top = `${p.y}px`;
+  const GAP = 20;
+  const w = loupe.offsetWidth, h = loupe.offsetHeight;
+  let lx = p.x + GAP;
+  let ly = p.y + GAP;
+  if (lx + w > window.innerWidth - 6) lx = p.x - GAP - w;
+  if (ly + h > window.innerHeight - 6) ly = p.y - GAP - h;
+  loupe.style.left = `${Math.max(6, lx)}px`;
+  loupe.style.top = `${Math.max(6, ly)}px`;
+}
+
+// Copy the picked colour. The backend re-samples the frozen image at this exact
+// pixel and owns the clipboard write — nothing is stored as a prompt or in the
+// copy history.
+async function pickHere() {
+  if (pickBusy || !cur) return;
+  pickBusy = true;
+  try {
+    await invoke("pick_color", { x: cur.x, y: cur.y });
+  } catch {
+    pickBusy = false;
+    showError();
+  }
+}
 
 // Topmost window under a CSS point; returns its id, CSS rect and image rect.
 function windowAt(cssX, cssY) {
@@ -197,12 +425,15 @@ function onMove() {
   else fullDim();
 }
 window.addEventListener("mousemove", (e) => {
+  // Picking runs on the loupe's own scheduler, which redraws the readout too.
+  if (pickMode) { pendingMove = { x: e.clientX, y: e.clientY }; queueLoupe(); return; }
   lastMove = e;
   if (!moveRaf) moveRaf = requestAnimationFrame(onMove);
 });
 
 window.addEventListener("mousedown", (e) => {
   if (e.button !== 0 || busy) return;
+  if (pickMode) return; // picking has no drag; the release does the work
   hint.textContent = T.hint;
   hint.classList.remove("error");
   start = { x: e.clientX, y: e.clientY };
@@ -212,6 +443,14 @@ window.addEventListener("mousedown", (e) => {
 });
 
 window.addEventListener("mouseup", async (e) => {
+  if (pickMode) {
+    if (e.button !== 0) return;
+    // `cur` already tracks the pointer; only seed it if the mouse never moved. A
+    // click must not undo an arrow-key nudge made from the same spot.
+    if (!cur) { const p = toImg(e.clientX, e.clientY); setCur(Math.floor(p.x), Math.floor(p.y)); }
+    pickHere();
+    return;
+  }
   if (!start || busy) return;
   const s = start;
   start = null;
@@ -249,7 +488,20 @@ window.addEventListener("mouseup", async (e) => {
   }
 });
 
+// Arrow keys nudge the picked pixel by exactly one PHYSICAL pixel — the precision
+// the mouse cannot give on a scaled monitor. The OS cursor is hidden while picking,
+// so the crosshair we draw is the only pointer and it follows the keys.
+const NUDGE = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") invoke("snip_cancel");
+  if (e.key === "Escape") { invoke("snip_cancel"); return; }
+  if (!pickMode || pickBusy) return;
+  const d = NUDGE[e.key];
+  if (d && cur) {
+    e.preventDefault();
+    setCur(cur.x + d[0], cur.y + d[1]);
+  } else if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    pickHere();
+  }
 });
 window.addEventListener("contextmenu", (e) => e.preventDefault());

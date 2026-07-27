@@ -15,6 +15,20 @@
   <div id="snip-mask-left" class="snip-mask"></div>
   <div id="snip-mask-right" class="snip-mask"></div>
   <div id="snip-box" class="snip-box hidden"><span id="snip-size" class="snip-size"></span></div>
+  <!-- Colour picker: the OS cursor is hidden in this mode, so the overlay draws its
+       own crosshair plus a loupe (zoomed pixel grid + readout) on an opaque surface
+       of its own — the value has to stay legible over any wallpaper. -->
+  <div id="pick-dot" class="pick-dot hidden"></div>
+  <div id="pick-loupe" class="pick-loupe hidden">
+    <canvas id="pick-grid" class="pick-grid" width="1" height="1"></canvas>
+    <div class="pick-read">
+      <span id="pick-swatch" class="pick-swatch"></span>
+      <span class="pick-vals">
+        <span id="pick-main" class="pick-main"></span>
+        <span id="pick-alt" class="pick-alt"></span>
+      </span>
+    </div>
+  </div>
   <div id="snip-hint" class="snip-hint"></div>
   <script type="module" src="snip.js"></script>
 </body>
