@@ -357,30 +357,6 @@ function stampDocs(root, oldB, b, withChangelog, enabled) {
 
 // ---------- out-of-tree copy ----------
 
-// Build output, tool caches and the notes that never leave this repo.
-const SKIP_DIRS = new Set([
-  ".git", "node_modules", "dist", "build", "target", "gen",
-  "graphify-out", ".serena", ".remember", ".claude", ".vscode", ".idea", "test-data", "backups",
-]);
-const SKIP_FILES = new Set([
-  "FUTUREUPDATES.md", "GEMINI.md", "CLAUDE.md", "BACKUP.bat", "Thumbs.db", "Desktop.ini",
-]);
-const SKIP_EXT = new Set([".log", ".psb", ".db", ".db-wal", ".db-shm", ".pem", ".key", ".pfx", ".p12", ".cer", ".crt"]);
-
-function walkTree(src, dst) {
-  fs.mkdirSync(dst, { recursive: true });
-  for (const e of fs.readdirSync(src, { withFileTypes: true })) {
-    if (e.isDirectory()) {
-      if (SKIP_DIRS.has(e.name)) continue;
-      walkTree(path.join(src, e.name), path.join(dst, e.name));
-    } else if (e.isFile()) {
-      if (SKIP_FILES.has(e.name) || SKIP_EXT.has(path.extname(e.name))) continue;
-      if (e.name.startsWith(".env")) continue;
-      fs.copyFileSync(path.join(src, e.name), path.join(dst, e.name));
-    }
-  }
-}
-
 // What git would commit is exactly what belongs in a product repo: tracked files
 // plus anything new that is not ignored, which already leaves out build output and
 // local notes. Build inputs that are ignored on purpose (the pdfium DLL) are added
@@ -400,11 +376,9 @@ const EXTRA_FILES = ["src-tauri/pdfium.dll", "src-tauri/pdfium-LICENSE"];
 
 function copyTree(dst) {
   const tracked = gitFiles();
-  if (!tracked) {
-    console.warn("brand: git is unavailable — falling back to a deny-list copy");
-    walkTree(ROOT, dst);
-    return;
-  }
+  // Without git there is no trustworthy answer to "what may leave this repo", and
+  // guessing risks copying local notes or credentials into a public tree.
+  if (!tracked) fail("git is required to copy a branded tree (it decides what ships)");
   for (const rel of tracked.concat(EXTRA_FILES)) {
     const from = path.join(ROOT, rel);
     if (!fs.existsSync(from)) continue;
