@@ -129,11 +129,17 @@ function markSelectedSize() {
   }
 }
 
+// The labels need the translation module, which is imported lazily because it is
+// large and the pill has to open fast. Behaviour must NOT wait for it: a slow or
+// failed import used to take the cooldown, opacity, folders and drag-out with it.
 async function applySettings() {
-  const [s, { FLOAT_TXT: TXT }] = await Promise.all([
-    invoke("get_settings"),
-    import("./i18n.js"),
-  ]);
+  const s = await invoke("get_settings");
+  applyPrefs(s);
+  await applyTexts(s);
+}
+
+async function applyTexts(s) {
+  const { FLOAT_TXT: TXT } = await import("./i18n.js");
   const pref = (s.language && s.language !== "auto"
     ? s.language
     : navigator.language || "en"
@@ -153,6 +159,9 @@ async function applySettings() {
   closeBtn.title = t.close;
   closeBtn.setAttribute("aria-label", t.close);
   document.getElementById("file-error").textContent = t.missing;
+}
+
+function applyPrefs(s) {
   applyVideoPrefs(videoEl, s.video_prefs && s.video_prefs[promptId]);
   // Clamp to the backend's stored range (0.5–2.0): a corrupt 0/negative/NaN
   // factor would otherwise produce a degenerate (zero/inverted) window.
@@ -571,16 +580,34 @@ pill.addEventListener("dragstart", (e) => {
 });
 pill.addEventListener("dragend", () => { pill.draggable = false; });
 
+// F25: ONE call per drag END — the pills are separate windows, so only the backend
+// can tell whether this drop landed on another one. Nothing is sent while dragging,
+// and a drag that ends nowhere near a pill simply gets `false`.
+const mergeAfterDrop = () => {
+  if (foldersOn && !menuOpen) invoke("float_folder_drop", { id: promptId }).catch(() => {});
+};
+
+// startDragging() hands the window to the OS move loop, and that loop CONSUMES the
+// button release — a dragged pill never sees `mouseup`. So the release is also
+// recognised from the first later event that reports no button held, and the drag
+// ends (and merges) there instead.
+function pointerReleased(e) {
+  if (!drag || e.buttons !== 0) return false;
+  const wasDrag = drag.moved;
+  drag = null;
+  pill.classList.remove("dragging");
+  if (!menuOpen) applyPillSize();
+  ensureVideoPlaying();
+  if (wasDrag) mergeAfterDrop();
+  return true;
+}
+
+// Leaving the window counts as well: after a swallowed release the pointer may
+// travel off the pill before it ever moves inside it again.
+window.addEventListener("mouseout", (e) => pointerReleased(e));
+
 window.addEventListener("mousemove", async (e) => {
-  // Lost mouseup (can happen when the OS swallows it after a window drag):
-  // no button is held anymore, so end the drag state and recover playback.
-  if (drag && e.buttons === 0) {
-    drag = null;
-    pill.classList.remove("dragging");
-    if (!menuOpen) applyPillSize();
-    ensureVideoPlaying();
-    return;
-  }
+  if (pointerReleased(e)) return;
   if (!drag || drag.moved || drag.out) return;
   if (Math.abs(e.screenX - drag.x) < DRAG_THRESHOLD &&
       Math.abs(e.screenY - drag.y) < DRAG_THRESHOLD) return;
@@ -601,10 +628,7 @@ window.addEventListener("mouseup", async () => {
   if (wasDrag) {
     if (!menuOpen) applyPillSize(); // keep the menu+window when one is open
     ensureVideoPlaying();
-    // F25: ONE call per drag END — the pills are separate windows, so only the
-    // backend can tell whether this drop landed on another one. Nothing is sent
-    // while dragging, and a drag that ends nowhere near a pill simply gets `false`.
-    if (foldersOn && !menuOpen) invoke("float_folder_drop", { id: promptId }).catch(() => {});
+    mergeAfterDrop();
   } else if (menuOpen) {
     closeMenu(); // a click on the pill closes the open menu
   } else if (apOn && lastPillTs && Date.now() - lastPillTs <= apDblMs) {
@@ -759,6 +783,9 @@ document.addEventListener("visibilitychange", () => {
 listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 // Language switched in the settings — re-translate the pill texts in place.
 listen("language-changed", () => applySettings());
+// An expert setting changed: re-read it here too, or a feature switched on while
+// this pill is already on screen would stay off until the next restart.
+listen("settings-changed", () => applySettings());
 
 // Moving onto a monitor with a different DPI can leave a stale frame —
 // re-apply the size so the window repaints at the new scale factor.

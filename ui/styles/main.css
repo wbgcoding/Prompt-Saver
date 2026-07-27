@@ -376,6 +376,8 @@ body.noflag-showJournal #journal-btn { display: none; }
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
+  /* Dragging a tab onto another one must not paint a text selection across the bar. */
+  user-select: none;
   transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
 .view-btn:hover { border-color: var(--accent); color: var(--fg); }

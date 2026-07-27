@@ -2200,6 +2200,9 @@ function groupTabEl(g, views) {
       { label: t("viewGroupDissolve"), danger: true, run: () => dissolveViewGroup(g) },
     ], e.clientX, e.clientY);
   });
+  // A folder tab is a drag source too: dropped on a loose tab it swallows that view,
+  // dropped on another folder the two become one.
+  makeTabDraggable(btn, null, false, g.id);
   return btn;
 }
 
@@ -2384,11 +2387,21 @@ async function moveViewToGroup(viewId, groupId) {
 let tabDrag = null;
 let tabDragBlockClick = false;
 
-function makeTabDraggable(el, viewId, fromGroup) {
+// `groupId` marks the source as a whole folder tab instead of a single view.
+function makeTabDraggable(el, viewId, fromGroup, groupId) {
   el.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 || !groupsOn()) return;
-    tabDrag = { viewId, fromGroup, el, startX: e.clientX, startY: e.clientY, moved: false, target: null };
+    tabDrag = { viewId, fromGroup, groupId, el, startX: e.clientX, startY: e.clientY, moved: false, target: null };
   });
+}
+
+// Pour one folder's views into another and let the emptied one dissolve — a single
+// write, so the tab bar never shows the half-moved state.
+async function mergeViewGroups(fromId, intoId) {
+  const from = viewGroupList().find((g) => g.id === fromId);
+  const into = viewGroupList().find((g) => g.id === intoId);
+  if (!from || !into) return;
+  await saveViewGroup(into, { viewIds: [...(into.view_ids || []), ...(from.view_ids || [])] });
 }
 
 const tabDropTarget = (x, y) => document.elementFromPoint(x, y)?.closest(".view-btn") || null;
@@ -2421,6 +2434,11 @@ window.addEventListener("pointerup", async (e) => {
   d.target?.classList.remove("tab-drop");
   if (!d.moved) return;
   const target = d.target;
+  if (d.groupId) {
+    if (target?.dataset.groupId) await mergeViewGroups(d.groupId, target.dataset.groupId);
+    else if (target?.dataset.viewId) await moveViewToGroup(target.dataset.viewId, d.groupId);
+    return;
+  }
   if (target?.dataset.groupId) {
     await moveViewToGroup(d.viewId, target.dataset.groupId);
   } else if (target?.dataset.viewId && target.dataset.viewId !== d.viewId) {

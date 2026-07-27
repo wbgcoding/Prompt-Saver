@@ -1850,6 +1850,18 @@ fn folder_label(id: &str) -> String {
 fn folders_on(settings: &Settings) -> bool {
     settings.ui_flags.get("pillFolders") == Some(&true)
 }
+
+// Pill and folder windows read the settings ONCE, when they open. Without this every
+// expert change (pill folders, drag-out, opacity, cooldown …) would only reach the
+// windows opened afterwards — i.e. a feature switched on while pills are on screen
+// looked dead until a restart.
+fn notify_float_settings(app: &AppHandle) {
+    for label in app.webview_windows().keys() {
+        if label.starts_with("float-") || label.starts_with("folder-") {
+            let _ = app.emit_to(label.as_str(), "settings-changed", ());
+        }
+    }
+}
 fn merge_radius(settings: &Settings) -> f64 {
     settings
         .ui_values
@@ -6922,6 +6934,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
         let handle = app.clone();
         tauri::async_runtime::spawn(async move { sync_float_windows(&handle) });
     }
+    notify_float_settings(&app);
 }
 
 // Set an expert numeric value (CSS var / behaviour tweak).
@@ -6945,14 +6958,18 @@ fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
             }
         }
     }
+    notify_float_settings(&app);
 }
 
 // Set an expert string option (e.g. the copy-feedback font key).
 #[tauri::command]
 fn set_ui_text(app: AppHandle, state: State<Db>, key: String, value: String) {
-    let mut store = lock(&state);
-    store.settings.ui_texts.insert(key, value);
-    save_settings(&app, &store.settings);
+    {
+        let mut store = lock(&state);
+        store.settings.ui_texts.insert(key, value);
+        save_settings(&app, &store.settings);
+    }
+    notify_float_settings(&app);
 }
 
 // Clear all expert overrides back to the shipped defaults.
@@ -6971,6 +6988,7 @@ fn reset_expert(app: AppHandle, state: State<Db>) {
         set_capture_exclusion(&win, true);
     }
     apply_tray_menu(&app); // F23: the tray sections fall back to their defaults too
+    notify_float_settings(&app);
 }
 
 // Add a version to the skip list — it will not be offered again.

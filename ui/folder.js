@@ -260,8 +260,16 @@ async function loadState() {
   if (open === "grid") await reflow();
 }
 
+// Same split as the pill: the lazily imported translations must never hold up the
+// settings that drive behaviour.
 async function applySettings() {
-  const [s, i18n] = await Promise.all([invoke("get_settings"), import("./i18n.js")]);
+  const s = await invoke("get_settings");
+  applyPrefs(s);
+  await applyTexts(s);
+}
+
+async function applyTexts(s) {
+  const i18n = await import("./i18n.js");
   const pref = (s.language && s.language !== "auto" ? s.language : navigator.language || "en").toLowerCase();
   const lang = Object.keys(i18n.FLOAT_TXT).find((c) => pref.startsWith(c)) || "en";
   TXT = i18n.FLOAT_TXT[lang];
@@ -277,6 +285,9 @@ async function applySettings() {
     b.title = `${TXT.size} ${b.textContent}`;
     b.setAttribute("aria-label", b.title);
   }
+}
+
+function applyPrefs(s) {
   document.body.style.fontFamily = FONTS[s.tile_font] || FONTS.system;
   const cd = Number(s.ui_values?.copyCooldownMs);
   cooldownMs = Number.isFinite(cd) ? cd : 2000;
@@ -487,6 +498,8 @@ document.getElementById("mm-out").addEventListener("click", async () => {
 listen("folder-changed", () => loadState());
 listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 listen("language-changed", () => applySettings());
+// Same as the pill: an expert change has to reach a folder that is already open.
+listen("settings-changed", () => applySettings());
 listen("prompt-updated", (e) => {
   if (e.payload && state.members.some((p) => p.id === e.payload.id)) loadState();
 });

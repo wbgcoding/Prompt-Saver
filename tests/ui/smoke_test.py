@@ -754,6 +754,65 @@ PROBE = """
         document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
         await sleep(150);
       }
+      // The gesture the feature is built on: one tab dropped on another merges them,
+      // and a folder tab is a drag source in its own right (dropped on a folder the
+      // two become one). Dragging a tab must not paint a text selection either.
+      const tabCentre = (el) => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+      const tabPtr = (type, x, y, el) => (el || window).dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 3, clientX: x, clientY: y }));
+      const dragTab = async (from, to) => {
+        const [ax, ay] = tabCentre(from), [bx, by] = tabCentre(to);
+        tabPtr('pointerdown', ax, ay, from);
+        tabPtr('pointermove', ax + 8, ay);
+        await sleep(80);
+        tabPtr('pointermove', bx, by);
+        await sleep(80);
+        const marked = !!document.querySelector('.tab-drop');
+        tabPtr('pointerup', bx, by);
+        await sleep(350);
+        return marked;
+      };
+      if (viewTabs().length && getComputedStyle(viewTabs()[0]).userSelect !== 'none') {
+        out.errors.push('a view tab still selects its text while being dragged');
+      }
+      // Below roughly 700px the header squeezes the tab strip down to a sliver and
+      // the later tabs are clipped out of reach — no pointer can land on them, so
+      // the gesture is untestable there (and unusable; that is a layout bug of its
+      // own, not a view-group one).
+      const reachable = (el) => {
+        const r = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return !!hit && hit.closest('.view-btn') === el;
+      };
+      const loose = viewTabs().filter(b => b.dataset.viewId);
+      if (loose.length >= 2 && !loose.every(reachable)) {
+        out.tabs.push('(tab-merge check skipped: the tab strip is clipped at this width)');
+      } else if (loose.length < 2) {
+        out.errors.push('not enough loose view tabs for the merge check');
+      } else {
+        calls().length = 0;
+        if (!await dragTab(loose[0], loose[1])) out.errors.push('a view tab dropped on another marked no target');
+        if (document.getElementById('confirm-modal').classList.contains('hidden')) {
+          out.errors.push('merging two view tabs did not ask for a group name');
+        } else {
+          await click('confirm-ok');
+          await sleep(250);
+          if (!calls().includes('save_view_group')) out.errors.push('merging two view tabs saved no group');
+          if (viewTabs().some(b => b.dataset.viewId === loose[0].dataset.viewId)) {
+            out.errors.push('a merged view still has its own tab');
+          }
+        }
+        const groups = viewTabs().filter(b => b.dataset.groupId);
+        if (groups.length !== 2) {
+          out.errors.push('expected two folder tabs before the folder merge, got ' + groups.length);
+        } else {
+          calls().length = 0;
+          if (!await dragTab(groups[0], groups[1])) out.errors.push('a folder tab cannot be dragged onto another tab');
+          if (!calls().includes('save_view_group')) out.errors.push('dropping a folder on a folder merged nothing');
+          const left = viewTabs().filter(b => b.dataset.groupId).length;
+          if (left !== 1) out.errors.push(left + ' folder tabs left after merging two into one');
+        }
+      }
     }
     document.getElementById('settings').classList.remove('hidden');
     // Custom themes: the stored one is offered in the theme list, the editor opens
@@ -1014,14 +1073,69 @@ PROBE = """
 """
 
 
-ERR_PROBE = """
+# F25 + F22: the pill window is the only place these two are observable. Both used to
+# fail for the same kind of reason -- a drag that never reports its end, and settings
+# that were read once when the window opened and never again.
+FLOAT_PROBE = """
 <script>
-setTimeout(() => {
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
+  const until = async (fn) => { for (let i = 0; i < 80 && !fn(); i++) await sleep(50); return fn(); };
+  const pill = document.getElementById('pill');
+  const down = (opts) => pill.dispatchEvent(new MouseEvent('mousedown', Object.assign(
+    { bubbles: true, cancelable: true, button: 0, buttons: 1 }, opts)));
+  const move = (opts) => window.dispatchEvent(new MouseEvent('mousemove', Object.assign(
+    { bubbles: true, button: 0, buttons: 1 }, opts)));
+  const up = () => window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, buttons: 0 }));
+  try {
+    // applyPrefs ends by sizing the window, so that call is the signal that the
+    // settings are in place. Deliberately NOT the localized labels: those wait on a
+    // lazily imported module, and behaviour must never be gated on it.
+    await until(() => calls().includes('resize_float_pill'));
+    if (!calls().includes('resize_float_pill')) errs.push('the pill never applied its settings');
+    // The OS move loop startDragging() hands the window to CONSUMES the button
+    // release, so a dragged pill never sees `mouseup`. The merge test therefore has
+    // to run off the first later event that reports no button held.
+    calls().length = 0;
+    down({ screenX: 100, screenY: 100 });
+    move({ screenX: 260, screenY: 180 });
+    await until(() => pill.classList.contains('dragging'));
+    if (!pill.classList.contains('dragging')) errs.push('a pill press-and-move did not start a window drag');
+    if (calls().includes('float_folder_drop')) errs.push('the merge test ran while the pill was still being dragged');
+    move({ screenX: 262, screenY: 182, buttons: 0 }); // the release, noticed late
+    await until(() => calls().includes('float_folder_drop'));
+    if (!calls().includes('float_folder_drop')) {
+      errs.push('a finished pill drag never asked the backend to merge');
+    }
+    if (pill.classList.contains('dragging')) errs.push('the pill stayed marked as dragging');
+    // A pill reads the expert settings when it opens, so a feature switched on later
+    // only reaches it through `settings-changed` -- without that, drag-out (and the
+    // merge above) stay dead on every pill already on screen.
+    down({ screenX: 400, screenY: 400, ctrlKey: true });
+    if (pill.draggable) errs.push('a pill armed a drag-out although the feature is off');
+    up();
+    await sleep(150);
+    // Flip it exactly the way the main window does, then deliver the broadcast.
+    await window.__TAURI__.core.invoke('set_ui_flag', { key: 'dragOut', enabled: true });
+    window.__FIRE__('settings-changed');
+    await until(() => { down({ screenX: 400, screenY: 400, ctrlKey: true }); const on = pill.draggable; up(); return on; });
+    down({ screenX: 400, screenY: 400, ctrlKey: true });
+    if (!pill.draggable) errs.push('switching drag-out on never reached a pill that was already open');
+    else {
+      const ev = new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() });
+      pill.dispatchEvent(ev);
+      if (!ev.dataTransfer.getData('text/plain')) errs.push('a pill drag-out carried no text');
+    }
+    up();
+  } catch (e) { errs.push('probe: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
   const pre = document.createElement('pre');
   pre.id = 'SMOKE';
-  pre.textContent = JSON.stringify(window.__SMOKE_ERRORS__ || []);
+  pre.textContent = JSON.stringify(errs);
   document.body.appendChild(pre);
-}, 1500);
+})();
 </script>
 """
 
@@ -1289,10 +1403,11 @@ def main():
             if not (r["errors"] or r["overflow"] or r["rawKeys"]):
                 print("   ok")
 
-        # The secondary windows only need to boot without throwing — except the folder
-        # window, whose whole UI lives here and nowhere else.
+        # Each secondary window carries the only coverage its own UI can get — the
+        # pill drag/merge, the colour picker and the whole folder window live here
+        # and nowhere else.
         for name, size, probe, budget in (
-                ("floating.html", (240, 60), ERR_PROBE, 6000),
+                ("floating.html", (240, 60), FLOAT_PROBE, 15000),
                 ("snip.html", (1280, 800), PICK_PROBE, 20000),
                 ("folder.html", (520, 420), FOLDER_PROBE, 15000)):
             side = tmp / "ui" / name

@@ -154,6 +154,11 @@ function normalizeGroups() {
 }
 
 const RESULTS = {
+  // Expert writes have to land in the stored blob: every later settings read (and
+  // every window that re-reads them) must see the switch the user just flipped.
+  set_ui_flag: (a) => { SETTINGS.ui_flags[a.key] = a.enabled; return null; },
+  set_ui_value: (a) => { SETTINGS.ui_values[a.key] = a.value; return null; },
+  set_ui_text: (a) => { SETTINGS.ui_texts[a.key] = a.value; return null; },
   get_settings: () => JSON.parse(JSON.stringify(SETTINGS)),
   get_state: () => ({ prompts: PROMPTS, settings: JSON.parse(JSON.stringify(SETTINGS)) }),
   current_theme: () => "dark",
