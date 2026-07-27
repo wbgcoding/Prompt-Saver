@@ -816,6 +816,7 @@ const FLAG_LABELS = {
   codeHighlight: "flagCodeHighlight",   // F15 syntax colours in the preview's code blocks
   notesInTooltip: "flagNotesInTooltip", // F17 show the private note in the tile tooltip
   promptHotkeys: "flagPromptHotkeys",   // F20 per-prompt global hotkeys
+  trayRecent: "flagTrayRecent",         // F23 "recently used" section in the tray menu
   // Checks at launch, but only while the normal auto-update setting is on.
   checkUpdateOnStart: "flagCheckUpdateOnStart",
 };
@@ -873,6 +874,7 @@ const OPT_FLAG_LABELS = {
   promptNotes: "flagPromptNotes",               // F17 private notes row in the editor
   promptHotkeyPaste: "flagPromptHotkeyPaste",   // F20 hotkey also pastes into the last app
   dragOut: "flagDragOut",                       // F22 drag a prompt into another app
+  trayFavs: "flagTrayFavs",                     // F23 favourites section in the tray menu
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const optFlag = (key) => settings.ui_flags?.[key] === true;
@@ -996,6 +998,9 @@ const EXPERT_VALUES = {
   customThemeMax: { label: "valCustomThemeMax", min: 1, max: 20, step: 1, def: 8, unit: "", gate: "customThemes" },
   // F9 how many views a group popover lists before it starts scrolling.
   viewGroupMaxRows: { label: "valViewGroupMaxRows", min: 4, max: 12, step: 1, def: 8, unit: "", gate: "viewGroups" },
+  // F23 how many entries each tray quick-copy section lists.
+  trayRecentN: { label: "valTrayRecentN", min: 1, max: 10, step: 1, def: 5, unit: "", gate: "trayRecent" },
+  trayFavN: { label: "valTrayFavN", min: 1, max: 10, step: 1, def: 10, unit: "", gate: "trayFavs" },
   // F15 code text size inside the Markdown preview.
   hlFontPx: { label: "valHlFontPx", min: 10, max: 18, step: 1, def: 13, unit: "px", gate: "codeHighlight" },
   // F17 how much of a private note the tile tooltip shows (0 = the whole note).
@@ -1087,6 +1092,8 @@ const EXPERT_TABS = [
     // F14/F15 belong together: the highlighter only ever paints inside the preview.
     { title: "expGroupPreview", flags: ["mdPreview", "codeHighlight"], values: ["hlFontPx"], dropdowns: ["mdPreviewMode"] },
     { title: "expGroupWorkspace", flags: ["floating", "keyboardNav", "headerSeparators", "dimToolbar"], values: ["floatOpacity", "kbFocusFadeMs"] },
+    // F23: the quick-copy sections of the tray menu, each with its own entry count.
+    { title: "expGroupTray", flags: ["trayRecent", "trayFavs"], values: ["trayRecentN", "trayFavN"] },
     { title: "expGroupSystem", flags: ["showUpdates", "checkUpdateOnStart"] },
   ] },
   { title: "expTabTiles", groups: [
@@ -1219,6 +1226,7 @@ const EXPERT_TIPS = [
   "lengthCounter", "promptHistory", "editorMonospace",
   "promptNotes", "notesInTooltip", "notesTipLen",
   "mdPreview", "mdPreviewMode", "codeHighlight", "hlFontPx",
+  "trayRecent", "trayFavs", "trayRecentN", "trayFavN",
   "checkUpdateOnStart", "showUpdates", "importExport", "dimToolbar", "keyboardNav",
   "headerSeparators", "floating",
   // Tiles / copying
@@ -3935,14 +3943,15 @@ async function activateTile(id, paste = flag("autoPaste")) {
   }
 }
 
-// F20: a prompt's global hotkey fired. Placeholders that still need typing can only
-// be filled in a visible window, so the main window comes forward first; everything
-// else copies (and optionally pastes) without ever showing up.
-async function onPromptHotkey(id) {
+// A prompt was triggered from outside the grid — its global hotkey (F20) or a tray
+// quick-copy entry (F23). Placeholders that still need typing can only be filled in
+// a visible window, so the main window comes forward first; everything else copies
+// (and optionally pastes) without ever showing up.
+async function onPromptHotkey(id, paste) {
   const p = prompts.find((x) => x.id === id);
   if (!p) return;
   if (dialogTokens(p).length) await invoke("focus_main_window").catch(() => {});
-  await activateTile(id, optFlag("promptHotkeyPaste"));
+  await activateTile(id, paste);
 }
 // Expert opt: hide the window to the tray right after a prompt copy.
 function maybeCloseOnCopy() {
@@ -7832,7 +7841,9 @@ function bind() {
   // "Edit prompt" chosen in a floating pill's right-click menu.
   listen("edit-prompt", (e) => editPrompt(String(e.payload)));
   // F20: a prompt's global hotkey was pressed — run the same activation a tile does.
-  listen("prompt-hotkey", (e) => onPromptHotkey(String(e.payload)));
+  listen("prompt-hotkey", (e) => onPromptHotkey(String(e.payload), optFlag("promptHotkeyPaste")));
+  // F23: a quick-copy entry in the tray menu — same activation, never auto-paste.
+  listen("prompt-tray-copy", (e) => onPromptHotkey(String(e.payload), false));
 }
 
 // Fill a UI/icon size select with percentage presets (plus the current value if it

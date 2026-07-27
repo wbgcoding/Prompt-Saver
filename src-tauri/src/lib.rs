@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::menu::{Menu, MenuItem};
+use tauri::menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl,
@@ -225,6 +225,191 @@ fn set_hotkey(app: AppHandle, state: State<Db>, hotkey: String) -> Result<(), St
 #[tauri::command]
 fn focus_main_window(app: AppHandle) {
     show_main(&app);
+}
+
+// ---------- F23: tray quick-copy sections ----------
+
+// A prompt name ends up in an OS menu, so it is stripped and capped first.
+const TRAY_LABEL_MAX: usize = 40;
+// Namespace for the dynamic entries. Every other menu id is a fixed keyword, so a
+// click can be routed back to a prompt without ever guessing.
+const TRAY_COPY_PREFIX: &str = "psc:";
+// How long a burst of store changes is collected before the menu is rebuilt.
+const TRAY_DEBOUNCE_MS: u64 = 400;
+
+// Whether the installed menu currently carries quick-copy entries, and whether a
+// rebuild is already scheduled. Both flags off + nothing installed = no work at all.
+static TRAY_EXTRAS: AtomicBool = AtomicBool::new(false);
+static TRAY_PENDING: AtomicBool = AtomicBool::new(false);
+
+// What the two sections should contain, read from the expert settings.
+struct TrayCfg {
+    recent: bool,
+    recent_n: usize,
+    favs: bool,
+    fav_n: usize,
+}
+
+fn tray_cfg(settings: &Settings) -> TrayCfg {
+    let count = |key: &str, def: f64| {
+        settings.ui_values.get(key).copied().unwrap_or(def).clamp(1.0, 10.0) as usize
+    };
+    TrayCfg {
+        recent: settings.ui_flags.get("trayRecent") != Some(&false), // on by default
+        recent_n: count("trayRecentN", 5.0),
+        favs: settings.ui_flags.get("trayFavs") == Some(&true), // off by default
+        fav_n: count("trayFavN", 10.0),
+    }
+}
+
+// Menu text for a prompt. Control characters (a pasted newline lands in the name)
+// collapse to spaces, `&` is doubled because a Win32 menu reads a single one as a
+// mnemonic, and the cut counts CHARACTERS — a byte cut would split a multi-byte
+// name in the middle of a character.
+fn tray_label(name: &str) -> String {
+    let flat: String = name.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
+    let mut text = flat.split_whitespace().collect::<Vec<_>>().join(" ");
+    if text.chars().count() > TRAY_LABEL_MAX {
+        text = text.chars().take(TRAY_LABEL_MAX - 1).collect();
+        text.push('…');
+    }
+    if text.is_empty() {
+        text.push('—'); // a nameless prompt still needs something clickable
+    }
+    text.replace('&', "&&")
+}
+
+fn tray_item_id(prompt_id: &str) -> String {
+    format!("{TRAY_COPY_PREFIX}{prompt_id}")
+}
+
+// Route a clicked menu id back to a prompt. Anything that is not one of our own
+// quick-copy ids is ignored instead of being looked up.
+fn tray_copy_target(menu_id: &str) -> Option<&str> {
+    match menu_id.strip_prefix(TRAY_COPY_PREFIX) {
+        Some(id) if !id.is_empty() => Some(id),
+        _ => None,
+    }
+}
+
+// The two sections as (menu id, label) pairs: recent newest-first, favourites
+// alphabetical. Pure, so ordering, the caps and the truncation stay testable —
+// the menu API itself cannot be.
+fn tray_sections(
+    prompts: &[Prompt],
+    last_used: &HashMap<String, u64>,
+    cfg: &TrayCfg,
+) -> (Vec<(String, String)>, Vec<(String, String)>) {
+    let entry = |p: &Prompt| (tray_item_id(&p.id), tray_label(&p.name));
+    let mut recent = Vec::new();
+    if cfg.recent {
+        let mut used: Vec<(&Prompt, u64)> = prompts
+            .iter()
+            .filter_map(|p| last_used.get(&p.id).map(|ts| (p, *ts)))
+            .collect();
+        // Same second for two prompts: fall back to the name so the order is stable.
+        used.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.name.cmp(&b.0.name)));
+        used.truncate(cfg.recent_n);
+        recent = used.into_iter().map(|(p, _)| entry(p)).collect();
+    }
+    let mut favs = Vec::new();
+    if cfg.favs {
+        let mut starred: Vec<&Prompt> = prompts.iter().filter(|p| p.favorite).collect();
+        starred.sort_by_key(|p| (p.name.to_lowercase(), p.id.clone()));
+        starred.truncate(cfg.fav_n);
+        favs = starred.into_iter().map(entry).collect();
+    }
+    (recent, favs)
+}
+
+// One labelled section: a disabled header, the entries, a separator.
+fn push_tray_section(
+    app: &AppHandle,
+    items: &mut Vec<Box<dyn IsMenuItem<tauri::Wry>>>,
+    head_id: &str,
+    title: &str,
+    entries: &[(String, String)],
+) {
+    if entries.is_empty() {
+        return;
+    }
+    if let Ok(head) = MenuItem::with_id(app, head_id, title, false, None::<&str>) {
+        items.push(Box::new(head));
+    }
+    for (id, label) in entries {
+        if let Ok(item) = MenuItem::with_id(app, id.as_str(), label.as_str(), true, None::<&str>) {
+            items.push(Box::new(item));
+        }
+    }
+    if let Ok(sep) = PredefinedMenuItem::separator(app) {
+        items.push(Box::new(sep));
+    }
+}
+
+// Build the tray menu from the current store and install it. The store lock is
+// dropped before the first menu call — building a menu while holding it is the
+// classic deadlock shape here.
+fn apply_tray_menu(app: &AppHandle) {
+    let (lang, recent, favs) = match app.try_state::<Db>() {
+        Some(state) => {
+            let store = lock(&state);
+            let cfg = tray_cfg(&store.settings);
+            let (recent, favs) = tray_sections(&store.prompts, &store.settings.last_used, &cfg);
+            (resolve_lang(&store.settings.language), recent, favs)
+        }
+        None => return,
+    };
+    TRAY_EXTRAS.store(!recent.is_empty() || !favs.is_empty(), Ordering::SeqCst);
+    let (open_label, quit_label) = tray_labels(lang);
+    let (recent_title, favs_title) = tray_section_labels(lang);
+    let mut items: Vec<Box<dyn IsMenuItem<tauri::Wry>>> = Vec::new();
+    push_tray_section(app, &mut items, "tray-head-recent", recent_title, &recent);
+    push_tray_section(app, &mut items, "tray-head-favs", favs_title, &favs);
+    let (Ok(show), Ok(quit)) = (
+        MenuItem::with_id(app, "show", open_label, true, None::<&str>),
+        MenuItem::with_id(app, "quit", quit_label, true, None::<&str>),
+    ) else {
+        return;
+    };
+    items.push(Box::new(show));
+    items.push(Box::new(quit));
+    let refs: Vec<&dyn IsMenuItem<tauri::Wry>> = items.iter().map(|b| b.as_ref()).collect();
+    if let (Some(tray), Ok(menu)) = (app.tray_by_id("tray"), Menu::with_items(app, &refs)) {
+        let _ = tray.set_menu(Some(menu));
+    }
+}
+
+// A tray menu is static, so anything that changes prompts, stars or usage has to
+// rebuild it. Bursts (a batch action, an import, a run of copies) are collected
+// into a single rebuild off the UI thread; with both features off and no entries
+// installed there is nothing to do at all.
+fn rebuild_tray(app: &AppHandle) {
+    let wanted = match app.try_state::<Db>() {
+        Some(state) => {
+            let cfg = tray_cfg(&lock(&state).settings);
+            cfg.recent || cfg.favs
+        }
+        None => false,
+    };
+    if !wanted && !TRAY_EXTRAS.load(Ordering::SeqCst) {
+        return; // the legacy menu is already what the settings ask for
+    }
+    if TRAY_PENDING.swap(true, Ordering::SeqCst) {
+        return; // a rebuild is already due and will pick these changes up
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(TRAY_DEBOUNCE_MS));
+        TRAY_PENDING.store(false, Ordering::SeqCst);
+        apply_tray_menu(&app);
+    });
+}
+
+// A tray entry runs the very same activation a tile click does (copy, usage,
+// chains, placeholder dialog) — but never the hotkey auto-paste: the click leaves
+// the tray in the foreground, so there is no text field to paste into.
+fn fire_tray_copy(app: &AppHandle, id: &str) {
+    let _ = app.emit_to("main", "prompt-tray-copy", id.to_string());
 }
 
 // ---------- Data model ----------
@@ -596,6 +781,34 @@ fn tray_labels(lang: &str) -> (&'static str, &'static str) {
         "sv" => ("Öppna", "Avsluta"),
         "ro" => ("Deschide", "Ieșire"),
         _ => ("Open", "Quit"),
+    }
+}
+
+// F23: headers of the two tray quick-copy sections. The tray is drawn by the OS,
+// not by the webview, so these live next to the other tray labels instead of in
+// the frontend table.
+fn tray_section_labels(lang: &str) -> (&'static str, &'static str) {
+    match lang {
+        "de" => ("Zuletzt benutzt", "Favoriten"),
+        "es" => ("Usados recientemente", "Favoritos"),
+        "fr" => ("Utilisés récemment", "Favoris"),
+        "it" => ("Usati di recente", "Preferiti"),
+        "pt" => ("Usados recentemente", "Favoritos"),
+        "pl" => ("Ostatnio używane", "Ulubione"),
+        "ru" => ("Недавние", "Избранное"),
+        "zh" => ("最近使用", "收藏"),
+        "ja" => ("最近使ったもの", "お気に入り"),
+        "nl" => ("Onlangs gebruikt", "Favorieten"),
+        "tr" => ("Son kullanılanlar", "Favoriler"),
+        "ko" => ("최근 사용", "즐겨찾기"),
+        "hi" => ("हाल में उपयोग किए गए", "पसंदीदा"),
+        "id" => ("Baru digunakan", "Favorit"),
+        "vi" => ("Dùng gần đây", "Yêu thích"),
+        "cs" => ("Naposledy použité", "Oblíbené"),
+        "uk" => ("Нещодавні", "Обране"),
+        "sv" => ("Senast använda", "Favoriter"),
+        "ro" => ("Utilizate recent", "Favorite"),
+        _ => ("Recently used", "Favorites"),
     }
 }
 
@@ -1949,6 +2162,7 @@ async fn add_prompt(
         save_settings(&app, &store.settings);
         prompt
     };
+    rebuild_tray(&app); // F23
     // F20: arm the new accelerator. The re-arm drops one the OS refuses, so the
     // caller is handed the stored state, not the state before arming.
     if !prompt.hotkey.is_empty() {
@@ -2064,6 +2278,7 @@ async fn update_prompt(
     };
     if let Some(p) = &updated {
         let _ = app.emit("prompt-updated", p.clone());
+        rebuild_tray(&app); // F23: a rename shows up in the tray entries
         // An open pill switches between text pill and image box live.
         if let Some(win) = app.get_webview_window(&flabel(&p.id)) {
             let (w, h) = pill_dims(is_image_prompt(p), scale);
@@ -2106,6 +2321,7 @@ async fn restore_version(app: AppHandle, state: State<'_, Db>, version_id: i64) 
     };
     if let Some(p) = &restored {
         let _ = app.emit("prompt-updated", p.clone());
+        rebuild_tray(&app); // F23
     }
     Ok(restored)
 }
@@ -2113,11 +2329,14 @@ async fn restore_version(app: AppHandle, state: State<'_, Db>, version_id: i64) 
 // Star / unstar a prompt in the library.
 #[tauri::command]
 fn set_favorite(app: AppHandle, state: State<Db>, id: String, favorite: bool) {
-    let mut store = lock(&state);
-    if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
-        p.favorite = favorite;
-        save_prompts(&app, &store);
+    {
+        let mut store = lock(&state);
+        if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
+            p.favorite = favorite;
+            save_prompts(&app, &store);
+        }
     }
+    rebuild_tray(&app); // F23: the favourites section follows the stars
 }
 
 // Async: keeps the prompt-table rewrite off the UI thread.
@@ -2147,6 +2366,7 @@ async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Resu
     };
     if changed {
         rearm_hotkeys(&app); // F20: a deleted prompt gives its accelerator back
+        rebuild_tray(&app); // F23
     }
     Ok(changed)
 }
@@ -2249,6 +2469,7 @@ async fn batch_prompts(
     if action == "delete" {
         rearm_hotkeys(&app); // F20: the deleted prompts give their accelerators back
     }
+    rebuild_tray(&app); // F23: one rebuild for the whole batch, not one per prompt
     Ok(settings)
 }
 
@@ -2281,6 +2502,7 @@ async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Result<(), Str
         }
     }
     rearm_hotkeys(&app); // F20: no prompts left to keep accelerators bound
+    rebuild_tray(&app); // F23: nothing left to offer in the tray either
     Ok(())
 }
 
@@ -2384,17 +2606,7 @@ fn set_language(app: AppHandle, state: State<Db>, lang: String) {
         resolved
     };
     // Live updates without a restart: tray menu + floating pills.
-    let (open_label, quit_label) = tray_labels(resolved);
-    if let Some(tray) = app.tray_by_id("tray") {
-        if let (Ok(show), Ok(quit)) = (
-            MenuItem::with_id(&app, "show", open_label, true, None::<&str>),
-            MenuItem::with_id(&app, "quit", quit_label, true, None::<&str>),
-        ) {
-            if let Ok(menu) = Menu::with_items(&app, &[&show, &quit]) {
-                let _ = tray.set_menu(Some(menu));
-            }
-        }
-    }
+    apply_tray_menu(&app);
     let _ = app.emit("language-changed", resolved);
 }
 
@@ -3763,6 +3975,7 @@ async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String) -> Result
         }
         let _ = db_append_copy(&conn, &entry, cap, cutoff);
     }
+    rebuild_tray(&app); // F23: the "recently used" section follows every copy
     Ok(())
 }
 
@@ -3778,6 +3991,7 @@ async fn clear_copy_history(app: AppHandle, state: State<'_, Db>) -> Result<(), 
     if let Some(conn) = db_conn(&app) {
         let _ = conn.execute("DELETE FROM copy_log", []);
     }
+    rebuild_tray(&app); // F23: a wiped history empties the "recently used" section
     Ok(())
 }
 
@@ -5540,6 +5754,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
     let is_capture = key == CAPTURE_FLAG_KEY;
     let is_clip = key == "clipWatcher"; // F21
     let is_hotkeys = key == "promptHotkeys"; // F20
+    let is_tray = key == "trayRecent" || key == "trayFavs"; // F23
     {
         let mut store = lock(&state);
         store.settings.ui_flags.insert(key, enabled);
@@ -5566,14 +5781,24 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
     if is_hotkeys {
         rearm_hotkeys(&app);
     }
+    // F23: switching a section on or off redraws the tray menu.
+    if is_tray {
+        apply_tray_menu(&app);
+    }
 }
 
 // Set an expert numeric value (CSS var / behaviour tweak).
 #[tauri::command]
 fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
-    let mut store = lock(&state);
-    store.settings.ui_values.insert(key, value);
-    save_settings(&app, &store.settings);
+    let is_tray = key == "trayRecentN" || key == "trayFavN"; // F23
+    {
+        let mut store = lock(&state);
+        store.settings.ui_values.insert(key, value);
+        save_settings(&app, &store.settings);
+    }
+    if is_tray {
+        rebuild_tray(&app); // dragging a slider must not rebuild on every step
+    }
 }
 
 // Set an expert string option (e.g. the copy-feedback font key).
@@ -5599,6 +5824,7 @@ fn reset_expert(app: AppHandle, state: State<Db>) {
     for (_label, win) in app.webview_windows() {
         set_capture_exclusion(&win, true);
     }
+    apply_tray_menu(&app); // F23: the tray sections fall back to their defaults too
 }
 
 // Add a version to the skip list — it will not be offered again.
@@ -6289,6 +6515,7 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>) -> Result<usize, S
     let settings = store.settings.clone();
     drop(store);
     push_theme(&app, &settings);
+    rebuild_tray(&app); // F23
     Ok(count)
 }
 
@@ -6553,6 +6780,7 @@ async fn import_all(
     // Re-apply the visible parts of the imported settings without a restart.
     push_theme(&app, &settings);
     rearm_hotkeys(&app);
+    apply_tray_menu(&app); // F23: an import can bring new tray settings with it
     Ok(ImportSummary {
         name: path
             .file_name()
@@ -7011,7 +7239,13 @@ pub fn run() {
                         }
                         app.exit(0);
                     }
-                    _ => {}
+                    // F23: a quick-copy entry. Unknown ids (section headers, leftovers
+                    // from an older menu) fall through without a lookup.
+                    other => {
+                        if let Some(id) = tray_copy_target(other) {
+                            fire_tray_copy(app, id);
+                        }
+                    }
                 })
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click {
@@ -7027,6 +7261,7 @@ pub fn run() {
                 tray = tray.icon(icon.clone());
             }
             tray.build(app)?;
+            apply_tray_menu(&handle); // F23: adds the quick-copy sections if they are on
 
             // Re-apply autostart so the registry entry tracks the exe location.
             if autostart {
@@ -8078,5 +8313,131 @@ mod tests {
         assert_eq!(clamp_font_size(1), 1);
         assert_eq!(clamp_font_size(8), 10);
         assert_eq!(clamp_font_size(99), 40);
+    }
+
+    // ---- F23 tray quick menu ----
+
+    fn tray_prompt(id: &str, name: &str, favorite: bool) -> Prompt {
+        let mut p = sample_prompts().remove(1);
+        p.id = id.into();
+        p.name = name.into();
+        p.favorite = favorite;
+        p.hotkey = String::new();
+        p
+    }
+
+    fn tray_all_on(recent_n: usize, fav_n: usize) -> TrayCfg {
+        TrayCfg { recent: true, recent_n, favs: true, fav_n }
+    }
+
+    #[test]
+    fn tray_settings_default_to_recent_only() {
+        let cfg = tray_cfg(&Settings::default());
+        assert!(cfg.recent, "the recent section ships on");
+        assert!(!cfg.favs, "the favourites section ships off");
+        assert_eq!(cfg.recent_n, 5);
+        assert_eq!(cfg.fav_n, 10);
+
+        // Both features off = today's menu exactly, no entries at all.
+        let mut s = Settings::default();
+        s.ui_flags.insert("trayRecent".into(), false);
+        let off = tray_cfg(&s);
+        assert!(!off.recent && !off.favs);
+        let prompts = vec![tray_prompt("a", "A", true)];
+        let mut used = HashMap::new();
+        used.insert("a".to_string(), 10u64);
+        let (recent, favs) = tray_sections(&prompts, &used, &off);
+        assert!(recent.is_empty() && favs.is_empty());
+    }
+
+    #[test]
+    fn tray_counts_are_clamped_to_the_slider_range() {
+        let mut s = Settings::default();
+        s.ui_values.insert("trayRecentN".into(), 999.0);
+        s.ui_values.insert("trayFavN".into(), 0.0);
+        let cfg = tray_cfg(&s);
+        assert_eq!(cfg.recent_n, 10);
+        assert_eq!(cfg.fav_n, 1);
+    }
+
+    #[test]
+    fn tray_recent_is_newest_first_and_capped() {
+        let prompts = vec![
+            tray_prompt("p1", "One", false),
+            tray_prompt("p2", "Two", false),
+            tray_prompt("p3", "Three", false),
+            tray_prompt("p4", "Never copied", false),
+        ];
+        let used: HashMap<String, u64> = [("p1", 100u64), ("p2", 300), ("p3", 200)]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect();
+        let cfg = tray_all_on(2, 10);
+        let (recent, _) = tray_sections(&prompts, &used, &cfg);
+        assert_eq!(
+            recent.iter().map(|(_, l)| l.as_str()).collect::<Vec<_>>(),
+            vec!["Two", "Three"],
+            "newest first, cut at trayRecentN"
+        );
+        // A prompt that was never copied has no entry in last_used and stays out.
+        let (all, _) = tray_sections(&prompts, &used, &tray_all_on(10, 10));
+        assert_eq!(all.len(), 3);
+        assert!(all.iter().all(|(id, _)| id != &tray_item_id("p4")));
+    }
+
+    #[test]
+    fn tray_recent_breaks_ties_by_name() {
+        let prompts = vec![tray_prompt("p1", "Beta", false), tray_prompt("p2", "Alpha", false)];
+        let used: HashMap<String, u64> =
+            [("p1", 50u64), ("p2", 50)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+        let (recent, _) = tray_sections(&prompts, &used, &tray_all_on(10, 10));
+        assert_eq!(recent.iter().map(|(_, l)| l.as_str()).collect::<Vec<_>>(), vec!["Alpha", "Beta"]);
+    }
+
+    #[test]
+    fn tray_favorites_are_alphabetical_and_capped() {
+        let prompts = vec![
+            tray_prompt("p1", "zebra", true),
+            tray_prompt("p2", "Apple", true),
+            tray_prompt("p3", "Middle", true),
+            tray_prompt("p4", "Not starred", false),
+        ];
+        let (_, favs) = tray_sections(&prompts, &HashMap::new(), &tray_all_on(5, 2));
+        assert_eq!(favs.iter().map(|(_, l)| l.as_str()).collect::<Vec<_>>(), vec!["Apple", "Middle"]);
+        let (_, all) = tray_sections(&prompts, &HashMap::new(), &tray_all_on(5, 10));
+        assert_eq!(all.len(), 3, "only starred prompts");
+        assert_eq!(all[2].0, tray_item_id("p1"), "case-insensitive sort puts zebra last");
+    }
+
+    #[test]
+    fn tray_labels_are_cut_by_character_not_by_byte() {
+        // Every char is 3 bytes: a byte cut would split one and panic.
+        let cjk = "字".repeat(80);
+        let cut = tray_label(&cjk);
+        assert_eq!(cut.chars().count(), TRAY_LABEL_MAX);
+        assert!(cut.ends_with('…'));
+        for name in ["Привет мир ".repeat(20), "नमस्ते दुनिया ".repeat(20), "🙂🙃".repeat(60)] {
+            let out = tray_label(&name);
+            assert!(out.chars().count() <= TRAY_LABEL_MAX, "{out:?} is too long");
+            assert!(!out.is_empty());
+        }
+        // Short names pass through untouched.
+        assert_eq!(tray_label("Mail"), "Mail");
+        // Control characters collapse into single spaces, the name never spans lines.
+        assert_eq!(tray_label("a\nb\tc\u{7}d"), "a b c d");
+        // A Win32 menu reads a lone & as a mnemonic marker.
+        assert_eq!(tray_label("R&D"), "R&&D");
+        // A nameless prompt still gets something clickable.
+        assert!(!tray_label("   ").is_empty());
+    }
+
+    #[test]
+    fn tray_menu_ids_round_trip_and_reject_junk() {
+        assert_eq!(tray_copy_target(&tray_item_id("abc123")), Some("abc123"));
+        // A prompt id is opaque, so the parser must not stop at the first separator.
+        assert_eq!(tray_copy_target(&tray_item_id("a:b:c")), Some("a:b:c"));
+        for bad in ["show", "quit", "", "psc", "psc:", "PSC:x", "copy:x", ":x", "tray-head-recent"] {
+            assert_eq!(tray_copy_target(bad), None, "accepted a bad menu id: {bad:?}");
+        }
     }
 }
