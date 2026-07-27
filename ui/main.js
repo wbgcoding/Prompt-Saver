@@ -872,6 +872,7 @@ const OPT_FLAG_LABELS = {
   mdPreview: "flagMdPreview",                   // F14 rendered Markdown preview in the editor
   promptNotes: "flagPromptNotes",               // F17 private notes row in the editor
   promptHotkeyPaste: "flagPromptHotkeyPaste",   // F20 hotkey also pastes into the last app
+  dragOut: "flagDragOut",                       // F22 drag a prompt into another app
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const optFlag = (key) => settings.ui_flags?.[key] === true;
@@ -1046,6 +1047,9 @@ const EXPERT_DROPDOWNS = {
   // F14: preview replaces the textarea, or sits next to it.
   mdPreviewMode: enumDropdown("mdPreviewMode", "valMdPreviewMode",
     [["toggle", "optMdToggle"], ["split", "optMdSplit"]], "toggle", "mdPreview"),
+  // F22: which key turns a press into a drag-out instead of the plain drag.
+  dragOutModifier: enumDropdown("dragOutModifier", "valDragOutModifier",
+    [["ctrl", "keyCtrl"], ["alt", "keyAlt"], ["shift", "keyShift"]], "ctrl", "dragOut"),
   copySize: {
     label: "valCopySize",
     options: () => {
@@ -1088,7 +1092,7 @@ const EXPERT_TABS = [
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
     // and pure looks. One 26-entry blob made everything hard to find.
-    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "copyBubble", "copyFlash", "closeOnCopy", "chainPrompts", "chainLock", "autoPasteEnter", "promptHotkeys", "promptHotkeyPaste"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"] },
+    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragOut", "copyBubble", "copyFlash", "closeOnCopy", "chainPrompts", "chainLock", "autoPasteEnter", "promptHotkeys", "promptHotkeyPaste"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"], dropdowns: ["dragOutModifier"] },
     { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipDelay", "tooltipTimeout"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
     { title: "expGroupTileLook", flags: ["tileHover", "tileHoverLift", "tilePressScale", "tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow"], values: ["hoverLift", "tileRadius", "tileBorderWidth"] },
     { title: "expGroupFavorites", flags: ["favorites", "favViewButton", "favViewReorder"], values: ["favStarSize", "favMaxCols"] },
@@ -1220,7 +1224,7 @@ const EXPERT_TIPS = [
   // Tiles / copying
   "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale",
   "tileReorder", "chainPrompts", "chainLock", "autoPasteEnter", "closeOnCopy",
-  "promptHotkeys", "promptHotkeyPaste",
+  "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutModifier",
   "tooltipDelay", "tooltipTimeout", "iconTooltips",
   // Appearance
   "frostedModals", "accentHeader", "accentScrollbar", "hideScrollbars", "smoothScroll",
@@ -2981,7 +2985,10 @@ function buildTile(p) {
 
   tile.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 || e.target.closest(".tile-menu")) return;
-    drag = { id: p.id, startX: e.clientX, startY: e.clientY, moved: false, el: tile };
+    // F22: with the modifier held the press becomes a drag-out; `out` keeps the
+    // reorder machine out of it while a modifier-click still copies as before.
+    const out = armDragOut(tile, e, () => prompts.find((x) => x.id === p.id));
+    drag = { id: p.id, startX: e.clientX, startY: e.clientY, moved: false, el: tile, out };
   });
 
   // Prompts with an attached file or media icon get a persistent error
@@ -3086,8 +3093,54 @@ function endDragVisuals() {
   setHoverCell(null);
 }
 
+// ---- F22: drag a prompt out into another app ----
+// The webview's own drag-drop handling only replaces the drop TARGET (that is how a
+// file dropped onto the window becomes a prompt); starting a drag is untouched, so a
+// plain HTML5 dragstart is all it takes to hand the prompt to the OS.
+// A modifier is required everywhere because every drag source already owns its plain
+// drag — tiles reorder, library rows get placed on the grid, the pill moves its window.
+const DRAG_OUT_MODS = { ctrl: "ctrlKey", alt: "altKey", shift: "shiftKey" };
+const dragOutMod = () => DRAG_OUT_MODS[txt("dragOutModifier")] || "ctrlKey";
+const dragOutWired = new WeakSet();
+
+// Windows path -> file URI, so a drop target that understands URIs (browsers, most
+// editors) gets a usable reference instead of a bare path string.
+function fileUri(path) {
+  const p = encodeURI(path.replace(/\\/g, "/")).replace(/\?/g, "%3F").replace(/#/g, "%23");
+  return p.startsWith("//") ? `file:${p}` : `file:///${p}`;
+}
+
+// What lands in the drop target. Placeholders stay as written: resolving them needs
+// the fill-in dialog, and no dialog can open while the OS drag loop holds the pointer.
+const dragOutText = (p) => (p.file_path || p.text || "");
+
+// Called on pointerdown. Returns true when this press should become a drag-out;
+// the caller then leaves the plain drag alone.
+function armDragOut(el, e, getPrompt) {
+  const on = optFlag("dragOut") && e[dragOutMod()] === true;
+  el.draggable = on;
+  if (on && !dragOutWired.has(el)) {
+    dragOutWired.add(el);
+    el.addEventListener("dragstart", (ev) => startDragOut(ev, getPrompt()));
+    el.addEventListener("dragend", () => { el.draggable = false; });
+  }
+  return on;
+}
+
+function startDragOut(e, p) {
+  const text = p ? dragOutText(p) : "";
+  if (!optFlag("dragOut") || !text) { e.preventDefault(); return; }
+  e.dataTransfer.effectAllowed = "copy";
+  e.dataTransfer.setData("text/plain", text);
+  if (p.file_path) e.dataTransfer.setData("text/uri-list", fileUri(p.file_path));
+  // The OS owns the gesture from here — drop the pointer-drag bookkeeping so the
+  // ghost/hover cell of a reorder can never be left behind.
+  drag = null;
+  endDragVisuals();
+}
+
 window.addEventListener("pointermove", (e) => {
-  if (!drag) return;
+  if (!drag || drag.out) return;
   // No reorder while chaining (a click selects) or when reorder is switched off in
   // the expert menu — but always allow finishing a library-placed tile or a
   // favorites-view reorder (reordering favorites is intrinsic to that view).
@@ -6276,7 +6329,8 @@ function renderLibrary() {
     row.addEventListener("pointerdown", (e) => {
       if (libSelectMode) return; // no drag while multi-selecting
       if (e.button !== 0 || e.target.closest(".lib-add, .lib-edit, .lib-fav")) return;
-      drag = { id: p.id, startX: e.clientX, startY: e.clientY, moved: false, el: row, fromLibrary: true };
+      const out = armDragOut(row, e, () => prompts.find((x) => x.id === p.id));
+      drag = { id: p.id, startX: e.clientX, startY: e.clientY, moved: false, el: row, fromLibrary: true, out };
     });
     // Add-to-view icon (leftmost of the action group): place on the current layout.
     if (!placed.has(p.id)) {

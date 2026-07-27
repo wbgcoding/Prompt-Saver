@@ -53,6 +53,12 @@ let apOn = false, apEnter = false, apDelay = 80, apDblMs = 400, lastPillTs = 0;
 let pSize = 0;
 let pCaptionSize = 0; // per-prompt caption size (0 = default, 1 = auto)
 let menuOpen = false;
+// F22 drag-out (default off): the modifier separates "drag the prompt into another
+// app" from the plain drag, which moves this window.
+const DRAG_OUT_MODS = { ctrl: "ctrlKey", alt: "altKey", shift: "shiftKey" };
+let dragOutOn = false, dragOutMod = "ctrlKey";
+let pText = "", pFile = "";
+const dragOutHeld = (e) => dragOutOn && e[dragOutMod] === true;
 
 function applyFont() {
   pill.style.fontFamily = FONTS[pFont || globalFontKey] || FONTS.system;
@@ -183,6 +189,8 @@ async function applySettings() {
   apDelay = Number.isFinite(apd) ? apd : 80;
   const adb = Number(s.ui_values?.dblClickMs);
   apDblMs = Number.isFinite(adb) ? adb : 400;
+  dragOutOn = s.ui_flags?.dragOut === true;
+  dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
   copyFont = s.ui_texts?.copyFont || "";
   document.getElementById("feedback").style.fontFamily = FONTS[copyFont] || "";
   const op = Number(s.ui_values?.floatOpacity);
@@ -368,6 +376,8 @@ function applyPrompt(p) {
     borderW = 0;
   }
   hasFile = !!(p.file_path || p.icon_path);
+  pText = p.text || "";
+  pFile = p.file_path || "";
   pFont = p.font || "";
   pSize = p.font_size || 0;
   pCaptionSize = p.caption_size || 0;
@@ -558,8 +568,27 @@ document.getElementById("menu-remove").addEventListener("click", () => {
 window.addEventListener("mousedown", (e) => {
   if (e.button !== 0) return;
   if (e.target.closest(".menu") || e.target.closest(".rz-catch")) return;
-  drag = { x: e.screenX, y: e.screenY, moved: false };
+  // F22: the modifier hands the press to the OS drag loop instead of moving the
+  // window. A modifier-click that never moves still copies, like any other click.
+  const out = dragOutHeld(e);
+  pill.draggable = out;
+  drag = { x: e.screenX, y: e.screenY, moved: false, out };
 });
+
+// Same payload rules as the main window: raw text, placeholders left as written
+// (a fill-in dialog cannot open while the OS drag loop holds the pointer).
+pill.addEventListener("dragstart", (e) => {
+  const text = pFile || pText;
+  if (!dragOutOn || !text) { e.preventDefault(); return; }
+  e.dataTransfer.effectAllowed = "copy";
+  e.dataTransfer.setData("text/plain", text);
+  if (pFile) {
+    const u = encodeURI(pFile.replace(/\\/g, "/"));
+    e.dataTransfer.setData("text/uri-list", u.startsWith("//") ? `file:${u}` : `file:///${u}`);
+  }
+  drag = null;
+});
+pill.addEventListener("dragend", () => { pill.draggable = false; });
 
 window.addEventListener("mousemove", async (e) => {
   // Lost mouseup (can happen when the OS swallows it after a window drag):
@@ -571,7 +600,7 @@ window.addEventListener("mousemove", async (e) => {
     ensureVideoPlaying();
     return;
   }
-  if (!drag || drag.moved) return;
+  if (!drag || drag.moved || drag.out) return;
   if (Math.abs(e.screenX - drag.x) < DRAG_THRESHOLD &&
       Math.abs(e.screenY - drag.y) < DRAG_THRESHOLD) return;
   drag.moved = true;

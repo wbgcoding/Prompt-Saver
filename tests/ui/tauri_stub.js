@@ -101,6 +101,9 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   // F20: one prompt ships with a bound accelerator so the editor row has something
   // to display; the rest are free, so a capture can be checked against them.
   hotkey: i === 0 ? "CommandOrControl+Shift+9" : "",
+  // F22: one prompt points at a file, so a drag-out can be checked against the path
+  // payload and its file URI instead of the prompt body.
+  file_path: i === 9 ? "C:\\Notes\\brief.txt" : "",
 }));
 
 const LAYOUT = {};

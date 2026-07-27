@@ -646,6 +646,9 @@ body.drag-active .cell.drag-over {
 .tile:active:not(.media-hover) { --tile-press: 0.97; }
 /* No press-scale while dragging, keeps the text steady. */
 .tile.dragging { opacity: 0.25; cursor: grabbing; z-index: 5; transform: none !important; }
+/* F22: an armed drag-out source. The OS draws the drag image itself, so the cursor
+   is the only hint needed — and a cursor keyword carries no colour to clash with a theme. */
+.tile[draggable="true"], .lib-item[draggable="true"] { cursor: copy; }
 
 /* Hover-revealed actions button. */
 .tile-menu {

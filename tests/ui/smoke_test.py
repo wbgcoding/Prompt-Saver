@@ -370,6 +370,127 @@ PROBE = """
       await click('expert-back');
       document.getElementById('settings').classList.add('hidden');
     }
+    // F22: a modifier-held drag hands the prompt to the OS; a plain drag has to stay
+    // the tile reorder it always was, and the switch has to take the whole thing away.
+    const gridTile = (id) => [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === id);
+    const press = (el, opts) => el.dispatchEvent(new PointerEvent('pointerdown', Object.assign(
+      { bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 1, clientX: 20, clientY: 20 }, opts)));
+    // Cancel, not release: a pointerup on a tile would copy and pollute the call log.
+    const abort = () => window.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: 1 }));
+    const fireDragStart = (el) => {
+      const ev = new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() });
+      el.dispatchEvent(ev);
+      return ev;
+    };
+    const setExpertFlag = async (label, on) => {
+      document.getElementById('settings').classList.remove('hidden');
+      await click('expert-open');
+      const row = await expertRow(label);
+      const sw = row && row.querySelector('input.switch');
+      if (sw && sw.checked !== on) { sw.click(); await sleep(250); }
+      const tab0 = document.querySelector('.expert-tab');
+      if (tab0) { tab0.click(); await sleep(150); }
+      await click('expert-back');
+      document.getElementById('settings').classList.add('hidden');
+      return !!row;
+    };
+    const DRAG_OUT = 'Drag prompt into another app';
+    const offTile = gridTile('p1');
+    if (offTile) {
+      // Ships off: the modifier must not arm anything.
+      press(offTile, { ctrlKey: true });
+      if (offTile.draggable) out.errors.push('a tile is drag-out armed although the feature is off');
+      abort();
+      await sleep(100);
+    }
+    if (!await setExpertFlag(DRAG_OUT, true)) {
+      out.errors.push('the drag-out option is missing from the expert menu');
+    } else {
+      // Plain drag: unchanged. The ghost proves the reorder engaged; dropping it on a
+      // free cell has to save the new layout.
+      calls().length = 0;
+      const tile = gridTile('p1');
+      press(tile, {});
+      if (tile.draggable) out.errors.push('a plain press armed a drag-out');
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 300, clientY: 200 }));
+      await sleep(150);
+      if (!document.querySelector('.drag-ghost')) out.errors.push('a plain drag no longer starts the tile reorder');
+      const cell = [...document.querySelectorAll('#grid .cell')].find(c => {
+        const b = c.getBoundingClientRect();
+        return b.width && b.right < innerWidth && b.bottom < innerHeight;
+      });
+      const b = cell && cell.getBoundingClientRect();
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true,
+        clientX: b ? b.left + b.width / 2 : 300, clientY: b ? b.top + b.height / 2 : 200 }));
+      await sleep(350);
+      if (document.querySelector('.drag-ghost')) out.errors.push('the drag ghost outlived the drag');
+      if (cell && !calls().includes('set_layout')) {
+        out.errors.push('a plain drag did not save a new tile position');
+      }
+      // Modifier drag: armed, and the payload is the raw text — placeholders included,
+      // because filling them needs a dialog no drag can open.
+      const varTile2 = gridTile('p1');
+      press(varTile2, { ctrlKey: true });
+      if (!varTile2.draggable) out.errors.push('the modifier did not arm the drag-out');
+      const ev = fireDragStart(varTile2);
+      const dropped = ev.dataTransfer.getData('text/plain');
+      if (dropped !== 'Translate {#{Text}#} into {#{Language}#}.') {
+        out.errors.push('the dragged text is wrong: ' + dropped);
+      }
+      if (document.querySelector('.drag-ghost')) out.errors.push('a drag-out left a reorder ghost behind');
+      // Once the OS owns the gesture a stray pointerup must not ALSO copy the prompt
+      // (p1 asks for placeholders, so a copy would show up as the fill-in dialog).
+      calls().length = 0;
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 20, clientY: 20 }));
+      await sleep(200);
+      if (!document.getElementById('vars-modal').classList.contains('hidden')) {
+        out.errors.push('a drag-out also started a copy');
+        await click('vars-close');
+      }
+      if (calls().includes('copy_prompt')) out.errors.push('a drag-out also copied the prompt');
+      varTile2.dispatchEvent(new DragEvent('dragend', { bubbles: true }));
+      await sleep(100);
+      if (varTile2.draggable) out.errors.push('the tile stayed armed after the drag ended');
+      // A file-backed prompt drops its path plus a URI for targets that read one.
+      const fileTile = gridTile('p9');
+      if (!fileTile) {
+        out.errors.push('the file-backed prompt is missing from the grid');
+      } else {
+        press(fileTile, { ctrlKey: true });
+        const fev = fireDragStart(fileTile);
+        if (fev.dataTransfer.getData('text/plain') !== 'C:\\\\Notes\\\\brief.txt') {
+          out.errors.push('a file prompt did not drop its path: ' + fev.dataTransfer.getData('text/plain'));
+        }
+        if (fev.dataTransfer.getData('text/uri-list') !== 'file:///C:/Notes/brief.txt') {
+          out.errors.push('a file prompt dropped no file URI: ' + fev.dataTransfer.getData('text/uri-list'));
+        }
+        fileTile.dispatchEvent(new DragEvent('dragend', { bubbles: true }));
+      }
+      // The library rows are drag sources too.
+      await click('library-btn');
+      const libRow = document.querySelector('#library-list .lib-item');
+      if (!libRow) {
+        out.errors.push('the library has no row for the drag-out check');
+      } else {
+        press(libRow, { ctrlKey: true });
+        if (!libRow.draggable) out.errors.push('a library row cannot be dragged out');
+        if (!fireDragStart(libRow).dataTransfer.getData('text/plain')) {
+          out.errors.push('a library row dropped no text');
+        }
+        libRow.dispatchEvent(new DragEvent('dragend', { bubbles: true }));
+      }
+      await click('library-close');
+      // Switching it off takes the whole behaviour with it — including on a tile that
+      // is already wired up, which is the only way a stale drag could still fire.
+      await setExpertFlag(DRAG_OUT, false);
+      press(varTile2, { ctrlKey: true });
+      if (varTile2.draggable) out.errors.push('the modifier still arms a drag-out after switching it off');
+      if (!fireDragStart(varTile2).defaultPrevented) {
+        out.errors.push('a drag-out was not refused after switching the feature off');
+      }
+      abort();
+      await sleep(100);
+    }
     // F14/F15: the preview renders every Markdown construct, colours the fenced code
     // blocks, and — the part that matters — shows injected markup as literal text.
     const openEditor = async (id) => {
