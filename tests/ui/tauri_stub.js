@@ -114,13 +114,14 @@ const SETTINGS = {
   window: null, minimize_to_tray: false, autostart: false, start_minimized: false,
   // F20: the app hotkey is set, so a prompt trying to claim it must be refused.
   always_on_top: false, hotkey: "CommandOrControl+Shift+P", auto_update: true, skipped_versions: [],
-  // Tags, custom themes, view groups, the Markdown preview and private notes ship
-  // off; the stub turns them on so the smoke run covers that UI too.
+  // Tags, custom themes, view groups and private notes ship off; the stub turns them
+  // on so the smoke run covers that UI too. The Markdown preview is deliberately NOT
+  // listed — it ships on, and the run proves that.
   // F25 is on too, so the expert menu renders its gated sliders and the folder
   // window has something to draw.
   // F26 is on too, so the pipette shows in the composer bar and its gated expert
   // rows (notation, magnifier zoom) actually render.
-  ui_flags: { tags: true, customThemes: true, viewGroups: true, mdPreview: true, promptNotes: true, pillFolders: true, colorPicker: true },
+  ui_flags: { tags: true, customThemes: true, viewGroups: true, promptNotes: true, pillFolders: true, colorPicker: true },
   ui_values: {}, ui_texts: {}, dup_ignored: [],
   tag_colors: { work: "#3b82f6" },
   custom_themes: [{ id: "ct1", name: "Neon", base: "dark", vars: { accent: "#ff00aa" } }],

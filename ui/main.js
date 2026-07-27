@@ -1,5 +1,5 @@
 // Main-window controller. Uses Tauri's global API (withGlobalTauri).
-import { APP_NAME } from "./brand.js";
+import { APP_NAME, FLAG_DEFAULTS } from "./brand.js";
 import { I18N, LANGS } from "./i18n.js";
 import { FONTS, FONT_LABELS, fitText } from "./fonts.js";
 import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./media.js";
@@ -842,7 +842,9 @@ const FLAG_LABELS = {
   dynVars: "flagDynVars",               // F12 self-filling placeholder names
   choiceVars: "flagChoiceVars",         // F13 {#{name|a,b}#} dropdown variables
   choiceRemember: "flagChoiceRemember", // F13 reopen a choice on its last pick
+  mdPreview: "flagMdPreview",           // F14 rendered Markdown preview in the editor
   codeHighlight: "flagCodeHighlight",   // F15 syntax colours in the preview's code blocks
+  codeAutoDetect: "flagCodeAutoDetect", // F15 render an unfenced code prompt as code
   notesInTooltip: "flagNotesInTooltip", // F17 show the private note in the tile tooltip
   promptHotkeys: "flagPromptHotkeys",   // F20 per-prompt global hotkeys
   trayRecent: "flagTrayRecent",         // F23 "recently used" section in the tray menu
@@ -899,7 +901,6 @@ const OPT_FLAG_LABELS = {
   // their feature is switched off, so the feature can be paused, not hidden.
   pausedIcons: "flagPausedIcons",
   viewGroups: "flagViewGroups",                 // F9 folder tabs for views
-  mdPreview: "flagMdPreview",                   // F14 rendered Markdown preview in the editor
   promptNotes: "flagPromptNotes",               // F17 private notes row in the editor
   promptHotkeyPaste: "flagPromptHotkeyPaste",   // F20 hotkey also pastes into the last app
   dragOut: "flagDragOut",                       // F22 drag a prompt into another app
@@ -908,17 +909,36 @@ const OPT_FLAG_LABELS = {
   colorPicker: "flagColorPicker",               // F26 pipette — pick a screen colour to the clipboard
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
-const optFlag = (key) => settings.ui_flags?.[key] === true;
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
+// A brand may ship a feature the other way round than this app does (see
+// brands/<slug>.json "flagDefaults"). A stored value always wins, so the default
+// only decides what an untouched install starts with.
+const shipsOn = (key) => {
+  const v = FLAG_DEFAULTS[key];
+  return typeof v === "boolean" ? v : !isOptFlag(key);
+};
+const optFlag = (key) => (settings.ui_flags?.[key] ?? shipsOn(key)) === true;
 // Current state + label key, whichever kind of flag this is.
 const flagState = (key) => (isOptFlag(key) ? optFlag(key) : flag(key));
 const flagLabelKey = (key) => OPT_FLAG_LABELS[key] || FLAG_LABELS[key];
-// A value/select/dropdown may declare `gate: "flagKey"` (or "!flagKey" to invert)
-// so its row hides while that feature is off — no dead sliders for disabled things.
-const gateOpen = (gate) => {
+// A setting may declare `gate: "flagKey"` (or "!flagKey" to invert) so its row hides
+// while that feature is off — no dead controls for disabled things. Values, selects,
+// dropdowns and paths carry it in their definition; a flag carries it in the group's
+// `flags` list, written as { key, gate } instead of a bare key.
+const flagEntry = (f) => (typeof f === "string" ? { key: f } : f);
+const groupFlags = (group) => (group.flags || []).map(flagEntry);
+// A sub-toggle counts as off while its own parent is off, so everything hanging off
+// it disappears with the whole branch instead of surviving as an orphan row.
+const gateOpen = (gate, seen) => {
   if (!gate) return true;
   const inv = gate[0] === "!";
-  const on = flagState(inv ? gate.slice(1) : gate);
+  const key = inv ? gate.slice(1) : gate;
+  let on = flagState(key);
+  const guard = seen || new Set();
+  if (on && !guard.has(key)) {
+    guard.add(key);
+    on = gateOpen(FLAG_GATES[key], guard);
+  }
   return inv ? !on : on;
 };
 
@@ -995,7 +1015,7 @@ const EXPERT_VALUES = {
   headerPadY: { label: "valHeaderPadY", min: 2, max: 30, step: 1, def: 10, unit: "px" },
   snipPreviewVh: { label: "valSnipPreviewVh", min: 30, max: 92, step: 1, def: 74, unit: "%", gate: "screenshot" },
   // Scrollbar thickness across every dialog (thumb keeps its 3px inset border).
-  scrollbarWidth: { label: "valScrollbarWidth", min: 8, max: 20, step: 1, def: 12, unit: "px" },
+  scrollbarWidth: { label: "valScrollbarWidth", min: 8, max: 20, step: 1, def: 12, unit: "px", gate: "!hideScrollbars" },
   // Frosted-glass dialog background blur (paired with the frostedModals toggle).
   frostedBlur: { label: "valFrostedBlur", min: 0, max: 20, step: 1, def: 4, unit: "px", gate: "frostedModals" },
   // Privacy blur strength (each paired with its "blur until hover" toggle).
@@ -1130,25 +1150,25 @@ const EXPERT_TABS = [
   { title: "expTabGeneral", groups: [
     // F26 sits with the screenshot tool: both are composer-bar capture tools, and
     // its two parameters are gated on its own toggle.
-    { title: "expGroupCreate", flags: ["fileAttach", "screenshot", "pasteMedia", "dragDrop", "colorPicker", "promptVars", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "lengthCounter", "promptHistory", "promptNotes", "notesInTooltip", "storeFiles", "editorMonospace"], values: ["snipPreviewVh", "historyPerPrompt", "notesTipLen", "loupeZoom"], dropdowns: ["counterUnits", "dateStyle", "timeStyle", "pickerFormat"], paths: ["screenshotDir"] },
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", "pasteMedia", "dragDrop", "colorPicker", "promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, "lengthCounter", "promptHistory", "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace"], values: ["snipPreviewVh", "historyPerPrompt", "notesTipLen", "loupeZoom"], dropdowns: ["counterUnits", "dateStyle", "timeStyle", "pickerFormat"], paths: ["screenshotDir"] },
     // F14/F15 belong together: the highlighter only ever paints inside the preview.
-    { title: "expGroupPreview", flags: ["mdPreview", "codeHighlight"], values: ["hlFontPx"], dropdowns: ["mdPreviewMode"] },
-    { title: "expGroupWorkspace", flags: ["floating", "pillFolders", "keyboardNav", "headerSeparators", "dimToolbar"], values: ["floatOpacity", "pillMergeRadius", "folderGridCols", "kbFocusFadeMs"] },
+    { title: "expGroupPreview", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }], values: ["hlFontPx"], dropdowns: ["mdPreviewMode"] },
+    { title: "expGroupWorkspace", flags: ["floating", { key: "pillFolders", gate: "floating" }, "keyboardNav", "headerSeparators", "dimToolbar"], values: ["floatOpacity", "pillMergeRadius", "folderGridCols", "kbFocusFadeMs"] },
     // F23: the quick-copy sections of the tray menu, each with its own entry count.
     { title: "expGroupTray", flags: ["trayRecent", "trayFavs"], values: ["trayRecentN", "trayFavN"] },
-    { title: "expGroupSystem", flags: ["showUpdates", "checkUpdateOnStart"] },
+    { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }] },
   ] },
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
     // and pure looks. One 26-entry blob made everything hard to find.
-    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragOut", "copyBubble", "copyFlash", "closeOnCopy", "chainPrompts", "chainLock", "autoPasteEnter", "promptHotkeys", "promptHotkeyPaste"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"], dropdowns: ["dragOutModifier"] },
+    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragOut", "copyBubble", "copyFlash", "closeOnCopy", "chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "autoPasteEnter", gate: "autoPaste" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"], dropdowns: ["dragOutModifier"] },
     { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipDelay", "tooltipTimeout"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
-    { title: "expGroupTileLook", flags: ["tileHover", "tileHoverLift", "tilePressScale", "tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow"], values: ["hoverLift", "tileRadius", "tileBorderWidth"] },
-    { title: "expGroupFavorites", flags: ["favorites", "favViewButton", "favViewReorder"], values: ["favStarSize", "favMaxCols"] },
+    { title: "expGroupTileLook", flags: ["tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale", "tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow"], values: ["hoverLift", "tileRadius", "tileBorderWidth"] },
+    { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
   ] },
   { title: "expTabAppearance", groups: [
     { title: "expGroupScale", values: ["uiScale", "modalScale", "composerScale", "iconScale", "primaryScale"] },
-    { title: "expGroupVisual", flags: ["animations", "accentHeader", "hideScrollbars", "accentScrollbar", "smoothScroll", "frostedModals"], values: ["animSpeed", "gridGap", "gridPad", "headerPadY", "modalRadius", "overlayDim", "scrollbarWidth", "frostedBlur"], dropdowns: ["copySize", "copyFont"] },
+    { title: "expGroupVisual", flags: ["animations", "accentHeader", "hideScrollbars", { key: "accentScrollbar", gate: "!hideScrollbars" }, "smoothScroll", "frostedModals"], values: ["animSpeed", "gridGap", "gridPad", "headerPadY", "modalRadius", "overlayDim", "scrollbarWidth", "frostedBlur"], dropdowns: ["copySize", "copyFont"] },
     { title: "expGroupColors", flags: ["customThemes"], values: ["customThemeMax"], palette: true },
     { title: "expGroupLimits", values: ["maxViews", "gridMax", "previewLen", "nameMaxLen", "bubbleMs", "toastMs"] },
   ] },
@@ -1164,14 +1184,23 @@ const EXPERT_TABS = [
   ] },
   { title: "expTabTools", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
-    { title: "expGroupToolbar", flags: ["multiView", "viewGroups", "quickGrid", "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons"], values: ["viewBorder", "viewGroupMaxRows"] },
-    { title: "expGroupData", flags: ["dupFinder", "dupImportCheck", "autoBackupBeforeWipe", "cleanupFiles", "importExport"], values: ["dupThreshold"], paths: ["dataDir"],
+    { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, "quickGrid", "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons"], values: ["viewBorder", "viewGroupMaxRows"] },
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "autoBackupBeforeWipe", "importExport"], values: ["dupThreshold"], paths: ["dataDir"],
       actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }] },
     { title: "expGroupClipboard", flags: ["clipWatcher"], values: ["clipMinChars", "clipInboxMax"] },
   ] },
 ];
 
-const flag = (key) => settings.ui_flags?.[key] !== false;
+// Sub-toggle -> the feature it belongs to, collected from the group lists above so a
+// gate is declared in exactly one place. gateOpen() walks it, which is what makes a
+// whole branch (feature -> sub-toggle -> its sliders) vanish together.
+const FLAG_GATES = Object.fromEntries(
+  EXPERT_TABS.flatMap((tab) => tab.groups.flatMap(groupFlags))
+    .filter((f) => f.gate)
+    .map((f) => [f.key, f.gate])
+);
+
+const flag = (key) => (settings.ui_flags?.[key] ?? shipsOn(key)) !== false;
 const val = (key) => {
   const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key]; // selects live in ui_values too
   const raw = settings.ui_values?.[key];
@@ -1267,7 +1296,7 @@ const EXPERT_TIPS = [
   "storeFiles", "varDefaults", "dynVars", "choiceVars", "choiceRemember",
   "lengthCounter", "promptHistory", "editorMonospace",
   "promptNotes", "notesInTooltip", "notesTipLen",
-  "mdPreview", "mdPreviewMode", "codeHighlight", "hlFontPx",
+  "mdPreview", "mdPreviewMode", "codeHighlight", "codeAutoDetect", "hlFontPx",
   "colorPicker", "pickerFormat", "loupeZoom",
   "trayRecent", "trayFavs", "trayRecentN", "trayFavN",
   "checkUpdateOnStart", "showUpdates", "importExport", "dimToolbar", "keyboardNav",
@@ -1318,9 +1347,10 @@ function flagRow(key) {
   withTip(row, key);
   const span = document.createElement("span");
   span.textContent = t(flagLabelKey(key));
-  // Features that ship OFF by default (opt-in flags) get a "(Standard Aus)" tag so it's
-  // clear at a glance which settings are additions beyond the standard configuration.
-  if (OPT_FLAG_KEYS.includes(key)) span.textContent += ` ${t("defaultOff")}`;
+  // Features that ship OFF get a "(Standard Aus)" tag so it's clear at a glance which
+  // settings are additions beyond the standard configuration. Read from the shipped
+  // default, so a brand that turns a feature off is labelled correctly too.
+  if (!shipsOn(key)) span.textContent += ` ${t("defaultOff")}`;
   const input = document.createElement("input");
   input.type = "checkbox";
   input.className = "switch";
@@ -1648,6 +1678,7 @@ const EXPERT_DEFS = { values: EXPERT_VALUES, selects: EXPERT_SELECTS, dropdowns:
 const GATING_FLAGS = new Set(
   [
     ...Object.values(EXPERT_DEFS).flatMap((defs) => Object.values(defs).map((d) => d.gate)),
+    ...Object.values(FLAG_GATES),
     ...EXPERT_TABS.flatMap((tab) => tab.groups.flatMap((g) => (g.actions || []).map((a) => a.gate))),
   ].filter(Boolean).map((g) => g.replace(/^!/, ""))
 );
@@ -1713,18 +1744,21 @@ function renderExpert() {
   for (const tab of tabs) {
     for (const group of tab.groups) {
       const groupHit = searching && i18nHit(group.title, q);
+      // A row whose gating feature is off is dropped in every mode, search included:
+      // a setting the user cannot act on has no business being on screen.
       const keep = (kind) => (group[kind] || []).filter((k) => {
-        if (searching) return groupHit || i18nHit(EXPERT_LABEL_KEYS[kind](k), q);
-        // Not searching: drop a row whose gating feature is currently off.
-        return gateOpen(EXPERT_DEFS[kind]?.[k]?.gate);
+        if (!gateOpen(EXPERT_DEFS[kind]?.[k]?.gate)) return false;
+        return !searching || groupHit || i18nHit(EXPERT_LABEL_KEYS[kind](k), q);
       });
-      const flags = keep("flags");
+      const flags = groupFlags(group)
+        .filter((f) => gateOpen(f.gate) && (!searching || groupHit || i18nHit(flagLabelKey(f.key), q)))
+        .map((f) => f.key);
       const values = keep("values");
       const selects = keep("selects");
       const dropdowns = keep("dropdowns");
       const paths = keep("paths");
       const palette = group.palette && (!searching || groupHit || i18nHit("expGroupColors", q));
-      const actions = (group.actions || []).filter((a) => searching ? (groupHit || i18nHit(a.label, q)) : gateOpen(a.gate));
+      const actions = (group.actions || []).filter((a) => gateOpen(a.gate) && (!searching || groupHit || i18nHit(a.label, q)));
       if (searching && !flags.length && !values.length && !selects.length && !dropdowns.length && !paths.length && !palette && !actions.length) continue;
       shown++;
       // Categories collapse on click (persisted); searching always shows them.
@@ -1746,26 +1780,25 @@ function renderExpert() {
         for (const key of values) sec.appendChild(valueRow(key));
         for (const key of selects) sec.appendChild(selectRow(key));
       } else {
-        // A param whose gate names a toggle in THIS group renders right beneath that
-        // toggle (and vanishes with it), so a feature and its sub-settings stay together.
+        // A setting whose gate names a toggle in THIS group renders right beneath that
+        // toggle (and vanishes with it), so a feature and everything hanging off it stay
+        // together — sub-toggles included, nested as deep as the gates go.
+        const shownFlags = new Set(flags);
         const ownerIn = (kind, k) => {
-          const g = EXPERT_DEFS[kind]?.[k]?.gate;
-          return g && g[0] !== "!" && (group.flags || []).includes(g) ? g : null;
+          const g = kind === "flags" ? FLAG_GATES[k] : EXPERT_DEFS[kind]?.[k]?.gate;
+          return g && g[0] !== "!" && g !== k && shownFlags.has(g) ? g : null;
         };
         const owned = {};
-        const orphan = { values: [], selects: [], paths: [] };
-        for (const kind of ["values", "selects", "paths"]) {
-          for (const k of { values, selects, paths }[kind]) {
+        const top = [];
+        for (const kind of ["flags", "values", "selects", "paths"]) {
+          for (const k of { flags, values, selects, paths }[kind]) {
             const o = ownerIn(kind, k);
-            (o ? (owned[o] ||= []) : orphan[kind]).push([kind, k]);
+            (o ? (owned[o] ||= []) : top).push([kind, k]);
           }
         }
-        const ROW = { selects: selectRow, paths: pathRow, values: valueRow };
-        const render = ([kind, k]) => sec.appendChild(ROW[kind](k));
-        for (const key of flags) { sec.appendChild(flagRow(key)); (owned[key] || []).forEach(render); }
-        orphan.values.forEach(render);
-        orphan.selects.forEach(render);
-        orphan.paths.forEach(render);
+        const ROW = { flags: flagRow, selects: selectRow, paths: pathRow, values: valueRow };
+        const render = ([kind, k]) => { sec.appendChild(ROW[kind](k)); (owned[k] || []).forEach(render); };
+        top.forEach(render);
       }
       if (dropdowns.length) {
         const pair = document.createElement("div");
@@ -4250,7 +4283,62 @@ function mdInline(s) {
   return out + s.slice(last);
 }
 
+// ---- Code detection: a prompt that is plainly source code should look like code ----
+// Markdown rules would eat its punctuation (a leading "-", "#" or "*" turns into a
+// list, a heading or italics), so such a prompt is rendered as one highlighted block.
+// The heuristic keys on three things, all cheap:
+//   1. a language cue — a construct only that language writes (fn/def/SELECT/<tag>),
+//   2. shape — most non-empty lines end in code punctuation or are indented,
+//   3. no prose — not a single line reads like a sentence in running text.
+// A cue marked strong stands on its own (a shebang, a whole JSON document, an SQL
+// statement in the usual upper case) and skips the shape test, which those write too
+// few punctuated line ends to pass; every other cue needs the shape as well.
+// Markdown structure (a list, a quote, a fence) vetoes the whole thing, and so does a
+// single line: when in doubt this returns "" and the text stays ordinary Markdown.
+const CODE_CUES = [
+  ["json", /^\s*\{[\s\S]*"[^"\n]*"\s*:[\s\S]*\}\s*$|^\s*\[\s*[{["\d-][\s\S]*\]\s*$/, true],
+  ["bash", /^\s*#!\/\S/, true],
+  ["sql", /\bSELECT\b[\s\S]*\bFROM\b|\bINSERT\s+INTO\b|\bCREATE\s+TABLE\b|\bUPDATE\b[\s\S]*\bSET\b/, true],
+  ["html", /<\/[a-z][\w-]*>|<[a-z][\w-]*(?:\s[^<>]*)?\/>/i, false],
+  ["css", /(?:^|\n)[^\n{}]{1,80}\{[^}]*[\w-]+\s*:[^;}]+;/, false],
+  ["py", /(?:^|\n)[ \t]*(?:def\s+\w+\s*\(|class\s+\w+\s*[:(]|from\s+[\w.]+\s+import\b|import\s+\w+\s*$)/m, false],
+  ["rust", /\b(?:fn\s+\w+\s*[(<]|let\s+mut\s+\w+|impl\s+\w+|pub\s+(?:fn|struct|enum)\b|use\s+[\w:]+;)/, false],
+  ["js", /\b(?:function\s*\w*\s*\(|=>\s*[{(]|(?:const|let|var)\s+\w+\s*=|console\.\w+\(|export\s+(?:default|const|function)\b)/, false],
+  ["bash", /(?:^|\n)\s*(?:sudo|apt|npm|npx|git|curl|docker|chmod)\s+\S/, false],
+];
+// Markdown a code block would never contain. "#" is missing on purpose: it is a
+// comment in half the languages here and would veto every commented snippet.
+const MD_STRUCTURE = /^\s{0,3}(?:[-*+]\s|\d{1,9}[.)]\s|>\s|```|~~~|\|)/m;
+// A line that carries code punctuation where prose never would.
+const CODE_LINE = /[;{}([,:=]\s*$|^\s*(?:[}\])]|\/\/|\/\*|#|--|<\/|["'`])/;
+// Five or more words ending in a full stop, with no code punctuation: running prose.
+const PROSE_LINE = /^[^;{}=<>|]*\s\S+\s\S+\s\S+\s\S+[^;{}=<>|]*[.!?:]$/;
+
+function detectCodeLang(text) {
+  const s = text.trim();
+  // The highlighter's own ceiling: past it a block renders plain anyway.
+  if (!s || s.length > HL_MAX_CHARS || MD_STRUCTURE.test(s)) return "";
+  const lines = s.split("\n").filter((l) => l.trim());
+  if (lines.length < 2) return "";
+  const cue = CODE_CUES.find(([, re]) => re.test(s));
+  if (!cue) return "";
+  if (!cue[2]) {
+    const shaped = lines.filter((l) => CODE_LINE.test(l.trim()) || /^(?: {2,}|\t)/.test(l)).length;
+    if (shaped * 2 < lines.length) return "";
+  }
+  if (lines.some((l) => PROSE_LINE.test(l.trim()))) return "";
+  return cue[0];
+}
+
 function renderMarkdown(text) {
+  // An unfenced code prompt is one block, not Markdown — see detectCodeLang.
+  if (flag("codeAutoDetect")) {
+    const lang = detectCodeLang(text);
+    if (lang) {
+      const esc = mdEsc(text.replace(/\r\n?/g, "\n"));
+      return `<pre class="md-code"><code>${flag("codeHighlight") ? hlCode(esc, lang) : esc}</code></pre>`;
+    }
+  }
   const cut = text.length > MD_MAX_CHARS;
   const src = mdEsc((cut ? text.slice(0, MD_MAX_CHARS) : text).replace(/\r\n?/g, "\n"));
   const lines = src.split("\n");
@@ -4304,14 +4392,13 @@ function renderMarkdown(text) {
 
 // Preview state: true = the rendered pane stands in for the textarea (toggle layout).
 let mdPreviewOn = false;
-let mdRaf = 0;
 let mdTimer = 0;
 let mdLastText = null;
 const mdSplit = () => (txt("mdPreviewMode") || "toggle") === "split";
 
 function renderMdPreview(force) {
   const box = modal.mdPreview;
-  if (!box || box.classList.contains("hidden")) return;
+  if (!box) return;
   const s = modal.text.value;
   if (!force && s === mdLastText) return;
   mdLastText = s;
@@ -4320,22 +4407,19 @@ function renderMdPreview(force) {
   box.innerHTML = renderMarkdown(s);
 }
 function scheduleMdPreview() {
-  if (mdRaf || modal.mdPreview.classList.contains("hidden")) return;
-  // rAF paces the re-render at one per frame while typing; the timer is the safety
-  // net for a window that produces no frames at all, so the pane never goes stale.
-  const run = () => {
-    cancelAnimationFrame(mdRaf);
-    clearTimeout(mdTimer);
-    mdRaf = 0;
-    renderMdPreview();
-  };
-  mdRaf = requestAnimationFrame(run);
-  mdTimer = setTimeout(run, 100);
+  // Nothing to draw into while the pane is hidden — but mark it stale, so the next
+  // time it is shown it is rebuilt from the current text instead of a stale render.
+  if (modal.mdPreview.classList.contains("hidden")) { mdLastText = null; return; }
+  clearTimeout(mdTimer);
+  // A plain timer, deliberately not requestAnimationFrame: a window that paints no
+  // frames (occluded, minimised to the tray, restored from it) never runs a rAF
+  // callback, and the pane would then sit there empty.
+  mdTimer = setTimeout(() => renderMdPreview(), 60);
 }
 
 // Bring toolbar, textarea and preview in line with the flags and the picked layout.
 function syncMdUi(textVisible) {
-  const on = textVisible && optFlag("mdPreview");
+  const on = textVisible && flag("mdPreview");
   const split = on && mdSplit();
   if (!on) mdPreviewOn = false;
   const showPreview = on && (split || mdPreviewOn);
@@ -4345,7 +4429,11 @@ function syncMdUi(textVisible) {
   if (textVisible) modal.text.classList.toggle("hidden", on && !split && mdPreviewOn);
   modal.mdToggle.setAttribute("aria-pressed", String(mdPreviewOn));
   modal.mdToggleLabel.textContent = t(mdPreviewOn ? "mdEditBtn" : "mdPreviewBtn");
-  if (showPreview) renderMdPreview(true);
+  // Fill the pane whenever the feature is on, visible or not: the first paint must
+  // never depend on the pane already being on screen, or switching to it shows a
+  // blank box until the next keystroke.
+  clearTimeout(mdTimer);
+  if (on) renderMdPreview(true);
 }
 
 // ---- F7 version history: render the collapsible list in the editor ----
@@ -7015,10 +7103,11 @@ function bind() {
     mdPreviewOn = !mdPreviewOn;
     syncMdUi(true); // the switch only exists while the textarea is in play
     const to = mdPreviewOn ? modal.mdPreview : modal.text;
+    if (!mdPreviewOn) to.focus(); // never behind a frame callback — see scheduleMdPreview
+    // Only the scroll position waits for layout; losing it costs nothing.
     requestAnimationFrame(() => {
       const s = to.scrollHeight - to.clientHeight;
       to.scrollTop = s > 0 ? Math.round(ratio * s) : 0;
-      if (!mdPreviewOn) to.focus();
     });
   });
   // F17 private-notes collapsible (same convention as the version history).

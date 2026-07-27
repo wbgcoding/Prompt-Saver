@@ -64,7 +64,25 @@ const RULES = {
   legacyScreenshotPrefix: { re: /^([A-Za-z0-9._-]{1,40})?$/, req: false },
   icon: { asset: true, req: true },
   installerIcon: { asset: true, req: true },
+  // Feature switches this brand ships the other way round than the app does, e.g.
+  // { "mdPreview": false }. Only the shipped default moves — a stored user choice
+  // still wins. Absent means "every feature ships the way the app defines it".
+  flagDefaults: { flags: true, req: false },
 };
+
+// Flag keys are read straight into ui/brand.js, so keep them to the shape a JS
+// identifier has and the values to real booleans.
+function safeFlagDefaults(v, field) {
+  if (v === undefined || v === null || v === "") return {};
+  if (typeof v !== "object" || Array.isArray(v)) fail(`${field}: must be an object`);
+  const out = {};
+  for (const key of Object.keys(v).sort()) {
+    if (!/^[A-Za-z][A-Za-z0-9]{0,39}$/.test(key)) fail(`${field}: "${key}" is not a feature key`);
+    if (typeof v[key] !== "boolean") fail(`${field}.${key}: must be true or false`);
+    out[key] = v[key];
+  }
+  return out;
+}
 
 // A path out of the config may never leave the repo or climb out of it.
 function safeAsset(rel, field) {
@@ -92,6 +110,10 @@ function loadBrand(slug) {
   for (const key of Object.keys(b)) if (!RULES[key]) fail(`brands/${slug}.json: unknown field "${key}"`);
   for (const [key, rule] of Object.entries(RULES)) {
     let v = b[key];
+    if (rule.flags) {
+      b[key] = safeFlagDefaults(b[key], key);
+      continue;
+    }
     if (v === undefined || v === null) v = "";
     if (typeof v !== "string") fail(`${key}: must be a string`);
     if (rule.req && !v) fail(`${key}: required`);
@@ -181,7 +203,18 @@ function brandJs(b) {
 // t() substitutes {app} in every translated string with this, and applyI18n fills
 // each [data-brand] element with it, so no markup or translation spells the name.
 export const APP_NAME = ${JSON.stringify(b.displayName)};
+
+// Features this brand ships differently from the app's own default. shipsOn() in
+// main.js reads it; a value the user has stored always wins over it.
+export const FLAG_DEFAULTS = ${flagDefaultsJs(b.flagDefaults)};
 `;
+}
+
+// One key per line, sorted, so the generated file is byte-identical every run.
+function flagDefaultsJs(map) {
+  const keys = Object.keys(map || {});
+  if (!keys.length) return "{}";
+  return "{\n" + keys.map((k) => `  ${k}: ${map[k]},\n`).join("") + "}";
 }
 
 // ---------- stamping ----------

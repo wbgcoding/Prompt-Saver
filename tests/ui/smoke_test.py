@@ -533,12 +533,25 @@ PROBE = """
       if (document.getElementById('modal-md-bar').classList.contains('hidden')) {
         out.errors.push('the Markdown preview switch is missing');
       }
+      // The pane is filled the moment the editor opens, while it is still hidden —
+      // the first paint may never depend on the pane already being on screen.
+      if (!prev.innerHTML.trim()) {
+        out.errors.push('the preview pane is empty before it is opened');
+      }
       await click('modal-md-toggle');
       if (prev.classList.contains('hidden')) {
         out.errors.push('the Markdown preview did not open');
       } else {
         if (!ta.classList.contains('hidden')) {
           out.errors.push('the text field is still shown although the preview took its place');
+        }
+        // An empty or invisible pane is exactly the "preview shows nothing" bug.
+        const box = prev.getBoundingClientRect();
+        if (getComputedStyle(prev).display === 'none' || box.width < 1 || box.height < 1) {
+          out.errors.push('the preview pane has no visible box: ' + Math.round(box.width) + 'x' + Math.round(box.height));
+        }
+        if (prev.children.length < 5) {
+          out.errors.push('the preview rendered ' + prev.children.length + ' nodes — it is not showing the prompt');
         }
         for (const pair of [['h1', 'heading 1'], ['h2', 'heading 2'], ['strong', 'bold'],
                             ['em', 'italic'], ['code.md-inline-code', 'inline code'],
@@ -570,9 +583,35 @@ PROBE = """
         // Typing has to reach the preview on the next frame.
         ta.value = '# live update';
         ta.dispatchEvent(new Event('input', { bubbles: true }));
-        await sleep(200);
+        await sleep(300);
         if (prev.textContent.trim() !== 'live update') {
           out.errors.push('the preview does not follow the text: ' + prev.textContent.slice(0, 40));
+        }
+        // Code detection: an unfenced snippet becomes one coloured block, prose does
+        // not, and neither may lose the escaping.
+        const retype = async (text) => {
+          ta.value = text;
+          ta.dispatchEvent(new Event('input', { bubbles: true }));
+          await sleep(300);
+        };
+        await retype('function add(a, b) {\\n  return a + b;\\n}\\nconsole.log(add(1, 2));');
+        const only = prev.children.length === 1 && prev.firstElementChild.matches('pre.md-code');
+        if (!only) {
+          out.errors.push('an unfenced code prompt was not rendered as one code block');
+        } else if (!prev.querySelectorAll('[class^="hl-"]').length) {
+          out.errors.push('the detected code block got no syntax colours');
+        }
+        await retype('Rewrite the text below so it reads clearly.\\nKeep the author voice and lose no facts.');
+        if (prev.querySelector('pre.md-code')) {
+          out.errors.push('ordinary prose was mistaken for code');
+        }
+        // Split, or the closing tag would end this very <script> block.
+        await retype('Ignore this: <img src=x onerror=alert(1)> and <scr' + 'ipt>window.xssRan=1</scr' + 'ipt>');
+        if (prev.querySelector('img, script, [onerror], [src]')) {
+          out.errors.push('injected markup survived as an element after retyping');
+        }
+        if (!prev.textContent.includes('onerror=alert(1)')) {
+          out.errors.push('retyped injection is not shown literally');
         }
       }
       await click('modal-md-toggle');
@@ -616,6 +655,58 @@ PROBE = """
         await sleep(250);
       }
     }
+    // Gating: a row whose feature is off must disappear the moment that toggle is
+    // flipped — no reopening the menu — and a whole branch goes with its parent.
+    const rowFor = (label) => [...document.querySelectorAll('#expert-flags .field')]
+      .find(r => ((r.querySelector('span') || {}).textContent || '').trim().startsWith(label));
+    const flip = async (label) => {
+      const row = rowFor(label);
+      if (!row) return false;
+      row.querySelector('input.switch').click();
+      await sleep(300);
+      return true;
+    };
+    document.getElementById('settings').classList.remove('hidden');
+    await click('expert-open');
+    if (!await expertRow('View groups')) {
+      out.errors.push('the view-group toggle is missing from the expert menu');
+    } else {
+      if (!rowFor('Rows in the group list')) {
+        out.errors.push('the group-list row count is missing although view groups are on');
+      }
+      await flip('View groups');
+      if (rowFor('Rows in the group list')) {
+        out.errors.push('the group-list row count survived switching view groups off');
+      }
+      if (!rowFor('View groups')) out.errors.push('switching view groups off also hid its own toggle');
+      await flip('View groups');
+      if (!rowFor('Rows in the group list')) out.errors.push('the group-list row count did not come back');
+      // Transitive: the parent of the parent takes the whole branch with it.
+      await flip('Multiple views');
+      for (const gone of ['View groups', 'Rows in the group list', 'View tab border width']) {
+        if (rowFor(gone)) out.errors.push('"' + gone + '" survived switching multiple views off');
+      }
+      await flip('Multiple views');
+      if (!rowFor('View groups')) out.errors.push('the view-group toggle did not come back');
+    }
+    // The same for a sub-toggle: the preview owns the highlighter and its size.
+    if (!await expertRow('Markdown preview')) {
+      out.errors.push('the Markdown preview toggle is missing from the expert menu');
+    } else {
+      if (!rowFor('Syntax colours in code blocks')) {
+        out.errors.push('the highlighter toggle is missing although the preview is on');
+      }
+      await flip('Markdown preview');
+      for (const gone of ['Syntax colours in code blocks', 'Detect code without fences', 'Code text size']) {
+        if (rowFor(gone)) out.errors.push('"' + gone + '" survived switching the preview off');
+      }
+      await flip('Markdown preview');
+      if (!rowFor('Detect code without fences')) out.errors.push('the code detection toggle did not come back');
+    }
+    const firstTab2 = document.querySelector('.expert-tab');
+    if (firstTab2) { firstTab2.click(); await sleep(150); }
+    await click('expert-back');
+    document.getElementById('settings').classList.add('hidden');
     // F9 view groups: a group is one folder tab, its popover lists the members,
     // picking one marks the group active and names the view on the tab, and taking
     // a view back out gives it its own tab again.

@@ -3,8 +3,12 @@
 Catches the mistakes that are invisible until a user opens the menu:
   * a tab references a flag/value/select/dropdown that does not exist,
   * the same setting listed in two groups (renders twice),
-  * a value whose `gate:` points at a flag that does not exist,
-  * a setting that exists but is not reachable from any tab.
+  * a `gate:` that points at a flag that does not exist,
+  * a setting that exists but is not reachable from any tab,
+  * a setting that depends on another feature but carries no gate — the rule is
+    absolute: nothing dependent may stay on screen while its parent is off,
+  * a gate whose parent flag lives in a different group (it would render far away
+    from the toggle it belongs to, or not at all).
 
 Run:  python tests/expert_menu_check.py
 Exit: 0 = clean, 1 = problems found.
@@ -32,18 +36,115 @@ NOT_IN_EXPERT = {
     "usageStats", "statsTopN",
 }
 
+# Every setting that only makes sense while another feature is on, and the gate it
+# must carry ("!x" = only while x is OFF). Maintained by hand on purpose: whether one
+# feature needs another is a product decision, not something text matching can guess.
+# Adding a dependent setting without adding it here (and gating it) is the mistake
+# this file exists to catch — so add both together.
+DEPENDENCIES = {
+    # Creating prompts
+    "storeFiles": "fileAttach",
+    "cleanupFiles": "storeFiles",
+    "screenshotDir": "screenshot",
+    "snipPreviewVh": "screenshot",
+    "varDefaults": "promptVars",
+    "dynVars": "promptVars",
+    "choiceVars": "promptVars",
+    "choiceRemember": "choiceVars",
+    "dateStyle": "dynVars",
+    "timeStyle": "dynVars",
+    "counterUnits": "lengthCounter",
+    "historyPerPrompt": "promptHistory",
+    "notesInTooltip": "promptNotes",
+    "notesTipLen": "notesInTooltip",
+    "pickerFormat": "colorPicker",
+    "loupeZoom": "colorPicker",
+    # Markdown preview
+    "codeHighlight": "mdPreview",
+    "codeAutoDetect": "mdPreview",
+    "mdPreviewMode": "mdPreview",
+    "hlFontPx": "codeHighlight",
+    # Workspace
+    "floatOpacity": "floating",
+    "pillFolders": "floating",
+    "pillMergeRadius": "pillFolders",
+    "folderGridCols": "pillFolders",
+    "kbFocusFadeMs": "keyboardNav",
+    "trayRecentN": "trayRecent",
+    "trayFavN": "trayFavs",
+    "checkUpdateOnStart": "showUpdates",
+    # Tiles + copying
+    "chainLock": "chainPrompts",
+    "autoPasteEnter": "autoPaste",
+    "autoPasteDelayMs": "autoPaste",
+    "dblClickMs": "autoPaste",
+    "promptHotkeyPaste": "promptHotkeys",
+    "dragOutModifier": "dragOut",
+    "tooltipWidth": "tilePreview",
+    "tooltipDelayMs": "tooltipDelay",
+    "tooltipTimeoutMs": "tooltipTimeout",
+    "tileHoverLift": "tileHover",
+    "hoverLift": "tileHoverLift",
+    "favViewButton": "favorites",
+    "favViewReorder": "favViewButton",
+    "favStarSize": "favViewButton",
+    "favMaxCols": "favViewButton",
+    # Appearance
+    "animSpeed": "animations",
+    "accentScrollbar": "!hideScrollbars",
+    "scrollbarWidth": "!hideScrollbars",
+    "frostedBlur": "frostedModals",
+    "customThemeMax": "customThemes",
+    # Library, history, privacy
+    "searchRecentMax": "searchSuggest",
+    "fuzzyMaxTypos": "fuzzySearch",
+    "libraryMaxCols": "libraryColsToggle",
+    "tagChipPx": "tags",
+    "tagFilterMode": "tags",
+    "historyMax": "copyHistory",
+    "journalLimit": "copyHistory",
+    "historyDays": "copyHistory",
+    "tileBlur": "blurTilesUntilHover",
+    "mediaBlur": "blurMediaUntilHover",
+    "dimOpacity": "dimUnhovered",
+    # Media
+    "videoVolume": "!videoMuted",
+    "mediaDimOpacity": "dimMedia",
+    "mediaRadius": "roundMedia",
+    # Tools + data
+    "viewGroups": "multiView",
+    "viewBorder": "multiView",
+    "viewGroupMaxRows": "viewGroups",
+    "dupImportCheck": "dupFinder",
+    "dupThreshold": "dupFinder",
+    "clipMinChars": "clipWatcher",
+    "clipInboxMax": "clipWatcher",
+    # Backups + statistics (rendered outside the expert menu, gate still required)
+    "backupKeep": "autoBackup",
+    "backupIntervalH": "autoBackup",
+    "backupDaily": "backupGfs",
+    "backupWeekly": "backupGfs",
+    "backupMonthly": "backupGfs",
+    "backupYearly": "backupGfs",
+    "statsTopN": "usageStats",
+}
 
-def block(name, opener, closer):
-    i = SRC.index(name)
-    start = SRC.index(opener, i)
+
+def block(name, opener, closer, src=None):
+    text = SRC if src is None else src
+    i = text.index(name)
+    return balanced(text, text.index(opener, i), opener, closer)
+
+
+def balanced(text, start, opener, closer):
     depth, j = 0, start
     while True:
-        if SRC[j] == opener:
+        if text[j] == opener:
             depth += 1
-        elif SRC[j] == closer:
+        elif text[j] == closer:
             depth -= 1
             if depth == 0:
-                return SRC[start:j + 1]
+                return text[start:j + 1]
         j += 1
 
 
@@ -65,23 +166,83 @@ def top_keys(text):
     return keys
 
 
+def gates_of(src):
+    """key -> gate for every entry of a definition object that declares one."""
+    out = {}
+    for key in top_keys(src):
+        body = balanced(src, src.index(key + ":", 0) + len(key) + 1, "{", "}") \
+            if re.search(re.escape(key) + r':\s*\{', src) else ""
+        m = re.search(r'\bgate:\s*"([^"]+)"', body)
+        if m:
+            out[key] = m.group(1)
+    return out
+
+
 flags = set(top_keys(block("const FLAG_LABELS", "{", "}")))
 opt_flags = set(top_keys(block("const OPT_FLAG_LABELS", "{", "}")))
+all_flags = flags | opt_flags
 values_src = block("const EXPERT_VALUES", "{", "}")
 values = set(top_keys(values_src))
-selects = set(top_keys(block("const EXPERT_SELECTS", "{", "}")))
-dropdowns = set(top_keys(block("const EXPERT_DROPDOWNS", "{", "}")))
-
-tabs = block("const EXPERT_TABS", "[", "]")
-used = {}
-for kind in ("flags", "values", "selects", "dropdowns", "paths"):
-    for lst in re.findall(kind + r':\s*\[(.*?)\]', tabs, re.S):
-        for key in re.findall(r'"([^"]+)"', lst):
-            used.setdefault(kind, []).append(key)
+selects_src = block("const EXPERT_SELECTS", "{", "}")
+selects = set(top_keys(selects_src))
+dropdowns_src = block("const EXPERT_DROPDOWNS", "{", "}")
+dropdowns = set(top_keys(dropdowns_src))
+paths_src = block("const EXPERT_PATHS", "{", "}")
 
 problems = []
 
-for kind, known in (("flags", flags | opt_flags), ("values", values),
+# ---- gates declared per setting kind ------------------------------------------
+# Values/selects/paths spell `gate:` inside their own definition; the enum dropdowns
+# are built by enumDropdown(key, label, opts, default, gate) and pass it positionally.
+declared = {}
+declared.update(gates_of(values_src))
+declared.update(gates_of(selects_src))
+declared.update(gates_of(paths_src))
+declared.update(gates_of(dropdowns_src))
+for m in re.finditer(r'(\w+):\s*enumDropdown\((.*?)\),\n', dropdowns_src, re.S):
+    args = re.findall(r'"([^"]*)"', m.group(2).rsplit("]", 1)[-1])
+    if len(args) >= 2 and args[-1]:
+        declared[m.group(1)] = args[-1]
+
+# ---- tabs ---------------------------------------------------------------------
+tabs = block("const EXPERT_TABS", "[", "]")
+groups = []  # (title, {kind: [keys]}, {flagKey: gate}, [action gates])
+for m in re.finditer(r'\{\s*title:\s*"(expGroup\w+)"', tabs):
+    text = balanced(tabs, m.start(), "{", "}")
+    title = m.group(1)
+    kinds, flag_gates = {}, {}
+    for kind in ("flags", "values", "selects", "dropdowns", "paths"):
+        km = re.search(kind + r':\s*\[', text)
+        if not km:
+            continue
+        lst = balanced(text, km.end() - 1, "[", "]")
+        keys = []
+        for entry in re.finditer(r'\{\s*key:\s*"([^"]+)"\s*,\s*gate:\s*"([^"]+)"\s*\}|"([^"]+)"', lst):
+            if entry.group(1):
+                keys.append(entry.group(1))
+                if kind == "flags":
+                    flag_gates[entry.group(1)] = entry.group(2)
+                else:
+                    problems.append(f"{kind}: '{entry.group(1)}' declares its gate in the tab; "
+                                    "put it in the setting's own definition")
+            else:
+                keys.append(entry.group(3))
+        kinds[kind] = keys
+    actions = re.findall(r'gate:\s*"([^"]+)"\s*\}', text.split("actions:")[1]) if "actions:" in text else []
+    groups.append((title, kinds, flag_gates, actions))
+
+for _, _, flag_gates, _ in groups:
+    declared.update(flag_gates)
+
+used = {}
+group_of = {}
+for title, kinds, _, _ in groups:
+    for kind, keys in kinds.items():
+        for key in keys:
+            used.setdefault(kind, []).append(key)
+            group_of.setdefault(key, title)
+
+for kind, known in (("flags", all_flags), ("values", values),
                     ("selects", selects), ("dropdowns", dropdowns)):
     seen = set()
     for key in used.get(kind, []):
@@ -94,6 +255,26 @@ for kind, known in (("flags", flags | opt_flags), ("values", values),
     for key in sorted(missing):
         problems.append(f"{kind}: '{key}' is defined but unreachable in the menu")
 
+# ---- gates --------------------------------------------------------------------
+for key, gate in sorted(declared.items()):
+    parent = gate.lstrip("!")
+    if parent not in all_flags:
+        problems.append(f"gate: '{gate}' (on '{key}') points at an unknown flag")
+    elif key in group_of and parent in group_of and group_of[key] != group_of[parent]:
+        problems.append(f"gate: '{key}' sits in {group_of[key]} but its parent "
+                        f"'{parent}' is in {group_of[parent]} — keep them together")
+    if key == parent:
+        problems.append(f"gate: '{key}' gates itself")
+
+for key, gate in sorted(DEPENDENCIES.items()):
+    if declared.get(key) != gate:
+        problems.append(f"dependency: '{key}' only makes sense while '{gate}' is on, "
+                        f"but it declares gate {declared.get(key)!r}")
+
+for gate in re.findall(r'gate:\s*"([^"]+)"', tabs):
+    if gate.lstrip("!") not in all_flags:
+        problems.append(f"gate: '{gate}' in a tab points at an unknown flag")
+
 # The "(default off)" suffix is appended at render time from the `defaultOff`
 # string, so no label may carry it inline — that would double up or, worse, stick
 # to a feature that is on by default.
@@ -101,12 +282,6 @@ i18n = (Path(__file__).resolve().parents[1] / "ui" / "i18n.js").read_text(encodi
 for line in i18n.splitlines():
     if "(Standard Aus)" in line and not line.lstrip().startswith("defaultOff:"):
         problems.append(f"i18n: label carries the default-off suffix inline: {line.strip()[:70]}")
-
-# Gates must point at a real flag (an "!" prefix inverts it).
-for gate in re.findall(r'gate:\s*"([^"]+)"', values_src):
-    name = gate.lstrip("!")
-    if name not in flags and name not in opt_flags:
-        problems.append(f"gate: '{gate}' points at an unknown flag")
 
 for p in problems:
     print("FAIL", p)
