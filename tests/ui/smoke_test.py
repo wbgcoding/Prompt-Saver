@@ -3,10 +3,12 @@
 Catches the class of defect that only shows when the app actually runs:
   * a JS error during startup or while opening a dialog,
   * an element that overflows the window horizontally (layout bug),
+  * a control parked outside the window, covered, or crushed to no height,
   * a string that renders as its raw i18n key (missing translation).
 
-It walks the library, the copy history, the tile menu and every expert tab, at
-two window sizes. Skips cleanly when no Chromium browser is installed.
+It walks the library, the copy history, the tile menu and every expert tab, down
+to the smallest window the app itself allows, and once more with the appearance
+scales raised. Skips cleanly when no Chromium browser is installed.
 
 Run:  python tests/ui/smoke_test.py
 Exit: 0 = clean, 1 = problems found.
@@ -21,7 +23,28 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).parent
-SIZES = [(1280, 800), (620, 500), (480, 360)]
+
+# The floor is the app's own minimum window size — read it, so this sweep follows
+# tauri.conf.json instead of drifting away from it.
+_WIN = json.loads((REPO / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8"))["app"]["windows"][0]
+MIN_W, MIN_H = _WIN["minWidth"], _WIN["minHeight"]
+SIZES = [(1280, 800), (620, 500), (MIN_W + 60, MIN_H + 40), (MIN_W, MIN_H)]
+
+# Headless Chrome refuses to make its window narrower than ~500px, so the page is
+# loaded in an iframe of the exact size instead; the wrapper republishes the probe
+# result because --dump-dom only prints the top document.
+WRAPPER = """<!doctype html><meta charset="utf-8">
+<style>html,body{margin:0}iframe{border:0;display:block}</style>
+<iframe id="f" src="ui/index.html" style="width:%dpx;height:%dpx"></iframe><pre id="SMOKE"></pre>
+<script>
+setInterval(() => {
+  try {
+    const p = f.contentDocument.getElementById('SMOKE');
+    const own = document.getElementById('SMOKE');
+    if (p && !own.textContent) own.textContent = p.textContent;
+  } catch (e) {}
+}, 200);
+</script>"""
 
 CHROME_CANDIDATES = [
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
@@ -33,9 +56,126 @@ CHROME_CANDIDATES = [
 PROBE = """
 <script>
 (async () => {
-  const out = { errors: [], overflow: [], tabs: [], rawKeys: [] };
+  const out = { errors: [], overflow: [], tabs: [], rawKeys: [], layout: [] };
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const click = async (id) => { const e = document.getElementById(id); if (e) { e.click(); await sleep(200); } };
+
+  // ---- layout guards -------------------------------------------------------
+  // Everything below answers one question: on a small window, can the user still
+  // reach and read what is on screen?
+  const onScreen = (el) => {
+    const s = getComputedStyle(el);
+    return s.display !== 'none' && s.visibility !== 'hidden' && s.pointerEvents !== 'none' &&
+      Number(s.opacity) > 0.05 && el.getClientRects().length;
+  };
+  const sig = (el) => (el.id ? '#' + el.id : '') +
+    (typeof el.className === 'string' && el.className.trim()
+      ? '.' + el.className.trim().split(/\\s+/)[0] : el.tagName);
+  // Content parked past the right edge of a SIDEWAYS-scrollable container (the view
+  // tab strip) is reachable by scrolling. Behind an overflow-x:hidden ancestor it is
+  // gone for good, so that still counts as an escape.
+  // Only the NEAREST ancestor that controls horizontal overflow decides — an outer
+  // scroller cannot reveal what an inner overflow-x:hidden box already cut off.
+  const inScroller = (el) => {
+    for (let p = el.parentElement; p; p = p.parentElement) {
+      const ox = getComputedStyle(p).overflowX;
+      if (ox === 'auto' || ox === 'scroll') return true;
+      if (ox === 'hidden' || ox === 'clip') return false;
+    }
+    return false;
+  };
+  // Hit-testable: a real pointer can land on it. Scrolling to it first is allowed;
+  // sitting outside the window, or under something else, is not.
+  const canHit = (el) => {
+    try { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (e) {}
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return false;
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return false;
+    const hit = document.elementFromPoint(x, y);
+    if (!hit) return false;
+    if (hit === el || el.contains(hit) || hit.contains(el)) return true;
+    // Another dialog stacked on top is doing its job, not covering this one by accident.
+    const theirs = hit.closest('.overlay');
+    return !!theirs && theirs !== el.closest('.overlay');
+  };
+  const layoutScan = (where) => {
+    const add = (m) => { const s = where + ': ' + m; if (!out.layout.includes(s)) out.layout.push(s); };
+    if (document.documentElement.scrollWidth > innerWidth + 1) {
+      add('the page scrolls horizontally (' + document.documentElement.scrollWidth + ' > ' + innerWidth + ')');
+    }
+    // A dialog holding more than it can show must be able to scroll to the rest —
+    // on a short window the inner lists keep a height floor, so the dialog is where
+    // the overflow ends up.
+    for (const box of document.querySelectorAll('.overlay:not(.hidden) > .modal')) {
+      const oy = getComputedStyle(box).overflowY;
+      if (box.scrollHeight > box.clientHeight + 2 && oy !== 'auto' && oy !== 'scroll') {
+        add(sig(box) + ' holds ' + box.scrollHeight + 'px of content in ' +
+          box.clientHeight + 'px and cannot scroll to it');
+      }
+    }
+    for (const el of document.querySelectorAll('body *')) {
+      if (!onScreen(el)) continue;
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      if ((r.right > innerWidth + 1 || r.left < -1) && !inScroller(el)) {
+        add(sig(el) + ' is outside the window (x ' + Math.round(r.left) + '..' +
+          Math.round(r.right) + ' of ' + innerWidth + ')');
+      }
+      // Cut off sideways by a box that cannot scroll to it: the control is gone, not
+      // merely off-view. Only interactive elements — labels legitimately ellipsise.
+      if (el.matches('button, input, select, textarea')) {
+        for (let p = el.parentElement; p; p = p.parentElement) {
+          const ox = getComputedStyle(p).overflowX;
+          if (ox === 'auto' || ox === 'scroll') break;
+          if (ox === 'hidden' || ox === 'clip') {
+            const pr = p.getBoundingClientRect();
+            if (r.right > pr.right + 1 || r.left < pr.left - 1) {
+              add(sig(el) + ' is clipped away by ' + sig(p));
+            }
+            break;
+          }
+        }
+      }
+      // A flex item with its own overflow bottoms out at zero height, which turns a
+      // list into an unusable sliver instead of letting its dialog scroll.
+      const s = getComputedStyle(el);
+      if (/auto|scroll/.test(s.overflowY) && el.scrollHeight > 40 &&
+          el.clientHeight > 0 && el.clientHeight < 40) {
+        add(sig(el) + ' is crushed to ' + el.clientHeight + 'px around ' +
+          el.scrollHeight + 'px of content');
+      }
+    }
+  };
+  // A collapsible row is its own overflow box, so a flex parent can squeeze it below
+  // its head and leave a 6px sliver where a clickable row belongs.
+  const collapseRows = (where) => {
+    for (const row of document.querySelectorAll(where === 'editor' ? '#modal .modal-collapse' : '.modal-collapse')) {
+      const head = row.querySelector('.modal-collapse-head');
+      if (!head || !onScreen(row)) continue;
+      const h = row.getBoundingClientRect().height;
+      if (h + 1 < head.scrollHeight) {
+        out.layout.push('prompt editor: a collapsible row is squeezed to ' + Math.round(h) +
+          'px around a ' + head.scrollHeight + 'px head');
+      }
+    }
+  };
+  const mustReach = (where, sel) => {
+    for (const el of document.querySelectorAll(sel)) {
+      if (onScreen(el) && !canHit(el)) {
+        out.layout.push(where + ': "' + (el.id || el.textContent || sel).trim().slice(0, 20) + '" cannot be clicked');
+      }
+    }
+  };
+
+  // Startup reveals the window from a nested requestAnimationFrame. In a small
+  // headless frame Chromium stops producing frames once the page is quiet, so that
+  // second callback never runs and the walk below would start from a dead page.
+  // Dirtying an unused custom property keeps frames coming; it touches no geometry.
+  const heartbeat = setInterval(() => {
+    document.documentElement.style.setProperty('--smoke-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
   await sleep(700);
   try {
     // The portable take-over dialog opens on startup: it must be the themed modal
@@ -61,7 +201,32 @@ PROBE = """
       if (!/\\n/.test(msg)) out.errors.push('take-over dialog lost its line breaks');
       await click('confirm-cancel'); // "start empty"
     }
+    clearInterval(heartbeat);
+    document.documentElement.style.removeProperty('--smoke-tick');
+    layoutScan('main window');
+    // Window controls and composer buttons are the ones a squeezed header used to
+    // carry off the right edge, where no pointer could ever follow them.
+    mustReach('main window', '.win-btn, .header-actions > button, .composer > button');
+    // The tab strip is the piece the header used to crush: below ~700px it kept a
+    // ~45px sliver of a 244px strip, and every tab after the first became untouchable.
+    const strip = document.getElementById('views');
+    if (strip && !strip.classList.contains('hidden')) {
+      const stripTabs = [...strip.querySelectorAll('.view-btn')];
+      const widest = Math.max(0, ...stripTabs.map(t => t.getBoundingClientRect().width));
+      if (strip.clientWidth < Math.min(widest, 90)) {
+        out.layout.push('main window: the view tab strip is only ' + strip.clientWidth +
+          'px wide (one tab is ' + Math.round(widest) + 'px)');
+      }
+      const missed = stripTabs.filter(t => !canHit(t));
+      if (missed.length) {
+        out.layout.push('main window: ' + missed.length + ' of ' + stripTabs.length +
+          ' view tabs cannot be clicked');
+      }
+      strip.scrollLeft = 0;
+    }
     await click('library-btn');
+    layoutScan('library');
+    mustReach('library', '#library .modal-head-actions > button');
     // Tags: the filter row lists them, a chip narrows the list, the manager opens.
     const chips = [...document.querySelectorAll('#library-tagbar .tag-filter')];
     if (chips.length < 2) {
@@ -102,6 +267,8 @@ PROBE = """
     }
     await click('library-close');
     await click('journal-btn');
+    layoutScan('copy history');
+    mustReach('copy history', '#journal .modal-head-actions > button');
     await click('journal-close');
     const tile = document.querySelector('#grid .tile');
     if (tile) { tile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })); await sleep(150); }
@@ -232,6 +399,9 @@ PROBE = """
     if (document.getElementById('modal').classList.contains('hidden')) {
       out.tabs.push('(variable helper check skipped: the editor did not open)');
     } else {
+      layoutScan('prompt editor');
+      collapseRows('editor');
+      mustReach('prompt editor', '#modal .modal-x, #modal .modal-actions button');
       const chips = [...document.querySelectorAll('#modal-vars-chips .vars-chip')];
       if (chips.length !== 6) {
         out.errors.push('the editor lists ' + chips.length + ' automatic placeholders instead of 6');
@@ -310,6 +480,11 @@ PROBE = """
         await sleep(150);
         if (hField.value) out.errors.push('the clear button left a hotkey behind: ' + hField.value);
       }
+      // Both collapsibles are open now — the state that used to squeeze them to a
+      // 6px sliver and push Save out of reach on a short window.
+      layoutScan('prompt editor, rows expanded');
+      collapseRows('editor');
+      mustReach('prompt editor, rows expanded', '#modal .modal-x, #modal .modal-actions button');
       await click('modal-close-x');
       await sleep(250);
       // Editing made the dialog dirty, so the discard confirmation may step in.
@@ -775,21 +950,20 @@ PROBE = """
       if (viewTabs().length && getComputedStyle(viewTabs()[0]).userSelect !== 'none') {
         out.errors.push('a view tab still selects its text while being dragged');
       }
-      // Below roughly 700px the header squeezes the tab strip down to a sliver and
-      // the later tabs are clipped out of reach — no pointer can land on them, so
-      // the gesture is untestable there (and unusable; that is a layout bug of its
-      // own, not a view-group one).
-      const reachable = (el) => {
-        const r = el.getBoundingClientRect();
-        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-        return !!hit && hit.closest('.view-btn') === el;
-      };
+      // The strip stays hit-testable at every window size the app allows, so the
+      // gesture is testable everywhere — no width may skip this.
       const loose = viewTabs().filter(b => b.dataset.viewId);
-      if (loose.length >= 2 && !loose.every(reachable)) {
-        out.tabs.push('(tab-merge check skipped: the tab strip is clipped at this width)');
-      } else if (loose.length < 2) {
+      if (loose.length < 2) {
         out.errors.push('not enough loose view tabs for the merge check');
       } else {
+        for (const tb of loose) {
+          const r = tb.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          if (!hit || hit.closest('.view-btn') !== tb) {
+            out.errors.push('a view tab cannot be dropped on: nothing hit-tests to "' +
+              tb.textContent.trim().slice(0, 12) + '"');
+          }
+        }
         calls().length = 0;
         if (!await dragTab(loose[0], loose[1])) out.errors.push('a view tab dropped on another marked no target');
         if (document.getElementById('confirm-modal').classList.contains('hidden')) {
@@ -853,13 +1027,17 @@ PROBE = """
         out.errors.push('cancelling the theme editor kept the preview');
       }
     }
+    layoutScan('settings');
+    mustReach('settings', '#settings .modal-x, #settings-main > .field > button');
     await click('expert-open');
     for (const tb of [...document.querySelectorAll('.expert-tab')]) {
       tb.click();
       await sleep(200);
       out.tabs.push(tb.textContent.trim() + ':' +
         document.querySelectorAll('#expert-flags .expert-group').length);
+      layoutScan('expert tab ' + tb.textContent.trim());
     }
+    mustReach('expert menu', '.expert-tab');
     // Exercise the interactions that rebuild the menu: collapsing a group and
     // flipping switches (gated ones re-render, plain ones must not).
     // Collapsing must flip a class, not rebuild the list — rebuilding is what made
@@ -892,6 +1070,8 @@ PROBE = """
     } else if (getComputedStyle(bm).zIndex <= getComputedStyle(document.getElementById('settings')).zIndex) {
       out.errors.push('the backups dialog sits behind the settings it was opened from');
     } else {
+      layoutScan('backups');
+      mustReach('backups', '#backup-modal .modal-head-actions > button');
       // The top-list length field used to run past its own row.
       const row = document.querySelector('#stats-panel .stats-topn-row');
       const fld = row && row.querySelector('.modal-input');
@@ -1048,6 +1228,33 @@ PROBE = """
       }
       await click('update-modal-cancel');
     }
+    // The appearance scales are user-tunable, so the layout has to survive them being
+    // raised — the same guards once more with modal/icon/composer zoom at 130%.
+    const zoomed = document.documentElement.style;
+    document.getElementById('settings').classList.add('hidden');
+    for (const v of ['--modal-zoom', '--icon-zoom', '--composer-zoom', '--primary-zoom']) {
+      zoomed.setProperty(v, '1.3');
+    }
+    await sleep(400);
+    layoutScan('main window at 130% scale');
+    mustReach('main window at 130% scale', '.win-btn, .composer > button');
+    await click('library-btn');
+    layoutScan('library at 130% scale');
+    await click('library-close');
+    document.getElementById('settings').classList.remove('hidden');
+    await sleep(250);
+    layoutScan('settings at 130% scale');
+    // Clipped away by a dialog that cannot scroll counts as unreachable: elementFromPoint
+    // respects the clip, and scrollIntoView has nothing to scroll.
+    mustReach('settings at 130% scale', '#settings-main button, #settings-main select');
+    await click('expert-open');
+    layoutScan('expert menu at 130% scale');
+    await click('expert-back');
+    document.getElementById('settings').classList.add('hidden');
+    for (const v of ['--modal-zoom', '--icon-zoom', '--composer-zoom', '--primary-zoom']) {
+      zoomed.removeProperty(v);
+    }
+    await sleep(300);
     // Leave the theme editor open so the scans below measure its real layout.
     document.getElementById('settings').classList.remove('hidden');
     await click('theme-edit-open');
@@ -1073,6 +1280,30 @@ PROBE = """
 """
 
 
+# The secondary windows are small by nature, so they get the same "nothing escapes the
+# window" rule as the main one. Their own scroll containers are allowed to clip.
+SIDE_SCAN = """
+  const sideScan = (errs, where) => {
+    for (const el of document.querySelectorAll('body *')) {
+      const s = getComputedStyle(el);
+      if (s.display === 'none' || s.visibility === 'hidden' || s.position === 'fixed' ||
+          !el.getClientRects().length) continue;
+      let clipped = false;
+      for (let p = el.parentElement; p; p = p.parentElement) {
+        const ps = getComputedStyle(p);
+        if (ps.overflowX !== 'visible' || ps.overflowY !== 'visible') { clipped = true; break; }
+      }
+      if (clipped) continue;
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      if (r.right > innerWidth + 1 || r.left < -1) {
+        errs.push(where + ': ' + (el.id || el.className || el.tagName) + ' is outside the window (x ' +
+          Math.round(r.left) + '..' + Math.round(r.right) + ' of ' + innerWidth + ')');
+      }
+    }
+  };
+"""
+
 # F25 + F22: the pill window is the only place these two are observable. Both used to
 # fail for the same kind of reason -- a drag that never reports its end, and settings
 # that were read once when the window opened and never again.
@@ -1080,7 +1311,7 @@ FLOAT_PROBE = """
 <script>
 (async () => {
   const errs = [];
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));""" + SIDE_SCAN + """
   const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
   const until = async (fn) => { for (let i = 0; i < 80 && !fn(); i++) await sleep(50); return fn(); };
   const pill = document.getElementById('pill');
@@ -1095,6 +1326,7 @@ FLOAT_PROBE = """
     // lazily imported module, and behaviour must never be gated on it.
     await until(() => calls().includes('resize_float_pill'));
     if (!calls().includes('resize_float_pill')) errs.push('the pill never applied its settings');
+    sideScan(errs, 'pill');
     // The OS move loop startDragging() hands the window to CONSUMES the button
     // release, so a dragged pill never sees `mouseup`. The merge test therefore has
     // to run off the first later event that reports no button held.
@@ -1293,7 +1525,7 @@ FOLDER_PROBE = """
 <script>
 (async () => {
   const errs = [];
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));""" + SIDE_SCAN + """
   const calls = () => window.__SMOKE_CALLS__ || [];
   const until = async (fn) => { for (let i = 0; i < 80 && !fn(); i++) await sleep(100); return fn(); };
   try {
@@ -1307,6 +1539,7 @@ FOLDER_PROBE = """
     if (name.classList.contains('hidden') || name.textContent !== 'Drafts') {
       errs.push('the folder label is missing: ' + name.textContent);
     }
+    sideScan(errs, 'folder, closed');
     // Opening: press and release on the icon, the gesture a click really is here.
     const icon = document.getElementById('icon');
     icon.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
@@ -1318,6 +1551,7 @@ FOLDER_PROBE = """
     if (!document.body.classList.contains('pop-open')) errs.push('the open folder is not marked open');
     const tiles = [...document.querySelectorAll('#grid .folder-member')];
     if (tiles.length !== 5) errs.push('the open folder shows ' + tiles.length + ' members instead of 5');
+    sideScan(errs, 'folder, open');
     if (!tiles.length) {
       errs.push('the open folder rendered no members at all');
     } else {
@@ -1373,6 +1607,8 @@ def main():
 
         for w, h in SIZES:
             size_tag = f"{w}x{h}"
+            wrapper = tmp / f"wrap-{size_tag}.html"
+            wrapper.write_text(WRAPPER % (w, h), encoding="utf-8")
             # An isolated profile is required or Chrome hands the URL to a running
             # instance and prints nothing.
             proc = subprocess.run(
@@ -1380,8 +1616,10 @@ def main():
                  f"--user-data-dir={tmp / ('profile-%s' % size_tag)}", "--allow-file-access-from-files",
                  # The probe walks more UI than it used to; 30s of virtual time ran
                  # out mid-run on the smallest window and produced no result at all.
-                 f"--window-size={w},{h}", "--virtual-time-budget=45000", "--dump-dom",
-                 page.as_uri()],
+                 # The window has to hold the iframe plus Chrome's own frame.
+                 f"--window-size={max(w + 30, 520)},{h + 140}",
+                 "--virtual-time-budget=60000", "--dump-dom",
+                 wrapper.as_uri()],
                 # The dumped DOM carries all 20 languages; without an explicit
                 # codec Windows decodes it as cp1252 and the reader thread dies,
                 # leaving stdout empty.
@@ -1396,11 +1634,12 @@ def main():
             print(f"-- {w}x{h} — expert tabs: {', '.join(r['tabs']) or 'none'}")
             for kind, items in (("JS error", r["errors"]),
                                 ("overflow", sorted(set(r["overflow"]))),
+                                ("layout", r.get("layout", [])),
                                 ("untranslated", sorted(set(r["rawKeys"])))):
                 for it in items:
                     print(f"   FAIL {kind}: {it}")
                 failed += len(items)
-            if not (r["errors"] or r["overflow"] or r["rawKeys"]):
+            if not (r["errors"] or r["overflow"] or r["rawKeys"] or r.get("layout")):
                 print("   ok")
 
         # Each secondary window carries the only coverage its own UI can get — the

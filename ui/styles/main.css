@@ -314,16 +314,24 @@ body.win-maximized { border-radius: 0; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* The action group cannot shrink below its buttons. Below ~690px it takes a line of
+     its own instead of pushing the window controls off screen and squeezing the tab
+     strip to a sliver. */
+  flex-wrap: wrap;
+  row-gap: 6px;
   padding: var(--header-pad-y, 10px) 16px;
   border-bottom: 1px solid var(--border);
   flex: 0 0 auto;
 }
-.brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; }
+/* A basis wide enough for the logo plus a readable tab strip — that is what decides
+   when the header goes two-line. */
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 210px; }
 .logo { display: block; border-radius: 7px; flex: 0 0 auto; cursor: pointer; }
 .logo:hover { filter: brightness(1.12); }
-/* line-height = logo height -> text sits vertically centered next to it.
-   Truncates instead of pushing the header actions off-screen on narrow windows. */
-.title { font-weight: 600; font-size: 16px; letter-spacing: 0.2px; white-space: nowrap; line-height: 26px; overflow: hidden; text-overflow: ellipsis; min-width: 0; user-select: none; }
+/* line-height = logo height -> text sits vertically centered next to it. The high
+   shrink factor makes the name give up its width long before the tab strip beside
+   it does, so on a narrow window the tabs stay clickable and the name truncates. */
+.title { font-weight: 600; font-size: 16px; letter-spacing: 0.2px; white-space: nowrap; line-height: 26px; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 200 auto; user-select: none; }
 /* Expert toggles: hide the header logo / title independently. */
 body.noflag-showLogo .logo { display: none; }
 body.noflag-showTitle .title { display: none; }
@@ -363,7 +371,9 @@ body.noflag-showJournal #journal-btn { display: none; }
 }
 
 /* View switcher buttons (hidden while only one view exists) */
-.views { display: flex; gap: 6px; margin-left: 0; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+/* Takes the free brand width and keeps a floor: a strip narrower than one tab is a
+   strip no pointer can land on, so it scrolls sideways instead of being crushed. */
+.views { display: flex; gap: 6px; margin-left: 0; min-width: 96px; flex: 1 1 auto; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
 .views::-webkit-scrollbar { display: none; }
 .view-btn {
   padding: 5px 12px;
@@ -456,7 +466,9 @@ body.noflag-showJournal #journal-btn { display: none; }
 .view-group-item:hover .view-group-out { opacity: 1; }
 .view-group-out:hover { color: var(--accent); }
 
-.header-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+/* Wraps within itself once the row no longer fits — the window controls must stay on
+   screen at every window size the app allows. */
+.header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; row-gap: 4px; gap: 4px; min-width: 0; flex: 0 1 auto; }
 /* Thin divider grouping the header actions. */
 .header-sep { width: 1px; height: 18px; flex: 0 0 auto; margin: 0 3px; background: var(--border); }
 
@@ -859,6 +871,11 @@ body.drag-active .cell.drag-over {
 .composer {
   display: flex;
   align-items: flex-end;
+  /* The tool buttons and Save have fixed widths; with a raised composer scale on a
+     narrow window they no longer fit one line, so the row wraps instead of carrying
+     Save off the right edge. */
+  flex-wrap: wrap;
+  row-gap: 8px;
   gap: 10px;
   padding: 10px 16px;
   border-top: 1px solid var(--border);
@@ -881,7 +898,8 @@ body.drag-active .cell.drag-over {
 .composer-img-btn > svg { width: 22px; height: 22px; }
 .composer-img-btn > svg path, .composer-img-btn > svg circle { stroke-width: 2.3px; }
 .input {
-  flex: 1;
+  flex: 1 1 140px;
+  min-width: 0; /* a textarea's intrinsic min width would otherwise block shrinking */
   resize: none;
   min-height: 40px;
   max-height: 160px;
@@ -1013,9 +1031,12 @@ body.library-front #modal.overlay { z-index: 67; }
 .modal-narrow { width: min(380px, 92vw); }
 /* Prompt library always fills the window height (small even margin), so its
    size never jumps with the number of prompts; the list scrolls inside. */
-#library .modal { width: min(var(--lib-width, 900px), 95vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden; }
+/* `hidden auto`, not `hidden`: on a short window the head + filter rows alone can eat
+   the whole dialog, and the list below keeps a minimum height (see .library-list) —
+   the dialog then scrolls to it instead of crushing it out of existence. */
+#library .modal { width: min(var(--lib-width, 900px), 95vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden auto; }
 /* Copy history fills the window height too; the lists scroll inside it. */
-#journal .modal { width: min(980px, 95vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden; }
+#journal .modal { width: min(980px, 95vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden auto; }
 #journal-search { flex: 0 0 auto; }
 .head-clear { color: var(--danger); }
 .head-clear:hover { border-color: var(--danger); }
@@ -1052,6 +1073,8 @@ body.library-front #modal.overlay { z-index: 67; }
 #modal #color-row,
 #modal #modal-history,
 #modal #modal-md-bar,
+#modal #modal-tags,
+#modal .modal-collapse,
 #modal .modal-actions { flex: 0 0 auto; }
 /* Themed scrollbar for the prompt textarea. */
 .modal-text::-webkit-scrollbar { width: var(--sb-width, 12px); }
@@ -1561,13 +1584,17 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* The action group cannot shrink below its buttons, so on a narrow dialog it takes
+     a second line instead of carrying the close X off the right edge. */
+  flex-wrap: wrap;
+  row-gap: 6px;
   /* Reclaim the modal's top + right padding so the close X sits 12px from both
      the top and right edges (tucked symmetrically into the corner). */
   margin: -20px -20px 0 0;
   padding: 12px 12px 8px 0;
   background: var(--surface);
 }
-.modal-head .modal-title { margin: 0; padding: 0; position: static; }
+.modal-head .modal-title { margin: 0; padding: 0; position: static; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .modal-title { margin: 0; font-size: 16px; }
 /* Favorite star in the create/edit modal title bar (replaces the old toggle row). */
 .modal-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -1629,9 +1656,11 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 #snip-preview,
 .lib-thumb { cursor: zoom-in; }
 .two-col { display: flex; gap: 8px; }
-.two-col .field { flex: 1; }
-/* Top settings selects laid out three across. */
-.three-col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.two-col .field { flex: 1; min-width: 0; }
+/* Top settings selects laid out three across. `minmax(0, …)`, not `1fr`: a plain 1fr
+   track cannot shrink below its content, so the row overflowed the dialog and the
+   controls on the right were clipped out of reach. */
+.three-col { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 /* Inline field: label on the left (white, like the toggles), control on the right —
    keeps single inputs from stretching to the full popup width. The `.field.` prefix is
    required: the base `.field { flex-direction: column }` rule sits LATER in the file, so
@@ -1646,10 +1675,12 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 /* Settings body: rows stack with comfortable, even spacing (close, not touching). */
 /* Settings/expert: the head (and, for expert, the search + tabs) stays fixed; only
    the body scrolls, so nothing bleeds past the header. */
-#settings .modal { overflow: hidden; }
+/* `hidden auto`: the body normally scrolls on its own, but once the window is short
+   enough that the body hits its floor the dialog itself has to scroll to the rest. */
+#settings .modal { overflow: hidden auto; }
 #settings-main {
   display: flex; flex-direction: column; gap: 14px;
-  flex: 1 1 auto; min-height: 0;
+  flex: 1 1 auto; min-height: 140px;
 }
 #settings-expert {
   display: flex; flex-direction: column; gap: 10px;
@@ -1658,7 +1689,9 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 #settings-expert > .expert-top,
 #settings-expert > #expert-search,
 #settings-expert > #expert-tabs-bar { flex: 0 0 auto; }
-#expert-flags { flex: 1 1 auto; min-height: 0; }
+/* A floor, not 0: on a short window the tab bar + search alone filled the dialog and
+   left the option list as a 20px sliver. The modal (overflow-y:auto) scrolls instead. */
+#expert-flags { flex: 1 1 auto; min-height: 140px; }
 /* The scroll areas reach the modal's right + bottom edges (negative margin, inset
    re-added as padding) so the scrollbar hugs the far-right edge with no surface
    band left beside or below it. */
@@ -2085,7 +2118,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .backup-col .field.backup-pw-row { flex-wrap: wrap; justify-content: flex-start; gap: 6px 8px; }
 /* The password row spans both columns: label left, field + Save + Remove right. */
 .backup-cols > .backup-pw-row { grid-column: 1 / -1; }
-.backup-pw-controls { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.backup-pw-controls { display: flex; flex-wrap: wrap; row-gap: 8px; align-items: center; gap: 8px; min-width: 0; }
 .backup-pw-wrap { position: relative; flex: 1 1 120px; min-width: 0; max-width: 240px; display: flex; align-items: center; }
 .backup-pw-wrap .modal-input { padding-right: 36px; }
 .backup-pw-eye { position: absolute; right: 4px; width: 28px; height: 28px; }
@@ -2122,7 +2155,7 @@ input[type="password"]::-ms-clear { display: none; }
 .backup-list-head .collapse-chevron { transition: transform var(--transition); flex: 0 0 auto; }
 .backup-list-head.open .collapse-chevron { transform: rotate(180deg); }
 .backups-list { display: flex; flex-direction: column; gap: 6px; }
-.backup-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.backup-row { display: flex; flex-wrap: wrap; row-gap: 6px; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 .backup-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-variant-numeric: tabular-nums; }
 .backup-size { flex: 0 0 auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .backup-row .ghost-btn { flex: 0 0 auto; padding: 3px 10px; font-size: 12px; }
@@ -2220,7 +2253,9 @@ input[type="password"]::-ms-clear { display: none; }
    Fills the available height; the lists scroll together when too many entries. */
 .journal-body {
   flex: 1 1 auto;
-  min-height: 0;
+  /* Same floor the library list keeps: without it a short window squeezed the two
+     columns down to a 31px sliver. */
+  min-height: 120px;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
@@ -2333,13 +2368,17 @@ body.drag-over::after {
 }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field > span { color: var(--muted); font-size: 12px; }
-.export-row { display: flex; gap: 8px; }
+/* A real basis, not 0: with `flex: 1` all three buttons report a zero base size, so
+   the row never wraps and simply overflowed the dialog on a narrow settings popup. */
+.export-row { display: flex; flex-wrap: wrap; row-gap: 6px; gap: 8px; }
 .export-row + .export-row { margin-top: 6px; }
-.export-row .ghost-btn { flex: 1; }
+.export-row .ghost-btn { flex: 1 1 88px; }
 /* Same three columns as the export rows above, so the auto-update switch lines up
    with the last button there; check + version share the first two columns. */
-.update-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 8px; align-items: center; }
-.update-actions { grid-column: span 2; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.update-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 8px; align-items: center; }
+/* Wraps so the version label keeps a readable width on a narrow dialog instead of
+   being ellipsised down to a couple of pixels beside the check button. */
+.update-actions { grid-column: span 2; display: flex; flex-wrap: wrap; row-gap: 6px; align-items: center; gap: 10px; min-width: 0; }
 .update-actions .ghost-btn { flex: 0 0 auto; }
 /* Clickable version/status label (left of the check button) → releases page, or the
    update dialog once an update is pending. */
@@ -2364,7 +2403,9 @@ body.drag-over::after {
   /* The list is the scroll area (not the modal), so the header + search stay put and
      the scrollbar hugs the modal's right edge with the same 20px inset as settings. */
   flex: 1 1 auto;
-  min-height: 0;
+  /* A flex item with its own overflow bottoms out at zero height, which left the list
+     as a 20px sliver on a short window. Keep a usable floor and let the dialog scroll. */
+  min-height: 120px;
   overflow: hidden auto;
   scrollbar-gutter: stable;
   margin: 0 -20px -20px 0;
@@ -2469,7 +2510,7 @@ body.drag-over::after {
 .lib-fav-chip.active { background: #f5b301; border-color: #f5b301; color: #1a1a1a; }
 
 /* Library header: "Close after copy" toggle + close button grouped right. */
-.modal-head-actions { display: flex; align-items: center; gap: 8px; }
+.modal-head-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; row-gap: 6px; gap: 8px; min-width: 0; }
 .head-toggle {
   padding: 5px 10px;
   border: 1px solid var(--border);
@@ -2649,10 +2690,15 @@ body.drag-over::after {
   gap: 12px;
   cursor: pointer;
 }
-.switch-field > span { font-size: 13px; color: var(--fg); }
+.switch-field > span { font-size: 13px; color: var(--fg); min-width: 0; }
 /* Settings toggles laid out in two even columns (wider popup). Long labels wrap
    within their cell instead of being cut off; the switch stays pinned right. */
-.switch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; align-items: center; }
+.switch-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; align-items: center; }
+/* Two columns need ~200px each; below that they stack rather than pushing the
+   switches past the dialog edge, where the body's overflow clip put them out of reach. */
+@media (max-width: 520px) {
+  .switch-grid, .three-col { grid-template-columns: minmax(0, 1fr); }
+}
 .switch-grid .switch-field { align-items: center; }
 .switch-grid .switch-field > span { white-space: normal; line-height: 1.3; }
 .switch {

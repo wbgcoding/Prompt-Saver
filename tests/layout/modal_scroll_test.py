@@ -22,9 +22,27 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 STYLES = REPO / "ui" / "styles"
 
-# Window sizes to check, smallest last. The app allows resizing well below these.
-SIZES = ["560,430", "520,360", "480,300"]
+# Viewport sizes to check, smallest last. The last one is the app's own minimum
+# window size, so nothing here is smaller than the user can actually make it.
+_WIN = json.loads((REPO / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8"))["app"]["windows"][0]
+SIZES = [(560, 430), (520, 360), (480, 300), (420, 340), (_WIN["minWidth"], _WIN["minHeight"])]
 MIN_HISTORY_H = 100  # px the expanded list must keep
+
+# Headless Chrome will not make its window narrower than ~500px, so the page is
+# measured inside an iframe of the exact size and the wrapper republishes the
+# result (--dump-dom only prints the top document).
+WRAPPER = """<!doctype html><meta charset="utf-8">
+<style>html,body{margin:0}iframe{border:0;display:block}</style>
+<iframe id="f" src="%s" style="width:%dpx;height:%dpx"></iframe><pre id="RESULT"></pre>
+<script>
+setInterval(() => {
+  try {
+    const p = f.contentDocument.getElementById('RESULT');
+    const own = document.getElementById('RESULT');
+    if (p && p.textContent && !own.textContent) own.textContent = p.textContent;
+  } catch (e) {}
+}, 100);
+</script>"""
 
 CHROME_CANDIDATES = [
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
@@ -55,7 +73,18 @@ function measure() {
   out.PASS = out.saveReachable && out.historyUsable;
   document.getElementById('RESULT').textContent = JSON.stringify(out);
 }
-requestAnimationFrame(() => requestAnimationFrame(measure));
+// In a small headless frame Chromium stops producing frames once the page is quiet,
+// so a bare rAF chain can stall before the second callback. Dirty an unused custom
+// property to keep frames coming; it touches no geometry.
+const tick = setInterval(() => {
+  document.documentElement.style.setProperty('--tick', String(Date.now()));
+  document.body.getBoundingClientRect();
+}, 30);
+requestAnimationFrame(() => requestAnimationFrame(() => {
+  clearInterval(tick);
+  document.documentElement.style.removeProperty('--tick');
+  measure();
+}));
 """ % MIN_HISTORY_H
 
 
@@ -154,16 +183,20 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html") -> Path
 _run = 0
 
 
-def measure(browser, tmp, url, size):
+def measure(browser, tmp, page, size):
     # An isolated profile is required or Chrome hands the URL to a running
     # instance and prints nothing — and a FRESH one per run, or a still-closing
     # instance holds the lock and the next run comes back empty.
     global _run
     _run += 1
+    w, h = size
+    wrapper = tmp / f"wrap-{_run}.html"
+    wrapper.write_text(WRAPPER % (page.name, w, h), encoding="utf-8")
     proc = subprocess.run(
         [browser, "--headless=new", "--disable-gpu", "--no-first-run",
          f"--user-data-dir={tmp / ('profile-%d' % _run)}", "--allow-file-access-from-files",
-         f"--window-size={size}", "--virtual-time-budget=3000", "--dump-dom", url],
+         f"--window-size={max(w + 30, 520)},{h + 140}",
+         "--virtual-time-budget=6000", "--dump-dom", wrapper.as_uri()],
         # Without an explicit codec Windows decodes the dumped DOM as cp1252 and
         # the reader thread dies on the first non-Latin-1 byte.
         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
@@ -180,16 +213,16 @@ def main() -> int:
 
     tmp = Path(tempfile.mkdtemp(prefix="ps-layout-"))
     try:
-        url = build_page(tmp).as_uri()
+        page = build_page(tmp)
         failed = 0
         for size in SIZES:
-            r = measure(browser, tmp, url, size)
+            r = measure(browser, tmp, page, size)
             if not r:
-                print(f"FAIL {size}: no measurement (browser produced no result)")
+                print(f"FAIL {size[0]}x{size[1]}: no measurement (browser produced no result)")
                 failed += 1
                 continue
             status = "ok  " if r["PASS"] else "FAIL"
-            print(f"{status} win={size} vp={r['viewport']} history={r['histBodyH']}px "
+            print(f"{status} win={size[0]}x{size[1]} vp={r['viewport']} history={r['histBodyH']}px "
                   f"saveReachable={r['saveReachable']}")
             if not r["PASS"]:
                 failed += 1
@@ -197,7 +230,7 @@ def main() -> int:
         # A short history must hug its content: a fixed floor left a dead band
         # under the last entry.
         short = build_page(tmp, n_rows=2, name="short.html")
-        r = measure(browser, tmp, short.as_uri(), SIZES[0])
+        r = measure(browser, tmp, short, SIZES[0])
         if not r:
             print("FAIL short list: no measurement")
             failed += 1
