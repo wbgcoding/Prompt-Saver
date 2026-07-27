@@ -57,6 +57,8 @@ const modal = {
   hotkeyInput: $("modal-hotkey-input"),
   hotkeyBadge: $("modal-hotkey-badge"),
   hotkeyErr: $("modal-hotkey-err"),
+  hotkeyAction: $("modal-hotkey-action"),
+  hotkeyActionRow: $("modal-hotkey-action-row"),
 };
 
 const DRAG_THRESHOLD = 5;
@@ -842,6 +844,7 @@ const FLAG_LABELS = {
   dynVars: "flagDynVars",               // F12 self-filling placeholder names
   choiceVars: "flagChoiceVars",         // F13 {#{name|a,b}#} dropdown variables
   choiceRemember: "flagChoiceRemember", // F13 reopen a choice on its last pick
+  varPopupWindow: "flagVarPopupWindow", // F12 ask for placeholders in a small window of their own
   mdPreview: "flagMdPreview",           // F14 rendered Markdown preview in the editor
   codeHighlight: "flagCodeHighlight",   // F15 syntax colours in the preview's code blocks
   codeAutoDetect: "flagCodeAutoDetect", // F15 render an unfenced code prompt as code
@@ -1150,7 +1153,7 @@ const EXPERT_TABS = [
   { title: "expTabGeneral", groups: [
     // F26 sits with the screenshot tool: both are composer-bar capture tools, and
     // its two parameters are gated on its own toggle.
-    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", "pasteMedia", "dragDrop", "colorPicker", "promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, "lengthCounter", "promptHistory", "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace"], values: ["snipPreviewVh", "historyPerPrompt", "notesTipLen", "loupeZoom"], dropdowns: ["counterUnits", "dateStyle", "timeStyle", "pickerFormat"], paths: ["screenshotDir"] },
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", "pasteMedia", "dragDrop", "colorPicker", "promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }, "lengthCounter", "promptHistory", "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace"], values: ["snipPreviewVh", "historyPerPrompt", "notesTipLen", "loupeZoom"], dropdowns: ["counterUnits", "dateStyle", "timeStyle", "pickerFormat"], paths: ["screenshotDir"] },
     // F14/F15 belong together: the highlighter only ever paints inside the preview.
     { title: "expGroupPreview", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }], values: ["hlFontPx"], dropdowns: ["mdPreviewMode"] },
     { title: "expGroupWorkspace", flags: ["floating", { key: "pillFolders", gate: "floating" }, "keyboardNav", "headerSeparators", "dimToolbar"], values: ["floatOpacity", "pillMergeRadius", "folderGridCols", "kbFocusFadeMs"] },
@@ -1293,7 +1296,7 @@ function applyValues() {
 // convention tip<Key>. Self-explanatory settings are deliberately left out.
 const EXPERT_TIPS = [
   // General / creating
-  "storeFiles", "varDefaults", "dynVars", "choiceVars", "choiceRemember",
+  "storeFiles", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "varPopupWindow",
   "lengthCounter", "promptHistory", "editorMonospace",
   "promptNotes", "notesInTooltip", "notesTipLen",
   "mdPreview", "mdPreviewMode", "codeHighlight", "codeAutoDetect", "hlFontPx",
@@ -3587,7 +3590,7 @@ function modalSnapshot() {
     modal.name.value, modal.text.value, modal.caption.value, modal.captionSize.value,
     modal.fontSel.value, modal.sizeSel.value, modalState.color || "", modalState.image || "",
     !!modalState.showImage, modalState.filePath || "", modalState.iconPath || "", modal.fav.classList.contains("active"),
-    modalState.tags || [], modal.notesText.value, modalState.hotkey || "",
+    modalState.tags || [], modal.notesText.value, modalState.hotkey || "", modalState.hotkeyPaste || "",
   ]);
 }
 
@@ -3621,7 +3624,11 @@ function parseVar(token) {
 
 // F12: reserved names that fill themselves in at copy time, no dialog. They win
 // over a manual variable of the same name (documented in the editor's helper).
-const DYN_VARS = ["date", "time", "datetime", "weekday", "clipboard", "uuid"];
+const DYN_VARS = [
+  "date", "time", "datetime", "weekday", "yesterday", "tomorrow",
+  "week", "month", "year", "timestamp", "epoch",
+  "clipboard", "username", "uuid", "random", "counter",
+];
 const DYN_SET = new Set(DYN_VARS);
 const isDynVar = (name) => flag("dynVars") && DYN_SET.has(name);
 // The app language is a bare ISO code, which is already a valid BCP-47 tag; only
@@ -3641,6 +3648,42 @@ function fmtDynTime(d, style) {
   if (style === "iso") return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
   return intlFmt({ timeStyle: style }).format(d);
 }
+// Same calendar day ± n days, keeping the local time of day (so a DST change never
+// shifts the date by one).
+function dayShift(d, days) {
+  const out = new Date(d.getTime());
+  out.setDate(out.getDate() + days);
+  return out;
+}
+// ISO-8601 week number: the week holding the Thursday of the current week.
+function isoWeek(d) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  const jan1 = Date.UTC(t.getUTCFullYear(), 0, 1);
+  return Math.ceil(((t - jan1) / 86400000 + 1) / 7);
+}
+// ISO-8601 local timestamp with the UTC offset ("2026-07-27T14:03:22+02:00").
+function isoStamp(d) {
+  const off = -d.getTimezoneOffset();
+  const sign = off < 0 ? "-" : "+";
+  const abs = Math.abs(off);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}` +
+    `T${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}` +
+    `${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`;
+}
+// Short throwaway id — the same platform RNG as the UUID, just eight characters.
+const shortId = () =>
+  [...crypto.getRandomValues(new Uint8Array(6))].map((b) => b.toString(36).padStart(2, "0")).join("").slice(0, 8);
+// {#{counter}#} counts copies, so its value has to survive a restart. Kept in the
+// same ui_texts store the remembered variable values use.
+const VAR_COUNTER_MAX = 1e9;
+function nextVarCounter() {
+  const now = Math.floor(Number(settings.ui_texts?.varCounter) || 0);
+  const next = now >= 0 && now < VAR_COUNTER_MAX ? now + 1 : 1;
+  settings.ui_texts = { ...(settings.ui_texts || {}), varCounter: String(next) };
+  invoke("set_ui_text", { key: "varCounter", value: String(next) }).catch(() => {});
+  return next;
+}
 // RFC 4122 v4, lowercase — built from the platform RNG, no dependency.
 function uuidV4() {
   const b = crypto.getRandomValues(new Uint8Array(16));
@@ -3653,8 +3696,9 @@ function uuidV4() {
 // copy can never blow up the clipboard payload.
 const CLIP_VAR_MAX = 100000;
 
-// Resolve one reserved name. `clip` is the clipboard text fetched once per copy.
-function dynValue(name, now, clip) {
+// Resolve one reserved name. `ctx` carries the values that cost a round trip or a
+// write, fetched once per copy: the clipboard, the account name, the counter.
+function dynValue(name, now, ctx) {
   const ds = txt("dateStyle") || "short";
   const ts = txt("timeStyle") || "short";
   switch (name) {
@@ -3662,8 +3706,18 @@ function dynValue(name, now, clip) {
     case "time": return fmtDynTime(now, ts);
     case "datetime": return `${fmtDynDate(now, ds)} ${fmtDynTime(now, ts)}`;
     case "weekday": return intlFmt({ weekday: "long" }).format(now);
-    case "clipboard": return clip;
+    case "yesterday": return fmtDynDate(dayShift(now, -1), ds);
+    case "tomorrow": return fmtDynDate(dayShift(now, 1), ds);
+    case "week": return String(isoWeek(now));
+    case "month": return intlFmt({ month: "long" }).format(now);
+    case "year": return String(now.getFullYear());
+    case "timestamp": return isoStamp(now);
+    case "epoch": return String(Math.floor(now.getTime() / 1000));
+    case "clipboard": return ctx.clip;
+    case "username": return ctx.user;
     case "uuid": return uuidV4();
+    case "random": return shortId();
+    case "counter": return String(ctx.counter);
     default: return "";
   }
 }
@@ -3676,9 +3730,12 @@ const varTokens = (p) =>
 const dialogTokens = (p) => varTokens(p).filter((tok) => !isDynVar(parseVar(tok).name));
 
 // The one place every copy path goes through: reserved names resolve themselves,
-// the rest are asked for once. Returns the finished text, or null when the user
-// cancelled the fill-in dialog.
-async function resolveVars(text) {
+// the rest are asked for once. Returns the finished text, null when the user
+// cancelled — or false when `standalone` was asked for and the small window could
+// not be opened, so the caller can fall back to the in-window dialog.
+// `standalone` is set only by copies started from OUTSIDE the app (global hotkey,
+// tray): everything inside the window uses the in-window dialog.
+async function resolveVars(text, standalone = false) {
   const tokens = extractVars(text);
   if (!tokens.length) return text;
   const values = {};
@@ -3688,16 +3745,20 @@ async function resolveVars(text) {
     (isDynVar(parseVar(tok).name) ? dyn : ask).push(tok);
   }
   if (dyn.length) {
-    let clip = "";
-    if (dyn.some((tok) => parseVar(tok).name === "clipboard")) {
-      clip = String(await invoke("clipboard_text").catch(() => "") || "").slice(0, CLIP_VAR_MAX);
-      if (!clip) toast(t("clipVarEmpty")); // image/file payload, or an empty clipboard
+    const names = new Set(dyn.map((tok) => parseVar(tok).name));
+    const ctx = { clip: "", user: "", counter: 0 };
+    if (names.has("clipboard")) {
+      ctx.clip = String(await invoke("clipboard_text").catch(() => "") || "").slice(0, CLIP_VAR_MAX);
+      if (!ctx.clip) toast(t("clipVarEmpty")); // image/file payload, or an empty clipboard
     }
+    if (names.has("username")) ctx.user = String(await invoke("os_user_name").catch(() => "") || "");
+    if (names.has("counter")) ctx.counter = nextVarCounter();
     const now = new Date();
-    for (const tok of dyn) values[tok] = dynValue(parseVar(tok).name, now, clip);
+    for (const tok of dyn) values[tok] = dynValue(parseVar(tok).name, now, ctx);
   }
   if (ask.length) {
-    const filled = await promptVarsDialog(ask);
+    const filled = standalone ? await promptVarsWindow(ask) : await promptVarsDialog(ask);
+    if (filled === false) return false;
     if (!filled) return null;
     Object.assign(values, filled);
   }
@@ -3708,7 +3769,11 @@ async function resolveVars(text) {
 // One-line explanation per reserved name, shown as the chip's tooltip.
 const DYN_TIPS = {
   date: "dynDate", time: "dynTime", datetime: "dynDatetime",
-  weekday: "dynWeekday", clipboard: "dynClipboard", uuid: "dynUuid",
+  weekday: "dynWeekday", yesterday: "dynYesterday", tomorrow: "dynTomorrow",
+  week: "dynWeek", month: "dynMonth", year: "dynYear",
+  timestamp: "dynTimestamp", epoch: "dynEpoch",
+  clipboard: "dynClipboard", username: "dynUsername",
+  uuid: "dynUuid", random: "dynRandom", counter: "dynCounter",
 };
 // A name or option must not carry the fence characters, or the token breaks.
 const cleanVarPart = (s) => s.replace(/[|{}\n]/g, "").trim();
@@ -3770,6 +3835,18 @@ for (const id of ["modal-var-name", "modal-var-opts"]) {
   });
 }
 
+// Values the user asked to remember, keyed by variable NAME (expert: varDefaults).
+// Both fill-in surfaces read and write them through these two helpers.
+function readRememberedVars() {
+  try { return JSON.parse(settings.ui_texts?.varDefaults || "{}"); } catch (_) { return {}; }
+}
+function saveRememberedVars(next, prev) {
+  const json = JSON.stringify(next);
+  if (json === JSON.stringify(prev)) return;
+  settings.ui_texts = { ...(settings.ui_texts || {}), varDefaults: json };
+  invoke("set_ui_text", { key: "varDefaults", value: json }).catch(() => {});
+}
+
 // Fill-in dialog shown when copying a prompt that holds {#{placeholders}#}.
 // `vars` are raw tokens; resolves a {token: value} map, or null when cancelled.
 let varsCleanup = null;
@@ -3782,8 +3859,7 @@ function promptVarsDialog(vars) {
   // a choice variable keeps its last pick without a checkbox (expert: choiceRemember).
   const useRemember = flag("varDefaults");
   const keepChoice = flag("choiceRemember");
-  let remembered = {};
-  try { remembered = JSON.parse(settings.ui_texts?.varDefaults || "{}"); } catch (_) { /* ignore */ }
+  const remembered = readRememberedVars();
   const rows = vars.map((token) => {
     const { name, options } = parseVar(token);
     const label = document.createElement("label");
@@ -3842,11 +3918,7 @@ function promptVarsDialog(vars) {
         else delete obj[r.name];
       }
     }
-    const json = JSON.stringify(obj);
-    if (json !== JSON.stringify(remembered)) {
-      settings.ui_texts = { ...(settings.ui_texts || {}), varDefaults: json };
-      invoke("set_ui_text", { key: "varDefaults", value: json }).catch(() => {});
-    }
+    saveRememberedVars(obj, remembered);
   };
   $("vars-ok").textContent = t("varsCopy");
   varsCleanup?.(null);
@@ -3969,6 +4041,71 @@ async function copyTextWithVars(p, el, paste = false) {
   }
 }
 
+// ---- Standalone fill-in window (vars.html) ----
+// Used ONLY by copies started outside the app (global prompt hotkey, tray quick
+// copy): a small always-on-top window asks for the placeholders so the app the user
+// is working in keeps the foreground. Everything the variables MEAN still lives
+// here — that window is a form, it renders rows and hands the answers back.
+let varsWindowPending = null;
+
+async function promptVarsWindow(tokens) {
+  const useRemember = flag("varDefaults");
+  const keepChoice = flag("choiceRemember");
+  const remembered = readRememberedVars();
+  const rows = tokens.map((token) => {
+    const { name, options } = parseVar(token);
+    const last = remembered[name];
+    return {
+      token,
+      name,
+      options,
+      value: options.length
+        ? (keepChoice && options.includes(last) ? last : options[0])
+        : (useRemember && name in remembered ? String(last) : ""),
+      remember: !options.length && useRemember && name in remembered,
+    };
+  });
+  const payload = {
+    theme: document.documentElement.getAttribute("data-theme") || "",
+    vars: activeThemeVars(),
+    title: t("varsTitle"),
+    ok: t("varsCopy"),
+    cancel: t("cancel"),
+    rememberLabel: t("rememberValue"),
+    askRemember: useRemember,
+    rows: rows.map(({ name, options, value, remember }) => ({ name, options, value, remember })),
+  };
+  // A second hotkey while a window is still open cancels the older copy — one
+  // pending question at a time, or two answers would race for one clipboard.
+  const stale = varsWindowPending;
+  varsWindowPending = null;
+  stale?.(null);
+  const answer = await new Promise((resolve) => {
+    varsWindowPending = resolve;
+    invoke("open_var_window", { payload: JSON.stringify(payload), rows: rows.length })
+      .catch(() => { varsWindowPending = null; resolve(false); });
+  });
+  if (answer === false) return false; // no window — the caller falls back
+  if (!answer) return null;
+  let parsed;
+  try { parsed = JSON.parse(answer); } catch (_) { return null; }
+  if (!Array.isArray(parsed.values) || parsed.values.length !== rows.length) return null;
+  const next = { ...remembered };
+  const filled = {};
+  rows.forEach((r, i) => {
+    const value = String(parsed.values[i] ?? "");
+    filled[r.token] = value;
+    if (r.options.length) {
+      if (keepChoice) next[r.name] = value;
+    } else if (useRemember) {
+      if (parsed.remember?.[i]) next[r.name] = value;
+      else delete next[r.name];
+    }
+  });
+  saveRememberedVars(next, remembered);
+  return filled;
+}
+
 // ---- Keyboard navigation: arrow keys move a focus ring across the grid,
 // Enter/Space copies the focused tile (feature-gated by keyboardNav).
 let kbFocus = null;
@@ -4041,14 +4178,36 @@ async function activateTile(id, paste = flag("autoPaste")) {
 }
 
 // A prompt was triggered from outside the grid — its global hotkey (F20) or a tray
-// quick-copy entry (F23). Placeholders that still need typing can only be filled in
-// a visible window, so the main window comes forward first; everything else copies
-// (and optionally pastes) without ever showing up.
+// quick-copy entry (F23). Placeholders that still need typing are asked for in a
+// small window of their own, so the app the user is working in stays in front;
+// everything else copies (and optionally pastes) without ever showing up.
 async function onPromptHotkey(id, paste) {
   const p = prompts.find((x) => x.id === id);
   if (!p) return;
-  if (dialogTokens(p).length) await invoke("focus_main_window").catch(() => {});
+  if (dialogTokens(p).length) {
+    // Chain mode is an in-window gesture — a hotkey then still goes through the grid.
+    if (flag("varPopupWindow") && !chainMode) { await copyOutsideApp(p, paste); return; }
+    await invoke("focus_main_window").catch(() => {}); // fallback: the in-window dialog
+  }
   await activateTile(id, paste);
+}
+
+// The hotkey/tray copy of a prompt with manual placeholders: ask in the standalone
+// window, then finish the copy exactly like every other path does. Falls back to the
+// in-window dialog if the small window cannot be opened at all.
+async function copyOutsideApp(p, paste) {
+  if (copyOnCooldown(p.id)) return;
+  const text = await resolveVars(p.text, true);
+  if (text === null) return; // cancelled
+  if (text === false) { // no standalone window available
+    await invoke("focus_main_window").catch(() => {});
+    await activateTile(p.id, paste);
+    return;
+  }
+  if (await invoke("copy_text", { text }).catch((e) => { toast(String(e)); return false; })) {
+    recordCopy(p.id);
+    if (paste) await autoPasteNow(null);
+  }
 }
 // Expert opt: hide the window to the tray right after a prompt copy.
 function maybeCloseOnCopy() {
@@ -4056,8 +4215,8 @@ function maybeCloseOnCopy() {
   try { window.__TAURI__?.window?.getCurrentWindow?.()?.hide?.().catch?.(() => {}); } catch { /* no-op */ }
 }
 
-function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", title }) {
-  modalState = { mode, id, color, image, showImage, copyImage, filePath, iconPath, tags: [...tags], hotkey };
+function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", title }) {
+  modalState = { mode, id, color, image, showImage, copyImage, filePath, iconPath, tags: [...tags], hotkey, hotkeyPaste };
   modal.title.textContent = title;
   modal.fav.classList.toggle("active", !!favorite);
   modal.fav.setAttribute("aria-pressed", String(!!favorite));
@@ -4097,7 +4256,12 @@ const promptHotkeysOn = () => flag("promptHotkeys");
 
 // The backend answers a rejected accelerator with a code so the reason can be shown
 // in the app language; anything else passes through unchanged.
-const HOTKEY_ERRORS = { "hotkey-invalid": "promptHotkeyInvalid", "hotkey-taken": "promptHotkeyTaken" };
+const HOTKEY_ERRORS = {
+  "hotkey-invalid": "promptHotkeyInvalid",
+  "hotkey-taken": "promptHotkeyTaken",
+  "hotkey-system": "promptHotkeySystem",
+  "hotkey-conflict": "promptHotkeyConflict",
+};
 const hotkeyMessage = (err) => (HOTKEY_ERRORS[err] ? t(HOTKEY_ERRORS[err]) : err);
 
 // Show an inline reason and drop the capture; empty text clears the message again.
@@ -4106,12 +4270,25 @@ function showHotkeyError(msg) {
   modal.hotkeyErr.classList.toggle("hidden", !msg);
 }
 
+// What a hotkey without its own choice inherits — named on the row, so "Default"
+// never leaves the user guessing which of the two it means.
+const hotkeyPasteDefault = () => (optFlag("promptHotkeyPaste") ? t("promptHotkeyPaste") : t("promptHotkeyCopy"));
+
 function renderPromptHotkey() {
   const accel = modalState?.hotkey || "";
   const pretty = prettyAccel(accel);
   modal.hotkeyInput.value = pretty;
   modal.hotkeyBadge.textContent = pretty;
   modal.hotkeyBadge.classList.toggle("hidden", !pretty);
+  const sel = modal.hotkeyAction;
+  if (sel) {
+    sel.value = modalState?.hotkeyPaste || "";
+    // The inherited mode is spelled out on the default entry, and the whole row is
+    // pointless without a binding to act on.
+    const def = sel.querySelector('option[value=""]');
+    if (def) def.textContent = t("promptHotkeyActionDefault").replace("{mode}", hotkeyPasteDefault());
+    modal.hotkeyActionRow.classList.toggle("hidden", !accel);
+  }
   showHotkeyError("");
 }
 
@@ -4131,9 +4308,26 @@ function hotkeyTaken(accel) {
   return prompts.some((p) => p.id !== modalState?.id && accelKey(p.hotkey) === key);
 }
 
+// The captured combination is checked by the BACKEND before it is kept: only the
+// backend knows the blocklist of system shortcuts and can ask Windows whether
+// another app already owns the combination. A refusal leaves the previous binding
+// exactly as it was.
+async function tryPromptHotkey(accel) {
+  const before = modalState?.id;
+  try {
+    await invoke("check_hotkey", { hotkey: accel, id: modalState?.id || null });
+  } catch (err) {
+    if (modalState?.id === before) showHotkeyError(hotkeyMessage(String(err)));
+    return;
+  }
+  if (modalState?.id !== before) return; // the editor moved on while we asked
+  setPromptHotkey(accel);
+}
+
 function setPromptHotkey(accel) {
   if (!modalState) return;
   modalState.hotkey = accel;
+  if (!accel) modalState.hotkeyPaste = ""; // no binding, no action to choose
   renderPromptHotkey();
 }
 
@@ -5430,6 +5624,7 @@ async function confirmModal() {
   const tags = modalState.tags || [];
   const notes = modal.notesText.value;
   const hotkey = modalState.hotkey || "";
+  const hotkeyPaste = hotkey ? (modalState.hotkeyPaste || "") : "";
   // NOTE: Tauri expects camelCase keys for snake_case Rust args.
   // Path media (gif/video icon or attachment) shows without a stored image.
   const showImage =
@@ -5440,23 +5635,29 @@ async function confirmModal() {
     if (modalState.mode === "create") {
       const text = modal.text.value.trim();
       if (!text) { closeModal(); return; }
-      saved = await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey });
+      saved = await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste });
       inputEl.value = "";
       autoGrow(inputEl);
       saveBtn.disabled = true;
     } else if (modalState.mode === "image-create" || modalState.mode === "file-create") {
       // The name doubles as the copy text when shown as text.
-      saved = await invoke("add_prompt", { name, text: name, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey });
+      saved = await invoke("add_prompt", { name, text: name, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste });
     } else {
       const text = copyImage || filePath ? name : modal.text.value;
-      saved = await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey });
+      saved = await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste });
     }
   } catch (err) {
     toast(hotkeyMessage(String(err))); // keep the modal open so nothing typed is lost
+    // A binding the backend refused was never stored, so the field must not keep
+    // showing it: drop it and name the reason where it was captured.
+    if (HOTKEY_ERRORS[String(err)] && hotkey) {
+      setPromptHotkey("");
+      showHotkeyError(hotkeyMessage(String(err)));
+    }
     return;
   }
   // F20: the backend hands back what it really stored. An empty hotkey where one
-  // was sent means the OS refused the combination — another app owns it.
+  // was sent means the OS refused the combination between the check and the save.
   if (hotkey && saved && !saved.hotkey) toast(t("promptHotkeyFail"));
   closeModal();
   await renderGrid();
@@ -5487,6 +5688,7 @@ async function editPrompt(id) {
       tags: p.tags || [],
       notes: p.notes || "",
       hotkey: p.hotkey || "",
+      hotkeyPaste: p.hotkey_paste || "",
       title: p.file_path
         ? t(kind === "video" ? "videoEditTitle" : kind ? "imageEditTitle" : "fileEditTitle")
         : p.copy_image ? t("imageEditTitle") : t("editModalTitle"),
@@ -7162,9 +7364,13 @@ function bind() {
     const accel = accelFromEvent(e);
     if (!accel) { showHotkeyError(t("promptHotkeyInvalid")); return; }
     if (hotkeyTaken(accel)) { showHotkeyError(t("promptHotkeyTaken")); return; } // binding unchanged
-    setPromptHotkey(accel);
+    showHotkeyError("");
+    tryPromptHotkey(accel);
   });
   $("modal-hotkey-clear").addEventListener("click", () => setPromptHotkey(""));
+  modal.hotkeyAction.addEventListener("change", () => {
+    if (modalState) modalState.hotkeyPaste = modal.hotkeyAction.value;
+  });
   // F7 version-history collapsible.
   $("modal-history-head").addEventListener("click", () => {
     const body = $("modal-history-body");
@@ -7675,8 +7881,10 @@ function bind() {
       $("opt-hotkey").value = prettyAccel(accel);
       toast(t("hotkeySet"));
     } catch (err) {
+      // A refused combination changed nothing in the backend either, so the field
+      // keeps showing the hotkey that is really registered — with the reason why.
       $("opt-hotkey").value = prettyAccel(settings.hotkey);
-      toast(t("hotkeyFail"));
+      toast(HOTKEY_ERRORS[String(err)] ? hotkeyMessage(String(err)) : t("hotkeyFail"));
     }
   });
   $("hotkey-clear").addEventListener("click", async () => {
@@ -7736,6 +7944,7 @@ function bind() {
   attachSelectPicker($("tile-size"));
   attachSelectPicker(modal.sizeSel);
   attachSelectPicker(modal.captionSize);
+  attachSelectPicker(modal.hotkeyAction);
   modal.caption.addEventListener("input", updateCaptionPreview);
   modal.captionSize.addEventListener("change", updateCaptionPreview);
   attachSelectPicker($("tile-font"));
@@ -8004,9 +8213,20 @@ function bind() {
   // "Edit prompt" chosen in a floating pill's right-click menu.
   listen("edit-prompt", (e) => editPrompt(String(e.payload)));
   // F20: a prompt's global hotkey was pressed — run the same activation a tile does.
-  listen("prompt-hotkey", (e) => onPromptHotkey(String(e.payload), optFlag("promptHotkeyPaste")));
+  // Whether it also pastes is the hotkey's OWN setting, falling back to the global one.
+  listen("prompt-hotkey", (e) => {
+    const id = String(e.payload);
+    const mode = prompts.find((p) => p.id === id)?.hotkey_paste || "";
+    onPromptHotkey(id, mode ? mode === "paste" : optFlag("promptHotkeyPaste"));
+  });
   // F23: a quick-copy entry in the tray menu — same activation, never auto-paste.
   listen("prompt-tray-copy", (e) => onPromptHotkey(String(e.payload), false));
+  // The standalone fill-in window answered (null = cancelled or closed).
+  listen("vars-filled", (e) => {
+    const resolve = varsWindowPending;
+    varsWindowPending = null;
+    resolve?.(e.payload ?? null);
+  });
   // F25: "Rename" in a pill folder's menu. The folder window hosts no themed dialog,
   // so the name is asked for here and written back from here.
   listen("folder-rename", async (e) => {

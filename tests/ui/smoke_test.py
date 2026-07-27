@@ -354,6 +354,26 @@ PROBE = """
       if (/\\{#\\{/.test(copied)) out.errors.push('an automatic placeholder was left unresolved: ' + copied);
       if (!copied.includes('CLIPTEXT')) out.errors.push('the clipboard placeholder did not pick up the clipboard text');
       if (!/Meeting on \\S/.test(copied)) out.errors.push('the date placeholder produced nothing');
+      // F12: every calendar/id placeholder has to produce a real value of its own.
+      const dynChecks = [
+        ['week', /week \\d{1,2} of \\S/],
+        ['year', new RegExp(' ' + new Date().getFullYear() + '\\\\)')],
+        ['yesterday/tomorrow', /yesterday \\S+, tomorrow \\S+/],
+        ['timestamp', /stamp \\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}/],
+        ['epoch', /epoch 1\\d{9}/],
+        ['username', /by tester/],
+        ['random', /ref [0-9a-z]{8}/],
+        ['counter', /no 1[ :]/],
+      ];
+      for (const [name, re] of dynChecks) {
+        if (!re.test(copied)) out.errors.push('the ' + name + ' placeholder produced nothing usable: ' + copied);
+      }
+      // A second copy must move the counter on — that is the whole point of it.
+      window.__LAST_COPY__ = undefined;
+      await sleep(2400); // past the per-prompt copy cooldown (2000ms)
+      if (await clickTile('p3') && !/no 2[ :]/.test(window.__LAST_COPY__ || '')) {
+        out.errors.push('the counter placeholder did not count up: ' + window.__LAST_COPY__);
+      }
     }
     // F13: a mixed prompt asks only for the manual variable and offers the choice
     // as a themed dropdown; the pick lands in the copied text.
@@ -403,8 +423,8 @@ PROBE = """
       collapseRows('editor');
       mustReach('prompt editor', '#modal .modal-x, #modal .modal-actions button');
       const chips = [...document.querySelectorAll('#modal-vars-chips .vars-chip')];
-      if (chips.length !== 6) {
-        out.errors.push('the editor lists ' + chips.length + ' automatic placeholders instead of 6');
+      if (chips.length !== 16) {
+        out.errors.push('the editor lists ' + chips.length + ' automatic placeholders instead of 16');
       } else if (chips.some(c => !c.title.trim())) {
         out.errors.push('an automatic placeholder chip has no explanation');
       }
@@ -472,13 +492,42 @@ PROBE = """
         // A modifier-less press is refused too, with a reason.
         await press({ key: 'K' });
         if (hErr.classList.contains('hidden')) out.errors.push('a modifier-less key produced no inline error');
+        // A universal system shortcut is refused by the backend, never captured.
+        const beforeSys = hField.value;
+        await press({ key: 'c', ctrlKey: true });
+        if (hErr.classList.contains('hidden') || !hErr.textContent.trim()) {
+          out.errors.push('Ctrl+C produced no inline error');
+        }
+        if (hField.value !== beforeSys) out.errors.push('a system shortcut was captured anyway: ' + hField.value);
+        // A combination another running app owns is refused the same way.
+        await press({ key: 'B', ctrlKey: true, altKey: true });
+        if (hErr.classList.contains('hidden')) out.errors.push('a combination owned by another app produced no inline error');
+        if (hField.value !== beforeSys) out.errors.push('a conflicting combination was captured anyway: ' + hField.value);
         // A free combination is captured and clears the error.
         await press({ key: 'J', ctrlKey: true, altKey: true });
         if (!hErr.classList.contains('hidden')) out.errors.push('the inline error survived a valid capture');
         if (!/J$/.test(hField.value)) out.errors.push('a free combination was not captured: ' + hField.value);
+        // F20: the copy-vs-paste choice belongs to THIS hotkey, and its default
+        // entry has to spell out what it inherits.
+        const actRow = document.getElementById('modal-hotkey-action-row');
+        const actSel = document.getElementById('modal-hotkey-action');
+        if (!actRow || actRow.classList.contains('hidden')) {
+          out.errors.push('a bound hotkey shows no copy/paste choice of its own');
+        } else {
+          const def = actSel.querySelector('option[value=""]');
+          if (!def || !/\\(.+\\)/.test(def.textContent || '')) {
+            out.errors.push('the default entry does not name the inherited mode: ' + (def && def.textContent));
+          }
+          if ([...actSel.options].map(o => o.value).join(',') !== ',copy,paste') {
+            out.errors.push('the hotkey action dropdown offers the wrong entries');
+          }
+        }
         document.getElementById('modal-hotkey-clear').click();
         await sleep(150);
         if (hField.value) out.errors.push('the clear button left a hotkey behind: ' + hField.value);
+        if (actRow && !actRow.classList.contains('hidden')) {
+          out.errors.push('the copy/paste choice stayed visible without a binding');
+        }
       }
       // Both collapsibles are open now — the state that used to squeeze them to a
       // 6px sliver and push Save out of reach on a short window.
@@ -525,6 +574,50 @@ PROBE = """
     if (calls().includes('paste_into_previous')) {
       out.errors.push('a prompt hotkey pasted although the paste option is off');
     }
+    // F12: a hotkey copy of a prompt with MANUAL placeholders asks in the small
+    // standalone window — the main window must not be pulled forward for it.
+    calls().length = 0;
+    window.__VAR_PAYLOAD__ = undefined;
+    window.__LAST_COPY__ = undefined;
+    window.__FIRE__('prompt-hotkey', 'p1');
+    await sleep(400);
+    if (!calls().includes('open_var_window')) {
+      out.errors.push('a hotkey copy with placeholders did not open the standalone window');
+    }
+    if (calls().includes('focus_main_window')) {
+      out.errors.push('the hotkey fill-in pulled the main window forward');
+    }
+    if (!document.getElementById('vars-modal').classList.contains('hidden')) {
+      out.errors.push('the hotkey fill-in opened the in-window dialog as well');
+    }
+    {
+      let req = null;
+      try { req = JSON.parse(window.__VAR_PAYLOAD__ || 'null'); } catch (e) { req = null; }
+      if (!req || !Array.isArray(req.rows) || req.rows.length !== 2) {
+        out.errors.push('the standalone window was handed the wrong rows');
+      } else if (req.rows.map(r => r.name).join(',') !== 'Text,Language') {
+        out.errors.push('the standalone rows are ' + req.rows.map(r => r.name).join(','));
+      } else if (!req.title || !req.ok) {
+        out.errors.push('the standalone window was handed no labels');
+      }
+      // Answer the way the small window does, then the copy has to finish here.
+      window.__FIRE__('vars-filled', JSON.stringify({ values: ['Hello', 'Dutch'], remember: [false, false] }));
+      await sleep(400);
+      if (window.__LAST_COPY__ !== 'Translate Hello into Dutch.') {
+        out.errors.push('the standalone answer did not finish the copy: ' + window.__LAST_COPY__);
+      }
+      if (!calls().includes('record_copy')) out.errors.push('the standalone copy was not recorded');
+    }
+    // Cancelling it copies nothing at all.
+    calls().length = 0;
+    window.__LAST_COPY__ = undefined;
+    await sleep(2400); // past the per-prompt copy cooldown (2000ms)
+    window.__FIRE__('prompt-hotkey', 'p1');
+    await sleep(300);
+    window.__FIRE__('vars-filled', null);
+    await sleep(300);
+    if (window.__LAST_COPY__ !== undefined) out.errors.push('a cancelled fill-in copied anyway');
+
     // Turn the paste option on through its real expert switch, then fire again (a
     // different prompt, so the per-prompt copy cooldown cannot swallow it).
     // The menu only renders the active tab, so walk the tabs until the row shows up.
@@ -1582,6 +1675,76 @@ FOLDER_PROBE = """
 """
 
 
+# The standalone fill-in window: it renders the rows the main window handed over,
+# answers with what was typed, and treats Esc / a click outside as a cancel.
+VARS_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  try {
+    await sleep(300);
+    const rows = [...document.querySelectorAll('#fields .vars-row')];
+    if (rows.length !== 2) errs.push('the window rendered ' + rows.length + ' rows instead of 2');
+    if (!document.getElementById('title').textContent.trim()) errs.push('the window shows no title');
+    if (!document.getElementById('ok').textContent.trim()) errs.push('the confirm button has no label');
+    if (!document.getElementById('cancel').textContent.trim()) errs.push('the cancel button has no label');
+    const text = rows[0] && rows[0].querySelector('input[type=text]');
+    if (!text) errs.push('the free-text row has no input');
+    else if (text.value !== 'roadmap') errs.push('the remembered value was not filled in: ' + text.value);
+    if (!rows[0] || !rows[0].querySelector('input[type=checkbox]')) {
+      errs.push('the free-text row has no remember switch');
+    }
+    // The choice row must NOT be a native <select> — its OS popup would blur (and
+    // therefore cancel) this window.
+    if (rows[1] && rows[1].querySelector('select')) errs.push('a choice row uses a native select');
+    const choice = rows[1] && rows[1].querySelector('.vars-choice-btn');
+    const list = rows[1] && rows[1].querySelector('.vars-choice-list');
+    if (!choice || !list) {
+      errs.push('the choice row has no in-window dropdown');
+    } else {
+      if (choice.textContent !== 'casual') errs.push('the choice row did not preselect its value');
+      choice.click();
+      await sleep(120);
+      if (list.classList.contains('hidden')) errs.push('the choice dropdown did not open');
+      const items = [...list.querySelectorAll('.vars-choice-item')];
+      if (items.map(i => i.textContent).join(',') !== 'formal,casual,witty') {
+        errs.push('the choice dropdown lists the wrong options');
+      }
+      items[2] && items[2].click();
+      await sleep(120);
+      if (!list.classList.contains('hidden')) errs.push('picking an option left the dropdown open');
+      if (choice.textContent !== 'witty') errs.push('the pick did not land in the button');
+    }
+    if (text) text.value = 'Rust';
+    // Nothing may have been sent before the user confirms.
+    if (window.__VAR_RESULT__ !== undefined) errs.push('the window answered before it was confirmed');
+    document.getElementById('ok').click();
+    await sleep(200);
+    let answer = null;
+    try { answer = JSON.parse(window.__VAR_RESULT__ || 'null'); } catch (e) { answer = null; }
+    if (!answer) errs.push('confirming sent no answer');
+    else {
+      if (answer.values.join('|') !== 'Rust|witty') errs.push('the answer carries ' + answer.values.join('|'));
+      if (answer.remember[0] !== true) errs.push('the remember switch was not reported');
+    }
+    // One answer only: Esc after a confirm must not send a cancel on top of it.
+    window.__VAR_RESULT__ = 'SENTINEL';
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    window.dispatchEvent(new Event('blur'));
+    await sleep(150);
+    if (window.__VAR_RESULT__ !== 'SENTINEL') errs.push('the window answered a second time');
+  } catch (e) { errs.push('probe: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 def unescape(s):
     for a, b in (("&quot;", '"'), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
         s = s.replace(a, b)
@@ -1648,7 +1811,8 @@ def main():
         for name, size, probe, budget in (
                 ("floating.html", (240, 60), FLOAT_PROBE, 15000),
                 ("snip.html", (1280, 800), PICK_PROBE, 20000),
-                ("folder.html", (520, 420), FOLDER_PROBE, 15000)):
+                ("folder.html", (520, 420), FOLDER_PROBE, 15000),
+                ("vars.html", (340, 250), VARS_PROBE, 15000)):
             side = tmp / "ui" / name
             side.write_text(
                 side.read_text(encoding="utf-8")

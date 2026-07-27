@@ -51,24 +51,114 @@ fn summon_launcher(app: &AppHandle) {
 // ---------- Global shortcuts: the app hotkey + one per prompt (F20) ----------
 
 type Accel = tauri_plugin_global_shortcut::Shortcut;
+use tauri_plugin_global_shortcut::{Code, Modifiers};
 
 // An accelerator is user input on its way to the OS shortcut API, so its length is
 // capped before anything else looks at it.
 const MAX_ACCEL_LEN: usize = 64;
 
-// The single place an accelerator is validated. None = unusable: empty, over-long,
-// unparseable, or without a modifier (a bare key would swallow that key in every
-// other app). Pure, so validation and conflict handling stay testable.
-fn parse_accel(raw: &str) -> Option<Accel> {
+// Rejection codes. The UI turns them into a localized message; they are the whole
+// vocabulary the hotkey path speaks.
+const HK_INVALID: &str = "hotkey-invalid"; // unusable shape (no Ctrl/Alt, Win key, garbage)
+const HK_SYSTEM: &str = "hotkey-system"; // Windows or every app owns it
+const HK_TAKEN: &str = "hotkey-taken"; // already bound inside this app
+const HK_CONFLICT: &str = "hotkey-conflict"; // another running app holds the registration
+
+// Keys a global hotkey may never take, whatever the modifiers are. A registered
+// accelerator SWALLOWS the keystroke system-wide, so these would break the machine:
+// Tab/Escape/Enter are the universal navigation + confirm/cancel keys, Backspace
+// and Delete are word-wise text editing (Ctrl+Backspace), Insert carries the
+// classic clipboard aliases (Ctrl+Insert / Shift+Insert), Space is the IME switch
+// on CJK systems and the window menu with Alt, PrintScreen is screen capture, and
+// the lock keys are hardware state. This one list also covers Ctrl+Alt+Del,
+// Ctrl+Shift+Esc, Ctrl+Esc, Alt+Tab and Alt+Space without naming them.
+const RESERVED_KEYS: &[Code] = &[
+    Code::Tab,
+    Code::Escape,
+    Code::Enter,
+    Code::NumpadEnter,
+    Code::Backspace,
+    Code::Delete,
+    Code::Insert,
+    Code::Space,
+    Code::PrintScreen,
+    Code::CapsLock,
+    Code::NumLock,
+    Code::ScrollLock,
+    Code::Pause,
+];
+
+// Ctrl+<key> combinations every Windows application implements the same way. Taking
+// one globally means the user loses copy, paste or save in EVERY program. Only the
+// plain Ctrl form is blocked — adding Shift or Alt makes a distinct combination that
+// no longer belongs to anyone in particular, and that is the namespace users pick
+// their own shortcuts from.
+const UNIVERSAL_CTRL: &[Code] = &[
+    Code::KeyA, // select all
+    Code::KeyC, // copy
+    Code::KeyV, // paste
+    Code::KeyX, // cut
+    Code::KeyZ, // undo
+    Code::KeyY, // redo
+    Code::KeyS, // save
+    Code::KeyF, // find
+    Code::KeyP, // print
+    Code::KeyN, // new
+    Code::KeyO, // open
+    Code::KeyW, // close document
+    Code::KeyT, // new tab
+    Code::F4,   // close document (MDI / browser tab)
+];
+
+// The pure decision: may this accelerator become a global hotkey? Some(code) = no.
+// Kept free of any app state so the rule set is unit-testable on its own.
+fn hotkey_block_reason(sc: &Accel) -> Option<&'static str> {
+    // Windows owns the whole Win-key namespace; RegisterHotKey either fails there or
+    // shadows a system shortcut the user cannot get back.
+    if sc.mods.intersects(Modifiers::SUPER | Modifiers::META) {
+        return Some(HK_SYSTEM);
+    }
+    // Shift alone is not a modifier for this purpose: Shift+A is how a capital A is
+    // typed, so binding it would kill typing everywhere. Require Ctrl or Alt.
+    if !sc.mods.intersects(Modifiers::CONTROL | Modifiers::ALT) {
+        return Some(HK_INVALID);
+    }
+    if RESERVED_KEYS.contains(&sc.key) {
+        return Some(HK_SYSTEM);
+    }
+    let plain_ctrl = sc.mods == Modifiers::CONTROL;
+    if plain_ctrl && UNIVERSAL_CTRL.contains(&sc.key) {
+        return Some(HK_SYSTEM);
+    }
+    // Alt+F4 closes the focused window in every Windows program.
+    if sc.mods == Modifiers::ALT && sc.key == Code::F4 {
+        return Some(HK_SYSTEM);
+    }
+    None
+}
+
+// The single place an accelerator is validated, with the reason it failed. Unusable:
+// empty, over-long, unparseable, without a modifier (a bare key would swallow that
+// key in every other app), or on the blocklist above. Pure, so validation and
+// conflict handling stay testable.
+fn accel_error(raw: &str) -> Result<Accel, &'static str> {
     let s = raw.trim();
     if s.is_empty() || s.len() > MAX_ACCEL_LEN || s.chars().any(|c| c.is_control()) {
-        return None;
+        return Err(HK_INVALID);
     }
-    let sc: Accel = s.parse().ok()?;
+    let sc: Accel = s.parse().map_err(|_| HK_INVALID)?;
     if sc.mods.is_empty() {
-        return None;
+        return Err(HK_INVALID);
     }
-    Some(sc)
+    match hotkey_block_reason(&sc) {
+        Some(code) => Err(code),
+        None => Ok(sc),
+    }
+}
+
+// None = unusable, for the paths that only need to know whether to register it.
+fn parse_accel(raw: &str) -> Option<Accel> {
+    accel_error(raw).ok()
 }
 
 // Every accelerator that should be registered, in registration order. None marks
@@ -128,11 +218,21 @@ fn sanitize_hotkey(raw: &str, app_hotkey: &str, others: &[&Prompt]) -> Result<St
     if hk.is_empty() {
         return Ok(String::new());
     }
-    let sc = parse_accel(hk).ok_or_else(|| "hotkey-invalid".to_string())?;
+    let sc = accel_error(hk).map_err(|e| e.to_string())?;
     if parse_accel(app_hotkey) == Some(sc) || others.iter().any(|p| parse_accel(&p.hotkey) == Some(sc)) {
-        return Err("hotkey-taken".to_string());
+        return Err(HK_TAKEN.to_string());
     }
     Ok(hk.to_string())
+}
+
+// What a prompt hotkey does after copying. Empty = follow the global setting, so a
+// stored value is only ever one of three states.
+fn sanitize_hotkey_mode(raw: &str) -> String {
+    match raw.trim() {
+        "copy" => "copy".to_string(),
+        "paste" => "paste".to_string(),
+        _ => String::new(),
+    }
 }
 
 // Which prompt each registered accelerator belongs to (None = the app hotkey).
@@ -147,19 +247,32 @@ struct HotkeyTargets(Mutex<Vec<(Accel, Option<String>)>>);
 // thread, and the shortcut handler reads the store.
 fn rearm_hotkeys(app: &AppHandle) -> bool {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
-    let plan = match app.try_state::<Db>() {
+    // A binding stored by an older version can be one the blocklist now refuses.
+    // It is never registered again, so the stored string is cleared here — otherwise
+    // the editor keeps showing a hotkey that does nothing.
+    let (plan, mut dropped, mut app_ok) = match app.try_state::<Db>() {
         Some(state) => {
             let store = lock(&state);
             let per_prompt = store.settings.ui_flags.get("promptHotkeys") != Some(&false);
-            hotkey_plan(&store.settings.hotkey, &store.prompts, per_prompt)
+            let stale: Vec<String> = store
+                .prompts
+                .iter()
+                .filter(|p| !p.hotkey.trim().is_empty() && parse_accel(&p.hotkey).is_none())
+                .map(|p| p.id.clone())
+                .collect();
+            let app_ok = store.settings.hotkey.trim().is_empty()
+                || parse_accel(&store.settings.hotkey).is_some();
+            (
+                hotkey_plan(&store.settings.hotkey, &store.prompts, per_prompt),
+                stale,
+                app_ok,
+            )
         }
         None => return true,
     };
     let gs = app.global_shortcut();
     let _ = gs.unregister_all();
     let mut live = Vec::with_capacity(plan.len());
-    let mut dropped: Vec<String> = Vec::new();
-    let mut app_ok = true;
     for (sc, owner) in plan {
         if gs.register(sc).is_ok() {
             live.push((sc, owner));
@@ -200,13 +313,75 @@ fn fire_prompt_hotkey(app: &AppHandle, id: &str) {
     let _ = app.emit_to("main", "prompt-hotkey", id.to_string());
 }
 
-// Register a new global hotkey (empty = disable). Returns an error the UI can
-// show if the accelerator is invalid or already taken by another app.
+// Ask the OS whether a combination is free: register it, then immediately give it
+// back. Windows only refuses a combination another PROCESS holds, which is exactly
+// the conflict the user needs to hear about before the binding is stored. A
+// combination we already hold is ours, not a conflict.
+fn accel_is_free(app: &AppHandle, sc: Accel) -> bool {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let gs = app.global_shortcut();
+    if gs.is_registered(sc) {
+        return true;
+    }
+    match gs.register(sc) {
+        Ok(()) => {
+            let _ = gs.unregister(sc);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+// Everything the editor needs to know BEFORE a binding is stored: shape, blocklist,
+// duplicates inside the app, and whether another running app already owns it.
+// `id` is the prompt being edited (its own current binding is not a duplicate).
 #[tauri::command]
-fn set_hotkey(app: AppHandle, state: State<Db>, hotkey: String) -> Result<(), String> {
+async fn check_hotkey(
+    app: AppHandle,
+    state: State<'_, Db>,
+    hotkey: String,
+    id: Option<String>,
+) -> Result<(), String> {
+    if hotkey.trim().is_empty() {
+        return Ok(()); // clearing a binding needs no checks
+    }
+    let sc = accel_error(&hotkey).map_err(|e| e.to_string())?;
+    // Read what is bound, then drop the lock: registering hops to the main thread.
+    let taken = {
+        let store = lock(&state);
+        parse_accel(&store.settings.hotkey) == Some(sc)
+            || store
+                .prompts
+                .iter()
+                .any(|p| Some(&p.id) != id.as_ref() && parse_accel(&p.hotkey) == Some(sc))
+    };
+    if taken {
+        return Err(HK_TAKEN.to_string());
+    }
+    if !accel_is_free(&app, sc) {
+        return Err(HK_CONFLICT.to_string());
+    }
+    Ok(())
+}
+
+// Register a new global hotkey (empty = disable). Everything is validated BEFORE the
+// setting is written, so a refused combination leaves the previous one live and the
+// UI field in step with what is actually bound.
+#[tauri::command]
+async fn set_hotkey(app: AppHandle, state: State<'_, Db>, hotkey: String) -> Result<(), String> {
     let hk = hotkey.trim().to_string();
-    if !hk.is_empty() && parse_accel(&hk).is_none() {
-        return Err("hotkey-invalid".to_string());
+    if !hk.is_empty() {
+        let sc = accel_error(&hk).map_err(|e| e.to_string())?;
+        let taken = {
+            let store = lock(&state);
+            store.prompts.iter().any(|p| parse_accel(&p.hotkey) == Some(sc))
+        };
+        if taken {
+            return Err(HK_TAKEN.to_string());
+        }
+        if !accel_is_free(&app, sc) {
+            return Err(HK_CONFLICT.to_string());
+        }
     }
     {
         let mut store = lock(&state);
@@ -218,15 +393,153 @@ fn set_hotkey(app: AppHandle, state: State<Db>, hotkey: String) -> Result<(), St
     if rearm_hotkeys(&app) {
         Ok(())
     } else {
-        Err("hotkey-taken".to_string())
+        Err(HK_CONFLICT.to_string())
     }
 }
 
 // A hotkey-triggered prompt with manual placeholders needs its fill-in dialog on
-// screen, so the UI asks for the window before opening it.
+// screen, so the UI asks for the window before opening it. Only used when the
+// standalone variable window is switched off (expert: varPopupWindow).
 #[tauri::command]
 fn focus_main_window(app: AppHandle) {
     show_main(&app);
+}
+
+// ---------- Standalone variable prompt (hotkey / tray copies) ----------
+//
+// A copy started from OUTSIDE the app must not drag the whole window forward just to
+// ask for a placeholder. This small always-on-top window asks, and nothing else moves.
+// The main window still owns every variable rule (which tokens need asking, what the
+// reserved names resolve to, what happens after the copy) — this window is a form:
+// it pulls the pending payload, hands back the typed values, and closes.
+const VAR_WIN_LABEL: &str = "vars-0";
+const VAR_WIN_W: f64 = 340.0; // logical px; keep in sync with .vars-card in floating.css
+const VAR_ROW_H: f64 = 70.0;
+const VAR_WIN_CHROME: f64 = 104.0; // title + buttons + padding
+const VAR_WIN_MAX_H: f64 = 560.0;
+const VAR_ROWS_MAX: u32 = 24;
+// The payload is one prompt's placeholder list, never its body.
+const VAR_PAYLOAD_MAX: usize = 64 * 1024;
+
+// The pending request. Some(..) = a window is waiting for an answer; taking it is
+// what makes an answer (or a closed window) fire exactly once.
+struct VarPrompt(Mutex<Option<String>>);
+
+// Window box for `rows` fields, centred on the cursor and kept inside that monitor's
+// work area. Physical pixels, so a second monitor at another DPI lands correctly.
+fn var_window_rect(app: &AppHandle, rows: u32) -> Rect {
+    let cursor = app.cursor_position().unwrap_or(PhysicalPosition::new(0.0, 0.0));
+    let work = work_rect_at(app, cursor.x, cursor.y);
+    let dpi = app
+        .get_webview_window("main")
+        .and_then(|w| w.monitor_from_point(cursor.x, cursor.y).ok().flatten())
+        .map(|m| m.scale_factor())
+        .unwrap_or(1.0);
+    let w = VAR_WIN_W * dpi;
+    let h = (VAR_WIN_CHROME + VAR_ROW_H * rows as f64).min(VAR_WIN_MAX_H) * dpi;
+    let (x, y) = clamp_to_work(work, w, h, cursor.x - w / 2.0, cursor.y - h / 2.0);
+    Rect { x, y, w, h }
+}
+
+// Open the small window for one fill-in request. Replaces a still-open one, so a
+// second hotkey never leaves two forms fighting over the same copy.
+#[tauri::command]
+async fn open_var_window(
+    app: AppHandle,
+    pending: State<'_, VarPrompt>,
+    payload: String,
+    rows: u32,
+) -> Result<(), String> {
+    if payload.trim().is_empty() || payload.len() > VAR_PAYLOAD_MAX {
+        return Err("bad payload".to_string());
+    }
+    let rows = rows.clamp(1, VAR_ROWS_MAX);
+    if let Some(win) = app.get_webview_window(VAR_WIN_LABEL) {
+        let _ = win.close();
+    }
+    // Never hold the store mutex while a window is built (deadlock shape).
+    let excluded = {
+        let state: State<Db> = app.state();
+        let store = lock(&state);
+        capture_excluded(&store.settings)
+    };
+    *pending.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(payload);
+    let rect = var_window_rect(&app, rows);
+    let win = WebviewWindowBuilder::new(&app, VAR_WIN_LABEL, WebviewUrl::App("vars.html".into()))
+        .title(brand::DISPLAY_NAME)
+        .inner_size(VAR_WIN_W, VAR_WIN_W) // placeholder: set_bounds_phys owns the real box
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .shadow(false)
+        .focused(true)
+        .visible(false) // sized in physical pixels first, so nothing flashes at the wrong size
+        .build()
+        .map_err(|e| e.to_string())?;
+    let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
+    set_capture_exclusion(&win, excluded);
+    set_bounds_phys(&win, rect);
+    let _ = win.show();
+    let _ = win.set_focus();
+
+    // A window closed by anything other than an answer (app quit, Esc racing the
+    // command) must still release the copy waiting on it.
+    let app2 = app.clone();
+    win.on_window_event(move |event| {
+        if matches!(event, WindowEvent::Destroyed) {
+            if let Some(p) = app2.try_state::<VarPrompt>() {
+                let taken = p.0.lock().unwrap_or_else(|e| e.into_inner()).take();
+                if taken.is_some() {
+                    let _ = app2.emit_to("main", "vars-filled", Option::<String>::None);
+                }
+            }
+        }
+    });
+    Ok(())
+}
+
+// The window asks for its own request once it has booted (a push would race the
+// webview's first frame).
+#[tauri::command]
+fn var_window_payload(pending: State<VarPrompt>) -> String {
+    pending
+        .0
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .unwrap_or_default()
+}
+
+// Hand the typed values back to the main window (None = cancelled) and close.
+#[tauri::command]
+fn var_window_result(app: AppHandle, pending: State<VarPrompt>, values: Option<String>) -> Result<(), String> {
+    if values.as_ref().is_some_and(|v| v.len() > VAR_PAYLOAD_MAX) {
+        return Err("bad values".to_string());
+    }
+    // Take first: the close below fires Destroyed, which must not answer twice.
+    let waiting = pending.0.lock().unwrap_or_else(|e| e.into_inner()).take();
+    if waiting.is_some() {
+        let _ = app.emit_to("main", "vars-filled", values);
+    }
+    if let Some(win) = app.get_webview_window(VAR_WIN_LABEL) {
+        let _ = win.close();
+    }
+    Ok(())
+}
+
+// F12: the {#{username}#} placeholder. The account name never reaches a log — it is
+// resolved straight into the copied text.
+#[tauri::command]
+fn os_user_name() -> String {
+    std::env::var("USERNAME")
+        .or_else(|_| std::env::var("USER"))
+        .unwrap_or_default()
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(64)
+        .collect()
 }
 
 // ---------- F23: tray quick-copy sections ----------
@@ -464,6 +777,10 @@ struct Prompt {
     // F20: global accelerator that copies this prompt from anywhere ("" = none).
     #[serde(default)]
     hotkey: String,
+    // F20: what THIS hotkey does — "copy", "paste" (copy and paste into the app the
+    // user was in), or "" = follow the global promptHotkeyPaste setting.
+    #[serde(default)]
+    hotkey_paste: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Default)]
@@ -2649,6 +2966,7 @@ async fn add_prompt(
     tags: Option<Vec<String>>,
     notes: Option<String>,
     hotkey: Option<String>,
+    hotkey_paste: Option<String>,
 ) -> Result<Prompt, String> {
     // One lock for the whole op so the storeFiles flag can't change mid-insert.
     let prompt = {
@@ -2658,6 +2976,11 @@ async fn add_prompt(
         let notes = sanitize_notes(&notes.unwrap_or_default())?;
         let others: Vec<&Prompt> = store.prompts.iter().collect();
         let hotkey = sanitize_hotkey(&hotkey.unwrap_or_default(), &store.settings.hotkey, &others)?;
+        let hotkey_paste = if hotkey.is_empty() {
+            String::new() // no binding, no action to remember for it
+        } else {
+            sanitize_hotkey_mode(&hotkey_paste.unwrap_or_default())
+        };
         let mut fp = file_path.unwrap_or_default();
         let mut ip = icon_path.unwrap_or_default();
         if store_files {
@@ -2682,6 +3005,7 @@ async fn add_prompt(
             tags,
             notes,
             hotkey,
+            hotkey_paste,
         };
         let view = store.settings.active_view_mut();
         if let Some(cell) = first_free_cell(view) {
@@ -2728,6 +3052,7 @@ async fn update_prompt(
     tags: Option<Vec<String>>,
     notes: Option<String>,
     hotkey: Option<String>,
+    hotkey_paste: Option<String>,
 ) -> Result<Option<Prompt>, String> {
     let updated = {
         let mut store = lock(&state);
@@ -2780,10 +3105,12 @@ async fn update_prompt(
                 if let Some(fav) = favorite { p.favorite = fav; }
                 if let Some(t) = tags { p.tags = t; }
                 if let Some(n) = notes { p.notes = n; }
+                if let Some(hp) = &hotkey_paste { p.hotkey_paste = sanitize_hotkey_mode(hp); }
                 // F20: only a real change re-arms; every save would otherwise churn
                 // through unregister/register for nothing.
                 let rebind = matches!(&hotkey, Some(h) if *h != p.hotkey);
                 if let Some(h) = hotkey { p.hotkey = h; }
+                if p.hotkey.is_empty() { p.hotkey_paste.clear(); } // no binding, no action
                 let clone = p.clone();
                 save_prompts(&app, &store);
                 cleanup_orphan_files(&app, &store); // a replaced attachment orphans its old copy
@@ -7674,8 +8001,10 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>) -> Result<usize, S
             tags,
             // A note from a foreign file must not abort the import either.
             notes: sanitize_notes(&item.notes).unwrap_or_default(),
-            // A CSV/TXT file carries prompt content, never machine-local bindings.
+            // A CSV/TXT file carries prompt content, never machine-local bindings
+            // — nor the per-binding paste choice that belongs to one.
             hotkey: String::new(),
+            hotkey_paste: String::new(),
         };
         store.prompts.push(prompt);
         count += 1;
@@ -8212,6 +8541,7 @@ pub fn run() {
             app.manage(SnipPreview(Arc::new(Mutex::new(None))));
             app.manage(HotkeyTargets(Mutex::new(Vec::new()))); // F20
             app.manage(FolderExpand(Mutex::new(HashMap::new()))); // F25
+            app.manage(VarPrompt(Mutex::new(None))); // F12 standalone fill-in window
 
             // F19 auto-paste: start tracking the last external foreground window.
             #[cfg(windows)]
@@ -8561,7 +8891,12 @@ pub fn run() {
             install_update,
             set_auto_update,
             set_hotkey,
+            check_hotkey,
             focus_main_window,
+            open_var_window,
+            var_window_payload,
+            var_window_result,
+            os_user_name,
             set_bars,
             set_minimize_on_close,
             set_always_on_top,
@@ -8928,6 +9263,7 @@ mod tests {
                 tags: vec!["Work".into(), "E-Mail".into()],
                 notes: "Ask Anna first.\nDeadline: Friday".into(),
                 hotkey: "CommandOrControl+Shift+1".into(),
+                hotkey_paste: "paste".into(),
             },
             Prompt {
                 id: "p2".into(),
@@ -8947,6 +9283,7 @@ mod tests {
                 tags: Vec::new(),
                 notes: String::new(),
                 hotkey: String::new(),
+                hotkey_paste: String::new(),
             },
         ]
     }
@@ -8955,7 +9292,7 @@ mod tests {
 
     #[test]
     fn accelerators_are_validated_before_they_reach_the_os() {
-        for good in ["CommandOrControl+Shift+P", "ctrl+shift+p", "Alt+F5", "Ctrl+Alt+Space", " Ctrl+Shift+P "] {
+        for good in ["CommandOrControl+Shift+P", "ctrl+shift+p", "Alt+F5", "Ctrl+Alt+K", " Ctrl+Shift+P "] {
             assert!(parse_accel(good).is_some(), "rejected a usable accelerator: {good:?}");
         }
         for bad in [
@@ -8974,6 +9311,74 @@ mod tests {
         assert!(parse_accel(&long).is_none());
         // Spelling and case do not make two accelerators different.
         assert_eq!(parse_accel("CommandOrControl+Shift+P"), parse_accel("ctrl+SHIFT+p"));
+    }
+
+    // A global hotkey SWALLOWS its keystroke in every other program, so the
+    // blocklist decides what the app is allowed to take away from the user.
+    #[test]
+    fn system_and_universal_shortcuts_are_refused() {
+        let reason = |s: &str| accel_error(s).err();
+        // The universal editing set: losing these breaks every program at once.
+        for s in [
+            "Ctrl+C", "Ctrl+V", "Ctrl+X", "Ctrl+A", "Ctrl+Z", "Ctrl+Y", "Ctrl+S",
+            "Ctrl+F", "Ctrl+P", "Ctrl+N", "Ctrl+O", "Ctrl+W", "Ctrl+T",
+            "CommandOrControl+C", // the spelling the UI actually stores
+        ] {
+            assert_eq!(reason(s), Some(HK_SYSTEM), "not refused: {s}");
+        }
+        // Windows-reserved, and the ones the OS would never hand over anyway.
+        for s in [
+            "Ctrl+Alt+Delete", "Ctrl+Shift+Escape", "Ctrl+Escape", "Alt+Tab",
+            "Alt+Shift+Tab", "Alt+F4", "Ctrl+F4", "Alt+Space", "Alt+Escape",
+            "Ctrl+Shift+PrintScreen", "Alt+Enter", "Ctrl+Backspace", "Ctrl+Insert",
+            "Ctrl+Alt+CapsLock", "Ctrl+Space",
+        ] {
+            assert_eq!(reason(s), Some(HK_SYSTEM), "not refused: {s}");
+        }
+        // Anything with the Windows key: that namespace belongs to the OS.
+        for s in ["Super+K", "Super+Shift+S", "Alt+Super+P", "Cmd+Q"] {
+            assert_eq!(reason(s), Some(HK_SYSTEM), "not refused: {s}");
+        }
+        // Shift alone is how a capital letter is typed — never a modifier here.
+        for s in ["Shift+A", "Shift+1", "Shift+F5"] {
+            assert_eq!(reason(s), Some(HK_INVALID), "not refused: {s}");
+        }
+        // …and the line stops there: adding a second modifier makes a combination
+        // no program owns, which is exactly where users pick their own shortcuts.
+        for s in [
+            "Ctrl+Shift+C", "Ctrl+Alt+V", "Ctrl+Shift+S", "Ctrl+Alt+Q", "Alt+Q",
+            "Ctrl+Shift+1", "Alt+F9", "Ctrl+F1", "Ctrl+Shift+F4", "Ctrl+Alt+ArrowUp",
+        ] {
+            assert_eq!(reason(s), None, "wrongly refused: {s}");
+        }
+    }
+
+    // The blocklist is authoritative wherever a binding can enter the store.
+    #[test]
+    fn a_blocked_combination_never_reaches_the_store() {
+        let prompts = sample_prompts();
+        let others: Vec<&Prompt> = prompts.iter().collect();
+        assert_eq!(sanitize_hotkey("Ctrl+C", "", &others), Err(HK_SYSTEM.into()));
+        assert_eq!(sanitize_hotkey("Shift+A", "", &others), Err(HK_INVALID.into()));
+        assert_eq!(sanitize_hotkey("Super+J", "", &others), Err(HK_SYSTEM.into()));
+        // A blocked accelerator is never registered, whatever put it in the store.
+        let mut blocked = sample_prompts();
+        blocked[0].hotkey = "Ctrl+V".into();
+        blocked[1].hotkey = "Alt+Tab".into();
+        assert!(hotkey_plan("Ctrl+S", &blocked, true).is_empty());
+        // …and an import drops it instead of keeping a binding that does nothing.
+        assert_eq!(drop_colliding_hotkeys("", &mut blocked), 2);
+        assert!(blocked.iter().all(|p| p.hotkey.is_empty()));
+    }
+
+    #[test]
+    fn a_hotkey_carries_its_own_copy_or_paste_choice() {
+        assert_eq!(sanitize_hotkey_mode("copy"), "copy");
+        assert_eq!(sanitize_hotkey_mode(" paste "), "paste");
+        // Anything else means "follow the global default".
+        for raw in ["", "   ", "yes", "true", "PASTE", "copy;drop"] {
+            assert_eq!(sanitize_hotkey_mode(raw), "", "not folded to the default: {raw:?}");
+        }
     }
 
     #[test]

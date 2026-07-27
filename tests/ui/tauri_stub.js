@@ -84,7 +84,9 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   text: i === 1
     ? "Translate {#{Text}#} into {#{Language}#}."
     : i === 3
-      ? "Meeting on {#{date}#} at {#{time}#}: {#{clipboard}#}"
+      ? "Meeting on {#{date}#} at {#{time}#}, {#{weekday}#} (week {#{week}#} of {#{month}#} {#{year}#}), " +
+        "yesterday {#{yesterday}#}, tomorrow {#{tomorrow}#}, stamp {#{timestamp}#}, epoch {#{epoch}#}, " +
+        "by {#{username}#} ref {#{random}#} no {#{counter}#}: {#{clipboard}#}"
       : i === 5
         ? "Write a {#{tone|formal,casual,witty}#} note about {#{Topic}#}."
         : i === 7
@@ -265,6 +267,20 @@ const RESULTS = {
     return { name: "Backup 2026-07-25.psb", count: 12, dropped_hotkeys: 2 };
   },
   focus_main_window: () => null,
+  os_user_name: () => "tester",
+  // F20: the backend is the authority on a capture. Same three answers the real
+  // check gives, so the editor's inline error is driven by a real rejection.
+  check_hotkey: (a) => {
+    const accel = String((a && a.hotkey) || "").toLowerCase();
+    if (/^(commandorcontrol|ctrl)\+[a-z]$/.test(accel)) throw new Error("hotkey-system");
+    if (accel === "commandorcontrol+alt+b") throw new Error("hotkey-conflict");
+    return null;
+  },
+  // F12: the standalone fill-in window. The main window hands over a request here;
+  // the small window (vars.html) pulls it and answers.
+  open_var_window: (a) => { window.__VAR_PAYLOAD__ = a && a.payload; return null; },
+  var_window_payload: () => JSON.stringify(VAR_REQUEST),
+  var_window_result: (a) => { window.__VAR_RESULT__ = (a && a.values) ?? null; return null; },
   // F25 pill folders: one folder with five members, so the closed icon has more
   // previews than the 2x2 grid shows and the badge has a real count.
   float_folder_state: () => ({ id: "f1", name: "Drafts", scale: 1, cols: 3, members: PROMPTS.slice(0, 5) }),
@@ -298,6 +314,22 @@ const RESULTS = {
     per_view: [{ name: "Home", count: 12 }],
     history_on: true,
   }),
+};
+
+// What main.js sends to vars.html: one free-text row with the remember switch and
+// one choice row, so the small window renders both shapes.
+const VAR_REQUEST = {
+  theme: "dark",
+  vars: { accent: "#ff00aa" },
+  title: "Fill in the prompt",
+  ok: "Copy",
+  cancel: "Cancel",
+  rememberLabel: "Remember",
+  askRemember: true,
+  rows: [
+    { name: "Topic", options: [], value: "roadmap", remember: true },
+    { name: "tone", options: ["formal", "casual", "witty"], value: "casual", remember: false },
+  ],
 };
 
 const noopWindow = {
