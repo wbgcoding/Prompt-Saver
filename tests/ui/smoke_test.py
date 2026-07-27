@@ -422,6 +422,21 @@ PROBE = """
       layoutScan('prompt editor');
       collapseRows('editor');
       mustReach('prompt editor', '#modal .modal-x, #modal .modal-actions button');
+      // The variable helper is a reference, so it opens collapsed and costs no height.
+      const varsBody = document.getElementById('modal-vars-body');
+      const varsHead = document.getElementById('modal-vars-head');
+      if (!varsBody || !varsHead) {
+        out.errors.push('the variable helper has no collapsible section');
+      } else {
+        if (!varsBody.classList.contains('hidden')) {
+          out.errors.push('the variable helper did not open collapsed');
+        }
+        varsHead.click();
+        await sleep(150);
+        if (varsBody.classList.contains('hidden')) {
+          out.errors.push('the variable helper did not expand when its head was clicked');
+        }
+      }
       const chips = [...document.querySelectorAll('#modal-vars-chips .vars-chip')];
       if (chips.length !== 16) {
         out.errors.push('the editor lists ' + chips.length + ' automatic placeholders instead of 16');

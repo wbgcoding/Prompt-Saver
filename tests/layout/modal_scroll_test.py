@@ -130,15 +130,18 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html") -> Path
     <input id="modal-name" class="modal-input" type="text" value="Code Review">
     <button type="button" class="clear-btn show">x</button></span>
     <button type="button" id="modal-fav" class="modal-fav-star">&#9733;</button></div>
-  <div id="modal-text-bar" class="modal-text-bar">
-    <p id="modal-vars-hint" class="modal-hint modal-vars-hint">Tip: a variable is asked when copying.</p>
-    <div id="modal-vars-chips" class="vars-chips">{var_chips}</div>
-    <div id="modal-vars-new" class="vars-new">
-      <input id="modal-var-name" class="modal-input vars-new-name" type="text">
-      <input id="modal-var-opts" class="modal-input vars-new-opts" type="text">
-      <button type="button" id="modal-var-add" class="ghost-btn">Insert</button></div>
-    <p id="modal-vars-dyn-hint" class="modal-hint">These names fill themselves in and are never asked for.</p>
-    <p id="modal-vars-choice-hint" class="modal-hint">Options turn the variable into a dropdown.</p></div>
+  <div id="modal-text-bar" class="modal-collapse modal-text-bar">
+    <button type="button" id="modal-vars-head" class="modal-collapse-head" aria-expanded="false">
+      <span>Variables</span></button>
+    <div id="modal-vars-body" class="modal-collapse-body hidden">
+      <p id="modal-vars-hint" class="modal-hint modal-vars-hint">Tip: a variable is asked when copying.</p>
+      <div id="modal-vars-new" class="vars-new">
+        <input id="modal-var-name" class="modal-input vars-new-name" type="text">
+        <input id="modal-var-opts" class="modal-input vars-new-opts" type="text">
+        <button type="button" id="modal-var-add" class="ghost-btn">Insert</button></div>
+      <p id="modal-vars-choice-hint" class="modal-hint">Options turn the variable into a dropdown.</p>
+      <div id="modal-vars-chips" class="vars-chips">{var_chips}</div>
+      <p id="modal-vars-dyn-hint" class="modal-hint">These names fill themselves in and are never asked for.</p></div></div>
   <div id="modal-md-bar" class="modal-md-bar hidden">
     <button type="button" id="modal-md-toggle" class="ghost-btn md-toggle">Preview</button></div>
   <div id="modal-text-wrap" class="modal-text-wrap">

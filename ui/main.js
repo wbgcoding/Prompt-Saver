@@ -5,7 +5,7 @@ import { FONTS, FONT_LABELS, fitText } from "./fonts.js";
 import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./media.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
-const { listen } = window.__TAURI__.event;
+const { listen, emit } = window.__TAURI__.event;
 
 const $ = (id) => document.getElementById(id);
 const gridEl = $("grid");
@@ -42,6 +42,8 @@ const modal = {
   fontSel: $("modal-font"),
   sizeSel: $("modal-size"),
   textBar: $("modal-text-bar"),
+  varsHead: $("modal-vars-head"),
+  varsBody: $("modal-vars-body"),
   varsHint: $("modal-vars-hint"),
   mdBar: $("modal-md-bar"),
   mdToggle: $("modal-md-toggle"),
@@ -186,7 +188,7 @@ const BUILTIN_THEMES = [
   "sunset", "ocean", "forest", "lavender", "candy", "coffee", "midnight",
 ];
 
-const customThemes = () => (optFlag("customThemes") ? settings.custom_themes || [] : []);
+const customThemes = () => (flag("customThemes") ? settings.custom_themes || [] : []);
 const customThemeId = (pref) => (String(pref || "").startsWith("custom:") ? String(pref).slice(7) : "");
 const findCustomTheme = (pref) => customThemes().find((c) => c.id === customThemeId(pref)) || null;
 
@@ -852,6 +854,7 @@ const FLAG_LABELS = {
   promptHotkeys: "flagPromptHotkeys",   // F20 per-prompt global hotkeys
   trayRecent: "flagTrayRecent",         // F23 "recently used" section in the tray menu
   colorPicker: "flagColorPicker",       // F26 pipette — pick a screen colour to the clipboard
+  customThemes: "flagCustomThemes",     // F3 theme editor + custom entries in the theme list
   // Checks at launch, but only while the normal auto-update setting is on.
   checkUpdateOnStart: "flagCheckUpdateOnStart",
 };
@@ -873,7 +876,6 @@ const OPT_FLAG_LABELS = {
   searchAutofocus: "flagSearchAutofocus",
   tags: "flagTags",                     // F1 tags + library tag filter
   // Appearance extras
-  customThemes: "flagCustomThemes",   // F3 theme editor + custom entries in the theme list
   compactTiles: "flagCompactTiles",
   tileGradient: "flagTileGradient",
   accentHeader: "flagAccentHeader",
@@ -5376,6 +5378,10 @@ function syncModalImageUi(mode) {
   if (varsUi) renderVarHelper(); // F12/F13 chips + insert row follow their flags
   syncMdUi(textVisible);         // F14 preview toolbar + rendered pane
   updateLenCounter();
+  // F12/F13: the variable helper is a reference, so it reopens collapsed too.
+  modal.varsBody.classList.add("hidden");
+  modal.varsHead.setAttribute("aria-expanded", "false");
+  modal.textBar.classList.remove("open");
   // F17: notes are available for every prompt kind; always reopen collapsed so the
   // dialog looks the same each time and a long note never pushes Save off screen.
   modal.notesBody.classList.add("hidden");
@@ -6097,10 +6103,19 @@ function previewThemeDraft() {
   if (!themeDraft) return;
   document.documentElement.setAttribute("data-theme", themeDraft.base);
   applyThemeVars(themeDraft.vars);
+  // The pills and folders are their own windows and only ever hear the backend's
+  // theme-changed event, which fires on a real switch — without this the preview
+  // would stop at the main window's edge while they kept the old colours.
+  broadcastTheme(themeDraft.base, themeDraft.vars);
+}
+
+// Same payload shape the backend emits, so the small windows need no new listener.
+function broadcastTheme(theme, vars) {
+  emit("theme-changed", { theme, vars: vars || {} }).catch(() => {});
 }
 
 function openThemeEditor() {
-  if (!optFlag("customThemes")) return;
+  if (!flag("customThemes")) return;
   themeRestore = {
     theme: document.documentElement.getAttribute("data-theme"),
     vars: { ...activeThemeVars() },
@@ -6115,7 +6130,10 @@ function openThemeEditor() {
 function closeThemeEditor(revert = true) {
   $("theme-modal").classList.add("hidden");
   closeColorPop();
-  if (revert && themeRestore) applyTheme(themeRestore.theme, themeRestore.vars);
+  if (revert && themeRestore) {
+    applyTheme(themeRestore.theme, themeRestore.vars);
+    broadcastTheme(themeRestore.theme, themeRestore.vars); // undo the preview in the pills too
+  }
   themeDraft = null;
   themeRestore = null;
 }
@@ -7329,6 +7347,12 @@ function bind() {
       const s = to.scrollHeight - to.clientHeight;
       to.scrollTop = s > 0 ? Math.round(ratio * s) : 0;
     });
+  });
+  // F12/F13 variable helper collapsible (same convention as the notes row).
+  modal.varsHead.addEventListener("click", () => {
+    const open = !modal.varsBody.classList.toggle("hidden");
+    modal.varsHead.setAttribute("aria-expanded", String(open));
+    modal.textBar.classList.toggle("open", open);
   });
   // F17 private-notes collapsible (same convention as the version history).
   modal.notesHead.addEventListener("click", () => {
