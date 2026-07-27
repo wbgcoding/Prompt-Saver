@@ -193,7 +193,7 @@ const RESULTS = {
     url: "https://example.invalid/setup.exe",
     skipped: false,
     notes: [
-      "## Prompt Saver 9.9.9",
+      "## Release 9.9.9",
       "",
       "A short intro paragraph that the release notes",
       "wrap over two source lines.",
@@ -249,14 +249,14 @@ const RESULTS = {
   copy_text: (a) => { window.__LAST_COPY__ = a && a.text; return true; },
   clipboard_text: () => "CLIPTEXT",
   // Always offer the portable take-over so the dialog is exercised on every run.
-  takeover_offer: () => "C:\\Users\\Example\\AppData\\Roaming\\Prompt-Saver",
+  takeover_offer: () => "C:\\Users\\Example\\AppData\\Roaming\\Example-Store",
   takeover_apply: () => null,
-  pick_backup_file: () => "C:\\Backups\\Prompt Saver 2026-07-25.psb",
+  pick_backup_file: () => "C:\\Backups\\Backup 2026-07-25.psb",
   // Refuses until a password is supplied — drives the retry prompt.
   import_all: (a) => {
     if (!a || !a.password) throw new Error("password-required");
     if (a.password !== "letmein") throw new Error("wrong password or corrupt backup");
-    return { name: "Prompt Saver 2026-07-25.psb", count: 12, dropped_hotkeys: 2 };
+    return { name: "Backup 2026-07-25.psb", count: 12, dropped_hotkeys: 2 };
   },
   focus_main_window: () => null,
   // F25 pill folders: one folder with five members, so the closed icon has more

@@ -3,6 +3,15 @@
 All notable changes to **Prompt Saver**. Download the latest version from the
 [releases page](../../releases/latest).
 
+## Unreleased
+
+### Changed
+
+- The product name now lives in one generated file per layer instead of being
+  spelled out across the code, the interface and the build scripts. Nothing about
+  the app changes: it keeps the same data folder, autostart entry and update
+  source, and a unit test pins every one of those values.
+
 ## 2.7.0 (2026-07-27)
 
 Thirteen new features: tags, custom themes, folders for view tabs and for

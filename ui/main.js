@@ -1,4 +1,5 @@
 // Main-window controller. Uses Tauri's global API (withGlobalTauri).
+import { APP_NAME } from "./brand.js";
 import { I18N, LANGS } from "./i18n.js";
 import { FONTS, FONT_LABELS, fitText } from "./fonts.js";
 import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./media.js";
@@ -144,10 +145,21 @@ function resolveLang(pref) {
   const p = (pref && pref !== "auto" ? pref : (navigator.language || "en")).toLowerCase();
   return LANGS.find((code) => p.startsWith(code)) || "en";
 }
-const t = (key) => I18N[LANG][key] ?? I18N.en[key] ?? key;
+// {app} stands for the product name in every translation, so no string spells it.
+// Filling it here means callers never have to pass it.
+const t = (key) => String(I18N[LANG][key] ?? I18N.en[key] ?? key).replaceAll("{app}", APP_NAME);
+
+// The product name never appears in the markup — every [data-brand] element (the
+// <title> and the header label) is filled from ui/brand.js. Runs at load, before
+// the first backend round trip, so the header is never briefly blank.
+const applyBrand = () => {
+  document.querySelectorAll("[data-brand]").forEach((el) => { el.textContent = APP_NAME; });
+};
+applyBrand();
 
 function applyI18n() {
   document.documentElement.lang = LANG;
+  applyBrand();
   document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll("[data-i18n-ph]").forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
   document.querySelectorAll("[data-i18n-title]").forEach((el) => { el.title = t(el.dataset.i18nTitle); });

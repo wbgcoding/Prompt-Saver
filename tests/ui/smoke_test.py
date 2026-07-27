@@ -57,7 +57,7 @@ PROBE = """
         out.errors.push('take-over dialog has no icon');
       }
       const msg = document.getElementById('confirm-msg').textContent;
-      if (!msg.includes('Prompt-Saver')) out.errors.push('take-over dialog does not name the folder');
+      if (!msg.includes('Example-Store')) out.errors.push('take-over dialog does not name the folder');
       if (!/\\n/.test(msg)) out.errors.push('take-over dialog lost its line breaks');
       await click('confirm-cancel'); // "start empty"
     }

@@ -1354,7 +1354,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .noflag-tilePressScale .tile:active:not(.media-hover) { --tile-press: 1; }
 .noflag-tileHoverLift .tile:hover { --tile-lift: 0px; }
 .noflag-copyFlash .tile.copied { border-color: var(--border); background: var(--surface); }
-/* Screenshot keep-as-button popup: scales with the Prompt Saver window so the
+/* Screenshot keep-as-button popup: scales with the main window so the
    preview is as large as possible while keeping a comfortable margin. */
 .snip-modal-box { width: min(1200px, 94vw); }
 .snip-preview {

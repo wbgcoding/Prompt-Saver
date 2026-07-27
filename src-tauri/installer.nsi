@@ -1075,7 +1075,7 @@ Section Uninstall
     DeleteRegKey /ifempty HKCU "${MANUKEY}"
 
     SetShellVarContext current
-    ; Canonical store (matches DATA_FOLDER in lib.rs); legacy bundle-id dirs kept
+    ; Canonical store (matches DATA_FOLDER in src/brand.rs); legacy bundle-id dirs kept
     ; for older installs. A store relocated via the expert menu is not reachable.
     RmDir /r "$APPDATA\Prompt-Saver"
     RmDir /r "$APPDATA\${BUNDLEID}"

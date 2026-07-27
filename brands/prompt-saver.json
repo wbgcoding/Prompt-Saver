@@ -1,0 +1,19 @@
+{
+  "displayName": "Prompt Saver",
+  "slug": "prompt-saver",
+  "identifier": "com.bgcoding.promptsaver",
+  "description": "Local offline prompt manager",
+  "npmDescription": "Local offline prompt manager with floating quick-copy buttons",
+  "dataFolder": "Prompt-Saver",
+  "autostartKey": "PromptSaver",
+  "tempDir": "prompt-saver",
+  "tempPrefix": "promptsaver",
+  "windowClass": "PromptSaverClipWatch",
+  "userAgent": "PromptSaver",
+  "repo": "wbgcoding/Prompt-Saver",
+  "legacyDataFolder": "com.bgcoding.promptsaver",
+  "legacyAutostartKey": "",
+  "legacyScreenshotPrefix": "PromptSaver-",
+  "icon": "brands/icons/prompt-saver.svg",
+  "installerIcon": "brands/icons/prompt-saver-installer.svg"
+}

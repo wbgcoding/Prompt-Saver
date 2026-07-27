@@ -1,5 +1,7 @@
-// Prompt Saver backend (Tauri v2). Local SQLite storage, clipboard, import/export,
+// Application backend (Tauri v2). Local SQLite storage, clipboard, import/export,
 // multiple views, frameless floating quick-copy windows. No network, 100% offline.
+
+pub mod brand;
 
 use image::imageops::FilterType;
 use rusqlite::{params, Connection};
@@ -733,40 +735,52 @@ const FLOAT_IMG: f64 = 400.0; // square box for image pills: S 300 / M 400 / L 5
 const MAX_FLOAT_FOLDERS: usize = 100;
 const MAX_FOLDER_NAME: usize = 40;
 const FOLDER_BOX: f64 = 96.0; // collapsed folder icon (square, logical px at scale 1)
-const AUTOSTART_KEY: &str = "PromptSaver";
+// Brand-owned identifiers. Every product name in the Rust code comes from
+// src/brand.rs, which tools/brand.js writes from brands/<brand>.json.
+const AUTOSTART_KEY: &str = brand::AUTOSTART_KEY;
 // Local data folder under %APPDATA%\Roaming. Used by the pre-app panic hook
 // (no AppHandle) and the store path; deliberately NOT the bundle identifier.
-const DATA_FOLDER: &str = "Prompt-Saver";
+const DATA_FOLDER: &str = brand::DATA_FOLDER;
 
 fn grid_key(cols: u32, rows: u32) -> String {
     format!("{}x{}", cols, rows)
 }
 
 // WebView2-missing dialog texts; shown before settings exist, so the OS
-// locale decides (same language set as the UI).
+// locale decides (same language set as the UI). `{app}` is filled with the
+// product name once, in webview2_dialog — the translations never spell it.
 fn webview2_texts(lang: &str) -> (&'static str, &'static str) {
     match lang {
-        "de" => ("WebView2 Runtime fehlt", "Prompt Saver benötigt die Microsoft WebView2 Runtime.\n\nJetzt herunterladen und installieren? Danach Prompt Saver einfach erneut starten."),
-        "es" => ("Falta WebView2 Runtime", "Prompt Saver necesita Microsoft WebView2 Runtime.\n\n¿Descargarlo e instalarlo ahora? Después, simplemente inicia Prompt Saver de nuevo."),
-        "fr" => ("WebView2 Runtime manquant", "Prompt Saver nécessite Microsoft WebView2 Runtime.\n\nLe télécharger et l'installer maintenant ? Relancez ensuite simplement Prompt Saver."),
-        "it" => ("WebView2 Runtime mancante", "Prompt Saver richiede Microsoft WebView2 Runtime.\n\nScaricarlo e installarlo ora? Dopo, riavvia semplicemente Prompt Saver."),
-        "pt" => ("WebView2 Runtime ausente", "O Prompt Saver precisa do Microsoft WebView2 Runtime.\n\nBaixar e instalar agora? Depois, basta iniciar o Prompt Saver novamente."),
-        "pl" => ("Brak środowiska WebView2", "Prompt Saver wymaga Microsoft WebView2 Runtime.\n\nPobrać i zainstalować teraz? Następnie po prostu uruchom Prompt Saver ponownie."),
-        "ru" => ("Отсутствует WebView2 Runtime", "Prompt Saver требуется Microsoft WebView2 Runtime.\n\nСкачать и установить сейчас? После этого просто запустите Prompt Saver снова."),
-        "zh" => ("缺少 WebView2 运行时", "Prompt Saver 需要 Microsoft WebView2 运行时。\n\n现在下载并安装吗？安装后重新启动 Prompt Saver 即可。"),
-        "ja" => ("WebView2 ランタイムがありません", "Prompt Saver には Microsoft WebView2 ランタイムが必要です。\n\n今すぐダウンロードしてインストールしますか？その後、Prompt Saver を再起動してください。"),
-        "nl" => ("WebView2-runtime ontbreekt", "Prompt Saver heeft de Microsoft WebView2-runtime nodig.\n\nNu downloaden en installeren? Start Prompt Saver daarna gewoon opnieuw."),
-        "tr" => ("WebView2 çalışma zamanı eksik", "Prompt Saver, Microsoft WebView2 çalışma zamanına ihtiyaç duyar.\n\nŞimdi indirilip kurulsun mu? Ardından Prompt Saver'ı yeniden başlatmanız yeterli."),
-        "ko" => ("WebView2 런타임 없음", "Prompt Saver에는 Microsoft WebView2 런타임이 필요합니다.\n\n지금 다운로드하여 설치할까요? 설치 후 Prompt Saver를 다시 시작하면 됩니다."),
-        "hi" => ("WebView2 रनटाइम मौजूद नहीं है", "Prompt Saver को Microsoft WebView2 रनटाइम की आवश्यकता है।\n\nअभी डाउनलोड और इंस्टॉल करें? उसके बाद बस Prompt Saver फिर से शुरू करें।"),
-        "id" => ("WebView2 Runtime tidak ditemukan", "Prompt Saver memerlukan Microsoft WebView2 Runtime.\n\nUnduh dan pasang sekarang? Setelah itu cukup jalankan Prompt Saver lagi."),
-        "vi" => ("Thiếu WebView2 Runtime", "Prompt Saver cần Microsoft WebView2 Runtime.\n\nTải xuống và cài đặt ngay? Sau đó chỉ cần khởi động lại Prompt Saver."),
-        "cs" => ("Chybí WebView2 Runtime", "Prompt Saver vyžaduje Microsoft WebView2 Runtime.\n\nStáhnout a nainstalovat nyní? Poté stačí Prompt Saver znovu spustit."),
-        "uk" => ("Відсутній WebView2 Runtime", "Prompt Saver потребує Microsoft WebView2 Runtime.\n\nЗавантажити та встановити зараз? Після цього просто запустіть Prompt Saver знову."),
-        "sv" => ("WebView2-runtime saknas", "Prompt Saver behöver Microsoft WebView2-runtime.\n\nLadda ner och installera nu? Starta sedan bara Prompt Saver igen."),
-        "ro" => ("Lipsește WebView2 Runtime", "Prompt Saver are nevoie de Microsoft WebView2 Runtime.\n\nDescărcați și instalați acum? Apoi porniți pur și simplu Prompt Saver din nou."),
-        _ => ("WebView2 runtime missing", "Prompt Saver needs the Microsoft WebView2 runtime.\n\nDownload and install it now? Simply start Prompt Saver again afterwards."),
+        "de" => ("WebView2 Runtime fehlt", "{app} benötigt die Microsoft WebView2 Runtime.\n\nJetzt herunterladen und installieren? Danach {app} einfach erneut starten."),
+        "es" => ("Falta WebView2 Runtime", "{app} necesita Microsoft WebView2 Runtime.\n\n¿Descargarlo e instalarlo ahora? Después, simplemente inicia {app} de nuevo."),
+        "fr" => ("WebView2 Runtime manquant", "{app} nécessite Microsoft WebView2 Runtime.\n\nLe télécharger et l'installer maintenant ? Relancez ensuite simplement {app}."),
+        "it" => ("WebView2 Runtime mancante", "{app} richiede Microsoft WebView2 Runtime.\n\nScaricarlo e installarlo ora? Dopo, riavvia semplicemente {app}."),
+        "pt" => ("WebView2 Runtime ausente", "O {app} precisa do Microsoft WebView2 Runtime.\n\nBaixar e instalar agora? Depois, basta iniciar o {app} novamente."),
+        "pl" => ("Brak środowiska WebView2", "{app} wymaga Microsoft WebView2 Runtime.\n\nPobrać i zainstalować teraz? Następnie po prostu uruchom {app} ponownie."),
+        "ru" => ("Отсутствует WebView2 Runtime", "{app} требуется Microsoft WebView2 Runtime.\n\nСкачать и установить сейчас? После этого просто запустите {app} снова."),
+        "zh" => ("缺少 WebView2 运行时", "{app} 需要 Microsoft WebView2 运行时。\n\n现在下载并安装吗？安装后重新启动 {app} 即可。"),
+        "ja" => ("WebView2 ランタイムがありません", "{app} には Microsoft WebView2 ランタイムが必要です。\n\n今すぐダウンロードしてインストールしますか？その後、{app} を再起動してください。"),
+        "nl" => ("WebView2-runtime ontbreekt", "{app} heeft de Microsoft WebView2-runtime nodig.\n\nNu downloaden en installeren? Start {app} daarna gewoon opnieuw."),
+        "tr" => ("WebView2 çalışma zamanı eksik", "{app}, Microsoft WebView2 çalışma zamanına ihtiyaç duyar.\n\nŞimdi indirilip kurulsun mu? Ardından {app}'ı yeniden başlatmanız yeterli."),
+        "ko" => ("WebView2 런타임 없음", "{app}에는 Microsoft WebView2 런타임이 필요합니다.\n\n지금 다운로드하여 설치할까요? 설치 후 {app}를 다시 시작하면 됩니다."),
+        "hi" => ("WebView2 रनटाइम मौजूद नहीं है", "{app} को Microsoft WebView2 रनटाइम की आवश्यकता है।\n\nअभी डाउनलोड और इंस्टॉल करें? उसके बाद बस {app} फिर से शुरू करें।"),
+        "id" => ("WebView2 Runtime tidak ditemukan", "{app} memerlukan Microsoft WebView2 Runtime.\n\nUnduh dan pasang sekarang? Setelah itu cukup jalankan {app} lagi."),
+        "vi" => ("Thiếu WebView2 Runtime", "{app} cần Microsoft WebView2 Runtime.\n\nTải xuống và cài đặt ngay? Sau đó chỉ cần khởi động lại {app}."),
+        "cs" => ("Chybí WebView2 Runtime", "{app} vyžaduje Microsoft WebView2 Runtime.\n\nStáhnout a nainstalovat nyní? Poté stačí {app} znovu spustit."),
+        "uk" => ("Відсутній WebView2 Runtime", "{app} потребує Microsoft WebView2 Runtime.\n\nЗавантажити та встановити зараз? Після цього просто запустіть {app} знову."),
+        "sv" => ("WebView2-runtime saknas", "{app} behöver Microsoft WebView2-runtime.\n\nLadda ner och installera nu? Starta sedan bara {app} igen."),
+        "ro" => ("Lipsește WebView2 Runtime", "{app} are nevoie de Microsoft WebView2 Runtime.\n\nDescărcați și instalați acum? Apoi porniți pur și simplu {app} din nou."),
+        _ => ("WebView2 runtime missing", "{app} needs the Microsoft WebView2 runtime.\n\nDownload and install it now? Simply start {app} again afterwards."),
     }
+}
+
+// The same texts with the product name filled in.
+fn webview2_dialog(lang: &str) -> (String, String) {
+    let (title, msg) = webview2_texts(lang);
+    (
+        title.replace("{app}", brand::DISPLAY_NAME),
+        msg.replace("{app}", brand::DISPLAY_NAME),
+    )
 }
 
 // Resolve the effective UI language code ("auto" -> OS locale), EN fallback.
@@ -944,7 +958,7 @@ type Db = Mutex<Store>;
 
 fn default_data_dir(app: &AppHandle) -> PathBuf {
     // Portable build keeps its data beside the exe so it travels with the folder;
-    // installed builds use %APPDATA%\Prompt-Saver. If the exe folder is not
+    // installed builds use %APPDATA%\<DATA_FOLDER>. If the exe folder is not
     // writable (e.g. run from a read-only location), fall back to AppData.
     if is_portable() {
         if let Some(dir) = portable_data_dir() {
@@ -987,20 +1001,33 @@ fn appdata_store_dir(app: &AppHandle, portable: &std::path::Path) -> Option<Path
     STORE_FILES.iter().any(|f| src.join(f).exists()).then_some(src)
 }
 
-// One-time move of the store from the old identifier-based folder
-// (com.bgcoding.promptsaver) to Prompt-Saver, so the rename never loses data.
+// One-time move of the store out of the old identifier-based folder
+// (brand::LEGACY_DATA_FOLDER) into DATA_FOLDER, so the rename never loses data.
+// Both the identifier folder Tauri resolves and the frozen legacy name are tried:
+// the second one survives even if Tauri ever changes how app_data_dir is built.
 fn migrate_legacy_data(app: &AppHandle, new: &std::path::Path) {
     if new.join("data.db").exists() {
         return;
     }
-    if let Ok(old) = app.path().app_data_dir() {
-        if old.as_path() != new {
-            for f in ["data.db", "prompts.json", "settings.json"] {
-                if old.join(f).exists() {
-                    let _ = fs::copy(old.join(f), new.join(f));
-                }
+    let mut olds: Vec<PathBuf> = Vec::new();
+    if let Ok(dir) = app.path().app_data_dir() {
+        olds.push(dir);
+    }
+    if !brand::LEGACY_DATA_FOLDER.is_empty() {
+        if let Some(roaming) = std::env::var_os("APPDATA") {
+            olds.push(PathBuf::from(roaming).join(brand::LEGACY_DATA_FOLDER));
+        }
+    }
+    for old in olds {
+        if old.as_path() == new || !STORE_FILES.iter().any(|f| old.join(f).exists()) {
+            continue;
+        }
+        for f in STORE_FILES {
+            if old.join(f).exists() {
+                let _ = fs::copy(old.join(f), new.join(f));
             }
         }
+        return;
     }
 }
 
@@ -2432,7 +2459,7 @@ static PDFIUM_DLL: &[u8] = include_bytes!("../pdfium.dll");
 // against a stale DLL left behind by an older one.
 fn pdfium_cache_path() -> PathBuf {
     std::env::temp_dir()
-        .join("prompt-saver")
+        .join(brand::TEMP_DIR)
         .join(format!("pdfium-{APP_VERSION}.dll"))
 }
 
@@ -4643,7 +4670,7 @@ fn capture_excluded(settings: &Settings) -> bool {
 }
 
 // Keep our own windows out of OTHER capture tools (Snipping Tool, Print Screen,
-// Game Bar, OBS, and Prompt Saver's own window picker): when excluded the window
+// Game Bar, and our own window picker): when excluded the window
 // stays fully visible to the user but is omitted from any screen capture. Our own
 // snip already hides these windows before grabbing, so this never affects it.
 // WDA_EXCLUDEFROMCAPTURE needs Windows 10 2004+; on older builds the call simply
@@ -4913,7 +4940,7 @@ mod clipwatch {
         WATCHER_STOP.store(false, Ordering::Release);
         *WATCHER_APP.lock().unwrap_or_else(|e| e.into_inner()) = Some(app);
         let handle = std::thread::spawn(|| unsafe {
-            let class = wide("PromptSaverClipWatch");
+            let class = wide(crate::brand::WINDOW_CLASS);
             let name = wide("psclip");
             let wc = WndClassW {
                 style: 0,
@@ -5445,7 +5472,7 @@ fn close_all_snip(app: &AppHandle) {
 }
 
 // Hide (or restore) the app's own windows — the main window and floating pills —
-// around a snip, so a screenshot never contains Prompt Saver itself (this also
+// around a snip, so a screenshot never contains the app itself (this also
 // reveals whatever the main window was covering, e.g. Task Manager).
 fn set_app_windows_hidden(app: &AppHandle, hidden: bool) {
     for (label, win) in app.webview_windows() {
@@ -5485,7 +5512,7 @@ static SNIP_PREVIEW_FILE: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 fn write_snip_preview(jpeg: &[u8]) -> Option<String> {
     let seq = SNIP_PREVIEW_SEQ.fetch_add(1, Ordering::Relaxed);
-    let path = std::env::temp_dir().join(format!("promptsaver-snip-{}.jpg", seq));
+    let path = std::env::temp_dir().join(format!("{}-snip-{}.jpg", brand::TEMP_PREFIX, seq));
     fs::write(&path, jpeg).ok()?;
     if let Some(old) = SNIP_PREVIEW_FILE
         .lock()
@@ -6220,14 +6247,16 @@ async fn save_screenshot_as(app: AppHandle, data_url: String) -> Result<Option<S
 }
 
 // Delete a previously auto-saved screenshot (result dialog: folder-saving turned
-// off). Safety: only ever removes our own Screenshot-*.jpg (or legacy
-// PromptSaver-*.png) files.
+// off). Safety: only ever removes our own Screenshot-*.jpg (or the legacy
+// <brand>-*.png a much older version wrote) files.
 #[tauri::command]
 async fn delete_screenshot_file(state: State<'_, Db>, path: String) -> Result<bool, String> {
     let p = std::path::Path::new(&path);
     let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-    let ours = (name.starts_with("Screenshot-") && name.ends_with(".jpg"))
-        || (name.starts_with("PromptSaver-") && name.ends_with(".png"));
+    let legacy = !brand::LEGACY_SCREENSHOT_PREFIX.is_empty()
+        && name.starts_with(brand::LEGACY_SCREENSHOT_PREFIX)
+        && name.ends_with(".png");
+    let ours = (name.starts_with("Screenshot-") && name.ends_with(".jpg")) || legacy;
     if !ours || !p.is_file() {
         return Ok(false);
     }
@@ -6703,11 +6732,11 @@ async fn capture_window(app: AppHandle, state: State<'_, SnipState>, id: u32) ->
 #[tauri::command]
 fn open_repo(page: Option<String>) -> Result<(), String> {
     let url = match page.as_deref() {
-        Some("releases") => "https://github.com/wbgcoding/Prompt-Saver/releases",
-        _ => "https://github.com/wbgcoding/Prompt-Saver",
+        Some("releases") => format!("{}/releases", repo_url()),
+        _ => repo_url(),
     };
     let mut cmd = std::process::Command::new("cmd");
-    cmd.args(["/C", "start", "", url]);
+    cmd.args(["/C", "start", "", &url]);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -6732,8 +6761,15 @@ fn set_ui_zoom(app: AppHandle, factor: f64) -> Result<(), String> {
 
 // ---------- Updates (GitHub releases) ----------
 
-const UPDATE_API: &str = "https://api.github.com/repos/wbgcoding/Prompt-Saver/releases/latest";
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+// The project's own GitHub repo — the only host any of this ever talks to.
+fn repo_url() -> String {
+    format!("https://github.com/{}", brand::REPO)
+}
+fn update_api() -> String {
+    format!("https://api.github.com/repos/{}/releases/latest", brand::REPO)
+}
 const UPDATE_MAX_BYTES: u64 = 100 * 1024 * 1024;
 
 // Spawn a child process without flashing a console window.
@@ -6754,8 +6790,8 @@ struct UpdateInfo {
 // Latest release tag, installer asset URL and changelog body. None on any
 // failure (offline, private repo, rate limit) — checks never disturb the app.
 fn fetch_latest() -> Option<(String, String, String)> {
-    let body = ureq::get(UPDATE_API)
-        .set("User-Agent", "PromptSaver")
+    let body = ureq::get(&update_api())
+        .set("User-Agent", brand::USER_AGENT)
         .timeout(std::time::Duration::from_secs(10))
         .call()
         .ok()?
@@ -6953,8 +6989,8 @@ fn skip_version(app: AppHandle, state: State<Db>, version: String) {
 // pass a prefix check yet resolve to a different repo. Reject every escape vector and
 // require exactly the two trailing path segments (tag / asset), no query or fragment.
 fn valid_update_url(url: &str) -> bool {
-    const PREFIX: &str = "https://github.com/wbgcoding/Prompt-Saver/releases/download/";
-    let rest = match url.strip_prefix(PREFIX) {
+    let prefix = format!("{}/releases/download/", repo_url());
+    let rest = match url.strip_prefix(prefix.as_str()) {
         Some(r) => r,
         None => return false,
     };
@@ -6982,7 +7018,7 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
         return Err("invalid update source".to_string());
     }
     let resp = ureq::get(&url)
-        .set("User-Agent", "PromptSaver")
+        .set("User-Agent", brand::USER_AGENT)
         .timeout(std::time::Duration::from_secs(300))
         .call()
         .map_err(|e| format!("download: {}", e))?;
@@ -7010,7 +7046,7 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
     // that mismatches always aborts; a release that ships no hash file proceeds (so the
     // updater still works for any release that predates the hash convention).
     if let Ok(resp) = ureq::get(&format!("{}.sha256", url))
-        .set("User-Agent", "PromptSaver")
+        .set("User-Agent", brand::USER_AGENT)
         .timeout(std::time::Duration::from_secs(30))
         .call()
     {
@@ -7031,7 +7067,7 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let stage = std::env::temp_dir().join(format!("prompt-saver-update-{}-{}", std::process::id(), stamp));
+    let stage = std::env::temp_dir().join(format!("{}-update-{}-{}", brand::SLUG, std::process::id(), stamp));
     fs::create_dir_all(&stage).map_err(|e| format!("stage dir: {}", e))?;
     let installer = stage.join("setup.exe");
     fs::write(&installer, &bytes).map_err(|e| format!("save installer: {}", e))?;
@@ -7103,6 +7139,11 @@ fn apply_autostart(enabled: bool, minimized: bool) -> Result<(), String> {
             KEY_SET_VALUE,
         )
         .map_err(|e| e.to_string())?;
+    // A value an earlier name of this product registered would keep launching the
+    // app twice; drop it whichever way the setting goes.
+    if !brand::LEGACY_AUTOSTART_KEY.is_empty() {
+        let _ = run.delete_value(brand::LEGACY_AUTOSTART_KEY);
+    }
     if enabled {
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
         let flag = if minimized { " --minimized" } else { "" };
@@ -7810,8 +7851,8 @@ async fn export_all(app: AppHandle, state: State<'_, Db>) -> Result<usize, Strin
     // Always encrypted: fixed key by default (restorable anywhere), user password if set.
     let blob = backup_encrypt(json.as_bytes(), password.as_deref())?;
     let file = file_dialog(&app)
-        .set_file_name("prompt-saver-backup.psb")
-        .add_filter("Prompt Saver backup", &["psb", "json"])
+        .set_file_name(&format!("{}-backup.psb", brand::SLUG))
+        .add_filter(&format!("{} backup", brand::DISPLAY_NAME), &["psb", "json"])
         .save_file();
     match file {
         Some(path) => {
@@ -7834,7 +7875,7 @@ struct ImportSummary {
 #[tauri::command]
 async fn pick_backup_file(app: AppHandle) -> Option<String> {
     file_dialog(&app)
-        .add_filter("Prompt Saver backup", &["psb", "json"])
+        .add_filter(&format!("{} backup", brand::DISPLAY_NAME), &["psb", "json"])
         .pick_file()
         .map(|p| p.display().to_string())
 }
@@ -7858,10 +7899,10 @@ async fn import_all(
     // Encrypted (PSB1) or a legacy plaintext .json backup.
     let content = match backup_decrypt(&raw, pw.as_deref())? {
         Some(plain) => String::from_utf8(plain).map_err(|_| "corrupt backup".to_string())?,
-        None => String::from_utf8(raw).map_err(|_| "not a Prompt Saver backup".to_string())?,
+        None => String::from_utf8(raw).map_err(|_| format!("not a {} backup", brand::DISPLAY_NAME))?,
     };
     let backup: Backup =
-        serde_json::from_str(&content).map_err(|_| "not a Prompt Saver backup".to_string())?;
+        serde_json::from_str(&content).map_err(|_| format!("not a {} backup", brand::DISPLAY_NAME))?;
 
     let (settings, count, dropped_hotkeys) = {
         let mut store = lock(&state);
@@ -8022,7 +8063,7 @@ fn ensure_webview2() -> bool {
     if tauri::webview_version().is_ok() {
         return true;
     }
-    let (title, msg) = webview2_texts(resolve_lang("auto"));
+    let (title, msg) = webview2_dialog(resolve_lang("auto"));
     let answer = rfd::MessageDialog::new()
         .set_level(rfd::MessageLevel::Warning)
         .set_title(title)
@@ -8058,7 +8099,7 @@ fn install_webview2_runtime() -> bool {
     use std::os::windows::process::CommandExt;
     const BOOTSTRAPPER_URL: &str = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
     let resp = match ureq::get(BOOTSTRAPPER_URL)
-        .set("User-Agent", "PromptSaver")
+        .set("User-Agent", brand::USER_AGENT)
         .timeout(std::time::Duration::from_secs(300))
         .call()
     {
@@ -8081,7 +8122,7 @@ fn install_webview2_runtime() -> bool {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let dir = std::env::temp_dir().join(format!("prompt-saver-wv2-{}-{}", std::process::id(), stamp));
+    let dir = std::env::temp_dir().join(format!("{}-wv2-{}-{}", brand::SLUG, std::process::id(), stamp));
     if fs::create_dir_all(&dir).is_err() {
         return false;
     }
@@ -8334,7 +8375,7 @@ pub fn run() {
             let quit_item = MenuItem::with_id(app, "quit", quit_label, true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
             let mut tray = TrayIconBuilder::with_id("tray")
-                .tooltip("Prompt Saver")
+                .tooltip(brand::DISPLAY_NAME)
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -8557,24 +8598,63 @@ pub fn run() {
 mod tests {
     use super::*;
 
+    // Every identifier a rebrand may NOT quietly change. These literals are a
+    // deliberate second copy of brand.rs: an installation finds its data, its
+    // autostart entry and its update source through them, so a refactor that moves
+    // one has to fail here instead of in someone's %APPDATA%. tools/brand.js
+    // rewrites this block (BRAND-PIN markers) when a different brand is stamped.
+    #[test]
+    fn brand_values_are_pinned() {
+        // BRAND-PIN-START
+        assert_eq!(brand::DISPLAY_NAME, "Prompt Saver");
+        assert_eq!(brand::SLUG, "prompt-saver");
+        assert_eq!(brand::IDENTIFIER, "com.bgcoding.promptsaver");
+        assert_eq!(brand::DATA_FOLDER, "Prompt-Saver");
+        assert_eq!(brand::AUTOSTART_KEY, "PromptSaver");
+        assert_eq!(brand::TEMP_DIR, "prompt-saver");
+        assert_eq!(brand::TEMP_PREFIX, "promptsaver");
+        assert_eq!(brand::WINDOW_CLASS, "PromptSaverClipWatch");
+        assert_eq!(brand::USER_AGENT, "PromptSaver");
+        assert_eq!(brand::REPO, "wbgcoding/Prompt-Saver");
+        assert_eq!(brand::LEGACY_DATA_FOLDER, "com.bgcoding.promptsaver");
+        assert_eq!(brand::LEGACY_AUTOSTART_KEY, "");
+        assert_eq!(brand::LEGACY_SCREENSHOT_PREFIX, "PromptSaver-");
+        assert_eq!(env!("CARGO_PKG_NAME"), "prompt-saver");
+        let conf = include_str!("../tauri.conf.json");
+        assert!(conf.contains("\"productName\": \"Prompt Saver\""));
+        assert!(conf.contains("\"identifier\": \"com.bgcoding.promptsaver\""));
+        let js = include_str!("../../ui/brand.js");
+        assert!(js.contains("APP_NAME = \"Prompt Saver\";"));
+        // BRAND-PIN-END
+        // The consts the app actually reads must be the ones pinned above.
+        assert_eq!(AUTOSTART_KEY, brand::AUTOSTART_KEY);
+        assert_eq!(DATA_FOLDER, brand::DATA_FOLDER);
+        // Backup crypto is NOT brand-derived: these two are frozen for every build
+        // of every brand, or existing .psb files stop opening.
+        assert_eq!(BACKUP_PEPPER, &b"prompt-saver::backup::pepper::v1"[..]);
+        assert_eq!(BACKUP_FIXED_KEY[0], 0x8f);
+        assert_eq!(BACKUP_FIXED_KEY[31], 0x84);
+    }
+
     #[test]
     fn update_url_pin_rejects_escapes() {
+        let base = format!("https://github.com/{}/releases/download", brand::REPO);
         // The one legit shape is accepted.
-        assert!(valid_update_url(
-            "https://github.com/wbgcoding/Prompt-Saver/releases/download/v2.5.0/Prompt-Saver_2.5.0_x64-setup.exe"
-        ));
+        assert!(valid_update_url(&format!("{base}/v2.5.0/App_2.5.0_x64-setup.exe")));
         // Path-traversal to another repo, still github.com and still prefix-matching.
-        assert!(!valid_update_url(
-            "https://github.com/wbgcoding/Prompt-Saver/releases/download/../../attacker/repo/releases/download/v1/x-setup.exe"
-        ));
+        assert!(!valid_update_url(&format!(
+            "{base}/../../attacker/repo/releases/download/v1/x-setup.exe"
+        )));
         // Encoded dot-segment, backslash, extra scheme/authority, query, non-exe.
-        assert!(!valid_update_url("https://github.com/wbgcoding/Prompt-Saver/releases/download/%2e%2e/x/y-setup.exe"));
-        assert!(!valid_update_url("https://github.com/wbgcoding/Prompt-Saver/releases/download/v1\\x/y-setup.exe"));
-        assert!(!valid_update_url("https://github.com/wbgcoding/Prompt-Saver/releases/download/v1/y-setup.exe?x=1"));
-        assert!(!valid_update_url("https://github.com/wbgcoding/Prompt-Saver/releases/download/v1/y.txt"));
-        assert!(!valid_update_url("http://github.com/wbgcoding/Prompt-Saver/releases/download/v1/y-setup.exe"));
+        assert!(!valid_update_url(&format!("{base}/%2e%2e/x/y-setup.exe")));
+        assert!(!valid_update_url(&format!("{base}/v1\\x/y-setup.exe")));
+        assert!(!valid_update_url(&format!("{base}/v1/y-setup.exe?x=1")));
+        assert!(!valid_update_url(&format!("{base}/v1/y.txt")));
+        assert!(!valid_update_url(&format!("http://github.com/{}/releases/download/v1/y-setup.exe", brand::REPO)));
         // Extra path segments beyond tag/asset.
-        assert!(!valid_update_url("https://github.com/wbgcoding/Prompt-Saver/releases/download/v1/sub/y-setup.exe"));
+        assert!(!valid_update_url(&format!("{base}/v1/sub/y-setup.exe")));
+        // A different repo under the same host is not ours.
+        assert!(!valid_update_url("https://github.com/someone/else/releases/download/v1/y-setup.exe"));
     }
 
     #[test]

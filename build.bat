@@ -1,10 +1,16 @@
 @echo off
 setlocal enabledelayedexpansion
-title Prompt Saver - Build
 cd /d "%~dp0"
 
+rem Product identity. GENERATED - run `node tools/brand.js <brand>` to change it;
+rem the values live in brands\<brand>.json.
+set "APP_NAME=Prompt Saver"
+set "APP_SLUG=prompt-saver"
+
+title %APP_NAME% - Build
+
 echo ============================================
-echo  Prompt Saver - Build (installer + portable)
+echo  %APP_NAME% - Build (installer + portable)
 echo ============================================
 echo.
 
@@ -60,13 +66,13 @@ set "CARGO_REG=%USERPROFILE%\.cargo\registry"
 set "RUSTFLAGS=--remap-path-prefix=%CARGO_REG%=cargo"
 echo %CARGO_REG%| find " " >nul
 if not errorlevel 1 set "RUSTFLAGS=" & echo [WARN] Profile path contains a space - build paths stay in the exe.
-rem Full bundle: produces BOTH the portable exe (target\release\prompt-saver.exe)
+rem Full bundle: produces BOTH the portable exe (target\release\<slug>.exe)
 rem AND the NSIS installer (target\release\bundle\nsis). Never pass --no-bundle
 rem here or the installer is skipped (that was the "no installer created" bug).
 call npm run build
 if errorlevel 1 goto :fail
 
-set "EXE=%~dp0src-tauri\target\release\prompt-saver.exe"
+set "EXE=%~dp0src-tauri\target\release\%APP_SLUG%.exe"
 if not exist "%EXE%" (
     echo [ERROR] Build finished but exe not found: %EXE%
     goto :fail
@@ -81,7 +87,7 @@ for /f "delims=" %%F in ('dir /b /a-d /o-d "%~dp0src-tauri\target\release\bundle
 rem Collect both artifacts in dist\ for convenience (clean, predictable names).
 set "DIST=%~dp0dist"
 if not exist "%DIST%" mkdir "%DIST%"
-copy /y "%EXE%" "%DIST%\Prompt Saver.exe" >nul || echo [WARN] Could not update the portable exe in dist - is it currently running? Close it and rebuild.
+copy /y "%EXE%" "%DIST%\%APP_NAME%.exe" >nul || echo [WARN] Could not update the portable exe in dist - is it currently running? Close it and rebuild.
 if defined INSTALLER copy /y "%INSTALLER%" "%DIST%\" >nul
 rem SHA-256 sidecar for the installer (the auto-updater verifies "<installer>.sha256"
 rem before running the download). Upload it alongside the installer on the GitHub release.
@@ -92,7 +98,7 @@ rem on first use, so nothing has to travel next to the portable exe any more.
 echo.
 echo ============================================
 echo  DONE
-echo  Portable : %DIST%\Prompt Saver.exe
+echo  Portable : %DIST%\%APP_NAME%.exe
 if defined INSTALLER (
     echo  Installer: %INSTALLER%
 ) else (
