@@ -46,26 +46,185 @@ fn summon_launcher(app: &AppHandle) {
     }
 }
 
+// ---------- Global shortcuts: the app hotkey + one per prompt (F20) ----------
+
+type Accel = tauri_plugin_global_shortcut::Shortcut;
+
+// An accelerator is user input on its way to the OS shortcut API, so its length is
+// capped before anything else looks at it.
+const MAX_ACCEL_LEN: usize = 64;
+
+// The single place an accelerator is validated. None = unusable: empty, over-long,
+// unparseable, or without a modifier (a bare key would swallow that key in every
+// other app). Pure, so validation and conflict handling stay testable.
+fn parse_accel(raw: &str) -> Option<Accel> {
+    let s = raw.trim();
+    if s.is_empty() || s.len() > MAX_ACCEL_LEN || s.chars().any(|c| c.is_control()) {
+        return None;
+    }
+    let sc: Accel = s.parse().ok()?;
+    if sc.mods.is_empty() {
+        return None;
+    }
+    Some(sc)
+}
+
+// Every accelerator that should be registered, in registration order. None marks
+// the app hotkey, Some(id) a prompt. Unusable accelerators and combinations an
+// earlier entry already claimed are skipped: the app hotkey wins, then the first
+// prompt in list order. `per_prompt` is the promptHotkeys feature toggle — off
+// leaves the stored accelerators alone and simply registers none of them.
+fn hotkey_plan(app_hotkey: &str, prompts: &[Prompt], per_prompt: bool) -> Vec<(Accel, Option<String>)> {
+    let mut plan = Vec::new();
+    let mut taken: std::collections::HashSet<Accel> = std::collections::HashSet::new();
+    if let Some(sc) = parse_accel(app_hotkey) {
+        taken.insert(sc);
+        plan.push((sc, None));
+    }
+    if per_prompt {
+        for p in prompts {
+            if let Some(sc) = parse_accel(&p.hotkey) {
+                if taken.insert(sc) {
+                    plan.push((sc, Some(p.id.clone())));
+                }
+            }
+        }
+    }
+    plan
+}
+
+// A restored backup can carry an accelerator the app hotkey or an earlier prompt
+// already owns. The import must not fail over that, so the losing binding is
+// dropped and counted for the summary.
+fn drop_colliding_hotkeys(app_hotkey: &str, prompts: &mut [Prompt]) -> usize {
+    let mut taken: std::collections::HashSet<Accel> = std::collections::HashSet::new();
+    if let Some(sc) = parse_accel(app_hotkey) {
+        taken.insert(sc);
+    }
+    let mut dropped = 0;
+    for p in prompts.iter_mut() {
+        if p.hotkey.trim().is_empty() {
+            p.hotkey = String::new();
+            continue;
+        }
+        match parse_accel(&p.hotkey) {
+            Some(sc) if taken.insert(sc) => {}
+            _ => {
+                p.hotkey = String::new();
+                dropped += 1;
+            }
+        }
+    }
+    dropped
+}
+
+// Check an accelerator from the editor against everything already bound. Empty
+// clears the binding; the error codes are turned into a localized inline message
+// by the UI.
+fn sanitize_hotkey(raw: &str, app_hotkey: &str, others: &[&Prompt]) -> Result<String, String> {
+    let hk = raw.trim();
+    if hk.is_empty() {
+        return Ok(String::new());
+    }
+    let sc = parse_accel(hk).ok_or_else(|| "hotkey-invalid".to_string())?;
+    if parse_accel(app_hotkey) == Some(sc) || others.iter().any(|p| parse_accel(&p.hotkey) == Some(sc)) {
+        return Err("hotkey-taken".to_string());
+    }
+    Ok(hk.to_string())
+}
+
+// Which prompt each registered accelerator belongs to (None = the app hotkey).
+// Rebuilt by rearm_hotkeys, read by the global shortcut handler.
+struct HotkeyTargets(Mutex<Vec<(Accel, Option<String>)>>);
+
+// The single owner of the registered shortcut set: drop everything, then register
+// the app hotkey plus one accelerator per prompt. A combination the OS refuses is
+// owned by another app — it is cleared from the store instead of leaving a binding
+// the user believes in. Returns false when the APP hotkey was the refused one.
+// Must never run while the store mutex is held: registering hops to the main
+// thread, and the shortcut handler reads the store.
+fn rearm_hotkeys(app: &AppHandle) -> bool {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let plan = match app.try_state::<Db>() {
+        Some(state) => {
+            let store = lock(&state);
+            let per_prompt = store.settings.ui_flags.get("promptHotkeys") != Some(&false);
+            hotkey_plan(&store.settings.hotkey, &store.prompts, per_prompt)
+        }
+        None => return true,
+    };
+    let gs = app.global_shortcut();
+    let _ = gs.unregister_all();
+    let mut live = Vec::with_capacity(plan.len());
+    let mut dropped: Vec<String> = Vec::new();
+    let mut app_ok = true;
+    for (sc, owner) in plan {
+        if gs.register(sc).is_ok() {
+            live.push((sc, owner));
+        } else {
+            match owner {
+                Some(id) => dropped.push(id),
+                None => app_ok = false,
+            }
+        }
+    }
+    if let Some(targets) = app.try_state::<HotkeyTargets>() {
+        *targets.0.lock().unwrap_or_else(|e| e.into_inner()) = live;
+    }
+    if !app_ok || !dropped.is_empty() {
+        if let Some(state) = app.try_state::<Db>() {
+            let mut store = lock(&state);
+            if !app_ok {
+                store.settings.hotkey = String::new();
+            }
+            if !dropped.is_empty() {
+                for p in store.prompts.iter_mut() {
+                    if dropped.contains(&p.id) {
+                        p.hotkey = String::new();
+                    }
+                }
+                save_prompts(app, &store);
+            }
+            save_settings(app, &store.settings);
+        }
+    }
+    app_ok
+}
+
+// A prompt hotkey runs the very same activation a tile click does. The UI owns
+// copying, usage recording, chain handling and placeholder filling, so the backend
+// only names the prompt that was triggered.
+fn fire_prompt_hotkey(app: &AppHandle, id: &str) {
+    let _ = app.emit_to("main", "prompt-hotkey", id.to_string());
+}
+
 // Register a new global hotkey (empty = disable). Returns an error the UI can
 // show if the accelerator is invalid or already taken by another app.
 #[tauri::command]
 fn set_hotkey(app: AppHandle, state: State<Db>, hotkey: String) -> Result<(), String> {
-    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
-    let gs = app.global_shortcut();
-    let _ = gs.unregister_all();
     let hk = hotkey.trim().to_string();
-    let result = if hk.is_empty() {
+    if !hk.is_empty() && parse_accel(&hk).is_none() {
+        return Err("hotkey-invalid".to_string());
+    }
+    {
+        let mut store = lock(&state);
+        store.settings.hotkey = hk.clone();
+        save_settings(&app, &store.settings);
+    }
+    // One place owns the registered set, so the app hotkey is re-armed together
+    // with every prompt accelerator instead of wiping them.
+    if rearm_hotkeys(&app) {
         Ok(())
     } else {
-        match hk.parse::<Shortcut>() {
-            Ok(sc) => gs.register(sc).map_err(|e| e.to_string()),
-            Err(e) => Err(e.to_string()),
-        }
-    };
-    let mut store = lock(&state);
-    store.settings.hotkey = if result.is_ok() { hk } else { String::new() };
-    save_settings(&app, &store.settings);
-    result
+        Err("hotkey-taken".to_string())
+    }
+}
+
+// A hotkey-triggered prompt with manual placeholders needs its fill-in dialog on
+// screen, so the UI asks for the window before opening it.
+#[tauri::command]
+fn focus_main_window(app: AppHandle) {
+    show_main(&app);
 }
 
 // ---------- Data model ----------
@@ -115,6 +274,9 @@ struct Prompt {
     // tile tooltip — never part of anything that reaches the clipboard.
     #[serde(default)]
     notes: String,
+    // F20: global accelerator that copies this prompt from anywhere ("" = none).
+    #[serde(default)]
+    hotkey: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -1742,6 +1904,7 @@ async fn add_prompt(
     favorite: Option<bool>,
     tags: Option<Vec<String>>,
     notes: Option<String>,
+    hotkey: Option<String>,
 ) -> Result<Prompt, String> {
     // One lock for the whole op so the storeFiles flag can't change mid-insert.
     let prompt = {
@@ -1749,6 +1912,8 @@ async fn add_prompt(
         let store_files = store_files_enabled(&store);
         let tags = sanitize_tags(tags.unwrap_or_default(), &canonical_tags(&store.prompts))?;
         let notes = sanitize_notes(&notes.unwrap_or_default())?;
+        let others: Vec<&Prompt> = store.prompts.iter().collect();
+        let hotkey = sanitize_hotkey(&hotkey.unwrap_or_default(), &store.settings.hotkey, &others)?;
         let mut fp = file_path.unwrap_or_default();
         let mut ip = icon_path.unwrap_or_default();
         if store_files {
@@ -1772,6 +1937,7 @@ async fn add_prompt(
             favorite: favorite.unwrap_or(false),
             tags,
             notes,
+            hotkey,
         };
         let view = store.settings.active_view_mut();
         if let Some(cell) = first_free_cell(view) {
@@ -1783,6 +1949,15 @@ async fn add_prompt(
         save_settings(&app, &store.settings);
         prompt
     };
+    // F20: arm the new accelerator. The re-arm drops one the OS refuses, so the
+    // caller is handed the stored state, not the state before arming.
+    if !prompt.hotkey.is_empty() {
+        rearm_hotkeys(&app);
+        let store = lock(&state);
+        if let Some(fresh) = store.prompts.iter().find(|p| p.id == prompt.id) {
+            return Ok(fresh.clone());
+        }
+    }
     Ok(prompt)
 }
 
@@ -1807,6 +1982,7 @@ async fn update_prompt(
     favorite: Option<bool>,
     tags: Option<Vec<String>>,
     notes: Option<String>,
+    hotkey: Option<String>,
 ) -> Result<Option<Prompt>, String> {
     let updated = {
         let mut store = lock(&state);
@@ -1817,6 +1993,13 @@ async fn update_prompt(
         };
         let notes = match notes {
             Some(text) => Some(sanitize_notes(&text)?),
+            None => None,
+        };
+        let hotkey = match hotkey {
+            Some(raw) => {
+                let others: Vec<&Prompt> = store.prompts.iter().filter(|p| p.id != id).collect();
+                Some(sanitize_hotkey(&raw, &store.settings.hotkey, &others)?)
+            }
             None => None,
         };
         let file_path = file_path.map(|p| if store_files { store_attached_file(&app, &p) } else { p });
@@ -1852,18 +2035,32 @@ async fn update_prompt(
                 if let Some(fav) = favorite { p.favorite = fav; }
                 if let Some(t) = tags { p.tags = t; }
                 if let Some(n) = notes { p.notes = n; }
+                // F20: only a real change re-arms; every save would otherwise churn
+                // through unregister/register for nothing.
+                let rebind = matches!(&hotkey, Some(h) if *h != p.hotkey);
+                if let Some(h) = hotkey { p.hotkey = h; }
                 let clone = p.clone();
                 save_prompts(&app, &store);
                 cleanup_orphan_files(&app, &store); // a replaced attachment orphans its old copy
                 let scale = float_scale_of(&store.settings, &id);
-                Some((clone, scale))
+                Some((clone, scale, rebind))
             }
             None => None,
         }
     };
-    let (updated, scale) = match updated {
-        Some((p, s)) => (Some(p), s),
-        None => (None, 1.0),
+    let (updated, scale, rebind) = match updated {
+        Some((p, s, r)) => (Some(p), s, r),
+        None => (None, 1.0, false),
+    };
+    // Re-arm outside the lock, then hand back what is actually stored — the re-arm
+    // clears an accelerator the OS refused.
+    let updated = match updated {
+        Some(p) if rebind => {
+            rearm_hotkeys(&app);
+            let store = lock(&state);
+            Some(store.prompts.iter().find(|x| x.id == p.id).cloned().unwrap_or(p))
+        }
+        other => other,
     };
     if let Some(p) = &updated {
         let _ = app.emit("prompt-updated", p.clone());
@@ -1948,6 +2145,9 @@ async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Resu
         }
         changed
     };
+    if changed {
+        rearm_hotkeys(&app); // F20: a deleted prompt gives its accelerator back
+    }
     Ok(changed)
 }
 
@@ -2044,7 +2244,12 @@ async fn batch_prompts(
     }
     // Return only the (small) settings: the caller mutates its local prompt list
     // in place, so we never re-serialise every prompt's base64 image over IPC.
-    Ok(store.settings.clone())
+    let settings = store.settings.clone();
+    drop(store); // never re-arm shortcuts while the store mutex is held
+    if action == "delete" {
+        rearm_hotkeys(&app); // F20: the deleted prompts give their accelerators back
+    }
+    Ok(settings)
 }
 
 // Factory reset: wipe all prompts AND all settings (views, theme, window,
@@ -2075,6 +2280,7 @@ async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Result<(), Str
             let _ = c.execute("DELETE FROM clip_inbox", []); // F21 inbox
         }
     }
+    rearm_hotkeys(&app); // F20: no prompts left to keep accelerators bound
     Ok(())
 }
 
@@ -5333,6 +5539,7 @@ async fn check_update(state: State<'_, Db>) -> Result<UpdateInfo, String> {
 fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
     let is_capture = key == CAPTURE_FLAG_KEY;
     let is_clip = key == "clipWatcher"; // F21
+    let is_hotkeys = key == "promptHotkeys"; // F20
     {
         let mut store = lock(&state);
         store.settings.ui_flags.insert(key, enabled);
@@ -5353,6 +5560,11 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
         } else {
             clipwatch::stop();
         }
+    }
+    // F20: switching the feature off unregisters every prompt accelerator but keeps
+    // the stored ones, so switching it back on restores them all.
+    if is_hotkeys {
+        rearm_hotkeys(&app);
     }
 }
 
@@ -6067,6 +6279,8 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>) -> Result<usize, S
             tags,
             // A note from a foreign file must not abort the import either.
             notes: sanitize_notes(&item.notes).unwrap_or_default(),
+            // A CSV/TXT file carries prompt content, never machine-local bindings.
+            hotkey: String::new(),
         };
         store.prompts.push(prompt);
         count += 1;
@@ -6276,6 +6490,8 @@ async fn export_all(app: AppHandle, state: State<'_, Db>) -> Result<usize, Strin
 struct ImportSummary {
     name: String,
     count: usize,
+    // F20: prompt hotkeys the restore had to give up (unusable or already bound).
+    dropped_hotkeys: usize,
 }
 
 #[tauri::command]
@@ -6310,7 +6526,7 @@ async fn import_all(
     let backup: Backup =
         serde_json::from_str(&content).map_err(|_| "not a Prompt Saver backup".to_string())?;
 
-    let (settings, hotkey, count) = {
+    let (settings, count, dropped_hotkeys) = {
         let mut store = lock(&state);
         store.prompts = backup.prompts;
         // A backup written by hand could miss ids; keep every prompt addressable.
@@ -6326,30 +6542,24 @@ async fn import_all(
         // on the next mutation (and poisons the Db mutex).
         store.settings.migrate();
         store.prompts_locked = false; // a full import supersedes any decrypt lock
+        // F20: a colliding or unusable accelerator must not fail the restore — drop
+        // it and let the summary say so.
+        let app_hotkey = store.settings.hotkey.clone();
+        let dropped = drop_colliding_hotkeys(&app_hotkey, &mut store.prompts);
         save_prompts(&app, &store);
         save_settings(&app, &store.settings);
-        (
-            store.settings.clone(),
-            store.settings.hotkey.clone(),
-            store.prompts.len(),
-        )
+        (store.settings.clone(), store.prompts.len(), dropped)
     };
     // Re-apply the visible parts of the imported settings without a restart.
     push_theme(&app, &settings);
-    {
-        use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
-        let gs = app.global_shortcut();
-        let _ = gs.unregister_all();
-        if let Ok(sc) = hotkey.trim().parse::<Shortcut>() {
-            let _ = gs.register(sc);
-        }
-    }
+    rearm_hotkeys(&app);
     Ok(ImportSummary {
         name: path
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default(),
         count,
+        dropped_hotkeys,
     })
 }
 
@@ -6565,12 +6775,23 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main(app);
         }))
-        // Optional global hotkey: pressing it summons the window + quick-launcher.
+        // The app hotkey summons the window + quick-launcher; a prompt hotkey (F20)
+        // copies that prompt wherever the user is.
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| {
-                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        summon_launcher(app);
+                .with_handler(|app, shortcut, event| {
+                    if event.state() != tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        return;
+                    }
+                    // Read the owner out first — the handler must not call back into
+                    // the app while the lookup lock is held.
+                    let owner = app.try_state::<HotkeyTargets>().and_then(|targets| {
+                        let list = targets.0.lock().unwrap_or_else(|e| e.into_inner());
+                        list.iter().find(|(sc, _)| sc == shortcut).map(|(_, o)| o.clone())
+                    });
+                    match owner {
+                        Some(Some(id)) => fire_prompt_hotkey(app, &id),
+                        _ => summon_launcher(app), // the app hotkey (or an unknown leftover)
                     }
                 })
                 .build(),
@@ -6590,13 +6811,13 @@ pub fn run() {
             let start_min = store.settings.start_minimized;
             let on_top = store.settings.always_on_top;
             let capture_excl = capture_excluded(&store.settings);
-            let hotkey = store.settings.hotkey.clone();
 
             let clip_on = store.settings.ui_flags.get("clipWatcher") == Some(&true); // F21, off by default
 
             app.manage(Mutex::new(store));
             app.manage(SnipState(Mutex::new(Vec::new())));
             app.manage(SnipPreview(Arc::new(Mutex::new(None))));
+            app.manage(HotkeyTargets(Mutex::new(Vec::new()))); // F20
 
             // F19 auto-paste: start tracking the last external foreground window.
             #[cfg(windows)]
@@ -6639,12 +6860,15 @@ pub fn run() {
                 });
             }
 
-            // Re-arm the saved global hotkey (ignored if unset or invalid).
-            if !hotkey.is_empty() {
-                if let Ok(sc) = hotkey.parse::<tauri_plugin_global_shortcut::Shortcut>() {
-                    use tauri_plugin_global_shortcut::GlobalShortcutExt;
-                    let _ = app.global_shortcut().register(sc);
-                }
+            // Re-arm the app hotkey plus every prompt accelerator (F20). Each
+            // registration is a round trip to the main thread, so this runs on a
+            // worker — the first paint never waits for it, however many prompts
+            // carry a hotkey.
+            {
+                let h = handle.clone();
+                std::thread::spawn(move || {
+                    rearm_hotkeys(&h);
+                });
             }
 
             // Launched by autostart with --minimized: stay in the tray.
@@ -6928,6 +7152,7 @@ pub fn run() {
             install_update,
             set_auto_update,
             set_hotkey,
+            focus_main_window,
             set_bars,
             set_minimize_on_close,
             set_always_on_top,
@@ -7251,6 +7476,7 @@ mod tests {
                 favorite: false,
                 tags: vec!["Work".into(), "E-Mail".into()],
                 notes: "Ask Anna first.\nDeadline: Friday".into(),
+                hotkey: "CommandOrControl+Shift+1".into(),
             },
             Prompt {
                 id: "p2".into(),
@@ -7269,8 +7495,114 @@ mod tests {
                 favorite: false,
                 tags: Vec::new(),
                 notes: String::new(),
+                hotkey: String::new(),
             },
         ]
+    }
+
+    // ---- F20 per-prompt hotkeys ----
+
+    #[test]
+    fn accelerators_are_validated_before_they_reach_the_os() {
+        for good in ["CommandOrControl+Shift+P", "ctrl+shift+p", "Alt+F5", "Ctrl+Alt+Space", " Ctrl+Shift+P "] {
+            assert!(parse_accel(good).is_some(), "rejected a usable accelerator: {good:?}");
+        }
+        for bad in [
+            "",
+            "   ",
+            "P",                       // no modifier: would swallow the key everywhere
+            "Shift+",                  // empty token
+            "Ctrl+Shift+NotAKey",
+            "Ctrl+A+B",                // two main keys
+            "Ctrl+Shift+\u{7}",        // control character
+        ] {
+            assert!(parse_accel(bad).is_none(), "accepted an unusable accelerator: {bad:?}");
+        }
+        // An over-long string is rejected outright, never handed to the OS.
+        let long = format!("Ctrl+Shift+{}", "A".repeat(MAX_ACCEL_LEN));
+        assert!(parse_accel(&long).is_none());
+        // Spelling and case do not make two accelerators different.
+        assert_eq!(parse_accel("CommandOrControl+Shift+P"), parse_accel("ctrl+SHIFT+p"));
+    }
+
+    #[test]
+    fn hotkey_plan_resolves_conflicts_by_precedence() {
+        let mut prompts = sample_prompts();
+        prompts[1].hotkey = "CommandOrControl+Shift+2".into();
+        // The app hotkey wins over a prompt that wants the same combination.
+        let plan = hotkey_plan("ctrl+shift+1", &prompts, true);
+        assert_eq!(plan.len(), 2);
+        assert_eq!(plan[0].1, None);
+        assert_eq!(plan[1].1.as_deref(), Some("p2"));
+
+        // Between two prompts the first one in list order keeps it.
+        prompts[1].hotkey = "ctrl+shift+1".into();
+        let plan = hotkey_plan("", &prompts, true);
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].1.as_deref(), Some("p1"));
+
+        // Feature toggled off: nothing but the app hotkey is registered, and the
+        // stored accelerators stay untouched.
+        let plan = hotkey_plan("Alt+Q", &prompts, false);
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].1, None);
+        assert_eq!(prompts[0].hotkey, "CommandOrControl+Shift+1");
+    }
+
+    #[test]
+    fn a_deleted_prompt_gives_its_accelerator_back() {
+        let mut prompts = sample_prompts();
+        prompts[1].hotkey = "Ctrl+Shift+2".into();
+        assert_eq!(hotkey_plan("", &prompts, true).len(), 2);
+        prompts.retain(|p| p.id != "p1");
+        let plan = hotkey_plan("", &prompts, true);
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].1.as_deref(), Some("p2"));
+    }
+
+    #[test]
+    fn an_import_drops_colliding_hotkeys_instead_of_failing() {
+        let mut prompts = sample_prompts();
+        prompts[1].hotkey = "ctrl+shift+1".into(); // same combination as p1
+        assert_eq!(drop_colliding_hotkeys("", &mut prompts), 1);
+        assert_eq!(prompts[0].hotkey, "CommandOrControl+Shift+1");
+        assert!(prompts[1].hotkey.is_empty());
+
+        // The app hotkey outranks every prompt, and junk is dropped too.
+        let mut prompts = sample_prompts();
+        prompts[1].hotkey = "not an accelerator".into();
+        assert_eq!(drop_colliding_hotkeys("Ctrl+Shift+1", &mut prompts), 2);
+        assert!(prompts.iter().all(|p| p.hotkey.is_empty()));
+
+        // Nothing to drop leaves every binding in place.
+        let mut prompts = sample_prompts();
+        prompts[1].hotkey = "Alt+F9".into();
+        assert_eq!(drop_colliding_hotkeys("Ctrl+Alt+Q", &mut prompts), 0);
+        assert_eq!(prompts[1].hotkey, "Alt+F9");
+    }
+
+    #[test]
+    fn the_editor_rejects_a_taken_or_unusable_accelerator() {
+        let prompts = sample_prompts();
+        let others: Vec<&Prompt> = prompts.iter().collect();
+        assert_eq!(sanitize_hotkey("", "Ctrl+Q", &others).unwrap(), "");
+        assert_eq!(sanitize_hotkey("  Alt+F9  ", "Ctrl+Q", &others).unwrap(), "Alt+F9");
+        assert_eq!(sanitize_hotkey("Ctrl+Shift+P", "ctrl+shift+p", &others), Err("hotkey-taken".into()));
+        assert_eq!(sanitize_hotkey("ctrl+shift+1", "", &others), Err("hotkey-taken".into()));
+        assert_eq!(sanitize_hotkey("F9", "", &others), Err("hotkey-invalid".into()));
+        // Editing the prompt that already owns the combination is not a conflict.
+        let others: Vec<&Prompt> = prompts.iter().filter(|p| p.id != "p1").collect();
+        assert_eq!(sanitize_hotkey("ctrl+shift+1", "", &others).unwrap(), "ctrl+shift+1");
+    }
+
+    // A prompt stored before F20 has no hotkey field at all — it must load with an
+    // empty binding instead of failing the whole row.
+    #[test]
+    fn a_prompt_without_a_hotkey_field_still_loads() {
+        let json = r#"{"id":"old","name":"N","text":"T","color":"","tags":["Work"]}"#;
+        let p: Prompt = serde_json::from_str(json).unwrap();
+        assert!(p.hotkey.is_empty());
+        assert!(parse_accel(&p.hotkey).is_none());
     }
 
     // Settings JSON from an older version: unknown/removed fields (copy_history,

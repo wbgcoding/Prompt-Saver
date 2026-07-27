@@ -130,6 +130,13 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html") -> Path
       <span>Notes</span></button>
     <div id="modal-notes-body" class="modal-collapse-body hidden">
       <textarea id="modal-notes-text" class="modal-input modal-notes-text" rows="3"></textarea></div></div>
+  <div id="modal-hotkey" class="modal-collapse">
+    <button type="button" id="modal-hotkey-head" class="modal-collapse-head" aria-expanded="false">
+      <span>Hotkey</span>
+      <span class="modal-collapse-side"><span id="modal-hotkey-badge" class="modal-collapse-badge">Ctrl + Shift + 9</span></span></button>
+    <div id="modal-hotkey-body" class="modal-collapse-body hidden">
+      <div class="hotkey-row"><input id="modal-hotkey-input" class="modal-input" type="text" readonly>
+        <button type="button" id="modal-hotkey-clear" class="ghost-btn">Clear</button></div></div></div>
   <div id="modal-history" class="modal-collapse open">
     <button type="button" id="modal-history-head" class="modal-collapse-head" aria-expanded="true">
       <span>Version history</span></button>

@@ -50,6 +50,12 @@ const modal = {
   notesHead: $("modal-notes-head"),
   notesBody: $("modal-notes-body"),
   notesText: $("modal-notes-text"),
+  hotkey: $("modal-hotkey"),
+  hotkeyHead: $("modal-hotkey-head"),
+  hotkeyBody: $("modal-hotkey-body"),
+  hotkeyInput: $("modal-hotkey-input"),
+  hotkeyBadge: $("modal-hotkey-badge"),
+  hotkeyErr: $("modal-hotkey-err"),
 };
 
 const DRAG_THRESHOLD = 5;
@@ -809,6 +815,7 @@ const FLAG_LABELS = {
   choiceRemember: "flagChoiceRemember", // F13 reopen a choice on its last pick
   codeHighlight: "flagCodeHighlight",   // F15 syntax colours in the preview's code blocks
   notesInTooltip: "flagNotesInTooltip", // F17 show the private note in the tile tooltip
+  promptHotkeys: "flagPromptHotkeys",   // F20 per-prompt global hotkeys
   // Checks at launch, but only while the normal auto-update setting is on.
   checkUpdateOnStart: "flagCheckUpdateOnStart",
 };
@@ -864,6 +871,7 @@ const OPT_FLAG_LABELS = {
   viewGroups: "flagViewGroups",                 // F9 folder tabs for views
   mdPreview: "flagMdPreview",                   // F14 rendered Markdown preview in the editor
   promptNotes: "flagPromptNotes",               // F17 private notes row in the editor
+  promptHotkeyPaste: "flagPromptHotkeyPaste",   // F20 hotkey also pastes into the last app
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const optFlag = (key) => settings.ui_flags?.[key] === true;
@@ -1080,7 +1088,7 @@ const EXPERT_TABS = [
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
     // and pure looks. One 26-entry blob made everything hard to find.
-    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "copyBubble", "copyFlash", "closeOnCopy", "chainPrompts", "chainLock", "autoPasteEnter"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"] },
+    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "copyBubble", "copyFlash", "closeOnCopy", "chainPrompts", "chainLock", "autoPasteEnter", "promptHotkeys", "promptHotkeyPaste"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"] },
     { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipDelay", "tooltipTimeout"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
     { title: "expGroupTileLook", flags: ["tileHover", "tileHoverLift", "tilePressScale", "tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow"], values: ["hoverLift", "tileRadius", "tileBorderWidth"] },
     { title: "expGroupFavorites", flags: ["favorites", "favViewButton", "favViewReorder"], values: ["favStarSize", "favMaxCols"] },
@@ -1212,6 +1220,7 @@ const EXPERT_TIPS = [
   // Tiles / copying
   "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale",
   "tileReorder", "chainPrompts", "chainLock", "autoPasteEnter", "closeOnCopy",
+  "promptHotkeys", "promptHotkeyPaste",
   "tooltipDelay", "tooltipTimeout", "iconTooltips",
   // Appearance
   "frostedModals", "accentHeader", "accentScrollbar", "hideScrollbars", "smoothScroll",
@@ -3420,7 +3429,7 @@ function modalSnapshot() {
     modal.name.value, modal.text.value, modal.caption.value, modal.captionSize.value,
     modal.fontSel.value, modal.sizeSel.value, modalState.color || "", modalState.image || "",
     !!modalState.showImage, modalState.filePath || "", modalState.iconPath || "", modal.fav.classList.contains("active"),
-    modalState.tags || [], modal.notesText.value,
+    modalState.tags || [], modal.notesText.value, modalState.hotkey || "",
   ]);
 }
 
@@ -3770,10 +3779,11 @@ function prettyAccel(accel) {
   return accel.split("+").map((p) => (MOD_LABELS[p] ? MOD_LABELS[p]() : p)).join(" + ");
 }
 
-// Copy a text prompt after filling its placeholders. `allowPaste` is only set by
-// activations that mean "paste" (Enter on a focused tile); a plain click copies
-// and nothing else, exactly like a prompt without variables.
-async function copyTextWithVars(p, el, allowPaste = false) {
+// Copy a text prompt after filling its placeholders. `paste` is only set by
+// activations that mean "paste" (Enter on a focused tile, a prompt hotkey with the
+// paste option on); a plain click copies and nothing else, exactly like a prompt
+// without variables.
+async function copyTextWithVars(p, el, paste = false) {
   // A double-click can never reach the tile a second time — the dialog already
   // covers it, and that second press used to land on the overlay and dismiss it.
   // Swallow it instead and treat it as the double-click it was: fill in the
@@ -3796,7 +3806,7 @@ async function copyTextWithVars(p, el, allowPaste = false) {
   if (ok) {
     showCopied(el);
     recordCopy(p.id);
-    if ((allowPaste || quickSecond) && flag("autoPaste")) await autoPasteNow(el);
+    if (paste || (quickSecond && flag("autoPaste"))) await autoPasteNow(el);
     maybeCloseOnCopy();
   }
 }
@@ -3851,20 +3861,35 @@ function moveKbFocus(dc, dr) {
   }
   if (best) focusTile(best);
 }
-async function activateTile(id) {
+// One activation path for "copy this prompt now": Enter on a focused tile and a
+// prompt hotkey (F20) both land here, so usage recording, chain semantics and
+// placeholder filling behave identically. `paste` decides whether the copy is also
+// pushed into the last app — Enter follows the auto-paste setting, a hotkey follows
+// its own option.
+async function activateTile(id, paste = flag("autoPaste")) {
   const p = prompts.find((x) => x.id === id);
   if (!p) return;
   const el = gridEl.querySelector(`.tile[data-id="${CSS.escape(id)}"]`);
   if (chainMode) { await toggleChainPick(p); return; }
   if (copyOnCooldown(id)) return;
   if (dialogTokens(p).length) {
-    await copyTextWithVars(p, el, true); // Enter means copy + paste
+    await copyTextWithVars(p, el, paste);
   } else if (await copyResolved(p)) {
     if (el) showCopied(el);
     recordCopy(id);
-    if (flag("autoPaste")) await autoPasteNow(el); // F19: Enter = copy + paste
+    if (paste) await autoPasteNow(el); // F19
     maybeCloseOnCopy();
   }
+}
+
+// F20: a prompt's global hotkey fired. Placeholders that still need typing can only
+// be filled in a visible window, so the main window comes forward first; everything
+// else copies (and optionally pastes) without ever showing up.
+async function onPromptHotkey(id) {
+  const p = prompts.find((x) => x.id === id);
+  if (!p) return;
+  if (dialogTokens(p).length) await invoke("focus_main_window").catch(() => {});
+  await activateTile(id, optFlag("promptHotkeyPaste"));
 }
 // Expert opt: hide the window to the tray right after a prompt copy.
 function maybeCloseOnCopy() {
@@ -3872,8 +3897,8 @@ function maybeCloseOnCopy() {
   try { window.__TAURI__?.window?.getCurrentWindow?.()?.hide?.().catch?.(() => {}); } catch { /* no-op */ }
 }
 
-function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", title }) {
-  modalState = { mode, id, color, image, showImage, copyImage, filePath, iconPath, tags: [...tags] };
+function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", title }) {
+  modalState = { mode, id, color, image, showImage, copyImage, filePath, iconPath, tags: [...tags], hotkey };
   modal.title.textContent = title;
   modal.fav.classList.toggle("active", !!favorite);
   modal.fav.setAttribute("aria-pressed", String(!!favorite));
@@ -3895,6 +3920,7 @@ function openModal({ mode, id, name = "", text = "", color = "", image = "", sho
   if (tagInput) tagInput.value = "";
   closeTagSuggest();
   renderTagChips();
+  renderPromptHotkey();
   // Show the dialog before wiring the preview so the <video>/<img> decode and
   // lay out in a visible context (a hidden element never renders a first frame).
   modal.root.classList.remove("hidden");
@@ -3902,6 +3928,54 @@ function openModal({ mode, id, name = "", text = "", color = "", image = "", sho
   modalInitial = modalSnapshot();
   modal.name.focus();
   modal.name.select();
+}
+
+// ---- F20 per-prompt hotkey (editor row) ----
+// The capture field mirrors the global-hotkey setting: click it, press a combo. The
+// binding is stored with the prompt and only reaches the OS on save, so a cancelled
+// edit changes nothing.
+const promptHotkeysOn = () => flag("promptHotkeys");
+
+// The backend answers a rejected accelerator with a code so the reason can be shown
+// in the app language; anything else passes through unchanged.
+const HOTKEY_ERRORS = { "hotkey-invalid": "promptHotkeyInvalid", "hotkey-taken": "promptHotkeyTaken" };
+const hotkeyMessage = (err) => (HOTKEY_ERRORS[err] ? t(HOTKEY_ERRORS[err]) : err);
+
+// Show an inline reason and drop the capture; empty text clears the message again.
+function showHotkeyError(msg) {
+  modal.hotkeyErr.textContent = msg || "";
+  modal.hotkeyErr.classList.toggle("hidden", !msg);
+}
+
+function renderPromptHotkey() {
+  const accel = modalState?.hotkey || "";
+  const pretty = prettyAccel(accel);
+  modal.hotkeyInput.value = pretty;
+  modal.hotkeyBadge.textContent = pretty;
+  modal.hotkeyBadge.classList.toggle("hidden", !pretty);
+  showHotkeyError("");
+}
+
+// Which combinations are already spoken for: the app hotkey and every OTHER prompt.
+// Compared on the raw accelerator, normalized the way the backend does it.
+const accelKey = (a) => String(a || "").trim().toLowerCase()
+  .split("+").map((s) => s.trim()).filter(Boolean)
+  .map((s) => (["commandorcontrol", "commandorctrl", "cmdorctrl", "cmdorcontrol", "control"].includes(s) ? "ctrl"
+    : ["command", "cmd", "meta", "win"].includes(s) ? "super"
+      : s === "option" ? "alt" : s))
+  .sort().join("+");
+
+function hotkeyTaken(accel) {
+  const key = accelKey(accel);
+  if (!key) return false;
+  if (accelKey(settings.hotkey) === key) return true;
+  return prompts.some((p) => p.id !== modalState?.id && accelKey(p.hotkey) === key);
+}
+
+function setPromptHotkey(accel) {
+  if (!modalState) return;
+  modalState.hotkey = accel;
+  renderPromptHotkey();
 }
 
 // ---- F16: live length counter (chars / words / ~tokens) in the editor ----
@@ -4899,6 +4973,13 @@ function syncModalImageUi(mode) {
   modal.notesBody.classList.add("hidden");
   modal.notesHead.setAttribute("aria-expanded", "false");
   modal.notes.classList.remove("open");
+  // F20: the hotkey row exists for every prompt kind (a hotkey copies whatever the
+  // prompt holds) and always reopens collapsed, so it costs no height.
+  modal.hotkey.classList.toggle("hidden", !promptHotkeysOn());
+  modal.hotkeyBody.classList.add("hidden");
+  modal.hotkeyHead.setAttribute("aria-expanded", "false");
+  modal.hotkey.classList.remove("open");
+  showHotkeyError("");
   // F7: version history only for existing text prompts; reset to collapsed on open.
   const histOn = mode === "edit" && textVisible && flag("promptHistory");
   $("modal-history").classList.toggle("hidden", !histOn);
@@ -5134,30 +5215,35 @@ async function confirmModal() {
   // tags or notes.
   const tags = modalState.tags || [];
   const notes = modal.notesText.value;
+  const hotkey = modalState.hotkey || "";
   // NOTE: Tauri expects camelCase keys for snake_case Rust args.
   // Path media (gif/video icon or attachment) shows without a stored image.
   const showImage =
     image || mediaKind(filePath) || mediaKind(iconPath) ? modalState.showImage : false;
   const copyImage = image ? modalState.copyImage : false;
+  let saved = null;
   try {
     if (modalState.mode === "create") {
       const text = modal.text.value.trim();
       if (!text) { closeModal(); return; }
-      await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes });
+      saved = await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey });
       inputEl.value = "";
       autoGrow(inputEl);
       saveBtn.disabled = true;
     } else if (modalState.mode === "image-create" || modalState.mode === "file-create") {
       // The name doubles as the copy text when shown as text.
-      await invoke("add_prompt", { name, text: name, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes });
+      saved = await invoke("add_prompt", { name, text: name, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey });
     } else {
       const text = copyImage || filePath ? name : modal.text.value;
-      await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes });
+      saved = await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey });
     }
   } catch (err) {
-    toast(String(err)); // keep the modal open so nothing typed is lost
+    toast(hotkeyMessage(String(err))); // keep the modal open so nothing typed is lost
     return;
   }
+  // F20: the backend hands back what it really stored. An empty hotkey where one
+  // was sent means the OS refused the combination — another app owns it.
+  if (hotkey && saved && !saved.hotkey) toast(t("promptHotkeyFail"));
   closeModal();
   await renderGrid();
   pollMissingFiles(); // a replaced file clears the error immediately
@@ -5186,6 +5272,7 @@ async function editPrompt(id) {
       favorite: p.favorite || false,
       tags: p.tags || [],
       notes: p.notes || "",
+      hotkey: p.hotkey || "",
       title: p.file_path
         ? t(kind === "video" ? "videoEditTitle" : kind ? "imageEditTitle" : "fileEditTitle")
         : p.copy_image ? t("imageEditTitle") : t("editModalTitle"),
@@ -6680,7 +6767,10 @@ async function runImportAll() {
     try {
       const res = await invoke("import_all", { path, password });
       await reloadEverything();
-      await infoDialog(t("backupImport"), t("importAllDone").replace("{f}", res.name).replace("{n}", res.count));
+      let msg = t("importAllDone").replace("{f}", res.name).replace("{n}", res.count);
+      // F20: a hotkey the restore could not keep is named, never silently dropped.
+      if (res.dropped_hotkeys) msg += "\n" + t("importHotkeysDropped").replace("{n}", res.dropped_hotkeys);
+      await infoDialog(t("backupImport"), msg);
       return;
     } catch (err) {
       const m = String(err);
@@ -6835,6 +6925,30 @@ function bind() {
       }));
     }
   });
+  // F20 hotkey collapsible (same convention as the notes row).
+  modal.hotkeyHead.addEventListener("click", () => {
+    const open = !modal.hotkeyBody.classList.toggle("hidden");
+    modal.hotkeyHead.setAttribute("aria-expanded", String(open));
+    modal.hotkey.classList.toggle("open", open);
+    if (open) {
+      modal.hotkeyInput.focus();
+      const scroller = modal.hotkey.closest(".modal");
+      if (scroller) requestAnimationFrame(() => requestAnimationFrame(() => {
+        scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
+      }));
+    }
+  });
+  // Capture: the field is read-only, the key press itself is the input.
+  modal.hotkeyInput.addEventListener("keydown", (e) => {
+    if (e.key === "Tab" || e.key === "Escape") return; // let focus leave the field
+    e.preventDefault();
+    if (e.key === "Backspace" || e.key === "Delete") { setPromptHotkey(""); return; }
+    const accel = accelFromEvent(e);
+    if (!accel) { showHotkeyError(t("promptHotkeyInvalid")); return; }
+    if (hotkeyTaken(accel)) { showHotkeyError(t("promptHotkeyTaken")); return; } // binding unchanged
+    setPromptHotkey(accel);
+  });
+  $("modal-hotkey-clear").addEventListener("click", () => setPromptHotkey(""));
   // F7 version-history collapsible.
   $("modal-history-head").addEventListener("click", () => {
     const body = $("modal-history-body");
@@ -7663,6 +7777,8 @@ function bind() {
   listen("theme-changed", (e) => applyTheme(e.payload?.theme, e.payload?.vars));
   // "Edit prompt" chosen in a floating pill's right-click menu.
   listen("edit-prompt", (e) => editPrompt(String(e.payload)));
+  // F20: a prompt's global hotkey was pressed — run the same activation a tile does.
+  listen("prompt-hotkey", (e) => onPromptHotkey(String(e.payload)));
 }
 
 // Fill a UI/icon size select with percentage presets (plus the current value if it

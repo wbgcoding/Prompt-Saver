@@ -242,6 +242,27 @@
           <p class="modal-hint modal-notes-hint" data-i18n="notesHint">Never copied — only shown here.</p>
         </div>
       </div>
+      <!-- F20 per-prompt hotkey (collapsed by default; copies this prompt anywhere) -->
+      <div id="modal-hotkey" class="modal-collapse">
+        <button type="button" id="modal-hotkey-head" class="modal-collapse-head" aria-expanded="false">
+          <span data-i18n="promptHotkeyTitle">Hotkey</span>
+          <span class="modal-collapse-side">
+            <span id="modal-hotkey-badge" class="modal-collapse-badge hidden"></span>
+            <svg class="collapse-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/>
+            </svg>
+          </span>
+        </button>
+        <div id="modal-hotkey-body" class="modal-collapse-body hidden">
+          <div class="hotkey-row">
+            <input id="modal-hotkey-input" class="modal-input" type="text" readonly
+                   data-i18n-ph="hotkeyPh" data-i18n-aria="promptHotkeyTitle" />
+            <button type="button" id="modal-hotkey-clear" class="ghost-btn" data-i18n="hotkeyClear">Clear</button>
+          </div>
+          <p id="modal-hotkey-err" class="modal-hint modal-hotkey-err hidden" role="alert"></p>
+          <p class="modal-hint" data-i18n="promptHotkeyHint">Copies this prompt from any app.</p>
+        </div>
+      </div>
       <!-- F7 version history (collapsed by default; edit mode + text prompts only) -->
       <div id="modal-history" class="modal-collapse hidden">
         <button type="button" id="modal-history-head" class="modal-collapse-head" aria-expanded="false">

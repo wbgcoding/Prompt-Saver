@@ -98,6 +98,9 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   // library search can be checked against a prompt that has none. "Moonshot" appears
   // in no name or body, so a search hit can only have come from the note.
   notes: i === 0 ? "Moonshot idea — ask legal first.\nRewrite the ending." : "",
+  // F20: one prompt ships with a bound accelerator so the editor row has something
+  // to display; the rest are free, so a capture can be checked against them.
+  hotkey: i === 0 ? "CommandOrControl+Shift+9" : "",
 }));
 
 const LAYOUT = {};
@@ -106,7 +109,8 @@ PROMPTS.forEach((p, i) => { LAYOUT[p.id] = [i % 4, Math.floor(i / 4)]; });
 const SETTINGS = {
   theme: "dark", language: "en", floating: {}, float_scale: {}, video_prefs: {},
   window: null, minimize_to_tray: false, autostart: false, start_minimized: false,
-  always_on_top: false, hotkey: "", auto_update: true, skipped_versions: [],
+  // F20: the app hotkey is set, so a prompt trying to claim it must be refused.
+  always_on_top: false, hotkey: "CommandOrControl+Shift+P", auto_update: true, skipped_versions: [],
   // Tags, custom themes, view groups, the Markdown preview and private notes ship
   // off; the stub turns them on so the smoke run covers that UI too.
   ui_flags: { tags: true, customThemes: true, viewGroups: true, mdPreview: true, promptNotes: true },
@@ -245,8 +249,9 @@ const RESULTS = {
   import_all: (a) => {
     if (!a || !a.password) throw new Error("password-required");
     if (a.password !== "letmein") throw new Error("wrong password or corrupt backup");
-    return { name: "Prompt Saver 2026-07-25.psb", count: 12 };
+    return { name: "Prompt Saver 2026-07-25.psb", count: 12, dropped_hotkeys: 2 };
   },
+  focus_main_window: () => null,
   // Screenshot overlay: no capture session, nothing to draw.
   snip_should_begin: () => false,
   snip_background: () => null,
@@ -282,6 +287,14 @@ const noopWindow = {
   scaleFactor: async () => 1, setZoom: async () => {},
 };
 
+// Backend events are kept so the probe can deliver one (window.__FIRE__), which is
+// the only way to exercise a code path the backend normally starts — e.g. a prompt
+// hotkey being pressed while the app sits in the tray.
+const LISTENERS = {};
+window.__FIRE__ = (event, payload) => {
+  for (const fn of LISTENERS[event] || []) fn({ event, payload });
+};
+
 window.__TAURI__ = {
   core: {
     invoke: async (cmd, args) => {
@@ -290,7 +303,13 @@ window.__TAURI__ = {
       return fn ? fn(args) : null;
     },
   },
-  event: { listen: async () => () => {}, emit: async () => {} },
+  event: {
+    listen: async (event, fn) => {
+      (LISTENERS[event] = LISTENERS[event] || []).push(fn);
+      return () => {};
+    },
+    emit: async () => {},
+  },
   window: { getCurrentWindow: () => noopWindow },
   webviewWindow: { getCurrentWebviewWindow: () => noopWindow },
 };

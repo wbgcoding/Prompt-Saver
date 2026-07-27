@@ -267,11 +267,108 @@ PROBE = """
           out.errors.push('the editor did not load the stored note');
         }
       }
+      // F20: the hotkey row opens collapsed, shows the stored accelerator, refuses a
+      // combination that is already taken, accepts a free one and can be cleared.
+      const hRow = document.getElementById('modal-hotkey');
+      const hBody = document.getElementById('modal-hotkey-body');
+      const hField = document.getElementById('modal-hotkey-input');
+      const hErr = document.getElementById('modal-hotkey-err');
+      const press = async (opts) => {
+        hField.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ bubbles: true, cancelable: true }, opts)));
+        await sleep(150);
+      };
+      if (!hRow || getComputedStyle(hRow).display === 'none') {
+        out.errors.push('the editor has no hotkey row');
+      } else if (!hBody.classList.contains('hidden')) {
+        out.errors.push('the hotkey row does not start collapsed');
+      } else {
+        document.getElementById('modal-hotkey-head').click();
+        await sleep(250);
+        if (hBody.classList.contains('hidden')) out.errors.push('the hotkey row did not expand');
+        if (!/9$/.test(hField.value) || !/\\+/.test(hField.value)) {
+          out.errors.push('the stored hotkey is not shown readably: ' + hField.value);
+        }
+        const badge = document.getElementById('modal-hotkey-badge');
+        if (badge.classList.contains('hidden') || !badge.textContent.trim()) {
+          out.errors.push('the collapsed hotkey row shows no binding');
+        }
+        // The app hotkey is Ctrl+Shift+P — a prompt must not be able to take it.
+        const before = hField.value;
+        await press({ key: 'P', ctrlKey: true, shiftKey: true });
+        if (hErr.classList.contains('hidden') || !hErr.textContent.trim()) {
+          out.errors.push('a taken combination produced no inline error');
+        }
+        if (hField.value !== before) out.errors.push('a rejected combination was captured anyway');
+        // A modifier-less press is refused too, with a reason.
+        await press({ key: 'K' });
+        if (hErr.classList.contains('hidden')) out.errors.push('a modifier-less key produced no inline error');
+        // A free combination is captured and clears the error.
+        await press({ key: 'J', ctrlKey: true, altKey: true });
+        if (!hErr.classList.contains('hidden')) out.errors.push('the inline error survived a valid capture');
+        if (!/J$/.test(hField.value)) out.errors.push('a free combination was not captured: ' + hField.value);
+        document.getElementById('modal-hotkey-clear').click();
+        await sleep(150);
+        if (hField.value) out.errors.push('the clear button left a hotkey behind: ' + hField.value);
+      }
       await click('modal-close-x');
       await sleep(250);
       // Editing made the dialog dirty, so the discard confirmation may step in.
       const cm2 = document.getElementById('confirm-modal');
       if (!cm2.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+    }
+    // F20: pressing a prompt hotkey runs the same activation a tile does — the copy
+    // is recorded, and whether it also pastes follows the expert option alone.
+    const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
+    calls().length = 0;
+    window.__FIRE__('prompt-hotkey', 'p0');
+    await sleep(400);
+    if (!calls().includes('copy_prompt') && !calls().includes('copy_text')) {
+      out.errors.push('a prompt hotkey did not copy the prompt');
+    }
+    if (!calls().includes('record_copy')) out.errors.push('a prompt hotkey did not record the copy');
+    if (calls().includes('paste_into_previous')) {
+      out.errors.push('a prompt hotkey pasted although the paste option is off');
+    }
+    // Turn the paste option on through its real expert switch, then fire again (a
+    // different prompt, so the per-prompt copy cooldown cannot swallow it).
+    // The menu only renders the active tab, so walk the tabs until the row shows up.
+    const expertRow = async (label) => {
+      const hit = () => [...document.querySelectorAll('#expert-flags .switch-field')]
+        .find(r => ((r.querySelector('span') || {}).textContent || '').startsWith(label));
+      if (hit()) return hit();
+      for (const tb of [...document.querySelectorAll('.expert-tab')]) {
+        tb.click();
+        await sleep(200);
+        if (hit()) return hit();
+      }
+      return null;
+    };
+    document.getElementById('settings').classList.remove('hidden');
+    await click('expert-open');
+    const pasteRow = await expertRow('Prompt hotkey also pastes');
+    if (!pasteRow) {
+      out.errors.push('the prompt-hotkey paste option is missing from the expert menu');
+    } else {
+      pasteRow.querySelector('input.switch').click();
+      await sleep(250);
+      await click('expert-back');
+      document.getElementById('settings').classList.add('hidden');
+      calls().length = 0;
+      window.__FIRE__('prompt-hotkey', 'p2');
+      await sleep(500);
+      if (!calls().includes('paste_into_previous')) {
+        out.errors.push('the prompt hotkey did not paste although the option is on');
+      }
+      // Put it back so the rest of the run sees the shipped default.
+      document.getElementById('settings').classList.remove('hidden');
+      await click('expert-open');
+      const back = await expertRow('Prompt hotkey also pastes');
+      if (back) { back.querySelector('input.switch').click(); await sleep(200); }
+      // The walk above left another tab active; later checks expect the first one.
+      const firstTab = document.querySelector('.expert-tab');
+      if (firstTab) { firstTab.click(); await sleep(200); }
+      await click('expert-back');
+      document.getElementById('settings').classList.add('hidden');
     }
     // F14/F15: the preview renders every Markdown construct, colours the fenced code
     // blocks, and — the part that matters — shows injected markup as literal text.
@@ -633,6 +730,10 @@ PROBE = """
       document.getElementById('confirm-ok').click();
       const done = await until(() => document.getElementById('confirm-msg').textContent.includes('12'));
       if (!done) out.errors.push('no import confirmation after the right password');
+      // F20: hotkeys the restore had to give up are named, not silently dropped.
+      else if (!/hotkey/i.test(document.getElementById('confirm-msg').textContent)) {
+        out.errors.push('the import summary does not mention the dropped hotkeys');
+      }
       await click('confirm-ok');
     }
     // The changelog popup renders the release Markdown instead of dumping it, and

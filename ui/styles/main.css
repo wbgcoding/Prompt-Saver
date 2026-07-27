@@ -1926,6 +1926,17 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
    Save row away, and the 120px floor stops the cap from collapsing to a sliver on
    a very short window (the dialog scrolls there instead). */
 .modal-collapse-body { max-height: min(240px, max(120px, 34vh)); overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+/* F20: the collapsed hotkey row still shows the bound combination, so the binding
+   is readable without opening the row. */
+.modal-collapse-side { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.modal-collapse-badge {
+  padding: 1px 7px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--muted); font-size: 11px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;
+}
+/* Inline capture error: the same dimmed hint slot, in the danger colour. */
+.modal-hotkey-err { color: var(--danger); }
 .hist-row {
   display: flex; flex-direction: column; gap: 4px;
   padding: 6px 8px; border-radius: 6px; background: var(--surface);
