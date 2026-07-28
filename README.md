@@ -78,7 +78,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Auto-fit text** | Tile text grows to fill the button, or pick a fixed size |
 | **Scaling** | Separate size control for UI, popups, icons and buttons — from 50 % up |
 | **Distraction-free** | Hide the top and bottom bars; the grid takes over the freed space |
-| **20 languages** | Auto-detected from the system: EN, DE, ES, FR, IT, PT, PL, RU, ZH, JA, NL, TR, KO, HI, ID, VI, CS, UK, SV, RO |
+| **13 languages** | Auto-detected from the system: EN, DE, ES, IT, PT, PL, RU, ZH, JA, NL, TR, KO, RO |
 
 ### 🛟 Keep it safe
 

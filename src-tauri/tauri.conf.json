@@ -35,13 +35,10 @@
       "nsis": {
         "installMode": "both",
         "installerIcon": "icons/installer-icon.ico",
-        "languages": ["English", "German", "Spanish", "French", "Italian", "PortugueseBR", "Polish", "Russian", "SimpChinese", "Japanese", "Dutch", "Turkish", "Korean", "Hindi", "Indonesian", "Vietnamese", "Czech", "Ukrainian", "Swedish", "Romanian"],
+        "languages": ["English", "German", "Spanish", "Italian", "PortugueseBR", "Polish", "Russian", "SimpChinese", "Japanese", "Dutch", "Turkish", "Korean", "Romanian"],
         "customLanguageFiles": {
           "German": "nsis-languages/German.nsh",
           "Polish": "nsis-languages/Polish.nsh",
-          "Hindi": "nsis-languages/Hindi.nsh",
-          "Indonesian": "nsis-languages/Indonesian.nsh",
-          "Czech": "nsis-languages/Czech.nsh",
           "Romanian": "nsis-languages/Romanian.nsh"
         },
         "template": "installer.nsi"

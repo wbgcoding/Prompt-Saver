@@ -145,6 +145,14 @@ const ICON_EDIT =
   '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 20h4L18.5 9.5a2 2 0 0 0-2.8-2.8L5 17.2V20Zm9.5-12.5 3 3"/></svg>';
 
 let LANG = "en";
+// A language that was stored before it was retired has no option left, which would
+// leave the select blank; show what the app actually falls back to instead.
+function setLangSelect() {
+  const sel = document.getElementById("lang-select");
+  if (!sel) return;
+  sel.value = settings.language || "auto";
+  if (!sel.value) sel.value = "auto";
+}
 function resolveLang(pref) {
   const p = (pref && pref !== "auto" ? pref : (navigator.language || "en")).toLowerCase();
   return LANGS.find((code) => p.startsWith(code)) || "en";
@@ -7160,7 +7168,7 @@ async function runImport() {
     applyI18n();
     fillSizeSelects();
     fillFontSelects();
-    $("lang-select").value = settings.language || "auto";
+    setLangSelect();
     fillThemeSelect();
     $("tile-font").value = settings.tile_font || "system";
     $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
@@ -8413,7 +8421,7 @@ async function init() {
 // Push the loaded settings into the settings-dialog controls.
 function syncSettingsControls() {
     fillThemeSelect();
-    $("lang-select").value = settings.language || "auto";
+    setLangSelect();
     $("opt-minimize").checked = settings.minimize_to_tray === true;
     $("opt-screenshot-folder").checked = settings.ui_flags?.screenshotSave === true;
     $("opt-tooltips").checked = settings.ui_flags?.tooltipsEnabled !== false;

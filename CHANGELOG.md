@@ -5,6 +5,15 @@ All notable changes to **Prompt Saver**. Download the latest version from the
 
 ## Unreleased
 
+### Removed
+
+- **Seven UI languages are gone**: French, Hindi, Indonesian, Vietnamese, Czech,
+  Ukrainian and Swedish. Thirteen remain — English, German, Spanish, Italian,
+  Portuguese, Polish, Russian, Chinese, Japanese, Dutch, Turkish, Korean and
+  Romanian — along with their installer translations. An installation still set
+  to one of the removed languages falls back to English; nothing else about it
+  changes.
+
 ### Changed
 
 - The product name now lives in one generated file per layer instead of being
