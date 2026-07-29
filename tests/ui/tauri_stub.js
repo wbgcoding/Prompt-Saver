@@ -84,9 +84,9 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   text: i === 1
     ? "Translate {#{Text}#} into {#{Language}#}."
     : i === 3
-      ? "Meeting on {#{date}#} at {#{time}#}, {#{weekday}#} (week {#{week}#} of {#{month}#} {#{year}#}), " +
-        "yesterday {#{yesterday}#}, tomorrow {#{tomorrow}#}, stamp {#{timestamp}#}, epoch {#{epoch}#}, " +
-        "by {#{username}#} ref {#{random}#} no {#{counter}#}: {#{clipboard}#}"
+      ? "Meeting on {#{/date\\}#} at {#{/time\\}#}, {#{/weekday\\}#} (week {#{/week\\}#} of {#{/month\\}#} {#{/year\\}#}), " +
+        "yesterday {#{/yesterday\\}#}, tomorrow {#{/tomorrow\\}#}, stamp {#{/timestamp\\}#}, epoch {#{/epoch\\}#}, " +
+        "by {#{/username\\}#} ref {#{/random\\}#} no {#{/counter\\}#}: {#{/clipboard\\}#}"
       : i === 5
         ? "Write a {#{tone|formal,casual,witty}#} note about {#{Topic}#}."
         : i === 7

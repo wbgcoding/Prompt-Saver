@@ -447,8 +447,10 @@ PROBE = """
       const before = ta.value;
       chips[0] && chips[0].click();
       await sleep(150);
-      if (ta.value === before || !ta.value.includes('{#{date}#}')) {
-        out.errors.push('clicking a placeholder chip did not insert it');
+      // A reserved name is written with its slash fence, so the plain word stays
+      // available as a variable of the user's own.
+      if (ta.value === before || !ta.value.includes('{#{/date\\\\}#}')) {
+        out.errors.push('clicking a placeholder chip did not insert it: ' + ta.value);
       }
       document.getElementById('modal-var-name').value = 'tone';
       document.getElementById('modal-var-opts').value = ' formal , casual ,, ';
