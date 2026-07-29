@@ -2426,6 +2426,9 @@ select,
 .expert-dropdown-row .value-head { flex: 1 1 auto; min-width: 0; }
 .expert-dropdown-row .expert-select { align-self: auto; flex: 0 0 auto; min-width: 140px; }
 .expert-dropdown-row .expert-num { margin-top: 0; flex: 0 0 92px; }
+/* The unit next to a free-entry retention/interval field — the preset options show
+   theirs on the option text ("7d"), so the number alone would look unit-less. */
+.expert-num-unit { flex: 0 0 auto; color: var(--muted); font-size: 13px; }
 .path-out { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.75; font-size: 12px; }
 .path-btns { display: flex; gap: 8px; margin-top: 4px; }
 .path-btns .ghost-btn { flex: 1; }

@@ -1510,10 +1510,18 @@ function selectRow(key) {
   num.min = 1;
   num.max = 3650;
   num.className = "modal-input expert-num";
+  // The presets show their unit ("7d", "24h") right on the option — the free-entry
+  // field cannot, since it holds only the number. Without this, a value typed here
+  // looked unit-less and Ben tried typing the unit into the number field itself
+  // ("7d"), which a number input silently discards with no error at all.
+  const unit = document.createElement("span");
+  unit.className = "expert-num-unit";
+  unit.textContent = cfg.unit;
   const isPreset = cfg.options.includes(cur);
   sel.value = isPreset ? String(cur) : "custom";
   num.value = cur;
   num.classList.toggle("hidden", isPreset);
+  unit.classList.toggle("hidden", isPreset);
   const persist = async (value) => {
     settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
     try { await invoke("set_ui_value", { key, value }); } catch (err) { toast(String(err)); }
@@ -1521,10 +1529,12 @@ function selectRow(key) {
   sel.addEventListener("change", () => {
     if (sel.value === "custom") {
       num.classList.remove("hidden");
+      unit.classList.remove("hidden");
       num.focus();
       persist(Math.max(1, Number(num.value) || cfg.def));
     } else {
       num.classList.add("hidden");
+      unit.classList.add("hidden");
       persist(Number(sel.value));
     }
   });
@@ -1533,7 +1543,7 @@ function selectRow(key) {
     num.value = v;
     persist(v);
   });
-  row.append(head, sel, num);
+  row.append(head, sel, num, unit);
   return row;
 }
 
@@ -3873,8 +3883,12 @@ function openCtx(id, x, y) {
   ctxId = id;
   // Reset an armed delete confirmation from a previous open.
   disarmButton(ctxEl.querySelector('[data-act="delete"]'), t("delete"));
-  // Hide the floating-button action when that feature is switched off.
-  ctxEl.querySelector('[data-act="pin"]').classList.toggle("hidden", !flag("floating"));
+  // Hide the floating-button action when that feature is switched off; otherwise
+  // name the actual effect of a click instead of a state-less "toggle".
+  const pinBtn = ctxEl.querySelector('[data-act="pin"]');
+  pinBtn.classList.toggle("hidden", !flag("floating"));
+  const pinned = !!settings.floating?.[id];
+  pinBtn.textContent = t(pinned ? "removeFloating" : "showFloating");
   // In the favorites view a prompt can't be hidden/removed — unstar it instead.
   ctxEl.querySelector('[data-act="hide"]').classList.toggle("hidden", favView);
   ctxEl.classList.remove("hidden");
