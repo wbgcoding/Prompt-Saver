@@ -381,27 +381,77 @@ body.menu-open .pill { flex: 0 0 auto; }
 }
 
 /* F25 merge preview — this pill or folder is what the dragged pill would be dropped
-   into. It does NOT scale up: the frameless window is exactly the pill box, so
-   anything larger would be cut off by the OS. A ring, a brighter face and a folder
-   watermark say the same thing inside the box. Timing follows --transition, i.e. the
-   animation speed setting. */
+   into. The WINDOW grows a little (floating.js), so the pill really does swell; the
+   ring and the folder watermark are drawn inside that grown box. Everything here is a
+   transition, never a keyframe loop, so it follows the animation-speed setting and
+   stops dead when animations are switched off. */
 .pill.merge-hint,
 .folder-icon.merge-hint {
-  box-shadow: inset 0 0 0 3px var(--pill-fg), inset 0 0 0 6px rgba(0, 0, 0, 0.28);
-  filter: brightness(1.15);
+  box-shadow:
+    inset 0 0 0 3px var(--pill-fg),
+    inset 0 0 0 5px rgba(0, 0, 0, 0.3),
+    inset 0 0 22px rgba(255, 255, 255, 0.35);
+  filter: brightness(1.18) saturate(1.1);
   transition: box-shadow var(--transition), filter var(--transition);
 }
+/* The face dims and steps back a touch, so the folder mark reads as the thing in
+   front — the "it goes in here" cue rather than just a highlighted button. */
+.pill.merge-hint > .label,
+.pill.merge-hint > .pill-img,
+.pill.merge-hint > .pill-video,
+.folder-icon.merge-hint > .folder-preview {
+  opacity: 0.5;
+  transform: scale(0.9);
+  transition: opacity var(--transition), transform var(--transition);
+}
+.pill > .label,
+.folder-icon > .folder-preview { transition: opacity var(--transition), transform var(--transition); }
 .pill.merge-hint::after,
 .folder-icon.merge-hint::after {
   content: "";
   position: absolute;
-  inset: 22%;
+  inset: 20%;
   pointer-events: none;
-  opacity: 0.6;
+  opacity: 0.92;
   background: var(--pill-fg);
   -webkit-mask: var(--folder-glyph) center / contain no-repeat;
   mask: var(--folder-glyph) center / contain no-repeat;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
+  /* Grows in from the middle instead of appearing at full size. */
+  animation: merge-glyph-in var(--transition) both;
 }
+@keyframes merge-glyph-in {
+  from { opacity: 0; transform: scale(0.55); }
+  to { opacity: 0.92; transform: scale(1); }
+}
+/* Free-resize grip, bottom-right of the closed folder icon. Sits ABOVE the icon so
+   the corner drag wins over the icon's own press-to-open/drag gesture; it disappears
+   while the folder is open (the window is then the popover, not the icon). */
+.folder-grip {
+  position: absolute;
+  z-index: 5;
+  width: 26%;
+  height: 26%;
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+.folder-body:hover .folder-grip { opacity: 1; }
+.folder-grip::after {
+  content: "";
+  position: absolute;
+  right: 14%;
+  bottom: 14%;
+  width: 55%;
+  height: 55%;
+  border-right: 2px solid var(--pill-fg);
+  border-bottom: 2px solid var(--pill-fg);
+  border-bottom-right-radius: 4px;
+  opacity: 0.75;
+}
+.folder-body.pop-open .folder-grip { display: none; }
 .folder-preview {
   display: grid;
   grid-template-columns: 1fr 1fr;

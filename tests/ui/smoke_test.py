@@ -1770,6 +1770,25 @@ FOLDER_PROBE = """
       errs.push('the folder label is missing: ' + name.textContent);
     }
     sideScan(errs, 'folder, closed');
+    // Free resize: dragging the corner grip changes the scale and must NOT open the
+    // folder (the grip sits over the icon, whose own press is the open gesture).
+    const grip = document.getElementById('rz-grip');
+    if (!grip) {
+      errs.push('the folder has no resize grip');
+    } else {
+      const before = getComputedStyle(document.body).getPropertyValue('--folder-box').trim();
+      grip.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, screenX: 100, screenY: 100 }));
+      window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, screenX: 148, screenY: 148 }));
+      await sleep(60);
+      const during = getComputedStyle(document.body).getPropertyValue('--folder-box').trim();
+      if (during === before) errs.push('dragging the resize grip did not change the folder size (' + before + ')');
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }));
+      await sleep(60);
+      if (!calls().includes('set_float_folder_scale')) errs.push('the resize never reached the backend');
+      if (!document.getElementById('pop').classList.contains('hidden')) {
+        errs.push('resizing the folder opened it as well');
+      }
+    }
     // Opening: press and release on the icon, the gesture a click really is here.
     const icon = document.getElementById('icon');
     icon.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));

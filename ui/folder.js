@@ -339,8 +339,53 @@ let iconDrag = null;
 window.addEventListener("mousedown", (e) => {
   if (e.button !== 0) return;
   if (e.target.closest(".menu") || e.target.closest(".folder-pop")) return;
+  // The corner grip resizes instead of moving/opening — check it FIRST, or the icon's
+  // own press would swallow the gesture.
+  if (e.target.closest("#rz-grip")) {
+    gripDrag = { x: e.screenX, y: e.screenY, scale: state.scale };
+    document.body.classList.add("resizing");
+    e.preventDefault();
+    return;
+  }
   iconDrag = { x: e.screenX, y: e.screenY, moved: false };
 });
+
+// ---- Free resize (corner grip) ----
+// The folder's size IS its scale, so the drag maps the diagonal the pointer travelled
+// onto that one number and writes it through the same command the S/M/L presets use.
+// The backend clamps it (0.5-3.0), which is where the real limits live.
+let gripDrag = null;
+let gripSave = 0;
+
+function gripResize(e) {
+  if (!gripDrag) return;
+  // The larger of the two axes wins, so a mostly-horizontal or mostly-vertical drag
+  // both work; FOLDER_BOX is the icon's size at scale 1, which turns pixels into scale.
+  const dx = e.screenX - gripDrag.x;
+  const dy = e.screenY - gripDrag.y;
+  const delta = Math.abs(dx) > Math.abs(dy) ? dx : dy;
+  const next = Math.min(3, Math.max(0.5, gripDrag.scale + delta / FOLDER_BOX));
+  if (Math.abs(next - state.scale) < 0.01) return;
+  state.scale = next;
+  renderIcon(); // paint the new size immediately; the window follows below
+  markSelectedSize();
+  // One write per frame at most: dragging fires far more often than the window can
+  // actually be resized, and every call is a round trip.
+  if (gripSave) return;
+  gripSave = requestAnimationFrame(() => {
+    gripSave = 0;
+    invoke("set_float_folder_scale", { id: folderId, scale: state.scale }).catch(() => {});
+  });
+}
+
+function gripReleased() {
+  if (!gripDrag) return;
+  gripDrag = null;
+  document.body.classList.remove("resizing");
+  if (gripSave) { cancelAnimationFrame(gripSave); gripSave = 0; }
+  // Final exact value, in case the last frame was skipped.
+  invoke("set_float_folder_scale", { id: folderId, scale: state.scale }).catch(() => {});
+}
 
 function iconReleased(e) {
   if (!iconDrag || e.buttons !== 0) return false;
@@ -352,6 +397,11 @@ function iconReleased(e) {
 window.addEventListener("mouseout", (e) => iconReleased(e));
 
 window.addEventListener("mousemove", async (e) => {
+  if (gripDrag) {
+    if (e.buttons === 0) { gripReleased(); return; }
+    gripResize(e);
+    return;
+  }
   if (iconReleased(e)) return;
   if (!iconDrag || iconDrag.moved) return;
   if (Math.abs(e.screenX - iconDrag.x) < DRAG_THRESHOLD && Math.abs(e.screenY - iconDrag.y) < DRAG_THRESHOLD) return;
@@ -362,6 +412,7 @@ window.addEventListener("mousemove", async (e) => {
 });
 
 window.addEventListener("mouseup", () => {
+  if (gripDrag) { gripReleased(); return; } // a resize never opens the folder
   if (!iconDrag) return;
   const wasDrag = iconDrag.moved;
   iconDrag = null;
@@ -383,7 +434,7 @@ window.addEventListener("keydown", (e) => {
 });
 // A click anywhere else takes the focus away, which is what closes the folder.
 window.addEventListener("blur", () => {
-  if (!iconDrag && !memberDrag) closePopover();
+  if (!iconDrag && !memberDrag && !gripDrag) closePopover();
 });
 
 // ---- folder menu ----

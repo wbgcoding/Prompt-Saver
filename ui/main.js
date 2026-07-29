@@ -3493,7 +3493,10 @@ window.addEventListener("pointercancel", () => {
   }
   drag = null;
   disarmFolder();
-  if (memberDrag) memberDrag.el.classList.remove("dragging");
+  if (memberDrag) {
+    memberDrag.el.classList.remove("dragging");
+    memberDrag.ghost?.remove();
+  }
   memberDrag = null;
   endDragVisuals();
 });
@@ -3809,13 +3812,29 @@ window.addEventListener("pointermove", (e) => {
         Math.abs(e.clientY - memberDrag.startY) < DRAG_THRESHOLD) return;
     memberDrag.moved = true;
     memberDrag.el.classList.add("dragging");
+    document.body.classList.add("drag-active");
+    // A live ghost under the cursor, exactly as a tile drag has: pulling a member out
+    // of the folder showed nothing moving before, so the gesture read as "not working".
+    const r = memberDrag.el.getBoundingClientRect();
+    memberDrag.offX = memberDrag.startX - r.left;
+    memberDrag.offY = memberDrag.startY - r.top;
+    const ghost = memberDrag.el.cloneNode(true);
+    ghost.classList.add("drag-ghost");
+    ghost.classList.remove("dragging");
+    ghost.style.width = `${r.width}px`;
+    ghost.style.height = `${r.height}px`;
+    document.body.appendChild(ghost);
+    memberDrag.ghost = ghost;
   }
+  memberDrag.ghost.style.transform =
+    `translate(${e.clientX - memberDrag.offX}px, ${e.clientY - memberDrag.offY}px)`;
   setHoverCell(cellAt(e.clientX, e.clientY));
 });
 window.addEventListener("pointerup", async (e) => {
   if (!memberDrag) return;
   const d = memberDrag;
   memberDrag = null;
+  d.ghost?.remove();
   d.el.classList.remove("dragging");
   endDragVisuals();
   const p = prompts.find((x) => x.id === d.id);

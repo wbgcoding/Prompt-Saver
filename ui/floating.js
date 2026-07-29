@@ -199,8 +199,9 @@ function applyPrefs(s) {
 // window at a wrong size — whenever it differs from the pill's real box,
 // snap it back. The ±2px tolerance ends the loop once it matches.
 function enforcePillSize() {
-  // No resize ping-pong while the OS moves the window or the user resizes it.
-  if (menuOpen || pill.classList.contains("dragging") || pill.classList.contains("resizing")) return;
+  // No resize ping-pong while the OS moves the window, the user resizes it, or the
+  // merge preview is holding the window at its grown size.
+  if (menuOpen || mergeHint || pill.classList.contains("dragging") || pill.classList.contains("resizing")) return;
   if (pill.classList.contains("has-image") && !imgRatio) return;
   const box = pillBox();
   if (Math.abs(window.innerWidth - box.w) > SIZE_EPSILON ||
@@ -795,7 +796,41 @@ document.addEventListener("visibilitychange", () => {
 });
 
 // F25: another pill is being dragged over this one — show what letting go would do.
-listen("merge-hint", (e) => pill.classList.toggle("merge-hint", e.payload === true));
+// The window itself grows a little, so the pill visibly swells as the target instead
+// of only changing colour. It grows DOWN-RIGHT: moving the origin would fire a window
+// Moved event and the pill's stored position would creep with every hint. The exact
+// old box is restored on the way out, so a clamp at a screen edge cannot leave it
+// shifted either.
+let mergeHint = false;
+let mergeHintBox = null;
+const MERGE_GROW = 1.12;
+listen("merge-hint", async (e) => {
+  const on = e.payload === true;
+  pill.classList.toggle("merge-hint", on);
+  if (on === mergeHint) return;
+  mergeHint = on;
+  if (on) {
+    if (menuOpen || resizing) { mergeHint = false; return; }
+    let x, y;
+    try {
+      const p = await appWin.outerPosition();
+      const d = window.devicePixelRatio || 1;
+      x = p.x / d;
+      y = p.y / d;
+    } catch { mergeHint = false; return; }
+    const w = window.innerWidth, h = window.innerHeight;
+    mergeHintBox = { x, y, w, h };
+    invoke("set_float_bounds", {
+      id: promptId, x, y,
+      width: Math.round(w * MERGE_GROW), height: Math.round(h * MERGE_GROW),
+    }).catch(() => {});
+  } else if (mergeHintBox) {
+    const b = mergeHintBox;
+    mergeHintBox = null;
+    invoke("set_float_bounds", { id: promptId, x: b.x, y: b.y, width: b.w, height: b.h })
+      .catch(() => {});
+  }
+});
 
 listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 // Language switched in the settings — re-translate the pill texts in place.

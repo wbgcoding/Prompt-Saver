@@ -2190,7 +2190,16 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .stat-dt .dt-time { font-size: 14px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .stat-card .stat-val { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Characters + tokens of the longest/shortest prompt, on their own line. */
-.stat-sub-row { color: var(--muted); font-size: 12px; }
+/* Characters + tokens of the longest/shortest prompt: right-aligned under the value
+   it describes, and pulled tight against it so the two read as one entry. */
+.stat-sub-row {
+  color: var(--muted);
+  font-size: 11.5px;
+  justify-content: flex-end;
+  margin-top: -5px;
+  padding-top: 0;
+  padding-bottom: 5px;
+}
 .backup-settings { display: flex; flex-direction: column; gap: 8px; }
 .backup-set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 /* The base `.field { flex-direction: column }` sits later in the file at equal
@@ -2200,9 +2209,15 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .field.backup-set-row { flex-direction: row; }
 .backup-set-row > span { font-size: 13px; }
 .backup-set-row .modal-input { flex: 0 0 auto; width: auto; min-width: 90px; }
-/* The interval dropdown is as wide as its content and as tall as the number fields
-   next to it, so the whole retention block sits on one line. */
-.backup-interval-row .backup-interval { min-width: 0; width: auto; padding-top: 5px; padding-bottom: 5px; }
+/* Every control in the backup settings shares ONE height, so switching smart
+   retention on cannot make the block below it shift up or down. The height is set
+   explicitly rather than left to each control's own padding: a select and a number
+   input do not agree on their intrinsic height. A touch roomier than the old rows. */
+.backup-settings .modal-input,
+.backup-settings .backup-interval { height: 40px; padding-top: 0; padding-bottom: 0; }
+/* The interval dropdown is only as wide as its content, so it sits on one line with
+   the number fields beside it. */
+.backup-interval-row .backup-interval { min-width: 0; width: auto; }
 /* Settings split in two: left "make a backup / how often", right "how many are kept". */
 .backup-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 24px; align-items: start; }
 .backup-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -2419,13 +2434,15 @@ select,
 }
 .expert-select { border-radius: 10px; }
 /* Label to the LEFT of every expert dropdown (was stacked above). */
-/* Label left, control right. Paired rows are equally tall (grid stretch), and the
-   control hangs at the BOTTOM of its row — so two dropdowns side by side line up
+/* Label left, control right. Both sides stretch to the row's height, so the label
+   text is vertically CENTRED against the control it belongs to, while the control
+   itself hangs at the BOTTOM — that is what keeps two dropdowns side by side lined up
    even when one label needs a second line in a longer language. */
-.field.expert-dropdown-row { flex-direction: row; align-items: flex-end; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.expert-dropdown-row .value-head { flex: 1 1 auto; min-width: 0; }
-.expert-dropdown-row .expert-select { align-self: auto; flex: 0 0 auto; min-width: 140px; }
-.expert-dropdown-row .expert-num { margin-top: 0; flex: 0 0 92px; }
+.field.expert-dropdown-row { flex-direction: row; align-items: stretch; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.expert-dropdown-row .value-head { flex: 1 1 auto; min-width: 0; align-items: center; }
+.expert-dropdown-row .expert-select { align-self: flex-end; flex: 0 0 auto; min-width: 140px; }
+.expert-dropdown-row .expert-num { margin-top: 0; flex: 0 0 92px; align-self: flex-end; }
+.expert-dropdown-row .expert-num-unit { align-self: center; }
 /* The unit next to a free-entry retention/interval field — the preset options show
    theirs on the option text ("7d"), so the number alone would look unit-less. */
 .expert-num-unit { flex: 0 0 auto; color: var(--muted); font-size: 13px; }
