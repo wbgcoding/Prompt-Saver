@@ -3,25 +3,8 @@
 All notable changes to **Prompt Saver**. Download the latest version from the
 [releases page](../../releases/latest).
 
-## Unreleased
 
-### Removed
-
-- **Seven UI languages are gone**: French, Hindi, Indonesian, Vietnamese, Czech,
-  Ukrainian and Swedish. Thirteen remain — English, German, Spanish, Italian,
-  Portuguese, Polish, Russian, Chinese, Japanese, Dutch, Turkish, Korean and
-  Romanian — along with their installer translations. An installation still set
-  to one of the removed languages falls back to English; nothing else about it
-  changes.
-
-### Changed
-
-- The product name now lives in one generated file per layer instead of being
-  spelled out across the code, the interface and the build scripts. Nothing about
-  the app changes: it keeps the same data folder, autostart entry and update
-  source, and a unit test pins every one of those values.
-
-## 2.7.0 (2026-07-27)
+## 2.7.0 (unreleased)
 
 Thirteen new features: tags, custom themes, folders for view tabs and for
 floating buttons, self-filling and choice variables, a markdown preview with
@@ -83,6 +66,22 @@ switch, most of it off until you turn it on.
 - The changelog in the update dialog is laid out instead of dumped: headings,
   bullets, tables and highlighted terms, in a box that takes the height of the
   release notes and scrolls only once they outgrow the window.
+
+### Removed
+
+- **Nine UI languages are gone**: French, Hindi, Indonesian, Vietnamese, Czech,
+  Ukrainian, Swedish, Russian and Korean. Eleven remain — English, German,
+  Spanish, Italian, Portuguese, Polish, Chinese, Japanese, Dutch, Turkish and
+  Romanian — along with their installer translations. An installation still set
+  to one of the removed languages falls back to English and shows "Automatic" in
+  the language picker; nothing else about it changes.
+
+### Changed
+
+- The product name now lives in one generated file per layer instead of being
+  spelled out across the code, the interface and the build scripts. Nothing about
+  the app changes: it keeps the same data folder, autostart entry and update
+  source, and a unit test pins every one of those values.
 
 ## 2.6.3 (2026-07-26)
 

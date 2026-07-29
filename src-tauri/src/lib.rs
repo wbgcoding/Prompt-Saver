@@ -1279,12 +1279,10 @@ fn webview2_texts(lang: &str) -> (&'static str, &'static str) {
         "it" => ("WebView2 Runtime mancante", "{app} richiede Microsoft WebView2 Runtime.\n\nScaricarlo e installarlo ora? Dopo, riavvia semplicemente {app}."),
         "pt" => ("WebView2 Runtime ausente", "O {app} precisa do Microsoft WebView2 Runtime.\n\nBaixar e instalar agora? Depois, basta iniciar o {app} novamente."),
         "pl" => ("Brak środowiska WebView2", "{app} wymaga Microsoft WebView2 Runtime.\n\nPobrać i zainstalować teraz? Następnie po prostu uruchom {app} ponownie."),
-        "ru" => ("Отсутствует WebView2 Runtime", "{app} требуется Microsoft WebView2 Runtime.\n\nСкачать и установить сейчас? После этого просто запустите {app} снова."),
         "zh" => ("缺少 WebView2 运行时", "{app} 需要 Microsoft WebView2 运行时。\n\n现在下载并安装吗？安装后重新启动 {app} 即可。"),
         "ja" => ("WebView2 ランタイムがありません", "{app} には Microsoft WebView2 ランタイムが必要です。\n\n今すぐダウンロードしてインストールしますか？その後、{app} を再起動してください。"),
         "nl" => ("WebView2-runtime ontbreekt", "{app} heeft de Microsoft WebView2-runtime nodig.\n\nNu downloaden en installeren? Start {app} daarna gewoon opnieuw."),
         "tr" => ("WebView2 çalışma zamanı eksik", "{app}, Microsoft WebView2 çalışma zamanına ihtiyaç duyar.\n\nŞimdi indirilip kurulsun mu? Ardından {app}'ı yeniden başlatmanız yeterli."),
-        "ko" => ("WebView2 런타임 없음", "{app}에는 Microsoft WebView2 런타임이 필요합니다.\n\n지금 다운로드하여 설치할까요? 설치 후 {app}를 다시 시작하면 됩니다."),
         "ro" => ("Lipsește WebView2 Runtime", "{app} are nevoie de Microsoft WebView2 Runtime.\n\nDescărcați și instalați acum? Apoi porniți pur și simplu {app} din nou."),
         _ => ("WebView2 runtime missing", "{app} needs the Microsoft WebView2 runtime.\n\nDownload and install it now? Simply start {app} again afterwards."),
     }
@@ -1301,8 +1299,8 @@ fn webview2_dialog(lang: &str) -> (String, String) {
 
 // Resolve the effective UI language code ("auto" -> OS locale), EN fallback.
 // Supported UI languages besides English (keep in sync with ui/i18n.js).
-const LANG_CODES: [&str; 12] = [
-    "de", "es", "it", "pt", "pl", "ru", "zh", "ja", "nl", "tr", "ko", "ro",
+const LANG_CODES: [&str; 10] = [
+    "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro",
 ];
 
 fn resolve_lang(pref: &str) -> &'static str {
@@ -1327,12 +1325,10 @@ fn tray_labels(lang: &str) -> (&'static str, &'static str) {
         "it" => ("Apri", "Esci"),
         "pt" => ("Abrir", "Sair"),
         "pl" => ("Otwórz", "Zakończ"),
-        "ru" => ("Открыть", "Выход"),
         "zh" => ("打开", "退出"),
         "ja" => ("開く", "終了"),
         "nl" => ("Openen", "Afsluiten"),
         "tr" => ("Aç", "Çıkış"),
-        "ko" => ("열기", "종료"),
         "ro" => ("Deschide", "Ieșire"),
         _ => ("Open", "Quit"),
     }
@@ -1348,12 +1344,10 @@ fn tray_section_labels(lang: &str) -> (&'static str, &'static str) {
         "it" => ("Usati di recente", "Preferiti"),
         "pt" => ("Usados recentemente", "Favoritos"),
         "pl" => ("Ostatnio używane", "Ulubione"),
-        "ru" => ("Недавние", "Избранное"),
         "zh" => ("最近使用", "收藏"),
         "ja" => ("最近使ったもの", "お気に入り"),
         "nl" => ("Onlangs gebruikt", "Favorieten"),
         "tr" => ("Son kullanılanlar", "Favoriler"),
-        "ko" => ("최근 사용", "즐겨찾기"),
         "ro" => ("Utilizate recent", "Favorite"),
         _ => ("Recently used", "Favorites"),
     }
@@ -1367,11 +1361,9 @@ fn home_name(lang: &str) -> &'static str {
         "es" => "Inicio",
         "pt" => "Início",
         "pl" => "Strona główna",
-        "ru" => "Главная",
         "zh" => "主页",
         "ja" => "ホーム",
         "tr" => "Ana sayfa",
-        "ko" => "홈",
         "ro" => "Acasă",
         _ => "Home", // en + it + nl
     }

@@ -78,7 +78,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Auto-fit text** | Tile text grows to fill the button, or pick a fixed size |
 | **Scaling** | Separate size control for UI, popups, icons and buttons — from 50 % up |
 | **Distraction-free** | Hide the top and bottom bars; the grid takes over the freed space |
-| **13 languages** | Auto-detected from the system: EN, DE, ES, IT, PT, PL, RU, ZH, JA, NL, TR, KO, RO |
+| **11 languages** | Auto-detected from the system: EN, DE, ES, IT, PT, PL, ZH, JA, NL, TR, RO |
 
 ### 🛟 Keep it safe
 
@@ -158,6 +158,5 @@ Third-party components and their licenses: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-
 
 ## Copyright
 
-© 2026 BG Coding. All rights reserved. The source is published so anyone can see
-what the app does with their data — it is not released for reuse, redistribution
-or derivative works.
+© 2026 BG Coding. The source is published so anyone can see what the app does with
+their data — it is not released for reuse, redistribution or derivative works.

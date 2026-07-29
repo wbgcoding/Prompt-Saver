@@ -35,7 +35,7 @@
       "nsis": {
         "installMode": "both",
         "installerIcon": "icons/installer-icon.ico",
-        "languages": ["English", "German", "Spanish", "Italian", "PortugueseBR", "Polish", "Russian", "SimpChinese", "Japanese", "Dutch", "Turkish", "Korean", "Romanian"],
+        "languages": ["English", "German", "Spanish", "Italian", "PortugueseBR", "Polish", "SimpChinese", "Japanese", "Dutch", "Turkish", "Romanian"],
         "customLanguageFiles": {
           "German": "nsis-languages/German.nsh",
           "Polish": "nsis-languages/Polish.nsh",
