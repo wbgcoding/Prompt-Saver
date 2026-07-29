@@ -1722,6 +1722,19 @@ PICK_PROBE = """
       errs.push('the persisted zoom is ' + savedZoom()[1].value + ' instead of 15');
     }
 
+    // A fresh session where the pointer never moves: a click must still take the
+    // pixel under the cursor, not the seed the loupe opened on (desktop centre).
+    await session('hex');
+    await sleep(150); // let the seed's own patch land before the click
+    window.dispatchEvent(new MouseEvent('mouseup', {
+      bubbles: true, button: 0, clientX: bg().left + 3.5 * bg().width / W, clientY: bg().top + 0.5 * bg().height / H,
+    }));
+    await until(() => seen.filter((c) => c[0] === 'pick_color').length >= 2);
+    const call2 = seen.filter((c) => c[0] === 'pick_color').pop();
+    if (call2[1].x !== 3 || call2[1].y !== 0) {
+      errs.push('a click with no prior pointer move copied ' + call2[1].x + ',' + call2[1].y + ' instead of the pixel under it (3,0)');
+    }
+
     key('Escape');
     await until(() => called('snip_cancel'));
     if (!called('snip_cancel')) errs.push('Esc did not cancel the picker');

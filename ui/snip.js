@@ -6,8 +6,6 @@
 // the window scale factor — so the mapping is pixel-exact on any DPI mix.
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
-const { getCurrentWebviewWindow } = window.__TAURI__.webviewWindow;
-const appWin = getCurrentWebviewWindow();
 
 const bg = document.getElementById("snip-bg");
 const mask = {
@@ -55,6 +53,7 @@ let tile = null;       // { x, y, w, h, px } in stitched-image physical pixels
 let tileBusy = false;
 let loupeLive = false; // a real pixel has been painted at least once this session
 let cur = null; // picked point, in stitched-image physical pixels
+let curPicked = false; // true once `cur` reflects a real aim, not just the seed
 
 // Seed hint/error text synchronously from the browser locale (en/de are the
 // defaults) so a German user never sees an English flash; the async i18n load
@@ -92,6 +91,7 @@ function resetSession() {
   tileBusy = false;
   loupeLive = false;
   cur = null;
+  curPicked = false;
   pendingMove = null;
   document.body.classList.remove("pick");
   loupe.classList.add("hidden");
@@ -132,11 +132,7 @@ async function beginSession() {
     if (presented) return;
     presented = true;
     if (timer) clearTimeout(timer);
-    invoke("snip_present").catch(() => {});
-    // Windows sends the wheel to the FOCUSED window, so an overlay that came up
-    // without the focus silently swallowed every zoom. Ask for it once it is on
-    // screen; the keyboard shortcuts need it just as much.
-    appWin.setFocus().catch(() => {});
+    invoke("snip_present").catch(() => {}); // also focuses the window (reveal_snip)
   };
   bg.onload = present;
   bg.onerror = present;
@@ -355,6 +351,7 @@ function runLoupe() {
     const p = toImg(pendingMove.x, pendingMove.y);
     pendingMove = null;
     clampCur(Math.floor(p.x), Math.floor(p.y));
+    curPicked = true;
   }
   drawLoupe();
 }
@@ -414,11 +411,7 @@ function drawLoupe() {
   const c = centre;
   const hex = rgbToHex(c[0], c[1], c[2]);
   swatch.style.background = hex;
-  const main = formatColor(pickFmt, c[0], c[1], c[2]);
-  readMain.textContent = main;
-  // hsl() is up to 18 characters where hex is 7 — the longest notations step the
-  // font down instead of pushing the box wider (or being cut off by it).
-  readMain.style.fontSize = main.length > 14 ? "11.5px" : "";
+  readMain.textContent = formatColor(pickFmt, c[0], c[1], c[2]);
   // Second line: hex is the one notation everyone recognises, so show it whenever
   // the chosen format is something else — and rgb() when hex is the format.
   readAlt.textContent = pickFmt === "hex" ? `rgb(${c[0]},${c[1]},${c[2]})` : hex;
@@ -448,19 +441,12 @@ function setZoom(z) {
   if (zoomSave) clearTimeout(zoomSave);
   zoomSave = setTimeout(saveZoom, 400);
 }
-// Wheel notches differ wildly between mice and precision touchpads (120 per notch vs
-// a stream of small deltas), so the movement is accumulated and only whole steps are
-// applied: a touchpad zooms smoothly instead of skipping, and a mouse still moves one
-// step per notch. The overlay also takes the focus first — Windows delivers the wheel
-// to the FOCUSED window, which is why zooming sometimes did nothing at all.
 let wheelAcc = 0;
 window.addEventListener(
   "wheel",
   (e) => {
     if (!pickMode || pickBusy) return;
     e.preventDefault();
-    // One mouse notch (|deltaY| ~100) is exactly one step; a touchpad's small deltas
-    // add up to one.
     wheelAcc += Math.sign(-e.deltaY) * Math.min(1, Math.abs(e.deltaY) / 50);
     const step = Math.trunc(wheelAcc);
     if (!step) return;
@@ -556,6 +542,8 @@ window.addEventListener("mousedown", (e) => {
 window.addEventListener("mouseup", async (e) => {
   if (pickMode) {
     if (e.button !== 0) return;
+    // `cur` already tracks the pointer; only seed it if the mouse never moved. A
+    // click must not undo an arrow-key nudge made from the same spot.
     // `cur` already tracks the pointer once it has moved (or an arrow key aimed it);
     // a click that follows neither still has to take the pixel under the pointer,
     // never the seed the session started on.
