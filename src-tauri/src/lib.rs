@@ -8182,24 +8182,25 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
     if bytes.len() < 2 || &bytes[0..2] != b"MZ" {
         return Err("downloaded file is not a valid installer".to_string());
     }
-    // Integrity (Option A): verify the SHA-256 against the hash published beside the
-    // installer in the release (`<installer>.sha256`, same pinned path). A PRESENT hash
-    // that mismatches always aborts; a release that ships no hash file proceeds (so the
-    // updater still works for any release that predates the hash convention).
-    if let Ok(resp) = ureq::get(&format!("{}.sha256", url))
+    // Integrity: the SHA-256 published beside the installer in the release
+    // (`<installer>.sha256`, same pinned path) must be present AND match. Fail closed —
+    // an installer we cannot authenticate is never executed, so a hash file that is
+    // missing, unreadable or malformed aborts the update just like a mismatch does.
+    // Every release publishes the hash (see `release:publish` in package.json); if one
+    // ever does not, the update is done by hand rather than unverified.
+    let want = ureq::get(&format!("{}.sha256", url))
         .set("User-Agent", brand::USER_AGENT)
         .timeout(std::time::Duration::from_secs(30))
         .call()
+        .ok()
+        .and_then(|r| r.into_string().ok())
+        .map(|t| t.split_whitespace().next().unwrap_or("").to_ascii_lowercase())
+        .filter(|w| w.len() == 64 && w.chars().all(|c| c.is_ascii_hexdigit()))
+        .ok_or_else(|| "no usable checksum published for this update — download rejected".to_string())?;
     {
-        if let Ok(text) = resp.into_string() {
-            let want = text.split_whitespace().next().unwrap_or("").to_ascii_lowercase();
-            if want.len() == 64 && want.chars().all(|c| c.is_ascii_hexdigit()) {
-                use sha2::{Digest, Sha256};
-                let got = format!("{:x}", Sha256::digest(&bytes));
-                if got != want {
-                    return Err("update hash mismatch — download rejected".to_string());
-                }
-            }
+        use sha2::{Digest, Sha256};
+        if format!("{:x}", Sha256::digest(&bytes)) != want {
+            return Err("update hash mismatch — download rejected".to_string());
         }
     }
     // Stage into a fresh, uniquely-named temp subdir so a local attacker can't pre-plant
@@ -9267,14 +9268,23 @@ fn install_webview2_runtime() -> bool {
         Ok(r) => r,
         Err(_) => return false,
     };
+    const CAP: u64 = 8 * 1024 * 1024;
     let mut bytes = Vec::new();
     if resp
         .into_reader()
-        .take(8 * 1024 * 1024)
+        .take(CAP)
         .read_to_end(&mut bytes)
         .is_err()
         || bytes.is_empty()
     {
+        return false;
+    }
+    // Same two guards the update download uses: a file that exactly hit the cap was
+    // almost certainly truncated, and whatever we are about to execute has to at least
+    // be a Windows executable. (Not cryptographic authentication — the bootstrapper
+    // comes from Microsoft's own pinned fwlink over TLS, and only after the user
+    // agreed to install it.)
+    if bytes.len() as u64 >= CAP || bytes.len() < 2 || &bytes[0..2] != b"MZ" {
         return false;
     }
     // Stage into a unique temp subdir so a local attacker can't pre-plant the
