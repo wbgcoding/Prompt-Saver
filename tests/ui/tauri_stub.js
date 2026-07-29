@@ -136,6 +136,9 @@ const SETTINGS = {
   ],
   // Two of the four views live in a folder tab, so the tab bar shows both shapes.
   view_groups: [{ id: "g1", name: "Docs", color: "", view_ids: ["notes", "archive"] }],
+  // F27: one grid folder on the home view, so the folder cell and its popover are
+  // walked on every run. Its two members are drawn by the folder, not as tiles.
+  tile_folders: [{ id: "tf1", name: "Drafts", color: "", view_id: "home", cell: [0, 1], members: ["p4", "p6"] }],
   active_view: "home",
 };
 
@@ -244,6 +247,28 @@ const RESULTS = {
   },
   delete_view_group: (a) => {
     SETTINGS.view_groups = SETTINGS.view_groups.filter((g) => g.id !== (a && a.id));
+    return clone();
+  },
+  // F27 grid folders: same answers as the backend — the settings blob, invariants
+  // applied (no prompt in two folders, under two members dissolves).
+  save_tile_folder: (a) => {
+    const members = (a && a.members) || [];
+    for (const f of SETTINGS.tile_folders) {
+      if (f.id !== (a && a.id)) f.members = f.members.filter((m) => !members.includes(m));
+    }
+    const at = SETTINGS.tile_folders.find((f) => f.id === (a && a.id));
+    if (at) { at.name = a.name; at.color = a.color; at.cell = a.cell; at.members = members; }
+    else SETTINGS.tile_folders.push({ id: "tf" + (SETTINGS.tile_folders.length + 1), name: a.name, color: a.color, view_id: a.viewId, cell: a.cell, members });
+    SETTINGS.tile_folders = SETTINGS.tile_folders.filter((f) => f.members.length >= 2);
+    return clone();
+  },
+  take_out_of_tile_folder: (a) => {
+    for (const f of SETTINGS.tile_folders) f.members = f.members.filter((m) => m !== (a && a.id));
+    SETTINGS.tile_folders = SETTINGS.tile_folders.filter((f) => f.members.length >= 2);
+    return clone();
+  },
+  delete_tile_folder: (a) => {
+    SETTINGS.tile_folders = SETTINGS.tile_folders.filter((f) => f.id !== (a && a.id));
     return clone();
   },
   // The tag commands answer with the settings blob, like the real backend.

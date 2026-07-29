@@ -1075,10 +1075,10 @@ struct ViewGroup {
 }
 
 // F27: an Android-style folder inside the grid. It occupies ONE cell of one view and
-// holds prompts that are then no longer tiles of their own; the layout entry of a
-// member is dropped when it joins, and it gets a fresh cell when it leaves. `cell` is
-// [col, row] of the view it belongs to — a view can change its grid size, so the
-// renderer moves a folder that no longer fits into the first free cell.
+// holds prompts that are no longer tiles of their own: a member's layout entry is
+// dropped when it joins and it gets a free cell again when it leaves. A view can
+// change its grid size, so a folder whose cell no longer exists is moved to the first
+// free one instead of disappearing.
 #[derive(Serialize, Deserialize, Clone)]
 struct TileFolder {
     #[serde(default)]
@@ -1230,6 +1230,10 @@ struct Settings {
     // back on restores the folders instead of losing them.
     #[serde(default)]
     view_groups: Vec<ViewGroup>,
+    // F27: grid folders. Kept while the feature is off as well — the members simply
+    // show as their own tiles again until it comes back on.
+    #[serde(default)]
+    tile_folders: Vec<TileFolder>,
     // Legacy single-grid fields (pre-views). Read for migration, never written back.
     #[serde(default = "default_cols", rename = "cols", skip_serializing)]
     legacy_cols: u32,
@@ -1295,6 +1299,7 @@ impl Default for Settings {
             active_view: String::new(),
             views: Vec::new(),
             view_groups: Vec::new(),
+            tile_folders: Vec::new(),
             legacy_cols: default_cols(),
             legacy_rows: default_rows(),
             legacy_layout: HashMap::new(),
@@ -1309,6 +1314,8 @@ const GRID_MIN: u32 = 1;
 const GRID_MAX: u32 = 200;
 const MAX_VIEWS: usize = 200;
 const MAX_VIEW_GROUPS: usize = 100;
+// F27: grid folders. One per cell at most, so a huge grid is the real ceiling.
+const MAX_TILE_FOLDERS: usize = 200;
 const MAX_GROUP_NAME: usize = 60;
 const FLOAT_W: f64 = 360.0;
 const FLOAT_H: f64 = 80.0; // flat pill shape, clearly wider than tall
@@ -1489,11 +1496,13 @@ struct Store {
 }
 
 impl Store {
-    // F25: keep the folder list valid against the CURRENT prompt list — one call after
-    // every mutation that can remove a prompt. Idempotent.
+    // F25/F27: keep both folder lists valid against the CURRENT prompt list — one call
+    // after every mutation that can remove a prompt. Idempotent.
     fn normalize_folders(&mut self) {
         let ids: Vec<String> = self.prompts.iter().map(|p| p.id.clone()).collect();
         normalize_float_folders(&mut self.settings.float_folders, &ids);
+        let views = self.settings.views.clone();
+        normalize_tile_folders(&mut self.settings.tile_folders, &ids, &views);
     }
 }
 
@@ -2769,20 +2778,22 @@ fn folder_icon_rect(app: &AppHandle, id: &str, window: Rect) -> Rect {
 // read needs nothing from the stalled event loop.
 #[cfg(windows)]
 fn window_rect_native(win: &tauri::WebviewWindow) -> Option<Rect> {
+    #[repr(C)]
+    struct RectW { left: i32, top: i32, right: i32, bottom: i32 }
     #[link(name = "user32")]
     extern "system" {
-        fn GetWindowRect(hwnd: isize, rect: *mut [i32; 4]) -> i32;
+        fn GetWindowRect(hwnd: isize, r: *mut RectW) -> i32;
     }
     let hwnd = win.hwnd().ok()?.0 as isize;
-    let mut r = [0i32; 4]; // left, top, right, bottom
+    let mut r = RectW { left: 0, top: 0, right: 0, bottom: 0 };
     if unsafe { GetWindowRect(hwnd, &mut r) } == 0 {
         return None;
     }
     Some(Rect {
-        x: r[0] as f64,
-        y: r[1] as f64,
-        w: (r[2] - r[0]) as f64,
-        h: (r[3] - r[1]) as f64,
+        x: r.left as f64,
+        y: r.top as f64,
+        w: (r.right - r.left) as f64,
+        h: (r.bottom - r.top) as f64,
     })
 }
 
@@ -4344,6 +4355,166 @@ fn set_view_group_member(
     normalize_view_groups(&mut store.settings.view_groups, &views);
     save_settings(&app, &store.settings);
     Ok(store.settings.clone())
+}
+
+// ---------- Tile folder commands (F27) ----------
+
+// Bring the grid folders back to their invariants: only real prompts and real views,
+// no prompt in two folders (the first folder listing it wins), no two folders on the
+// same cell of the same view (the first one keeps it, the next is moved aside by the
+// renderer because its cell is cleared to the origin only if free), and no folder
+// left with fewer than two members — that one dissolves and its prompts become tiles
+// again. Runs on load and after every mutation. Idempotent.
+fn normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], views: &[View]) {
+    let mut taken: Vec<String> = Vec::new();
+    for folder in folders.iter_mut() {
+        folder.members.retain(|id| {
+            let ok = prompt_ids.iter().any(|p| p == id) && !taken.contains(id);
+            if ok {
+                taken.push(id.clone());
+            }
+            ok
+        });
+    }
+    folders.retain(|f| f.members.len() >= 2 && views.iter().any(|v| v.id == f.view_id));
+    // One folder per cell: a later one on an occupied cell is pushed to the right,
+    // which the renderer resolves to the first free cell anyway.
+    let mut cells: Vec<(String, [u32; 2])> = Vec::new();
+    for folder in folders.iter_mut() {
+        while cells.iter().any(|(v, c)| v == &folder.view_id && *c == folder.cell) {
+            folder.cell[0] = folder.cell[0].saturating_add(1);
+        }
+        cells.push((folder.view_id.clone(), folder.cell));
+    }
+    folders.truncate(MAX_TILE_FOLDERS);
+}
+
+// Create (empty id) or update one grid folder in a single pass: name, colour, cell
+// and the full member list. Prompts handed in are pulled out of every other folder.
+#[tauri::command]
+fn save_tile_folder(
+    app: AppHandle,
+    state: State<Db>,
+    id: String,
+    name: String,
+    color: String,
+    view_id: String,
+    cell: [u32; 2],
+    members: Vec<String>,
+) -> Result<Settings, String> {
+    // A folder may stay unnamed — it then shows the member count alone.
+    let name = folder_name_of(&name)?;
+    let color = valid_tag_color(&color)?;
+    let mut store = lock(&state);
+    for pid in &members {
+        if !store.prompts.iter().any(|p| &p.id == pid) {
+            return Err("unknown prompt".to_string());
+        }
+    }
+    for folder in store.settings.tile_folders.iter_mut() {
+        if folder.id != id {
+            folder.members.retain(|m| !members.contains(m));
+        }
+    }
+    match store.settings.tile_folders.iter_mut().find(|f| f.id == id) {
+        Some(folder) => {
+            folder.name = name;
+            folder.color = color;
+            folder.cell = cell;
+            folder.members = members;
+        }
+        None => {
+            if members.len() < 2 {
+                return Err("a folder needs at least two prompts".to_string());
+            }
+            if !store.settings.views.iter().any(|v| v.id == view_id) {
+                return Err("unknown view".to_string());
+            }
+            if store.settings.tile_folders.len() >= MAX_TILE_FOLDERS {
+                return Err(format!("max {} folders", MAX_TILE_FOLDERS));
+            }
+            store.settings.tile_folders.push(TileFolder {
+                id: gen_id(),
+                name,
+                color,
+                view_id,
+                cell,
+                members,
+            });
+        }
+    }
+    // A prompt inside a folder is not a tile of its own: drop its layout entries so
+    // the cell it used to sit on is free again.
+    let inside: Vec<String> = store
+        .settings
+        .tile_folders
+        .iter()
+        .flat_map(|f| f.members.iter().cloned())
+        .collect();
+    for view in store.settings.views.iter_mut() {
+        for layout in view.layouts.values_mut() {
+            layout.retain(|pid, _| !inside.contains(pid));
+        }
+    }
+    let (ids, views) = (
+        store.prompts.iter().map(|p| p.id.clone()).collect::<Vec<_>>(),
+        store.settings.views.clone(),
+    );
+    normalize_tile_folders(&mut store.settings.tile_folders, &ids, &views);
+    save_settings(&app, &store.settings);
+    Ok(store.settings.clone())
+}
+
+// Take one prompt out of its folder and put it on `cell` of the folder's view. The
+// second-to-last member leaving dissolves the folder (normalize), which is what makes
+// "drag the last one out" work without a case of its own.
+#[tauri::command]
+fn take_out_of_tile_folder(
+    app: AppHandle,
+    state: State<Db>,
+    id: String,
+    cell: [u32; 2],
+) -> Result<Settings, String> {
+    let mut store = lock(&state);
+    let view_id = match store
+        .settings
+        .tile_folders
+        .iter()
+        .find(|f| f.members.contains(&id))
+    {
+        Some(f) => f.view_id.clone(),
+        None => return Err("not in a folder".to_string()),
+    };
+    for folder in store.settings.tile_folders.iter_mut() {
+        folder.members.retain(|m| m != &id);
+    }
+    if let Some(view) = store.settings.views.iter_mut().find(|v| v.id == view_id) {
+        let key = format!("{}x{}", view.cols, view.rows);
+        let free = cell[0] < view.cols && cell[1] < view.rows;
+        let layout = view.layouts.entry(key).or_default();
+        if free {
+            // Whoever sits there moves on: the grid never stacks two prompts.
+            layout.retain(|_, c| *c != cell);
+            layout.insert(id.clone(), cell);
+        }
+    }
+    let (ids, views) = (
+        store.prompts.iter().map(|p| p.id.clone()).collect::<Vec<_>>(),
+        store.settings.views.clone(),
+    );
+    normalize_tile_folders(&mut store.settings.tile_folders, &ids, &views);
+    save_settings(&app, &store.settings);
+    Ok(store.settings.clone())
+}
+
+// Dissolve a grid folder: its prompts become tiles again, nothing is deleted. The
+// renderer places whatever has no layout entry in the first free cell.
+#[tauri::command]
+fn delete_tile_folder(app: AppHandle, state: State<Db>, id: String) -> Settings {
+    let mut store = lock(&state);
+    store.settings.tile_folders.retain(|f| f.id != id);
+    save_settings(&app, &store.settings);
+    store.settings.clone()
 }
 
 // Dissolve a group: its views go back to the tab bar, nothing is deleted.
@@ -9371,6 +9542,9 @@ pub fn run() {
             save_view_group,
             set_view_group_member,
             delete_view_group,
+            save_tile_folder,
+            take_out_of_tile_folder,
+            delete_tile_folder,
             get_settings,
             get_state,
             current_theme,
@@ -10396,6 +10570,60 @@ mod tests {
             layouts: HashMap::new(),
             color: String::new(),
         }
+    }
+
+    fn test_tile_folder(id: &str, view_id: &str, cell: [u32; 2], members: &[&str]) -> TileFolder {
+        TileFolder {
+            id: id.to_string(),
+            name: String::new(),
+            color: String::new(),
+            view_id: view_id.to_string(),
+            cell,
+            members: members.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn tile_folders_normalize_to_their_invariants() {
+        let views = vec![test_view("v1")];
+        let ids: Vec<String> = ["a", "b", "c", "d"].iter().map(|s| s.to_string()).collect();
+        let mut folders = vec![
+            test_tile_folder("f1", "v1", [1, 1], &["a", "gone", "b"]),
+            // Claims a prompt the first folder already holds, plus one of its own.
+            test_tile_folder("f2", "v1", [1, 1], &["b", "c", "d"]),
+            // A view that no longer exists takes its folder with it.
+            test_tile_folder("f3", "vX", [0, 0], &["a", "c"]),
+        ];
+        normalize_tile_folders(&mut folders, &ids, &views);
+        assert_eq!(folders.len(), 2);
+        assert_eq!(folders[0].members, vec!["a", "b"]); // unknown id dropped
+        assert_eq!(folders[1].members, vec!["c", "d"]); // "b" belongs to f1
+        // Two folders never sit on the same cell.
+        assert_ne!(folders[0].cell, folders[1].cell);
+        // Idempotent.
+        let before: Vec<[u32; 2]> = folders.iter().map(|f| f.cell).collect();
+        normalize_tile_folders(&mut folders, &ids, &views);
+        assert_eq!(folders.len(), 2);
+        assert_eq!(folders.iter().map(|f| f.cell).collect::<Vec<_>>(), before);
+        // Down to one member: the folder dissolves instead of lingering.
+        folders[0].members.pop();
+        normalize_tile_folders(&mut folders, &ids, &views);
+        assert_eq!(folders.len(), 1);
+        assert_eq!(folders[0].id, "f2");
+    }
+
+    #[test]
+    fn settings_without_tile_folders_still_load() {
+        let s: Settings = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
+        assert!(s.tile_folders.is_empty());
+        // A folder from a newer build with unknown extra fields keeps what it can.
+        let s: Settings = serde_json::from_str(
+            r##"{"tile_folders":[{"id":"f","name":"Work","color":"#112233","view_id":"v1","cell":[2,3],"members":["a","b"],"future":1}]}"##,
+        )
+        .unwrap();
+        assert_eq!(s.tile_folders[0].cell, [2, 3]);
+        assert_eq!(s.tile_folders[0].members, vec!["a", "b"]);
+        assert_eq!(s.tile_folders[0].color, "#112233");
     }
 
     fn test_group(id: &str, view_ids: &[&str]) -> ViewGroup {

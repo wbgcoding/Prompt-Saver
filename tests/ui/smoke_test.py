@@ -242,6 +242,27 @@ PROBE = """
       }
       strip.scrollLeft = 0;
     }
+    // F27: the grid folder draws its own cell, hides its members as tiles and opens
+    // a popover holding them.
+    const fTile = document.querySelector('.tile.folder-tile');
+    if (!fTile) {
+      out.errors.push('the grid folder has no tile');
+    } else {
+      if (document.querySelector('.tile[data-id="p4"]')) {
+        out.errors.push('a prompt inside the folder is still a tile of its own');
+      }
+      const cnt = fTile.querySelector('.folder-count');
+      if (!cnt || cnt.textContent !== '2') out.errors.push('the folder does not show its member count');
+      fTile.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));
+      await sleep(200);
+      const pop = document.querySelector('.tile-folder-pop:not(.hidden)');
+      const members = pop ? pop.querySelectorAll('.folder-member-tile').length : 0;
+      if (members !== 2) out.errors.push('the open folder shows ' + members + ' of 2 entries');
+      layoutScan('grid folder');
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+      await sleep(120);
+    }
     await click('library-btn');
     layoutScan('library');
     mustReach('library', '#library .modal-head-actions > button');

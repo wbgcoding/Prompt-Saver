@@ -853,6 +853,85 @@ body.drag-active .cell.drag-over {
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.65));
 }
 
+/* ---- F27 grid folders ----
+   A folder is a cell like any other: the four newest members as a 2x2 face, the name
+   under it and the member count in the corner. Everything is drawn INSIDE the tile —
+   the grid clips its cells, so nothing may reach past the edge. */
+.folder-tile { flex-direction: column; gap: 4px; }
+.folder-mini {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 3px;
+  width: 46%;
+  aspect-ratio: 1;
+  min-height: 0;
+}
+.folder-mini-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 22%;
+  background: var(--surface-2);
+  color: var(--fg);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+.folder-mini-cell > img { width: 100%; height: 100%; object-fit: cover; }
+.folder-count {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  z-index: 3;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+}
+/* The tile a dragged one would be dropped INTO. Inset ring + tint, no scaling: the
+   cell clips anything larger, the same reason the pill merge hint stays inside. */
+.tile.folder-arm {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 3px var(--accent);
+}
+/* Open folder: its members as small buttons. */
+.tile-folder-pop { padding: 8px; max-width: min(420px, 92vw); }
+.tile-folder-pop-head {
+  padding: 0 2px 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.tile-folder-grid { display: grid; gap: 6px; }
+.folder-member-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 84px;
+  height: 56px;
+  padding: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color var(--transition), transform var(--transition), opacity var(--transition);
+}
+.folder-member-tile:hover { border-color: var(--accent); }
+.folder-member-tile.dragging { opacity: 0.45; }
+.folder-member-tile .tile-name { font-size: 12px; -webkit-line-clamp: 3; }
+
 /* Off-screen measurement ruler used by the auto-fit (fixed position keeps
    the subpixel context identical for every measurement). */
 .tile-ruler {

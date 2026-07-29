@@ -873,6 +873,7 @@ const FLAG_LABELS = {
   colorPicker: "flagColorPicker",       // F26 pipette — pick a screen colour to the clipboard
   viewGroups: "flagViewGroups",         // F9 folder tabs for views
   customThemes: "flagCustomThemes",     // F3 theme editor + custom entries in the theme list
+  tileFolders: "flagTileFolders",       // F27 drop a tile into another to make a grid folder
   // Checks at launch, but only while the normal auto-update setting is on.
   checkUpdateOnStart: "flagCheckUpdateOnStart",
 };
@@ -994,6 +995,11 @@ const EXPERT_VALUES = {
   // grid of an opened folder is. Both mirrored by the backend (merge_radius/folder_cols).
   pillMergeRadius: { label: "valPillMergeRadius", min: 20, max: 80, step: 1, def: 40, unit: "px", gate: "pillFolders" },
   folderGridCols: { label: "valFolderGridCols", min: 2, max: 5, step: 1, def: 3, unit: "", gate: "pillFolders" },
+  // F27 grid folders: how much of a tile counts as its middle, how long the pointer
+  // has to rest there before the folder is offered, and how wide the open folder is.
+  tileFolderZone: { label: "valTileFolderZone", min: 30, max: 80, step: 5, def: 55, unit: "%", gate: "tileFolders" },
+  tileFolderHoverMs: { label: "valTileFolderHoverMs", min: 100, max: 800, step: 50, def: 300, unit: "ms", gate: "tileFolders" },
+  tileFolderCols: { label: "valTileFolderCols", min: 2, max: 5, step: 1, def: 3, unit: "", gate: "tileFolders" },
   // Custom tile tooltip max width (it wraps + grows taller instead of widening).
   tooltipWidth: { label: "valTooltipWidth", min: 180, max: 640, step: 10, def: 340, unit: "px", gate: "tilePreview" },
   // How long the pointer must rest on an element before its tooltip appears, so a
@@ -1184,7 +1190,7 @@ const EXPERT_TABS = [
     // Everything that happens between a click and the clipboard.
     { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "autoPasteEnter", gate: "autoPaste" }, "closeOnCopy", "copyBubble", "copyFlash"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"], dropdowns: ["dragOutModifier"] },
     // Floating buttons and the two kinds of folder they can form.
-    { title: "expGroupFolders", flags: ["floating", { key: "pillFolders", gate: "floating" }], values: ["floatOpacity", "pillMergeRadius", "folderGridCols"] },
+    { title: "expGroupFolders", flags: ["floating", { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillMergeRadius", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
     // F23: the quick-copy sections of the tray menu, each with its own entry count.
     { title: "expGroupTray", flags: ["trayRecent", "trayFavs"], values: ["trayRecentN", "trayFavN"] },
     // F21: the watcher that collects what you copy elsewhere.
@@ -1334,6 +1340,7 @@ const EXPERT_TIPS = [
   "checkUpdateOnStart", "showUpdates", "importExport", "dimToolbar", "keyboardNav",
   "headerSeparators", "floating",
   "pillFolders", "pillMergeRadius", "folderGridCols",
+  "tileFolders", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols",
   // Tiles / copying
   "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "autoPasteEnter", "closeOnCopy",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutModifier",
@@ -2133,10 +2140,30 @@ async function renderGrid(skipFetch = false) {
   $("qg-cols").max = val("gridMax");
   $("qg-rows").max = val("gridMax");
 
+  // F27: a prompt inside a grid folder is drawn by that folder, not by itself.
+  const folders = foldersOfView(view.id);
+  const inFolder = new Set(folders.flatMap((f) => f.members || []));
   const byCell = new Map();
   for (const p of prompts) {
+    if (inFolder.has(p.id)) continue;
     const cell = layout[p.id];
     if (cell) byCell.set(cellKey(...cell), p);
+  }
+  // A folder whose cell fell outside a resized grid — or landed on a taken one —
+  // moves to the first free cell, and that repair is written back.
+  const folderAt = new Map();
+  for (const f of folders) {
+    const [fc, fr] = f.cell || [0, 0];
+    let cell = [fc, fr];
+    const free = (c) => c[0] < cols && c[1] < rows &&
+      !byCell.has(cellKey(c[0], c[1])) && !folderAt.has(cellKey(c[0], c[1]));
+    if (!free(cell)) {
+      const spot = firstFree(new Map([...byCell, ...folderAt]), cols, rows);
+      if (!spot) continue; // no room at all: it reappears when the grid grows again
+      cell = spot;
+      saveFolder(f, { cell });
+    }
+    folderAt.set(cellKey(cell[0], cell[1]), f);
   }
 
   // Build off-DOM, attach once (1 reflow instead of cols*rows).
@@ -2147,8 +2174,10 @@ async function renderGrid(skipFetch = false) {
       cellEl.className = "cell";
       cellEl.dataset.col = c;
       cellEl.dataset.row = r;
+      const f = folderAt.get(cellKey(c, r));
       const p = byCell.get(cellKey(c, r));
-      if (p) cellEl.appendChild(buildTile(p));
+      if (f) cellEl.appendChild(buildFolderTile(f));
+      else if (p) cellEl.appendChild(buildTile(p));
       frag.appendChild(cellEl);
     }
   }
@@ -3373,6 +3402,7 @@ window.addEventListener("pointermove", (e) => {
   drag.ghost.style.transform =
     `translate(${e.clientX - drag.offX}px, ${e.clientY - drag.offY}px)`;
   setHoverCell(cellAt(e.clientX, e.clientY));
+  armFolderDrop(e); // F27: hovering the middle of a tile offers a folder
 });
 
 // Resume videos the drag paused (visibility pauses use the same marker).
@@ -3387,12 +3417,30 @@ function resumeDragVideos(el) {
 
 window.addEventListener("pointerup", async (e) => {
   if (!drag) return;
-  const { id, moved, el, ghost } = drag;
+  const { id, moved, el, ghost, folderId } = drag;
   drag = null;
   ghost?.remove();
   el.classList.remove("dragging");
   resumeDragVideos(el);
   endDragVisuals();
+  // F27: what an armed centre would swallow, decided before the arm is dropped.
+  const armed = folderArm && folderArm.armed ? folderArm.el : null;
+  disarmFolder();
+
+  // A folder tile: a click opens it, a drag moves it to another cell.
+  if (folderId) {
+    const f = folderById(folderId);
+    if (!f) return;
+    if (!moved) { openTileFolderPop(f, el); return; }
+    const cell = cellAt(e.clientX, e.clientY);
+    if (!cell) return;
+    const target = [Number(cell.dataset.col), Number(cell.dataset.row)];
+    // Onto an occupied cell the folder simply stays put — a folder never swaps a
+    // tile away, that is what dropping INTO it is for.
+    if (cell.firstElementChild && cell.firstElementChild !== el) return;
+    if (await saveFolder(f, { cell: target })) await renderGrid(true);
+    return;
+  }
 
   if (!moved) {
     if (el.classList.contains("tile")) {
@@ -3418,6 +3466,7 @@ window.addEventListener("pointerup", async (e) => {
   const cell = cellAt(e.clientX, e.clientY);
   if (!cell) return;
   if (favView) { await placeFav(id, Number(cell.dataset.col), Number(cell.dataset.row)); return; }
+  if (armed) { await dropIntoFolder(id, armed, cell); return; } // F27
   await placeTile(id, Number(cell.dataset.col), Number(cell.dataset.row));
 });
 
@@ -3428,6 +3477,9 @@ window.addEventListener("pointercancel", () => {
     resumeDragVideos(drag.el);
   }
   drag = null;
+  disarmFolder();
+  if (memberDrag) memberDrag.el.classList.remove("dragging");
+  memberDrag = null;
   endDragVisuals();
 });
 
@@ -3509,6 +3561,306 @@ async function placeTile(id, col, row) {
   view.layouts[gridKeyOf(view)] = layout;
   invoke("set_layout", { layout }).catch((e) => toast(String(e)));
   if (!moveTileDom(id, col, row)) await renderGrid(true);
+}
+
+// ---- F27 grid folders: several prompts collapsed into one cell ----
+// Ships ON. A member has no layout entry of its own while it sits in a folder, so
+// switching the feature off simply shows every prompt as its own tile again — the
+// folders stay stored and come back with it.
+const tileFoldersOn = () => flag("tileFolders");
+const tileFolderList = () => (tileFoldersOn() ? settings.tile_folders || [] : []);
+const foldersOfView = (viewId) => tileFolderList().filter((f) => f.view_id === viewId);
+const folderById = (id) => tileFolderList().find((f) => f.id === id);
+const folderMembers = (f) =>
+  (f.members || []).map((id) => prompts.find((p) => p.id === id)).filter(Boolean);
+const folderTitle = (f) => f.name || t("tileFolderDefaultName");
+
+// One write per change — name, colour, cell and members always travel together, so
+// the grid never shows a half-moved folder.
+async function saveFolder(f, patch) {
+  try {
+    settings = await invoke("save_tile_folder", {
+      id: f.id || "",
+      name: patch.name ?? f.name ?? "",
+      color: patch.color ?? f.color ?? "",
+      viewId: f.view_id,
+      cell: patch.cell ?? f.cell ?? [0, 0],
+      members: patch.members ?? f.members ?? [],
+    });
+  } catch (e) {
+    toast(String(e));
+    return false;
+  }
+  return true;
+}
+
+// Two tiles dropped on each other become a folder on the target's cell.
+async function newTileFolder(targetId, dropId, cell) {
+  const name = await confirmDialog({
+    title: t("tileFolderNew"),
+    message: t("tileFolderNameMsg"),
+    confirmLabel: t("save"),
+    input: { type: "text", value: t("tileFolderDefaultName"), placeholder: t("tileFolderNamePh") },
+    danger: false,
+  });
+  if (name === null) return; // cancelled: nothing moves, the tiles stay as they were
+  const view = activeView();
+  const ok = await saveFolder(
+    { id: "", view_id: view.id },
+    { name: String(name).trim(), cell, members: [targetId, dropId] }
+  );
+  if (ok) await renderGrid(true);
+}
+
+async function renameTileFolder(f) {
+  const name = await confirmDialog({
+    title: t("tileFolderRename"),
+    message: t("tileFolderNameMsg"),
+    confirmLabel: t("save"),
+    input: { type: "text", value: f.name, placeholder: t("tileFolderNamePh") },
+    danger: false,
+  });
+  if (name === null || String(name).trim() === f.name) return;
+  if (await saveFolder(f, { name: String(name).trim() })) await renderGrid(true);
+}
+
+let folderColorTimer = null;
+function pickTileFolderColor(f, anchor) {
+  openColorPop(anchor, f.color || "", (hex) => {
+    const live = folderById(f.id);
+    if (!live) return;
+    live.color = hex;
+    renderGrid(true);
+    clearTimeout(folderColorTimer);
+    // Re-read the folder on write: the settings object was replaced in between.
+    folderColorTimer = setTimeout(() => {
+      const now = folderById(f.id);
+      if (now) saveFolder(now, { color: hex });
+    }, 300);
+  });
+}
+
+async function dissolveTileFolder(f) {
+  const ok = await confirmDialog({
+    title: t("tileFolderDissolve"),
+    message: t("tileFolderDissolveMsg").replace("{name}", folderTitle(f)),
+    confirmLabel: t("tileFolderDissolve"),
+  });
+  if (!ok) return;
+  try {
+    settings = await invoke("delete_tile_folder", { id: f.id });
+  } catch (e) {
+    toast(String(e));
+    return;
+  }
+  closeTileFolderPop();
+  await renderGrid(true);
+}
+
+// Take one member out and put it on `cell`. The second-to-last one leaving dissolves
+// the folder — the backend's invariant, so there is no special case here.
+async function takeOutOfFolder(id, cell) {
+  try {
+    settings = await invoke("take_out_of_tile_folder", { id, cell });
+  } catch (e) {
+    toast(String(e));
+    return;
+  }
+  closeTileFolderPop();
+  await renderGrid(true);
+}
+
+// A folder cell: up to four member faces, the name and the count.
+function buildFolderTile(f) {
+  const tile = document.createElement("div");
+  tile.className = "tile folder-tile";
+  tile.dataset.folderId = f.id;
+  if (f.color) {
+    tile.classList.add("tinted");
+    tile.style.background = f.color;
+    tile.style.borderColor = f.color;
+  }
+  const mini = document.createElement("span");
+  mini.className = "folder-mini";
+  const members = folderMembers(f);
+  for (const p of members.slice(0, 4)) {
+    const face = document.createElement("span");
+    face.className = "folder-mini-cell";
+    if (p.color) face.style.background = p.color;
+    if (p.image) {
+      const img = document.createElement("img");
+      img.src = p.image;
+      img.draggable = false;
+      face.appendChild(img);
+    } else {
+      face.textContent = (p.name || "").slice(0, 2);
+    }
+    mini.appendChild(face);
+  }
+  tile.appendChild(mini);
+  const name = document.createElement("span");
+  name.className = "tile-name";
+  name.textContent = folderTitle(f);
+  tile.appendChild(name);
+  const count = document.createElement("span");
+  count.className = "folder-count";
+  count.textContent = String(members.length);
+  tile.appendChild(count);
+  if (flag("tilePreview")) {
+    tile.dataset.tipName = folderTitle(f);
+    tile.dataset.tipBody = members.map((p) => p.name).join(", ");
+  }
+  tile.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openMiniMenu([
+      { label: t("tileFolderRename"), run: () => renameTileFolder(f) },
+      { label: t("tileFolderColor"), run: () => pickTileFolderColor(f, tile) },
+      { label: t("tileFolderDissolve"), danger: true, run: () => dissolveTileFolder(f) },
+    ], e.clientX, e.clientY);
+  });
+  // Same drag machine as a tile — only what a press means differs (open, not copy).
+  tile.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    drag = { folderId: f.id, startX: e.clientX, startY: e.clientY, moved: false, el: tile };
+  });
+  return tile;
+}
+
+// ---- Folder popover: the members, opened by a click on the folder ----
+const tileFolderPop = document.createElement("div");
+tileFolderPop.className = "ctx tile-folder-pop hidden";
+tileFolderPop.setAttribute("role", "menu");
+document.body.appendChild(tileFolderPop);
+let tileFolderPopId = null;
+
+function closeTileFolderPop() {
+  tileFolderPop.classList.add("hidden");
+  tileFolderPopId = null;
+}
+
+function openTileFolderPop(f, anchor) {
+  if (tileFolderPopId === f.id) { closeTileFolderPop(); return; }
+  tileFolderPop.innerHTML = "";
+  tileFolderPopId = f.id;
+  const head = document.createElement("div");
+  head.className = "tile-folder-pop-head";
+  head.textContent = folderTitle(f);
+  tileFolderPop.appendChild(head);
+  const grid = document.createElement("div");
+  grid.className = "tile-folder-grid";
+  grid.style.gridTemplateColumns = `repeat(${val("tileFolderCols")}, 1fr)`;
+  for (const p of folderMembers(f)) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "folder-member-tile";
+    btn.dataset.id = p.id;
+    btn.title = p.name;
+    if (p.color) {
+      btn.style.background = p.color;
+      btn.style.borderColor = p.color;
+    }
+    const label = document.createElement("span");
+    label.className = "tile-name";
+    label.textContent = p.name;
+    btn.appendChild(label);
+    btn.addEventListener("contextmenu", (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      openCtx(p.id, ev.clientX, ev.clientY);
+    });
+    // Press and pull onto a cell to take the prompt out of the folder again.
+    btn.addEventListener("pointerdown", (ev) => {
+      if (ev.button !== 0) return;
+      memberDrag = { id: p.id, startX: ev.clientX, startY: ev.clientY, moved: false, el: btn };
+    });
+    grid.appendChild(btn);
+  }
+  tileFolderPop.appendChild(grid);
+  tileFolderPop.classList.remove("hidden");
+  const r = anchor.getBoundingClientRect();
+  const z = uiZoom();
+  const w = tileFolderPop.offsetWidth, h = tileFolderPop.offsetHeight;
+  tileFolderPop.style.left = `${Math.max(4, Math.min(r.left, window.innerWidth - w - 6)) / z}px`;
+  tileFolderPop.style.top = `${Math.max(4, Math.min(r.bottom + 4, window.innerHeight - h - 6)) / z}px`;
+}
+
+// Dragging a member out of the open popover.
+let memberDrag = null;
+window.addEventListener("pointermove", (e) => {
+  if (!memberDrag) return;
+  if (!memberDrag.moved) {
+    if (Math.abs(e.clientX - memberDrag.startX) < DRAG_THRESHOLD &&
+        Math.abs(e.clientY - memberDrag.startY) < DRAG_THRESHOLD) return;
+    memberDrag.moved = true;
+    memberDrag.el.classList.add("dragging");
+  }
+  setHoverCell(cellAt(e.clientX, e.clientY));
+});
+window.addEventListener("pointerup", async (e) => {
+  if (!memberDrag) return;
+  const d = memberDrag;
+  memberDrag = null;
+  d.el.classList.remove("dragging");
+  endDragVisuals();
+  const p = prompts.find((x) => x.id === d.id);
+  if (!d.moved) {
+    // A plain click copies, exactly like the tile it stands for.
+    if (!p) return;
+    if (dialogTokens(p).length) { await copyTextWithVars(p, d.el); return; }
+    if (copyOnCooldown(d.id)) return;
+    if (await copyResolved(p)) {
+      showCopied(d.el);
+      recordCopy(d.id);
+      maybeCloseOnCopy();
+    }
+    return;
+  }
+  const cell = cellAt(e.clientX, e.clientY);
+  if (!cell) return;
+  await takeOutOfFolder(d.id, [Number(cell.dataset.col), Number(cell.dataset.row)]);
+});
+
+// ---- Arming a folder while a tile is dragged ----
+// The OUTER band of a tile keeps the plain swap; the middle makes a folder, but only
+// after a short dwell, so a quick swap can never turn into one by accident.
+let folderArm = null;
+function disarmFolder() {
+  if (!folderArm) return;
+  clearTimeout(folderArm.timer);
+  folderArm.el.classList.remove("folder-arm");
+  folderArm = null;
+}
+function armFolderDrop(e) {
+  if (!tileFoldersOn() || favView || !drag || drag.folderId) return disarmFolder();
+  const host = cellAt(e.clientX, e.clientY)?.firstElementChild;
+  if (!host || host === drag.el) return disarmFolder();
+  const r = host.getBoundingClientRect();
+  const zone = Math.min(90, Math.max(10, val("tileFolderZone"))) / 100;
+  const inside =
+    Math.abs(e.clientX - (r.left + r.width / 2)) <= (r.width * zone) / 2 &&
+    Math.abs(e.clientY - (r.top + r.height / 2)) <= (r.height * zone) / 2;
+  if (!inside) return disarmFolder();
+  if (folderArm && folderArm.el === host) return;
+  disarmFolder();
+  const arm = { el: host, armed: false, timer: 0 };
+  arm.timer = setTimeout(() => {
+    host.classList.add("folder-arm");
+    arm.armed = true;
+  }, Math.max(0, val("tileFolderHoverMs")));
+  folderArm = arm;
+}
+
+// A drop in an armed centre: join that folder, or make one out of the two tiles.
+async function dropIntoFolder(id, host, cell) {
+  const f = host.dataset.folderId ? folderById(host.dataset.folderId) : null;
+  if (f) {
+    if (f.members.includes(id)) return;
+    if (await saveFolder(f, { members: [...f.members, id] })) await renderGrid(true);
+    return;
+  }
+  if (!host.dataset.id) return;
+  await newTileFolder(host.dataset.id, id, [Number(cell.dataset.col), Number(cell.dataset.row)]);
 }
 
 // ---- Context menu ----
@@ -8176,6 +8528,9 @@ function bind() {
     // The group tab itself toggles the popover, so let its own click through.
     if (!viewGroupPop.classList.contains("hidden") && !viewGroupPop.contains(e.target) &&
         !e.target.closest(".view-group-btn")) closeViewGroupPop();
+    // F27: the folder tile toggles its own popover, so let its press through.
+    if (!tileFolderPop.classList.contains("hidden") && !tileFolderPop.contains(e.target) &&
+        !e.target.closest(".folder-tile")) closeTileFolderPop();
   });
   // Ctrl+Tab walks the views in the order the tab bar shows them, so a group's
   // members are reached in place instead of being skipped.
@@ -8200,6 +8555,7 @@ function bind() {
     if (!toolbarMenu.classList.contains("hidden")) { closeToolbarMenu(); return; }
     if (!miniMenu.classList.contains("hidden")) { closeMiniMenu(); return; }
     if (!viewGroupPop.classList.contains("hidden")) { closeViewGroupPop(); return; }
+    if (!tileFolderPop.classList.contains("hidden")) { closeTileFolderPop(); return; }
     if (!$("lightbox").classList.contains("hidden")) closeLightbox();
     else if (confirmCleanup) confirmCleanup(false);
     // The variable-fill dialog has its own keydown handler; consume Escape here so the
