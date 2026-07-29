@@ -88,7 +88,9 @@ let modalInitial = ""; // snapshot of the open modal's content (unsaved-change g
 let ctxId = null;
 let drag = null;
 let libQuery = ""; // prompt library search text
-let libType = "all"; // prompt library type filter
+// Type filters are ADDITIVE and identical in both windows: an empty set means every
+// type, each chip toggles its own, and the pick is stored per window.
+const libTypes = new Set();
 let libColor = "all"; // prompt library color filter
 let libFav = false; // prompt library "favorites only" filter
 const libTags = new Set(); // F1: selected tag filters, as lowercase tag keys
@@ -99,8 +101,9 @@ let libLastId = null;          // anchor for shift-click range select
 let libDisplayOrder = [];      // ids in current display order (for range select)
 let gridDirty = false;         // batch ops changed prompts; rebuild grid on library close
 let journalQuery = ""; // copy-history search text
-let journalType = "all"; // copy-history type filter
+const journalTypes = new Set(); // additive, like the library's
 let journalColor = "all"; // copy-history color filter
+let journalFav = false; // copy-history "favorites only" filter
 let toastTimer = null;
 let deleteAllTimer = null;
 let resetSettingsTimer = null;
@@ -143,6 +146,8 @@ const ICON_PDF =
   '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm0 2 4 4h-4V4ZM8 12h8v1.6H8V12Zm0 3.2h8v1.6H8v-1.6Z"/></svg>';
 const ICON_EDIT =
   '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 20h4L18.5 9.5a2 2 0 0 0-2.8-2.8L5 17.2V20Zm9.5-12.5 3 3"/></svg>';
+const ICON_TRASH =
+  '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13M10 11v6M14 11v6"/></svg>';
 
 let LANG = "en";
 // A language that was stored before it was retired has no option left, which would
@@ -6940,10 +6945,29 @@ function thumbEl(p) {
   return thumbDot(p);
 }
 
-function setLibType(type) {
-  libType = type;
-  setActiveFilter($("library-types"), ".lib-type", "type", type);
+// ---- Additive type filters, shared by the library and the copy history ----
+// Nothing picked = every type. "All" clears the set, every other chip toggles itself,
+// so PDF and File can be shown together. The pick is stored per window.
+const typeFilterOf = (key) => new Set((settings.ui_texts?.[key] || "").split(",").filter(Boolean));
+
+function paintTypeChips(box, set) {
+  for (const btn of box.querySelectorAll(".lib-type[data-type]")) {
+    const type = btn.dataset.type;
+    btn.classList.toggle("active", type === "all" ? set.size === 0 : set.has(type));
+  }
 }
+
+function toggleTypeFilter(set, type, box, key) {
+  if (type === "all") set.clear();
+  else if (!set.delete(type)) set.add(type);
+  paintTypeChips(box, set);
+  const value = [...set].join(",");
+  settings.ui_texts = { ...(settings.ui_texts || {}), [key]: value };
+  invoke("set_ui_text", { key, value }).catch(() => {});
+}
+
+// A prompt passes when no type is picked, or when its own type is among them.
+const typeAllowed = (set, p) => set.size === 0 || set.has(promptType(p));
 
 // ---- F18 fuzzy search: tiered scoring (exact > prefix > fuzzy) over the same
 // fields the plain search used. Fuzzy only kicks in when no substring hit exists,
@@ -7034,7 +7058,7 @@ function fuzzyWordHit(qw, vw, max) {
 
 function libMatches(p) {
   if (libFav && !p.favorite) return false;
-  if (libType !== "all" && promptType(p) !== libType) return false;
+  if (!typeAllowed(libTypes, p)) return false;
   if (libColor !== "all" && (p.color || "") !== libColor) return false;
   if (!tagMatches(p)) return false;
   return libSearchScore(p).score > 0;
@@ -7203,7 +7227,7 @@ function renderLibrary() {
     // Place on the current layout: drag the row onto the grid, or one click.
     row.addEventListener("pointerdown", (e) => {
       if (libSelectMode) return; // no drag while multi-selecting
-      if (e.button !== 0 || e.target.closest(".lib-add, .lib-edit, .lib-fav")) return;
+      if (e.button !== 0 || e.target.closest(".lib-add, .lib-edit, .lib-fav, .lib-delete")) return;
       const out = armDragOut(row, e, () => prompts.find((x) => x.id === p.id));
       drag = { id: p.id, startX: e.clientX, startY: e.clientY, moved: false, el: row, fromLibrary: true, out };
     });
@@ -7251,6 +7275,32 @@ function renderLibrary() {
     edit.addEventListener("pointerdown", (e) => e.stopPropagation());
     edit.addEventListener("click", (e) => { e.stopPropagation(); editPrompt(p.id); });
     row.appendChild(edit);
+
+    // Delete (far right): the only destructive action in the row, so it asks first.
+    const del = document.createElement("span");
+    del.className = "icon-btn lib-delete";
+    del.title = t("delete");
+    del.innerHTML = ICON_TRASH;
+    del.addEventListener("pointerdown", (e) => e.stopPropagation());
+    del.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const ok = await confirmDialog({
+        title: t("delete"),
+        message: `${t("deleteConfirm")}\n\n${p.name}`,
+        confirmLabel: t("delete"),
+      });
+      if (!ok) return;
+      try {
+        await invoke("delete_prompt", { id: p.id });
+      } catch (err) {
+        toast(String(err));
+        return;
+      }
+      prompts = prompts.filter((x) => x.id !== p.id);
+      renderLibrary();
+      await renderGrid(); // the tile (or its folder) is gone from the grid as well
+    });
+    row.appendChild(del);
 
     // Click copies the prompt (or toggles selection in batch mode).
     row.addEventListener("click", (e) => {
@@ -7485,17 +7535,14 @@ const fmtCopyTime = (ts) => {
 };
 
 function journalMatches(p) {
-  if (journalType !== "all" && promptType(p) !== journalType) return false;
+  if (!typeAllowed(journalTypes, p)) return false;
+  if (journalFav && !p.favorite) return false;
   if (journalColor !== "all" && (p.color || "") !== journalColor) return false;
   const q = journalQuery.trim().toLowerCase();
   if (!q) return true;
   return [p.name, p.text, p.file_path].some((s) => (s || "").toLowerCase().includes(q));
 }
 
-function setJournalType(type) {
-  journalType = type;
-  setActiveFilter($("journal-types"), ".lib-type", "type", type);
-}
 function setJournalColor(color) {
   journalColor = color;
   setActiveFilter($("journal-colors"), ".lib-color", "color", color);
@@ -7619,7 +7666,11 @@ async function openJournal() {
   settings = await invoke("get_settings");
   journalQuery = "";
   if ($("journal-q")) $("journal-q").value = "";
-  setJournalType("all");
+  journalTypes.clear();
+  for (const type of typeFilterOf("journalTypeFilterPick")) journalTypes.add(type);
+  paintTypeChips($("journal-types"), journalTypes);
+  journalFav = false;
+  $("journal-fav").classList.remove("active");
   setJournalColor("all");
   // Hide the whole filter bar when every filter is switched off (expert menu).
   const anyFilter = flag("journalSearch") || flag("journalTypeFilter") || flag("journalColorFilter");
@@ -8171,7 +8222,10 @@ function bind() {
   $("library-btn").addEventListener("click", () => {
     libQuery = "";
     $("library-q").value = "";
-    setLibType("all");
+    // The type pick is remembered per window; search, colour and favourites are not.
+    libTypes.clear();
+    for (const type of typeFilterOf("libTypeFilter")) libTypes.add(type);
+    paintTypeChips($("library-types"), libTypes);
     setLibColor("all");
     libFav = false;
     $("library-fav").classList.remove("active");
@@ -8207,7 +8261,7 @@ function bind() {
       return;
     }
     const btn = e.target.closest(".lib-type");
-    if (btn) { setLibType(btn.dataset.type); renderLibrary(); }
+    if (btn) { toggleTypeFilter(libTypes, btn.dataset.type, $("library-types"), "libTypeFilter"); renderLibrary(); }
   });
   $("library-colors").addEventListener("click", (e) => {
     const btn = e.target.closest(".lib-color");
@@ -8278,8 +8332,14 @@ function bind() {
   $("journal-q").addEventListener("input", (e) => { journalQuery = e.target.value; renderJournal(); });
   wireSearchSuggest($("journal-q"), "recentSearchJournal");
   $("journal-types").addEventListener("click", (e) => {
+    if (e.target.closest("#journal-fav")) {
+      journalFav = !journalFav;
+      $("journal-fav").classList.toggle("active", journalFav);
+      renderJournal();
+      return;
+    }
     const btn = e.target.closest(".lib-type");
-    if (btn) { setJournalType(btn.dataset.type); renderJournal(); }
+    if (btn) { toggleTypeFilter(journalTypes, btn.dataset.type, $("journal-types"), "journalTypeFilterPick"); renderJournal(); }
   });
   $("journal-colors").addEventListener("click", (e) => {
     const btn = e.target.closest(".lib-color");

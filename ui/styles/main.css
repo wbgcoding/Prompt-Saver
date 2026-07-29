@@ -2366,8 +2366,9 @@ input[type="password"]::-ms-clear { display: none; }
   scrollbar-gutter: stable;
 }
 /* Type chips + colour dots share one row (colours to the right of the chips). */
+/* One filter row for BOTH windows: type chips left, colours right of them. */
 .journal-filters { display: flex; gap: 12px; align-items: flex-start; flex-wrap: nowrap; }
-.journal-filters > #journal-colors { flex: 1 1 auto; min-width: 0; }
+.journal-filters > .lib-colors { flex: 1 1 auto; min-width: 0; }
 .journal-col { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .journal-body::-webkit-scrollbar { width: var(--sb-width, 12px); }
 .journal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
@@ -2392,17 +2393,19 @@ input[type="password"]::-ms-clear { display: none; }
 /* Expert preset dropdown + free-entry number */
 .expert-select { width: auto; min-width: 120px; align-self: flex-start; }
 /* Themed, rounded select with a custom chevron (drops the raw OS triangle so the
-   dropdowns match the rest of the layout). */
+   dropdowns match the rest of the layout). EVERY select in the app wears it — the
+   look is defined once here and inherited by the library, backup and editor rows. */
+select,
 .expert-select {
   appearance: none; -webkit-appearance: none;
   padding-right: 30px;
-  border-radius: 10px;
   cursor: pointer;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 9px center;
   background-size: 14px;
 }
+.expert-select { border-radius: 10px; }
 /* Label to the LEFT of every expert dropdown (was stacked above). */
 /* Label left, control right. Paired rows are equally tall (grid stretch), and the
    control hangs at the BOTTOM of its row — so two dropdowns side by side line up
@@ -2513,9 +2516,12 @@ body.drag-over::after {
 .library-list::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 .library-list::-webkit-scrollbar-track { background: transparent; margin: 14px 0; }
 @media (max-width: 560px) { .library-list { grid-template-columns: 1fr; } }
+/* A row carries up to four action icons; on a narrow (or scaled-up) window they wrap
+   onto a second line instead of being pushed past the edge of the list. */
 .lib-item {
   display: flex;
   align-items: flex-start;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 10px 12px;
   border: 1px solid var(--border);
@@ -2604,6 +2610,15 @@ body.drag-over::after {
 /* Favorites filter chip in the search bar. */
 .lib-fav-chip { color: var(--muted); }
 .lib-fav-chip.active { background: #f5b301; border-color: #f5b301; color: #1a1a1a; }
+/* Delete sits at the far right of a row and is the only destructive one there. */
+.lib-item .lib-delete {
+  align-self: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+}
+.lib-item .lib-delete:hover { color: var(--danger); border-color: var(--danger); }
 
 /* Library header: "Close after copy" toggle + close button grouped right. */
 .modal-head-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; row-gap: 6px; gap: 8px; min-width: 0; }
