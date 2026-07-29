@@ -1463,6 +1463,15 @@ impl Settings {
                 color: String::new(),
             });
         }
+        // Every view arrives through here, including from an imported backup, so this
+        // is where the same ceilings the commands enforce have to hold. Without them a
+        // hand-edited backup with cols near u32::MAX makes the grid renderer build
+        // billions of cells and the window never paints again.
+        self.views.truncate(MAX_VIEWS);
+        for v in self.views.iter_mut() {
+            v.cols = v.cols.clamp(GRID_MIN, GRID_MAX);
+            v.rows = v.rows.clamp(GRID_MIN, GRID_MAX);
+        }
         if !self.views.iter().any(|v| v.id == self.active_view) {
             if let Some(first) = self.views.first() {
                 self.active_view = first.id.clone();
@@ -1979,6 +1988,18 @@ fn fence_dyn_vars(text: &str) -> String {
 }
 
 fn migrate_prompts(prompts: &mut [Prompt]) {
+    // `id` is the prompts table's PRIMARY KEY, so a duplicate makes the whole
+    // DELETE+INSERT rewrite fail — and save_prompts then quietly writes the JSON
+    // fallback that the database path ignores, so the import looks like it worked and
+    // the old prompts are back after a restart. An import (or a hand-edited backup) is
+    // the only way two prompts can share an id; the second one gets a fresh one.
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for p in prompts.iter_mut() {
+        if p.id.is_empty() || !seen.insert(p.id.clone()) {
+            p.id = gen_id();
+            seen.insert(p.id.clone());
+        }
+    }
     for p in prompts {
         if !p.image.is_empty() && !p.copy_image && (p.text.is_empty() || p.text == p.name) {
             p.copy_image = true;
@@ -5097,9 +5118,9 @@ fn gzip_to(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> 
 fn gunzip_to(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
     use flate2::read::GzDecoder;
     let packed = fs::read(src).map_err(|e| e.to_string())?;
-    let mut out = Vec::new();
-    std::io::Read::read_to_end(&mut GzDecoder::new(&packed[..]), &mut out)
-        .map_err(|e| e.to_string())?;
+    // Capped like every other decompression here: a snapshot file is on disk where
+    // anything could have replaced it, and an unbounded inflate is a free crash.
+    let out = inflate_capped(GzDecoder::new(&packed[..]))?;
     fs::write(dest, out).map_err(|e| e.to_string())
 }
 
@@ -5197,10 +5218,31 @@ async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep
         let _ = do_backup(&app, keep, gfs); // pre-restore safety snapshot
         let dir = data_dir(&app);
         let target = dir.join("data.db");
-        if backup_db.extension().is_some_and(|e| e == "gz") {
-            gunzip_to(&backup_db, &target)?;
+        // Unpack BESIDE the live store, then swap it in with one rename. Writing
+        // straight onto data.db truncates it first, so a disk that fills up (or any
+        // I/O error) halfway through would leave the user with neither the old
+        // database nor the restored one.
+        let staged = dir.join("data.db.restoring");
+        let _ = fs::remove_file(&staged);
+        let unpack = if backup_db.extension().is_some_and(|e| e == "gz") {
+            gunzip_to(&backup_db, &staged)
         } else {
-            fs::copy(&backup_db, &target).map_err(|e| e.to_string())?; // pre-2.6 snapshot
+            fs::copy(&backup_db, &staged).map(|_| ()).map_err(|e| e.to_string()) // pre-2.6 snapshot
+        };
+        if let Err(e) = unpack {
+            let _ = fs::remove_file(&staged);
+            return Err(e);
+        }
+        // A snapshot that is not a readable database must never replace a working one.
+        if let Err(e) = Connection::open(&staged)
+            .and_then(|c| c.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0)))
+        {
+            let _ = fs::remove_file(&staged);
+            return Err(format!("backup is not a readable database: {}", e));
+        }
+        if let Err(e) = fs::rename(&staged, &target) {
+            let _ = fs::remove_file(&staged);
+            return Err(e.to_string());
         }
         let _ = fs::remove_file(dir.join("data.db-wal"));
         let _ = fs::remove_file(dir.join("data.db-shm"));
@@ -5950,6 +5992,15 @@ async fn set_float_bounds(app: AppHandle, id: String, x: f64, y: f64, width: f64
         if let Some(win) = app.get_webview_window(&flabel(&id)) {
             let w = width.clamp(48.0, 8000.0);
             let h = height.clamp(48.0, 8000.0);
+            // Keep the grown box on the monitor. The pill menu picks a side that fits
+            // and falls back to "below" when none does — on a small screen (or with a
+            // large scaled pill) that fallback used to push the menu buttons off the
+            // edge where no pointer could reach them. Clamping here covers every
+            // caller instead of each one repeating the arithmetic.
+            let dpi = win.scale_factor().unwrap_or(1.0);
+            let work = work_rect_at(&app, x * dpi, y * dpi);
+            let (cx, cy) = clamp_to_work(work, w * dpi, h * dpi, x * dpi, y * dpi);
+            let (x, y) = (cx / dpi, cy / dpi);
             #[cfg(windows)]
             if set_float_bounds_native(&win, x, y, w, h) {
                 return Ok(());
@@ -8809,12 +8860,30 @@ fn deflate(raw: &[u8]) -> Result<Vec<u8>, String> {
     enc.finish().map_err(|e| e.to_string())
 }
 
+// Ceiling for anything we decompress. The default backup key ships inside the exe, so
+// a valid-looking .psb is something anyone can craft — without a cap a few KB of
+// deflate expands until the process is killed. Far above any real library.
+const MAX_INFLATED: u64 = 512 * 1024 * 1024;
+
+// Decompress at most MAX_INFLATED bytes, refusing anything larger instead of growing
+// the buffer until the allocator gives up.
+fn inflate_capped<R: std::io::Read>(reader: R) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let mut out = Vec::new();
+    // cap + 1 byte: reaching the extra byte is what proves the stream was too big.
+    reader
+        .take(MAX_INFLATED + 1)
+        .read_to_end(&mut out)
+        .map_err(|_| "corrupt backup".to_string())?;
+    if out.len() as u64 > MAX_INFLATED {
+        return Err("backup expands to more than 512 MB".to_string());
+    }
+    Ok(out)
+}
+
 fn inflate(packed: &[u8]) -> Result<Vec<u8>, String> {
     use flate2::read::DeflateDecoder;
-    let mut out = Vec::new();
-    std::io::Read::read_to_end(&mut DeflateDecoder::new(packed), &mut out)
-        .map_err(|_| "corrupt backup".to_string())?;
-    Ok(out)
+    inflate_capped(DeflateDecoder::new(packed))
 }
 
 fn backup_encrypt(plain: &[u8], password: Option<&str>) -> Result<Vec<u8>, String> {
@@ -10770,6 +10839,46 @@ mod tests {
     }
 
     // ---- F23 tray quick menu ----
+
+    #[test]
+    fn importing_duplicate_prompt_ids_gives_each_one_its_own() {
+        // `id` is the prompts table PRIMARY KEY: a duplicate made the whole rewrite
+        // fail, and the failure was swallowed into the ignored JSON fallback, so the
+        // import "succeeded" and the old prompts came back after a restart.
+        let mut ps = sample_prompts();
+        ps[1].id = ps[0].id.clone();
+        ps.push({
+            let mut p = ps[0].clone();
+            p.id = String::new(); // a hand-written backup may leave it out entirely
+            p
+        });
+        migrate_prompts(&mut ps);
+        let ids: std::collections::HashSet<&str> = ps.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids.len(), ps.len(), "every prompt must end up with a unique id");
+        assert!(ps.iter().all(|p| !p.id.is_empty()), "no prompt may be left without an id");
+    }
+
+    #[test]
+    fn an_imported_view_cannot_exceed_the_grid_ceiling() {
+        // A hand-edited backup used to be able to ask for a grid of u32::MAX cells,
+        // which the renderer then tried to build — the window never painted again.
+        let mut s = Settings::default();
+        s.views = vec![test_view("v1"), test_view("v2")];
+        s.views[0].cols = u32::MAX;
+        s.views[0].rows = 999_999;
+        s.views[1].cols = 0; // and the other direction: a grid with no cells at all
+        s.views[1].rows = 0;
+        s.migrate();
+        assert_eq!(s.views[0].cols, GRID_MAX);
+        assert_eq!(s.views[0].rows, GRID_MAX);
+        assert_eq!(s.views[1].cols, GRID_MIN);
+        assert_eq!(s.views[1].rows, GRID_MIN);
+        // More views than the ceiling are cut, not carried.
+        let mut s = Settings::default();
+        s.views = (0..MAX_VIEWS + 20).map(|i| test_view(&format!("v{i}"))).collect();
+        s.migrate();
+        assert_eq!(s.views.len(), MAX_VIEWS);
+    }
 
     fn tray_prompt(id: &str, name: &str, favorite: bool) -> Prompt {
         let mut p = sample_prompts().remove(1);
