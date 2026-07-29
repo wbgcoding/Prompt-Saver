@@ -589,7 +589,13 @@ pill.addEventListener("dragend", () => { pill.draggable = false; });
 // can tell whether this drop landed on another one. Nothing is sent while dragging,
 // and a drag that ends nowhere near a pill simply gets `false`.
 const mergeAfterDrop = () => {
-  if (foldersOn && !menuOpen) invoke("float_folder_drop", { id: promptId }).catch(() => {});
+  if (!foldersOn) return;
+  // With the menu open nothing merges — but the highlight still has to go out.
+  if (menuOpen) {
+    invoke("float_drag_hint", { id: promptId, active: false }).catch(() => {});
+    return;
+  }
+  invoke("float_folder_drop", { id: promptId }).catch(() => {});
 };
 
 // startDragging() hands the window to the OS move loop, and that loop CONSUMES the
@@ -618,6 +624,10 @@ window.addEventListener("mousemove", async (e) => {
       Math.abs(e.screenY - drag.y) < DRAG_THRESHOLD) return;
   drag.moved = true;
   pill.classList.add("dragging");
+  // F25: the backend follows this window while the OS moves it and lights up
+  // whatever letting go would merge into. Nothing is computed here — the pointer
+  // belongs to the move loop from the next line on.
+  if (foldersOn) invoke("float_drag_hint", { id: promptId, active: true }).catch(() => {});
   // Decoding video frames while the OS moves the window makes the drag
   // stutter — pause for the duration of the drag.
   if (!videoEl.classList.contains("hidden")) pauseByApp();
@@ -783,6 +793,9 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) pauseByApp();
   else ensureVideoPlaying();
 });
+
+// F25: another pill is being dragged over this one — show what letting go would do.
+listen("merge-hint", (e) => pill.classList.toggle("merge-hint", e.payload === true));
 
 listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 // Language switched in the settings — re-translate the pill texts in place.

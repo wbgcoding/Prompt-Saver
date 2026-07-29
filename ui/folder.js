@@ -3,7 +3,7 @@
 // ever one window per folder — expanding resizes it, so z-order and focus stay as
 // simple as a single pill's. All geometry (side, edge flipping, DPI) is decided in the
 // backend, which is the only place that knows the monitors.
-import { FONTS } from "./fonts.js";
+import { FONTS, fitText } from "./fonts.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { mediaKind } from "./media.js";
 
@@ -137,6 +137,16 @@ function renderGrid() {
     ok.textContent = TXT.copied;
     tile.appendChild(ok);
     gridEl.appendChild(tile);
+  }
+  // The tiles grow with the folder size, so the names have to as well — a fixed
+  // small font left a large folder full of unreadable labels. Same auto-fit pass
+  // the grid tiles and the pills use.
+  const cap = Math.max(9, Math.round(t / 3));
+  for (const el of gridEl.querySelectorAll(".member-face .face-text")) {
+    fitText(el, t * 0.86, t * 0.86, cap);
+  }
+  for (const el of gridEl.querySelectorAll(".member-ok")) {
+    fitText(el, t * 0.8, t * 0.5, cap);
   }
 }
 
@@ -322,15 +332,28 @@ function markSelectedSize() {
 
 let iconDrag = null;
 
-iconEl.addEventListener("mousedown", (e) => {
+// Exactly the pill's mechanic: the whole window is the drag surface (the popover and
+// the menus handle their own presses), and startDragging() hands the window to the OS
+// move loop, which CONSUMES the release — so the drag also ends on the first later
+// event that reports no button held.
+window.addEventListener("mousedown", (e) => {
   if (e.button !== 0) return;
+  if (e.target.closest(".menu") || e.target.closest(".folder-pop")) return;
   iconDrag = { x: e.screenX, y: e.screenY, moved: false };
 });
 
+function iconReleased(e) {
+  if (!iconDrag || e.buttons !== 0) return false;
+  iconDrag = null;
+  iconEl.classList.remove("dragging");
+  return true;
+}
+
+window.addEventListener("mouseout", (e) => iconReleased(e));
+
 window.addEventListener("mousemove", async (e) => {
-  if (!iconDrag) return;
-  if (e.buttons === 0) { iconDrag = null; return; }
-  if (iconDrag.moved) return;
+  if (iconReleased(e)) return;
+  if (!iconDrag || iconDrag.moved) return;
   if (Math.abs(e.screenX - iconDrag.x) < DRAG_THRESHOLD && Math.abs(e.screenY - iconDrag.y) < DRAG_THRESHOLD) return;
   iconDrag.moved = true;
   iconEl.classList.add("dragging");
@@ -499,6 +522,8 @@ document.getElementById("mm-out").addEventListener("click", async () => {
 // ---- backend events ----
 
 listen("folder-changed", () => loadState());
+// A pill is being dragged over this folder — show that letting go drops it in.
+listen("merge-hint", (e) => iconEl.classList.toggle("merge-hint", e.payload === true));
 listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 listen("language-changed", () => applySettings());
 // Same as the pill: an expert change has to reach a folder that is already open.

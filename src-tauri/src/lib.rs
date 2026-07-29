@@ -2541,9 +2541,15 @@ fn folder_layout(icon: Rect, pop_w: f64, pop_h: f64, gap: f64, work: Rect) -> Fo
     };
     // A popover larger than the work area can only start at its edge.
     let fit = |v: f64, lo: f64, hi: f64| if hi < lo { lo } else { v.max(lo).min(hi) };
+    // The popover is ALIGNED with the icon's leading edge, never centred on it. A
+    // centred popover is wider than the icon on both sides, so the window ORIGIN moves
+    // left — and the icon has to be pushed right by the same amount inside it, one
+    // frame later. That one frame is the sideways jump on right-click. Aligned, the
+    // origin stays exactly where it was whenever the popover fits below/right, which
+    // is the normal case.
     let pop = match side {
         FolderSide::Below | FolderSide::Above => {
-            let x = fit(icon.x + (icon.w - pop_w) / 2.0, work.x, work.right() - pop_w);
+            let x = fit(icon.x, work.x, work.right() - pop_w);
             let y = if side == FolderSide::Below {
                 icon.bottom() + gap
             } else {
@@ -2552,7 +2558,7 @@ fn folder_layout(icon: Rect, pop_w: f64, pop_h: f64, gap: f64, work: Rect) -> Fo
             Rect { x, y: fit(y, work.y, work.bottom() - pop_h), w: pop_w, h: pop_h }
         }
         FolderSide::Right | FolderSide::Left => {
-            let y = fit(icon.y + (icon.h - pop_h) / 2.0, work.y, work.bottom() - pop_h);
+            let y = fit(icon.y, work.y, work.bottom() - pop_h);
             let x = if side == FolderSide::Right {
                 icon.right() + gap
             } else {
@@ -2585,6 +2591,51 @@ fn clamp_to_work(work: Rect, w: f64, h: f64, x: f64, y: f64) -> (f64, f64) {
         fit(x, work.x, work.right() - w),
         fit(y, work.y, work.bottom() - h),
     )
+}
+
+// Fan a set of pills apart so none of them ends up hidden under another. Each pill
+// keeps its old position as a WISH; dropping one pill onto another is what created the
+// folder in the first place, so those wishes sit on top of each other and a dissolved
+// folder would look like a single pill. A taken box pushes the next one outward on a
+// growing ring (step: a bit more than half the pill, so a few rings clear even a large
+// media pill) until it lands free, and the result is clamped onto the work area.
+// Pure and deterministic: same input, same layout.
+fn spread_free_positions(wishes: &[Rect], taken: &[Rect], work: Rect) -> Vec<(f64, f64)> {
+    const RINGS: i32 = 10;
+    let mut placed: Vec<Rect> = taken.to_vec();
+    let mut out = Vec::with_capacity(wishes.len());
+    for wish in wishes {
+        let step = (wish.w.max(wish.h) * 0.55).max(24.0);
+        let at = |dx: i32, dy: i32| {
+            let (x, y) = clamp_to_work(
+                work,
+                wish.w,
+                wish.h,
+                wish.x + dx as f64 * step,
+                wish.y + dy as f64 * step,
+            );
+            Rect { x, y, w: wish.w, h: wish.h }
+        };
+        let mut spot = at(0, 0);
+        'rings: for ring in 0..=RINGS {
+            for dy in -ring..=ring {
+                for dx in -ring..=ring {
+                    // Only the outer edge of each ring is new.
+                    if ring > 0 && dx.abs() != ring && dy.abs() != ring {
+                        continue;
+                    }
+                    let cand = at(dx, dy);
+                    if !placed.iter().any(|p| p.overlaps(&cand)) {
+                        spot = cand;
+                        break 'rings;
+                    }
+                }
+            }
+        }
+        placed.push(spot);
+        out.push((spot.x, spot.y));
+    }
+    out
 }
 
 // Bring the folder list back to its invariants: only real prompt ids, no prompt in two
@@ -2691,7 +2742,33 @@ fn folder_icon_rect(app: &AppHandle, id: &str, window: Rect) -> Rect {
 }
 
 // A window's box in physical desktop pixels.
+// The window box in physical pixels. On Windows this reads the HWND directly: the
+// live merge hint polls it while the OS move loop owns the pointer, and a plain Win32
+// read needs nothing from the stalled event loop.
+#[cfg(windows)]
+fn window_rect_native(win: &tauri::WebviewWindow) -> Option<Rect> {
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetWindowRect(hwnd: isize, rect: *mut [i32; 4]) -> i32;
+    }
+    let hwnd = win.hwnd().ok()?.0 as isize;
+    let mut r = [0i32; 4]; // left, top, right, bottom
+    if unsafe { GetWindowRect(hwnd, &mut r) } == 0 {
+        return None;
+    }
+    Some(Rect {
+        x: r[0] as f64,
+        y: r[1] as f64,
+        w: (r[2] - r[0]) as f64,
+        h: (r[3] - r[1]) as f64,
+    })
+}
+
 fn window_rect(win: &tauri::WebviewWindow) -> Option<Rect> {
+    #[cfg(windows)]
+    if let Some(r) = window_rect_native(win) {
+        return Some(r);
+    }
     let p = win.outer_position().ok()?;
     let s = win.outer_size().ok()?;
     Some(Rect {
@@ -5639,11 +5716,123 @@ async fn set_float_bounds(app: AppHandle, id: String, x: f64, y: f64, width: f64
 
 // ---------- F25: folder commands ----------
 
+// What the dragged pill currently covers: every other pill/folder box plus the one
+// `merge_target` picks. ONE hit function for both the live highlight and the drop, so
+// what lights up while dragging is exactly what letting go would merge.
+fn drag_hit(app: &AppHandle, id: &str, radius: f64) -> Option<(String, Vec<(String, Rect)>, Rect)> {
+    let win = app.get_webview_window(&flabel(id))?;
+    let dragged = window_rect(&win)?;
+    let dpi = win.scale_factor().unwrap_or(1.0);
+    let mut targets: Vec<(String, Rect)> = Vec::new();
+    for (label, other) in app.webview_windows() {
+        if label == flabel(id) {
+            continue;
+        }
+        let rect = match window_rect(&other) {
+            Some(r) => r,
+            None => continue,
+        };
+        if let Some(pid) = label.strip_prefix("float-") {
+            targets.push((format!("p{}", pid), rect));
+        } else if let Some(fid) = label.strip_prefix("folder-") {
+            // An OPEN folder is hit-tested on its icon, never on the grid it grew.
+            targets.push((format!("f{}", fid), folder_icon_rect(app, fid, rect)));
+        }
+    }
+    // The radius is a logical distance, so it follows the dragged pill's monitor.
+    let hit = merge_target(dragged, &targets, radius * dpi)?.to_string();
+    Some((hit, targets, dragged))
+}
+
+// Which window a hit key belongs to ("p<prompt>" = pill, "f<folder>" = folder).
+fn hit_label(hit: &str) -> String {
+    let (kind, key) = hit.split_at(1);
+    if kind == "f" {
+        folder_label(key)
+    } else {
+        flabel(key)
+    }
+}
+
+// Live merge feedback while a pill is dragged. The OS move loop owns the pointer, so
+// no webview sees the motion — the backend polls the dragged window instead and lights
+// up the window that would swallow it. (generation, currently lit window label)
+struct DragHint(Mutex<(u64, Option<String>)>);
+
+const HINT_TICK_MS: u64 = 70;
+const HINT_MAX_TICKS: u32 = 700; // ~50 s guard — no drag runs longer
+
+// Move the highlight, telling the old target to drop it. Emits only on a change.
+fn light_hint(app: &AppHandle, label: Option<String>) {
+    let Some(state) = app.try_state::<DragHint>() else { return };
+    let mut cur = state.0.lock().unwrap_or_else(|e| e.into_inner());
+    if cur.1 == label {
+        return;
+    }
+    if let Some(old) = cur.1.take() {
+        let _ = app.emit_to(old.as_str(), "merge-hint", false);
+    }
+    if let Some(new) = &label {
+        let _ = app.emit_to(new.as_str(), "merge-hint", true);
+    }
+    cur.1 = label;
+}
+
+// The pill window says when its drag starts and ends. Ending also clears the
+// highlight, so a drag that dies with the window never leaves one lit.
+#[tauri::command]
+async fn float_drag_hint(app: AppHandle, state: State<'_, Db>, id: String, active: bool) -> Result<(), String> {
+    let generation = {
+        let hint: State<DragHint> = app.state();
+        let mut cur = hint.0.lock().unwrap_or_else(|e| e.into_inner());
+        cur.0 = cur.0.wrapping_add(1);
+        cur.0
+    };
+    if !active {
+        light_hint(&app, None);
+        return Ok(());
+    }
+    let (on, radius) = {
+        let store = lock(&state);
+        (folders_on(&store.settings), merge_radius(&store.settings))
+    };
+    if !on {
+        return Ok(());
+    }
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        for _ in 0..HINT_MAX_TICKS {
+            tokio::time::sleep(std::time::Duration::from_millis(HINT_TICK_MS)).await;
+            {
+                let hint: State<DragHint> = handle.state();
+                let cur = hint.0.lock().unwrap_or_else(|e| e.into_inner());
+                if cur.0 != generation {
+                    return; // a newer drag (or its end) owns the highlight now
+                }
+            }
+            if handle.get_webview_window(&flabel(&id)).is_none() {
+                break;
+            }
+            let hit = drag_hit(&handle, &id, radius).map(|(h, _, _)| hit_label(&h));
+            light_hint(&handle, hit);
+        }
+        light_hint(&handle, None);
+    });
+    Ok(())
+}
+
 // A pill was dropped after a drag: did it land on another pill or on a folder? The
 // check has to run HERE — the pills are separate OS windows, so only the backend knows
 // where they all are. Called ONCE per drag END, never while dragging.
 #[tauri::command]
 async fn float_folder_drop(app: AppHandle, state: State<'_, Db>, id: String) -> Result<bool, String> {
+    // The drag is over: whatever was lit goes dark, hit or no hit.
+    {
+        let hint: State<DragHint> = app.state();
+        let mut cur = hint.0.lock().unwrap_or_else(|e| e.into_inner());
+        cur.0 = cur.0.wrapping_add(1);
+    }
+    light_hint(&app, None);
     let (on, radius, full) = {
         let store = lock(&state);
         (
@@ -5659,30 +5848,9 @@ async fn float_folder_drop(app: AppHandle, state: State<'_, Db>, id: String) -> 
         Some(w) => w,
         None => return Ok(false),
     };
-    let dragged = match window_rect(&win) {
-        Some(r) => r,
-        None => return Ok(false),
-    };
     let dpi = win.scale_factor().unwrap_or(1.0);
-    let mut targets: Vec<(String, Rect)> = Vec::new();
-    for (label, other) in app.webview_windows() {
-        if label == flabel(&id) {
-            continue;
-        }
-        let rect = match window_rect(&other) {
-            Some(r) => r,
-            None => continue,
-        };
-        if let Some(pid) = label.strip_prefix("float-") {
-            targets.push((format!("p{}", pid), rect));
-        } else if let Some(fid) = label.strip_prefix("folder-") {
-            // An OPEN folder is hit-tested on its icon, never on the grid it grew.
-            targets.push((format!("f{}", fid), folder_icon_rect(&app, fid, rect)));
-        }
-    }
-    // The radius is a logical distance, so it follows the dragged pill's monitor.
-    let hit = match merge_target(dragged, &targets, radius * dpi) {
-        Some(h) => h.to_string(),
+    let (hit, targets, dragged) = match drag_hit(&app, &id, radius) {
+        Some(h) => h,
         None => return Ok(false),
     };
     let (kind, key) = hit.split_at(1);
@@ -5931,16 +6099,64 @@ async fn folder_rename_request(app: AppHandle, state: State<'_, Db>, id: String)
     Ok(())
 }
 
-// Dissolve a folder: every member goes back to being a free pill at its own stored
-// position. Nothing is deleted.
+// Dissolve a folder: every member goes back to being a free pill. Nothing is deleted.
+// Each one asks for the position it kept all along, but they are fanned apart first —
+// merging put them on top of each other, so restoring the wishes unchanged would leave
+// a stack that looks like a single pill.
 #[tauri::command]
 async fn dissolve_float_folder(app: AppHandle, state: State<'_, Db>, id: String) -> Result<(), String> {
+    let dpi = app
+        .get_webview_window(&folder_label(&id))
+        .and_then(|w| w.scale_factor().ok())
+        .unwrap_or(1.0);
+    // Wished-for box of every member, in physical pixels.
+    let (members, folder_pos) = {
+        let store = lock(&state);
+        let folder = match store.settings.float_folders.iter().find(|f| f.id == id) {
+            Some(f) => f.clone(),
+            None => return Ok(()),
+        };
+        let members: Vec<(String, Rect)> = folder
+            .members
+            .iter()
+            .filter_map(|mid| {
+                let prompt = store.prompts.iter().find(|p| &p.id == mid)?;
+                let (w, h) = pill_dims(is_image_prompt(prompt), float_scale_of(&store.settings, mid));
+                let pos = store.settings.floating.get(mid).copied().unwrap_or(folder.pos);
+                Some((
+                    mid.clone(),
+                    Rect { x: pos.x as f64, y: pos.y as f64, w: w * dpi, h: h * dpi },
+                ))
+            })
+            .collect();
+        (members, folder.pos)
+    };
+    // Pills and folders already on screen are obstacles — this folder's own window is
+    // about to close, so it is not one.
+    let taken: Vec<Rect> = app
+        .webview_windows()
+        .iter()
+        .filter(|(label, _)| {
+            (label.starts_with("float-") || label.starts_with("folder-")) && *label != &folder_label(&id)
+        })
+        .filter_map(|(_, win)| window_rect(win))
+        .collect();
+    let side = folder_box(1.0) * dpi;
+    let work = work_rect_at(&app, folder_pos.x as f64 + side / 2.0, folder_pos.y as f64 + side / 2.0);
+    let wishes: Vec<Rect> = members.iter().map(|(_, r)| *r).collect();
+    let spread = spread_free_positions(&wishes, &taken, work);
     {
         let mut store = lock(&state);
         let before = store.settings.float_folders.len();
         store.settings.float_folders.retain(|f| f.id != id);
         if store.settings.float_folders.len() == before {
             return Ok(());
+        }
+        for ((mid, _), (x, y)) in members.iter().zip(spread) {
+            store
+                .settings
+                .floating
+                .insert(mid.clone(), Pos { x: x.round() as i32, y: y.round() as i32 });
         }
         save_settings(&app, &store.settings);
     }
@@ -8817,6 +9033,7 @@ pub fn run() {
             app.manage(SnipPreview(Arc::new(Mutex::new(None))));
             app.manage(HotkeyTargets(Mutex::new(Vec::new()))); // F20
             app.manage(FolderExpand(Mutex::new(HashMap::new()))); // F25
+            app.manage(DragHint(Mutex::new((0, None)))); // F25 live merge highlight
             app.manage(VarPrompt::new()); // F12 standalone fill-in window
 
             // F19 auto-paste: start tracking the last external foreground window.
@@ -9151,6 +9368,7 @@ pub fn run() {
             resize_float_media,
             set_float_bounds,
             float_folder_drop,
+            float_drag_hint,
             float_folder_state,
             expand_float_folder,
             collapse_float_folder,
@@ -10676,12 +10894,27 @@ mod tests {
         // The icon never moves: it still sits at its own screen position.
         assert_eq!(l.win.x + l.icon.0, icon.x);
         assert_eq!(l.win.y + l.icon.1, icon.y);
-        // The popover hangs under it, centred, with the gap in between.
+        // The popover hangs under it with the gap in between, aligned with the icon's
+        // left edge — so the window origin IS the icon and nothing shifts sideways
+        // when it opens.
         assert_eq!(l.win.y + l.pop.1, icon.bottom() + 6.0);
-        assert_eq!(l.win.x + l.pop.0, icon.x + (ICON - 260.0) / 2.0);
+        assert_eq!(l.win.x + l.pop.0, icon.x);
+        assert_eq!(l.icon, (0.0, 0.0));
         // One window covers both.
         assert_eq!(l.win.h, ICON + 6.0 + 180.0);
         assert_eq!(l.win.w, 260.0);
+    }
+
+    #[test]
+    fn opening_a_folder_never_moves_the_window_origin_sideways() {
+        // Anywhere with room to the right, the popover starts at the icon's own left
+        // edge: the origin stays put, so the icon cannot jump left/right for a frame.
+        for x in [0.0, 400.0, 1000.0] {
+            let icon = icon_at(x, 200.0);
+            let l = folder_layout(icon, 230.0, 140.0, 6.0, primary_work());
+            assert_eq!(l.win.x, icon.x, "origin moved at x={}", x);
+            assert_eq!(l.icon.0, 0.0);
+        }
     }
 
     #[test]
@@ -10751,6 +10984,34 @@ mod tests {
         let l = folder_layout(icon_at(900.0, 500.0), 4000.0, 4000.0, 6.0, work);
         assert_eq!(l.win.x + l.pop.0, work.x);
         assert_eq!(l.win.y + l.pop.1, work.y);
+    }
+
+    #[test]
+    fn dissolving_a_folder_never_stacks_its_pills() {
+        let work = primary_work();
+        let pill = |x: f64, y: f64| Rect { x, y, w: 200.0, h: 80.0 };
+        // Two members whose stored position is the SAME spot — exactly what merging
+        // one pill onto another leaves behind.
+        let out = spread_free_positions(&[pill(500.0, 400.0), pill(500.0, 400.0)], &[], work);
+        assert_eq!(out[0], (500.0, 400.0), "the first one keeps its wish");
+        assert_ne!(out[0], out[1]);
+        let a = pill(out[0].0, out[0].1);
+        let b = pill(out[1].0, out[1].1);
+        assert!(!a.overlaps(&b), "the pills still cover each other: {:?} {:?}", a, b);
+        // Both stay on screen.
+        for (x, y) in out {
+            assert!(x >= work.x && x + 200.0 <= work.right());
+            assert!(y >= work.y && y + 80.0 <= work.bottom());
+        }
+        // A pill already on screen is an obstacle too.
+        let out = spread_free_positions(&[pill(500.0, 400.0)], &[pill(500.0, 400.0)], work);
+        assert!(!pill(out[0].0, out[0].1).overlaps(&pill(500.0, 400.0)));
+        // Idempotent: positions that are already free are left exactly where they are.
+        let free = [pill(100.0, 100.0), pill(600.0, 600.0)];
+        assert_eq!(
+            spread_free_positions(&free, &[], work),
+            vec![(100.0, 100.0), (600.0, 600.0)]
+        );
     }
 
     #[test]
