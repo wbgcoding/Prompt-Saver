@@ -63,14 +63,46 @@ function measure() {
   const sr = save.getBoundingClientRect();
   const hr = hb.getBoundingClientRect();
   const top = Math.max(mr.top, 0), bottom = Math.min(mr.bottom, innerHeight);
+  // No direct child of the dialog may sit on top of the one before it. Expanding a
+  // collapsible must push the rows below it down, never overlap them.
+  const overlaps = [];
+  const name = (e) => e.id || e.className || e.tagName.toLowerCase();
+  for (const parent of [m, ...m.querySelectorAll('*')]) {
+    const st = getComputedStyle(parent);
+    if (st.display !== 'block' && st.display !== 'flex') continue;
+    const row = st.display === 'flex' && st.flexDirection.startsWith('row');
+    const kids = [...parent.children].filter(e => e.getClientRects().length &&
+      getComputedStyle(e).position === 'static');
+    if (row) {
+      // A wrapping row reflows by design; only a nowrap row can push an item out.
+      if (st.flexWrap !== 'nowrap') continue;
+      // A nowrap row must fit its own content box: an item pushed past the right
+      // edge is drawn on top of whatever is there.
+      const pr = parent.getBoundingClientRect();
+      for (const k of kids) {
+        const r = k.getBoundingClientRect();
+        if (r.right > pr.right + 1) {
+          overlaps.push(name(parent) + ' overflows by ' + Math.round(r.right - pr.right) + 'px at ' + name(k));
+        }
+      }
+      continue;
+    }
+    for (let i = 1; i < kids.length; i++) {
+      const a = kids[i - 1].getBoundingClientRect(), b = kids[i].getBoundingClientRect();
+      if (b.top < a.bottom - 1 && b.height > 0 && a.height > 0) {
+        overlaps.push(name(kids[i - 1]) + ' / ' + name(kids[i]) + ' by ' + Math.round(a.bottom - b.top) + 'px');
+      }
+    }
+  }
   const out = {
     viewport: innerWidth + 'x' + innerHeight,
     histBodyH: Math.round(hr.height),
     histContentH: hb.scrollHeight,
     saveReachable: sr.top >= top - 1 && sr.bottom <= bottom + 1,
+    overlaps,
   };
   out.historyUsable = out.histBodyH >= %d;
-  out.PASS = out.saveReachable && out.historyUsable;
+  out.PASS = out.saveReachable && out.historyUsable && !overlaps.length;
   document.getElementById('RESULT').textContent = JSON.stringify(out);
 }
 // In a small headless frame Chromium stops producing frames once the page is quiet,
@@ -88,7 +120,7 @@ requestAnimationFrame(() => requestAnimationFrame(() => {
 """ % MIN_HISTORY_H
 
 
-def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html") -> Path:
+def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_open: bool = False) -> Path:
     if not (out_dir / "styles").exists():
         shutil.copytree(STYLES, out_dir / "styles")
 
@@ -130,14 +162,16 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html") -> Path
     <input id="modal-name" class="modal-input" type="text" value="Code Review">
     <button type="button" class="clear-btn show">x</button></span>
     <button type="button" id="modal-fav" class="modal-fav-star">&#9733;</button></div>
-  <div id="modal-text-bar" class="modal-collapse modal-text-bar">
-    <button type="button" id="modal-vars-head" class="modal-collapse-head" aria-expanded="false">
+  <div id="modal-text-bar" class="modal-collapse modal-text-bar{' open' if vars_open else ''}">
+    <button type="button" id="modal-vars-head" class="modal-collapse-head" aria-expanded="{'true' if vars_open else 'false'}">
       <span>Variables</span></button>
-    <div id="modal-vars-body" class="modal-collapse-body hidden">
+    <div id="modal-vars-body" class="modal-collapse-body{'' if vars_open else ' hidden'}">
       <p id="modal-vars-hint" class="modal-hint modal-vars-hint">Tip: a variable is asked when copying.</p>
       <div id="modal-vars-new" class="vars-new">
-        <input id="modal-var-name" class="modal-input vars-new-name" type="text">
-        <input id="modal-var-opts" class="modal-input vars-new-opts" type="text">
+        <span class="clear-wrap"><input id="modal-var-name" class="modal-input vars-new-name" type="text" value="Tone">
+          <button type="button" class="clear-btn show">x</button></span>
+        <span class="clear-wrap"><input id="modal-var-opts" class="modal-input vars-new-opts" type="text" value="formal,casual">
+          <button type="button" class="clear-btn show">x</button></span>
         <button type="button" id="modal-var-add" class="ghost-btn">Insert</button></div>
       <p id="modal-vars-choice-hint" class="modal-hint">Options turn the variable into a dropdown.</p>
       <div id="modal-vars-chips" class="vars-chips">{var_chips}</div>
@@ -150,6 +184,9 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html") -> Path
       <button type="button" class="clear-btn show">x</button></span>
     <div id="modal-md-preview" class="md-preview hidden"></div></div>
   <div id="modal-length" class="modal-length">26 chars</div>
+  <div id="modal-caption-row" class="caption-row">
+    <input id="modal-caption" class="modal-input" type="text">
+    <select id="modal-caption-size" class="modal-input caption-size"><option>Default</option></select></div>
   <div id="modal-style-row" class="two-col">
     <label class="field"><span>Font</span><select class="modal-input"><option>Default</option></select></label>
     <label class="field"><span>Text size</span><select class="modal-input"><option>Auto</option></select></label></div>
@@ -217,7 +254,17 @@ def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="ps-layout-"))
     try:
         page = build_page(tmp)
+        # Same dialog with the variables helper expanded: opening it must push the
+        # rows below it down, not land on top of them.
+        page_vars = build_page(tmp, name="modal-vars.html", vars_open=True)
         failed = 0
+        for size in SIZES:
+            r = measure(browser, tmp, page_vars, size)
+            if r and r["overlaps"]:
+                print(f"FAIL win={size[0]}x{size[1]} vars open: overlapping rows: {r['overlaps']}")
+                failed += 1
+            elif r:
+                print(f"ok   win={size[0]}x{size[1]} vars open: no overlapping rows")
         for size in SIZES:
             r = measure(browser, tmp, page, size)
             if not r:

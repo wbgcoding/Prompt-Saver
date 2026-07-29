@@ -1605,6 +1605,8 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .modal-name-row { display: flex; align-items: center; gap: 8px; }
 .modal-name-row .clear-wrap, .modal-name-row > #modal-name { flex: 1 1 auto; min-width: 0; }
 .modal-name-row .modal-fav-star { flex: 0 0 auto; }
+/* Media-as-icon: an icon button beside the star instead of a row of its own. */
+.modal-name-row .modal-name-icon { flex: 0 0 auto; }
 .modal-fav-star {
   flex: 0 0 auto;
   border: none;
@@ -1933,7 +1935,11 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 /* Wrapped number fields drop the native spinners — the X takes their place. */
 .clear-wrap > input[type=number]::-webkit-inner-spin-button,
 .clear-wrap > input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+/* wireClear() moves every text input into a .clear-wrap span at runtime, so the
+   WRAPPER becomes the flex item and any flex sizing meant for the input has to sit
+   here — otherwise the wrapper shrinks to nothing and the field collapses. */
 .library-search .clear-wrap, #journal-search .clear-wrap, .caption-row .clear-wrap, .hotkey-row .clear-wrap { flex: 1 1 auto; }
+.vars-new > .clear-wrap { flex: 1 1 auto; min-width: 0; }
 .backup-set-row .clear-wrap { flex: 0 0 auto; width: 110px; }
 /* Composer + editor textareas keep their flex-grow role through the wrapper. */
 .composer .clear-wrap-ta { flex: 1 1 auto; }

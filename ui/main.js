@@ -5530,6 +5530,9 @@ function syncModalImageUi(mode) {
     ? t(kind === "video" ? "videoNamePh" : kind ? "imageNamePh" : "fileNamePh")
     : copyImage ? t("imageNamePh") : t("namePh");
   modal.imgWrap.classList.toggle("hidden", !hasPreview);
+  // The caption row now lives next to the font/size selects, so it needs its own
+  // visibility — there is no caption without a preview to put it on.
+  $("modal-caption-row")?.classList.toggle("hidden", !hasPreview);
   modal.addIcon.classList.toggle("hidden", hasPreview);
   // "Replace media" always available next to "Remove media"; only the image
   // of a clipboard-image prompt cannot be removed (it IS the prompt).
