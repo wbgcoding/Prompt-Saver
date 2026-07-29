@@ -176,6 +176,12 @@
           <button type="button" id="modal-replace-img" class="ghost-btn" data-i18n="replaceMedia">Replace media</button>
           <button type="button" id="modal-remove-img" class="ghost-btn danger-btn" data-i18n="removeImage">Remove media</button>
         </div>
+        <!-- Optional caption shown over the media tile + its text size -->
+        <div class="caption-row">
+          <input id="modal-caption" class="modal-input" type="text" maxlength="80" data-i18n-ph="captionPh" />
+          <!-- Options filled by JS: default + 10..40 -->
+          <select id="modal-caption-size" class="modal-input caption-size" data-i18n-title="tileSize"></select>
+        </div>
       </div>
       <!-- Attached file row (visible only when the prompt has a file) -->
       <div id="modal-file-wrap" class="modal-file-wrap hidden">
@@ -227,13 +233,6 @@
       </div>
       <!-- Live length readout (chars / words / ~tokens), expert-tunable -->
       <div id="modal-length" class="modal-length hidden" aria-hidden="true"></div>
-      <!-- Optional caption shown over the media tile + its text size. Sits directly
-           above the font and size selects: everything that styles tile text together. -->
-      <div id="modal-caption-row" class="caption-row hidden">
-        <input id="modal-caption" class="modal-input" type="text" maxlength="80" data-i18n-ph="captionPh" />
-        <!-- Options filled by JS: default + 10..40 -->
-        <select id="modal-caption-size" class="modal-input caption-size" data-i18n-title="tileSize"></select>
-      </div>
       <!-- Per-tile font/size overrides (create + edit) -->
       <div id="modal-style-row" class="two-col">
         <label class="field">

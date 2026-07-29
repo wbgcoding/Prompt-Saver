@@ -1074,6 +1074,28 @@ struct ViewGroup {
     view_ids: Vec<String>,
 }
 
+// F27: an Android-style folder inside the grid. It occupies ONE cell of one view and
+// holds prompts that are then no longer tiles of their own; the layout entry of a
+// member is dropped when it joins, and it gets a fresh cell when it leaves. `cell` is
+// [col, row] of the view it belongs to — a view can change its grid size, so the
+// renderer moves a folder that no longer fits into the first free cell.
+#[derive(Serialize, Deserialize, Clone)]
+struct TileFolder {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    name: String,
+    // Optional folder colour (hex); empty = default.
+    #[serde(default)]
+    color: String,
+    #[serde(default)]
+    view_id: String,
+    #[serde(default)]
+    cell: [u32; 2],
+    #[serde(default)]
+    members: Vec<String>,
+}
+
 // F25: an Android-style folder holding several floating pills. It owns ONE window
 // (the folder icon; expanding only resizes it), so `pos` is the icon's top-left in
 // physical desktop pixels — the same space `Settings.floating` uses. A member keeps

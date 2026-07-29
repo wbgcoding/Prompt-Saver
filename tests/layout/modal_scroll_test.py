@@ -134,6 +134,13 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
         for i in range(n_rows)
     )
     swatches = '<button type="button" class="swatch"></button>' * 10
+    # A media prompt opens the preview block above the text. It is the tallest
+    # optional row of the dialog and the one that used to be drawn over the colour
+    # row when the window got small. Inline SVG: the harness never touches the net.
+    preview_src = (
+        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' "
+        "width='320' height='200'><rect width='320' height='200' fill='%23888'/></svg>"
+    )
     # The F12/F13 variable helper sits above the textarea and wraps on a narrow
     # dialog, so it has to count against the height the history is left with.
     var_chips = "".join(
@@ -162,6 +169,19 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
     <input id="modal-name" class="modal-input" type="text" value="Code Review">
     <button type="button" class="clear-btn show">x</button></span>
     <button type="button" id="modal-fav" class="modal-fav-star">&#9733;</button></div>
+  <div id="modal-img-wrap" class="modal-img-wrap">
+    <div class="modal-media-stage">
+      <img id="modal-img" class="modal-preview-img" alt="" src="{preview_src}">
+      <div id="modal-caption-preview" class="tile-caption modal-caption-preview">Caption</div></div>
+    <div class="modal-display-row">
+      <button type="button" class="ghost-btn">Preview</button>
+      <button type="button" class="ghost-btn">Text</button>
+      <button type="button" class="ghost-btn">Replace media</button>
+      <button type="button" class="ghost-btn danger-btn">Remove media</button></div>
+    <div class="caption-row">
+      <span class="clear-wrap"><input id="modal-caption" class="modal-input" type="text" value="On the tile">
+        <button type="button" class="clear-btn show">x</button></span>
+      <select id="modal-caption-size" class="modal-input caption-size"><option>Default</option></select></div></div>
   <div id="modal-text-bar" class="modal-collapse modal-text-bar{' open' if vars_open else ''}">
     <button type="button" id="modal-vars-head" class="modal-collapse-head" aria-expanded="{'true' if vars_open else 'false'}">
       <span>Variables</span></button>
@@ -184,9 +204,6 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
       <button type="button" class="clear-btn show">x</button></span>
     <div id="modal-md-preview" class="md-preview hidden"></div></div>
   <div id="modal-length" class="modal-length">26 chars</div>
-  <div id="modal-caption-row" class="caption-row">
-    <input id="modal-caption" class="modal-input" type="text">
-    <select id="modal-caption-size" class="modal-input caption-size"><option>Default</option></select></div>
   <div id="modal-style-row" class="two-col">
     <label class="field"><span>Font</span><select class="modal-input"><option>Default</option></select></label>
     <label class="field"><span>Text size</span><select class="modal-input"><option>Auto</option></select></label></div>

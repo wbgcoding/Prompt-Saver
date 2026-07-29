@@ -1764,7 +1764,12 @@ function emitExpertRows(list, parent, actionById, depth) {
     const row = n.kind === "actions"
       ? actionRow(actionById.get(n.k))
       : { flags: flagRow, values: valueRow, selects: selectRow, dropdowns: dropdownRow, paths: pathRow }[n.kind](n.k);
-    if (depth > 0) row.classList.add("expert-sub");
+    // Indent by depth: a setting unlocked by a setting that is itself unlocked sits
+    // one step further in, so the chain of dependencies reads off the left edge.
+    if (depth > 0) {
+      row.classList.add("expert-sub");
+      row.style.setProperty("--expert-depth", String(depth));
+    }
     return row;
   };
   for (let i = 0; i < list.length; i++) {
@@ -1774,10 +1779,14 @@ function emitExpertRows(list, parent, actionById, depth) {
       if (j - i >= 2) {
         const cols = document.createElement("div");
         cols.className = "expert-cols";
-        if (depth > 0) cols.classList.add("expert-sub");
+        if (depth > 0) {
+          cols.classList.add("expert-sub");
+          cols.style.setProperty("--expert-depth", String(depth));
+        }
         for (let x = i; x < j; x++) {
           const row = build(list[x]);
           row.classList.remove("expert-sub"); // the wrapper carries the indent
+          row.style.removeProperty("--expert-depth");
           cols.appendChild(row);
         }
         parent.appendChild(cols);
@@ -5538,9 +5547,6 @@ function syncModalImageUi(mode) {
     ? t(kind === "video" ? "videoNamePh" : kind ? "imageNamePh" : "fileNamePh")
     : copyImage ? t("imageNamePh") : t("namePh");
   modal.imgWrap.classList.toggle("hidden", !hasPreview);
-  // The caption row now lives next to the font/size selects, so it needs its own
-  // visibility — there is no caption without a preview to put it on.
-  $("modal-caption-row")?.classList.toggle("hidden", !hasPreview);
   modal.addIcon.classList.toggle("hidden", hasPreview);
   // "Replace media" always available next to "Remove media"; only the image
   // of a clipboard-image prompt cannot be removed (it IS the prompt).

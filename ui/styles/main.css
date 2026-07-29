@@ -1077,17 +1077,13 @@ body.library-front #modal.overlay { z-index: 67; }
 #modal.tall.history-open .clear-wrap-ta > .modal-text { flex: 0 1 auto; min-height: 96px; max-height: 26vh; }
 /* A flex item that has its own overflow gets an automatic minimum size of ZERO, so on
    a short window flexbox squeezed the open history down to a sliver instead of letting
-   the dialog scroll — which is why the list stayed out of reach. Pin the rows that must
-   keep their natural height; the modal (overflow-y:auto) then scrolls to reach them. */
-#modal .modal-titlebar,
-#modal .modal-name-row,
-#modal #modal-style-row,
-#modal #color-row,
-#modal #modal-history,
-#modal #modal-md-bar,
-#modal #modal-tags,
-#modal .modal-collapse,
-#modal .modal-actions { flex: 0 0 auto; }
+   the dialog scroll — which is why the list stayed out of reach. EVERY row of the
+   dialog keeps its natural height; the modal (overflow-y:auto) then scrolls to reach
+   them. Only the textarea and the preview may flex, and those live inside
+   #modal-text-wrap (display:contents), so this rule does not touch them. Listing the
+   rows one by one left the ones nobody thought of — the media block above all —
+   shrinking until their content was drawn over the colour row below. */
+#modal .modal > * { flex: 0 0 auto; }
 /* Themed scrollbar for the prompt textarea. */
 .modal-text::-webkit-scrollbar { width: var(--sb-width, 12px); }
 .modal-text::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
@@ -1666,8 +1662,9 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .modal-media-stage .modal-preview-img,
 #snip-preview,
 .lib-thumb { cursor: zoom-in; }
-.two-col { display: flex; gap: 8px; }
-.two-col .field { flex: 1; min-width: 0; }
+/* Two fields side by side, one under the other once they no longer fit. */
+.two-col { display: flex; flex-wrap: wrap; gap: 8px; }
+.two-col .field { flex: 1 1 150px; min-width: 0; }
 /* Top settings selects laid out three across. `minmax(0, …)`, not `1fr`: a plain 1fr
    track cannot shrink below its content, so the row overflowed the dialog and the
    controls on the right were clipped out of reach. */
@@ -1880,7 +1877,9 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   border: 1px solid var(--border);
   background: var(--surface-2);
 }
-.modal-display-row { display: flex; gap: 8px; }
+/* Four buttons in a row — they wrap onto a second line rather than being pushed
+   past the dialog edge on a narrow window. */
+.modal-display-row { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* Attached file row inside the save/edit modal */
 .modal-file-wrap {
@@ -2326,7 +2325,10 @@ input[type="password"]::-ms-clear { display: none; }
   background-size: 14px;
 }
 /* Label to the LEFT of every expert dropdown (was stacked above). */
-.field.expert-dropdown-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+/* Label left, control right. Paired rows are equally tall (grid stretch), and the
+   control hangs at the BOTTOM of its row — so two dropdowns side by side line up
+   even when one label needs a second line in a longer language. */
+.field.expert-dropdown-row { flex-direction: row; align-items: flex-end; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .expert-dropdown-row .value-head { flex: 1 1 auto; min-width: 0; }
 .expert-dropdown-row .expert-select { align-self: auto; flex: 0 0 auto; min-width: 140px; }
 .expert-dropdown-row .expert-num { margin-top: 0; flex: 0 0 92px; }
@@ -2674,11 +2676,13 @@ body.drag-over::after {
 /* Runs of narrow label+control rows share a line. auto-fit means the second column
    only appears when both fit at their minimum, so a narrow window or a long
    translation drops back to one per line instead of squeezing the labels. */
-.expert-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 14px; }
+.expert-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 14px; align-items: stretch; }
 .expert-cols > .field { min-width: 0; margin: 0; }
 /* A setting that hangs off a toggle is stepped in, so a feature and its parameters
-   read as one block. */
-.expert-sub { margin-left: 14px; border-left: 2px solid var(--border); padding-left: 10px; }
+   read as one block. Indentation alone carries it — a rule down the left edge only
+   added noise. Each further level steps in again, so a parameter unlocked by an
+   unlocked toggle sits deeper than its parent. */
+.expert-sub { margin-left: calc(var(--expert-depth, 1) * 18px); }
 
 /* Editable colour palette (expert > Appearance). */
 .palette-field { gap: 10px; }

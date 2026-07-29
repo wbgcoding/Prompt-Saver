@@ -146,6 +146,24 @@ PROBE = """
           el.scrollHeight + 'px of content');
       }
     }
+    // Rows of an open dialog are stacked, never layered: a row squeezed below its
+    // content is drawn OVER the row beneath it (the colour swatches used to end up
+    // under the media block on a small window). Only in-flow children count.
+    for (const box of document.querySelectorAll('.overlay:not(.hidden) .modal, .overlay:not(.hidden) .modal *')) {
+      if (!(box instanceof HTMLElement)) continue; // an <svg> lays its own shapes out
+      const st = getComputedStyle(box);
+      if (st.display !== 'block' && st.display !== 'flex') continue;
+      if (st.display === 'flex' && st.flexDirection.startsWith('row')) continue;
+      const kids = [...box.children].filter((e) => e instanceof HTMLElement &&
+        e.getClientRects().length && getComputedStyle(e).position === 'static');
+      for (let i = 1; i < kids.length; i++) {
+        const a = kids[i - 1].getBoundingClientRect(), b = kids[i].getBoundingClientRect();
+        if (a.height > 0 && b.height > 0 && b.top < a.bottom - 1) {
+          add(sig(kids[i - 1]) + ' and ' + sig(kids[i]) + ' overlap by ' +
+            Math.round(a.bottom - b.top) + 'px');
+        }
+      }
+    }
   };
   // A collapsible row is its own overflow box, so a flex parent can squeeze it below
   // its head and leave a 6px sliver where a clickable row belongs.
