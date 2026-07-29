@@ -1924,10 +1924,37 @@ fn save_settings(app: &AppHandle, settings: &Settings) {
 }
 
 // Pre-1.9 builds saved image prompts without copy_image but copied on click.
+// The self-filling placeholder names, kept in step with DYN_VARS in ui/main.js.
+const DYN_NAMES: [&str; 16] = [
+    "date", "time", "datetime", "weekday", "yesterday", "tomorrow", "week", "month",
+    "year", "timestamp", "epoch", "clipboard", "username", "uuid", "random", "counter",
+];
+
+// Reserved names are now written {#{/date\}#} instead of {#{date}#}, which frees the
+// plain word for a variable of the user's own. Rewrite the old spelling so an existing
+// prompt keeps filling itself in. Idempotent — the new form no longer matches.
+fn fence_dyn_vars(text: &str) -> String {
+    if !text.contains("{#{") {
+        return text.to_string();
+    }
+    let mut out = text.to_string();
+    for n in DYN_NAMES {
+        let old = ["{#{", n, "}#}"].concat();
+        if out.contains(&old) {
+            out = out.replace(&old, &["{#{/", n, "\\}#}"].concat());
+        }
+    }
+    out
+}
+
 fn migrate_prompts(prompts: &mut [Prompt]) {
     for p in prompts {
         if !p.image.is_empty() && !p.copy_image && (p.text.is_empty() || p.text == p.name) {
             p.copy_image = true;
+        }
+        let fenced = fence_dyn_vars(&p.text);
+        if fenced != p.text {
+            p.text = fenced;
         }
     }
 }
@@ -9339,6 +9366,13 @@ mod tests {
         let dropped = backups_to_drop(&names, 1, Some(&empty));
         assert_eq!(dropped.len(), names.len() - 1);
         assert!(!dropped.contains(&names[4]));
+
+        // Reserved placeholders gain their slash fence exactly once.
+        assert_eq!(fence_dyn_vars("Hi {#{date}#} and {#{name}#}"), "Hi {#{/date\\}#} and {#{name}#}");
+        assert_eq!(fence_dyn_vars("{#{/date\\}#}"), "{#{/date\\}#}", "already fenced stays put");
+        assert_eq!(fence_dyn_vars("plain text"), "plain text");
+        // A choice variable that happens to start with a reserved word is untouched.
+        assert_eq!(fence_dyn_vars("{#{date|a,b}#}"), "{#{date|a,b}#}");
 
         // The schedule reads the folder name, not a modification time.
         let a = stamp_secs("2026-07-29_08-00-00").unwrap();

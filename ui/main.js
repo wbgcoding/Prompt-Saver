@@ -3702,7 +3702,15 @@ const DYN_VARS = [
   "clipboard", "username", "uuid", "random", "counter",
 ];
 const DYN_SET = new Set(DYN_VARS);
-const isDynVar = (name) => flag("dynVars") && DYN_SET.has(name);
+// A reserved name is WRITTEN with a slash fence: {#{/date\}#}. That keeps every plain
+// word free for a variable of the user's own — "date" only fills itself in when it is
+// spelled /date\. Old prompts are rewritten once by the store migration.
+const DYN_OPEN = "/";
+const DYN_CLOSE = "\\";
+const dynToken = (name) => `${DYN_OPEN}${name}${DYN_CLOSE}`;
+const dynName = (raw) =>
+  raw.length > 2 && raw.startsWith(DYN_OPEN) && raw.endsWith(DYN_CLOSE) ? raw.slice(1, -1) : "";
+const isDynVar = (name) => flag("dynVars") && DYN_SET.has(dynName(name));
 // The app language is a bare ISO code, which is already a valid BCP-47 tag; only
 // where the default region would be the wrong one is it spelled out. The app's
 // Portuguese is European, so "pt" must not fall back to the Brazilian default.
@@ -3817,7 +3825,7 @@ async function resolveVars(text, standalone = false) {
     (isDynVar(parseVar(tok).name) ? dyn : ask).push(tok);
   }
   if (dyn.length) {
-    const names = new Set(dyn.map((tok) => parseVar(tok).name));
+    const names = new Set(dyn.map((tok) => dynName(parseVar(tok).name)));
     const ctx = { clip: "", user: "", counter: 0 };
     if (names.has("clipboard")) {
       ctx.clip = String(await invoke("clipboard_text").catch(() => "") || "").slice(0, CLIP_VAR_MAX);
@@ -3826,7 +3834,7 @@ async function resolveVars(text, standalone = false) {
     if (names.has("username")) ctx.user = String(await invoke("os_user_name").catch(() => "") || "");
     if (names.has("counter")) ctx.counter = nextVarCounter();
     const now = new Date();
-    for (const tok of dyn) values[tok] = dynValue(parseVar(tok).name, now, ctx);
+    for (const tok of dyn) values[tok] = dynValue(dynName(parseVar(tok).name), now, ctx);
   }
   if (ask.length) {
     const filled = standalone ? await promptVarsWindow(ask) : await promptVarsDialog(ask);
@@ -3875,9 +3883,9 @@ function renderVarHelper() {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "vars-chip";
-      b.textContent = name;
+      b.textContent = dynToken(name);
       b.title = t(DYN_TIPS[name]); // hover engine themes any [title]
-      b.addEventListener("click", () => insertVarToken(name));
+      b.addEventListener("click", () => insertVarToken(dynToken(name)));
       chips.appendChild(b);
     }
   }
