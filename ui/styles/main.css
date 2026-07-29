@@ -432,9 +432,18 @@ body.noflag-showJournal #journal-btn { display: none; }
   opacity: 0.85;
 }
 .view-group-chev { display: inline-flex; align-items: center; opacity: 0.7; }
-/* Drag feedback: the dragged tab fades, the tab under the cursor lights up. */
+/* Drag feedback: the dragged tab fades, the tab under the cursor lights up.
+   Everything the drop target paints stays INSIDE its own box — an outer ring or a
+   lift is cut off at the edge of the tab strip, which scrolls (overflow-x), and that
+   half-drawn effect is the reported one. Same reasoning as the pill merge hint, which
+   cannot leave its window either, so both folder gestures look alike. */
 .view-btn.tab-dragging { opacity: 0.45; }
-.view-btn.tab-drop { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.view-btn.tab-drop {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+}
 .view-group-pop {
   min-width: 210px;
   z-index: 90;

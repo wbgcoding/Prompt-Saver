@@ -871,6 +871,7 @@ const FLAG_LABELS = {
   promptHotkeys: "flagPromptHotkeys",   // F20 per-prompt global hotkeys
   trayRecent: "flagTrayRecent",         // F23 "recently used" section in the tray menu
   colorPicker: "flagColorPicker",       // F26 pipette — pick a screen colour to the clipboard
+  viewGroups: "flagViewGroups",         // F9 folder tabs for views
   customThemes: "flagCustomThemes",     // F3 theme editor + custom entries in the theme list
   // Checks at launch, but only while the normal auto-update setting is on.
   checkUpdateOnStart: "flagCheckUpdateOnStart",
@@ -923,7 +924,6 @@ const OPT_FLAG_LABELS = {
   // Keep the clipboard-inbox and copy-history buttons in the toolbar even while
   // their feature is switched off, so the feature can be paused, not hidden.
   pausedIcons: "flagPausedIcons",
-  viewGroups: "flagViewGroups",                 // F9 folder tabs for views
   promptNotes: "flagPromptNotes",               // F17 private notes row in the editor
   promptHotkeyPaste: "flagPromptHotkeyPaste",   // F20 hotkey also pastes into the last app
   dragOut: "flagDragOut",                       // F22 drag a prompt into another app
@@ -2210,7 +2210,7 @@ function viewTabEl(v) {
 // ---- F9 view groups: several views collapsed into one folder tab ----
 // The feature is opt-in and rides on multi-view; with either off the stored groups
 // stay untouched and every view renders as its own tab again.
-const groupsOn = () => optFlag("viewGroups") && flag("multiView");
+const groupsOn = () => flag("viewGroups") && flag("multiView");
 const viewGroupList = () => (groupsOn() ? settings.view_groups || [] : []);
 const groupOfView = (id) => viewGroupList().find((g) => (g.view_ids || []).includes(id));
 const viewById = (id) => settings.views.find((v) => v.id === id);
