@@ -7064,7 +7064,7 @@ async fn begin_capture(
     *slot.lock().unwrap_or_else(|e| e.into_inner()) = None;
     tauri::async_runtime::spawn_blocking(move || {
         // Encode the capture at NATIVE resolution — pixel-sharp overlay, no downscale.
-        let bg = encode_snip_jpeg(enc_img.as_raw(), total_w, total_h, SNIP_Q).map(|j| {
+        let bg = encode_snip_jpeg(enc_img.as_raw(), total_w, total_h, if pick { PICK_Q } else { SNIP_Q }).map(|j| {
             let (src, is_file) = match write_snip_preview(&j) {
                 Some(path) => (path, true),
                 None => (format!("data:image/jpeg;base64,{}", base64_encode(&j)), false),
@@ -7223,6 +7223,12 @@ fn snip_windows(state: State<SnipState>, index: usize) -> Vec<SnipWindow> {
 
 // Overlay preview JPEG quality (encoded at native resolution — pixel-sharp).
 const SNIP_Q: u8 = 80;
+// The colour picker shows the frozen desktop as the reference for the colour it is
+// about to copy, so its background must not carry JPEG's subsampled chroma: below
+// quality 90 the encoder halves the colour resolution, which is exactly the "washed
+// out" look. 92 keeps full chroma (4:4:4). Measured cost: ~1.6x the q80 encode — paid
+// only when the pipette is opened, never on the screenshot path.
+const PICK_Q: u8 = 92;
 // Saved-button JPEG quality: higher (crisp text) but still a fraction of a PNG's
 // size + encode time — a full-res PNG data URL used to stall the whole app on save.
 const SNIP_SAVE_Q: u8 = 90;
@@ -10636,6 +10642,7 @@ mod tests {
             members: members.iter().map(|s| s.to_string()).collect(),
         }
     }
+
 
     #[test]
     fn tile_folders_normalize_to_their_invariants() {

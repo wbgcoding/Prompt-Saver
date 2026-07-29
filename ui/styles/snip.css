@@ -83,6 +83,9 @@ body.pick { cursor: none; }
   flex-direction: column;
   gap: 6px;
   padding: 6px;
+  /* Never narrower than the readout under it: at a low magnification the grid is
+     smaller than the text, and a box that cuts its own value is unusable. */
+  min-width: max-content;
   border: 1px solid rgba(255, 255, 255, 0.38);
   border-radius: 10px;
   background: #111113;
@@ -91,7 +94,9 @@ body.pick { cursor: none; }
 }
 /* Nearest-neighbour: a magnified pixel must stay a hard square, never a blur. */
 .pick-grid { display: block; border-radius: 4px; image-rendering: pixelated; }
-.pick-read { display: flex; align-items: center; gap: 7px; }
+/* Fixed height as well as fixed widths: switching notation (or magnification) must
+   not make the loupe grow or shrink under the cursor. */
+.pick-read { display: flex; align-items: center; gap: 7px; height: 30px; }
 .pick-swatch {
   flex: 0 0 auto;
   width: 22px;

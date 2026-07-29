@@ -6,6 +6,8 @@
 // the window scale factor — so the mapping is pixel-exact on any DPI mix.
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
+const { getCurrentWebviewWindow } = window.__TAURI__.webviewWindow;
+const appWin = getCurrentWebviewWindow();
 
 const bg = document.getElementById("snip-bg");
 const mask = {
@@ -114,8 +116,11 @@ async function beginSession() {
     hint.textContent = T.pick;
     noDim();
     // Start on the middle of the desktop so the first patch is already on its way
-    // before the user moves; the very next pointer move corrects it.
+    // before the overlay is even shown; the very next pointer move corrects it.
+    // `curPicked` stays false until the user really aims somewhere — a click without
+    // any pointer movement must take the colour under the CURSOR, not this seed.
     setCur(Math.floor(FULL_W / 2), Math.floor(FULL_H / 2));
+    curPicked = false;
   }
   // Reveal the overlay only once the frozen image has decoded, so it never
   // appears blank first. onerror presents too, so a rare decode failure can't
@@ -128,6 +133,10 @@ async function beginSession() {
     presented = true;
     if (timer) clearTimeout(timer);
     invoke("snip_present").catch(() => {});
+    // Windows sends the wheel to the FOCUSED window, so an overlay that came up
+    // without the focus silently swallowed every zoom. Ask for it once it is on
+    // screen; the keyboard shortcuts need it just as much.
+    appWin.setFocus().catch(() => {});
   };
   bg.onload = present;
   bg.onerror = present;
@@ -327,6 +336,7 @@ function clampCur(x, y) {
 }
 function setCur(x, y) {
   clampCur(x, y);
+  curPicked = true;
   queueLoupe();
 }
 
@@ -404,7 +414,11 @@ function drawLoupe() {
   const c = centre;
   const hex = rgbToHex(c[0], c[1], c[2]);
   swatch.style.background = hex;
-  readMain.textContent = formatColor(pickFmt, c[0], c[1], c[2]);
+  const main = formatColor(pickFmt, c[0], c[1], c[2]);
+  readMain.textContent = main;
+  // hsl() is up to 18 characters where hex is 7 — the longest notations step the
+  // font down instead of pushing the box wider (or being cut off by it).
+  readMain.style.fontSize = main.length > 14 ? "11.5px" : "";
   // Second line: hex is the one notation everyone recognises, so show it whenever
   // the chosen format is something else — and rgb() when hex is the format.
   readAlt.textContent = pickFmt === "hex" ? `rgb(${c[0]},${c[1]},${c[2]})` : hex;
@@ -434,12 +448,24 @@ function setZoom(z) {
   if (zoomSave) clearTimeout(zoomSave);
   zoomSave = setTimeout(saveZoom, 400);
 }
+// Wheel notches differ wildly between mice and precision touchpads (120 per notch vs
+// a stream of small deltas), so the movement is accumulated and only whole steps are
+// applied: a touchpad zooms smoothly instead of skipping, and a mouse still moves one
+// step per notch. The overlay also takes the focus first — Windows delivers the wheel
+// to the FOCUSED window, which is why zooming sometimes did nothing at all.
+let wheelAcc = 0;
 window.addEventListener(
   "wheel",
   (e) => {
     if (!pickMode || pickBusy) return;
     e.preventDefault();
-    setZoom(pickZoom + (e.deltaY < 0 ? 1 : -1));
+    // One mouse notch (|deltaY| ~100) is exactly one step; a touchpad's small deltas
+    // add up to one.
+    wheelAcc += Math.sign(-e.deltaY) * Math.min(1, Math.abs(e.deltaY) / 50);
+    const step = Math.trunc(wheelAcc);
+    if (!step) return;
+    wheelAcc -= step;
+    setZoom(pickZoom + step);
   },
   { passive: false }
 );
@@ -530,9 +556,10 @@ window.addEventListener("mousedown", (e) => {
 window.addEventListener("mouseup", async (e) => {
   if (pickMode) {
     if (e.button !== 0) return;
-    // `cur` already tracks the pointer; only seed it if the mouse never moved. A
-    // click must not undo an arrow-key nudge made from the same spot.
-    if (!cur) { const p = toImg(e.clientX, e.clientY); setCur(Math.floor(p.x), Math.floor(p.y)); }
+    // `cur` already tracks the pointer once it has moved (or an arrow key aimed it);
+    // a click that follows neither still has to take the pixel under the pointer,
+    // never the seed the session started on.
+    if (!curPicked) { const p = toImg(e.clientX, e.clientY); setCur(Math.floor(p.x), Math.floor(p.y)); }
     pickHere();
     return;
   }
