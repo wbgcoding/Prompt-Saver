@@ -284,6 +284,24 @@ for line in i18n.splitlines():
     if "(Standard Aus)" in line and not line.lstrip().startswith("defaultOff:"):
         problems.append(f"i18n: label carries the default-off suffix inline: {line.strip()[:70]}")
 
+# A key listed in EXPERT_TIPS but without a tip<Key> string shows no tooltip at
+# all — withTip() drops it silently, so nothing on screen says the string is
+# missing. Listing a key is a promise to write the explanation.
+tips = re.search(r"const EXPERT_TIPS = \[(.*?)\];", SRC, re.S)
+if not tips:
+    problems.append("EXPERT_TIPS: list not found")
+else:
+    tip_keys = re.findall(r'"([A-Za-z0-9_]+)"', tips.group(1))
+    en = re.search(r"\n  en: \{(.*?)\n  [a-z]{2}: \{", i18n, re.S)
+    en_keys = set(re.findall(r"^    ([A-Za-z0-9_]+):", en.group(1), re.M)) if en else set()
+    known_settings = all_flags | values | selects | dropdowns | set(top_keys(paths_src))
+    for key in tip_keys:
+        want = "tip" + key[0].upper() + key[1:]
+        if want not in en_keys:
+            problems.append(f"tooltip: '{key}' is in EXPERT_TIPS but '{want}' has no string")
+        if key not in known_settings:
+            problems.append(f"tooltip: EXPERT_TIPS lists '{key}', which is not a setting")
+
 for p in problems:
     print("FAIL", p)
 print("PASS" if not problems else f"{len(problems)} problem(s)")

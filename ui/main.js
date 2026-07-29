@@ -1167,25 +1167,37 @@ const EXPERT_DROPDOWNS = {
   },
 };
 
-// Expert menu organised into tabs (it has grown large — tabs keep it tidy).
+// Expert menu organised into tabs. The shape is deliberate and documented in
+// CLAUDE.md: the first tab holds FEATURES — a toggle followed by everything that
+// tunes it, so a switched-off feature costs exactly one line — while the remaining
+// tabs hold the general values that belong to no single feature.
 const EXPERT_TABS = [
-  { title: "expTabGeneral", groups: [
-    // F26 sits with the screenshot tool: both are composer-bar capture tools, and
-    // its two parameters are gated on its own toggle.
-    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", "pasteMedia", "dragDrop", "colorPicker", "promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }, "lengthCounter", "promptHistory", "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace"], values: ["snipPreviewVh", "historyPerPrompt", "notesTipLen", "loupeZoom"], dropdowns: ["counterUnits", "dateStyle", "timeStyle", "pickerFormat"], paths: ["screenshotDir"] },
-    // F14/F15 belong together: the highlighter only ever paints inside the preview.
-    { title: "expGroupPreview", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }], values: ["hlFontPx"], dropdowns: ["mdPreviewMode"] },
-    { title: "expGroupWorkspace", flags: ["floating", { key: "pillFolders", gate: "floating" }, "keyboardNav", "headerSeparators", "dimToolbar"], values: ["floatOpacity", "pillMergeRadius", "folderGridCols", "kbFocusFadeMs"] },
+  { title: "expTabFeatures", groups: [
+    // Everything that puts new content into the app. F26 (pipette) sits with the
+    // screenshot tool: both are capture tools on the composer bar.
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", "colorPicker", "pasteMedia", "dragDrop"], values: ["snipPreviewVh", "loupeZoom"], dropdowns: ["pickerFormat"], paths: ["screenshotDir"] },
+    // F12/F13 placeholders, from the grammar to where the app asks for them.
+    { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
+    // The editor: what it shows beside the text box. F14/F15 belong together — the
+    // highlighter only ever paints inside the preview.
+    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, "lengthCounter", "promptHistory", "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen"], dropdowns: ["mdPreviewMode", "counterUnits"] },
+    // Everything that happens between a click and the clipboard.
+    { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "autoPasteEnter", gate: "autoPaste" }, "closeOnCopy", "copyBubble", "copyFlash"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"], dropdowns: ["dragOutModifier"] },
+    // Floating buttons and the two kinds of folder they can form.
+    { title: "expGroupFolders", flags: ["floating", { key: "pillFolders", gate: "floating" }], values: ["floatOpacity", "pillMergeRadius", "folderGridCols"] },
     // F23: the quick-copy sections of the tray menu, each with its own entry count.
     { title: "expGroupTray", flags: ["trayRecent", "trayFavs"], values: ["trayRecentN", "trayFavN"] },
-    { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }] },
+    // F21: the watcher that collects what you copy elsewhere.
+    { title: "expGroupClipboard", flags: ["clipWatcher"], values: ["clipMinChars", "clipInboxMax"] },
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "autoBackupBeforeWipe", "importExport"], values: ["dupThreshold"],
+      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }] },
   ] },
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
     // and pure looks. One 26-entry blob made everything hard to find.
-    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragOut", "copyBubble", "copyFlash", "closeOnCopy", "chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "autoPasteEnter", gate: "autoPaste" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"], dropdowns: ["dragOutModifier"] },
+    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale"], values: ["hoverLift"] },
     { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipDelay", "tooltipTimeout"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
-    { title: "expGroupTileLook", flags: ["tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale", "tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow"], values: ["hoverLift", "tileRadius", "tileBorderWidth"] },
+    { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow"], values: ["tileRadius", "tileBorderWidth"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
   ] },
   { title: "expTabAppearance", groups: [
@@ -1199,17 +1211,15 @@ const EXPERT_TABS = [
     { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx"], dropdowns: ["tagFilterMode"] },
     // Everything that records or shows copy history lives with the history view.
     { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalLimit"], selects: ["historyDays"] },
-    { title: "expGroupPrivacy", flags: ["captureExclusion", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
   ] },
   { title: "expTabMedia", groups: [
     { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "grayscaleMedia", "dimMedia", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaDimOpacity", "mediaRadius"] },
   ] },
-  { title: "expTabTools", groups: [
+  { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
-    { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, "quickGrid", "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons"], values: ["viewBorder", "viewGroupMaxRows"] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "autoBackupBeforeWipe", "importExport"], values: ["dupThreshold"], paths: ["dataDir"],
-      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }] },
-    { title: "expGroupClipboard", flags: ["clipWatcher"], values: ["clipMinChars", "clipInboxMax"] },
+    { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, "quickGrid", "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
+    { title: "expGroupPrivacy", flags: ["captureExclusion", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
+    { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav"], values: ["kbFocusFadeMs"], paths: ["dataDir"] },
   ] },
 ];
 
@@ -1325,29 +1335,25 @@ const EXPERT_TIPS = [
   "headerSeparators", "floating",
   "pillFolders", "pillMergeRadius", "folderGridCols",
   // Tiles / copying
-  "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale",
-  "tileReorder", "chainPrompts", "chainLock", "autoPasteEnter", "closeOnCopy",
+  "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "autoPasteEnter", "closeOnCopy",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutModifier",
   "tooltipDelay", "tooltipTimeout", "iconTooltips",
-  // Appearance
-  "frostedModals", "accentHeader", "accentScrollbar", "hideScrollbars", "smoothScroll",
-  "compactTiles", "tileHoverLift", "gridLines", "pausedIcons",
+  // Appearance "hideScrollbars", "gridLines", "pausedIcons",
   "customThemes", "customThemeMax",
   // Library / privacy
-  "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus",
-  "closeAfterCopy", "libraryCloseToggle", "libraryColsToggle", "confirmDiscard",
+  "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus", "libraryCloseToggle", "libraryColsToggle",
   "tags", "tagChipPx", "tagFilterMode",
   "captureExclusion", "copyHistory", "historyTimestamps", "historyGrouped",
-  "dedupCopyLog", "cleanupFiles", "dimUnhovered", "blurTilesUntilHover",
-  "blurMediaUntilHover", "hideTileNames",
+  "dedupCopyLog", "cleanupFiles", "blurTilesUntilHover",
   // Tools / data
-  "dupFinder", "dupImportCheck", "autoBackupBeforeWipe", "clipWatcher", "backupGfs",
+  "dupFinder", "clipWatcher", "backupGfs",
   "usageStats",
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "kbFocusFadeMs", "snipPreviewVh",
   "historyPerPrompt", "dupThreshold", "clipMinChars", "clipInboxMax", "historyMax",
   "journalLimit", "previewLen", "nameMaxLen", "searchRecentMax", "maxViews", "gridMax",
   "viewBorder", "statsTopN", "viewGroups", "viewGroupMaxRows",
+  "barToggles", "quickGrid", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryMaxCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
 ];
 const EXPERT_TIP_SET = new Set(EXPERT_TIPS);
 // Attach the tooltip for `key` to a rendered expert row, if one is defined.
@@ -1736,6 +1742,54 @@ function toggleExpertGroup(title, sec, fill) {
   if (!collapsed) fill?.(); // custom panels fill on first open
 }
 
+function actionRow(a) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "ghost-btn expert-action";
+  btn.textContent = t(a.label);
+  btn.addEventListener("click", () => EXPERT_ACTIONS[a.id]?.());
+  return btn;
+}
+
+// Rows that carry a label plus one narrow control fit two to a line; a slider needs
+// the full width for its track, and anything with children must stay a full row so
+// its subtree reads as one block.
+const COMPACT_KINDS = new Set(["dropdowns", "selects"]);
+const isCompactRow = (n) => COMPACT_KINDS.has(n.kind) && !n.kids.length;
+
+// Emit one level of the row tree: runs of compact rows are paired into a two-column
+// grid, everything else is a full-width row followed by its own subtree.
+function emitExpertRows(list, parent, actionById, depth) {
+  const build = (n) => {
+    const row = n.kind === "actions"
+      ? actionRow(actionById.get(n.k))
+      : { flags: flagRow, values: valueRow, selects: selectRow, dropdowns: dropdownRow, paths: pathRow }[n.kind](n.k);
+    if (depth > 0) row.classList.add("expert-sub");
+    return row;
+  };
+  for (let i = 0; i < list.length; i++) {
+    if (isCompactRow(list[i])) {
+      let j = i;
+      while (j < list.length && isCompactRow(list[j])) j++;
+      if (j - i >= 2) {
+        const cols = document.createElement("div");
+        cols.className = "expert-cols";
+        if (depth > 0) cols.classList.add("expert-sub");
+        for (let x = i; x < j; x++) {
+          const row = build(list[x]);
+          row.classList.remove("expert-sub"); // the wrapper carries the indent
+          cols.appendChild(row);
+        }
+        parent.appendChild(cols);
+        i = j - 1;
+        continue;
+      }
+    }
+    parent.appendChild(build(list[i]));
+    if (list[i].kids.length) emitExpertRows(list[i].kids, parent, actionById, depth + 1);
+  }
+}
+
 function renderExpert() {
   const box = $("expert-flags");
   const tabBar = $("expert-tabs-bar");
@@ -1795,49 +1849,43 @@ function renderExpert() {
         head.addEventListener("click", () => toggleExpertGroup(group.title, sec));
       }
       sec.appendChild(head);
+      const actionById = new Map(actions.map((a) => [a.id, a]));
       if (searching) {
         // Flat list while searching (grouping a match under a non-matching toggle
         // would hide it); adjacency only matters for the calm, browsable view.
         for (const key of flags) sec.appendChild(flagRow(key));
         for (const key of values) sec.appendChild(valueRow(key));
         for (const key of selects) sec.appendChild(selectRow(key));
+        for (const key of dropdowns) sec.appendChild(dropdownRow(key));
+        for (const key of paths) sec.appendChild(pathRow(key));
+        for (const a of actions) sec.appendChild(actionRow(a));
       } else {
-        // A setting whose gate names a toggle in THIS group renders right beneath that
-        // toggle (and vanishes with it), so a feature and everything hanging off it stay
-        // together — sub-toggles included, nested as deep as the gates go.
+        // Every kind of row obeys the same contract: a setting whose gate names a
+        // toggle in THIS group renders right beneath that toggle and vanishes with
+        // it, nested as deep as the gates go. Dropdowns and actions used to sit in
+        // a block of their own at the end, which is what tore features apart.
         const shownFlags = new Set(flags);
-        const ownerIn = (kind, k) => {
-          const g = kind === "flags" ? FLAG_GATES[k] : EXPERT_DEFS[kind]?.[k]?.gate;
+        const ownerOf = (kind, k) => {
+          const g = kind === "flags" ? FLAG_GATES[k]
+            : kind === "actions" ? actionById.get(k)?.gate
+            : EXPERT_DEFS[kind]?.[k]?.gate;
           return g && g[0] !== "!" && g !== k && shownFlags.has(g) ? g : null;
         };
-        const owned = {};
-        const top = [];
-        for (const kind of ["flags", "values", "selects", "paths"]) {
-          for (const k of { flags, values, selects, paths }[kind]) {
-            const o = ownerIn(kind, k);
-            (o ? (owned[o] ||= []) : top).push([kind, k]);
+        const byFlag = new Map();
+        const roots = [];
+        const lists = { flags, values, selects, dropdowns, paths, actions: actions.map((a) => a.id) };
+        // Flags first, so a parent always exists before anything hangs off it.
+        for (const kind of ["flags", "values", "selects", "dropdowns", "paths", "actions"]) {
+          for (const k of lists[kind]) {
+            const n = { kind, k, kids: [] };
+            if (kind === "flags") byFlag.set(k, n);
+            const owner = ownerOf(kind, k);
+            (owner && byFlag.has(owner) ? byFlag.get(owner).kids : roots).push(n);
           }
         }
-        const ROW = { flags: flagRow, selects: selectRow, paths: pathRow, values: valueRow };
-        const render = ([kind, k]) => { sec.appendChild(ROW[kind](k)); (owned[k] || []).forEach(render); };
-        top.forEach(render);
+        emitExpertRows(roots, sec, actionById, 0);
       }
-      if (dropdowns.length) {
-        const pair = document.createElement("div");
-        pair.className = "dropdown-pair";
-        for (const key of dropdowns) pair.appendChild(dropdownRow(key));
-        sec.appendChild(pair);
-      }
-      if (searching) for (const key of paths) sec.appendChild(pathRow(key));
       if (palette) sec.appendChild(paletteRow());
-      for (const a of actions) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "ghost-btn expert-action";
-        btn.textContent = t(a.label);
-        btn.addEventListener("click", () => EXPERT_ACTIONS[a.id]?.());
-        sec.appendChild(btn);
-      }
       box.appendChild(sec);
     }
   }
