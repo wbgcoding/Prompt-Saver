@@ -257,6 +257,9 @@ async function loadState() {
   if (!data) return;
   state = data;
   renderIcon();
+  // The stored scale arrives here, not through applyPrefs, and both run in
+  // parallel — without this the size menu keeps whatever applySettings marked.
+  markSelectedSize();
   if (open === "grid") await reflow();
 }
 

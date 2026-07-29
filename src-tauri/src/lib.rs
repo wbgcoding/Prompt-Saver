@@ -313,6 +313,24 @@ fn fire_prompt_hotkey(app: &AppHandle, id: &str) {
     let _ = app.emit_to("main", "prompt-hotkey", id.to_string());
 }
 
+// While a hotkey field is capturing, every global hotkey has to be off. Windows
+// delivers a registered combination to the owning process instead of the focused
+// window, so the field would never see the key press — the user just watches the
+// prompt behind it get copied and gets no error at all.
+#[tauri::command]
+async fn set_hotkey_capture(app: AppHandle, active: bool) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    if active {
+        let _ = app.global_shortcut().unregister_all();
+        if let Some(t) = app.try_state::<HotkeyTargets>() {
+            t.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        }
+    } else {
+        rearm_hotkeys(&app);
+    }
+    Ok(())
+}
+
 // Ask the OS whether a combination is free: register it, then immediately give it
 // back. Windows only refuses a combination another PROCESS holds, which is exactly
 // the conflict the user needs to hear about before the binding is stored. A
@@ -422,8 +440,22 @@ const VAR_ROWS_MAX: u32 = 24;
 const VAR_PAYLOAD_MAX: usize = 64 * 1024;
 
 // The pending request. Some(..) = a window is waiting for an answer; taking it is
-// what makes an answer (or a closed window) fire exactly once.
-struct VarPrompt(Mutex<Option<String>>);
+// what makes an answer (or a closed window) fire exactly once. The generation is
+// what keeps a *replaced* window honest: its Destroyed event arrives after the next
+// request is already installed, and without the number it would cancel that one.
+struct VarPrompt {
+    pending: Mutex<Option<(u64, String)>>,
+    next_gen: AtomicU64,
+}
+
+impl VarPrompt {
+    fn new() -> Self {
+        Self { pending: Mutex::new(None), next_gen: AtomicU64::new(1) }
+    }
+    fn lock(&self) -> std::sync::MutexGuard<'_, Option<(u64, String)>> {
+        self.pending.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
 
 // Window box for `rows` fields, centred on the cursor and kept inside that monitor's
 // work area. Physical pixels, so a second monitor at another DPI lands correctly.
@@ -455,6 +487,11 @@ async fn open_var_window(
     }
     let rows = rows.clamp(1, VAR_ROWS_MAX);
     if let Some(win) = app.get_webview_window(VAR_WIN_LABEL) {
+        // Release the copy that window was holding before its slot is overwritten,
+        // otherwise the first request waits for an answer that can never arrive.
+        if pending.lock().take().is_some() {
+            let _ = app.emit_to("main", "vars-filled", Option::<String>::None);
+        }
         let _ = win.close();
     }
     // Never hold the store mutex while a window is built (deadlock shape).
@@ -463,7 +500,8 @@ async fn open_var_window(
         let store = lock(&state);
         capture_excluded(&store.settings)
     };
-    *pending.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(payload);
+    let gen = pending.next_gen.fetch_add(1, Ordering::Relaxed);
+    *pending.lock() = Some((gen, payload));
     let rect = var_window_rect(&app, rows);
     let win = WebviewWindowBuilder::new(&app, VAR_WIN_LABEL, WebviewUrl::App("vars.html".into()))
         .title(brand::DISPLAY_NAME)
@@ -490,8 +528,12 @@ async fn open_var_window(
     win.on_window_event(move |event| {
         if matches!(event, WindowEvent::Destroyed) {
             if let Some(p) = app2.try_state::<VarPrompt>() {
-                let taken = p.0.lock().unwrap_or_else(|e| e.into_inner()).take();
-                if taken.is_some() {
+                // Only cancel the request this window was built for. A newer one has
+                // a newer generation and belongs to the window that replaced this.
+                let mut slot = p.lock();
+                if slot.as_ref().is_some_and(|(g, _)| *g == gen) {
+                    slot.take();
+                    drop(slot);
                     let _ = app2.emit_to("main", "vars-filled", Option::<String>::None);
                 }
             }
@@ -504,12 +546,7 @@ async fn open_var_window(
 // webview's first frame).
 #[tauri::command]
 fn var_window_payload(pending: State<VarPrompt>) -> String {
-    pending
-        .0
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .clone()
-        .unwrap_or_default()
+    pending.lock().as_ref().map(|(_, p)| p.clone()).unwrap_or_default()
 }
 
 // Hand the typed values back to the main window (None = cancelled) and close.
@@ -519,7 +556,7 @@ fn var_window_result(app: AppHandle, pending: State<VarPrompt>, values: Option<S
         return Err("bad values".to_string());
     }
     // Take first: the close below fires Destroyed, which must not answer twice.
-    let waiting = pending.0.lock().unwrap_or_else(|e| e.into_inner()).take();
+    let waiting = pending.lock().take();
     if waiting.is_some() {
         let _ = app.emit_to("main", "vars-filled", values);
     }
@@ -2212,9 +2249,15 @@ fn default_pos(app: &AppHandle, index: usize) -> Pos {
     Pos { x: base.x + off, y: base.y + off }
 }
 
+// One range for floating-button size, shared by the writer, the reader and the UI.
+const FLOAT_SCALE_MIN: f64 = 0.3;
+const FLOAT_SCALE_MAX: f64 = 8.0;
+
 fn float_scale_of(settings: &Settings, id: &str) -> f64 {
     let s = settings.float_scale.get(id).copied().unwrap_or(1.0);
-    if s.is_finite() { s.clamp(0.5, 2.0) } else { 1.0 }
+    // Same range set_float_scale accepts. A narrower one here silently shrank the
+    // "L" preset and every freely resized pill back down on the next start.
+    if s.is_finite() { s.clamp(FLOAT_SCALE_MIN, FLOAT_SCALE_MAX) } else { 1.0 }
 }
 
 // Pill window size: square box for image pills, classic pill for text.
@@ -4647,7 +4690,11 @@ fn backups_to_drop(names: &[String], keep: usize, gfs: Option<&GfsConfig>) -> Ve
         }
         out
     };
-    let mut keep_set: HashSet<String> = HashSet::new();
+    // The newest `keep` snapshots survive whatever the tiers say. A tier keeps one
+    // backup per distinct day, so without this a second backup made the same day
+    // would delete the first one — correct by the letter of the rule, and exactly
+    // the kind of surprise a backup feature must not produce.
+    let mut keep_set: HashSet<String> = names.iter().rev().take(keep).cloned().collect();
     for (count, idx) in [(g.daily, 0), (g.weekly, 1), (g.monthly, 2), (g.yearly, 3)] {
         for n in pick(count, idx) {
             keep_set.insert(n);
@@ -4734,19 +4781,33 @@ fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<Str
     rotate_backups(app, keep.clamp(1, 50), gfs);
     Ok(name)
 }
+// A folder name "YYYY-MM-DD_HH-MM-SS" as seconds on a local civil timeline. Two of
+// these subtract cleanly — the zone offset cancels — which is all the schedule needs
+// and avoids trusting a modification time that any sync or antivirus tool may reset.
+fn stamp_secs(name: &str) -> Option<i64> {
+    let (date, time) = name.split_once('_')?;
+    let mut d = date.split('-');
+    let y: i64 = d.next()?.parse().ok()?;
+    let mo: i64 = d.next()?.parse().ok()?;
+    let da: i64 = d.next()?.parse().ok()?;
+    let mut t = time.split('-');
+    let h: i64 = t.next()?.parse().ok()?;
+    let mi: i64 = t.next()?.parse().ok()?;
+    let s: i64 = t.next().unwrap_or("0").parse().ok()?;
+    Some(days_from_civil(y, mo, da) * 86_400 + h * 3_600 + mi * 60 + s)
+}
+
+// Seconds since the newest snapshot, or None when there is none yet.
 fn newest_backup_age(app: &AppHandle) -> Option<u64> {
-    let dir = backups_dir(app);
-    let mut newest: Option<std::time::SystemTime> = None;
-    for e in fs::read_dir(&dir).into_iter().flatten().flatten() {
-        if let Ok(m) = e.metadata() {
-            if let Ok(t) = m.modified() {
-                if newest.map_or(true, |n| t > n) {
-                    newest = Some(t);
-                }
-            }
-        }
-    }
-    newest.and_then(|t| t.elapsed().ok()).map(|d| d.as_secs())
+    let now = stamp_secs(&local_stamp())?;
+    let newest = fs::read_dir(backups_dir(app))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .filter_map(|e| stamp_secs(&e.file_name().to_string_lossy()))
+        .max()?;
+    Some((now - newest).max(0) as u64)
 }
 
 #[tauri::command]
@@ -5088,7 +5149,7 @@ async fn set_float_scale(
     scale: f64,
     resize: Option<bool>,
 ) -> Result<(), String> {
-    let scale = if scale.is_finite() { scale.clamp(0.3, 8.0) } else { 1.0 };
+    let scale = if scale.is_finite() { scale.clamp(FLOAT_SCALE_MIN, FLOAT_SCALE_MAX) } else { 1.0 };
     let is_img = {
         let mut store = lock(&state);
         store.settings.float_scale.insert(id.clone(), scale);
@@ -8729,7 +8790,7 @@ pub fn run() {
             app.manage(SnipPreview(Arc::new(Mutex::new(None))));
             app.manage(HotkeyTargets(Mutex::new(Vec::new()))); // F20
             app.manage(FolderExpand(Mutex::new(HashMap::new()))); // F25
-            app.manage(VarPrompt(Mutex::new(None))); // F12 standalone fill-in window
+            app.manage(VarPrompt::new()); // F12 standalone fill-in window
 
             // F19 auto-paste: start tracking the last external foreground window.
             #[cfg(windows)]
@@ -9080,6 +9141,7 @@ pub fn run() {
             set_auto_update,
             set_hotkey,
             check_hotkey,
+            set_hotkey_capture,
             focus_main_window,
             open_var_window,
             var_window_payload,
@@ -9263,9 +9325,10 @@ mod tests {
         assert_eq!(backups_to_drop(&names, 0, None).len(), names.len() - 1);
 
         // Tiers count PERIODS, newest first: 3 years reach back to 2024, while one
-        // day / week / month only ever pins the newest backup.
+        // day / week / month only ever pins the newest backup. `keep` is a floor, so
+        // it has to stay at 1 here for the tiers alone to decide.
         let tiers = GfsConfig { daily: 1, weekly: 1, monthly: 1, yearly: 3 };
-        let dropped = backups_to_drop(&names, 10, Some(&tiers));
+        let dropped = backups_to_drop(&names, 1, Some(&tiers));
         assert!(!dropped.contains(&names[4]), "the newest backup always survives");
         assert!(!dropped.contains(&names[1]), "second-newest year kept");
         assert!(!dropped.contains(&names[0]), "third-newest year kept");
@@ -9273,9 +9336,28 @@ mod tests {
 
         // Every tier at zero must not wipe the lot — the newest one stays.
         let empty = GfsConfig { daily: 0, weekly: 0, monthly: 0, yearly: 0 };
-        let dropped = backups_to_drop(&names, 5, Some(&empty));
+        let dropped = backups_to_drop(&names, 1, Some(&empty));
         assert_eq!(dropped.len(), names.len() - 1);
         assert!(!dropped.contains(&names[4]));
+
+        // The schedule reads the folder name, not a modification time.
+        let a = stamp_secs("2026-07-29_08-00-00").unwrap();
+        let b = stamp_secs("2026-07-29_10-30-00").unwrap();
+        assert_eq!(b - a, 2 * 3600 + 30 * 60);
+        assert_eq!(stamp_secs("2026-07-30_08-00-00").unwrap() - a, 86_400);
+        assert!(stamp_secs("not-a-stamp").is_none());
+
+        // `keep` survives the tiers: several backups on ONE day must not delete each
+        // other just because the daily tier only pins one per date.
+        let today: Vec<String> = ["2026-07-29_08-00-00", "2026-07-29_09-00-00", "2026-07-29_10-00-00"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let dropped = backups_to_drop(&today, 10, Some(&tiers));
+        assert!(dropped.is_empty(), "same-day backups stay while `keep` has room");
+        // With no room left, the tiers thin them out as before.
+        let dropped = backups_to_drop(&today, 1, Some(&tiers));
+        assert_eq!(dropped, today[..2].to_vec());
     }
 
     #[test]

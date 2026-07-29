@@ -114,8 +114,14 @@ document.addEventListener("keydown", (e) => {
 });
 okEl.addEventListener("click", confirm);
 cancelEl.addEventListener("click", () => answer(null));
-// Clicking away means "not now" — the window never lingers over another app.
-window.addEventListener("blur", () => answer(null));
+// Clicking away means "not now" — the window never lingers over another app. The
+// grace period covers the hand-off: the backend shows the window and only then takes
+// the focus, and a blur fired in between would cancel before anything was on screen.
+const OPENED_AT = Date.now();
+const BLUR_GRACE_MS = 400;
+window.addEventListener("blur", () => {
+  if (Date.now() - OPENED_AT > BLUR_GRACE_MS) answer(null);
+});
 // A click on the transparent margin around the card is an outside click too.
 document.body.addEventListener("mousedown", (e) => {
   if (!cardEl.contains(e.target)) answer(null);

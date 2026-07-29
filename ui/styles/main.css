@@ -373,7 +373,10 @@ body.noflag-showJournal #journal-btn { display: none; }
 /* View switcher buttons (hidden while only one view exists) */
 /* Takes the free brand width and keeps a floor: a strip narrower than one tab is a
    strip no pointer can land on, so it scrolls sideways instead of being crushed. */
-.views { display: flex; gap: 6px; margin-left: 0; min-width: 96px; flex: 1 1 auto; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+/* Shrinks (so the tabs stay scrollable on a narrow window) but never grows: a
+   stretched tab strip would cover the free part of the header, and that area is
+   what the user grabs to move the window — the strip itself is no drag region. */
+.views { display: flex; gap: 6px; margin-left: 0; min-width: 96px; flex: 0 1 auto; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
 .views::-webkit-scrollbar { display: none; }
 .view-btn {
   padding: 5px 12px;

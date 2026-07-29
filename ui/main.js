@@ -334,7 +334,11 @@ function fitTileText(tile, maxW, maxH) {
 // around can never change a fitted text size.
 const fitBox = { key: "", maxW: 0, maxH: 0 };
 
-function fitAllTiles() {
+// `boxOnly` = skip the per-tile work while the measurement box is unchanged. Used by
+// the resize handler: dragging the window edge changes the pixel size on every frame,
+// but the quantized box only moves every FIT_QUANT px — re-fitting every tile in
+// between is what made the grid shimmer during a resize.
+function fitAllTiles(boxOnly) {
   const globalAuto = Number(settings.tile_size) === 0;
   const tiles = [...gridEl.querySelectorAll(".tile")].filter(
     (tile) =>
@@ -349,7 +353,10 @@ function fitAllTiles() {
     // size or template, so without it a gap change would reuse a stale fit box
     // (text kept its old size, leaving wrong vertical spacing).
     `|${gridEl.clientWidth}x${gridEl.clientHeight}|${getComputedStyle(gridEl).gap}`;
+  let boxMoved = false;
   if (fitBox.key !== key) {
+    const prevW = fitBox.maxW;
+    const prevH = fitBox.maxH;
     // Shared box = smallest grid CELL (cells exist for every slot) minus the
     // tile chrome from computed style — fractional-exact, no per-cell rounding.
     let cellW = Infinity;
@@ -372,7 +379,9 @@ function fitAllTiles() {
     // and the slack guarantees the text never clips after such a shift.
     fitBox.maxW = Math.floor((cellW - chromeW) / FIT_QUANT) * FIT_QUANT;
     fitBox.maxH = Math.floor((cellH - chromeH - 2) / FIT_QUANT) * FIT_QUANT;
+    boxMoved = fitBox.maxW !== prevW || fitBox.maxH !== prevH;
   }
+  if (boxOnly && !boxMoved) return;
   if (fitBox.maxW <= 0 || fitBox.maxH <= 0) return;
   for (const tile of tiles) fitTileText(tile, fitBox.maxW, fitBox.maxH);
 }
@@ -381,7 +390,7 @@ function fitAllTiles() {
 let fitRaf = 0;
 window.addEventListener("resize", () => {
   cancelAnimationFrame(fitRaf);
-  fitRaf = requestAnimationFrame(fitAllTiles);
+  fitRaf = requestAnimationFrame(() => fitAllTiles(true));
 });
 
 // Re-measure cells when the window moves to a monitor with a different scale
@@ -758,7 +767,7 @@ function applyBars() {
   $("show-top").classList.toggle("hidden", header);
   $("show-bottom").classList.toggle("hidden", composer);
   // The grid area changed size — re-fit the tile text.
-  requestAnimationFrame(fitAllTiles);
+  requestAnimationFrame(() => fitAllTiles());
 }
 
 function setBars(header, composer) {
@@ -1854,6 +1863,11 @@ async function onResetExpert() {
   refreshColorUI();
   applyFlags();
   renderExpert();
+  // ui_flags also holds NORMAL settings (auto-paste, tooltips, screenshot saving,
+  // favourites view). Wiping it resets those too, so the settings page has to be
+  // redrawn or its checkboxes keep showing the old, no longer stored state.
+  syncSettingsControls();
+  refreshFavViewUi();
   renderViews();
   await renderGrid(true);
   toast(t("expertResetDone"));
@@ -3941,8 +3955,11 @@ function promptVarsDialog(vars) {
     // The click/keypress that OPENED this dialog is still in flight: arm the
     // backdrop + Enter close handlers only on the next frame so that same event
     // can't immediately dismiss the dialog (it was flashing shut instantly).
+    // A timer, not a frame callback: this dialog can open while the window is still
+    // hidden or tray-minimised, and a WebView2 window that paints no frames would
+    // leave Enter and the backdrop dead for as long as it stays that way.
     let armed = false;
-    requestAnimationFrame(() => { armed = true; });
+    setTimeout(() => { armed = true; }, 0);
     const done = (val) => {
       root.classList.add("hidden");
       ok.removeEventListener("click", onOk);
@@ -3968,24 +3985,35 @@ function promptVarsDialog(vars) {
 }
 
 // Record a copy for the history/usage journal (backend honours the privacy flag).
-const recordCopy = (id) => invoke("record_copy", { id }).catch(() => {});
+// Every successful copy path ends here, which makes it the one place that may start
+// the cooldown — see below.
+const recordCopy = (id) => {
+  markCopied(id);
+  return invoke("record_copy", { id }).catch(() => {});
+};
 
 // Per-prompt copy throttle: block re-copying the SAME prompt within the cooldown
 // (expert value, 0 = off). Other prompts are never blocked, so a wrong pick can
 // be corrected instantly. Returns true if this copy should be skipped.
+// The check is pure: a copy that never happened — the placeholder dialog was
+// cancelled — must not lock the prompt out for the whole cooldown.
 const copyTimes = new Map();
 const COPY_TIMES_CAP = 256; // sweep entries past the cooldown once the map grows
 function copyOnCooldown(id) {
   const ms = val("copyCooldownMs");
   if (!ms) return false;
-  const now = Date.now();
   const last = copyTimes.get(id);
-  if (last && now - last < ms) return true;
+  return !!last && Date.now() - last < ms;
+}
+// Start the cooldown for a prompt that really was copied.
+function markCopied(id) {
+  const ms = val("copyCooldownMs");
+  if (!ms) return;
+  const now = Date.now();
   if (copyTimes.size >= COPY_TIMES_CAP) {
     for (const [k, t0] of copyTimes) if (now - t0 >= ms) copyTimes.delete(k);
   }
   copyTimes.set(id, now);
-  return false;
 }
 
 // Build a Tauri accelerator ("CommandOrControl+Shift+P") from a keydown event.
@@ -4311,11 +4339,35 @@ const accelKey = (a) => String(a || "").trim().toLowerCase()
       : s === "option" ? "alt" : s))
   .sort().join("+");
 
-function hotkeyTaken(accel) {
+// Who already holds this combination inside the app: the app hotkey, another
+// prompt, or nobody. Naming the owner is the difference between "taken" and a
+// message the user can act on.
+function hotkeyOwner(accel) {
   const key = accelKey(accel);
-  if (!key) return false;
-  if (accelKey(settings.hotkey) === key) return true;
-  return prompts.some((p) => p.id !== modalState?.id && accelKey(p.hotkey) === key);
+  if (!key) return null;
+  if (accelKey(settings.hotkey) === key) return { app: true };
+  const p = prompts.find((x) => x.id !== modalState?.id && accelKey(x.hotkey) === key);
+  return p ? { name: p.name } : null;
+}
+const hotkeyTakenMsg = (owner) =>
+  owner.app ? t("promptHotkeyTakenApp") : t("promptHotkeyTakenBy").replace("{name}", owner.name);
+
+// Global hotkeys have to be off while a field is capturing: Windows hands a
+// registered combination to the owning process, not to the focused window, so the
+// key press would never reach the field — the prompt behind it would simply be
+// copied, with no error to show for it.
+let hotkeyCaptureOn = false;
+function hotkeyCapture(on) {
+  if (on === hotkeyCaptureOn) return;
+  hotkeyCaptureOn = on;
+  invoke("set_hotkey_capture", { active: on }).catch(() => {});
+}
+// Storing a hotkey re-arms the whole set, so a field that still has the focus has
+// to take them back off straight away.
+function reassertHotkeyCapture() {
+  if (!hotkeyCaptureOn) return;
+  hotkeyCaptureOn = false;
+  hotkeyCapture(true);
 }
 
 // The captured combination is checked by the BACKEND before it is kept: only the
@@ -5310,13 +5362,26 @@ function updateClipBadge() {
   badge.classList.toggle("hidden", clipCount <= 0); // only the number hides at 0
   badge.textContent = clipCount > 99 ? "99+" : String(clipCount);
 }
+// The badge counts what the user has NOT looked at yet, so opening the inbox clears
+// it. Inbox ids are row ids and only grow, which makes the highest one a cheap
+// "seen up to here" marker that survives a restart.
+const clipSeenId = () => Number(settings.ui_values?.clipSeenId) || 0;
+const clipUnseen = (items) => items.filter((it) => Number(it.id) > clipSeenId()).length;
+async function markClipSeen(items) {
+  const top = items.reduce((m, it) => Math.max(m, Number(it.id) || 0), 0);
+  if (top <= clipSeenId()) return;
+  settings.ui_values = { ...(settings.ui_values || {}), clipSeenId: top };
+  try { await invoke("set_ui_value", { key: "clipSeenId", value: top }); } catch (_) {}
+}
 async function refreshClipInbox() {
   if (!optFlag("clipWatcher")) { clipCount = 0; updateClipBadge(); return; }
   let items = [];
   try { items = await invoke("clip_inbox_list"); } catch (_) {}
-  clipCount = items.length; // the badge shows how many collected items are waiting
+  const open = !$("clip-modal").classList.contains("hidden");
+  if (open) await markClipSeen(items); // arriving while the list is on screen counts as seen
+  clipCount = clipUnseen(items);
   updateClipBadge();
-  if (!$("clip-modal").classList.contains("hidden")) renderClipList(items);
+  if (open) renderClipList(items);
 }
 function renderClipList(items) {
   const list = $("clip-list");
@@ -5359,7 +5424,8 @@ function renderClipList(items) {
 async function openClipInbox() {
   let items = [];
   try { items = await invoke("clip_inbox_list"); } catch (_) {}
-  clipCount = items.length; // badge stays until items are dismissed/cleared
+  await markClipSeen(items); // everything on this list has now been seen
+  clipCount = 0;
   updateClipBadge();
   renderClipList(items);
   $("clip-modal").classList.remove("hidden");
@@ -5580,7 +5646,10 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input,
     root.addEventListener("pointerdown", onBg);
     field.addEventListener("keydown", onKey);
     eye.addEventListener("click", onEye);
-    confirmCleanup = done;
+    // Escape and the stale-dialog sweep both come through here, so they must map
+    // their answer exactly like Cancel does — a prompt with an input field owes its
+    // caller null, never false.
+    confirmCleanup = finish;
     (input ? field : ok).focus();
     if (input && field.value) field.select();
   });
@@ -7395,10 +7464,13 @@ function bind() {
     if (e.key === "Backspace" || e.key === "Delete") { setPromptHotkey(""); return; }
     const accel = accelFromEvent(e);
     if (!accel) { showHotkeyError(t("promptHotkeyInvalid")); return; }
-    if (hotkeyTaken(accel)) { showHotkeyError(t("promptHotkeyTaken")); return; } // binding unchanged
+    const owner = hotkeyOwner(accel);
+    if (owner) { showHotkeyError(hotkeyTakenMsg(owner)); return; } // binding unchanged
     showHotkeyError("");
     tryPromptHotkey(accel);
   });
+  modal.hotkeyInput.addEventListener("focus", () => hotkeyCapture(true));
+  modal.hotkeyInput.addEventListener("blur", () => hotkeyCapture(false));
   $("modal-hotkey-clear").addEventListener("click", () => setPromptHotkey(""));
   modal.hotkeyAction.addEventListener("change", () => {
     if (modalState) modalState.hotkeyPaste = modal.hotkeyAction.value;
@@ -7902,6 +7974,8 @@ function bind() {
   $("fav-view-btn").addEventListener("click", () => setFavView(!favView));
 
   // Global hotkey: click the field and press a key combo to capture it.
+  $("opt-hotkey").addEventListener("focus", () => hotkeyCapture(true));
+  $("opt-hotkey").addEventListener("blur", () => hotkeyCapture(false));
   $("opt-hotkey").addEventListener("keydown", async (e) => {
     if (e.key === "Tab" || e.key === "Escape") return; // let focus leave the field
     e.preventDefault();
@@ -7911,6 +7985,7 @@ function bind() {
       await invoke("set_hotkey", { hotkey: accel });
       settings.hotkey = accel;
       $("opt-hotkey").value = prettyAccel(accel);
+      reassertHotkeyCapture(); // the field still has the focus
       toast(t("hotkeySet"));
     } catch (err) {
       // A refused combination changed nothing in the backend either, so the field
@@ -8408,12 +8483,20 @@ async function init() {
     try { toast(String((e && e.message) || e)); } catch (_) {}
   } finally {
     // Reveal only after the first fitted paint — the user never sees text sizing.
+    // A hidden WebView2 window can stop producing frames, so a timer backs the
+    // rAF chain up: showing late beats never showing at all. Whichever wins, the
+    // reveal runs exactly once.
+    let revealed = false;
+    const reveal = () => {
+      if (revealed) return;
+      revealed = true;
+      // Ask about adopting an installed store only once the themed window is up.
+      invoke("show_main_window").catch(() => {}).finally(() => offerTakeover());
+    };
+    setTimeout(reveal, 1500);
     requestAnimationFrame(() => {
       try { fitCache.clear(); fitAllTiles(); } catch (_) {}
-      requestAnimationFrame(() => {
-        // Ask about adopting an installed store only once the themed window is up.
-        invoke("show_main_window").catch(() => {}).finally(() => offerTakeover());
-      });
+      requestAnimationFrame(reveal);
     });
   }
 }

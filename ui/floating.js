@@ -44,7 +44,10 @@ function applyFont() {
   pill.style.fontFamily = FONTS[pFont || globalFontKey] || FONTS.system;
 }
 
-// Keep in sync with the backend pill constants (FLOAT_H / FLOAT_IMG).
+// Keep in sync with the backend pill constants (FLOAT_H / FLOAT_IMG,
+// FLOAT_SCALE_MIN / FLOAT_SCALE_MAX).
+const SCALE_MIN = 0.3;
+const SCALE_MAX = 8;
 const PILL_H = 80;
 const PILL_IMG = 400;
 const PILL_FONT_DEFAULT = 26; // text pill font size at scale 1
@@ -163,10 +166,12 @@ async function applyTexts(s) {
 
 function applyPrefs(s) {
   applyVideoPrefs(videoEl, s.video_prefs && s.video_prefs[promptId]);
-  // Clamp to the backend's stored range (0.5–2.0): a corrupt 0/negative/NaN
-  // factor would otherwise produce a degenerate (zero/inverted) window.
+  // Clamp to the backend's stored range (SCALE_MIN–SCALE_MAX): a corrupt
+  // 0/negative/NaN factor would otherwise produce a degenerate window. The range
+  // must match the backend's, or the "L" preset and every freely resized pill
+  // would snap back on the next start.
   const rawScale = Number(s.float_scale && s.float_scale[promptId]);
-  scale = Number.isFinite(rawScale) && rawScale > 0 ? Math.min(2, Math.max(0.5, rawScale)) : 1;
+  scale = Number.isFinite(rawScale) && rawScale > 0 ? Math.min(SCALE_MAX, Math.max(SCALE_MIN, rawScale)) : 1;
   tileSize = Number(s.tile_size) || 0;
   globalFontKey = s.tile_font || "system";
   copySize = Number(s.ui_values?.copySize) || 0;
@@ -648,7 +653,6 @@ window.addEventListener("mouseup", async () => {
 // ---- Edge/corner resize ----
 // The grabbed edge/corner follows the cursor 1:1; the opposite side stays put.
 // Content scales with the window (aspect kept), up to nearly full screen.
-const SCALE_MIN = 0.3;
 let resizing = null;
 let rzRaf = 0;
 let rzPending = null;
