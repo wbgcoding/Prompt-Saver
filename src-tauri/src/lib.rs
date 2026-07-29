@@ -4576,6 +4576,8 @@ struct UsageStats {
     recent_ts: u64,
     longest_name: String,
     longest_chars: usize,
+    shortest_name: String,
+    shortest_chars: usize,
     types: Vec<ViewCount>,
     top: Vec<StatBar>,
     never_used: Vec<StatBar>,
@@ -4629,9 +4631,16 @@ async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Resu
         if lu > recent_ts { recent_ts = lu; recent_name = name_of(p); }
     }
     let (mut longest_name, mut longest_chars) = (String::new(), 0usize);
+    // The shortest one only counts prompts that HAVE a body — a media prompt with no
+    // text would otherwise win every time and say nothing.
+    let (mut shortest_name, mut shortest_chars) = (String::new(), 0usize);
     for p in &store.prompts {
         let c = p.text.chars().count();
         if c > longest_chars { longest_chars = c; longest_name = name_of(p); }
+        if c > 0 && (shortest_chars == 0 || c < shortest_chars) {
+            shortest_chars = c;
+            shortest_name = name_of(p);
+        }
     }
     let mut type_counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
     for p in &store.prompts {
@@ -4703,6 +4712,8 @@ async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Resu
         recent_ts,
         longest_name,
         longest_chars,
+        shortest_name,
+        shortest_chars,
         types,
         top,
         never_used,
@@ -4887,6 +4898,41 @@ async fn ignore_dups(app: AppHandle, state: State<'_, Db>, ids: Vec<String>) -> 
 struct BackupInfo {
     name: String,
     size: u64,
+    // How many prompts the snapshot holds. Written next to the snapshot when it is
+    // made (exact, and free to read back); a backup from an older build has no note
+    // yet, so its count is read out of the snapshot itself once.
+    prompts: Option<usize>,
+}
+
+const BACKUP_COUNT_FILE: &str = "prompts.count";
+
+// Count the prompts in a snapshot folder: the note if there is one, otherwise the
+// snapshot is unpacked to a temp file and counted (and the note written for next
+// time). None only when the folder holds no readable snapshot at all.
+fn backup_prompt_count(folder: &std::path::Path) -> Option<usize> {
+    if let Ok(text) = fs::read_to_string(folder.join(BACKUP_COUNT_FILE)) {
+        if let Ok(n) = text.trim().parse::<usize>() {
+            return Some(n);
+        }
+    }
+    let db = backup_db_file(folder)?;
+    let tmp;
+    let path = if db.extension().map(|e| e == "gz").unwrap_or(false) {
+        tmp = folder.join("count.tmp");
+        gunzip_to(&db, &tmp).ok()?;
+        tmp.clone()
+    } else {
+        db
+    };
+    let n = Connection::open(&path)
+        .ok()
+        .and_then(|c| c.query_row("SELECT COUNT(*) FROM prompts", [], |r| r.get::<_, i64>(0)).ok())
+        .map(|n| n.max(0) as usize);
+    let _ = fs::remove_file(folder.join("count.tmp"));
+    if let Some(n) = n {
+        let _ = fs::write(folder.join(BACKUP_COUNT_FILE), n.to_string());
+    }
+    n
 }
 fn backups_dir(app: &AppHandle) -> std::path::PathBuf {
     data_dir(app).join("backups")
@@ -4913,7 +4959,8 @@ fn list_backups_impl(app: &AppHandle) -> Vec<BackupInfo> {
                 .and_then(|p| fs::metadata(p).ok())
                 .map(|m| m.len())
                 .unwrap_or(0);
-            BackupInfo { name, size }
+            let prompts = backup_prompt_count(&e.path());
+            BackupInfo { name, size, prompts }
         })
         .collect();
     out.sort_by(|a, b| b.name.cmp(&a.name)); // newest first (stamp sorts chronologically)
@@ -5073,6 +5120,13 @@ fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<Str
     }
     // Compress the vacuumed copy, then drop the raw one — never leave both behind.
     let packed = gzip_to(&tmp, &dest);
+    // The count is taken from the vacuumed copy while it is still unpacked, so the
+    // list never has to decompress a snapshot to say how much is in it.
+    if let Ok(conn) = Connection::open(&tmp) {
+        if let Ok(n) = conn.query_row("SELECT COUNT(*) FROM prompts", [], |r| r.get::<_, i64>(0)) {
+            let _ = fs::write(folder.join(BACKUP_COUNT_FILE), n.max(0).to_string());
+        }
+    }
     let _ = fs::remove_file(&tmp);
     packed?;
     rotate_backups(app, keep.clamp(1, 50), gfs);

@@ -2027,7 +2027,9 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
    here — otherwise the wrapper shrinks to nothing and the field collapses. */
 .library-search .clear-wrap, #journal-search .clear-wrap, .caption-row .clear-wrap, .hotkey-row .clear-wrap { flex: 1 1 auto; }
 .vars-new > .clear-wrap { flex: 1 1 auto; min-width: 0; }
-.backup-set-row .clear-wrap { flex: 0 0 auto; width: 110px; }
+/* Same field width as the statistics top-N field, so the two number fields of the
+   dialog do not read as two different controls. */
+.backup-set-row .clear-wrap { flex: 0 1 90px; width: auto; }
 /* Composer + editor textareas keep their flex-grow role through the wrapper. */
 .composer .clear-wrap-ta { flex: 1 1 auto; }
 #modal.tall .clear-wrap-ta { flex: 1 1 auto; min-height: 0; }
@@ -2181,9 +2183,14 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 
 /* F2 backups & restore. */
 /* Date/time diagnostic card: date over time, no comma, a touch larger for legibility. */
+/* Diagnostics cards: the date is the value of the card, so it reads as large as any
+   other number, and none of these texts may wrap — a broken date is unreadable. */
 .stat-dt { display: flex; flex-direction: column; gap: 1px; line-height: 1.25; }
-.stat-dt .dt-date { font-size: 15px; font-weight: 700; }
-.stat-dt .dt-time { font-size: 13px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stat-dt .dt-date { font-size: 17px; font-weight: 700; white-space: nowrap; }
+.stat-dt .dt-time { font-size: 14px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stat-card .stat-val { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Characters + tokens of the longest/shortest prompt, on their own line. */
+.stat-sub-row { color: var(--muted); font-size: 12px; }
 .backup-settings { display: flex; flex-direction: column; gap: 8px; }
 .backup-set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 /* The base `.field { flex-direction: column }` sits later in the file at equal
@@ -2193,6 +2200,9 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .field.backup-set-row { flex-direction: row; }
 .backup-set-row > span { font-size: 13px; }
 .backup-set-row .modal-input { flex: 0 0 auto; width: auto; min-width: 90px; }
+/* The interval dropdown is as wide as its content and as tall as the number fields
+   next to it, so the whole retention block sits on one line. */
+.backup-interval-row .backup-interval { min-width: 0; width: auto; padding-top: 5px; padding-bottom: 5px; }
 /* Settings split in two: left "make a backup / how often", right "how many are kept". */
 .backup-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 24px; align-items: start; }
 .backup-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -2251,6 +2261,8 @@ input[type="password"]::-ms-clear { display: none; }
 .backup-row { display: flex; flex-wrap: wrap; row-gap: 6px; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 .backup-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-variant-numeric: tabular-nums; }
 .backup-size { flex: 0 0 auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* How many prompts are in that snapshot — its own column, right of the date. */
+.backup-count { flex: 0 0 auto; min-width: 34px; text-align: right; font-size: 12px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
 .backup-row .ghost-btn { flex: 0 0 auto; padding: 3px 10px; font-size: 12px; }
 
 /* F21 clipboard inbox. */

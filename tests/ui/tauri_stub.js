@@ -186,9 +186,11 @@ const RESULTS = {
   app_version: () => "0.0.0",
   current_data_dir: () => "C:\\Data",
   default_screenshot_dir: () => "C:\\Pictures",
+  // One snapshot carries its prompt count, one is from an older build and has none —
+  // the list has to show both without a gap in the row.
   list_backups: () => [
-    { name: "2026-07-25_18-30-00", size: 812345 },
-    { name: "2026-07-24_09-05-00", size: 654321 },
+    { name: "2026-07-25_18-30-00", size: 812345, prompts: 12 },
+    { name: "2026-07-24_09-05-00", size: 654321, prompts: null },
   ],
   recent_copies: () => PROMPTS.slice(0, 4).map((p, i) => ({ id: p.id, ts: 1750000000 + i })),
   clip_inbox_list: () => [],
@@ -333,6 +335,7 @@ const RESULTS = {
     total_prompts: 12, total_copies: 40, copies7: 5, copies30: 20, used_count: 8, avg_copies: 3.3, total_chars: 900,
     recent_name: "Prompt 1", recent_ts: 1750000000,
     longest_name: "Prompt 2", longest_chars: 120,
+    shortest_name: "Prompt 7", shortest_chars: 18,
     types: [{ name: "text", count: 12 }],
     top: [{ name: "Prompt 1", count: 9 }],
     never_used: [{ name: "Prompt 9", count: 0 }],

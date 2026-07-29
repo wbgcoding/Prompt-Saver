@@ -5205,6 +5205,25 @@ function statSection(text) {
   h.textContent = text;
   return h;
 }
+// Collapsible section head (chevron) shared by the backup and statistics panels: it
+// folds `contentEl` away and remembers the state under `stateKey`.
+function collapsibleHead(labelText, contentEl, stateKey) {
+  const open = optFlag(stateKey);
+  const h = document.createElement("button");
+  h.type = "button";
+  h.className = "stat-section backup-list-head" + (open ? " open" : "");
+  const s = document.createElement("span");
+  s.textContent = labelText;
+  h.appendChild(s);
+  h.insertAdjacentHTML("beforeend", '<svg class="collapse-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>');
+  contentEl.classList.toggle("hidden", !open);
+  h.addEventListener("click", () => {
+    const o = !contentEl.classList.toggle("hidden");
+    h.classList.toggle("open", o);
+    saveUiState(stateKey, o);
+  });
+  return h;
+}
 // Label + bounded number field, as used by the backup and statistics panels.
 // Clearing the field means "back to the default" — it is committed on blur, so
 // an empty field mid-typing is left alone.
@@ -5255,6 +5274,15 @@ async function renderStatsPanel(body) {
   }
   body.appendChild(headRow);
   if (!on) return;
+  // Everything below the toggle folds away as one block (state remembered), so the
+  // backup dialog is not half statistics every time it opens. `root` stays the panel
+  // itself — the clear-X wiring at the end has to reach the top-N field in the head
+  // row, which is NOT inside the collapsible part.
+  const root = body;
+  const panel = document.createElement("div");
+  panel.className = "stats-panel-body";
+  root.append(collapsibleHead(t("statsSection"), panel, "statsPanelOpen"), panel);
+  body = panel;
   const nf = (n) => Number(n).toLocaleString(LANG);
   const cards = document.createElement("div");
   cards.className = "stat-cards";
@@ -5296,7 +5324,19 @@ async function renderStatsPanel(body) {
   // Only what the cards above do NOT already show — the most-used count is a card
   // and a bar below it, so it stays out of here.
   if (s.recent_ts) info.appendChild(infoRow(t("statRecent"), `${s.recent_name} · ${new Date(s.recent_ts * 1000).toLocaleDateString(LANG)}`));
-  if (s.longest_chars) info.appendChild(infoRow(t("statLongest"), `${s.longest_name} · ${nf(s.longest_chars)} ${t("lenChars")}`));
+  // Longest and shortest: the name on the label line, its size on a line of its own —
+  // one row could not hold name, characters and tokens without cutting one off.
+  const sizeRow = (label, name, chars) => {
+    info.appendChild(infoRow(label, name));
+    const r = document.createElement("div");
+    r.className = "stat-view-row stat-sub-row";
+    const l = document.createElement("span");
+    l.textContent = `${nf(chars)} ${t("lenChars")} · ~${nf(Math.ceil(chars / 4))} ${t("lenTokens")}`;
+    r.appendChild(l);
+    info.appendChild(r);
+  };
+  if (s.longest_chars) sizeRow(t("statLongest"), s.longest_name, s.longest_chars);
+  if (s.shortest_chars) sizeRow(t("statShortest"), s.shortest_name, s.shortest_chars);
   const split = document.createElement("div"); split.className = "stat-overview-split";
   const ovCol = document.createElement("div"); ovCol.className = "stat-overview-main";
   ovCol.append(statSection(t("statOverview")), info);
@@ -5365,7 +5405,7 @@ async function renderStatsPanel(body) {
     }
     body.appendChild(list);
   }
-  wireClearButtons(body); // clear-X on the top-N field
+  wireClearButtons(root); // clear-X on the top-N field (in the head row, not in the panel)
 }
 function jumpToPrompt(name) {
   // The settings and the backups dialog stay open underneath: the library is only
@@ -5479,7 +5519,11 @@ function fmtBytes(n) {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
+// A backup folder name as a readable local date + time ("29.07.2026 18:15" in German,
+// and whatever the picked language writes elsewhere).
 function prettyStamp(name) {
+  const dt = parseStamp(name);
+  if (dt) return `${dt.toLocaleDateString(LANG)} ${dt.toLocaleTimeString(LANG, { hour: "2-digit", minute: "2-digit" })}`;
   const [d, tm] = String(name).split("_");
   return tm ? `${d} ${tm.replace(/-/g, ":")}` : d;
 }
@@ -5551,23 +5595,7 @@ async function renderBackupPanel(body) {
     const ll = document.createElement("div"); ll.className = "stat-label"; ll.textContent = l;
     c.append(vv, ll); return c;
   };
-  // Collapsible section head (chevron), toggles the given content element and
-  // remembers the last state under `stateKey`.
-  const collapseHead = (labelText, contentEl, stateKey) => {
-    const open = optFlag(stateKey);
-    const h = document.createElement("button");
-    h.type = "button";
-    h.className = "stat-section backup-list-head" + (open ? " open" : "");
-    const s = document.createElement("span"); s.textContent = labelText; h.appendChild(s);
-    h.insertAdjacentHTML("beforeend", '<svg class="collapse-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>');
-    contentEl.classList.toggle("hidden", !open);
-    h.addEventListener("click", () => {
-      const o = !contentEl.classList.toggle("hidden");
-      h.classList.toggle("open", o);
-      saveUiState(stateKey, o);
-    });
-    return h;
-  };
+  const collapseHead = collapsibleHead;
 
   const fmtInterval = (h) => (h < 24 ? `${h} h` : `${h / 24} d`); // ≥24h shown in days
 
@@ -5602,23 +5630,25 @@ async function renderBackupPanel(body) {
   }));
   // The interval only means something while automatic backups run.
   if (flag("autoBackup")) {
-    const iv = document.createElement("label"); iv.className = "field backup-set-row";
+    const iv = document.createElement("label"); iv.className = "field backup-set-row backup-interval-row";
     const ivl = document.createElement("span"); ivl.textContent = t("valBackupInterval");
-    const ivs = document.createElement("select"); ivs.className = "modal-input";
+    const ivs = document.createElement("select"); ivs.className = "modal-input backup-interval";
     for (const h of [6, 12, 24, 48, 168]) { const o = document.createElement("option"); o.value = String(h); o.textContent = fmtInterval(h); ivs.appendChild(o); }
     ivs.value = String(val("backupIntervalH"));
     ivs.addEventListener("change", async () => { await saveBackupSetting("value", "backupIntervalH", Number(ivs.value)); renderBackupPanel(body); });
     iv.append(ivl, ivs); left.appendChild(iv);
   }
 
-  // Right column — retention: a plain count, or the period-based tiers.
-  if (!optFlag("backupGfs")) {
-    right.appendChild(numRow("valBackupKeep", "backupKeep", 1, 50, (v) => saveBackupSetting("value", "backupKeep", v)));
-  }
+  // Right column — retention. The SWITCH comes first and the count below it: turning
+  // smart retention on then only changes what is underneath, instead of moving the
+  // switch itself out from under the pointer.
   right.appendChild(switchRow(t("flagBackupGfs"), optFlag("backupGfs"), async (on) => {
     await saveBackupSetting("flag", "backupGfs", on);
     renderBackupPanel(body);
   }, "backupGfs")); // the name alone does not say what it keeps
+  if (!optFlag("backupGfs")) {
+    right.appendChild(numRow("valBackupKeep", "backupKeep", 1, 50, (v) => saveBackupSetting("value", "backupKeep", v)));
+  }
   if (optFlag("backupGfs")) {
     // Day / week beside each other, month / year underneath — four small fields.
     // The tiers replace the plain count entirely (the backend ignores it while smart
@@ -5746,6 +5776,10 @@ async function renderBackupPanel(body) {
     for (const b of backups) {
       const row = document.createElement("div"); row.className = "backup-row";
       const name = document.createElement("span"); name.className = "backup-name"; name.textContent = prettyStamp(b.name);
+      // What is actually in that snapshot — read from the snapshot itself, not guessed.
+      const count = document.createElement("span"); count.className = "backup-count";
+      count.textContent = b.prompts === null || b.prompts === undefined ? "—" : nf(b.prompts);
+      count.title = t("backupPrompts");
       const size = document.createElement("span"); size.className = "backup-size"; size.textContent = fmtBytes(b.size);
       const restore = document.createElement("button"); restore.type = "button"; restore.className = "ghost-btn"; restore.textContent = t("backupRestore");
       restore.addEventListener("click", () => restoreBackup(b.name));
@@ -5756,7 +5790,7 @@ async function renderBackupPanel(body) {
         await saveUiState("backupListOpen", true); // stay in the list after delete
         renderBackupPanel(body);
       });
-      row.append(name, size, restore, del);
+      row.append(name, count, size, restore, del);
       list.appendChild(row);
     }
   }
