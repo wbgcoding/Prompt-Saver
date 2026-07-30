@@ -385,44 +385,61 @@ body.menu-open .pill { flex: 0 0 auto; }
    ring and the folder watermark are drawn inside that grown box. Everything here is a
    transition, never a keyframe loop, so it follows the animation-speed setting and
    stops dead when animations are switched off. */
+/* Modelled on the Android home screen: the target's face shrinks back and a soft
+   well opens behind it. No hard ring, no brightness blow-out — the depth is the
+   message. The folder mark sits inside the well as a watermark, because a pill
+   does not otherwise read as something you can drop into. */
 .pill.merge-hint,
 .folder-icon.merge-hint {
+  transition: filter var(--transition);
+  filter: saturate(1.05);
+}
+.pill.merge-hint::before,
+.folder-icon.merge-hint::before {
+  content: "";
+  position: absolute;
+  inset: 5%;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--pill-fg) 16%, transparent);
   box-shadow:
-    inset 0 0 0 3px var(--pill-fg),
-    inset 0 0 0 5px rgba(0, 0, 0, 0.3),
-    inset 0 0 22px rgba(255, 255, 255, 0.35);
-  filter: brightness(1.18) saturate(1.1);
-  transition: box-shadow var(--transition), filter var(--transition);
+    0 0 0 2px color-mix(in srgb, var(--pill-fg) 50%, transparent),
+    inset 0 2px 10px color-mix(in srgb, var(--pill-fg) 12%, transparent);
+  animation: merge-well-in var(--transition) both;
 }
-/* The face dims and steps back a touch, so the folder mark reads as the thing in
-   front — the "it goes in here" cue rather than just a highlighted button. */
-.pill.merge-hint > .label,
-.pill.merge-hint > .pill-img,
-.pill.merge-hint > .pill-video,
-.folder-icon.merge-hint > .folder-preview {
-  opacity: 0.5;
-  transform: scale(0.9);
-  transition: opacity var(--transition), transform var(--transition);
-}
-.pill > .label,
-.folder-icon > .folder-preview { transition: opacity var(--transition), transform var(--transition); }
 .pill.merge-hint::after,
 .folder-icon.merge-hint::after {
   content: "";
   position: absolute;
-  inset: 20%;
+  inset: 26%;
+  z-index: 0;
   pointer-events: none;
-  opacity: 0.92;
+  opacity: 0.34;
   background: var(--pill-fg);
   -webkit-mask: var(--folder-glyph) center / contain no-repeat;
   mask: var(--folder-glyph) center / contain no-repeat;
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
-  /* Grows in from the middle instead of appearing at full size. */
-  animation: merge-glyph-in var(--transition) both;
+  animation: merge-well-in var(--transition) both;
 }
-@keyframes merge-glyph-in {
-  from { opacity: 0; transform: scale(0.55); }
-  to { opacity: 0.92; transform: scale(1); }
+@keyframes merge-well-in {
+  from { opacity: 0; transform: scale(0.6); }
+}
+/* The face steps back into the well. It stays readable — Android keeps the icon
+   legible too; the shrink is what says "this one takes the other". */
+.pill.merge-hint > .label,
+.pill.merge-hint > .pill-img,
+.pill.merge-hint > .pill-video,
+.folder-icon.merge-hint > .folder-preview {
+  opacity: 0.72;
+  transform: scale(0.74);
+}
+.pill > .label,
+.pill > .pill-img,
+.pill > .pill-video,
+.folder-icon > .folder-preview {
+  position: relative;
+  z-index: 1;
+  transition: opacity var(--transition), transform var(--transition);
 }
 /* Free-resize grip, bottom-right of the closed folder icon. Sits ABOVE the icon so
    the corner drag wins over the icon's own press-to-open/drag gesture; it disappears

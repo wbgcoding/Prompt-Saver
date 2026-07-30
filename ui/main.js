@@ -2245,7 +2245,11 @@ function viewTabEl(v) {
     btn.classList.add("colored");
     btn.style.setProperty("--view-color", v.color);
   }
-  btn.textContent = v.name;
+  // The name lives in its own span so the merge preview can shrink it back into the
+  // tab the way a folder tab's spans already do.
+  const label = document.createElement("span");
+  label.textContent = v.name;
+  btn.appendChild(label);
   btn.addEventListener("click", () => { if (!tabDragBlockClick) switchToView(v.id); });
   btn.addEventListener("contextmenu", (e) => {
     e.preventDefault();

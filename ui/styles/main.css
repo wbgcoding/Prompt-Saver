@@ -1,5 +1,7 @@
 /* ---- Theme tokens ---- */
 :root {
+  /* Folder outline, used as a mask by every merge preview (tabs, tiles, pills). */
+  --folder-glyph: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M10.6 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8.2l-1.2-2Z'/></svg>");
   --bg: #f7f7f8;
   --surface: #ffffff;
   --surface-2: #f0f0f2;
@@ -379,6 +381,7 @@ body.noflag-showJournal #journal-btn { display: none; }
 .views { display: flex; gap: 6px; margin-left: 0; min-width: 96px; flex: 0 1 auto; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
 .views::-webkit-scrollbar { display: none; }
 .view-btn {
+  position: relative; /* the merge preview draws inside this box */
   padding: 5px 12px;
   border: 1px solid var(--border);
   border-radius: 13px;
@@ -440,9 +443,36 @@ body.noflag-showJournal #journal-btn { display: none; }
 .view-btn.tab-dragging { opacity: 0.45; }
 .view-btn.tab-drop {
   border-color: var(--accent);
-  box-shadow: inset 0 0 0 2px var(--accent);
   background: var(--accent);
   color: var(--accent-fg);
+}
+/* Same gesture as the floating pills: the label steps back and a well opens behind
+   it, with the folder mark as a watermark. Both stay inside the button box. */
+.view-btn > span { position: relative; z-index: 1; transition: opacity var(--transition), transform var(--transition); }
+.view-btn.tab-drop > span { opacity: 0.7; transform: scale(0.78); }
+.view-btn.tab-drop::before,
+.view-btn.tab-drop::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  animation: tab-well-in var(--transition) both;
+}
+.view-btn.tab-drop::before {
+  inset: 3px;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent-fg) 16%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-fg) 50%, transparent);
+}
+.view-btn.tab-drop::after {
+  inset: 20%;
+  opacity: 0.34;
+  background: var(--accent-fg);
+  -webkit-mask: var(--folder-glyph) center / contain no-repeat;
+  mask: var(--folder-glyph) center / contain no-repeat;
+}
+@keyframes tab-well-in {
+  from { opacity: 0; transform: scale(0.6); }
 }
 .view-group-pop {
   min-width: 210px;
@@ -896,11 +926,43 @@ body.drag-active .cell.drag-over {
   text-align: center;
   pointer-events: none;
 }
-/* The tile a dragged one would be dropped INTO. Inset ring + tint, no scaling: the
-   cell clips anything larger, the same reason the pill merge hint stays inside. */
-.tile.folder-arm {
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 3px var(--accent);
+/* The tile a dragged one would be dropped INTO. Same Android-style gesture as the
+   view tabs and the floating pills: the face steps back, a well opens behind it.
+   Everything is drawn INSIDE the tile — the cell clips anything larger. */
+.tile.folder-arm { border-color: var(--accent); }
+/* The media children are already absolutely positioned — only the name needs a
+   position of its own so a z-index can lift it above the well. */
+.tile > .tile-name { position: relative; z-index: 1; }
+.tile > .tile-img,
+.tile > .tile-media { z-index: 1; }
+.tile > .tile-name,
+.tile > .tile-img,
+.tile > .tile-media,
+.tile > .tile-caption { transition: opacity var(--transition), transform var(--transition); }
+.tile.folder-arm > .tile-name,
+.tile.folder-arm > .tile-img,
+.tile.folder-arm > .tile-media,
+.tile.folder-arm > .tile-caption { opacity: 0.7; transform: scale(0.78); }
+.tile.folder-arm::before,
+.tile.folder-arm::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  animation: tab-well-in var(--transition) both;
+}
+.tile.folder-arm::before {
+  inset: 5px;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.tile.folder-arm::after {
+  inset: 28%;
+  opacity: 0.4;
+  background: var(--accent);
+  -webkit-mask: var(--folder-glyph) center / contain no-repeat;
+  mask: var(--folder-glyph) center / contain no-repeat;
 }
 /* Open folder: its members as small buttons. */
 .tile-folder-pop { padding: 8px; max-width: min(420px, 92vw); }
