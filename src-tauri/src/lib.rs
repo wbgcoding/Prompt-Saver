@@ -1809,6 +1809,34 @@ fn db_load(conn: &Connection) -> (Vec<Prompt>, Option<Settings>, bool, usize) {
     (prompts, settings, plaintext, failures)
 }
 
+// Peeks the "allowMultipleInstances" flag before the Tauri builder exists. The
+// single-instance plugin has to be attached (or not) at builder time, before any
+// AppHandle exists to resolve settings the normal way — so this mirrors
+// default_data_dir()'s portable/APPDATA resolution and opens the DB directly. Any
+// failure (first run, missing DB, undecryptable row) yields false: single instance,
+// the safe default that matches every install before this option existed.
+fn early_allow_multiple_instances() -> bool {
+    let dir = if is_portable() {
+        portable_data_dir()
+    } else {
+        std::env::var_os("APPDATA").map(|p| PathBuf::from(p).join(DATA_FOLDER))
+    };
+    let Some(base) = dir else { return false };
+    let dir = fs::read_to_string(base.join("datapath"))
+        .ok()
+        .map(|s| PathBuf::from(s.trim()))
+        .filter(|p| !p.as_os_str().is_empty() && p.is_dir())
+        .unwrap_or(base);
+    let Ok(conn) = Connection::open(dir.join("data.db")) else { return false };
+    let raw: Option<String> = conn
+        .query_row("SELECT value FROM meta WHERE key='settings'", [], |r| r.get(0))
+        .ok();
+    let Some(raw) = raw else { return false };
+    serde_json::from_str::<Settings>(&dec_str(&raw))
+        .map(|s| s.ui_flags.get("allowMultipleInstances").copied().unwrap_or(false))
+        .unwrap_or(false)
+}
+
 // Append one copy event, then trim to the cap and the retention window. The cap
 // trim uses the rowid (monotonic insertion order): "keep rows whose rowid is
 // within `cap` of the newest" deletes at most one row per call in steady state
@@ -3257,10 +3285,19 @@ async fn get_prompt(state: State<'_, Db>, id: String) -> Result<Option<Prompt>, 
 
 // First free [col,row] in row-major order; None if the grid is full.
 fn first_free_cell(view: &View) -> Option<[u32; 2]> {
+    first_free_cell_excluding(view, &[])
+}
+
+// Same, but also treats `extra` cells (e.g. another grid folder's own cell, which
+// lives outside view.layouts) as taken. Without this, a cell handed out here could
+// coincide with a folder's cell — the tile would save fine but never draw, since
+// the renderer gives a folder priority over whatever else sits on its cell.
+fn first_free_cell_excluding(view: &View, extra: &[[u32; 2]]) -> Option<[u32; 2]> {
     let key = grid_key(view.cols, view.rows);
     let empty = HashMap::new();
     let layout = view.layouts.get(&key).unwrap_or(&empty);
-    let occupied: std::collections::HashSet<&[u32; 2]> = layout.values().collect();
+    let mut occupied: std::collections::HashSet<[u32; 2]> = layout.values().cloned().collect();
+    occupied.extend(extra.iter().cloned());
     for row in 0..view.rows {
         for col in 0..view.cols {
             if !occupied.contains(&[col, row]) {
@@ -4545,12 +4582,35 @@ fn take_out_of_tile_folder(
     Ok(store.settings.clone())
 }
 
-// Dissolve a grid folder: its prompts become tiles again, nothing is deleted. The
-// renderer places whatever has no layout entry in the first free cell.
+// Dissolve a grid folder: its prompts become tiles again, nothing is deleted. Each
+// member lands on the first free cell of the folder's view — the folder's own cell is
+// free again by the time this runs, so it is usually one of them. Cells held by any
+// OTHER folder still in that view are excluded too (they live outside view.layouts,
+// so first_free_cell alone would not see them — a member could otherwise be handed a
+// cell another folder already owns and never actually appear on screen).
 #[tauri::command]
 fn delete_tile_folder(app: AppHandle, state: State<Db>, id: String) -> Settings {
     let mut store = lock(&state);
+    let removed = store.settings.tile_folders.iter().find(|f| f.id == id).cloned();
     store.settings.tile_folders.retain(|f| f.id != id);
+    if let Some(folder) = removed {
+        let other_folder_cells: Vec<[u32; 2]> = store
+            .settings
+            .tile_folders
+            .iter()
+            .filter(|f| f.view_id == folder.view_id)
+            .map(|f| f.cell)
+            .collect();
+        if let Some(view) = store.settings.views.iter_mut().find(|v| v.id == folder.view_id) {
+            let key = grid_key(view.cols, view.rows);
+            for member in &folder.members {
+                // Grid full: this and any remaining member stay library-only, same as a
+                // brand-new prompt would.
+                let Some(cell) = first_free_cell_excluding(view, &other_folder_cells) else { break };
+                view.layouts.entry(key.clone()).or_default().insert(member.clone(), cell);
+            }
+        }
+    }
     save_settings(&app, &store.settings);
     store.settings.clone()
 }
@@ -5203,6 +5263,20 @@ fn newest_backup_age(app: &AppHandle) -> Option<u64> {
 #[tauri::command]
 async fn list_backups(app: AppHandle) -> Result<Vec<BackupInfo>, String> {
     Ok(list_backups_impl(&app))
+}
+
+// 65: hands the user straight to the snapshot folder. The path is always the app's
+// own backups_dir() — never taken from the frontend — so there is nothing here for a
+// crafted argument to redirect; `explorer` gets exactly one argument, no shell involved.
+#[tauri::command]
+fn open_backups_folder(app: AppHandle) -> Result<(), String> {
+    let dir = backups_dir(&app);
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::process::Command::new("explorer")
+        .arg(&dir)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -9355,12 +9429,20 @@ pub fn run() {
         append_crash_log(&info.to_string());
     }));
 
-    tauri::Builder::default()
-        // Only one instance app-wide (keyed by app identifier, independent of
-        // the exe location). A second launch closes itself and focuses the first.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+    let mut builder = tauri::Builder::default();
+    // Only one instance app-wide (keyed by app identifier, independent of the exe
+    // location) unless the user opted into "Allow multiple instances" (expert menu,
+    // default off) — then this plugin is left out entirely, since it enforces the
+    // limit itself before .setup() ever runs (there is no AppHandle yet to consult
+    // the setting the normal way; early_allow_multiple_instances() peeks the DB
+    // directly for exactly this reason). A second launch, when the plugin IS
+    // attached, closes itself and focuses the first instance.
+    if !early_allow_multiple_instances() {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main(app);
-        }))
+        }));
+    }
+    builder
         // The app hotkey summons the window + quick-launcher; a prompt hotkey (F20)
         // copies that prompt wherever the user is.
         .plugin(
@@ -9689,6 +9771,7 @@ pub fn run() {
             find_duplicates,
             ignore_dups,
             list_backups,
+            open_backups_folder,
             create_backup,
             delete_backup,
             restore_backup,
@@ -10743,6 +10826,23 @@ mod tests {
             layouts: HashMap::new(),
             color: String::new(),
         }
+    }
+
+    #[test]
+    fn first_free_cell_skips_other_folder_cells() {
+        // 3x1 grid, tile "a" on [0,0]: the plain scan would find [1,0] free.
+        let mut view = test_view("v1");
+        view.cols = 3;
+        view.rows = 1;
+        view.layouts.insert(
+            grid_key(view.cols, view.rows),
+            HashMap::from([("a".to_string(), [0, 0])]),
+        );
+        assert_eq!(first_free_cell(&view), Some([1, 0]));
+        // A folder sits on [1,0] (outside view.layouts) — the scan must skip it, or a
+        // dissolved member handed that cell would save fine but never render.
+        assert_eq!(first_free_cell_excluding(&view, &[[1, 0]]), Some([2, 0]));
+        assert_eq!(first_free_cell_excluding(&view, &[[1, 0], [2, 0]]), None);
     }
 
     fn test_tile_folder(id: &str, view_id: &str, cell: [u32; 2], members: &[&str]) -> TileFolder {

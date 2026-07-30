@@ -97,7 +97,7 @@ const RING_MAX = 60;
 function renderIcon() {
   const box = FOLDER_BOX * state.scale;
   document.body.style.setProperty("--folder-box", px(box));
-  const ring = Math.round(Math.min(RING_MAX, Math.max(RING_MIN, box * 0.14)));
+  const ring = Math.round(Math.min(RING_MAX, Math.max(RING_MIN, box * 0.18)));
   document.getElementById("resize")?.style.setProperty("--rz", `${ring}px`);
   previewEl.innerHTML = "";
   for (const p of state.members.slice(0, PREVIEW_MAX)) {
@@ -417,6 +417,10 @@ function iconReleased(e) {
 window.addEventListener("mouseout", (e) => iconReleased(e));
 
 window.addEventListener("mousemove", async (e) => {
+  // D3: the ring is otherwise invisible until it is grabbed — a thin accent edge on
+  // the icon says "resize starts here" while the pointer sits in the band. e.target can
+  // be the window itself for a synthetic event with no real target under the pointer.
+  iconEl.classList.toggle("rz-hover", !!e.target?.closest?.("#rz-catch"));
   if (gripDrag) {
     if (e.buttons === 0) { gripReleased(); return; }
     gripResize(e);

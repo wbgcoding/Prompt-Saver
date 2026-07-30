@@ -902,7 +902,6 @@ const FLAG_LABELS = {
   choiceVars: "flagChoiceVars",         // F13 {#{name|a,b}#} dropdown variables
   choiceRemember: "flagChoiceRemember", // F13 reopen a choice on its last pick
   varPopupWindow: "flagVarPopupWindow", // F12 ask for placeholders in a small window of their own
-  mdPreview: "flagMdPreview",           // F14 rendered Markdown preview in the editor
   codeHighlight: "flagCodeHighlight",   // F15 syntax colours in the preview's code blocks
   codeAutoDetect: "flagCodeAutoDetect", // F15 render an unfenced code prompt as code
   notesInTooltip: "flagNotesInTooltip", // F17 show the private note in the tile tooltip
@@ -957,6 +956,7 @@ const OPT_FLAG_LABELS = {
   mediaBorder: "flagMediaBorder",
   roundMedia: "flagRoundMedia",
   // New features (default off).
+  mdPreview: "flagMdPreview",           // F14 rendered Markdown preview in the editor
   autoPasteEnter: "flagAutoPasteEnter", // F19
   clipWatcher: "flagClipWatcher",       // F21
   backupGfs: "flagBackupGfs",           // F2 period-based retention
@@ -972,6 +972,11 @@ const OPT_FLAG_LABELS = {
   promptNotes: "flagPromptNotes",               // F17 private notes row in the editor
   promptHotkeyPaste: "flagPromptHotkeyPaste",   // F20 hotkey also pastes into the last app
   dragOut: "flagDragOut",                       // F22 drag a prompt into another app
+  // Off = one instance app-wide (a second launch focuses the first, as always). On =
+  // the OS-level single-instance guard is skipped entirely at startup, so several
+  // windows can run side by side. Read once at launch, before settings normally
+  // load — toggling it needs a restart to take effect (flagRow() toasts that).
+  allowMultipleInstances: "flagAllowMultipleInstances",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
@@ -1265,7 +1270,7 @@ const EXPERT_TABS = [
     // Toolbar button visibility (mirrors the header right-click tool list).
     { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, "quickGrid", "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
     { title: "expGroupPrivacy", flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
-    { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav"], values: ["kbFocusFadeMs"], paths: ["dataDir"] },
+    { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances"], values: ["kbFocusFadeMs"], paths: ["dataDir"] },
   ] },
 ];
 
@@ -1377,7 +1382,7 @@ const EXPERT_TIPS = [
   "mdPreview", "codeHighlight", "codeAutoDetect", "hlFontPx",
   "colorPicker", "pickerFormat", "loupeZoom",
   "trayRecent", "trayFavs", "trayRecentN", "trayFavN",
-  "checkUpdateOnStart", "showUpdates", "importExport", "dimToolbar", "keyboardNav",
+  "checkUpdateOnStart", "showUpdates", "importExport", "dimToolbar", "keyboardNav", "allowMultipleInstances",
   "headerSeparators", "floating",
   "pillFolders", "pillMergeRadius", "folderGridCols",
   "tileFolders", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols",
@@ -1438,6 +1443,9 @@ function flagRow(key) {
     } catch (err) {
       toast(String(err));
     }
+    // Read once at process start (before the builder exists) — flipping it live
+    // cannot change which guard is already running.
+    if (key === "allowMultipleInstances") toast(t("toastRestartNeeded"));
     applyFlags();
     if (GATING_FLAGS.has(key)) renderExpert(); // reveal/hide its parameter rows live
     renderViews();
@@ -2046,6 +2054,7 @@ function setFavView(on) {
 // a favorite keeps the cell it is dragged to (gaps allowed), but the grid resizes
 // the moment the count changes, and any button now outside it is re-fitted.
 function renderFavGrid() {
+  $("grid-empty").classList.add("hidden"); // this view has its own empty message
   const favs = prompts.filter((p) => p.favorite);
   const n = favs.length;
   const ids = new Set(favs.map((p) => p.id));
@@ -2233,6 +2242,8 @@ async function renderGrid(skipFetch = false) {
   }
   gridEl.innerHTML = "";
   gridEl.appendChild(frag);
+  // 1: first run, nothing anywhere yet — a plain grid explains nothing on its own.
+  $("grid-empty").classList.toggle("hidden", prompts.length > 0);
 
   pruneVideoCache();
   renderViews();
@@ -2866,10 +2877,11 @@ function wireTooltips() {
   tipEl = document.createElement("div");
   tipEl.className = "tile-tip";
   tipEl.setAttribute("role", "tooltip");
-  tipEl.innerHTML = '<div class="tile-tip-name"></div><div class="tile-tip-body"></div><div class="tile-tip-notes"></div><div class="tile-tip-hint"></div>';
+  tipEl.innerHTML = '<div class="tile-tip-name"></div><div class="tile-tip-body"></div><div class="tile-tip-len"></div><div class="tile-tip-notes"></div><div class="tile-tip-hint"></div>';
   document.body.appendChild(tipEl);
   const nameEl = tipEl.querySelector(".tile-tip-name");
   const bodyEl = tipEl.querySelector(".tile-tip-body");
+  const lenEl = tipEl.querySelector(".tile-tip-len");
   const notesEl = tipEl.querySelector(".tile-tip-notes");
   const hintEl = tipEl.querySelector(".tile-tip-hint");
   const OFF = 16, PAD = 12;
@@ -2895,7 +2907,8 @@ function wireTooltips() {
     tipEl.classList.toggle("plain", !rich);
     if (rich) {
       nameEl.textContent = name;
-      bodyEl.textContent = el.dataset.tipBody || "";
+      fillVarHighlighted(bodyEl, el.dataset.tipBody || "");
+      lenEl.textContent = el.dataset.tipLen || "";
       // textContent, so a note is shown as the literal text the user typed.
       notesEl.textContent = el.dataset.tipNotes || "";
       hintEl.textContent = t("tileTooltip") + (flag("autoPaste") ? " · " + t("autoPasteHint") : "");
@@ -2910,6 +2923,7 @@ function wireTooltips() {
         nameEl.textContent = name;
         bodyEl.textContent = "";
       }
+      lenEl.textContent = "";
       notesEl.textContent = "";
       hintEl.textContent = "";
     }
@@ -3140,6 +3154,15 @@ function buildTile(p) {
   if (flag("tilePreview")) {
     tile.dataset.tipName = p.name;
     if (preview && preview !== p.name) tile.dataset.tipBody = preview;
+    // 6: two prompts of wildly different length look identical on the tile itself —
+    // the same char/~token readout the editor already shows, reused here so there is
+    // only one formula for "how long is this" in the whole app.
+    if (p.text) {
+      const chars = [...p.text].length;
+      const tokens = Math.ceil(chars / 4);
+      const nf = (n) => n.toLocaleString(LANG);
+      tile.dataset.tipLen = `${nf(chars)} ${t("lenChars")} · ~${nf(tokens)} ${t("lenTokens")}`;
+    }
     // F17: the private note rides along as its own dimmed section (opt-out flag).
     const note = notesOn() && flag("notesInTooltip") ? (p.notes || "").trim() : "";
     if (note) tile.dataset.tipNotes = clipNote(note);
@@ -3607,6 +3630,20 @@ async function placeTile(id, col, row) {
   invoke("set_layout", { layout }).catch((e) => toast(String(e)));
   if (!moveTileDom(id, col, row)) await renderGrid(true);
 }
+
+// 9: double-click an empty cell to create a prompt right there, instead of typing
+// below and dragging it over. `.cell` has no children while nothing occupies it
+// (renderGrid only ever appends a tile or a folder tile to a filled one).
+gridEl.addEventListener("dblclick", (e) => {
+  if (favView) return; // free-form favorites layout has its own placement rules
+  const cell = e.target.closest(".cell");
+  if (!cell || cell.firstElementChild) return;
+  openModal({
+    mode: "create",
+    title: t("nameModalTitle"),
+    targetCell: [Number(cell.dataset.col), Number(cell.dataset.row)],
+  });
+});
 
 // ---- F27 grid folders: several prompts collapsed into one cell ----
 // Ships ON. A member has no layout entry of its own while it sits in a folder, so
@@ -4104,6 +4141,28 @@ function extractVars(text) {
   return seen;
 }
 const fillVars = (text, values) => text.replace(VAR_RE, (_, k) => values[k.trim()] ?? "");
+// A fence whose body is only whitespace ({#{ }#}) never becomes a real variable —
+// extractVars() silently drops it — so it would sit in the copied text unfilled and
+// unexplained. 34: catch it before save instead of leaving it a silent trap.
+const hasEmptyVarToken = (text) =>
+  [...String(text || "").matchAll(VAR_RE)].some((m) => !m[1].trim());
+
+// 14: a placeholder gets a visible accent wherever raw prompt text is previewed, so
+// "does this prompt ask for anything" no longer surprises you only at copy time. DOM
+// text nodes + a plain span, never innerHTML — a token is user-typed text.
+function fillVarHighlighted(el, text) {
+  el.textContent = "";
+  let last = 0;
+  for (const m of text.matchAll(VAR_RE)) {
+    if (m.index > last) el.appendChild(document.createTextNode(text.slice(last, m.index)));
+    const span = document.createElement("span");
+    span.className = "var-token";
+    span.textContent = m[0];
+    el.appendChild(span);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
+}
 
 // F13: a token is either a plain name or `name|opt,opt,…`. Options are trimmed and
 // empty ones dropped; a comma always starts the next option, so an option can never
@@ -4431,7 +4490,14 @@ function promptVarsDialog(vars) {
   return new Promise((resolve) => {
     const ok = $("vars-ok");
     const cancel = $("vars-close");
+    const clearAll = $("vars-clear-all");
     const collect = () => Object.fromEntries(rows.map((r) => [r.token, r.control.value]));
+    // Only plain text fields have an empty state worth clearing to — a choice
+    // dropdown always needs a value, so it is left on whatever it already shows.
+    const onClearAll = () => {
+      for (const r of rows) if (!r.choice) r.control.value = "";
+      rows.find((r) => !r.choice)?.control.focus();
+    };
     // The click/keypress that OPENED this dialog is still in flight: arm the
     // backdrop + Enter close handlers only on the next frame so that same event
     // can't immediately dismiss the dialog (it was flashing shut instantly).
@@ -4444,6 +4510,7 @@ function promptVarsDialog(vars) {
       root.classList.add("hidden");
       ok.removeEventListener("click", onOk);
       cancel.removeEventListener("click", onCancel);
+      clearAll.removeEventListener("click", onClearAll);
       root.removeEventListener("pointerdown", onBg);
       document.removeEventListener("keydown", onKey);
       varsCleanup = null;
@@ -4459,6 +4526,7 @@ function promptVarsDialog(vars) {
     varsCleanup = done;
     ok.addEventListener("click", onOk);
     cancel.addEventListener("click", onCancel);
+    clearAll.addEventListener("click", onClearAll);
     root.addEventListener("pointerdown", onBg);
     document.addEventListener("keydown", onKey);
   });
@@ -4733,8 +4801,8 @@ function maybeCloseOnCopy() {
   try { window.__TAURI__?.window?.getCurrentWindow?.()?.hide?.().catch?.(() => {}); } catch { /* no-op */ }
 }
 
-function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", title }) {
-  modalState = { mode, id, color, image, showImage, copyImage, filePath, iconPath, tags: [...tags], hotkey, hotkeyPaste };
+function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", title, targetCell }) {
+  modalState = { mode, id, color, image, showImage, copyImage, filePath, iconPath, tags: [...tags], hotkey, hotkeyPaste, targetCell };
   modal.title.textContent = title;
   modal.fav.classList.toggle("active", !!favorite);
   modal.fav.setAttribute("aria-pressed", String(!!favorite));
@@ -5685,6 +5753,12 @@ async function renderBackupPanel(body) {
     renderBackupPanel(body);
   });
   left.appendChild(nowBtn);
+  const openFolderBtn = document.createElement("button");
+  openFolderBtn.type = "button";
+  openFolderBtn.className = "ghost-btn";
+  openFolderBtn.textContent = t("backupOpenFolder");
+  openFolderBtn.addEventListener("click", () => invoke("open_backups_folder").catch((e) => toast(String(e))));
+  left.appendChild(openFolderBtn);
   left.appendChild(switchRow(t("flagAutoBackup"), flag("autoBackup"), async (on) => {
     await saveBackupSetting("flag", "autoBackup", on);
     renderBackupPanel(body);
@@ -6213,6 +6287,17 @@ async function confirmModal() {
   if (!modalState) return;
   const name = modal.name.value.trim();
   if (!name) { modal.name.focus(); return; }
+  // 34: a {#{ }#} with no name inside never becomes a fillable variable — warn now,
+  // while it is still one click away from being fixed, instead of after it is saved.
+  if (hasEmptyVarToken(modal.text.value)) {
+    const proceed = await confirmDialog({
+      title: t("emptyVarTitle"),
+      message: t("emptyVarBody"),
+      confirmLabel: t("emptyVarSaveAnyway"),
+      danger: false,
+    });
+    if (!proceed) { modal.text.focus(); return; }
+  }
 
   const color = modalState.color || "";
   const image = modalState.image || "";
@@ -6229,6 +6314,9 @@ async function confirmModal() {
   const notes = modal.notesText.value;
   const hotkey = modalState.hotkey || "";
   const hotkeyPaste = hotkey ? (modalState.hotkeyPaste || "") : "";
+  // 9: double-click on an empty cell opened this dialog for that exact spot — the
+  // backend's own first-free-cell placement would otherwise ignore it.
+  const targetCell = modalState.targetCell;
   // NOTE: Tauri expects camelCase keys for snake_case Rust args.
   // Path media (gif/video icon or attachment) shows without a stored image.
   const showImage =
@@ -6265,47 +6353,41 @@ async function confirmModal() {
   if (hotkey && saved && !saved.hotkey) toast(t("promptHotkeyFail"));
   closeModal();
   await renderGrid();
+  if (saved && targetCell) await placeTile(saved.id, targetCell[0], targetCell[1]);
   pollMissingFiles(); // a replaced file clears the error immediately
   if (!libraryEl.classList.contains("hidden")) renderLibrary();
 }
 
-// Everything about a prompt except what identifies it: the hotkey stays with the
-// original (one accelerator, one prompt) and the copy lands in the first free cell of
-// the current view, so it is visible instead of only existing in the library.
+// Everything about a prompt except what identifies it and the hotkey (one accelerator,
+// one prompt): opens the normal create dialog prefilled, so the user can review or
+// cancel before anything is saved. Placement then follows the regular create path.
 async function duplicatePrompt(id) {
   const p = await invoke("get_prompt", { id });
   if (!p) return;
-  let saved;
-  try {
-    saved = await invoke("add_prompt", {
-      name: `${p.name} (${t("duplicateSuffix")})`,
-      text: p.text,
-      color: p.color,
-      image: p.image,
-      showImage: p.show_image,
-      copyImage: p.copy_image,
-      filePath: p.file_path,
-      iconPath: p.icon_path,
-      caption: p.caption,
-      captionSize: p.caption_size,
-      font: p.font,
-      fontSize: p.font_size,
-      favorite: false,
-      tags: p.tags || [],
-      notes: p.notes || "",
-      hotkey: "",
-      hotkeyPaste: "",
-    });
-  } catch (e) { toast(String(e)); return; }
-  const view = activeView();
-  const layout = { ...layoutOf(view) };
-  const spot = firstFree(new Map(Object.values(layout).map((c) => [cellKey(...c), 1])), view.cols, view.rows);
-  if (spot) {
-    layout[saved.id] = spot;
-    view.layouts[gridKeyOf(view)] = layout;
-    invoke("set_layout", { layout }).catch((e) => toast(String(e)));
-  }
-  await renderGrid();
+  const kind = p.file_path ? mediaKind(p.file_path) : "";
+  openModal({
+    mode: "create",
+    name: `${p.name} (${t("duplicateSuffix")})`,
+    text: p.text,
+    color: p.color || "",
+    image: p.image || "",
+    showImage: p.show_image || false,
+    copyImage: p.copy_image || false,
+    filePath: p.file_path || "",
+    iconPath: p.icon_path || "",
+    caption: p.caption || "",
+    captionSize: p.caption_size || 0,
+    font: p.font || "",
+    fontSize: p.font_size || 0,
+    favorite: false,
+    tags: p.tags || [],
+    notes: p.notes || "",
+    hotkey: "",
+    hotkeyPaste: "",
+    title: p.file_path
+      ? t(kind === "video" ? "videoEditTitle" : kind ? "imageEditTitle" : "fileEditTitle")
+      : p.copy_image ? t("imageEditTitle") : t("editModalTitle"),
+  });
 }
 
 async function editPrompt(id) {

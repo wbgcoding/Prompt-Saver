@@ -16,9 +16,6 @@
   "legacyScreenshotPrefix": "",
   "icon": "brands/icons/clipboard-saver.svg",
   "installerIcon": "brands/icons/clipboard-saver-installer.svg",
-  "flagDefaults": {
-    "mdPreview": false
-  },
   "terms": {
     "item": "entry",
     "itemPlural": "entries",

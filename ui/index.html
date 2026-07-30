@@ -108,6 +108,7 @@
 
   <section class="grid-wrap">
     <div id="grid" class="grid"></div>
+    <p id="grid-empty" class="grid-empty hidden" data-i18n="gridEmptyHint"></p>
   </section>
 
   <footer class="composer">
@@ -223,9 +224,6 @@
         <div id="modal-md-wrap" class="md-wrap hidden">
           <div id="modal-md-preview" class="md-preview" tabindex="0" aria-live="off"
                data-i18n-title="mdClickToEdit"></div>
-          <!-- The rendered pane and the text field are deliberately the same box, so
-               without this there is nothing to tell you which one you are looking at. -->
-          <span class="md-badge" data-i18n="mdRendered" aria-hidden="true">Rendered</span>
         </div>
       </div>
       <!-- Live length readout (chars / words / ~tokens), expert-tunable -->
@@ -334,6 +332,7 @@
       </div>
       <div id="vars-fields" class="vars-fields"></div>
       <div class="modal-actions">
+        <button id="vars-clear-all" class="ghost-btn" type="button" data-i18n="varsClearAll">Clear all</button>
         <button id="vars-ok" class="primary-btn">Copy</button>
       </div>
     </div>

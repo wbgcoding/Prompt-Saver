@@ -64,6 +64,10 @@ switch, most of it off until you turn it on.
 - **Grid folders** — drop one tile onto another and both move into a folder in
   that cell. The folder shows a preview of what is inside, opens its contents in
   a small grid, and hands a prompt back to the layout when you drag it out.
+- **Allow multiple instances** (expert menu, off by default) — opens the door to
+  running the app more than once at the same time, for example against two
+  different data folders side by side. Off keeps the usual behaviour: a second
+  launch just brings the first window forward. Takes effect after a restart.
 
 ### Improved
 
@@ -90,6 +94,23 @@ switch, most of it off until you turn it on.
   installation that had the old hiding turned off keeps its screenshots.
 - A backup is now either whole or absent: the snapshot is written under a
   temporary name and only then renamed, and a failed one leaves nothing behind.
+- "Duplicate" on a prompt's context menu now opens the same dialog as creating a
+  new one, prefilled with everything from the original — so you can change
+  something before it exists, or cancel and leave nothing behind, instead of a
+  silent copy landing in the grid.
+- The variable fill-in dialog gets a "Clear all" button, so starting over on a
+  prompt with several placeholders is one click instead of one per field.
+- Saving a prompt with an empty `{#{ }#}` placeholder now warns first — it would
+  otherwise sit in the copied text exactly like that, since it never becomes an
+  actual variable.
+- The backups window can open its snapshot folder in Explorer directly.
+
+### Fixed
+
+- **Dissolving a grid folder could leave a member invisible or bump another
+  folder off its spot.** The cell handed to each returning member never
+  accounted for a second folder sharing the same view, since a folder's own
+  cell lives outside the normal layout — it could land exactly there.
 
 ### Removed
 

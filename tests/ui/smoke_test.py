@@ -288,6 +288,95 @@ PROBE = """
       layoutScan('grid folder');
       document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
       await sleep(120);
+      // Dissolving must not just remove the folder tile — every member has to land
+      // back on the grid as its own tile, not vanish into the library.
+      fTile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(150);
+      const dissolveBtn = document.querySelector('.tab-menu button.danger');
+      if (!dissolveBtn) {
+        out.errors.push('the grid folder context menu has no dissolve option');
+      } else {
+        dissolveBtn.click();
+        await sleep(150);
+        const cmDissolve = document.getElementById('confirm-modal');
+        if (cmDissolve && !cmDissolve.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+        if (document.querySelector('.tile.folder-tile')) {
+          out.errors.push('the folder tile survived dissolving it');
+        }
+        for (const mid of ['p4', 'p6', 'p8', 'p10', 'p11']) {
+          if (!document.querySelector('.tile[data-id="' + mid + '"]')) {
+            out.errors.push('dissolving the folder did not bring back ' + mid + ' as a tile');
+          }
+        }
+      }
+    }
+    // 9: double-click an empty cell creates a prompt right there instead of typing
+    // below and dragging it over. Done on "work" (an untouched, empty view) so it
+    // never competes with the folder math above for a free cell.
+    const workTab = document.querySelector('.view-btn[data-view-id="work"]');
+    if (!workTab) {
+      out.errors.push('the "work" view tab is missing for the double-click-create check');
+    } else {
+      workTab.click();
+      await sleep(200);
+      const cell00 = document.querySelector('#grid .cell[data-col="0"][data-row="0"]');
+      if (!cell00 || cell00.firstElementChild) {
+        out.errors.push('expected an empty cell on "work" to double-click-create into');
+      } else {
+        cell00.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+        await sleep(200);
+        const modalEl = document.getElementById('modal');
+        if (!modalEl || modalEl.classList.contains('hidden')) {
+          out.errors.push('double-clicking an empty cell did not open the create dialog');
+        } else {
+          document.getElementById('modal-name').value = 'Grid Click Prompt';
+          document.getElementById('modal-text').value = 'Created by double-click.';
+          document.getElementById('modal-confirm').click();
+          await sleep(250);
+          const placed = document.querySelector('#grid .cell[data-col="0"][data-row="0"] .tile');
+          if (!placed) {
+            out.errors.push('double-click-create did not land the new prompt on the clicked cell');
+          } else if ((placed.querySelector('.tile-name') || {}).textContent !== 'Grid Click Prompt') {
+            out.errors.push('the tile on the double-clicked cell is not the prompt just created');
+          }
+        }
+      }
+      // 34: a {#{ }#} placeholder with no name inside warns before the save goes
+      // through, and "save anyway" still lets it through.
+      const cell10 = document.querySelector('#grid .cell[data-col="1"][data-row="0"]');
+      if (!cell10 || cell10.firstElementChild) {
+        out.errors.push('expected a second empty cell on "work" for the empty-variable check');
+      } else {
+        cell10.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+        await sleep(200);
+        document.getElementById('modal-name').value = 'Empty Var Prompt';
+        document.getElementById('modal-text').value = 'Say {#{ }#} please.';
+        document.getElementById('modal-confirm').click();
+        await sleep(200);
+        const cm = document.getElementById('confirm-modal');
+        if (!cm || cm.classList.contains('hidden')) {
+          out.errors.push('saving a prompt with an unnamed {#{ }#} variable did not warn');
+        } else {
+          if (document.getElementById('confirm-title').textContent !== 'Empty variable') {
+            out.errors.push('the empty-variable warning has the wrong title');
+          }
+          document.getElementById('confirm-cancel').click(); // back to editing, not saved
+          await sleep(150);
+          if (document.getElementById('modal').classList.contains('hidden')) {
+            out.errors.push('cancelling the empty-variable warning closed the editor instead of returning to it');
+          } else {
+            document.getElementById('modal-confirm').click(); // through again
+            await sleep(200);
+            document.getElementById('confirm-ok').click(); // save anyway
+            await sleep(250);
+            if (!document.querySelector('#grid .cell[data-col="1"][data-row="0"] .tile')) {
+              out.errors.push('"save anyway" did not actually save the prompt');
+            }
+          }
+        }
+      }
+      const homeTab = document.querySelector('.view-btn[data-view-id="home"]');
+      if (homeTab) { homeTab.click(); await sleep(200); }
     }
     await click('library-btn');
     layoutScan('library');
@@ -370,8 +459,27 @@ PROBE = """
       if (empty && empty.textContent.trim()) {
         out.errors.push('the tooltip shows a note for a prompt that has none');
       }
+      // 6/14: the length readout and the {#{variable}#} highlight, on a prompt that
+      // actually has placeholders (p1: "Translate {#{Text}#} into {#{Language}#}.").
+      const varHoverTile = byId('p1');
+      if (varHoverTile) {
+        await hover(varHoverTile, 90);
+        const lenText = (document.querySelector('.tile-tip .tile-tip-len') || {}).textContent || '';
+        if (!/^[0-9][0-9,.]* chars/.test(lenText) || !/~[0-9][0-9,.]* tokens$/.test(lenText)) {
+          out.errors.push('the tile tooltip length readout looks wrong: "' + lenText + '"');
+        }
+        const varSpans = [...document.querySelectorAll('.tile-tip .tile-tip-body .var-token')];
+        const varTexts = varSpans.map((s) => s.textContent);
+        if (varTexts.length !== 2 || !varTexts.includes('{#{Text}#}') || !varTexts.includes('{#{Language}#}')) {
+          out.errors.push('the tile tooltip does not highlight both variables: ' + JSON.stringify(varTexts));
+        }
+      }
       document.body.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
       await sleep(200);
+    }
+    // 1: the empty-grid hint stays out of the way once prompts exist.
+    if (!document.getElementById('grid-empty').classList.contains('hidden')) {
+      out.errors.push('the empty-grid hint shows although the grid has prompts');
     }
     // Copying the prompt with placeholders must open and close the fill-in dialog —
     // and a plain click must NOT paste into the previous app (that is what the
@@ -387,6 +495,16 @@ PROBE = """
       await sleep(400);
       const varsOpen = !document.getElementById('vars-modal').classList.contains('hidden');
       if (!varsOpen) out.errors.push('clicking a variable prompt did not open the fill-in dialog');
+      // 37: "Clear all" empties every text field in one click, without touching a
+      // choice dropdown (there is none here, but the handler must not throw either).
+      if (varsOpen) {
+        const varsTexts = document.querySelectorAll('#vars-fields input[type=text]');
+        for (const el of varsTexts) el.value = 'filled';
+        await click('vars-clear-all');
+        for (const el of varsTexts) {
+          if (el.value !== '') out.errors.push('"clear all" left a variable field non-empty: ' + el.value);
+        }
+      }
       await click('vars-ok');
       await sleep(250);
       if ((window.__SMOKE_CALLS__ || []).includes('paste_into_previous')) {
@@ -864,6 +982,10 @@ PROBE = """
     }
     // F14/F15: the preview renders every Markdown construct, colours the fenced code
     // blocks, and — the part that matters — shows injected markup as literal text.
+    // Ships off now, so the test has to switch it on itself.
+    if (!await setExpertFlag('Markdown preview', true)) {
+      out.errors.push('the Markdown preview option is missing from the expert menu');
+    }
     const openEditor = async (id) => {
       const el = [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === id);
       if (!el) return false;
@@ -1330,6 +1452,18 @@ PROBE = """
       // Two-column settings, 8 diagnostic cards, 12 statistic cards, overview split.
       if (document.querySelectorAll('#backup-panel .backup-col').length !== 2) {
         out.errors.push('the backup settings are not split in two columns');
+      }
+      // 65: opens the snapshot folder — must exist and never throw.
+      const openFolderBtn = [...document.querySelectorAll('#backup-panel .ghost-btn')]
+        .find(b => b.textContent === 'Open in Explorer');
+      if (!openFolderBtn) {
+        out.errors.push('the "open backups folder" button is missing');
+      } else {
+        openFolderBtn.click();
+        await sleep(120);
+        if (!(window.__SMOKE_CALLS__ || []).includes('open_backups_folder')) {
+          out.errors.push('the "open backups folder" button did not call the backend');
+        }
       }
       if (document.querySelectorAll('#backup-panel .stat-cards .stat-card').length !== 8) {
         out.errors.push('the backup diagnostics do not show 8 cards');

@@ -137,13 +137,17 @@ const SETTINGS = {
   // Two of the four views live in a folder tab, so the tab bar shows both shapes.
   view_groups: [{ id: "g1", name: "Docs", color: "", view_ids: ["notes", "archive"] }],
   // F27: one grid folder on the home view, so the folder cell and its popover are
-  // walked on every run. Its two members are drawn by the folder, not as tiles.
-  // Eight members on purpose: the open popover is then taller than a small window
-  // leaves, which is the case the popover placement has to get right.
+  // walked on every run. Its members are drawn by the folder, not as tiles. Five
+  // members on purpose: the open popover is then taller than a small window leaves,
+  // which is the case the popover placement has to get right.
   tile_folders: [{ id: "tf1", name: "Drafts", color: "", view_id: "home", cell: [0, 1],
     members: ["p4", "p6", "p8", "p10", "p11"] }],
   active_view: "home",
 };
+// A member has no cell of its own while it sits in a folder (mirrors the backend
+// dropping it on join) — without this, dissolve would look like it worked even with
+// a stub that never restored one, because the stale index-based cell was still there.
+for (const f of SETTINGS.tile_folders) for (const m of f.members) delete LAYOUT[m];
 
 const clone = () => JSON.parse(JSON.stringify(SETTINGS));
 
@@ -159,6 +163,22 @@ function normalizeGroups() {
     });
   }
   SETTINGS.view_groups = SETTINGS.view_groups.filter((g) => g.view_ids.length);
+}
+
+// Mirrors the backend's first_free_cell_excluding: row-major scan of the view's own
+// layout, also skipping any cell in `extra` (another grid folder's own cell, which
+// lives outside view.layouts).
+function firstFreeCell(view, extra) {
+  const key = view.cols + "x" + view.rows;
+  const layout = view.layouts[key] || (view.layouts[key] = {});
+  const taken = new Set(Object.values(layout).map((c) => c[0] + "," + c[1]));
+  for (const c of extra || []) taken.add(c[0] + "," + c[1]);
+  for (let row = 0; row < view.rows; row++) {
+    for (let col = 0; col < view.cols; col++) {
+      if (!taken.has(col + "," + row)) return { layout, cell: [col, row] };
+    }
+  }
+  return { layout, cell: null };
 }
 
 const RESULTS = {
@@ -191,6 +211,7 @@ const RESULTS = {
   default_screenshot_dir: () => "C:\\Pictures",
   // One snapshot carries its prompt count, one is from an older build and has none —
   // the list has to show both without a gap in the row.
+  open_backups_folder: () => null,
   list_backups: () => [
     { name: "2026-07-25_18-30-00", size: 812345, prompts: 12 },
     { name: "2026-07-24_09-05-00", size: 654321, prompts: null },
@@ -235,6 +256,25 @@ const RESULTS = {
     ].join("\n"),
   }),
   get_prompt: (a) => PROMPTS.find((p) => p.id === (a && a.id)) || PROMPTS[0],
+  // Mirrors the backend: a new prompt lands on the active view's first free cell,
+  // same firstFreeCell scan the folder-dissolve stub above already uses.
+  add_prompt: (a) => {
+    const prompt = {
+      id: "new" + (PROMPTS.length + 1), name: a.name || "", text: a.text || "",
+      color: a.color || "", image: a.image || "", show_image: !!a.showImage,
+      copy_image: !!a.copyImage, file_path: a.filePath || "", icon_path: a.iconPath || "",
+      caption: a.caption || "", caption_size: a.captionSize || 0, font: a.font || "",
+      font_size: a.fontSize || 0, favorite: !!a.favorite, tags: a.tags || [],
+      notes: a.notes || "", hotkey: a.hotkey || "", hotkey_paste: a.hotkeyPaste || "",
+    };
+    PROMPTS.push(prompt);
+    const view = SETTINGS.views.find((v) => v.id === SETTINGS.active_view);
+    if (view) {
+      const { layout, cell } = firstFreeCell(view);
+      if (cell) layout[prompt.id] = cell;
+    }
+    return prompt;
+  },
   set_active_view: (a) => {
     if (SETTINGS.views.some((v) => v.id === (a && a.id))) SETTINGS.active_view = a.id;
     return clone();
@@ -276,12 +316,31 @@ const RESULTS = {
     return clone();
   },
   take_out_of_tile_folder: (a) => {
-    for (const f of SETTINGS.tile_folders) f.members = f.members.filter((m) => m !== (a && a.id));
-    SETTINGS.tile_folders = SETTINGS.tile_folders.filter((f) => f.members.length >= 2);
+    const f = SETTINGS.tile_folders.find((x) => x.members.includes(a && a.id));
+    for (const g of SETTINGS.tile_folders) g.members = g.members.filter((m) => m !== (a && a.id));
+    SETTINGS.tile_folders = SETTINGS.tile_folders.filter((g) => g.members.length >= 2);
+    const view = f && SETTINGS.views.find((v) => v.id === f.view_id);
+    if (view && a.cell && a.cell[0] < view.cols && a.cell[1] < view.rows) {
+      const key = view.cols + "x" + view.rows;
+      const layout = view.layouts[key] || (view.layouts[key] = {});
+      for (const [pid, c] of Object.entries(layout)) if (c[0] === a.cell[0] && c[1] === a.cell[1]) delete layout[pid];
+      layout[a.id] = a.cell;
+    }
     return clone();
   },
   delete_tile_folder: (a) => {
-    SETTINGS.tile_folders = SETTINGS.tile_folders.filter((f) => f.id !== (a && a.id));
+    const f = SETTINGS.tile_folders.find((x) => x.id === (a && a.id));
+    SETTINGS.tile_folders = SETTINGS.tile_folders.filter((x) => x.id !== (a && a.id));
+    const view = f && SETTINGS.views.find((v) => v.id === f.view_id);
+    if (view) {
+      // Other folders still on this view keep their own cell — a dissolved member
+      // must not be handed one of those, or it saves fine but never renders.
+      const otherCells = SETTINGS.tile_folders.filter((g) => g.view_id === f.view_id).map((g) => g.cell);
+      for (const member of f.members) {
+        const { layout, cell } = firstFreeCell(view, otherCells);
+        if (cell) layout[member] = cell;
+      }
+    }
     return clone();
   },
   // The tag commands answer with the settings blob, like the real backend.

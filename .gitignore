@@ -36,3 +36,5 @@ test-data/
 *.p12
 *.cer
 *.crt
+build.bat
+build+install on phone.bat
