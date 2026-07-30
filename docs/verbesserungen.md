@@ -218,10 +218,10 @@ Funktionen. Innerhalb einer Gruppe stehen die aus meiner Sicht nützlichsten obe
 72. **Die Skalierungsregler sind zu fein.** Fünf Werte für Fenster, Modale, Icons,
     Composer, Primärknopf; eine Gesamtskalierung würde 90 % der Fälle abdecken.
     *Wo:* Expertenmenü → Aussehen.
-73. **„Vor Bildschirmaufnahmen verbergen" braucht eine Warnung beim Einschalten.**
-    Die Sperre wird inzwischen ausgeschaltet ausgeliefert — wer sie einschaltet, sollte
-    einmal lesen, dass Screenshots danach leer bleiben. Heute steht das nur im Tooltip.
-    *Wo:* Expertenmenü → Datenschutz.
+73. **„Screenshots von Prompt Saver erlauben" braucht eine Warnung beim Ausschalten.**
+    Der Schalter heißt jetzt so, wie ein Nutzer sucht, und ist ab Werk aus — die Sperre
+    ist also der Standard. Wer sie einmal an- und wieder ausschaltet, sollte lesen, dass
+    Screenshots danach leer bleiben. *Wo:* Expertenmenü → Datenschutz.
 
 ## L · Themes und Optik
 

@@ -36,6 +36,63 @@
         "Prompts": "Einträge",
         "Prompt": "Eintrag",
         "prompt": "prompt"
+      },
+      "es": {
+        "prompt": "entrada",
+        "prompts": "entradas",
+        "Prompts": "Entradas",
+        "Prompt": "Entrada"
+      },
+      "it": {
+        "prompt": "voce",
+        "Prompt": "Voce"
+      },
+      "pt": {
+        "prompt": "entrada",
+        "prompts": "entradas",
+        "Prompts": "Entradas",
+        "Prompt": "Entrada"
+      },
+      "nl": {
+        "prompt": "item",
+        "prompts": "items",
+        "Prompts": "Items",
+        "Prompt": "Item"
+      },
+      "pl": {
+        "prompt": "wpis",
+        "prompty": "wpisy",
+        "promptu": "wpisu",
+        "Prompty": "Wpisy",
+        "promptem": "wpisem",
+        "promptowi": "wpisowi",
+        "Prompt": "Wpis",
+        "promptami": "wpisami"
+      },
+      "ro": {
+        "prompt": "intrare",
+        "prompturi": "intrări",
+        "promptul": "intrarea",
+        "prompturile": "intrările",
+        "Prompturi": "Intrări",
+        "promptului": "intrării",
+        "Prompturile": "Intrările",
+        "Promptul": "Intrarea"
+      },
+      "tr": {
+        "istem": "kayıt",
+        "istemi": "kaydı",
+        "istemler": "kayıtlar",
+        "istemleri": "kayıtları",
+        "istemiyle": "kaydıyla",
+        "istemle": "kayıtla",
+        "isteme": "kayda"
+      },
+      "zh": {
+        "提示词": "条目"
+      },
+      "ja": {
+        "プロンプト": "項目"
       }
     }
   }

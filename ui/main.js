@@ -923,9 +923,10 @@ const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 // class that is present exactly when the option is on.
 const OPT_FLAG_LABELS = {
   // Features extras
-  // Ships OFF: an app that cannot be screenshotted looks broken, and the reason
-  // is invisible. Whoever wants the protection turns it on here.
-  captureExclusion: "flagCaptureExclusion",
+  // Named from the user's side: the window is kept out of screenshots, and this is
+  // the switch that lets them through. Ships off, so the protection is the default
+  // and whoever misses their screenshots finds the reason by its name.
+  allowScreenshot: "flagAllowScreenshot",
   storeFiles: "flagStoreFiles",
   gridLines: "flagGridLines",
   uppercaseTiles: "flagUppercaseTiles",
@@ -1265,7 +1266,7 @@ const EXPERT_TABS = [
   { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
     { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, "quickGrid", "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
-    { title: "expGroupPrivacy", flags: ["captureExclusion", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
+    { title: "expGroupPrivacy", flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
     { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav"], values: ["kbFocusFadeMs"], paths: ["dataDir"] },
   ] },
 ];
@@ -1391,7 +1392,7 @@ const EXPERT_TIPS = [
   // Library / privacy
   "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus", "libraryCloseToggle", "libraryColsToggle",
   "tags", "tagChipPx", "tagFilterMode",
-  "captureExclusion", "copyHistory", "historyTimestamps", "historyGrouped",
+  "allowScreenshot", "copyHistory", "historyTimestamps", "historyGrouped",
   "dedupCopyLog", "cleanupFiles", "blurTilesUntilHover",
   // Tools / data
   "dupFinder", "clipWatcher", "backupGfs",

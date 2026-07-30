@@ -41,7 +41,7 @@ Requires the Microsoft WebView2 runtime (preinstalled on Windows 11 and current 
 - Dropdowns and menus flip above their anchor when there is no room below, and never open past the edge of the window.
 - The copy history reads like the library — same rows, tags, a type chip and a quiet timestamp.
 - The favourites section of the tray menu is on out of the box.
-- Hiding the window from screen capture is now off out of the box — with it on, screenshots of the window came out empty with no hint why. The switch stays under privacy in the expert menu.
+- The privacy switch that keeps the window out of screenshots is now called **Allow screenshots of Prompt Saver** and reads from your side. It ships off, so the window is still left out of screen captures — but if your screenshots come out empty, the switch that explains it is under privacy in the expert menu.
 - A backup is either whole or absent: a failed one leaves nothing behind.
 
 ### Make it yours

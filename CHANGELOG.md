@@ -80,9 +80,11 @@ switch, most of it off until you turn it on.
 - Dropdowns, colour popovers and context menus flip above their anchor when there
   is no room below, and never open past the edge of the window.
 - The favourites section of the tray menu is on out of the box.
-- **Hiding the window from screen capture is now off out of the box.** With it on,
-  every screenshot of the window came out empty and nothing said why. The switch
-  stays where it was, under privacy in the expert menu.
+- The privacy switch that keeps the window out of screenshots is now phrased from
+  your side and named **Allow screenshots of Prompt Saver**. It ships off, so the
+  window still stays out of screen captures by default — but anyone whose screenshots
+  come out empty now finds the reason under privacy in the expert menu. An
+  installation that had the old hiding turned off keeps its screenshots.
 - A backup is now either whole or absent: the snapshot is written under a
   temporary name and only then renamed, and a failed one leaves nothing behind.
 

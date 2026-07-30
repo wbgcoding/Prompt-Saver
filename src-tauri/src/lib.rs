@@ -1446,6 +1446,14 @@ const HOME_NAMES: [&str; 18] = [
 impl Settings {
     // Ensure at least one view exists; migrate legacy single-grid data.
     fn migrate(&mut self) {
+        // The privacy switch used to be "hide from screen capture" (on unless stored
+        // false); it is now "allow screenshots" (off unless stored true). Anyone who
+        // had deliberately turned the hiding OFF keeps their screenshots.
+        if let Some(hidden) = self.ui_flags.remove("captureExclusion") {
+            if !hidden {
+                self.ui_flags.insert(ALLOW_SCREENSHOT_KEY.to_string(), true);
+            }
+        }
         if self.views.is_empty() {
             let mut layouts = HashMap::new();
             if !self.legacy_layout.is_empty() {
@@ -5644,14 +5652,13 @@ fn set_float_bounds_native(win: &tauri::WebviewWindow, x: f64, y: f64, w: f64, h
     )
 }
 
-// Expert privacy flag (Datenschutz tab). Missing = enabled, like every expert
-// flag, so capture exclusion is ON by default.
-const CAPTURE_FLAG_KEY: &str = "captureExclusion";
+// Expert privacy flag (Datenschutz tab), phrased from the user's side: "allow
+// screenshots of this app". It ships OFF, so the window stays out of screen captures
+// until someone deliberately lets them through.
+const ALLOW_SCREENSHOT_KEY: &str = "allowScreenshot";
 
 fn capture_excluded(settings: &Settings) -> bool {
-    // Off by default: with it on, every screenshot of this window comes out empty and
-    // nothing on screen says why. It stays available for anyone who wants it.
-    settings.ui_flags.get(CAPTURE_FLAG_KEY) == Some(&true)
+    settings.ui_flags.get(ALLOW_SCREENSHOT_KEY) != Some(&true)
 }
 
 // Keep our own windows out of OTHER capture tools (Snipping Tool, Print Screen,
@@ -8037,7 +8044,7 @@ async fn check_update(state: State<'_, Db>) -> Result<UpdateInfo, String> {
 // Toggle an expert feature flag (enabled = feature on).
 #[tauri::command]
 fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
-    let is_capture = key == CAPTURE_FLAG_KEY;
+    let is_capture = key == ALLOW_SCREENSHOT_KEY;
     let is_clip = key == "clipWatcher"; // F21
     let is_hotkeys = key == "promptHotkeys"; // F20
     let is_tray = key == "trayRecent" || key == "trayFavs"; // F23
@@ -10889,6 +10896,26 @@ mod tests {
         let ids: std::collections::HashSet<&str> = ps.iter().map(|p| p.id.as_str()).collect();
         assert_eq!(ids.len(), ps.len(), "every prompt must end up with a unique id");
         assert!(ps.iter().all(|p| !p.id.is_empty()), "no prompt may be left without an id");
+    }
+
+    #[test]
+    fn turning_the_old_hiding_off_keeps_screenshots_working() {
+        // Stored "captureExclusion: false" meant "let screenshots through"; that has to
+        // survive the switch to the positively-phrased flag.
+        let mut s = Settings::default();
+        s.ui_flags.insert("captureExclusion".into(), false);
+        s.migrate();
+        assert!(!capture_excluded(&s), "an explicit allow must keep allowing");
+        assert!(!s.ui_flags.contains_key("captureExclusion"), "the old key is retired");
+
+        // The old default (hiding on) and a fresh install both stay protected.
+        let mut had = Settings::default();
+        had.ui_flags.insert("captureExclusion".into(), true);
+        had.migrate();
+        assert!(capture_excluded(&had));
+        let mut fresh = Settings::default();
+        fresh.migrate();
+        assert!(capture_excluded(&fresh), "the protection is the shipped default");
     }
 
     #[test]
