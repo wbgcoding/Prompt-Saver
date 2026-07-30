@@ -25,7 +25,7 @@ Requires the Microsoft WebView2 runtime (preinstalled on Windows 11 and current 
 
 - **Self-filling variables** — `date`, `time`, `datetime`, `weekday`, `clipboard` and `uuid` fill themselves in on copy with no dialog, formatted in the app language. A prompt that mixes them with your own variables only asks for yours.
 - **Choice variables** — `{#{tone|formal,casual,witty}#}` turns into a dropdown in the copy dialog and remembers your last pick.
-- **Markdown preview** — an eye button renders the prompt with headings, lists, quotes, emphasis and code blocks, toggled or side by side. Code is syntax-colored for JavaScript, TypeScript, Python, HTML, CSS, JSON, SQL, Bash and Rust.
+- **Markdown preview** — the editor shows the prompt rendered: headings, lists, quotes, emphasis and code blocks. The rendered view either takes the place of the text field, handing it back the moment you click into it, or sits beside it while you type. Code is syntax-colored for JavaScript, TypeScript, Python, HTML, CSS, JSON, SQL, Bash and Rust.
 
 ### Copy from anywhere
 
@@ -33,6 +33,15 @@ Requires the Microsoft WebView2 runtime (preinstalled on Windows 11 and current 
 - **Tray quick menu** — the tray menu can list your recent and favorite prompts; one click copies without opening the window.
 - **Drag-out** — hold Ctrl and drag a tile, library row or floating button into another app to drop its text there.
 - **Floating-button folders** — drag one floating button onto another and they merge into a folder showing up to four previews and a count. Click to open it in place, drag a member out to free it, and it dissolves when one is left.
+
+### Also in this release
+
+- **Grid folders** — drop one tile onto another and both move into a folder in that cell; drag one out and it goes back to the layout.
+- Dragging a button, tab or tile onto another shows what would happen: the target steps back and a folder mark opens behind it.
+- Dropdowns and menus flip above their anchor when there is no room below, and never open past the edge of the window.
+- The copy history reads like the library — same rows, tags, a type chip and a quiet timestamp.
+- The favourites section of the tray menu is on out of the box.
+- A backup is either whole or absent: a failed one leaves nothing behind.
 
 ### Make it yours
 
