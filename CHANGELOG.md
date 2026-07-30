@@ -37,9 +37,10 @@ switch, most of it off until you turn it on.
   lists all six as insertable chips with a one-line explanation each.
 - **Choice variables** — write `{#{tone|formal,casual,witty}#}` and the copy
   dialog offers a dropdown instead of a text field, remembering your last pick.
-- **Markdown preview** — an eye button in the editor renders the prompt:
-  headings, lists, quotes, rules, emphasis and fenced code blocks, either
-  toggled or side by side. Code blocks are syntax-colored for JavaScript,
+- **Markdown preview** — the editor shows the prompt rendered: headings, lists,
+  quotes, rules, emphasis and fenced code blocks. The rendered view either takes
+  the place of the text field, handing it back the moment you click into it, or
+  sits beside it while you type. Code blocks are syntax-colored for JavaScript,
   TypeScript, Python, HTML, CSS, JSON, SQL, Bash and Rust.
 - **Private notes** — a collapsible notes row on every prompt for context you
   want to keep but never copy. Notes show as a dimmed section in the tile
@@ -60,12 +61,27 @@ switch, most of it off until you turn it on.
 - **Color picker** — a pipette next to the screenshot button freezes the screen
   and shows a magnified pixel grid with a live readout; click to copy the color
   as hex, rgb or hsl. Nothing is saved — the value only goes to the clipboard.
+- **Grid folders** — drop one tile onto another and both move into a folder in
+  that cell. The folder shows a preview of what is inside, opens its contents in
+  a small grid, and hands a prompt back to the layout when you drag it out.
 
 ### Improved
 
 - The changelog in the update dialog is laid out instead of dumped: headings,
   bullets, tables and highlighted terms, in a box that takes the height of the
   release notes and scrolls only once they outgrow the window.
+- Dragging one button, tab or tile onto another now shows what would happen: the
+  target's face steps back and a folder mark opens behind it, the same gesture in
+  all three places.
+- Tags are findable: the editor's tag field has a handle that opens the list of
+  tags you already have, and the library's tag filter says what it is.
+- The copy history reads like the library — same rows, same tags, a type chip
+  where it is not plain text, and the timestamp as a quiet second line.
+- Dropdowns, colour popovers and context menus flip above their anchor when there
+  is no room below, and never open past the edge of the window.
+- The favourites section of the tray menu is on out of the box.
+- A backup is now either whole or absent: the snapshot is written under a
+  temporary name and only then renamed, and a failed one leaves nothing behind.
 
 ### Removed
 
