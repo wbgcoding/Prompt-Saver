@@ -1177,8 +1177,6 @@ const EXPERT_DROPDOWNS = {
   dateStyle: enumDropdown("dateStyle", "valDateStyle", STYLE_OPTS, "short", "dynVars"),
   timeStyle: enumDropdown("timeStyle", "valTimeStyle", STYLE_OPTS, "short", "dynVars"),
   // F14: preview replaces the textarea, or sits next to it.
-  mdPreviewMode: enumDropdown("mdPreviewMode", "valMdPreviewMode",
-    [["toggle", "optMdReplace"], ["split", "optMdSplit"]], "toggle", "mdPreview"),
   // F22: which key turns a press into a drag-out instead of the plain drag.
   dragOutModifier: enumDropdown("dragOutModifier", "valDragOutModifier",
     [["ctrl", "keyCtrl"], ["alt", "keyAlt"], ["shift", "keyShift"]], "ctrl", "dragOut"),
@@ -1228,7 +1226,7 @@ const EXPERT_TABS = [
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
     // The editor: what it shows beside the text box. F14/F15 belong together — the
     // highlighter only ever paints inside the preview.
-    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, "lengthCounter", "promptHistory", "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen"], dropdowns: ["mdPreviewMode", "counterUnits"] },
+    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, "lengthCounter", "promptHistory", "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
     { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "autoPasteEnter", gate: "autoPaste" }, "closeOnCopy", "copyBubble", "copyFlash"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"], dropdowns: ["dragOutModifier"] },
     // Floating buttons and the two kinds of folder they can form.
@@ -1376,7 +1374,7 @@ const EXPERT_TIPS = [
   "storeFiles", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "varPopupWindow",
   "lengthCounter", "promptHistory", "editorMonospace",
   "promptNotes", "notesInTooltip", "notesTipLen",
-  "mdPreview", "mdPreviewMode", "codeHighlight", "codeAutoDetect", "hlFontPx",
+  "mdPreview", "codeHighlight", "codeAutoDetect", "hlFontPx",
   "colorPicker", "pickerFormat", "loupeZoom",
   "trayRecent", "trayFavs", "trayRecentN", "trayFavN",
   "checkUpdateOnStart", "showUpdates", "importExport", "dimToolbar", "keyboardNav",
@@ -5139,8 +5137,6 @@ function renderMarkdown(text) {
 let mdEditing = false;
 let mdTimer = 0;
 let mdLastText = null;
-// "toggle" is the value older installs stored for what is now the replace layout.
-const mdSplit = () => (txt("mdPreviewMode") || "toggle") === "split";
 
 function renderMdPreview(force) {
   const box = modal.mdPreview;
@@ -5166,12 +5162,19 @@ function scheduleMdPreview() {
 // Bring toolbar, textarea and preview in line with the flags and the picked layout.
 function syncMdUi(textVisible) {
   const on = textVisible && flag("mdPreview");
-  const split = on && mdSplit();
-  if (!on || split) mdEditing = false;
-  const showPreview = on && (split || !mdEditing);
-  modal.root.classList.toggle("md-split", split);
-  modal.mdPreview.classList.toggle("hidden", !showPreview);
-  if (textVisible) modal.text.classList.toggle("hidden", on && !split && !mdEditing);
+  if (!on) mdEditing = false;
+  // ONE field: the rendered pane stands in for the textarea and hands it back on a
+  // click. Two panes side by side was the second thing on screen that did the same
+  // job — there is no layout option any more.
+  modal.mdPreview.classList.toggle("hidden", !on || mdEditing);
+  // Hide the WRAPPER, not just the textarea: the clear-X wrapper stays in flow with
+  // an empty box and pushes the rendered pane down, so the field appeared to jump
+  // 19px every time it handed over.
+  const field = modal.text.closest(".clear-wrap-ta") || modal.text;
+  if (textVisible) {
+    field.classList.toggle("hidden", on && !mdEditing);
+    modal.text.classList.toggle("hidden", on && !mdEditing);
+  }
   // Fill the pane whenever the feature is on, visible or not: the first paint must
   // never depend on the pane already being on screen, or switching to it shows a
   // blank box until the next keystroke.
@@ -6423,15 +6426,24 @@ function renderTagSuggest(all = false) {
   const hits = allTags()
     .filter((n) => !taken.has(tagKey(n)) && (!q || tagKey(n).includes(q)))
     .slice(0, all ? 40 : 8);
+  // Typing with no match just closes — a dropdown that keeps saying "nothing" while
+  // the user is still typing a NEW tag is in the way.
+  if (!hits.length && !all) { closeTagSuggest(); return; }
   tagSuggest.innerHTML = "";
   if (!hits.length) {
-    closeTagSuggest();
-    if (all) toast(t(allTags().length ? "tagAllTaken" : "tagNone"));
-    return;
+    // Opened by the handle with nothing to offer. This belongs IN the dropdown —
+    // a toast for "there is nothing here yet" reads like an error and is gone
+    // before it is understood.
+    const empty = document.createElement("div");
+    empty.className = "tag-suggest-empty";
+    empty.textContent = t(allTags().length ? "tagAllTaken" : "tagNone");
+    tagSuggest.appendChild(empty);
   }
   for (const name of hits) {
-    const item = tagChipEl(name, "button");
-    item.classList.add("tag-suggest-item");
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "tag-suggest-item";
+    item.append(tagChipEl(name));
     item.addEventListener("click", () => {
       addTagToModal(name);
       input.value = "";
@@ -6440,6 +6452,8 @@ function renderTagSuggest(all = false) {
     });
     tagSuggest.appendChild(item);
   }
+  // A dropdown belongs to its field, so it takes the field's width.
+  tagSuggest.style.minWidth = `${Math.round(input.getBoundingClientRect().width)}px`;
   placePop(tagSuggest, input);
 }
 
@@ -6516,14 +6530,14 @@ function renderTagFilter() {
   if (libTags.size) {
     const clear = document.createElement("button");
     clear.type = "button";
-    clear.className = "tag-chip tag-action";
+    clear.className = "tag-action";
     clear.textContent = t("tagClearFilter");
     clear.addEventListener("click", () => { libTags.clear(); renderLibrary(); });
     bar.appendChild(clear);
   }
   const manage = document.createElement("button");
   manage.type = "button";
-  manage.className = "tag-chip tag-action";
+  manage.className = "tag-action";
   manage.textContent = t("tagManager");
   manage.addEventListener("click", openTagManager);
   bar.appendChild(manage);
@@ -8009,8 +8023,8 @@ function bind() {
       to.scrollTop = s > 0 ? Math.round(ratio * s) : 0;
     });
   };
-  modal.mdPreview.addEventListener("click", () => { if (flag("mdPreview") && !mdSplit()) mdSwap(true); });
-  modal.mdPreview.addEventListener("focus", () => { if (flag("mdPreview") && !mdSplit()) mdSwap(true); });
+  modal.mdPreview.addEventListener("click", () => { if (flag("mdPreview")) mdSwap(true); });
+  modal.mdPreview.addEventListener("focus", () => { if (flag("mdPreview")) mdSwap(true); });
   // Swapping back changes the height of the block, so doing it on the blur that a
   // mousedown produces moves whatever the user is halfway through clicking — the
   // click then lands somewhere else, or nowhere. Wait for the pointer to come up.

@@ -63,7 +63,6 @@ DEPENDENCIES = {
     # Markdown preview
     "codeHighlight": "mdPreview",
     "codeAutoDetect": "mdPreview",
-    "mdPreviewMode": "mdPreview",
     "hlFontPx": "codeHighlight",
     # Workspace
     "floatOpacity": "floating",

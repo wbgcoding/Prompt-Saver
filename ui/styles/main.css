@@ -446,33 +446,41 @@ body.noflag-showJournal #journal-btn { display: none; }
   background: var(--accent);
   color: var(--accent-fg);
 }
-/* Same gesture as the floating pills: the label steps back and a well opens behind
-   it, with the folder mark as a watermark. Both stay inside the button box. */
+/* Merge preview — the same gesture as the tiles and the floating pills. Drawn as a
+   SCRIM, not a tint: a 16 % wash of the accent over an already-accent tab was almost
+   invisible, which is what made it look broken. --fg/--bg invert together with the
+   theme, so the mark always reads. Everything stays inside the button box: the tab
+   strip scrolls and would cut off anything larger. */
 .view-btn > span { position: relative; z-index: 1; transition: opacity var(--transition), transform var(--transition); }
-.view-btn.tab-drop > span { opacity: 0.7; transform: scale(0.78); }
+.view-btn.tab-drop > span { opacity: 0.2; transform: scale(0.85); }
 .view-btn.tab-drop::before,
 .view-btn.tab-drop::after {
   content: "";
   position: absolute;
   z-index: 0;
   pointer-events: none;
-  animation: tab-well-in var(--transition) both;
+  animation: merge-in var(--transition) both;
 }
 .view-btn.tab-drop::before {
-  inset: 3px;
+  inset: 0;
   border-radius: inherit;
-  background: color-mix(in srgb, var(--accent-fg) 16%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-fg) 50%, transparent);
+  background: color-mix(in srgb, var(--accent) 82%, transparent);
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 .view-btn.tab-drop::after {
-  inset: 20%;
-  opacity: 0.34;
+  top: 18%;
+  bottom: 18%;
+  left: 50%;
+  transform: translateX(-50%);
+  aspect-ratio: 1;
   background: var(--accent-fg);
   -webkit-mask: var(--folder-glyph) center / contain no-repeat;
   mask: var(--folder-glyph) center / contain no-repeat;
 }
-@keyframes tab-well-in {
-  from { opacity: 0; transform: scale(0.6); }
+/* One keyframe for all three surfaces. Only a fade — a scaling scrim looked like a
+   glitch at tab size. */
+@keyframes merge-in {
+  from { opacity: 0; }
 }
 .view-group-pop {
   min-width: 210px;
@@ -926,12 +934,11 @@ body.drag-active .cell.drag-over {
   text-align: center;
   pointer-events: none;
 }
-/* The tile a dragged one would be dropped INTO. Same Android-style gesture as the
-   view tabs and the floating pills: the face steps back, a well opens behind it.
-   Everything is drawn INSIDE the tile — the cell clips anything larger. */
+/* The tile a dragged one would be dropped INTO — same scrim, same mark, same reason.
+   Everything is drawn INSIDE the tile: the cell clips anything larger. */
 .tile.folder-arm { border-color: var(--accent); }
 /* The media children are already absolutely positioned — only the name needs a
-   position of its own so a z-index can lift it above the well. */
+   position of its own so a z-index can lift it above the scrim. */
 .tile > .tile-name { position: relative; z-index: 1; }
 .tile > .tile-img,
 .tile > .tile-media { z-index: 1; }
@@ -942,25 +949,24 @@ body.drag-active .cell.drag-over {
 .tile.folder-arm > .tile-name,
 .tile.folder-arm > .tile-img,
 .tile.folder-arm > .tile-media,
-.tile.folder-arm > .tile-caption { opacity: 0.7; transform: scale(0.78); }
+.tile.folder-arm > .tile-caption { opacity: 0.18; transform: scale(0.85); }
 .tile.folder-arm::before,
 .tile.folder-arm::after {
   content: "";
   position: absolute;
-  z-index: 0;
+  z-index: 2;
   pointer-events: none;
-  animation: tab-well-in var(--transition) both;
+  animation: merge-in var(--transition) both;
 }
 .tile.folder-arm::before {
-  inset: 5px;
+  inset: 0;
   border-radius: inherit;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 82%, transparent);
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 .tile.folder-arm::after {
-  inset: 28%;
-  opacity: 0.4;
-  background: var(--accent);
+  inset: 30%;
+  background: var(--accent-fg);
   -webkit-mask: var(--folder-glyph) center / contain no-repeat;
   mask: var(--folder-glyph) center / contain no-repeat;
 }
@@ -1232,11 +1238,14 @@ body.library-front #modal.overlay { z-index: 67; }
 .modal-text::-webkit-scrollbar-track { background: transparent; }
 
 /* ---- F14 Markdown preview / F15 syntax colours ---- */
-/* The wrapper is invisible to layout unless the split is picked, so every flex rule
-   the editor already had keeps applying to the textarea unchanged. */
+/* The wrapper is invisible to layout, so every flex rule the editor already had keeps
+   applying to the textarea unchanged. */
 .modal-text-wrap { display: contents; }
+/* ONE field. The rendered pane and the textarea are the same box down to the type
+   metrics — a click swaps them, and that swap must not be visible as a jump or as a
+   change of style. Every value here has a twin in .modal-input / .modal-text. */
 .md-preview {
-  padding: 10px 12px;
+  padding: 10px 32px 10px 12px;
   min-height: 110px;
   max-height: 280px;
   overflow: auto;
@@ -1247,20 +1256,10 @@ body.library-front #modal.overlay { z-index: 67; }
   border-radius: 8px;
   font-size: 13px;
   line-height: 1.5;
-  /* In the replace layout a click hands over to the textarea, so the pane has to
-     look like something you can type in. */
   cursor: text;
 }
-#modal.md-split .md-preview { cursor: default; }
 #modal.tall .md-preview { flex: 1 1 auto; min-height: 120px; max-height: none; }
 #modal.tall.history-open .md-preview { flex: 0 1 auto; min-height: 96px; max-height: 26vh; }
-/* Split layout: the textarea keeps the left half, the rendered pane takes the right. */
-#modal.md-split .modal-text-wrap { display: flex; gap: 8px; flex: 1 1 auto; min-height: 0; }
-#modal.md-split .modal-text-wrap > .clear-wrap-ta,
-#modal.md-split .modal-text-wrap > .md-preview { flex: 1 1 0; min-width: 0; }
-@media (max-width: 620px) {
-  #modal.md-split .modal-text-wrap { flex-direction: column; }
-}
 .md-preview::-webkit-scrollbar { width: var(--sb-width, 12px); }
 .md-preview::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface-2); }
 .md-preview::-webkit-scrollbar-thumb:hover { background: var(--muted); }
@@ -1916,7 +1915,8 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 }
 .cp-sv {
   position: relative;
-  height: 130px;
+  height: min(130px, 28vh);
+  min-height: 74px;
   border-radius: 8px;
   border: 1px solid var(--border);
   cursor: crosshair;
@@ -1991,7 +1991,8 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   transition: border-color var(--transition);
 }
 .modal-input:focus { border-color: var(--accent); }
-.modal-text { resize: vertical; min-height: 110px; max-height: 280px; }
+/* Type metrics matched to .md-preview: the two are one field that swaps. */
+.modal-text { resize: vertical; min-height: 110px; max-height: 280px; font-size: 13px; line-height: 1.5; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .modal-actions #modal-delete,
 .modal-actions #snip-modal-retry { margin-right: auto; }
@@ -3041,6 +3042,9 @@ body.drag-over::after {
 /* Set by placePopover when a popover is taller than the room it has: it keeps its
    place inside the window and scrolls instead of being cut off at the edge. */
 .pop-clamped { overflow-y: auto; }
+/* The colour picker is a canvas plus a row of swatches: scrolling it would put the
+   knob out of reach. It is sized to fit instead (see .cp-sv). */
+.color-pop.pop-clamped { overflow: visible; max-height: none !important; }
 .num-pop::-webkit-scrollbar { width: 6px; }
 .num-pop::-webkit-scrollbar-track { background: transparent; margin: 6px 0; }
 .num-pop::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
@@ -3190,7 +3194,7 @@ body:not(.flag-promptNotes) #modal-notes { display: none; }
   cursor: pointer;
 }
 .tag-pick:hover { color: var(--text); background: var(--hover); }
-.lib-tagbar-label { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
+.lib-tagbar-label { flex: 0 0 auto; color: var(--muted); font-size: 11.5px; }
 
 .tag-chip {
   display: inline-flex;
@@ -3245,21 +3249,65 @@ button.tag-chip:hover { border-color: var(--accent); }
   max-width: min(340px, 92vw);
   max-height: 220px;
   overflow-y: auto;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: var(--shadow);
 }
-.tag-pop { z-index: 141; }
-.tag-suggest::-webkit-scrollbar { width: var(--sb-width, 12px); }
-.tag-suggest::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
+/* The palette stays a grid of swatches; the type-ahead is a LIST, like every other
+   dropdown in the app — chips floating in a box read as a stray tooltip. */
+.tag-pop { z-index: 141; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; }
+.tag-suggest { display: flex; flex-direction: column; gap: 2px; padding: 4px; }
+.tag-suggest-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 5px 6px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tag-suggest-item:hover { background: var(--surface-2); }
+.tag-suggest-empty { padding: 8px 10px; color: var(--muted); font-size: 12px; }
+.tag-suggest::-webkit-scrollbar { width: 8px; }
+.tag-suggest::-webkit-scrollbar-track { background: transparent; margin: 4px 0; }
+.tag-suggest::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
+/* The filter row carries the SAME chip metrics as the type filter above it, or the
+   two rows read as two different controls stacked by accident. */
 .lib-tagbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .lib-tagbar.empty { display: none; }
+.tag-chip.tag-filter {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.tag-chip.tag-filter:hover { border-color: var(--accent); color: var(--fg); }
+.tag-chip.tag-filter.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.tag-chip.tag-filter.tag-colored { border-color: var(--chip-color); }
+.tag-chip.tag-filter.tag-colored.active { background: var(--chip-color); border-color: var(--chip-color); }
+/* Clearing the filter and opening the manager are ACTIONS, not filters — they must
+   not look like one more tag to click. */
+.tag-action {
+  padding: 4px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.tag-action:hover { border-color: var(--accent); color: var(--fg); }
+.tag-action:last-child { margin-left: auto; }
 .lib-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
 
 #tag-modal.overlay { z-index: 68; }
@@ -3311,7 +3359,13 @@ body.noflag-customThemes .theme-edit-btn { display: none; }
 /* The colour list scrolls inside the dialog so Cancel/Save stay reachable at any
    window height (a shrinking flex child would otherwise spill over them). */
 #theme-modal .modal { overflow: hidden; }
-#theme-modal .modal-actions { flex: 0 0 auto; }
+#theme-modal .modal-actions {
+  flex: 0 0 auto;
+  /* Marks where the scrolling list ends. Without it the half-visible last row looked
+     cut off by the buttons rather than scrollable. */
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
 .theme-edit-body {
   display: flex;
   flex: 1 1 auto;

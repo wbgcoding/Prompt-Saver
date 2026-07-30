@@ -38,10 +38,10 @@ switch, most of it off until you turn it on.
 - **Choice variables** — write `{#{tone|formal,casual,witty}#}` and the copy
   dialog offers a dropdown instead of a text field, remembering your last pick.
 - **Markdown preview** — the editor shows the prompt rendered: headings, lists,
-  quotes, rules, emphasis and fenced code blocks. The rendered view either takes
-  the place of the text field, handing it back the moment you click into it, or
-  sits beside it while you type. Code blocks are syntax-colored for JavaScript,
-  TypeScript, Python, HTML, CSS, JSON, SQL, Bash and Rust.
+  quotes, rules, emphasis and fenced code blocks. It is ONE field, not two: the
+  rendered view stands where the text field was and hands it back the moment you
+  click into it, in the same box, at the same size. Code blocks are syntax-colored
+  for JavaScript, TypeScript, Python, HTML, CSS, JSON, SQL, Bash and Rust.
 - **Private notes** — a collapsible notes row on every prompt for context you
   want to keep but never copy. Notes show as a dimmed section in the tile
   tooltip, are found by the library search, and travel with TXT and CSV
@@ -71,10 +71,13 @@ switch, most of it off until you turn it on.
   bullets, tables and highlighted terms, in a box that takes the height of the
   release notes and scrolls only once they outgrow the window.
 - Dragging one button, tab or tile onto another now shows what would happen: the
-  target's face steps back and a folder mark opens behind it, the same gesture in
-  all three places.
-- Tags are findable: the editor's tag field has a handle that opens the list of
-  tags you already have, and the library's tag filter says what it is.
+  target dims behind a folder mark in the accent colour, the same gesture in all
+  three places and readable on any tile colour and in every theme.
+- Tags are findable and look like the rest of the app: the editor's tag field has a
+  handle that opens the list of tags you already have — as a proper dropdown, with
+  a line inside it when there is nothing to offer instead of an error message — and
+  the library's tag filter is a labelled row of chips built like the type filter
+  above it, with clearing and managing set apart as actions.
 - The copy history reads like the library — same rows, same tags, a type chip
   where it is not plain text, and the timestamp as a quiet second line.
 - Dropdowns, colour popovers and context menus flip above their anchor when there

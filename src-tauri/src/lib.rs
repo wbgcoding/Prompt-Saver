@@ -8055,10 +8055,12 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
         save_settings(&app, &store.settings);
     }
     // Capture exclusion applies live to every open window. Never hold the store
-    // lock across window API calls (deadlock risk).
+    // lock across window API calls (deadlock risk). The flag says "allow
+    // screenshots", so the exclusion is its OPPOSITE — passing it straight through
+    // is what made the switch work backwards.
     if is_capture {
         for (_label, win) in app.webview_windows() {
-            set_capture_exclusion(&win, enabled);
+            set_capture_exclusion(&win, !enabled);
         }
     }
     // F21: start/stop the clipboard listener as the toggle flips (no leaked handle).
@@ -8135,8 +8137,8 @@ fn reset_expert(app: AppHandle, state: State<Db>) {
         store.settings.ui_texts.clear();
         save_settings(&app, &store.settings);
     }
-    // Cleared flags revert capture exclusion to its default (on) — re-assert it
-    // on every open window so the change is immediate.
+    // Cleared flags put the screenshot permission back to its default (off), which
+    // means the exclusion is on — re-assert it on every window so it is immediate.
     for (_label, win) in app.webview_windows() {
         set_capture_exclusion(&win, true);
     }
@@ -10916,6 +10918,15 @@ mod tests {
         let mut fresh = Settings::default();
         fresh.migrate();
         assert!(capture_excluded(&fresh), "the protection is the shipped default");
+
+        // The mapping the live toggle in set_ui_flag has to follow: allow = do NOT
+        // exclude. Passing the flag straight to set_capture_exclusion inverts it.
+        let mut on = Settings::default();
+        on.ui_flags.insert(ALLOW_SCREENSHOT_KEY.into(), true);
+        assert!(!capture_excluded(&on), "allowing screenshots must not exclude");
+        let mut off = Settings::default();
+        off.ui_flags.insert(ALLOW_SCREENSHOT_KEY.into(), false);
+        assert!(capture_excluded(&off), "refusing screenshots must exclude");
     }
 
     #[test]

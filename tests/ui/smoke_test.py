@@ -986,36 +986,36 @@ PROBE = """
       const cm3 = document.getElementById('confirm-modal');
       if (!cm3.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
     }
-    // The other layout: the expert dropdown puts both panes on screen at once.
-    document.getElementById('settings').classList.remove('hidden');
-    await click('expert-open');
-    const mdSel = [...document.querySelectorAll('#expert-flags select.expert-select')]
-      .find(s => [...s.options].some(o => o.value === 'split'));
-    if (!mdSel) {
-      out.errors.push('the preview layout dropdown is missing from the expert menu');
-    } else {
-      mdSel.value = 'split';
-      mdSel.dispatchEvent(new Event('change', { bubbles: true }));
-      await sleep(250);
-      await click('expert-back');
-      document.getElementById('settings').classList.add('hidden');
-      if (!await openEditor('p7')) {
-        out.errors.push('the editor did not reopen for the split layout');
-      } else {
-        const text = document.getElementById('modal-text');
-        const prev2 = document.getElementById('modal-md-preview');
-        if (!document.getElementById('modal').classList.contains('md-split')) {
-          out.errors.push('the split layout was not applied');
+    // There is no second layout any more: one field, and the rendered pane and the
+    // textarea must be the same box so the swap is invisible.
+    if (await openEditor('p7')) {
+      const pv = document.getElementById('modal-md-preview');
+      const tx = document.getElementById('modal-text');
+      const box = document.querySelector('#modal .modal');
+      const scroll = box.scrollTop;
+      const before = pv.getBoundingClientRect();
+      pv.click();
+      await sleep(300);
+      // Focusing the textarea scrolls the dialog; put it back or the comparison
+      // measures the scroll instead of the layout.
+      box.scrollTop = scroll;
+      const after = tx.getBoundingClientRect();
+      for (const k of ['left', 'right', 'top', 'width']) {
+        if (Math.abs(before[k] - after[k]) > 1) {
+          out.errors.push('the field moves when it hands over: ' + k + ' ' +
+            Math.round(before[k]) + ' -> ' + Math.round(after[k]));
         }
-        if (text.classList.contains('hidden') || prev2.classList.contains('hidden')) {
-          out.errors.push('the split layout does not show text field and preview together');
-        } else if (innerWidth > 640) {
-          const tr = text.getBoundingClientRect(), pr = prev2.getBoundingClientRect();
-          if (pr.left < tr.right - 1) out.errors.push('the split panes are not side by side');
-        }
-        await click('modal-close-x');
-        await sleep(250);
       }
+      const a = getComputedStyle(pv), b = getComputedStyle(tx);
+      for (const prop of ['fontSize', 'lineHeight', 'padding', 'borderRadius', 'backgroundColor']) {
+        if (a[prop] !== b[prop]) {
+          out.errors.push('rendered pane and text field differ in ' + prop + ': ' + a[prop] + ' vs ' + b[prop]);
+        }
+      }
+      await click('modal-close-x');
+      await sleep(250);
+      const cm4 = document.getElementById('confirm-modal');
+      if (!cm4.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
     }
     // Gating: a row whose feature is off must disappear the moment that toggle is
     // flipped — no reopening the menu — and a whole branch goes with its parent.
