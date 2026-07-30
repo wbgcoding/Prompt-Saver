@@ -196,8 +196,6 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
       <p id="modal-vars-choice-hint" class="modal-hint">Options turn the variable into a dropdown.</p>
       <div id="modal-vars-chips" class="vars-chips">{var_chips}</div>
       <p id="modal-vars-dyn-hint" class="modal-hint">These names fill themselves in and are never asked for.</p></div></div>
-  <div id="modal-md-bar" class="modal-md-bar hidden">
-    <button type="button" id="modal-md-toggle" class="ghost-btn md-toggle">Preview</button></div>
   <div id="modal-text-wrap" class="modal-text-wrap">
     <span class="clear-wrap clear-wrap-ta">
       <textarea id="modal-text" class="modal-input modal-text" rows="6">Review the following code.</textarea>

@@ -45,9 +45,6 @@ const modal = {
   varsHead: $("modal-vars-head"),
   varsBody: $("modal-vars-body"),
   varsHint: $("modal-vars-hint"),
-  mdBar: $("modal-md-bar"),
-  mdToggle: $("modal-md-toggle"),
-  mdToggleLabel: $("modal-md-toggle-label"),
   mdPreview: $("modal-md-preview"),
   notes: $("modal-notes"),
   notesHead: $("modal-notes-head"),
@@ -879,6 +876,7 @@ const FLAG_LABELS = {
   viewGroups: "flagViewGroups",         // F9 folder tabs for views
   customThemes: "flagCustomThemes",     // F3 theme editor + custom entries in the theme list
   tileFolders: "flagTileFolders",       // F27 drop a tile into another to make a grid folder
+  trayFavs: "flagTrayFavs",             // F23 favourites section in the tray menu
   // Checks at launch, but only while the normal auto-update setting is on.
   checkUpdateOnStart: "flagCheckUpdateOnStart",
 };
@@ -933,7 +931,6 @@ const OPT_FLAG_LABELS = {
   promptNotes: "flagPromptNotes",               // F17 private notes row in the editor
   promptHotkeyPaste: "flagPromptHotkeyPaste",   // F20 hotkey also pastes into the last app
   dragOut: "flagDragOut",                       // F22 drag a prompt into another app
-  trayFavs: "flagTrayFavs",                     // F23 favourites section in the tray menu
   pillFolders: "flagPillFolders",               // F25 merge floating buttons into folders
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
@@ -1141,7 +1138,7 @@ const EXPERT_DROPDOWNS = {
   timeStyle: enumDropdown("timeStyle", "valTimeStyle", STYLE_OPTS, "short", "dynVars"),
   // F14: preview replaces the textarea, or sits next to it.
   mdPreviewMode: enumDropdown("mdPreviewMode", "valMdPreviewMode",
-    [["toggle", "optMdToggle"], ["split", "optMdSplit"]], "toggle", "mdPreview"),
+    [["toggle", "optMdReplace"], ["split", "optMdSplit"]], "toggle", "mdPreview"),
   // F22: which key turns a press into a drag-out instead of the plain drag.
   dragOutModifier: enumDropdown("dragOutModifier", "valDragOutModifier",
     [["ctrl", "keyCtrl"], ["alt", "keyAlt"], ["shift", "keyShift"]], "ctrl", "dragOut"),
@@ -4719,7 +4716,7 @@ function openModal({ mode, id, name = "", text = "", color = "", image = "", sho
   modal.fav.setAttribute("aria-pressed", String(!!favorite));
   modal.name.value = name;
   modal.text.value = text;
-  mdPreviewOn = false; // every prompt opens in the editor, never in the preview
+  mdEditing = false; // every prompt opens rendered; a click on the pane starts editing
   mdLastText = null;
   modal.notesText.value = notes;
   modal.caption.value = caption;
@@ -5123,10 +5120,12 @@ function renderMarkdown(text) {
   return out.join("");
 }
 
-// Preview state: true = the rendered pane stands in for the textarea (toggle layout).
-let mdPreviewOn = false;
+// Replace layout: the rendered pane stands in for the textarea until the user clicks
+// into it. `mdEditing` is that moment — everywhere else the prompt reads as Markdown.
+let mdEditing = false;
 let mdTimer = 0;
 let mdLastText = null;
+// "toggle" is the value older installs stored for what is now the replace layout.
 const mdSplit = () => (txt("mdPreviewMode") || "toggle") === "split";
 
 function renderMdPreview(force) {
@@ -5154,14 +5153,11 @@ function scheduleMdPreview() {
 function syncMdUi(textVisible) {
   const on = textVisible && flag("mdPreview");
   const split = on && mdSplit();
-  if (!on) mdPreviewOn = false;
-  const showPreview = on && (split || mdPreviewOn);
+  if (!on || split) mdEditing = false;
+  const showPreview = on && (split || !mdEditing);
   modal.root.classList.toggle("md-split", split);
-  modal.mdBar.classList.toggle("hidden", !on || split); // the split needs no switch
   modal.mdPreview.classList.toggle("hidden", !showPreview);
-  if (textVisible) modal.text.classList.toggle("hidden", on && !split && mdPreviewOn);
-  modal.mdToggle.setAttribute("aria-pressed", String(mdPreviewOn));
-  modal.mdToggleLabel.textContent = t(mdPreviewOn ? "mdEditBtn" : "mdPreviewBtn");
+  if (textVisible) modal.text.classList.toggle("hidden", on && !split && !mdEditing);
   // Fill the pane whenever the feature is on, visible or not: the first paint must
   // never depend on the pane already being on screen, or switching to it shows a
   // blank box until the next keystroke.
@@ -7584,38 +7580,53 @@ function syncLibraryCols() {
 
 // ---- Copy history & usage journal ----
 
-function journalRow(p, subtitle, onClick, subtitle2) {
+// One history entry, built like a library row on purpose: same thumbnail, same name
+// and text lines, same tag chips. What the history adds is the meta line — when it
+// was copied on the left, how often on the right — and a chip naming the type for
+// everything that is not plain text.
+function journalRow(p, meta, onClick) {
   const row = document.createElement("button");
   row.type = "button";
-  row.className = "lib-item";
+  row.className = "lib-item journal-item";
   row.title = t("copy");
   const body = document.createElement("span");
   body.className = "lib-body";
+  const head = document.createElement("span");
+  head.className = "journal-name-row";
   const name = document.createElement("span");
   name.className = "lib-name";
   name.textContent = libLabel(p);
-  body.append(name);
-  if (subtitle) {
+  head.append(name);
+  const kind = promptType(p);
+  if (kind !== "text") {
+    const chip = document.createElement("span");
+    chip.className = "journal-kind";
+    chip.textContent = t(`filter${kind[0].toUpperCase()}${kind.slice(1)}`);
+    head.append(chip);
+  }
+  body.append(head);
+  const preview = p.file_path || p.text;
+  if (preview) {
     const text = document.createElement("span");
     text.className = "lib-text";
-    text.textContent = subtitle;
+    text.textContent = preview;
     body.append(text);
   }
-  if (subtitle2 && typeof subtitle2 === "object") {
-    // Two-part sub-line: left text + right text on one row (e.g. time + count).
+  if (tagsOn() && (p.tags || []).length) {
+    const tags = document.createElement("span");
+    tags.className = "lib-tags";
+    for (const tn of p.tags) tags.appendChild(tagChipEl(tn));
+    body.append(tags);
+  }
+  if (meta && (meta.left || meta.right)) {
     const sub = document.createElement("span");
-    sub.className = "lib-sub lib-subrow";
+    sub.className = "lib-sub lib-subrow journal-meta";
     const l = document.createElement("span");
-    l.textContent = subtitle2.left || "";
+    l.textContent = meta.left || "";
     const r = document.createElement("span");
     r.className = "lib-sub-right";
-    r.textContent = subtitle2.right || "";
+    r.textContent = meta.right || "";
     sub.append(l, r);
-    body.append(sub);
-  } else if (subtitle2) {
-    const sub = document.createElement("span");
-    sub.className = "lib-sub";
-    sub.textContent = subtitle2;
     body.append(sub);
   }
   row.append(thumbEl(p), body);
@@ -7685,8 +7696,8 @@ function renderJournal() {
       await loadJournal();
     }
   };
-  // `rows` items are [prompt, subtitle, subtitle2?]. `extra` is an optional
-  // control rendered to the right of the column title.
+  // `rows` items are [prompt, meta]. `extra` is an optional control rendered to the
+  // right of the column title.
   const column = (titleKey, rows, extra, cls) => {
     const col = document.createElement("div");
     col.className = "journal-col" + (cls ? " " + cls : "");
@@ -7703,7 +7714,7 @@ function renderJournal() {
       e.textContent = t("journalEmpty");
       col.appendChild(e);
     } else {
-      for (const [p, sub, sub2] of rows) col.appendChild(journalRow(p, sub, copyAgain(p), sub2));
+      for (const [p, meta] of rows) col.appendChild(journalRow(p, meta, copyAgain(p)));
     }
     return col;
   };
@@ -7747,11 +7758,12 @@ function renderJournal() {
     ? sortBtn(journalUsedRev, () => { journalUsedRev = !journalUsedRev; renderJournal(); })
     : null;
   body.append(
-    column("recentlyCopied", recent.map(([p, ts]) => [p, showTime ? fmtCopyTime(ts) : ""]), headExtras(groupBtn, recentSort), "journal-col-recent"),
+    column("recentlyCopied",
+      recent.map(([p, ts]) => [p, { left: showTime ? fmtCopyTime(ts) : "" }]),
+      headExtras(groupBtn, recentSort), "journal-col-recent"),
+    // One meta line: last-used time on the left, copy count on the right.
     column("mostUsed", used.map(([p, n, ts]) => [
       p,
-      "",
-      // One sub-line: last-used time on the left, copy count on the right.
       { left: showTime && ts ? fmtCopyTime(ts) : "", right: t("usedTimes").replace("{n}", n) },
     ]), headExtras(usedSort), "journal-col-used"),
   );
@@ -7973,21 +7985,25 @@ function bind() {
   modal.name.addEventListener("keydown", (e) => { if (e.key === "Enter") confirmModal(); });
   modal.text.addEventListener("input", scheduleLenCounter); // F16 live length readout
   modal.text.addEventListener("input", scheduleMdPreview);  // F14 live preview (rAF-throttled)
-  // F14: swap textarea and preview, keeping roughly the same spot in the text.
-  modal.mdToggle.addEventListener("click", () => {
-    const from = mdPreviewOn ? modal.mdPreview : modal.text;
+  // F14 replace layout: the rendered pane IS the resting state, so it has to hand the
+  // textarea over on a click and take back over once the user is done typing.
+  const mdSwap = (editing) => {
+    const from = editing ? modal.mdPreview : modal.text;
     const span = from.scrollHeight - from.clientHeight;
     const ratio = span > 0 ? from.scrollTop / span : 0;
-    mdPreviewOn = !mdPreviewOn;
-    syncMdUi(true); // the switch only exists while the textarea is in play
-    const to = mdPreviewOn ? modal.mdPreview : modal.text;
-    if (!mdPreviewOn) to.focus(); // never behind a frame callback — see scheduleMdPreview
+    mdEditing = editing;
+    syncMdUi(true);
+    const to = editing ? modal.text : modal.mdPreview;
+    if (editing) to.focus(); // never behind a frame callback — see scheduleMdPreview
     // Only the scroll position waits for layout; losing it costs nothing.
     requestAnimationFrame(() => {
       const s = to.scrollHeight - to.clientHeight;
       to.scrollTop = s > 0 ? Math.round(ratio * s) : 0;
     });
-  });
+  };
+  modal.mdPreview.addEventListener("click", () => { if (flag("mdPreview") && !mdSplit()) mdSwap(true); });
+  modal.mdPreview.addEventListener("focus", () => { if (flag("mdPreview") && !mdSplit()) mdSwap(true); });
+  modal.text.addEventListener("blur", () => { if (mdEditing) mdSwap(false); });
   // F12/F13 variable helper collapsible (same convention as the notes row).
   modal.varsHead.addEventListener("click", () => {
     const open = !modal.varsBody.classList.toggle("hidden");

@@ -214,22 +214,14 @@
           <p id="modal-vars-dyn-hint" class="modal-hint hidden" data-i18n="varsDynHint"></p>
         </div>
       </div>
-      <!-- F14 Markdown preview: the toolbar switch, then the textarea and the rendered
-           pane. Their wrapper is display:contents until the split layout is picked, so
-           the editor's existing flex rules keep applying to the textarea unchanged. -->
-      <div id="modal-md-bar" class="modal-md-bar hidden">
-        <button type="button" id="modal-md-toggle" class="ghost-btn md-toggle" aria-pressed="false">
-          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                  d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/>
-            <circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="2"/>
-          </svg>
-          <span id="modal-md-toggle-label">Preview</span>
-        </button>
-      </div>
+      <!-- F14 Markdown preview: with the feature on the prompt is ALWAYS shown
+           rendered — either in place of the textarea (click the pane to type) or
+           beside it. Their wrapper is display:contents until the split layout is
+           picked, so the editor's existing flex rules keep applying unchanged. -->
       <div id="modal-text-wrap" class="modal-text-wrap">
         <textarea id="modal-text" class="modal-input modal-text hidden" rows="6" data-i18n-ph="promptPh"></textarea>
-        <div id="modal-md-preview" class="md-preview hidden" tabindex="0" aria-live="off"></div>
+        <div id="modal-md-preview" class="md-preview hidden" tabindex="0" aria-live="off"
+             data-i18n-title="mdClickToEdit"></div>
       </div>
       <!-- Live length readout (chars / words / ~tokens), expert-tunable -->
       <div id="modal-length" class="modal-length hidden" aria-hidden="true"></div>

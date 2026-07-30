@@ -611,7 +611,7 @@ fn tray_cfg(settings: &Settings) -> TrayCfg {
     TrayCfg {
         recent: settings.ui_flags.get("trayRecent") != Some(&false), // on by default
         recent_n: count("trayRecentN", 5.0),
-        favs: settings.ui_flags.get("trayFavs") == Some(&true), // off by default
+        favs: settings.ui_flags.get("trayFavs") != Some(&false), // on by default
         fav_n: count("trayFavN", 10.0),
     }
 }
@@ -10912,16 +10912,17 @@ mod tests {
     }
 
     #[test]
-    fn tray_settings_default_to_recent_only() {
+    fn tray_settings_default_to_both_sections() {
         let cfg = tray_cfg(&Settings::default());
         assert!(cfg.recent, "the recent section ships on");
-        assert!(!cfg.favs, "the favourites section ships off");
+        assert!(cfg.favs, "the favourites section ships on");
         assert_eq!(cfg.recent_n, 5);
         assert_eq!(cfg.fav_n, 10);
 
-        // Both features off = today's menu exactly, no entries at all.
+        // Both features off = a menu with no dynamic entries at all.
         let mut s = Settings::default();
         s.ui_flags.insert("trayRecent".into(), false);
+        s.ui_flags.insert("trayFavs".into(), false);
         let off = tray_cfg(&s);
         assert!(!off.recent && !off.favs);
         let prompts = vec![tray_prompt("a", "A", true)];

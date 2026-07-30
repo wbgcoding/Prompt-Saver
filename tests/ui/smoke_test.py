@@ -854,17 +854,12 @@ PROBE = """
     } else {
       const prev = document.getElementById('modal-md-preview');
       const ta = document.getElementById('modal-text');
-      if (document.getElementById('modal-md-bar').classList.contains('hidden')) {
-        out.errors.push('the Markdown preview switch is missing');
-      }
-      // The pane is filled the moment the editor opens, while it is still hidden —
-      // the first paint may never depend on the pane already being on screen.
+      // With the feature on the prompt opens RENDERED — no switch, no empty pane.
       if (!prev.innerHTML.trim()) {
         out.errors.push('the preview pane is empty before it is opened');
       }
-      await click('modal-md-toggle');
       if (prev.classList.contains('hidden')) {
-        out.errors.push('the Markdown preview did not open');
+        out.errors.push('the prompt does not open rendered');
       } else {
         if (!ta.classList.contains('hidden')) {
           out.errors.push('the text field is still shown although the preview took its place');
@@ -938,8 +933,14 @@ PROBE = """
           out.errors.push('retyped injection is not shown literally');
         }
       }
-      await click('modal-md-toggle');
-      if (ta.classList.contains('hidden')) out.errors.push('switching back did not restore the text field');
+      // Clicking the pane hands over to the textarea; leaving it renders again.
+      prev.click();
+      await sleep(250);
+      if (ta.classList.contains('hidden')) out.errors.push('clicking the preview does not open the text field');
+      if (document.activeElement !== ta) out.errors.push('the text field did not take focus for typing');
+      ta.dispatchEvent(new Event('blur'));
+      await sleep(250);
+      if (prev.classList.contains('hidden')) out.errors.push('leaving the text field does not render the prompt again');
       await click('modal-close-x');
       await sleep(250);
       const cm3 = document.getElementById('confirm-modal');
@@ -971,9 +972,6 @@ PROBE = """
         } else if (innerWidth > 640) {
           const tr = text.getBoundingClientRect(), pr = prev2.getBoundingClientRect();
           if (pr.left < tr.right - 1) out.errors.push('the split panes are not side by side');
-        }
-        if (!document.getElementById('modal-md-bar').classList.contains('hidden')) {
-          out.errors.push('the split layout still offers the switch button');
         }
         await click('modal-close-x');
         await sleep(250);

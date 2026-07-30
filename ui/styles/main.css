@@ -1232,8 +1232,6 @@ body.library-front #modal.overlay { z-index: 67; }
 .modal-text::-webkit-scrollbar-track { background: transparent; }
 
 /* ---- F14 Markdown preview / F15 syntax colours ---- */
-.modal-md-bar { display: flex; gap: 8px; }
-.md-toggle { display: inline-flex; align-items: center; gap: 6px; }
 /* The wrapper is invisible to layout unless the split is picked, so every flex rule
    the editor already had keeps applying to the textarea unchanged. */
 .modal-text-wrap { display: contents; }
@@ -1249,7 +1247,11 @@ body.library-front #modal.overlay { z-index: 67; }
   border-radius: 8px;
   font-size: 13px;
   line-height: 1.5;
+  /* In the replace layout a click hands over to the textarea, so the pane has to
+     look like something you can type in. */
+  cursor: text;
 }
+#modal.md-split .md-preview { cursor: default; }
 #modal.tall .md-preview { flex: 1 1 auto; min-height: 120px; max-height: none; }
 #modal.tall.history-open .md-preview { flex: 0 1 auto; min-height: 96px; max-height: 26vh; }
 /* Split layout: the textarea keeps the left half, the rendered pane takes the right. */
@@ -2466,8 +2468,27 @@ input[type="password"]::-ms-clear { display: none; }
 .journal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
 .journal-body::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 .journal-body::-webkit-scrollbar-track { background: transparent; margin: 14px 0; }
-/* Every entry the same height; never overlapping. */
+/* Every entry the same height; never overlapping. A hairline between rows gives the
+   column a grid instead of a float of loose cards. */
 .journal-col .lib-item { min-height: 46px; align-items: flex-start; margin: 0; flex: 0 0 auto; }
+.journal-col .lib-item + .lib-item { border-top: 1px solid var(--border); border-radius: 0; }
+.journal-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.journal-name-row > .lib-name { min-width: 0; }
+/* Names the type without repeating the thumbnail's job — text rows carry no chip. */
+.journal-kind {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+/* Timestamps read as metadata, not as content: muted, small, digits aligned. */
+.journal-meta { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .journal-col .lib-thumb { width: 30px; height: 30px; flex: 0 0 auto; object-fit: cover; }
 .journal-col .lib-section { padding: 2px 4px; }
 /* Column titles stay pinned while the list scrolls. */
