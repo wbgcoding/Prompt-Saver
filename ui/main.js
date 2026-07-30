@@ -4365,7 +4365,9 @@ function renderVarHelper() {
     for (const name of DYN_VARS) {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "vars-chip";
+      // P42: clipboard reads live external data, unlike the other self-filling
+      // names — worth a visual nudge so it isn't missed among the rest.
+      b.className = name === "clipboard" ? "vars-chip vars-chip-highlight" : "vars-chip";
       b.textContent = dynToken(name);
       b.title = t(DYN_TIPS[name]); // hover engine themes any [title]
       b.addEventListener("click", () => insertVarToken(dynToken(name)));
@@ -9084,6 +9086,12 @@ function bind() {
   });
   // F23: a quick-copy entry in the tray menu — same activation, never auto-paste.
   listen("prompt-tray-copy", (e) => onPromptHotkey(String(e.payload), false));
+  // P92: the very first close-to-tray — backend held the window open, we explain
+  // the tray menu, then hide it ourselves once the hint is dismissed.
+  listen("first-tray-hide", async () => {
+    await infoDialog(t("trayHintTitle"), t("trayHintMsg"));
+    try { await window.__TAURI__?.window?.getCurrentWindow?.()?.hide?.(); } catch { /* no-op */ }
+  });
   // The standalone fill-in window answered (null = cancelled or closed).
   listen("vars-filled", (e) => {
     const resolve = varsWindowPending;

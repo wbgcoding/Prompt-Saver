@@ -1165,6 +1165,9 @@ struct Settings {
     window: Option<WindowGeom>,
     #[serde(default)]
     minimize_to_tray: bool,
+    // One-time hint (P92): explains that the tray menu still copies while hidden.
+    #[serde(default)]
+    seen_tray_hint: bool,
     #[serde(default)]
     autostart: bool,
     #[serde(default)]
@@ -1276,6 +1279,7 @@ impl Default for Settings {
             video_prefs: HashMap::new(),
             window: None,
             minimize_to_tray: false,
+            seen_tray_hint: false,
             autostart: false,
             start_minimized: false,
             always_on_top: false,
@@ -9627,7 +9631,25 @@ pub fn run() {
                                 .unwrap_or(false);
                         if minimize {
                             api.prevent_close();
-                            if let Some(w) = handle2.get_webview_window("main") {
+                            // P92: the very first time, explain that the tray menu
+                            // still copies while hidden — JS shows it, then hides
+                            // itself once dismissed. Every later close hides at once.
+                            let first_time = handle2
+                                .try_state::<Db>()
+                                .map(|s| {
+                                    !s.lock().unwrap_or_else(|e| e.into_inner())
+                                        .settings
+                                        .seen_tray_hint
+                                })
+                                .unwrap_or(false);
+                            if first_time {
+                                if let Some(state) = handle2.try_state::<Db>() {
+                                    let mut store = state.lock().unwrap_or_else(|e| e.into_inner());
+                                    store.settings.seen_tray_hint = true;
+                                    save_settings(&handle2, &store.settings);
+                                }
+                                let _ = handle2.emit_to("main", "first-tray-hide", ());
+                            } else if let Some(w) = handle2.get_webview_window("main") {
                                 let _ = w.hide();
                             }
                         } else {

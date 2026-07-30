@@ -104,6 +104,12 @@ switch, most of it off until you turn it on.
   otherwise sit in the copied text exactly like that, since it never becomes an
   actual variable.
 - The backups window can open its snapshot folder in Explorer directly.
+- Closing to the tray for the very first time now explains what just happened —
+  right-click the tray icon to copy a prompt without reopening the window —
+  before the window disappears. Every later close is instant again.
+- The editor's automatic-placeholder chips call out `clipboard`: it is the only
+  one that reads live data instead of a fixed value, so it now stands apart from
+  the rest.
 
 ### Fixed
 

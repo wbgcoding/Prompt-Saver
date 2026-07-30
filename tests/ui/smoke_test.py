@@ -626,6 +626,15 @@ PROBE = """
       } else if (chips.some(c => !c.title.trim())) {
         out.errors.push('an automatic placeholder chip has no explanation');
       }
+      // P42: the clipboard placeholder reads live external data, unlike the rest —
+      // it alone must carry the highlight class.
+      const clipChip = chips.find(c => c.textContent === '/clipboard\\\\');
+      if (!clipChip || !clipChip.classList.contains('vars-chip-highlight')) {
+        out.errors.push('the clipboard placeholder chip is not highlighted');
+      }
+      if (chips.filter(c => c.classList.contains('vars-chip-highlight')).length !== 1) {
+        out.errors.push('more than one placeholder chip is highlighted');
+      }
       const ta = document.getElementById('modal-text');
       const before = ta.value;
       chips[0] && chips[0].click();
@@ -817,6 +826,25 @@ PROBE = """
     window.__FIRE__('vars-filled', null);
     await sleep(300);
     if (window.__LAST_COPY__ !== undefined) out.errors.push('a cancelled fill-in copied anyway');
+
+    // P92: the first close-to-tray shows a one-time hint before the window actually
+    // hides — dismissing it must still hide the window.
+    {
+      const win = window.__TAURI__.window.getCurrentWindow();
+      let hidden = false;
+      const origHide = win.hide;
+      win.hide = async () => { hidden = true; };
+      window.__FIRE__('first-tray-hide');
+      await sleep(200);
+      if (document.getElementById('confirm-modal').classList.contains('hidden')) {
+        out.errors.push('the first-tray-hide hint did not show a dialog');
+      }
+      if (hidden) out.errors.push('the window hid before the tray hint was dismissed');
+      document.getElementById('confirm-ok').click();
+      await sleep(200);
+      if (!hidden) out.errors.push('dismissing the tray hint did not hide the window');
+      win.hide = origHide;
+    }
 
     // Turn the paste option on through its real expert switch, then fire again (a
     // different prompt, so the per-prompt copy cooldown cannot swallow it).

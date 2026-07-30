@@ -2497,6 +2497,7 @@ input[type="password"]::-ms-clear { display: none; }
   transition: border-color var(--transition), color var(--transition);
 }
 .vars-chip:hover { border-color: var(--accent); color: var(--fg); }
+.vars-chip-highlight { border-color: var(--accent); color: var(--accent); }
 .vars-new { display: flex; align-items: center; gap: 6px; }
 .vars-new .modal-input { min-width: 0; padding: 3px 8px; font-size: 12px; }
 .vars-new-name { flex: 1 1 40%; }
