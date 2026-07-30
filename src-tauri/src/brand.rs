@@ -33,3 +33,11 @@ pub const LEGACY_DATA_FOLDER: &str = "com.bgcoding.promptsaver";
 pub const LEGACY_AUTOSTART_KEY: &str = "";
 /// File-name prefix of screenshots an earlier version saved.
 pub const LEGACY_SCREENSHOT_PREFIX: &str = "PromptSaver-";
+
+// What this brand calls the thing it stores. The backend only needs it for the few
+// English messages it hands back to the UI; every translated string is handled by
+// TERMS in ui/brand.js.
+/// Singular, lowercase.
+pub const ITEM: &str = "prompt";
+/// Plural, lowercase.
+pub const ITEM_PLURAL: &str = "prompts";

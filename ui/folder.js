@@ -285,7 +285,9 @@ async function applyTexts(s) {
   const i18n = await import("./i18n.js");
   const pref = (s.language && s.language !== "auto" ? s.language : navigator.language || "en").toLowerCase();
   const lang = Object.keys(i18n.FLOAT_TXT).find((c) => pref.startsWith(c)) || "en";
-  TXT = i18n.FLOAT_TXT[lang];
+  const { applyTerms } = await import("./terms.js");
+  TXT = Object.fromEntries(
+    Object.entries(i18n.FLOAT_TXT[lang]).map(([k, v]) => [k, applyTerms(v, lang)]));
   document.getElementById("size-label").textContent = TXT.size;
   document.getElementById("menu-rename").textContent = TXT.rename;
   document.getElementById("menu-dissolve").textContent = TXT.dissolve;

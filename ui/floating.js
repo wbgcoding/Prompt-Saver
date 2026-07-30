@@ -148,7 +148,9 @@ async function applyTexts(s) {
     : navigator.language || "en"
   ).toLowerCase();
   const lang = Object.keys(TXT).find((c) => pref.startsWith(c)) || "en";
-  const t = TXT[lang];
+  const { applyTerms } = await import("./terms.js");
+  const t = Object.fromEntries(
+    Object.entries(TXT[lang]).map(([k, v]) => [k, applyTerms(v, lang)]));
   document.getElementById("feedback").textContent = t.copied;
   document.getElementById("size-label").textContent = t.size;
   // Localized tooltip for the S/M/L size buttons (visible letters stay universal).

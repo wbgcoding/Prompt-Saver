@@ -1637,6 +1637,15 @@ fn write_json<T: Serialize>(path: &PathBuf, data: &T) -> bool {
     false
 }
 
+// Capitalise a brand word for a dialog title ("prompts" -> "Prompts").
+fn title_case(w: &str) -> String {
+    let mut c = w.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+        None => String::new(),
+    }
+}
+
 // ---------- SQLite store ----------
 // Prompts live one-per-row (ordered); settings are a single JSON row. The DB
 // is the source of truth; the legacy JSON files are imported once on upgrade
@@ -4429,7 +4438,7 @@ fn save_tile_folder(
     let mut store = lock(&state);
     for pid in &members {
         if !store.prompts.iter().any(|p| &p.id == pid) {
-            return Err("unknown prompt".to_string());
+            return Err(format!("unknown {}", brand::ITEM));
         }
     }
     for folder in store.settings.tile_folders.iter_mut() {
@@ -4446,7 +4455,7 @@ fn save_tile_folder(
         }
         None => {
             if members.len() < 2 {
-                return Err("a folder needs at least two prompts".to_string());
+                return Err(format!("a folder needs at least two {}", brand::ITEM_PLURAL));
             }
             if !store.settings.views.iter().any(|v| v.id == view_id) {
                 return Err("unknown view".to_string());
@@ -6500,7 +6509,7 @@ async fn remove_folder_member(
         let store = lock(&state);
         let prompt = match store.prompts.iter().find(|p| p.id == id) {
             Some(p) => p,
-            None => return Err("unknown prompt".to_string()),
+            None => return Err(format!("unknown {}", brand::ITEM)),
         };
         if !store
             .settings
@@ -8467,7 +8476,7 @@ async fn export_prompts(app: AppHandle, state: State<'_, Db>, format: String, id
         (content, selected.len())
     };
     let file = file_dialog(&app)
-        .set_file_name(format!("prompts.{}", format))
+        .set_file_name(format!("{}.{}", brand::ITEM_PLURAL, format))
         .add_filter(format.to_uppercase(), &[format.as_str()])
         .save_file();
     match file {
@@ -8751,7 +8760,7 @@ fn parse_csv_data(content: &str) -> ImportData {
 #[tauri::command]
 async fn import_prompts(app: AppHandle, state: State<'_, Db>) -> Result<usize, String> {
     let file = file_dialog(&app)
-        .add_filter("Prompts", &["csv", "txt"])
+        .add_filter(&title_case(brand::ITEM_PLURAL), &["csv", "txt"])
         .pick_file();
     let Some(path) = file else {
         return Err("canceled".to_string());
@@ -8764,7 +8773,7 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>) -> Result<usize, S
     let data = if is_csv { parse_csv_data(&content) } else { parse_txt(&content) };
 
     if data.prompts.is_empty() {
-        return Err("no prompts found".to_string());
+        return Err(format!("no {} found", brand::ITEM_PLURAL));
     }
 
     // Prompts-only import: never touch app settings, views or layout, even if an

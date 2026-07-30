@@ -1,5 +1,6 @@
 // Main-window controller. Uses Tauri's global API (withGlobalTauri).
 import { APP_NAME, FLAG_DEFAULTS } from "./brand.js";
+import { applyTerms } from "./terms.js";
 import { I18N, LANGS } from "./i18n.js";
 import { FONTS, FONT_LABELS, fitText } from "./fonts.js";
 import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./media.js";
@@ -161,7 +162,8 @@ function resolveLang(pref) {
 }
 // {app} stands for the product name in every translation, so no string spells it.
 // Filling it here means callers never have to pass it.
-const t = (key) => String(I18N[LANG][key] ?? I18N.en[key] ?? key).replaceAll("{app}", APP_NAME);
+const t = (key) =>
+  applyTerms(String(I18N[LANG][key] ?? I18N.en[key] ?? key).replaceAll("{app}", APP_NAME), LANG);
 
 // The product name never appears in the markup — every [data-brand] element (the
 // <title> and the header label) is filled from ui/brand.js. Runs at load, before

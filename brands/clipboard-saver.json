@@ -18,5 +18,25 @@
   "installerIcon": "brands/icons/clipboard-saver-installer.svg",
   "flagDefaults": {
     "mdPreview": false
+  },
+  "terms": {
+    "item": "entry",
+    "itemPlural": "entries",
+    "forms": {
+      "en": {
+        "prompts": "entries",
+        "Prompts": "Entries",
+        "prompt": "entry",
+        "Prompt": "Entry"
+      },
+      "de": {
+        "desselben Prompts": "desselben Eintrags",
+        "eines Prompts": "eines Eintrags",
+        "allen Prompts": "allen Einträgen",
+        "Prompts": "Einträge",
+        "Prompt": "Eintrag",
+        "prompt": "prompt"
+      }
+    }
   }
 }
