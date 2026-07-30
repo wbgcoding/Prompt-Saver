@@ -200,7 +200,15 @@ const RESULTS = {
   list_versions: () => [],
   missing_files: () => [],
   has_backup_password: () => true,
-  find_duplicates: () => [],
+  // One real group, so the duplicate cards actually render and the layout scan has
+  // something to measure — an empty list only ever proved the "none found" line.
+  find_duplicates: () => [{
+    score: 0.94,
+    members: [
+      { id: "p0", name: PROMPTS[0].name, text: PROMPTS[0].text, usage: 12, views: ["Home"] },
+      { id: "p1", name: PROMPTS[1].name, text: PROMPTS[1].text, usage: 3, views: ["Home", "Work"] },
+    ],
+  }],
   // A release body in the shape GitHub delivers it, so the changelog popup has real
   // Markdown to render (heading, wrapped paragraph, table, bullets, bold, code, link).
   check_update: () => ({

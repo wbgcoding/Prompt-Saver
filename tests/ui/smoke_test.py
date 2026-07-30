@@ -1017,6 +1017,36 @@ PROBE = """
       const cm4 = document.getElementById('confirm-modal');
       if (!cm4.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
     }
+    // Duplicates: its own dialog, reachable only from the expert menu, and the last
+    // window of the main surface that no scan had ever opened.
+    document.getElementById('settings').classList.remove('hidden');
+    await click('expert-open');
+    const dupBtn = [...document.querySelectorAll('#expert-flags button')]
+      .find(b => /duplicat|duplik|dupli/i.test(b.textContent));
+    if (!dupBtn) {
+      out.errors.push('the expert menu has no way to open the duplicates dialog');
+    } else {
+      dupBtn.click();
+      await sleep(500);
+      const dm = document.getElementById('dupes-modal');
+      if (dm.classList.contains('hidden')) {
+        out.errors.push('the duplicates dialog did not open');
+      } else {
+        if (!document.querySelectorAll('#dupes-body .dup-group').length) {
+          out.errors.push('the duplicates dialog shows no group for a reported duplicate');
+        }
+        if (document.querySelectorAll('#dupes-body .dup-col').length !== 2) {
+          out.errors.push('a duplicate group does not show both of its entries');
+        }
+        layoutScan('duplicates');
+        mustReach('duplicates', '#dupes-body .dup-keep, #dupes-modal .modal-head-actions > button');
+        await click('dupes-close');
+        await sleep(200);
+      }
+    }
+    await click('expert-back');
+    document.getElementById('settings').classList.add('hidden');
+    await sleep(150);
     // The colour picker must fit the window at ANY size: it may neither scroll (the
     // knob would be out of reach) nor spill (the hex field gets cut off).
     if (await openEditor('p1')) {
