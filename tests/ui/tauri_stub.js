@@ -138,7 +138,10 @@ const SETTINGS = {
   view_groups: [{ id: "g1", name: "Docs", color: "", view_ids: ["notes", "archive"] }],
   // F27: one grid folder on the home view, so the folder cell and its popover are
   // walked on every run. Its two members are drawn by the folder, not as tiles.
-  tile_folders: [{ id: "tf1", name: "Drafts", color: "", view_id: "home", cell: [0, 1], members: ["p4", "p6"] }],
+  // Eight members on purpose: the open popover is then taller than a small window
+  // leaves, which is the case the popover placement has to get right.
+  tile_folders: [{ id: "tf1", name: "Drafts", color: "", view_id: "home", cell: [0, 1],
+    members: ["p4", "p6", "p8", "p10", "p11"] }],
   active_view: "home",
 };
 

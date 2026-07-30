@@ -266,13 +266,25 @@ PROBE = """
         out.errors.push('a prompt inside the folder is still a tile of its own');
       }
       const cnt = fTile.querySelector('.folder-count');
-      if (!cnt || cnt.textContent !== '2') out.errors.push('the folder does not show its member count');
+      if (!cnt || cnt.textContent !== '5') out.errors.push('the folder does not show its member count');
+      const anchor = fTile.getBoundingClientRect();
       fTile.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));
       window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));
       await sleep(200);
       const pop = document.querySelector('.tile-folder-pop:not(.hidden)');
       const members = pop ? pop.querySelectorAll('.folder-member-tile').length : 0;
-      if (members !== 2) out.errors.push('the open folder shows ' + members + ' of 2 entries');
+      if (members !== 5) out.errors.push('the open folder shows ' + members + ' of 5 entries');
+      // A popover taller than the room below must shrink and scroll, NOT jump to the
+      // top of the window and cover the tile it was opened from.
+      if (pop) {
+        const r = pop.getBoundingClientRect();
+        const clear = r.top >= anchor.bottom - 1 || r.bottom <= anchor.top + 1;
+        if (!clear) {
+          out.errors.push('the folder popover covers the tile it belongs to (' +
+            Math.round(r.top) + '..' + Math.round(r.bottom) + ' vs tile ' +
+            Math.round(anchor.top) + '..' + Math.round(anchor.bottom) + ')');
+        }
+      }
       layoutScan('grid folder');
       document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
       await sleep(120);
