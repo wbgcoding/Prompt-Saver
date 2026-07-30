@@ -952,7 +952,21 @@ PROBE = """
       await sleep(250);
       if (ta.classList.contains('hidden')) out.errors.push('clicking the preview does not open the text field');
       if (document.activeElement !== ta) out.errors.push('the text field did not take focus for typing');
-      ta.dispatchEvent(new Event('blur'));
+      // A blur caused by pressing a button must NOT swap while the pointer is still
+      // down: the block changes height and the click lands somewhere else.
+      window.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      ta.blur();
+      await sleep(200);
+      if (prev.classList.contains('hidden') === false) {
+        out.errors.push('the preview took over mid-click, moving whatever was being pressed');
+      }
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+      await sleep(250);
+      if (prev.classList.contains('hidden')) out.errors.push('the swap never happened after the click finished');
+      // And the plain case: focus leaves without a click at all.
+      prev.click();
+      await sleep(200);
+      ta.blur();
       await sleep(250);
       if (prev.classList.contains('hidden')) out.errors.push('leaving the text field does not render the prompt again');
       await click('modal-close-x');

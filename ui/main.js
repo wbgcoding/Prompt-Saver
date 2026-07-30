@@ -8003,7 +8003,23 @@ function bind() {
   };
   modal.mdPreview.addEventListener("click", () => { if (flag("mdPreview") && !mdSplit()) mdSwap(true); });
   modal.mdPreview.addEventListener("focus", () => { if (flag("mdPreview") && !mdSplit()) mdSwap(true); });
-  modal.text.addEventListener("blur", () => { if (mdEditing) mdSwap(false); });
+  // Swapping back changes the height of the block, so doing it on the blur that a
+  // mousedown produces moves whatever the user is halfway through clicking — the
+  // click then lands somewhere else, or nowhere. Wait for the pointer to come up.
+  let swapAfterClick = false;
+  let pointerIsDown = false;
+  window.addEventListener("pointerdown", () => { pointerIsDown = true; }, true);
+  window.addEventListener("pointerup", () => {
+    pointerIsDown = false;
+    if (!swapAfterClick) return;
+    swapAfterClick = false;
+    if (mdEditing && document.activeElement !== modal.text) mdSwap(false);
+  }, true);
+  modal.text.addEventListener("blur", () => {
+    if (!mdEditing) return;
+    if (pointerIsDown) { swapAfterClick = true; return; }
+    mdSwap(false);
+  });
   // F12/F13 variable helper collapsible (same convention as the notes row).
   modal.varsHead.addEventListener("click", () => {
     const open = !modal.varsBody.classList.toggle("hidden");
