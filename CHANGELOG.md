@@ -80,6 +80,9 @@ switch, most of it off until you turn it on.
 - Dropdowns, colour popovers and context menus flip above their anchor when there
   is no room below, and never open past the edge of the window.
 - The favourites section of the tray menu is on out of the box.
+- **Hiding the window from screen capture is now off out of the box.** With it on,
+  every screenshot of the window came out empty and nothing said why. The switch
+  stays where it was, under privacy in the expert menu.
 - A backup is now either whole or absent: the snapshot is written under a
   temporary name and only then renamed, and a failed one leaves nothing behind.
 

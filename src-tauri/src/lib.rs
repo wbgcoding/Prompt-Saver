@@ -5649,7 +5649,9 @@ fn set_float_bounds_native(win: &tauri::WebviewWindow, x: f64, y: f64, w: f64, h
 const CAPTURE_FLAG_KEY: &str = "captureExclusion";
 
 fn capture_excluded(settings: &Settings) -> bool {
-    settings.ui_flags.get(CAPTURE_FLAG_KEY) != Some(&false)
+    // Off by default: with it on, every screenshot of this window comes out empty and
+    // nothing on screen says why. It stays available for anyone who wants it.
+    settings.ui_flags.get(CAPTURE_FLAG_KEY) == Some(&true)
 }
 
 // Keep our own windows out of OTHER capture tools (Snipping Tool, Print Screen,

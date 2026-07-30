@@ -218,9 +218,10 @@ Funktionen. Innerhalb einer Gruppe stehen die aus meiner Sicht nützlichsten obe
 72. **Die Skalierungsregler sind zu fein.** Fünf Werte für Fenster, Modale, Icons,
     Composer, Primärknopf; eine Gesamtskalierung würde 90 % der Fälle abdecken.
     *Wo:* Expertenmenü → Aussehen.
-73. **„Vor Bildschirmaufnahmen verbergen" ist an und überrascht jeden.** Man kann das
-    Programm nicht screenshotten und findet nicht heraus, warum. Der Tooltip muss das
-    Wort „Screenshot" enthalten. *Wo:* Expertenmenü → Datenschutz.
+73. **„Vor Bildschirmaufnahmen verbergen" braucht eine Warnung beim Einschalten.**
+    Die Sperre wird inzwischen ausgeschaltet ausgeliefert — wer sie einschaltet, sollte
+    einmal lesen, dass Screenshots danach leer bleiben. Heute steht das nur im Tooltip.
+    *Wo:* Expertenmenü → Datenschutz.
 
 ## L · Themes und Optik
 

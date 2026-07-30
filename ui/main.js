@@ -844,7 +844,6 @@ const FLAG_LABELS = {
   pasteMedia: "flagPasteMedia",
   dragDrop: "flagDragDrop",
   promptVars: "flagPromptVars",
-  captureExclusion: "flagCaptureExclusion",
   copyHistory: "flagCopyHistory",
   historyTimestamps: "flagHistoryTimestamps",
   historyGrouped: "flagHistoryGrouped",
@@ -924,6 +923,9 @@ const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 // class that is present exactly when the option is on.
 const OPT_FLAG_LABELS = {
   // Features extras
+  // Ships OFF: an app that cannot be screenshotted looks broken, and the reason
+  // is invisible. Whoever wants the protection turns it on here.
+  captureExclusion: "flagCaptureExclusion",
   storeFiles: "flagStoreFiles",
   gridLines: "flagGridLines",
   uppercaseTiles: "flagUppercaseTiles",
