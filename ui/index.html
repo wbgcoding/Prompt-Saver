@@ -220,8 +220,13 @@
            picked, so the editor's existing flex rules keep applying unchanged. -->
       <div id="modal-text-wrap" class="modal-text-wrap">
         <textarea id="modal-text" class="modal-input modal-text hidden" rows="6" data-i18n-ph="promptPh"></textarea>
-        <div id="modal-md-preview" class="md-preview hidden" tabindex="0" aria-live="off"
-             data-i18n-title="mdClickToEdit"></div>
+        <div id="modal-md-wrap" class="md-wrap hidden">
+          <div id="modal-md-preview" class="md-preview" tabindex="0" aria-live="off"
+               data-i18n-title="mdClickToEdit"></div>
+          <!-- The rendered pane and the text field are deliberately the same box, so
+               without this there is nothing to tell you which one you are looking at. -->
+          <span class="md-badge" data-i18n="mdRendered" aria-hidden="true">Rendered</span>
+        </div>
       </div>
       <!-- Live length readout (chars / words / ~tokens), expert-tunable -->
       <div id="modal-length" class="modal-length hidden" aria-hidden="true"></div>

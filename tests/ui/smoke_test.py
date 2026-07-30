@@ -879,12 +879,13 @@ PROBE = """
       out.errors.push('the Markdown prompt did not open in the editor');
     } else {
       const prev = document.getElementById('modal-md-preview');
+      const pwrap = document.getElementById('modal-md-wrap');
       const ta = document.getElementById('modal-text');
       // With the feature on the prompt opens RENDERED — no switch, no empty pane.
       if (!prev.innerHTML.trim()) {
         out.errors.push('the preview pane is empty before it is opened');
       }
-      if (prev.classList.contains('hidden')) {
+      if (pwrap.classList.contains('hidden')) {
         out.errors.push('the prompt does not open rendered');
       } else {
         if (!ta.classList.contains('hidden')) {
@@ -969,18 +970,18 @@ PROBE = """
       window.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
       ta.blur();
       await sleep(200);
-      if (prev.classList.contains('hidden') === false) {
+      if (pwrap.classList.contains('hidden') === false) {
         out.errors.push('the preview took over mid-click, moving whatever was being pressed');
       }
       window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
       await sleep(250);
-      if (prev.classList.contains('hidden')) out.errors.push('the swap never happened after the click finished');
+      if (pwrap.classList.contains('hidden')) out.errors.push('the swap never happened after the click finished');
       // And the plain case: focus leaves without a click at all.
       prev.click();
       await sleep(200);
       ta.blur();
       await sleep(250);
-      if (prev.classList.contains('hidden')) out.errors.push('leaving the text field does not render the prompt again');
+      if (pwrap.classList.contains('hidden')) out.errors.push('leaving the text field does not render the prompt again');
       await click('modal-close-x');
       await sleep(250);
       const cm3 = document.getElementById('confirm-modal');
@@ -1931,12 +1932,17 @@ FOLDER_PROBE = """
       errs.push('the folder label is missing: ' + name.textContent);
     }
     sideScan(errs, 'folder, closed');
-    // Free resize: dragging the corner grip changes the scale and must NOT open the
-    // folder (the grip sits over the icon, whose own press is the open gesture).
-    const grip = document.getElementById('rz-grip');
-    if (!grip) {
-      errs.push('the folder has no resize grip');
+    // Free resize from ANY edge, exactly like a pill: nothing is drawn for it, so the
+    // ring is what this proves. It must change the size and must NOT open the folder
+    // (the icon's own press is the open gesture), and the centre must stay free —
+    // rz-hole covers it, or dragging the middle would resize instead of moving.
+    const grip = document.getElementById('rz-catch');
+    const hole = document.getElementById('rz-hole');
+    if (!grip || !hole) {
+      errs.push('the folder has no resize ring');
     } else {
+      const ring = getComputedStyle(document.getElementById('resize')).getPropertyValue('--rz').trim();
+      if (!ring || parseFloat(ring) < 8) errs.push('the resize ring has no usable thickness: ' + ring);
       const before = getComputedStyle(document.body).getPropertyValue('--folder-box').trim();
       grip.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, screenX: 100, screenY: 100 }));
       window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, screenX: 148, screenY: 148 }));

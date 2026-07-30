@@ -1316,8 +1316,33 @@ body.library-front #modal.overlay { z-index: 67; }
   line-height: 1.5;
   cursor: text;
 }
-#modal.tall .md-preview { flex: 1 1 auto; min-height: 120px; max-height: none; }
-#modal.tall.history-open .md-preview { flex: 0 1 auto; min-height: 96px; max-height: 26vh; }
+/* The wrap is the flex child now (it carries the badge), so the height rules move
+   with it; the pane itself just fills it. */
+.md-wrap { position: relative; display: flex; min-height: 0; }
+.md-wrap > .md-preview { flex: 1 1 auto; min-width: 0; }
+#modal.tall .md-wrap { flex: 1 1 auto; min-height: 120px; }
+#modal.tall .md-wrap > .md-preview { max-height: none; }
+#modal.tall.history-open .md-wrap { flex: 0 1 auto; min-height: 96px; max-height: 26vh; }
+/* Says which of the two identical boxes you are looking at. Quiet by default, plain
+   on hover — without it "is this rendered?" has no answer on a prompt that happens to
+   contain no Markdown. */
+.md-badge {
+  position: absolute;
+  top: 6px;
+  right: 14px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 15px;
+  letter-spacing: 0.02em;
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity var(--transition);
+}
+.md-wrap:hover .md-badge { opacity: 1; }
 .md-preview::-webkit-scrollbar { width: var(--sb-width, 12px); }
 .md-preview::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface-2); }
 .md-preview::-webkit-scrollbar-thumb:hover { background: var(--muted); }

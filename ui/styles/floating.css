@@ -432,36 +432,22 @@ body.menu-open .pill { flex: 0 0 auto; }
   z-index: 1;
   transition: opacity var(--transition), transform var(--transition);
 }
-/* Free-resize grip, bottom-right of the closed folder icon. Sits ABOVE the icon so
-   the corner drag wins over the icon's own press-to-open/drag gesture; it disappears
-   while the folder is open (the window is then the popover, not the icon). */
-.folder-grip {
+/* Free resize, same idiom as the pill: rz-catch is the whole icon, rz-hole punches
+   out the centre, so only the edge ring resizes and nothing is drawn for it. The ring
+   scales with the icon, so the hitbox sits right at the edge at any size. While the
+   folder is open the window IS the popover, so the ring stands down. */
+.folder-rz {
   position: absolute;
-  z-index: 5;
-  width: 26%;
-  height: 26%;
-  right: 0;
-  bottom: 0;
-  cursor: nwse-resize;
-  opacity: 0;
-  transition: opacity var(--transition);
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  --rz: 12px;
 }
-/* Only while the pointer is IN the corner. Showing it on every hover of the folder
-   put a mark on screen that looked like an arrow and belonged to nothing. */
-.folder-grip:hover { opacity: 1; }
-.folder-grip::after {
-  content: "";
-  position: absolute;
-  right: 18%;
-  bottom: 18%;
-  width: 42%;
-  height: 42%;
-  /* Two short diagonals — the resize idiom, and nothing that points anywhere. */
-  background:
-    linear-gradient(135deg, transparent 44%, rgba(255, 255, 255, 0.85) 44% 56%, transparent 56%),
-    linear-gradient(135deg, transparent 74%, rgba(255, 255, 255, 0.85) 74% 86%, transparent 86%);
-}
-.folder-body.pop-open .folder-grip { display: none; }
+.folder-rz .rz-catch,
+.folder-rz .rz-hole { position: absolute; pointer-events: auto; border-radius: 22%; }
+.folder-rz .rz-catch { inset: 0; cursor: nwse-resize; }
+.folder-rz .rz-hole { inset: var(--rz); cursor: inherit; }
+.folder-body.pop-open .folder-rz { display: none; }
 .folder-preview {
   display: grid;
   grid-template-columns: 1fr 1fr;

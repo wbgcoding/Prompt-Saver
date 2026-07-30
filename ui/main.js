@@ -47,6 +47,7 @@ const modal = {
   varsBody: $("modal-vars-body"),
   varsHint: $("modal-vars-hint"),
   mdPreview: $("modal-md-preview"),
+  mdWrap: $("modal-md-wrap"),
   notes: $("modal-notes"),
   notesHead: $("modal-notes-head"),
   notesBody: $("modal-notes-body"),
@@ -5177,7 +5178,7 @@ function syncMdUi(textVisible) {
   // ONE field: the rendered pane stands in for the textarea and hands it back on a
   // click. Two panes side by side was the second thing on screen that did the same
   // job — there is no layout option any more.
-  modal.mdPreview.classList.toggle("hidden", !on || mdEditing);
+  modal.mdWrap.classList.toggle("hidden", !on || mdEditing);
   // Hide the WRAPPER, not just the textarea: the clear-X wrapper stays in flow with
   // an empty box and pushes the rendered pane down, so the field appeared to jump
   // 19px every time it handed over.

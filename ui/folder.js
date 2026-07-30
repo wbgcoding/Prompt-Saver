@@ -89,8 +89,16 @@ function paintFace(el, p, withName) {
   }
 }
 
+// Ring thickness, in proportion to the icon — the same reasoning as the pill's:
+// a fixed band is a hairline on a large folder and swallows a small one whole.
+const RING_MIN = 8;
+const RING_MAX = 60;
+
 function renderIcon() {
-  document.body.style.setProperty("--folder-box", px(FOLDER_BOX * state.scale));
+  const box = FOLDER_BOX * state.scale;
+  document.body.style.setProperty("--folder-box", px(box));
+  const ring = Math.round(Math.min(RING_MAX, Math.max(RING_MIN, box * 0.14)));
+  document.getElementById("resize")?.style.setProperty("--rz", `${ring}px`);
   previewEl.innerHTML = "";
   for (const p of state.members.slice(0, PREVIEW_MAX)) {
     const cell = document.createElement("span");
@@ -350,9 +358,10 @@ let iconDrag = null;
 window.addEventListener("mousedown", (e) => {
   if (e.button !== 0) return;
   if (e.target.closest(".menu") || e.target.closest(".folder-pop")) return;
-  // The corner grip resizes instead of moving/opening — check it FIRST, or the icon's
-  // own press would swallow the gesture.
-  if (e.target.closest("#rz-grip")) {
+  // The edge ring resizes instead of moving/opening — check it FIRST, or the icon's
+  // own press would swallow the gesture. rz-hole covers the centre, so only a press
+  // on the edge lands here.
+  if (e.target.closest("#rz-catch")) {
     gripDrag = { x: e.screenX, y: e.screenY, scale: state.scale };
     document.body.classList.add("resizing");
     e.preventDefault();
@@ -361,7 +370,7 @@ window.addEventListener("mousedown", (e) => {
   iconDrag = { x: e.screenX, y: e.screenY, moved: false };
 });
 
-// ---- Free resize (corner grip) ----
+// ---- Free resize (edge ring) ----
 // The folder's size IS its scale, so the drag maps the diagonal the pointer travelled
 // onto that one number and writes it through the same command the S/M/L presets use.
 // The backend clamps it (0.5-3.0), which is where the real limits live.

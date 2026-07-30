@@ -9,13 +9,18 @@
   <!-- Collapsed folder icon: up to four member previews in a 2x2 grid plus the
        member count. Opening the folder only RESIZES this window (the icon keeps its
        place inside it) — no member ever gets a window of its own. -->
-  <!-- Free resize: drag the bottom-right corner of the closed icon. The S/M/L presets
-       in the menu stay, this just makes every size in between reachable. -->
-  <div id="rz-grip" class="folder-grip" aria-hidden="true"></div>
+  <!-- Free resize: grab ANY edge of the closed icon, exactly like a pill. No visible
+       handle — rz-catch is the whole icon shape, rz-hole punches out the centre, so
+       only the edge ring resizes and the middle keeps dragging and opening. The S/M/L
+       presets in the menu stay; this makes every size between them reachable. -->
   <button id="icon" class="folder-icon" type="button">
     <span id="preview" class="folder-preview"></span>
     <span id="badge" class="folder-badge">0</span>
     <span id="fname" class="folder-name hidden"></span>
+    <span id="resize" class="folder-rz" aria-hidden="true">
+      <span id="rz-catch" class="rz-catch"></span>
+      <span id="rz-hole" class="rz-hole"></span>
+    </span>
   </button>
 
   <!-- Grid of member pills, placed by the backend layout (below/above/right/left). -->
