@@ -35,6 +35,19 @@ for (const lang of langs) {
   for (const k of keys) if (!en.has(k)) problems.push(`${lang}: has '${k}' which en does not`);
   const empty = [...keys].filter((k) => !String(I18N[lang][k]).trim());
   for (const k of empty) problems.push(`${lang}: '${k}' is empty`);
+  // A placeholder dropped in translation ships a sentence with a hole in it — the
+  // count, the app name or the value never appears. Compare against en.
+  if (lang !== "en") {
+    for (const k of keys) {
+      if (!en.has(k)) continue;
+      // Only the tokens t()/the call sites really substitute. The variable-syntax
+      // examples ("{#{VariableName}#}") are translated on purpose and are not holes.
+      const holes = (s) => (String(s).match(/\{(?:app|n|v|f|name|path|mode)\}/g) || []).sort().join(",");
+      const want = holes(I18N.en[k]);
+      const got = holes(I18N[lang][k]);
+      if (want !== got) problems.push(`${lang}: '${k}' has placeholders [${got}] instead of [${want}]`);
+    }
+  }
 }
 
 // Keys actually referenced from the UI code.
