@@ -1419,6 +1419,17 @@ PROBE = """
     mustReach('settings at 130% scale', '#settings-main button, #settings-main select');
     await click('expert-open');
     layoutScan('expert menu at 130% scale');
+    // Indentation is the only thing that says which setting belongs to which
+    // toggle. Every nested row has to actually step in, one level per depth.
+    for (const el of document.querySelectorAll('#expert-flags .expert-sub')) {
+      const depth = Number(el.style.getPropertyValue('--expert-depth') || 0);
+      const inset = parseFloat(getComputedStyle(el).marginLeft) || 0;
+      if (!(depth > 0)) out.layout.push('expert menu: a nested row carries no depth');
+      else if (inset < depth * 10) {
+        out.layout.push('expert menu: a depth-' + depth + ' row is indented ' +
+          Math.round(inset) + 'px, so it does not read as nested');
+      }
+    }
     await click('expert-back');
     document.getElementById('settings').classList.add('hidden');
     for (const v of ['--modal-zoom', '--icon-zoom', '--composer-zoom', '--primary-zoom']) {
