@@ -220,8 +220,15 @@ function applyTheme(theme, vars) {
 function applyThemeVars(vars) {
   const style = document.documentElement.style;
   for (const key of THEME_VARS) style.removeProperty(`--${key}`);
+  style.removeProperty("--shadow");
   for (const [key, value] of Object.entries(vars || {})) {
     if (THEME_VARS.includes(key) && HEX_RE.test(value)) style.setProperty(`--${key}`, value);
+  }
+  // The window glow is the base theme's, so a custom accent used to sit inside a
+  // shadow of the wrong colour and never followed an edit. Derive it instead.
+  const accent = vars?.accent;
+  if (HEX_RE.test(accent || "")) {
+    style.setProperty("--shadow", `0 8px 28px color-mix(in srgb, ${accent} 32%, transparent)`);
   }
 }
 
@@ -517,16 +524,47 @@ function renderNumPop() {
 // existing `/ z` call sites stay no-ops instead of being ripped out everywhere.
 const uiZoom = () => 1;
 
+// ---- ONE placement rule for every popover, dropdown and context menu ----
+// Below the anchor when it fits, above it when it does not, and always clamped into
+// the window on both axes — a popover that opens past an edge is unreachable, and
+// that was the same defect in the theme editor, the value pickers and the colour
+// row. Call it AFTER the content is built: the size has to be measurable.
+const POP_PAD = 6;
+function placePopover(el, rect, gap = 4) {
+  el.classList.remove("hidden"); // a hidden element has no box to measure
+  el.style.maxHeight = "";
+  el.classList.remove("pop-clamped");
+  const w = el.offsetWidth;
+  const h = el.offsetHeight;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const below = vh - rect.bottom - gap - POP_PAD;
+  const above = rect.top - gap - POP_PAD;
+  let top;
+  let room;
+  if (h <= below || below >= above) { top = rect.bottom + gap; room = below; }
+  else { top = rect.top - gap - Math.min(h, above); room = above; }
+  // Too tall for either side: keep it inside and let it scroll rather than cut it.
+  if (h > room) {
+    el.style.maxHeight = `${Math.max(80, room)}px`;
+    el.classList.add("pop-clamped");
+    if (top < POP_PAD) top = POP_PAD;
+  }
+  el.style.left = `${Math.max(POP_PAD, Math.min(rect.left, vw - w - POP_PAD))}px`;
+  el.style.top = `${Math.max(POP_PAD, Math.min(top, vh - Math.min(h, vh - 2 * POP_PAD) - POP_PAD))}px`;
+}
+// Cursor-anchored variant (context menus): the click point is the anchor.
+const placePopoverAt = (el, x, y) =>
+  placePopover(el, { left: x, right: x, top: y, bottom: y });
+
 function openNumPop(input, apply) {
   popInput = input;
   popApply = apply;
-  const r = input.getBoundingClientRect();
-  const z = uiZoom();
-  numPop.style.left = `${Math.min(r.left, window.innerWidth - 70) / z}px`;
-  numPop.style.top = `${(r.bottom + 4) / z}px`;
-  // Unhide first: centering the selection needs a laid-out list.
+  // Fill first: the placement needs a laid-out list, and so does centering the
+  // selected row.
   numPop.classList.remove("hidden");
   renderNumPop();
+  placePopover(numPop, input.getBoundingClientRect());
 }
 
 function closeNumPop(apply) {
@@ -576,12 +614,9 @@ function openValuePop(anchor, items, current, onPick) {
     });
     numPop.appendChild(row);
   }
-  // Width follows the widest entry, not the anchor.
-  const r = anchor.getBoundingClientRect();
-  const z = uiZoom();
-  numPop.style.left = `${Math.min(r.left, window.innerWidth - 120) / z}px`;
-  numPop.style.top = `${(r.bottom + 4) / z}px`;
-  numPop.classList.remove("hidden");
+  // Width follows the widest entry, not the anchor — so the clamp has to run on the
+  // real box, which is why it happens after the rows exist.
+  placePopover(numPop, anchor.getBoundingClientRect());
   if (selected) selected.scrollIntoView({ block: "center" });
 }
 
@@ -706,12 +741,7 @@ function openColorPop(anchor, current, onPick) {
   cpOnPick = null;
   cpRender(false); // show the current color without re-triggering the pick
   cpOnPick = onPick;
-  const r = anchor.getBoundingClientRect();
-  colorPop.classList.remove("hidden");
-  const w = colorPop.offsetWidth;
-  const z = uiZoom();
-  colorPop.style.left = `${Math.min(r.left, window.innerWidth - w - 8) / z}px`;
-  colorPop.style.top = `${(r.bottom + 6) / z}px`;
+  placePopover(colorPop, anchor.getBoundingClientRect(), 6);
 }
 
 function closeColorPop() {
@@ -2384,12 +2414,7 @@ function openViewGroupPop(g, anchor) {
     makeTabDraggable(row, v.id, true);
     viewGroupPop.appendChild(row);
   }
-  viewGroupPop.classList.remove("hidden");
-  const r = anchor.getBoundingClientRect();
-  const z = uiZoom();
-  const w = viewGroupPop.offsetWidth, h = viewGroupPop.offsetHeight;
-  viewGroupPop.style.left = `${Math.min(r.left, window.innerWidth - w - 6) / z}px`;
-  viewGroupPop.style.top = `${Math.min(r.bottom + 4, window.innerHeight - h - 6) / z}px`;
+  placePopover(viewGroupPop, anchor.getBoundingClientRect());
 }
 
 // Small shared right-click menu for view tabs and group tabs.
@@ -2409,11 +2434,7 @@ function openMiniMenu(items, x, y) {
     b.addEventListener("click", () => { closeMiniMenu(); it.run(); });
     miniMenu.appendChild(b);
   }
-  miniMenu.classList.remove("hidden");
-  const z = uiZoom();
-  const w = miniMenu.offsetWidth, h = miniMenu.offsetHeight;
-  miniMenu.style.left = `${Math.min(x, window.innerWidth - w - 6) / z}px`;
-  miniMenu.style.top = `${Math.min(y + 4, window.innerHeight - h - 6) / z}px`;
+  placePopoverAt(miniMenu, x, y);
 }
 
 async function saveViewGroup(g, patch) {
@@ -3016,17 +3037,13 @@ function wireSearchSuggest(input, storeKey) {
       row.append(label, del);
       pop.appendChild(row);
     }
-    // Divide by the body zoom (uiScale): fixed popups live inside the zoomed body.
-    const z = uiZoom();
     const r = input.getBoundingClientRect();
     // Size to the terms (short), not the full search field — a full-width bar over a
     // wide library search looked oversized. Clamp: at least 220px, at most the field.
-    pop.style.left = `${r.left / z}px`;
-    pop.style.top = `${(r.bottom + 4) / z}px`;
     pop.style.width = "";
-    pop.style.minWidth = `${Math.min(220, r.width / z)}px`;
-    pop.style.maxWidth = `${r.width / z}px`;
-    pop.classList.remove("hidden");
+    pop.style.minWidth = `${Math.min(220, r.width)}px`;
+    pop.style.maxWidth = `${r.width}px`;
+    placePopover(pop, r);
   };
   // Open on an explicit click/type, NOT on the focus the dialog may grab on open.
   input.addEventListener("pointerdown", show);
@@ -3796,12 +3813,7 @@ function openTileFolderPop(f, anchor) {
     grid.appendChild(btn);
   }
   tileFolderPop.appendChild(grid);
-  tileFolderPop.classList.remove("hidden");
-  const r = anchor.getBoundingClientRect();
-  const z = uiZoom();
-  const w = tileFolderPop.offsetWidth, h = tileFolderPop.offsetHeight;
-  tileFolderPop.style.left = `${Math.max(4, Math.min(r.left, window.innerWidth - w - 6)) / z}px`;
-  tileFolderPop.style.top = `${Math.max(4, Math.min(r.bottom + 4, window.innerHeight - h - 6)) / z}px`;
+  placePopover(tileFolderPop, anchor.getBoundingClientRect());
 }
 
 // Dragging a member out of the open popover.
@@ -3911,11 +3923,7 @@ function openCtx(id, x, y) {
   pinBtn.textContent = t(pinned ? "removeFloating" : "showFloating");
   // In the favorites view a prompt can't be hidden/removed — unstar it instead.
   ctxEl.querySelector('[data-act="hide"]').classList.toggle("hidden", favView);
-  ctxEl.classList.remove("hidden");
-  const w = ctxEl.offsetWidth, h = ctxEl.offsetHeight;
-  const z = uiZoom();
-  ctxEl.style.left = `${Math.min(x, window.innerWidth - w - 4) / z}px`;
-  ctxEl.style.top = `${Math.min(y, window.innerHeight - h - 4) / z}px`;
+  placePopoverAt(ctxEl, x, y);
 }
 function closeCtx() {
   ctxEl.classList.add("hidden");
@@ -3993,11 +4001,7 @@ function buildToolbarMenu() {
 }
 function openToolbarMenu(x, y) {
   buildToolbarMenu();
-  toolbarMenu.classList.remove("hidden");
-  const z = uiZoom();
-  const w = toolbarMenu.offsetWidth, h = toolbarMenu.offsetHeight;
-  toolbarMenu.style.left = `${Math.min(x, window.innerWidth - w - 6) / z}px`;
-  toolbarMenu.style.top = `${Math.min(y + 4, window.innerHeight - h - 6) / z}px`;
+  placePopoverAt(toolbarMenu, x, y);
 }
 function closeToolbarMenu() { toolbarMenu.classList.add("hidden"); }
 
@@ -6328,13 +6332,7 @@ tagPop.className = "tag-pop hidden";
 tagPop.innerHTML = '<div class="swatches"></div>';
 document.body.appendChild(tagPop);
 
-function placePop(el, anchor) {
-  const r = anchor.getBoundingClientRect();
-  el.classList.remove("hidden");
-  const z = uiZoom();
-  el.style.left = `${Math.min(r.left, window.innerWidth - el.offsetWidth - 8) / z}px`;
-  el.style.top = `${(r.bottom + 4) / z}px`;
-}
+const placePop = (el, anchor) => placePopover(el, anchor.getBoundingClientRect());
 const closeTagSuggest = () => tagSuggest.classList.add("hidden");
 const closeTagPop = () => tagPop.classList.add("hidden");
 document.addEventListener("pointerdown", (e) => {

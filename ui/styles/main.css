@@ -3038,6 +3038,9 @@ body.drag-over::after {
   border-radius: 8px;
   box-shadow: var(--shadow);
 }
+/* Set by placePopover when a popover is taller than the room it has: it keeps its
+   place inside the window and scrolls instead of being cut off at the edge. */
+.pop-clamped { overflow-y: auto; }
 .num-pop::-webkit-scrollbar { width: 6px; }
 .num-pop::-webkit-scrollbar-track { background: transparent; margin: 6px 0; }
 .num-pop::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
@@ -3295,9 +3298,13 @@ button.tag-chip:hover { border-color: var(--accent); }
   border: 1px solid var(--border);
   border-radius: var(--radius-sm, 7px);
   background: var(--surface-2, var(--surface));
+  /* The button takes its size from the row; the glyph has to be centred in it and
+     scale with it, or it sits off to one corner. */
+  align-items: center;
+  justify-content: center;
 }
 .theme-edit-btn:hover { background: var(--hover); border-color: var(--accent); }
-.theme-edit-btn svg { width: 20px; height: 20px; }
+.theme-edit-btn svg { width: 62%; height: 62%; }
 body.noflag-customThemes .theme-edit-btn { display: none; }
 
 #theme-modal.overlay { z-index: 68; }

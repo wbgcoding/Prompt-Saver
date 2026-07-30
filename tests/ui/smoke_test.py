@@ -114,6 +114,20 @@ PROBE = """
           box.clientHeight + 'px and cannot scroll to it');
       }
     }
+    // Every popover goes through one placement rule and must land fully inside the
+    // window — vertically too. A dropdown opening past the bottom edge is the theme
+    // editor / value picker defect, and it is invisible to the horizontal scan.
+    for (const el of document.querySelectorAll(
+        '.num-pop, .color-pop, .tag-suggest, .tag-pop, .mini-menu, .ctx-menu, ' +
+        '.tile-folder-pop, .view-group-pop, .toolbar-menu, .suggest-pop')) {
+      if (!onScreen(el)) continue;
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      if (r.bottom > innerHeight + 1 || r.top < -1 || r.right > innerWidth + 1 || r.left < -1) {
+        add(sig(el) + ' opens outside the window (' + Math.round(r.left) + ',' + Math.round(r.top) +
+          '..' + Math.round(r.right) + ',' + Math.round(r.bottom) + ' of ' + innerWidth + 'x' + innerHeight + ')');
+      }
+    }
     for (const el of document.querySelectorAll('body *')) {
       if (!onScreen(el)) continue;
       const r = el.getBoundingClientRect();
@@ -1414,6 +1428,22 @@ PROBE = """
     // Leave the theme editor open so the scans below measure its real layout.
     document.getElementById('settings').classList.remove('hidden');
     await click('theme-edit-open');
+    // Every dropdown and swatch in the theme editor is anchored low in the window —
+    // exactly where a popover used to open past the bottom edge. Open the LAST of
+    // each kind, which is the worst case, and let the popover scan judge it.
+    const lastVisible = (sel) => [...document.querySelectorAll(sel)]
+      .filter(e => e.getClientRects().length).pop();
+    for (const [sel, what] of [['#theme-modal select', 'theme editor dropdown'],
+                               ['#theme-modal .swatch, #theme-modal .color-dot', 'theme editor colour']]) {
+      const el = lastVisible(sel);
+      if (!el) continue;
+      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      el.click();
+      await sleep(250);
+      layoutScan(what);
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await sleep(150);
+    }
   } catch (e) { out.errors.push('probe: ' + e.message); }
   for (const el of document.querySelectorAll('.overlay *, #expert-flags *')) {
     const r = el.getBoundingClientRect();
