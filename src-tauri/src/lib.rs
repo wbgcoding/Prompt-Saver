@@ -6017,20 +6017,33 @@ async fn clip_inbox_clear(app: AppHandle) -> Result<(), String> {
 // Set a floating window's position AND size together (logical px). Used by the
 // edge/corner resize so the grabbed edge tracks the cursor 1:1.
 #[tauri::command]
-async fn set_float_bounds(app: AppHandle, id: String, x: f64, y: f64, width: f64, height: f64) -> Result<(), String> {
+async fn set_float_bounds(
+    app: AppHandle,
+    id: String,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    clamp: Option<bool>,
+) -> Result<(), String> {
     if [x, y, width, height].iter().all(|v| v.is_finite()) {
         if let Some(win) = app.get_webview_window(&flabel(&id)) {
             let w = width.clamp(48.0, 8000.0);
             let h = height.clamp(48.0, 8000.0);
-            // Keep the grown box on the monitor. The pill menu picks a side that fits
-            // and falls back to "below" when none does — on a small screen (or with a
-            // large scaled pill) that fallback used to push the menu buttons off the
-            // edge where no pointer could reach them. Clamping here covers every
-            // caller instead of each one repeating the arithmetic.
-            let dpi = win.scale_factor().unwrap_or(1.0);
-            let work = work_rect_at(&app, x * dpi, y * dpi);
-            let (cx, cy) = clamp_to_work(work, w * dpi, h * dpi, x * dpi, y * dpi);
-            let (x, y) = (cx / dpi, cy / dpi);
+            // OPT-IN, and only the pill menu asks for it: that placement picks a side
+            // that fits and falls back to "below" when none does, which used to push
+            // the buttons off the screen edge. Every other caller has already worked
+            // out the exact box it wants — a live edge-resize computes the origin from
+            // the size it is about to set, so clamping it here moved the window out
+            // from under the cursor on every frame near a screen edge.
+            let (x, y) = if clamp.unwrap_or(false) {
+                let dpi = win.scale_factor().unwrap_or(1.0);
+                let work = work_rect_at(&app, x * dpi, y * dpi);
+                let (cx, cy) = clamp_to_work(work, w * dpi, h * dpi, x * dpi, y * dpi);
+                (cx / dpi, cy / dpi)
+            } else {
+                (x, y)
+            };
             #[cfg(windows)]
             if set_float_bounds_native(&win, x, y, w, h) {
                 return Ok(());

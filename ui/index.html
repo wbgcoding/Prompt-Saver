@@ -579,7 +579,9 @@
             <option value="midnight" data-i18n="themeMidnight">Midnight</option>
           </select>
           <button id="theme-edit-open" class="icon-btn theme-edit-btn" type="button" data-i18n-title="themeEditor" data-i18n-aria="themeEditor">
-            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+            <!-- The palette artwork spans y 3.2-18.8 in a 24 box, so it sits 1px above
+                 the centre. The shifted viewBox puts it back, without redrawing it. -->
+            <svg viewBox="0 -1 24 24" width="17" height="17" aria-hidden="true">
               <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M12 3.2c-4.9 0-8.8 3.6-8.8 8.1 0 4.4 3.5 7.5 7.4 7.5 1.4 0 2.2-.8 2.2-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.4-.6-.4-1 0-.8.7-1.4 1.6-1.4h1.6c3 0 5.1-2 5.1-4.9 0-3-3.5-5.3-8.2-5.3Z"/>
               <circle cx="7.6" cy="11.4" r="1.25" fill="currentColor"/>
               <circle cx="11.1" cy="7.9" r="1.25" fill="currentColor"/>

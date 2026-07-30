@@ -393,6 +393,7 @@ window.__TAURI__ = {
   core: {
     invoke: async (cmd, args) => {
       (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []).push(cmd);
+      (window.__SMOKE_ARGS__ = window.__SMOKE_ARGS__ || []).push([cmd, args]);
       const fn = RESULTS[cmd];
       return fn ? fn(args) : null;
     },

@@ -1017,6 +1017,37 @@ PROBE = """
       const cm4 = document.getElementById('confirm-modal');
       if (!cm4.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
     }
+    // The colour picker must fit the window at ANY size: it may neither scroll (the
+    // knob would be out of reach) nor spill (the hex field gets cut off).
+    if (await openEditor('p1')) {
+      const custom = document.querySelector('#color-row .swatch.custom');
+      if (!custom) {
+        out.errors.push('the editor colour row has no custom-colour swatch');
+      } else {
+        custom.click();
+        await sleep(300);
+        const cp = document.querySelector('.color-pop:not(.hidden)');
+        if (!cp) out.errors.push('the custom colour swatch opened no picker');
+        else {
+          const r = cp.getBoundingClientRect();
+          if (r.top < -1 || r.bottom > innerHeight + 1 || r.left < -1 || r.right > innerWidth + 1) {
+            out.errors.push('the colour picker does not fit the window (' +
+              Math.round(r.top) + '..' + Math.round(r.bottom) + ' of ' + innerHeight + ')');
+          }
+          if (cp.scrollHeight > cp.clientHeight + 2) {
+            out.errors.push('the colour picker scrolls instead of fitting');
+          }
+        }
+        document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        await sleep(150);
+      }
+      await click('modal-close-x');
+      await sleep(250);
+      const cm5 = document.getElementById('confirm-modal');
+      if (!cm5.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+    } else {
+      out.errors.push('the editor did not open for the colour-picker check');
+    }
     // Gating: a row whose feature is off must disappear the moment that toggle is
     // flipped — no reopening the menu — and a whole branch goes with its parent.
     const rowFor = (label) => [...document.querySelectorAll('#expert-flags .field')]
@@ -1536,6 +1567,7 @@ FLOAT_PROBE = """
   const errs = [];
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));""" + SIDE_SCAN + """
   const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
+  const args = () => (window.__SMOKE_ARGS__ = window.__SMOKE_ARGS__ || []);
   const until = async (fn) => { for (let i = 0; i < 80 && !fn(); i++) await sleep(50); return fn(); };
   const pill = document.getElementById('pill');
   const down = (opts) => pill.dispatchEvent(new MouseEvent('mousedown', Object.assign(
@@ -1553,6 +1585,31 @@ FLOAT_PROBE = """
     // The OS move loop startDragging() hands the window to CONSUMES the button
     // release, so a dragged pill never sees `mouseup`. The merge test therefore has
     // to run off the first later event that reports no button held.
+    // Edge resize. Grabbing the ring snaps the window to the pill box straight away,
+    // and THAT call is what this checks: it must carry the exact box, with no monitor
+    // clamp — clamping this path moved the window out from under the cursor on every
+    // frame near a screen edge. The frames that follow are rAF-driven and a quiet
+    // headless frame produces none, so the tracking itself is a manual check.
+    args().length = 0;
+    const cat = document.getElementById('rz-catch');
+    const before = pill.getBoundingClientRect();
+    const cx = Math.round(before.right - 2), cy = Math.round(before.top + before.height / 2);
+    cat.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, buttons: 1,
+      clientX: cx, clientY: cy, screenX: cx, screenY: cy }));
+    const bounds = args().filter((c) => c[0] === 'set_float_bounds').map((c) => c[1]);
+    if (!pill.classList.contains('resizing')) {
+      errs.push('grabbing the resize ring did not start a resize');
+    } else if (!bounds.length) {
+      errs.push('grabbing the resize ring set no bounds');
+    } else {
+      if (bounds.some((b) => b.clamp)) errs.push('a live resize asked for the monitor clamp');
+      const b = bounds[bounds.length - 1];
+      if (!(b.width > 0 && b.height > 0)) errs.push('the resize sent an empty box');
+    }
+    up();
+    await sleep(50);
+    if (pill.classList.contains('resizing')) errs.push('the resize did not end on mouseup');
+
     calls().length = 0;
     down({ screenX: 100, screenY: 100 });
     move({ screenX: 260, screenY: 180 });

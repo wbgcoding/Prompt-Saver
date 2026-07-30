@@ -1749,11 +1749,22 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .modal-x { flex: 0 0 auto; color: var(--muted); }
 .modal-x:hover { color: var(--fg); }
 /* Name input + favorite star on one row (star moved out of the titlebar). */
-.modal-name-row { display: flex; align-items: center; gap: 8px; }
+/* `stretch`, not `center`: the media and favourite buttons take the height of the
+   name field beside them, so the row reads as one control group instead of two tiny
+   glyphs next to a tall box. */
+.modal-name-row { display: flex; align-items: stretch; gap: 8px; }
 .modal-name-row .clear-wrap, .modal-name-row > #modal-name { flex: 1 1 auto; min-width: 0; }
-.modal-name-row .modal-fav-star { flex: 0 0 auto; }
-/* Media-as-icon: an icon button beside the star instead of a row of its own. */
-.modal-name-row .modal-name-icon { flex: 0 0 auto; }
+.modal-name-row .modal-fav-star,
+.modal-name-row .modal-name-icon {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  padding: 0;
+}
+.modal-name-row .modal-name-icon svg { width: 58%; height: 58%; }
+.modal-name-row .modal-fav-star { font-size: 22px; }
 .modal-fav-star {
   flex: 0 0 auto;
   border: none;
@@ -1915,8 +1926,8 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 }
 .cp-sv {
   position: relative;
-  height: min(130px, 28vh);
-  min-height: 74px;
+  height: min(130px, 22vh);
+  min-height: 56px;
   border-radius: 8px;
   border: 1px solid var(--border);
   cursor: crosshair;
@@ -3042,9 +3053,12 @@ body.drag-over::after {
 /* Set by placePopover when a popover is taller than the room it has: it keeps its
    place inside the window and scrolls instead of being cut off at the edge. */
 .pop-clamped { overflow-y: auto; }
-/* The colour picker is a canvas plus a row of swatches: scrolling it would put the
-   knob out of reach. It is sized to fit instead (see .cp-sv). */
+/* The colour picker is a canvas plus a hue bar and a hex row: scrolling it would put
+   the knob out of reach, and letting it spill would cut the hex field off. So it is
+   SIZED to fit — .cp-sv shrinks with the window and the whole popover stays well
+   inside even the app's smallest one. */
 .color-pop.pop-clamped { overflow: visible; max-height: none !important; }
+.color-pop { gap: 8px; padding: 10px; }
 .num-pop::-webkit-scrollbar { width: 6px; }
 .num-pop::-webkit-scrollbar-track { background: transparent; margin: 6px 0; }
 .num-pop::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
@@ -3201,13 +3215,13 @@ body:not(.flag-promptNotes) #modal-notes { display: none; }
   align-items: center;
   gap: 5px;
   max-width: 100%;
-  padding: 2px 9px;
+  padding: 1px 8px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface-2);
   color: var(--fg);
-  font-size: var(--tag-chip-px, 12px);
-  line-height: 1.6;
+  font-size: var(--tag-chip-px, 11px);
+  line-height: 1.5;
 }
 .tag-chip.tag-colored {
   border-color: var(--chip-color);
@@ -3258,11 +3272,14 @@ button.tag-chip:hover { border-color: var(--accent); }
    dropdown in the app — chips floating in a box read as a stray tooltip. */
 .tag-pop { z-index: 141; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; }
 .tag-suggest { display: flex; flex-direction: column; gap: 2px; padding: 4px; }
+/* The row is full width so the whole line is clickable, but the HIGHLIGHT belongs to
+   the chip — a 40px tag lighting up a 200px band looked like the wrong thing was
+   selected. */
 .tag-suggest-item {
   display: flex;
   align-items: center;
   width: 100%;
-  padding: 5px 6px;
+  padding: 3px 4px;
   border: none;
   border-radius: 7px;
   background: none;
@@ -3270,7 +3287,8 @@ button.tag-chip:hover { border-color: var(--accent); }
   text-align: left;
   cursor: pointer;
 }
-.tag-suggest-item:hover { background: var(--surface-2); }
+.tag-suggest-item > .tag-chip { transition: border-color var(--transition), background var(--transition); }
+.tag-suggest-item:hover > .tag-chip { border-color: var(--accent); background: var(--surface); }
 .tag-suggest-empty { padding: 8px 10px; color: var(--muted); font-size: 12px; }
 .tag-suggest::-webkit-scrollbar { width: 8px; }
 .tag-suggest::-webkit-scrollbar-track { background: transparent; margin: 4px 0; }
@@ -3352,7 +3370,7 @@ button.tag-chip:hover { border-color: var(--accent); }
   justify-content: center;
 }
 .theme-edit-btn:hover { background: var(--hover); border-color: var(--accent); }
-.theme-edit-btn svg { width: 62%; height: 62%; }
+.theme-edit-btn svg { width: 66%; height: 66%; }
 body.noflag-customThemes .theme-edit-btn { display: none; }
 
 #theme-modal.overlay { z-index: 68; }

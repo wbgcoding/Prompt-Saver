@@ -446,18 +446,20 @@ body.menu-open .pill { flex: 0 0 auto; }
   opacity: 0;
   transition: opacity var(--transition);
 }
-.folder-body:hover .folder-grip { opacity: 1; }
+/* Only while the pointer is IN the corner. Showing it on every hover of the folder
+   put a mark on screen that looked like an arrow and belonged to nothing. */
+.folder-grip:hover { opacity: 1; }
 .folder-grip::after {
   content: "";
   position: absolute;
-  right: 14%;
-  bottom: 14%;
-  width: 55%;
-  height: 55%;
-  border-right: 2px solid var(--pill-fg);
-  border-bottom: 2px solid var(--pill-fg);
-  border-bottom-right-radius: 4px;
-  opacity: 0.75;
+  right: 18%;
+  bottom: 18%;
+  width: 42%;
+  height: 42%;
+  /* Two short diagonals — the resize idiom, and nothing that points anywhere. */
+  background:
+    linear-gradient(135deg, transparent 44%, rgba(255, 255, 255, 0.85) 44% 56%, transparent 56%),
+    linear-gradient(135deg, transparent 74%, rgba(255, 255, 255, 0.85) 74% 86%, transparent 86%);
 }
 .folder-body.pop-open .folder-grip { display: none; }
 .folder-preview {
@@ -508,8 +510,11 @@ body.menu-open .pill { flex: 0 0 auto; }
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: var(--pill-bg);
-  color: var(--pill-fg);
+  /* NOT --pill-bg: that is the colour of the folder underneath, so the count was
+     invisible. A dark chip with white ink reads on every theme, exactly like the
+     media caption does. */
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
   font-size: calc(var(--folder-box) / 6);
   font-weight: 700;
   line-height: 1;

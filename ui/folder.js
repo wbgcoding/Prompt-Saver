@@ -101,7 +101,10 @@ function renderIcon() {
   badgeEl.textContent = String(state.members.length);
   nameEl.textContent = state.name;
   nameEl.classList.toggle("hidden", !state.name);
-  iconEl.title = state.name || "";
+  // The count needs saying once: a bare number on a folder explains nothing.
+  const many = TXT.members ? TXT.members.replace("{n}", state.members.length) : "";
+  iconEl.title = [state.name, many].filter(Boolean).join(" — ");
+  badgeEl.title = many;
 }
 
 // Popover size for the open grid, from the column count and the folder's own scale.

@@ -468,7 +468,7 @@ function placeMenu(box, mw, mh) {
   menuState.offX = offX;
   menuState.offY = offY;
   confineResizeToPill(offX, offY, box.w, box.h);
-  invoke("set_float_bounds", { id: promptId, x, y, width: w, height: h }).catch(() => {});
+  invoke("set_float_bounds", { id: promptId, x, y, width: w, height: h, clamp: true }).catch(() => {});
 }
 
 async function openMenu() {
