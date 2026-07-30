@@ -5112,7 +5112,14 @@ fn gzip_to(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> 
     let mut enc = GzEncoder::new(Vec::new(), Compression::best());
     std::io::Write::write_all(&mut enc, &raw).map_err(|e| e.to_string())?;
     let packed = enc.finish().map_err(|e| e.to_string())?;
-    fs::write(dest, packed).map_err(|e| e.to_string())
+    // Temp + rename: a snapshot half-written when the machine goes down would still
+    // be picked up by backup_db_file and only fail at restore time, when it matters.
+    let tmp = dest.with_extension("gz.part");
+    fs::write(&tmp, packed).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, dest).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        e.to_string()
+    })
 }
 
 fn gunzip_to(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
@@ -5149,7 +5156,12 @@ fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<Str
         }
     }
     let _ = fs::remove_file(&tmp);
-    packed?;
+    if let Err(e) = packed {
+        // No snapshot is better than a folder that looks like one: the list reads
+        // folders, and an empty one would offer a restore that cannot work.
+        let _ = fs::remove_dir_all(&folder);
+        return Err(e);
+    }
     rotate_backups(app, keep.clamp(1, 50), gfs);
     Ok(name)
 }
