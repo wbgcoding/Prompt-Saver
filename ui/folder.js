@@ -101,9 +101,15 @@ function renderIcon() {
   badgeEl.textContent = String(state.members.length);
   nameEl.textContent = state.name;
   nameEl.classList.toggle("hidden", !state.name);
-  // The count needs saying once: a bare number on a folder explains nothing.
+  // The count needs saying once: a bare number on a folder explains nothing. And the
+  // 2x2 preview only identifies IMAGE members — for text pills it is four coloured
+  // squares, so the tooltip names the first two and counts the rest.
   const many = TXT.members ? TXT.members.replace("{n}", state.members.length) : "";
-  iconEl.title = [state.name, many].filter(Boolean).join(" — ");
+  const names = state.members.map((p) => p.name).filter(Boolean);
+  const shown = names.slice(0, 2).join(", ");
+  const rest = names.length - 2;
+  const who = shown && rest > 0 ? `${shown} +${rest}` : shown;
+  iconEl.title = [state.name, who, many].filter(Boolean).join(" — ");
   badgeEl.title = many;
 }
 

@@ -1782,6 +1782,18 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .modal::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
 .modal::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 /* Header (title + close X) stays readable while the settings body scrolls. */
+/* Count beside a dialog title: a fact about the list, so it reads as a caption and
+   never competes with the heading. */
+.modal-count {
+  flex: 0 0 auto;
+  margin-left: -4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
 .modal-head {
   position: sticky;
   top: -20px;            /* counter the modal padding */

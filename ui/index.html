@@ -401,15 +401,12 @@
     <div class="modal">
       <div class="modal-head">
         <h2 class="modal-title" data-i18n="library">All prompts</h2>
+        <span id="library-count" class="modal-count"></span>
         <div class="modal-head-actions">
           <label class="head-sort">
             <span class="cols-label" data-i18n="sortBy">Sort</span>
             <select id="library-sort" class="lib-sort" data-i18n-aria="sortBy"></select>
           </label>
-          <div class="cols-control">
-            <span class="cols-label" data-i18n="libraryColumns">Columns</span>
-            <div id="lib-cols-seg" class="seg-toggle" role="group" data-i18n-aria="libraryColumns"></div>
-          </div>
           <button id="library-select-btn" type="button" class="head-toggle" aria-pressed="false" data-i18n="selectMode">Select</button>
           <button id="library-close-toggle" type="button" class="head-toggle" aria-pressed="true" data-i18n="closeAfterCopy">Close after copy</button>
           <button id="library-close" class="icon-btn" data-i18n-aria="close">
@@ -820,6 +817,7 @@
   <!-- Context menu for a tile -->
   <div id="ctx" class="ctx hidden" role="menu">
     <button data-act="edit" role="menuitem" data-i18n="edit">Edit</button>
+    <button data-act="duplicate" role="menuitem" data-i18n="duplicate">Duplicate</button>
     <button data-act="hide" role="menuitem" data-i18n="hideInView">Hide in this view</button>
     <!-- Label set in openCtx() -- it names the action ("Show"/"Remove"), not a state-less "Toggle". -->
     <button data-act="pin" role="menuitem"></button>

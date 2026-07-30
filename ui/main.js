@@ -878,7 +878,6 @@ const FLAG_LABELS = {
   favorites: "flagFavorites",
   keyboardNav: "flagKeyboardNav",
   varDefaults: "flagVarDefaults",
-  libraryColsToggle: "flagLibraryColsToggle",
   favViewButton: "flagFavViewButton",
   favViewReorder: "flagFavViewReorder",
   tileShadow: "flagTileShadow",
@@ -1071,7 +1070,7 @@ const EXPERT_VALUES = {
   // Favorites grid: cap the column count (0 = auto-size to the count).
   favMaxCols: { label: "valFavMaxCols", min: 0, max: 20, step: 1, def: 0, unit: "", gate: "favViewButton" },
   // Prompt-list (library) column options: how many columns the header toggle offers.
-  libraryMaxCols: { label: "valLibraryMaxCols", min: 1, max: 6, step: 1, def: 2, unit: "", gate: "libraryColsToggle" },
+  libraryCols: { label: "valLibraryCols", min: 1, max: 6, step: 1, def: 1, unit: "", gate: "librarySearch" },
   // Prompt-list (library) dialog width.
   libraryWidth: { label: "valLibraryWidth", min: 520, max: 1400, step: 20, def: 900, unit: "px" },
   // How many recent search terms the suggestions dropdown keeps + shows.
@@ -1253,7 +1252,7 @@ const EXPERT_TABS = [
     { title: "expGroupLimits", values: ["maxViews", "gridMax", "previewLen", "nameMaxLen", "bubbleMs", "toastMs"] },
   ] },
   { title: "expTabLibrary", groups: [
-    { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "libraryColsToggle", "confirmDiscard"], values: ["searchRecentMax", "libraryMaxCols", "libraryWidth"], dropdowns: ["fuzzyMaxTypos"] },
+    { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "confirmDiscard"], values: ["searchRecentMax", "libraryCols", "libraryWidth"], dropdowns: ["fuzzyMaxTypos"] },
     { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx"], dropdowns: ["tagFilterMode"] },
     // Everything that records or shows copy history lives with the history view.
     { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalLimit"], selects: ["historyDays"] },
@@ -1388,7 +1387,7 @@ const EXPERT_TIPS = [
   // Appearance "hideScrollbars", "gridLines", "pausedIcons",
   "customThemes", "customThemeMax",
   // Library / privacy
-  "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus", "libraryCloseToggle", "libraryColsToggle",
+  "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus", "libraryCloseToggle",
   "tags", "tagChipPx", "tagFilterMode",
   "allowScreenshot", "copyHistory", "historyTimestamps", "historyGrouped",
   "dedupCopyLog", "cleanupFiles", "blurTilesUntilHover",
@@ -1400,7 +1399,7 @@ const EXPERT_TIPS = [
   "historyPerPrompt", "dupThreshold", "clipMinChars", "clipInboxMax", "historyMax",
   "journalLimit", "previewLen", "nameMaxLen", "searchRecentMax", "maxViews", "gridMax",
   "viewBorder", "statsTopN", "viewGroups", "viewGroupMaxRows",
-  "barToggles", "quickGrid", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryMaxCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
+  "barToggles", "quickGrid", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
 ];
 const EXPERT_TIP_SET = new Set(EXPERT_TIPS);
 // Attach the tooltip for `key` to a rendered expert row, if one is defined.
@@ -2285,6 +2284,7 @@ function viewTabEl(v) {
   const label = document.createElement("span");
   label.textContent = v.name;
   btn.appendChild(label);
+  btn.title = t("viewSwitchHint");
   btn.addEventListener("click", () => { if (!tabDragBlockClick) switchToView(v.id); });
   btn.addEventListener("contextmenu", (e) => {
     e.preventDefault();
@@ -6268,6 +6268,45 @@ async function confirmModal() {
   if (!libraryEl.classList.contains("hidden")) renderLibrary();
 }
 
+// Everything about a prompt except what identifies it: the hotkey stays with the
+// original (one accelerator, one prompt) and the copy lands in the first free cell of
+// the current view, so it is visible instead of only existing in the library.
+async function duplicatePrompt(id) {
+  const p = await invoke("get_prompt", { id });
+  if (!p) return;
+  let saved;
+  try {
+    saved = await invoke("add_prompt", {
+      name: `${p.name} (${t("duplicateSuffix")})`,
+      text: p.text,
+      color: p.color,
+      image: p.image,
+      showImage: p.show_image,
+      copyImage: p.copy_image,
+      filePath: p.file_path,
+      iconPath: p.icon_path,
+      caption: p.caption,
+      captionSize: p.caption_size,
+      font: p.font,
+      fontSize: p.font_size,
+      favorite: false,
+      tags: p.tags || [],
+      notes: p.notes || "",
+      hotkey: "",
+      hotkeyPaste: "",
+    });
+  } catch (e) { toast(String(e)); return; }
+  const view = activeView();
+  const layout = { ...layoutOf(view) };
+  const spot = firstFree(new Map(Object.values(layout).map((c) => [cellKey(...c), 1])), view.cols, view.rows);
+  if (spot) {
+    layout[saved.id] = spot;
+    view.layouts[gridKeyOf(view)] = layout;
+    invoke("set_layout", { layout }).catch((e) => toast(String(e)));
+  }
+  await renderGrid();
+}
+
 async function editPrompt(id) {
   const p = await invoke("get_prompt", { id });
   if (p) {
@@ -7304,6 +7343,14 @@ function renderLibrary() {
   }
   // Hidden filters keep their default state, so this is inert when they are off.
   const items = prompts.filter(libMatches);
+  // How hard the filters are biting, in the header where the filters are.
+  const count = $("library-count");
+  if (count) {
+    const all = prompts.length;
+    count.textContent = items.length === all
+      ? String(all)
+      : t("libraryCount").replace("{n}", items.length).replace("{v}", all);
+  }
   sortLibraryItems(items); // F10 chosen sort (stable), before the favorites float
   // Favorites float to the top (stable otherwise) when the feature is on.
   if (flag("favorites")) items.sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0));
@@ -7559,6 +7606,13 @@ async function copyResolved(p) {
   return invoke("copy_prompt", { id: p.id }).catch((e) => { toast(String(e)); return false; });
 }
 
+// A blink says "something happened"; the character count says the whole prompt went
+// to the clipboard, which is the doubt a long one leaves.
+function toastCopied(p) {
+  const n = (p?.text || "").length;
+  toast(n > 0 ? t("copiedChars").replace("{n}", n.toLocaleString(LANG)) : t("copied"));
+}
+
 async function libraryCopy(p) {
   // Prompts that still need input skip the double-click shortcut: they must reach
   // the dialog (copyResolved) so the variables get asked before copy + auto-paste.
@@ -7566,7 +7620,7 @@ async function libraryCopy(p) {
   if (copyOnCooldown(p.id)) return;
   if (!(await copyResolved(p))) return;
   recordCopy(p.id);
-  toast(t("copied"));
+  toastCopied(p);
   if (flag("closeAfterCopy")) hideLibrary();
 }
 
@@ -7579,35 +7633,12 @@ function syncLibraryToggle() {
   btn.classList.toggle("hidden", !flag("libraryCloseToggle"));
 }
 
-// Library list columns: a user-chosen count (1 = one wide column by default), with
-// the number of options set by the libraryMaxCols expert value.
-const libCols = () => {
-  const n = parseInt(settings.ui_texts?.libCols, 10) || 1;
-  return Math.min(Math.max(1, n), val("libraryMaxCols"));
-};
-async function setLibCols(n) {
-  const value = String(n);
-  if ((settings.ui_texts?.libCols || "1") === value) return;
-  settings.ui_texts = { ...(settings.ui_texts || {}), libCols: value };
-  try { await invoke("set_ui_text", { key: "libCols", value }); } catch (err) { toast(String(err)); }
-  syncLibraryCols();
-}
-// Rebuild the 1..max segmented toggle and apply the current column count.
+// Library list columns. ONE place decides it: the expert value. The segmented
+// toggle in the library header was a third control for the same number, next to the
+// flag that showed it and the value that capped it.
+const libCols = () => Math.min(6, Math.max(1, Math.round(val("libraryCols"))));
 function syncLibraryCols() {
-  const max = val("libraryMaxCols");
-  const cur = libCols();
-  $("library-list").style.setProperty("--lib-cols", cur);
-  const seg = $("lib-cols-seg");
-  seg.innerHTML = "";
-  for (let n = 1; n <= max; n++) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "seg-btn" + (n === cur ? " active" : "");
-    b.textContent = String(n);
-    b.setAttribute("aria-label", `${n} ${t("libraryColumns")}`);
-    b.addEventListener("click", () => setLibCols(n));
-    seg.appendChild(b);
-  }
+  $("library-list").style.setProperty("--lib-cols", libCols());
 }
 
 // ---- Copy history & usage journal ----
@@ -7723,7 +7754,7 @@ function renderJournal() {
     if (copyOnCooldown(p.id)) return; // same prompt copied moments ago
     if (await copyResolved(p)) { // handles {{variables}} like the library does
       await recordCopy(p.id); // await: the log must refetch AFTER the copy is recorded
-      toast(t("copied"));
+      toastCopied(p);
       settings = await invoke("get_settings");
       await loadJournal();
     }
@@ -8726,6 +8757,8 @@ function bind() {
     closeCtx();
     if (act === "edit") {
       await editPrompt(id);
+    } else if (act === "duplicate") {
+      await duplicatePrompt(id);
     } else if (act === "hide") {
       // Remove from the active view's grid; stays available in the library.
       const view = activeView();

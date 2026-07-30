@@ -101,7 +101,7 @@ DEPENDENCIES = {
     # Library, history, privacy
     "searchRecentMax": "searchSuggest",
     "fuzzyMaxTypos": "fuzzySearch",
-    "libraryMaxCols": "libraryColsToggle",
+    "libraryCols": "librarySearch",
     "tagChipPx": "tags",
     "tagFilterMode": "tags",
     "historyMax": "copyHistory",
