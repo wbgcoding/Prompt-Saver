@@ -1249,10 +1249,19 @@ PROBE = """
       // The panel re-renders on every toggle, so the switch has to be looked up again.
       const gfsSwitch = () => [...document.querySelectorAll('#backup-panel input.switch')].pop();
       if (gfsSwitch()) {
+        // Nothing below the switch may move when it is flipped — the slot holding
+        // the count and the tier grid keeps one height for both.
+        const slotH = () => Math.round(
+          (document.querySelector('#backup-panel .backup-retention-slot') || {getBoundingClientRect: () => ({height: -1})})
+            .getBoundingClientRect().height);
+        const before = slotH();
         gfsSwitch().click();
         await sleep(400);
         const tiers = document.querySelectorAll('#backup-panel .backup-tier-grid .modal-input');
         if (tiers.length !== 4) out.errors.push('smart retention does not show 4 tier fields');
+        if (before < 0 || Math.abs(slotH() - before) > 1) {
+          out.errors.push('toggling smart retention moves the rows below it (' + before + ' -> ' + slotH() + ')');
+        }
         gfsSwitch().click();
         await sleep(400);
       }

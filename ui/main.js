@@ -5679,8 +5679,12 @@ async function renderBackupPanel(body) {
     await saveBackupSetting("flag", "backupGfs", on);
     renderBackupPanel(body);
   }, "backupGfs")); // the name alone does not say what it keeps
+  // Both retention states live in the same slot, which keeps the height of the taller
+  // one — otherwise flipping the switch shifts everything below it by two rows.
+  const slot = document.createElement("div"); slot.className = "backup-retention-slot";
+  right.appendChild(slot);
   if (!optFlag("backupGfs")) {
-    right.appendChild(numRow("valBackupKeep", "backupKeep", 1, 50, (v) => saveBackupSetting("value", "backupKeep", v)));
+    slot.appendChild(numRow("valBackupKeep", "backupKeep", 1, 50, (v) => saveBackupSetting("value", "backupKeep", v)));
   }
   if (optFlag("backupGfs")) {
     // Day / week beside each other, month / year underneath — four small fields.
@@ -5692,7 +5696,7 @@ async function renderBackupPanel(body) {
     tiers.appendChild(numRow("valBackupWeekly", "backupWeekly", 0, 52, onTier("backupWeekly")));
     tiers.appendChild(numRow("valBackupMonthly", "backupMonthly", 0, 60, onTier("backupMonthly")));
     tiers.appendChild(numRow("valBackupYearly", "backupYearly", 0, 20, onTier("backupYearly")));
-    right.appendChild(tiers);
+    slot.appendChild(tiers);
   }
   // Optional backup password. Without one, backups use a fixed key and restore on any
   // PC; with one they need exactly this password. The stored password is never sent
@@ -6335,7 +6339,8 @@ const closeTagSuggest = () => tagSuggest.classList.add("hidden");
 const closeTagPop = () => tagPop.classList.add("hidden");
 document.addEventListener("pointerdown", (e) => {
   if (!tagSuggest.classList.contains("hidden") &&
-      !tagSuggest.contains(e.target) && e.target !== $("modal-tag-input")) closeTagSuggest();
+      !tagSuggest.contains(e.target) && e.target !== $("modal-tag-input") &&
+      !e.target.closest?.(".tag-pick")) closeTagSuggest();
   if (!tagPop.classList.contains("hidden") &&
       !tagPop.contains(e.target) && !e.target.closest(".tag-dot") && !e.target.closest(".color-pop")) closeTagPop();
 });
@@ -6400,16 +6405,22 @@ function addTagToModal(raw) {
   return true;
 }
 
-function renderTagSuggest() {
+// `all` ignores what is typed — that is what the chevron next to the field opens,
+// so an existing tag can be picked without knowing its first letters.
+function renderTagSuggest(all = false) {
   const input = $("modal-tag-input");
   if (!input || !modalState) return;
-  const q = input.value.trim().toLowerCase();
+  const q = all ? "" : input.value.trim().toLowerCase();
   const taken = new Set((modalState.tags || []).map(tagKey));
   const hits = allTags()
     .filter((n) => !taken.has(tagKey(n)) && (!q || tagKey(n).includes(q)))
-    .slice(0, 8);
+    .slice(0, all ? 40 : 8);
   tagSuggest.innerHTML = "";
-  if (!hits.length) { closeTagSuggest(); return; }
+  if (!hits.length) {
+    closeTagSuggest();
+    if (all) toast(t(allTags().length ? "tagAllTaken" : "tagNone"));
+    return;
+  }
   for (const name of hits) {
     const item = tagChipEl(name, "button");
     item.classList.add("tag-suggest-item");
@@ -6451,8 +6462,16 @@ function wireTagInput() {
     if (input.value.includes(",")) { commit(); return; }
     renderTagSuggest();
   });
-  input.addEventListener("focus", renderTagSuggest);
+  input.addEventListener("focus", () => renderTagSuggest());
   input.addEventListener("blur", () => setTimeout(closeTagSuggest, 150)); // let a click land first
+  const pick = $("modal-tag-pick");
+  pick?.addEventListener("mousedown", (e) => e.preventDefault()); // keep the field focused
+  pick?.addEventListener("click", () => {
+    if (!tagSuggest.classList.contains("hidden")) { closeTagSuggest(); return; }
+    input.value = "";
+    renderTagSuggest(true);
+    input.focus();
+  });
 }
 wireTagInput();
 
@@ -6468,6 +6487,11 @@ function renderTagFilter() {
   for (const key of [...libTags]) if (!live.has(key)) libTags.delete(key);
   bar.classList.toggle("empty", !names.length);
   if (!names.length) return;
+  // A bare row of chips reads as decoration; the label is what makes it a filter.
+  const label = document.createElement("span");
+  label.className = "lib-tagbar-label";
+  label.textContent = t("tagFilterLabel");
+  bar.appendChild(label);
   for (const name of names) {
     const chip = tagChipEl(name, "button");
     chip.classList.add("tag-filter");

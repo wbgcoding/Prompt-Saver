@@ -251,8 +251,18 @@
       <div id="modal-tags" class="modal-tags">
         <span class="modal-tags-label" data-i18n="tagsLabel">Tags</span>
         <div id="modal-tag-chips" class="tag-chips"></div>
-        <input id="modal-tag-input" class="modal-input tag-input" type="text" maxlength="60"
-               autocomplete="off" data-i18n-ph="tagsPh" data-i18n-aria="tagsPh" />
+        <span class="tag-input-wrap">
+          <input id="modal-tag-input" class="modal-input tag-input" type="text" maxlength="60"
+                 autocomplete="off" data-i18n-ph="tagsPh" data-i18n-aria="tagsPh" />
+          <!-- Without a visible handle the type-ahead is invisible until you guess it
+               exists, so picking an EXISTING tag looks impossible. This opens the list. -->
+          <button type="button" id="modal-tag-pick" class="tag-pick"
+                  data-i18n-title="tagPick" data-i18n-aria="tagPick">
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 10l6 6 6-6"/>
+            </svg>
+          </button>
+        </span>
       </div>
       <!-- F17 private notes (collapsed by default; context for the user, never copied) -->
       <div id="modal-notes" class="modal-collapse">

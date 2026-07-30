@@ -2224,6 +2224,9 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .backup-now-btn { align-self: flex-start; }
 @media (max-width: 720px) { .backup-cols { grid-template-columns: minmax(0, 1fr); } }
 /* GFS tiers as a 2x2 block of small fields (day / week over month / year). */
+/* Two rows of 40px fields plus their row gap: the tier grid at its tallest. Holding
+   that height with the plain count showing is what stops the toggle from jumping. */
+.backup-retention-slot { min-height: 86px; }
 .backup-tier-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
 .backup-tier-grid > .backup-set-row { justify-content: space-between; gap: 8px; }
 .backup-tier-grid .modal-input { flex: 0 0 auto; width: 64px; min-width: 0; text-align: center; }
@@ -2441,7 +2444,8 @@ select,
 .field.expert-dropdown-row { flex-direction: row; align-items: stretch; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .expert-dropdown-row .value-head { flex: 1 1 auto; min-width: 0; align-items: center; }
 .expert-dropdown-row .expert-select { align-self: flex-end; flex: 0 0 auto; min-width: 140px; }
-.expert-dropdown-row .expert-num { margin-top: 0; flex: 0 0 92px; align-self: flex-end; }
+/* Wide enough for four digits and nothing more — these fields hold days/hours. */
+.expert-dropdown-row .expert-num { margin-top: 0; flex: 0 0 68px; align-self: flex-end; text-align: right; }
 .expert-dropdown-row .expert-num-unit { align-self: center; }
 /* The unit next to a free-entry retention/interval field — the preset options show
    theirs on the option text ("7d"), so the number alone would look unit-less. */
@@ -3079,7 +3083,28 @@ body:not(.flag-promptNotes) #modal-notes { display: none; }
 .modal-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .modal-tags-label { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
 .tag-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
-.tag-input { flex: 1 1 130px; min-width: 90px; }
+.tag-input-wrap { position: relative; display: flex; flex: 1 1 130px; min-width: 90px; }
+.tag-input { flex: 1 1 auto; min-width: 0; padding-right: 28px; }
+/* The handle that makes the type-ahead discoverable: it opens the full tag list. */
+.tag-pick {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.tag-pick:hover { color: var(--text); background: var(--hover); }
+.lib-tagbar-label { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
 
 .tag-chip {
   display: inline-flex;
