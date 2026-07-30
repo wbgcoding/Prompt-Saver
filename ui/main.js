@@ -3741,15 +3741,18 @@ function buildFolderTile(f) {
     }
     mini.appendChild(face);
   }
-  tile.appendChild(mini);
-  const name = document.createElement("span");
-  name.className = "tile-name";
-  name.textContent = folderTitle(f);
-  tile.appendChild(name);
+  // The count belongs ON the preview, like a folder badge, not loose in a corner.
   const count = document.createElement("span");
   count.className = "folder-count";
   count.textContent = String(members.length);
-  tile.appendChild(count);
+  mini.appendChild(count);
+  tile.appendChild(mini);
+  const name = document.createElement("span");
+  // NOT .tile-name: that class is what the auto-fitter scales, and a folder label
+  // blown up to prompt size is what made these tiles unreadable.
+  name.className = "folder-title";
+  name.textContent = folderTitle(f);
+  tile.appendChild(name);
   if (flag("tilePreview")) {
     tile.dataset.tipName = folderTitle(f);
     tile.dataset.tipBody = members.map((p) => p.name).join(", ");
@@ -3883,7 +3886,8 @@ let folderArm = null;
 function disarmFolder() {
   if (!folderArm) return;
   clearTimeout(folderArm.timer);
-  folderArm.el.classList.remove("folder-arm");
+  folderArm.el.classList.remove("folder-arm", "folder-arming");
+  folderArm.el.style.removeProperty("--arm-ms");
   folderArm = null;
 }
 function armFolderDrop(e) {
@@ -3899,10 +3903,17 @@ function armFolderDrop(e) {
   if (folderArm && folderArm.el === host) return;
   disarmFolder();
   const arm = { el: host, armed: false, timer: 0 };
+  const wait = Math.max(0, val("tileFolderHoverMs"));
+  // Show the wait instead of making the user guess it: a ring fills over exactly the
+  // dwell time, then the target flips to the armed scrim. Without it the folder
+  // appeared out of nothing and a drag that was only passing through looked broken.
+  host.style.setProperty("--arm-ms", `${wait}ms`);
+  host.classList.add("folder-arming");
   arm.timer = setTimeout(() => {
+    host.classList.remove("folder-arming");
     host.classList.add("folder-arm");
     arm.armed = true;
-  }, Math.max(0, val("tileFolderHoverMs")));
+  }, wait);
   folderArm = arm;
 }
 
