@@ -2470,10 +2470,10 @@ fn folder_label(id: &str) -> String {
     format!("folder-{}", id)
 }
 
-// Expert settings the backend needs. The feature ships OFF; the two parameters use
+// Expert settings the backend needs. The feature ships ON; the two parameters use
 // the same defaults and ranges as their sliders in the expert menu.
 fn folders_on(settings: &Settings) -> bool {
-    settings.ui_flags.get("pillFolders") == Some(&true)
+    settings.ui_flags.get("pillFolders") != Some(&false)
 }
 
 // Pill and folder windows read the settings ONCE, when they open. Without this every
@@ -4614,8 +4614,6 @@ struct UsageStats {
     recent_ts: u64,
     longest_name: String,
     longest_chars: usize,
-    shortest_name: String,
-    shortest_chars: usize,
     types: Vec<ViewCount>,
     top: Vec<StatBar>,
     never_used: Vec<StatBar>,
@@ -4669,16 +4667,9 @@ async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Resu
         if lu > recent_ts { recent_ts = lu; recent_name = name_of(p); }
     }
     let (mut longest_name, mut longest_chars) = (String::new(), 0usize);
-    // The shortest one only counts prompts that HAVE a body — a media prompt with no
-    // text would otherwise win every time and say nothing.
-    let (mut shortest_name, mut shortest_chars) = (String::new(), 0usize);
     for p in &store.prompts {
         let c = p.text.chars().count();
         if c > longest_chars { longest_chars = c; longest_name = name_of(p); }
-        if c > 0 && (shortest_chars == 0 || c < shortest_chars) {
-            shortest_chars = c;
-            shortest_name = name_of(p);
-        }
     }
     let mut type_counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
     for p in &store.prompts {
@@ -4750,8 +4741,6 @@ async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Resu
         recent_ts,
         longest_name,
         longest_chars,
-        shortest_name,
-        shortest_chars,
         types,
         top,
         never_used,
@@ -11338,16 +11327,19 @@ mod tests {
         settings.float_folders = vec![folder_of("f1", &["a", "b"])];
         let known = ids(&["a", "b", "c"]);
 
-        // Off (the shipped default): every member is a plain pill again, no folder.
-        let (pills, folders) = float_window_plan(&settings, &known);
-        assert_eq!(pills, ids(&["a", "b", "c"]));
-        assert!(folders.is_empty());
-
-        // On: the members lose their own window, the folder gets one.
-        settings.ui_flags.insert("pillFolders".into(), true);
+        // On (the shipped default): the members lose their own window, the folder
+        // gets one.
         let (pills, folders) = float_window_plan(&settings, &known);
         assert_eq!(pills, ids(&["c"]));
         assert_eq!(folders, ids(&["f1"]));
+
+        // Off: every member is a plain pill again, no folder — switching the feature
+        // off must put every pill back.
+        settings.ui_flags.insert("pillFolders".into(), false);
+        let (pills, folders) = float_window_plan(&settings, &known);
+        assert_eq!(pills, ids(&["a", "b", "c"]));
+        assert!(folders.is_empty());
+        settings.ui_flags.remove("pillFolders");
 
         // An unpinned prompt never gets a window, folder member or not.
         settings.floating.remove("c");
@@ -11358,7 +11350,7 @@ mod tests {
     #[test]
     fn folder_expert_settings_use_their_slider_range() {
         let s = Settings::default();
-        assert!(!folders_on(&s), "the feature ships off");
+        assert!(folders_on(&s), "the feature ships on");
         assert_eq!(merge_radius(&s), 40.0);
         assert_eq!(folder_cols(&s), 3);
         let mut s = Settings::default();

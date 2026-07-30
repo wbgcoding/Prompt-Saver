@@ -909,9 +909,10 @@ const FLAG_LABELS = {
   promptHotkeys: "flagPromptHotkeys",   // F20 per-prompt global hotkeys
   trayRecent: "flagTrayRecent",         // F23 "recently used" section in the tray menu
   colorPicker: "flagColorPicker",       // F26 pipette — pick a screen colour to the clipboard
-  viewGroups: "flagViewGroups",         // F9 folder tabs for views
   customThemes: "flagCustomThemes",     // F3 theme editor + custom entries in the theme list
   tileFolders: "flagTileFolders",       // F27 drop a tile into another to make a grid folder
+  tags: "flagTags",                     // F1 tags + library tag filter
+  pillFolders: "flagPillFolders",       // F25 merge floating buttons into folders
   trayFavs: "flagTrayFavs",             // F23 favourites section in the tray menu
   // Checks at launch, but only while the normal auto-update setting is on.
   checkUpdateOnStart: "flagCheckUpdateOnStart",
@@ -923,6 +924,7 @@ const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 // class that is present exactly when the option is on.
 const OPT_FLAG_LABELS = {
   // Features extras
+  viewGroups: "flagViewGroups",                 // F9 folder tabs for views
   // Named from the user's side: the window is kept out of screenshots, and this is
   // the switch that lets them through. Ships off, so the protection is the default
   // and whoever misses their screenshots finds the reason by its name.
@@ -936,7 +938,6 @@ const OPT_FLAG_LABELS = {
   tileTextShadow: "flagTileTextShadow",
   // Library/search extras
   searchAutofocus: "flagSearchAutofocus",
-  tags: "flagTags",                     // F1 tags + library tag filter
   // Appearance extras
   compactTiles: "flagCompactTiles",
   tileGradient: "flagTileGradient",
@@ -971,7 +972,6 @@ const OPT_FLAG_LABELS = {
   promptNotes: "flagPromptNotes",               // F17 private notes row in the editor
   promptHotkeyPaste: "flagPromptHotkeyPaste",   // F20 hotkey also pastes into the last app
   dragOut: "flagDragOut",                       // F22 drag a prompt into another app
-  pillFolders: "flagPillFolders",               // F25 merge floating buttons into folders
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
@@ -2302,7 +2302,7 @@ function viewTabEl(v) {
 // ---- F9 view groups: several views collapsed into one folder tab ----
 // The feature is opt-in and rides on multi-view; with either off the stored groups
 // stay untouched and every view renders as its own tab again.
-const groupsOn = () => flag("viewGroups") && flag("multiView");
+const groupsOn = () => optFlag("viewGroups") && flag("multiView");
 const viewGroupList = () => (groupsOn() ? settings.view_groups || [] : []);
 const groupOfView = (id) => viewGroupList().find((g) => (g.view_ids || []).includes(id));
 const viewById = (id) => settings.views.find((v) => v.id === id);
@@ -5397,7 +5397,6 @@ async function renderStatsPanel(body) {
     info.appendChild(r);
   };
   if (s.longest_chars) sizeRow(t("statLongest"), s.longest_name, s.longest_chars);
-  if (s.shortest_chars) sizeRow(t("statShortest"), s.shortest_name, s.shortest_chars);
   const split = document.createElement("div"); split.className = "stat-overview-split";
   const ovCol = document.createElement("div"); ovCol.className = "stat-overview-main";
   ovCol.append(statSection(t("statOverview")), info);

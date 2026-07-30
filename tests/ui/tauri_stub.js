@@ -346,7 +346,6 @@ const RESULTS = {
     total_prompts: 12, total_copies: 40, copies7: 5, copies30: 20, used_count: 8, avg_copies: 3.3, total_chars: 900,
     recent_name: "Prompt 1", recent_ts: 1750000000,
     longest_name: "Prompt 2", longest_chars: 120,
-    shortest_name: "Prompt 7", shortest_chars: 18,
     types: [{ name: "text", count: 12 }],
     top: [{ name: "Prompt 1", count: 9 }],
     never_used: [{ name: "Prompt 9", count: 0 }],
