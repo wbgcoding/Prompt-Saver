@@ -124,6 +124,11 @@ switch, most of it off until you turn it on.
 
 ### Fixed
 
+- **The tag manager was unreachable until you'd already tagged something.**
+  The library's tag bar — the only place "Manage tags" lives — disappeared
+  entirely with nothing yet to filter by, so there was no way to discover
+  tags exist at all before creating the first one by hand in the editor. The
+  button now stays put regardless.
 - **Dissolving a grid folder could leave a member invisible or bump another
   folder off its spot.** The cell handed to each returning member never
   accounted for a second folder sharing the same view, since a folder's own

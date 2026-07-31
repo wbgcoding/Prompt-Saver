@@ -6673,33 +6673,36 @@ function renderTagFilter() {
   // A tag renamed or deleted elsewhere must not keep filtering the list.
   const live = new Set(names.map(tagKey));
   for (const key of [...libTags]) if (!live.has(key)) libTags.delete(key);
-  bar.classList.toggle("empty", !names.length);
-  if (!names.length) return;
-  // A bare row of chips reads as decoration; the label is what makes it a filter.
-  const label = document.createElement("span");
-  label.className = "lib-tagbar-label";
-  label.textContent = t("tagFilterLabel");
-  bar.appendChild(label);
-  for (const name of names) {
-    const chip = tagChipEl(name, "button");
-    chip.classList.add("tag-filter");
-    const on = libTags.has(tagKey(name));
-    chip.classList.toggle("active", on);
-    chip.setAttribute("aria-pressed", String(on));
-    chip.addEventListener("click", () => {
-      const key = tagKey(name);
-      if (libTags.has(key)) libTags.delete(key); else libTags.add(key);
-      renderLibrary();
-    });
-    bar.appendChild(chip);
-  }
-  if (libTags.size) {
-    const clear = document.createElement("button");
-    clear.type = "button";
-    clear.className = "tag-action";
-    clear.textContent = t("tagClearFilter");
-    clear.addEventListener("click", () => { libTags.clear(); renderLibrary(); });
-    bar.appendChild(clear);
+  // P26: "Manage tags" stays reachable even before the first tag exists — the
+  // bar used to disappear entirely with nothing to filter by, hiding the only
+  // way to find out tags exist at all.
+  if (names.length) {
+    // A bare row of chips reads as decoration; the label is what makes it a filter.
+    const label = document.createElement("span");
+    label.className = "lib-tagbar-label";
+    label.textContent = t("tagFilterLabel");
+    bar.appendChild(label);
+    for (const name of names) {
+      const chip = tagChipEl(name, "button");
+      chip.classList.add("tag-filter");
+      const on = libTags.has(tagKey(name));
+      chip.classList.toggle("active", on);
+      chip.setAttribute("aria-pressed", String(on));
+      chip.addEventListener("click", () => {
+        const key = tagKey(name);
+        if (libTags.has(key)) libTags.delete(key); else libTags.add(key);
+        renderLibrary();
+      });
+      bar.appendChild(chip);
+    }
+    if (libTags.size) {
+      const clear = document.createElement("button");
+      clear.type = "button";
+      clear.className = "tag-action";
+      clear.textContent = t("tagClearFilter");
+      clear.addEventListener("click", () => { libTags.clear(); renderLibrary(); });
+      bar.appendChild(clear);
+    }
   }
   const manage = document.createElement("button");
   manage.type = "button";
