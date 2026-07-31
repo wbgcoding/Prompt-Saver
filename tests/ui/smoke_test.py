@@ -1510,6 +1510,30 @@ PROBE = """
         out.errors.push('a default-ON flag row wrongly carries the badge');
       }
     }
+    // P68: the expert-menu search also matches a word that lives only in a
+    // setting's tooltip, not its label.
+    {
+      const search = document.getElementById('expert-search');
+      if (!search) {
+        out.errors.push('the expert menu has no search field');
+      } else {
+        search.value = 'arranging'; // only in tipGridLines, not in the "Always show grid lines" label
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(200);
+        const found = [...document.querySelectorAll('#expert-flags .switch-field span')]
+          .some(s => s.textContent === 'Always show grid lines');
+        if (!found) out.errors.push('the expert search did not match a tooltip-only word');
+        search.value = 'zzz_no_such_setting_zzz';
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(200);
+        if (document.querySelectorAll('#expert-flags .expert-group').length) {
+          out.errors.push('a nonsense expert search still shows groups');
+        }
+        search.value = '';
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(200);
+      }
+    }
     // Exercise the interactions that rebuild the menu: collapsing a group and
     // flipping switches (gated ones re-render, plain ones must not).
     // Collapsing must flip a class, not rebuild the list — rebuilding is what made

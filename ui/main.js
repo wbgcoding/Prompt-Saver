@@ -1391,7 +1391,8 @@ const EXPERT_TIPS = [
   "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "autoPasteEnter", "closeOnCopy",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutModifier",
   "tooltipDelay", "tooltipTimeout", "iconTooltips",
-  // Appearance "hideScrollbars", "gridLines", "pausedIcons",
+  // Appearance
+  "hideScrollbars", "gridLines", "pausedIcons",
   "customThemes", "customThemeMax",
   // Library / privacy
   "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus", "libraryCloseToggle",
@@ -1791,6 +1792,14 @@ const EXPERT_ACTIONS = {};
 function i18nHit(key, q) {
   return (I18N[LANG][key] || "").toLowerCase().includes(q) || (I18N.en[key] || "").toLowerCase().includes(q);
 }
+// P68: expert-menu search also matches a setting's tooltip text, not just its
+// label — a setting is often findable only by a word that lives in the tip.
+function settingHit(settingKey, labelKey, q) {
+  if (i18nHit(labelKey, q)) return true;
+  if (!EXPERT_TIP_SET.has(settingKey)) return false;
+  const tipKey = `tip${settingKey[0].toUpperCase()}${settingKey.slice(1)}`;
+  return i18nHit(tipKey, q);
+}
 
 // The "off by default" extras groups start folded (kept tidy until wanted).
 const DEFAULT_COLLAPSED_GROUPS = [];
@@ -1907,10 +1916,10 @@ function renderExpert() {
       // a setting the user cannot act on has no business being on screen.
       const keep = (kind) => (group[kind] || []).filter((k) => {
         if (!gateOpen(EXPERT_DEFS[kind]?.[k]?.gate)) return false;
-        return !searching || groupHit || i18nHit(EXPERT_LABEL_KEYS[kind](k), q);
+        return !searching || groupHit || settingHit(k, EXPERT_LABEL_KEYS[kind](k), q);
       });
       const flags = groupFlags(group)
-        .filter((f) => gateOpen(f.gate) && (!searching || groupHit || i18nHit(flagLabelKey(f.key), q)))
+        .filter((f) => gateOpen(f.gate) && (!searching || groupHit || settingHit(f.key, flagLabelKey(f.key), q)))
         .map((f) => f.key);
       const values = keep("values");
       const selects = keep("selects");

@@ -123,6 +123,10 @@ switch, most of it off until you turn it on.
   in a toast after saving.
 - The theme editor's per-color reset button is a crisp icon now instead of a
   small, pixelated "×" character.
+- The expert menu's search box now also matches a word that only appears in a
+  setting's tooltip, not its label — three settings (hide scrollbars, grid
+  lines, paused toolbar icons) get their tooltip shown at all again in the
+  process; it had quietly stopped reaching them.
 
 ### Fixed
 
