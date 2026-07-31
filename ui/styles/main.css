@@ -3361,6 +3361,16 @@ body:not(.flag-promptNotes) #modal-notes { display: none; }
 
 .modal-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .modal-tags-label { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
+/* 28: tags/hotkey/history sub-sections inside one "Advanced options" collapsible —
+   a thin rule between them stands in for the collapse headers they lost. */
+.modal-advanced-sub + .modal-advanced-sub { padding-top: 10px; border-top: 1px solid var(--border); }
+.modal-advanced-sub-label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+/* Hotkey/history used to be their own .modal-collapse-body (flex column, 4px gap)
+   before 28 merged them in — restore that spacing here so their own children
+   (row, inline error, action dropdown, hint) don't touch. Not applied to
+   .modal-tags, which keeps its own single-row wrapping layout. */
+#modal-hotkey, #modal-history { display: flex; flex-direction: column; gap: 4px; }
+.modal-advanced-history-body { display: flex; flex-direction: column; gap: 4px; }
 .tag-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 /* P25: the 3 most-used tags, offered right in the editor so adding a common one
    is one click instead of typing it out. */

@@ -52,9 +52,11 @@ const modal = {
   notesHead: $("modal-notes-head"),
   notesBody: $("modal-notes-body"),
   notesText: $("modal-notes-text"),
+  // 28: tags/hotkey/history share one collapsible now.
+  advanced: $("modal-advanced"),
+  advancedHead: $("modal-advanced-head"),
+  advancedBody: $("modal-advanced-body"),
   hotkey: $("modal-hotkey"),
-  hotkeyHead: $("modal-hotkey-head"),
-  hotkeyBody: $("modal-hotkey-body"),
   hotkeyInput: $("modal-hotkey-input"),
   hotkeyBadge: $("modal-hotkey-badge"),
   hotkeyErr: $("modal-hotkey-err"),
@@ -6374,23 +6376,20 @@ function syncModalImageUi(mode) {
   modal.notesBody.classList.add("hidden");
   modal.notesHead.setAttribute("aria-expanded", "false");
   modal.notes.classList.remove("open");
-  // F20: the hotkey row exists for every prompt kind (a hotkey copies whatever the
-  // prompt holds) and always reopens collapsed, so it costs no height.
+  // 28: tags/hotkey/history share one "Advanced options" collapsible, which always
+  // reopens collapsed. F20: the hotkey row exists for every prompt kind (a hotkey
+  // copies whatever the prompt holds). F7: version history only for existing text
+  // prompts. The outer section itself hides only if none of the three apply.
   modal.hotkey.classList.toggle("hidden", !promptHotkeysOn());
-  modal.hotkeyBody.classList.add("hidden");
-  modal.hotkeyHead.setAttribute("aria-expanded", "false");
-  modal.hotkey.classList.remove("open");
   showHotkeyError("");
-  // F7: version history only for existing text prompts; reset to collapsed on open.
   const histOn = mode === "edit" && textVisible && flag("promptHistory");
   $("modal-history").classList.toggle("hidden", !histOn);
-  if (histOn) {
-    $("modal-history-body").classList.add("hidden");
-    $("modal-history-body").innerHTML = "";
-    $("modal-history-head").setAttribute("aria-expanded", "false");
-    $("modal-history").classList.remove("open");
-    modal.root.classList.remove("history-open");
-  }
+  if (histOn) $("modal-history-body").innerHTML = "";
+  modal.advanced.classList.toggle("hidden", !tagsOn() && !promptHotkeysOn() && !histOn);
+  modal.advancedBody.classList.add("hidden");
+  modal.advancedHead.setAttribute("aria-expanded", "false");
+  modal.advanced.classList.remove("open");
+  modal.root.classList.remove("history-open");
   modal.name.placeholder = filePath
     ? t(kind === "video" ? "videoNamePh" : kind ? "imageNamePh" : "fileNamePh")
     : copyImage ? t("imageNamePh") : t("namePh");
@@ -8699,19 +8698,6 @@ function bind() {
       }));
     }
   });
-  // F20 hotkey collapsible (same convention as the notes row).
-  modal.hotkeyHead.addEventListener("click", () => {
-    const open = !modal.hotkeyBody.classList.toggle("hidden");
-    modal.hotkeyHead.setAttribute("aria-expanded", String(open));
-    modal.hotkey.classList.toggle("open", open);
-    if (open) {
-      modal.hotkeyInput.focus();
-      const scroller = modal.hotkey.closest(".modal");
-      if (scroller) requestAnimationFrame(() => requestAnimationFrame(() => {
-        scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
-      }));
-    }
-  });
   // Capture: the field is read-only, the key press itself is the input.
   modal.hotkeyInput.addEventListener("keydown", (e) => {
     if (e.key === "Tab" || e.key === "Escape") return; // let focus leave the field
@@ -8730,21 +8716,22 @@ function bind() {
   modal.hotkeyAction.addEventListener("change", () => {
     if (modalState) modalState.hotkeyPaste = modal.hotkeyAction.value;
   });
-  // F7 version-history collapsible.
-  $("modal-history-head").addEventListener("click", () => {
-    const body = $("modal-history-body");
-    const open = !body.classList.toggle("hidden");
-    $("modal-history-head").setAttribute("aria-expanded", String(open));
-    $("modal-history").classList.toggle("open", open);
+  // 28: tags/hotkey/history collapsible, combined into one "Advanced options".
+  modal.advancedHead.addEventListener("click", () => {
+    const open = !modal.advancedBody.classList.toggle("hidden");
+    modal.advancedHead.setAttribute("aria-expanded", String(open));
+    modal.advanced.classList.toggle("open", open);
     // In tall (text-edit) mode the textarea flex-grows and eats the height the open
     // history needs; history-open caps it (CSS) so the list + Save row stay reachable.
-    modal.root.classList.toggle("history-open", open);
+    // Only relevant when history itself applies to this prompt (mode/type/flag).
+    const histApplies = !$("modal-history").classList.contains("hidden");
+    modal.root.classList.toggle("history-open", open && histApplies);
     if (open) {
-      loadHistory(modalState?.id);
+      if (histApplies) loadHistory(modalState?.id);
       // Scroll the modal's own scroll container to the bottom so the freshly opened
-      // history (and the Save row below it) come fully into view on small windows.
+      // section (and the Save row below it) come fully into view on small windows.
       // scrollIntoView("nearest") only nudged the already-visible head, hence unreliable.
-      const scroller = $("modal-history").closest(".modal");
+      const scroller = modal.advanced.closest(".modal");
       if (scroller) requestAnimationFrame(() => requestAnimationFrame(() => {
         scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
       }));

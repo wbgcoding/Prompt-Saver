@@ -545,6 +545,9 @@ PROBE = """
       } else {
         editBtn.click();
         await sleep(250);
+        // 28: tags now live inside the "Advanced options" collapsible.
+        document.getElementById('modal-advanced-head').click();
+        await sleep(200);
         const qa = document.getElementById('modal-tag-quickadd');
         const chips = qa ? [...qa.querySelectorAll('.tag-chip')] : [];
         const names = chips.map(c => (c.querySelector('.tag-chip-label') || {}).textContent);
@@ -847,10 +850,11 @@ PROBE = """
         const promptBg = getComputedStyle(document.getElementById('modal-text')).backgroundColor;
         if (notesBg === promptBg) out.errors.push('the notes field looks identical to the prompt field');
       }
-      // F20: the hotkey row opens collapsed, shows the stored accelerator, refuses a
-      // combination that is already taken, accepts a free one and can be cleared.
+      // F20: the hotkey row opens collapsed (28: as part of "Advanced options" now),
+      // shows the stored accelerator, refuses a combination that is already taken,
+      // accepts a free one and can be cleared.
       const hRow = document.getElementById('modal-hotkey');
-      const hBody = document.getElementById('modal-hotkey-body');
+      const hBody = document.getElementById('modal-advanced-body');
       const hField = document.getElementById('modal-hotkey-input');
       const hErr = document.getElementById('modal-hotkey-err');
       const press = async (opts) => {
@@ -860,11 +864,11 @@ PROBE = """
       if (!hRow || getComputedStyle(hRow).display === 'none') {
         out.errors.push('the editor has no hotkey row');
       } else if (!hBody.classList.contains('hidden')) {
-        out.errors.push('the hotkey row does not start collapsed');
+        out.errors.push('advanced options does not start collapsed');
       } else {
-        document.getElementById('modal-hotkey-head').click();
+        document.getElementById('modal-advanced-head').click();
         await sleep(250);
-        if (hBody.classList.contains('hidden')) out.errors.push('the hotkey row did not expand');
+        if (hBody.classList.contains('hidden')) out.errors.push('advanced options did not expand');
         if (!/9$/.test(hField.value) || !/\\+/.test(hField.value)) {
           out.errors.push('the stored hotkey is not shown readably: ' + hField.value);
         }
@@ -1599,7 +1603,7 @@ PROBE = """
     if (!await openEditor('p6')) {
       out.errors.push('the version-history prompt did not open in the editor');
     } else {
-      document.getElementById('modal-history-head').click();
+      document.getElementById('modal-advanced-head').click();
       await sleep(250);
       const rows = [...document.querySelectorAll('#modal-history-body .hist-row')];
       if (rows.length !== 2) {
