@@ -310,6 +310,54 @@ PROBE = """
         }
       }
     }
+    // P50: right-clicking a view tab's "Duplicate" entry creates a new, empty view
+    // with the same name (+ suffix), color and grid size — cleaned up right after
+    // so it doesn't throw off the view-count checks further down.
+    {
+      const homeTab = document.querySelector('.view-btn[data-view-id="home"]');
+      if (!homeTab) {
+        out.errors.push('the "home" view tab is missing for the duplicate-view check');
+      } else {
+        const tabCountBefore = document.querySelectorAll('#views .view-btn:not(.view-add-top)').length;
+        const menuItem = (text) => [...document.querySelectorAll('.tab-menu button[role="menuitem"]')]
+          .find(el => el.textContent.trim() === text);
+        homeTab.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+        await sleep(150);
+        const dupItem = menuItem('Duplicate');
+        if (!dupItem) {
+          out.errors.push('the view tab context menu has no Duplicate entry');
+        } else {
+          dupItem.click();
+          await sleep(300);
+          const tabsAfter = [...document.querySelectorAll('#views .view-btn:not(.view-add-top)')];
+          if (tabsAfter.length !== tabCountBefore + 1) {
+            out.errors.push('duplicating a view did not add exactly one tab');
+          } else {
+            const newTab = tabsAfter.find(b => (b.querySelector('span') || {}).textContent === 'Home (copy)');
+            if (!newTab) {
+              out.errors.push('the duplicated view is not named "Home (copy)"');
+            } else {
+              // Clean up: delete the duplicate (2-click arm+confirm) so later view-count
+              // assertions see the same tab bar they expect.
+              newTab.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+              await sleep(150);
+              const editItem = menuItem('Edit view');
+              if (editItem) editItem.click();
+              await sleep(200);
+              const delBtn = document.getElementById('view-modal-delete');
+              if (delBtn && !delBtn.classList.contains('hidden')) {
+                delBtn.click(); await sleep(50);
+                delBtn.click(); await sleep(300);
+              }
+              const tabsFinal = document.querySelectorAll('#views .view-btn:not(.view-add-top)').length;
+              if (tabsFinal !== tabCountBefore) {
+                out.errors.push('cleanup after the duplicate-view check left an extra tab behind');
+              }
+            }
+          }
+        }
+      }
+    }
     // 9: double-click an empty cell creates a prompt right there instead of typing
     // below and dragging it over. Done on "work" (an untouched, empty view) so it
     // never competes with the folder math above for a free cell.

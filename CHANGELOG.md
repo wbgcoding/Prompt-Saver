@@ -115,6 +115,9 @@ switch, most of it off until you turn it on.
 - Every visual transition now follows the animation-speed expert setting,
   including the keyboard-focus ring's fade-out and the privacy blur effects,
   which previously always ran at a fixed speed.
+- A view tab's right-click menu gets a **Duplicate** entry: a new, empty view
+  with the same name, color and grid size, ready to build a variant of it from
+  scratch.
 
 ### Fixed
 

@@ -2310,11 +2310,12 @@ function viewTabEl(v) {
   btn.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!groupsOn()) { openViewModal(v); return; }
-    openMiniMenu([
+    const items = [
       { label: t("editViewTitle"), run: () => openViewModal(v) },
-      { label: t("viewGroupNew"), run: () => newViewGroup([v.id], v.name) },
-    ], e.clientX, e.clientY);
+      { label: t("duplicate"), run: () => duplicateView(v) },
+    ];
+    if (groupsOn()) items.push({ label: t("viewGroupNew"), run: () => newViewGroup([v.id], v.name) });
+    openMiniMenu(items, e.clientX, e.clientY);
   });
   makeTabDraggable(btn, v.id, false);
   return btn;
@@ -2707,6 +2708,22 @@ async function confirmViewModal() {
     return;
   }
   closeViewModal();
+  renderViews();
+  await renderGrid(true);
+}
+
+// P50: a new, empty view with the same name/color/grid size as the source — its
+// tile placements are not copied, since a prompt cannot yet sit in two views at
+// once (see WORK.md item 51).
+async function duplicateView(v) {
+  try {
+    settings = await invoke("add_view", { name: `${v.name} (${t("duplicateSuffix")})`, color: v.color || "" });
+    const newId = settings.active_view; // add_view switches to the view it just created
+    settings = await invoke("set_view_grid", { id: newId, cols: v.cols, rows: v.rows });
+  } catch (err) {
+    toast(String(err));
+    return;
+  }
   renderViews();
   await renderGrid(true);
 }

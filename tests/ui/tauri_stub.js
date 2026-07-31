@@ -279,6 +279,32 @@ const RESULTS = {
     if (SETTINGS.views.some((v) => v.id === (a && a.id))) SETTINGS.active_view = a.id;
     return clone();
   },
+  add_view: (a) => {
+    const id = "v" + (SETTINGS.views.length + 1);
+    SETTINGS.views.push({ id, name: (a && a.name) || "", cols: 5, rows: 4, layouts: {}, color: (a && a.color) || "" });
+    SETTINGS.active_view = id;
+    return clone();
+  },
+  rename_view: (a) => {
+    const view = SETTINGS.views.find((v) => v.id === (a && a.id));
+    if (view && a.name) view.name = a.name;
+    return clone();
+  },
+  set_view_color: (a) => {
+    const view = SETTINGS.views.find((v) => v.id === (a && a.id));
+    if (view) view.color = (a && a.color) || "";
+    return clone();
+  },
+  set_view_grid: (a) => {
+    const view = SETTINGS.views.find((v) => v.id === (a && a.id));
+    if (view) { view.cols = a.cols; view.rows = a.rows; }
+    return clone();
+  },
+  delete_view: (a) => {
+    if (SETTINGS.views.length > 1) SETTINGS.views = SETTINGS.views.filter((v) => v.id !== (a && a.id));
+    if (!SETTINGS.views.some((v) => v.id === SETTINGS.active_view)) SETTINGS.active_view = SETTINGS.views[0]?.id || "";
+    return clone();
+  },
   // The view-group commands answer with the settings blob, like the real backend.
   save_view_group: (a) => {
     const ids = (a && a.viewIds) || [];

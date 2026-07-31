@@ -2139,13 +2139,7 @@ fn load_store(app: &AppHandle) -> Store {
         }
         // Enforce the cap + retention window on the table at startup (e.g. after
         // the cap was lowered, or right after a large legacy import).
-        let cap = settings
-            .ui_values
-            .get("historyMax")
-            .copied()
-            .unwrap_or(100.0)
-            .clamp(0.0, COPY_HISTORY_MAX as f64) as usize;
-        let cutoff = history_max_age(&settings).map(|age| now_secs().saturating_sub(age));
+        let (cap, cutoff) = history_cap_and_cutoff(&settings);
         let _ = db_trim_copy(&conn, cap, cutoff);
         migrate_prompts(&mut prompts);
         let mut store = Store { prompts, settings, prompts_locked: decrypt_fails > 0 };
@@ -5501,6 +5495,20 @@ fn history_max_age(settings: &Settings) -> Option<u64> {
     }
 }
 
+// History length is an expert value (default 100, ceiling COPY_HISTORY_MAX), paired
+// with the retention-window cutoff — the two limits `db_trim_copy` always applies
+// together. One place for both, so startup trimming and live recording can't drift.
+fn history_cap_and_cutoff(settings: &Settings) -> (usize, Option<u64>) {
+    let cap = settings
+        .ui_values
+        .get("historyMax")
+        .copied()
+        .unwrap_or(100.0)
+        .clamp(0.0, COPY_HISTORY_MAX as f64) as usize;
+    let cutoff = history_max_age(settings).map(|age| now_secs().saturating_sub(age));
+    (cap, cutoff)
+}
+
 // Drop copy-history entries older than the retention window (auto-delete).
 fn prune_history(settings: &mut Settings) {
     if let Some(max_age) = history_max_age(settings) {
@@ -5533,15 +5541,7 @@ async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String) -> Result
         if ts > 0 {
             store.settings.last_used.insert(id.clone(), ts);
         }
-        // History length is an expert value (default 100, ceiling COPY_HISTORY_MAX).
-        let cap = store
-            .settings
-            .ui_values
-            .get("historyMax")
-            .copied()
-            .unwrap_or(100.0)
-            .clamp(0.0, COPY_HISTORY_MAX as f64) as usize;
-        let cutoff = history_max_age(&store.settings).map(|age| now_secs().saturating_sub(age));
+        let (cap, cutoff) = history_cap_and_cutoff(&store.settings);
         save_settings(&app, &store.settings);
         (CopyEntry { id, ts }, cap, cutoff, dedup)
     };
