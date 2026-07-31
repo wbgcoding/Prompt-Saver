@@ -111,6 +111,14 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
 const LAYOUT = {};
 PROMPTS.forEach((p, i) => { LAYOUT[p.id] = [i % 4, Math.floor(i / 4)]; });
 
+// 91: trash — three items so restore, single purge and empty-all each get their own
+// target; t2 is anonymous, exercising the libLabel() fallback.
+const TRASH = [
+  { id: "t1", name: "Deleted idea", text: "Body of the deleted prompt.", trashed_at: 1750000000, color: "", tags: [], notes: "", hotkey: "", file_path: "" },
+  { id: "t2", name: "", text: "Second trashed prompt.", trashed_at: 1750000100, color: "", tags: [], notes: "", hotkey: "", file_path: "" },
+  { id: "t3", name: "Third trashed prompt", text: "Body three.", trashed_at: 1750000200, color: "", tags: [], notes: "", hotkey: "", file_path: "" },
+];
+
 const SETTINGS = {
   theme: "dark", language: "en", floating: {}, float_scale: {}, video_prefs: {},
   window: null, minimize_to_tray: false, autostart: false, start_minimized: false,
@@ -276,6 +284,24 @@ const RESULTS = {
     ].join("\n"),
   }),
   get_prompt: (a) => PROMPTS.find((p) => p.id === (a && a.id)) || PROMPTS[0],
+  // 91: trash — restore/purge mutate the shared TRASH/PROMPTS fixtures so the dialog
+  // reflects real effects, the way batch_prompts already mirrors "color" onto PROMPTS.
+  list_trash: () => JSON.parse(JSON.stringify(TRASH)),
+  restore_prompt: (a) => {
+    const idx = TRASH.findIndex((p) => p.id === (a && a.id));
+    if (idx >= 0) {
+      const [p] = TRASH.splice(idx, 1);
+      p.trashed_at = 0;
+      PROMPTS.push(p);
+    }
+    return { prompts: JSON.parse(JSON.stringify(PROMPTS)), settings: JSON.parse(JSON.stringify(SETTINGS)) };
+  },
+  purge_prompt: (a) => {
+    const idx = TRASH.findIndex((p) => p.id === (a && a.id));
+    if (idx >= 0) TRASH.splice(idx, 1);
+    return JSON.parse(JSON.stringify(TRASH));
+  },
+  empty_trash: () => { TRASH.length = 0; return []; },
   // F8/P11: shared by the library's and the grid's bulk toolbars. The caller
   // (doBatch/doGridBatch) already mirrors "delete"/"color" onto its own local
   // prompts array, so this only needs to track the call and hand back settings.

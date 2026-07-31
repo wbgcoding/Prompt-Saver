@@ -1158,6 +1158,80 @@ PROBE = """
         }
       }
     }
+    // 91: trash — the dialog opened from the expert menu's Data group. Restore,
+    // single purge and "Clear all" (empty_trash) each get their own target so all
+    // three new commands are exercised, not just the happy path of one.
+    {
+      const expertAction = async (label) => {
+        const hit = () => [...document.querySelectorAll('.expert-action')].find(b => b.textContent === label);
+        if (hit()) return hit();
+        for (const tb of [...document.querySelectorAll('.expert-tab')]) {
+          tb.click();
+          await sleep(200);
+          if (hit()) return hit();
+        }
+        return null;
+      };
+      document.getElementById('settings').classList.remove('hidden');
+      await click('expert-open');
+      const trashBtn = await expertAction('Trash');
+      if (!trashBtn) {
+        out.errors.push('the Trash action is missing from the expert menu');
+      } else {
+        trashBtn.click();
+        await sleep(200);
+        const trashModal = document.getElementById('trash-modal');
+        const trashBody = document.getElementById('trash-body');
+        const rows = () => [...trashBody.querySelectorAll('.clip-row')];
+        if (trashModal.classList.contains('hidden')) {
+          out.errors.push('clicking the Trash action did not open the trash dialog');
+        } else if (rows().length !== 3) {
+          out.errors.push('the trash dialog shows ' + rows().length + ' rows instead of 3');
+        } else {
+          const t1Row = rows().find(r => r.textContent.includes('Deleted idea'));
+          if (!t1Row) {
+            out.errors.push('the trash dialog is missing "Deleted idea"');
+          } else {
+            t1Row.querySelectorAll('button')[0].click(); // Restore
+            await sleep(200);
+            if (rows().length !== 2) out.errors.push('restoring left ' + rows().length + ' rows instead of 2');
+          }
+          const t2Row = rows().find(r => r.textContent.includes('Second trashed prompt'));
+          if (!t2Row) {
+            out.errors.push('the trash dialog is missing the anonymous trashed prompt');
+          } else {
+            t2Row.querySelectorAll('button')[1].click(); // Delete forever
+            await sleep(150);
+            const cm = document.getElementById('confirm-modal');
+            if (cm.classList.contains('hidden')) {
+              out.errors.push('purging a single trash item skipped the confirm dialog');
+            } else {
+              await click('confirm-ok');
+              await sleep(200);
+              if (rows().length !== 1) out.errors.push('purging left ' + rows().length + ' rows instead of 1');
+            }
+          }
+          await click('trash-clear');
+          await sleep(150);
+          const cm2 = document.getElementById('confirm-modal');
+          if (cm2.classList.contains('hidden')) {
+            out.errors.push('emptying the trash skipped the confirm dialog');
+          } else {
+            await click('confirm-ok');
+            await sleep(200);
+            if (!trashBody.textContent.includes('Trash is empty')) {
+              out.errors.push('emptying the trash left the dialog without the empty-state message');
+            }
+          }
+        }
+        document.getElementById('trash-close').click();
+        await sleep(100);
+      }
+      const firstTab = document.querySelector('.expert-tab');
+      if (firstTab) { firstTab.click(); await sleep(150); }
+      await click('expert-back');
+      document.getElementById('settings').classList.add('hidden');
+    }
     const DRAG_OUT = 'Drag prompt into another app';
     const offTile = gridTile('p1');
     if (offTile) {

@@ -1153,6 +1153,9 @@ const EXPERT_SELECTS = {
   historyDays: { label: "valHistoryDays", options: [0, 7, 30, 90, 365], def: 0, unit: "d", zeroLabel: "retentionForever", gate: "copyHistory" },
   // F2 backup interval (hours) — a preset-or-custom select right under backupKeep.
   backupIntervalH: { label: "valBackupInterval", options: [6, 12, 24, 48, 168], def: 24, unit: "h", gate: "autoBackup" },
+  // 91: how long a deleted prompt sits in the trash before it is purged automatically.
+  // No feature gate — trash is not optional, delete always goes through it.
+  trashRetentionDays: { label: "valTrashRetentionDays", options: [0, 7, 30, 90, 365], def: 30, unit: "d", zeroLabel: "retentionForever" },
 };
 
 // F12 date/time width, shared by both style dropdowns. "iso" is the only entry
@@ -1249,8 +1252,8 @@ const EXPERT_TABS = [
     { title: "expGroupTray", flags: ["trayRecent", "trayFavs"], values: ["trayRecentN", "trayFavN"] },
     // F21: the watcher that collects what you copy elsewhere.
     { title: "expGroupClipboard", flags: ["clipWatcher"], values: ["clipMinChars", "clipInboxMax"] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "autoBackupBeforeWipe", "importExport"], values: ["dupThreshold"],
-      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }] },
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "autoBackupBeforeWipe", "importExport"], values: ["dupThreshold"], selects: ["trashRetentionDays"],
+      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }] },
   ] },
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
@@ -5781,6 +5784,74 @@ async function maybeDupImportToast() {
 }
 EXPERT_ACTIONS["dupes-open"] = openDupes;
 
+// ---- 91: trash ----
+// Deleting a prompt (grid tile, library row, editor, multi-select) always moves it
+// here first — delete_prompt/batch_prompts("delete") no longer hard-remove. This
+// dialog is the only place it can come back from, or be purged for good.
+let trashList = [];
+async function openTrash() {
+  $("trash-modal").classList.remove("hidden");
+  try { trashList = await invoke("list_trash"); } catch (e) { toast(String(e)); trashList = []; }
+  renderTrashList();
+}
+function renderTrashList() {
+  const body = $("trash-body");
+  body.innerHTML = "";
+  if (!trashList.length) {
+    const e = document.createElement("div");
+    e.className = "hint";
+    e.textContent = t("trashEmpty");
+    body.appendChild(e);
+    return;
+  }
+  for (const p of trashList) {
+    const row = document.createElement("div");
+    row.className = "clip-row";
+    const head = document.createElement("span");
+    head.className = "clip-time";
+    head.textContent = `${libLabel(p)} · ${new Date(p.trashed_at * 1000).toLocaleDateString(LANG)}`;
+    const prev = document.createElement("div");
+    prev.className = "clip-preview";
+    prev.textContent = p.file_path || p.text || "";
+    const actions = document.createElement("div");
+    actions.className = "clip-actions";
+    const restore = document.createElement("button");
+    restore.type = "button"; restore.className = "ghost-btn"; restore.textContent = t("trashRestore");
+    restore.addEventListener("click", () => restoreTrashItem(p.id));
+    const purge = document.createElement("button");
+    purge.type = "button"; purge.className = "ghost-btn"; purge.textContent = t("trashPurge");
+    purge.addEventListener("click", () => purgeTrashItem(p.id, libLabel(p)));
+    actions.append(restore, purge);
+    row.append(head, prev, actions);
+    body.appendChild(row);
+  }
+}
+async function restoreTrashItem(id) {
+  let st;
+  try { st = await invoke("restore_prompt", { id }); } catch (e) { toast(String(e)); return; }
+  prompts = st.prompts;
+  settings = st.settings;
+  trashList = trashList.filter((p) => p.id !== id);
+  renderTrashList();
+  renderViews();
+  await renderGrid(true);
+  if (!libraryEl.classList.contains("hidden")) renderLibrary();
+}
+async function purgeTrashItem(id, name) {
+  const ok = await confirmDialog({ title: t("trashPurge"), message: `${t("trashPurgeConfirm")}\n\n${name}`, confirmLabel: t("trashPurge") });
+  if (!ok) return;
+  try { trashList = await invoke("purge_prompt", { id }); } catch (e) { toast(String(e)); return; }
+  renderTrashList();
+}
+async function emptyTrashAll() {
+  if (!trashList.length) return;
+  const ok = await confirmDialog({ title: t("trashTitle"), message: t("trashEmptyConfirm").replace("{n}", String(trashList.length)), confirmLabel: t("trashPurge") });
+  if (!ok) return;
+  try { trashList = await invoke("empty_trash"); } catch (e) { toast(String(e)); return; }
+  renderTrashList();
+}
+EXPERT_ACTIONS["trash-open"] = openTrash;
+
 // ---- F2 backups & restore ----
 function fmtBytes(n) {
   if (n < 1024) return `${n} B`;
@@ -8914,6 +8985,9 @@ function bind() {
   $("dupes-close").addEventListener("click", () => $("dupes-modal").classList.add("hidden"));
   $("dupes-modal").addEventListener("pointerdown", (e) => { if (e.target === $("dupes-modal")) $("dupes-modal").classList.add("hidden"); });
   $("dupes-rescan").addEventListener("click", () => scanDupes());
+  $("trash-close").addEventListener("click", () => $("trash-modal").classList.add("hidden"));
+  $("trash-modal").addEventListener("pointerdown", (e) => { if (e.target === $("trash-modal")) $("trash-modal").classList.add("hidden"); });
+  $("trash-clear").addEventListener("click", () => emptyTrashAll());
   // F21 clipboard inbox.
   $("clip-btn").addEventListener("click", openClipInbox);
   // Pause/resume collecting straight from the inbox — same switch as the expert one.
@@ -9245,6 +9319,7 @@ function bind() {
     else if (!modal.root.classList.contains("hidden")) confirmDiscardIfDirty().then((ok) => { if (ok) closeModal(); });
     else if (!$("clip-modal").classList.contains("hidden")) $("clip-modal").classList.add("hidden");
     else if (!$("dupes-modal").classList.contains("hidden")) $("dupes-modal").classList.add("hidden");
+    else if (!$("trash-modal").classList.contains("hidden")) $("trash-modal").classList.add("hidden");
     // A library raised over the backups dialog is the topmost thing — it closes first.
     else if (document.body.classList.contains("library-front") && !libraryEl.classList.contains("hidden")) hideLibrary();
     else if (!$("backup-modal").classList.contains("hidden")) closeBackups();

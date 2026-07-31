@@ -1095,6 +1095,12 @@ struct Prompt {
     // user was in), or "" = follow the global promptHotkeyPaste setting.
     #[serde(default)]
     hotkey_paste: String,
+    // 91: unix seconds set the moment a prompt moves into the trash table; unused
+    // (0) for every prompt still in store.prompts. Drives both the trash list's
+    // "deleted N days ago" and the retention sweep — never touched for anything
+    // else, so it never appears in an export or a fresh add_prompt/update_prompt.
+    #[serde(default)]
+    trashed_at: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Default)]
@@ -1583,6 +1589,10 @@ impl Settings {
 // In-memory store, flushed to disk on mutations.
 struct Store {
     prompts: Vec<Prompt>,
+    // 91: prompts the user deleted, kept whole (media + version history untouched)
+    // until a real purge. Newest-deleted first, matching how every other list in
+    // the app (recent copies, history) already orders "most recent on top".
+    trash: Vec<Prompt>,
     settings: Settings,
     // Set when db_load found encrypted prompt rows it could NOT decrypt (e.g. DPAPI
     // failed after a profile move / password reset). While true, save_prompts refuses
@@ -1818,6 +1828,7 @@ fn db_conn(app: &AppHandle) -> Option<Connection> {
         "PRAGMA journal_mode=WAL;
          PRAGMA busy_timeout=3000;
          CREATE TABLE IF NOT EXISTS prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+         CREATE TABLE IF NOT EXISTS trash(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
          CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
          CREATE TABLE IF NOT EXISTS copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
          CREATE INDEX IF NOT EXISTS idx_copy_log_ts ON copy_log(ts);
@@ -1840,6 +1851,39 @@ fn db_write_prompts(conn: &mut Connection, prompts: &[Prompt]) -> rusqlite::Resu
         }
     }
     tx.commit()
+}
+
+// 91: same schema and shape as db_write_prompts/db_load's prompt half, but its own
+// table. A prompt "in the trash" simply isn't in `prompts` any more, so every
+// existing read of store.prompts (grid, library, tray, hotkeys, export, stats,
+// duplicate finder...) stays correct with zero changes — the alternative, a
+// deleted_at flag on Prompt filtered everywhere, would have needed every one of
+// those call sites found and fixed, with real risk of missing one.
+fn db_write_trash(conn: &mut Connection, trash: &[Prompt]) -> rusqlite::Result<()> {
+    let tx = conn.transaction()?;
+    tx.execute("DELETE FROM trash", [])?;
+    {
+        let mut stmt = tx.prepare("INSERT INTO trash(id, ord, data) VALUES(?1, ?2, ?3)")?;
+        for (i, p) in trash.iter().enumerate() {
+            let data = enc_str(&serde_json::to_string(p).unwrap_or_default());
+            stmt.execute(params![p.id, i as i64, data])?;
+        }
+    }
+    tx.commit()
+}
+
+fn db_load_trash(conn: &Connection) -> Vec<Prompt> {
+    let mut trash = Vec::new();
+    if let Ok(mut stmt) = conn.prepare("SELECT data FROM trash ORDER BY ord") {
+        if let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) {
+            for data in rows.flatten() {
+                if let Ok(p) = serde_json::from_str::<Prompt>(&dec_str(&data)) {
+                    trash.push(p);
+                }
+            }
+        }
+    }
+    trash
 }
 
 fn db_write_settings(conn: &Connection, settings: &Settings) -> rusqlite::Result<()> {
@@ -2076,6 +2120,20 @@ fn save_prompts(app: &AppHandle, store: &Store) {
     }
 }
 
+fn save_trash(app: &AppHandle, store: &Store) {
+    // Same lock as save_prompts: an unreadable-row situation must never trigger a
+    // destructive rewrite of a second table either.
+    if store.prompts_locked {
+        return;
+    }
+    if let Some(mut conn) = db_conn(app) {
+        if db_write_trash(&mut conn, &store.trash).is_ok() {
+            return;
+        }
+    }
+    append_crash_log("persist failed: trash could not be written to the database");
+}
+
 fn save_settings(app: &AppHandle, settings: &Settings) {
     if let Some(conn) = db_conn(app) {
         if db_write_settings(&conn, settings).is_ok() {
@@ -2139,6 +2197,7 @@ fn load_store(app: &AppHandle) -> Store {
     let dir = data_dir(app);
     if let Some(mut conn) = db_conn(app) {
         let (mut prompts, settings_opt, needs_mig, decrypt_fails) = db_load(&conn);
+        let trash = db_load_trash(&conn);
         // Some encrypted rows would not decrypt → preserve the raw DB and lock writes.
         if decrypt_fails > 0 {
             let db_path = dir.join("data.db");
@@ -2217,8 +2276,9 @@ fn load_store(app: &AppHandle) -> Store {
         let (cap, cutoff) = history_cap_and_cutoff(&settings);
         let _ = db_trim_copy(&conn, cap, cutoff);
         migrate_prompts(&mut prompts);
-        let mut store = Store { prompts, settings, prompts_locked: decrypt_fails > 0 };
+        let mut store = Store { prompts, trash, settings, prompts_locked: decrypt_fails > 0 };
         store.normalize_folders(); // F25: drop members whose prompt is gone
+        sweep_trash(app, &mut store); // 91: drop anything past the retention window
         if needs_mig || migrated_log {
             // One-time: re-encrypt legacy plaintext rows / drop the migrated log from the blob.
             save_prompts(app, &store);
@@ -2232,8 +2292,9 @@ fn load_store(app: &AppHandle) -> Store {
     prune_history(&mut settings);
     let mut prompts: Vec<Prompt> = read_json(&dir.join("prompts.json"));
     migrate_prompts(&mut prompts);
-    let mut store = Store { prompts, settings, prompts_locked: false };
+    let mut store = Store { prompts, trash: Vec::new(), settings, prompts_locked: false };
     store.normalize_folders();
+    sweep_trash(app, &mut store); // 91: no-op here (fallback path never loads trash), kept for symmetry
     store
 }
 
@@ -3424,11 +3485,16 @@ fn cleanup_orphan_files(app: &AppHandle, store: &Store) {
         Err(_) => return, // no store folder yet -> nothing to clean
     };
     // Compare case-insensitively with normalized separators (Windows) so a still
-    // referenced file is never mistaken for an orphan and deleted.
+    // referenced file is never mistaken for an orphan and deleted. 91: a trashed
+    // prompt still owns its files until it is actually purged — leaving trash out
+    // of this scan would let an UNRELATED cleanup pass (triggered by some other
+    // prompt's add/delete) sweep away a file a trashed prompt still needs to be
+    // restorable.
     let norm = |s: &str| s.replace('/', "\\").to_lowercase();
     let referenced: std::collections::HashSet<String> = store
         .prompts
         .iter()
+        .chain(store.trash.iter())
         .flat_map(|p| [p.file_path.clone(), p.icon_path.clone()])
         .filter(|s| !s.is_empty())
         .map(|s| norm(&s))
@@ -3486,6 +3552,7 @@ async fn add_prompt(
         }
         let prompt = Prompt {
             id: gen_id(),
+            trashed_at: 0,
             name,
             text,
             color,
@@ -3696,12 +3763,25 @@ fn set_favorite(app: AppHandle, state: State<Db>, id: String, favorite: bool) {
 
 // Async: keeps the prompt-table rewrite off the UI thread.
 #[tauri::command]
+// 91: "delete" moves a prompt into the trash table instead of removing it — media
+// files and version history stay exactly as they were, untouched until a real
+// purge (purge_prompt/empty_trash, or the retention sweep). Everything else here
+// (views, floating, folders, hotkeys, tray) is unchanged from the old hard-delete:
+// those are all app-level associations, not part of the prompt's own content, and
+// a restored prompt gets a fresh placement rather than trying to replay them.
 async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result<bool, String> {
     close_floating_window(&app, &id);
     let changed = {
         let mut store = lock(&state);
-        let before = store.prompts.len();
-        store.prompts.retain(|p| p.id != id);
+        let moved = match store.prompts.iter().position(|p| p.id == id) {
+            Some(pos) => {
+                let mut p = store.prompts.remove(pos);
+                p.trashed_at = now_secs();
+                store.trash.insert(0, p); // newest-deleted first
+                true
+            }
+            None => false,
+        };
         for view in &mut store.settings.views {
             for layout in view.layouts.values_mut() {
                 layout.remove(&id);
@@ -3711,14 +3791,12 @@ async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Resu
         store.settings.float_scale.remove(&id);
         store.settings.video_prefs.remove(&id);
         store.normalize_folders(); // F25: and out of whatever folder held it
-        let changed = store.prompts.len() != before;
-        if changed {
+        if moved {
             save_prompts(&app, &store);
+            save_trash(&app, &store);
             save_settings(&app, &store.settings);
-            cleanup_orphan_files(&app, &store); // drop the deleted prompt's stored copies
-            if let Some(c) = db_conn(&app) { db_delete_versions(&c, &id); } // F7 cascade
         }
-        changed
+        moved
     };
     if changed {
         rearm_hotkeys(&app); // F20: a deleted prompt gives its accelerator back
@@ -3752,7 +3830,22 @@ async fn batch_prompts(
     let mut store = lock(&state);
     match action.as_str() {
         "delete" => {
-            store.prompts.retain(|p| !idset.contains(p.id.as_str()));
+            // 91: move to trash, same as the single-prompt delete_prompt command —
+            // media files and version history stay untouched until a real purge.
+            let mut moved: Vec<Prompt> = Vec::new();
+            store.prompts.retain(|p| {
+                if idset.contains(p.id.as_str()) {
+                    moved.push(p.clone());
+                    false
+                } else {
+                    true
+                }
+            });
+            let now = now_secs();
+            for mut p in moved.into_iter().rev() {
+                p.trashed_at = now;
+                store.trash.insert(0, p); // newest-deleted first, preserving the batch's own order
+            }
             for view in &mut store.settings.views {
                 for layout in view.layouts.values_mut() {
                     layout.retain(|k, _| !idset.contains(k.as_str()));
@@ -3765,9 +3858,8 @@ async fn batch_prompts(
             }
             store.normalize_folders(); // F25
             save_prompts(&app, &store);
+            save_trash(&app, &store);
             save_settings(&app, &store.settings);
-            cleanup_orphan_files(&app, &store);
-            if let Some(c) = db_conn(&app) { for id in &ids { db_delete_versions(&c, id); } } // F7 cascade
         }
         "favorite" => {
             let fav = favorite.unwrap_or(true);
@@ -3830,6 +3922,111 @@ async fn batch_prompts(
     }
     rebuild_tray(&app); // F23: one rebuild for the whole batch, not one per prompt
     Ok(settings)
+}
+
+// ---------- 91: trash ----------
+
+#[tauri::command]
+fn list_trash(state: State<Db>) -> Vec<Prompt> {
+    lock(&state).trash.clone()
+}
+
+// Places the restored prompt in the ACTIVE view via the same first_free_cell scan
+// add_prompt already uses for a brand-new prompt: if the view is full, the prompt
+// still comes back (reachable through the library) just without a grid cell of its
+// own — the same graceful fallback, never a hard failure or a silently dropped
+// prompt. Every other app-level association (floating, folder membership, hotkey)
+// was already let go at delete time and is not reconstructed.
+#[tauri::command]
+async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result<AppState, String> {
+    let (app_state, restored) = {
+        let mut store = lock(&state);
+        let pos = store.trash.iter().position(|p| p.id == id);
+        let Some(pos) = pos else {
+            return Err("not-found".into());
+        };
+        let mut p = store.trash.remove(pos);
+        p.trashed_at = 0;
+        let view = store.settings.active_view_mut();
+        if let Some(cell) = first_free_cell(view) {
+            let key = grid_key(view.cols, view.rows);
+            view.layouts.entry(key).or_default().insert(p.id.clone(), cell);
+        }
+        store.prompts.push(p);
+        save_prompts(&app, &store);
+        save_trash(&app, &store);
+        save_settings(&app, &store.settings);
+        (AppState { prompts: store.prompts.clone(), settings: store.settings.clone() }, true)
+    };
+    if restored {
+        rearm_hotkeys(&app); // F20: the restored prompt's own hotkey, if any, is free again to re-claim
+        rebuild_tray(&app); // F23
+    }
+    Ok(app_state)
+}
+
+// Permanent delete: the trash entry, its media files and its whole version history
+// are gone for good. This is the old hard-delete's own cleanup logic, just moved
+// here instead of running at every "delete" click.
+fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) {
+    let idset: std::collections::HashSet<&str> = ids.iter().map(|s| s.as_str()).collect();
+    store.trash.retain(|p| !idset.contains(p.id.as_str()));
+    save_trash(app, store);
+    cleanup_orphan_files(app, store);
+    if let Some(c) = db_conn(app) {
+        for id in ids {
+            db_delete_versions(&c, id);
+        }
+    }
+}
+
+#[tauri::command]
+fn purge_prompt(app: AppHandle, state: State<Db>, id: String) -> Vec<Prompt> {
+    let mut store = lock(&state);
+    purge_ids(&app, &mut store, std::slice::from_ref(&id));
+    store.trash.clone()
+}
+
+#[tauri::command]
+fn empty_trash(app: AppHandle, state: State<Db>) -> Vec<Prompt> {
+    let mut store = lock(&state);
+    let ids: Vec<String> = store.trash.iter().map(|p| p.id.clone()).collect();
+    purge_ids(&app, &mut store, &ids);
+    store.trash.clone()
+}
+
+// 91: drop anything past the retention window (0/off by settings default, same
+// "0 = forever" convention as historyDays). Runs once at startup, mirroring
+// prune_history's own startup sweep — never on a timer, so a long-idle app does
+// not surprise-purge something the user only just noticed in the trash.
+fn trash_retention_secs(settings: &Settings) -> Option<u64> {
+    let days = settings.ui_values.get("trashRetentionDays").copied().unwrap_or(30.0);
+    if days <= 0.0 {
+        None
+    } else {
+        Some(days as u64 * 86_400)
+    }
+}
+
+// Pure decision, kept apart from sweep_trash's side effects (save/file-cleanup need
+// an AppHandle, which cannot be constructed in a unit test) so the actual "what
+// counts as stale" rule is directly testable.
+fn stale_trash_ids(trash: &[Prompt], max_age: u64, now: u64) -> Vec<String> {
+    trash
+        .iter()
+        .filter(|p| p.trashed_at > 0 && now.saturating_sub(p.trashed_at) > max_age)
+        .map(|p| p.id.clone())
+        .collect()
+}
+
+fn sweep_trash(app: &AppHandle, store: &mut Store) {
+    let Some(max_age) = trash_retention_secs(&store.settings) else {
+        return;
+    };
+    let stale = stale_trash_ids(&store.trash, max_age, now_secs());
+    if !stale.is_empty() {
+        purge_ids(app, store, &stale);
+    }
 }
 
 // Factory reset: wipe all prompts AND all settings (views, theme, window,
@@ -9036,6 +9233,7 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>) -> Result<usize, S
         }
         let prompt = Prompt {
             id: gen_id(),
+            trashed_at: 0,
             name: item.name,
             text: item.text,
             color: item.color,
@@ -9999,6 +10197,10 @@ pub fn run() {
             set_favorite,
             delete_prompt,
             batch_prompts,
+            list_trash,
+            restore_prompt,
+            purge_prompt,
+            empty_trash,
             list_versions,
             restore_version,
             usage_stats,
@@ -10459,6 +10661,7 @@ mod tests {
         vec![
             Prompt {
                 id: "p1".into(),
+                trashed_at: 0,
                 name: "Mail".into(),
                 text: "Hello\nWorld".into(),
                 color: "#ef4444".into(),
@@ -10479,6 +10682,7 @@ mod tests {
             },
             Prompt {
                 id: "p2".into(),
+                trashed_at: 0,
                 name: "Doc".into(),
                 text: "Doc".into(),
                 color: String::new(),
@@ -10498,6 +10702,38 @@ mod tests {
                 hotkey_paste: String::new(),
             },
         ]
+    }
+
+    // ---- 91: trash ----
+
+    #[test]
+    fn stale_trash_ids_respects_the_retention_window() {
+        let mut trash = sample_prompts(); // p1, p2
+        let now = 10_000_000u64;
+        trash[0].trashed_at = now - 100; // just trashed — well inside any window
+        trash[1].trashed_at = now - 1_000_000; // trashed long ago — past a 1-day window
+        let max_age = 86_400; // 1 day
+        let stale = stale_trash_ids(&trash, max_age, now);
+        assert_eq!(stale, vec!["p2".to_string()], "only the old entry should be stale");
+    }
+
+    #[test]
+    fn stale_trash_ids_never_touches_a_zero_timestamp() {
+        // trashed_at == 0 is the "never trashed" sentinel every non-trashed Prompt
+        // carries — it must never be treated as "trashed an eternity ago".
+        let mut trash = sample_prompts();
+        trash[0].trashed_at = 0;
+        trash[1].trashed_at = 0;
+        assert!(stale_trash_ids(&trash, 1, 1_000_000).is_empty());
+    }
+
+    #[test]
+    fn trash_retention_zero_days_means_forever() {
+        let mut settings = Settings::default();
+        settings.ui_values.insert("trashRetentionDays".to_string(), 0.0);
+        assert_eq!(trash_retention_secs(&settings), None);
+        settings.ui_values.insert("trashRetentionDays".to_string(), 7.0);
+        assert_eq!(trash_retention_secs(&settings), Some(7 * 86_400));
     }
 
     // ---- F20 per-prompt hotkeys ----

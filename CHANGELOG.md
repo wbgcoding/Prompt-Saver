@@ -6,12 +6,12 @@ All notable changes to **Prompt Saver**. Download the latest version from the
 
 ## 2.7.0 (unreleased)
 
-Fifteen new features: tags, custom themes, folders for view tabs and for
+Sixteen new features: tags, custom themes, folders for view tabs and for
 floating buttons, self-filling and choice variables, a markdown preview with
 syntax colors, private notes, per-prompt hotkeys, drag-out into other apps, a
-tray quick-copy menu, a screen color picker, a standalone quick launcher and
-multi-select in the grid. Everything new is an expert-menu switch, most of it
-off until you turn it on.
+tray quick-copy menu, a screen color picker, a standalone quick launcher,
+multi-select in the grid and a trash for deleted prompts. Everything new is an
+expert-menu switch, most of it off until you turn it on.
 
 ### Added
 
@@ -78,6 +78,10 @@ off until you turn it on.
   corner; once anything is checked, every tile shows one. A toolbar appears
   above the grid to recolor, move to another view, or delete everything you
   picked at once.
+- **Trash** — deleting a prompt now moves it to a trash instead of removing it
+  right away. Restore it or delete it forever from a dialog in the expert
+  menu's Data group, or let it clear itself automatically after a retention
+  period you choose (30 days by default, or never).
 
 ### Improved
 
