@@ -1323,6 +1323,7 @@ let _lastUiZoom = null; // last native-zoom factor pushed to the backend (thrott
 function applyValues() {
   const root = document.documentElement.style;
   root.setProperty("--transition", `${val("animSpeed")}ms cubic-bezier(0.4, 0, 0.2, 1)`);
+  root.setProperty("--transition-ms", `${val("animSpeed")}ms`); // bare duration for effects that scale it (e.g. a slower fade)
   root.setProperty("--gap", `${val("gridGap")}px`);
   root.setProperty("--grid-pad", `${val("gridPad")}px`);
   root.setProperty("--modal-radius", `${val("modalRadius")}px`);
@@ -1427,10 +1428,18 @@ function flagRow(key) {
   withTip(row, key);
   const span = document.createElement("span");
   span.textContent = t(flagLabelKey(key));
-  // Features that ship OFF get a "(Standard Aus)" tag so it's clear at a glance which
-  // settings are additions beyond the standard configuration. Read from the shipped
-  // default, so a brand that turns a feature off is labelled correctly too.
-  if (!shipsOn(key)) span.textContent += ` ${t("defaultOff")}`;
+  row.append(span);
+  // Features that ship OFF get a small badge (P69: a sign, not text crowding the
+  // label) so it's clear at a glance which settings are additions beyond the
+  // standard configuration. Read from the shipped default, so a brand that turns
+  // a feature off is labelled correctly too.
+  if (!shipsOn(key)) {
+    const badge = document.createElement("span");
+    badge.className = "default-off-badge";
+    badge.textContent = "●";
+    badge.title = t("defaultOff");
+    row.append(badge);
+  }
   const input = document.createElement("input");
   input.type = "checkbox";
   input.className = "switch";
@@ -1454,7 +1463,7 @@ function flagRow(key) {
     if (TILE_DOM_FLAGS.has(key)) await renderGrid(true);
     else fitAllTiles();
   });
-  row.append(span, input);
+  row.append(input);
   return row;
 }
 
@@ -7975,7 +7984,7 @@ async function runImport() {
     applyTileStyle();
     applyBars();
     await renderGrid(true); // re-render with the new tile style
-    toast(`${count} ${t("imported")}`);
+    toast(t("imported").replace("{n}", count.toLocaleString(LANG)));
     maybeDupImportToast(); // F6: flag near-duplicates the import may have introduced
   } catch (err) {
     if (String(err) !== "canceled") toast(t("importFailed"));

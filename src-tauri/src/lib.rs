@@ -8463,6 +8463,11 @@ fn set_start_minimized(app: AppHandle, state: State<Db>, enabled: bool) -> Resul
 // ---------- Import / export ----------
 
 fn csv_cell(s: &str) -> String {
+    // CSV formula injection: a cell starting with =, +, -, @ or a tab is read as a
+    // formula by Excel/LibreOffice once reopened — CSV-quoting only protects the
+    // CSV syntax, not spreadsheet evaluation. A leading single quote forces text.
+    let needs_prefix = matches!(s.as_bytes().first(), Some(b'=' | b'+' | b'-' | b'@' | b'\t' | b'\r'));
+    let s = if needs_prefix { format!("'{s}") } else { s.to_string() };
     format!("\"{}\"", s.replace('"', "\"\""))
 }
 
@@ -8580,6 +8585,17 @@ async fn export_prompts(app: AppHandle, state: State<'_, Db>, format: String, id
 }
 
 // Minimal CSV reader for our own export format (quoted fields, ';' delimiter).
+// Reverses csv_cell's formula-injection guard: a field re-quoted with a leading
+// `'` in front of =, +, -, @, tab or CR gets that quote stripped back off, so a
+// round trip through this app's own export/import never gains a stray character.
+fn strip_formula_guard(s: String) -> String {
+    let mut chars = s.chars();
+    if chars.next() == Some('\'') && matches!(chars.next(), Some('=' | '+' | '-' | '@' | '\t' | '\r')) {
+        return s[1..].to_string();
+    }
+    s
+}
+
 fn parse_csv(content: &str) -> Vec<Vec<String>> {
     let mut rows = Vec::new();
     let mut row = Vec::new();
@@ -8599,10 +8615,10 @@ fn parse_csv(content: &str) -> Vec<Vec<String>> {
         } else {
             match c {
                 '"' => in_quotes = true,
-                ';' => row.push(std::mem::take(&mut field)),
+                ';' => row.push(strip_formula_guard(std::mem::take(&mut field))),
                 '\r' => {}
                 '\n' => {
-                    row.push(std::mem::take(&mut field));
+                    row.push(strip_formula_guard(std::mem::take(&mut field)));
                     rows.push(std::mem::take(&mut row));
                 }
                 _ => field.push(c),
@@ -8610,7 +8626,7 @@ fn parse_csv(content: &str) -> Vec<Vec<String>> {
         }
     }
     if !field.is_empty() || !row.is_empty() {
-        row.push(field);
+        row.push(strip_formula_guard(field));
         rows.push(row);
     }
     rows
@@ -10659,6 +10675,25 @@ mod tests {
         let data = parse_csv_data(&csv);
         assert_eq!(&data.prompts[0].notes, note);
         assert!(data.prompts[1].notes.is_empty());
+    }
+
+    // Security: a name/text starting with =, +, -, @ or a tab must not turn into a
+    // live formula when the CSV is opened in Excel/LibreOffice, but it must still
+    // come back exactly as typed on the next import into this app.
+    #[test]
+    fn csv_export_guards_formula_prefixes_and_import_undoes_it() {
+        let mut prompts = sample_prompts();
+        prompts[0].name = "=cmd|'/c calc'!A1".into();
+        prompts[0].text = "-1 to 5 scale".into();
+        prompts[0].notes = "@mention someone".into();
+        let csv = to_csv(&prompts);
+        assert!(csv.contains("\"'=cmd"), "the name must be guarded: {csv}");
+        assert!(csv.contains("\"'-1 to 5"), "the text must be guarded: {csv}");
+        assert!(csv.contains("\"'@mention"), "the notes must be guarded: {csv}");
+        let data = parse_csv_data(&csv);
+        assert_eq!(data.prompts[0].name, "=cmd|'/c calc'!A1");
+        assert_eq!(data.prompts[0].text, "-1 to 5 scale");
+        assert_eq!(data.prompts[0].notes, "@mention someone");
     }
 
     #[test]

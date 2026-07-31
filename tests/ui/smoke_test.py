@@ -1437,6 +1437,31 @@ PROBE = """
       layoutScan('expert tab ' + tb.textContent.trim());
     }
     mustReach('expert menu', '.expert-tab');
+    // P69: a default-off feature gets a small dot badge instead of a "(Default
+    // off)" text suffix crowding the label — find the rows across all tabs.
+    {
+      const rowByLabel = (text) => {
+        for (const tb of [...document.querySelectorAll('.expert-tab')]) {
+          tb.click();
+          const hit = [...document.querySelectorAll('#expert-flags .switch-field')]
+            .find(r => (r.querySelector('span') || {}).textContent === text);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const offRow = rowByLabel('Always show grid lines');
+      const onRow = rowByLabel('Media captions');
+      const badge = offRow && offRow.querySelector('.default-off-badge');
+      if (!badge || !badge.title.trim()) {
+        out.errors.push('a default-off flag row has no badge (or no tooltip)');
+      }
+      if (offRow && offRow.querySelector('span').textContent.includes('Default off')) {
+        out.errors.push('the default-off suffix is still text on the label');
+      }
+      if (onRow && onRow.querySelector('.default-off-badge')) {
+        out.errors.push('a default-ON flag row wrongly carries the badge');
+      }
+    }
     // Exercise the interactions that rebuild the menu: collapsing a group and
     // flipping switches (gated ones re-render, plain ones must not).
     // Collapsing must flip a class, not rebuild the list — rebuilding is what made

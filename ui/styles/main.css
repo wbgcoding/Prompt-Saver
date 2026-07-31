@@ -14,6 +14,7 @@
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   --radius: 10px;
   --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-ms: 150ms;
   --gap: 8px;
   /* Full-height modals (library/journal/settings/tall). Divided by the compounding
      CSS zooms (body ui-scale × modal-scale) so the modal never exceeds the viewport
@@ -1466,7 +1467,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   outline: 3px solid transparent;
   outline-offset: 2px;
   box-shadow: 0 0 0 2px transparent, 0 0 0 5px transparent, 0 0 14px 2px transparent;
-  transition: outline-color 480ms ease, box-shadow 480ms ease;
+  transition: outline-color calc(var(--transition-ms) * 3.2) ease, box-shadow calc(var(--transition-ms) * 3.2) ease;
 }
 /* Order badge (1, 2, 3 …) on a chained button, pinned top-left. */
 .tile-chain-badge {
@@ -1538,13 +1539,13 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .flag-accentScrollbar ::-webkit-scrollbar-thumb { background: var(--accent) !important; }
 .flag-smoothScroll * { scroll-behavior: smooth; }
 /* Privacy extras */
-.flag-blurTilesUntilHover .tile-name { filter: blur(var(--blur-tiles, 4px)); transition: filter 0.12s; }
+.flag-blurTilesUntilHover .tile-name { filter: blur(var(--blur-tiles, 4px)); transition: filter var(--transition); }
 .flag-blurTilesUntilHover .tile:hover .tile-name { filter: none; }
 .flag-blurMediaUntilHover .tile-img,
-.flag-blurMediaUntilHover .tile-video { filter: blur(var(--blur-media, 10px)); transition: filter 0.12s; }
+.flag-blurMediaUntilHover .tile-video { filter: blur(var(--blur-media, 10px)); transition: filter var(--transition); }
 .flag-blurMediaUntilHover .tile:hover .tile-img,
 .flag-blurMediaUntilHover .tile:hover .tile-video { filter: none; }
-.flag-hideTileNames .tile-name { opacity: 0; transition: opacity 0.12s; }
+.flag-hideTileNames .tile-name { opacity: 0; transition: opacity var(--transition); }
 .flag-hideTileNames .tile:hover .tile-name { opacity: 1; }
 .flag-dimUnhovered .grid:hover .tile:not(:hover) { opacity: var(--dim-unhovered, 0.45); }
 /* Media extras */
@@ -1578,7 +1579,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   pointer-events: none;
   opacity: 0;
   transform: translateY(3px);
-  transition: opacity 0.12s ease, transform 0.12s ease;
+  transition: opacity var(--transition), transform var(--transition);
 }
 .tile-tip.show { opacity: 1; transform: translateY(0); }
 .tile-tip-name { font-weight: 700; }
@@ -3033,11 +3034,18 @@ body.drag-over::after {
 .switch-field {
   flex-direction: row;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   cursor: pointer;
 }
 .switch-field > span { font-size: 13px; color: var(--fg); min-width: 0; }
+.switch-field > span:first-child { flex: 1; }
+/* P69: a small dot instead of a "(Default off)" text suffix crowding the label. */
+.default-off-badge {
+  font-size: 8px;
+  line-height: 1;
+  color: var(--muted);
+  flex-shrink: 0;
+}
 /* Settings toggles laid out in two even columns (wider popup). Long labels wrap
    within their cell instead of being cut off; the switch stays pinned right. */
 .switch-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; align-items: center; }

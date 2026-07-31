@@ -110,6 +110,11 @@ switch, most of it off until you turn it on.
 - The editor's automatic-placeholder chips call out `clipboard`: it is the only
   one that reads live data instead of a fixed value, so it now stands apart from
   the rest.
+- A feature that ships off now gets a small dot next to its switch instead of a
+  "(Default off)" suffix crowding the label text.
+- Every visual transition now follows the animation-speed expert setting,
+  including the keyboard-focus ring's fade-out and the privacy blur effects,
+  which previously always ran at a fixed speed.
 
 ### Fixed
 
@@ -117,6 +122,14 @@ switch, most of it off until you turn it on.
   folder off its spot.** The cell handed to each returning member never
   accounted for a second folder sharing the same view, since a folder's own
   cell lives outside the normal layout — it could land exactly there.
+- **Exporting to CSV could hand Excel or LibreOffice a live formula.** A prompt
+  name, text or note starting with `=`, `+`, `-`, `@` or a tab is read as a
+  formula the moment the file is reopened there, even though the value was
+  correctly CSV-quoted — quoting only protects the CSV syntax, not what the
+  spreadsheet does with the cell afterwards. Such a value is now prefixed with
+  a single quote on export (the standard fix) and the prefix is removed again
+  on the next import into Prompt Saver, so nothing changes for data that never
+  leaves this app.
 
 ### Removed
 
