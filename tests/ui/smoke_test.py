@@ -1115,6 +1115,8 @@ PROBE = """
       // free cell has to save the new layout.
       calls().length = 0;
       const tile = gridTile('p1');
+      const origCell = tile.closest('.cell');
+      const origCol = origCell && origCell.dataset.col, origRow = origCell && origCell.dataset.row;
       press(tile, {});
       if (tile.draggable) out.errors.push('a plain press armed a drag-out');
       window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 300, clientY: 200 }));
@@ -1131,6 +1133,25 @@ PROBE = """
       if (document.querySelector('.drag-ghost')) out.errors.push('the drag ghost outlived the drag');
       if (cell && !calls().includes('set_layout')) {
         out.errors.push('a plain drag did not save a new tile position');
+      }
+      // P8: the same reorder must offer an undo toast. Click it and prove the tile
+      // really lands back on its original cell (not just that a class flips), then
+      // leave the toast the way its own click handler leaves it (hideToast()) — no
+      // stray classList surgery, and nothing lingers into later checks.
+      if (cell && origCell) {
+        const undoToast = document.getElementById('toast');
+        const undoBtn = undoToast.querySelector('.toast-btn');
+        if (!undoToast.classList.contains('actionable') || !undoBtn) {
+          out.errors.push('a plain drag did not offer an undo toast');
+        } else {
+          undoBtn.click();
+          await sleep(300);
+          const backCell = gridTile('p1')?.closest('.cell');
+          if (!backCell || backCell.dataset.col !== origCol || backCell.dataset.row !== origRow) {
+            out.errors.push('undo did not put the tile back on its original cell');
+          }
+          if (undoToast.classList.contains('show')) out.errors.push('the undo toast is still showing after being clicked');
+        }
       }
       // Modifier drag: armed, and the payload is the raw text — placeholders included,
       // because filling them needs a dialog no drag can open.

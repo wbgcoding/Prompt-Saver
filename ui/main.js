@@ -147,6 +147,8 @@ const ICON_EDIT =
   '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 20h4L18.5 9.5a2 2 0 0 0-2.8-2.8L5 17.2V20Zm9.5-12.5 3 3"/></svg>';
 const ICON_TRASH =
   '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13M10 11v6M14 11v6"/></svg>';
+const ICON_UNDO =
+  '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M8 7 3 12l5 5M3 12h11a5 5 0 0 1 0 10h-4"/></svg>';
 
 let LANG = "en";
 // A language that was stored before it was retired has no option left, which would
@@ -3581,7 +3583,21 @@ window.addEventListener("pointerup", async (e) => {
   if (!cell) return;
   if (favView) { await placeFav(id, Number(cell.dataset.col), Number(cell.dataset.row)); return; }
   if (armed) { await dropIntoFolder(id, armed, cell); return; } // F27
-  await placeTile(id, Number(cell.dataset.col), Number(cell.dataset.row));
+  // P8: only a genuine reorder of an already-placed tile gets an undo offer — a
+  // brand-new placement (drag in from the library, double-click-create) has
+  // nothing to move back FROM, so prevCell stays undefined and the toast is skipped.
+  const prevCell = layoutOf(activeView())[id];
+  const destCol = Number(cell.dataset.col);
+  const destRow = Number(cell.dataset.row);
+  await placeTile(id, destCol, destRow);
+  if (prevCell && (prevCell[0] !== destCol || prevCell[1] !== destRow)) {
+    const [fromCol, fromRow] = prevCell;
+    toast(t("tileMoved"), {
+      label: t("undo"),
+      icon: ICON_UNDO,
+      onClick: () => placeTile(id, fromCol, fromRow),
+    });
+  }
 });
 
 window.addEventListener("pointercancel", () => {

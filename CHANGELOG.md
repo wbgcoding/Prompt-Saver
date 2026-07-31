@@ -99,6 +99,9 @@ switch, most of it off until you turn it on.
 - A floating button or folder left completely off-screen (say, after unplugging
   a second monitor) is dropped automatically on the next launch; one merely
   hanging over an edge is left alone.
+- Dragging a tile to a new spot now shows a brief "Tile moved" toast with an
+  Undo button, so a mis-drop can be reversed with one click instead of
+  dragging it back by hand.
 - A backup is now either whole or absent: the snapshot is written under a
   temporary name and only then renamed, and a failed one leaves nothing behind.
 - "Duplicate" on a prompt's context menu now opens the same dialog as creating a
