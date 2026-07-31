@@ -757,6 +757,13 @@ body.drag-active .cell.drag-over {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 16%, var(--surface));
 }
+/* P38: a click the copy cooldown swallowed — a "no" shake, not silence. */
+@keyframes tile-cooldown-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+.tile.cooldown-blocked { animation: tile-cooldown-shake 220ms ease-in-out; }
 /* Small "Copied!" bubble at the bottom edge of the tile. */
 .copy-pop {
   position: absolute;

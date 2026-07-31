@@ -3556,7 +3556,13 @@ window.addEventListener("pointerup", async (e) => {
         return;
       }
       if (autoPasteDouble(id)) { await autoPasteNow(el); return; } // F19: 2nd fast click pastes
-      if (copyOnCooldown(id)) return; // same prompt copied moments ago
+      // P38: a click swallowed by the cooldown used to give no feedback at all —
+      // a quick shake says "that didn't do anything" instead of silence.
+      if (copyOnCooldown(id)) {
+        el.classList.add("cooldown-blocked");
+        setTimeout(() => el.classList.remove("cooldown-blocked"), 250);
+        return;
+      }
       if (p && await copyResolved(p)) {
         showCopied(el);
         recordCopy(id);

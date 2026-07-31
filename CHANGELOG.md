@@ -144,6 +144,9 @@ switch, most of it off until you turn it on.
   colored yourself are left alone.
 - The library preview's line count (2, until now fixed) is an expert value,
   adjustable from 1 to 4.
+- A grid click swallowed by the copy cooldown now shakes the tile briefly
+  instead of doing nothing at all — the cooldown itself was already
+  adjustable (down to 0 to turn it off) in the expert menu.
 
 ### Fixed
 
