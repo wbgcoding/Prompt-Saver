@@ -1232,6 +1232,76 @@ PROBE = """
       await click('expert-back');
       document.getElementById('settings').classList.add('hidden');
     }
+    // 51: prompt in multiple views — off by default. On exposes "Also show in…" on
+    // the tile menu, which places/unplaces the SAME prompt (shared data, no copy)
+    // in another view via addView/removeView.
+    {
+      const gotFlag = await setExpertFlag('Prompt in multiple views', true);
+      if (!gotFlag) {
+        out.errors.push('the "Prompt in multiple views" expert toggle is missing');
+      } else {
+        const t0 = gridTile('p0');
+        if (!t0) {
+          out.errors.push('the multi-view test needs p0 on the grid');
+        } else {
+          t0.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+          await sleep(150);
+          const viewsBtn = document.querySelector('#ctx [data-act="views"]');
+          if (!viewsBtn || viewsBtn.classList.contains('hidden')) {
+            out.errors.push('the "Also show in…" tile action did not appear with the flag on');
+          } else {
+            viewsBtn.click();
+            await sleep(150);
+            const popRows = () => [...document.querySelectorAll('.views-pop .view-group-item')];
+            if (popRows().length !== 3) {
+              out.errors.push('the "also show in" popover shows ' + popRows().length + ' rows instead of 3');
+            } else {
+              const workRow = popRows().find(r => r.textContent.includes('Work'));
+              if (!workRow || workRow.classList.contains('on')) {
+                out.errors.push('p0 shows as already placed in Work before toggling it on');
+              } else {
+                window.__SMOKE_ARGS__ = [];
+                workRow.click();
+                await sleep(150);
+                const addCall = (window.__SMOKE_ARGS__ || []).find(c => c[0] === 'batch_prompts');
+                if (!addCall || addCall[1].action !== 'addView' || addCall[1].viewId !== 'work') {
+                  out.errors.push('toggling a view row did not call batch_prompts with addView/work');
+                }
+                const workRowAfter = popRows().find(r => r.textContent.includes('Work'));
+                if (!workRowAfter || !workRowAfter.classList.contains('on')) {
+                  out.errors.push('the popover did not show Work as placed after adding it');
+                } else {
+                  window.__SMOKE_ARGS__ = [];
+                  workRowAfter.click(); // toggle back off — leaves the fixture clean
+                  await sleep(150);
+                  const removeCall = (window.__SMOKE_ARGS__ || []).find(c => c[0] === 'batch_prompts');
+                  if (!removeCall || removeCall[1].action !== 'removeView') {
+                    out.errors.push('toggling the row back off did not call batch_prompts with removeView');
+                  }
+                }
+              }
+            }
+            document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+            await sleep(100);
+          }
+        }
+      }
+      // Off again: the tile action must disappear, restoring the "one placement" guarantee.
+      const restored = await setExpertFlag('Prompt in multiple views', false);
+      if (restored) {
+        const t0b = gridTile('p0');
+        if (t0b) {
+          t0b.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+          await sleep(150);
+          const viewsBtnOff = document.querySelector('#ctx [data-act="views"]');
+          if (!viewsBtnOff || !viewsBtnOff.classList.contains('hidden')) {
+            out.errors.push('the "Also show in…" tile action stayed visible with the flag off');
+          }
+          document.body.click();
+          await sleep(100);
+        }
+      }
+    }
     const DRAG_OUT = 'Drag prompt into another app';
     const offTile = gridTile('p1');
     if (offTile) {

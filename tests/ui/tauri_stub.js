@@ -310,6 +310,24 @@ const RESULTS = {
     if (a && a.action === "color") {
       for (const id of ids) { const p = PROMPTS.find((x) => x.id === id); if (p) p.color = a.color || ""; }
     }
+    // 51: mirrors the real backend enough for the "also show in" popover to see a
+    // genuine placement change, not just a settings echo.
+    if (a && (a.action === "addView" || a.action === "removeView")) {
+      const view = SETTINGS.views.find((v) => v.id === a.viewId);
+      if (view) {
+        const key = view.cols + "x" + view.rows;
+        const layout = view.layouts[key] || (view.layouts[key] = {});
+        if (a.action === "removeView") {
+          for (const id of ids) delete layout[id];
+        } else {
+          for (const id of ids) {
+            if (id in layout) continue;
+            const { cell } = firstFreeCell(view);
+            if (cell) layout[id] = cell;
+          }
+        }
+      }
+    }
     return JSON.parse(JSON.stringify(SETTINGS));
   },
   // Mirrors the backend: a new prompt lands on the active view's first free cell,

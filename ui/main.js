@@ -985,6 +985,9 @@ const OPT_FLAG_LABELS = {
   // windows can run side by side. Read once at launch, before settings normally
   // load — toggling it needs a restart to take effect (flagRow() toasts that).
   allowMultipleInstances: "flagAllowMultipleInstances",
+  // 51: off keeps the historical "one placement" guarantee (adding elsewhere moves
+  // it there); on lets a prompt sit in several views at once, sharing the same data.
+  multiViewPrompt: "flagMultiViewPrompt",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
@@ -1280,7 +1283,7 @@ const EXPERT_TABS = [
   ] },
   { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
-    { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, "gridViewBorder", "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }, "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
+    { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "gridViewBorder", "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }, "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
     { title: "expGroupPrivacy", flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
     { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances"], values: ["kbFocusFadeMs"], paths: ["dataDir"] },
   ] },
@@ -1419,7 +1422,7 @@ const EXPERT_TIPS = [
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "kbFocusFadeMs", "snipPreviewVh",
   "historyPerPrompt", "dupThreshold", "clipMinChars", "clipInboxMax", "historyMax",
   "journalLimit", "previewLen", "nameMaxLen", "searchRecentMax", "maxViews", "gridMax",
-  "viewBorder", "statsTopN", "viewGroups", "viewGroupMaxRows",
+  "viewBorder", "statsTopN", "viewGroups", "viewGroupMaxRows", "multiViewPrompt",
   "barToggles", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
 ];
 const EXPERT_TIP_SET = new Set(EXPERT_TIPS);
@@ -2044,6 +2047,10 @@ function activeView() {
 }
 const gridKeyOf = (v) => `${v.cols}x${v.rows}`;
 const layoutOf = (v) => v.layouts?.[gridKeyOf(v)] || {};
+// 51: every OTHER view currently holding this prompt — a client-side scan, no
+// round trip, since every view's layout is already loaded in `settings`.
+const viewsContaining = (id, exceptViewId) =>
+  settings.views.filter((v) => v.id !== exceptViewId && Object.prototype.hasOwnProperty.call(layoutOf(v), id));
 
 // ---- Favorites view: a live, auto-sized grid of every starred prompt.
 // Enabled by the favView setting (off by default); the header star toggles it.
@@ -3700,6 +3707,15 @@ function moveTileDom(id, col, row) {
 // state immediately, persistence runs in the background.
 async function placeTile(id, col, row) {
   const view = activeView();
+  // 51: off by default — placing a prompt here drops it from every other view it
+  // sits in first, keeping the historical "one placement" guarantee. On, a prompt
+  // can sit in several views at once (same object, same data, everywhere).
+  if (!optFlag("multiViewPrompt")) {
+    for (const other of viewsContaining(id, view.id)) {
+      delete layoutOf(other)[id];
+      invoke("batch_prompts", { ids: [id], action: "removeView", color: null, favorite: null, viewId: other.id }).catch(() => {});
+    }
+  }
   const layout = { ...layoutOf(view) };
   const old = layout[id];
   const occupant = Object.entries(layout).find(
@@ -4064,11 +4080,58 @@ function openCtx(id, x, y) {
   pinBtn.textContent = t(pinned ? "removeFloating" : "showFloating");
   // In the favorites view a prompt can't be hidden/removed — unstar it instead.
   ctxEl.querySelector('[data-act="hide"]').classList.toggle("hidden", favView);
+  // 51: nothing to place this prompt into besides the view it is already on.
+  ctxEl.querySelector('[data-act="views"]').classList.toggle("hidden", !optFlag("multiViewPrompt") || settings.views.length < 2);
   placePopoverAt(ctxEl, x, y);
 }
 function closeCtx() {
   ctxEl.classList.add("hidden");
   ctxId = null;
+}
+
+// ---- 51: "also show in" popover — place/unplace this prompt on other views ----
+const viewsPop = document.createElement("div");
+viewsPop.className = "ctx views-pop hidden";
+viewsPop.setAttribute("role", "menu");
+document.body.appendChild(viewsPop);
+function closeViewsPop() {
+  viewsPop.classList.add("hidden");
+}
+function renderViewsPop(id) {
+  viewsPop.innerHTML = "";
+  for (const v of settings.views) {
+    if (v.id === settings.active_view) continue; // already here — that's why the menu was opened
+    const on = Object.prototype.hasOwnProperty.call(layoutOf(v), id);
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "view-group-item" + (on ? " on" : "");
+    row.setAttribute("role", "menuitemcheckbox");
+    row.setAttribute("aria-checked", String(on));
+    const check = document.createElement("span");
+    check.className = "tb-check";
+    check.innerHTML = on ? TB_CHECK : "";
+    const label = document.createElement("span");
+    label.className = "view-group-item-name";
+    label.textContent = v.name;
+    if (v.color) {
+      const dot = document.createElement("span");
+      dot.className = "view-group-dot";
+      dot.style.background = v.color;
+      label.prepend(dot);
+    }
+    row.append(check, label);
+    row.addEventListener("click", async () => {
+      try {
+        settings = await invoke("batch_prompts", { ids: [id], action: on ? "removeView" : "addView", color: null, favorite: null, viewId: v.id });
+      } catch (e) { toast(String(e)); return; }
+      renderViewsPop(id);
+    });
+    viewsPop.appendChild(row);
+  }
+}
+function openViewsPop(id, rect) {
+  renderViewsPop(id);
+  placePopover(viewsPop, rect);
 }
 
 // ---- Right-click toolbar menu: quickly toggle the optional top-bar tools on/off
@@ -9250,6 +9313,12 @@ function bind() {
       await renderGrid();
       return;
     }
+    if (act === "views") {
+      const rect = ctxEl.getBoundingClientRect();
+      closeCtx();
+      openViewsPop(id, rect);
+      return;
+    }
     closeCtx();
     if (act === "edit") {
       await editPrompt(id);
@@ -9279,6 +9348,8 @@ function bind() {
     // F27: the folder tile toggles its own popover, so let its press through.
     if (!tileFolderPop.classList.contains("hidden") && !tileFolderPop.contains(e.target) &&
         !e.target.closest(".folder-tile")) closeTileFolderPop();
+    // 51: opened from the (already-closed) tile context menu, so nothing else needs excluding.
+    if (!viewsPop.classList.contains("hidden") && !viewsPop.contains(e.target)) closeViewsPop();
   });
   // Ctrl+Tab walks the views in the order the tab bar shows them, so a group's
   // members are reached in place instead of being skipped.
@@ -9304,6 +9375,7 @@ function bind() {
     if (!miniMenu.classList.contains("hidden")) { closeMiniMenu(); return; }
     if (!viewGroupPop.classList.contains("hidden")) { closeViewGroupPop(); return; }
     if (!tileFolderPop.classList.contains("hidden")) { closeTileFolderPop(); return; }
+    if (!viewsPop.classList.contains("hidden")) { closeViewsPop(); return; }
     if (!$("lightbox").classList.contains("hidden")) closeLightbox();
     else if (confirmCleanup) confirmCleanup(false);
     // The variable-fill dialog has its own keydown handler; consume Escape here so the
