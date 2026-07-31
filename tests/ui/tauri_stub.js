@@ -232,12 +232,12 @@ const RESULTS = {
   app_version: () => "0.0.0",
   current_data_dir: () => "C:\\Data",
   default_screenshot_dir: () => "C:\\Pictures",
-  // One snapshot carries its prompt count, one is from an older build and has none —
-  // the list has to show both without a gap in the row.
+  // One snapshot carries its prompt count and names (61), one is from an older
+  // build and has neither — the list has to show both without a gap in the row.
   open_backups_folder: () => null,
   list_backups: () => [
-    { name: "2026-07-25_18-30-00", size: 812345, prompts: 12 },
-    { name: "2026-07-24_09-05-00", size: 654321, prompts: null },
+    { name: "2026-07-25_18-30-00", size: 812345, prompts: 12, names: ["Draft reply", "Meeting notes"] },
+    { name: "2026-07-24_09-05-00", size: 654321, prompts: null, names: [] },
   ],
   recent_copies: () => PROMPTS.slice(0, 4).map((p, i) => ({ id: p.id, ts: 1750000000 + i })),
   clip_inbox_list: () => [],

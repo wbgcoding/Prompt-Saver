@@ -6284,6 +6284,25 @@ async function renderBackupPanel(body) {
       const count = document.createElement("span"); count.className = "backup-count";
       count.textContent = b.prompts === null || b.prompts === undefined ? "—" : nf(b.prompts);
       count.title = t("backupPrompts");
+      // 61: names are read straight from the snapshot (DPAPI-sealed exactly like the
+      // live library — a local snapshot is never password-protected, only the
+      // separate manual export-to-file has that option), so there is nothing to ask
+      // for here. An empty list just means an older backup made before this existed.
+      let namesBox = null;
+      if (b.names && b.names.length) {
+        namesBox = document.createElement("div");
+        namesBox.className = "backup-names hidden";
+        namesBox.textContent = b.names.join(", ");
+        count.classList.add("backup-count-toggle");
+        count.setAttribute("role", "button");
+        count.tabIndex = 0;
+        count.title = t("backupNamesToggle");
+        const toggle = () => namesBox.classList.toggle("hidden");
+        count.addEventListener("click", toggle);
+        count.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+        });
+      }
       const size = document.createElement("span"); size.className = "backup-size"; size.textContent = fmtBytes(b.size);
       const restore = document.createElement("button"); restore.type = "button"; restore.className = "ghost-btn"; restore.textContent = t("backupRestore");
       restore.addEventListener("click", () => restoreBackup(b.name));
@@ -6296,6 +6315,7 @@ async function renderBackupPanel(body) {
       });
       row.append(name, count, size, restore, del);
       list.appendChild(row);
+      if (namesBox) list.appendChild(namesBox);
     }
   }
   body.append(listHead, list);

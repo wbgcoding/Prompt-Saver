@@ -2524,6 +2524,15 @@ input[type="password"]::-ms-clear { display: none; }
 /* How many prompts are in that snapshot — its own column, right of the date. */
 .backup-count { flex: 0 0 auto; min-width: 34px; text-align: right; font-size: 12px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
 .backup-row .ghost-btn { flex: 0 0 auto; padding: 3px 10px; font-size: 12px; }
+/* 61: the count doubles as a click-to-expand toggle when names are available. */
+.backup-count-toggle { cursor: pointer; }
+.backup-count-toggle:hover, .backup-count-toggle:focus-visible { color: var(--fg); }
+.backup-names {
+  font-size: 12px; line-height: 1.6; color: var(--muted);
+  padding: 6px 10px; margin-top: -6px;
+  border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px;
+  max-height: 160px; overflow-y: auto;
+}
 
 /* F21 clipboard inbox. */
 .clip-inbox-btn { position: relative; }

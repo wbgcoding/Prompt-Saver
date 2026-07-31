@@ -5335,9 +5335,18 @@ struct BackupInfo {
     // made (exact, and free to read back); a backup from an older build has no note
     // yet, so its count is read out of the snapshot itself once.
     prompts: Option<usize>,
+    // 61: the prompt names themselves, same "written once, cheap to read back after"
+    // treatment as `prompts` above. NOT a privacy concern the way it first looks —
+    // a local snapshot (backups/<stamp>/data.db.gz) is never password-protected; the
+    // optional backup password (`BACKUP_PW_KEY`) only wraps the separate manual
+    // export-to-file flow (`export_all`/`import_all`, PSB1 format). Each row is
+    // DPAPI-sealed exactly like the live `data.db`, so reading it back here needs
+    // nothing beyond what already gates the live library on this machine.
+    names: Vec<String>,
 }
 
 const BACKUP_COUNT_FILE: &str = "prompts.count";
+const BACKUP_NAMES_FILE: &str = "prompts.names.json";
 
 // Count the prompts in a snapshot folder: the note if there is one, otherwise the
 // snapshot is unpacked to a temp file and counted (and the note written for next
@@ -5367,6 +5376,45 @@ fn backup_prompt_count(folder: &std::path::Path) -> Option<usize> {
     }
     n
 }
+
+// Decrypt each row (same DPAPI seal `db_load` uses on the live store) and pull out
+// just the name — best-effort, a row that fails to decrypt/parse is skipped rather
+// than failing the whole list.
+fn read_prompt_names(path: &std::path::Path) -> Vec<String> {
+    let Ok(conn) = Connection::open(path) else { return Vec::new() };
+    let Ok(mut stmt) = conn.prepare("SELECT data FROM prompts ORDER BY ord") else { return Vec::new() };
+    let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) else { return Vec::new() };
+    rows.flatten()
+        .filter_map(|data| serde_json::from_str::<Prompt>(&dec_str(&data)).ok())
+        .map(|p| p.name)
+        .collect()
+}
+
+// 61: same cached-note treatment as `backup_prompt_count` — computed once (here, or
+// at creation time in `do_backup`) and read straight back after.
+fn backup_prompt_names(folder: &std::path::Path) -> Vec<String> {
+    let cache = folder.join(BACKUP_NAMES_FILE);
+    if cache.exists() {
+        return read_json(&cache);
+    }
+    let Some(db) = backup_db_file(folder) else { return Vec::new() };
+    let tmp;
+    let path = if db.extension().map(|e| e == "gz").unwrap_or(false) {
+        tmp = folder.join("names.tmp");
+        if gunzip_to(&db, &tmp).is_err() {
+            return Vec::new();
+        }
+        tmp.clone()
+    } else {
+        db
+    };
+    let names = read_prompt_names(&path);
+    let _ = fs::remove_file(folder.join("names.tmp"));
+    if !names.is_empty() {
+        write_json(&cache, &names);
+    }
+    names
+}
 fn backups_dir(app: &AppHandle) -> std::path::PathBuf {
     data_dir(app).join("backups")
 }
@@ -5393,7 +5441,8 @@ fn list_backups_impl(app: &AppHandle) -> Vec<BackupInfo> {
                 .map(|m| m.len())
                 .unwrap_or(0);
             let prompts = backup_prompt_count(&e.path());
-            BackupInfo { name, size, prompts }
+            let names = backup_prompt_names(&e.path());
+            BackupInfo { name, size, prompts, names }
         })
         .collect();
     out.sort_by(|a, b| b.name.cmp(&a.name)); // newest first (stamp sorts chronologically)
@@ -5560,12 +5609,16 @@ fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<Str
     }
     // Compress the vacuumed copy, then drop the raw one — never leave both behind.
     let packed = gzip_to(&tmp, &dest);
-    // The count is taken from the vacuumed copy while it is still unpacked, so the
-    // list never has to decompress a snapshot to say how much is in it.
+    // The count and names are taken from the vacuumed copy while it is still
+    // unpacked, so the list never has to decompress a snapshot for either.
     if let Ok(conn) = Connection::open(&tmp) {
         if let Ok(n) = conn.query_row("SELECT COUNT(*) FROM prompts", [], |r| r.get::<_, i64>(0)) {
             let _ = fs::write(folder.join(BACKUP_COUNT_FILE), n.max(0).to_string());
         }
+    }
+    let names = read_prompt_names(&tmp);
+    if !names.is_empty() {
+        write_json(&folder.join(BACKUP_NAMES_FILE), &names);
     }
     let _ = fs::remove_file(&tmp);
     if let Err(e) = packed {

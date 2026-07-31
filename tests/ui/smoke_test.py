@@ -2156,6 +2156,38 @@ PROBE = """
           out.errors.push('picking a plain preset left the tier grid showing');
         }
       }
+      // 61: the count column doubles as a click-to-expand toggle for the backup's
+      // prompt names, when the backend supplied any (the fixture's first entry has
+      // two, the second — an "older build" stand-in — has none).
+      const rows = () => [...document.querySelectorAll('#backup-panel .backup-row')];
+      const withNames = rows()[0];
+      const withoutNames = rows()[1];
+      if (!withNames || !withoutNames) {
+        out.errors.push('the backup list does not show both fixture rows');
+      } else {
+        const toggle = withNames.querySelector('.backup-count-toggle');
+        if (!toggle) {
+          out.errors.push('a backup with names has no clickable count toggle');
+        } else {
+          const box = withNames.nextElementSibling;
+          if (!box || !box.classList.contains('backup-names') || !box.classList.contains('hidden')) {
+            out.errors.push('the names box is not collapsed by default');
+          } else {
+            toggle.click();
+            await sleep(150);
+            if (box.classList.contains('hidden')) out.errors.push('clicking the count did not reveal the names');
+            if (!box.textContent.includes('Draft reply') || !box.textContent.includes('Meeting notes')) {
+              out.errors.push('the expanded names box is missing a fixture name: ' + box.textContent);
+            }
+            toggle.click();
+            await sleep(150);
+            if (!box.classList.contains('hidden')) out.errors.push('clicking the count again did not collapse the names');
+          }
+        }
+        if (withoutNames.querySelector('.backup-count-toggle')) {
+          out.errors.push('a backup with no names still shows a count toggle');
+        }
+      }
     }
     // The X is positioned against its wrapper, so a field narrower than the wrapper
     // pushes it outside the box it belongs to.
