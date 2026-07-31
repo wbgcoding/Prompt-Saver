@@ -7376,13 +7376,21 @@ function libSearchScore(p) {
   return res;
 }
 function computeLibSearchScore(p) {
-  const q = libQuery.trim().toLowerCase();
-  if (!q) return { score: 1, fuzzy: false };
+  const raw = libQuery.trim().toLowerCase();
+  if (!raw) return { score: 1, fuzzy: false };
   const fields = [[(p.name || "").toLowerCase(), 3], [(p.text || "").toLowerCase(), 1], [(p.file_path || "").toLowerCase(), 1]];
   // A tag is a deliberate label, so it ranks between the name and the body.
   if (tagsOn() && (p.tags || []).length) fields.push([p.tags.join(" ").toLowerCase(), 2]);
   // F17: a note is private context, so it matches but ranks below the prompt body.
   if (notesOn() && p.notes) fields.push([p.notes.toLowerCase(), 0.5]);
+  // P18: a "-word" term excludes any prompt whose searchable text contains it,
+  // checked across every field before anything else runs.
+  const terms = raw.split(/\s+/).filter(Boolean);
+  const isExclude = (t) => t.length > 1 && t[0] === "-";
+  const excludes = terms.filter(isExclude).map((t) => t.slice(1));
+  if (excludes.some((ex) => fields.some(([val]) => val.includes(ex)))) return { score: 0, fuzzy: false };
+  const q = terms.filter((t) => !isExclude(t)).join(" ");
+  if (!q) return { score: 1, fuzzy: false }; // an exclusion-only query matches everything not excluded
   let best = 0;
   for (const [val, w] of fields) {
     if (val && val.includes(q)) { const s = (val.startsWith(q) ? 120 : 100) * w; if (s > best) best = s; }

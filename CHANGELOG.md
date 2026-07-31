@@ -151,6 +151,8 @@ switch, most of it off until you turn it on.
   the manual button.
 - New expert option: a colored border around the grid itself, in the active
   view's color (off by default).
+- The library search now supports `-word` to exclude prompts containing it,
+  combinable with a normal search term.
 
 ### Fixed
 

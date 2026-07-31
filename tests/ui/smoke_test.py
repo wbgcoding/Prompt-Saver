@@ -498,6 +498,24 @@ PROBE = """
       q.dispatchEvent(new Event('input', { bubbles: true }));
       await sleep(250);
     }
+    // P18: a "-word" term excludes matches instead of narrowing to them —
+    // "work" alone should hit more prompts than "work -draft".
+    if (q) {
+      q.value = 'work';
+      q.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(300);
+      const withDraft = document.querySelectorAll('#library-list .lib-item').length;
+      q.value = 'work -draft';
+      q.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(300);
+      const withoutDraft = document.querySelectorAll('#library-list .lib-item').length;
+      if (!(withoutDraft < withDraft)) {
+        out.errors.push('"-draft" did not exclude anything: ' + withDraft + ' -> ' + withoutDraft);
+      }
+      q.value = '';
+      q.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(250);
+    }
     // P25: the 2 most-used tags across the fixture (Work, Draft) are offered as
     // one-click chips on an untagged prompt, and vanish once actually added.
     {
