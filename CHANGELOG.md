@@ -94,6 +94,8 @@ switch, most of it off until you turn it on.
   installation that had the old hiding turned off keeps its screenshots.
 - The editor's font and size dropdowns moved up to sit right under the name row,
   with the other row-level settings, instead of down by the character/token count.
+- The quick grid-size control in the header can now be set to appear only while
+  you point at the header, for a tidier toolbar (expert menu, off by default).
 - A backup is now either whole or absent: the snapshot is written under a
   temporary name and only then renamed, and a failed one leaves nothing behind.
 - "Duplicate" on a prompt's context menu now opens the same dialog as creating a

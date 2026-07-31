@@ -1356,6 +1356,20 @@ PROBE = """
       const cm4 = document.getElementById('confirm-modal');
       if (!cm4.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
     }
+    // 10: the quick-grid header control hides until you point at the header — pure
+    // CSS :hover, so a synthetic event can't prove the reveal itself; this only
+    // proves the flag actually hides/unhides the control (Ben checks the hover by eye).
+    const qgEl = document.getElementById('quick-grid');
+    if (!await setExpertFlag('Quick grid: hover to reveal', true)) {
+      out.errors.push('the quick-grid hover-only option is missing from the expert menu');
+    } else {
+      const csOn = getComputedStyle(qgEl);
+      if (csOn.opacity !== '0') out.errors.push('the quick-grid control is not hidden with hover-only on: opacity ' + csOn.opacity);
+      if (csOn.pointerEvents === 'auto') out.errors.push('the hidden quick-grid control still accepts clicks');
+      await setExpertFlag('Quick grid: hover to reveal', false);
+      const csOff = getComputedStyle(qgEl);
+      if (csOff.opacity !== '1') out.errors.push('the quick-grid control stays hidden after switching hover-only back off');
+    }
     // Duplicates: its own dialog, reachable only from the expert menu, and the last
     // window of the main surface that no scan had ever opened.
     document.getElementById('settings').classList.remove('hidden');
@@ -2532,10 +2546,12 @@ def main():
                 [browser, "--headless=new", "--disable-gpu", "--no-first-run",
                  f"--user-data-dir={tmp / ('profile-%s' % size_tag)}", "--allow-file-access-from-files",
                  # The probe walks more UI than it used to; 30s of virtual time ran
-                 # out mid-run on the smallest window and produced no result at all.
+                 # out mid-run on the smallest window and produced no result at all —
+                 # raised to 60s, then to 75s once the P10 quick-grid hover-only check
+                 # (two more expert-menu round trips) pushed past that too.
                  # The window has to hold the iframe plus Chrome's own frame.
                  f"--window-size={max(w + 30, 520)},{h + 140}",
-                 "--virtual-time-budget=60000", "--dump-dom",
+                 "--virtual-time-budget=75000", "--dump-dom",
                  wrapper.as_uri()],
                 # The dumped DOM carries all 20 languages; without an explicit
                 # codec Windows decodes it as cp1252 and the reader thread dies,

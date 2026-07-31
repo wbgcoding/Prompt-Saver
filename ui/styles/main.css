@@ -1422,6 +1422,8 @@ body.library-front #modal.overlay { z-index: 67; }
 .noflag-screenshot #snip-btn { display: none; }
 .noflag-colorPicker #picker-btn { display: none; }
 .noflag-quickGrid #quick-grid { display: none; }
+.flag-quickGridHoverOnly .header #quick-grid { opacity: 0; pointer-events: none; }
+.flag-quickGridHoverOnly .header:hover #quick-grid, .flag-quickGridHoverOnly .header:focus-within #quick-grid { opacity: 1; pointer-events: auto; }
 .noflag-pinButton #pin-top { display: none; }
 .noflag-librarySearch #library-q { display: none; }
 /* Hide only the type chips, so the favorites chip can stay when it is on. */

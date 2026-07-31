@@ -925,6 +925,7 @@ const OPT_FLAG_LABELS = {
   // Features extras
   viewGroups: "flagViewGroups",                 // F9 folder tabs for views
   gridViewBorder: "flagGridViewBorder",         // colored border around the grid in the view's color
+  quickGridHoverOnly: "flagQuickGridHoverOnly", // quick-grid control shows only while the header is hovered
   // Named from the user's side: the window is kept out of screenshots, and this is
   // the switch that lets them through. Ships off, so the protection is the default
   // and whoever misses their screenshots finds the reason by its name.
@@ -1270,7 +1271,7 @@ const EXPERT_TABS = [
   ] },
   { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
-    { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, "gridViewBorder", "quickGrid", "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
+    { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, "gridViewBorder", "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }, "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
     { title: "expGroupPrivacy", flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
     { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances"], values: ["kbFocusFadeMs"], paths: ["dataDir"] },
   ] },
@@ -1410,7 +1411,7 @@ const EXPERT_TIPS = [
   "historyPerPrompt", "dupThreshold", "clipMinChars", "clipInboxMax", "historyMax",
   "journalLimit", "previewLen", "nameMaxLen", "searchRecentMax", "maxViews", "gridMax",
   "viewBorder", "statsTopN", "viewGroups", "viewGroupMaxRows",
-  "barToggles", "quickGrid", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
+  "barToggles", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
 ];
 const EXPERT_TIP_SET = new Set(EXPERT_TIPS);
 // Attach the tooltip for `key` to a rendered expert row, if one is defined.
