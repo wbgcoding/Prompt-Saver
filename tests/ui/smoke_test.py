@@ -642,6 +642,8 @@ PROBE = """
     if (await clickTile('p5')) {
       const sel2 = document.querySelector('#vars-fields select.vars-select');
       if (!sel2 || sel2.value !== 'witty') out.errors.push('the last choice was not remembered');
+      // P36: a remembered pick says so, since a choice variable has no checkbox.
+      if (sel2 && !sel2.title.trim()) out.errors.push('the remembered choice has no "from last time" hint');
       await click('vars-close');
       await sleep(200);
     }

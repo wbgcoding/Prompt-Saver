@@ -131,6 +131,9 @@ switch, most of it off until you turn it on.
   deleting everything already did, if that expert option is on.
 - Creating a prompt by hand now gets the same near-duplicate warning that
   importing already gave.
+- The variable fill-in dialog now says when a field's value is the one from
+  last time, for both a free-text field and a choice variable (which had no
+  checkbox to hint at it at all).
 
 ### Fixed
 

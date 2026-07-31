@@ -4478,7 +4478,11 @@ function promptVarsDialog(vars) {
         control.appendChild(opt);
       }
       const last = keepChoice ? remembered[name] : null;
-      control.value = options.includes(last) ? last : options[0];
+      const usedLast = options.includes(last);
+      control.value = usedLast ? last : options[0];
+      // P36: says outright that this pick came from last time, not just the checkbox
+      // state (there is none for a choice variable — it remembers silently).
+      if (usedLast) control.title = t("rememberedValueHint");
       // A single option is a fixed value: still shown, but nothing to choose.
       if (options.length === 1) control.disabled = true;
       else attachSelectPicker(control); // themed popup, 8 rows then scroll
@@ -4487,7 +4491,10 @@ function promptVarsDialog(vars) {
       control = document.createElement("input");
       control.className = "modal-input";
       control.type = "text";
-      if (useRemember && name in remembered) control.value = remembered[name];
+      if (useRemember && name in remembered) {
+        control.value = remembered[name];
+        control.title = t("rememberedValueHint"); // P36: says so, not just a checked box
+      }
       label.append(span, control);
       if (useRemember) {
         const rem = document.createElement("label");
