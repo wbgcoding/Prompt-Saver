@@ -9244,6 +9244,49 @@ fn point_on_monitor(monitors: &[tauri::Monitor], x: i32, y: i32) -> bool {
     })
 }
 
+// Same point-on-monitor test as above, but over plain (x, y, width, height) tuples
+// instead of tauri::Monitor — that type can't be constructed outside a real window,
+// so this is the only form `prune_offscreen_floats` below can actually unit-test.
+fn point_in_monitor_rects(monitors: &[(i32, i32, i32, i32)], x: i32, y: i32) -> bool {
+    monitors.iter().any(|&(mx, my, mw, mh)| x >= mx && x < mx + mw && y >= my && y < my + mh)
+}
+
+// P44: a floating pill/folder whose saved anchor point (its stored x/y — no width or
+// height is tracked) sits on NO monitor at all is unreachable forever — drop it. No
+// margin: a pill dragged mostly off an edge but with its origin corner still on some
+// monitor counts as "hanging over the edge" and stays, exactly what the request asked
+// for. A folder's members never carry their own `floating` entry while grouped (same
+// invariant as grid folders), but removing an absent key is a harmless no-op either
+// way. Returns whether anything changed, so the caller only re-saves settings when it
+// actually pruned something.
+fn prune_offscreen_floats(monitors: &[(i32, i32, i32, i32)], settings: &mut Settings) -> bool {
+    if monitors.is_empty() {
+        return false; // a failed monitor probe must never look like "nothing is on-screen"
+    }
+    let gone_pills: Vec<String> = settings
+        .floating
+        .iter()
+        .filter(|(_, pos)| !point_in_monitor_rects(monitors, pos.x, pos.y))
+        .map(|(id, _)| id.clone())
+        .collect();
+    for id in &gone_pills {
+        settings.floating.remove(id);
+    }
+    let before = settings.float_folders.len();
+    let mut freed_members = Vec::new();
+    settings.float_folders.retain(|f| {
+        let gone = !point_in_monitor_rects(monitors, f.pos.x, f.pos.y);
+        if gone {
+            freed_members.extend(f.members.iter().cloned());
+        }
+        !gone
+    });
+    for id in &freed_members {
+        settings.floating.remove(id);
+    }
+    !gone_pills.is_empty() || settings.float_folders.len() != before
+}
+
 // NOTE: WindowGeom.width/height are LOGICAL pixels (DPI-independent) — a
 // physically stored size grew by the monitor's scale factor on every start.
 // Position stays physical (global desktop coordinates).
@@ -9569,6 +9612,28 @@ pub fn run() {
                 let _ = main.set_size(tauri::LogicalSize::new(geom.width, geom.height));
                 let _ = main.set_position(PhysicalPosition::new(geom.x, geom.y));
                 set_capture_exclusion(&main, capture_excl);
+                // P44: drop any pill/folder left fully off-screen, e.g. by an unplugged
+                // second monitor. Before sync_float_windows() below, which never even
+                // creates a window for something no longer in `floating`/`float_folders`.
+                {
+                    let mons: Vec<(i32, i32, i32, i32)> = main
+                        .available_monitors()
+                        .unwrap_or_default()
+                        .iter()
+                        .map(|m| {
+                            let p = m.position();
+                            let s = m.size();
+                            (p.x, p.y, s.width as i32, s.height as i32)
+                        })
+                        .collect();
+                    let state = handle.state::<Db>();
+                    let mut store = lock(&state);
+                    if prune_offscreen_floats(&mons, &mut store.settings) {
+                        let settings = store.settings.clone();
+                        drop(store);
+                        save_settings(&handle, &settings);
+                    }
+                }
                 if on_top {
                     let _ = main.set_always_on_top(true);
                 }
@@ -10905,6 +10970,57 @@ mod tests {
         // dissolved member handed that cell would save fine but never render.
         assert_eq!(first_free_cell_excluding(&view, &[[1, 0]]), Some([2, 0]));
         assert_eq!(first_free_cell_excluding(&view, &[[1, 0], [2, 0]]), None);
+    }
+
+    #[test]
+    fn prune_offscreen_floats_drops_only_what_has_no_monitor_at_all() {
+        let monitors = [(0, 0, 1920, 1080)];
+        let mut settings = Settings::default();
+        settings.floating.insert("on-screen".to_string(), Pos { x: 100, y: 100 });
+        settings.floating.insert("edge".to_string(), Pos { x: 1910, y: 100 }); // 10px still on
+        settings.floating.insert("gone".to_string(), Pos { x: 5000, y: 5000 }); // unplugged monitor
+        settings.float_folders.push(FloatFolder {
+            id: "f-on".to_string(),
+            name: String::new(),
+            pos: Pos { x: 200, y: 200 },
+            scale: 1.0,
+            members: vec!["m1".to_string()],
+        });
+        settings.float_folders.push(FloatFolder {
+            id: "f-gone".to_string(),
+            name: String::new(),
+            pos: Pos { x: -9000, y: -9000 },
+            scale: 1.0,
+            members: vec!["m2".to_string(), "m3".to_string()],
+        });
+        settings.floating.insert("m2".to_string(), Pos { x: -9000, y: -9000 });
+
+        let changed = prune_offscreen_floats(&monitors, &mut settings);
+
+        assert!(changed);
+        assert!(settings.floating.contains_key("on-screen"));
+        assert!(settings.floating.contains_key("edge"));
+        assert!(!settings.floating.contains_key("gone"));
+        assert_eq!(settings.float_folders.len(), 1);
+        assert_eq!(settings.float_folders[0].id, "f-on");
+        assert!(!settings.floating.contains_key("m2")); // dropped with its folder
+    }
+
+    #[test]
+    fn prune_offscreen_floats_touches_nothing_when_all_on_screen() {
+        let monitors = [(0, 0, 1920, 1080)];
+        let mut settings = Settings::default();
+        settings.floating.insert("a".to_string(), Pos { x: 50, y: 50 });
+        assert!(!prune_offscreen_floats(&monitors, &mut settings));
+        assert!(settings.floating.contains_key("a"));
+    }
+
+    #[test]
+    fn prune_offscreen_floats_never_deletes_on_a_failed_monitor_probe() {
+        let mut settings = Settings::default();
+        settings.floating.insert("a".to_string(), Pos { x: 5000, y: 5000 });
+        assert!(!prune_offscreen_floats(&[], &mut settings));
+        assert!(settings.floating.contains_key("a"));
     }
 
     fn test_tile_folder(id: &str, view_id: &str, cell: [u32; 2], members: &[&str]) -> TileFolder {

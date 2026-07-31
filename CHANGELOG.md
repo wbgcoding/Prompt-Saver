@@ -96,6 +96,9 @@ switch, most of it off until you turn it on.
   with the other row-level settings, instead of down by the character/token count.
 - The quick grid-size control in the header can now be set to appear only while
   you point at the header, for a tidier toolbar (expert menu, off by default).
+- A floating button or folder left completely off-screen (say, after unplugging
+  a second monitor) is dropped automatically on the next launch; one merely
+  hanging over an edge is left alone.
 - A backup is now either whole or absent: the snapshot is written under a
   temporary name and only then renamed, and a failed one leaves nothing behind.
 - "Duplicate" on a prompt's context menu now opens the same dialog as creating a
