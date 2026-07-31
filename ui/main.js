@@ -5909,6 +5909,12 @@ async function renderBackupPanel(body) {
   pwControls.append(pwWrap, save, remove);
   pwRow.append(pwLabel, pwControls);
   set.appendChild(pwRow);
+  // P63: the consequence of forgetting it, spelled out where it's set — not just
+  // in a toast after the fact, which is easy to miss.
+  const pwWarn = document.createElement("p");
+  pwWarn.className = "modal-hint backup-pw-hint";
+  pwWarn.textContent = t("backupPasswordForgetWarn");
+  set.appendChild(pwWarn);
   body.appendChild(set);
 
   // ---- Diagnostics (collapsible) ----

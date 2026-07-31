@@ -1544,6 +1544,12 @@ PROBE = """
     } else {
       layoutScan('backups');
       mustReach('backups', '#backup-modal .modal-head-actions > button');
+      // P63: the consequence of forgetting the backup password is spelled out
+      // right where the field is, not just in a toast after saving it.
+      const pwHint = document.querySelector('#backup-panel .backup-pw-hint');
+      if (!pwHint || !pwHint.textContent.trim()) {
+        out.errors.push('the backup password field has no forget-consequence warning');
+      }
       // The top-list length field used to run past its own row.
       const row = document.querySelector('#stats-panel .stats-topn-row');
       const fld = row && row.querySelector('.modal-input');

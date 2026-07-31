@@ -118,6 +118,9 @@ switch, most of it off until you turn it on.
 - A view tab's right-click menu gets a **Duplicate** entry: a new, empty view
   with the same name, color and grid size, ready to build a variant of it from
   scratch.
+- The backup password field now says plainly, right where you set it, that a
+  forgotten password can never be recovered — previously that only showed up
+  in a toast after saving.
 
 ### Fixed
 
