@@ -163,6 +163,20 @@
         </button>
         <button type="button" id="modal-fav" class="modal-fav-star" aria-pressed="false" data-i18n-title="favoriteToggle" data-i18n-aria="favoriteToggle">★</button>
       </div>
+      <!-- P32: font/size sit right under the name — kept, not dropped, just moved
+           up from the bottom so the row-level settings live together. -->
+      <div id="modal-style-row" class="two-col">
+        <label class="field">
+          <span data-i18n="tileFont">Font</span>
+          <!-- Options filled by JS from the shared font catalog -->
+          <select id="modal-font" class="modal-input"></select>
+        </label>
+        <label class="field">
+          <span data-i18n="tileSize">Text size</span>
+          <!-- Options filled by JS: Like settings + Automatic + 10..40 -->
+          <select id="modal-size" class="modal-input"></select>
+        </label>
+      </div>
       <!-- Image preview + display toggle (visible only when prompt has an image) -->
       <div id="modal-img-wrap" class="modal-img-wrap hidden">
         <div class="modal-media-stage">
@@ -228,19 +242,6 @@
       </div>
       <!-- Live length readout (chars / words / ~tokens), expert-tunable -->
       <div id="modal-length" class="modal-length hidden" aria-hidden="true"></div>
-      <!-- Per-tile font/size overrides (create + edit) -->
-      <div id="modal-style-row" class="two-col">
-        <label class="field">
-          <span data-i18n="tileFont">Font</span>
-          <!-- Options filled by JS from the shared font catalog -->
-          <select id="modal-font" class="modal-input"></select>
-        </label>
-        <label class="field">
-          <span data-i18n="tileSize">Text size</span>
-          <!-- Options filled by JS: Like settings + Automatic + 10..40 -->
-          <select id="modal-size" class="modal-input"></select>
-        </label>
-      </div>
       <div id="color-row" class="swatches"></div>
       <!-- F1 tags: assigned chips + type-ahead input (feature-gated via body.flag-tags) -->
       <div id="modal-tags" class="modal-tags">

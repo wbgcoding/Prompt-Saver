@@ -92,6 +92,8 @@ switch, most of it off until you turn it on.
   window still stays out of screen captures by default — but anyone whose screenshots
   come out empty now finds the reason under privacy in the expert menu. An
   installation that had the old hiding turned off keeps its screenshots.
+- The editor's font and size dropdowns moved up to sit right under the name row,
+  with the other row-level settings, instead of down by the character/token count.
 - A backup is now either whole or absent: the snapshot is written under a
   temporary name and only then renamed, and a failed one leaves nothing behind.
 - "Duplicate" on a prompt's context menu now opens the same dialog as creating a

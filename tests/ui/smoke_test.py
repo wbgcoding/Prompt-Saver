@@ -244,6 +244,25 @@ PROBE = """
     if (getComputedStyle(document.documentElement).getPropertyValue('--lib-preview-lines').trim() !== '2') {
       out.errors.push('the library preview line-count CSS var is not applied');
     }
+    // P32: font/size sit right under the name row, not down by the prompt text —
+    // kept, just moved. A pure DOM-order check, no need to open the editor.
+    {
+      const nameRow = document.querySelector('#modal .modal-name-row');
+      const styleRow = document.getElementById('modal-style-row');
+      const textWrap = document.getElementById('modal-text-wrap');
+      if (!nameRow || !styleRow || !textWrap) {
+        out.errors.push('the editor is missing the name row, style row or text wrap');
+      } else {
+        const pos = nameRow.compareDocumentPosition(styleRow);
+        if (!(pos & Node.DOCUMENT_POSITION_FOLLOWING)) {
+          out.errors.push('the font/size row does not come after the name row');
+        }
+        const pos2 = styleRow.compareDocumentPosition(textWrap);
+        if (!(pos2 & Node.DOCUMENT_POSITION_FOLLOWING)) {
+          out.errors.push('the font/size row is not above the prompt text anymore');
+        }
+      }
+    }
     // The tab strip is the piece the header used to crush: below ~700px it kept a
     // ~45px sliver of a 244px strip, and every tab after the first became untouchable.
     const strip = document.getElementById('views');
