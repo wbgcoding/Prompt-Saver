@@ -2910,7 +2910,7 @@ body.drag-over::after {
   color: var(--muted);
   font-size: 12px;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: var(--lib-preview-lines, 2);
   -webkit-box-orient: vertical;
   overflow: hidden;
   overflow-wrap: anywhere;

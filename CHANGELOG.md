@@ -142,6 +142,8 @@ switch, most of it off until you turn it on.
 - The tag manager gets a **Colorize** button: one click gives every tag
   without a color one from the palette, round-robin. Tags you've already
   colored yourself are left alone.
+- The library preview's line count (2, until now fixed) is an expert value,
+  adjustable from 1 to 4.
 
 ### Fixed
 

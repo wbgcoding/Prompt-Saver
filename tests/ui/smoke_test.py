@@ -239,6 +239,11 @@ PROBE = """
     // Window controls and composer buttons are the ones a squeezed header used to
     // carry off the right edge, where no pointer could ever follow them.
     mustReach('main window', '.win-btn, .header-actions > button, .composer > button');
+    // P20: the library preview's line count is an expert value (default 2),
+    // not a hardcoded CSS number.
+    if (getComputedStyle(document.documentElement).getPropertyValue('--lib-preview-lines').trim() !== '2') {
+      out.errors.push('the library preview line-count CSS var is not applied');
+    }
     // The tab strip is the piece the header used to crush: below ~700px it kept a
     // ~45px sliver of a 244px strip, and every tab after the first became untouchable.
     const strip = document.getElementById('views');
