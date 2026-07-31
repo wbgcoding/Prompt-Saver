@@ -692,6 +692,15 @@ PROBE = """
       if (ta.value === before || !ta.value.includes('{#{/date\\\\}#}')) {
         out.errors.push('clicking a placeholder chip did not insert it: ' + ta.value);
       }
+      // P33: a chip inserts at the CURSOR, not appended to the end of the text.
+      ta.value = 'Say AAA then BBB.';
+      ta.focus();
+      ta.setSelectionRange(8, 8); // right after "Say AAA "
+      chips[1] && chips[1].click();
+      await sleep(150);
+      if (!ta.value.startsWith('Say AAA {#{') || !ta.value.includes('then BBB.')) {
+        out.errors.push('a chip did not insert at the cursor position: ' + ta.value);
+      }
       document.getElementById('modal-var-name').value = 'tone';
       document.getElementById('modal-var-opts').value = ' formal , casual ,, ';
       document.getElementById('modal-var-add').click();
