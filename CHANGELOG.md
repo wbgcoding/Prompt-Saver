@@ -6,11 +6,12 @@ All notable changes to **Prompt Saver**. Download the latest version from the
 
 ## 2.7.0 (unreleased)
 
-Fourteen new features: tags, custom themes, folders for view tabs and for
+Fifteen new features: tags, custom themes, folders for view tabs and for
 floating buttons, self-filling and choice variables, a markdown preview with
 syntax colors, private notes, per-prompt hotkeys, drag-out into other apps, a
-tray quick-copy menu, a screen color picker and a standalone quick launcher.
-Everything new is an expert-menu switch, most of it off until you turn it on.
+tray quick-copy menu, a screen color picker, a standalone quick launcher and
+multi-select in the grid. Everything new is an expert-menu switch, most of it
+off until you turn it on.
 
 ### Added
 
@@ -73,6 +74,10 @@ Everything new is an expert-menu switch, most of it off until you turn it on.
   a prompt by name or text, press Enter or click to copy it instantly. A fresh
   install starts with the hotkey already bound; an existing one keeps whatever
   you already had, including turned off.
+- **Multi-select in the grid** — point at a tile to reveal a checkbox in the
+  corner; once anything is checked, every tile shows one. A toolbar appears
+  above the grid to recolor, move to another view, or delete everything you
+  picked at once.
 
 ### Improved
 

@@ -107,6 +107,16 @@
   </button>
 
   <section class="grid-wrap">
+    <!-- 11: bulk toolbar, visible only once at least one tile is checked -->
+    <div id="grid-batch-bar" class="lib-batch-bar grid-batch-bar hidden">
+      <span id="grid-batch-count" class="lib-batch-count"></span>
+      <button id="grid-batch-none" type="button" class="ghost-btn" data-i18n="selectNone">None</button>
+      <span class="lib-batch-sep" aria-hidden="true"></span>
+      <div id="grid-batch-colors" class="lib-colors lib-batch-colors" data-i18n-title="batchColor"></div>
+      <select id="grid-batch-view" class="lib-sort" data-i18n-aria="batchMoveView"></select>
+      <button id="grid-batch-move" type="button" class="ghost-btn" data-i18n="batchMove">Move</button>
+      <button id="grid-batch-delete" type="button" class="ghost-btn danger-btn" data-i18n="delete">Delete</button>
+    </div>
     <div id="grid" class="grid"></div>
     <p id="grid-empty" class="grid-empty hidden" data-i18n="gridEmptyHint"></p>
   </section>

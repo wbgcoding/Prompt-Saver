@@ -1099,6 +1099,65 @@ PROBE = """
       document.getElementById('settings').classList.add('hidden');
       return !!row;
     };
+    // 11: grid bulk selection — checkbox click must never fall through to the
+    // tile's own copy/drag handling (same .tile-select guard as .tile-menu).
+    {
+      const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
+      const t4 = gridTile('p4'), t5 = gridTile('p5');
+      if (!t4 || !t5) {
+        out.errors.push('the grid multi-select test needs p4 and p5 on the grid');
+      } else {
+        calls().length = 0;
+        t4.querySelector('.tile-select').click();
+        await sleep(120);
+        const batchBar = document.getElementById('grid-batch-bar');
+        const batchCount = document.getElementById('grid-batch-count');
+        if (!t4.classList.contains('grid-selected')) out.errors.push('clicking the checkbox did not select the tile');
+        if (!document.body.classList.contains('grid-selecting')) out.errors.push('selecting a tile did not enter grid-selecting mode');
+        if (batchBar.classList.contains('hidden')) out.errors.push('the grid batch bar stayed hidden with a tile selected');
+        if (!batchCount.textContent.trim().startsWith('1')) {
+          out.errors.push('the batch count reads "' + batchCount.textContent + '" instead of 1');
+        }
+        if (calls().includes('copy_prompt') || calls().includes('copy_text')) {
+          out.errors.push('the checkbox click also copied the prompt');
+        }
+        t5.querySelector('.tile-select').click();
+        await sleep(120);
+        if (!batchCount.textContent.trim().startsWith('2')) out.errors.push('selecting a second tile did not update the count to 2');
+        // Recolor both, then confirm the change actually reached the tiles. The
+        // browser normalises tile.style.background to rgb(), so compare through a
+        // throwaway element instead of the hex string the swatch itself carries.
+        const swatch = document.querySelector('#grid-batch-colors .lib-color:not(.lib-color-all)');
+        if (!swatch) {
+          out.errors.push('the grid batch bar has no colour swatches');
+        } else {
+          const probe = document.createElement('div');
+          probe.style.background = swatch.dataset.color;
+          const wantColor = probe.style.background;
+          swatch.click();
+          await sleep(150);
+          if (document.body.classList.contains('grid-selecting')) out.errors.push('recolouring did not clear the selection');
+          if (!batchBar.classList.contains('hidden')) out.errors.push('the batch bar stayed open after recolouring');
+          const t4After = gridTile('p4');
+          if (!t4After || t4After.style.background !== wantColor) {
+            out.errors.push('the recolour did not reach the tile: ' + (t4After && t4After.style.background));
+          }
+        }
+        // Delete: goes through the same themed confirm dialog as every other delete.
+        gridTile('p4').querySelector('.tile-select').click();
+        await sleep(120);
+        await click('grid-batch-delete');
+        await sleep(150);
+        const cmSel = document.getElementById('confirm-modal');
+        if (cmSel.classList.contains('hidden') || !cmSel.textContent.includes('1')) {
+          out.errors.push('deleting from the grid batch bar skipped the confirm dialog');
+        } else {
+          await click('confirm-ok');
+          await sleep(200);
+          if (gridTile('p4')) out.errors.push('confirming the batch delete left the tile on the grid');
+        }
+      }
+    }
     const DRAG_OUT = 'Drag prompt into another app';
     const offTile = gridTile('p1');
     if (offTile) {

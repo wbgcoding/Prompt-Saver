@@ -99,6 +99,10 @@ let libSelected = new Set();
 let libLastId = null;          // anchor for shift-click range select
 let libDisplayOrder = [];      // ids in current display order (for range select)
 let gridDirty = false;         // batch ops changed prompts; rebuild grid on library close
+// 11: grid bulk selection — its own Set, independent of the library's libSelected.
+// Folder tiles are excluded: a folder stands for several prompts, and "select,
+// then recolor/move/delete" has no single obvious meaning for the group itself.
+let gridSelected = new Set();
 let journalQuery = ""; // copy-history search text
 const journalTypes = new Set(); // additive, like the library's
 let journalColor = "all"; // copy-history color filter
@@ -2306,6 +2310,7 @@ function renderViews() {
 
 async function switchToView(id) {
   favView = false; // picking a normal view leaves the favorites grid
+  if (gridSelected.size) clearGridSelection(); // 11: a selection belongs to what's on screen
   settings = await invoke("set_active_view", { id });
   await renderGrid(true); // prompts unchanged, settings already fresh
 }
@@ -3191,6 +3196,17 @@ function buildTile(p) {
   const tile = document.createElement("div");
   tile.className = "tile";
   tile.dataset.id = p.id;
+  if (gridSelected.has(p.id)) tile.classList.add("grid-selected");
+  // 11: bulk-selection checkbox. Its own pointerdown/click stop propagation so a
+  // press here can never arm the tile's reorder drag or start a copy.
+  const selBtn = document.createElement("button");
+  selBtn.type = "button";
+  selBtn.className = "tile-select";
+  selBtn.title = t("selectPrompt");
+  selBtn.setAttribute("aria-label", t("selectPrompt"));
+  selBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+  selBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleGridSelect(p.id); });
+  tile.appendChild(selBtn);
   const raw = p.file_path || p.text || "";
   const preview = PREVIEW_MAX <= 0 ? "" : raw.length > PREVIEW_MAX ? `${raw.slice(0, PREVIEW_MAX)}…` : raw;
   // Themed hover tooltip (rendered by wireTooltips' shared popup, not the native
@@ -3312,7 +3328,7 @@ function buildTile(p) {
   }
 
   tile.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0 || e.target.closest(".tile-menu")) return;
+    if (e.button !== 0 || e.target.closest(".tile-menu") || e.target.closest(".tile-select")) return;
     // F22: with the modifier held the press becomes a drag-out; `out` keeps the
     // reorder machine out of it while a modifier-click still copies as before.
     const out = armDragOut(tile, e, () => prompts.find((x) => x.id === p.id));
@@ -7842,8 +7858,8 @@ function updateBatchBar() {
     el.disabled = n === 0;
   });
 }
-function buildBatchColors() {
-  const wrap = $("lib-batch-colors");
+function buildBatchColors(wrapId = "lib-batch-colors") {
+  const wrap = $(wrapId);
   if (!wrap || wrap.childElementCount) return;
   const mk = (color, cls) => {
     const b = document.createElement("button");
@@ -7857,8 +7873,8 @@ function buildBatchColors() {
   wrap.appendChild(mk("none", "lib-color-all"));
   for (const c of COLORS) if (c) wrap.appendChild(mk(c, ""));
 }
-function fillBatchViews() {
-  const sel = $("lib-batch-view");
+function fillBatchViews(selId = "lib-batch-view") {
+  const sel = $(selId);
   if (!sel) return;
   sel.innerHTML = "";
   for (const v of settings.views || []) {
@@ -7868,6 +7884,66 @@ function fillBatchViews() {
   }
   if (settings.active_view) sel.value = settings.active_view;
 }
+
+// ---- 11: grid bulk selection — reuses the same batch_prompts backend, its own
+// selection state and toolbar (folder tiles are excluded, see gridSelected). ----
+function toggleGridSelect(id) {
+  if (gridSelected.has(id)) gridSelected.delete(id); else gridSelected.add(id);
+  document.body.classList.toggle("grid-selecting", gridSelected.size > 0);
+  applyGridSelectionDom();
+  updateGridBatchBar();
+}
+function applyGridSelectionDom() {
+  for (const tile of gridEl.querySelectorAll(".tile")) {
+    tile.classList.toggle("grid-selected", gridSelected.has(tile.dataset.id));
+  }
+}
+function updateGridBatchBar() {
+  const n = gridSelected.size;
+  $("grid-batch-bar")?.classList.toggle("hidden", n === 0);
+  const count = $("grid-batch-count");
+  if (count) count.textContent = t("selectedCount").replace("{n}", n.toLocaleString(LANG));
+  // buildBatchColors() no-ops once already built; fillBatchViews() harmlessly
+  // resets the dropdown to the active view each time, which is the right default
+  // for a selection that just grew.
+  if (n > 0) { buildBatchColors("grid-batch-colors"); fillBatchViews("grid-batch-view"); }
+}
+function clearGridSelection() {
+  gridSelected.clear();
+  document.body.classList.remove("grid-selecting");
+  applyGridSelectionDom();
+  updateGridBatchBar();
+}
+async function doGridBatch(action, extra = {}) {
+  const ids = [...gridSelected];
+  if (!ids.length) return;
+  try {
+    settings = await invoke("batch_prompts", {
+      ids, action,
+      color: extra.color ?? null,
+      favorite: extra.favorite ?? null,
+      viewId: extra.viewId ?? null,
+    });
+  } catch (e) { toast(String(e)); return; }
+  if (action === "delete") prompts = prompts.filter((p) => !ids.includes(p.id));
+  else if (action === "color") { for (const p of prompts) if (ids.includes(p.id)) p.color = extra.color ?? ""; }
+  clearGridSelection();
+  await renderGrid(true);
+}
+// A real move (not just "also in"): drop the current view's placement first, then
+// place into the target — matches the "a prompt lives in exactly one view"
+// invariant everywhere else in the app relies on.
+async function doGridMove(targetViewId) {
+  const ids = [...gridSelected];
+  if (!ids.length || !targetViewId) return;
+  try {
+    await invoke("batch_prompts", { ids, action: "removeView", color: null, favorite: null, viewId: settings.active_view });
+    settings = await invoke("batch_prompts", { ids, action: "addView", color: null, favorite: null, viewId: targetViewId });
+  } catch (e) { toast(String(e)); return; }
+  clearGridSelection();
+  await renderGrid(true);
+}
+
 async function doBatch(action, extra = {}) {
   const ids = [...libSelected];
   if (!ids.length) return;
@@ -8809,6 +8885,25 @@ function bind() {
     if (e.key === "Escape" && libSelectMode && !libraryEl.classList.contains("hidden")) {
       e.stopPropagation();
       setLibSelectMode(false);
+    }
+  }, true);
+  // 11: grid batch toolbar wiring — same shape as the library's, its own state.
+  $("grid-batch-none").addEventListener("click", clearGridSelection);
+  $("grid-batch-colors").addEventListener("click", (e) => {
+    const b = e.target.closest(".lib-color");
+    if (b) doGridBatch("color", { color: b.dataset.color === "none" ? "" : b.dataset.color });
+  });
+  $("grid-batch-move").addEventListener("click", () => doGridMove($("grid-batch-view").value));
+  $("grid-batch-delete").addEventListener("click", async () => {
+    const n = gridSelected.size;
+    if (!n) return;
+    const ok = await confirmDialog({ title: t("delete"), message: t("batchDeleteConfirm").replace("{n}", String(n)), confirmLabel: t("delete") });
+    if (ok) doGridBatch("delete");
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && gridSelected.size) {
+      e.stopPropagation();
+      clearGridSelection();
     }
   }, true);
   $("library-close").addEventListener("click", hideLibrary);

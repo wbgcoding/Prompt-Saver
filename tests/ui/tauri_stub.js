@@ -276,6 +276,16 @@ const RESULTS = {
     ].join("\n"),
   }),
   get_prompt: (a) => PROMPTS.find((p) => p.id === (a && a.id)) || PROMPTS[0],
+  // F8/P11: shared by the library's and the grid's bulk toolbars. The caller
+  // (doBatch/doGridBatch) already mirrors "delete"/"color" onto its own local
+  // prompts array, so this only needs to track the call and hand back settings.
+  batch_prompts: (a) => {
+    const ids = (a && a.ids) || [];
+    if (a && a.action === "color") {
+      for (const id of ids) { const p = PROMPTS.find((x) => x.id === id); if (p) p.color = a.color || ""; }
+    }
+    return JSON.parse(JSON.stringify(SETTINGS));
+  },
   // Mirrors the backend: a new prompt lands on the active view's first free cell,
   // same firstFreeCell scan the folder-dissolve stub above already uses.
   add_prompt: (a) => {
