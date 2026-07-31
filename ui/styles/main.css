@@ -1460,6 +1460,7 @@ body.library-front #modal.overlay { z-index: 67; }
 .flag-quickGridHoverOnly .header #quick-grid { opacity: 0; pointer-events: none; }
 .flag-quickGridHoverOnly .header:hover #quick-grid, .flag-quickGridHoverOnly .header:focus-within #quick-grid { opacity: 1; pointer-events: auto; }
 .noflag-pinButton #pin-top { display: none; }
+.noflag-tags #grid-tag-btn { display: none; }
 .noflag-librarySearch #library-q { display: none; }
 /* Hide only the type chips, so the favorites chip can stay when it is on. */
 .noflag-libraryTypeFilter #library-types .lib-type[data-type] { display: none; }
@@ -1480,6 +1481,13 @@ body.library-front #modal.overlay { z-index: 67; }
   background: var(--accent);
 }
 .pin-toggle.active:hover { color: var(--accent-fg); background: var(--accent); filter: brightness(1.08); }
+/* 24: grid tag filter — same filled-look active state as the pin toggle. */
+.grid-tag-btn.active { color: var(--accent-fg); background: var(--accent); }
+.grid-tag-btn.active:hover { color: var(--accent-fg); background: var(--accent); filter: brightness(1.08); }
+.grid-tag-pop { min-width: 200px; max-width: 320px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 10px; z-index: 90; }
+/* A tile that does not match the active filter stays in place (drag/reorder,
+   grid geometry unaffected) but reads as excluded, not deleted. */
+.tile.tile-dimmed { opacity: 0.35; }
 
 /* ---- Prompt chaining ---- */
 /* Two-stage state: first click outlines the button (chain armed for one copy),

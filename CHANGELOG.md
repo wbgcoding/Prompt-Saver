@@ -97,6 +97,9 @@ Everything new is an expert-menu switch, most of it off until you turn it on.
   same day/week/month/year settings as before.
 - The editor's tags, hotkey and version history now share one collapsible
   "Advanced options" section instead of three separate controls.
+- The grid can now be filtered by tag too, from a new button in the header —
+  tiles that do not match dim instead of disappearing, so the layout never
+  shifts underneath you.
 - The changelog in the update dialog is laid out instead of dumped: headings,
   bullets, tables and highlighted terms, in a box that takes the height of the
   release notes and scrolls only once they outgrow the window.

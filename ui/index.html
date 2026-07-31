@@ -16,6 +16,14 @@
       <nav id="views" class="views hidden"></nav>
     </div>
     <div class="header-actions">
+      <!-- 24: grid tag filter (feature-gated via body.flag-tags), right of the view
+           tabs and left of the grid-size control -->
+      <button id="grid-tag-btn" class="icon-btn grid-tag-btn" data-i18n-title="gridTagFilter" data-i18n-aria="gridTagFilter">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20.6 12.6 12.4 20.8a2 2 0 0 1-2.8 0l-6.4-6.4a2 2 0 0 1 0-2.8L11.4 3.4A2 2 0 0 1 12.8 2.8H20a1 1 0 0 1 1 1v7.2a2 2 0 0 1-.4 1.4Z"/>
+          <circle cx="16" cy="7" r="1.4" fill="currentColor" stroke="none"/>
+        </svg>
+      </button>
       <!-- Quick grid-size control for the active view -->
       <div id="quick-grid" class="quick-grid" data-i18n-title="gridSize">
         <input id="qg-cols" class="grid-mini" type="number" min="1" max="20" data-i18n-aria="gridSize" />

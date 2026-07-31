@@ -1306,6 +1306,46 @@ PROBE = """
         }
       }
     }
+    // 24: grid tag filter — the header toolbar button opens a popover of tag chips;
+    // picking one dims (never hides) tiles that do not match, so the grid geometry
+    // and drag targets stay exactly as they were.
+    {
+      const tagBtn = document.getElementById('grid-tag-btn');
+      if (!tagBtn || getComputedStyle(tagBtn).display === 'none') {
+        out.errors.push('the grid tag filter button is missing');
+      } else {
+        tagBtn.click();
+        await sleep(200);
+        const pop = document.querySelector('.grid-tag-pop');
+        const chips = () => pop ? [...pop.querySelectorAll('.tag-chip.tag-filter')] : [];
+        if (!pop || pop.classList.contains('hidden') || chips().length < 2) {
+          out.errors.push('the grid tag popover shows ' + chips().length + ' chips instead of at least 2');
+        } else {
+          const draftChip = chips().find(c => (c.querySelector('.tag-chip-label') || {}).textContent === 'Draft');
+          if (!draftChip) {
+            out.errors.push('the grid tag popover is missing the "Draft" chip');
+          } else {
+            draftChip.click();
+            await sleep(200);
+            if (!tagBtn.classList.contains('active')) out.errors.push('picking a tag did not mark the toolbar button active');
+            const t0 = gridTile('p0'); // ["Work"] only — must dim
+            const t1 = gridTile('p1'); // ["Draft", "Work"] — must stay full
+            if (!t0 || !t0.classList.contains('tile-dimmed')) out.errors.push('a non-matching tile (p0) was not dimmed');
+            if (!t1 || t1.classList.contains('tile-dimmed')) out.errors.push('a matching tile (p1) was dimmed');
+            if (t0 && getComputedStyle(t0).display === 'none') out.errors.push('a dimmed tile was hidden instead of dimmed');
+            // Clear filter restores every tile and the button's active state.
+            const clearBtn = [...pop.querySelectorAll('.tag-action')].find(b => b.textContent === 'Clear filter');
+            clearBtn?.click();
+            await sleep(200);
+            if (tagBtn.classList.contains('active')) out.errors.push('clearing the filter left the toolbar button active');
+            const t0After = gridTile('p0');
+            if (t0After && t0After.classList.contains('tile-dimmed')) out.errors.push('clearing the filter left a tile dimmed');
+          }
+        }
+        document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        await sleep(100);
+      }
+    }
     const DRAG_OUT = 'Drag prompt into another app';
     const offTile = gridTile('p1');
     if (offTile) {

@@ -95,6 +95,7 @@ const libTypes = new Set();
 let libColor = "all"; // prompt library color filter
 let libFav = false; // prompt library "favorites only" filter
 const libTags = new Set(); // F1: selected tag filters, as lowercase tag keys
+const gridTags = new Set(); // 24: same idea, independent selection for the grid
 // F8 batch operations state.
 let libSelectMode = false;
 let libSelected = new Set();
@@ -3209,6 +3210,9 @@ function buildTile(p) {
   tile.className = "tile";
   tile.dataset.id = p.id;
   if (gridSelected.has(p.id)) tile.classList.add("grid-selected");
+  // 24: a tag filter dims what does not match instead of hiding it — the cell
+  // stays occupied, so drag/reorder/grid geometry never has to treat it as empty.
+  if (gridTags.size && !tagMatches(p, gridTags)) tile.classList.add("tile-dimmed");
   // 11: bulk-selection checkbox. Its own pointerdown/click stop propagation so a
   // press here can never arm the tile's reorder drag or start a copy.
   const selBtn = document.createElement("button");
@@ -4134,6 +4138,60 @@ function renderViewsPop(id) {
 function openViewsPop(id, rect) {
   renderViewsPop(id);
   placePopover(viewsPop, rect);
+}
+
+// ---- 24: grid tag filter — header toolbar popover, own Set from the library's ----
+const gridTagPop = document.createElement("div");
+gridTagPop.className = "ctx grid-tag-pop hidden";
+gridTagPop.setAttribute("role", "menu");
+document.body.appendChild(gridTagPop);
+function closeGridTagPop() {
+  gridTagPop.classList.add("hidden");
+}
+function updateGridTagBtn() {
+  $("grid-tag-btn")?.classList.toggle("active", gridTags.size > 0);
+}
+function renderGridTagPop() {
+  gridTagPop.innerHTML = "";
+  const names = allTags();
+  for (const name of names) {
+    const chip = tagChipEl(name, "button");
+    chip.classList.add("tag-filter");
+    const on = gridTags.has(tagKey(name));
+    chip.classList.toggle("active", on);
+    chip.setAttribute("aria-pressed", String(on));
+    chip.addEventListener("click", () => {
+      const key = tagKey(name);
+      if (gridTags.has(key)) gridTags.delete(key); else gridTags.add(key);
+      renderGridTagPop();
+      updateGridTagBtn();
+      renderGrid(true);
+    });
+    gridTagPop.appendChild(chip);
+  }
+  if (gridTags.size) {
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "tag-action";
+    clear.textContent = t("tagClearFilter");
+    clear.addEventListener("click", () => {
+      gridTags.clear();
+      renderGridTagPop();
+      updateGridTagBtn();
+      renderGrid(true);
+    });
+    gridTagPop.appendChild(clear);
+  }
+  if (!names.length && !gridTags.size) {
+    const hint = document.createElement("div");
+    hint.className = "hint";
+    hint.textContent = t("tagFilterEmpty");
+    gridTagPop.appendChild(hint);
+  }
+}
+function openGridTagPop() {
+  renderGridTagPop();
+  placePopover(gridTagPop, $("grid-tag-btn").getBoundingClientRect());
 }
 
 // ---- Right-click toolbar menu: quickly toggle the optional top-bar tools on/off
@@ -7755,11 +7813,12 @@ function libMatches(p) {
 }
 
 // F1: selected tag chips narrow the list, combined with search and the other
-// filters. AND (default) needs every chip, OR any of them.
-function tagMatches(p) {
-  if (!tagsOn() || !libTags.size) return true;
+// filters. AND (default) needs every chip, OR any of them. 24: the grid's own
+// filter (gridTags) reuses this with its own Set instead of the library's.
+function tagMatches(p, tagSet = libTags) {
+  if (!tagsOn() || !tagSet.size) return true;
   const own = new Set((p.tags || []).map(tagKey));
-  const wanted = [...libTags];
+  const wanted = [...tagSet];
   return (txt("tagFilterMode") || "and") === "or"
     ? wanted.some((k) => own.has(k))
     : wanted.every((k) => own.has(k));
@@ -9234,6 +9293,11 @@ function bind() {
   };
   $("opt-ontop").addEventListener("change", (e) => setOnTop(e.target.checked));
   $("pin-top").addEventListener("click", () => setOnTop(!settings.always_on_top));
+  // 24: grid tag filter toolbar button.
+  $("grid-tag-btn").addEventListener("click", () => {
+    if (!gridTagPop.classList.contains("hidden")) { closeGridTagPop(); return; }
+    openGridTagPop();
+  });
 
   // Favorites view: setting enables the header star; the star toggles the grid.
   $("opt-favview").addEventListener("change", (e) => {
@@ -9397,6 +9461,9 @@ function bind() {
         !e.target.closest(".folder-tile")) closeTileFolderPop();
     // 51: opened from the (already-closed) tile context menu, so nothing else needs excluding.
     if (!viewsPop.classList.contains("hidden") && !viewsPop.contains(e.target)) closeViewsPop();
+    // 24: the toolbar button toggles its own popover, so let its own press through.
+    if (!gridTagPop.classList.contains("hidden") && !gridTagPop.contains(e.target) &&
+        !e.target.closest("#grid-tag-btn")) closeGridTagPop();
   });
   // Ctrl+Tab walks the views in the order the tab bar shows them, so a group's
   // members are reached in place instead of being skipped.
@@ -9423,6 +9490,7 @@ function bind() {
     if (!viewGroupPop.classList.contains("hidden")) { closeViewGroupPop(); return; }
     if (!tileFolderPop.classList.contains("hidden")) { closeTileFolderPop(); return; }
     if (!viewsPop.classList.contains("hidden")) { closeViewsPop(); return; }
+    if (!gridTagPop.classList.contains("hidden")) { closeGridTagPop(); return; }
     if (!$("lightbox").classList.contains("hidden")) closeLightbox();
     else if (confirmCleanup) confirmCleanup(false);
     // The variable-fill dialog has its own keydown handler; consume Escape here so the
