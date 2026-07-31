@@ -6216,12 +6216,23 @@ async function renderBackupPanel(body) {
   wireClearButtons(body); // clear-X on the number fields
 }
 async function restoreBackup(name) {
-  const ok = await confirmDialog({ title: t("backupRestore"), message: t("backupRestoreConfirm"), confirmLabel: t("backupRestore") });
+  // 70: both checked (the default) = the old full-file "all" restore; only one
+  // checked = the new selective merge; the dialog itself refuses zero checked.
+  const ok = await confirmDialog({
+    title: t("backupRestore"), message: t("backupRestoreConfirm"), confirmLabel: t("backupRestore"),
+    checkboxes: [
+      { key: "data", label: t("backupRestoreData"), checked: true },
+      { key: "settings", label: t("backupRestoreSettings"), checked: true },
+    ],
+  });
   if (!ok) return;
+  const dataOn = $("confirm-cb-data").checked;
+  const settingsOn = $("confirm-cb-settings").checked;
+  const scope = dataOn && settingsOn ? "all" : dataOn ? "data" : "settings";
   // P64: the same safety net as reset/delete — restoring replaces the current
   // data just as permanently, so it earns the same offer of a backup first.
   await maybeBackupBeforeWipe();
-  try { await invoke("restore_backup", { name, keep: Math.round(val("backupKeep")) }); }
+  try { await invoke("restore_backup", { name, keep: Math.round(val("backupKeep")), scope }); }
   catch (e) { toast(String(e)); } // on success the app relaunches
 }
 
@@ -6474,7 +6485,12 @@ function closeModal() {
 // `icon` puts an SVG above the title, `input` turns it into a one-field prompt
 // (then it resolves to the entered string, or null when dismissed).
 let confirmCleanup = null;
-function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input, danger = true }) {
+// `checkboxes`: [{key, label, checked}] — rendered into #confirm-checkbox-row,
+// read back by the caller via document.getElementById(`confirm-cb-${key}`) once
+// the promise resolves true (the return value itself stays plain bool/string, so
+// no existing `if (!ok) return` caller needs to change). At least one must stay
+// checked, or the confirm button offers nothing to actually do.
+function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input, checkboxes, danger = true }) {
   const root = $("confirm-modal");
   $("confirm-title").textContent = title;
   $("confirm-msg").textContent = message;
@@ -6499,11 +6515,30 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input,
     eye.innerHTML = EYE_SVG;
     eye.classList.toggle("hidden", field.type !== "password");
   }
+  const cbRow = $("confirm-checkbox-row");
+  cbRow.innerHTML = "";
+  cbRow.classList.toggle("hidden", !checkboxes);
+  const syncOk = () => { ok.disabled = !!checkboxes && !cbRow.querySelector("input:checked"); };
+  if (checkboxes) {
+    for (const cb of checkboxes) {
+      const label = document.createElement("label");
+      label.className = "confirm-checkbox";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.id = `confirm-cb-${cb.key}`;
+      box.checked = cb.checked !== false;
+      box.addEventListener("change", syncOk);
+      label.append(box, document.createTextNode(cb.label));
+      cbRow.appendChild(label);
+    }
+  }
+  syncOk();
   confirmCleanup?.(false); // resolve any stale dialog first
   root.classList.remove("hidden");
   return new Promise((resolve) => {
     const done = (val) => {
       root.classList.add("hidden");
+      ok.disabled = false;
       ok.removeEventListener("click", onOk);
       cancel.removeEventListener("click", onCancel);
       root.removeEventListener("pointerdown", onBg);
@@ -6516,7 +6551,7 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input,
     const onOk = () => finish(true);
     const onCancel = () => finish(false);
     const onBg = (e) => { if (e.target === root) finish(false); };
-    const onKey = (e) => { if (e.key === "Enter") { e.preventDefault(); finish(true); } };
+    const onKey = (e) => { if (e.key === "Enter" && !ok.disabled) { e.preventDefault(); finish(true); } };
     const onEye = () => { field.type = field.type === "password" ? "text" : "password"; };
     ok.addEventListener("click", onOk);
     cancel.addEventListener("click", onCancel);

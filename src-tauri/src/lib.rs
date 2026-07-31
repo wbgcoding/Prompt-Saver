@@ -5567,10 +5567,73 @@ async fn delete_backup(app: AppHandle, name: String) -> Result<(), String> {
     fs::remove_dir_all(backups_dir(&app).join(&name)).map_err(|e| e.to_string())
 }
 
-// Restore: snapshot the current store first (safety), swap data.db, drop the stale
-// WAL/SHM, then relaunch so nothing can half-apply.
+// Unpack (gunzip if needed) a backup file BESIDE the live store, then prove it is
+// an openable SQLite file. Shared by every restore scope — a snapshot that fails
+// either step must never touch the live database.
+fn stage_and_validate_backup(backup_db: &std::path::Path, dir: &std::path::Path) -> Result<PathBuf, String> {
+    let staged = dir.join("data.db.restoring");
+    let _ = fs::remove_file(&staged);
+    let unpack = if backup_db.extension().is_some_and(|e| e == "gz") {
+        gunzip_to(backup_db, &staged)
+    } else {
+        fs::copy(backup_db, &staged).map(|_| ()).map_err(|e| e.to_string()) // pre-2.6 snapshot
+    };
+    if let Err(e) = unpack {
+        let _ = fs::remove_file(&staged);
+        return Err(e);
+    }
+    if let Err(e) = Connection::open(&staged)
+        .and_then(|c| c.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0)))
+    {
+        let _ = fs::remove_file(&staged);
+        return Err(format!("backup is not a readable database: {}", e));
+    }
+    Ok(staged)
+}
+
+// 70: merge only the tables `scope` asks for from `staged` into the live `target`
+// database, inside one transaction — any failure leaves `target` untouched. "data"
+// mirrors exactly the tables delete_all_data already treats as data; "settings"
+// touches only the meta['settings'] row, never the meta['copy_log_migrated']
+// migration marker. A table missing from an older backup (e.g. "trash", added in
+// 91) is skipped rather than failing the whole restore — its live rows stay put.
+fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: &str) -> Result<(), String> {
+    let mut conn = Connection::open(target).map_err(|e| e.to_string())?;
+    conn.execute("ATTACH DATABASE ?1 AS backup", [staged.to_string_lossy().to_string()])
+        .map_err(|e| e.to_string())?;
+    let result: rusqlite::Result<()> = (|| {
+        let tx = conn.transaction()?;
+        if scope == "data" {
+            for table in ["prompts", "trash", "prompt_versions", "copy_log", "clip_inbox"] {
+                let exists: i64 = tx.query_row(
+                    "SELECT COUNT(*) FROM backup.sqlite_master WHERE type='table' AND name=?1",
+                    [table],
+                    |r| r.get(0),
+                )?;
+                if exists == 0 {
+                    continue;
+                }
+                tx.execute(&format!("DELETE FROM {table}"), [])?;
+                tx.execute(&format!("INSERT INTO {table} SELECT * FROM backup.{table}"), [])?;
+            }
+        } else if scope == "settings" {
+            tx.execute(
+                "INSERT INTO meta(key, value) SELECT key, value FROM backup.meta WHERE key = 'settings'
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [],
+            )?;
+        }
+        tx.commit()
+    })();
+    let _ = conn.execute("DETACH DATABASE backup", []);
+    result.map_err(|e| e.to_string())
+}
+
+// Restore: snapshot the current store first (safety), then either swap the whole
+// data.db (scope "all") or merge just the requested tables in place (scope "data"/
+// "settings") — either way relaunch after, so nothing can half-apply.
 #[tauri::command]
-async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep: usize) -> Result<(), String> {
+async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep: usize, scope: String) -> Result<(), String> {
     if !valid_backup_name(&name) {
         return Err("bad-name".into());
     }
@@ -5583,31 +5646,19 @@ async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep
         let _ = do_backup(&app, keep, gfs); // pre-restore safety snapshot
         let dir = data_dir(&app);
         let target = dir.join("data.db");
-        // Unpack BESIDE the live store, then swap it in with one rename. Writing
-        // straight onto data.db truncates it first, so a disk that fills up (or any
-        // I/O error) halfway through would leave the user with neither the old
-        // database nor the restored one.
-        let staged = dir.join("data.db.restoring");
-        let _ = fs::remove_file(&staged);
-        let unpack = if backup_db.extension().is_some_and(|e| e == "gz") {
-            gunzip_to(&backup_db, &staged)
+        let staged = stage_and_validate_backup(&backup_db, &dir)?;
+        if scope == "all" {
+            // Writing straight onto data.db truncates it first, so a disk that fills
+            // up (or any I/O error) halfway through would leave the user with
+            // neither the old database nor the restored one — swap via rename instead.
+            if let Err(e) = fs::rename(&staged, &target) {
+                let _ = fs::remove_file(&staged);
+                return Err(e.to_string());
+            }
         } else {
-            fs::copy(&backup_db, &staged).map(|_| ()).map_err(|e| e.to_string()) // pre-2.6 snapshot
-        };
-        if let Err(e) = unpack {
+            let result = restore_selective(&target, &staged, &scope);
             let _ = fs::remove_file(&staged);
-            return Err(e);
-        }
-        // A snapshot that is not a readable database must never replace a working one.
-        if let Err(e) = Connection::open(&staged)
-            .and_then(|c| c.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0)))
-        {
-            let _ = fs::remove_file(&staged);
-            return Err(format!("backup is not a readable database: {}", e));
-        }
-        if let Err(e) = fs::rename(&staged, &target) {
-            let _ = fs::remove_file(&staged);
-            return Err(e.to_string());
+            result?;
         }
         let _ = fs::remove_file(dir.join("data.db-wal"));
         let _ = fs::remove_file(dir.join("data.db-shm"));
@@ -10620,6 +10671,165 @@ mod tests {
         assert_eq!(count("prompt_versions"), 0);
         assert_eq!(count("clip_inbox"), 0);
         assert_eq!(count("meta"), 1, "settings must survive a data-only wipe");
+    }
+
+    // ---- 70: selective backup restore ----
+
+    // restore_selective opens real files via Connection::open (ATTACH DATABASE
+    // needs a path, an in-memory DB can't be attached across connections), so these
+    // tests write actual throwaway .db files under the OS temp dir and remove them
+    // when done. `tag` keeps parallel test runs from colliding on the same names.
+    fn full_schema_db(path: &std::path::Path, tag: &str) -> Connection {
+        let _ = std::fs::remove_file(path);
+        let conn = Connection::open(path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+             CREATE TABLE trash(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+             CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+             CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
+             CREATE TABLE prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL);
+             CREATE TABLE clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);",
+        )
+        .unwrap();
+        let _ = tag; // only distinguishes the caller's temp filename, not the schema
+        conn
+    }
+
+    #[test]
+    fn restore_selective_data_scope_leaves_settings_untouched() {
+        let dir = std::env::temp_dir();
+        let target = dir.join("prompt-saver-test-restore-data-target.db");
+        let staged = dir.join("prompt-saver-test-restore-data-staged.db");
+        {
+            let conn = full_schema_db(&target, "target");
+            conn.execute_batch(
+                "INSERT INTO prompts VALUES('live', 0, '{}');
+                 INSERT INTO meta VALUES('settings', 'LIVE-SETTINGS');
+                 INSERT INTO meta VALUES('copy_log_migrated', '1');",
+            )
+            .unwrap();
+        }
+        {
+            let conn = full_schema_db(&staged, "staged");
+            conn.execute_batch(
+                "INSERT INTO prompts VALUES('backed-up', 0, '{}');
+                 INSERT INTO meta VALUES('settings', 'BACKUP-SETTINGS');",
+            )
+            .unwrap();
+        }
+        restore_selective(&target, &staged, "data").unwrap();
+        let conn = Connection::open(&target).unwrap();
+        let prompt_id: String = conn.query_row("SELECT id FROM prompts", [], |r| r.get(0)).unwrap();
+        assert_eq!(prompt_id, "backed-up", "data scope must replace the prompts table");
+        let settings: String = conn.query_row("SELECT value FROM meta WHERE key='settings'", [], |r| r.get(0)).unwrap();
+        assert_eq!(settings, "LIVE-SETTINGS", "data scope must never touch settings");
+        let migrated: String = conn.query_row("SELECT value FROM meta WHERE key='copy_log_migrated'", [], |r| r.get(0)).unwrap();
+        assert_eq!(migrated, "1", "data scope must never touch the migration marker");
+        let _ = std::fs::remove_file(&target);
+        let _ = std::fs::remove_file(&staged);
+    }
+
+    #[test]
+    fn restore_selective_settings_scope_leaves_data_untouched() {
+        let dir = std::env::temp_dir();
+        let target = dir.join("prompt-saver-test-restore-settings-target.db");
+        let staged = dir.join("prompt-saver-test-restore-settings-staged.db");
+        {
+            let conn = full_schema_db(&target, "target");
+            conn.execute_batch(
+                "INSERT INTO prompts VALUES('live', 0, '{}');
+                 INSERT INTO meta VALUES('settings', 'LIVE-SETTINGS');
+                 INSERT INTO meta VALUES('copy_log_migrated', '1');",
+            )
+            .unwrap();
+        }
+        {
+            let conn = full_schema_db(&staged, "staged");
+            conn.execute_batch(
+                "INSERT INTO prompts VALUES('backed-up', 0, '{}');
+                 INSERT INTO meta VALUES('settings', 'BACKUP-SETTINGS');",
+            )
+            .unwrap();
+        }
+        restore_selective(&target, &staged, "settings").unwrap();
+        let conn = Connection::open(&target).unwrap();
+        let prompt_id: String = conn.query_row("SELECT id FROM prompts", [], |r| r.get(0)).unwrap();
+        assert_eq!(prompt_id, "live", "settings scope must never touch prompts");
+        let settings: String = conn.query_row("SELECT value FROM meta WHERE key='settings'", [], |r| r.get(0)).unwrap();
+        assert_eq!(settings, "BACKUP-SETTINGS", "settings scope must apply the backup's settings");
+        let migrated: String = conn.query_row("SELECT value FROM meta WHERE key='copy_log_migrated'", [], |r| r.get(0)).unwrap();
+        assert_eq!(migrated, "1", "settings scope must never touch the migration marker");
+        let _ = std::fs::remove_file(&target);
+        let _ = std::fs::remove_file(&staged);
+    }
+
+    #[test]
+    fn restore_selective_skips_a_table_missing_from_an_older_backup() {
+        let dir = std::env::temp_dir();
+        let target = dir.join("prompt-saver-test-restore-oldbackup-target.db");
+        let staged = dir.join("prompt-saver-test-restore-oldbackup-staged.db");
+        {
+            let conn = full_schema_db(&target, "target");
+            conn.execute_batch(
+                "INSERT INTO prompts VALUES('live', 0, '{}');
+                 INSERT INTO trash VALUES('live-trashed', 0, '{}');
+                 INSERT INTO meta VALUES('settings', 'LIVE-SETTINGS');",
+            )
+            .unwrap();
+        }
+        {
+            // Pre-91 backup: no trash table at all.
+            let _ = std::fs::remove_file(&staged);
+            let conn = Connection::open(&staged).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+                 CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
+                 CREATE TABLE prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL);
+                 CREATE TABLE clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);
+                 INSERT INTO prompts VALUES('backed-up', 0, '{}');",
+            )
+            .unwrap();
+        }
+        restore_selective(&target, &staged, "data").unwrap();
+        let conn = Connection::open(&target).unwrap();
+        let prompt_id: String = conn.query_row("SELECT id FROM prompts", [], |r| r.get(0)).unwrap();
+        assert_eq!(prompt_id, "backed-up", "prompts (present in the old backup) must still be replaced");
+        let trash_id: String = conn.query_row("SELECT id FROM trash", [], |r| r.get(0)).unwrap();
+        assert_eq!(trash_id, "live-trashed", "trash (absent from the old backup) must be left alone, not wiped");
+        let _ = std::fs::remove_file(&target);
+        let _ = std::fs::remove_file(&staged);
+    }
+
+    #[test]
+    fn restore_selective_rolls_back_everything_if_one_table_fails() {
+        // "prompts" comes first in the copy order and would succeed on its own;
+        // "trash" is made incompatible (extra column) so its INSERT fails — proving
+        // the whole thing runs in ONE transaction, not one commit per table.
+        let dir = std::env::temp_dir();
+        let target = dir.join("prompt-saver-test-restore-rollback-target.db");
+        let staged = dir.join("prompt-saver-test-restore-rollback-staged.db");
+        {
+            let conn = full_schema_db(&target, "target");
+            conn.execute_batch("INSERT INTO prompts VALUES('live', 0, '{}');").unwrap();
+        }
+        {
+            let _ = std::fs::remove_file(&staged);
+            let conn = Connection::open(&staged).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+                 CREATE TABLE trash(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL, extra TEXT);
+                 INSERT INTO prompts VALUES('backed-up', 0, '{}');",
+            )
+            .unwrap();
+        }
+        let result = restore_selective(&target, &staged, "data");
+        assert!(result.is_err(), "a column-count mismatch on trash must surface as an error");
+        let conn = Connection::open(&target).unwrap();
+        let prompt_id: String = conn.query_row("SELECT id FROM prompts", [], |r| r.get(0)).unwrap();
+        assert_eq!(prompt_id, "live", "prompts must roll back too, even though its own copy succeeded");
+        let _ = std::fs::remove_file(&target);
+        let _ = std::fs::remove_file(&staged);
     }
 
     #[test]

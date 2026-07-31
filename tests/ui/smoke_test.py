@@ -2174,12 +2174,58 @@ PROBE = """
       } else {
         restoreBtn.click();
         await sleep(200);
+        // 70: both checkboxes default to checked — confirming as-is restores "all".
+        const dataCb = document.getElementById('confirm-cb-data');
+        const settingsCb = document.getElementById('confirm-cb-settings');
+        if (!dataCb || !settingsCb) {
+          out.errors.push('the restore confirm dialog has no data/settings checkboxes');
+        } else if (!dataCb.checked || !settingsCb.checked) {
+          out.errors.push('the restore checkboxes are not both checked by default');
+        }
         await click('confirm-ok'); // the restore confirmation itself
         await sleep(200);
         if (!calls().includes('restore_backup')) out.errors.push('restoring did not call restore_backup at all');
+        const allArgs = (window.__SMOKE_ARGS__ || []).find(c => c[0] === 'restore_backup');
+        if (!allArgs || allArgs[1].scope !== 'all') {
+          out.errors.push('both checkboxes checked must restore scope "all", got ' + (allArgs && allArgs[1].scope));
+        }
         if (calls().includes('create_backup')) {
           out.errors.push('a safety backup ran although autoBackupBeforeWipe is off by default');
         }
+      }
+    }
+    // 70: unchecking one checkbox switches to a selective restore scope.
+    {
+      const restoreBtn = [...document.querySelectorAll('#backup-panel button')]
+        .find(b => b.textContent.trim() === 'Restore');
+      if (restoreBtn) {
+        window.__SMOKE_ARGS__ = [];
+        restoreBtn.click();
+        await sleep(200);
+        document.getElementById('confirm-cb-settings').click(); // uncheck — data only
+        await click('confirm-ok');
+        await sleep(200);
+        const dataArgs = (window.__SMOKE_ARGS__ || []).find(c => c[0] === 'restore_backup');
+        if (!dataArgs || dataArgs[1].scope !== 'data') {
+          out.errors.push('unchecking settings must restore scope "data", got ' + (dataArgs && dataArgs[1].scope));
+        }
+      }
+    }
+    // 70: unchecking both leaves nothing to restore — the confirm button must refuse.
+    {
+      const restoreBtn = [...document.querySelectorAll('#backup-panel button')]
+        .find(b => b.textContent.trim() === 'Restore');
+      if (restoreBtn) {
+        restoreBtn.click();
+        await sleep(200);
+        document.getElementById('confirm-cb-data').click();
+        document.getElementById('confirm-cb-settings').click();
+        await sleep(100);
+        if (!document.getElementById('confirm-ok').disabled) {
+          out.errors.push('unchecking both restore checkboxes must disable the confirm button');
+        }
+        document.getElementById('confirm-cancel').click();
+        await sleep(150);
       }
     }
     await click('backup-close');
@@ -2895,10 +2941,12 @@ def main():
                  # The probe walks more UI than it used to; 30s of virtual time ran
                  # out mid-run on the smallest window and produced no result at all —
                  # raised to 60s, then to 75s once the P10 quick-grid hover-only check
-                 # (two more expert-menu round trips) pushed past that too.
+                 # (two more expert-menu round trips) pushed past that too, then to 95s
+                 # once 91/51/70's regressions (trash dialog, multi-view popover, three
+                 # restore-scope round trips) added their own expert-menu detours.
                  # The window has to hold the iframe plus Chrome's own frame.
                  f"--window-size={max(w + 30, 520)},{h + 140}",
-                 "--virtual-time-budget=75000", "--dump-dom",
+                 "--virtual-time-budget=95000", "--dump-dom",
                  wrapper.as_uri()],
                 # The dumped DOM carries all 20 languages; without an explicit
                 # codec Windows decodes it as cp1252 and the reader thread dies,

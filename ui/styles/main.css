@@ -2488,6 +2488,8 @@ input[type="password"]::-ms-clear { display: none; }
 .confirm-msg { white-space: pre-line; }
 .confirm-input-row { position: relative; display: flex; align-items: center; }
 .confirm-input-row .modal-input { flex: 1 1 auto; padding-right: 36px; }
+.confirm-checkbox-row { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.confirm-checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
 .pw-eye { position: absolute; right: 4px; width: 28px; height: 28px; }
 /* One row, two equal columns: the toggle left, the top-list length right. As a
    flex row the number field ran past the edge while space was left on the left. */
