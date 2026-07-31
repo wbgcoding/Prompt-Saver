@@ -473,6 +473,35 @@ PROBE = """
       q.dispatchEvent(new Event('input', { bubbles: true }));
       await sleep(250);
     }
+    // P25: the 2 most-used tags across the fixture (Work, Draft) are offered as
+    // one-click chips on an untagged prompt, and vanish once actually added.
+    {
+      const row = document.querySelector('#library-list .lib-item[data-id="p2"]');
+      const editBtn = row && row.querySelector('.lib-edit');
+      if (!editBtn) {
+        out.errors.push('library row p2 has no edit icon for the quickadd check');
+      } else {
+        editBtn.click();
+        await sleep(250);
+        const qa = document.getElementById('modal-tag-quickadd');
+        const chips = qa ? [...qa.querySelectorAll('.tag-chip')] : [];
+        const names = chips.map(c => (c.querySelector('.tag-chip-label') || {}).textContent);
+        if (!names.includes('Work') || !names.includes('Draft')) {
+          out.errors.push('the tag quick-add row is missing an expected tag: ' + names.join(','));
+        }
+        const workChip = chips.find(c => (c.querySelector('.tag-chip-label') || {}).textContent === 'Work');
+        if (workChip) {
+          workChip.click();
+          await sleep(150);
+          const assigned = [...document.querySelectorAll('#modal-tag-chips .tag-chip-label')].map(s => s.textContent);
+          if (!assigned.includes('Work')) out.errors.push('clicking a quick-add tag did not add it to the prompt');
+          const stillOffered = [...document.querySelectorAll('#modal-tag-quickadd .tag-chip-label')].map(s => s.textContent);
+          if (stillOffered.includes('Work')) out.errors.push('an already-added tag is still offered in quick-add');
+        }
+        document.getElementById('modal-close-x').click();
+        await sleep(200);
+      }
+    }
     await click('library-close');
     await click('journal-btn');
     layoutScan('copy history');

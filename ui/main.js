@@ -6588,6 +6588,33 @@ function renderTagChips() {
     chip.append(del);
     box.appendChild(chip);
   }
+  renderTagQuickAdd();
+}
+
+// P25: the 3 most-used tags across the library, minus ones already on this
+// prompt — click to add without typing.
+function renderTagQuickAdd() {
+  const box = $("modal-tag-quickadd");
+  if (!box || !modalState) return;
+  box.innerHTML = "";
+  if (!tagsOn()) { box.classList.add("hidden"); return; }
+  const counts = tagUsage();
+  const assigned = new Set((modalState.tags || []).map(tagKey));
+  const top = allTags()
+    .filter((n) => !assigned.has(tagKey(n)))
+    .sort((a, b) => (counts.get(tagKey(b)) || 0) - (counts.get(tagKey(a)) || 0))
+    .slice(0, 3);
+  box.classList.toggle("hidden", !top.length);
+  if (!top.length) return;
+  const label = document.createElement("span");
+  label.className = "tag-quickadd-label";
+  label.textContent = t("tagQuickAddLabel");
+  box.appendChild(label);
+  for (const name of top) {
+    const chip = tagChipEl(name, "button");
+    chip.addEventListener("click", () => { addTagToModal(name); renderTagChips(); });
+    box.appendChild(chip);
+  }
 }
 
 // Add a typed name to the open editor. Returns false when it is unusable, so the

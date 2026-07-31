@@ -137,6 +137,8 @@ switch, most of it off until you turn it on.
 - Every copy-history row gets an edit icon, same as the library, so you can
   open a prompt from its history without going to find it in the grid or
   library first.
+- The editor now offers your 3 most-used tags right below the tag field —
+  one click to add instead of typing them out every time.
 
 ### Fixed
 

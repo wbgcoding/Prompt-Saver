@@ -3292,6 +3292,12 @@ body:not(.flag-promptNotes) #modal-notes { display: none; }
 .modal-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .modal-tags-label { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
 .tag-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+/* P25: the 3 most-used tags, offered right in the editor so adding a common one
+   is one click instead of typing it out. */
+.tag-quickadd { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; width: 100%; }
+.tag-quickadd-label { color: var(--muted); font-size: 11.5px; }
+.tag-quickadd > .tag-chip { cursor: pointer; transition: border-color var(--transition), background var(--transition); }
+.tag-quickadd > .tag-chip:hover { border-color: var(--accent); background: var(--surface); }
 .tag-input-wrap { position: relative; display: flex; flex: 1 1 130px; min-width: 90px; }
 .tag-input { flex: 1 1 auto; min-width: 0; padding-right: 28px; }
 /* The handle that makes the type-ahead discoverable: it opens the full tag list. */
