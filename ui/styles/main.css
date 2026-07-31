@@ -2453,12 +2453,16 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 @media (max-width: 720px) { .backup-cols { grid-template-columns: minmax(0, 1fr); } }
 /* GFS tiers as a 2x2 block of small fields (day / week over month / year). */
 /* Two rows of 40px fields plus their row gap: the tier grid at its tallest. Holding
-   that height with the plain count showing is what stops the toggle from jumping. */
+   that height (the slot is empty otherwise, 62) is what stops picking a preset tile
+   from resizing anything below it. */
 .backup-retention-slot { min-height: 86px; }
 .backup-tier-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
 .backup-tier-grid > .backup-set-row { justify-content: space-between; gap: 8px; }
 .backup-tier-grid .modal-input { flex: 0 0 auto; width: 64px; min-width: 0; text-align: center; }
 .backup-tier-grid .clear-wrap { flex: 0 0 auto; width: 64px; }
+/* 62: sparsam/normal/viel/Erweitert as a 2x2 grid of preset tiles. */
+.backup-retention-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.backup-retention-grid .ghost-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 /* Optional backup password: label left, field + eye button right. */
 .field.backup-pw-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
 .backup-pw-row > span { font-size: 13px; }

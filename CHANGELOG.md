@@ -92,6 +92,9 @@ Everything new is an expert-menu switch, most of it off until you turn it on.
 
 ### Improved
 
+- Backup retention is now a quick pick — Light (5), Normal (10), Heavy (20) or
+  Advanced — instead of a switch plus a number field. Advanced still opens the
+  same day/week/month/year settings as before.
 - The changelog in the update dialog is laid out instead of dumped: headings,
   bullets, tables and highlighted terms, in a box that takes the height of the
   release notes and scrolls only once they outgrow the window.

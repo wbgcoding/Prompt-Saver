@@ -2063,42 +2063,55 @@ PROBE = """
       if (!pw || pw.type !== 'password' || pw.value !== '' || !/^•+$/.test(pw.placeholder)) {
         out.errors.push('a stored backup password is not shown as empty dots');
       }
-      // Smart retention swaps the keep count for the 2x2 day/week/month/year grid.
-      // The panel re-renders on every toggle, so the switch has to be looked up again.
-      const gfsSwitch = () => [...document.querySelectorAll('#backup-panel input.switch')].pop();
-      if (gfsSwitch()) {
-        // Nothing below the switch may move when it is flipped — the slot holding
-        // the count and the tier grid keeps one height for both.
+      // 62: sparsam/normal/viel/Erweitert as a 2x2 preset grid. The panel re-renders
+      // on every click, so tiles have to be looked up again after each one.
+      const retTiles = () => [...document.querySelectorAll('#backup-panel .backup-retention-grid .ghost-btn')];
+      const advTile = () => retTiles().find(b => b.textContent.trim() === 'Advanced');
+      const heavyTile = () => retTiles().find(b => b.textContent.includes('(20)'));
+      if (retTiles().length !== 4) {
+        out.errors.push('the retention grid does not show 4 preset tiles');
+      } else {
+        heavyTile()?.click();
+        await sleep(300);
+        if (!heavyTile()?.classList.contains('active')) out.errors.push('picking the "heavy" preset did not mark it active');
+        // Nothing below the grid may move when a tile is picked — the slot holding
+        // the empty state and the tier grid keeps one height for both.
         const slotH = () => Math.round(
           (document.querySelector('#backup-panel .backup-retention-slot') || {getBoundingClientRect: () => ({height: -1})})
             .getBoundingClientRect().height);
         const before = slotH();
-        gfsSwitch().click();
+        advTile().click();
         await sleep(400);
         const tiers = document.querySelectorAll('#backup-panel .backup-tier-grid .modal-input');
-        if (tiers.length !== 4) out.errors.push('smart retention does not show 4 tier fields');
+        if (tiers.length !== 4) out.errors.push('"Advanced" does not show 4 tier fields');
+        if (!advTile()?.classList.contains('active')) out.errors.push('picking "Advanced" did not mark it active');
         if (before < 0 || Math.abs(slotH() - before) > 1) {
-          out.errors.push('toggling smart retention moves the rows below it (' + before + ' -> ' + slotH() + ')');
+          out.errors.push('picking a retention tile moves the rows below it (' + before + ' -> ' + slotH() + ')');
         }
-        gfsSwitch().click();
+        // Clearing a tier field with its X and leaving it must land on the default,
+        // not the field minimum — checked here, while "Advanced" is still active.
+        const dailyInput = document.querySelector('#backup-panel .backup-tier-grid input[type=number]');
+        const dailyClear = dailyInput && dailyInput.parentElement.querySelector('.clear-btn');
+        if (!dailyInput || !dailyClear) {
+          out.errors.push('the daily-tier field has no clear button');
+        } else {
+          dailyClear.click();
+          await sleep(150);
+          dailyInput.dispatchEvent(new Event('blur'));
+          await sleep(300);
+          if (dailyInput.value !== '3') out.errors.push('clearing the daily tier gives ' + dailyInput.value + ' instead of the default 3');
+          // The X hides itself while the field is empty; once the default is written
+          // back it has to reappear, or the field can never be cleared a second time.
+          if (!dailyClear.classList.contains('show')) out.errors.push('the clear button stays hidden after the field refilled itself');
+        }
+        // Back to a plain preset — the tier grid must disappear again.
+        [...document.querySelectorAll('#backup-panel .backup-retention-grid .ghost-btn')]
+          .find(b => b.textContent.includes('(10)'))?.click();
         await sleep(400);
+        if (document.querySelectorAll('#backup-panel .backup-tier-grid').length) {
+          out.errors.push('picking a plain preset left the tier grid showing');
+        }
       }
-    }
-    // Clearing a number field with its X and leaving it must land on the default,
-    // not on the field minimum.
-    const keepInput = document.querySelector('#backup-panel .backup-set-row input[type=number]');
-    const keepClear = keepInput && keepInput.parentElement.querySelector('.clear-btn');
-    if (!keepInput || !keepClear) {
-      out.errors.push('the keep-count field has no clear button');
-    } else {
-      keepClear.click();
-      await sleep(150);
-      keepInput.dispatchEvent(new Event('blur'));
-      await sleep(300);
-      if (keepInput.value !== '10') out.errors.push('clearing the keep count gives ' + keepInput.value + ' instead of the default 10');
-      // The X hides itself while the field is empty; once the default is written
-      // back it has to reappear, or the field can never be cleared a second time.
-      if (!keepClear.classList.contains('show')) out.errors.push('the clear button stays hidden after the field refilled itself');
     }
     // The X is positioned against its wrapper, so a field narrower than the wrapper
     // pushes it outside the box it belongs to.
