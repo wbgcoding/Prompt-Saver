@@ -102,6 +102,9 @@ switch, most of it off until you turn it on.
 - Dragging a tile to a new spot now shows a brief "Tile moved" toast with an
   Undo button, so a mis-drop can be reversed with one click instead of
   dragging it back by hand.
+- The theme editor has a **Revert changes** button that undoes everything
+  done since it was opened without closing it — Cancel still discards
+  everything and closes the editor.
 - A backup is now either whole or absent: the snapshot is written under a
   temporary name and only then renamed, and a failed one leaves nothing behind.
 - "Duplicate" on a prompt's context menu now opens the same dialog as creating a

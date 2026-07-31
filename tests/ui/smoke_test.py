@@ -1631,6 +1631,7 @@ PROBE = """
       if (!hex) {
         out.errors.push('a theme colour row has no hex field');
       } else {
+        const original = hex.value;
         // A valid value applies live; an invalid one is rejected and rolled back.
         hex.value = '#123456';
         hex.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1642,6 +1643,22 @@ PROBE = """
         hex.dispatchEvent(new Event('change', { bubbles: true }));
         await sleep(120);
         if (hex.value !== '#123456') out.errors.push('an invalid hex value was not rejected');
+        // D75 part 2: "Revert changes" undoes everything since the editor opened —
+        // WITHOUT closing it, the one thing that actually sets it apart from Cancel.
+        await click('theme-edit-revert');
+        await sleep(120);
+        if (tmodal.classList.contains('hidden')) {
+          out.errors.push('reverting the theme draft closed the editor');
+        }
+        // renderThemeEditor() rebuilt the rows, so the old references are stale.
+        const revertedRows = [...document.querySelectorAll('#theme-edit-vars .theme-var-row')];
+        const revertedHex = revertedRows[0] && revertedRows[0].querySelector('.theme-hex');
+        if (!revertedHex || revertedHex.value !== original) {
+          out.errors.push('reverting did not restore the original colour: ' + (revertedHex && revertedHex.value));
+        }
+        if (getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() === '#123456') {
+          out.errors.push('reverting did not undo the live preview');
+        }
       }
       await click('theme-edit-cancel');
       await sleep(150);

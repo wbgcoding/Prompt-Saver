@@ -6959,6 +6959,11 @@ function baseThemeColors(base) {
 // (it previews on the real window, so cancelling has to undo it).
 let themeDraft = null;
 let themeRestore = null;
+// D75: the draft as it looked the moment the editor opened, so "Revert changes"
+// can undo everything done in THIS session without closing the editor — a
+// separate snapshot from themeRestore, which is the real window's pre-edit
+// theme (used only when the whole editor is cancelled).
+let themeDraftStart = null;
 
 function newThemeDraft() {
   const current = document.documentElement.getAttribute("data-theme");
@@ -7000,6 +7005,7 @@ function openThemeEditor() {
   };
   const active = findCustomTheme(settings.theme);
   themeDraft = active ? draftFrom(active) : newThemeDraft();
+  themeDraftStart = draftFrom(themeDraft);
   $("theme-modal").classList.remove("hidden");
   renderThemeEditor();
   previewThemeDraft();
@@ -7014,6 +7020,15 @@ function closeThemeEditor(revert = true) {
   }
   themeDraft = null;
   themeRestore = null;
+  themeDraftStart = null;
+}
+
+// D75 part 2: undo every change made since the editor opened, without closing it.
+function revertThemeDraft() {
+  if (!themeDraftStart) return;
+  themeDraft = draftFrom(themeDraftStart);
+  renderThemeEditor();
+  previewThemeDraft();
 }
 
 function renderThemeEditor() {
@@ -7214,6 +7229,7 @@ function refreshCustomThemes() {
 $("theme-edit-open")?.addEventListener("click", openThemeEditor);
 $("theme-modal-close")?.addEventListener("click", () => closeThemeEditor());
 $("theme-edit-cancel")?.addEventListener("click", () => closeThemeEditor());
+$("theme-edit-revert")?.addEventListener("click", revertThemeDraft);
 $("theme-modal")?.addEventListener("pointerdown", (e) => {
   if (e.target === $("theme-modal")) closeThemeEditor();
 });
