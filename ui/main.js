@@ -6851,6 +6851,23 @@ function renderTagManager() {
 }
 
 $("tag-modal-close")?.addEventListener("click", closeTagManager);
+// P27: one click assigns the palette to every tag that has no color yet, in the
+// order the palette lists them — round-robin once past the end.
+$("tag-colorize")?.addEventListener("click", async () => {
+  const palette = COLORS.slice(1);
+  if (!palette.length) return;
+  const uncolored = allTags().filter((n) => !tagColor(n));
+  if (!uncolored.length) return;
+  let i = 0;
+  for (const name of uncolored) {
+    try { settings = await invoke("set_tag_color", { name, color: palette[i % palette.length] }); }
+    catch (err) { toast(String(err)); return; }
+    i++;
+  }
+  renderTagManager();
+  renderLibrary();
+  await renderGrid();
+});
 $("tag-modal")?.addEventListener("pointerdown", (e) => {
   if (e.target === $("tag-modal")) closeTagManager();
 });

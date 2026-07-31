@@ -139,6 +139,9 @@ switch, most of it off until you turn it on.
   library first.
 - The editor now offers your 3 most-used tags right below the tag field —
   one click to add instead of typing them out every time.
+- The tag manager gets a **Colorize** button: one click gives every tag
+  without a color one from the palette, round-robin. Tags you've already
+  colored yourself are left alone.
 
 ### Fixed
 

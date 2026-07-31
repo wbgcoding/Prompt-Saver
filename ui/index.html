@@ -465,11 +465,15 @@
     <div class="modal modal-narrow">
       <div class="modal-head">
         <h2 class="modal-title" data-i18n="tagManager">Manage tags</h2>
-        <button id="tag-modal-close" class="icon-btn" type="button" data-i18n-aria="close">
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
-          </svg>
-        </button>
+        <div class="modal-head-actions">
+          <button id="tag-colorize" class="head-toggle" type="button" data-i18n="tagColorize"
+                  data-i18n-title="tipTagColorize">Colorize</button>
+          <button id="tag-modal-close" class="icon-btn" type="button" data-i18n-aria="close">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+            </svg>
+          </button>
+        </div>
       </div>
       <div id="tag-modal-list" class="tag-manager-list"></div>
     </div>

@@ -455,6 +455,21 @@ PROBE = """
         out.errors.push('the tag manager did not open');
       } else if (!document.querySelectorAll('#tag-modal-list .tag-manage-row').length) {
         out.errors.push('the tag manager listed no tags');
+      } else {
+        // P27: "Colorize" gives every UNcolored tag a palette color, in order —
+        // an already-colored tag ("Work", fixture blue) must stay untouched.
+        const rowFor = (name) => [...document.querySelectorAll('#tag-modal-list .tag-manage-row')]
+          .find(r => (r.querySelector('.tag-manage-name') || {}).textContent === name);
+        const workDot = rowFor('Work')?.querySelector('.tag-dot');
+        const workBefore = workDot?.style.getPropertyValue('--chip-color');
+        document.getElementById('tag-colorize')?.click();
+        await sleep(300);
+        const workAfter = rowFor('Work')?.querySelector('.tag-dot')?.style.getPropertyValue('--chip-color');
+        if (workAfter !== workBefore) out.errors.push('colorize touched a tag that already had a color');
+        const draftDot = rowFor('Draft')?.querySelector('.tag-dot');
+        if (!draftDot || !draftDot.classList.contains('tag-colored')) {
+          out.errors.push('colorize did not give the uncolored tag a color');
+        }
       }
       await click('tag-modal-close');
     }

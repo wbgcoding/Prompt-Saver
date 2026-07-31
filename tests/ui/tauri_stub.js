@@ -372,7 +372,12 @@ const RESULTS = {
   // The tag commands answer with the settings blob, like the real backend.
   rename_tag: () => JSON.parse(JSON.stringify(SETTINGS)),
   delete_tag: () => JSON.parse(JSON.stringify(SETTINGS)),
-  set_tag_color: () => JSON.parse(JSON.stringify(SETTINGS)),
+  set_tag_color: (a) => {
+    const key = String((a && a.name) || "").toLowerCase();
+    if (a && a.color) SETTINGS.tag_colors[key] = a.color;
+    else delete SETTINGS.tag_colors[key];
+    return clone();
+  },
   // The copy commands report success; the UI skips everything that follows a copy
   // (feedback, history, auto-paste) when they come back falsy.
   copy_prompt: () => true,
