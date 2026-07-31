@@ -149,6 +149,8 @@ switch, most of it off until you turn it on.
   adjustable (down to 0 to turn it off) in the expert menu.
 - The "Backup created" toast now shows for automatic backups too, not just
   the manual button.
+- New expert option: a colored border around the grid itself, in the active
+  view's color (off by default).
 
 ### Fixed
 

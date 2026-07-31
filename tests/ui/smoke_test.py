@@ -372,6 +372,11 @@ PROBE = """
     } else {
       workTab.click();
       await sleep(200);
+      // P53: the grid keeps a CSS var of the active view's color, ready for the
+      // (default-off) grid-border option even while the flag itself is off.
+      if (getComputedStyle(document.documentElement).getPropertyValue('--active-view-color').trim() !== '#ef4444') {
+        out.errors.push('the active-view-color CSS var did not follow the switch to "work"');
+      }
       const cell00 = document.querySelector('#grid .cell[data-col="0"][data-row="0"]');
       if (!cell00 || cell00.firstElementChild) {
         out.errors.push('expected an empty cell on "work" to double-click-create into');

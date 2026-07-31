@@ -414,6 +414,12 @@ body.noflag-showJournal #journal-btn { display: none; }
   color: #fff;
   box-shadow: none;
 }
+/* P53: the grid itself outlined in the active view's color (expert opt, off
+   by default) — a view with no color set just gets no border, via the same
+   --active-view-color the tab already carries per-button. */
+.flag-gridViewBorder #grid {
+  box-shadow: inset 0 0 0 calc(var(--view-border, 3px) * 0.95) var(--active-view-color, transparent);
+}
 /* Trailing "+" that opens the add-view popup. */
 .view-add-top {
   display: inline-flex;
