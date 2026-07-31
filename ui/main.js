@@ -5336,6 +5336,50 @@ function syncMdUi(textVisible) {
   if (on) renderMdPreview(true);
 }
 
+// 31: word-level diff between two texts via a classic LCS backtrack — no
+// dependency, the whole thing is a couple dozen lines. O(n*m) on word count, so
+// a pathologically huge pasted text falls back to plain text (DIFF_WORD_CAP)
+// rather than freezing the editor while it opens the history panel.
+const DIFF_WORD_CAP = 4000;
+function diffWords(oldText, newText) {
+  const tokenize = (s) => (s || "").split(/(\s+)/).filter((t) => t !== "");
+  const a = tokenize(oldText);
+  const b = tokenize(newText);
+  if (a.length > DIFF_WORD_CAP || b.length > DIFF_WORD_CAP) return null;
+  const n = a.length, m = b.length;
+  const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const out = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { out.push({ type: "same", text: a[i] }); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push({ type: "del", text: a[i] }); i++; }
+    else { out.push({ type: "add", text: b[j] }); j++; }
+  }
+  while (i < n) out.push({ type: "del", text: a[i++] });
+  while (j < m) out.push({ type: "add", text: b[j++] });
+  return out;
+}
+// Text nodes only — never innerHTML on prompt content, same rule the Markdown
+// preview follows (a prompt's own text is fully user-controlled).
+function renderDiffInto(el, tokens) {
+  el.textContent = "";
+  for (const t of tokens) {
+    if (t.type === "same") {
+      el.appendChild(document.createTextNode(t.text));
+      continue;
+    }
+    const span = document.createElement("span");
+    span.className = t.type === "add" ? "diff-add" : "diff-del";
+    span.textContent = t.text;
+    el.appendChild(span);
+  }
+}
+
 // ---- F7 version history: render the collapsible list in the editor ----
 async function loadHistory(id) {
   const body = $("modal-history-body");
@@ -5350,7 +5394,7 @@ async function loadHistory(id) {
     body.appendChild(e);
     return;
   }
-  for (const v of list) {
+  list.forEach((v, idx) => {
     const row = document.createElement("div");
     row.className = "hist-row";
     const head = document.createElement("div");
@@ -5389,7 +5433,12 @@ async function loadHistory(id) {
     head.append(time, prev, expand, restore);
     const full = document.createElement("div");
     full.className = "hist-full hidden";
-    full.textContent = v.text || "";
+    // 31: diff against whatever came right after this snapshot — the live editor
+    // text for the newest row, the next-newer snapshot for every other one.
+    const newerText = idx === 0 ? modal.text.value : list[idx - 1].text;
+    const tokens = diffWords(v.text || "", newerText || "");
+    if (tokens) renderDiffInto(full, tokens);
+    else full.textContent = v.text || ""; // DIFF_WORD_CAP fallback: plain text
     const toggle = () => {
       const open = !full.classList.toggle("hidden");
       expand.setAttribute("aria-expanded", String(open));
@@ -5399,7 +5448,7 @@ async function loadHistory(id) {
     prev.addEventListener("click", toggle); // clicking the preview also expands
     row.append(head, full);
     body.appendChild(row);
-  }
+  });
 }
 
 // ---- F11 usage statistics dashboard (opened from the expert menu) ----

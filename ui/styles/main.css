@@ -2280,6 +2280,11 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .hist-row.open .hist-expand svg { transform: rotate(180deg); }
 .hist-restore { flex: 0 0 auto; padding: 3px 8px; font-size: 12px; }
 .hist-full { margin-top: 2px; padding: 8px 10px; border-radius: 6px; background: var(--bg); color: var(--fg); font-size: 12px; white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow-y: auto; }
+/* P31: word-diff against whatever this version turned into next — no themed
+   "success" colour exists yet, so added text gets a fixed, theme-independent
+   green rather than inventing a 16-theme variable for one spot. */
+.diff-add { background: rgba(34, 197, 94, 0.22); border-radius: 3px; }
+.diff-del { background: color-mix(in srgb, var(--danger) 22%, transparent); text-decoration: line-through; text-decoration-color: var(--danger); border-radius: 3px; }
 
 /* Inline expert panels (backups + statistics) — lay their sub-widgets out in a
    column; the expert menu's own scroll box handles overflow (no nested scroller). */

@@ -230,7 +230,12 @@ const RESULTS = {
   ],
   recent_copies: () => PROMPTS.slice(0, 4).map((p, i) => ({ id: p.id, ts: 1750000000 + i })),
   clip_inbox_list: () => [],
-  list_versions: () => [],
+  // P31: two snapshots for p6, each one word off from the next, so the diff
+  // view has something real to highlight (list_versions is newest-first).
+  list_versions: (a) => (a && a.promptId === "p6" ? [
+    { id: 2, ts: 1700000200, name: "Prompt 7", text: "Example draft body number 7." },
+    { id: 1, ts: 1700000100, name: "Prompt 7", text: "Example draft text number 7." },
+  ] : []),
   missing_files: () => [],
   has_backup_password: () => true,
   // One real group, so the duplicate cards actually render and the layout scan has

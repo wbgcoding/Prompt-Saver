@@ -1391,6 +1391,35 @@ PROBE = """
       const csOff = getComputedStyle(qgEl);
       if (csOff.opacity !== '1') out.errors.push('the quick-grid control stays hidden after switching hover-only back off');
     }
+    // P31: version history shows a word diff against whatever this snapshot
+    // turned into next, not just the raw old text.
+    if (!await openEditor('p6')) {
+      out.errors.push('the version-history prompt did not open in the editor');
+    } else {
+      document.getElementById('modal-history-head').click();
+      await sleep(250);
+      const rows = [...document.querySelectorAll('#modal-history-body .hist-row')];
+      if (rows.length !== 2) {
+        out.errors.push('the history panel shows ' + rows.length + ' versions instead of 2');
+      } else {
+        // Newest row (id 2): "draft"->"prompt" against the live current text.
+        const newRowText = rows[0].querySelector('.hist-full').textContent;
+        if (!newRowText.includes('draft') || !newRowText.includes('prompt')) {
+          out.errors.push('the newest version diff is missing the expected words: ' + newRowText);
+        }
+        const newAdd = rows[0].querySelector('.diff-add'), newDel = rows[0].querySelector('.diff-del');
+        if (!newAdd || newAdd.textContent !== 'prompt') out.errors.push('the newest row does not mark "prompt" as added');
+        if (!newDel || newDel.textContent !== 'draft') out.errors.push('the newest row does not mark "draft" as removed');
+        // Oldest row (id 1): "text"->"body" against the next-newer snapshot.
+        const oldAdd = rows[1].querySelector('.diff-add'), oldDel = rows[1].querySelector('.diff-del');
+        if (!oldAdd || oldAdd.textContent !== 'body') out.errors.push('the oldest row does not mark "body" as added');
+        if (!oldDel || oldDel.textContent !== 'text') out.errors.push('the oldest row does not mark "text" as removed');
+      }
+      await click('modal-close-x');
+      await sleep(200);
+      const cmHist = document.getElementById('confirm-modal');
+      if (!cmHist.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+    }
     // Duplicates: its own dialog, reachable only from the expert menu, and the last
     // window of the main surface that no scan had ever opened.
     document.getElementById('settings').classList.remove('hidden');

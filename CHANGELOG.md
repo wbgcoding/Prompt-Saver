@@ -108,6 +108,9 @@ switch, most of it off until you turn it on.
 - Custom themes can be **exported to a file and imported back** — handy for
   sharing a theme or carrying it to another install. An imported theme is
   validated the same way a hand-typed one would be.
+- Version history now highlights **what actually changed** between two
+  versions — words added or removed — instead of just showing the raw old
+  text for you to compare by eye.
 - A backup is now either whole or absent: the snapshot is written under a
   temporary name and only then renamed, and a failed one leaves nothing behind.
 - "Duplicate" on a prompt's context menu now opens the same dialog as creating a
