@@ -477,6 +477,26 @@ PROBE = """
     await click('journal-btn');
     layoutScan('copy history');
     mustReach('copy history', '#journal .modal-head-actions > button');
+    // P55: an edit icon on each history row opens the editor without copying.
+    {
+      const jRow = document.querySelector('#journal-body .journal-item');
+      const jEdit = jRow && jRow.querySelector('.lib-edit');
+      if (!jEdit) {
+        out.errors.push('a history row has no edit icon');
+      } else {
+        window.__SMOKE_CALLS__ = [];
+        jEdit.click();
+        await sleep(250);
+        const modalEl = document.getElementById('modal');
+        if (!modalEl || modalEl.classList.contains('hidden')) {
+          out.errors.push('the edit icon in the history did not open the editor');
+        } else if (window.__SMOKE_CALLS__.includes('copy_text') || window.__SMOKE_CALLS__.includes('copy_prompt')) {
+          out.errors.push('clicking the history edit icon also copied the prompt');
+        }
+        document.getElementById('modal-close-x').click();
+        await sleep(200);
+      }
+    }
     await click('journal-close');
     const tile = document.querySelector('#grid .tile');
     if (tile) { tile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })); await sleep(150); }

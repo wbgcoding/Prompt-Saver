@@ -7838,6 +7838,14 @@ function journalRow(p, meta, onClick) {
   }
   row.append(thumbEl(p), body);
   row.addEventListener("click", onClick);
+  // P55: edit straight from the history — same icon/pattern as the library row.
+  const edit = document.createElement("span");
+  edit.className = "icon-btn lib-edit";
+  edit.title = t("edit");
+  edit.innerHTML = ICON_EDIT;
+  edit.addEventListener("pointerdown", (e) => e.stopPropagation());
+  edit.addEventListener("click", (e) => { e.stopPropagation(); editPrompt(p.id); });
+  row.appendChild(edit);
   return row;
 }
 
