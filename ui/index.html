@@ -498,6 +498,26 @@
   </div>
 
   <!-- F1 tag manager: rename / recolor / delete, opened from the library filter row -->
+  <!-- 88: what an import would actually do, before it touches anything -->
+  <div id="import-preview-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal modal-narrow">
+      <div class="modal-titlebar">
+        <h2 class="modal-title" data-i18n="importPreviewTitle">Import preview</h2>
+        <button id="import-preview-close" class="icon-btn modal-x" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <p id="import-preview-summary" class="modal-hint"></p>
+      <div id="import-preview-list" class="import-preview-list"></div>
+      <div class="modal-actions">
+        <button id="import-preview-cancel" class="ghost-btn" data-i18n="cancel">Cancel</button>
+        <button id="import-preview-confirm" class="primary-btn" data-i18n="importConfirm">Import</button>
+      </div>
+    </div>
+  </div>
+
   <div id="tag-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal modal-narrow">
       <div class="modal-head">

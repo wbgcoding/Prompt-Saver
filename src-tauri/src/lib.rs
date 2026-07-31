@@ -9387,44 +9387,87 @@ fn parse_csv_data(content: &str) -> ImportData {
     data
 }
 
-// Async: parsing + persisting an import stays off the UI thread.
+// The signature a prompt is de-duplicated by, on both the preview and the real
+// import — the two must always agree, or the preview's "new"/"duplicate" label
+// could lie about what actually happens on confirm.
+fn import_sig(name: &str, text: &str, file: &str, image: &str, copy: bool) -> String {
+    format!("{name}\u{1}{text}\u{1}{file}\u{1}{image}\u{1}{copy}")
+}
+
+fn parse_import_file(path: &std::path::Path) -> Result<ImportData, String> {
+    let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
+    let is_csv = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase() == "csv")
+        .unwrap_or(false);
+    let data = if is_csv { parse_csv_data(&content) } else { parse_txt(&content) };
+    if data.prompts.is_empty() {
+        return Err(format!("no {} found", brand::ITEM_PLURAL));
+    }
+    Ok(data)
+}
+
+// 88: what an import WOULD do, without touching the store — the file is picked
+// here, and its path travels back so the confirm step (import_prompts) can
+// re-read the SAME file without a second file dialog.
+#[derive(Serialize)]
+struct ImportPreviewItem {
+    name: String,
+    duplicate: bool,
+}
+#[derive(Serialize)]
+struct ImportPreview {
+    path: String,
+    items: Vec<ImportPreviewItem>,
+}
 #[tauri::command]
-async fn import_prompts(app: AppHandle, state: State<'_, Db>) -> Result<usize, String> {
+async fn preview_import(app: AppHandle, state: State<'_, Db>) -> Result<ImportPreview, String> {
     let file = file_dialog(&app)
         .add_filter(&title_case(brand::ITEM_PLURAL), &["csv", "txt"])
         .pick_file();
     let Some(path) = file else {
         return Err("canceled".to_string());
     };
-    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let is_csv = path
-        .extension()
-        .map(|e| e.to_string_lossy().to_lowercase() == "csv")
-        .unwrap_or(false);
-    let data = if is_csv { parse_csv_data(&content) } else { parse_txt(&content) };
+    let data = parse_import_file(&path)?;
+    let store = lock(&state);
+    let mut seen: std::collections::HashSet<String> = store
+        .prompts
+        .iter()
+        .map(|p| import_sig(&p.name, &p.text, &p.file_path, &p.image, p.copy_image))
+        .collect();
+    let items = data
+        .prompts
+        .into_iter()
+        .map(|item| {
+            let dup = !seen.insert(import_sig(&item.name, &item.text, &item.file_path, &item.image, item.copy_image));
+            ImportPreviewItem { name: item.name, duplicate: dup }
+        })
+        .collect();
+    Ok(ImportPreview { path: path.to_string_lossy().to_string(), items })
+}
 
-    if data.prompts.is_empty() {
-        return Err(format!("no {} found", brand::ITEM_PLURAL));
-    }
+// Async: parsing + persisting an import stays off the UI thread. `path` comes
+// from a prior preview_import call (88) — never a fresh file dialog here, so
+// confirming a preview can never silently import a DIFFERENT file.
+#[tauri::command]
+async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String) -> Result<usize, String> {
+    let data = parse_import_file(std::path::Path::new(&path))?;
 
     // Prompts-only import: never touch app settings, views or layout, even if an
     // older export file still carries those blocks (they are parsed but ignored).
     // Imported prompts are appended, but an entry identical to one already present
     // is skipped so the original is kept (no duplicate buttons).
     let mut store = lock(&state);
-    let sig = |name: &str, text: &str, file: &str, image: &str, copy: bool| {
-        format!("{name}\u{1}{text}\u{1}{file}\u{1}{image}\u{1}{copy}")
-    };
     let mut seen: std::collections::HashSet<String> = store
         .prompts
         .iter()
-        .map(|p| sig(&p.name, &p.text, &p.file_path, &p.image, p.copy_image))
+        .map(|p| import_sig(&p.name, &p.text, &p.file_path, &p.image, p.copy_image))
         .collect();
     let mut count = 0usize;
     // Grows while importing so tags introduced by the file itself also settle on one casing.
     let mut known = canonical_tags(&store.prompts);
     for item in data.prompts {
-        if !seen.insert(sig(&item.name, &item.text, &item.file_path, &item.image, item.copy_image)) {
+        if !seen.insert(import_sig(&item.name, &item.text, &item.file_path, &item.image, item.copy_image)) {
             continue; // duplicate of an existing (or earlier imported) prompt
         }
         // A malformed tag in an imported file must not abort the whole import.
@@ -10509,6 +10552,7 @@ pub fn run() {
             set_autostart,
             set_start_minimized,
             export_prompts,
+            preview_import,
             import_prompts,
             export_all,
             import_all,

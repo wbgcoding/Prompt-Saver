@@ -240,6 +240,15 @@ const RESULTS = {
   // None of these three are favorited (favorite: i % 5 === 0) — favorites float
   // to the top independently of this sort, which would otherwise confuse the test.
   last_edited_map: () => ({ p3: 3000, p1: 2000, p9: 1000 }),
+  // 88: two new prompts, one duplicate of something already in the library.
+  preview_import: () => ({
+    path: "C:\\fake\\import.csv",
+    items: [
+      { name: "New A", duplicate: false },
+      { name: "Old B", duplicate: true },
+      { name: "New C", duplicate: false },
+    ],
+  }),
   list_backups: () => [
     { name: "2026-07-25_18-30-00", size: 812345, prompts: 12, names: ["Draft reply", "Meeting notes"] },
     { name: "2026-07-24_09-05-00", size: 654321, prompts: null, names: [] },

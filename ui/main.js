@@ -8576,9 +8576,67 @@ async function runExport(format) {
   }
 }
 
-async function runImport() {
+// 88: shows what an import would do (new vs. skipped-as-duplicate) before it
+// touches anything. Resolves the picked-file path if the user confirms, or
+// null if they canceled anywhere along the way (no file picked, no items,
+// or the preview itself dismissed).
+async function runImportPreview() {
+  let preview;
   try {
-    const count = await withDialog(() => invoke("import_prompts"));
+    preview = await withDialog(() => invoke("preview_import"));
+  } catch (err) {
+    if (String(err) !== "canceled") toast(t("importFailed"));
+    return null;
+  }
+  if (!preview) return null;
+  const newCount = preview.items.filter((i) => !i.duplicate).length;
+  const dupCount = preview.items.length - newCount;
+  $("import-preview-summary").textContent = t("importPreviewSummary")
+    .replace("{new}", newCount).replace("{dup}", dupCount);
+  const list = $("import-preview-list");
+  list.innerHTML = "";
+  for (const item of preview.items) {
+    const row = document.createElement("div");
+    row.className = "import-preview-row" + (item.duplicate ? " dup" : "");
+    const name = document.createElement("span");
+    name.className = "import-preview-name";
+    name.textContent = item.name;
+    row.appendChild(name);
+    if (item.duplicate) {
+      const badge = document.createElement("span");
+      badge.className = "import-preview-badge";
+      badge.textContent = t("importPreviewDuplicate");
+      row.appendChild(badge);
+    }
+    list.appendChild(row);
+  }
+  const modal = $("import-preview-modal");
+  const confirmBtn = $("import-preview-confirm");
+  confirmBtn.disabled = newCount === 0;
+  modal.classList.remove("hidden");
+  const confirmed = await new Promise((resolve) => {
+    const done = (v) => {
+      modal.classList.add("hidden");
+      confirmBtn.removeEventListener("click", onOk);
+      $("import-preview-cancel").removeEventListener("click", onCancel);
+      $("import-preview-close").removeEventListener("click", onCancel);
+      resolve(v);
+    };
+    const onOk = () => done(true);
+    const onCancel = () => done(false);
+    confirmBtn.addEventListener("click", onOk);
+    $("import-preview-cancel").addEventListener("click", onCancel);
+    $("import-preview-close").addEventListener("click", onCancel);
+  });
+  return confirmed ? preview.path : null;
+}
+async function runImport() {
+  const path = await runImportPreview();
+  if (!path) return;
+  try {
+    // No withDialog here — import_prompts re-reads the already-picked file, it
+    // never opens a native dialog itself (that guard is preview_import's job).
+    const count = await invoke("import_prompts", { path });
     if (count == null) return;
     await renderGrid(); // refreshes prompts AND settings
     // Imported preferences apply on the spot — no restart needed.

@@ -3556,6 +3556,13 @@ button.tag-chip:hover { border-color: var(--accent); }
 .tag-manage-count { flex: 0 0 auto; min-width: 22px; text-align: right; color: var(--muted); font-size: 12px; }
 .tag-manage-row .ghost-btn { flex: 0 0 auto; padding: 3px 10px; font-size: 12px; }
 
+/* 88: import preview — a plain scrollable list, duplicates dimmed and badged. */
+.import-preview-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; min-height: 0; }
+.import-preview-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 6px; border-radius: 6px; }
+.import-preview-row.dup { opacity: 0.55; }
+.import-preview-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.import-preview-badge { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
+
 /* ---- F3 custom themes ---- */
 /* The editor button sits right of the theme dropdown, which gives up the width. */
 .theme-row { display: flex; align-items: center; gap: 6px; }

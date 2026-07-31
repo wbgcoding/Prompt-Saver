@@ -1372,6 +1372,36 @@ PROBE = """
         await sleep(100);
       }
     }
+    // 88: import preview — shows new vs. duplicate before anything is imported.
+    // Cancel only here (not confirm): confirming would push fake prompts into
+    // the shared fixture and could throw off every check after this one in the
+    // same probe run.
+    {
+      const importBtn = document.getElementById('import-btn');
+      if (!importBtn) {
+        out.errors.push('the settings page has no import button');
+      } else {
+        importBtn.click();
+        await sleep(300);
+        const modal = document.getElementById('import-preview-modal');
+        if (!modal || modal.classList.contains('hidden')) {
+          out.errors.push('the import preview did not open');
+        } else {
+          const rows = [...document.querySelectorAll('#import-preview-list .import-preview-row')];
+          if (rows.length !== 3) out.errors.push('the import preview lists ' + rows.length + ' rows, expected 3');
+          const dupRows = rows.filter(r => r.classList.contains('dup'));
+          if (dupRows.length !== 1) out.errors.push('the import preview marks ' + dupRows.length + ' rows as duplicate, expected 1');
+          if (dupRows.length && !dupRows[0].querySelector('.import-preview-badge')) {
+            out.errors.push('a duplicate row has no badge');
+          }
+          const confirmBtn = document.getElementById('import-preview-confirm');
+          if (confirmBtn.disabled) out.errors.push('the import preview confirm button is disabled although 2 items are new');
+          document.getElementById('import-preview-cancel').click();
+          await sleep(200);
+          if (!modal.classList.contains('hidden')) out.errors.push('canceling the import preview did not close it');
+        }
+      }
+    }
     const DRAG_OUT = 'Drag prompt into another app';
     const offTile = gridTile('p1');
     if (offTile) {
