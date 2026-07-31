@@ -2055,6 +2055,20 @@ fn db_list_versions(conn: &Connection, prompt_id: &str) -> Vec<PromptVersion> {
     }
     out
 }
+// 17: one prompt's last real content edit (name or text change — the only kind
+// that gets a version row, see update_prompt) is the newest `ts` it has in
+// prompt_versions. Bundled for every prompt at once (one GROUP BY, not an N+1
+// query per prompt) — a prompt absent from the result has never had a version
+// row: history was off for all its edits, or it was never edited since creation.
+fn db_last_edited(conn: &Connection) -> std::collections::HashMap<String, u64> {
+    let mut out = std::collections::HashMap::new();
+    if let Ok(mut stmt) = conn.prepare("SELECT prompt_id, MAX(ts) FROM prompt_versions GROUP BY prompt_id") {
+        if let Ok(rows) = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))) {
+            out.extend(rows.flatten());
+        }
+    }
+    out
+}
 fn db_get_version(conn: &Connection, id: i64) -> Option<(String, String, String)> {
     conn.query_row(
         "SELECT prompt_id, name, text FROM prompt_versions WHERE id = ?1",
@@ -3788,6 +3802,13 @@ async fn update_prompt(
 #[tauri::command]
 async fn list_versions(app: AppHandle, prompt_id: String) -> Result<Vec<PromptVersion>, String> {
     Ok(db_conn(&app).map(|c| db_list_versions(&c, &prompt_id)).unwrap_or_default())
+}
+
+// 17: the library's "last edited" sort mode. A prompt missing from the map has
+// never had a version row (see db_last_edited) — the frontend sorts those last.
+#[tauri::command]
+async fn last_edited_map(app: AppHandle) -> Result<std::collections::HashMap<String, u64>, String> {
+    Ok(db_conn(&app).map(|c| db_last_edited(&c)).unwrap_or_default())
 }
 
 // F7: restore a snapshot. The current state is snapshotted first, so a restore is
@@ -10382,6 +10403,7 @@ pub fn run() {
             purge_prompt,
             empty_trash,
             list_versions,
+            last_edited_map,
             restore_version,
             usage_stats,
             find_duplicates,

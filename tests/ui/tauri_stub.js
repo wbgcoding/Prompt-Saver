@@ -235,6 +235,11 @@ const RESULTS = {
   // One snapshot carries its prompt count and names (61), one is from an older
   // build and has neither — the list has to show both without a gap in the row.
   open_backups_folder: () => null,
+  // 17: p3 edited most recently, then p1, then p9 — everything else has no
+  // version row (never content-edited, or history was off) and sorts last.
+  // None of these three are favorited (favorite: i % 5 === 0) — favorites float
+  // to the top independently of this sort, which would otherwise confuse the test.
+  last_edited_map: () => ({ p3: 3000, p1: 2000, p9: 1000 }),
   list_backups: () => [
     { name: "2026-07-25_18-30-00", size: 812345, prompts: 12, names: ["Draft reply", "Meeting notes"] },
     { name: "2026-07-24_09-05-00", size: 654321, prompts: null, names: [] },

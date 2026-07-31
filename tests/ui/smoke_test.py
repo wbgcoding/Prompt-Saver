@@ -464,6 +464,32 @@ PROBE = """
     await click('library-btn');
     layoutScan('library');
     mustReach('library', '#library .modal-head-actions > button');
+    // 17: "last edited" sort — from the last_edited_map fixture (p3 newest, then
+    // p1, then p9; everything else — including the favorited p0/p5/p10, which
+    // float to the top independently of this sort — has no version row and
+    // sorts to the end).
+    {
+      const sortSel = document.getElementById('library-sort');
+      if (!sortSel || ![...sortSel.options].some(o => o.value === 'lastEdited')) {
+        out.errors.push('the library sort dropdown has no "last edited" option');
+      } else {
+        sortSel.value = 'lastEdited';
+        sortSel.dispatchEvent(new Event('change'));
+        await sleep(250);
+        const order = [...document.querySelectorAll('#library-list .lib-item')].map(el => el.dataset.id);
+        const idx = (id) => order.indexOf(id);
+        if (idx('p3') < 0 || idx('p1') < 0 || idx('p9') < 0) {
+          out.errors.push('"last edited" sort is missing a fixture prompt: ' + order.join(','));
+        } else if (!(idx('p3') < idx('p1') && idx('p1') < idx('p9'))) {
+          out.errors.push('"last edited" sort order is wrong: ' + order.join(','));
+        } else if (idx('p2') >= 0 && idx('p2') < idx('p9')) {
+          out.errors.push('a prompt with no edit history sorted before one that has it');
+        }
+        sortSel.value = 'default';
+        sortSel.dispatchEvent(new Event('change'));
+        await sleep(200);
+      }
+    }
     // Tags: the filter row lists them, a chip narrows the list, the manager opens.
     const chips = [...document.querySelectorAll('#library-tagbar .tag-filter')];
     if (chips.length < 2) {

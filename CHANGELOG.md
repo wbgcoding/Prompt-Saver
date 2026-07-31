@@ -102,6 +102,8 @@ Everything new is an expert-menu switch, most of it off until you turn it on.
   shifts underneath you.
 - The backup list now shows what is actually in each snapshot: click the
   prompt count to reveal the names.
+- The library can now be sorted by "last edited", alongside the existing name/
+  most-used/recently-used options.
 - The changelog in the update dialog is laid out instead of dumped: headings,
   bullets, tables and highlighted terms, in a box that takes the height of the
   release notes and scrolls only once they outgrow the window.

@@ -6779,11 +6779,18 @@ async function confirmModal() {
   // P89: the same near-duplicate check the import path already runs, now also
   // after creating a prompt by hand — before closeModal() clears modalState.
   const wasCreate = modalState.mode === "create" || modalState.mode === "image-create" || modalState.mode === "file-create";
+  const wasEdit = modalState.mode === "edit";
   closeModal();
   await renderGrid();
   if (saved && targetCell) await placeTile(saved.id, targetCell[0], targetCell[1]);
   pollMissingFiles(); // a replaced file clears the error immediately
-  if (!libraryEl.classList.contains("hidden")) renderLibrary();
+  if (!libraryEl.classList.contains("hidden")) {
+    // 17: an edit MAY have just changed this prompt's "last edited" rank — the
+    // library stayed open underneath the modal, so the usual refresh-on-open
+    // (library-btn click) never fired for it.
+    if (wasEdit && flag("promptHistory")) await refreshLastEdited();
+    renderLibrary();
+  }
   if (saved && wasCreate) maybeDupImportToast();
 }
 
@@ -7876,10 +7883,22 @@ function setLibColor(color) {
   setActiveFilter($("library-colors"), ".lib-color", "color", color);
 }
 
+// 17: "last edited" per prompt — from prompt_versions (a version row is only
+// ever written on a real name/text change, see update_prompt), refetched
+// whenever the library opens or an edit lands while it's already open. A
+// prompt absent from the map has no version row (history off, or never
+// content-edited since creation) and sorts to the end, same as an unused
+// prompt already does under "most used"/"recently used" above.
+let lastEdited = {};
+async function refreshLastEdited() {
+  if (!flag("promptHistory")) { lastEdited = {}; return; }
+  try { lastEdited = await invoke("last_edited_map"); } catch { lastEdited = {}; }
+}
 // F10 smart sort: order the library list. The usage-based options gate on smartSort.
 function libSortMode() {
   const raw = settings.ui_texts?.librarySort || "default";
   if ((raw === "mostUsed" || raw === "recentUsed") && !flag("smartSort")) return "default";
+  if (raw === "lastEdited" && !flag("promptHistory")) return "default";
   return raw;
 }
 function sortLibraryItems(items) {
@@ -7898,6 +7917,8 @@ function sortLibraryItems(items) {
     items.sort((a, b) => ((settings.usage?.[b.id] || 0) - (settings.usage?.[a.id] || 0)) || byName(a, b));
   } else if (mode === "recentUsed") {
     items.sort((a, b) => ((settings.last_used?.[b.id] || 0) - (settings.last_used?.[a.id] || 0)) || byName(a, b));
+  } else if (mode === "lastEdited") {
+    items.sort((a, b) => ((lastEdited[b.id] || 0) - (lastEdited[a.id] || 0)) || byName(a, b));
   }
 }
 function fillLibrarySort() {
@@ -7905,6 +7926,7 @@ function fillLibrarySort() {
   if (!sel) return;
   const opts = [["default", "sortDefault"], ["name", "sortName"]];
   if (flag("smartSort")) opts.push(["mostUsed", "sortMostUsed"], ["recentUsed", "sortRecentUsed"]);
+  if (flag("promptHistory")) opts.push(["lastEdited", "sortLastEdited"]);
   sel.innerHTML = "";
   for (const [v, k] of opts) {
     const o = document.createElement("option");
@@ -9086,7 +9108,8 @@ function bind() {
   $("show-bottom").addEventListener("click", () => setBars(settings.show_header !== false, true));
 
   buildColorFilter($("library-colors"), libColor);
-  $("library-btn").addEventListener("click", () => {
+  $("library-btn").addEventListener("click", async () => {
+    await refreshLastEdited();
     libQuery = "";
     $("library-q").value = "";
     // The type pick is remembered per window; search, colour and favourites are not.
