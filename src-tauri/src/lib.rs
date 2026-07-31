@@ -4048,15 +4048,18 @@ async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Result<(), Str
     {
         let mut store = lock(&state);
         store.prompts.clear();
+        store.trash.clear(); // 91: a data wipe must not leave trashed prompts behind
         store.prompts_locked = false; // explicit wipe overrides the decrypt-failure lock
         store.normalize_folders(); // F25: no prompts left, so no folder survives
         save_prompts(&app, &store);
+        save_trash(&app, &store);
         save_settings(&app, &store.settings);
         // Data-only wipe: keep every setting, drop the derived data tables.
         if let Some(c) = db_conn(&app) {
             let _ = c.execute("DELETE FROM prompt_versions", []); // F7 history
             let _ = c.execute("DELETE FROM copy_log", []); // copy history
             let _ = c.execute("DELETE FROM clip_inbox", []); // F21 inbox
+            let _ = c.execute("DELETE FROM trash", []); // 91: trashed prompts
         }
     }
     rearm_hotkeys(&app); // F20: no prompts left to keep accelerators bound
@@ -10590,11 +10593,13 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
             "CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+             CREATE TABLE trash(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
              CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
              CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
              CREATE TABLE prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL);
              CREATE TABLE clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);
              INSERT INTO prompts VALUES('a', 0, '{}');
+             INSERT INTO trash VALUES('b', 0, '{}');
              INSERT INTO meta VALUES('settings', '{\"theme\":\"ocean\"}');
              INSERT INTO copy_log VALUES(1, 'a');
              INSERT INTO prompt_versions(prompt_id, ts, name, text) VALUES('a', 1, 'n', 't');
@@ -10602,7 +10607,7 @@ mod tests {
         )
         .unwrap();
         // Exactly the statements delete_all_data issues.
-        for table in ["prompt_versions", "copy_log", "clip_inbox"] {
+        for table in ["prompt_versions", "copy_log", "clip_inbox", "trash"] {
             conn.execute(&format!("DELETE FROM {table}"), []).unwrap();
         }
         conn.execute("DELETE FROM prompts", []).unwrap();
@@ -10610,6 +10615,7 @@ mod tests {
             conn.query_row(&format!("SELECT COUNT(*) FROM {t}"), [], |r| r.get(0)).unwrap()
         };
         assert_eq!(count("prompts"), 0);
+        assert_eq!(count("trash"), 0, "a data wipe must not leave trashed prompts behind");
         assert_eq!(count("copy_log"), 0);
         assert_eq!(count("prompt_versions"), 0);
         assert_eq!(count("clip_inbox"), 0);
