@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Quick launcher</title>
+  <link rel="stylesheet" href="styles/floating.css" />
+</head>
+<body class="launcher-body">
+  <!-- 100: opened by the global hotkey. A search box and a result list, nothing
+       else — picking a result runs the exact same "copy from outside the grid"
+       path the tray menu already uses, so every rule about what a copy MEANS
+       (placeholders, cooldown, chains) stays in main.js, never duplicated here. -->
+  <div id="card" class="launcher-card">
+    <input id="search" class="launcher-search" type="text" autocomplete="off" spellcheck="false" />
+    <div id="results" class="launcher-results"></div>
+    <div id="empty" class="launcher-empty hidden"></div>
+  </div>
+
+  <script type="module" src="launcher.js"></script>
+</body>
+</html>

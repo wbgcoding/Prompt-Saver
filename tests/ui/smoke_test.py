@@ -2609,6 +2609,54 @@ VARS_PROBE = """
 """
 
 
+LAUNCHER_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  try {
+    await sleep(500);
+    const search = document.getElementById('search');
+    if (!search.placeholder.trim()) errs.push('the search field has no placeholder');
+    const rows = () => [...document.querySelectorAll('#results .launcher-row')];
+    if (!rows().length) errs.push('the empty-query default list shows nothing');
+    if (rows().length > 8) errs.push('the default list is not capped at 8');
+    // A query nothing matches shows the empty-state text, not a stale row.
+    search.value = 'zzzznomatch';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(50);
+    if (rows().length) errs.push('a query with no matches still shows rows');
+    const empty = document.getElementById('empty');
+    if (empty.classList.contains('hidden') || !empty.textContent.trim()) {
+      errs.push('the no-matches state has no visible message');
+    }
+    // p1's TEXT (not its name) carries the only "Translate" in the fixture, so a
+    // hit here proves the body is searched too, not just the name.
+    search.value = 'Translate';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(50);
+    if (rows().length !== 1) errs.push('searching "Translate" found ' + rows().length + ' rows instead of 1');
+    else if (rows()[0].dataset.id !== 'p1') errs.push('the wrong prompt matched: ' + rows()[0].dataset.id);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await sleep(50);
+    if (window.__LAUNCHER_SELECTED__ !== 'p1') {
+      errs.push('Enter did not select the highlighted row: ' + window.__LAUNCHER_SELECTED__);
+    }
+    // "One action ever" — same guard vars.js uses (see its own SENTINEL check): a
+    // stray Escape after a real selection must never ALSO fire launcher_close.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await sleep(50);
+    if (window.__LAUNCHER_CLOSED__) errs.push('closing fired even though a selection already had');
+  } catch (e) { errs.push('probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 def unescape(s):
     for a, b in (("&quot;", '"'), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
         s = s.replace(a, b)
@@ -2678,7 +2726,8 @@ def main():
                 ("floating.html", (240, 60), FLOAT_PROBE, 15000),
                 ("snip.html", (1280, 800), PICK_PROBE, 20000),
                 ("folder.html", (520, 420), FOLDER_PROBE, 15000),
-                ("vars.html", (340, 250), VARS_PROBE, 15000)):
+                ("vars.html", (340, 250), VARS_PROBE, 15000),
+                ("launcher.html", (560, 420), LAUNCHER_PROBE, 15000)):
             side = tmp / "ui" / name
             side.write_text(
                 side.read_text(encoding="utf-8")

@@ -39,13 +39,40 @@ fn show_main(app: &AppHandle) {
     }
 }
 
-// Global-hotkey action: bring the window forward and tell the UI to open the
-// quick-launcher (the prompt library with its search focused).
+// 100: global-hotkey action — open the standalone quick-launcher (fuzzy search,
+// instant copy) instead of raising the main window. Replaces any launcher already
+// open, so a second hotkey press never leaves two fighting over the same focus.
 fn summon_launcher(app: &AppHandle) {
-    show_main(app);
-    if let Some(win) = app.get_webview_window("main") {
-        let _ = win.emit("summon-launcher", ());
+    if let Some(win) = app.get_webview_window(LAUNCHER_WIN_LABEL) {
+        let _ = win.close();
     }
+    let excluded = {
+        let state: State<Db> = app.state();
+        let store = lock(&state);
+        capture_excluded(&store.settings)
+    };
+    let rect = launcher_rect(app);
+    let win = match WebviewWindowBuilder::new(app, LAUNCHER_WIN_LABEL, WebviewUrl::App("launcher.html".into()))
+        .title(brand::DISPLAY_NAME)
+        .inner_size(LAUNCHER_WIN_W, LAUNCHER_WIN_H) // placeholder: set_bounds_phys owns the real box
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .shadow(false)
+        .focused(true)
+        .visible(false) // sized in physical pixels first, so nothing flashes at the wrong size
+        .build()
+    {
+        Ok(w) => w,
+        Err(_) => return,
+    };
+    let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
+    set_capture_exclusion(&win, excluded);
+    set_bounds_phys(&win, rect);
+    let _ = win.show();
+    let _ = win.set_focus();
 }
 
 // ---------- Global shortcuts: the app hotkey + one per prompt (F20) ----------
@@ -455,6 +482,30 @@ impl VarPrompt {
     fn lock(&self) -> std::sync::MutexGuard<'_, Option<(u64, String)>> {
         self.pending.lock().unwrap_or_else(|e| e.into_inner())
     }
+}
+
+// 100: quick-launcher window (fuzzy search, instant copy).
+const LAUNCHER_WIN_LABEL: &str = "launcher";
+const LAUNCHER_WIN_W: f64 = 560.0; // logical px; keep in sync with .launcher-card in floating.css
+const LAUNCHER_WIN_H: f64 = 420.0;
+
+// Centred horizontally on the cursor's monitor, sitting in the upper third the way
+// every other quick-launcher (Spotlight, PowerToys Run, Alfred) does — a search box
+// that pops up at screen centre reads as a dialog, not a launcher.
+fn launcher_rect(app: &AppHandle) -> Rect {
+    let cursor = app.cursor_position().unwrap_or(PhysicalPosition::new(0.0, 0.0));
+    let work = work_rect_at(app, cursor.x, cursor.y);
+    let dpi = app
+        .get_webview_window("main")
+        .and_then(|w| w.monitor_from_point(cursor.x, cursor.y).ok().flatten())
+        .map(|m| m.scale_factor())
+        .unwrap_or(1.0);
+    let w = LAUNCHER_WIN_W * dpi;
+    let h = LAUNCHER_WIN_H * dpi;
+    let x = work.x + (work.w - w) / 2.0;
+    let y = work.y + (work.h - h) * 0.28;
+    let (x, y) = clamp_to_work(work, w, h, x, y);
+    Rect { x, y, w, h }
 }
 
 // Window box for `rows` fields, centred on the cursor and kept inside that monitor's
@@ -970,6 +1021,26 @@ fn fire_tray_copy(app: &AppHandle, id: &str) {
     let _ = app.emit_to("main", "prompt-tray-copy", id.to_string());
 }
 
+// 100: a result picked in the quick-launcher runs the very same activation the tray
+// does (fire_tray_copy) -- placeholder dialog, cooldown, chains, everything already
+// tested for "a copy that started outside the grid" -- then the launcher itself closes.
+#[tauri::command]
+fn launcher_select(app: AppHandle, id: String) -> Result<(), String> {
+    fire_tray_copy(&app, &id);
+    if let Some(win) = app.get_webview_window(LAUNCHER_WIN_LABEL) {
+        let _ = win.close();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn launcher_close(app: AppHandle) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window(LAUNCHER_WIN_LABEL) {
+        let _ = win.close();
+    }
+    Ok(())
+}
+
 // ---------- Data model ----------
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -1283,7 +1354,11 @@ impl Default for Settings {
             autostart: false,
             start_minimized: false,
             always_on_top: false,
-            hotkey: String::new(),
+            // 100: a fresh install ships with the quick-launcher already bound, so the
+            // feature is discoverable without a trip to settings. An EXISTING install's
+            // stored value (including a deliberately empty/off one) is untouched --
+            // #[serde(default)] only ever fills in a value that was never written.
+            hotkey: "CommandOrControl+Alt+P".to_string(),
             auto_update: true,
             skipped_versions: Vec::new(),
             ui_flags: HashMap::new(),
@@ -9969,6 +10044,8 @@ pub fn run() {
             delete_custom_theme,
             export_custom_theme,
             import_custom_theme,
+            launcher_select,
+            launcher_close,
             copy_prompt,
             copy_text,
             clipboard_text,
@@ -10486,6 +10563,15 @@ mod tests {
         ] {
             assert_eq!(reason(s), None, "wrongly refused: {s}");
         }
+    }
+
+    // 100: the shipped default must actually register, or every fresh install would
+    // silently lose its launcher hotkey the moment rearm_hotkeys() runs at startup
+    // (an unparseable/blocked default gets cleared back to "", exactly like a bad
+    // value a user typed in by hand -- see rearm_hotkeys' app_ok branch).
+    #[test]
+    fn the_default_hotkey_is_not_refused() {
+        assert_eq!(accel_error(&Settings::default().hotkey).err(), None);
     }
 
     // The blocklist is authoritative wherever a binding can enter the store.

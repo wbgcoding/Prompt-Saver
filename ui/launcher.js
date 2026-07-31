@@ -1,0 +1,160 @@
+// 100: standalone quick-launcher, opened by the global hotkey. Fuzzy search over
+// every prompt, Enter/click copies. Picking a result only ever tells the backend
+// which id was chosen (launcher_select) — the backend runs the exact same
+// "copy from outside the grid" path the tray menu already uses (fire_tray_copy),
+// so placeholder dialogs, cooldown, chains and recording stay in main.js, not
+// duplicated here.
+import { applyFloatTheme } from "./floattheme.js";
+// Static, not dynamic: this window has to boot instantly (it opens on a hotkey
+// press) and unlike floating.js's pill, it needs the translated placeholder/empty
+// text from the very first frame, not after a lazy follow-up load.
+import { FLOAT_TXT } from "./i18n.js";
+import { applyTerms } from "./terms.js";
+
+const { invoke } = window.__TAURI__.core;
+const { listen } = window.__TAURI__.event;
+
+const cardEl = document.getElementById("card");
+const searchEl = document.getElementById("search");
+const resultsEl = document.getElementById("results");
+const emptyEl = document.getElementById("empty");
+
+let TXT = null;
+let prompts = [];
+let usage = {};
+let lastUsed = {};
+let active = -1; // keyboard-highlighted row index into the CURRENT rendered list
+let closed = false;
+
+const MAX_RESULTS = 8;
+const PREVIEW_LEN = 70;
+
+function close() {
+  if (closed) return;
+  closed = true;
+  invoke("launcher_close").catch(() => {});
+}
+
+function select(id) {
+  if (closed) return;
+  closed = true;
+  invoke("launcher_select", { id }).catch(() => {});
+}
+
+// Case-insensitive substring score: a name hit ranks far above a body hit, an
+// earlier match ranks above a later one. No dependency, no fuzzy typo-tolerance —
+// this is a quick filter, not the library's full search.
+function score(p, q) {
+  const name = (p.name || "").toLowerCase();
+  const text = (p.text || "").toLowerCase();
+  const ni = name.indexOf(q);
+  if (ni === 0) return 1000;
+  if (ni > 0) return 500 - ni;
+  const ti = text.indexOf(q);
+  if (ti >= 0) return 100 - Math.min(ti, 90);
+  return -1;
+}
+
+function defaultList() {
+  return [...prompts]
+    .sort((a, b) => (usage[b.id] || 0) - (usage[a.id] || 0) || (lastUsed[b.id] || 0) - (lastUsed[a.id] || 0))
+    .slice(0, MAX_RESULTS);
+}
+
+function matchList(q) {
+  return prompts
+    .map((p) => [p, score(p, q)])
+    .filter(([, s]) => s >= 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, MAX_RESULTS)
+    .map(([p]) => p);
+}
+
+function renderRow(p, i) {
+  const row = document.createElement("div");
+  row.className = "launcher-row" + (i === active ? " active" : "");
+  row.dataset.id = p.id;
+  if (p.color) row.style.setProperty("--row-color", p.color);
+  const name = document.createElement("span");
+  name.className = "launcher-row-name";
+  name.textContent = p.name || "";
+  row.appendChild(name);
+  const preview = (p.text || "").replace(/\s+/g, " ").trim();
+  if (preview) {
+    const prev = document.createElement("span");
+    prev.className = "launcher-row-preview";
+    prev.textContent = preview.length > PREVIEW_LEN ? preview.slice(0, PREVIEW_LEN) + "…" : preview;
+    row.appendChild(prev);
+  }
+  row.addEventListener("mousedown", (e) => e.preventDefault()); // keep focus in the search field
+  row.addEventListener("click", () => select(p.id));
+  row.addEventListener("mouseenter", () => setActive(i));
+  return row;
+}
+
+function render() {
+  const q = searchEl.value.trim().toLowerCase();
+  const list = q ? matchList(q) : defaultList();
+  active = list.length ? 0 : -1;
+  resultsEl.innerHTML = "";
+  for (const [i, p] of list.entries()) resultsEl.appendChild(renderRow(p, i));
+  emptyEl.classList.toggle("hidden", list.length > 0 || !q);
+  if (!list.length && q) emptyEl.textContent = TXT?.noMatches || "";
+  resultsEl.dataset.count = String(list.length);
+}
+
+function setActive(i) {
+  const rows = [...resultsEl.children];
+  if (i < 0 || i >= rows.length) return;
+  rows[active]?.classList.remove("active");
+  active = i;
+  rows[active]?.classList.add("active");
+  rows[active]?.scrollIntoView({ block: "nearest" });
+}
+
+searchEl.addEventListener("input", render);
+document.addEventListener("keydown", (e) => {
+  const rows = [...resultsEl.children];
+  if (e.key === "Escape") { e.preventDefault(); close(); }
+  else if (e.key === "ArrowDown") { e.preventDefault(); setActive(Math.min(active + 1, rows.length - 1)); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); setActive(Math.max(active - 1, 0)); }
+  else if (e.key === "Enter") {
+    e.preventDefault();
+    const id = rows[active]?.dataset.id;
+    if (id) select(id);
+  }
+});
+
+// Same grace-period pattern as vars.js: the backend shows the window and only then
+// takes focus, and a blur fired in that hand-off window would close before anything
+// was ever on screen.
+const OPENED_AT = Date.now();
+const BLUR_GRACE_MS = 400;
+window.addEventListener("blur", () => {
+  if (Date.now() - OPENED_AT > BLUR_GRACE_MS) close();
+});
+document.body.addEventListener("mousedown", (e) => {
+  if (!cardEl.contains(e.target)) close();
+});
+
+async function boot() {
+  const state = await invoke("get_state").catch(() => ({ prompts: [], settings: {} }));
+  const settings = state.settings || {};
+  applyFloatTheme(await invoke("current_theme").catch(() => null), await invoke("theme_vars").catch(() => ({})));
+  listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
+
+  const pref = (settings.language && settings.language !== "auto"
+    ? settings.language
+    : navigator.language || "en"
+  ).toLowerCase();
+  const lang = Object.keys(FLOAT_TXT).find((c) => pref.startsWith(c)) || "en";
+  TXT = Object.fromEntries(Object.entries(FLOAT_TXT[lang]).map(([k, v]) => [k, applyTerms(v, lang)]));
+  searchEl.placeholder = TXT.searchPh;
+
+  prompts = state.prompts || [];
+  usage = settings.usage || {};
+  lastUsed = settings.last_used || {};
+  render();
+  searchEl.focus();
+}
+boot();

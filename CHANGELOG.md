@@ -6,11 +6,11 @@ All notable changes to **Prompt Saver**. Download the latest version from the
 
 ## 2.7.0 (unreleased)
 
-Thirteen new features: tags, custom themes, folders for view tabs and for
+Fourteen new features: tags, custom themes, folders for view tabs and for
 floating buttons, self-filling and choice variables, a markdown preview with
 syntax colors, private notes, per-prompt hotkeys, drag-out into other apps, a
-tray quick-copy menu and a screen color picker. Everything new is an expert-menu
-switch, most of it off until you turn it on.
+tray quick-copy menu, a screen color picker and a standalone quick launcher.
+Everything new is an expert-menu switch, most of it off until you turn it on.
 
 ### Added
 
@@ -68,6 +68,11 @@ switch, most of it off until you turn it on.
   running the app more than once at the same time, for example against two
   different data folders side by side. Off keeps the usual behaviour: a second
   launch just brings the first window forward. Takes effect after a restart.
+- **Quick launcher** — the global hotkey (**Ctrl+Alt+P** by default) now opens a
+  small standalone search window instead of the main library: type to fuzzy-find
+  a prompt by name or text, press Enter or click to copy it instantly. A fresh
+  install starts with the hotkey already bound; an existing one keeps whatever
+  you already had, including turned off.
 
 ### Improved
 

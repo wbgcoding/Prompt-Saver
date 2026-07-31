@@ -191,6 +191,9 @@ const RESULTS = {
   get_state: () => ({ prompts: PROMPTS, settings: JSON.parse(JSON.stringify(SETTINGS)) }),
   current_theme: () => "dark",
   theme_vars: () => ({ accent: "#ff00aa" }),
+  // P100: the probe reads this back instead of a real backend hand-off to main.js.
+  launcher_select: (a) => { window.__LAUNCHER_SELECTED__ = a && a.id; return null; },
+  launcher_close: () => { window.__LAUNCHER_CLOSED__ = true; return null; },
   set_theme: () => "dark",
   // Saving hands back the settings blob with the edited theme in place.
   save_custom_theme: (a) => {

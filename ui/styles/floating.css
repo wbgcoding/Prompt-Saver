@@ -711,6 +711,81 @@ body.vars-body {
   color: var(--pill-fg);
 }
 
+/* ---- Standalone quick-launcher (launcher.html) ----
+   Same tokens as the pill menus and vars.html. A search field and a result list,
+   nothing else — picking a result hands off to the exact same "copy from outside
+   the grid" path the tray menu already uses. */
+body.launcher-body {
+  display: flex;
+  padding: 6px;
+  cursor: default;
+  user-select: auto;
+}
+.launcher-card {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  padding: 10px;
+  border-radius: 14px;
+  background: var(--menu-bg);
+  color: var(--menu-fg);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+}
+.launcher-search {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--menu-line);
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+}
+.launcher-search:focus { outline: 2px solid var(--pill-bg); outline-offset: -1px; }
+.launcher-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+}
+.launcher-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border-left: 3px solid var(--row-color, transparent);
+  cursor: pointer;
+}
+.launcher-row.active,
+.launcher-row:hover { background: var(--menu-line); }
+.launcher-row-name {
+  flex: 0 1 auto;
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.launcher-row-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  opacity: 0.65;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.launcher-empty {
+  padding: 10px 9px;
+  font-size: 13px;
+  opacity: 0.65;
+  text-align: center;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
