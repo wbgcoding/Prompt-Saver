@@ -6397,11 +6397,15 @@ async function confirmModal() {
   // F20: the backend hands back what it really stored. An empty hotkey where one
   // was sent means the OS refused the combination between the check and the save.
   if (hotkey && saved && !saved.hotkey) toast(t("promptHotkeyFail"));
+  // P89: the same near-duplicate check the import path already runs, now also
+  // after creating a prompt by hand — before closeModal() clears modalState.
+  const wasCreate = modalState.mode === "create" || modalState.mode === "image-create" || modalState.mode === "file-create";
   closeModal();
   await renderGrid();
   if (saved && targetCell) await placeTile(saved.id, targetCell[0], targetCell[1]);
   pollMissingFiles(); // a replaced file clears the error immediately
   if (!libraryEl.classList.contains("hidden")) renderLibrary();
+  if (saved && wasCreate) maybeDupImportToast();
 }
 
 // Everything about a prompt except what identifies it and the hotkey (one accelerator,

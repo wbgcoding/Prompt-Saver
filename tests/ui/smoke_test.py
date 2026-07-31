@@ -387,6 +387,12 @@ PROBE = """
           } else if ((placed.querySelector('.tile-name') || {}).textContent !== 'Grid Click Prompt') {
             out.errors.push('the tile on the double-clicked cell is not the prompt just created');
           }
+          // P89: creating a prompt runs the same near-duplicate check import does.
+          await sleep(200);
+          const toastEl2 = document.getElementById('toast');
+          if (!(toastEl2.textContent || '').toLowerCase().includes('duplicate')) {
+            out.errors.push('creating a prompt did not warn about possible duplicates: ' + toastEl2.textContent);
+          }
         }
       }
       // 34: a {#{ }#} placeholder with no name inside warns before the save goes
