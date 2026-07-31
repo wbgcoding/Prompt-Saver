@@ -5982,6 +5982,9 @@ async function renderBackupPanel(body) {
 async function restoreBackup(name) {
   const ok = await confirmDialog({ title: t("backupRestore"), message: t("backupRestoreConfirm"), confirmLabel: t("backupRestore") });
   if (!ok) return;
+  // P64: the same safety net as reset/delete — restoring replaces the current
+  // data just as permanently, so it earns the same offer of a backup first.
+  await maybeBackupBeforeWipe();
   try { await invoke("restore_backup", { name, keep: Math.round(val("backupKeep")) }); }
   catch (e) { toast(String(e)); } // on success the app relaunches
 }

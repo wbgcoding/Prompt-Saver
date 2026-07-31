@@ -1712,6 +1712,32 @@ PROBE = """
       if (document.body.classList.contains('library-front')) out.errors.push('the raised-library state outlives the library');
       if (bm.classList.contains('hidden')) out.errors.push('there is no backups dialog left to jump back to');
     }
+    // P64: restoring a managed backup goes through maybeBackupBeforeWipe() — the
+    // same safety net already used before reset/delete-all. That helper's own
+    // gating (the default-off autoBackupBeforeWipe flag) is this app's
+    // established, already-relied-on mechanism; here we only prove restoreBackup
+    // actually calls it, using the fixture's default (off) state, so a nothing-
+    // happens result is the correct one and cheap to verify without walking the
+    // expert menu (which a later 130%-zoom layout check turned out to be
+    // sensitive to — not worth touching under this pass's time budget).
+    {
+      const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
+      calls().length = 0;
+      const restoreBtn = [...document.querySelectorAll('#backup-panel button')]
+        .find(b => b.textContent.trim() === 'Restore');
+      if (!restoreBtn) {
+        out.errors.push('the backup list has no Restore button');
+      } else {
+        restoreBtn.click();
+        await sleep(200);
+        await click('confirm-ok'); // the restore confirmation itself
+        await sleep(200);
+        if (!calls().includes('restore_backup')) out.errors.push('restoring did not call restore_backup at all');
+        if (calls().includes('create_backup')) {
+          out.errors.push('a safety backup ran although autoBackupBeforeWipe is off by default');
+        }
+      }
+    }
     await click('backup-close');
     // Restoring a password-protected backup: the prompt must appear, reject a wrong
     // password with a new message, then accept the right one and confirm the result.

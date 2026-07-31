@@ -127,6 +127,8 @@ switch, most of it off until you turn it on.
   setting's tooltip, not its label — three settings (hide scrollbars, grid
   lines, paused toolbar icons) get their tooltip shown at all again in the
   process; it had quietly stopped reaching them.
+- Restoring a backup now takes the same safety backup first that resetting or
+  deleting everything already did, if that expert option is on.
 
 ### Fixed
 
