@@ -153,6 +153,8 @@ switch, most of it off until you turn it on.
   view's color (off by default).
 - The library search now supports `-word` to exclude prompts containing it,
   combinable with a normal search term.
+- The private-note field in the editor now has a quieter fill than the
+  prompt text box, so the two don't read as the same kind of field.
 
 ### Fixed
 

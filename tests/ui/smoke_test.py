@@ -822,6 +822,11 @@ PROBE = """
         if (!document.getElementById('modal-notes-text').value.includes('Moonshot')) {
           out.errors.push('the editor did not load the stored note');
         }
+        // P35: the note field reads as a different kind of box, not a second
+        // prompt field — its background must not match the main text area's.
+        const notesBg = getComputedStyle(document.getElementById('modal-notes-text')).backgroundColor;
+        const promptBg = getComputedStyle(document.getElementById('modal-text')).backgroundColor;
+        if (notesBg === promptBg) out.errors.push('the notes field looks identical to the prompt field');
       }
       // F20: the hotkey row opens collapsed, shows the stored accelerator, refuses a
       // combination that is already taken, accepts a free one and can be cleared.
