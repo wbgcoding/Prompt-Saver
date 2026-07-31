@@ -7057,6 +7057,7 @@ function renderThemeEditor() {
   }
   baseSel.value = themeDraft.base;
   $("theme-edit-delete").classList.toggle("hidden", !themeDraft.id);
+  $("theme-edit-export")?.classList.toggle("hidden", !themeDraft.id);
   renderThemeVars();
 }
 
@@ -7230,6 +7231,33 @@ $("theme-edit-open")?.addEventListener("click", openThemeEditor);
 $("theme-modal-close")?.addEventListener("click", () => closeThemeEditor());
 $("theme-edit-cancel")?.addEventListener("click", () => closeThemeEditor());
 $("theme-edit-revert")?.addEventListener("click", revertThemeDraft);
+// 76: export the currently selected SAVED theme (an unsaved draft has no id to
+// look up on the backend, hence the button hides for one — see renderThemeEditor).
+$("theme-edit-export")?.addEventListener("click", async () => {
+  if (!themeDraft?.id) return;
+  try {
+    await invoke("export_custom_theme", { id: themeDraft.id });
+  } catch (err) {
+    if (err !== "canceled") toast(String(err));
+  }
+});
+// Import creates a new saved theme on the backend right away (the same validation
+// as typing values in by hand), then opens it in the editor so it can be tweaked
+// or just confirmed with Cancel/Save.
+$("theme-edit-import")?.addEventListener("click", async () => {
+  try {
+    settings = await invoke("import_custom_theme");
+  } catch (err) {
+    if (err !== "canceled") toast(String(err));
+    return;
+  }
+  fillThemeSelect();
+  const imported = findCustomTheme(settings.theme);
+  themeDraft = imported ? draftFrom(imported) : newThemeDraft();
+  themeDraftStart = draftFrom(themeDraft);
+  renderThemeEditor();
+  previewThemeDraft();
+});
 $("theme-modal")?.addEventListener("pointerdown", (e) => {
   if (e.target === $("theme-modal")) closeThemeEditor();
 });

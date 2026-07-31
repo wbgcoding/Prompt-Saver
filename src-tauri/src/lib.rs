@@ -5418,6 +5418,57 @@ fn delete_custom_theme(app: AppHandle, state: State<Db>, id: String) -> Result<S
     Ok(settings)
 }
 
+// 76: name/base/vars only — never the internal id, so importing a theme on another
+// install always creates a fresh one instead of colliding with (or silently
+// overwriting) whatever already has that id there.
+#[derive(Serialize, Deserialize)]
+struct ThemeExport {
+    #[serde(default)]
+    name: String,
+    #[serde(default = "default_custom_base")]
+    base: String,
+    #[serde(default)]
+    vars: HashMap<String, String>,
+}
+
+#[tauri::command]
+fn export_custom_theme(app: AppHandle, state: State<Db>, id: String) -> Result<(), String> {
+    let theme = {
+        let store = lock(&state);
+        store
+            .settings
+            .custom_themes
+            .iter()
+            .find(|c| c.id == id)
+            .cloned()
+            .ok_or_else(|| "theme not found".to_string())?
+    };
+    let json = serde_json::to_string_pretty(&ThemeExport { name: theme.name.clone(), base: theme.base, vars: theme.vars })
+        .map_err(|e| e.to_string())?;
+    let file = file_dialog(&app)
+        .set_file_name(format!("{}.json", theme.name))
+        .add_filter("JSON", &["json"])
+        .save_file();
+    match file {
+        Some(path) => fs::write(&path, json).map_err(|e| e.to_string()),
+        None => Err("canceled".to_string()),
+    }
+}
+
+// Reuses save_custom_theme's own validation (name/base/vars) so an imported file
+// is never trusted more than a value typed into the editor by hand — a malformed
+// or hand-edited JSON file gets the exact same rejection a bad manual entry would.
+#[tauri::command]
+fn import_custom_theme(app: AppHandle, state: State<Db>) -> Result<Settings, String> {
+    let file = file_dialog(&app).add_filter("JSON", &["json"]).pick_file();
+    let Some(path) = file else {
+        return Err("canceled".to_string());
+    };
+    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let parsed: ThemeExport = serde_json::from_str(&content).map_err(|_| "invalid theme file".to_string())?;
+    save_custom_theme(app, state, String::new(), parsed.name, parsed.base, parsed.vars)
+}
+
 // F17: the single place that decides what text a copy puts on the clipboard. The
 // private notes are deliberately not part of it — every copy path goes through
 // here (or through copy_text with an already-resolved body), so a note can never
@@ -9916,6 +9967,8 @@ pub fn run() {
             set_theme,
             save_custom_theme,
             delete_custom_theme,
+            export_custom_theme,
+            import_custom_theme,
             copy_prompt,
             copy_text,
             clipboard_text,
@@ -10764,6 +10817,24 @@ mod tests {
         assert_eq!(data.prompts[0].name, "=cmd|'/c calc'!A1");
         assert_eq!(data.prompts[0].text, "-1 to 5 scale");
         assert_eq!(data.prompts[0].notes, "@mention someone");
+    }
+
+    // 76: an exported theme file never carries the internal id, so importing it on
+    // another install (or re-importing it on the same one) always creates a fresh
+    // theme instead of silently colliding with -- or overwriting -- an existing one.
+    #[test]
+    fn theme_export_roundtrips_without_leaking_the_internal_id() {
+        let mut vars = HashMap::new();
+        vars.insert("bg".to_string(), "#123456".to_string());
+        vars.insert("accent".to_string(), "#abcdef".to_string());
+        let theme = CustomTheme { id: "secret-internal-id".to_string(), name: "My theme".to_string(), base: "dark".to_string(), vars };
+        let export = ThemeExport { name: theme.name.clone(), base: theme.base.clone(), vars: theme.vars.clone() };
+        let json = serde_json::to_string_pretty(&export).unwrap();
+        assert!(!json.contains("secret-internal-id"), "the export must not carry the internal id: {json}");
+        let back: ThemeExport = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.name, theme.name);
+        assert_eq!(back.base, theme.base);
+        assert_eq!(back.vars, theme.vars);
     }
 
     #[test]

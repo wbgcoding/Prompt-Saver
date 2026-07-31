@@ -105,6 +105,9 @@ switch, most of it off until you turn it on.
 - The theme editor has a **Revert changes** button that undoes everything
   done since it was opened without closing it — Cancel still discards
   everything and closes the editor.
+- Custom themes can be **exported to a file and imported back** — handy for
+  sharing a theme or carrying it to another install. An imported theme is
+  validated the same way a hand-typed one would be.
 - A backup is now either whole or absent: the snapshot is written under a
   temporary name and only then renamed, and a failed one leaves nothing behind.
 - "Duplicate" on a prompt's context menu now opens the same dialog as creating a

@@ -1660,6 +1660,35 @@ PROBE = """
           out.errors.push('reverting did not undo the live preview');
         }
       }
+      // 76: switch to the stored theme (ct1) so it has a real id — the editor
+      // opened on a fresh, unsaved draft by default, which correctly has none.
+      const targetSel = document.getElementById('theme-edit-target');
+      targetSel.value = 'ct1';
+      targetSel.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(120);
+      const exportBtn = document.getElementById('theme-edit-export');
+      if (!exportBtn || exportBtn.classList.contains('hidden')) {
+        out.errors.push('the export button is missing/hidden for a saved theme');
+      } else {
+        exportBtn.click();
+        await sleep(120);
+        const call = [...(window.__SMOKE_ARGS__ || [])].reverse().find(([c]) => c === 'export_custom_theme');
+        if (!call || call[1].id !== 'ct1') out.errors.push('export did not pass the current theme id');
+      }
+      document.getElementById('theme-edit-import').click();
+      await sleep(150);
+      if (document.getElementById('theme-edit-target').value !== 'ct2') {
+        out.errors.push('importing a theme did not open it in the editor');
+      }
+      if (document.getElementById('theme-edit-name').value !== 'Imported theme') {
+        out.errors.push('the imported theme did not fill the editor with its own values');
+      }
+      if (exportBtn && exportBtn.classList.contains('hidden')) {
+        out.errors.push('the export button stayed hidden after importing a (now saved) theme');
+      }
+      if (![...themeSel.options].some(o => o.value === 'custom:ct2')) {
+        out.errors.push('the imported theme is missing from the theme list');
+      }
       await click('theme-edit-cancel');
       await sleep(150);
       if (document.documentElement.style.getPropertyValue('--bg') === '#123456') {

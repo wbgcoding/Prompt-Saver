@@ -206,6 +206,18 @@ const RESULTS = {
     if (SETTINGS.theme === "custom:" + (a && a.id)) SETTINGS.theme = "system";
     return JSON.parse(JSON.stringify(SETTINGS));
   },
+  // 76: simulates the OS save dialog succeeding; a real "canceled" rejection is
+  // never exercised here, since there is no real dialog for the harness to cancel.
+  export_custom_theme: () => null,
+  // 76: simulates picking a file and it parsing into a new saved theme — same
+  // shape save_custom_theme returns, so the caller's refresh path is identical.
+  import_custom_theme: () => {
+    const id = "ct" + (SETTINGS.custom_themes.length + 1);
+    const theme = { id, name: "Imported theme", base: "dark", vars: { bg: "#0a0a0a" } };
+    SETTINGS.custom_themes.push(theme);
+    SETTINGS.theme = "custom:" + id;
+    return JSON.parse(JSON.stringify(SETTINGS));
+  },
   app_version: () => "0.0.0",
   current_data_dir: () => "C:\\Data",
   default_screenshot_dir: () => "C:\\Pictures",
