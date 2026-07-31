@@ -223,6 +223,21 @@ Everything new is an expert-menu switch, most of it off until you turn it on.
   a single quote on export (the standard fix) and the prefix is removed again
   on the next import into Prompt Saver, so nothing changes for data that never
   leaves this app.
+- **A save could look successful and then quietly revert after a restart.** If
+  the database write failed (locked or full disk) the change fell back to a
+  recovery file that was only ever read back on a completely empty database —
+  a normal restart always preferred the older database state instead, silently
+  undoing the change. The recovery file is now always checked and retried on
+  the next launch. A related case — replacing an attachment could delete the
+  old file even though the change that replaced it failed to save, breaking
+  the attachment for good — is fixed alongside it.
+- **Double-clicking Save (or pressing Enter twice) while saving a prompt could
+  create a duplicate.** The Save button had no protection against a second
+  click while the first save was still in flight.
+- **Moving prompts to another view could make them vanish if the target view
+  was full**, or land a prompt on a grid folder's own cell and unexpectedly
+  bump the folder aside on the next render. Moving now checks the target has
+  room for everything first and shows a clear "grid is full" message instead.
 
 ### Removed
 

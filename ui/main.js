@@ -86,6 +86,7 @@ let settings = { theme: "system", views: [], active_view: "" };
 
 let modalState = null;
 let modalInitial = ""; // snapshot of the open modal's content (unsaved-change guard)
+let modalSaving = false; // 103: re-entry guard, a double-click/double-Enter must not fire two saves
 let ctxId = null;
 let drag = null;
 let libQuery = ""; // prompt library search text
@@ -4129,7 +4130,7 @@ function renderViewsPop(id) {
     row.addEventListener("click", async () => {
       try {
         settings = await invoke("batch_prompts", { ids: [id], action: on ? "removeView" : "addView", color: null, favorite: null, viewId: v.id });
-      } catch (e) { toast(String(e)); return; }
+      } catch (e) { batchErrorToast(e); return; }
       renderViewsPop(id);
     });
     viewsPop.appendChild(row);
@@ -6683,7 +6684,7 @@ function startCreate() {
 }
 
 async function confirmModal() {
-  if (!modalState) return;
+  if (!modalState || modalSaving) return;
   const name = modal.name.value.trim();
   if (!name) { modal.name.focus(); return; }
   // 34: a {#{ }#} with no name inside never becomes a fillable variable — warn now,
@@ -6722,6 +6723,8 @@ async function confirmModal() {
     image || mediaKind(filePath) || mediaKind(iconPath) ? modalState.showImage : false;
   const copyImage = image ? modalState.copyImage : false;
   let saved = null;
+  modalSaving = true;
+  modal.confirm.disabled = true;
   try {
     if (modalState.mode === "create") {
       const text = modal.text.value.trim();
@@ -6746,6 +6749,9 @@ async function confirmModal() {
       showHotkeyError(hotkeyMessage(String(err)));
     }
     return;
+  } finally {
+    modalSaving = false;
+    modal.confirm.disabled = false;
   }
   // F20: the backend hands back what it really stored. An empty hotkey where one
   // was sent means the OS refused the combination between the check and the save.
@@ -8166,6 +8172,11 @@ function clearGridSelection() {
   applyGridSelectionDom();
   updateGridBatchBar();
 }
+// 104: addView is all-or-nothing on the backend now — a full target view rejects
+// the whole batch with this one error string instead of silently dropping ids.
+function batchErrorToast(e) {
+  toast(String(e).includes("view-full") ? t("gridFull") : String(e));
+}
 async function doGridBatch(action, extra = {}) {
   const ids = [...gridSelected];
   if (!ids.length) return;
@@ -8176,7 +8187,7 @@ async function doGridBatch(action, extra = {}) {
       favorite: extra.favorite ?? null,
       viewId: extra.viewId ?? null,
     });
-  } catch (e) { toast(String(e)); return; }
+  } catch (e) { batchErrorToast(e); return; }
   if (action === "delete") prompts = prompts.filter((p) => !ids.includes(p.id));
   else if (action === "color") { for (const p of prompts) if (ids.includes(p.id)) p.color = extra.color ?? ""; }
   clearGridSelection();
@@ -8189,9 +8200,12 @@ async function doGridMove(targetViewId) {
   const ids = [...gridSelected];
   if (!ids.length || !targetViewId) return;
   try {
-    await invoke("batch_prompts", { ids, action: "removeView", color: null, favorite: null, viewId: settings.active_view });
-    settings = await invoke("batch_prompts", { ids, action: "addView", color: null, favorite: null, viewId: targetViewId });
-  } catch (e) { toast(String(e)); return; }
+    // 104: place into the target FIRST — addView is all-or-nothing (backend), so a
+    // full target throws here and every id is still exactly where it was. Only once
+    // the target accepted them all does dropping the source placement become safe.
+    await invoke("batch_prompts", { ids, action: "addView", color: null, favorite: null, viewId: targetViewId });
+    settings = await invoke("batch_prompts", { ids, action: "removeView", color: null, favorite: null, viewId: settings.active_view });
+  } catch (e) { batchErrorToast(e); return; }
   clearGridSelection();
   await renderGrid(true);
 }
@@ -8209,7 +8223,7 @@ async function doBatch(action, extra = {}) {
       favorite: extra.favorite ?? null,
       viewId: extra.viewId ?? null,
     });
-  } catch (e) { toast(String(e)); return; }
+  } catch (e) { batchErrorToast(e); return; }
   // Mirror the change onto the local prompt list ourselves.
   if (action === "delete") prompts = prompts.filter((p) => !idset.has(p.id));
   else if (action === "favorite") { for (const p of prompts) if (idset.has(p.id)) p.favorite = extra.favorite ?? true; }

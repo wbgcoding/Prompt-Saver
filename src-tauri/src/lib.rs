@@ -2100,38 +2100,47 @@ fn db_list_clips(conn: &Connection) -> Vec<ClipItem> {
     out
 }
 
-fn save_prompts(app: &AppHandle, store: &Store) {
+// Returns whether the prompts made it to durable storage (DB or JSON fallback) —
+// callers that follow a save with a destructive step (102: deleting an orphaned
+// attachment file) must skip that step when this is false, or the deletion can
+// outlive the very change that made the file orphaned.
+fn save_prompts(app: &AppHandle, store: &Store) -> bool {
     // Safety valve: if some rows failed to decrypt at load, the in-memory list is a
     // SUBSET of what's on disk. Rewriting the table (DELETE + re-INSERT) would delete
     // the unreadable rows permanently — so we refuse to persist prompt changes at all
     // until the situation is resolved. Prompt edits this session simply won't stick.
     if store.prompts_locked {
-        return;
+        return false;
     }
     if let Some(mut conn) = db_conn(app) {
         if db_write_prompts(&mut conn, &store.prompts).is_ok() {
-            return;
+            return true;
         }
     }
-    // Last resort: JSON fallback. If even that fails (disk full / permission), the
-    // change is lost — leave a diagnosable trace instead of failing silently.
+    // Last resort: JSON fallback. 101: load_store() reads this back and retries the
+    // DB write on next launch, so a fallback here is not itself data loss. If even
+    // this fails (disk full / permission), the change really is lost — leave a
+    // diagnosable trace instead of failing silently.
     if !write_json(&data_dir(app).join("prompts.json"), &store.prompts) {
         append_crash_log("persist failed: prompts could not be written to the database or the JSON fallback");
+        return false;
     }
+    true
 }
 
-fn save_trash(app: &AppHandle, store: &Store) {
+fn save_trash(app: &AppHandle, store: &Store) -> bool {
     // Same lock as save_prompts: an unreadable-row situation must never trigger a
     // destructive rewrite of a second table either.
     if store.prompts_locked {
-        return;
+        return false;
     }
     if let Some(mut conn) = db_conn(app) {
         if db_write_trash(&mut conn, &store.trash).is_ok() {
-            return;
+            return true;
         }
     }
     append_crash_log("persist failed: trash could not be written to the database");
+    false
 }
 
 fn save_settings(app: &AppHandle, settings: &Settings) {
@@ -2229,6 +2238,29 @@ fn load_store(app: &AppHandle) -> Store {
             }
             prompts = j_prompts;
             settings = j_settings;
+        } else {
+            // 101: prompts.json/settings.json otherwise only exist as a save_prompts/
+            // save_settings fallback from a failed DB write earlier this session (they
+            // are deleted the moment the DB accepts the data again) — their presence
+            // here means the DB never received that change, so the file, not the DB,
+            // is the truth. Retry the write; keep the file (and the loaded data) if the
+            // DB still refuses, so this keeps retrying every launch instead of quietly
+            // losing the edit.
+            let pj = dir.join("prompts.json");
+            if pj.exists() {
+                let fallback: Vec<Prompt> = read_json(&pj);
+                prompts = fallback;
+                if db_write_prompts(&mut conn, &prompts).is_ok() {
+                    let _ = fs::remove_file(&pj);
+                }
+            }
+            let sj = dir.join("settings.json");
+            if sj.exists() {
+                settings = read_json(&sj);
+                if db_write_settings(&conn, &settings).is_ok() {
+                    let _ = fs::remove_file(&sj);
+                }
+            }
         }
         settings.migrate();
         // One-time: move any legacy in-blob copy history into the copy_log table.
@@ -3442,6 +3474,44 @@ fn first_free_cell_excluding(view: &View, extra: &[[u32; 2]]) -> Option<[u32; 2]
     None
 }
 
+// Places every id from `ids` that isn't already in `layout` into a free cell,
+// counting `extra_occupied` (105: e.g. a grid folder's own cell, which lives
+// outside `layout`) as taken too. All-or-nothing (104): if there isn't room for
+// every id, nothing is placed and `layout` is left exactly as it was, so a caller
+// that already removed these ids from somewhere else can react to the failure
+// instead of stranding them.
+fn place_ids_in_view(
+    layout: &mut std::collections::HashMap<String, [u32; 2]>,
+    ids: &[String],
+    cols: u32,
+    rows: u32,
+    extra_occupied: &std::collections::HashSet<(u32, u32)>,
+) -> bool {
+    let mut occupied: std::collections::HashSet<(u32, u32)> =
+        layout.values().map(|c| (c[0], c[1])).collect();
+    occupied.extend(extra_occupied.iter().copied());
+    let need = ids.iter().filter(|id| !layout.contains_key(id.as_str())).count();
+    let free = (cols as usize * rows as usize).saturating_sub(occupied.len());
+    if need > free {
+        return false;
+    }
+    for id in ids {
+        if layout.contains_key(id) {
+            continue;
+        }
+        'find: for row in 0..rows {
+            for col in 0..cols {
+                if !occupied.contains(&(col, row)) {
+                    layout.insert(id.clone(), [col, row]);
+                    occupied.insert((col, row));
+                    break 'find;
+                }
+            }
+        }
+    }
+    true
+}
+
 // "Store files" opt-in flag (off by default).
 fn store_files_enabled(store: &Store) -> bool {
     store.settings.ui_flags.get("storeFiles").copied().unwrap_or(false)
@@ -3676,8 +3746,12 @@ async fn update_prompt(
                 if let Some(h) = hotkey { p.hotkey = h; }
                 if p.hotkey.is_empty() { p.hotkey_paste.clear(); } // no binding, no action
                 let clone = p.clone();
-                save_prompts(&app, &store);
-                cleanup_orphan_files(&app, &store); // a replaced attachment orphans its old copy
+                // 102: only sweep the old attachment once the new reference is durably
+                // saved -- otherwise a failed save leaves the DB pointing at a file the
+                // sweep just deleted, with no fallback (101) to recover it from.
+                if save_prompts(&app, &store) {
+                    cleanup_orphan_files(&app, &store); // a replaced attachment orphans its old copy
+                }
                 let scale = float_scale_of(&store.settings, &id);
                 Some((clone, scale, rebind))
             }
@@ -3881,6 +3955,17 @@ async fn batch_prompts(
         }
         "addView" | "removeView" => {
             let vid = view_id.unwrap_or_default();
+            // 105: a grid folder occupies a cell via `tile_folders`, deliberately
+            // outside `view.layouts` (see docs/INVARIANTS.md -> Grid folders) -- read
+            // it before `view` is borrowed mutably below, since both can't happen
+            // at once.
+            let folder_cells: std::collections::HashSet<(u32, u32)> = store
+                .settings
+                .tile_folders
+                .iter()
+                .filter(|f| f.view_id == vid)
+                .map(|f| (f.cell[0], f.cell[1]))
+                .collect();
             if let Some(view) = store.settings.views.iter_mut().find(|v| v.id == vid) {
                 let (cols, rows) = (view.cols, view.rows);
                 let key = format!("{}x{}", cols, rows);
@@ -3889,23 +3974,8 @@ async fn batch_prompts(
                     for id in &ids {
                         layout.remove(id);
                     }
-                } else {
-                    let mut occupied: std::collections::HashSet<(u32, u32)> =
-                        layout.values().map(|c| (c[0], c[1])).collect();
-                    for id in &ids {
-                        if layout.contains_key(id) {
-                            continue;
-                        }
-                        'find: for row in 0..rows {
-                            for col in 0..cols {
-                                if !occupied.contains(&(col, row)) {
-                                    layout.insert(id.clone(), [col, row]);
-                                    occupied.insert((col, row));
-                                    break 'find;
-                                }
-                            }
-                        }
-                    }
+                } else if !place_ids_in_view(layout, &ids, cols, rows, &folder_cells) {
+                    return Err("view-full".into());
                 }
                 save_settings(&app, &store.settings);
             }
@@ -3971,8 +4041,11 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
 fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) {
     let idset: std::collections::HashSet<&str> = ids.iter().map(|s| s.as_str()).collect();
     store.trash.retain(|p| !idset.contains(p.id.as_str()));
-    save_trash(app, store);
-    cleanup_orphan_files(app, store);
+    // 102: same guard as update_prompt -- a failed trash save must not still trigger
+    // the file sweep, or the DB keeps referencing files the sweep just removed.
+    if save_trash(app, store) {
+        cleanup_orphan_files(app, store);
+    }
     if let Some(c) = db_conn(app) {
         for id in ids {
             db_delete_versions(&c, id);
@@ -11579,6 +11652,40 @@ mod tests {
         // dissolved member handed that cell would save fine but never render.
         assert_eq!(first_free_cell_excluding(&view, &[[1, 0]]), Some([2, 0]));
         assert_eq!(first_free_cell_excluding(&view, &[[1, 0], [2, 0]]), None);
+    }
+
+    #[test]
+    fn place_ids_in_view_fills_free_cells_and_skips_already_placed_ids() {
+        // 2x1 grid, "a" already on [0,0].
+        let mut layout = HashMap::from([("a".to_string(), [0, 0])]);
+        let ids: Vec<String> = vec!["a".to_string(), "b".to_string()];
+        assert!(place_ids_in_view(&mut layout, &ids, 2, 1, &std::collections::HashSet::new()));
+        assert_eq!(layout.get("a"), Some(&[0, 0])); // untouched, was already placed
+        assert_eq!(layout.get("b"), Some(&[1, 0]));
+    }
+
+    #[test]
+    fn place_ids_in_view_is_all_or_nothing_when_the_view_is_full() {
+        // 104: a batch that doesn't fully fit must place NOTHING, not a partial subset
+        // -- a caller that already removed these ids from their source view relies on
+        // this to know the move truly failed.
+        let mut layout = HashMap::from([("a".to_string(), [0, 0])]);
+        let before = layout.clone();
+        let ids: Vec<String> = vec!["b".to_string(), "c".to_string()]; // only 1 free cell for 2 ids
+        assert!(!place_ids_in_view(&mut layout, &ids, 2, 1, &std::collections::HashSet::new()));
+        assert_eq!(layout, before);
+    }
+
+    #[test]
+    fn place_ids_in_view_counts_grid_folder_cells_as_occupied() {
+        // 105: a folder's cell lives outside `layout` (see docs/INVARIANTS.md -> Grid
+        // folders) -- without passing it as extra_occupied, addView could hand a
+        // prompt the same cell a folder already sits on.
+        let mut layout: HashMap<String, [u32; 2]> = HashMap::new();
+        let folder_cells = std::collections::HashSet::from([(0u32, 0u32)]);
+        let ids: Vec<String> = vec!["a".to_string()];
+        assert!(place_ids_in_view(&mut layout, &ids, 2, 1, &folder_cells));
+        assert_eq!(layout.get("a"), Some(&[1, 0])); // [0,0] was the folder's, must be skipped
     }
 
     #[test]
