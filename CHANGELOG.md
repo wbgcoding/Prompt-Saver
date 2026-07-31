@@ -121,6 +121,8 @@ switch, most of it off until you turn it on.
 - The backup password field now says plainly, right where you set it, that a
   forgotten password can never be recovered — previously that only showed up
   in a toast after saving.
+- The theme editor's per-color reset button is a crisp icon now instead of a
+  small, pixelated "×" character.
 
 ### Fixed
 

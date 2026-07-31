@@ -3531,7 +3531,8 @@ body.noflag-customThemes .theme-edit-btn { display: none; }
   font-size: 12px;
 }
 .theme-hex.invalid { border-color: var(--danger); }
-.theme-var-reset { flex: 0 0 auto; padding: 2px 7px; font-size: 12px; line-height: 1.4; }
+.theme-var-reset { flex: 0 0 auto; padding: 4px; }
+.theme-var-reset svg { width: 13px; height: 13px; }
 .theme-var-reset:disabled { opacity: 0; pointer-events: none; }
 .modal-actions #theme-edit-delete { margin-right: auto; }
 /* Separator row in the dropdown popup (built-in themes above, custom below). */

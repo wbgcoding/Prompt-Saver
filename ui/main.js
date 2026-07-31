@@ -6977,9 +6977,10 @@ function themeVarRow(key, fallback) {
   hex.spellcheck = false;
   const reset = document.createElement("button");
   reset.type = "button";
-  reset.className = "ghost-btn theme-var-reset";
-  reset.textContent = "×";
+  reset.className = "icon-btn theme-var-reset";
+  reset.innerHTML = CLEAR_SVG;
   reset.title = t("themeVarReset");
+  reset.setAttribute("aria-label", t("themeVarReset"));
 
   const paint = () => {
     const value = themeDraft.vars[key] || fallback;
