@@ -9538,7 +9538,12 @@ pub fn run() {
                             .unwrap_or(24.0) as u64;
                         let due = newest_backup_age(&h).map_or(true, |age| age >= interval_h.saturating_mul(3600));
                         if on && due {
-                            let _ = do_backup(&h, keep, gfs_from_settings(&store.settings));
+                            // P60: the manual "backup now" toast fires from the same
+                            // command's own success path in the frontend — the automatic
+                            // one has no such call site, so it needs its own signal here.
+                            if do_backup(&h, keep, gfs_from_settings(&store.settings)).is_ok() {
+                                let _ = h.emit_to("main", "backup-done", ());
+                            }
                         }
                     }
                     std::thread::sleep(std::time::Duration::from_secs(BACKUP_CHECK_SECS));

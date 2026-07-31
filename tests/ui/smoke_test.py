@@ -903,6 +903,13 @@ PROBE = """
     if (toastEl.style.getPropertyValue('--toast-tint') !== '#1A2B3C') {
       out.errors.push('the picker toast carries no colour');
     }
+    // P60: an automatic backup toasts the same way a manual one already did —
+    // the backend has no other call site to toast from, so it fires this itself.
+    window.__FIRE__('backup-done');
+    await sleep(150);
+    if (!(toastEl.textContent || '').includes('Backup created')) {
+      out.errors.push('an automatic backup gave no "Backup created" toast: ' + toastEl.textContent);
+    }
 
     // F20: pressing a prompt hotkey runs the same activation a tile does — the copy
     // is recorded, and whether it also pastes follows the expert option alone.

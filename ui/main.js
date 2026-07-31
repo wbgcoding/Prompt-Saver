@@ -9211,6 +9211,9 @@ function bind() {
     await infoDialog(t("trayHintTitle"), t("trayHintMsg"));
     try { await window.__TAURI__?.window?.getCurrentWindow?.()?.hide?.(); } catch { /* no-op */ }
   });
+  // P60: the automatic backup has no frontend call site of its own to toast
+  // from — the backend says so once the snapshot is really on disk.
+  listen("backup-done", () => toast(t("backupDone")));
   // The standalone fill-in window answered (null = cancelled or closed).
   listen("vars-filled", (e) => {
     const resolve = varsWindowPending;

@@ -147,6 +147,8 @@ switch, most of it off until you turn it on.
 - A grid click swallowed by the copy cooldown now shakes the tile briefly
   instead of doing nothing at all — the cooldown itself was already
   adjustable (down to 0 to turn it off) in the expert menu.
+- The "Backup created" toast now shows for automatic backups too, not just
+  the manual button.
 
 ### Fixed
 
