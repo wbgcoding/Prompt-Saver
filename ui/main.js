@@ -39,6 +39,7 @@ const modal = {
   addIcon: $("modal-add-icon"),
   fileWrap: $("modal-file-wrap"),
   fileName: $("modal-file-name"),
+  pdfPage: $("modal-pdf-page"),
   replaceFile: $("modal-replace-file"),
   fontSel: $("modal-font"),
   sizeSel: $("modal-size"),
@@ -5018,8 +5019,8 @@ function maybeCloseOnCopy() {
   try { window.__TAURI__?.window?.getCurrentWindow?.()?.hide?.().catch?.(() => {}); } catch { /* no-op */ }
 }
 
-function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", title, targetCell }) {
-  modalState = { mode, id, color, image, showImage, copyImage, filePath, iconPath, tags: [...tags], hotkey, hotkeyPaste, targetCell };
+function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", pdfPage = 0, iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", title, targetCell }) {
+  modalState = { mode, id, color, image, showImage, copyImage, filePath, pdfPage, iconPath, tags: [...tags], hotkey, hotkeyPaste, targetCell };
   modal.title.textContent = title;
   modal.fav.classList.toggle("active", !!favorite);
   modal.fav.setAttribute("aria-pressed", String(!!favorite));
@@ -6491,7 +6492,7 @@ function syncModalImageUi(mode) {
       // that fails to decode, ask the backend for a data URL once.
       modal.img.onerror = () => {
         modal.img.onerror = null;
-        loadFilePreview(previewPath).then((d) => { if (d) modal.img.src = d; });
+        loadFilePreview(previewPath, modalState?.pdfPage || 0).then((d) => { if (d) modal.img.src = d; });
       };
       modal.img.src = image || convertFileSrc(previewPath);
       modal.video.removeAttribute("src");
@@ -6506,9 +6507,16 @@ function syncModalImageUi(mode) {
   fileHint.classList.toggle("hidden", !filePath);
   fileHint.textContent = t(optFlag("storeFiles") ? "fileHintStored" : "fileHint");
   if (filePath) {
-    $("modal-file-icon").innerHTML = PDF_EXT.test(filePath) ? ICON_PDF : ICON_FILE;
+    const isPdf = PDF_EXT.test(filePath);
+    $("modal-file-icon").innerHTML = isPdf ? ICON_PDF : ICON_FILE;
     modal.fileName.textContent = filePath.split(/[\\/]/).pop();
     modal.fileName.title = filePath;
+    // 83: shown 1-based (page 1, 2, ...) — pdfPage itself stays the 0-based index
+    // pdf_preview expects, so the two never need converting anywhere else.
+    modal.pdfPage.classList.toggle("hidden", !isPdf);
+    if (isPdf) modal.pdfPage.value = String((modalState?.pdfPage || 0) + 1);
+  } else {
+    modal.pdfPage.classList.add("hidden");
   }
 }
 
@@ -6526,10 +6534,12 @@ async function withDialog(fn) {
 }
 
 const PDF_EXT = /\.pdf$/i;
-async function loadFilePreview(path) {
-  // A PDF gets its first page rendered as the preview image.
+// 83: page defaults to the first (0). The backend clamps against the real page
+// count, so a stale number from a previously longer PDF at the same path still
+// renders something instead of nothing.
+async function loadFilePreview(path, page = 0) {
   if (PDF_EXT.test(path)) {
-    return (await invoke("pdf_preview", { path }).catch(() => "")) || "";
+    return (await invoke("pdf_preview", { path, page }).catch(() => "")) || "";
   }
   if (!IMAGE_EXT.test(path)) return "";
   return (await invoke("load_image_file", { path }).catch(() => "")) || "";
@@ -6734,6 +6744,7 @@ async function confirmModal() {
   const notes = modal.notesText.value;
   const hotkey = modalState.hotkey || "";
   const hotkeyPaste = hotkey ? (modalState.hotkeyPaste || "") : "";
+  const pdfPage = modalState.pdfPage || 0;
   // 9: double-click on an empty cell opened this dialog for that exact spot — the
   // backend's own first-free-cell placement would otherwise ignore it.
   const targetCell = modalState.targetCell;
@@ -6749,16 +6760,16 @@ async function confirmModal() {
     if (modalState.mode === "create") {
       const text = modal.text.value.trim();
       if (!text) { closeModal(); return; }
-      saved = await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste });
+      saved = await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste });
       inputEl.value = "";
       autoGrow(inputEl);
       saveBtn.disabled = true;
     } else if (modalState.mode === "image-create" || modalState.mode === "file-create") {
       // The name doubles as the copy text when shown as text.
-      saved = await invoke("add_prompt", { name, text: name, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste });
+      saved = await invoke("add_prompt", { name, text: name, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste });
     } else {
       const text = copyImage || filePath ? name : modal.text.value;
-      saved = await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste });
+      saved = await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste });
     }
   } catch (err) {
     toast(hotkeyMessage(String(err))); // keep the modal open so nothing typed is lost
@@ -6810,6 +6821,7 @@ async function duplicatePrompt(id) {
     showImage: p.show_image || false,
     copyImage: p.copy_image || false,
     filePath: p.file_path || "",
+    pdfPage: p.pdf_page || 0,
     iconPath: p.icon_path || "",
     caption: p.caption || "",
     captionSize: p.caption_size || 0,
@@ -6840,6 +6852,7 @@ async function editPrompt(id) {
       showImage: p.show_image || false,
       copyImage: p.copy_image || false,
       filePath: p.file_path || "",
+      pdfPage: p.pdf_page || 0,
       iconPath: p.icon_path || "",
       caption: p.caption || "",
       captionSize: p.caption_size || 0,
@@ -8968,11 +8981,22 @@ function bind() {
     const path = await withDialog(() => invoke("pick_file_path"));
     if (!path || !modalState) return;
     modalState.filePath = path;
+    modalState.pdfPage = 0; // 83: a different file starts back at its own first page
     const kind = mediaKind(path);
     modalState.image = await loadFilePreview(path);
     modalState.copyImage = false; // the file itself is what gets copied
     modalState.showImage = !!kind;
     syncModalImageUi(modalState.mode);
+  });
+
+  // 83: re-requests the preview at the chosen page and saves it into pdf_page —
+  // the field only ever shows for a PDF attachment (syncModalImageUi).
+  modal.pdfPage.addEventListener("change", async () => {
+    if (!modalState) return;
+    const page = Math.max(0, (Number(modal.pdfPage.value) || 1) - 1);
+    modalState.pdfPage = page;
+    const data = await loadFilePreview(modalState.filePath, page);
+    if (data) { modalState.image = data; modal.img.src = data; }
   });
 
   // Paperclip button in the composer bar (files, images, gifs, videos).

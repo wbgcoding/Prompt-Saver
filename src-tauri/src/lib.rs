@@ -1064,6 +1064,12 @@ struct Prompt {
     // Attached file: clicking puts the file itself on the clipboard.
     #[serde(default)]
     file_path: String,
+    // 83: which page of an attached PDF the preview shows (0-based). Ignored for
+    // any other attachment type. Clamped against the actual page count at render
+    // time (pdf_preview), never here — the file can change independently of this
+    // number (a replaced attachment, or a shorter PDF at the same path).
+    #[serde(default)]
+    pdf_page: u32,
     // Gif/video used as the tile icon only — shown, never copied.
     #[serde(default)]
     icon_path: String,
@@ -3429,17 +3435,26 @@ fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
     Some(cached)
 }
 
-// Render the first page of a PDF to a preview image (data URL). Returns None if
-// pdfium is unavailable or the file cannot be read — the caller then keeps the
-// PDF as a plain file attachment without a preview.
+// Render one page of a PDF to a preview image (data URL). Returns None if pdfium
+// is unavailable or the file cannot be read — the caller then keeps the PDF as a
+// plain file attachment without a preview. `page` (83) is clamped against the
+// actual page count here, not by the caller — the stored number and the file can
+// disagree (a shorter PDF re-attached at the same path), and clamping is what
+// keeps that case showing the last page instead of nothing at all.
 #[tauri::command]
-async fn pdf_preview(app: AppHandle, path: String) -> Option<String> {
+async fn pdf_preview(app: AppHandle, path: String, page: Option<u32>) -> Option<String> {
     use pdfium_render::prelude::*;
     let lib = pdfium_lib_path(&app)?;
     let bindings = Pdfium::bind_to_library(lib).ok()?;
     let pdfium = Pdfium::new(bindings);
     let document = pdfium.load_pdf_from_file(&path, None).ok()?;
-    let page = document.pages().get(0).ok()?;
+    let pages = document.pages();
+    let count = pages.len();
+    if count == 0 {
+        return None;
+    }
+    let index = page.unwrap_or(0).min(count as u32 - 1);
+    let page = pages.get(index as u16).ok()?;
     let config = PdfRenderConfig::new()
         .set_target_width(1000)
         .set_maximum_height(1400);
@@ -3617,6 +3632,7 @@ async fn add_prompt(
     show_image: Option<bool>,
     copy_image: Option<bool>,
     file_path: Option<String>,
+    pdf_page: Option<u32>,
     icon_path: Option<String>,
     caption: Option<String>,
     caption_size: Option<u32>,
@@ -3657,6 +3673,7 @@ async fn add_prompt(
             show_image: show_image.unwrap_or(false),
             copy_image: copy_image.unwrap_or(false),
             file_path: fp,
+            pdf_page: pdf_page.unwrap_or(0),
             icon_path: ip,
             caption: caption.unwrap_or_default(),
             caption_size: clamp_caption_size(caption_size.unwrap_or(0)),
@@ -3704,6 +3721,7 @@ async fn update_prompt(
     show_image: Option<bool>,
     copy_image: Option<bool>,
     file_path: Option<String>,
+    pdf_page: Option<u32>,
     icon_path: Option<String>,
     caption: Option<String>,
     caption_size: Option<u32>,
@@ -3756,6 +3774,7 @@ async fn update_prompt(
                 if let Some(si) = show_image { p.show_image = si; }
                 if let Some(ci) = copy_image { p.copy_image = ci; }
                 if let Some(fp) = file_path { p.file_path = fp; }
+                if let Some(pp) = pdf_page { p.pdf_page = pp; }
                 if let Some(ip) = icon_path { p.icon_path = ip; }
                 if let Some(c) = caption { p.caption = c; }
                 if let Some(cs) = caption_size { p.caption_size = clamp_caption_size(cs); }
@@ -9028,9 +9047,13 @@ fn csv_row(cells: &[&str]) -> String {
 // Export the prompt library only (incl. images/files) — never app settings,
 // views or grid layout, so importing elsewhere can't clobber the user's setup.
 fn to_csv(prompts: &[Prompt]) -> String {
+    // 83: pdfpage appended at the END, not inserted among the existing columns —
+    // an older export re-imported here has no such column, and row.get() on a
+    // short row already returns None (-> the same default 0), never shifting
+    // any OTHER column's fixed index.
     let head = [
         "name", "text", "positions", "color", "font", "size", "file", "icon", "show", "copy",
-        "image", "caption", "capsize", "tags", "notes",
+        "image", "caption", "capsize", "tags", "notes", "pdfpage",
     ];
     let mut rows = vec![csv_row(&head)];
     for p in prompts {
@@ -9052,6 +9075,7 @@ fn to_csv(prompts: &[Prompt]) -> String {
             // The CSV writer quotes every cell and doubles inner quotes, so a
             // multi-line note travels verbatim — no escaping needed here.
             &p.notes,
+            &p.pdf_page.to_string(),
         ]));
     }
     rows.join("\r\n")
@@ -9076,6 +9100,12 @@ fn to_txt(prompts: &[Prompt]) -> String {
         }
         if !p.file_path.is_empty() {
             block.push_str(&format!("\n@file {}", p.file_path));
+        }
+        // 83: only a PDF attachment reads this, and 0 (the first page) is by far
+        // the common case — skip the line entirely then, same as every other
+        // optional field here.
+        if p.pdf_page > 0 {
+            block.push_str(&format!("\n@pdfpage {}", p.pdf_page));
         }
         if !p.icon_path.is_empty() {
             block.push_str(&format!("\n@icon {}", p.icon_path));
@@ -9188,6 +9218,7 @@ struct ImportedPrompt {
     font: String,
     font_size: u32,
     file_path: String,
+    pdf_page: u32,
     icon_path: String,
     caption: String,
     caption_size: u32,
@@ -9308,6 +9339,10 @@ fn parse_txt(content: &str) -> ImportData {
             Some((t, v)) => (t.to_string(), v.trim().to_string()),
             None => (body, String::new()),
         };
+        let (body, pdf_page) = match body.rsplit_once("\n@pdfpage ") {
+            Some((t, v)) => (t.to_string(), v.trim().parse().unwrap_or(0)),
+            None => (body, 0),
+        };
         let (body, file_path) = match body.rsplit_once("\n@file ") {
             Some((t, f)) => (t.to_string(), f.trim().to_string()),
             None => (body, String::new()),
@@ -9340,6 +9375,7 @@ fn parse_txt(content: &str) -> ImportData {
             font,
             font_size,
             file_path,
+            pdf_page,
             icon_path,
             caption,
             caption_size,
@@ -9393,6 +9429,7 @@ fn parse_csv_data(content: &str) -> ImportData {
                     .and_then(|s| s.trim().parse().ok())
                     .unwrap_or(0),
                 file_path: row.get(6).map(|f| f.trim().to_string()).unwrap_or_default(),
+                pdf_page: row.get(15).and_then(|v| v.trim().parse().ok()).unwrap_or(0),
                 icon_path: row.get(7).map(|f| f.trim().to_string()).unwrap_or_default(),
                 show_image: row.get(8).map(|v| v.trim() == "1").unwrap_or(false),
                 copy_image: row.get(9).map(|v| v.trim() == "1").unwrap_or(false),
@@ -9510,6 +9547,7 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String) -> R
             show_image: item.show_image,
             copy_image: item.copy_image,
             file_path: item.file_path,
+            pdf_page: item.pdf_page,
             icon_path: item.icon_path,
             caption: item.caption,
             caption_size: clamp_caption_size(item.caption_size),
@@ -11104,6 +11142,7 @@ mod tests {
                 show_image: true,
                 copy_image: true,
                 file_path: String::new(),
+                pdf_page: 0,
                 icon_path: String::new(),
                 caption: String::new(),
                 caption_size: 0,
@@ -11125,6 +11164,7 @@ mod tests {
                 show_image: true,
                 copy_image: false,
                 file_path: "C:\\tmp\\report.pdf".into(),
+                pdf_page: 3,
                 icon_path: "C:\\tmp\\clip.mp4".into(),
                 caption: "Mein Untertitel".into(),
                 caption_size: 18,
@@ -11404,6 +11444,8 @@ mod tests {
         assert_eq!(p2.font, "");
         assert_eq!(p2.font_size, 1);
         assert_eq!(p2.file_path, "C:\\tmp\\report.pdf");
+        assert_eq!(p2.pdf_page, 3);
+        assert_eq!(p1.pdf_page, 0, "the omitted @pdfpage line must default to 0");
         assert_eq!(p2.icon_path, "C:\\tmp\\clip.mp4");
         assert_eq!(p2.caption, "Mein Untertitel");
         assert_eq!(p2.caption_size, 18);
@@ -11430,6 +11472,8 @@ mod tests {
         assert_eq!(rows[2][12], "18");
         assert_eq!(rows[1][13], "Work,E-Mail");
         assert_eq!(rows[2][13], "");
+        assert_eq!(rows[1][15], "0");
+        assert_eq!(rows[2][15], "3");
     }
 
     // F13: a choice variable is plain prompt text, so neither exporter may touch
@@ -11459,6 +11503,8 @@ mod tests {
         assert_eq!(p1.tags, vec!["Work".to_string(), "E-Mail".to_string()]);
         let p2 = &data.prompts[1];
         assert_eq!(p2.file_path, "C:\\tmp\\report.pdf");
+        assert_eq!(p2.pdf_page, 3);
+        assert_eq!(p1.pdf_page, 0);
         assert_eq!(p2.icon_path, "C:\\tmp\\clip.mp4");
         assert_eq!(p2.caption, "Mein Untertitel");
         assert_eq!(p2.caption_size, 18);

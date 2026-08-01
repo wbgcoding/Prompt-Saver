@@ -2210,6 +2210,8 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   white-space: nowrap;
   font-size: 12px;
 }
+/* 83: page number field, only shown for a PDF attachment. */
+.pdf-page-input { flex: 0 0 auto; width: 52px; padding: 3px 6px; font-size: 12px; text-align: center; }
 /* Caption text + its size select side by side. */
 .caption-row {
   display: flex;

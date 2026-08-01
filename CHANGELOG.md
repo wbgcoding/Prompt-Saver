@@ -108,6 +108,8 @@ Everything new is an expert-menu switch, most of it off until you turn it on.
   before anything is actually imported.
 - Floating pills and folders now have a "Hide until restart" option in their
   right-click menu, alongside the existing permanent Remove/Dissolve.
+- A PDF attachment can now show a page other than the first — a page number
+  field appears next to it in the editor.
 - The changelog in the update dialog is laid out instead of dumped: headings,
   bullets, tables and highlighted terms, in a box that takes the height of the
   release notes and scrolls only once they outgrow the window.

@@ -220,6 +220,9 @@
       <div id="modal-file-wrap" class="modal-file-wrap hidden">
         <span id="modal-file-icon" class="modal-file-icon" aria-hidden="true"></span>
         <span id="modal-file-name" class="modal-file-name"></span>
+        <!-- 83: only shown for a PDF attachment; the preview re-requests that page. -->
+        <input type="number" id="modal-pdf-page" class="modal-input pdf-page-input hidden" min="1"
+               data-i18n-title="tipPdfPage" data-i18n-aria="tipPdfPage" />
         <button type="button" id="modal-replace-file" class="ghost-btn" data-i18n="replaceImage">Replace</button>
       </div>
       <p id="modal-file-hint" class="modal-hint hidden" data-i18n="fileHint">Only the file path is saved.</p>
