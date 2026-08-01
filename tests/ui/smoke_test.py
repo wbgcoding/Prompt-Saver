@@ -2607,6 +2607,15 @@ FLOAT_PROBE = """
       if (!ev.dataTransfer.getData('text/plain')) errs.push('a pill drag-out carried no text');
     }
     up();
+    // 43: "hide for now" — a distinct action from Remove, must never touch the
+    // permanent toggle_floating command.
+    calls().length = 0;
+    document.getElementById('menu-hide').click();
+    await until(() => calls().includes('hide_float_for_now'));
+    if (!calls().includes('hide_float_for_now')) errs.push('menu-hide did not call hide_float_for_now');
+    const hideArgs = args().find((c) => c[0] === 'hide_float_for_now');
+    if (!hideArgs || hideArgs[1].id !== 'p0') errs.push('menu-hide sent the wrong id: ' + JSON.stringify(hideArgs));
+    if (calls().includes('toggle_floating')) errs.push('menu-hide also called the permanent toggle_floating');
   } catch (e) { errs.push('probe: ' + e.message); }
   errs.push(...(window.__SMOKE_ERRORS__ || []));
   const pre = document.createElement('pre');
@@ -2916,6 +2925,15 @@ FOLDER_PROBE = """
       if (!calls().includes('copy_prompt')) errs.push('clicking a member did not copy it');
       if (!calls().includes('record_copy')) errs.push('a copy from a folder was not recorded');
     }
+    // 43: "hide for now" — a distinct action from Dissolve, must never touch the
+    // permanent dissolve_float_folder command.
+    window.__SMOKE_CALLS__.length = 0;
+    document.getElementById('menu-hide').click();
+    await until(() => calls().includes('hide_float_for_now'));
+    if (!calls().includes('hide_float_for_now')) errs.push('menu-hide did not call hide_float_for_now');
+    const hideArgs = (window.__SMOKE_ARGS__ || []).find((c) => c[0] === 'hide_float_for_now');
+    if (!hideArgs || hideArgs[1].id !== 'f1') errs.push('menu-hide sent the wrong id: ' + JSON.stringify(hideArgs));
+    if (calls().includes('dissolve_float_folder')) errs.push('menu-hide also called the permanent dissolve_float_folder');
     // Esc collapses it again and shrinks the window back to the icon.
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await until(() => pop.classList.contains('hidden'));

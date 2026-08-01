@@ -2984,6 +2984,11 @@ fn folder_name_of(name: &str) -> Result<String, String> {
 // never survives a restart.
 struct FolderExpand(Mutex<HashMap<String, Rect>>);
 
+// 43: pill/folder windows dismissed "for now" (their own context menu, not the
+// permanent Remove/Dissolve). In memory only, like FolderExpand above — cleared
+// on restart, never written to settings.
+struct HiddenFloats(Mutex<std::collections::HashSet<String>>);
+
 fn folder_expansion(app: &AppHandle, id: &str) -> Option<Rect> {
     let state = app.try_state::<FolderExpand>()?;
     let map = state.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -3171,7 +3176,15 @@ fn sync_float_windows(app: &AppHandle) {
         let state: State<Db> = app.state();
         let store = lock(&state);
         let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
-        let (want_pills, want_folders) = float_window_plan(&store.settings, &ids);
+        let (mut want_pills, mut want_folders) = float_window_plan(&store.settings, &ids);
+        // 43: "hide for now" drops the id from the plan, which the stale-window
+        // loop below then closes if it was already open — the same one filter
+        // both closes it now and keeps it from reopening until the next launch.
+        if let Some(hidden) = app.try_state::<HiddenFloats>() {
+            let hidden = hidden.0.lock().unwrap_or_else(|e| e.into_inner());
+            want_pills.retain(|id| !hidden.contains(id));
+            want_folders.retain(|id| !hidden.contains(id));
+        }
         let pills: Vec<Prompt> = store
             .prompts
             .iter()
@@ -6109,6 +6122,18 @@ async fn recent_copies(app: AppHandle, limit: usize, grouped: bool) -> Vec<CopyE
     db_conn(&app)
         .map(|c| db_recent_copies(&c, limit.min(COPY_HISTORY_MAX), grouped))
         .unwrap_or_default()
+}
+
+// 43: "hide for now" — a pill or folder id (both flat strings from different id
+// spaces, never colliding), dismissed until the app restarts. NOT the permanent
+// unpin (toggle_floating/dissolve_float_folder) — the entry in settings.floating
+// / float_folders stays untouched, so it comes right back on the next launch.
+#[tauri::command]
+async fn hide_float_for_now(app: AppHandle, id: String) {
+    if let Some(state) = app.try_state::<HiddenFloats>() {
+        state.0.lock().unwrap_or_else(|e| e.into_inner()).insert(id);
+    }
+    sync_float_windows(&app);
 }
 
 // Must stay async: window creation from a sync command deadlocks on Windows
@@ -10112,6 +10137,7 @@ pub fn run() {
             app.manage(SnipPreview(Arc::new(Mutex::new(None))));
             app.manage(HotkeyTargets(Mutex::new(Vec::new()))); // F20
             app.manage(FolderExpand(Mutex::new(HashMap::new()))); // F25
+            app.manage(HiddenFloats(Mutex::new(std::collections::HashSet::new()))); // 43
             app.manage(DragHint(Mutex::new((0, None)))); // F25 live merge highlight
             app.manage(VarPrompt::new()); // F12 standalone fill-in window
 
@@ -10500,6 +10526,7 @@ pub fn run() {
             clear_copy_history,
             recent_copies,
             toggle_floating,
+            hide_float_for_now,
             set_float_scale,
             resize_float_pill,
             resize_float_media,

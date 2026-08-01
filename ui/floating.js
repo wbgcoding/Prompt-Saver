@@ -159,6 +159,7 @@ async function applyTexts(s) {
     b.setAttribute("aria-label", b.title);
   }
   document.getElementById("menu-edit").textContent = t.edit;
+  document.getElementById("menu-hide").textContent = t.hideForNow;
   document.getElementById("menu-remove").textContent = t.remove;
   const closeBtn = document.getElementById("menu-close");
   closeBtn.title = t.close;
@@ -554,6 +555,10 @@ document.getElementById("menu-close").addEventListener("click", () => closeMenu(
 document.getElementById("menu-edit").addEventListener("click", async () => {
   await closeMenu();
   await invoke("edit_prompt_request", { id: promptId }).catch(() => {});
+});
+
+document.getElementById("menu-hide").addEventListener("click", () => {
+  invoke("hide_float_for_now", { id: promptId }).catch(() => {}); // closes this window, until restart
 });
 
 document.getElementById("menu-remove").addEventListener("click", () => {

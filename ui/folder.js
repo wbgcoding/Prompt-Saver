@@ -307,6 +307,7 @@ async function applyTexts(s) {
     Object.entries(i18n.FLOAT_TXT[lang]).map(([k, v]) => [k, applyTerms(v, lang)]));
   document.getElementById("size-label").textContent = TXT.size;
   document.getElementById("menu-rename").textContent = TXT.rename;
+  document.getElementById("menu-hide").textContent = TXT.hideForNow;
   document.getElementById("menu-dissolve").textContent = TXT.dissolve;
   document.getElementById("mm-edit").textContent = TXT.edit;
   document.getElementById("mm-out").textContent = TXT.takeOut;
@@ -485,6 +486,10 @@ document.getElementById("menu-rename").addEventListener("click", async () => {
   await closePopover();
   // The folder window hosts no themed dialog — the main window asks for the name.
   invoke("folder_rename_request", { id: folderId }).catch(() => {});
+});
+
+document.getElementById("menu-hide").addEventListener("click", () => {
+  invoke("hide_float_for_now", { id: folderId }).catch(() => {}); // closes this window, until restart
 });
 
 document.getElementById("menu-dissolve").addEventListener("click", () => {
