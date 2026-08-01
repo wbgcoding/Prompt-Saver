@@ -5186,6 +5186,19 @@ function scheduleLenCounter() {
   lenRaf = requestAnimationFrame(() => { lenRaf = 0; updateLenCounter(); });
 }
 
+// Search re-renders the whole result list, which for a large library means rebuilding
+// every row (and re-decoding every image thumbnail) — far too much to do on each
+// keystroke. The field itself stays live; only the list waits for a short pause in
+// typing. Short enough to feel immediate, long enough that a fast typist renders once.
+const SEARCH_DEBOUNCE_MS = 120;
+function debounced(fn, ms = SEARCH_DEBOUNCE_MS) {
+  let timer = 0;
+  return () => {
+    clearTimeout(timer);
+    timer = setTimeout(fn, ms);
+  };
+}
+
 // ---- F14 Markdown preview + F15 code highlighting (editor) ----
 // The prompt body is untrusted text. It is HTML-escaped ONCE, up front, and every
 // transform below only ever slices that escaped string, so nothing a user types can
@@ -6808,13 +6821,13 @@ async function confirmModal() {
 // Everything about a prompt except what identifies it and the hotkey (one accelerator,
 // one prompt): opens the normal create dialog prefilled, so the user can review or
 // cancel before anything is saved. Placement then follows the regular create path.
-async function duplicatePrompt(id) {
-  const p = await invoke("get_prompt", { id });
-  if (!p) return;
+// A stored prompt as the editor's fields. Both "edit" and "duplicate" go through
+// here so a newly added prompt field can never reach one and be forgotten in the
+// other — each caller then overrides only what genuinely differs between them.
+function promptToModal(p) {
   const kind = p.file_path ? mediaKind(p.file_path) : "";
-  openModal({
-    mode: "create",
-    name: `${p.name} (${t("duplicateSuffix")})`,
+  return {
+    name: p.name,
     text: p.text,
     color: p.color || "",
     image: p.image || "",
@@ -6827,46 +6840,35 @@ async function duplicatePrompt(id) {
     captionSize: p.caption_size || 0,
     font: p.font || "",
     fontSize: p.font_size || 0,
-    favorite: false,
+    favorite: p.favorite || false,
     tags: p.tags || [],
     notes: p.notes || "",
-    hotkey: "",
-    hotkeyPaste: "",
+    hotkey: p.hotkey || "",
+    hotkeyPaste: p.hotkey_paste || "",
     title: p.file_path
       ? t(kind === "video" ? "videoEditTitle" : kind ? "imageEditTitle" : "fileEditTitle")
       : p.copy_image ? t("imageEditTitle") : t("editModalTitle"),
+  };
+}
+
+async function duplicatePrompt(id) {
+  const p = await invoke("get_prompt", { id });
+  if (!p) return;
+  // A copy starts unstarred and unbound: one accelerator belongs to one prompt.
+  openModal({
+    ...promptToModal(p),
+    mode: "create",
+    name: `${p.name} (${t("duplicateSuffix")})`,
+    favorite: false,
+    hotkey: "",
+    hotkeyPaste: "",
   });
 }
 
 async function editPrompt(id) {
   const p = await invoke("get_prompt", { id });
   if (p) {
-    const kind = p.file_path ? mediaKind(p.file_path) : "";
-    openModal({
-      mode: "edit",
-      id,
-      name: p.name,
-      text: p.text,
-      color: p.color || "",
-      image: p.image || "",
-      showImage: p.show_image || false,
-      copyImage: p.copy_image || false,
-      filePath: p.file_path || "",
-      pdfPage: p.pdf_page || 0,
-      iconPath: p.icon_path || "",
-      caption: p.caption || "",
-      captionSize: p.caption_size || 0,
-      font: p.font || "",
-      fontSize: p.font_size || 0,
-      favorite: p.favorite || false,
-      tags: p.tags || [],
-      notes: p.notes || "",
-      hotkey: p.hotkey || "",
-      hotkeyPaste: p.hotkey_paste || "",
-      title: p.file_path
-        ? t(kind === "video" ? "videoEditTitle" : kind ? "imageEditTitle" : "fileEditTitle")
-        : p.copy_image ? t("imageEditTitle") : t("editModalTitle"),
-    });
+    openModal({ ...promptToModal(p), mode: "edit", id });
   }
 }
 
@@ -9218,7 +9220,8 @@ function bind() {
     try { await invoke("set_ui_flag", { key: "closeAfterCopy", enabled }); } catch (err) { toast(String(err)); }
     syncLibraryToggle();
   });
-  $("library-q").addEventListener("input", (e) => { libQuery = e.target.value; renderLibrary(); });
+  const renderLibraryDebounced = debounced(renderLibrary);
+  $("library-q").addEventListener("input", (e) => { libQuery = e.target.value; renderLibraryDebounced(); });
   wireSearchSuggest($("library-q"), "recentSearchLib");
   $("library-sort").addEventListener("change", (e) => { // F10
     settings.ui_texts = { ...(settings.ui_texts || {}), librarySort: e.target.value };
@@ -9323,7 +9326,8 @@ function bind() {
   journalEl.addEventListener("pointerdown", (e) => {
     if (e.target === journalEl) journalEl.classList.add("hidden");
   });
-  $("journal-q").addEventListener("input", (e) => { journalQuery = e.target.value; renderJournal(); });
+  const renderJournalDebounced = debounced(renderJournal);
+  $("journal-q").addEventListener("input", (e) => { journalQuery = e.target.value; renderJournalDebounced(); });
   wireSearchSuggest($("journal-q"), "recentSearchJournal");
   $("journal-types").addEventListener("click", (e) => {
     if (e.target.closest("#journal-fav")) {

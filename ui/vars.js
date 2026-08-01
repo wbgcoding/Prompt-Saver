@@ -4,6 +4,11 @@
 // hands the answers straight back; every rule about what a variable MEANS stays in
 // main.js. Esc, the Cancel button and losing focus all mean "cancelled".
 import { applyFloatTheme } from "./floattheme.js";
+import { APP_NAME } from "./brand.js";
+
+// Frameless window: the title is invisible in the app but shows in the Alt-Tab
+// switcher, so it comes from the brand rather than a hardcoded English word.
+document.title = APP_NAME;
 
 const { invoke } = window.__TAURI__.core;
 

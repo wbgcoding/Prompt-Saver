@@ -5,11 +5,16 @@
 // so placeholder dialogs, cooldown, chains and recording stay in main.js, not
 // duplicated here.
 import { applyFloatTheme } from "./floattheme.js";
+import { APP_NAME } from "./brand.js";
 // Static, not dynamic: this window has to boot instantly (it opens on a hotkey
 // press) and unlike floating.js's pill, it needs the translated placeholder/empty
 // text from the very first frame, not after a lazy follow-up load.
 import { FLOAT_TXT } from "./i18n.js";
 import { applyTerms } from "./terms.js";
+
+// Frameless window: the title is invisible in the app but shows in the Alt-Tab
+// switcher, so it comes from the brand rather than a hardcoded English word.
+document.title = APP_NAME;
 
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;

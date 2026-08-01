@@ -12,6 +12,10 @@ pdfium-LICENSE
 # Editor / OS / logs
 .vscode/
 .idea/
+# Local tooling config — machine-specific absolute paths, nothing a clone needs.
+.codex/
+.claude/
+.serena/
 Thumbs.db
 Desktop.ini
 *.log

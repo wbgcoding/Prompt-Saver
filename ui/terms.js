@@ -24,8 +24,6 @@ function ruleFor(lang) {
   return rule;
 }
 
-export const hasTerms = (lang) => !!ruleFor(lang);
-
 // Apply the brand's vocabulary to one finished string. A no-op — same string object
 // — for a brand without a table, which is the case that has to stay free.
 export function applyTerms(text, lang) {

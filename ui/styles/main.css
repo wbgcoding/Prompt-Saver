@@ -1272,8 +1272,11 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* Edit dialog stacks above the prompt library. */
 #modal.overlay { z-index: 55; }
 /* Feature modals opened from inside settings/expert must sit ABOVE the settings
-   overlay (both were z-index 50, so they rendered behind it). Below vars/confirm. */
+   overlay (both were z-index 50, so they rendered behind it). Below vars/confirm.
+   Every dialog reached from EXPERT_ACTIONS belongs here — the expert menu leaves
+   settings open behind it, so a base-z overlay opens invisible. */
 #dupes-modal.overlay,
+#trash-modal.overlay,
 #clip-modal.overlay { z-index: 65; }
 /* Wide enough that the title, the on/off switch and "Clear all" stay on one line. */
 #clip-modal .modal { width: min(580px, 92vw); }
@@ -2953,7 +2956,6 @@ body.drag-over::after {
 .head-toggle.head-clear { color: var(--danger); }
 .head-toggle.head-clear:hover { border-color: var(--danger); }
 .noflag-libraryCloseToggle #library-close-toggle { display: none; }
-.noflag-libraryColsToggle .cols-control { display: none; }
 /* F10 library sort dropdown. */
 .head-sort { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .lib-sort {
@@ -2968,25 +2970,6 @@ body.drag-over::after {
   cursor: pointer;
 }
 .lib-sort:hover { border-color: var(--accent); }
-/* Library columns: "Spalten" + a 1..N segmented toggle. */
-.cols-control { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
-.cols-label { color: var(--muted); font-size: 12px; }
-.seg-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-.seg-btn {
-  min-width: 28px;
-  padding: 4px 9px;
-  border: none;
-  background: var(--surface-2);
-  color: var(--muted);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background var(--transition), color var(--transition);
-}
-.seg-btn + .seg-btn { border-left: 1px solid var(--border); }
-.seg-btn:hover { color: var(--fg); }
-.seg-btn.active { background: var(--accent); color: var(--accent-fg); }
 .lib-name { font-weight: 600; overflow-wrap: anywhere; }
 .lib-sub { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 .lib-subrow { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
@@ -3366,9 +3349,9 @@ body.no-composer .toast { bottom: 18px; }
 .toast.update .toast-btn:hover { background: var(--accent); filter: brightness(1.08); }
 
 /* ---- Tags: chips in the editor, filter row in the library, manager dialog ---- */
-/* Opt-in feature: without the flag the tag UI is gone, the stored tags stay. */
-body:not(.flag-tags) #modal-tags,
-body:not(.flag-tags) .lib-tagbar { display: none; }
+/* Default-on feature: switched off, the tag UI is gone, the stored tags stay. */
+body.noflag-tags #modal-tags,
+body.noflag-tags .lib-tagbar { display: none; }
 /* F17 private notes: the editor row only exists while the feature is on. */
 body:not(.flag-promptNotes) #modal-notes { display: none; }
 /* P35: a private note reads like a different kind of field, not a second

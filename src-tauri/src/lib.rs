@@ -1721,17 +1721,41 @@ fn data_dir(app: &AppHandle) -> PathBuf {
     base
 }
 
-fn read_json<T: for<'de> Deserialize<'de> + Default>(path: &PathBuf) -> T {
+// The store's JSON files (prompts.json / settings.json — the DB-write fallback and the
+// legacy pre-SQLite format) hold full prompt bodies and private notes, so they are
+// DPAPI-sealed exactly like the SQLite rows. `dec_str` passes an un-prefixed value
+// through unchanged, which is what still lets a genuinely old plaintext install be
+// migrated in; it is re-sealed the next time it is written.
+fn read_sealed_json<T: for<'de> Deserialize<'de> + Default>(path: &PathBuf) -> T {
     match fs::read_to_string(path) {
-        Ok(raw) if !raw.trim().is_empty() => serde_json::from_str(&raw).unwrap_or_default(),
+        Ok(raw) if !raw.trim().is_empty() => serde_json::from_str(&dec_str(&raw)).unwrap_or_default(),
         _ => T::default(),
     }
 }
 
+// Every import reads a file the user picked — which may have come from someone else —
+// fully into memory before parsing. Check the size FIRST so a wrong pick (a disk image,
+// a video) fails with a clear message instead of exhausting memory. Mirrors the cap the
+// decompression path already applies via `inflate_capped`.
+const MAX_IMPORT_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_THEME_BYTES: u64 = 4 * 1024 * 1024; // a theme is a handful of colour values
+
+fn check_import_size(path: &std::path::Path, max: u64) -> Result<(), String> {
+    let len = fs::metadata(path).map_err(|e| e.to_string())?.len();
+    if len > max {
+        return Err(format!(
+            "file is too large ({} MB); the limit is {} MB",
+            len / (1024 * 1024),
+            max / (1024 * 1024)
+        ));
+    }
+    Ok(())
+}
+
 // Atomic write: temp file then rename, so a crash never truncates data. Returns
 // whether the data actually reached disk, so callers can log a persist failure.
-fn write_json<T: Serialize>(path: &PathBuf, data: &T) -> bool {
-    if let Ok(json) = serde_json::to_string_pretty(data) {
+fn write_sealed_json<T: Serialize>(path: &PathBuf, data: &T) -> bool {
+    if let Ok(json) = serde_json::to_string(data).map(|j| enc_str(&j)) {
         let tmp = path.with_extension("tmp");
         if fs::write(&tmp, json).is_ok() {
             return fs::rename(&tmp, path).is_ok();
@@ -1800,11 +1824,26 @@ mod store_crypt {
     pub fn unprotect(d: &[u8]) -> Option<Vec<u8>> { run(d, false) }
 }
 
-// Encrypt a JSON string for storage (prefix + base64 ciphertext); plaintext on failure.
+// Encrypt a JSON string for storage (prefix + base64 ciphertext).
+//
+// A DPAPI failure falls back to plaintext rather than refusing the write: hard-failing
+// here would mean the user cannot save at all, trading a confidentiality problem for
+// guaranteed data loss. It must never be SILENT though — a broken Windows profile
+// would otherwise downgrade the whole store from sealed to readable with nothing to
+// show for it. Logged once per run (this runs per row; a full save would flood the log).
 fn enc_str(plain: &str) -> String {
     #[cfg(windows)]
-    if let Some(ct) = store_crypt::protect(plain.as_bytes()) {
-        return format!("{}{}", ENC_PREFIX, base64_encode(&ct));
+    {
+        if let Some(ct) = store_crypt::protect(plain.as_bytes()) {
+            return format!("{}{}", ENC_PREFIX, base64_encode(&ct));
+        }
+        static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            append_crash_log(
+                "DPAPI encryption unavailable - stored data is being written UNENCRYPTED. \
+                 Check the Windows user profile; a repaired profile re-seals on the next save.",
+            );
+        }
     }
     plain.to_string()
 }
@@ -2141,7 +2180,7 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
     // DB write on next launch, so a fallback here is not itself data loss. If even
     // this fails (disk full / permission), the change really is lost — leave a
     // diagnosable trace instead of failing silently.
-    if !write_json(&data_dir(app).join("prompts.json"), &store.prompts) {
+    if !write_sealed_json(&data_dir(app).join("prompts.json"), &store.prompts) {
         append_crash_log("persist failed: prompts could not be written to the database or the JSON fallback");
         return false;
     }
@@ -2169,7 +2208,7 @@ fn save_settings(app: &AppHandle, settings: &Settings) {
             return;
         }
     }
-    if !write_json(&data_dir(app).join("settings.json"), settings) {
+    if !write_sealed_json(&data_dir(app).join("settings.json"), settings) {
         append_crash_log("persist failed: settings could not be written to the database or the JSON fallback");
     }
 }
@@ -2242,8 +2281,8 @@ fn load_store(app: &AppHandle) -> Store {
         let mut settings = settings_opt.clone().unwrap_or_default();
         // Empty DB but legacy JSON present → import it once, then own the data.
         if prompts.is_empty() && settings_opt.is_none() {
-            let j_settings: Settings = read_json(&dir.join("settings.json"));
-            let j_prompts: Vec<Prompt> = read_json(&dir.join("prompts.json"));
+            let j_settings: Settings = read_sealed_json(&dir.join("settings.json"));
+            let j_prompts: Vec<Prompt> = read_sealed_json(&dir.join("prompts.json"));
             if !j_prompts.is_empty() || dir.join("settings.json").exists() {
                 let prompts_ok = db_conn(app)
                     .map(|mut c2| db_write_prompts(&mut c2, &j_prompts).is_ok())
@@ -2268,7 +2307,7 @@ fn load_store(app: &AppHandle) -> Store {
             // losing the edit.
             let pj = dir.join("prompts.json");
             if pj.exists() {
-                let fallback: Vec<Prompt> = read_json(&pj);
+                let fallback: Vec<Prompt> = read_sealed_json(&pj);
                 prompts = fallback;
                 if db_write_prompts(&mut conn, &prompts).is_ok() {
                     let _ = fs::remove_file(&pj);
@@ -2276,7 +2315,7 @@ fn load_store(app: &AppHandle) -> Store {
             }
             let sj = dir.join("settings.json");
             if sj.exists() {
-                settings = read_json(&sj);
+                settings = read_sealed_json(&sj);
                 if db_write_settings(&conn, &settings).is_ok() {
                     let _ = fs::remove_file(&sj);
                 }
@@ -2339,10 +2378,10 @@ fn load_store(app: &AppHandle) -> Store {
         return store;
     }
     // Fallback: DB unavailable → read the JSON files directly.
-    let mut settings: Settings = read_json(&dir.join("settings.json"));
+    let mut settings: Settings = read_sealed_json(&dir.join("settings.json"));
     settings.migrate();
     prune_history(&mut settings);
-    let mut prompts: Vec<Prompt> = read_json(&dir.join("prompts.json"));
+    let mut prompts: Vec<Prompt> = read_sealed_json(&dir.join("prompts.json"));
     migrate_prompts(&mut prompts);
     let mut store = Store { prompts, trash: Vec::new(), settings, prompts_locked: false };
     store.normalize_folders();
@@ -3423,13 +3462,19 @@ fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
         return Some(found);
     }
     let cached = pdfium_cache_path();
-    // Size check catches a truncated write from an interrupted first run.
-    if fs::metadata(&cached).map(|m| m.len() as usize).ok() == Some(PDFIUM_DLL.len()) {
+    // The cache path is predictable and lives in a world-writable %TEMP%, so the file
+    // found there is only trusted when its CONTENT matches the copy compiled into this
+    // exe — a length check alone would let any process running as this user pre-plant a
+    // same-size DLL and get it loaded as native code. Rewritten otherwise, which also
+    // repairs a truncated write from an interrupted first run.
+    if fs::read(&cached).is_ok_and(|got| got == PDFIUM_DLL) {
         return Some(cached);
     }
     fs::create_dir_all(cached.parent()?).ok()?;
     if let Err(e) = fs::write(&cached, PDFIUM_DLL) {
-        eprintln!("pdfium unpack failed: {e}"); // preview is skipped, app keeps running
+        // Release builds have no console (windows_subsystem = "windows"), so this has
+        // to reach the rolling log or it is lost. The preview is skipped, app runs on.
+        append_crash_log(&format!("pdfium unpack failed: {e}"));
         return None;
     }
     Some(cached)
@@ -4021,7 +4066,7 @@ async fn batch_prompts(
                 .collect();
             if let Some(view) = store.settings.views.iter_mut().find(|v| v.id == vid) {
                 let (cols, rows) = (view.cols, view.rows);
-                let key = format!("{}x{}", cols, rows);
+                let key = grid_key(cols, rows);
                 let layout = view.layouts.entry(key).or_default();
                 if action == "removeView" {
                     for id in &ids {
@@ -4963,7 +5008,7 @@ fn take_out_of_tile_folder(
         folder.members.retain(|m| m != &id);
     }
     if let Some(view) = store.settings.views.iter_mut().find(|v| v.id == view_id) {
-        let key = format!("{}x{}", view.cols, view.rows);
+        let key = grid_key(view.cols, view.rows);
         let free = cell[0] < view.cols && cell[1] < view.rows;
         let layout = view.layouts.entry(key).or_default();
         if free {
@@ -5171,7 +5216,7 @@ async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Resu
         .views
         .iter()
         .map(|v| {
-            let key = format!("{}x{}", v.cols, v.rows);
+            let key = grid_key(v.cols, v.rows);
             let count = v.layouts.get(&key).map(|l| l.len()).unwrap_or(0);
             ViewCount { name: v.name.clone(), count }
         })
@@ -5389,12 +5434,11 @@ struct BackupInfo {
     // yet, so its count is read out of the snapshot itself once.
     prompts: Option<usize>,
     // 61: the prompt names themselves, same "written once, cheap to read back after"
-    // treatment as `prompts` above. NOT a privacy concern the way it first looks —
-    // a local snapshot (backups/<stamp>/data.db.gz) is never password-protected; the
-    // optional backup password (`BACKUP_PW_KEY`) only wraps the separate manual
-    // export-to-file flow (`export_all`/`import_all`, PSB1 format). Each row is
-    // DPAPI-sealed exactly like the live `data.db`, so reading it back here needs
-    // nothing beyond what already gates the live library on this machine.
+    // treatment as `prompts` above. The snapshot beside it has every row DPAPI-sealed,
+    // so this cache is sealed the same way — plaintext here would hand anyone copying
+    // the data folder to another Windows account the full list of prompt names while
+    // the snapshot itself stayed unreadable, which is exactly the protection the seal
+    // exists for.
     names: Vec<String>,
 }
 
@@ -5443,12 +5487,28 @@ fn read_prompt_names(path: &std::path::Path) -> Vec<String> {
         .collect()
 }
 
+// The names cache carries real prompt titles, so it is DPAPI-sealed like every row in
+// the snapshot it sits beside. `dec_str` passes an un-prefixed value straight through,
+// so a plaintext cache written by an earlier build still reads and is re-sealed on the
+// next write — no migration step needed.
+fn write_prompt_names(cache: &std::path::Path, names: &[String]) {
+    if let Ok(json) = serde_json::to_string(names) {
+        let _ = fs::write(cache, enc_str(&json));
+    }
+}
+fn read_prompt_names_cache(cache: &std::path::Path) -> Vec<String> {
+    fs::read_to_string(cache)
+        .ok()
+        .and_then(|raw| serde_json::from_str(&dec_str(&raw)).ok())
+        .unwrap_or_default()
+}
+
 // 61: same cached-note treatment as `backup_prompt_count` — computed once (here, or
 // at creation time in `do_backup`) and read straight back after.
 fn backup_prompt_names(folder: &std::path::Path) -> Vec<String> {
     let cache = folder.join(BACKUP_NAMES_FILE);
     if cache.exists() {
-        return read_json(&cache);
+        return read_prompt_names_cache(&cache);
     }
     let Some(db) = backup_db_file(folder) else { return Vec::new() };
     let tmp;
@@ -5464,7 +5524,7 @@ fn backup_prompt_names(folder: &std::path::Path) -> Vec<String> {
     let names = read_prompt_names(&path);
     let _ = fs::remove_file(folder.join("names.tmp"));
     if !names.is_empty() {
-        write_json(&cache, &names);
+        write_prompt_names(&cache, &names);
     }
     names
 }
@@ -5671,7 +5731,7 @@ fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<Str
     }
     let names = read_prompt_names(&tmp);
     if !names.is_empty() {
-        write_json(&folder.join(BACKUP_NAMES_FILE), &names);
+        write_prompt_names(&folder.join(BACKUP_NAMES_FILE), &names);
     }
     let _ = fs::remove_file(&tmp);
     if let Err(e) = packed {
@@ -5969,6 +6029,7 @@ fn import_custom_theme(app: AppHandle, state: State<Db>) -> Result<Settings, Str
     let Some(path) = file else {
         return Err("canceled".to_string());
     };
+    check_import_size(&path, MAX_THEME_BYTES)?;
     let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let parsed: ThemeExport = serde_json::from_str(&content).map_err(|_| "invalid theme file".to_string())?;
     save_custom_theme(app, state, String::new(), parsed.name, parsed.base, parsed.vars)
@@ -9227,10 +9288,6 @@ struct ImportedPrompt {
     image: String,
     tags: Vec<String>,
     notes: String,
-    // Parsed from legacy exports so their @positions block is consumed cleanly;
-    // grid layout is no longer imported (prompts-only import).
-    #[allow(dead_code)]
-    positions: Vec<String>,
 }
 
 // "a,b , c" -> ["a", "b", "c"]. Used by both import parsers; empty parts drop out.
@@ -9305,12 +9362,11 @@ fn parse_txt(content: &str) -> ImportData {
         }
         let Some(rest) = block.strip_prefix("### ") else { continue };
         let (name, body) = rest.split_once('\n').unwrap_or((rest, ""));
-        let (body, positions) = match body.split_once("\n@positions\n") {
-            Some((t, pos)) => (
-                t,
-                pos.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect(),
-            ),
-            None => (body, Vec::new()),
+        // A legacy export may still carry an @positions block; the import is
+        // prompts-only, so it is dropped here rather than parsed.
+        let body = match body.split_once("\n@positions\n") {
+            Some((t, _)) => t,
+            None => body,
         };
         // Strip trailing metadata lines in reverse write order:
         // @imagedata, @flags, @icon, @file, @style, @color.
@@ -9384,7 +9440,6 @@ fn parse_txt(content: &str) -> ImportData {
             image,
             tags,
             notes,
-            positions,
         });
     }
     data
@@ -9438,12 +9493,6 @@ fn parse_csv_data(content: &str) -> ImportData {
                 caption_size: row.get(12).and_then(|v| v.trim().parse().ok()).unwrap_or(0),
                 tags: row.get(13).map(|v| split_tag_list(v)).unwrap_or_default(),
                 notes: row.get(14).cloned().unwrap_or_default(),
-                positions: row
-                    .get(2)
-                    .map(|p| {
-                        p.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect()
-                    })
-                    .unwrap_or_default(),
             });
     }
     data
@@ -9457,6 +9506,7 @@ fn import_sig(name: &str, text: &str, file: &str, image: &str, copy: bool) -> St
 }
 
 fn parse_import_file(path: &std::path::Path) -> Result<ImportData, String> {
+    check_import_size(path, MAX_IMPORT_BYTES)?;
     let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
     let is_csv = path
         .extension()
@@ -9811,6 +9861,7 @@ async fn import_all(
     password: Option<String>,
 ) -> Result<ImportSummary, String> {
     let path = PathBuf::from(path);
+    check_import_size(&path, MAX_IMPORT_BYTES)?;
     let raw = fs::read(&path).map_err(|e| e.to_string())?;
     // Try the caller-supplied password first, else the one stored for this machine.
     let pw = password.filter(|p| !p.is_empty()).or_else(|| {
@@ -10714,6 +10765,30 @@ mod tests {
         assert_eq!(dec_str(&enc_str(secret)), secret);
         // Legacy plaintext (no prefix) passes through unchanged for migration.
         assert_eq!(dec_str("legacy plaintext"), "legacy plaintext");
+    }
+
+    // The store's JSON files are the DB-write fallback: they hold full prompt bodies
+    // and private notes, so they must reach disk sealed, not as readable JSON.
+    #[test]
+    fn store_json_fallback_is_written_sealed() {
+        let dir = std::env::temp_dir().join(format!("ps-sealed-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("prompts.json");
+        let secret = vec!["confidential prompt title".to_string()];
+
+        assert!(write_sealed_json(&path, &secret));
+        let raw = fs::read_to_string(&path).expect("written");
+        assert!(raw.starts_with(ENC_PREFIX), "fallback must be sealed, got: {raw}");
+        assert!(!raw.contains("confidential"), "plaintext leaked into the fallback file");
+        let back: Vec<String> = read_sealed_json(&path);
+        assert_eq!(back, secret);
+
+        // A genuinely old plaintext install still migrates in.
+        fs::write(&path, r#"["legacy entry"]"#).expect("write legacy");
+        let legacy: Vec<String> = read_sealed_json(&path);
+        assert_eq!(legacy, vec!["legacy entry".to_string()]);
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

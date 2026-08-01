@@ -5,6 +5,11 @@ import { FONTS, fitText } from "./fonts.js";
 import { mediaKind, buildMediaBar, applyVideoPrefs } from "./media.js";
 // F3 custom themes: shared with the folder window (floattheme.js).
 import { applyFloatTheme } from "./floattheme.js";
+import { APP_NAME } from "./brand.js";
+
+// Frameless window: the title is invisible in the app but shows in the Alt-Tab
+// switcher, so it comes from the brand rather than a hardcoded English word.
+document.title = APP_NAME;
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;

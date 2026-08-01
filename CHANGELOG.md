@@ -216,6 +216,20 @@ Everything new is an expert-menu switch, most of it off until you turn it on.
 
 ### Fixed
 
+- **The trash opened invisibly.** Opening it from the expert menu drew it behind
+  the still-open settings panel, so the dialog appeared not to open at all.
+- **Prompt data could be written to disk unencrypted without any sign of it.**
+  If the database write failed, the recovery file it fell back to was plain,
+  readable JSON while every database row is encrypted; the same applied to the
+  prompt-name list cached beside each backup. Both are now encrypted like the
+  rest, and a failure of the Windows encryption service is written to the log
+  instead of silently downgrading storage.
+- **Typing in the library search no longer stutters** on large libraries — the
+  result list is rebuilt once you pause, not on every keystroke.
+- **Window titles in the Alt-Tab switcher were always English.** The floating
+  pill, folder, variables and quick-launcher windows now carry the app name.
+- Importing a file far too large to be a prompt export (a video, a disk image)
+  now fails with a clear message instead of trying to load all of it into memory.
 - **The tag manager was unreachable until you'd already tagged something.**
   The library's tag bar — the only place "Manage tags" lives — disappeared
   entirely with nothing yet to filter by, so there was no way to discover
