@@ -42,3 +42,7 @@ test-data/
 *.crt
 build.bat
 build+install on phone.bat
+
+WORK.md
+docs/DESIGN.md
+docs/INVARIANTS.md
