@@ -25,7 +25,7 @@ STYLES = REPO / "ui" / "styles"
 # Viewport sizes to check, smallest last. The last one is the app's own minimum
 # window size, so nothing here is smaller than the user can actually make it.
 _WIN = json.loads((REPO / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8"))["app"]["windows"][0]
-SIZES = [(560, 430), (520, 360), (480, 300), (420, 340), (_WIN["minWidth"], _WIN["minHeight"])]
+SIZES = [(700, 550), (620, 480), (_WIN["minWidth"], _WIN["minHeight"])]
 MIN_HISTORY_H = 100  # px the expanded list must keep
 
 # Headless Chrome will not make its window narrower than ~500px, so the page is

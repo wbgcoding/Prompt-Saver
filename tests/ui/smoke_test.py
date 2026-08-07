@@ -1724,9 +1724,12 @@ PROBE = """
       if (!cmHist.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
     }
     // Duplicates: its own dialog, reachable only from the expert menu, and the last
-    // window of the main surface that no scan had ever opened.
+    // window of the main surface that no scan had ever opened. Its group (147) lives
+    // in the "System & data" tab, not whatever tab was last active.
     document.getElementById('settings').classList.remove('hidden');
     await click('expert-open');
+    const sysTab = [...document.querySelectorAll('.expert-tab')].find(b => /system/i.test(b.textContent));
+    if (sysTab) { sysTab.click(); await sleep(200); }
     const dupBtn = [...document.querySelectorAll('#expert-flags button')]
       .find(b => /duplicat|duplik|dupli/i.test(b.textContent));
     if (!dupBtn) {

@@ -2006,7 +2006,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   flex: 1 1 auto; min-height: 0;
 }
 #settings-expert > .expert-top,
-#settings-expert > #expert-search,
+#settings-expert > .clear-wrap,
 #settings-expert > #expert-tabs-bar { flex: 0 0 auto; }
 /* A floor, not 0: on a short window the tab bar + search alone filled the dialog and
    left the option list as a 20px sliver. The modal (overflow-y:auto) scrolls instead. */
@@ -3057,7 +3057,10 @@ body.drag-over::after {
 .lib-type.lib-fav-chip.active { background: #f5b301; border-color: #f5b301; color: #1a1a1a; }
 
 /* Expert: copy text-size + font dropdowns share one row. */
-#expert-search { margin-bottom: 10px; }
+/* wireClear() wraps #expert-search in .clear-wrap at runtime — the wrapper is the
+   real flex item, so the clear-X (centered against it) ends up 5px too low if this
+   margin stays on the bare input instead. */
+#settings-expert > .clear-wrap { margin-bottom: 10px; }
 .hotkey-row { display: flex; gap: 8px; align-items: center; }
 .hotkey-row .modal-input { flex: 1; min-width: 0; cursor: pointer; }
 .hotkey-row .ghost-btn { flex: 0 0 auto; }

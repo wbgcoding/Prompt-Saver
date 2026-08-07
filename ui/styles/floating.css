@@ -364,7 +364,7 @@ body.menu-open .pill { flex: 0 0 auto; }
   padding: 6%;
   border: none;
   border-radius: 22%;
-  background: var(--menu-bg);
+  background: transparent;
   color: var(--menu-fg);
   font: inherit;
   cursor: inherit;
@@ -469,6 +469,9 @@ body.menu-open .pill { flex: 0 0 auto; }
   background: var(--pill-bg);
   color: var(--pill-fg);
   font-weight: 700;
+  /* No carrier surface behind the folder any more (item 145) — each tile gets its
+     own soft glow + hairline contour so it stays visible on light backgrounds. */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 .folder-face {
   position: relative;
@@ -550,8 +553,7 @@ body.menu-open .pill { flex: 0 0 auto; }
 .folder-body[data-side="left"] .folder-menu { transform-origin: right center; }
 .folder-pop {
   border-radius: 14px;
-  background: var(--menu-bg);
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+  background: transparent;
   cursor: default;
 }
 .folder-grid { display: grid; }

@@ -1071,8 +1071,8 @@ const EXPERT_VALUES = {
   // How long the hover tooltip stays before auto-hiding (paired with tooltipTimeout).
   tooltipTimeoutMs: { label: "valTooltipTimeout", min: 2000, max: 60000, step: 1000, def: 15000, unit: "ms", gate: "tooltipTimeout" },
   // Appearance scales (percent, 100 = unchanged). Applied as CSS zoom.
-  uiScale: { label: "valUiScale", min: 50, max: 300, step: 5, def: 100, unit: "%" },
-  modalScale: { label: "valModalScale", min: 60, max: 300, step: 5, def: 100, unit: "%" },
+  uiScale: { label: "valUiScale", min: 75, max: 300, step: 5, def: 100, unit: "%" },
+  modalScale: { label: "valModalScale", min: 75, max: 300, step: 5, def: 100, unit: "%" },
   composerScale: { label: "valComposerScale", min: 60, max: 300, step: 5, def: 100, unit: "%" },
   iconScale: { label: "valIconScale", min: 50, max: 300, step: 5, def: 100, unit: "%" },
   primaryScale: { label: "valPrimaryScale", min: 60, max: 300, step: 5, def: 100, unit: "%" },
@@ -1260,8 +1260,6 @@ const EXPERT_TABS = [
     { title: "expGroupTray", flags: ["trayRecent", "trayFavs"], values: ["trayRecentN", "trayFavN"] },
     // F21: the watcher that collects what you copy elsewhere.
     { title: "expGroupClipboard", flags: ["clipWatcher"], values: ["clipMinChars", "clipInboxMax"] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "autoBackupBeforeWipe", "importExport"], values: ["dupThreshold"], selects: ["trashRetentionDays"],
-      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }] },
   ] },
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
@@ -1291,6 +1289,8 @@ const EXPERT_TABS = [
     { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "gridViewBorder", "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }, "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
     { title: "expGroupPrivacy", flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
     { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances"], values: ["kbFocusFadeMs"], paths: ["dataDir"] },
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "autoBackupBeforeWipe", "importExport"], values: ["dupThreshold"], selects: ["trashRetentionDays"],
+      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }] },
   ] },
 ];
 
@@ -3971,6 +3971,9 @@ function openTileFolderPop(f, anchor) {
   }
   tileFolderPop.appendChild(grid);
   placePopover(tileFolderPop, anchor.getBoundingClientRect());
+  // Fixed 84x56 tile, 1px border + 4px padding each side: same auto-shrink as
+  // grid tiles, just against a constant box instead of the shared grid fitBox.
+  for (const btn of grid.children) fitTileText(btn, 74, 46);
 }
 
 // Dragging a member out of the open popover.
@@ -9863,7 +9866,7 @@ function bind() {
 
 // Fill a UI/icon size select with percentage presets (plus the current value if it
 // was fine-tuned in the expert menu), then select the current value.
-const SCALE_PRESETS = [50, 75, 90, 100, 110, 125, 150];
+const SCALE_PRESETS = [75, 90, 100, 110, 125, 150];
 function fillScaleSelect(id, key) {
   const sel = $(id);
   if (!sel) return;
