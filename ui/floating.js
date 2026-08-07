@@ -493,6 +493,9 @@ async function openMenu() {
     px = p.x / d;
     py = p.y / d;
   } catch {}
+  // closeMenu() may have run while we awaited outerPosition (Escape/blur) — respect
+  // it instead of reopening what it just closed with a stale menuState.
+  if (!menuOpen) return;
   menu.classList.remove("hidden");
   const mw = menu.offsetWidth;
   const mh = menu.offsetHeight;
@@ -547,7 +550,7 @@ for (const btn of menu.querySelectorAll("[data-scale]")) {
   btn.addEventListener("click", async () => {
     scale = Number(btn.dataset.scale) || 1;
     markSelectedSize();
-    await invoke("set_float_scale", { id: promptId, scale, resize: false });
+    await invoke("set_float_scale", { id: promptId, scale, resize: false }).catch(() => {});
     const box = pillBox();
     lockPillBox(box.w, box.h);
     placeMenu(box, menu.offsetWidth, menu.offsetHeight);
@@ -713,7 +716,7 @@ async function endResize() {
   rzRaf = 0;
   rzPending = null;
   pill.classList.remove("resizing");
-  await invoke("set_float_scale", { id: promptId, scale, resize: false });
+  await invoke("set_float_scale", { id: promptId, scale, resize: false }).catch(() => {});
   markSelectedSize();
   ensureVideoPlaying();
 }
@@ -830,6 +833,10 @@ listen("merge-hint", async (e) => {
       x = p.x / d;
       y = p.y / d;
     } catch { mergeHint = false; return; }
+    // A merge-hint-off event may have landed while we awaited outerPosition — respect
+    // it instead of growing the window into a state nothing will ever shrink back
+    // from (the "off" branch above already ran with mergeHintBox still null).
+    if (!mergeHint) return;
     const w = window.innerWidth, h = window.innerHeight;
     mergeHintBox = { x, y, w, h };
     invoke("set_float_bounds", {

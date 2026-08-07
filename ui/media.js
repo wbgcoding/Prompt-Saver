@@ -72,7 +72,7 @@ export function buildMediaBar(video, { onChange } = {}) {
   };
 
   const playBtn = mkBtn(ICON_PAUSE); // media autoplays
-  playBtn.addEventListener("click", () => (video.paused ? video.play() : video.pause()));
+  playBtn.addEventListener("click", () => (video.paused ? video.play().catch(() => {}) : video.pause()));
   video.addEventListener("play", () => (playBtn.innerHTML = ICON_PAUSE));
   video.addEventListener("pause", () => (playBtn.innerHTML = ICON_PLAY));
 

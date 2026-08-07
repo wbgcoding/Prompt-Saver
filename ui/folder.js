@@ -44,6 +44,10 @@ let open = null; // "grid" | "menu" | null
 // Every open/close bumps this. A round trip that finishes after a newer one started
 // drops its result instead of resizing the window behind the current state.
 let seq = 0;
+// Separate from `seq`: openPopover()'s own await of closePopover() can outlive a
+// newer openPopover() call that started in the meantime (its close finishes after
+// the newer one already opened something) — this catches that case specifically.
+let openReq = 0;
 let TXT = { copied: "Copied!", size: "Size", edit: "Edit prompt", close: "Close", rename: "Rename", dissolve: "Dissolve folder", takeOut: "Take out of folder" };
 
 // Copy behaviour, mirrored from the pill window.
@@ -210,7 +214,9 @@ async function layout(kind, el, token) {
 // Grow the window around the icon; the icon itself never moves on screen.
 async function openPopover(kind) {
   if (open === kind) return;
+  const req = ++openReq;
   await closePopover(true); // instant: no fade between two popovers
+  if (req !== openReq) return; // a newer openPopover() call already won
   const token = ++seq;
   const el = kind === "menu" ? menuEl : popEl;
   if (kind === "grid") renderGrid();

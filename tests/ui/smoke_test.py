@@ -14,6 +14,7 @@ Run:  python tests/ui/smoke_test.py
 Exit: 0 = clean, 1 = problems found.
 """
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -3081,6 +3082,12 @@ def unescape(s):
 def main():
     browser = next((p for p in CHROME_CANDIDATES if Path(p).exists()), None)
     if not browser:
+        # CI's runner image always ships Chrome (see ci.yml) — a missing browser there
+        # means the whole UI-smoke job silently stopped covering anything, which must
+        # fail loudly instead of passing green with zero coverage.
+        if os.environ.get("CI"):
+            print("FAIL: no Chromium browser found on a CI runner")
+            return 1
         print("SKIP: no Chromium browser found")
         return 0
 

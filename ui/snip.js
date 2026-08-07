@@ -77,6 +77,10 @@ hint.textContent = T.hint;
 // a fresh one was the slow part). beginSession() runs once on first load and
 // again on every "snip-begin" the backend fires for a reused window.
 let i18nLoaded = false;
+// beginSession()'s reveal fallback — module-scoped so resetSession() can cancel a
+// still-pending timer from a session that got replaced before it fired (the window
+// is reused across snips), instead of it firing snip_present into the next one.
+let revealTimer = 0;
 
 function resetSession() {
   start = null;
@@ -97,12 +101,14 @@ function resetSession() {
   loupe.classList.add("hidden");
   dot.classList.add("hidden");
   fullDim();
+  clearTimeout(revealTimer);
+  revealTimer = 0;
 }
 
 async function beginSession() {
   resetSession();
   const b = await invoke("snip_background", { index: IDX });
-  if (!b) { invoke("snip_cancel"); return; }
+  if (!b) { invoke("snip_cancel").catch(() => {}); return; }
   FULL_W = b.width || 1;
   FULL_H = b.height || 1;
   // Colour-pick mode: no selection chrome at all, and the frozen desktop is sampled
@@ -127,17 +133,17 @@ async function beginSession() {
   // leave it stuck hidden; a timer is the final safety net in case a hidden
   // webview ever throttles the load event. present() is idempotent.
   let presented = false;
-  let timer = 0;
   const present = () => {
     if (presented) return;
     presented = true;
-    if (timer) clearTimeout(timer);
+    clearTimeout(revealTimer);
+    revealTimer = 0;
     invoke("snip_present").catch(() => {}); // also focuses the window (reveal_snip)
   };
   bg.onload = present;
   bg.onerror = present;
   bg.src = b.is_file ? convertFileSrc(b.src) : b.src;
-  timer = setTimeout(present, 500);
+  revealTimer = setTimeout(present, 500);
   // Hover highlight loads in the background — it must not gate the overlay. The
   // picker has no window selection, so it never pays for the enumeration.
   if (!pickMode) {
@@ -594,7 +600,7 @@ window.addEventListener("mouseup", async (e) => {
 const NUDGE = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 const ZOOM_KEYS = { "+": 1, "=": 1, "-": -1, _: -1 };
 window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { saveZoom(); invoke("snip_cancel"); return; }
+  if (e.key === "Escape") { saveZoom(); invoke("snip_cancel").catch(() => {}); return; }
   if (!pickMode || pickBusy) return;
   const d = NUDGE[e.key];
   const zk = ZOOM_KEYS[e.key];

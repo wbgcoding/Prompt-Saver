@@ -26,7 +26,9 @@ let answered = false;
 function answer(values) {
   if (answered) return;
   answered = true;
-  invoke("var_window_result", { values }).catch(() => {});
+  // If the call itself fails (backend not ready, IPC hiccup), un-stick the guard —
+  // otherwise this window can never answer again and just sits there forever.
+  invoke("var_window_result", { values }).catch(() => { answered = false; });
 }
 
 const confirm = () =>

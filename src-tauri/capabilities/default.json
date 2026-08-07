@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capabilities for main window, floating quick-copy buttons, pill folders and the variable prompt",
-  "windows": ["main", "float-*", "folder-*", "snip-*", "vars-*"],
+  "description": "Capabilities for main window, floating quick-copy buttons, pill folders, the variable prompt and the quick launcher",
+  "windows": ["main", "float-*", "folder-*", "snip-*", "vars-*", "launcher"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

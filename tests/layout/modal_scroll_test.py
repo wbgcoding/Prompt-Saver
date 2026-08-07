@@ -12,6 +12,7 @@ Run:  python tests/layout/modal_scroll_test.py
 Exit: 0 = all sizes pass, 1 = regression.
 """
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -263,6 +264,12 @@ def measure(browser, tmp, page, size):
 def main() -> int:
     browser = next((p for p in CHROME_CANDIDATES if Path(p).exists()), None)
     if not browser:
+        # CI's runner image always ships Chrome (see ci.yml) — a missing browser there
+        # means this job silently stopped covering anything, which must fail loudly
+        # instead of passing green with zero coverage.
+        if os.environ.get("CI"):
+            print("FAIL: no Chromium browser found on a CI runner")
+            return 1
         print("SKIP: no Chromium browser found")
         return 0
 
