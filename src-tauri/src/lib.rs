@@ -10043,6 +10043,12 @@ fn prune_offscreen_floats(monitors: &[(i32, i32, i32, i32)], settings: &mut Sett
 // physically stored size grew by the monitor's scale factor on every start.
 // Position stays physical (global desktop coordinates).
 
+// Keep in sync with tauri.conf.json's main-window minWidth/minHeight. The OS/WebView2
+// minSize constraint only guards interactive resize-dragging, not a programmatic
+// set_size() call — resolve_geometry's first-start branch has to floor itself.
+const MAIN_WIN_MIN_W: u32 = 680;
+const MAIN_WIN_MIN_H: u32 = 460;
+
 // Center a window of the given LOGICAL size on the primary monitor.
 fn centered_on_primary(main: &tauri::WebviewWindow, width: u32, height: u32) -> WindowGeom {
     if let Some(m) = main.primary_monitor().ok().flatten() {
@@ -10086,8 +10092,8 @@ fn resolve_geometry(main: &tauri::WebviewWindow, saved: Option<WindowGeom>) -> W
     }
     // First start: 50% x 50% of the primary screen (logical), centered.
     let (width, height) = (
-        (cap.0 / 2).max(400).min(cap.0),
-        (cap.1 / 2).max(300).min(cap.1),
+        (cap.0 / 2).max(MAIN_WIN_MIN_W).min(cap.0),
+        (cap.1 / 2).max(MAIN_WIN_MIN_H).min(cap.1),
     );
     centered_on_primary(main, width, height)
 }

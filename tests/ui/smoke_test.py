@@ -1894,6 +1894,11 @@ PROBE = """
       const tabPtr = (type, x, y, el) => (el || window).dispatchEvent(new PointerEvent(type, {
         bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 3, clientX: x, clientY: y }));
       const dragTab = async (from, to) => {
+        // .views scrolls horizontally when squeezed (single-line header mode still
+        // leaves it a variable share of the row) — a real user scrolls the strip
+        // into view before dragging across it too.
+        to.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        await sleep(50);
         const [ax, ay] = tabCentre(from), [bx, by] = tabCentre(to);
         tabPtr('pointerdown', ax, ay, from);
         tabPtr('pointermove', ax + 8, ay);
