@@ -1597,6 +1597,7 @@ function selectRow(key) {
   num.value = cur;
   num.classList.toggle("hidden", isPreset);
   unit.classList.toggle("hidden", isPreset);
+  attachSelectPicker(sel); // themed popup instead of the native OS dropdown
   const persist = async (value) => {
     settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
     try { await invoke("set_ui_value", { key, value }); } catch (err) { toast(String(err)); }
@@ -1644,6 +1645,7 @@ function dropdownRow(key) {
   }
   sel.value = cfg.get();
   sel.addEventListener("change", () => cfg.set(sel.value));
+  attachSelectPicker(sel); // themed popup instead of the native OS dropdown
   row.append(head, sel);
   return row;
 }
@@ -6137,6 +6139,7 @@ async function renderBackupPanel(body) {
     for (const h of [6, 12, 24, 48, 168]) { const o = document.createElement("option"); o.value = String(h); o.textContent = fmtInterval(h); ivs.appendChild(o); }
     ivs.value = String(val("backupIntervalH"));
     ivs.addEventListener("change", async () => { await saveBackupSetting("value", "backupIntervalH", Number(ivs.value)); renderBackupPanel(body); });
+    attachSelectPicker(ivs); // themed popup instead of the native OS dropdown
     iv.append(ivl, ivs); left.appendChild(iv);
   }
 
