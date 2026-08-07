@@ -141,6 +141,10 @@ and put it in `src-tauri/` before building — the build fails without it.
 build.bat
 ```
 
+This is the canonical build path: it regenerates the app icons, builds both the
+portable exe and the NSIS installer, writes a `.sha256` sidecar next to the
+installer (checked by the in-app updater), and copies everything into `dist/`.
+
 or manually:
 
 ```sh
