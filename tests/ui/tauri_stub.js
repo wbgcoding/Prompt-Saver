@@ -197,6 +197,12 @@ const RESULTS = {
   set_ui_text: (a) => { SETTINGS.ui_texts[a.key] = a.value; return null; },
   get_settings: () => JSON.parse(JSON.stringify(SETTINGS)),
   get_state: () => ({ prompts: PROMPTS, settings: JSON.parse(JSON.stringify(SETTINGS)) }),
+  launcher_items: () => ({
+    prompts: PROMPTS.map((p) => ({ id: p.id, name: p.name, text: p.text, color: p.color || "" })),
+    language: SETTINGS.language || "",
+    usage: JSON.parse(JSON.stringify(SETTINGS.usage || {})),
+    last_used: JSON.parse(JSON.stringify(SETTINGS.last_used || {})),
+  }),
   current_theme: () => "dark",
   theme_vars: () => ({ accent: "#ff00aa" }),
   // P100: the probe reads this back instead of a real backend hand-off to main.js.

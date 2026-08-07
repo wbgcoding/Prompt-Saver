@@ -51,10 +51,11 @@ function select(id) {
 // this is a quick filter, not the library's full search.
 function score(p, q) {
   const name = (p.name || "").toLowerCase();
-  const text = (p.text || "").toLowerCase();
   const ni = name.indexOf(q);
   if (ni === 0) return 1000;
   if (ni > 0) return 500 - ni;
+  // Only lowercase the (often much longer) body once a name hit is ruled out.
+  const text = (p.text || "").toLowerCase();
   const ti = text.indexOf(q);
   if (ti >= 0) return 100 - Math.min(ti, 90);
   return -1;
@@ -143,13 +144,14 @@ document.body.addEventListener("mousedown", (e) => {
 });
 
 async function boot() {
-  const state = await invoke("get_state").catch(() => ({ prompts: [], settings: {} }));
-  const settings = state.settings || {};
+  // 133: a lean command instead of get_state — this window has to be ready the
+  // instant its hotkey fires, and get_state clones every prompt's base64 image.
+  const state = await invoke("launcher_items").catch(() => ({ prompts: [], language: "", usage: {}, last_used: {} }));
   applyFloatTheme(await invoke("current_theme").catch(() => null), await invoke("theme_vars").catch(() => ({})));
   listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 
-  const pref = (settings.language && settings.language !== "auto"
-    ? settings.language
+  const pref = (state.language && state.language !== "auto"
+    ? state.language
     : navigator.language || "en"
   ).toLowerCase();
   const lang = Object.keys(FLOAT_TXT).find((c) => pref.startsWith(c)) || "en";
@@ -157,8 +159,8 @@ async function boot() {
   searchEl.placeholder = TXT.searchPh;
 
   prompts = state.prompts || [];
-  usage = settings.usage || {};
-  lastUsed = settings.last_used || {};
+  usage = state.usage || {};
+  lastUsed = state.last_used || {};
   render();
   searchEl.focus();
 }

@@ -489,10 +489,10 @@ const LAUNCHER_WIN_LABEL: &str = "launcher";
 const LAUNCHER_WIN_W: f64 = 560.0; // logical px; keep in sync with .launcher-card in floating.css
 const LAUNCHER_WIN_H: f64 = 420.0;
 
-// Centred horizontally on the cursor's monitor, sitting in the upper third the way
-// every other quick-launcher (Spotlight, PowerToys Run, Alfred) does — a search box
-// that pops up at screen centre reads as a dialog, not a launcher.
-fn launcher_rect(app: &AppHandle) -> Rect {
+// Shared by every cursor-anchored popup window (launcher, var prompt): the monitor's
+// work area under the cursor plus that monitor's own scale factor, so a second
+// monitor at another DPI still gets correctly sized physical pixels.
+fn work_and_dpi_at_cursor(app: &AppHandle) -> (Rect, f64, PhysicalPosition<f64>) {
     let cursor = app.cursor_position().unwrap_or(PhysicalPosition::new(0.0, 0.0));
     let work = work_rect_at(app, cursor.x, cursor.y);
     let dpi = app
@@ -500,6 +500,14 @@ fn launcher_rect(app: &AppHandle) -> Rect {
         .and_then(|w| w.monitor_from_point(cursor.x, cursor.y).ok().flatten())
         .map(|m| m.scale_factor())
         .unwrap_or(1.0);
+    (work, dpi, cursor)
+}
+
+// Centred horizontally on the cursor's monitor, sitting in the upper third the way
+// every other quick-launcher (Spotlight, PowerToys Run, Alfred) does — a search box
+// that pops up at screen centre reads as a dialog, not a launcher.
+fn launcher_rect(app: &AppHandle) -> Rect {
+    let (work, dpi, _cursor) = work_and_dpi_at_cursor(app);
     let w = LAUNCHER_WIN_W * dpi;
     let h = LAUNCHER_WIN_H * dpi;
     let x = work.x + (work.w - w) / 2.0;
@@ -511,13 +519,7 @@ fn launcher_rect(app: &AppHandle) -> Rect {
 // Window box for `rows` fields, centred on the cursor and kept inside that monitor's
 // work area. Physical pixels, so a second monitor at another DPI lands correctly.
 fn var_window_rect(app: &AppHandle, rows: u32) -> Rect {
-    let cursor = app.cursor_position().unwrap_or(PhysicalPosition::new(0.0, 0.0));
-    let work = work_rect_at(app, cursor.x, cursor.y);
-    let dpi = app
-        .get_webview_window("main")
-        .and_then(|w| w.monitor_from_point(cursor.x, cursor.y).ok().flatten())
-        .map(|m| m.scale_factor())
-        .unwrap_or(1.0);
+    let (work, dpi, cursor) = work_and_dpi_at_cursor(app);
     let w = VAR_WIN_W * dpi;
     let h = (VAR_WIN_CHROME + VAR_ROW_H * rows as f64).min(VAR_WIN_MAX_H) * dpi;
     let (x, y) = clamp_to_work(work, w, h, cursor.x - w / 2.0, cursor.y - h / 2.0);
@@ -1613,8 +1615,8 @@ impl Store {
     fn normalize_folders(&mut self) {
         let ids: Vec<String> = self.prompts.iter().map(|p| p.id.clone()).collect();
         normalize_float_folders(&mut self.settings.float_folders, &ids);
-        let views = self.settings.views.clone();
-        normalize_tile_folders(&mut self.settings.tile_folders, &ids, &views);
+        let view_ids: Vec<String> = self.settings.views.iter().map(|v| v.id.clone()).collect();
+        normalize_tile_folders(&mut self.settings.tile_folders, &ids, &view_ids);
     }
 }
 
@@ -2182,6 +2184,7 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
     // diagnosable trace instead of failing silently.
     if !write_sealed_json(&data_dir(app).join("prompts.json"), &store.prompts) {
         append_crash_log("persist failed: prompts could not be written to the database or the JSON fallback");
+        let _ = app.emit("persist-failed", "prompts");
         return false;
     }
     true
@@ -2199,6 +2202,7 @@ fn save_trash(app: &AppHandle, store: &Store) -> bool {
         }
     }
     append_crash_log("persist failed: trash could not be written to the database");
+    let _ = app.emit("persist-failed", "trash");
     false
 }
 
@@ -3271,23 +3275,37 @@ fn sync_float_windows(app: &AppHandle) {
 
 // ---------- Image helpers ----------
 
+const B64_ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+// Reverse lookup built once at compile time: base64_decode runs over whole images and
+// every sealed settings/prompt line at startup, so an O(64) scan per byte (the linear
+// alphabet search this replaced) was real, measurable work — this makes it O(1).
+const fn build_b64_decode_table() -> [u8; 256] {
+    let mut table = [0xFFu8; 256];
+    let mut i = 0;
+    while i < 64 {
+        table[B64_ALPHABET[i] as usize] = i as u8;
+        i += 1;
+    }
+    table
+}
+const B64_DECODE_TABLE: [u8; 256] = build_b64_decode_table();
+
 fn base64_encode(data: &[u8]) -> String {
-    const B: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     for c in data.chunks(3) {
         let n = ((c[0] as u32) << 16)
             | ((*c.get(1).unwrap_or(&0) as u32) << 8)
             | (*c.get(2).unwrap_or(&0) as u32);
-        out.push(B[((n >> 18) & 63) as usize] as char);
-        out.push(B[((n >> 12) & 63) as usize] as char);
-        out.push(if c.len() > 1 { B[((n >> 6) & 63) as usize] as char } else { '=' });
-        out.push(if c.len() > 2 { B[(n & 63) as usize] as char } else { '=' });
+        out.push(B64_ALPHABET[((n >> 18) & 63) as usize] as char);
+        out.push(B64_ALPHABET[((n >> 12) & 63) as usize] as char);
+        out.push(if c.len() > 1 { B64_ALPHABET[((n >> 6) & 63) as usize] as char } else { '=' });
+        out.push(if c.len() > 2 { B64_ALPHABET[(n & 63) as usize] as char } else { '=' });
     }
     out
 }
 
 fn base64_decode(s: &str) -> Vec<u8> {
-    const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let bytes: Vec<u8> = s.bytes().filter(|&b| b != b'=' && !b.is_ascii_whitespace()).collect();
     let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
     for c in bytes.chunks(4) {
@@ -3295,10 +3313,9 @@ fn base64_decode(s: &str) -> Vec<u8> {
         // instead of dropping it and silently shifting every following group.
         let mut v = [0u32; 4];
         for (i, &b) in c.iter().enumerate() {
-            match B64.iter().position(|&x| x == b) {
-                Some(p) => v[i] = p as u32,
-                None => return Vec::new(),
-            }
+            let p = B64_DECODE_TABLE[b as usize];
+            if p == 0xFF { return Vec::new(); }
+            v[i] = p as u32;
         }
         if c.len() >= 2 { out.push(((v[0] << 2) | (v[1] >> 4)) as u8); }
         if c.len() >= 3 { out.push(((v[1] << 4) | (v[2] >> 2)) as u8); }
@@ -4884,7 +4901,10 @@ fn set_view_group_member(
 // renderer because its cell is cleared to the origin only if free), and no folder
 // left with fewer than two members — that one dissolves and its prompts become tiles
 // again. Runs on load and after every mutation. Idempotent.
-fn normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], views: &[View]) {
+// `view_ids` rather than `&[View]` (135): every caller only ever needs to check
+// membership, so passing ids instead of whole views spares a clone of every view's
+// layout maps at each call site.
+fn normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], view_ids: &[String]) {
     let mut taken: Vec<String> = Vec::new();
     for folder in folders.iter_mut() {
         folder.members.retain(|id| {
@@ -4895,7 +4915,7 @@ fn normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], 
             ok
         });
     }
-    folders.retain(|f| f.members.len() >= 2 && views.iter().any(|v| v.id == f.view_id));
+    folders.retain(|f| f.members.len() >= 2 && view_ids.iter().any(|id| id == &f.view_id));
     // One folder per cell: a later one on an occupied cell is pushed to the right,
     // which the renderer resolves to the first free cell anyway.
     let mut cells: Vec<(String, [u32; 2])> = Vec::new();
@@ -4975,11 +4995,9 @@ fn save_tile_folder(
             layout.retain(|pid, _| !inside.contains(pid));
         }
     }
-    let (ids, views) = (
-        store.prompts.iter().map(|p| p.id.clone()).collect::<Vec<_>>(),
-        store.settings.views.clone(),
-    );
-    normalize_tile_folders(&mut store.settings.tile_folders, &ids, &views);
+    let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+    let view_ids: Vec<String> = store.settings.views.iter().map(|v| v.id.clone()).collect();
+    normalize_tile_folders(&mut store.settings.tile_folders, &ids, &view_ids);
     save_settings(&app, &store.settings);
     Ok(store.settings.clone())
 }
@@ -5017,11 +5035,9 @@ fn take_out_of_tile_folder(
             layout.insert(id.clone(), cell);
         }
     }
-    let (ids, views) = (
-        store.prompts.iter().map(|p| p.id.clone()).collect::<Vec<_>>(),
-        store.settings.views.clone(),
-    );
-    normalize_tile_folders(&mut store.settings.tile_folders, &ids, &views);
+    let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+    let view_ids: Vec<String> = store.settings.views.iter().map(|v| v.id.clone()).collect();
+    normalize_tile_folders(&mut store.settings.tile_folders, &ids, &view_ids);
     save_settings(&app, &store.settings);
     Ok(store.settings.clone())
 }
@@ -5090,6 +5106,45 @@ async fn get_state(state: State<'_, Db>) -> Result<AppState, String> {
     Ok(AppState {
         prompts: store.prompts.clone(),
         settings: store.settings.clone(),
+    })
+}
+
+// 133: the quick launcher only ever reads id/name/text/color, on a surface that has
+// to be ready the instant its hotkey fires — get_state's full clone (every base64
+// image included) was exactly the wrong cost to pay there. The four fields are
+// small strings, so cloning just those (instead of the whole Prompt, image and all)
+// is the actual saving.
+#[derive(Serialize)]
+struct LauncherItem {
+    id: String,
+    name: String,
+    text: String,
+    color: String,
+}
+#[derive(Serialize)]
+struct LauncherState {
+    prompts: Vec<LauncherItem>,
+    language: String,
+    usage: HashMap<String, u32>,
+    last_used: HashMap<String, u64>,
+}
+#[tauri::command]
+async fn launcher_items(state: State<'_, Db>) -> Result<LauncherState, String> {
+    let store = lock(&state);
+    Ok(LauncherState {
+        prompts: store
+            .prompts
+            .iter()
+            .map(|p| LauncherItem {
+                id: p.id.clone(),
+                name: p.name.clone(),
+                text: p.text.clone(),
+                color: p.color.clone(),
+            })
+            .collect(),
+        language: store.settings.language.clone(),
+        usage: store.settings.usage.clone(),
+        last_used: store.settings.last_used.clone(),
     })
 }
 
@@ -6043,22 +6098,37 @@ fn copy_payload(p: &Prompt) -> &str {
     &p.text
 }
 
+// The most-called command in the app (every tile/pill/hotkey copy goes through it),
+// so it clones only the ONE field the chosen branch actually needs — not the whole
+// Prompt (134), which on an image prompt meant cloning that base64 blob on every
+// text-branch check too.
+enum CopyPayload {
+    Image(String),
+    File(String),
+    Text(String),
+    Missing,
+}
+
 // Async: encoding + writing a large image to the clipboard stays off the UI thread.
 #[tauri::command]
 async fn copy_prompt(state: State<'_, Db>, id: String) -> Result<bool, String> {
-    let prompt = {
+    let payload = {
         let store = lock(&state);
-        store.prompts.iter().find(|p| p.id == id).cloned()
+        match store.prompts.iter().find(|p| p.id == id) {
+            Some(p) if p.copy_image && !p.image.is_empty() => CopyPayload::Image(p.image.clone()),
+            Some(p) if !p.file_path.is_empty() => CopyPayload::File(p.file_path.clone()),
+            Some(p) => CopyPayload::Text(copy_payload(p).to_string()),
+            None => CopyPayload::Missing,
+        }
     };
-    Ok(match prompt {
-        Some(p) if p.copy_image && !p.image.is_empty() => copy_image_to_clipboard(&p.image),
-        Some(p) if !p.file_path.is_empty() => set_clipboard_file(&p.file_path),
-        Some(p) => {
-            let text = copy_payload(&p).to_string();
+    Ok(match payload {
+        CopyPayload::Image(img) => copy_image_to_clipboard(&img),
+        CopyPayload::File(path) => set_clipboard_file(&path),
+        CopyPayload::Text(text) => {
             note_own_copy(&text); // F21: don't echo our own copy into the inbox
             arboard::Clipboard::new().and_then(|mut c| c.set_text(text)).is_ok()
         }
-        None => false,
+        CopyPayload::Missing => false,
     })
 }
 
@@ -10599,6 +10669,7 @@ pub fn run() {
             delete_tile_folder,
             get_settings,
             get_state,
+            launcher_items,
             current_theme,
             theme_vars,
             set_theme,
@@ -12020,7 +12091,7 @@ mod tests {
 
     #[test]
     fn tile_folders_normalize_to_their_invariants() {
-        let views = vec![test_view("v1")];
+        let view_ids: Vec<String> = vec![test_view("v1").id];
         let ids: Vec<String> = ["a", "b", "c", "d"].iter().map(|s| s.to_string()).collect();
         let mut folders = vec![
             test_tile_folder("f1", "v1", [1, 1], &["a", "gone", "b"]),
@@ -12029,7 +12100,7 @@ mod tests {
             // A view that no longer exists takes its folder with it.
             test_tile_folder("f3", "vX", [0, 0], &["a", "c"]),
         ];
-        normalize_tile_folders(&mut folders, &ids, &views);
+        normalize_tile_folders(&mut folders, &ids, &view_ids);
         assert_eq!(folders.len(), 2);
         assert_eq!(folders[0].members, vec!["a", "b"]); // unknown id dropped
         assert_eq!(folders[1].members, vec!["c", "d"]); // "b" belongs to f1
@@ -12037,12 +12108,12 @@ mod tests {
         assert_ne!(folders[0].cell, folders[1].cell);
         // Idempotent.
         let before: Vec<[u32; 2]> = folders.iter().map(|f| f.cell).collect();
-        normalize_tile_folders(&mut folders, &ids, &views);
+        normalize_tile_folders(&mut folders, &ids, &view_ids);
         assert_eq!(folders.len(), 2);
         assert_eq!(folders.iter().map(|f| f.cell).collect::<Vec<_>>(), before);
         // Down to one member: the folder dissolves instead of lingering.
         folders[0].members.pop();
-        normalize_tile_folders(&mut folders, &ids, &views);
+        normalize_tile_folders(&mut folders, &ids, &view_ids);
         assert_eq!(folders.len(), 1);
         assert_eq!(folders[0].id, "f2");
     }

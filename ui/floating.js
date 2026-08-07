@@ -6,6 +6,7 @@ import { mediaKind, buildMediaBar, applyVideoPrefs } from "./media.js";
 // F3 custom themes: shared with the folder window (floattheme.js).
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
+import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT } from "./copyDefaults.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -30,10 +31,10 @@ let globalFontKey = "system";
 let copySize = 0; // expert copy-text size (0 = auto-fit to the pill)
 let copyFont = ""; // expert copy-text font key ("" = pill font)
 let pFont = ""; // per-prompt overrides ("" / 0 = follow settings)
-let cooldownMs = 2000; // re-copy throttle for this pill (expert value)
+let cooldownMs = COOLDOWN_MS_DEFAULT; // re-copy throttle for this pill (expert value)
 let lastCopyTs = 0;
 // F19 auto-paste on this pill (all default off; a fast second click pastes).
-let apOn = false, apEnter = false, apDelay = 80, apDblMs = 400, lastPillTs = 0;
+let apOn = false, apEnter = false, apDelay = AUTO_PASTE_DELAY_MS_DEFAULT, apDblMs = DBL_CLICK_MS_DEFAULT, lastPillTs = 0;
 let pSize = 0;
 let pCaptionSize = 0; // per-prompt caption size (0 = default, 1 = auto)
 let menuOpen = false;
@@ -184,13 +185,13 @@ function applyPrefs(s) {
   globalFontKey = s.tile_font || "system";
   copySize = Number(s.ui_values?.copySize) || 0;
   const cd = Number(s.ui_values?.copyCooldownMs);
-  cooldownMs = Number.isFinite(cd) ? cd : 2000;
+  cooldownMs = Number.isFinite(cd) ? cd : COOLDOWN_MS_DEFAULT;
   apOn = s.ui_flags?.autoPaste !== false; // default on
   apEnter = s.ui_flags?.autoPasteEnter === true;
   const apd = Number(s.ui_values?.autoPasteDelayMs);
-  apDelay = Number.isFinite(apd) ? apd : 80;
+  apDelay = Number.isFinite(apd) ? apd : AUTO_PASTE_DELAY_MS_DEFAULT;
   const adb = Number(s.ui_values?.dblClickMs);
-  apDblMs = Number.isFinite(adb) ? adb : 400;
+  apDblMs = Number.isFinite(adb) ? adb : DBL_CLICK_MS_DEFAULT;
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
   foldersOn = s.ui_flags?.pillFolders === true;

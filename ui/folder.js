@@ -7,6 +7,7 @@ import { FONTS, fitText } from "./fonts.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { mediaKind } from "./media.js";
 import { APP_NAME } from "./brand.js";
+import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT } from "./copyDefaults.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -51,8 +52,8 @@ let openReq = 0;
 let TXT = { copied: "Copied!", size: "Size", edit: "Edit prompt", close: "Close", rename: "Rename", dissolve: "Dissolve folder", takeOut: "Take out of folder" };
 
 // Copy behaviour, mirrored from the pill window.
-let cooldownMs = 2000;
-let apOn = false, apEnter = false, apDelay = 80, apDblMs = 400;
+let cooldownMs = COOLDOWN_MS_DEFAULT;
+let apOn = false, apEnter = false, apDelay = AUTO_PASTE_DELAY_MS_DEFAULT, apDblMs = DBL_CLICK_MS_DEFAULT;
 const lastCopy = {};
 const lastClick = {};
 let animMs = 150;
@@ -334,13 +335,13 @@ async function applyTexts(s) {
 function applyPrefs(s) {
   document.body.style.fontFamily = FONTS[s.tile_font] || FONTS.system;
   const cd = Number(s.ui_values?.copyCooldownMs);
-  cooldownMs = Number.isFinite(cd) ? cd : 2000;
+  cooldownMs = Number.isFinite(cd) ? cd : COOLDOWN_MS_DEFAULT;
   apOn = s.ui_flags?.autoPaste !== false; // default on
   apEnter = s.ui_flags?.autoPasteEnter === true;
   const apd = Number(s.ui_values?.autoPasteDelayMs);
-  apDelay = Number.isFinite(apd) ? apd : 80;
+  apDelay = Number.isFinite(apd) ? apd : AUTO_PASTE_DELAY_MS_DEFAULT;
   const adb = Number(s.ui_values?.dblClickMs);
-  apDblMs = Number.isFinite(adb) ? adb : 400;
+  apDblMs = Number.isFinite(adb) ? adb : DBL_CLICK_MS_DEFAULT;
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
   // The folder animation reuses the global animation setting.

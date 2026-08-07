@@ -4,6 +4,7 @@ import { applyTerms } from "./terms.js";
 import { I18N, LANGS } from "./i18n.js";
 import { FONTS, FONT_LABELS, fitText } from "./fonts.js";
 import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./media.js";
+import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT } from "./copyDefaults.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen, emit } = window.__TAURI__.event;
@@ -1086,7 +1087,7 @@ const EXPERT_VALUES = {
   // Max copy-history rows the journal renders at once (UI cap, not storage).
   journalLimit: { label: "valJournalLimit", min: 50, max: 10000, step: 50, def: 100, unit: "", gate: "copyHistory" },
   // Block re-copying the SAME prompt within this window (0 = off). Never blocks others.
-  copyCooldownMs: { label: "valCopyCooldown", min: 0, max: 10000, step: 100, def: 2000, unit: "ms" },
+  copyCooldownMs: { label: "valCopyCooldown", min: 0, max: 10000, step: 100, def: COOLDOWN_MS_DEFAULT, unit: "ms" },
   // Header favorites-star size.
   favStarSize: { label: "valFavStarSize", min: 14, max: 48, step: 1, def: 22, unit: "px", gate: "favViewButton" },
   // Favorites grid: cap the column count (0 = auto-size to the count).
@@ -1132,8 +1133,8 @@ const EXPERT_VALUES = {
   backupMonthly: { label: "valBackupMonthly", min: 0, max: 60, step: 1, def: 6, unit: "", gate: "backupGfs" },
   backupYearly: { label: "valBackupYearly", min: 0, max: 20, step: 1, def: 1, unit: "", gate: "backupGfs" },
   // F19 auto-paste: SetForeground→Ctrl+V delay + double-click window.
-  autoPasteDelayMs: { label: "valAutoPasteDelay", min: 30, max: 300, step: 10, def: 80, unit: "ms", gate: "autoPaste" },
-  dblClickMs: { label: "valDblClick", min: 200, max: 600, step: 20, def: 400, unit: "ms", gate: "autoPaste" },
+  autoPasteDelayMs: { label: "valAutoPasteDelay", min: 30, max: 300, step: 10, def: AUTO_PASTE_DELAY_MS_DEFAULT, unit: "ms", gate: "autoPaste" },
+  dblClickMs: { label: "valDblClick", min: 200, max: 600, step: 20, def: DBL_CLICK_MS_DEFAULT, unit: "ms", gate: "autoPaste" },
   // F21 clipboard watcher: min length + inbox cap.
   clipMinChars: { label: "valClipMin", min: 1, max: 100, step: 1, def: 3, unit: "", gate: "clipWatcher" },
   clipInboxMax: { label: "valClipMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "clipWatcher" },
@@ -1238,10 +1239,10 @@ const EXPERT_DROPDOWNS = {
   },
 };
 
-// Expert menu organised into tabs. The shape is deliberate and documented in
-// CLAUDE.md: the first tab holds FEATURES — a toggle followed by everything that
-// tunes it, so a switched-off feature costs exactly one line — while the remaining
-// tabs hold the general values that belong to no single feature.
+// Expert menu organised into tabs. The shape is deliberate: the first tab holds
+// FEATURES — a toggle followed by everything that tunes it, so a switched-off
+// feature costs exactly one line — while the remaining tabs hold the general
+// values that belong to no single feature.
 const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app. F26 (pipette) sits with the
@@ -2155,6 +2156,8 @@ function renderFavGrid() {
     gridEl.appendChild(empty);
   }
   pruneVideoCache();
+  pruneThumbCache(libThumbCache);
+  pruneThumbCache(journalThumbCache);
   renderViews();
   refreshFavViewUi();
   fitAllTiles();
@@ -2293,6 +2296,8 @@ async function renderGrid(skipFetch = false) {
   $("grid-empty").classList.toggle("hidden", prompts.length > 0);
 
   pruneVideoCache();
+  pruneThumbCache(libThumbCache);
+  pruneThumbCache(journalThumbCache);
   renderViews();
   refreshFavViewUi();
   fitAllTiles();
@@ -2447,33 +2452,41 @@ function closeViewGroupPop() {
   viewGroupPopId = null;
 }
 
+// Shared by openViewGroupPop() and renderViewsPop(): both build a checkbox + optional
+// colour dot + name row for a view — a new column here only needs adding once (127).
+function viewRowBase(v, on) {
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "view-group-item" + (on ? " on" : "");
+  const check = document.createElement("span");
+  check.className = "tb-check";
+  check.innerHTML = on ? TB_CHECK : "";
+  const label = document.createElement("span");
+  label.className = "view-group-item-name";
+  label.textContent = v.name;
+  if (v.color) {
+    const dot = document.createElement("span");
+    dot.className = "view-group-dot";
+    dot.style.background = v.color;
+    label.prepend(dot);
+  }
+  row.append(check, label);
+  return row;
+}
+
 function openViewGroupPop(g, anchor) {
   viewGroupPop.innerHTML = "";
   viewGroupPopId = g.id;
   for (const v of groupViews(g)) {
     const on = !favView && v.id === settings.active_view;
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "view-group-item" + (on ? " on" : "");
+    const row = viewRowBase(v, on);
     row.dataset.viewId = v.id;
     row.setAttribute("role", "menuitem");
-    const check = document.createElement("span");
-    check.className = "tb-check";
-    check.innerHTML = on ? TB_CHECK : "";
-    const label = document.createElement("span");
-    label.className = "view-group-item-name";
-    label.textContent = v.name;
-    if (v.color) {
-      const dot = document.createElement("span");
-      dot.className = "view-group-dot";
-      dot.style.background = v.color;
-      label.prepend(dot);
-    }
     const out = document.createElement("span");
     out.className = "view-group-out";
     out.innerHTML = GROUP_OUT_ICON;
     out.title = t("viewGroupRemove");
-    row.append(check, label, out);
+    row.appendChild(out);
     row.addEventListener("click", (e) => {
       if (tabDragBlockClick) return;
       if (e.target.closest(".view-group-out")) { moveViewToGroup(v.id, ""); return; }
@@ -2957,8 +2970,11 @@ function wireTooltips() {
     if (x + r.width + PAD > innerWidth) x = cx - OFF - r.width;
     if (y + r.height + PAD > innerHeight) y = cy - OFF - r.height;
     const z = uiZoom(); // fixed popup lives inside the zoomed body
-    tipEl.style.left = `${Math.max(PAD, x) / z}px`;
-    tipEl.style.top = `${Math.max(PAD, y) / z}px`;
+    // 137: the flip above only guards the edge it checked — near a corner, with a
+    // wide tooltip (expert tooltipWidth), the flipped side can itself run off the
+    // FAR edge. Clamp both bounds, same as placePopover does for every other popup.
+    tipEl.style.left = `${Math.max(PAD, Math.min(x, innerWidth - r.width - PAD)) / z}px`;
+    tipEl.style.top = `${Math.max(PAD, Math.min(y, innerHeight - r.height - PAD)) / z}px`;
   };
   // Actually reveal the tip for `el` (called immediately or after the show-delay).
   const showNow = (el) => {
@@ -3400,6 +3416,20 @@ function getVideoWrap(p, src) {
 function pruneVideoCache() {
   for (const id of videoCache.keys()) {
     if (!prompts.some((p) => p.id === id)) videoCache.delete(id);
+  }
+}
+
+// 132: library/journal thumbnails used to get a fresh <img> with a reassigned
+// base64 src on EVERY render (search re-renders the whole row list on every
+// keystroke), forcing the browser to re-decode the same blob each time. One cache
+// per panel — library and journal can both stay mounted at once (see the video
+// IntersectionObserver comment above), so a single shared cache would rip a thumb
+// out of whichever panel isn't rendering right now.
+const libThumbCache = new Map(); // prompt id -> { key, el }
+const journalThumbCache = new Map();
+function pruneThumbCache(cache) {
+  for (const id of cache.keys()) {
+    if (!prompts.some((p) => p.id === id)) cache.delete(id);
   }
 }
 
@@ -4113,24 +4143,9 @@ function renderViewsPop(id) {
   for (const v of settings.views) {
     if (v.id === settings.active_view) continue; // already here — that's why the menu was opened
     const on = Object.prototype.hasOwnProperty.call(layoutOf(v), id);
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "view-group-item" + (on ? " on" : "");
+    const row = viewRowBase(v, on);
     row.setAttribute("role", "menuitemcheckbox");
     row.setAttribute("aria-checked", String(on));
-    const check = document.createElement("span");
-    check.className = "tb-check";
-    check.innerHTML = on ? TB_CHECK : "";
-    const label = document.createElement("span");
-    label.className = "view-group-item-name";
-    label.textContent = v.name;
-    if (v.color) {
-      const dot = document.createElement("span");
-      dot.className = "view-group-dot";
-      dot.style.background = v.color;
-      label.prepend(dot);
-    }
-    row.append(check, label);
     row.addEventListener("click", async () => {
       try {
         settings = await invoke("batch_prompts", { ids: [id], action: on ? "removeView" : "addView", color: null, favorite: null, viewId: v.id });
@@ -7111,15 +7126,28 @@ function wireTagInput() {
 wireTagInput();
 
 // ---- Library: filter chips + manager ----
+// 135: the bar (and every chip's click listener) doesn't change while the user is
+// just typing a search query — skip rebuilding it unless the tag set or the active
+// filter actually changed since the last render.
+let _lastTagFilterSig = null;
 function renderTagFilter() {
   const bar = $("library-tagbar");
   if (!bar) return;
-  bar.innerHTML = "";
-  if (!tagsOn()) { libTags.clear(); closeTagManager(); return; }
+  if (!tagsOn()) {
+    bar.innerHTML = "";
+    _lastTagFilterSig = null;
+    libTags.clear();
+    closeTagManager();
+    return;
+  }
   const names = allTags();
   // A tag renamed or deleted elsewhere must not keep filtering the list.
   const live = new Set(names.map(tagKey));
   for (const key of [...libTags]) if (!live.has(key)) libTags.delete(key);
+  const sig = names.join("") + "" + [...libTags].sort().join("");
+  if (sig === _lastTagFilterSig) return;
+  _lastTagFilterSig = sig;
+  bar.innerHTML = "";
   // P26: "Manage tags" stays reachable even before the first tag exists — the
   // bar used to disappear entirely with nothing to filter by, hiding the only
   // way to find out tags exist at all.
@@ -7708,32 +7736,39 @@ function thumbDot(p) {
 
 // Shared row preview for library + journal: a looping muted inline video for
 // video prompts, an image for image/gif/stored-image prompts, else a color dot.
-function thumbEl(p) {
+// `cache` (132) reuses the element across re-renders of the SAME panel instead of
+// re-decoding the same base64 blob on every keystroke — appending an already-
+// mounted node just reparents it, so an id whose thumb type stays the same never
+// gets a fresh <img>/<video>.
+function thumbEl(p, cache) {
   if (!flag("imagePreview")) return thumbDot(p);
   const vsrc = flag("libraryVideoPreview") ? videoSrc(p) : "";
+  const src = vsrc ? "" : thumbSrc(p);
+  const key = vsrc ? `v:${vsrc}` : src ? `i:${src}` : "";
+  if (!key) return thumbDot(p);
+  const cached = cache.get(p.id);
+  if (cached && cached.key === key) return cached.el;
+  let el;
   if (vsrc) {
-    const v = document.createElement("video");
-    v.className = "lib-thumb";
-    v.muted = true;
-    v.loop = true;
-    v.playsInline = true;
-    v.preload = "metadata";
-    v.draggable = false;
-    v.src = convertFileSrc(vsrc);
-    if (_activeVidObs) _activeVidObs.observe(v);
-    v.addEventListener("click", (e) => { e.stopPropagation(); openLightbox(v.src, true); });
-    return v;
+    el = document.createElement("video");
+    el.className = "lib-thumb";
+    el.muted = true;
+    el.loop = true;
+    el.playsInline = true;
+    el.preload = "metadata";
+    el.draggable = false;
+    el.src = convertFileSrc(vsrc);
+    if (_activeVidObs) _activeVidObs.observe(el);
+    el.addEventListener("click", (e) => { e.stopPropagation(); openLightbox(el.src, true); });
+  } else {
+    el = document.createElement("img");
+    el.className = "lib-thumb";
+    el.src = src;
+    el.draggable = false;
+    el.addEventListener("click", (e) => { e.stopPropagation(); openLightbox(el.src, false); });
   }
-  const src = thumbSrc(p);
-  if (src) {
-    const img = document.createElement("img");
-    img.className = "lib-thumb";
-    img.src = src;
-    img.draggable = false;
-    img.addEventListener("click", (e) => { e.stopPropagation(); openLightbox(img.src, false); });
-    return img;
-  }
-  return thumbDot(p);
+  cache.set(p.id, { key, el });
+  return el;
 }
 
 // ---- Additive type filters, shared by the library and the copy history ----
@@ -7923,7 +7958,10 @@ function sortLibraryItems(items) {
   const mode = libSortMode();
   const q = libQuery.trim();
   const nameOf = (p) => libLabel(p).toLowerCase();
-  const byName = (a, b) => nameOf(a).localeCompare(nameOf(b), LANG);
+  // One Collator for the whole sort instead of one per pairwise comparison (135) —
+  // localeCompare(str, locale) builds a fresh one internally on every call.
+  const collator = new Intl.Collator(LANG);
+  const byName = (a, b) => collator.compare(nameOf(a), nameOf(b));
   if (mode === "default") {
     // Default + active query = relevance order (exact/prefix above fuzzy).
     if (q) items.sort((a, b) => (libSearchScore(b).score - libSearchScore(a).score) || byName(a, b));
@@ -8045,7 +8083,7 @@ function renderLibrary() {
     }
 
     // Per-type preview: video plays inline, image/gif as a thumbnail, else a dot.
-    row.append(thumbEl(p), body);
+    row.append(thumbEl(p, libThumbCache), body);
 
     // Place on the current layout: drag the row onto the grid, or one click.
     row.addEventListener("pointerdown", (e) => {
@@ -8240,6 +8278,7 @@ function batchErrorToast(e) {
 async function doGridBatch(action, extra = {}) {
   const ids = [...gridSelected];
   if (!ids.length) return;
+  const idset = new Set(ids);
   try {
     settings = await invoke("batch_prompts", {
       ids, action,
@@ -8248,8 +8287,8 @@ async function doGridBatch(action, extra = {}) {
       viewId: extra.viewId ?? null,
     });
   } catch (e) { batchErrorToast(e); return; }
-  if (action === "delete") prompts = prompts.filter((p) => !ids.includes(p.id));
-  else if (action === "color") { for (const p of prompts) if (ids.includes(p.id)) p.color = extra.color ?? ""; }
+  if (action === "delete") prompts = prompts.filter((p) => !idset.has(p.id));
+  else if (action === "color") { for (const p of prompts) if (idset.has(p.id)) p.color = extra.color ?? ""; }
   clearGridSelection();
   await renderGrid(true);
 }
@@ -8413,7 +8452,7 @@ function journalRow(p, meta, onClick) {
     sub.append(l, r);
     body.append(sub);
   }
-  row.append(thumbEl(p), body);
+  row.append(thumbEl(p, journalThumbCache), body);
   row.addEventListener("click", onClick);
   // P55: edit straight from the history — same icon/pattern as the library row.
   const edit = document.createElement("span");
@@ -9840,6 +9879,10 @@ function bind() {
   // P60: the automatic backup has no frontend call site of its own to toast
   // from — the backend says so once the snapshot is really on disk.
   listen("backup-done", () => toast(t("backupDone")));
+  // 113: save_prompts/save_trash used to fail silently to the user when both the DB
+  // and the JSON fallback failed (disk full, permissions). One toast per event —
+  // a stuck disk would otherwise spam this on every edit.
+  listen("persist-failed", () => toast(t("persistFailed")));
   // The standalone fill-in window answered (null = cancelled or closed).
   listen("vars-filled", (e) => {
     const resolve = varsWindowPending;
@@ -9958,25 +10001,39 @@ function setupDragDrop() {
 }
 
 // ---- Init ----
+// Re-read settings from the backend and apply the global, order-sensitive parts
+// (palette, language, sizing, theme). Shared by init() and reloadEverything() so a
+// new global settings value only needs adding here, not in both places (127).
+async function applySettingsCore() {
+  settings = await invoke("get_settings");
+  loadPalette();
+  LANG = resolveLang(settings.language);
+  applyI18n();
+  fillSizeSelects();
+  fillFontSelects();
+  applyTheme(await invoke("current_theme").catch(() => settings.theme));
+}
+
+// The rest of applying loaded settings — flags, toolbar, the grid itself and the
+// settings-dialog controls. Split from applySettingsCore() because init() has to
+// wire event handlers in between; reloadEverything() calls both back to back.
+async function applySettingsUi() {
+  applyFlags();
+  applyBars();
+  await renderGrid();
+  syncSettingsControls();
+}
+
 async function init() {
   try {
-    settings = await invoke("get_settings");
-    loadPalette();
-    LANG = resolveLang(settings.language);
-    applyI18n();
-    fillSizeSelects();
-    fillFontSelects();
-    applyTheme(await invoke("current_theme"));
+    await applySettingsCore();
     bind();
     wireTooltips();
     wireWindowControls();
     wireClearButtons();
     wireLightbox();
     setupDragDrop();
-    applyFlags();
-    applyBars();
-    await renderGrid();
-    syncSettingsControls();
+    await applySettingsUi();
     invoke("app_version").then((v) => {
       versionLabel = t("versionInstalled").replace("{v}", v);
       $("update-version").textContent = versionLabel;
@@ -10039,17 +10096,8 @@ function syncSettingsControls() {
 // flags, views, prompts, controls). Reloading the page would do the same but repaints
 // the whole window, which reads as a flicker.
 async function reloadEverything() {
-  settings = await invoke("get_settings");
-  loadPalette();
-  LANG = resolveLang(settings.language);
-  applyI18n();
-  fillSizeSelects();
-  fillFontSelects();
-  applyTheme(await invoke("current_theme").catch(() => settings.theme));
-  applyFlags();
-  applyBars();
-  await renderGrid(); // WITH the fetch: the prompts themselves were replaced too
-  syncSettingsControls();
+  await applySettingsCore();
+  await applySettingsUi(); // renderGrid() WITH the fetch: the prompts were replaced too
   wireClearButtons();
   fitCache.clear();
   fitAllTiles();
