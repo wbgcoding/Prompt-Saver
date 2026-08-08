@@ -6393,41 +6393,22 @@ async function renderBackupPanel(body) {
     iv.append(ivl, ivs); left.appendChild(iv);
   }
 
-  // Right column — retention. 62: a 2x2 preset grid replaces the old switch. Three
-  // tiles set a plain count (backupGfs off); the fourth ("Erweitert") turns on the
-  // same GFS tiers the old switch revealed — same underlying settings, just reached
-  // by picking a tile instead of flipping a switch first.
-  const RETENTION_PRESETS = [
-    { label: "backupRetentionLight", n: 5 },
-    { label: "backupRetentionNormal", n: 10 },
-    { label: "backupRetentionHeavy", n: 20 },
-  ];
-  const gridEl = document.createElement("div"); gridEl.className = "backup-retention-grid";
-  const keepNow = val("backupKeep");
+  // Right column — retention. 25: a plain number field replaces the three preset
+  // buttons; "Smart retention" is a switch above it that turns the field grey
+  // (backend ignores backupKeep while it is on) and activates the tiers below.
   const gfsOn = optFlag("backupGfs");
-  for (const preset of RETENTION_PRESETS) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "ghost-btn" + (!gfsOn && keepNow === preset.n ? " active" : "");
-    btn.textContent = `${t(preset.label)} (${preset.n})`;
-    btn.addEventListener("click", async () => {
-      await saveBackupSetting("flag", "backupGfs", false);
-      await saveBackupSetting("value", "backupKeep", preset.n);
-      renderBackupPanel(body);
-    });
-    gridEl.appendChild(btn);
-  }
-  const advBtn = document.createElement("button");
-  advBtn.type = "button";
-  advBtn.className = "ghost-btn" + (gfsOn ? " active" : "");
-  advBtn.title = t("flagBackupGfs"); // the name alone does not say what it keeps
-  advBtn.textContent = t("backupRetentionAdvanced");
-  advBtn.addEventListener("click", async () => {
-    await saveBackupSetting("flag", "backupGfs", true);
+  right.appendChild(switchRow(t("flagBackupGfs"), gfsOn, async (on) => {
+    await saveBackupSetting("flag", "backupGfs", on);
     renderBackupPanel(body);
-  });
-  gridEl.appendChild(advBtn);
-  right.appendChild(gridEl);
+  }, "tipBackupGfs"));
+  const keepRow = numRow("valBackupKeep", "backupKeep", 1, 50, async (v) => {
+    await saveBackupSetting("value", "backupKeep", v);
+  }, "backup-keep-row");
+  if (gfsOn) {
+    keepRow.classList.add("is-disabled");
+    keepRow.querySelector("input").disabled = true;
+  }
+  right.appendChild(keepRow);
   // Both retention states share ONE slot so picking a tile never moves the rows below
   // it. The tier grid is always BUILT and merely parked when smart retention is off:
   // a CSS min-height guessing its height was three pixels short of what the fields

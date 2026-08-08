@@ -2534,88 +2534,46 @@ PROBE = """
       if (!pw || pw.type !== 'password' || pw.value !== '' || !/^•+$/.test(pw.placeholder)) {
         out.errors.push('a stored backup password is not shown as empty dots');
       }
-      // 62: sparsam/normal/viel/Erweitert as a 2x2 preset grid. The panel re-renders
-      // on every click, so tiles have to be looked up again after each one.
-      const retTiles = () => [...document.querySelectorAll('#backup-panel .backup-retention-grid .ghost-btn')];
-      const advTile = () => retTiles().find(b => b.textContent.trim() === 'Advanced');
-      const heavyTile = () => retTiles().find(b => b.textContent.includes('(20)'));
-      if (retTiles().length !== 4) {
-        out.errors.push('the retention grid does not show 4 preset tiles');
+      // 25: a plain number field replaces the light/normal/heavy preset tiles;
+      // "Smart retention" is a switch above it that greys the field out and
+      // activates the tier grid below. The panel re-renders on every change, so
+      // elements have to be looked up again after each one.
+      const settle = async (fn) => { for (let i = 0; i < 60 && !fn(); i++) await sleep(50); return fn(); };
+      const keepInput = () => document.querySelector('#backup-panel .backup-keep-row input[type=number]');
+      const gfsSwitch = () => [...document.querySelectorAll('#backup-panel .switch-field')]
+        .find((l) => l.querySelector('span')?.textContent.trim() === 'Smart retention')
+        ?.querySelector('input[type=checkbox]');
+      const tierNode = () => document.querySelector('#backup-panel .backup-tier-grid');
+      if (!keepInput() || !gfsSwitch()) {
+        out.errors.push('the backup panel is missing the retention field or the smart-retention switch');
       } else {
-        // renderBackupPanel() rebuilds the whole panel asynchronously on every click,
-        // so each step waits for the state it expects instead of a fixed sleep — a
-        // measurement taken mid-rebuild is what made this check flaky.
-        // The panel is REPLACED on every click, so waiting on a condition that the
-        // still-mounted old DOM already satisfies measures the wrong render. Wait for
-        // the node itself to be a different one.
-        const settle = async (fn) => { for (let i = 0; i < 60 && !fn(); i++) await sleep(50); return fn(); };
-        // "Rendered" is not enough: wireClearButtons() moves every field into a
-        // clear-X wrapper afterwards, and that changes the row height. Measure only
-        // once that has happened, or the two states are compared in different states.
-        const tierNode = () => document.querySelector('#backup-panel .backup-tier-grid');
-        const tierReady = () => {
-          const n = tierNode();
-          return n && n !== seenNode && n.querySelectorAll('.clear-wrap').length === 4;
-        };
+        if (keepInput().value !== '10') out.errors.push('backupKeep does not default to 10: ' + keepInput().value);
+        if (keepInput().disabled) out.errors.push('the retention field is disabled while smart retention is off');
+        if (!tierNode().classList.contains('is-parked')) out.errors.push('the tier grid is not parked while smart retention is off');
+        keepInput().value = '15';
+        keepInput().dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(200);
+        if (keepInput().value !== '15') out.errors.push('the retention field did not accept 15');
         let seenNode = tierNode();
-        heavyTile()?.click();
-        await settle(tierReady);
-        // The tier grid is always in the DOM and only parked, so "smart retention is
-        // off" is the parked class, not the absence of the grid.
-        if (!await settle(() => heavyTile()?.classList.contains('active') &&
-                                document.querySelector('#backup-panel .backup-tier-grid.is-parked'))) {
-          out.errors.push('picking the "heavy" preset did not mark it active');
+        gfsSwitch().click();
+        await settle(() => tierNode() !== seenNode);
+        if (!await settle(() => !tierNode()?.classList.contains('is-parked'))) {
+          out.errors.push('turning on smart retention did not unpark the tier grid');
         }
-        // Nothing below the retention grid may move when a tile is picked. That is
-        // guaranteed by construction: the tier grid is ALWAYS in the slot and only
-        // parked, so the slot is the same box in both states. Comparing heights
-        // ACROSS the two renders would race the web fonts (they land after the first
-        // layout and add ~3px per row), so each state is checked on its own instead:
-        // the slot must take its height from the tier grid and from nothing else.
-        const slot = () => document.querySelector('#backup-panel .backup-retention-slot');
-        const boxH = (el) => (el ? Math.round(el.getBoundingClientRect().height) : -1);
-        const slotFitsTiers = (label) => {
-          const s = boxH(slot()), g = boxH(tierNode());
-          if (s < 0 || g < 0 || Math.abs(s - g) > 1) {
-            out.errors.push('the retention slot (' + s + ') is not sized by its tier grid (' + g + ') ' + label);
-          }
-        };
-        slotFitsTiers('with a plain preset');
-        if (!document.querySelector('#backup-panel .backup-tier-grid.is-parked')) {
-          out.errors.push('a plain preset left the tier grid unparked');
+        if (document.querySelectorAll('#backup-panel .backup-tier-grid .modal-input').length !== 4) {
+          out.errors.push('smart retention does not show 4 tier fields');
+        }
+        if (!keepInput().disabled || !keepInput().closest('.backup-keep-row').classList.contains('is-disabled')) {
+          out.errors.push('the retention field did not grey out while smart retention is on');
         }
         seenNode = tierNode();
-        advTile().click();
-        await settle(tierReady);
-        if (document.querySelectorAll('#backup-panel .backup-tier-grid:not(.is-parked) .modal-input').length !== 4) {
-          out.errors.push('"Advanced" does not show 4 tier fields');
+        gfsSwitch().click();
+        await settle(() => tierNode() !== seenNode);
+        if (!await settle(() => tierNode()?.classList.contains('is-parked'))) {
+          out.errors.push('turning off smart retention did not park the tier grid again');
         }
-        if (!advTile()?.classList.contains('active')) out.errors.push('picking "Advanced" did not mark it active');
-        slotFitsTiers('with "Advanced"');
-        // Clearing a tier field with its X and leaving it must land on the default,
-        // not the field minimum — checked here, while "Advanced" is still active.
-        const dailyInput = document.querySelector('#backup-panel .backup-tier-grid input[type=number]');
-        const dailyClear = dailyInput && dailyInput.parentElement.querySelector('.clear-btn');
-        if (!dailyInput || !dailyClear) {
-          out.errors.push('the daily-tier field has no clear button');
-        } else {
-          dailyClear.click();
-          await sleep(150);
-          dailyInput.dispatchEvent(new Event('blur'));
-          await sleep(300);
-          if (dailyInput.value !== '3') out.errors.push('clearing the daily tier gives ' + dailyInput.value + ' instead of the default 3');
-          // The X hides itself while the field is empty; once the default is written
-          // back it has to reappear, or the field can never be cleared a second time.
-          if (!dailyClear.classList.contains('show')) out.errors.push('the clear button stays hidden after the field refilled itself');
-        }
-        // Back to a plain preset — the tier grid must be parked again (it stays in the
-        // DOM so the block below it never moves; parked = invisible and untabbable).
-        [...document.querySelectorAll('#backup-panel .backup-retention-grid .ghost-btn')]
-          .find(b => b.textContent.includes('(10)'))?.click();
-        await sleep(400);
-        if (document.querySelectorAll('#backup-panel .backup-tier-grid:not(.is-parked)').length) {
-          out.errors.push('picking a plain preset left the tier grid showing');
-        }
+        if (keepInput().disabled) out.errors.push('the retention field stayed disabled after turning smart retention off');
+        if (keepInput().value !== '15') out.errors.push('the retention value was lost while smart retention was on: ' + keepInput().value);
       }
       // 61: the count column doubles as a click-to-expand toggle for the backup's
       // prompt names, when the backend supplied any (the fixture's first entry has

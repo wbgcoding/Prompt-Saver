@@ -2445,9 +2445,9 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .backup-tier-grid > .backup-set-row { justify-content: space-between; gap: 8px; }
 .backup-tier-grid .modal-input { flex: 0 0 auto; width: 64px; min-width: 0; text-align: center; }
 .backup-tier-grid .clear-wrap { flex: 0 0 auto; width: 64px; }
-/* 62: sparsam/normal/viel/Erweitert as a 2x2 grid of preset tiles. */
-.backup-retention-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-.backup-retention-grid .ghost-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+/* 25: the plain backup-count field greys out while smart retention (GFS) is on —
+   the backend ignores it, but the stored value survives untouched underneath. */
+.backup-keep-row.is-disabled { opacity: 0.45; }
 /* Optional backup password: label left, field + eye button right. */
 .field.backup-pw-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
 .backup-pw-row > span { font-size: 13px; }
