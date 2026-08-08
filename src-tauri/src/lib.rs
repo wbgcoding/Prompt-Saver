@@ -8277,13 +8277,16 @@ async fn begin_capture(
     }
     PICK_ACTIVE.store(pick, Ordering::SeqCst);
     // Loupe settings are read once here, while nothing else holds the store.
-    let cfg = if pick {
+    let (cfg, hist_max) = if pick {
         app.try_state::<Db>()
-            .map(|s| pick_cfg(&s.lock().unwrap_or_else(|e| e.into_inner()).settings))
+            .map(|s| {
+                let guard = s.lock().unwrap_or_else(|e| e.into_inner());
+                (pick_cfg(&guard.settings), pick_history_max(&guard.settings))
+            })
     } else {
         None
     }
-    .unwrap_or(PickCfg { zoom: 8, format: "hex".to_string() });
+    .unwrap_or((PickCfg { zoom: 8, format: "hex".to_string() }, PICK_HISTORY_DEFAULT));
     // Wake the overlay's WebView2 NOW (off-screen) so a long-idle, background-throttled
     // webview un-throttles DURING the freeze+encode below. Without this head start the
     // icon path (overlay idle a while) lags behind a retry (whose webview was just
@@ -8327,7 +8330,13 @@ async fn begin_capture(
                 pick,
                 pick_zoom: cfg.zoom,
                 pick_format: cfg.format,
-                pick_history: if pick { pick_history_hex() } else { Vec::new() },
+                pick_history: if pick {
+                    let mut h = pick_history_hex();
+                    h.truncate(hist_max);
+                    h
+                } else {
+                    Vec::new()
+                },
             }
         });
         *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(bg);
