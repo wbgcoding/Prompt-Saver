@@ -132,6 +132,26 @@ body.pick { cursor: none; }
   overflow: hidden;
   font-variant-numeric: tabular-nums;
 }
+/* 80: last-5 picked colours, a narrow strip under the readout. The loupe itself is
+   pointer-events:none (it must never steal the pick click) — this strip opts back in
+   so its swatches are clickable. */
+.pick-history {
+  display: flex;
+  gap: 5px;
+  pointer-events: auto;
+}
+.pick-history-item {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.12s;
+}
+.pick-history-item:hover { border-color: #fff; }
+.pick-history-item.copied { transform: scale(1.25); }
 .hidden { display: none !important; }
 @keyframes snip-pop {
   from { opacity: 0.5; }

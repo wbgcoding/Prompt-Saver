@@ -24,6 +24,7 @@ const swatch = document.getElementById("pick-swatch");
 const readMain = document.getElementById("pick-main");
 const readAlt = document.getElementById("pick-alt");
 const readZoom = document.getElementById("pick-zoom");
+const historyEl = document.getElementById("pick-history"); // 80: last-5 picked colours
 
 const MIN_REGION = 5; // CSS px; below this a drag counts as a click
 const WIN_RADIUS = 8; // rounded corners when highlighting a window
@@ -54,6 +55,11 @@ let tileBusy = false;
 let loupeLive = false; // a real pixel has been painted at least once this session
 let cur = null; // picked point, in stitched-image physical pixels
 let curPicked = false; // true once `cur` reflects a real aim, not just the seed
+let lastRGB = null; // 80: rgb under the crosshair right now, for the history entry
+// 80: last 5 picked colours, newest first. In-memory only (the overlay window is
+// reused, not destroyed, across snips — see build_snip_window — so this survives
+// between picks within one app run without needing a new persistence layer).
+let pickHistory = [];
 
 // Seed hint/error text synchronously from the browser locale (en/de are the
 // defaults) so a German user never sees an English flash; the async i18n load
@@ -118,6 +124,7 @@ async function beginSession() {
     pickZoom = clampZoom(Number(b.pick_zoom) || 8);
     readZoom.textContent = `${pickZoom}×`;
     pickFmt = b.pick_format || "hex";
+    renderHistory(); // 80: reflect any picks made earlier in this app run
     document.body.classList.add("pick");
     hint.textContent = T.pick;
     noDim();
@@ -415,6 +422,7 @@ function drawLoupe() {
   ctx.strokeRect(o + 0.5, o + 0.5, z - 1, z - 1);
 
   const c = centre;
+  lastRGB = c; // 80: what a click right now would copy
   const hex = rgbToHex(c[0], c[1], c[2]);
   swatch.style.background = hex;
   readMain.textContent = formatColor(pickFmt, c[0], c[1], c[2]);
@@ -480,6 +488,33 @@ function placeLoupe() {
   loupe.style.top = `${Math.max(6, ly)}px`;
 }
 
+// 80: render the last-5 strip. Rebuilt from scratch on every change — 5 buttons is
+// cheap, no need for incremental diffing.
+function renderHistory() {
+  historyEl.innerHTML = "";
+  historyEl.classList.toggle("hidden", pickHistory.length === 0);
+  for (const [r, g, b] of pickHistory) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "pick-history-item";
+    btn.style.background = rgbToHex(r, g, b);
+    btn.title = formatColor(pickFmt, r, g, b);
+    // Both mouse events must stop here: mousedown would otherwise arm a selection
+    // drag, mouseup would otherwise fire pickHere() for whatever the crosshair is
+    // currently over (the window-level pick handlers, above).
+    btn.addEventListener("mousedown", (e) => e.stopPropagation());
+    btn.addEventListener("mouseup", async (e) => {
+      e.stopPropagation();
+      try {
+        await invoke("copy_text", { text: formatColor(pickFmt, r, g, b) });
+        btn.classList.add("copied");
+        setTimeout(() => btn.classList.remove("copied"), 250);
+      } catch { /* clipboard write failed — nothing to show inside this overlay */ }
+    });
+    historyEl.appendChild(btn);
+  }
+}
+
 // Copy the picked colour. The backend re-samples the frozen image at this exact
 // pixel and owns the clipboard write — nothing is stored as a prompt or in the
 // copy history.
@@ -489,6 +524,14 @@ async function pickHere() {
   saveZoom(); // the overlay is about to close; a pending debounce would be lost
   try {
     await invoke("pick_color", { x: cur.x, y: cur.y });
+    if (lastRGB) {
+      const [r, g, b] = lastRGB;
+      // Skip a no-op duplicate of the entry already on top.
+      const top = pickHistory[0];
+      if (!top || top[0] !== r || top[1] !== g || top[2] !== b) {
+        pickHistory = [[r, g, b], ...pickHistory].slice(0, 5);
+      }
+    }
   } catch {
     pickBusy = false;
     showError();
