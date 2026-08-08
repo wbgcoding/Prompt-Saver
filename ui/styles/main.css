@@ -1742,6 +1742,10 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .expert-group { display: flex; flex-direction: column; gap: 8px; }
 .expert-group + .expert-group { margin-top: 4px; }
 .expert-group-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -1750,18 +1754,25 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   padding-bottom: 3px;
   border-bottom: 1px solid var(--border);
 }
+/* 71: holds the optional per-category reset button + (while collapsible) the fold
+   arrow, so both stay clustered on the right regardless of which are present. */
+.expert-group-title-right { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
 /* Collapsible category header (click to fold the whole category away). */
-.expert-group-title.collapsible {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  user-select: none;
-}
-.expert-group-title.collapsible::after { content: "▾"; font-size: 15px; opacity: 0.7; }
-.expert-group.collapsed .expert-group-title.collapsible::after { content: "▸"; }
+.expert-group-title.collapsible { cursor: pointer; user-select: none; }
+.expert-group-title.collapsible .expert-group-title-right::after { content: "▾"; font-size: 15px; opacity: 0.7; }
+.expert-group.collapsed .expert-group-title.collapsible .expert-group-title-right::after { content: "▸"; }
 .expert-group-title.collapsible:hover { color: var(--fg); }
 .expert-group.collapsed > *:not(.expert-group-title) { display: none; }
+.expert-group-reset {
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.expert-group-reset:hover { color: var(--accent); }
 .value-field { gap: 6px; }
 .value-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .value-head span { font-size: 13px; color: var(--fg); }

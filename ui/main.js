@@ -2035,11 +2035,34 @@ function renderExpert() {
       sec.className = "expert-group" + (isCollapsed ? " collapsed" : "");
       const head = document.createElement("div");
       head.className = "expert-group-title";
-      head.textContent = t(group.title);
+      const titleSpan = document.createElement("span");
+      titleSpan.textContent = t(group.title);
+      head.appendChild(titleSpan);
       if (!globalView) {
         head.classList.add("collapsible");
         head.addEventListener("click", () => toggleExpertGroup(group.title, sec));
       }
+      // 71: per-category reset — only worth showing when there is something in this
+      // group to reset. Reuses the same isRowChanged() diff as 66/67.
+      const right = document.createElement("span");
+      right.className = "expert-group-title-right";
+      const changedHere = changedKeysInGroup(group);
+      const changedCount = changedHere.flags.length + changedHere.values.length +
+        changedHere.selects.length + changedHere.dropdowns.length + changedHere.paths.length;
+      if (changedCount) {
+        const resetBtn = document.createElement("button");
+        resetBtn.type = "button";
+        resetBtn.className = "expert-group-reset";
+        resetBtn.title = t("expertResetGroupBtn");
+        resetBtn.setAttribute("aria-label", t("expertResetGroupBtn"));
+        resetBtn.innerHTML = ICON_UNDO;
+        resetBtn.addEventListener("click", (e) => {
+          e.stopPropagation(); // must not also toggle the collapse
+          resetExpertGroup(group, changedHere, changedCount);
+        });
+        right.appendChild(resetBtn);
+      }
+      head.appendChild(right);
       sec.appendChild(head);
       const actionById = new Map(actions.map((a) => [a.id, a]));
       if (searching) {
@@ -2088,6 +2111,65 @@ function renderExpert() {
     box.appendChild(empty);
   }
   box.scrollTop = keepScroll;
+}
+
+// 71: which of this group's own rows currently differ from their default — reuses
+// the same gate + isRowChanged() checks renderExpert()'s keep() applies, just
+// standalone so the reset button can both decide whether to show itself and know
+// exactly what to touch.
+function changedKeysInGroup(group) {
+  const out = { flags: [], values: [], selects: [], dropdowns: [], paths: [] };
+  for (const f of groupFlags(group)) {
+    if (gateOpen(f.gate) && isRowChanged("flags", f.key)) out.flags.push(f.key);
+  }
+  for (const kind of ["values", "selects", "dropdowns", "paths"]) {
+    for (const k of group[kind] || []) {
+      if (gateOpen(EXPERT_DEFS[kind]?.[k]?.gate) && isRowChanged(kind, k)) out[kind].push(k);
+    }
+  }
+  return out;
+}
+
+// 71: reset only what THIS category owns, straight through the same per-key
+// set_ui_flag/set_ui_value/set_ui_text commands a manual edit would use — the
+// backend's own side effects (screensaver exclusion, tray, clipboard watcher, …)
+// are already keyed on the setting being touched, so resetting an unrelated
+// category can never drag them along; nothing extra to guard here.
+async function resetExpertGroup(group, changed, count) {
+  const ok = await confirmDialog({
+    title: t(group.title),
+    message: t("expertResetGroupConfirm").replace("{n}", String(count)),
+    confirmLabel: t("expertReset"),
+  });
+  if (!ok) return;
+  for (const key of changed.flags) {
+    const enabled = shipsOn(key);
+    settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
+    stampChanged(key);
+    try { await invoke("set_ui_flag", { key, enabled }); } catch (err) { toast(String(err)); }
+  }
+  for (const key of [...changed.values, ...changed.selects]) {
+    const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key];
+    settings.ui_values = { ...(settings.ui_values || {}), [key]: cfg.def };
+    stampChanged(key);
+    try { await invoke("set_ui_value", { key, value: cfg.def }); } catch (err) { toast(String(err)); }
+  }
+  for (const key of changed.dropdowns) {
+    const cfg = EXPERT_DROPDOWNS[key];
+    if (cfg.def === undefined) continue;
+    await cfg.set(cfg.def);
+    stampChanged(key);
+  }
+  for (const key of changed.paths) EXPERT_PATHS[key].onReset?.();
+  // Batched once for the whole category instead of per key — same reasoning as
+  // onResetExpert()'s own full-reset refresh below.
+  applyFlags();
+  applyValues();
+  renderViews();
+  await renderGrid(true);
+  fitAllTiles();
+  toast(t("expertResetGroupDone"));
+  renderExpert();
 }
 
 async function onResetExpert() {

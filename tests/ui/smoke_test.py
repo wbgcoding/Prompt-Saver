@@ -2159,6 +2159,75 @@ PROBE = """
         }
       }
     }
+    // 71: per-category reset — resets only the settings that belong to the group
+    // whose button was clicked, a flag changed in a DIFFERENT group must survive.
+    {
+      const rowByLabel2 = (text) => {
+        const tabs = [...document.querySelectorAll('.expert-tab')];
+        const find = () => [...document.querySelectorAll('#expert-flags .switch-field')]
+          .find(r => (r.querySelector('span') || {}).textContent === text) || null;
+        if (!tabs.length) return find();
+        for (const tb of tabs) { tb.click(); const hit = find(); if (hit) return hit; }
+        return null;
+      };
+      // Two flags in the SAME group (Tiles > Tile look) + one in a different group
+      // (Library) entirely, to prove the reset button stays scoped to its own group.
+      // Grid + caption are looked up from ONE tab visit (rowByLabel2 for each
+      // separately would switch tabs in between and click a detached, already
+      // replaced checkbox for the second one).
+      rowByLabel2('Always show grid lines'); // lands on the Tiles tab
+      const gridSw = [...document.querySelectorAll('#expert-flags .switch-field')]
+        .find(r => (r.querySelector('span') || {}).textContent === 'Always show grid lines')
+        ?.querySelector('input.switch');
+      const captionSw = [...document.querySelectorAll('#expert-flags .switch-field')]
+        .find(r => (r.querySelector('span') || {}).textContent === 'Media captions')
+        ?.querySelector('input.switch');
+      if (!gridSw || !captionSw) {
+        out.errors.push('could not find the same-group rows needed for the "reset category" test');
+      }
+      gridSw && gridSw.click(); await sleep(120);
+      captionSw && captionSw.click(); await sleep(120);
+      const otherSw = rowByLabel2('Close library after copying')?.querySelector('input.switch');
+      if (!gridSw || !captionSw || !otherSw) {
+        out.errors.push('could not find the rows needed for the "reset category" test');
+      } else {
+        otherSw.click(); await sleep(120);
+        const otherWasChecked = otherSw.checked;
+        const gridRowNow = rowByLabel2('Always show grid lines');
+        const groupSec = gridRowNow?.closest('.expert-group');
+        const resetBtn = groupSec && groupSec.querySelector('.expert-group-reset');
+        if (!resetBtn) {
+          out.errors.push('the "reset category" button did not appear for a changed group');
+        } else {
+          resetBtn.click();
+          await sleep(150);
+          const cm = document.getElementById('confirm-modal');
+          if (cm.classList.contains('hidden')) {
+            out.errors.push('"reset category" did not ask for confirmation');
+          } else {
+            document.getElementById('confirm-ok').click();
+            await sleep(300);
+            const gridAfter = rowByLabel2('Always show grid lines')?.querySelector('input.switch');
+            const captionAfter = rowByLabel2('Media captions')?.querySelector('input.switch');
+            const otherAfter = rowByLabel2('Close library after copying')?.querySelector('input.switch');
+            if (!gridAfter || gridAfter.checked) {
+              out.errors.push('"reset category" left a flag in the reset category still non-default');
+            }
+            if (!captionAfter || !captionAfter.checked) {
+              out.errors.push('"reset category" left the other changed flag in the same category non-default');
+            }
+            if (!otherAfter || otherAfter.checked !== otherWasChecked) {
+              out.errors.push('"reset category" touched a setting outside its own category');
+            }
+            // Restore the cross-group control flag so later blocks see the default state.
+            if (otherAfter && otherAfter.checked !== undefined) {
+              const backSw = rowByLabel2('Close library after copying')?.querySelector('input.switch');
+              if (backSw && backSw.checked === otherWasChecked) { backSw.click(); await sleep(120); }
+            }
+          }
+        }
+      }
+    }
     // Exercise the interactions that rebuild the menu: collapsing a group and
     // flipping switches (gated ones re-render, plain ones must not).
     // Collapsing must flip a class, not rebuild the list — rebuilding is what made
