@@ -1773,6 +1773,22 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   cursor: pointer;
 }
 .expert-group-reset:hover { color: var(--accent); }
+/* 97: in-app documentation. .help-group reuses .expert-group's own collapse
+   mechanic (unscoped rules, see above) — only the body typography is new here. */
+#help .modal { width: min(760px, 94vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden; }
+.help-body { display: flex; flex-direction: column; gap: 14px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.help-group-body { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; }
+.help-overview { margin: 0; font-size: 13px; line-height: 1.5; color: var(--fg); }
+.help-settings { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.5; color: var(--fg); }
+.help-settings li { margin-bottom: 2px; }
+.help-tip {
+  margin: 4px 0 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 12px;
+  color: var(--muted);
+}
 .value-field { gap: 6px; }
 .value-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .value-head span { font-size: 13px; color: var(--fg); }

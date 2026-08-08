@@ -128,6 +128,7 @@ Full version history: [CHANGELOG.md](CHANGELOG.md)
 | Views | Tabs next to the title: **+** adds one; right-click a tab to rename, resize, recolor or delete |
 | Settings | Gear icon: theme, language, fonts, sizes, autostart, hotkey, import/export, updates, reset |
 | Backups | **Backup manager** in the settings: schedule, retention, password, restore list and statistics |
+| Help | **Help** button in the settings: what every feature and setting does, also readable at [docs/help.md](docs/help.md) |
 
 ## Building from source
 

@@ -6,6 +6,7 @@ import { FONTS, FONT_LABELS, fitText } from "./fonts.js";
 import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./media.js";
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT } from "./copyDefaults.js";
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
+import { HELP_CONTENT } from "./help.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen, emit } = window.__TAURI__.event;
@@ -8832,6 +8833,79 @@ function renderJournal() {
   );
 }
 
+// 97: in-app documentation. EN + DE only (ui/help.js) — every other language
+// falls back to English rather than showing untranslated placeholder text.
+let helpQuery = "";
+let helpCollapsed = new Set(); // in-memory only; resets each time the dialog opens
+
+function helpCategories() {
+  return HELP_CONTENT[LANG] || HELP_CONTENT.en;
+}
+
+function renderHelp() {
+  const box = $("help-body");
+  box.innerHTML = "";
+  const q = helpQuery.trim().toLowerCase();
+  const searching = q.length > 0;
+  let shown = 0;
+  for (const cat of helpCategories()) {
+    const haystack = [cat.title, cat.overview, ...cat.settings, cat.tip || ""].join(" ").toLowerCase();
+    if (searching && !haystack.includes(q)) continue;
+    shown++;
+    // Reuses the expert menu's own group/collapse styling (arrow, spacing, hover) —
+    // same visual language, zero new CSS for the mechanic itself.
+    const sec = document.createElement("div");
+    sec.className = "expert-group help-group" + (!searching && helpCollapsed.has(cat.title) ? " collapsed" : "");
+    const head = document.createElement("div");
+    head.className = "expert-group-title collapsible";
+    head.textContent = cat.title;
+    head.addEventListener("click", () => {
+      if (helpCollapsed.has(cat.title)) helpCollapsed.delete(cat.title);
+      else helpCollapsed.add(cat.title);
+      sec.classList.toggle("collapsed");
+    });
+    sec.appendChild(head);
+    const body = document.createElement("div");
+    body.className = "help-group-body";
+    const ov = document.createElement("p");
+    ov.className = "help-overview";
+    ov.textContent = cat.overview;
+    body.appendChild(ov);
+    if (cat.settings.length) {
+      const ul = document.createElement("ul");
+      ul.className = "help-settings";
+      for (const s of cat.settings) {
+        const li = document.createElement("li");
+        li.textContent = s;
+        ul.appendChild(li);
+      }
+      body.appendChild(ul);
+    }
+    if (cat.tip) {
+      const tip = document.createElement("p");
+      tip.className = "help-tip";
+      tip.textContent = `${t("helpDidYouKnow")} ${cat.tip}`;
+      body.appendChild(tip);
+    }
+    sec.appendChild(body);
+    box.appendChild(sec);
+  }
+  if (searching && !shown) {
+    const empty = document.createElement("div");
+    empty.className = "hint";
+    empty.textContent = t("libraryNoResults");
+    box.appendChild(empty);
+  }
+}
+
+function openHelp() {
+  helpQuery = "";
+  $("help-search").value = "";
+  helpCollapsed = new Set();
+  renderHelp();
+  $("help").classList.remove("hidden");
+}
+
 async function openJournal() {
   settings = await invoke("get_settings");
   journalQuery = "";
@@ -9632,6 +9706,15 @@ function bind() {
   listen("clip-inbox-changed", () => refreshClipInbox());
   // Clicking the app logo opens the project's GitHub page (drag still moves the window).
   $("app-logo")?.addEventListener("click", () => invoke("open_repo").catch((e) => toast(String(e))));
+
+  // 97: in-app documentation.
+  const helpEl = $("help");
+  $("help-open").addEventListener("click", openHelp);
+  $("help-close").addEventListener("click", () => helpEl.classList.add("hidden"));
+  helpEl.addEventListener("pointerdown", (e) => {
+    if (e.target === helpEl) helpEl.classList.add("hidden");
+  });
+  $("help-search").addEventListener("input", (e) => { helpQuery = e.target.value; renderHelp(); });
 
   // Copy history & usage journal.
   const journalEl = $("journal");

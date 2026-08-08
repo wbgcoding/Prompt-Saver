@@ -622,6 +622,22 @@
     </div>
   </div>
 
+  <!-- 97: in-app documentation (EN/DE only, see ui/help.js) -->
+  <div id="help" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 class="modal-title" data-i18n="helpMenu">Help</h2>
+        <button id="help-close" class="icon-btn" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <input id="help-search" class="modal-input" type="text" data-i18n-ph="helpSearchPh" data-i18n-aria="helpSearchPh" />
+      <div id="help-body" class="help-body"></div>
+    </div>
+  </div>
+
   <!-- Settings panel -->
   <div id="settings" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal">
@@ -781,6 +797,7 @@
         </div>
       </div>
       <div class="field settings-btn-row">
+        <button id="help-open" class="ghost-btn" data-i18n="helpMenu">Help</button>
         <button id="expert-open" class="ghost-btn" data-i18n="expertMenu">Expert menu</button>
         <button id="reset-settings" class="ghost-btn danger-btn" data-i18n="resetSettings">Reset settings</button>
         <button id="delete-data" class="ghost-btn danger-btn" data-i18n="deleteData">Delete all data</button>

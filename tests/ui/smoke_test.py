@@ -257,6 +257,49 @@ PROBE = """
         out.errors.push('the "remove examples" button does not call dismiss_example_prompts');
       }
     }
+    // 97: in-app documentation — every category reaches the page, none is empty,
+    // search narrows the list, a "did you know" callout shows up somewhere.
+    {
+      document.getElementById('help-open').click();
+      await sleep(150);
+      const helpEl = document.getElementById('help');
+      if (helpEl.classList.contains('hidden')) {
+        out.errors.push('the help menu did not open');
+      } else {
+        layoutScan('help menu');
+        mustReach('help menu', '#help-close, #help-search');
+        const groups = () => [...document.querySelectorAll('#help-body .help-group')];
+        const allGroups = groups();
+        if (allGroups.length < 15) {
+          out.errors.push('the help menu shows too few categories (' + allGroups.length + ')');
+        }
+        const empties = allGroups.filter(g => !g.querySelector('.help-overview').textContent.trim());
+        if (empties.length) out.errors.push(empties.length + ' help category has an empty overview');
+        if (!document.querySelector('#help-body .help-tip')) {
+          out.errors.push('no help category shows a "did you know" callout');
+        }
+        const search = document.getElementById('help-search');
+        search.value = 'markdown';
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(150);
+        const filtered = groups();
+        if (!filtered.length || filtered.length >= allGroups.length) {
+          out.errors.push('searching the help menu did not narrow the category list');
+        }
+        search.value = 'zzz_no_such_help_topic_zzz';
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(150);
+        if (groups().length) out.errors.push('a nonsense help search still shows categories');
+        if (!document.querySelector('#help-body .hint')) out.errors.push('an empty help search shows no "no results" hint');
+        search.value = '';
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+        document.getElementById('help-close').click();
+        await sleep(150);
+        if (!document.getElementById('help').classList.contains('hidden')) {
+          out.errors.push('the help menu did not close');
+        }
+      }
+    }
     // Window controls and composer buttons are the ones a squeezed header used to
     // carry off the right edge, where no pointer could ever follow them.
     mustReach('main window', '.win-btn, .header-actions > button, .composer > button');
