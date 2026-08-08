@@ -8450,20 +8450,24 @@ function updateBatchBar() {
     el.disabled = n === 0;
   });
 }
+// 28: same free-color palette as the editor (buildSwatches + openColorPop)
+// instead of "none" + presets only — no selection is ever marked here since a
+// batch can hold prompts of different colors.
+let batchColorDebounce = 0;
 function buildBatchColors(wrapId = "lib-batch-colors") {
   const wrap = $(wrapId);
-  if (!wrap || wrap.childElementCount) return;
-  const mk = (color, cls) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = `lib-color ${cls}`.trim();
-    b.dataset.color = color;
-    if (color && color !== "none") b.style.background = color;
-    b.title = color === "none" ? t("colorNone") : color;
-    return b;
+  if (!wrap) return;
+  const run = wrapId === "grid-batch-colors"
+    ? (color) => doGridBatch("color", { color })
+    : (color) => doBatch("color", { color });
+  // The free picker's SV field fires onPick on every drag frame (fine for the
+  // editor's cheap local-state preview) — a batch write per frame would spam
+  // the backend and clear the selection mid-drag, so settle before committing.
+  const debouncedRun = (color) => {
+    clearTimeout(batchColorDebounce);
+    batchColorDebounce = setTimeout(() => run(color), 200);
   };
-  wrap.appendChild(mk("none", "lib-color-all"));
-  for (const c of COLORS) if (c) wrap.appendChild(mk(c, ""));
+  buildSwatches(wrap, "", run, (anchor, cur) => openColorPop(anchor, cur, debouncedRun));
 }
 function fillBatchViews(selId = "lib-batch-view") {
   const sel = $(selId);
@@ -9673,10 +9677,6 @@ function bind() {
   $("library-select-btn").addEventListener("click", () => setLibSelectMode(!libSelectMode));
   $("lib-batch-all").addEventListener("click", () => { for (const id of libDisplayOrder) libSelected.add(id); applyLibSelectionDom(); updateBatchBar(); });
   $("lib-batch-none").addEventListener("click", () => { libSelected.clear(); libLastId = null; applyLibSelectionDom(); updateBatchBar(); });
-  $("lib-batch-colors").addEventListener("click", (e) => {
-    const b = e.target.closest(".lib-color");
-    if (b) doBatch("color", { color: b.dataset.color === "none" ? "" : b.dataset.color });
-  });
   $("lib-batch-fav").addEventListener("click", () => doBatch("favorite", { favorite: true }));
   $("lib-batch-unfav").addEventListener("click", () => doBatch("favorite", { favorite: false }));
   $("lib-batch-addview").addEventListener("click", () => doBatch("addView", { viewId: $("lib-batch-view").value }));
@@ -9700,10 +9700,6 @@ function bind() {
   }, true);
   // 11: grid batch toolbar wiring — same shape as the library's, its own state.
   $("grid-batch-none").addEventListener("click", clearGridSelection);
-  $("grid-batch-colors").addEventListener("click", (e) => {
-    const b = e.target.closest(".lib-color");
-    if (b) doGridBatch("color", { color: b.dataset.color === "none" ? "" : b.dataset.color });
-  });
   $("grid-batch-move").addEventListener("click", () => doGridMove($("grid-batch-view").value));
   $("grid-batch-delete").addEventListener("click", (e) => {
     const n = gridSelected.size;

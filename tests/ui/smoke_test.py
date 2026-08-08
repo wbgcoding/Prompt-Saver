@@ -1281,16 +1281,15 @@ PROBE = """
         t5.querySelector('.tile-select').click();
         await sleep(120);
         if (!batchCount.textContent.trim().startsWith('2')) out.errors.push('selecting a second tile did not update the count to 2');
-        // Recolor both, then confirm the change actually reached the tiles. The
-        // browser normalises tile.style.background to rgb(), so compare through a
-        // throwaway element instead of the hex string the swatch itself carries.
-        const swatch = document.querySelector('#grid-batch-colors .lib-color:not(.lib-color-all)');
+        // Recolor both, then confirm the change actually reached the tiles. 28:
+        // the batch bar now uses the same free-color swatches as the editor
+        // (.swatch, not .lib-color) — skip "none" and the free-pick swatch.
+        const swatch = document.querySelector('#grid-batch-colors .swatch:not(.none):not(.custom)');
         if (!swatch) {
           out.errors.push('the grid batch bar has no colour swatches');
         } else {
-          const probe = document.createElement('div');
-          probe.style.background = swatch.dataset.color;
-          const wantColor = probe.style.background;
+          // Already normalised to rgb() by the browser, same as the tile's own style.
+          const wantColor = swatch.style.background;
           swatch.click();
           await sleep(150);
           if (document.body.classList.contains('grid-selecting')) out.errors.push('recolouring did not clear the selection');
@@ -1333,6 +1332,42 @@ PROBE = """
             }
           }
         }
+        // 28: the free-color swatch opens the same picker as the editor and
+        // applies a custom hex to every selected tile.
+        {
+          const customSwatch = document.querySelector('#grid-batch-colors .swatch.custom');
+          if (!customSwatch) {
+            out.errors.push('28: the grid batch bar has no free-color swatch');
+          } else {
+            customSwatch.click();
+            await sleep(120);
+            const pop = document.querySelector('.color-pop');
+            if (!pop || pop.classList.contains('hidden')) {
+              out.errors.push('28: the free-color swatch did not open the color picker');
+            } else {
+              const hexInput = pop.querySelector('.cp-hex');
+              const probe = document.createElement('div');
+              probe.style.background = '#336699';
+              const wantColor = probe.style.background;
+              hexInput.value = '336699';
+              hexInput.dispatchEvent(new Event('change', { bubbles: true }));
+              // The picker debounces its backend commit (drag frames must not
+              // spam a write each), so give it longer than that window.
+              await sleep(400);
+              const t4Custom = gridTile('p4');
+              if (!t4Custom || t4Custom.style.background !== wantColor) {
+                out.errors.push('28: picking a custom hex did not reach the tile: ' + (t4Custom && t4Custom.style.background));
+              }
+              if (document.body.classList.contains('grid-selecting')) {
+                out.errors.push('28: picking a custom hex did not clear the selection');
+              }
+            }
+          }
+        }
+        // Re-select for the delete-arm test below — the custom-color commit
+        // above clears the selection same as every other batch action.
+        gridTile('p4').querySelector('.tile-select').click();
+        await sleep(120);
         const delBtn = document.getElementById('grid-batch-delete');
         await click('grid-batch-delete');
         await sleep(150);
