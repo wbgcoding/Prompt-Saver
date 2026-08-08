@@ -3139,9 +3139,14 @@ function chainText() {
   return chainSel.map((id) => chainTexts.get(id) ?? "").join(CHAIN_SEP);
 }
 
-function pushChainClipboard() {
+// 32: `commitId` is the prompt just newly picked into the chain (if it rotates) —
+// its pointer only advances once this actual clipboard write succeeds, never from
+// the pick alone (a pick that never reaches the clipboard must burn nothing).
+function pushChainClipboard(commitId) {
   if (!chainSel.length) return;
-  invoke("copy_text", { text: chainText() }).catch((e) => toast(String(e)));
+  invoke("copy_text", { text: chainText() })
+    .then((ok) => { if (ok && commitId) invoke("rotation_commit", { id: commitId }).catch(() => {}); })
+    .catch((e) => toast(String(e)));
 }
 
 // Reflect one tile's chain state (skip / picked + order badge) without a re-render.
@@ -3171,19 +3176,31 @@ async function toggleChainPick(p) {
   if (i >= 0) {
     chainSel.splice(i, 1); // deselect → the rest renumber
     chainTexts.delete(p.id);
-  } else {
-    // Resolve {#{variables}#} right when the button is picked into the chain.
-    let text = p.text || p.name || "";
-    if (varTokens(p).length) {
-      const filled = await resolveVars(p.text);
-      if (filled === null) return; // cancelled → leave it unselected
-      text = filled;
-    }
-    chainSel.push(p.id);
-    chainTexts.set(p.id, text);
+    refreshChainUi();
+    pushChainClipboard();
+    return;
   }
+  // 32: rotating prompt — peek the entry a copy would use (never consumes), resolve
+  // {#{variables}#} on THAT text, right when the button is picked into the chain.
+  let rawText = p.text || p.name || "";
+  let peeked = false; // only a successful peek may be followed by a commit below —
+                       // a failed peek already fell back to p.text (a stale/wrong
+                       // entry to consume) and committing anyway would advance
+                       // whatever the pointer's REAL position actually is.
+  if ((p.variants || []).length) {
+    const peek = await invoke("rotation_peek", { id: p.id }).catch(() => null);
+    if (peek) { rawText = peek.text; peeked = true; }
+  }
+  let text = rawText;
+  if (varTokens(p, rawText).length) {
+    const filled = await resolveVars(rawText);
+    if (filled === null) return; // cancelled → leave it unselected
+    text = filled;
+  }
+  chainSel.push(p.id);
+  chainTexts.set(p.id, text);
   refreshChainUi();
-  pushChainClipboard();
+  pushChainClipboard(peeked ? p.id : null);
 }
 
 function setChainMode(on) {
@@ -3293,12 +3310,13 @@ function wireTooltips() {
   tipEl = document.createElement("div");
   tipEl.className = "tile-tip";
   tipEl.setAttribute("role", "tooltip");
-  tipEl.innerHTML = '<div class="tile-tip-name"></div><div class="tile-tip-body"></div><div class="tile-tip-len"></div><div class="tile-tip-notes"></div><div class="tile-tip-hint"></div>';
+  tipEl.innerHTML = '<div class="tile-tip-name"></div><div class="tile-tip-body"></div><div class="tile-tip-len"></div><div class="tile-tip-notes"></div><div class="tile-tip-rotate"></div><div class="tile-tip-hint"></div>';
   document.body.appendChild(tipEl);
   const nameEl = tipEl.querySelector(".tile-tip-name");
   const bodyEl = tipEl.querySelector(".tile-tip-body");
   const lenEl = tipEl.querySelector(".tile-tip-len");
   const notesEl = tipEl.querySelector(".tile-tip-notes");
+  const rotateEl = tipEl.querySelector(".tile-tip-rotate");
   const hintEl = tipEl.querySelector(".tile-tip-hint");
   const OFF = 16, PAD = 12;
   const placeAt = (cx, cy) => {
@@ -3330,6 +3348,7 @@ function wireTooltips() {
       lenEl.textContent = el.dataset.tipLen || "";
       // textContent, so a note is shown as the literal text the user typed.
       notesEl.textContent = el.dataset.tipNotes || "";
+      rotateEl.textContent = el.dataset.tipRotate || "";
       hintEl.textContent = t("tileTooltip") + (flag("autoPaste") ? " · " + t("autoPasteHint") : "");
     } else {
       // Plain setting/icon tip: break "<lead sentence>. <details>" into two tidy
@@ -3561,6 +3580,39 @@ const clipNote = (s) => {
   return max > 0 && s.length > max ? `${s.slice(0, max)}…` : s;
 };
 
+// 32: client-side cache of each rotating prompt's "next entry" state (index/total/
+// text), kept in sync by the backend's rotation-changed event — fired by every copy
+// path in every window after the pointer actually moves. Populated lazily the first
+// time a tile for that id renders (primeRotateState), so a fresh render never has to
+// await anything itself; the badge/tooltip just stay blank for one frame.
+const rotateState = new Map(); // id -> { index, total, text }
+const ROTATE_SHORT_MAX = 60; // tooltip preview length, independent of the notes cap
+
+function rotateBadgeLabel(id) {
+  const s = rotateState.get(id);
+  return s ? `${s.index + 1}/${s.total}` : "";
+}
+
+// Pushes the cached state (however stale/empty) into one tile's badge + tooltip.
+function applyRotateState(tile, id) {
+  const badge = tile.querySelector(".tile-rotate-badge");
+  if (badge) badge.textContent = rotateBadgeLabel(id);
+  const s = rotateState.get(id);
+  if (s && flag("tilePreview")) {
+    const short = s.text.length > ROTATE_SHORT_MAX ? `${s.text.slice(0, ROTATE_SHORT_MAX)}…` : s.text;
+    tile.dataset.tipRotate = t("tileTipRotate").replace("{text}", short);
+  }
+}
+
+function primeRotateState(id) {
+  if (rotateState.has(id)) return;
+  invoke("rotation_peek", { id }).then((r) => {
+    if (!r) return;
+    rotateState.set(id, r);
+    document.querySelectorAll(`.tile[data-id="${CSS.escape(id)}"]`).forEach((tile) => applyRotateState(tile, id));
+  }).catch(() => {});
+}
+
 function buildTile(p) {
   const tile = document.createElement("div");
   tile.className = "tile";
@@ -3679,6 +3731,15 @@ function buildTile(p) {
     tile.appendChild(badge);
   }
 
+  // 32: rotating prompt — "next entry" position pill, bottom-left (a rotating
+  // prompt is always text-only, so that corner never competes with a media
+  // caption/control bar). Text fills in from the cache once primed below.
+  if ((p.variants || []).length && flag("rotateBadge")) {
+    const rbadge = document.createElement("span");
+    rbadge.className = "tile-rotate-badge";
+    tile.appendChild(rbadge);
+  }
+
   // The actions menu (⋯ button + right-click) can be switched off entirely.
   if (flag("tileMenu")) {
     const menuBtn = document.createElement("button");
@@ -3715,6 +3776,10 @@ function buildTile(p) {
     err.textContent = t("fileMissing");
     tile.appendChild(err);
     if (missingFiles.has(p.id)) tile.classList.add("file-missing");
+  }
+  if ((p.variants || []).length) {
+    primeRotateState(p.id); // async — patches this tile again once the peek lands
+    applyRotateState(tile, p.id); // sync — reflects whatever is cached right now
   }
   if (chainMode) applyChainToTile(tile, p); // keep badges/skip across re-renders
   return tile;
@@ -3840,19 +3905,54 @@ function fileUri(path) {
   return p.startsWith("//") ? `file:${p}` : `file:///${p}`;
 }
 
+// 32: a rotating prompt's peeked "next entry" text, prefetched on arm (see
+// armDragOut) so dragOutText can stay synchronous — dataTransfer.setData only works
+// inside the dragstart handler itself, too late to await a peek there.
+const dragRotationPeek = new Map(); // prompt id -> peeked text
+
 // What lands in the drop target. Placeholders stay as written: resolving them needs
 // the fill-in dialog, and no dialog can open while the OS drag loop holds the pointer.
-const dragOutText = (p) => (p.file_path || p.text || "");
+function dragOutText(p) {
+  if (p.file_path) return p.file_path;
+  if ((p.variants || []).length) {
+    const peeked = dragRotationPeek.get(p.id);
+    if (peeked != null) return peeked;
+  }
+  return p.text || "";
+}
 
 // Called on pointerdown. Returns true when this press should become a drag-out;
 // the caller then leaves the plain drag alone.
 function armDragOut(el, e, getPrompt) {
   const on = optFlag("dragOut") && e[dragOutMod()] === true;
   el.draggable = on;
+  if (on) {
+    const p = getPrompt();
+    // Peek is read-only — safe to fire on every arm, even one that never becomes a
+    // real drag. Almost always resolved well before dragstart (a real drag needs
+    // pointer motion past the threshold first).
+    if (p && (p.variants || []).length) {
+      invoke("rotation_peek", { id: p.id }).then((r) => { if (r) dragRotationPeek.set(p.id, r.text); }).catch(() => {});
+    }
+  }
   if (on && !dragOutWired.has(el)) {
     dragOutWired.add(el);
     el.addEventListener("dragstart", (ev) => startDragOut(ev, getPrompt()));
-    el.addEventListener("dragend", () => { el.draggable = false; });
+    el.addEventListener("dragend", (ev) => {
+      el.draggable = false;
+      const p = getPrompt();
+      // 32: only an actually-accepted drop of a text we actually peeked may consume
+      // an entry — a cancelled drag (dropped nowhere, or on a target that refused
+      // it) reports "none", and a peek that never resolved already fell back to
+      // p.text in dragOutText above (committing then would advance whatever the
+      // pointer's REAL position is, not the entry that actually got dragged out).
+      if (p && (p.variants || []).length) {
+        if (ev.dataTransfer.dropEffect !== "none" && dragRotationPeek.has(p.id)) {
+          invoke("rotation_commit", { id: p.id }).catch(() => {});
+        }
+        dragRotationPeek.delete(p.id);
+      }
+    });
   }
   return on;
 }
@@ -4881,8 +4981,10 @@ function dynValue(name, now, ctx) {
 
 // The variable tokens of a prompt that are worth resolving at all (text prompts
 // only — an image/file prompt copies its media, not its text).
-const varTokens = (p) =>
-  (flag("promptVars") && p && !p.copy_image && !p.file_path ? extractVars(p.text) : []);
+// 32: `text` overrides which string is scanned (the rotated entry actually about
+// to be copied) — every existing caller keeps checking p.text unchanged.
+const varTokens = (p, text) =>
+  (flag("promptVars") && p && !p.copy_image && !p.file_path ? extractVars(text ?? p.text) : []);
 // The subset the user still has to fill in by hand — the only reason to open a dialog.
 const dialogTokens = (p) => varTokens(p).filter((tok) => !isDynVar(parseVar(tok).name));
 
@@ -7291,6 +7393,10 @@ async function confirmModal() {
   // after creating a prompt by hand — before closeModal() clears modalState.
   const wasCreate = modalState.mode === "create" || modalState.mode === "image-create" || modalState.mode === "file-create";
   const wasEdit = modalState.mode === "edit";
+  // 32: an edit can change entry count/text — drop the cached rotation state so the
+  // grid re-render below primes it fresh instead of keeping a stale badge/tooltip
+  // (primeRotateState only ever peeks once per id otherwise).
+  if (saved) rotateState.delete(saved.id);
   closeModal();
   await renderGrid();
   if (saved && targetCell) await placeTile(saved.id, targetCell[0], targetCell[1]);
@@ -8841,6 +8947,22 @@ async function batchExport(format) {
 // failed or the user cancelled. The single copy entry point for every path that
 // does not run the dialog's own double-click handling (grid, library, journal).
 async function copyResolved(p) {
+  // 32: rotating prompt — peek the entry copy_prompt would use, resolve variables
+  // on THAT text (fixes {#{...}#} tokens, if any, in it), then commit only once the
+  // copy actually reaches the clipboard, so a cancelled variable dialog never
+  // burns an entry.
+  if ((p.variants || []).length) {
+    const peek = await invoke("rotation_peek", { id: p.id }).catch(() => null);
+    const rawText = peek ? peek.text : p.text;
+    const text = varTokens(p, rawText).length ? await resolveVars(rawText) : rawText;
+    if (text === null || text === false) return false;
+    const ok = await invoke("copy_text", { text }).catch(() => false);
+    // A failed peek already fell back to p.text above — committing anyway would
+    // advance whatever the pointer's REAL position is, not the entry we actually
+    // just copied. Only a successful peek may be followed by a commit.
+    if (ok && peek) invoke("rotation_commit", { id: p.id }).catch(() => {});
+    return ok;
+  }
   if (varTokens(p).length) {
     const text = await resolveVars(p.text);
     if (text === null) return false;
@@ -10097,6 +10219,14 @@ function bind() {
     if (n !== null) toast(t("clipPurgeBackupsDone").replace("{n}", String(n)));
   });
   listen("clip-inbox-changed", () => refreshClipInbox());
+  // 32: any window's copy of a rotating prompt lands here — refresh every tile of
+  // that id (usually one, but "prompt in multiple views" can place several).
+  listen("rotation-changed", (e) => {
+    const { id, index, total, text } = e.payload || {};
+    if (!id) return;
+    rotateState.set(id, { index, total, text });
+    document.querySelectorAll(`.tile[data-id="${CSS.escape(id)}"]`).forEach((tile) => applyRotateState(tile, id));
+  });
   // Clicking the app logo opens the project's GitHub page (drag still moves the window).
   $("app-logo")?.addEventListener("click", () => invoke("open_repo").catch((e) => toast(String(e))));
 

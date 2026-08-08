@@ -525,6 +525,32 @@ body.menu-open .pill { flex: 0 0 auto; }
   transition: opacity var(--transition);
 }
 .folder-member.copied .member-ok { opacity: 1; }
+
+/* 32: rotating-prompt "next entry" badge — small dot in the corner, independent of
+   the pill/theme colour so it reads the same in every theme; shared by the pill
+   (floating.html) and folder member tiles. A POSITIVE inset, not a negative
+   "notification dot" offset: `html, body { overflow: hidden }` clips the pill
+   window at its own edge (the window is sized exactly to the pill, no margin to
+   spill into), and .folder-member separately clips overflow for its rounded image
+   corners — a negative offset would be invisible in both places. */
+.rotate-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  z-index: 5;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.5;
+  pointer-events: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+/* Folder members render the badge without an initial "hidden" class (unlike the
+   pill, which toggles it explicitly) — empty until primeMemberRotate's peek lands. */
+.rotate-badge:empty { display: none; }
 /* Member menu: laid over the open grid, never wider than the popover it sits in. */
 .member-menu { z-index: 12; width: auto; min-width: 150px; }
 

@@ -106,10 +106,15 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   // F22: one prompt points at a file, so a drag-out can be checked against the path
   // payload and its file URI instead of the prompt body.
   file_path: i === 9 ? "C:\\Notes\\brief.txt" : "",
+  variants: [],
+  rotate_mode: "",
 }));
 
 const LAYOUT = {};
 PROMPTS.forEach((p, i) => { LAYOUT[p.id] = [i % 4, Math.floor(i / 4)]; });
+
+// 32: mirrors Settings.rotate_pos — order-mode pointer per rotating prompt id.
+const ROTATE_POS = new Map();
 
 // 91: trash — three items so restore, single purge and empty-all each get their own
 // target; t2 is anonymous, exercising the libLabel() fallback.
@@ -481,7 +486,32 @@ const RESULTS = {
   },
   // The copy commands report success; the UI skips everything that follows a copy
   // (feedback, history, auto-paste) when they come back falsy.
-  copy_prompt: () => true,
+  // 32: order-mode only (random's shuffle-bag is covered by the 5 Rust unit tests,
+  // not re-proven here) — enough to exercise the peek→copy→commit wiring for real.
+  copy_prompt: (a) => {
+    const p = PROMPTS.find((x) => x.id === (a && a.id));
+    if (p) {
+      const total = 1 + (p.variants || []).length;
+      const idx = (ROTATE_POS.get(p.id) || 0) % total;
+      window.__LAST_COPY__ = idx === 0 ? p.text : p.variants[idx - 1];
+      if (total > 1) ROTATE_POS.set(p.id, (idx + 1) % total);
+    }
+    return true;
+  },
+  rotation_peek: (a) => {
+    const p = PROMPTS.find((x) => x.id === (a && a.id));
+    if (!p) return null;
+    const total = 1 + (p.variants || []).length;
+    const idx = (ROTATE_POS.get(p.id) || 0) % total;
+    return { index: idx, total, text: idx === 0 ? p.text : p.variants[idx - 1] };
+  },
+  rotation_commit: (a) => {
+    const p = PROMPTS.find((x) => x.id === (a && a.id));
+    if (!p) return null;
+    const total = 1 + (p.variants || []).length;
+    if (total > 1) ROTATE_POS.set(p.id, ((ROTATE_POS.get(p.id) || 0) + 1) % total);
+    return null;
+  },
   // The resolved text is kept so the probe can assert what the placeholders became.
   copy_text: (a) => { window.__LAST_COPY__ = a && a.text; return true; },
   clipboard_text: () => "CLIPTEXT",

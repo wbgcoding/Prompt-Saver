@@ -46,6 +46,36 @@ let foldersOn = false; // F25 pill folders (default off)
 let pText = "", pFile = "";
 const dragOutHeld = (e) => dragOutOn && e[dragOutMod] === true;
 
+// 32: rotating prompt — "next entry" badge. Only ever one prompt per pill window,
+// so a single cached {index,total} (not a Map keyed by id, as the main grid needs)
+// is enough; kept live by the backend's rotation-changed event.
+let rotateBadgeOn = true; // Phase B default: on
+let rotateVariants = 0;
+let rotateInfo = null; // { index, total } once known
+let rotateReq = 0; // bumped on every primeRotateBadge call, so an in-flight peek
+                    // from a superseded call (the prompt was re-applied again
+                    // before the first one resolved) can never overwrite a newer
+                    // one's result.
+const rotateBadgeEl = document.getElementById("rotate-badge");
+
+function renderRotateBadge() {
+  const show = rotateBadgeOn && rotateVariants > 0 && !!rotateInfo;
+  rotateBadgeEl.classList.toggle("hidden", !show);
+  if (show) rotateBadgeEl.textContent = `${rotateInfo.index + 1}/${rotateInfo.total}`;
+}
+
+function primeRotateBadge() {
+  rotateInfo = null;
+  const req = ++rotateReq;
+  if (!rotateVariants) { renderRotateBadge(); return; }
+  invoke("rotation_peek", { id: promptId }).then((r) => {
+    if (!r || req !== rotateReq) return;
+    rotateInfo = { index: r.index, total: r.total };
+    renderRotateBadge();
+  }).catch(() => {});
+  renderRotateBadge(); // hide immediately; primeRotateBadge's own peek fills it in
+}
+
 function applyFont() {
   pill.style.fontFamily = FONTS[pFont || globalFontKey] || FONTS.system;
 }
@@ -195,6 +225,8 @@ function applyPrefs(s) {
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
   foldersOn = s.ui_flags?.pillFolders === true;
+  rotateBadgeOn = s.ui_flags?.rotateBadge !== false; // default on
+  renderRotateBadge();
   copyFont = s.ui_texts?.copyFont || "";
   document.getElementById("feedback").style.fontFamily = FONTS[copyFont] || "";
   const op = Number(s.ui_values?.floatOpacity);
@@ -383,6 +415,8 @@ function applyPrompt(p) {
   hasFile = !!(p.file_path || p.icon_path);
   pText = p.text || "";
   pFile = p.file_path || "";
+  rotateVariants = (p.variants || []).length;
+  primeRotateBadge();
   pFont = p.font || "";
   pSize = p.font_size || 0;
   pCaptionSize = p.caption_size || 0;
@@ -802,6 +836,16 @@ window.addEventListener("mouseup", () => { if (resizing) endResize(); });
 // Refresh pill when the prompt is edited in the main window.
 listen("prompt-updated", (e) => {
   if (e.payload && e.payload.id === promptId) applyPrompt(e.payload);
+});
+// 32: this pill's own rotation pointer moved (any window may have copied it). A
+// pushed event is always fresher than any in-flight peek — bump rotateReq so a
+// slow primeRotateBadge() peek from before this event can't overwrite it later.
+listen("rotation-changed", (e) => {
+  if (e.payload && e.payload.id === promptId) {
+    rotateReq++;
+    rotateInfo = { index: e.payload.index, total: e.payload.total };
+    renderRotateBadge();
+  }
 });
 
 // Pause the looping pill video while this window is hidden.

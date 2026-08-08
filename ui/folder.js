@@ -61,6 +61,26 @@ let animMs = 150;
 const DRAG_OUT_MODS = { ctrl: "ctrlKey", alt: "altKey", shift: "shiftKey" };
 let dragOutOn = false, dragOutMod = "ctrlKey";
 
+// 32: rotating prompt — "next entry" badge per member, kept live by the backend's
+// rotation-changed event (any window's copy can move another member's pointer).
+const rotateInfo = new Map(); // member id -> { index, total }
+let rotateBadgeOn = true; // Phase B default: on
+
+function rotateBadgeLabel(id) {
+  const s = rotateInfo.get(id);
+  return s ? `${s.index + 1}/${s.total}` : "";
+}
+
+function primeMemberRotate(id) {
+  if (rotateInfo.has(id)) return;
+  invoke("rotation_peek", { id }).then((r) => {
+    if (!r) return;
+    rotateInfo.set(id, { index: r.index, total: r.total });
+    const el = gridEl.querySelector(`.folder-member[data-id="${CSS.escape(id)}"] .rotate-badge`);
+    if (el) el.textContent = rotateBadgeLabel(id);
+  }).catch(() => {});
+}
+
 const member = (id) => state.members.find((p) => p.id === id);
 const px = (v) => `${Math.round(v)}px`;
 
@@ -157,6 +177,13 @@ function renderGrid() {
     face.className = "member-face";
     paintFace(face, p, true);
     tile.appendChild(face);
+    if (rotateBadgeOn && (p.variants || []).length) {
+      const rb = document.createElement("span");
+      rb.className = "rotate-badge";
+      rb.textContent = rotateBadgeLabel(p.id);
+      tile.appendChild(rb);
+      primeMemberRotate(p.id);
+    }
     const ok = document.createElement("span");
     ok.className = "member-ok";
     ok.textContent = TXT.copied;
@@ -344,6 +371,7 @@ function applyPrefs(s) {
   apDblMs = Number.isFinite(adb) ? adb : DBL_CLICK_MS_DEFAULT;
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
+  rotateBadgeOn = s.ui_flags?.rotateBadge !== false; // default on
   // The folder animation reuses the global animation setting.
   const speed = Number(s.ui_values?.animSpeed);
   animMs = s.ui_flags?.animations === false ? 0 : Number.isFinite(speed) ? Math.max(0, speed) : 150;
@@ -621,7 +649,20 @@ listen("language-changed", () => applySettings());
 // Same as the pill: an expert change has to reach a folder that is already open.
 listen("settings-changed", () => applySettings());
 listen("prompt-updated", (e) => {
-  if (e.payload && state.members.some((p) => p.id === e.payload.id)) loadState();
+  if (e.payload && state.members.some((p) => p.id === e.payload.id)) {
+    // 32: an edit can change entry count/text — drop the cached rotation state so
+    // the reload below primes it fresh (primeMemberRotate only peeks once per id).
+    rotateInfo.delete(e.payload.id);
+    loadState();
+  }
+});
+// 32: a member's rotation pointer moved (any window may have copied it).
+listen("rotation-changed", (e) => {
+  const { id, index, total } = e.payload || {};
+  if (!id || !state.members.some((p) => p.id === id)) return;
+  rotateInfo.set(id, { index, total });
+  const el = gridEl.querySelector(`.folder-member[data-id="${CSS.escape(id)}"] .rotate-badge`);
+  if (el) el.textContent = rotateBadgeLabel(id);
 });
 
 // Moving onto a monitor with a different DPI invalidates the physical box the

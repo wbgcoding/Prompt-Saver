@@ -2710,6 +2710,38 @@ PROBE = """
               if (a.text !== 'Entry one' || JSON.stringify(a.variants) !== JSON.stringify(['Entry two']) || a.rotateMode !== 'random') {
                 out.errors.push('add_prompt got the wrong rotating payload: ' + JSON.stringify({ text: a.text, variants: a.variants, rotateMode: a.rotateMode }));
               }
+              // 32-D: the tile this created shows a live "next entry" badge, and a
+              // real click copies the CURRENT entry (peek→copy_text→commit, not
+              // copy_prompt — copyResolved's own path for grid/library/journal).
+              await sleep(150); // grid re-render + primeRotateState's own peek
+              const newTile = [...document.querySelectorAll('#grid .tile-name')]
+                .find(n => n.textContent === 'Rotate Test')?.closest('.tile');
+              if (!newTile) {
+                out.errors.push('the newly created rotating prompt has no grid tile');
+              } else {
+                const newId = newTile.dataset.id;
+                const badge0 = newTile.querySelector('.tile-rotate-badge');
+                if (!badge0 || badge0.textContent !== '1/2') {
+                  out.errors.push('the rotate badge shows "' + (badge0 && badge0.textContent) + '" instead of "1/2" on a fresh 2-entry prompt');
+                }
+                window.__LAST_COPY__ = undefined;
+                await clickTile(newId);
+                if (window.__LAST_COPY__ !== 'Entry one') {
+                  out.errors.push('clicking the rotating tile copied "' + window.__LAST_COPY__ + '" instead of entry 1');
+                }
+                // The backend advances the pointer and pushes rotation-changed to every
+                // window after a real commit — simulated the same way every other
+                // push-event probe in this suite delivers a backend event.
+                window.__FIRE__('rotation-changed', { id: newId, index: 1, total: 2, text: 'Entry two' });
+                await sleep(50);
+                const badge1 = newTile.querySelector('.tile-rotate-badge');
+                if (!badge1 || badge1.textContent !== '2/2') {
+                  out.errors.push('the rotate badge did not advance to "2/2" after rotation-changed');
+                }
+                if (!newTile.dataset.tipRotate || !newTile.dataset.tipRotate.includes('Entry two')) {
+                  out.errors.push('the tile tooltip does not mention the new next entry after rotation-changed');
+                }
+              }
             }
           }
         }

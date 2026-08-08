@@ -6500,6 +6500,7 @@ async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result
             let p = store.prompts[pos].clone();
             rotation_advance(&p, &mut store.settings);
             save_settings(&app, &store.settings); // 32: the pointer survives a restart
+            emit_rotation_changed(&app, &p, &store.settings);
         }
     }
     Ok(ok)
@@ -6524,6 +6525,28 @@ fn rotation_peek(state: State<Db>, id: String) -> Option<RotationPeek> {
     Some(RotationPeek { index, total: rotation_total(p), text })
 }
 
+// 32: every window's tile/pill/folder-member badge stays live off ONE event, fired
+// wherever the pointer actually moves (copy_prompt's own success path, this command)
+// — the same "backend decides, frontend just reflects" split as prompt-updated.
+#[derive(Serialize, Clone)]
+struct RotationChanged {
+    id: String,
+    index: usize,
+    total: usize,
+    text: String,
+}
+
+fn emit_rotation_changed(app: &AppHandle, p: &Prompt, settings: &Settings) {
+    if p.variants.is_empty() {
+        return;
+    }
+    let (index, text) = rotation_next(p, settings);
+    let _ = app.emit(
+        "rotation-changed",
+        RotationChanged { id: p.id.clone(), index, total: rotation_total(p), text },
+    );
+}
+
 #[tauri::command]
 fn rotation_commit(app: AppHandle, state: State<Db>, id: String) {
     let mut store = lock(&state);
@@ -6531,6 +6554,7 @@ fn rotation_commit(app: AppHandle, state: State<Db>, id: String) {
         let p = store.prompts[pos].clone();
         rotation_advance(&p, &mut store.settings);
         save_settings(&app, &store.settings);
+        emit_rotation_changed(&app, &p, &store.settings);
     }
 }
 
