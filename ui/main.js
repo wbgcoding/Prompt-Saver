@@ -1445,6 +1445,24 @@ function withTip(row, key) {
   return row;
 }
 
+// 66: mirrors what set_ui_flag/set_ui_value/set_ui_text just stamped on the backend,
+// same way settings.ui_flags/ui_values/ui_texts are already updated optimistically —
+// without this, the "Changed:" tooltip would stay stale until the next full settings
+// fetch. Seconds, to match the backend's now_secs().
+function stampChanged(key) {
+  settings.ui_changed = { ...(settings.ui_changed || {}), [key]: Math.floor(Date.now() / 1000) };
+}
+
+// 66: appended to whatever withTip() left behind (or standalone) when this exact row
+// differs from its default — same isRowChanged() the "only changed" filter (67) uses.
+function withChangedTip(row, kind, key) {
+  const ts = isRowChanged(kind, key) && settings.ui_changed?.[key];
+  if (!ts) return row;
+  const line = t("expertChangedAt").replace("{date}", new Date(ts * 1000).toLocaleString(LANG));
+  row.title = row.title ? `${row.title}\n${line}` : line;
+  return row;
+}
+
 // Flags whose state changes the tile DOM itself (everything else is a body class).
 const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip"]);
 
@@ -1473,6 +1491,7 @@ function flagRow(key) {
   input.addEventListener("change", async () => {
     const enabled = input.checked;
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
+    stampChanged(key);
     try {
       await invoke("set_ui_flag", { key, enabled });
     } catch (err) {
@@ -1493,6 +1512,7 @@ function flagRow(key) {
     else fitAllTiles();
   });
   row.append(input);
+  withChangedTip(row, "flags", key);
   return row;
 }
 
@@ -1515,6 +1535,7 @@ function previewValue(key, value) {
 }
 async function commitValue(key, value) {
   settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
+  stampChanged(key);
   try { await invoke("set_ui_value", { key, value }); } catch (err) { toast(String(err)); }
   applyValues();
   await refreshTiles(key);
@@ -1561,6 +1582,7 @@ function valueRow(key) {
   slider.addEventListener("change", () => commitValue(key, cur()));
   head.append(span, out);
   row.append(head, slider);
+  withChangedTip(row, "values", key);
   return row;
 }
 
@@ -1609,6 +1631,7 @@ function selectRow(key) {
   attachSelectPicker(sel); // themed popup instead of the native OS dropdown
   const persist = async (value) => {
     settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
+    stampChanged(key);
     try { await invoke("set_ui_value", { key, value }); } catch (err) { toast(String(err)); }
   };
   sel.addEventListener("change", () => {
@@ -1635,6 +1658,7 @@ function selectRow(key) {
     if (expertOnlyChanged) renderExpert();
   });
   row.append(head, sel, num, unit);
+  withChangedTip(row, "selects", key);
   return row;
 }
 
@@ -1661,10 +1685,12 @@ function dropdownRow(key) {
   sel.value = cfg.get();
   sel.addEventListener("change", async () => {
     await cfg.set(sel.value);
+    stampChanged(key); // 66
     if (expertOnlyChanged) renderExpert(); // 67
   });
   attachSelectPicker(sel); // themed popup instead of the native OS dropdown
   row.append(head, sel);
+  withChangedTip(row, "dropdowns", key);
   return row;
 }
 
@@ -1681,6 +1707,7 @@ const EXPERT_PATHS = {
       const dir = await invoke("pick_folder").catch(() => null);
       if (!dir) return;
       settings.ui_texts = { ...(settings.ui_texts || {}), screenshotDir: dir };
+      stampChanged("screenshotDir"); // 66
       invoke("set_ui_text", { key: "screenshotDir", value: dir }).catch((e) => toast(String(e)));
       renderExpert();
     },
@@ -1745,6 +1772,7 @@ function pathRow(key) {
     btns.appendChild(reset);
   }
   row.append(head, btns);
+  withChangedTip(row, "paths", key);
   return row;
 }
 
@@ -2066,6 +2094,7 @@ async function onResetExpert() {
   settings.ui_flags = {};
   settings.ui_values = {};
   settings.ui_texts = {};
+  settings.ui_changed = {}; // 66
   try {
     await invoke("reset_expert");
   } catch (err) {

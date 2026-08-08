@@ -1278,6 +1278,10 @@ struct Settings {
     // Expert string options (e.g. copy-feedback font). Missing key = default.
     #[serde(default)]
     ui_texts: HashMap<String, String>,
+    // 66: key -> unix seconds of its last write, across ui_flags/ui_values/ui_texts.
+    // A missing key was never explicitly changed (still at its shipped default).
+    #[serde(default)]
+    ui_changed: HashMap<String, u64>,
     // F6: prompt-id pairs (sorted) the user marked "not a duplicate" — never regrouped.
     #[serde(default)]
     dup_ignored: Vec<[String; 2]>,
@@ -1378,6 +1382,7 @@ impl Default for Settings {
             ui_flags: HashMap::new(),
             ui_values: HashMap::new(),
             ui_texts: HashMap::new(),
+            ui_changed: HashMap::new(),
             dup_ignored: Vec::new(),
             tag_colors: HashMap::new(),
             custom_themes: Vec::new(),
@@ -8889,6 +8894,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
     let is_folders = key == "pillFolders"; // F25
     {
         let mut store = lock(&state);
+        store.settings.ui_changed.insert(key.clone(), now_secs()); // 66
         store.settings.ui_flags.insert(key, enabled);
         save_settings(&app, &store.settings);
     }
@@ -8937,6 +8943,7 @@ fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
     let is_folder_grid = key == "folderGridCols"; // F25
     {
         let mut store = lock(&state);
+        store.settings.ui_changed.insert(key.clone(), now_secs()); // 66
         store.settings.ui_values.insert(key, value);
         save_settings(&app, &store.settings);
     }
@@ -8959,6 +8966,7 @@ fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
 fn set_ui_text(app: AppHandle, state: State<Db>, key: String, value: String) {
     {
         let mut store = lock(&state);
+        store.settings.ui_changed.insert(key.clone(), now_secs()); // 66
         store.settings.ui_texts.insert(key, value);
         save_settings(&app, &store.settings);
     }
@@ -8973,6 +8981,7 @@ fn reset_expert(app: AppHandle, state: State<Db>) {
         store.settings.ui_flags.clear();
         store.settings.ui_values.clear();
         store.settings.ui_texts.clear();
+        store.settings.ui_changed.clear(); // 66
         save_settings(&app, &store.settings);
     }
     // Cleared flags put the screenshot permission back to its default (off), which
