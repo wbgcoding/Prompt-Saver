@@ -9359,6 +9359,31 @@ function bind() {
   $("clip-close").addEventListener("click", () => $("clip-modal").classList.add("hidden"));
   $("clip-modal").addEventListener("pointerdown", (e) => { if (e.target === $("clip-modal")) $("clip-modal").classList.add("hidden"); });
   $("clip-clear").addEventListener("click", async () => { await invoke("clip_inbox_clear").catch((e) => toast(String(e))); refreshClipInbox(); });
+  // Emergency wipe: clears the live inbox AND scrubs clip_inbox rows out of every
+  // rotating backup snapshot. Irreversible and touches every backup, so it asks
+  // twice — the second dialog spells out that it cannot be undone.
+  $("clip-purge-backups").addEventListener("click", async () => {
+    const step1 = await confirmDialog({
+      title: t("clipPurgeBackupsTitle"),
+      message: t("clipPurgeBackupsBody1"),
+      confirmLabel: t("clipPurgeBackupsConfirm"),
+      cancelLabel: t("cancel"),
+      danger: true,
+    });
+    if (!step1) return;
+    const step2 = await confirmDialog({
+      title: t("clipPurgeBackupsTitle"),
+      message: t("clipPurgeBackupsBody2"),
+      confirmLabel: t("clipPurgeBackupsConfirm2"),
+      cancelLabel: t("cancel"),
+      danger: true,
+    });
+    if (!step2) return;
+    await invoke("clip_inbox_clear").catch((e) => toast(String(e)));
+    const n = await invoke("purge_clip_inbox_from_backups").catch((e) => { toast(String(e)); return null; });
+    refreshClipInbox();
+    if (n !== null) toast(t("clipPurgeBackupsDone").replace("{n}", String(n)));
+  });
   listen("clip-inbox-changed", () => refreshClipInbox());
   // Clicking the app logo opens the project's GitHub page (drag still moves the window).
   $("app-logo")?.addEventListener("click", () => invoke("open_repo").catch((e) => toast(String(e))));

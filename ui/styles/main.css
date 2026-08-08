@@ -947,6 +947,9 @@ body.drag-active .cell.drag-over {
 }
 .tile:hover .tile-select,
 body.grid-selecting .tile-select { opacity: 1; }
+/* The chain order badge (1, 2, 3 …) sits in the same corner — a picked tile shows
+   the number, not the checkbox, so the two never overlap. */
+.tile.chain-picked .tile-select { opacity: 0; pointer-events: none; }
 .tile:hover .tile-type,
 body.grid-selecting .tile-type { opacity: 0; }
 .tile.grid-selected .tile-select {

@@ -6780,6 +6780,65 @@ async fn clip_inbox_clear(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+// Emergency purge: something sensitive (a password) ended up in the clipboard inbox
+// and may be sitting inside one or more ROTATING SNAPSHOTS too, DPAPI-sealed but
+// still on disk. clip_inbox_clear only ever touched the live DB — this walks every
+// backup folder, opens its snapshot, deletes clip_inbox rows if any, and VACUUMs so
+// the bytes are actually overwritten (a bare DELETE leaves them in SQLite's free
+// pages until something else reuses that space). Returns how many snapshots had
+// something to remove, for the confirmation toast.
+#[tauri::command]
+async fn purge_clip_inbox_from_backups(app: AppHandle) -> Result<usize, String> {
+    Ok(purge_clip_inbox_from_backups_impl(&backups_dir(&app)))
+}
+
+fn purge_clip_inbox_from_backups_impl(dir: &std::path::Path) -> usize {
+    let mut purged = 0usize;
+    for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+        let folder = entry.path();
+        if !folder.is_dir() {
+            continue;
+        }
+        let Some(db) = backup_db_file(&folder) else { continue };
+        let is_gz = db.extension().is_some_and(|e| e == "gz");
+        let staged_tmp = folder.join("purge.tmp");
+        let staged = if is_gz {
+            if gunzip_to(&db, &staged_tmp).is_err() {
+                continue;
+            }
+            staged_tmp.clone()
+        } else {
+            db.clone()
+        };
+        let mut removed = 0i64;
+        if let Ok(conn) = Connection::open(&staged) {
+            let has_table: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='clip_inbox'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(0);
+            if has_table > 0 {
+                removed = conn.execute("DELETE FROM clip_inbox", []).unwrap_or(0) as i64;
+                if removed > 0 {
+                    let _ = conn.execute("VACUUM", []);
+                }
+            }
+        }
+        if removed > 0 {
+            let repacked = if is_gz { gzip_to(&staged, &db) } else { Ok(()) };
+            if repacked.is_ok() {
+                purged += 1;
+            }
+        }
+        if is_gz {
+            let _ = fs::remove_file(&staged_tmp);
+        }
+    }
+    purged
+}
+
 // Set a floating window's position AND size together (logical px). Used by the
 // edge/corner resize so the grabbed edge tracks the cursor 1:1.
 #[tauri::command]
@@ -10650,6 +10709,7 @@ pub fn run() {
             clip_inbox_list,
             clip_inbox_dismiss,
             clip_inbox_clear,
+            purge_clip_inbox_from_backups,
             open_repo,
             set_ui_zoom,
             delete_all_data,
@@ -11170,6 +11230,65 @@ mod tests {
         assert_eq!(migrated, "1", "settings scope must never touch the migration marker");
         let _ = std::fs::remove_file(&target);
         let _ = std::fs::remove_file(&staged);
+    }
+
+    #[test]
+    fn purge_clip_inbox_from_backups_scrubs_every_snapshot() {
+        let dir = std::env::temp_dir().join("prompt-saver-test-purge-backups");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // A: gzipped snapshot (current format) with clip_inbox rows + a prompt that
+        // must survive untouched.
+        let folder_a = dir.join("20260101-000000");
+        std::fs::create_dir_all(&folder_a).unwrap();
+        let raw_a = dir.join("raw_a.db");
+        {
+            let conn = full_schema_db(&raw_a, "a");
+            conn.execute_batch(
+                "INSERT INTO prompts VALUES('p1', 0, '{}');
+                 INSERT INTO clip_inbox(ts, text) VALUES(1, 'secret-a');
+                 INSERT INTO clip_inbox(ts, text) VALUES(2, 'secret-b');",
+            )
+            .unwrap();
+        }
+        gzip_to(&raw_a, &folder_a.join("data.db.gz")).unwrap();
+        let _ = std::fs::remove_file(&raw_a);
+
+        // B: plain (pre-2.6, ungzipped) snapshot — also has clip_inbox rows.
+        let folder_b = dir.join("20260102-000000");
+        std::fs::create_dir_all(&folder_b).unwrap();
+        {
+            let conn = full_schema_db(&folder_b.join("data.db"), "b");
+            conn.execute_batch("INSERT INTO clip_inbox(ts, text) VALUES(3, 'secret-c');").unwrap();
+        }
+
+        // C: nothing in its clip_inbox — must not be counted as purged.
+        let folder_c = dir.join("20260103-000000");
+        std::fs::create_dir_all(&folder_c).unwrap();
+        let raw_c = dir.join("raw_c.db");
+        {
+            full_schema_db(&raw_c, "c");
+        }
+        gzip_to(&raw_c, &folder_c.join("data.db.gz")).unwrap();
+        let _ = std::fs::remove_file(&raw_c);
+
+        let purged = purge_clip_inbox_from_backups_impl(&dir);
+        assert_eq!(purged, 2, "only A and B actually had clip_inbox rows to remove");
+
+        let unpacked_a = dir.join("check_a.db");
+        gunzip_to(&folder_a.join("data.db.gz"), &unpacked_a).unwrap();
+        let conn = Connection::open(&unpacked_a).unwrap();
+        let clip_count: i64 = conn.query_row("SELECT COUNT(*) FROM clip_inbox", [], |r| r.get(0)).unwrap();
+        assert_eq!(clip_count, 0, "A's clip_inbox must be emptied");
+        let prompt_id: String = conn.query_row("SELECT id FROM prompts", [], |r| r.get(0)).unwrap();
+        assert_eq!(prompt_id, "p1", "the purge must never touch other tables");
+
+        let conn = Connection::open(folder_b.join("data.db")).unwrap();
+        let clip_count: i64 = conn.query_row("SELECT COUNT(*) FROM clip_inbox", [], |r| r.get(0)).unwrap();
+        assert_eq!(clip_count, 0, "B's (ungzipped) clip_inbox must be emptied too");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
