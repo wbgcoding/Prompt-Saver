@@ -10011,6 +10011,8 @@ function bind() {
   attachSelectPicker($("lang-select"));
   attachSelectPicker($("theme-edit-target"));
   attachSelectPicker($("theme-edit-base"));
+  attachSelectPicker($("grid-batch-view")); // 27: themed popup, options refreshed by fillBatchViews()
+  attachSelectPicker($("lib-batch-view"));
 
   // UI size + icon size: percentage-preset selects mirroring the expert scales.
   fillScaleSelect("ui-scale", "uiScale");

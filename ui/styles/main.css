@@ -2963,6 +2963,21 @@ body.drag-over::after {
   cursor: pointer;
 }
 .lib-sort:hover { border-color: var(--accent); }
+/* 27: the batch-bar "move to view" select matches its ghost-btn neighbours in
+   height and radius instead of looking like a foreign control; the themed
+   popup (attachSelectPicker) replaces its native OS dropdown list. Only
+   background-COLOR is set here, never the shorthand, so the chevron image the
+   global `select` rule already draws survives. */
+.batch-view-select {
+  padding: 8px 30px 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background-color: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.batch-view-select:hover { background-color: var(--surface-2); border-color: var(--accent); }
 .lib-name { font-weight: 600; overflow-wrap: anywhere; }
 .lib-sub { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 .lib-subrow { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }

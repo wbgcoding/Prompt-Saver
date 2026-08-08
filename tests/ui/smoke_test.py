@@ -1304,6 +1304,35 @@ PROBE = """
         // named), the second really deletes. No dialog is involved any more.
         gridTile('p4').querySelector('.tile-select').click();
         await sleep(120);
+        // 27: the "move to view" select opens the same themed popup as every other
+        // select instead of the native OS dropdown list, and matches its ghost-btn
+        // neighbours in size.
+        {
+          const viewSel = document.getElementById('grid-batch-view');
+          const neighbour = document.getElementById('grid-batch-move');
+          const vr = viewSel.getBoundingClientRect(), nr = neighbour.getBoundingClientRect();
+          if (Math.abs(vr.height - nr.height) > 1) {
+            out.errors.push('27: the view select (' + vr.height + 'px) does not match its neighbours (' + nr.height + 'px)');
+          }
+          viewSel.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+          await sleep(120);
+          const pop = document.querySelector('.num-pop');
+          if (!pop || pop.classList.contains('hidden')) {
+            out.errors.push('27: clicking the view select did not open the themed popup');
+          } else {
+            const rows = [...pop.querySelectorAll('button')];
+            if (rows.length !== viewSel.options.length) {
+              out.errors.push('27: the view popup lists ' + rows.length + ' entries, the select has ' + viewSel.options.length);
+            }
+            const wantId = viewSel.options[viewSel.options.length - 1].value;
+            rows[rows.length - 1].dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+            await sleep(120);
+            if (viewSel.value !== wantId) out.errors.push('27: picking a popup entry did not update the select value');
+            if (!document.querySelector('.num-pop').classList.contains('hidden')) {
+              out.errors.push('27: the view popup stayed open after picking an entry');
+            }
+          }
+        }
         const delBtn = document.getElementById('grid-batch-delete');
         await click('grid-batch-delete');
         await sleep(150);
