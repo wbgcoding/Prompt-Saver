@@ -4214,7 +4214,24 @@ function openTileFolderPop(f, anchor) {
     btn.className = "folder-member-tile";
     btn.dataset.id = p.id;
     btn.title = p.name;
-    if (p.color) {
+    // 30: same content as a real grid tile (buildTile) — image/gif thumb, type
+    // badge, tinted background — so a folder never shows less than the grid
+    // underneath it. Interactive bits (select checkbox, tile menu, video player)
+    // stay out: this button already has its own click/drag/context-menu handling.
+    const kind = p.file_path ? mediaKind(p.file_path) : "";
+    const iconKind = !p.image && p.icon_path ? mediaKind(p.icon_path) : "";
+    const showPath = iconKind ? p.icon_path : p.file_path;
+    const showKind = p.image ? "" : iconKind || kind;
+    const showable = p.show_image && (p.image || showKind === "image" || showKind === "gif");
+    if (showable) {
+      btn.classList.add("has-image");
+      if (p.color) { btn.style.background = p.color; btn.style.borderColor = p.color; }
+      const img = document.createElement("img");
+      img.className = "tile-img";
+      img.src = p.image || convertFileSrc(showPath);
+      img.draggable = false;
+      btn.appendChild(img);
+    } else if (p.color) {
       btn.style.background = p.color;
       btn.style.borderColor = p.color;
     }
@@ -4222,6 +4239,15 @@ function openTileFolderPop(f, anchor) {
     label.className = "tile-name";
     label.textContent = p.name;
     btn.appendChild(label);
+    const typeIcon = p.file_path
+      ? (kind === "video" ? ICON_VIDEO : kind ? ICON_IMAGE : PDF_EXT.test(p.file_path) ? ICON_PDF : ICON_FILE)
+      : p.copy_image ? ICON_IMAGE : "";
+    if (typeIcon && flag("typeBadges")) {
+      const badge = document.createElement("span");
+      badge.className = "tile-type";
+      badge.innerHTML = typeIcon;
+      btn.appendChild(badge);
+    }
     btn.addEventListener("contextmenu", (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
@@ -4236,9 +4262,15 @@ function openTileFolderPop(f, anchor) {
   }
   tileFolderPop.appendChild(grid);
   placePopover(tileFolderPop, anchor.getBoundingClientRect());
-  // Fixed 84x56 tile, 1px border + 4px padding each side: same auto-shrink as
-  // grid tiles, just against a constant box instead of the shared grid fitBox.
-  for (const btn of grid.children) fitTileText(btn, 74, 46);
+  // 30: cells now size themselves from tileFolderCols + the popover width (CSS
+  // grid + aspect-ratio), so the fit box is measured per tile instead of a
+  // constant — 1px border + 4px padding each side, same auto-shrink as the grid.
+  for (const btn of grid.children) {
+    const r = btn.getBoundingClientRect();
+    // Floor, not the raw fractional rect: scrollWidth/Height are integers, so a
+    // fractional maxW like 76.65 can fail its own <= check against a rounded 77.
+    fitTileText(btn, Math.floor(r.width - 10), Math.floor(r.height - 10));
+  }
 }
 
 // Dragging a member out of the open popover.

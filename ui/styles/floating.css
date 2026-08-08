@@ -440,7 +440,7 @@ body.menu-open .pill { flex: 0 0 auto; }
   pointer-events: none;
 }
 .face-text {
-  padding: 0 4%;
+  padding: 0 2%; /* 30: less margin eaten by padding, more room for the fitted text */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

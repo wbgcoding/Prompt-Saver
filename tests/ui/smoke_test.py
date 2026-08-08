@@ -379,6 +379,25 @@ PROBE = """
       const pop = document.querySelector('.tile-folder-pop:not(.hidden)');
       const members = pop ? pop.querySelectorAll('.folder-member-tile').length : 0;
       if (members !== 5) out.errors.push('the open folder shows ' + members + ' of 5 entries');
+      // 30: member cells now size from tileFolderCols + the popover width (bigger
+      // than the old fixed 84x56 box) and no member's name text overflows its cell.
+      if (pop) {
+        const cellRect = pop.querySelector('.folder-member-tile')?.getBoundingClientRect();
+        if (!cellRect || cellRect.width <= 84) {
+          out.errors.push('30: folder member cells did not grow past the old 84px width (' + (cellRect && cellRect.width) + ')');
+        }
+        // Compare rendered rects, not scrollHeight/clientHeight: the auto-fit
+        // text-box-trim on .tile-name.fit intentionally reports a layout height
+        // smaller than its line box (optical centering) without actually
+        // clipping any glyph, so that pairing is not a reliable overflow signal.
+        const overflowing = [...pop.querySelectorAll('.folder-member-tile')].filter((btn) => {
+          const nameEl = btn.querySelector('.tile-name');
+          if (!nameEl || getComputedStyle(nameEl).display === 'none') return false;
+          const b = btn.getBoundingClientRect(), n = nameEl.getBoundingClientRect();
+          return n.left < b.left - 1 || n.right > b.right + 1 || n.top < b.top - 1 || n.bottom > b.bottom + 1;
+        });
+        if (overflowing.length) out.errors.push('30: ' + overflowing.length + ' folder member name(s) overflow their cell');
+      }
       // A popover taller than the room below must shrink and scroll, NOT jump to the
       // top of the window and cover the tile it was opened from.
       if (pop) {

@@ -958,13 +958,17 @@ body.grid-selecting .tile-type { opacity: 0; }
   font-size: 12px;
   font-weight: 600;
 }
+/* 30: ~30% bigger than the old 84x56 box in both dimensions — still comfortably
+   inside the popover's own max-width (`min(420px, 92vw)`) at 5 columns, the
+   most `tileFolderCols` allows. */
 .tile-folder-grid { display: grid; gap: 6px; }
 .folder-member-tile {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 84px;
-  height: 56px;
+  width: 108px;
+  height: 72px;
   padding: 4px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -979,6 +983,9 @@ body.grid-selecting .tile-type { opacity: 0; }
 .folder-member-tile:hover { border-color: var(--accent); }
 .folder-member-tile.dragging { opacity: 0.45; }
 .folder-member-tile .tile-name { font-size: 12px; -webkit-line-clamp: 3; }
+/* Same rule as the real grid tile: an image replaces the name, not overlays it. */
+.folder-member-tile.has-image .tile-name { display: none; }
+.folder-member-tile .tile-type { width: 14px; height: 14px; }
 
 /* Off-screen measurement ruler used by the auto-fit (fixed position keeps
    the subpixel context identical for every measurement). */

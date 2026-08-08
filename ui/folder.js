@@ -167,8 +167,10 @@ function renderGrid() {
   // small font left a large folder full of unreadable labels. Same auto-fit pass
   // the grid tiles and the pills use.
   const cap = Math.max(9, Math.round(t / 3));
+  // 30: 0.86 gave away 14% of the edge length unused — raised to use nearly the
+  // whole face, matching the padding cut below.
   for (const el of gridEl.querySelectorAll(".member-face .face-text")) {
-    fitText(el, t * 0.86, t * 0.86, cap);
+    fitText(el, t * 0.92, t * 0.92, cap);
   }
   for (const el of gridEl.querySelectorAll(".member-ok")) {
     fitText(el, t * 0.8, t * 0.5, cap);
