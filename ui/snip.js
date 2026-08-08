@@ -55,10 +55,10 @@ let tileBusy = false;
 let loupeLive = false; // a real pixel has been painted at least once this session
 let cur = null; // picked point, in stitched-image physical pixels
 let curPicked = false; // true once `cur` reflects a real aim, not just the seed
-let lastRGB = null; // 80: rgb under the crosshair right now, for the history entry
-// 80: last 5 picked colours, newest first. In-memory only (the overlay window is
-// reused, not destroyed, across snips — see build_snip_window — so this survives
-// between picks within one app run without needing a new persistence layer).
+// 80: last 5 picked colours as #rrggbb, newest first. Owned by the BACKEND
+// (pick_color records what it really copied) and handed over with every session in
+// snip_background.pick_history — the page keeps no history state of its own, so a
+// hidden or reloaded overlay webview cannot lose it.
 let pickHistory = [];
 
 // Seed hint/error text synchronously from the browser locale (en/de are the
@@ -106,6 +106,7 @@ function resetSession() {
   document.body.classList.remove("pick");
   loupe.classList.add("hidden");
   dot.classList.add("hidden");
+  historyEl.classList.add("hidden"); // a region snip must not inherit the picker strip
   fullDim();
   clearTimeout(revealTimer);
   revealTimer = 0;
@@ -124,7 +125,8 @@ async function beginSession() {
     pickZoom = clampZoom(Number(b.pick_zoom) || 8);
     readZoom.textContent = `${pickZoom}×`;
     pickFmt = b.pick_format || "hex";
-    renderHistory(); // 80: reflect any picks made earlier in this app run
+    pickHistory = Array.isArray(b.pick_history) ? b.pick_history : [];
+    renderHistory(); // 80: the picks made earlier in this app run
     document.body.classList.add("pick");
     hint.textContent = T.pick;
     noDim();
@@ -313,6 +315,12 @@ function pixelAt(x, y) {
 
 const hex2 = (n) => n.toString(16).toUpperCase().padStart(2, "0");
 const rgbToHex = (r, g, b) => `#${hex2(r)}${hex2(g)}${hex2(b)}`;
+// 80: the history arrives as #rrggbb; the swatch still needs the channels to render
+// the value in whatever notation the expert menu is set to.
+const hexToRgb = (s) => {
+  const n = parseInt(String(s).replace("#", ""), 16) || 0;
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
 
 // Mirror of the backend's rgb_to_hsl (rounded ints; grey has no hue, red is 0°).
 // The readout has to be identical to what the click will copy, and it cannot ask
@@ -422,7 +430,6 @@ function drawLoupe() {
   ctx.strokeRect(o + 0.5, o + 0.5, z - 1, z - 1);
 
   const c = centre;
-  lastRGB = c; // 80: what a click right now would copy
   const hex = rgbToHex(c[0], c[1], c[2]);
   swatch.style.background = hex;
   readMain.textContent = formatColor(pickFmt, c[0], c[1], c[2]);
@@ -492,13 +499,15 @@ function placeLoupe() {
 // cheap, no need for incremental diffing.
 function renderHistory() {
   historyEl.innerHTML = "";
-  historyEl.classList.toggle("hidden", pickHistory.length === 0);
-  for (const [r, g, b] of pickHistory) {
+  historyEl.classList.toggle("hidden", !pickMode || pickHistory.length === 0);
+  for (const hex of pickHistory) {
+    const [r, g, b] = hexToRgb(hex);
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "pick-history-item";
-    btn.style.background = rgbToHex(r, g, b);
+    btn.style.background = hex;
     btn.title = formatColor(pickFmt, r, g, b);
+    btn.setAttribute("aria-label", btn.title);
     // Both mouse events must stop here: mousedown would otherwise arm a selection
     // drag, mouseup would otherwise fire pickHere() for whatever the crosshair is
     // currently over (the window-level pick handlers, above).
@@ -523,15 +532,9 @@ async function pickHere() {
   pickBusy = true;
   saveZoom(); // the overlay is about to close; a pending debounce would be lost
   try {
+    // The backend records the picked colour in its own history (it is the side that
+    // knows what really reached the clipboard); the next session reads it back.
     await invoke("pick_color", { x: cur.x, y: cur.y });
-    if (lastRGB) {
-      const [r, g, b] = lastRGB;
-      // Skip a no-op duplicate of the entry already on top.
-      const top = pickHistory[0];
-      if (!top || top[0] !== r || top[1] !== g || top[2] !== b) {
-        pickHistory = [[r, g, b], ...pickHistory].slice(0, 5);
-      }
-    }
   } catch {
     pickBusy = false;
     showError();

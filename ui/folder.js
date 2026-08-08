@@ -22,7 +22,6 @@ const folderId = appWin.label.replace(/^folder-/, "");
 
 const iconEl = document.getElementById("icon");
 const previewEl = document.getElementById("preview");
-const badgeEl = document.getElementById("badge");
 const nameEl = document.getElementById("fname");
 const popEl = document.getElementById("pop");
 const gridEl = document.getElementById("grid");
@@ -116,19 +115,18 @@ function renderIcon() {
     paintFace(cell, p, false);
     previewEl.appendChild(cell);
   }
-  badgeEl.textContent = String(state.members.length);
   nameEl.textContent = state.name;
   nameEl.classList.toggle("hidden", !state.name);
-  // The count needs saying once: a bare number on a folder explains nothing. And the
-  // 2x2 preview only identifies IMAGE members — for text pills it is four coloured
-  // squares, so the tooltip names the first two and counts the rest.
+  // The count lives in the tooltip only — a bare number stamped on the icon explains
+  // nothing and covers a preview cell. The 2x2 preview identifies IMAGE members; for
+  // text pills it is four coloured squares, so the tooltip names the first two and
+  // counts the rest.
   const many = TXT.members ? TXT.members.replace("{n}", state.members.length) : "";
   const names = state.members.map((p) => p.name).filter(Boolean);
   const shown = names.slice(0, 2).join(", ");
   const rest = names.length - 2;
   const who = shown && rest > 0 ? `${shown} +${rest}` : shown;
   iconEl.title = [state.name, who, many].filter(Boolean).join(" — ");
-  badgeEl.title = many;
 }
 
 // Popover size for the open grid, from the column count and the folder's own scale.

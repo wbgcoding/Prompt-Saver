@@ -68,11 +68,16 @@ function measure() {
   // collapsible must push the rows below it down, never overlap them.
   const overlaps = [];
   const name = (e) => e.id || e.className || e.tagName.toLowerCase();
+  // `display: contents` boxes (the Markdown wrapper around the textarea) are NOT rows
+  // of their own — their children are. Walking element.children alone dropped the
+  // textarea out of the scan entirely, so it could grow over the colour row unseen.
+  const boxes = (el) => [...el.children].flatMap((k) =>
+    getComputedStyle(k).display === 'contents' ? boxes(k) : [k]);
   for (const parent of [m, ...m.querySelectorAll('*')]) {
     const st = getComputedStyle(parent);
     if (st.display !== 'block' && st.display !== 'flex') continue;
     const row = st.display === 'flex' && st.flexDirection.startsWith('row');
-    const kids = [...parent.children].filter(e => e.getClientRects().length &&
+    const kids = boxes(parent).filter(e => e.getClientRects().length &&
       getComputedStyle(e).position === 'static');
     if (row) {
       // A wrapping row reflows by design; only a nowrap row can push an item out.
@@ -121,7 +126,8 @@ requestAnimationFrame(() => requestAnimationFrame(() => {
 """ % MIN_HISTORY_H
 
 
-def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_open: bool = False) -> Path:
+def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_open: bool = False,
+               history_open: bool = True) -> Path:
     if not (out_dir / "styles").exists():
         shutil.copytree(STYLES, out_dir / "styles")
 
@@ -163,7 +169,7 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
     # history, as it does when the editor opens.
     html = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <link rel="stylesheet" href="styles/main.css"><style>body{{margin:0}}</style></head><body class="flag-tags flag-promptNotes">
-<div id="modal" class="overlay tall history-open" role="dialog" aria-modal="true"><div class="modal">
+<div id="modal" class="overlay tall{' history-open' if history_open else ''}" role="dialog" aria-modal="true"><div class="modal">
   <div class="modal-titlebar"><h2 class="modal-title">Edit prompt</h2>
     <button class="icon-btn modal-x" type="button">X</button></div>
   <div class="modal-name-row"><span class="clear-wrap">
@@ -222,10 +228,10 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
     <div id="modal-hotkey-body" class="modal-collapse-body hidden">
       <div class="hotkey-row"><input id="modal-hotkey-input" class="modal-input" type="text" readonly>
         <button type="button" id="modal-hotkey-clear" class="ghost-btn">Clear</button></div></div></div>
-  <div id="modal-history" class="modal-collapse open">
-    <button type="button" id="modal-history-head" class="modal-collapse-head" aria-expanded="true">
+  <div id="modal-history" class="modal-collapse{' open' if history_open else ''}">
+    <button type="button" id="modal-history-head" class="modal-collapse-head" aria-expanded="{'true' if history_open else 'false'}">
       <span>Version history</span></button>
-    <div id="modal-history-body" class="modal-collapse-body">{rows}</div></div>
+    <div id="modal-history-body" class="modal-collapse-body{'' if history_open else ' hidden'}">{rows}</div></div>
   <div class="modal-actions"><button class="ghost-btn danger-btn">Delete</button>
     <button id="modal-confirm" class="primary-btn">Save</button></div>
 </div></div>
@@ -279,14 +285,25 @@ def main() -> int:
         # Same dialog with the variables helper expanded: opening it must push the
         # rows below it down, not land on top of them.
         page_vars = build_page(tmp, name="modal-vars.html", vars_open=True)
+        # Same again with the version history COLLAPSED — the normal state of the
+        # editor. Only that branch leaves the textarea's flex wrapper without a floor,
+        # so the field could shrink past its own min-height and draw over the colour
+        # row. The history-open variant above never reproduced it.
+        page_vars_hist_closed = build_page(
+            tmp, name="modal-vars-nohist.html", vars_open=True, history_open=False
+        )
         failed = 0
-        for size in SIZES:
-            r = measure(browser, tmp, page_vars, size)
-            if r and r["overlaps"]:
-                print(f"FAIL win={size[0]}x{size[1]} vars open: overlapping rows: {r['overlaps']}")
-                failed += 1
-            elif r:
-                print(f"ok   win={size[0]}x{size[1]} vars open: no overlapping rows")
+        for label, pg in (("vars open", page_vars), ("vars open, history closed", page_vars_hist_closed)):
+            for size in SIZES:
+                r = measure(browser, tmp, pg, size)
+                if r is None:
+                    print(f"FAIL win={size[0]}x{size[1]} {label}: no measurement")
+                    failed += 1
+                elif r["overlaps"]:
+                    print(f"FAIL win={size[0]}x{size[1]} {label}: overlapping rows: {r['overlaps']}")
+                    failed += 1
+                else:
+                    print(f"ok   win={size[0]}x{size[1]} {label}: no overlapping rows")
         for size in SIZES:
             r = measure(browser, tmp, page, size)
             if not r:

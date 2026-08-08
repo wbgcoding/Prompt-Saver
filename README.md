@@ -97,7 +97,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 |---|---|
 | **Expert menu** | Six tabs with an on/off switch for every feature and a parameter for everything adjustable. Settings that are not self-explanatory carry a tooltip |
 | **Runs in the background** | Optional minimize-to-tray, autostart at login, global hotkey |
-| **Auto updates** | Opt-in check with one-click install, verified against a published checksum |
+| **Auto updates** | Checks for a new version on start (switchable off) with one-click install, verified against a published checksum |
 | **100 % local** | A single local database. No account, no telemetry, no network traffic except the update check |
 | **Small** | ~8 MB installer (Rust / Tauri), using the Windows WebView2 runtime |
 

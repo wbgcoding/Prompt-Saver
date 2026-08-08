@@ -2464,10 +2464,8 @@ fn lock<'a>(state: &'a State<'a, Db>) -> std::sync::MutexGuard<'a, Store> {
 
 // Every theme that has its own rules in main.css. "system" is not in here: it
 // resolves to light/dark at runtime, and it is not a valid custom-theme base.
-const BUILTIN_THEMES: [&str; 15] = [
-    "light", "dark", "programmer", "ai", "gradient", "sunset", "ocean", "forest", "midnight",
-    "cyberpunk", "retro", "mono", "lavender", "candy", "coffee",
-];
+const BUILTIN_THEMES: [&str; 7] =
+    ["light", "dark", "programmer", "ai", "ocean", "cyberpunk", "mono"];
 // The colour variables a custom theme may override — the `:root` colour tokens of
 // main.css. Everything else (shadow, radius, timings) stays with the base theme.
 const THEME_VAR_KEYS: [&str; 9] = [
@@ -2537,9 +2535,20 @@ fn theme_base_of(settings: &Settings, pref: &str) -> String {
             .custom_themes
             .iter()
             .find(|c| c.id == id)
-            .map(|c| c.base.clone())
+            .map(|c| known_theme(&c.base))
             .unwrap_or_else(default_theme),
-        None => pref.to_string(),
+        None => known_theme(pref),
+    }
+}
+
+// A theme that was dropped from the product (or a hand-edited settings file) must
+// not leave the app with no colour tokens at all — an unknown name resolves to the
+// default, exactly like a missing one.
+fn known_theme(name: &str) -> String {
+    if name == "system" || BUILTIN_THEMES.contains(&name) {
+        name.to_string()
+    } else {
+        default_theme()
     }
 }
 
@@ -2587,17 +2596,9 @@ fn apply_window_bg(app: &AppHandle, theme: &str, custom_bg: Option<&str>) {
             "dark" => tauri::webview::Color(27, 27, 29, 255),
             "programmer" => tauri::webview::Color(13, 17, 23, 255),
             "ai" => tauri::webview::Color(12, 8, 23, 255),
-            "gradient" => tauri::webview::Color(109, 40, 217, 255),
-            "sunset" => tauri::webview::Color(255, 247, 237, 255),
             "ocean" => tauri::webview::Color(238, 249, 254, 255),
-            "forest" => tauri::webview::Color(240, 253, 244, 255),
-            "midnight" => tauri::webview::Color(15, 23, 42, 255),
             "cyberpunk" => tauri::webview::Color(10, 10, 18, 255),
-            "retro" => tauri::webview::Color(26, 18, 8, 255),
             "mono" => tauri::webview::Color(250, 250, 250, 255),
-            "lavender" => tauri::webview::Color(245, 243, 255, 255),
-            "candy" => tauri::webview::Color(253, 242, 248, 255),
-            "coffee" => tauri::webview::Color(247, 241, 232, 255),
             _ => tauri::webview::Color(247, 247, 248, 255),
         };
         let _ = win.set_background_color(Some(color));
@@ -3609,6 +3610,21 @@ fn first_free_cell(view: &View) -> Option<[u32; 2]> {
     first_free_cell_excluding(view, &[])
 }
 
+// The active view's grid-folder cells. Every caller that hands out a free cell in
+// the active view needs these: they live outside view.layouts, so first_free_cell()
+// alone cannot see them.
+fn active_view_folder_cells(settings: &Settings) -> Vec<[u32; 2]> {
+    let Some(vid) = settings.views.get(settings.active_index()).map(|v| v.id.clone()) else {
+        return Vec::new();
+    };
+    settings
+        .tile_folders
+        .iter()
+        .filter(|f| f.view_id == vid)
+        .map(|f| f.cell)
+        .collect()
+}
+
 // Same, but also treats `extra` cells (e.g. another grid folder's own cell, which
 // lives outside view.layouts) as taken. Without this, a cell handed out here could
 // coincide with a folder's cell — the tile would save fine but never draw, since
@@ -3798,8 +3814,12 @@ async fn add_prompt(
             hotkey,
             hotkey_paste,
         };
+        // A grid folder owns its cell OUTSIDE view.layouts, and the renderer gives a
+        // folder priority — so a cell handed out without excluding them saves fine and
+        // then never draws.
+        let folder_cells = active_view_folder_cells(&store.settings);
         let view = store.settings.active_view_mut();
-        if let Some(cell) = first_free_cell(view) {
+        if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
             let key = grid_key(view.cols, view.rows);
             view.layouts.entry(key).or_default().insert(prompt.id.clone(), cell);
         }
@@ -4265,8 +4285,9 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
         };
         let mut p = store.trash.remove(pos);
         p.trashed_at = 0;
+        let folder_cells = active_view_folder_cells(&store.settings);
         let view = store.settings.active_view_mut();
-        if let Some(cell) = first_free_cell(view) {
+        if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
             let key = grid_key(view.cols, view.rows);
             view.layouts.entry(key).or_default().insert(p.id.clone(), cell);
         }
@@ -5909,9 +5930,32 @@ fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<Str
     if !src.exists() {
         return Err("no-store".into());
     }
-    let name = local_stamp();
-    let folder = backups_dir(app).join(&name);
-    fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+    // Two snapshots inside the same second — two quick manual backups, or the hour a
+    // DST fallback repeats — must not share a folder: create_dir_all would reuse the
+    // existing one and the earlier snapshot would be silently overwritten. create_dir
+    // fails on an existing directory, so claiming the name IS the check (no race).
+    // stamp_secs() reads only the first three time fields, so the suffix leaves the
+    // snapshot's age intact for rotation and the GFS tiers.
+    let root = backups_dir(app);
+    fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+    let base = local_stamp();
+    let mut name = base.clone();
+    let mut folder = root.join(&name);
+    let mut n = 2;
+    loop {
+        match fs::create_dir(&folder) {
+            Ok(()) => break,
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                if n > 99 {
+                    return Err("backup-name-taken".into());
+                }
+                name = format!("{base}-{n}");
+                folder = root.join(&name);
+                n += 1;
+            }
+            Err(e) => return Err(e.to_string()),
+        }
+    }
     let tmp = folder.join("data.db.tmp");
     let dest = folder.join(BACKUP_DB_GZ);
     let _ = fs::remove_file(&tmp);
@@ -7676,6 +7720,9 @@ struct SnipBg {
     pick: bool,
     pick_zoom: u32,
     pick_format: String,
+    // 80: the last picked colours as #rrggbb, newest first. Handed over with the
+    // session so the overlay page never has to keep history state of its own.
+    pick_history: Vec<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -7878,6 +7925,32 @@ fn rgb_to_hex(r: u8, g: u8, b: u8) -> String {
     format!("#{:02X}{:02X}{:02X}", r, g, b)
 }
 
+// 80: the last 5 picked colours, newest first. Recorded here rather than in the
+// overlay page, because this is the side that knows what actually reached the
+// clipboard — a hidden or reloaded webview cannot lose the list. In memory only:
+// a colour history is a convenience, not user data worth a settings write.
+const PICK_HISTORY_MAX: usize = 5;
+static PICK_HISTORY: Mutex<Vec<[u8; 3]>> = Mutex::new(Vec::new());
+
+// Push a pick, newest first, skipping a repeat of the entry already on top.
+fn record_pick(rgb: [u8; 3]) {
+    let mut hist = PICK_HISTORY.lock().unwrap_or_else(|e| e.into_inner());
+    if hist.first() == Some(&rgb) {
+        return;
+    }
+    hist.insert(0, rgb);
+    hist.truncate(PICK_HISTORY_MAX);
+}
+
+fn pick_history_hex() -> Vec<String> {
+    PICK_HISTORY
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+        .map(|c| rgb_to_hex(c[0], c[1], c[2]))
+        .collect()
+}
+
 // RGB -> HSL as rounded integers (degrees, percent, percent). Grey has no hue, so
 // it reports 0°/0%; the hue wraps so 360° is always written as 0°.
 fn rgb_to_hsl(r: u8, g: u8, b: u8) -> (u32, u32, u32) {
@@ -8003,6 +8076,7 @@ async fn pick_color(app: AppHandle, state: State<'_, SnipState>, x: i32, y: i32)
     if arboard::Clipboard::new().and_then(|mut c| c.set_text(text.clone())).is_err() {
         return Err("clipboard write failed".to_string());
     }
+    record_pick(rgb); // 80: only once the value really is on the clipboard
     close_all_snip(&app);
     state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
     let _ = app.emit(
@@ -8158,6 +8232,7 @@ async fn begin_capture(
                 pick,
                 pick_zoom: cfg.zoom,
                 pick_format: cfg.format,
+                pick_history: if pick { pick_history_hex() } else { Vec::new() },
             }
         });
         *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(bg);
@@ -8498,10 +8573,15 @@ async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: String) -> Resu
     // Adopt an existing store in the target; otherwise copy ours across. Abort
     // before writing the redirect pointer if the copy fails, so a launch can
     // never be pointed at a truncated store.
+    // Every file the store can consist of, not just the database: a prompts.json or
+    // settings.json left behind by a failed DB write is the ONLY copy of that change,
+    // and delete_data_dir removes the old folder right after this.
     if !new.join("data.db").exists() {
-        let src = current.join("data.db");
-        if src.exists() {
-            fs::copy(&src, new.join("data.db")).map_err(|e| format!("copy store: {}", e))?;
+        for f in STORE_FILES {
+            let src = current.join(f);
+            if src.exists() {
+                fs::copy(&src, new.join(f)).map_err(|e| format!("copy store: {}", e))?;
+            }
         }
     }
     // Point future launches at the new folder (pointer lives in the canonical dir).
@@ -9042,8 +9122,11 @@ async fn check_update(state: State<'_, Db>) -> Result<UpdateInfo, String> {
 }
 
 // Toggle an expert feature flag (enabled = feature on).
+// Returns Err only where switching the feature ON has a hard precondition that
+// failed (today: the safety backup prompt-sync takes before it first writes) — the
+// flag is then left OFF, so the UI and the store never disagree.
 #[tauri::command]
-fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
+fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> Result<(), String> {
     let is_capture = key == ALLOW_SCREENSHOT_KEY;
     let is_clip = key == "clipWatcher"; // F21
     let is_hotkeys = key == "promptHotkeys"; // F20
@@ -9058,11 +9141,15 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
         if is_sync_enable {
             // Safety net before the very first sync run ever touches this library —
             // same shape a manual backup would take, so a bad first sync is always
-            // recoverable.
+            // recoverable. Without it there is nothing to fall back on, so a failure
+            // here ABORTS the activation instead of syncing unprotected.
             let keep = store.settings.ui_values.get("backupKeep").copied().unwrap_or(10.0).max(1.0) as usize;
             let gfs = gfs_from_settings(&store.settings);
             if let Err(e) = do_backup(&app, keep, gfs) {
                 append_crash_log(&format!("prompt-sync activation backup failed: {e}"));
+                store.settings.ui_flags.insert("promptSync".to_string(), false);
+                save_settings(&app, &store.settings);
+                return Err(format!("sync-backup-failed: {e}"));
             }
             sync_write_all(&app, &store); // seed the folder with every existing prompt right away
         }
@@ -9103,6 +9190,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
         tauri::async_runtime::spawn(async move { sync_float_windows(&handle) });
     }
     notify_float_settings(&app);
+    Ok(())
 }
 
 // Set an expert numeric value (CSS var / behaviour tweak).
@@ -11059,9 +11147,19 @@ fn sync_dir_path(app: &AppHandle, settings: &Settings) -> PathBuf {
     }
 }
 
-// Binary-carrying prompts stay DB-only.
+// Binary-carrying prompts stay DB-only. A prompt whose id is not a plain, filename-
+// safe token stays out too: the id becomes the FILE NAME here, and ids can arrive
+// from an imported backup, i.e. from outside this app.
 fn sync_eligible(p: &Prompt) -> bool {
-    p.image.is_empty() && p.file_path.is_empty() && p.icon_path.is_empty()
+    p.image.is_empty() && p.file_path.is_empty() && p.icon_path.is_empty() && sync_safe_id(&p.id)
+}
+
+// Refused rather than escaped: the id is also how the inbound half finds the prompt
+// again, so a rewritten name would silently orphan the file.
+fn sync_safe_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 // Header fields are one line each — flattening a stray newline is simpler and safer
@@ -11115,8 +11213,18 @@ fn parse_frontmatter(content: &str) -> Option<(HashMap<String, String>, String)>
     Some((fields, body_lines.join("\n")))
 }
 
+// A file only counts as ours when it carries the FULL header this feature writes.
+// A user's own note (Obsidian, Jekyll, …) also opens with `---`; importing one and
+// then rewriting it would destroy their own frontmatter fields.
+fn md_is_ours(fields: &HashMap<String, String>) -> bool {
+    ["name", "color", "tags", "notes"].iter().all(|k| fields.contains_key(*k))
+}
+
 fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
     let (fields, body) = parse_frontmatter(content)?;
+    if !md_is_ours(&fields) {
+        return None;
+    }
     let mut p = base.clone();
     if let Some(v) = fields.get("name") {
         p.name = v.clone();
@@ -11135,7 +11243,9 @@ fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
     if let Some(v) = fields.get("notes") {
         p.notes = v.clone();
     }
-    p.text = body;
+    // The writer closes the body with a newline; keeping it out of the stored text is
+    // what stops every round trip through the folder from adding another blank line.
+    p.text = body.strip_suffix('\n').unwrap_or(&body).to_string();
     Some(p)
 }
 
@@ -11262,15 +11372,29 @@ fn sync_write_all(app: &AppHandle, store: &Store) {
         }
         wanted.insert(filename);
     }
-    // A prompt that left the library (deleted, trashed, or became media-carrying)
-    // takes its file with it — otherwise a stale file would come back as a
-    // duplicate "new" prompt on the next inbound poll.
-    if let Ok(entries) = fs::read_dir(&dir) {
-        for e in entries.flatten() {
-            let name = e.file_name().to_string_lossy().to_string();
-            if name.ends_with(".md") && name != "AGENTS.md" && !wanted.contains(&name) {
-                let _ = fs::remove_file(e.path());
-            }
+    sync_sweep_orphans(&dir, &wanted);
+}
+
+// A prompt that left the library (deleted, trashed, or became media-carrying) takes
+// its file with it — otherwise a stale file would come back as a duplicate "new"
+// prompt on the next inbound poll. ONLY files this feature could have written are
+// swept: the sync folder is a directory the USER picks, so it can hold their own
+// documents. A document without our `---` frontmatter is never imported by
+// sync_poll_once either, so deleting it would destroy data the app does not own.
+fn sync_sweep_orphans(dir: &Path, wanted: &std::collections::HashSet<String>) {
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if !name.ends_with(".md") || name == "AGENTS.md" || wanted.contains(&name) {
+            continue;
+        }
+        let path = e.path();
+        let ours = fs::read_to_string(&path)
+            .ok()
+            .and_then(|c| parse_frontmatter(&c))
+            .is_some_and(|(fields, _)| md_is_ours(&fields));
+        if ours {
+            let _ = fs::remove_file(&path);
         }
     }
 }
@@ -11317,6 +11441,11 @@ fn sync_poll_once(app: &AppHandle) {
             continue;
         }
         let Some(stem) = path.file_stem().and_then(|s| s.to_str()).map(str::to_string) else { continue };
+        // The stem becomes a prompt id, and every id is written back out as a file
+        // name — so it has to pass the same gate an outgoing id does.
+        if !sync_safe_id(&stem) {
+            continue;
+        }
         let Ok(content) = fs::read_to_string(&path) else { continue };
         if let Some(idx) = store.prompts.iter().position(|p| p.id == stem) {
             if prompt_to_md(&store.prompts[idx]) == content {
@@ -11335,8 +11464,9 @@ fn sync_poll_once(app: &AppHandle) {
                 continue;
             }
             if let Some(np) = apply_md_to_prompt(&sync_blank_prompt(stem), &content) {
+                let folder_cells = active_view_folder_cells(&store.settings);
                 let view = store.settings.active_view_mut();
-                if let Some(cell) = first_free_cell(view) {
+                if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
                     let key = grid_key(view.cols, view.rows);
                     view.layouts.entry(key).or_default().insert(np.id.clone(), cell);
                 }
@@ -11364,6 +11494,75 @@ fn start_sync_poll(app: AppHandle) {
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_theme_that_no_longer_ships_falls_back_to_system() {
+        let mut s = Settings::default();
+        // Themes dropped in 2.7.0 — an installation set to one of them must still
+        // start with a full set of colour tokens.
+        for gone in ["gradient", "sunset", "forest", "midnight", "retro", "lavender", "candy", "coffee"] {
+            assert_eq!(theme_base_of(&s, gone), "system", "{gone} should fall back");
+        }
+        assert_eq!(theme_base_of(&s, "ocean"), "ocean");
+        assert_eq!(theme_base_of(&s, "system"), "system");
+        // A custom theme built on a dropped base falls back the same way.
+        s.custom_themes.push(CustomTheme {
+            id: "t1".into(),
+            name: "Mine".into(),
+            base: "retro".into(),
+            vars: HashMap::new(),
+        });
+        assert_eq!(theme_base_of(&s, "custom:t1"), "system");
+    }
+
+    // ---- 80: colour-picker history ----
+
+    #[test]
+    fn record_pick_keeps_five_newest_and_skips_a_repeat() {
+        PICK_HISTORY.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        for i in 1..=6u8 {
+            record_pick([i, 0, 0]);
+        }
+        record_pick([6, 0, 0]); // the same colour twice in a row is not a new entry
+        let hex = pick_history_hex();
+        assert_eq!(hex.len(), PICK_HISTORY_MAX);
+        // Newest first, and the oldest ([1,0,0]) has fallen off the end.
+        assert_eq!(hex[0], "#060000");
+        assert_eq!(hex[PICK_HISTORY_MAX - 1], "#020000");
+        // Picking an earlier colour again puts it back on top as a fresh entry.
+        record_pick([2, 0, 0]);
+        assert_eq!(pick_history_hex()[0], "#020000");
+    }
+
+    // The sync folder is a directory the USER picks, so it can hold their own
+    // documents. Only files carrying our frontmatter may ever be swept.
+    #[test]
+    fn sync_sweep_spares_documents_the_app_did_not_write() {
+        let dir = std::env::temp_dir().join(format!("ps-sweep-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let mine = dir.join("p_stale.md");
+        let theirs = dir.join("My shopping list.md");
+        let obsidian = dir.join("Reading list.md");
+        let kept = dir.join("p_live.md");
+        fs::write(&mine, prompt_to_md(&sync_test_prompt())).unwrap();
+        fs::write(&theirs, "# Shopping\n\n- milk\n").unwrap();
+        // Someone else's frontmatter is still not ours.
+        fs::write(&obsidian, "---\ntitle: Books\ntags: reading\n---\n\n- Dune\n").unwrap();
+        fs::write(&kept, prompt_to_md(&sync_test_prompt())).unwrap();
+        fs::write(dir.join("AGENTS.md"), SYNC_AGENTS_MD).unwrap();
+
+        let mut wanted = std::collections::HashSet::new();
+        wanted.insert("p_live.md".to_string());
+        sync_sweep_orphans(&dir, &wanted);
+
+        assert!(!mine.exists(), "an orphaned prompt file must go");
+        assert!(theirs.exists(), "a document without our frontmatter must survive");
+        assert!(obsidian.exists(), "someone else's frontmatter must survive");
+        assert!(kept.exists(), "a live prompt's file must stay");
+        assert!(dir.join("AGENTS.md").exists(), "the readme must stay");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     // ---- Prompt folders as Markdown ----
 
     fn sync_test_prompt() -> Prompt {
@@ -11385,7 +11584,9 @@ mod tests {
         assert_eq!(updated.color, p.color);
         assert_eq!(updated.tags, p.tags);
         assert_eq!(updated.notes, p.notes);
-        assert_eq!(updated.text, "Hello\nWorld\n"); // writer normalizes a trailing newline
+        // The closing newline the writer adds is the file's, not the prompt's — a
+        // round trip must hand back exactly the text that went in.
+        assert_eq!(updated.text, "Hello\nWorld");
         // Re-serializing the round-tripped prompt must be byte-identical — otherwise
         // sync_write_all()'s "only write if content differs" guard would loop forever.
         assert_eq!(prompt_to_md(&updated), content);
@@ -11733,7 +11934,7 @@ mod tests {
         // backup password must survive: without it every password-protected
         // backup on disk would be undecryptable.
         let mut old = Settings::default();
-        old.theme = "gradient".into();
+        old.theme = "ocean".into();
         old.ui_texts.insert(BACKUP_PW_KEY.to_string(), "sealed-blob".into());
         old.ui_texts.insert("screenshotDir".to_string(), "C:/shots".into());
 
@@ -13852,11 +14053,13 @@ mod tests {
         let bg = SnipBg {
             src: "x".into(), is_file: true, width: 4, height: 2,
             pick: true, pick_zoom: 12, pick_format: "rgb".into(),
+            pick_history: vec!["#FF0000".into()],
         };
         let j = serde_json::to_value(&bg).unwrap();
         assert_eq!(j["pick"], serde_json::json!(true));
         assert_eq!(j["pick_zoom"], serde_json::json!(12));
         assert_eq!(j["pick_format"], serde_json::json!("rgb"));
+        assert_eq!(j["pick_history"], serde_json::json!(["#FF0000"]));
     }
 }
 

@@ -29,8 +29,11 @@
       </span>
       <span id="pick-zoom" class="pick-zoom"></span>
     </div>
-    <div id="pick-history" class="pick-history hidden"></div>
   </div>
+  <!-- 80: the last picked colours. Deliberately NOT inside the loupe — the loupe
+       follows the cursor, so a swatch parked in it moves away from every attempt to
+       click it. A stationary strip above the hint stays reachable. -->
+  <div id="pick-history" class="pick-history hidden"></div>
   <div id="snip-hint" class="snip-hint"></div>
   <script type="module" src="snip.js"></script>
 </body>

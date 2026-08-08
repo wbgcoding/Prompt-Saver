@@ -92,6 +92,22 @@ Everything new is an expert-menu switch, most of it off until you turn it on.
 
 ### Improved
 
+- Deleting several prompts at once confirms on the button itself: the first press
+  turns it red and names the count, the second deletes and reports what moved to
+  the trash. No dialog jumps under the pointer any more.
+- The help page is split into chapters with a row of jump buttons, instead of one
+  long list of twenty-five topics.
+- The colour-pick confirmation keeps its three formats on one line and marks the
+  one already on the clipboard, instead of repeating it in the message and
+  wrapping the rest onto a second row.
+- The expert menu's "only changed" filter is a button beside the search field
+  rather than a full row of its own.
+- Usage statistics fold away as one block in the backup window, its own switch
+  included.
+- A folder no longer stamps a number on its preview; the member count is in the
+  tooltip, where the rest of its description already was.
+- Tag chips, the update button's width and the prompt count beside the library
+  title were all tidied up.
 - Backup retention is now a quick pick — Light (5), Normal (10), Heavy (20) or
   Advanced — instead of a switch plus a number field. Advanced still opens the
   same day/week/month/year settings as before.
@@ -262,6 +278,27 @@ Everything new is an expert-menu switch, most of it off until you turn it on.
   was full**, or land a prompt on a grid folder's own cell and unexpectedly
   bump the folder aside on the next render. Moving now checks the target has
   room for everything first and shows a clear "grid is full" message instead.
+- **The Markdown sync folder could delete your own documents.** If you pointed it
+  at a folder that already held Markdown files of your own, they were removed the
+  moment sync was switched on. It now only ever touches files it wrote itself, and
+  leaves any other Markdown — including notes with their own frontmatter — alone,
+  in both directions.
+- **A prompt edited through the sync folder gained a blank line** at the end every
+  time it was saved.
+- **Switching prompt sync on kept going even when its safety backup failed.** It
+  now stops, leaves the feature off and says why.
+- **Two backups made in the same second overwrote each other**, so one of the two
+  recovery points was silently lost.
+- **New, restored and folder-imported prompts could land on a grid folder's own
+  cell** and stay invisible until the folder was moved.
+- **Moving the data folder left a pending change behind.** If a database write had
+  failed earlier, the fallback file holding that change was not copied to the new
+  location and was then deleted with the old folder.
+- **The colour picker's history never appeared.** The last five picked colours now
+  live in a strip of their own above the hint line, where they can actually be
+  clicked — inside the loupe they moved away with the cursor.
+- **The editor's text box could be drawn over the colour swatches** once the
+  variable helper above it was expanded.
 
 ### Removed
 

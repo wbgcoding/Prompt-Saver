@@ -443,7 +443,8 @@
       </div>
       <div class="backup-body">
         <div id="backup-panel" class="expert-custom"></div>
-        <h3 class="stat-section backup-split" data-i18n="expGroupStats">Usage statistics</h3>
+        <!-- The statistics heading is built by renderStatsPanel: it IS the collapse
+             head for the whole section, switch included. -->
         <div id="stats-panel" class="expert-custom"></div>
       </div>
     </div>
@@ -665,17 +666,9 @@
             <option value="dark" data-i18n="themeDark">Dark</option>
             <option value="programmer" data-i18n="themeProgrammer">Programmer</option>
             <option value="ai" data-i18n="themeAi">AI Enthusiast</option>
-            <option value="cyberpunk" data-i18n="themeCyberpunk">Cyberpunk</option>
-            <option value="retro" data-i18n="themeRetro">Retro</option>
-            <option value="mono" data-i18n="themeMono">Black &amp; White</option>
-            <option value="gradient" data-i18n="themeGradient">Gradient</option>
-            <option value="sunset" data-i18n="themeSunset">Sunset</option>
             <option value="ocean" data-i18n="themeOcean">Ocean</option>
-            <option value="forest" data-i18n="themeForest">Forest</option>
-            <option value="lavender" data-i18n="themeLavender">Lavender</option>
-            <option value="candy" data-i18n="themeCandy">Candy</option>
-            <option value="coffee" data-i18n="themeCoffee">Coffee</option>
-            <option value="midnight" data-i18n="themeMidnight">Midnight</option>
+            <option value="cyberpunk" data-i18n="themeCyberpunk">Cyberpunk</option>
+            <option value="mono" data-i18n="themeMono">Black &amp; White</option>
           </select>
           <button id="theme-edit-open" class="icon-btn theme-edit-btn" type="button" data-i18n-title="themeEditor" data-i18n-aria="themeEditor">
             <!-- The palette artwork spans y 3.2-18.8 in a 24 box, so it sits 1px above
@@ -808,11 +801,18 @@
           <p class="expert-hint" data-i18n="expertHint">Changing these can cause unexpected behaviour.</p>
           <button id="expert-reset" class="ghost-btn danger-btn" data-i18n="expertReset">Reset expert menu</button>
         </div>
-        <input id="expert-search" class="modal-input" type="text" data-i18n-ph="expertSearchPh" data-i18n-aria="expertSearchPh" />
-        <label class="expert-only-changed-row">
-          <input id="expert-only-changed" type="checkbox" />
-          <span data-i18n="expertOnlyChanged">Show only changed</span>
-        </label>
+        <!-- Search + the "only changed" filter share one row: the filter used to be a
+             full-width checkbox line of its own, a whole row of height for one word. -->
+        <div class="expert-filter-row">
+          <input id="expert-search" class="modal-input" type="text" data-i18n-ph="expertSearchPh" data-i18n-aria="expertSearchPh" />
+          <label id="expert-only-changed-chip" class="expert-chip">
+            <input id="expert-only-changed" type="checkbox" />
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M7 12h10M10 18h4"/>
+            </svg>
+            <span data-i18n="expertOnlyChanged">Only changed</span>
+          </label>
+        </div>
         <!-- Tab bar stays fixed; only the rows below scroll. Both built by JS. -->
         <div id="expert-tabs-bar"></div>
         <div id="expert-flags"></div>

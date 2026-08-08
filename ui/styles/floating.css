@@ -30,37 +30,8 @@
   --menu-fg: #ede9fe;
   --menu-line: rgba(255, 255, 255, 0.12);
 }
-:root[data-theme="gradient"] {
-  --pill-bg: linear-gradient(135deg, #4f46e5, #9333ea, #db2777, #9333ea);
-  --menu-bg: rgba(76, 29, 149, 0.96);
-  --menu-fg: #f5f3ff;
-  --menu-line: rgba(255, 255, 255, 0.14);
-}
-/* Text pills drift through the gradient like the main window. */
-:root[data-theme="gradient"] .pill:not(.has-image) {
-  background-size: 300% 300%;
-  animation: gradient-drift 10s ease-in-out infinite;
-}
-@keyframes gradient-drift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-:root[data-theme="sunset"] {
-  --pill-bg: rgba(249, 115, 22, 0.96);
-}
 :root[data-theme="ocean"] {
   --pill-bg: rgba(2, 132, 199, 0.96);
-}
-:root[data-theme="forest"] {
-  --pill-bg: rgba(22, 163, 74, 0.96);
-}
-:root[data-theme="midnight"] {
-  --pill-bg: rgba(56, 189, 248, 0.96);
-  --pill-fg: #07273a;
-  --menu-bg: rgba(30, 41, 59, 0.98);
-  --menu-fg: #e2e8f0;
-  --menu-line: rgba(255, 255, 255, 0.1);
 }
 :root[data-theme="cyberpunk"] {
   --pill-bg: rgba(255, 45, 120, 0.95);
@@ -68,24 +39,8 @@
   --menu-fg: #e0e7ff;
   --menu-line: rgba(255, 255, 255, 0.12);
 }
-:root[data-theme="retro"] {
-  --pill-bg: rgba(255, 176, 0, 0.95);
-  --pill-fg: #1a1208;
-  --menu-bg: rgba(36, 26, 13, 0.98);
-  --menu-fg: #ffb000;
-  --menu-line: rgba(255, 176, 0, 0.18);
-}
 :root[data-theme="mono"] {
   --pill-bg: rgba(17, 17, 17, 0.95);
-}
-:root[data-theme="lavender"] {
-  --pill-bg: rgba(124, 58, 237, 0.95);
-}
-:root[data-theme="candy"] {
-  --pill-bg: rgba(236, 72, 153, 0.95);
-}
-:root[data-theme="coffee"] {
-  --pill-bg: rgba(139, 94, 52, 0.95);
 }
 
 * { box-sizing: border-box; }
@@ -489,28 +444,6 @@ body.menu-open .pill { flex: 0 0 auto; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-/* Inside the icon, never over its edge: the window IS the icon, so anything sticking
-   out is cut off by the window itself. */
-.folder-badge {
-  position: absolute;
-  right: 2%;
-  top: 2%;
-  min-width: 26%;
-  height: 26%;
-  padding: 0 4%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  /* NOT --pill-bg: that is the colour of the folder underneath, so the count was
-     invisible. A dark chip with white ink reads on every theme, exactly like the
-     media caption does. */
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  font-size: calc(var(--folder-box) / 6);
-  font-weight: 700;
-  line-height: 1;
 }
 /* Optional label, laid over the lower edge of the icon (the window is the icon, so
    it has no room below itself). */

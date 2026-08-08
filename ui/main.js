@@ -210,10 +210,7 @@ const THEME_VAR_GROUPS = [
 ];
 // The built-in themes a custom theme can inherit from ("system" is not one of
 // them — it has no rules of its own). Order matches the settings dropdown.
-const BUILTIN_THEMES = [
-  "light", "dark", "programmer", "ai", "cyberpunk", "retro", "mono", "gradient",
-  "sunset", "ocean", "forest", "lavender", "candy", "coffee", "midnight",
-];
+const BUILTIN_THEMES = ["light", "dark", "programmer", "ai", "cyberpunk", "mono", "ocean"];
 
 const customThemes = () => (flag("customThemes") ? settings.custom_themes || [] : []);
 const customThemeId = (pref) => (String(pref || "").startsWith("custom:") ? String(pref).slice(7) : "");
@@ -471,7 +468,7 @@ function toast(msg, action = null, tint = "", chips = null) {
   toastEl.classList.toggle("actionable", !!action || hasChips);
   toastEl.classList.toggle("update", !!(action && action.variant === "update"));
   toastEl.classList.toggle("tinted", !!tint);
-  toastEl.classList.toggle("has-chips", hasChips); // wraps the chip row onto its own line
+  toastEl.classList.toggle("has-chips", hasChips); // wider card, chips inline with the message
   if (tint) {
     toastEl.style.setProperty("--toast-tint", tint);
     toastEl.style.setProperty("--toast-ink", readableInk(tint));
@@ -502,6 +499,7 @@ function toast(msg, action = null, tint = "", chips = null) {
       chip.type = "button";
       chip.className = "toast-chip";
       chip.textContent = c.label;
+      chip.classList.toggle("is-current", !!c.current); // the one on the clipboard
       // Copies again without closing the toast — comparing/re-picking a different
       // notation is the whole point, unlike the single-action button above.
       chip.addEventListener("click", () => {
@@ -835,6 +833,25 @@ function armButton(btn, confirmLabel) {
 function disarmButton(btn, label) {
   btn.classList.remove("confirm");
   btn.textContent = label;
+}
+// 21: a delete confirms on the button itself instead of in a dialog — first press
+// arms it (fully red, warning glyph, the count spelled out), a second press within
+// DISARM_MS deletes. One place to look instead of two, and the pointer never has to
+// travel to a dialog that just appeared under it.
+const ARM_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M12 9v4M12 17h.01M10.3 4 2.6 17.5A1.8 1.8 0 0 0 4.2 20h15.6a1.8 1.8 0 0 0 1.6-2.5L13.7 4a1.9 1.9 0 0 0-3.4 0Z"/></svg>';
+let armDeleteTimer = 0;
+function armDelete(btn, armedLabel, run) {
+  clearTimeout(armDeleteTimer);
+  if (btn.classList.contains("confirm")) {
+    disarmButton(btn, t("delete"));
+    run();
+    return;
+  }
+  btn.classList.add("confirm");
+  btn.textContent = "";
+  btn.insertAdjacentHTML("beforeend", ARM_ICON); // static, developer-controlled markup
+  btn.insertAdjacentText("beforeend", ` ${armedLabel}`);
+  armDeleteTimer = setTimeout(() => disarmButton(btn, t("delete")), DISARM_MS);
 }
 
 // ---- Collapsible bars (header / composer) ----
@@ -1528,7 +1545,13 @@ function flagRow(key) {
     try {
       await invoke("set_ui_flag", { key, enabled });
     } catch (err) {
-      toast(String(err));
+      // The backend refused to switch the feature on (today: prompt sync, whose
+      // safety backup failed). It left the flag off, so the switch has to follow —
+      // a checkbox that shows a state the store does not have is worse than the error.
+      const msg = String(err);
+      toast(msg.startsWith("sync-backup-failed") ? t("syncBackupFailed") : msg);
+      settings.ui_flags = { ...(settings.ui_flags || {}), [key]: !enabled };
+      input.checked = !enabled;
     }
     // Read once at process start (before the builder exists) — flipping it live
     // cannot change which guard is already running.
@@ -1830,6 +1853,10 @@ function pathRow(key) {
 let expertTab = 0;
 let expertQuery = ""; // expert-menu search filter
 let expertOnlyChanged = false; // 67: hide every row still at its default
+// The filter is a pill whose checkbox is visually hidden, so the "on" look is a
+// class rather than :checked (:has() is avoided project-wide, see main.css:733).
+const syncOnlyChangedChip = () =>
+  $("expert-only-changed-chip")?.classList.toggle("active", expertOnlyChanged);
 // 67: does this row differ from its shipped default? Actions and the colour palette
 // have no single "default value" to diff against, so they are excluded up in
 // renderExpert() instead of handled here.
@@ -4130,11 +4157,6 @@ function buildFolderTile(f) {
     }
     mini.appendChild(face);
   }
-  // The count belongs ON the preview, like a folder badge, not loose in a corner.
-  const count = document.createElement("span");
-  count.className = "folder-count";
-  count.textContent = String(members.length);
-  mini.appendChild(count);
   tile.appendChild(mini);
   const name = document.createElement("span");
   // NOT .tile-name: that class is what the auto-fitter scales, and a folder label
@@ -4805,9 +4827,7 @@ function renderVarHelper() {
     for (const name of DYN_VARS) {
       const b = document.createElement("button");
       b.type = "button";
-      // P42: clipboard reads live external data, unlike the other self-filling
-      // names — worth a visual nudge so it isn't missed among the rest.
-      b.className = name === "clipboard" ? "vars-chip vars-chip-highlight" : "vars-chip";
+      b.className = "vars-chip";
       b.textContent = dynToken(name);
       b.title = t(DYN_TIPS[name]); // hover engine themes any [title]
       b.addEventListener("click", () => insertVarToken(dynToken(name)));
@@ -5900,6 +5920,16 @@ async function renderStatsPanel(body) {
     catch (e) { toast(String(e)); return; }
   }
   body.innerHTML = "";
+  // ONE collapsible head for the whole section, its own switch included — folding it
+  // away used to leave the "record statistics" row behind as an orphan under a
+  // heading with nothing under it.
+  const root = body;
+  const panel = document.createElement("div");
+  panel.className = "stats-panel-body";
+  const head = collapsibleHead(t("statsSection"), panel, "statsPanelOpen");
+  head.classList.add("backup-split"); // the rule that separates it from the backups above
+  root.append(head, panel);
+  body = panel;
   const headRow = document.createElement("div"); headRow.className = "stats-head-row";
   const sw = document.createElement("label"); sw.className = "field switch-field";
   const swl = document.createElement("span"); swl.textContent = t("statsEnable");
@@ -5915,15 +5945,6 @@ async function renderStatsPanel(body) {
   }
   body.appendChild(headRow);
   if (!on) return;
-  // Everything below the toggle folds away as one block (state remembered), so the
-  // backup dialog is not half statistics every time it opens. `root` stays the panel
-  // itself — the clear-X wiring at the end has to reach the top-N field in the head
-  // row, which is NOT inside the collapsible part.
-  const root = body;
-  const panel = document.createElement("div");
-  panel.className = "stats-panel-body";
-  root.append(collapsibleHead(t("statsSection"), panel, "statsPanelOpen"), panel);
-  body = panel;
   const nf = (n) => Number(n).toLocaleString(LANG);
   const cards = document.createElement("div");
   cards.className = "stat-cards";
@@ -6063,7 +6084,7 @@ async function renderStatsPanel(body) {
     }
     body.appendChild(list);
   }
-  wireClearButtons(root); // clear-X on the top-N field (in the head row, not in the panel)
+  wireClearButtons(root); // clear-X on the top-N field
 }
 function jumpToPrompt(name) {
   // The settings and the backups dialog stay open underneath: the library is only
@@ -6407,22 +6428,23 @@ async function renderBackupPanel(body) {
   });
   gridEl.appendChild(advBtn);
   right.appendChild(gridEl);
-  // Both retention states live in the same slot, which keeps the height of the taller
-  // one — otherwise picking a tile shifts everything below it by two rows.
+  // Both retention states share ONE slot so picking a tile never moves the rows below
+  // it. The tier grid is always BUILT and merely parked when smart retention is off:
+  // a CSS min-height guessing its height was three pixels short of what the fields
+  // really measure, and every font, UI scale and translation moved that target again.
+  // Day / week beside each other, month / year underneath — four small fields. The
+  // tiers replace the plain count entirely (the backend ignores it while smart
+  // retention is on), so the count the user set stays untouched for when it is off.
   const slot = document.createElement("div"); slot.className = "backup-retention-slot";
   right.appendChild(slot);
-  if (gfsOn) {
-    // Day / week beside each other, month / year underneath — four small fields.
-    // The tiers replace the plain count entirely (the backend ignores it while smart
-    // retention is on), so the count the user set stays untouched for when it is off.
-    const tiers = document.createElement("div"); tiers.className = "backup-tier-grid";
-    const onTier = (key) => async (v) => { await saveBackupSetting("value", key, v); };
-    tiers.appendChild(numRow("valBackupDaily", "backupDaily", 0, 30, onTier("backupDaily")));
-    tiers.appendChild(numRow("valBackupWeekly", "backupWeekly", 0, 52, onTier("backupWeekly")));
-    tiers.appendChild(numRow("valBackupMonthly", "backupMonthly", 0, 60, onTier("backupMonthly")));
-    tiers.appendChild(numRow("valBackupYearly", "backupYearly", 0, 20, onTier("backupYearly")));
-    slot.appendChild(tiers);
-  }
+  const tiers = document.createElement("div");
+  tiers.className = "backup-tier-grid" + (gfsOn ? "" : " is-parked");
+  const onTier = (key) => async (v) => { await saveBackupSetting("value", key, v); };
+  tiers.appendChild(numRow("valBackupDaily", "backupDaily", 0, 30, onTier("backupDaily")));
+  tiers.appendChild(numRow("valBackupWeekly", "backupWeekly", 0, 52, onTier("backupWeekly")));
+  tiers.appendChild(numRow("valBackupMonthly", "backupMonthly", 0, 60, onTier("backupMonthly")));
+  tiers.appendChild(numRow("valBackupYearly", "backupYearly", 0, 20, onTier("backupYearly")));
+  slot.appendChild(tiers);
   // Optional backup password. Without one, backups use a fixed key and restore on any
   // PC; with one they need exactly this password. The stored password is never sent
   // back to the UI — the eye only reveals what was just typed in this session.
@@ -7532,9 +7554,7 @@ $("tag-modal")?.addEventListener("pointerdown", (e) => {
 // ---- F3 custom theme editor ----
 const THEME_LABELS = {
   light: "themeLight", dark: "themeDark", programmer: "themeProgrammer", ai: "themeAi",
-  cyberpunk: "themeCyberpunk", retro: "themeRetro", mono: "themeMono", gradient: "themeGradient",
-  sunset: "themeSunset", ocean: "themeOcean", forest: "themeForest", lavender: "themeLavender",
-  candy: "themeCandy", coffee: "themeCoffee", midnight: "themeMidnight",
+  cyberpunk: "themeCyberpunk", mono: "themeMono", ocean: "themeOcean",
 };
 const THEME_VAR_LABELS = {
   bg: "themeVarBg", surface: "themeVarSurface", "surface-2": "themeVarSurface2",
@@ -7841,6 +7861,9 @@ function fillThemeSelect() {
   sel.value = settings.theme || "system";
   // A parked custom theme (feature off) has no entry — show the base it renders as.
   if (!sel.value) sel.value = themeBase(settings.theme);
+  // A theme that was dropped from the product leaves the select with no match at
+  // all; fall back to the automatic one rather than showing an empty picker.
+  if (!sel.value) sel.value = "system";
 }
 
 // Re-apply after the feature was toggled: switching it off parks every custom theme
@@ -8872,10 +8895,40 @@ function renderHelp() {
   const q = helpQuery.trim().toLowerCase();
   const searching = q.length > 0;
   let shown = 0;
-  for (const cat of helpCategories()) {
+  const cats = helpCategories();
+  // Twenty-five collapsibles in one flat column is a wall, not a manual. They are
+  // grouped into a handful of sections, with a chip per section at the top that
+  // jumps to it — the whole page stays readable at the app's minimum width.
+  const sections = [...new Set(cats.map((c) => c.section))];
+  if (!searching && sections.length > 1) {
+    const nav = document.createElement("div");
+    nav.className = "help-nav";
+    for (const name of sections) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "help-nav-chip";
+      chip.textContent = name;
+      chip.addEventListener("click", () => {
+        box.querySelector(`[data-help-section="${CSS.escape(name)}"]`)
+          ?.scrollIntoView({ block: "start", behavior: "smooth" });
+      });
+      nav.appendChild(chip);
+    }
+    box.appendChild(nav);
+  }
+  let lastSection = null;
+  for (const cat of cats) {
     const haystack = [cat.title, cat.overview, ...cat.settings, cat.tip || ""].join(" ").toLowerCase();
     if (searching && !haystack.includes(q)) continue;
     shown++;
+    if (!searching && cat.section !== lastSection) {
+      lastSection = cat.section;
+      const sh = document.createElement("h3");
+      sh.className = "help-section";
+      sh.dataset.helpSection = cat.section;
+      sh.textContent = cat.section;
+      box.appendChild(sh);
+    }
     // Reuses the expert menu's own group/collapse styling (arrow, spacing, hover) —
     // same visual language, zero new CSS for the mechanic itself.
     const sec = document.createElement("div");
@@ -9398,8 +9451,14 @@ function bind() {
     const chips = ["hex", "rgb", "hsl"]
       .map((k) => e.payload?.[k])
       .filter(Boolean)
-      .map((v) => ({ label: v, onClick: () => invoke("copy_text", { text: v }).catch((err) => toast(String(err))) }));
-    toast(t("colorCopied").replace("{v}", value), null, e.payload?.hex || "", chips);
+      .map((v) => ({
+        label: v,
+        // The notation already on the clipboard is marked instead of being repeated
+        // in the message — that duplication was what pushed the row onto a second line.
+        current: v === value,
+        onClick: () => invoke("copy_text", { text: v }).catch((err) => toast(String(err))),
+      }));
+    toast(t("colorCopied"), null, e.payload?.hex || "", chips);
   });
 
   // Chain mode: combine several text buttons into one clipboard copy. Single
@@ -9536,11 +9595,16 @@ function bind() {
     $("expert-search").value = "";
     expertOnlyChanged = false;
     $("expert-only-changed").checked = false;
+    syncOnlyChangedChip();
     showExpertPage(true);
   });
   $("expert-back").addEventListener("click", () => showExpertPage(false));
   $("expert-search").addEventListener("input", (e) => { expertQuery = e.target.value; renderExpert(); });
-  $("expert-only-changed").addEventListener("change", (e) => { expertOnlyChanged = e.target.checked; renderExpert(); });
+  $("expert-only-changed").addEventListener("change", (e) => {
+    expertOnlyChanged = e.target.checked;
+    syncOnlyChangedChip();
+    renderExpert();
+  });
   // Two-step confirm: first click arms it red, second within 3s resets.
   $("expert-reset").addEventListener("click", (e) => {
     const btn = e.currentTarget;
@@ -9638,11 +9702,13 @@ function bind() {
   $("lib-batch-removeview").addEventListener("click", () => doBatch("removeView", { viewId: $("lib-batch-view").value }));
   $("lib-batch-csv").addEventListener("click", () => batchExport("csv"));
   $("lib-batch-txt").addEventListener("click", () => batchExport("txt"));
-  $("lib-batch-delete").addEventListener("click", async () => {
+  $("lib-batch-delete").addEventListener("click", (e) => {
     const n = libSelected.size;
     if (!n) return;
-    const ok = await confirmDialog({ title: t("delete"), message: t("batchDeleteConfirm").replace("{n}", String(n)), confirmLabel: t("delete") });
-    if (ok) doBatch("delete");
+    armDelete(e.currentTarget, t("batchDeleteConfirm").replace("{n}", String(n)), async () => {
+      await doBatch("delete");
+      toast(t("batchDeleteDone").replace("{n}", String(n)));
+    });
   });
   // Esc leaves selection mode before it closes the library (capture beats the overlay).
   document.addEventListener("keydown", (e) => {
@@ -9658,11 +9724,13 @@ function bind() {
     if (b) doGridBatch("color", { color: b.dataset.color === "none" ? "" : b.dataset.color });
   });
   $("grid-batch-move").addEventListener("click", () => doGridMove($("grid-batch-view").value));
-  $("grid-batch-delete").addEventListener("click", async () => {
+  $("grid-batch-delete").addEventListener("click", (e) => {
     const n = gridSelected.size;
     if (!n) return;
-    const ok = await confirmDialog({ title: t("delete"), message: t("batchDeleteConfirm").replace("{n}", String(n)), confirmLabel: t("delete") });
-    if (ok) doGridBatch("delete");
+    armDelete(e.currentTarget, t("batchDeleteConfirm").replace("{n}", String(n)), async () => {
+      await doGridBatch("delete");
+      toast(t("batchDeleteDone").replace("{n}", String(n)));
+    });
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && gridSelected.size) {

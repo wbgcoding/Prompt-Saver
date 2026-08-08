@@ -86,65 +86,6 @@
   --hl-kw: #f0abfc;
   --hl-fn: #93c5fd;
 }
-/* Gradient: full-color backdrop, frosted-glass surfaces, warm accent. */
-:root[data-theme="gradient"] {
-  --bg: #6d28d9;
-  --surface: rgba(255, 255, 255, 0.16);
-  --surface-2: rgba(255, 255, 255, 0.24);
-  --fg: #ffffff;
-  --muted: rgba(255, 255, 255, 0.72);
-  --border: rgba(255, 255, 255, 0.28);
-  --accent: #fbbf24;
-  --accent-fg: #3b2300;
-  --danger: #fecaca;
-  --shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-  /* The frosted surfaces sit on a saturated backdrop, so the code block gets its own
-     dark panel (below) and the tokens are picked to read on that. */
-  --hl-cmt: rgba(255, 255, 255, 0.62);
-  --hl-str: #bbf7d0;
-  --hl-num: #fed7aa;
-  --hl-kw: #fde047;
-  --hl-fn: #bfdbfe;
-}
-:root[data-theme="gradient"] body {
-  background: linear-gradient(130deg, #4f46e5, #9333ea, #db2777, #f59e0b, #db2777, #9333ea);
-  background-size: 300% 300%;
-  animation: gradient-drift 16s ease-in-out infinite;
-}
-@keyframes gradient-drift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-@media (prefers-reduced-motion: reduce) {
-  :root[data-theme="gradient"] body { animation: none; }
-}
-:root[data-theme="gradient"] .header,
-:root[data-theme="gradient"] .composer {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-}
-/* Popups get a SOLID backdrop: the sticky modal header must fully cover the
-   content scrolling underneath it (translucency made it bleed through). */
-:root[data-theme="gradient"] .modal,
-:root[data-theme="gradient"] .modal-head,
-:root[data-theme="gradient"] .ctx,
-:root[data-theme="gradient"] .num-pop {
-  background: #4c1d95;
-}
-/* Sunset: warm peach tones, golden-hour orange accent. */
-:root[data-theme="sunset"] {
-  --bg: #fff7ed;
-  --surface: #ffffff;
-  --surface-2: #ffedd5;
-  --fg: #431407;
-  --muted: #b45309;
-  --border: #fed7aa;
-  --accent: #f97316;
-  --accent-fg: #ffffff;
-  --danger: #dc2626;
-  --shadow: 0 8px 24px rgba(249, 115, 22, 0.15);
-}
 /* Ocean: airy sky blues, calm sea accent. */
 :root[data-theme="ocean"] {
   --bg: #eef9fe;
@@ -157,37 +98,6 @@
   --accent-fg: #ffffff;
   --danger: #dc2626;
   --shadow: 0 8px 24px rgba(2, 132, 199, 0.15);
-}
-/* Forest: soft greens, natural and easy on the eyes. */
-:root[data-theme="forest"] {
-  --bg: #f0fdf4;
-  --surface: #ffffff;
-  --surface-2: #dcfce7;
-  --fg: #14532d;
-  --muted: #6a8d70;
-  --border: #bbf7d0;
-  --accent: #16a34a;
-  --accent-fg: #ffffff;
-  --danger: #dc2626;
-  --shadow: 0 8px 24px rgba(22, 163, 74, 0.15);
-}
-/* Midnight: cozy deep navy with a soft sky-blue accent. */
-:root[data-theme="midnight"] {
-  --bg: #0f172a;
-  --surface: #1e293b;
-  --surface-2: #283548;
-  --fg: #e2e8f0;
-  --muted: #94a3b8;
-  --border: #334155;
-  --accent: #38bdf8;
-  --accent-fg: #07273a;
-  --danger: #f87171;
-  --shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  --hl-cmt: #7c8ba1;
-  --hl-str: #a5f3fc;
-  --hl-num: #fcd34d;
-  --hl-kw: #f9a8d4;
-  --hl-fn: #93c5fd;
 }
 /* Cyberpunk: neon pink on a night-city black. */
 :root[data-theme="cyberpunk"] {
@@ -207,28 +117,6 @@
   --hl-kw: #ff5d9e;
   --hl-fn: #a5b4fc;
 }
-/* Retro: amber phosphor on CRT-dark, typewriter type. */
-:root[data-theme="retro"] {
-  --bg: #1a1208;
-  --surface: #241a0d;
-  --surface-2: #2f2310;
-  --fg: #ffb000;
-  --muted: #a8842c;
-  --border: #4a3a14;
-  --accent: #ffb000;
-  --accent-fg: #1a1208;
-  --danger: #ff6b4a;
-  --shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
-  /* Phosphor screens were one colour: vary brightness, not hue. */
-  --hl-cmt: #9c7a28;
-  --hl-str: #ffd280;
-  --hl-num: #ffc247;
-  --hl-kw: #fff0c0;
-  --hl-fn: #e59a00;
-}
-:root[data-theme="retro"] body {
-  font-family: "Courier New", Consolas, monospace;
-}
 /* Black & White: clean monochrome, zero distraction. */
 :root[data-theme="mono"] {
   --bg: #fafafa;
@@ -247,45 +135,6 @@
   --hl-num: #5e5e5e;
   --hl-kw: #111111;
   --hl-fn: #6d6d6d;
-}
-/* Lavender: gentle violet pastels. */
-:root[data-theme="lavender"] {
-  --bg: #f5f3ff;
-  --surface: #ffffff;
-  --surface-2: #ede9fe;
-  --fg: #4c1d95;
-  --muted: #7c6f9f;
-  --border: #ddd6fe;
-  --accent: #7c3aed;
-  --accent-fg: #ffffff;
-  --danger: #dc2626;
-  --shadow: 0 8px 24px rgba(124, 58, 237, 0.15);
-}
-/* Candy: playful pink sweetness. */
-:root[data-theme="candy"] {
-  --bg: #fdf2f8;
-  --surface: #ffffff;
-  --surface-2: #fce7f3;
-  --fg: #831843;
-  --muted: #b25f8f;
-  --border: #fbcfe8;
-  --accent: #ec4899;
-  --accent-fg: #ffffff;
-  --danger: #dc2626;
-  --shadow: 0 8px 24px rgba(236, 72, 153, 0.15);
-}
-/* Coffee: cozy café browns. */
-:root[data-theme="coffee"] {
-  --bg: #f7f1e8;
-  --surface: #fffaf3;
-  --surface-2: #efe5d6;
-  --fg: #3e2b1f;
-  --muted: #8a7260;
-  --border: #e0d2bd;
-  --accent: #8b5e34;
-  --accent-fg: #ffffff;
-  --danger: #dc2626;
-  --shadow: 0 8px 24px rgba(139, 94, 52, 0.18);
 }
 
 * { box-sizing: border-box; }
@@ -1028,24 +877,6 @@ body.grid-selecting .tile-type { opacity: 0; }
   font-weight: 600;
   line-height: 1.2;
 }
-/* On the preview, like a folder badge — not loose in the tile's corner. */
-.folder-count {
-  position: absolute;
-  top: -6%;
-  right: -6%;
-  z-index: 3;
-  min-width: 1.5em;
-  padding: 0 0.35em;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--accent-fg);
-  font-size: clamp(9px, 3.4cqi, 13px);
-  font-weight: 700;
-  line-height: 1.55;
-  text-align: center;
-  pointer-events: none;
-  box-shadow: 0 0 0 2px var(--bg);
-}
 /* The dwell before a folder is made, drawn as a ring that fills over exactly the
    configured time. Purely decorative and pointer-transparent. */
 .tile.folder-arming::after {
@@ -1449,24 +1280,41 @@ body.library-front #modal.overlay { z-index: 67; }
   white-space: pre;
 }
 .md-preview .md-code code { font: inherit; }
-/* Frosted surfaces are far too bright for code: give the block its own dark panel. */
-:root[data-theme="gradient"] .md-preview .md-code,
-:root[data-theme="gradient"] .md-preview .md-inline-code { background: rgba(0, 0, 0, 0.3); }
 .hl-cmt { color: var(--hl-cmt); font-style: italic; }
 .hl-str { color: var(--hl-str); }
 .hl-num { color: var(--hl-num); }
 .hl-kw { color: var(--hl-kw); font-weight: 600; }
 .hl-fn { color: var(--hl-fn); }
 
-/* 67: "only changed" toggle, right under the search field. */
-.expert-only-changed-row {
-  display: flex;
+/* 67: search field + "only changed", one row. The filter is a pill next to the
+   search instead of a checkbox line of its own — same reach, no extra row. */
+.expert-filter-row { display: flex; align-items: center; gap: 8px; }
+/* wireClear() wraps the search input at runtime, so the wrapper is the flex item. */
+.expert-filter-row > .clear-wrap, .expert-filter-row > #expert-search { flex: 1 1 auto; min-width: 0; }
+.expert-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin: 6px 0 10px;
-  font-size: 13px;
+  gap: 6px;
+  padding: 8px 13px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
+  user-select: none;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
 }
+.expert-chip:hover { border-color: var(--accent); color: var(--fg); }
+.expert-chip:focus-within { border-color: var(--accent); }
+/* The checkbox still holds the state every caller reads; the pill is the control.
+   Kept in the DOM (not display:none) so it stays focusable and keyboard-operable. */
+.expert-chip > input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+/* Toggled from JS — :has() is avoided everywhere in this file (see main.css:733). */
+.expert-chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 
 /* Expert menu: caution line on the left + reset button on the right. */
 .expert-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
@@ -1776,7 +1624,38 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 /* 97: in-app documentation. .help-group reuses .expert-group's own collapse
    mechanic (unscoped rules, see above) — only the body typography is new here. */
 #help .modal { width: min(760px, 94vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden; }
-.help-body { display: flex; flex-direction: column; gap: 14px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.help-body { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* Section jump chips. They wrap by themselves, so the row costs one line on a wide
+   dialog and as many as it needs at the app's minimum width. */
+.help-nav { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 4px; }
+.help-nav-chip {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition);
+}
+.help-nav-chip:hover { border-color: var(--accent); color: var(--fg); }
+/* Section rule: the chapter above a run of topics. scroll-margin so a jump does not
+   park the heading under the sticky dialog header. */
+.help-section {
+  margin: 12px 0 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  scroll-margin-top: 8px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.help-section:first-child { margin-top: 0; }
 .help-group-body { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; }
 .help-overview { margin: 0; font-size: 13px; line-height: 1.5; color: var(--fg); }
 .help-settings { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.5; color: var(--fg); }
@@ -1925,7 +1804,11 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
    never competes with the heading. */
 .modal-count {
   flex: 0 0 auto;
-  margin-left: -4px;
+  /* Belongs to the heading, so it sits directly beside it. The auto right margin is
+     what keeps it there: .modal-head is space-between, which otherwise parks a middle
+     child halfway across the header, adrift from the title it describes. */
+  margin-left: 2px;
+  margin-right: auto;
   padding: 1px 8px;
   border-radius: 999px;
   background: var(--surface-2);
@@ -2057,7 +1940,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   flex: 1 1 auto; min-height: 0;
 }
 #settings-expert > .expert-top,
-#settings-expert > .clear-wrap,
+#settings-expert > .expert-filter-row,
 #settings-expert > #expert-tabs-bar { flex: 0 0 auto; }
 /* A floor, not 0: on a short window the tab bar + search alone filled the dialog and
    left the option list as a 20px sliver. The modal (overflow-y:auto) scrolls instead. */
@@ -2319,7 +2202,13 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .backup-set-row .clear-wrap { flex: 0 1 90px; width: auto; }
 /* Composer + editor textareas keep their flex-grow role through the wrapper. */
 .composer .clear-wrap-ta { flex: 1 1 auto; }
-#modal.tall .clear-wrap-ta { flex: 1 1 auto; min-height: 0; }
+/* The wrapper is the real flex item, so its floor MUST match the textarea's. With
+   min-height:0 (copied from the row wrappers, where a zero floor is correct because
+   their main axis is horizontal) the dialog could squeeze the wrapper to nothing
+   while the field inside kept its 120px — the textarea then spilled out of its own
+   box and was drawn over the colour row, which is what expanding the variable helper
+   made obvious. */
+#modal.tall .clear-wrap-ta { flex: 1 1 auto; min-height: 120px; }
 #modal.tall .clear-wrap-ta > .modal-text { flex: 1 1 auto; min-height: 120px; max-height: none; }
 .clear-btn {
   position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
@@ -2536,11 +2425,12 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .backup-now-btn { align-self: flex-start; }
 @media (max-width: 720px) { .backup-cols { grid-template-columns: minmax(0, 1fr); } }
 /* GFS tiers as a 2x2 block of small fields (day / week over month / year). */
-/* Two rows of 40px fields plus their row gap: the tier grid at its tallest. Holding
-   that height (the slot is empty otherwise, 62) is what stops picking a preset tile
-   from resizing anything below it. */
-.backup-retention-slot { min-height: 86px; }
+/* The slot takes its height from the tier grid itself, which is always rendered and
+   only parked when smart retention is off — that is what stops picking a preset tile
+   from resizing anything below it, at any font size, UI scale or translation.
+   `visibility: hidden` also keeps the parked fields out of the tab order. */
 .backup-tier-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
+.backup-tier-grid.is-parked { visibility: hidden; }
 .backup-tier-grid > .backup-set-row { justify-content: space-between; gap: 8px; }
 .backup-tier-grid .modal-input { flex: 0 0 auto; width: 64px; min-width: 0; text-align: center; }
 .backup-tier-grid .clear-wrap { flex: 0 0 auto; width: 64px; }
@@ -2652,7 +2542,6 @@ input[type="password"]::-ms-clear { display: none; }
   transition: border-color var(--transition), color var(--transition);
 }
 .vars-chip:hover { border-color: var(--accent); color: var(--fg); }
-.vars-chip-highlight { border-color: var(--accent); color: var(--accent); }
 .vars-new { display: flex; align-items: center; gap: 6px; }
 .vars-new .modal-input { min-width: 0; padding: 3px 8px; font-size: 12px; }
 .vars-new-name { flex: 1 1 40%; }
@@ -2855,13 +2744,17 @@ body.drag-over::after {
 .export-row { display: flex; flex-wrap: wrap; row-gap: 6px; gap: 8px; }
 .export-row + .export-row { margin-top: 6px; }
 .export-row .ghost-btn { flex: 1 1 88px; }
-/* Same three columns as the export rows above, so the auto-update switch lines up
-   with the last button there; check + version share the first two columns. */
-.update-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 8px; align-items: center; }
+/* The SAME four columns and gap as .settings-btn-row right below it, so the check
+   button comes out exactly as wide as Help and the auto-update switch lines up with
+   the last button in that row — the bottom of the dialog reads as one block. */
+.update-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: center; }
 /* Wraps so the version label keeps a readable width on a narrow dialog instead of
    being ellipsised down to a couple of pixels beside the check button. */
-.update-actions { grid-column: span 2; display: flex; flex-wrap: wrap; row-gap: 6px; align-items: center; gap: 10px; min-width: 0; }
+.update-actions { grid-column: span 3; display: flex; flex-wrap: wrap; row-gap: 6px; align-items: center; gap: 10px; min-width: 0; }
 .update-actions .ghost-btn { flex: 0 0 auto; }
+/* One column of the grid above: the box is 3 columns + 2 gaps wide, so one column is
+   (width - 2*gap) / 3 — the exact width a button in .settings-btn-row gets. */
+.update-actions > #update-btn { flex: 0 0 calc((100% - 20px) / 3); min-width: 0; }
 /* Clickable version/status label (left of the check button) → releases page, or the
    update dialog once an update is pending. */
 .update-version {
@@ -3146,10 +3039,6 @@ body.drag-over::after {
 .lib-type.lib-fav-chip.active { background: #f5b301; border-color: #f5b301; color: #1a1a1a; }
 
 /* Expert: copy text-size + font dropdowns share one row. */
-/* wireClear() wraps #expert-search in .clear-wrap at runtime — the wrapper is the
-   real flex item, so the clear-X (centered against it) ends up 5px too low if this
-   margin stays on the bare input instead. */
-#settings-expert > .clear-wrap { margin-bottom: 10px; }
 .hotkey-row { display: flex; gap: 8px; align-items: center; }
 .hotkey-row .modal-input { flex: 1; min-width: 0; cursor: pointer; }
 .hotkey-row .ghost-btn { flex: 0 0 auto; }
@@ -3404,12 +3293,26 @@ body.no-composer .toast { bottom: 18px; }
   white-space: nowrap;
 }
 .toast-btn:hover { filter: brightness(1.08); }
-/* 81: colour-pick toast — three notations as separate copy-this-format chips.
-   Wraps onto its own full-width line under the icon + message. */
-.toast.has-chips { flex-wrap: wrap; }
-.toast-chip-row { display: flex; flex: 1 0 100%; flex-wrap: wrap; gap: 6px; padding-left: 36px; }
+/* 81: colour-pick toast — three notations as separate copy-this-format chips, on the
+   SAME line as the message. The card widens for them instead of the row breaking to a
+   second line; only a genuinely too-narrow window still wraps (flex-wrap on the card),
+   and then the whole row moves down together rather than splitting mid-row. */
+.toast.has-chips { flex-wrap: wrap; max-width: min(96vw, 640px); gap: 9px; }
+.toast-chip-row {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  gap: 5px;
+  margin-left: auto;
+  padding-left: 9px;
+  border-left: 1px solid var(--border);
+}
 .toast-chip {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding: 4px 9px;
   border: 1px solid var(--border);
   border-radius: 9px;
@@ -3423,7 +3326,11 @@ body.no-composer .toast { bottom: 18px; }
   transition: transform 0.12s;
 }
 .toast-chip:hover { border-color: var(--accent); }
+/* The notation that is already on the clipboard — filled, so the message does not
+   have to spell the value out a second time. */
+.toast-chip.is-current { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
 .toast-chip.copied { transform: scale(1.08); border-color: var(--accent); color: var(--accent); }
+.toast-chip.is-current.copied { color: var(--accent-fg); }
 
 /* Update notification: a prominent, theme-aware card (icon badge + install
    button) instead of the flat accent pill — more present, still theme-adapted. */
@@ -3521,14 +3428,18 @@ body:not(.flag-promptNotes) #modal-notes { display: none; }
   justify-content: center;
   gap: 5px;
   max-width: 100%;
-  padding: 4px 11px;
+  padding: 5px 12px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface-2);
   color: var(--fg);
+  /* 600 like every other pill in the app (.lib-type, .expert-chip, .toast-chip) —
+     at 500 the tag chips were the one washed-out control among them. The taller
+     line-height is what actually centres the label in the pill; 1.3 sat it high. */
   font-size: var(--tag-chip-px, 12px);
-  font-weight: 500;
-  line-height: 1.3;
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
 }
 .tag-chip.tag-colored {
   border-color: var(--chip-color);

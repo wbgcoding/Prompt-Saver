@@ -353,8 +353,9 @@ PROBE = """
       if (document.querySelector('.tile[data-id="p4"]')) {
         out.errors.push('a prompt inside the folder is still a tile of its own');
       }
-      const cnt = fTile.querySelector('.folder-count');
-      if (!cnt || cnt.textContent !== '5') out.errors.push('the folder does not show its member count');
+      // No member-count badge on a folder tile: the preview identifies it, a number
+      // on top of it was noise.
+      if (fTile.querySelector('.folder-count')) out.errors.push('the folder tile still carries a count badge');
       const anchor = fTile.getBoundingClientRect();
       fTile.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));
       window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));
@@ -906,6 +907,27 @@ PROBE = """
         if (varsBody.classList.contains('hidden')) {
           out.errors.push('the variable helper did not expand when its head was clicked');
         }
+        // Expanding it must PUSH the rows below it down, never land on them. The
+        // textarea sits inside a display:contents wrapper, so the generic row scan
+        // cannot see it — compare it with the colour row directly.
+        const taField = document.getElementById('modal-text');
+        const colorRow = document.getElementById('color-row');
+        const field = taField && taField.getClientRects().length
+          ? taField
+          : document.getElementById('modal-md-wrap');
+        if (field && colorRow) {
+          const a = field.getBoundingClientRect(), b = colorRow.getBoundingClientRect();
+          if (a.height && b.height && b.top < a.bottom - 1) {
+            const wrap = field.closest('.clear-wrap-ta') || field.parentElement;
+            const w = wrap.getBoundingClientRect();
+            const cs = getComputedStyle(field), cw = getComputedStyle(wrap);
+            out.errors.push('the expanded variable helper left the text field over the colour row by ' +
+              Math.round(a.bottom - b.top) + 'px [modal=' + document.getElementById('modal').className +
+              ' field=' + Math.round(a.height) + '/' + cs.minHeight + '/' + cs.flex +
+              ' wrap=' + wrap.className + ':' + Math.round(w.height) + '/' + cw.minHeight + '/' + cw.flex + ']');
+          }
+        }
+        layoutScan('prompt editor, variables open');
       }
       const chips = [...document.querySelectorAll('#modal-vars-chips .vars-chip')];
       if (chips.length !== 16) {
@@ -913,14 +935,12 @@ PROBE = """
       } else if (chips.some(c => !c.title.trim())) {
         out.errors.push('an automatic placeholder chip has no explanation');
       }
-      // P42: the clipboard placeholder reads live external data, unlike the rest —
-      // it alone must carry the highlight class.
+      // Every placeholder chip looks the same: singling /clipboard\\ out read as
+      // "this one is selected", which it never is.
       const clipChip = chips.find(c => c.textContent === '/clipboard\\\\');
-      if (!clipChip || !clipChip.classList.contains('vars-chip-highlight')) {
-        out.errors.push('the clipboard placeholder chip is not highlighted');
-      }
-      if (chips.filter(c => c.classList.contains('vars-chip-highlight')).length !== 1) {
-        out.errors.push('more than one placeholder chip is highlighted');
+      if (!clipChip) out.errors.push('the clipboard placeholder chip is missing');
+      if (chips.some(c => c.classList.contains('vars-chip-highlight'))) {
+        out.errors.push('a placeholder chip is still highlighted');
       }
       const ta = document.getElementById('modal-text');
       const before = ta.value;
@@ -1264,19 +1284,24 @@ PROBE = """
             out.errors.push('the recolour did not reach the tile: ' + (t4After && t4After.style.background));
           }
         }
-        // Delete: goes through the same themed confirm dialog as every other delete.
+        // 21: the delete confirms on the button — one press arms it (red, count
+        // named), the second really deletes. No dialog is involved any more.
         gridTile('p4').querySelector('.tile-select').click();
         await sleep(120);
+        const delBtn = document.getElementById('grid-batch-delete');
         await click('grid-batch-delete');
         await sleep(150);
-        const cmSel = document.getElementById('confirm-modal');
-        if (cmSel.classList.contains('hidden') || !cmSel.textContent.includes('1')) {
-          out.errors.push('deleting from the grid batch bar skipped the confirm dialog');
-        } else {
-          await click('confirm-ok');
-          await sleep(200);
-          if (gridTile('p4')) out.errors.push('confirming the batch delete left the tile on the grid');
+        if (!document.getElementById('confirm-modal').classList.contains('hidden')) {
+          out.errors.push('the batch delete still opens a confirm dialog');
         }
+        if (!delBtn.classList.contains('confirm') || !delBtn.textContent.includes('1')) {
+          out.errors.push('the first press did not arm the delete button: ' + delBtn.textContent);
+        }
+        if (!gridTile('p4')) out.errors.push('the first press already deleted the tile');
+        await click('grid-batch-delete');
+        await sleep(200);
+        if (gridTile('p4')) out.errors.push('the second press did not delete the tile');
+        if (delBtn.classList.contains('confirm')) out.errors.push('the delete button stayed armed after deleting');
       }
     }
     // 91: trash — the dialog opened from the expert menu's Data group. Restore,
@@ -2489,23 +2514,56 @@ PROBE = """
       if (retTiles().length !== 4) {
         out.errors.push('the retention grid does not show 4 preset tiles');
       } else {
+        // renderBackupPanel() rebuilds the whole panel asynchronously on every click,
+        // so each step waits for the state it expects instead of a fixed sleep — a
+        // measurement taken mid-rebuild is what made this check flaky.
+        // The panel is REPLACED on every click, so waiting on a condition that the
+        // still-mounted old DOM already satisfies measures the wrong render. Wait for
+        // the node itself to be a different one.
+        const settle = async (fn) => { for (let i = 0; i < 60 && !fn(); i++) await sleep(50); return fn(); };
+        // "Rendered" is not enough: wireClearButtons() moves every field into a
+        // clear-X wrapper afterwards, and that changes the row height. Measure only
+        // once that has happened, or the two states are compared in different states.
+        const tierNode = () => document.querySelector('#backup-panel .backup-tier-grid');
+        const tierReady = () => {
+          const n = tierNode();
+          return n && n !== seenNode && n.querySelectorAll('.clear-wrap').length === 4;
+        };
+        let seenNode = tierNode();
         heavyTile()?.click();
-        await sleep(300);
-        if (!heavyTile()?.classList.contains('active')) out.errors.push('picking the "heavy" preset did not mark it active');
-        // Nothing below the grid may move when a tile is picked — the slot holding
-        // the empty state and the tier grid keeps one height for both.
-        const slotH = () => Math.round(
-          (document.querySelector('#backup-panel .backup-retention-slot') || {getBoundingClientRect: () => ({height: -1})})
-            .getBoundingClientRect().height);
-        const before = slotH();
-        advTile().click();
-        await sleep(400);
-        const tiers = document.querySelectorAll('#backup-panel .backup-tier-grid .modal-input');
-        if (tiers.length !== 4) out.errors.push('"Advanced" does not show 4 tier fields');
-        if (!advTile()?.classList.contains('active')) out.errors.push('picking "Advanced" did not mark it active');
-        if (before < 0 || Math.abs(slotH() - before) > 1) {
-          out.errors.push('picking a retention tile moves the rows below it (' + before + ' -> ' + slotH() + ')');
+        await settle(tierReady);
+        // The tier grid is always in the DOM and only parked, so "smart retention is
+        // off" is the parked class, not the absence of the grid.
+        if (!await settle(() => heavyTile()?.classList.contains('active') &&
+                                document.querySelector('#backup-panel .backup-tier-grid.is-parked'))) {
+          out.errors.push('picking the "heavy" preset did not mark it active');
         }
+        // Nothing below the retention grid may move when a tile is picked. That is
+        // guaranteed by construction: the tier grid is ALWAYS in the slot and only
+        // parked, so the slot is the same box in both states. Comparing heights
+        // ACROSS the two renders would race the web fonts (they land after the first
+        // layout and add ~3px per row), so each state is checked on its own instead:
+        // the slot must take its height from the tier grid and from nothing else.
+        const slot = () => document.querySelector('#backup-panel .backup-retention-slot');
+        const boxH = (el) => (el ? Math.round(el.getBoundingClientRect().height) : -1);
+        const slotFitsTiers = (label) => {
+          const s = boxH(slot()), g = boxH(tierNode());
+          if (s < 0 || g < 0 || Math.abs(s - g) > 1) {
+            out.errors.push('the retention slot (' + s + ') is not sized by its tier grid (' + g + ') ' + label);
+          }
+        };
+        slotFitsTiers('with a plain preset');
+        if (!document.querySelector('#backup-panel .backup-tier-grid.is-parked')) {
+          out.errors.push('a plain preset left the tier grid unparked');
+        }
+        seenNode = tierNode();
+        advTile().click();
+        await settle(tierReady);
+        if (document.querySelectorAll('#backup-panel .backup-tier-grid:not(.is-parked) .modal-input').length !== 4) {
+          out.errors.push('"Advanced" does not show 4 tier fields');
+        }
+        if (!advTile()?.classList.contains('active')) out.errors.push('picking "Advanced" did not mark it active');
+        slotFitsTiers('with "Advanced"');
         // Clearing a tier field with its X and leaving it must land on the default,
         // not the field minimum — checked here, while "Advanced" is still active.
         const dailyInput = document.querySelector('#backup-panel .backup-tier-grid input[type=number]');
@@ -2522,11 +2580,12 @@ PROBE = """
           // back it has to reappear, or the field can never be cleared a second time.
           if (!dailyClear.classList.contains('show')) out.errors.push('the clear button stays hidden after the field refilled itself');
         }
-        // Back to a plain preset — the tier grid must disappear again.
+        // Back to a plain preset — the tier grid must be parked again (it stays in the
+        // DOM so the block below it never moves; parked = invisible and untabbable).
         [...document.querySelectorAll('#backup-panel .backup-retention-grid .ghost-btn')]
           .find(b => b.textContent.includes('(10)'))?.click();
         await sleep(400);
-        if (document.querySelectorAll('#backup-panel .backup-tier-grid').length) {
+        if (document.querySelectorAll('#backup-panel .backup-tier-grid:not(.is-parked)').length) {
           out.errors.push('picking a plain preset left the tier grid showing');
         }
       }
@@ -3183,12 +3242,23 @@ FOLDER_PROBE = """
   const calls = () => window.__SMOKE_CALLS__ || [];
   const until = async (fn) => { for (let i = 0; i < 80 && !fn(); i++) await sleep(100); return fn(); };
   try {
-    // The window loads its state and its translations asynchronously.
-    await until(() => document.getElementById('badge').textContent !== '0');
+    // The window loads its state and its translations asynchronously. Wait on the
+    // label, which renderIcon fills in the same pass as the previews.
+    const ready = await until(() => document.getElementById('fname').textContent !== '');
+    if (!ready) errs.push('the folder window never rendered its state');
     const faces = document.querySelectorAll('#preview .folder-face').length;
     if (faces !== 4) errs.push('the closed folder shows ' + faces + ' previews instead of 4');
-    const badge = document.getElementById('badge').textContent;
-    if (badge !== '5') errs.push('the count badge shows ' + badge + ' instead of 5');
+    // No count badge anywhere on a folder: the member count lives in the tooltip.
+    if (document.getElementById('badge') || document.querySelector('.folder-badge')) {
+      errs.push('the folder icon still carries a count badge');
+    }
+    // With the badge gone the tooltip is the only place the folder says what is in
+    // it, so it has to name the folder AND its members.
+    const iconEl = document.getElementById('icon');
+    const tip = (iconEl && iconEl.title) || '';
+    if (!tip.includes('Drafts') || !tip.includes('Prompt 1')) {
+      errs.push('the folder tooltip does not describe its contents: ' + tip);
+    }
     const name = document.getElementById('fname');
     if (name.classList.contains('hidden') || name.textContent !== 'Drafts') {
       errs.push('the folder label is missing: ' + name.textContent);
