@@ -432,6 +432,10 @@ body.drag-active .bar-restore { opacity: 0.1; pointer-events: none; }
    close to the button edge instead of floating in a wide margin. */
 .header-actions .icon-btn { padding: 4px; }
 .header-actions .icon-btn > svg { width: 22px; height: 22px; }
+/* 23: tag-filter glyph fills its viewBox almost edge-to-edge (unlike its
+   neighbours, drawn with more internal padding) — shrink it alone so it
+   reads the same visual size instead of looking oversized. */
+#grid-tag-btn > svg { width: 19px; height: 19px; }
 /* Hide-bar chevrons (top + bottom + the restore buttons) share one bolder look. */
 .header-actions #hide-top > svg,
 .composer #hide-bottom > svg,
