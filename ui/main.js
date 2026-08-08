@@ -457,13 +457,19 @@ function readableInk(hex) {
 // picked colour is visible next to its value.
 // Every toast is now the same themed card (icon badge + message), matching the
 // update notification, so nothing looks like the old flat pill.
-function toast(msg, action = null, tint = "") {
+// 81: `chips` is a second, independent action slot — a row of small pill buttons
+// (e.g. the three colour notations) instead of the single `.toast-btn`. Kept
+// separate from `action` rather than folding it in, so every existing single-action
+// caller (undo, update-available, …) is untouched.
+function toast(msg, action = null, tint = "", chips = null) {
   toastEl.textContent = "";
+  const hasChips = !!(chips && chips.length);
   // Only actionable toasts capture clicks; plain ones stay click-through so they
   // never block the UI underneath. The card layout lives on the base .toast now.
-  toastEl.classList.toggle("actionable", !!action);
+  toastEl.classList.toggle("actionable", !!action || hasChips);
   toastEl.classList.toggle("update", !!(action && action.variant === "update"));
   toastEl.classList.toggle("tinted", !!tint);
+  toastEl.classList.toggle("has-chips", hasChips); // wraps the chip row onto its own line
   if (tint) {
     toastEl.style.setProperty("--toast-tint", tint);
     toastEl.style.setProperty("--toast-ink", readableInk(tint));
@@ -486,11 +492,30 @@ function toast(msg, action = null, tint = "") {
     });
     toastEl.appendChild(btn);
   }
+  if (hasChips) {
+    const row = document.createElement("span");
+    row.className = "toast-chip-row";
+    for (const c of chips) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "toast-chip";
+      chip.textContent = c.label;
+      // Copies again without closing the toast — comparing/re-picking a different
+      // notation is the whole point, unlike the single-action button above.
+      chip.addEventListener("click", () => {
+        c.onClick();
+        chip.classList.add("copied");
+        setTimeout(() => chip.classList.remove("copied"), 400);
+      });
+      row.appendChild(chip);
+    }
+    toastEl.appendChild(row);
+  }
   toastEl.classList.remove("hidden");
   void toastEl.offsetWidth;
   toastEl.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(hideToast, action ? 12000 : TOAST_MS);
+  toastTimer = setTimeout(hideToast, (action || hasChips) ? 12000 : TOAST_MS);
 }
 
 function autoGrow(el) {
@@ -9224,7 +9249,14 @@ function bind() {
   });
   listen("color-picked", (e) => {
     const value = e.payload?.text || "";
-    if (value) toast(t("colorCopied").replace("{v}", value), null, e.payload?.hex || "");
+    if (!value) return;
+    // 81: the picked notation is already on the clipboard (unchanged behaviour);
+    // these three chips let a click re-copy any of the OTHER notations too.
+    const chips = ["hex", "rgb", "hsl"]
+      .map((k) => e.payload?.[k])
+      .filter(Boolean)
+      .map((v) => ({ label: v, onClick: () => invoke("copy_text", { text: v }).catch((err) => toast(String(err))) }));
+    toast(t("colorCopied").replace("{v}", value), null, e.payload?.hex || "", chips);
   });
 
   // Chain mode: combine several text buttons into one clipboard copy. Single

@@ -7802,6 +7802,10 @@ fn crop_rgb(img: &image::RgbaImage, x: u32, y: u32, w: u32, h: u32) -> Vec<u8> {
 struct ColorPick {
     text: String,
     hex: String,
+    // 81: all three notations, pre-formatted — so the toast can offer them as
+    // separate copy-this-format chips without duplicating format_color() in JS.
+    rgb: String,
+    hsl: String,
 }
 
 // Longest tile edge the overlay may ask for. The loupe needs a few dozen pixels
@@ -7855,7 +7859,12 @@ async fn pick_color(app: AppHandle, state: State<'_, SnipState>, x: i32, y: i32)
     state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
     let _ = app.emit(
         "color-picked",
-        ColorPick { text: text.clone(), hex: rgb_to_hex(rgb[0], rgb[1], rgb[2]) },
+        ColorPick {
+            text: text.clone(),
+            hex: format_color("hex", rgb[0], rgb[1], rgb[2]),
+            rgb: format_color("rgb", rgb[0], rgb[1], rgb[2]),
+            hsl: format_color("hsl", rgb[0], rgb[1], rgb[2]),
+        },
     );
     Ok(text)
 }

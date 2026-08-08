@@ -2228,6 +2228,35 @@ PROBE = """
         }
       }
     }
+    // 81: colour-pick toast shows all three notations as separate copy chips.
+    {
+      window.__SMOKE_ARGS__ = window.__SMOKE_ARGS__ || [];
+      const before = window.__SMOKE_ARGS__.length;
+      window.__FIRE__('color-picked', { text: '#1A2B3C', hex: '#1A2B3C', rgb: 'rgb(26,43,60)', hsl: 'hsl(210,40%,17%)' });
+      await sleep(150);
+      const toastEl2 = document.getElementById('toast');
+      const chips = [...toastEl2.querySelectorAll('.toast-chip')];
+      if (chips.length !== 3) {
+        out.errors.push('the colour-pick toast does not show all three notations (found ' + chips.length + ')');
+      } else {
+        const labels = chips.map(c => c.textContent);
+        if (!labels.includes('#1A2B3C') || !labels.includes('rgb(26,43,60)') || !labels.includes('hsl(210,40%,17%)')) {
+          out.errors.push('the colour-pick toast chips show the wrong values: ' + labels.join('|'));
+        }
+        const rgbChip = chips.find(c => c.textContent === 'rgb(26,43,60)');
+        rgbChip.click();
+        await sleep(120);
+        const copyCall = window.__SMOKE_ARGS__.slice(before)
+          .find(([cmd, args]) => cmd === 'copy_text' && args && args.text === 'rgb(26,43,60)');
+        if (!copyCall) {
+          out.errors.push('clicking a colour-toast chip did not copy that exact notation');
+        }
+        if (!toastEl2.classList.contains('show')) {
+          out.errors.push('clicking a colour-toast chip closed the toast (should stay open for more clicks)');
+        }
+      }
+      toastEl2.classList.remove('show'); // don't linger into later blocks
+    }
     // Exercise the interactions that rebuild the menu: collapsing a group and
     // flipping switches (gated ones re-render, plain ones must not).
     // Collapsing must flip a class, not rebuild the list — rebuilding is what made

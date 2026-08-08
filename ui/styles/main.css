@@ -3350,6 +3350,26 @@ body.no-composer .toast { bottom: 18px; }
   white-space: nowrap;
 }
 .toast-btn:hover { filter: brightness(1.08); }
+/* 81: colour-pick toast — three notations as separate copy-this-format chips.
+   Wraps onto its own full-width line under the icon + message. */
+.toast.has-chips { flex-wrap: wrap; }
+.toast-chip-row { display: flex; flex: 1 0 100%; flex-wrap: wrap; gap: 6px; padding-left: 36px; }
+.toast-chip {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--fg);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: transform 0.12s;
+}
+.toast-chip:hover { border-color: var(--accent); }
+.toast-chip.copied { transform: scale(1.08); border-color: var(--accent); color: var(--accent); }
 
 /* Update notification: a prominent, theme-aware card (icon badge + install
    button) instead of the flat accent pill — more present, still theme-adapted. */
