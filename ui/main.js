@@ -850,7 +850,7 @@ function armDelete(btn, armedLabel, run) {
   btn.classList.add("confirm");
   btn.textContent = "";
   btn.insertAdjacentHTML("beforeend", ARM_ICON); // static, developer-controlled markup
-  btn.insertAdjacentText("beforeend", ` ${armedLabel}`);
+  btn.insertAdjacentText("beforeend", armedLabel);
   armDeleteTimer = setTimeout(() => disarmButton(btn, t("delete")), DISARM_MS);
 }
 

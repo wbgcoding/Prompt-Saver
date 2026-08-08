@@ -1297,6 +1297,18 @@ PROBE = """
         if (!delBtn.classList.contains('confirm') || !delBtn.textContent.includes('1')) {
           out.errors.push('the first press did not arm the delete button: ' + delBtn.textContent);
         }
+        // 29: the warning triangle must sit on the label's vertical centre, not
+        // its text baseline.
+        {
+          const svgEl = delBtn.querySelector('svg');
+          const svgRect = svgEl.getBoundingClientRect();
+          const textNode = Array.from(delBtn.childNodes).find((n) => n.nodeType === 3 && n.textContent.trim());
+          const range = document.createRange();
+          range.selectNodeContents(textNode);
+          const textRect = range.getBoundingClientRect();
+          const diff = Math.abs((svgRect.top + svgRect.height / 2) - (textRect.top + textRect.height / 2));
+          if (diff >= 1) out.errors.push('29: warning triangle is off the label centre by ' + diff.toFixed(2) + 'px');
+        }
         if (!gridTile('p4')) out.errors.push('the first press already deleted the tile');
         await click('grid-batch-delete');
         await sleep(200);

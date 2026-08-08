@@ -1101,6 +1101,10 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   transition: background var(--transition), border-color var(--transition);
 }
 .ghost-btn:hover { background: var(--surface-2); border-color: var(--accent); }
+/* 29: armed delete state adds a warning glyph before the label — without its
+   own flex layout the SVG sits on the text baseline (too low/high). */
+.ghost-btn.confirm { display: inline-flex; align-items: center; gap: 6px; }
+.ghost-btn.confirm > svg { display: block; flex: 0 0 auto; }
 
 /* ---- Overlays / modals ---- */
 .overlay {
