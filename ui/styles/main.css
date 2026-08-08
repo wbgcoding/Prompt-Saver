@@ -2939,14 +2939,16 @@ body.drag-over::after {
   pointer-events: none;
 }
 .lib-item .lib-add,
-.lib-item .lib-edit {
+.lib-item .lib-edit,
+.lib-item .journal-delete {
   align-self: center;
   flex: 0 0 auto;
   border: 1px solid var(--border);
   border-radius: 8px;
 }
 .lib-item .lib-add:hover,
-.lib-item .lib-edit:hover { color: var(--accent); border-color: var(--accent); }
+.lib-item .lib-edit:hover,
+.lib-item .journal-delete:hover { color: var(--accent); border-color: var(--accent); }
 /* Favorite star: dim by default, gold when starred. */
 .lib-item .lib-fav {
   align-self: center;

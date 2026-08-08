@@ -2041,18 +2041,28 @@ fn db_append_copy(conn: &Connection, entry: &CopyEntry, cap: usize, cutoff: Opti
     db_trim_copy(conn, cap, cutoff)
 }
 
+// 59: one journal row as shown/deletable in the UI — unlike CopyEntry (insert/trim/
+// legacy-migration only), this carries the rowid a delete needs to target the exact
+// row, even in grouped mode where several rows share the same prompt id.
+#[derive(Serialize)]
+struct JournalEntry {
+    rowid: i64,
+    id: String,
+    ts: u64,
+}
+
 // Newest copy events for the journal. grouped = one row per prompt (its most
 // recent copy); otherwise every event. Capped so the UI never renders millions.
-fn db_recent_copies(conn: &Connection, limit: usize, grouped: bool) -> Vec<CopyEntry> {
+fn db_recent_copies(conn: &Connection, limit: usize, grouped: bool) -> Vec<JournalEntry> {
     let sql = if grouped {
-        "SELECT id, MAX(ts) FROM copy_log GROUP BY id ORDER BY MAX(rowid) DESC LIMIT ?1"
+        "SELECT MAX(rowid), id, MAX(ts) FROM copy_log GROUP BY id ORDER BY MAX(rowid) DESC LIMIT ?1"
     } else {
-        "SELECT id, ts FROM copy_log ORDER BY rowid DESC LIMIT ?1"
+        "SELECT rowid, id, ts FROM copy_log ORDER BY rowid DESC LIMIT ?1"
     };
     let mut out = Vec::new();
     if let Ok(mut stmt) = conn.prepare(sql) {
         if let Ok(rows) = stmt.query_map(params![limit as i64], |r| {
-            Ok(CopyEntry { id: r.get::<_, String>(0)?, ts: r.get::<_, i64>(1)? as u64 })
+            Ok(JournalEntry { rowid: r.get(0)?, id: r.get(1)?, ts: r.get::<_, i64>(2)? as u64 })
         }) {
             out.extend(rows.flatten());
         }
@@ -6273,10 +6283,19 @@ async fn clear_copy_history(app: AppHandle, state: State<'_, Db>) -> Result<(), 
 // Newest copy-history entries for the journal (own table; capped for the UI).
 // Async: the grouped query scans the table, so keep it off the UI thread.
 #[tauri::command]
-async fn recent_copies(app: AppHandle, limit: usize, grouped: bool) -> Vec<CopyEntry> {
+async fn recent_copies(app: AppHandle, limit: usize, grouped: bool) -> Vec<JournalEntry> {
     db_conn(&app)
         .map(|c| db_recent_copies(&c, limit.min(COPY_HISTORY_MAX), grouped))
         .unwrap_or_default()
+}
+
+// 59: remove one journal entry by its exact row — never "all copies of this
+// prompt", so it behaves the same in grouped and ungrouped view.
+#[tauri::command]
+async fn delete_copy_entry(app: AppHandle, rowid: i64) -> bool {
+    db_conn(&app)
+        .map(|c| c.execute("DELETE FROM copy_log WHERE rowid = ?1", params![rowid]).is_ok())
+        .unwrap_or(false)
 }
 
 // 43: "hide for now" — a pill or folder id (both flat strings from different id
@@ -10769,6 +10788,7 @@ pub fn run() {
             record_copy,
             clear_copy_history,
             recent_copies,
+            delete_copy_entry,
             toggle_floating,
             hide_float_for_now,
             set_float_scale,
@@ -11417,6 +11437,40 @@ mod tests {
         }
         let n: i64 = conn.query_row("SELECT COUNT(*) FROM copy_log", [], |r| r.get(0)).unwrap();
         assert!(n <= 5, "cap exceeded after gaps: {n}");
+    }
+
+    #[test]
+    fn journal_rowid_deletes_exactly_one_entry() {
+        // 59: the rowid db_recent_copies() now returns has to target the exact row —
+        // never "every copy of this prompt", in either view mode.
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
+             CREATE INDEX idx_copy_log_ts ON copy_log(ts);",
+        )
+        .unwrap();
+        db_append_copy(&conn, &CopyEntry { id: "p1".into(), ts: 100 }, 100, None).unwrap();
+        db_append_copy(&conn, &CopyEntry { id: "p1".into(), ts: 200 }, 100, None).unwrap();
+        db_append_copy(&conn, &CopyEntry { id: "p2".into(), ts: 150 }, 100, None).unwrap();
+        // Ungrouped: three distinct rows, delete-by-rowid removes exactly one.
+        let ungrouped = db_recent_copies(&conn, 10, false);
+        assert_eq!(ungrouped.len(), 3);
+        let target = ungrouped.iter().find(|e| e.ts == 100).unwrap().rowid;
+        conn.execute("DELETE FROM copy_log WHERE rowid = ?1", params![target]).unwrap();
+        let after = db_recent_copies(&conn, 10, false);
+        assert_eq!(after.len(), 2, "deleted the wrong number of rows");
+        assert!(after.iter().any(|e| e.ts == 200), "the OTHER p1 copy must survive");
+        assert!(after.iter().any(|e| e.ts == 150));
+        // Grouped: p1's rowid is its most-recent (ts=200) copy — deleting it must
+        // remove only that one row, not every copy_log row for p1.
+        let grouped = db_recent_copies(&conn, 10, true);
+        let p1 = grouped.iter().find(|e| e.id == "p1").unwrap();
+        assert_eq!(p1.ts, 200);
+        conn.execute("DELETE FROM copy_log WHERE rowid = ?1", params![p1.rowid]).unwrap();
+        let n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM copy_log WHERE id = 'p1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 0, "p1 only had that one row left, both must not survive a single delete");
     }
 
     fn sample_prompts() -> Vec<Prompt> {

@@ -259,7 +259,8 @@ const RESULTS = {
     { name: "2026-07-25_18-30-00", size: 812345, prompts: 12, names: ["Draft reply", "Meeting notes"] },
     { name: "2026-07-24_09-05-00", size: 654321, prompts: null, names: [] },
   ],
-  recent_copies: () => PROMPTS.slice(0, 4).map((p, i) => ({ id: p.id, ts: 1750000000 + i })),
+  recent_copies: () => PROMPTS.slice(0, 4).map((p, i) => ({ id: p.id, ts: 1750000000 + i, rowid: i + 1 })),
+  delete_copy_entry: () => true,
   clip_inbox_list: () => [],
   // P31: two snapshots for p6, each one word off from the next, so the diff
   // view has something real to highlight (list_versions is newest-first).

@@ -8649,6 +8649,28 @@ function journalRow(p, meta, onClick) {
   edit.addEventListener("pointerdown", (e) => e.stopPropagation());
   edit.addEventListener("click", (e) => { e.stopPropagation(); editPrompt(p.id); });
   row.appendChild(edit);
+  // 59: only the "recently copied" column carries a rowid — "most used" is a
+  // usage-count aggregate with no single copy_log row a delete could target.
+  if (meta && meta.rowid != null) {
+    const del = document.createElement("span");
+    del.className = "icon-btn journal-delete";
+    del.title = t("delete");
+    del.setAttribute("aria-label", t("delete"));
+    del.innerHTML = ICON_TRASH;
+    del.addEventListener("pointerdown", (e) => e.stopPropagation());
+    del.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const ok = await confirmDialog({
+        title: t("delete"),
+        message: t("journalEntryDeleteConfirm"),
+        confirmLabel: t("delete"),
+      });
+      if (!ok) return;
+      try { await invoke("delete_copy_entry", { rowid: meta.rowid }); } catch (err) { toast(String(err)); return; }
+      await loadJournal(); // refetch — the entry (and only it) disappears
+    });
+    row.appendChild(del);
+  }
   return row;
 }
 
@@ -8694,7 +8716,7 @@ function renderJournal() {
   const grouped = flag("historyGrouped");
   const showTime = flag("historyTimestamps");
   let recent = journalLog
-    .map((e) => [byId.get(e.id), e.ts])
+    .map((e) => [byId.get(e.id), e.ts, e.rowid])
     .filter(([p]) => p && journalMatches(p));
   if (journalRecentRev) recent = recent.slice().reverse();
   // Most used: copy count + last-used timestamp, busiest first (or least-first).
@@ -8777,7 +8799,10 @@ function renderJournal() {
     : null;
   body.append(
     column("recentlyCopied",
-      recent.map(([p, ts]) => [p, { left: showTime ? fmtCopyTime(ts) : "" }]),
+      // 59: rowid rides along so journalRow() can offer a per-entry delete —
+      // "most used" (below) has no single copy_log row to point at, so it stays
+      // without one.
+      recent.map(([p, ts, rowid]) => [p, { left: showTime ? fmtCopyTime(ts) : "", rowid }]),
       headExtras(groupBtn, recentSort), "journal-col-recent"),
     // One meta line: last-used time on the left, copy count on the right.
     column("mostUsed", used.map(([p, n, ts]) => [

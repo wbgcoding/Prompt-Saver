@@ -618,6 +618,33 @@ PROBE = """
         await sleep(200);
       }
     }
+    // 59: a delete icon on each "recently copied" row removes that one entry —
+    // not every copy of that prompt.
+    {
+      const jRow = document.querySelector('#journal-body .journal-item');
+      const jDel = jRow && jRow.querySelector('.journal-delete');
+      if (!jDel) {
+        out.errors.push('a history row has no delete icon');
+      } else {
+        window.__SMOKE_ARGS__ = [];
+        jDel.click();
+        await sleep(150);
+        const cm = document.getElementById('confirm-modal');
+        if (!cm || cm.classList.contains('hidden')) {
+          out.errors.push('deleting a history entry did not ask for confirmation');
+        } else {
+          document.getElementById('confirm-ok').click();
+          await sleep(250);
+          const delCall = window.__SMOKE_ARGS__.find(([cmd]) => cmd === 'delete_copy_entry');
+          if (!delCall || typeof delCall[1].rowid !== 'number') {
+            out.errors.push('deleting a history entry did not call delete_copy_entry with a rowid');
+          }
+          if (!window.__SMOKE_ARGS__.some(([cmd]) => cmd === 'recent_copies')) {
+            out.errors.push('deleting a history entry did not refetch the journal');
+          }
+        }
+      }
+    }
     await click('journal-close');
     const tile = document.querySelector('#grid .tile');
     if (tile) { tile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })); await sleep(150); }
