@@ -1282,6 +1282,14 @@ struct Settings {
     // A missing key was never explicitly changed (still at its shipped default).
     #[serde(default)]
     ui_changed: HashMap<String, u64>,
+    // 2: seeded once on a genuinely fresh install (empty library, never seeded
+    // before) — never re-seeded just because the user later deletes everything.
+    #[serde(default)]
+    examples_seeded: bool,
+    // 2: ids of the seeded example prompts, so "remove examples" can find exactly
+    // those three (and only those) without guessing by name/content.
+    #[serde(default)]
+    example_prompt_ids: Vec<String>,
     // F6: prompt-id pairs (sorted) the user marked "not a duplicate" — never regrouped.
     #[serde(default)]
     dup_ignored: Vec<[String; 2]>,
@@ -1383,6 +1391,8 @@ impl Default for Settings {
             ui_values: HashMap::new(),
             ui_texts: HashMap::new(),
             ui_changed: HashMap::new(),
+            examples_seeded: false,
+            example_prompt_ids: Vec::new(),
             dup_ignored: Vec::new(),
             tag_colors: HashMap::new(),
             custom_themes: Vec::new(),
@@ -3806,6 +3816,88 @@ async fn add_prompt(
         }
     }
     Ok(prompt)
+}
+
+// 2: one example prompt as the frontend supplies it — name/text come from i18n.js
+// (resolved to whatever language the UI is actually showing), the image is the
+// one small embedded asset shared by all languages.
+#[derive(Deserialize)]
+struct NewExample {
+    name: String,
+    text: String,
+    #[serde(default)]
+    image: String,
+}
+
+// Seeds the three onboarding examples exactly once, on a genuinely fresh install —
+// checked and flipped atomically under the same lock so two racing calls (e.g. a
+// double invoke from a slow first paint) can never seed twice. A library that is
+// merely empty again after the user deleted everything does NOT reseed: that is
+// exactly what `examples_seeded` remembers.
+#[tauri::command]
+async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, examples: Vec<NewExample>) -> Result<Vec<Prompt>, String> {
+    let created = {
+        let mut store = lock(&state);
+        if !store.prompts.is_empty() || store.settings.examples_seeded {
+            return Ok(Vec::new());
+        }
+        let mut created = Vec::new();
+        for ex in examples {
+            let prompt = Prompt {
+                id: gen_id(),
+                trashed_at: 0,
+                name: ex.name,
+                text: ex.text,
+                color: String::new(),
+                show_image: !ex.image.is_empty(),
+                image: ex.image,
+                copy_image: false,
+                file_path: String::new(),
+                pdf_page: 0,
+                icon_path: String::new(),
+                caption: String::new(),
+                caption_size: 0,
+                font: String::new(),
+                font_size: 0,
+                favorite: false,
+                tags: Vec::new(),
+                notes: String::new(),
+                hotkey: String::new(),
+                hotkey_paste: String::new(),
+            };
+            let view = store.settings.active_view_mut();
+            if let Some(cell) = first_free_cell(view) {
+                let key = grid_key(view.cols, view.rows);
+                view.layouts.entry(key).or_default().insert(prompt.id.clone(), cell);
+            }
+            store.settings.example_prompt_ids.push(prompt.id.clone());
+            store.prompts.push(prompt.clone());
+            created.push(prompt);
+        }
+        store.settings.examples_seeded = true;
+        save_prompts(&app, &store);
+        save_settings(&app, &store.settings);
+        created
+    };
+    rebuild_tray(&app); // F23: mirrors add_prompt — the tray's recent/fav sections can list these too
+    Ok(created)
+}
+
+// 2: "remove examples" — deletes exactly the ids seed_example_prompts recorded,
+// through the same batch-delete path (→ trash, per 91) a manual multi-select
+// delete would use, so nothing about this is a special, less-safe deletion.
+#[tauri::command]
+async fn dismiss_example_prompts(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
+    let ids = {
+        let mut store = lock(&state);
+        std::mem::take(&mut store.settings.example_prompt_ids)
+    };
+    if ids.is_empty() {
+        return Ok(());
+    }
+    batch_prompts(app, state, ids, "delete".to_string(), None, None, None)
+        .await
+        .map(|_| ())
 }
 
 // Async: same reason as add_prompt — the SQLite write stays off the UI thread.
@@ -10758,6 +10850,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_prompt,
             add_prompt,
+            seed_example_prompts,
+            dismiss_example_prompts,
             update_prompt,
             set_favorite,
             delete_prompt,

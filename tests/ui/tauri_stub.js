@@ -261,6 +261,11 @@ const RESULTS = {
   ],
   recent_copies: () => PROMPTS.slice(0, 4).map((p, i) => ({ id: p.id, ts: 1750000000 + i, rowid: i + 1 })),
   delete_copy_entry: () => true,
+  // 2: the fixture library is never empty, so the real seeding never actually
+  // triggers (matches the backend's own "already has prompts" guard) — the mock
+  // just needs to exist so the call is tracked, not error out.
+  seed_example_prompts: () => [],
+  dismiss_example_prompts: () => null,
   clip_inbox_list: () => [],
   // P31: two snapshots for p6, each one word off from the next, so the diff
   // view has something real to highlight (list_versions is newest-first).

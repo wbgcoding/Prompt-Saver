@@ -237,6 +237,26 @@ PROBE = """
     clearInterval(heartbeat);
     document.documentElement.style.removeProperty('--smoke-tick');
     layoutScan('main window');
+    // 2: seeding is checked unconditionally on every launch (the backend itself
+    // decides whether the library was actually empty) — must have been called once
+    // by now regardless of the fixture's non-empty PROMPTS array.
+    if (!(window.__SMOKE_CALLS__ || []).includes('seed_example_prompts')) {
+      out.errors.push('seed_example_prompts was not called on startup');
+    }
+    // The fixture library is never empty, so the banner must stay hidden — but the
+    // dismiss button still has to exist and be wired correctly for when it isn't.
+    {
+      const banner = document.getElementById('examples-banner');
+      if (!banner || !banner.classList.contains('hidden')) {
+        out.errors.push('the examples banner is visible over a non-empty library');
+      }
+      window.__SMOKE_CALLS__ = [];
+      document.getElementById('examples-dismiss').click();
+      await sleep(150);
+      if (!window.__SMOKE_CALLS__.includes('dismiss_example_prompts')) {
+        out.errors.push('the "remove examples" button does not call dismiss_example_prompts');
+      }
+    }
     // Window controls and composer buttons are the ones a squeezed header used to
     // carry off the right edge, where no pointer could ever follow them.
     mustReach('main window', '.win-btn, .header-actions > button, .composer > button');

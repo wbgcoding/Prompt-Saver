@@ -5,6 +5,7 @@ import { I18N, LANGS } from "./i18n.js";
 import { FONTS, FONT_LABELS, fitText } from "./fonts.js";
 import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./media.js";
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT } from "./copyDefaults.js";
+import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen, emit } = window.__TAURI__.event;
@@ -2408,6 +2409,7 @@ async function renderGrid(skipFetch = false) {
       const s = await invoke("get_state");
       prompts = s.prompts;
       settings = s.settings;
+      updateExamplesBanner(); // 2: re-evaluate on every real fetch, not just at startup
     } catch (e) {
       // IPC hiccup: keep the last good state instead of throwing into the
       // global handler and leaving a half-rendered grid.
@@ -9570,6 +9572,12 @@ function bind() {
       clearGridSelection();
     }
   }, true);
+  // 2: "gone with one click" per spec — no confirm dialog, unlike a real delete
+  // (these are throwaway onboarding content, not the user's own data).
+  $("examples-dismiss").addEventListener("click", async () => {
+    try { await invoke("dismiss_example_prompts"); } catch (err) { toast(String(err)); return; }
+    await renderGrid();
+  });
   $("library-close").addEventListener("click", hideLibrary);
   libraryEl.addEventListener("pointerdown", (e) => {
     if (e.target === libraryEl) hideLibrary();
@@ -10279,12 +10287,39 @@ async function applySettingsCore() {
   applyTheme(await invoke("current_theme").catch(() => settings.theme));
 }
 
+// 2: three onboarding examples — variable, image, Markdown. Text comes from i18n.js
+// (LANG is already resolved by the time this runs, see applySettingsCore), so each
+// install sees them in its own language instead of freezing whatever the OS locale
+// was on first launch would have to.
+const EXAMPLES = [
+  { name: "example1Name", text: "example1Text", image: "" },
+  { name: "example2Name", text: "example2Text", image: EXAMPLE_IMAGE_DATA_URL },
+  { name: "example3Name", text: "example3Text", image: "" },
+];
+
+// The backend re-checks "library still empty AND never seeded before" itself, so
+// this is safe (and cheap) to call unconditionally on every launch — it is a no-op
+// the moment the library holds anything at all, examples included.
+async function seedExamplesIfNeeded() {
+  const examples = EXAMPLES.map((e) => ({ name: t(e.name), text: t(e.text), image: e.image }));
+  await invoke("seed_example_prompts", { examples }).catch(() => []);
+}
+
+function updateExamplesBanner() {
+  const banner = $("examples-banner");
+  if (!banner) return;
+  const ids = settings.example_prompt_ids || [];
+  const stillHere = ids.length > 0 && ids.some((id) => prompts.some((p) => p.id === id));
+  banner.classList.toggle("hidden", !stillHere);
+}
+
 // The rest of applying loaded settings — flags, toolbar, the grid itself and the
 // settings-dialog controls. Split from applySettingsCore() because init() has to
 // wire event handlers in between; reloadEverything() calls both back to back.
 async function applySettingsUi() {
   applyFlags();
   applyBars();
+  await seedExamplesIfNeeded();
   await renderGrid();
   syncSettingsControls();
 }

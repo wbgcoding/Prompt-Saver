@@ -2940,6 +2940,22 @@ body.drag-over::after {
 .lib-batch-sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px; }
 .lib-batch-colors { display: inline-flex; gap: 4px; }
 .lib-batch-bar .ghost-btn:disabled, .lib-batch-bar select:disabled { opacity: 0.4; pointer-events: none; }
+/* 2: onboarding-examples banner — same "sits above the grid" slot as the batch bar. */
+.examples-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12.5px;
+  flex: 0 0 auto;
+}
 .lib-item .dot {
   width: 10px;
   height: 10px;
