@@ -1110,6 +1110,15 @@ struct Prompt {
     // else, so it never appears in an export or a fresh add_prompt/update_prompt.
     #[serde(default)]
     trashed_at: u64,
+    // 32: "rotating prompts" — `text` is entry 1, `variants` holds entries 2..n, so
+    // every existing consumer (tile preview, search, export, dup-finder, tooltip,
+    // Markdown sync) stays correct without a single change, and "rotation is on" is
+    // exactly `!variants.is_empty()` — no separate bool that could drift from the data.
+    #[serde(default)]
+    variants: Vec<String>,
+    // "" = in order, "random" = shuffled bag (see rotation_next).
+    #[serde(default)]
+    rotate_mode: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Default)]
@@ -1313,6 +1322,15 @@ struct Settings {
     usage: HashMap<String, u32>,
     #[serde(default)]
     last_used: HashMap<String, u64>,
+    // 32: rotation pointer for "variants" prompts — kept out of Prompt itself (see
+    // rotation_next) so every copy doesn't rewrite prompts.json / bump the version
+    // history / touch the Markdown sync file. Index of the NEXT entry to serve.
+    #[serde(default)]
+    rotate_pos: HashMap<String, u32>,
+    // 32: shuffled remaining indices for "random" mode (the "bag" — drawn without
+    // repetition, reshuffled once empty). Absent/empty means "reshuffle on next use".
+    #[serde(default)]
+    rotate_bag: HashMap<String, Vec<u32>>,
     #[serde(default = "default_on")]
     show_header: bool,
     #[serde(default = "default_on")]
@@ -1400,6 +1418,8 @@ impl Default for Settings {
             copy_log: Vec::new(),
             usage: HashMap::new(),
             last_used: HashMap::new(),
+            rotate_pos: HashMap::new(),
+            rotate_bag: HashMap::new(),
             show_header: true,
             show_composer: true,
             language: default_language(),
@@ -3833,6 +3853,8 @@ async fn add_prompt(
             notes,
             hotkey,
             hotkey_paste,
+            variants: Vec::new(),
+            rotate_mode: String::new(),
         };
         // A grid folder owns its cell OUTSIDE view.layouts, and the renderer gives a
         // folder priority — so a cell handed out without excluding them saves fine and
@@ -3907,6 +3929,8 @@ async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, examples: Ve
                 notes: String::new(),
                 hotkey: String::new(),
                 hotkey_paste: String::new(),
+                variants: Vec::new(),
+                rotate_mode: String::new(),
             };
             let view = store.settings.active_view_mut();
             if let Some(cell) = first_free_cell(view) {
@@ -4330,6 +4354,9 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
 fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) {
     let idset: std::collections::HashSet<&str> = ids.iter().map(|s| s.as_str()).collect();
     store.trash.retain(|p| !idset.contains(p.id.as_str()));
+    rotation_forget(&mut store.settings, ids); // 32: no orphaned pointer/bag left behind
+    save_settings(app, &store.settings);
+
     // 102: same guard as update_prompt -- a failed trash save must not still trigger
     // the file sweep, or the DB keeps referencing files the sweep just removed.
     if save_trash(app, store) {
@@ -6307,6 +6334,92 @@ fn copy_payload(p: &Prompt) -> &str {
     &p.text
 }
 
+// 32: "text" is entry 0 (every non-rotating consumer stays correct unchanged),
+// `variants` hold entries 1..n.
+fn rotation_total(p: &Prompt) -> usize {
+    1 + p.variants.len()
+}
+
+fn rotation_entry_text(p: &Prompt, idx: usize) -> String {
+    if idx == 0 {
+        copy_payload(p).to_string() // F17: keep the one place that defines "entry 0"
+    } else {
+        p.variants.get(idx - 1).cloned().unwrap_or_else(|| copy_payload(p).to_string())
+    }
+}
+
+// 32: which entry the NEXT copy would use, without touching any state — so a tile's
+// "next: n/total" badge and the actual copy always agree, no matter how many times
+// this is called between two real copies. The global "rotatingPrompts" flag off, or
+// a prompt with no variants, always resolves to entry 0 — the list stays saved on
+// the prompt, it is just not served.
+// A stored pointer/bag that no longer fits the current entry count (edited since)
+// is never trusted blindly: `% total` keeps a stale `rotate_pos` in range, and any
+// bag containing an out-of-range index is treated as absent (discarded on the next
+// rotation_advance) instead of ever indexing past the end.
+fn rotation_next(p: &Prompt, settings: &Settings) -> (usize, String) {
+    let total = rotation_total(p);
+    let idx = if p.variants.is_empty() || settings.ui_flags.get("rotatingPrompts") == Some(&false) {
+        0
+    } else if p.rotate_mode == "random" {
+        match settings.rotate_bag.get(&p.id) {
+            Some(bag) if !bag.is_empty() && bag.iter().all(|&i| (i as usize) < total) => bag[0] as usize,
+            _ => 0,
+        }
+    } else {
+        settings.rotate_pos.get(&p.id).copied().unwrap_or(0) as usize % total
+    };
+    (idx, rotation_entry_text(p, idx))
+}
+
+// 32: advances the pointer past the entry rotation_next() just reported — call ONLY
+// once the copy that used it actually reached the clipboard, so a failed copy never
+// burns an entry. Random mode pops the bag's shown front and, once that empties it
+// (or the bag was stale/absent, per rotation_next's own validity check), reshuffles
+// a fresh permutation of every OTHER index with the just-shown one placed last — a
+// full cycle (every entry exactly once) always separates two showings of the same
+// entry, including across the reshuffle boundary.
+fn rotation_advance(p: &Prompt, settings: &mut Settings) {
+    // Same gate as rotation_next() — while the feature is globally off the pointer
+    // must stay frozen, not silently drift, so turning it back on resumes exactly
+    // where the user left off instead of landing on an arbitrary position.
+    if p.variants.is_empty() || settings.ui_flags.get("rotatingPrompts") == Some(&false) {
+        return;
+    }
+    let total = rotation_total(p);
+    if p.rotate_mode == "random" {
+        let bag_valid = settings.rotate_bag.get(&p.id)
+            .map(|b| !b.is_empty() && b.iter().all(|&i| (i as usize) < total))
+            .unwrap_or(false);
+        let (shown, mut rest) = if bag_valid {
+            let mut bag = settings.rotate_bag.remove(&p.id).unwrap();
+            (bag.remove(0), bag)
+        } else {
+            (0u32, Vec::new())
+        };
+        if rest.is_empty() {
+            rest = (0..total as u32).filter(|&i| i != shown).collect();
+            use rand::seq::SliceRandom;
+            rest.shuffle(&mut rand::thread_rng());
+            rest.push(shown); // never the first draw of the new cycle
+        }
+        settings.rotate_bag.insert(p.id.clone(), rest);
+    } else {
+        let pos = settings.rotate_pos.get(&p.id).copied().unwrap_or(0) as usize % total;
+        settings.rotate_pos.insert(p.id.clone(), ((pos + 1) % total) as u32);
+    }
+}
+
+// 32: drops both rotation entries once a prompt is gone for good — called from the
+// same places that already purge per-prompt state (`purge_ids`), not from the
+// soft "move to trash" step (a trashed-then-restored prompt keeps its position).
+fn rotation_forget(settings: &mut Settings, ids: &[String]) {
+    for id in ids {
+        settings.rotate_pos.remove(id);
+        settings.rotate_bag.remove(id);
+    }
+}
+
 // The most-called command in the app (every tile/pill/hotkey copy goes through it),
 // so it clones only the ONE field the chosen branch actually needs — not the whole
 // Prompt (134), which on an image prompt meant cloning that base64 blob on every
@@ -6320,17 +6433,19 @@ enum CopyPayload {
 
 // Async: encoding + writing a large image to the clipboard stays off the UI thread.
 #[tauri::command]
-async fn copy_prompt(state: State<'_, Db>, id: String) -> Result<bool, String> {
+async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result<bool, String> {
     let payload = {
         let store = lock(&state);
         match store.prompts.iter().find(|p| p.id == id) {
             Some(p) if p.copy_image && !p.image.is_empty() => CopyPayload::Image(p.image.clone()),
             Some(p) if !p.file_path.is_empty() => CopyPayload::File(p.file_path.clone()),
-            Some(p) => CopyPayload::Text(copy_payload(p).to_string()),
+            // 32: rotation_next() itself falls back to p.text when there is nothing
+            // to rotate, so a plain prompt goes through this exact same branch.
+            Some(p) => CopyPayload::Text(rotation_next(p, &store.settings).1),
             None => CopyPayload::Missing,
         }
     };
-    Ok(match payload {
+    let ok = match payload {
         CopyPayload::Image(img) => copy_image_to_clipboard(&img),
         CopyPayload::File(path) => set_clipboard_file(&path),
         CopyPayload::Text(text) => {
@@ -6338,7 +6453,47 @@ async fn copy_prompt(state: State<'_, Db>, id: String) -> Result<bool, String> {
             arboard::Clipboard::new().and_then(|mut c| c.set_text(text)).is_ok()
         }
         CopyPayload::Missing => false,
-    })
+    };
+    // 32: only a successful clipboard write may consume a rotation entry — a failed
+    // copy must leave the pointer exactly where it was.
+    if ok {
+        let mut store = lock(&state);
+        if let Some(pos) = store.prompts.iter().position(|p| p.id == id) {
+            let p = store.prompts[pos].clone();
+            rotation_advance(&p, &mut store.settings);
+            save_settings(&app, &store.settings); // 32: the pointer survives a restart
+        }
+    }
+    Ok(ok)
+}
+
+// 32: what rotation_peek() reports for a "next: n/total" badge or a copy path that
+// needs the resolved text itself (chaining, drag-out, hotkeys, tray, quick-launch)
+// BEFORE it goes through variable resolution — those all peek, resolve, copy_text,
+// then commit, so a cancelled variable dialog never burns an entry.
+#[derive(Serialize)]
+struct RotationPeek {
+    index: usize,
+    total: usize,
+    text: String,
+}
+
+#[tauri::command]
+fn rotation_peek(state: State<Db>, id: String) -> Option<RotationPeek> {
+    let store = lock(&state);
+    let p = store.prompts.iter().find(|p| p.id == id)?;
+    let (index, text) = rotation_next(p, &store.settings);
+    Some(RotationPeek { index, total: rotation_total(p), text })
+}
+
+#[tauri::command]
+fn rotation_commit(app: AppHandle, state: State<Db>, id: String) {
+    let mut store = lock(&state);
+    if let Some(pos) = store.prompts.iter().position(|p| p.id == id) {
+        let p = store.prompts[pos].clone();
+        rotation_advance(&p, &mut store.settings);
+        save_settings(&app, &store.settings);
+    }
 }
 
 // Put arbitrary text on the clipboard — used after filling prompt placeholders.
@@ -10110,6 +10265,8 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String) -> R
             // — nor the per-binding paste choice that belongs to one.
             hotkey: String::new(),
             hotkey_paste: String::new(),
+            variants: Vec::new(),
+            rotate_mode: String::new(),
         };
         store.prompts.push(prompt);
         count += 1;
@@ -11124,6 +11281,8 @@ pub fn run() {
             launcher_select,
             launcher_close,
             copy_prompt,
+            rotation_peek,
+            rotation_commit,
             copy_text,
             clipboard_text,
             record_copy,
@@ -11528,6 +11687,8 @@ fn sync_blank_prompt(id: String) -> Prompt {
         notes: String::new(),
         hotkey: String::new(),
         hotkey_paste: String::new(),
+        variants: Vec::new(),
+        rotate_mode: String::new(),
     }
 }
 
@@ -12476,6 +12637,8 @@ mod tests {
                 notes: "Ask Anna first.\nDeadline: Friday".into(),
                 hotkey: "CommandOrControl+Shift+1".into(),
                 hotkey_paste: "paste".into(),
+                variants: Vec::new(),
+                rotate_mode: String::new(),
             },
             Prompt {
                 id: "p2".into(),
@@ -12498,8 +12661,98 @@ mod tests {
                 notes: String::new(),
                 hotkey: String::new(),
                 hotkey_paste: String::new(),
+                variants: Vec::new(),
+                rotate_mode: String::new(),
             },
         ]
+    }
+
+    // ---- 32: rotating prompts ----
+    // "Kopierfehler ⇒ kein Commit" is not tested here: it is a one-line structural
+    // guarantee in copy_prompt (`if ok { rotation_advance(...) }`), not a property
+    // of rotation_advance itself, which has no notion of clipboard success.
+
+    #[test]
+    fn rotation_order_mode_cycles_through_every_entry_in_sequence() {
+        let mut p = sample_prompts().remove(0);
+        p.variants = vec!["b".into(), "c".into()]; // total = 3, "" = order
+        let mut settings = Settings::default();
+        let seen: Vec<usize> = (0..7)
+            .map(|_| {
+                let (idx, _) = rotation_next(&p, &settings);
+                rotation_advance(&p, &mut settings);
+                idx
+            })
+            .collect();
+        assert_eq!(seen, vec![0, 1, 2, 0, 1, 2, 0]);
+    }
+
+    #[test]
+    fn rotation_random_bag_shows_each_entry_once_then_avoids_an_immediate_repeat() {
+        let mut p = sample_prompts().remove(0);
+        p.rotate_mode = "random".into();
+        p.variants = vec!["b".into(), "c".into(), "d".into(), "e".into()]; // total = 5
+        let mut settings = Settings::default();
+        let total = 5;
+        let mut first_cycle = std::collections::HashSet::new();
+        let mut last_shown = None;
+        for _ in 0..total {
+            let (idx, _) = rotation_next(&p, &settings);
+            assert!(first_cycle.insert(idx), "the bag repeated an entry within one cycle");
+            rotation_advance(&p, &mut settings);
+            last_shown = Some(idx);
+        }
+        assert_eq!(first_cycle.len(), total, "the bag skipped an entry within one cycle");
+        let (next_idx, _) = rotation_next(&p, &settings);
+        assert_ne!(Some(next_idx), last_shown, "reshuffle repeated the last-shown entry immediately");
+    }
+
+    #[test]
+    fn rotation_stale_pointer_and_bag_never_go_out_of_range_after_entries_shrink() {
+        let mut p = sample_prompts().remove(0);
+        p.variants = vec!["b".into()]; // total = 2 now, but state below predates the shrink
+        let mut settings = Settings::default();
+        settings.rotate_pos.insert(p.id.clone(), 9);
+        let (idx, text) = rotation_next(&p, &settings);
+        assert_eq!(idx, 9 % 2, "a stale order-mode pointer must clamp back into range");
+        assert_eq!(text, p.variants[0]);
+
+        p.rotate_mode = "random".into();
+        settings.rotate_bag.insert(p.id.clone(), vec![4, 0]); // 4 no longer exists
+        let (idx2, _) = rotation_next(&p, &settings);
+        assert_eq!(idx2, 0, "a bag containing any stale index must be discarded, not partially trusted");
+        rotation_advance(&p, &mut settings);
+        let bag = settings.rotate_bag.get(&p.id).unwrap();
+        assert!(bag.iter().all(|&i| (i as usize) < 2), "the reshuffled bag must only contain valid indices");
+    }
+
+    #[test]
+    fn rotation_disabled_globally_always_serves_entry_one_and_freezes_the_pointer() {
+        let mut p = sample_prompts().remove(0);
+        p.variants = vec!["b".into(), "c".into()];
+        p.rotate_mode = "random".into();
+        let mut settings = Settings::default();
+        settings.ui_flags.insert("rotatingPrompts".into(), false);
+        for _ in 0..3 {
+            let (idx, text) = rotation_next(&p, &settings);
+            assert_eq!(idx, 0);
+            assert_eq!(text, p.text);
+            rotation_advance(&p, &mut settings); // must be a no-op while off
+        }
+        assert!(settings.rotate_pos.is_empty());
+        assert!(settings.rotate_bag.is_empty());
+    }
+
+    #[test]
+    fn rotation_forget_drops_both_maps_for_a_purged_prompt() {
+        let mut settings = Settings::default();
+        settings.rotate_pos.insert("p1".into(), 2);
+        settings.rotate_bag.insert("p1".into(), vec![1, 0]);
+        settings.rotate_pos.insert("p2".into(), 1);
+        rotation_forget(&mut settings, &["p1".to_string()]);
+        assert!(!settings.rotate_pos.contains_key("p1"));
+        assert!(!settings.rotate_bag.contains_key("p1"));
+        assert!(settings.rotate_pos.contains_key("p2"), "an unrelated prompt's pointer must survive");
     }
 
     // ---- 91: trash ----
