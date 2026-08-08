@@ -2755,6 +2755,43 @@ PROBE = """
       document.getElementById('settings-close')?.click();
       await sleep(120);
     }
+    // 32-E: library search finds a hit inside ANY entry of a rotating prompt, not
+    // just entry 1 — "Entry two" (the "Rotate Test" prompt second entry, created
+    // above) exists nowhere else in the fixture.
+    // NOTE: no apostrophes inside JS string literals below — this whole PROBE is a
+    // Python triple-quoted (non-raw) string, so a JS-intended \' is consumed by
+    // PYTHON's own escape processing before the browser ever sees it, leaving an
+    // unescaped quote that breaks the surrounding JS string and kills the WHOLE
+    // script tag with a syntax error (silent "no probe result", nothing runs).
+    {
+      await click('library-btn');
+      const q2 = document.getElementById('library-q');
+      if (!q2) {
+        out.errors.push('the library has no search field (32-E rotating-entry check)');
+      } else {
+        q2.value = 'entry two';
+        q2.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(300);
+        const rows = [...document.querySelectorAll('#library-list .lib-item')];
+        const nameEl = rows[0] && rows[0].querySelector('.lib-name');
+        if (rows.length !== 1 || !nameEl || !nameEl.textContent.includes('Rotate Test')) {
+          out.errors.push('searching a rotating prompt second entry found ' + rows.length + ' rows instead of exactly Rotate Test');
+        } else {
+          const tagEl = rows[0].querySelector('.lib-rotate-tag');
+          if (!tagEl || tagEl.textContent !== '2/2') {
+            out.errors.push('the library hit did not tag which entry matched: got ' + (tagEl && tagEl.textContent));
+          }
+          const textEl = rows[0].querySelector('.lib-text');
+          if (!textEl || !textEl.textContent.includes('Entry two')) {
+            out.errors.push('the library row preview did not switch to the matched entry');
+          }
+        }
+        q2.value = '';
+        q2.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(200);
+      }
+      await click('library-close');
+    }
     // 81: colour-pick toast shows all three notations as separate copy chips.
     {
       window.__SMOKE_ARGS__ = window.__SMOKE_ARGS__ || [];

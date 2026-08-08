@@ -1926,11 +1926,27 @@ fn db_conn(app: &AppHandle) -> Option<Connection> {
          CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
          CREATE TABLE IF NOT EXISTS copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
          CREATE INDEX IF NOT EXISTS idx_copy_log_ts ON copy_log(ts);
-         CREATE TABLE IF NOT EXISTS prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL);
+         CREATE TABLE IF NOT EXISTS prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '');
          CREATE INDEX IF NOT EXISTS idx_pv_prompt ON prompt_versions(prompt_id);
          CREATE TABLE IF NOT EXISTS clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);",
     )
     .ok()?;
+    // 32: first-ever schema migration in this app — `prompt_versions` predates
+    // `variants`. `CREATE TABLE IF NOT EXISTS` above already gives a brand-new
+    // install the column; an EXISTING data.db still has the old 5-column table.
+    // Checked via PRAGMA table_info rather than blindly firing ALTER TABLE and
+    // swallowing whatever comes back — that would also swallow a REAL failure
+    // (locked/full/corrupt disk), silently leaving the column missing with no way
+    // to tell the difference from "already migrated" (Codex audit).
+    let has_variants_column = conn
+        .prepare("SELECT 1 FROM pragma_table_info('prompt_versions') WHERE name = 'variants'")
+        .and_then(|mut s| s.exists([]))
+        .unwrap_or(true); // a PRAGMA query failing here means something is already
+                           // badly wrong with the connection — do not also spam an
+                           // ALTER TABLE into that same broken state.
+    if !has_variants_column {
+        let _ = conn.execute("ALTER TABLE prompt_versions ADD COLUMN variants TEXT NOT NULL DEFAULT ''", []);
+    }
     Some(conn)
 }
 
@@ -2144,6 +2160,17 @@ struct PromptVersion {
     ts: u64,
     name: String,
     text: String,
+    // 32: entries ARE content — a version snapshot without them would let a
+    // restore silently drop entries 2..n. JSON-encoded in its own DB column
+    // (unlike the export formats, nothing here needs to stay human-editable).
+    variants: Vec<String>,
+}
+
+fn encode_variants(variants: &[String]) -> String {
+    serde_json::to_string(variants).unwrap_or_default()
+}
+fn decode_variants(raw: &str) -> Vec<String> {
+    serde_json::from_str(raw).unwrap_or_default()
 }
 
 fn history_enabled(settings: &Settings) -> bool {
@@ -2153,10 +2180,10 @@ fn history_cap(settings: &Settings) -> usize {
     settings.ui_values.get("historyPerPrompt").copied().unwrap_or(20.0).clamp(5.0, 100.0) as usize
 }
 
-fn db_add_version(conn: &Connection, prompt_id: &str, ts: u64, name: &str, text: &str, cap: usize) -> rusqlite::Result<()> {
+fn db_add_version(conn: &Connection, prompt_id: &str, ts: u64, name: &str, text: &str, variants: &[String], cap: usize) -> rusqlite::Result<()> {
     conn.execute(
-        "INSERT INTO prompt_versions(prompt_id, ts, name, text) VALUES(?1, ?2, ?3, ?4)",
-        params![prompt_id, ts as i64, enc_str(name), enc_str(text)],
+        "INSERT INTO prompt_versions(prompt_id, ts, name, text, variants) VALUES(?1, ?2, ?3, ?4, ?5)",
+        params![prompt_id, ts as i64, enc_str(name), enc_str(text), enc_str(&encode_variants(variants))],
     )?;
     // Keep only the newest `cap` snapshots for this prompt.
     conn.execute(
@@ -2168,13 +2195,14 @@ fn db_add_version(conn: &Connection, prompt_id: &str, ts: u64, name: &str, text:
 }
 fn db_list_versions(conn: &Connection, prompt_id: &str) -> Vec<PromptVersion> {
     let mut out = Vec::new();
-    if let Ok(mut stmt) = conn.prepare("SELECT id, ts, name, text FROM prompt_versions WHERE prompt_id = ?1 ORDER BY id DESC") {
+    if let Ok(mut stmt) = conn.prepare("SELECT id, ts, name, text, variants FROM prompt_versions WHERE prompt_id = ?1 ORDER BY id DESC") {
         if let Ok(rows) = stmt.query_map(params![prompt_id], |r| {
             Ok(PromptVersion {
                 id: r.get::<_, i64>(0)?,
                 ts: r.get::<_, i64>(1)? as u64,
                 name: dec_str(&r.get::<_, String>(2)?),
                 text: dec_str(&r.get::<_, String>(3)?),
+                variants: decode_variants(&dec_str(&r.get::<_, String>(4)?)),
             })
         }) {
             out.extend(rows.flatten());
@@ -2196,11 +2224,16 @@ fn db_last_edited(conn: &Connection) -> std::collections::HashMap<String, u64> {
     }
     out
 }
-fn db_get_version(conn: &Connection, id: i64) -> Option<(String, String, String)> {
+fn db_get_version(conn: &Connection, id: i64) -> Option<(String, String, String, Vec<String>)> {
     conn.query_row(
-        "SELECT prompt_id, name, text FROM prompt_versions WHERE id = ?1",
+        "SELECT prompt_id, name, text, variants FROM prompt_versions WHERE id = ?1",
         params![id],
-        |r| Ok((r.get::<_, String>(0)?, dec_str(&r.get::<_, String>(1)?), dec_str(&r.get::<_, String>(2)?))),
+        |r| Ok((
+            r.get::<_, String>(0)?,
+            dec_str(&r.get::<_, String>(1)?),
+            dec_str(&r.get::<_, String>(2)?),
+            decode_variants(&dec_str(&r.get::<_, String>(3)?)),
+        )),
     )
     .ok()
 }
@@ -4027,11 +4060,16 @@ async fn update_prompt(
         let found = store.prompts.iter_mut().find(|p| p.id == id);
         match found {
             Some(p) => {
-                // F7: snapshot the previous name/text before overwriting, if changed.
-                if hist_on && (p.name != name || p.text != text) {
-                    let (old_name, old_text) = (p.name.clone(), p.text.clone());
+                // F7/32: snapshot the previous name/text/variants before overwriting,
+                // if changed — entries ARE content (WORK.md 32), so editing only
+                // entry 2 of a rotating prompt (name/text untouched) must still get a
+                // version row or a restore could never bring that entry back.
+                // rotate_mode is deliberately excluded (order/random is a setting,
+                // not versioned content, and isn't stored in the snapshot).
+                if hist_on && (p.name != name || p.text != text || p.variants != variants) {
+                    let (old_name, old_text, old_variants) = (p.name.clone(), p.text.clone(), p.variants.clone());
                     if let Some(c) = db_conn(&app) {
-                        let _ = db_add_version(&c, &id, now_secs(), &old_name, &old_text, hist_cap);
+                        let _ = db_add_version(&c, &id, now_secs(), &old_name, &old_text, &old_variants, hist_cap);
                     }
                 }
                 p.name = name;
@@ -4122,14 +4160,21 @@ async fn restore_version(app: AppHandle, state: State<'_, Db>, version_id: i64) 
             Some(r) => r,
             None => return Ok(None),
         };
-        let (pid, name, text) = record;
+        let (pid, name, text, variants) = record;
         let cap = history_cap(&store.settings);
         if let Some(p) = store.prompts.iter_mut().find(|p| p.id == pid) {
             if let Some(c) = db_conn(&app) {
-                let _ = db_add_version(&c, &pid, now_secs(), &p.name, &p.text, cap);
+                let _ = db_add_version(&c, &pid, now_secs(), &p.name, &p.text, &p.variants, cap);
             }
             p.name = name;
             p.text = text;
+            // 32: the restored list is our own history, but re-validate anyway (a
+            // version predating MAX_ROTATE_VARIANTS, however unlikely, must not
+            // slip a too-long list past the same floor every other entry point has).
+            p.variants = sanitize_variants(variants);
+            // A restore that lands on zero entries must not leave "random" mode
+            // stranded on an empty list (same invariant as everywhere else).
+            p.rotate_mode = sanitize_rotate_mode(p.rotate_mode.clone(), &p.variants);
             let clone = p.clone();
             save_prompts(&app, &store);
             Some(clone)
@@ -5580,6 +5625,10 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
     use std::collections::{HashMap as Map, HashSet as Set};
     let store = lock(&state);
     let thr = (threshold / 100.0).clamp(0.0, 1.0);
+    // 32: a rotating prompt is compared on entry 1 (p.text) only, deliberately —
+    // two prompts that happen to share their FIRST entry but differ in the rest are
+    // not "near duplicates" of each other, and comparing every entry pair would
+    // turn this already-O(n^2) scan into O(n^2 * entries).
     let items: Vec<(&Prompt, String)> = store
         .prompts
         .iter()
@@ -9830,22 +9879,61 @@ fn csv_row(cells: &[&str]) -> String {
     cells.iter().map(|c| csv_cell(c)).collect::<Vec<_>>().join(";")
 }
 
+// 32: joins/splits a rotating prompt's entries for every text-based export format
+// (CSV cell, TXT body, Markdown-sync body) — ONE marker everywhere. NOT the bare
+// "---" WORK.md originally sketched: `to_txt`'s blocks are already joined on the
+// literal "\n\n---\n\n" (between DIFFERENT prompts), and `prompt_to_md`'s header is
+// bounded by bare "---" lines too, so a bare "---" inside one prompt's own body
+// would be ambiguous with either. An HTML-comment marker cannot collide with
+// either delimiter and reads clearly as "generated" to a human editing the
+// Markdown-sync file by hand.
+const VARIANT_SEP: &str = "\n<!-- next -->\n";
+// Escaped form of the marker, used ONLY so an entry that happens to contain the
+// literal separator text survives the round trip instead of being silently
+// split into extra entries (Codex audit) — the inserted backslash means this
+// string can never equal VARIANT_SEP itself, so .split(VARIANT_SEP) never
+// matches inside it.
+const VARIANT_SEP_ESCAPED: &str = "\n<!-- \\next -->\n";
+
+fn join_variants(text: &str, variants: &[String]) -> String {
+    if variants.is_empty() {
+        return text.to_string();
+    }
+    let escape = |s: &str| s.replace(VARIANT_SEP, VARIANT_SEP_ESCAPED);
+    std::iter::once(escape(text))
+        .chain(variants.iter().map(|s| escape(s)))
+        .collect::<Vec<_>>()
+        .join(VARIANT_SEP)
+}
+
+fn split_variants(joined: &str) -> (String, Vec<String>) {
+    let unescape = |s: &str| s.replace(VARIANT_SEP_ESCAPED, VARIANT_SEP);
+    let mut parts = joined.split(VARIANT_SEP);
+    let text = unescape(parts.next().unwrap_or(""));
+    (text, parts.map(unescape).collect())
+}
+
 // Export the prompt library only (incl. images/files) — never app settings,
 // views or grid layout, so importing elsewhere can't clobber the user's setup.
 fn to_csv(prompts: &[Prompt]) -> String {
     // 83: pdfpage appended at the END, not inserted among the existing columns —
     // an older export re-imported here has no such column, and row.get() on a
     // short row already returns None (-> the same default 0), never shifting
-    // any OTHER column's fixed index.
+    // any OTHER column's fixed index. 32: rotatemode follows the identical
+    // append-only precedent.
     let head = [
         "name", "text", "positions", "color", "font", "size", "file", "icon", "show", "copy",
-        "image", "caption", "capsize", "tags", "notes", "pdfpage",
+        "image", "caption", "capsize", "tags", "notes", "pdfpage", "rotatemode",
     ];
     let mut rows = vec![csv_row(&head)];
     for p in prompts {
+        // 32: entries 2..n ride along INSIDE the text cell — the CSV writer quotes
+        // every cell (embedded newlines included), so the join marker needs no
+        // escaping of its own.
+        let text = join_variants(&p.text, &p.variants);
         rows.push(csv_row(&[
             &p.name,
-            &p.text,
+            &text,
             "", // positions omitted (prompts-only export)
             &p.color,
             &p.font,
@@ -9862,6 +9950,7 @@ fn to_csv(prompts: &[Prompt]) -> String {
             // multi-line note travels verbatim — no escaping needed here.
             &p.notes,
             &p.pdf_page.to_string(),
+            &p.rotate_mode,
         ]));
     }
     rows.join("\r\n")
@@ -9869,7 +9958,10 @@ fn to_csv(prompts: &[Prompt]) -> String {
 
 fn to_txt(prompts: &[Prompt]) -> String {
     let blocks: Vec<String> = prompts.iter().map(|p| {
-        let mut block = format!("### {}\n{}", p.name, p.text);
+        // 32: entries 2..n ride along inside the body itself, joined by the same
+        // marker as CSV/Markdown-sync — never the bare "---" the blocks below are
+        // themselves separated by.
+        let mut block = format!("### {}\n{}", p.name, join_variants(&p.text, &p.variants));
         if !p.color.is_empty() {
             block.push_str(&format!("\n@color {}", p.color));
         }
@@ -9910,6 +10002,11 @@ fn to_txt(prompts: &[Prompt]) -> String {
         }
         if !p.image.is_empty() {
             block.push_str(&format!("\n@imagedata {}", p.image));
+        }
+        // 32: order/random preference — sparse like every other optional field here
+        // (a plain prompt, the overwhelming majority, never gets an empty line).
+        if !p.rotate_mode.is_empty() {
+            block.push_str(&format!("\n@rotatemode {}", p.rotate_mode));
         }
         block
     }).collect();
@@ -10013,6 +10110,8 @@ struct ImportedPrompt {
     image: String,
     tags: Vec<String>,
     notes: String,
+    variants: Vec<String>,
+    rotate_mode: String,
 }
 
 // "a,b , c" -> ["a", "b", "c"]. Used by both import parsers; empty parts drop out.
@@ -10094,7 +10193,11 @@ fn parse_txt(content: &str) -> ImportData {
             None => body,
         };
         // Strip trailing metadata lines in reverse write order:
-        // @imagedata, @flags, @icon, @file, @style, @color.
+        // @rotatemode, @imagedata, @flags, @icon, @file, @style, @color.
+        let (body, rotate_mode) = match body.rsplit_once("\n@rotatemode ") {
+            Some((t, v)) => (t.to_string(), v.trim().to_string()),
+            None => (body.to_string(), String::new()),
+        };
         let (body, image) = match body.rsplit_once("\n@imagedata ") {
             Some((t, v)) => (t.to_string(), v.trim().to_string()),
             None => (body.to_string(), String::new()),
@@ -10149,6 +10252,9 @@ fn parse_txt(content: &str) -> ImportData {
             Some((t, c)) => (t.to_string(), c.trim().to_string()),
             None => (body, String::new()),
         };
+        // 32: entries 2..n still ride along inside `text` at this point — split
+        // them back out now that every trailing @key line is gone.
+        let (text, variants) = split_variants(&text);
         data.prompts.push(ImportedPrompt {
             name: name.trim().to_string(),
             text,
@@ -10165,6 +10271,8 @@ fn parse_txt(content: &str) -> ImportData {
             image,
             tags,
             notes,
+            variants,
+            rotate_mode,
         });
     }
     data
@@ -10199,9 +10307,11 @@ fn parse_csv_data(content: &str) -> ImportData {
             if row.len() < 2 {
                 continue;
             }
+            // 32: entries 2..n ride along inside the text cell (column 1).
+            let (text, variants) = split_variants(&row[1]);
             data.prompts.push(ImportedPrompt {
                 name: row[0].trim().to_string(),
-                text: row[1].clone(),
+                text,
                 color: row.get(3).map(|c| c.trim().to_string()).unwrap_or_default(),
                 font: row.get(4).map(|f| f.trim().to_string()).unwrap_or_default(),
                 font_size: row
@@ -10218,6 +10328,8 @@ fn parse_csv_data(content: &str) -> ImportData {
                 caption_size: row.get(12).and_then(|v| v.trim().parse().ok()).unwrap_or(0),
                 tags: row.get(13).map(|v| split_tag_list(v)).unwrap_or_default(),
                 notes: row.get(14).cloned().unwrap_or_default(),
+                variants,
+                rotate_mode: row.get(16).map(|v| v.trim().to_string()).unwrap_or_default(),
             });
     }
     data
@@ -10312,6 +10424,10 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String) -> R
         for t in &tags {
             known.entry(tag_key(t)).or_insert_with(|| t.clone());
         }
+        // 32: the same soft-editor-limit / hard-backend-floor split every other
+        // entry point into a rotating prompt already goes through.
+        let variants = sanitize_variants(item.variants);
+        let rotate_mode = sanitize_rotate_mode(item.rotate_mode, &variants);
         let prompt = Prompt {
             id: gen_id(),
             trashed_at: 0,
@@ -10336,8 +10452,8 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String) -> R
             // — nor the per-binding paste choice that belongs to one.
             hotkey: String::new(),
             hotkey_paste: String::new(),
-            variants: Vec::new(),
-            rotate_mode: String::new(),
+            variants,
+            rotate_mode,
         };
         store.prompts.push(prompt);
         count += 1;
@@ -11508,15 +11624,22 @@ fn md_escape_line(s: &str) -> String {
 
 fn prompt_to_md(p: &Prompt) -> String {
     let tags = p.tags.iter().map(|t| md_escape_line(t)).collect::<Vec<_>>().join(", ");
+    // 32: `variants` is informational only (a human glancing at the header sees the
+    // entry count at a glance) — NEVER read back by apply_md_to_prompt, which always
+    // re-derives the real list from the body's own VARIANT_SEP markers. The four
+    // REQUIRED fields (name/color/tags/notes, md_is_ours()) are unchanged; this is a
+    // fifth, additive field, which md_is_ours() already tolerates.
     let mut out = format!(
-        "---\nname: {}\ncolor: {}\ntags: {}\nnotes: {}\n---\n",
+        "---\nname: {}\ncolor: {}\ntags: {}\nnotes: {}\nvariants: {}\n---\n",
         md_escape_line(&p.name),
         md_escape_line(&p.color),
         tags,
         md_escape_line(&p.notes),
+        p.variants.len(),
     );
-    out.push_str(&p.text);
-    if !p.text.is_empty() && !p.text.ends_with('\n') {
+    let text = join_variants(&p.text, &p.variants);
+    out.push_str(&text);
+    if !text.is_empty() && !text.ends_with('\n') {
         out.push('\n');
     }
     out
@@ -11583,7 +11706,19 @@ fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
     }
     // The writer closes the body with a newline; keeping it out of the stored text is
     // what stops every round trip through the folder from adding another blank line.
-    p.text = body.strip_suffix('\n').unwrap_or(&body).to_string();
+    let body = body.strip_suffix('\n').unwrap_or(&body);
+    // 32: entries 2..n ride along inside the body, split back out here — the
+    // `variants:` header count above is never consulted, so a stale count left by a
+    // hand-edit (added/removed an entry without touching the header) is harmless.
+    // `rotate_mode` is deliberately NOT part of this sync (same partial-field
+    // philosophy as favorite/hotkey/font, which this function also never touches).
+    let (text, variants) = split_variants(body);
+    p.text = text;
+    p.variants = sanitize_variants(variants);
+    // A hand-edit that removed every `<!-- next -->` marker must not leave a
+    // "random" mode stranded on an empty list — the same invariant
+    // sanitize_rotate_mode already enforces for every other entry point.
+    p.rotate_mode = sanitize_rotate_mode(p.rotate_mode.clone(), &p.variants);
     Some(p)
 }
 
@@ -12338,7 +12473,7 @@ mod tests {
              CREATE TABLE trash(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
              CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
              CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
-             CREATE TABLE prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL);
+             CREATE TABLE prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '');
              CREATE TABLE clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);
              INSERT INTO prompts VALUES('a', 0, '{}');
              INSERT INTO trash VALUES('b', 0, '{}');
@@ -12378,7 +12513,7 @@ mod tests {
              CREATE TABLE trash(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
              CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
              CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
-             CREATE TABLE prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL);
+             CREATE TABLE prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '');
              CREATE TABLE clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);",
         )
         .unwrap();
@@ -12535,7 +12670,7 @@ mod tests {
                 "CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
                  CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
                  CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
-                 CREATE TABLE prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL);
+                 CREATE TABLE prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '');
                  CREATE TABLE clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);
                  INSERT INTO prompts VALUES('backed-up', 0, '{}');",
             )
@@ -13176,6 +13311,109 @@ mod tests {
         assert_eq!(p2.caption, "Mein Untertitel");
         assert_eq!(p2.caption_size, 18);
         assert!(p2.tags.is_empty());
+    }
+
+    // 32: an entry that happens to contain the join marker itself must not be
+    // split into extra entries on round trip (Codex audit).
+    #[test]
+    fn join_variants_survives_an_entry_containing_the_separator_verbatim() {
+        let text = "a\n<!-- next -->\nb".to_string(); // looks like 2 entries, is 1
+        let variants = vec!["c".to_string()];
+        let joined = join_variants(&text, &variants);
+        let (out_text, out_variants) = split_variants(&joined);
+        assert_eq!(out_text, text);
+        assert_eq!(out_variants, variants);
+    }
+
+    // 32: rotating-prompt entries round-trip through every export/storage format
+    // without loss. Each format gets its OWN test since each chose its own way to
+    // embed the entries and could silently regress independently of the others.
+    #[test]
+    fn csv_roundtrip_keeps_rotating_entries() {
+        let mut prompts = sample_prompts();
+        prompts[0].variants = vec!["Second entry".to_string(), "Third, entry\nwith a newline".to_string()];
+        prompts[0].rotate_mode = "random".to_string();
+        let data = parse_csv_data(&to_csv(&prompts));
+        let p = &data.prompts[0];
+        assert_eq!(p.text, prompts[0].text);
+        assert_eq!(p.variants, prompts[0].variants);
+        assert_eq!(p.rotate_mode, "random");
+    }
+
+    #[test]
+    fn txt_roundtrip_keeps_rotating_entries_and_never_confuses_them_with_the_block_separator() {
+        let mut prompts = sample_prompts();
+        // Deliberately contains a bare "---" line inside an entry — the whole point
+        // of VARIANT_SEP being a distinct marker is that this must NOT be mistaken
+        // for the "\n\n---\n\n" boundary between two DIFFERENT prompts.
+        prompts[0].variants = vec![
+            "Second entry".to_string(),
+            "---\nlooks like a separator, isn't one".to_string(),
+        ];
+        prompts[0].rotate_mode = "random".to_string();
+        let data = parse_txt(&to_txt(&prompts));
+        assert_eq!(data.prompts.len(), prompts.len(), "a variant containing \"---\" must never split into an extra prompt");
+        let p = &data.prompts[0];
+        assert_eq!(p.text, prompts[0].text);
+        assert_eq!(p.variants, prompts[0].variants);
+        assert_eq!(p.rotate_mode, "random");
+    }
+
+    #[test]
+    fn markdown_sync_roundtrip_keeps_rotating_entries() {
+        let mut p = sample_prompts().remove(0);
+        p.variants = vec!["Second entry".to_string(), "Third entry".to_string()];
+        let md = prompt_to_md(&p);
+        assert!(md.contains("variants: 2"), "the header count is informational but should still be right");
+        let restored = apply_md_to_prompt(&p, &md)
+            .expect("a file this function itself just wrote must always be recognised as ours");
+        assert_eq!(restored.text, p.text);
+        assert_eq!(restored.variants, p.variants);
+    }
+
+    #[test]
+    fn markdown_sync_survives_a_hand_edit_that_removes_every_entry() {
+        // The sync folder is the user's to hand-edit (INVARIANTS.md) — deleting
+        // every "<!-- next -->" marker must degrade to a plain prompt, never crash,
+        // and never leave rotate_mode stranded on an empty list.
+        let mut p = sample_prompts().remove(0);
+        p.variants = vec!["Second entry".to_string()];
+        p.rotate_mode = "random".to_string();
+        let md = prompt_to_md(&p).replace(&format!("{VARIANT_SEP}Second entry"), "");
+        let restored = apply_md_to_prompt(&p, &md).unwrap();
+        assert!(restored.variants.is_empty());
+        assert_eq!(restored.rotate_mode, "", "empty variants must never leave a stranded rotate_mode");
+    }
+
+    #[test]
+    fn backup_json_roundtrips_rotating_fields() {
+        let mut p = sample_prompts().remove(0);
+        p.variants = vec!["Second".to_string(), "Third".to_string()];
+        p.rotate_mode = "random".to_string();
+        let backup = Backup { prompts: vec![p.clone()], settings: Settings::default() };
+        let json = serde_json::to_string(&backup).unwrap();
+        let restored: Backup = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.prompts[0].variants, p.variants);
+        assert_eq!(restored.prompts[0].rotate_mode, p.rotate_mode);
+    }
+
+    #[test]
+    fn version_history_snapshots_and_restores_rotating_entries() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '');",
+        )
+        .unwrap();
+        let variants = vec!["b".to_string(), "c".to_string()];
+        db_add_version(&conn, "p1", 100, "Name", "Entry one", &variants, 20).unwrap();
+        let listed = db_list_versions(&conn, "p1");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].variants, variants);
+        let (pid, name, text, restored_variants) = db_get_version(&conn, listed[0].id).unwrap();
+        assert_eq!(pid, "p1");
+        assert_eq!(name, "Name");
+        assert_eq!(text, "Entry one");
+        assert_eq!(restored_variants, variants);
     }
 
     #[test]

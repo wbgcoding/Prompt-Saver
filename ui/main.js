@@ -8418,31 +8418,39 @@ function libSearchScore(p) {
 }
 function computeLibSearchScore(p) {
   const raw = libQuery.trim().toLowerCase();
-  if (!raw) return { score: 1, fuzzy: false };
-  const fields = [[(p.name || "").toLowerCase(), 3], [(p.text || "").toLowerCase(), 1], [(p.file_path || "").toLowerCase(), 1]];
+  if (!raw) return { score: 1, fuzzy: false, entryIndex: 0 };
+  // 32: entryIndex tags which entry a body-field match came from (0 = p.text, the
+  // library row's default preview; 1+ = variants[entryIndex-1]) — a rotating
+  // prompt is findable by ANY entry, and the row can then show the one that
+  // actually matched instead of always entry 1 regardless of why it appeared.
+  const fields = [[(p.name || "").toLowerCase(), 3, -1], [(p.text || "").toLowerCase(), 1, 0], [(p.file_path || "").toLowerCase(), 1, -1]];
+  (p.variants || []).forEach((v, i) => fields.push([(v || "").toLowerCase(), 1, i + 1]));
   // A tag is a deliberate label, so it ranks between the name and the body.
-  if (tagsOn() && (p.tags || []).length) fields.push([p.tags.join(" ").toLowerCase(), 2]);
+  if (tagsOn() && (p.tags || []).length) fields.push([p.tags.join(" ").toLowerCase(), 2, -1]);
   // F17: a note is private context, so it matches but ranks below the prompt body.
-  if (notesOn() && p.notes) fields.push([p.notes.toLowerCase(), 0.5]);
+  if (notesOn() && p.notes) fields.push([p.notes.toLowerCase(), 0.5, -1]);
   // P18: a "-word" term excludes any prompt whose searchable text contains it,
   // checked across every field before anything else runs.
   const terms = raw.split(/\s+/).filter(Boolean);
   const isExclude = (t) => t.length > 1 && t[0] === "-";
   const excludes = terms.filter(isExclude).map((t) => t.slice(1));
-  if (excludes.some((ex) => fields.some(([val]) => val.includes(ex)))) return { score: 0, fuzzy: false };
+  if (excludes.some((ex) => fields.some(([val]) => val.includes(ex)))) return { score: 0, fuzzy: false, entryIndex: 0 };
   const q = terms.filter((t) => !isExclude(t)).join(" ");
-  if (!q) return { score: 1, fuzzy: false }; // an exclusion-only query matches everything not excluded
-  let best = 0;
-  for (const [val, w] of fields) {
-    if (val && val.includes(q)) { const s = (val.startsWith(q) ? 120 : 100) * w; if (s > best) best = s; }
+  if (!q) return { score: 1, fuzzy: false, entryIndex: 0 }; // exclusion-only query matches everything not excluded
+  let best = 0, bestEntry = 0;
+  for (const [val, w, entry] of fields) {
+    if (val && val.includes(q)) {
+      const s = (val.startsWith(q) ? 120 : 100) * w;
+      if (s > best) { best = s; bestEntry = entry >= 0 ? entry : 0; }
+    }
   }
-  if (best) return { score: best, fuzzy: false };
-  if (!flag("fuzzySearch")) return { score: 0, fuzzy: false };
+  if (best) return { score: best, fuzzy: false, entryIndex: bestEntry };
+  if (!flag("fuzzySearch")) return { score: 0, fuzzy: false, entryIndex: 0 };
   // Tokenize on any non-alphanumeric so "code," / "code." / code blocks split into
   // clean words (scripts without spaces, e.g. CJK, stay one token — substring wins).
   const qWords = fuzzyTokens(q);
-  if (!qWords.length) return { score: 0, fuzzy: false };
-  for (const [val, w] of fields) {
+  if (!qWords.length) return { score: 0, fuzzy: false, entryIndex: 0 };
+  for (const [val, w, entry] of fields) {
     if (!val) continue;
     const words = fuzzyTokens(val);
     let matched = 0;
@@ -8450,9 +8458,12 @@ function computeLibSearchScore(p) {
       const max = fuzzyMaxTyposFor(qw);
       if (words.some((vw) => fuzzyWordHit(qw, vw, max))) matched++;
     }
-    if (matched === qWords.length) { const s = 40 * w; if (s > best) best = s; }
+    if (matched === qWords.length) {
+      const s = 40 * w;
+      if (s > best) { best = s; bestEntry = entry >= 0 ? entry : 0; }
+    }
   }
-  return { score: best, fuzzy: best > 0 };
+  return { score: best, fuzzy: best > 0, entryIndex: bestEntry };
 }
 // Split into alphanumeric tokens (Unicode-aware).
 function fuzzyTokens(s) {
@@ -8649,10 +8660,24 @@ function renderLibrary() {
     const name = document.createElement("span");
     name.className = "lib-name";
     name.textContent = libLabel(p);
+    // 32: a search hit inside entry 2+ shows THAT entry (why the row matched at
+    // all) instead of always entry 1, plus a small "n/total" tag naming it.
+    const hitEntry = libQuery.trim() ? libSearchScore(p).entryIndex : 0;
+    const hitVariant = hitEntry > 0 ? (p.variants || [])[hitEntry - 1] : null;
+    // file_path still wins over a variant hit — a file/image prompt can never
+    // actually HAVE variants (the editor gates rotation to text-only prompts), so
+    // hitVariant is never non-null on a prompt that also has a file_path.
     const text = document.createElement("span");
     text.className = "lib-text";
-    text.textContent = p.file_path || p.text;
-    body.append(name, text);
+    text.textContent = p.file_path || (hitVariant ?? p.text);
+    body.appendChild(name);
+    if (hitVariant != null) {
+      const tag = document.createElement("span");
+      tag.className = "lib-rotate-tag";
+      tag.textContent = `${hitEntry + 1}/${1 + p.variants.length}`;
+      body.appendChild(tag);
+    }
+    body.appendChild(text);
     if (tagsOn() && (p.tags || []).length) {
       const row2 = document.createElement("span");
       row2.className = "lib-tags";
