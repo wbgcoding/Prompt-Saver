@@ -536,6 +536,18 @@ document.body.appendChild(numPop);
 let popInput = null;
 let popApply = null;
 
+// ---- 19: colour-pick history popover (right-click on #picker-btn) ----
+const pickHistoryPop = document.createElement("div");
+pickHistoryPop.className = "pick-history-pop hidden";
+document.body.appendChild(pickHistoryPop);
+function closePickHistoryPop() { pickHistoryPop.classList.add("hidden"); }
+document.addEventListener("pointerdown", (e) => {
+  if (pickHistoryPop.classList.contains("hidden")) return;
+  if (!pickHistoryPop.contains(e.target) && !e.target.closest("#picker-btn")) {
+    closePickHistoryPop();
+  }
+});
+
 function renderNumPop() {
   const v = clampGrid(popInput.value, 1);
   numPop.innerHTML = "";
@@ -1203,6 +1215,8 @@ const EXPERT_VALUES = {
   notesTipLen: { label: "valNotesTipLen", min: 0, max: 2000, step: 20, def: 300, unit: "", gate: "notesInTooltip" },
   // F26 how far the picker's loupe magnifies the pixels around the cursor.
   loupeZoom: { label: "valLoupeZoom", min: 4, max: 16, step: 1, def: 8, unit: "×", gate: "colorPicker" },
+  // 19: how many recent picks the right-click popover (and the overlay strip) keep. 0 = off.
+  pickHistoryN: { label: "valPickHistoryN", min: 0, max: 20, step: 1, def: 5, unit: "", gate: "colorPicker" },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -1298,7 +1312,7 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app. F26 (pipette) sits with the
     // screenshot tool: both are capture tools on the composer bar.
-    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", "colorPicker", "pasteMedia", "dragDrop"], values: ["snipPreviewVh", "loupeZoom"], dropdowns: ["pickerFormat"], paths: ["screenshotDir"] },
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", "colorPicker", "pasteMedia", "dragDrop"], values: ["snipPreviewVh", "loupeZoom", "pickHistoryN"], dropdowns: ["pickerFormat"], paths: ["screenshotDir"] },
     // F12/F13 placeholders, from the grammar to where the app asks for them.
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
     // The editor: what it shows beside the text box. F14/F15 belong together — the
@@ -1456,7 +1470,7 @@ const EXPERT_TIPS = [
   "lengthCounter", "promptHistory", "editorMonospace",
   "promptNotes", "notesInTooltip", "notesTipLen",
   "mdPreview", "codeHighlight", "codeAutoDetect", "hlFontPx",
-  "colorPicker", "pickerFormat", "loupeZoom",
+  "colorPicker", "pickerFormat", "loupeZoom", "pickHistoryN",
   "trayRecent", "trayFavs", "trayRecentN", "trayFavN",
   "checkUpdateOnStart", "showUpdates", "importExport", "dimToolbar", "keyboardNav", "allowMultipleInstances",
   "headerSeparators", "floating",
@@ -9466,6 +9480,42 @@ function bind() {
   // is a clipboard value only — no prompt is created and nothing enters the history.
   $("picker-btn").addEventListener("click", () => {
     invoke("open_picker").catch((err) => toast(String(err)));
+  });
+  // 19: right-click reaches the picker's history without opening the overlay —
+  // it lives in the backend (survives a restart), this popover just displays it.
+  $("picker-btn").addEventListener("contextmenu", async (e) => {
+    e.preventDefault();
+    let hex = [];
+    try { hex = (await invoke("pick_history")) || []; } catch { /* history stays empty */ }
+    pickHistoryPop.innerHTML = "";
+    if (!hex.length) {
+      const empty = document.createElement("div");
+      empty.className = "pick-history-empty";
+      empty.textContent = t("pickHistoryEmpty");
+      pickHistoryPop.appendChild(empty);
+    } else {
+      for (const h of hex) {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "pick-history-row";
+        const sw = document.createElement("span");
+        sw.className = "pick-history-swatch";
+        sw.style.background = h;
+        const label = document.createElement("span");
+        label.className = "pick-history-hex";
+        label.textContent = h;
+        row.append(sw, label);
+        row.addEventListener("click", async () => {
+          closePickHistoryPop();
+          try {
+            const text = await invoke("copy_pick_history_entry", { hex: h });
+            toast(t("colorCopied"), null, text);
+          } catch (err) { toast(String(err)); }
+        });
+        pickHistoryPop.appendChild(row);
+      }
+    }
+    placePopover(pickHistoryPop, $("picker-btn").getBoundingClientRect());
   });
   listen("color-picked", (e) => {
     const value = e.payload?.text || "";

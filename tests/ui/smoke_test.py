@@ -120,7 +120,7 @@ PROBE = """
     // editor / value picker defect, and it is invisible to the horizontal scan.
     for (const el of document.querySelectorAll(
         '.num-pop, .color-pop, .tag-suggest, .tag-pop, .mini-menu, .ctx-menu, ' +
-        '.tile-folder-pop, .view-group-pop, .toolbar-menu, .suggest-pop')) {
+        '.tile-folder-pop, .view-group-pop, .toolbar-menu, .suggest-pop, .pick-history-pop')) {
       if (!onScreen(el)) continue;
       const r = el.getBoundingClientRect();
       if (!r.width || !r.height) continue;
@@ -1125,6 +1125,36 @@ PROBE = """
     }
     if (toastEl.style.getPropertyValue('--toast-tint') !== '#1A2B3C') {
       out.errors.push('the picker toast carries no colour');
+    }
+    // 19: right-click on the pipette reaches its history without opening the
+    // overlay — the fixture backend always returns a fixed two-colour list.
+    if (pickBtn) {
+      pickBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(150);
+      const pop = document.querySelector('.pick-history-pop');
+      const rows = pop ? [...pop.querySelectorAll('.pick-history-row')] : [];
+      if (rows.length !== 2) {
+        out.errors.push('19: the pick-history popover shows ' + rows.length + ' entries instead of 2');
+      } else {
+        if (!rows[0].querySelector('.pick-history-hex').textContent.includes('AABBCC')) {
+          out.errors.push('19: the pick-history popover does not show the expected hex value');
+        }
+        if (!rows[0].querySelector('.pick-history-swatch')) out.errors.push('19: a pick-history row has no colour swatch');
+        rows[0].click();
+        await sleep(150);
+        if (window.__LAST_COPY__ !== undefined && window.__SMOKE_CALLS__.includes('copy_pick_history_entry') === false) {
+          out.errors.push('19: clicking a pick-history entry did not call copy_pick_history_entry');
+        }
+        if (!pop.classList.contains('hidden')) out.errors.push('19: the pick-history popover stayed open after picking an entry');
+      }
+      // An outside click must close it too, same as every other popover.
+      pickBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(120);
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+      await sleep(120);
+      if (!document.querySelector('.pick-history-pop').classList.contains('hidden')) {
+        out.errors.push('19: clicking outside the pick-history popover did not close it');
+      }
     }
     // P60: an automatic backup toasts the same way a manual one already did —
     // the backend has no other call site to toast from, so it fires this itself.

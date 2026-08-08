@@ -2393,6 +2393,7 @@ fn load_store(app: &AppHandle) -> Store {
         let theme_ai_before =
             settings.theme == "ai" || settings.custom_themes.iter().any(|c| c.base == "ai");
         settings.migrate();
+        load_pick_history(&settings); // 19: restore the colour-pick history mirror
         // One-time: move any legacy in-blob copy history into the copy_log table.
         // Gated on a persistent `meta` marker (written in the same transaction as
         // the rows) so a failed post-migration resave can never re-import and
@@ -2453,6 +2454,7 @@ fn load_store(app: &AppHandle) -> Store {
     // Fallback: DB unavailable → read the JSON files directly.
     let mut settings: Settings = read_sealed_json(&dir.join("settings.json"));
     settings.migrate();
+    load_pick_history(&settings); // 19: restore the colour-pick history mirror
     prune_history(&mut settings);
     let mut prompts: Vec<Prompt> = read_sealed_json(&dir.join("prompts.json"));
     migrate_prompts(&mut prompts);
@@ -4452,6 +4454,7 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
         let backup_pw = store.settings.ui_texts.remove(BACKUP_PW_KEY);
         store.settings = Settings::default();
         store.settings.migrate();
+        load_pick_history(&store.settings); // 19: reset clears the mirror too
         if let Some(pw) = backup_pw {
             store.settings.ui_texts.insert(BACKUP_PW_KEY.to_string(), pw);
         }
@@ -7943,21 +7946,43 @@ fn rgb_to_hex(r: u8, g: u8, b: u8) -> String {
     format!("#{:02X}{:02X}{:02X}", r, g, b)
 }
 
-// 80: the last 5 picked colours, newest first. Recorded here rather than in the
+// 80/19: the last picked colours, newest first. Recorded here rather than in the
 // overlay page, because this is the side that knows what actually reached the
-// clipboard — a hidden or reloaded webview cannot lose the list. In memory only:
-// a colour history is a convenience, not user data worth a settings write.
-const PICK_HISTORY_MAX: usize = 5;
+// clipboard — a hidden or reloaded webview cannot lose the list. Kept in memory
+// for the running session, mirrored into `ui_texts["pickHistory"]` (comma-joined
+// hex) so it survives a restart; the mirror is the only thing ever written to disk.
+const PICK_HISTORY_DEFAULT: usize = 5;
+const PICK_HISTORY_CAP: usize = 20;
 static PICK_HISTORY: Mutex<Vec<[u8; 3]>> = Mutex::new(Vec::new());
 
+// The user-configurable cap (expert value `pickHistoryN`, 0 = history off).
+fn pick_history_max(settings: &Settings) -> usize {
+    settings
+        .ui_values
+        .get("pickHistoryN")
+        .copied()
+        .filter(|v| v.is_finite())
+        .unwrap_or(PICK_HISTORY_DEFAULT as f64)
+        .clamp(0.0, PICK_HISTORY_CAP as f64) as usize
+}
+
+fn hex_to_rgb(hex: &str) -> Option<[u8; 3]> {
+    let d = hex.trim().strip_prefix('#')?;
+    if d.len() != 6 {
+        return None;
+    }
+    let n = u32::from_str_radix(d, 16).ok()?;
+    Some([(n >> 16) as u8, ((n >> 8) & 0xff) as u8, (n & 0xff) as u8])
+}
+
 // Push a pick, newest first, skipping a repeat of the entry already on top.
-fn record_pick(rgb: [u8; 3]) {
+fn record_pick(rgb: [u8; 3], max: usize) {
     let mut hist = PICK_HISTORY.lock().unwrap_or_else(|e| e.into_inner());
     if hist.first() == Some(&rgb) {
         return;
     }
     hist.insert(0, rgb);
-    hist.truncate(PICK_HISTORY_MAX);
+    hist.truncate(max);
 }
 
 fn pick_history_hex() -> Vec<String> {
@@ -7967,6 +7992,17 @@ fn pick_history_hex() -> Vec<String> {
         .iter()
         .map(|c| rgb_to_hex(c[0], c[1], c[2]))
         .collect()
+}
+
+// One-time load from the persisted mirror — called once when the store loads.
+fn load_pick_history(settings: &Settings) {
+    let max = pick_history_max(settings);
+    let mut hist = PICK_HISTORY.lock().unwrap_or_else(|e| e.into_inner());
+    hist.clear();
+    if let Some(saved) = settings.ui_texts.get("pickHistory") {
+        hist.extend(saved.split(',').filter_map(hex_to_rgb));
+        hist.truncate(max);
+    }
 }
 
 // RGB -> HSL as rounded integers (degrees, percent, percent). Grey has no hue, so
@@ -8094,7 +8130,19 @@ async fn pick_color(app: AppHandle, state: State<'_, SnipState>, x: i32, y: i32)
     if arboard::Clipboard::new().and_then(|mut c| c.set_text(text.clone())).is_err() {
         return Err("clipboard write failed".to_string());
     }
-    record_pick(rgb); // 80: only once the value really is on the clipboard
+    // 80/19: only once the value really is on the clipboard, then mirror the
+    // in-memory list into settings so it survives a restart.
+    if let Some(db) = app.try_state::<Db>() {
+        let mut store = db.lock().unwrap_or_else(|e| e.into_inner());
+        record_pick(rgb, pick_history_max(&store.settings));
+        store
+            .settings
+            .ui_texts
+            .insert("pickHistory".to_string(), pick_history_hex().join(","));
+        save_settings(&app, &store.settings);
+    } else {
+        record_pick(rgb, PICK_HISTORY_DEFAULT);
+    }
     close_all_snip(&app);
     state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
     let _ = app.emit(
@@ -8106,6 +8154,35 @@ async fn pick_color(app: AppHandle, state: State<'_, SnipState>, x: i32, y: i32)
             hsl: format_color("hsl", rgb[0], rgb[1], rgb[2]),
         },
     );
+    Ok(text)
+}
+
+// 19: the popover behind #picker-btn's right-click — the persisted history,
+// respecting a cap the user may have lowered since the last pick.
+#[tauri::command]
+fn pick_history(app: AppHandle) -> Vec<String> {
+    let max = app
+        .try_state::<Db>()
+        .map(|s| pick_history_max(&s.lock().unwrap_or_else(|e| e.into_inner()).settings))
+        .unwrap_or(PICK_HISTORY_DEFAULT);
+    let mut hex = pick_history_hex();
+    hex.truncate(max);
+    hex
+}
+
+// Re-copy one entry from that popover in the currently configured notation.
+#[tauri::command]
+fn copy_pick_history_entry(app: AppHandle, hex: String) -> Result<String, String> {
+    let rgb = hex_to_rgb(&hex).ok_or("not a hex colour")?;
+    let fmt = app
+        .try_state::<Db>()
+        .map(|s| pick_cfg(&s.lock().unwrap_or_else(|e| e.into_inner()).settings).format)
+        .unwrap_or_else(|| "hex".to_string());
+    let text = format_color(&fmt, rgb[0], rgb[1], rgb[2]);
+    note_own_copy(&text); // F21: must not land in the clipboard inbox either
+    arboard::Clipboard::new()
+        .and_then(|mut c| c.set_text(text.clone()))
+        .map_err(|_| "clipboard write failed".to_string())?;
     Ok(text)
 }
 
@@ -10304,6 +10381,7 @@ async fn import_all(
         // hand-edited backup with "views": [] makes active_view_mut index [0] panic
         // on the next mutation (and poisons the Db mutex).
         store.settings.migrate();
+        load_pick_history(&store.settings); // 19: restore brings its own history mirror
         store.prompts_locked = false; // a full import supersedes any decrypt lock
         // F20: a colliding or unusable accelerator must not fail the restore — drop
         // it and let the summary say so.
@@ -11086,6 +11164,8 @@ pub fn run() {
             open_picker,
             pick_tile,
             pick_color,
+            pick_history,
+            copy_pick_history_entry,
             snip_background,
             snip_present,
             snip_should_begin,
@@ -11556,17 +11636,38 @@ mod tests {
     fn record_pick_keeps_five_newest_and_skips_a_repeat() {
         PICK_HISTORY.lock().unwrap_or_else(|e| e.into_inner()).clear();
         for i in 1..=6u8 {
-            record_pick([i, 0, 0]);
+            record_pick([i, 0, 0], PICK_HISTORY_DEFAULT);
         }
-        record_pick([6, 0, 0]); // the same colour twice in a row is not a new entry
+        record_pick([6, 0, 0], PICK_HISTORY_DEFAULT); // the same colour twice in a row is not a new entry
         let hex = pick_history_hex();
-        assert_eq!(hex.len(), PICK_HISTORY_MAX);
+        assert_eq!(hex.len(), PICK_HISTORY_DEFAULT);
         // Newest first, and the oldest ([1,0,0]) has fallen off the end.
         assert_eq!(hex[0], "#060000");
-        assert_eq!(hex[PICK_HISTORY_MAX - 1], "#020000");
+        assert_eq!(hex[PICK_HISTORY_DEFAULT - 1], "#020000");
         // Picking an earlier colour again puts it back on top as a fresh entry.
-        record_pick([2, 0, 0]);
+        record_pick([2, 0, 0], PICK_HISTORY_DEFAULT);
         assert_eq!(pick_history_hex()[0], "#020000");
+    }
+
+    #[test]
+    fn pick_history_persists_across_a_reload_and_respects_a_lowered_cap() {
+        PICK_HISTORY.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        let mut s = Settings::default();
+        record_pick([1, 0, 0], pick_history_max(&s));
+        record_pick([2, 0, 0], pick_history_max(&s));
+        s.ui_texts.insert("pickHistory".to_string(), pick_history_hex().join(","));
+        // Simulate a restart: clear the in-memory list, reload from the mirror.
+        PICK_HISTORY.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        load_pick_history(&s);
+        assert_eq!(pick_history_hex(), vec!["#020000", "#010000"]);
+        // Lowering the cap below the stored count trims on the next load.
+        s.ui_values.insert("pickHistoryN".to_string(), 1.0);
+        load_pick_history(&s);
+        assert_eq!(pick_history_hex(), vec!["#020000"]);
+        // 0 turns the feature off: the mirror is kept, but nothing loads back in.
+        s.ui_values.insert("pickHistoryN".to_string(), 0.0);
+        load_pick_history(&s);
+        assert!(pick_history_hex().is_empty());
     }
 
     // The sync folder is a directory the USER picks, so it can hold their own

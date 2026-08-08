@@ -495,6 +495,10 @@ const RESULTS = {
     return { name: "Backup 2026-07-25.psb", count: 12, dropped_hotkeys: 2 };
   },
   focus_main_window: () => null,
+  // 19: the picker's right-click history popover — a fixed, non-empty list so
+  // the happy path (list, click, copy) is exercised on every run.
+  pick_history: () => ["#AABBCC", "#112233"],
+  copy_pick_history_entry: (a) => { window.__LAST_COPY__ = a && a.hex; return (a && a.hex) || ""; },
   os_user_name: () => "tester",
   // F20: the backend is the authority on a capture. Same three answers the real
   // check gives, so the editor's inline error is driven by a real rejection.
