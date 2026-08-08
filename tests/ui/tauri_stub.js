@@ -366,6 +366,7 @@ const RESULTS = {
       caption: a.caption || "", caption_size: a.captionSize || 0, font: a.font || "",
       font_size: a.fontSize || 0, favorite: !!a.favorite, tags: a.tags || [],
       notes: a.notes || "", hotkey: a.hotkey || "", hotkey_paste: a.hotkeyPaste || "",
+      variants: a.variants || [], rotate_mode: a.rotateMode || "",
     };
     PROMPTS.push(prompt);
     const view = SETTINGS.views.find((v) => v.id === SETTINGS.active_view);

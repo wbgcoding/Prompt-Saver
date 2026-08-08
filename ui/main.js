@@ -66,6 +66,15 @@ const modal = {
   hotkeyErr: $("modal-hotkey-err"),
   hotkeyAction: $("modal-hotkey-action"),
   hotkeyActionRow: $("modal-hotkey-action-row"),
+  // 32: rotating prompts.
+  rotateToggleRow: $("modal-rotate-toggle-row"),
+  rotateSwitch: $("modal-rotate-switch"),
+  rotateList: $("modal-rotate-list"),
+  rotateEntries: $("modal-rotate-entries"),
+  rotateAdd: $("modal-rotate-add"),
+  rotateMode: $("modal-rotate-mode"),
+  rotateNext: $("modal-rotate-next"),
+  rotateReset: $("modal-rotate-reset"),
 };
 
 const DRAG_THRESHOLD = 5;
@@ -161,6 +170,11 @@ const ICON_TRASH =
   '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13M10 11v6M14 11v6"/></svg>';
 const ICON_UNDO =
   '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M8 7 3 12l5 5M3 12h11a5 5 0 0 1 0 10h-4"/></svg>';
+// 32: reorder a rotating prompt's entries (no drag & drop — YAGNI, and testable).
+const ICON_UP =
+  '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 15l6-6 6 6"/></svg>';
+const ICON_DOWN =
+  '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>';
 
 let LANG = "en";
 // A language that was stored before it was retired has no option left, which would
@@ -4702,6 +4716,8 @@ function modalSnapshot() {
     modal.fontSel.value, modal.sizeSel.value, modalState.color || "", modalState.image || "",
     !!modalState.showImage, modalState.filePath || "", modalState.iconPath || "", modal.fav.classList.contains("active"),
     modalState.tags || [], modal.notesText.value, modalState.hotkey || "", modalState.hotkeyPaste || "",
+    // 32: the entry list + mode are edited entirely in memory until Save.
+    modalState.rotateEntries || [], modalState.rotateMode || "",
   ]);
 }
 
@@ -5386,8 +5402,14 @@ function maybeCloseOnCopy() {
   try { window.__TAURI__?.window?.getCurrentWindow?.()?.hide?.().catch?.(() => {}); } catch { /* no-op */ }
 }
 
-function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", pdfPage = 0, iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", title, targetCell }) {
-  modalState = { mode, id, color, image, showImage, copyImage, filePath, pdfPage, iconPath, tags: [...tags], hotkey, hotkeyPaste, targetCell };
+function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", pdfPage = 0, iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", variants = [], rotateMode = "", title, targetCell }) {
+  modalState = {
+    mode, id, color, image, showImage, copyImage, filePath, pdfPage, iconPath, tags: [...tags], hotkey, hotkeyPaste, targetCell,
+    // 32: the FULL entry list (entry 0 = what would otherwise be modal.text's value)
+    // while rotation is active, empty while it is not.
+    rotateEntries: variants.length ? [text, ...variants] : [],
+    rotateMode,
+  };
   modal.title.textContent = title;
   modal.fav.classList.toggle("active", !!favorite);
   modal.fav.setAttribute("aria-pressed", String(!!favorite));
@@ -6822,8 +6844,12 @@ function syncModalImageUi(mode) {
   const textVisible = (mode === "edit" || mode === "create") && !copyImage && !filePath;
   // Full-height dialog only when editing a text prompt (max textarea space).
   modal.root.classList.toggle("tall", textVisible);
-  modal.text.classList.toggle("hidden", !textVisible);
-  const varsUi = textVisible && flag("promptVars");
+  // 32: only a text prompt, and only while the feature is on, ever offers rotation.
+  modal.rotateToggleRow.classList.toggle("hidden", !textVisible || !flag("rotatingPrompts"));
+  renderRotateUi();
+  const rotating = textVisible && rotationActive();
+  modal.text.classList.toggle("hidden", !textVisible || rotating);
+  const varsUi = textVisible && !rotating && flag("promptVars");
   modal.textBar.classList.toggle("hidden", !varsUi);
   modal.varsHint.classList.toggle("hidden", !varsUi);
   if (varsUi) renderVarHelper(); // F12/F13 chips + insert row follow their flags
@@ -6900,6 +6926,90 @@ function syncModalImageUi(mode) {
   } else {
     modal.pdfPage.classList.add("hidden");
   }
+}
+
+// ---- 32: rotating prompts (editor) ----
+// While active, modalState.rotateEntries holds EVERY entry (index 0 = what would
+// otherwise be modal.text's own value) — kept separate from modal.text so the two
+// never fight over which one is "the" source of truth while the switch is on.
+const rotationActive = () => (modalState?.rotateEntries || []).length > 0;
+
+function renderRotateUi() {
+  if (!modalState) return;
+  const active = rotationActive();
+  modal.rotateSwitch.checked = active;
+  modal.rotateList.classList.toggle("hidden", !active);
+  if (!active) return;
+  renderRotateEntries();
+  modal.rotateMode.value = modalState.rotateMode === "random" ? "random" : "order";
+  refreshRotateNext();
+}
+
+function renderRotateEntries() {
+  const list = modalState.rotateEntries || [];
+  const max = Math.max(2, Math.round(val("rotateMaxEntries")) || 20);
+  modal.rotateEntries.innerHTML = "";
+  list.forEach((entry, i) => {
+    const row = document.createElement("div");
+    row.className = "rotate-entry-row";
+    const num = document.createElement("span");
+    num.className = "rotate-entry-num";
+    num.textContent = String(i + 1);
+    const ta = document.createElement("textarea");
+    ta.className = "modal-input rotate-entry-input";
+    ta.rows = 1;
+    ta.value = entry;
+    ta.addEventListener("input", () => { list[i] = ta.value; autoGrow(ta); });
+    const btns = document.createElement("div");
+    btns.className = "rotate-entry-btns";
+    const up = document.createElement("button");
+    up.type = "button";
+    up.className = "icon-btn rotate-entry-move";
+    up.title = t("rotateMoveUp");
+    up.setAttribute("aria-label", t("rotateMoveUp"));
+    up.innerHTML = ICON_UP;
+    up.disabled = i === 0;
+    up.addEventListener("click", () => { [list[i - 1], list[i]] = [list[i], list[i - 1]]; renderRotateEntries(); });
+    const down = document.createElement("button");
+    down.type = "button";
+    down.className = "icon-btn rotate-entry-move";
+    down.title = t("rotateMoveDown");
+    down.setAttribute("aria-label", t("rotateMoveDown"));
+    down.innerHTML = ICON_DOWN;
+    down.disabled = i === list.length - 1;
+    down.addEventListener("click", () => { [list[i + 1], list[i]] = [list[i], list[i + 1]]; renderRotateEntries(); });
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "icon-btn rotate-entry-del";
+    del.title = t("delete");
+    del.setAttribute("aria-label", t("delete"));
+    del.innerHTML = ICON_TRASH;
+    del.disabled = list.length <= 1;
+    del.addEventListener("click", () => { list.splice(i, 1); renderRotateEntries(); });
+    btns.append(up, down, del);
+    row.append(num, ta, btns);
+    modal.rotateEntries.appendChild(row);
+    requestAnimationFrame(() => autoGrow(ta));
+  });
+  modal.rotateAdd.disabled = list.length >= max;
+}
+
+// "Next: n/total" + "From the start" only mean anything for an ALREADY SAVED
+// rotating prompt — a brand-new or not-yet-multi-entry one has no backend pointer
+// to read yet.
+async function refreshRotateNext() {
+  const list = modalState.rotateEntries || [];
+  const showPeek = modalState.mode === "edit" && !!modalState.id && list.length > 1;
+  modal.rotateNext.classList.toggle("hidden", !showPeek);
+  modal.rotateReset.classList.toggle("hidden", !showPeek);
+  if (!showPeek) return;
+  try {
+    const peek = await invoke("rotation_peek", { id: modalState.id });
+    if (peek && modalState.id) {
+      modal.rotateNext.textContent = t("rotateNextLabel")
+        .replace("{n}", String(peek.index + 1)).replace("{total}", String(peek.total));
+    }
+  } catch (_) { /* the peek is a convenience readout, never worth surfacing an error for */ }
 }
 
 // One native dialog at a time: ignore further requests until it is closed
@@ -7099,17 +7209,25 @@ async function confirmModal() {
   if (!modalState || modalSaving) return;
   const name = modal.name.value.trim();
   if (!name) { modal.name.focus(); return; }
+  // 32: while rotating, the real text lives in rotateEntries, not modal.text.
+  const rotating = rotationActive();
   // 34: a {#{ }#} with no name inside never becomes a fillable variable — warn now,
   // while it is still one click away from being fixed, instead of after it is saved.
-  if (hasEmptyVarToken(modal.text.value)) {
+  const rawTexts = rotating ? modalState.rotateEntries : [modal.text.value];
+  if (rawTexts.some(hasEmptyVarToken)) {
     const proceed = await confirmDialog({
       title: t("emptyVarTitle"),
       message: t("emptyVarBody"),
       confirmLabel: t("emptyVarSaveAnyway"),
       danger: false,
     });
-    if (!proceed) { modal.text.focus(); return; }
+    if (!proceed) { if (!rotating) modal.text.focus(); return; }
   }
+  // 32: "empty entries are dropped on save" applies to entry 1 too — the first
+  // surviving non-blank entry becomes the prompt's own text.
+  const rotateFilled = rotating ? modalState.rotateEntries.map((s) => s.trim()).filter(Boolean) : [];
+  const variants = rotateFilled.slice(1);
+  const rotateMode = variants.length ? (modalState.rotateMode === "random" ? "random" : "") : "";
 
   const color = modalState.color || "";
   const image = modalState.image || "";
@@ -7140,18 +7258,18 @@ async function confirmModal() {
   modal.confirm.disabled = true;
   try {
     if (modalState.mode === "create") {
-      const text = modal.text.value.trim();
+      const text = rotating ? (rotateFilled[0] || "") : modal.text.value.trim();
       if (!text) { closeModal(); return; }
-      saved = await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste });
+      saved = await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode });
       inputEl.value = "";
       autoGrow(inputEl);
       saveBtn.disabled = true;
     } else if (modalState.mode === "image-create" || modalState.mode === "file-create") {
       // The name doubles as the copy text when shown as text.
-      saved = await invoke("add_prompt", { name, text: name, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste });
+      saved = await invoke("add_prompt", { name, text: name, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants: [], rotateMode: "" });
     } else {
-      const text = copyImage || filePath ? name : modal.text.value;
-      saved = await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste });
+      const text = copyImage || filePath ? name : (rotating ? (rotateFilled[0] || "") : modal.text.value);
+      saved = await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode });
     }
   } catch (err) {
     toast(hotkeyMessage(String(err))); // keep the modal open so nothing typed is lost
@@ -7214,6 +7332,8 @@ function promptToModal(p) {
     notes: p.notes || "",
     hotkey: p.hotkey || "",
     hotkeyPaste: p.hotkey_paste || "",
+    variants: p.variants || [],
+    rotateMode: p.rotate_mode || "",
     title: p.file_path
       ? t(kind === "video" ? "videoEditTitle" : kind ? "imageEditTitle" : "fileEditTitle")
       : p.copy_image ? t("imageEditTitle") : t("editModalTitle"),
@@ -9359,6 +9479,51 @@ function bind() {
     const on = modal.fav.classList.toggle("active");
     modal.fav.setAttribute("aria-pressed", String(on));
   });
+  // 32: rotating prompts.
+  modal.rotateSwitch.addEventListener("change", async () => {
+    if (modal.rotateSwitch.checked) {
+      modalState.rotateEntries = [modal.text.value];
+      // Only a prompt that never rotated before takes the shipped/expert default —
+      // re-checking the box mid-edit must not clobber a mode already chosen.
+      if (!modalState.rotateMode) {
+        modalState.rotateMode = EXPERT_DROPDOWNS.rotateDefaultMode.get() === "random" ? "random" : "";
+      }
+    } else {
+      const hasExtra = (modalState.rotateEntries || []).length > 1;
+      if (hasExtra) {
+        const ok = await confirmDialog({
+          title: t("rotateToggle"),
+          message: t("rotateDiscardConfirm"),
+          confirmLabel: t("discardConfirm"),
+          danger: true,
+        });
+        if (!ok) { modal.rotateSwitch.checked = true; return; }
+      }
+      modal.text.value = (modalState.rotateEntries || [])[0] ?? modal.text.value;
+      modalState.rotateEntries = [];
+    }
+    renderRotateUi();
+    modal.text.classList.toggle("hidden", modal.rotateSwitch.checked);
+    if (!modal.rotateSwitch.checked) modal.text.focus();
+    scheduleLenCounter();
+  });
+  modal.rotateAdd.addEventListener("click", () => {
+    const max = Math.max(2, Math.round(val("rotateMaxEntries")) || 20);
+    if ((modalState.rotateEntries || []).length >= max) return;
+    modalState.rotateEntries.push("");
+    renderRotateEntries();
+    const rows = modal.rotateEntries.querySelectorAll(".rotate-entry-input");
+    rows[rows.length - 1]?.focus();
+  });
+  modal.rotateMode.addEventListener("change", () => {
+    modalState.rotateMode = modal.rotateMode.value === "random" ? "random" : "";
+  });
+  modal.rotateReset.addEventListener("click", async () => {
+    if (!modalState?.id) return;
+    await invoke("rotation_reset", { id: modalState.id });
+    toast(t("rotateResetDone"));
+    refreshRotateNext();
+  });
   // Click the preview media → fullscreen zoom/pan viewer.
   modal.img.addEventListener("click", () => { if (modal.img.src) openLightbox(modal.img.src, false); });
   modal.video.addEventListener("click", () => { if (modal.video.src) openLightbox(modal.video.src, true); });
@@ -10158,6 +10323,7 @@ function bind() {
   attachSelectPicker(modal.sizeSel);
   attachSelectPicker(modal.captionSize);
   attachSelectPicker(modal.hotkeyAction);
+  attachSelectPicker(modal.rotateMode);
   modal.caption.addEventListener("input", updateCaptionPreview);
   modal.captionSize.addEventListener("change", updateCaptionPreview);
   attachSelectPicker($("tile-font"));

@@ -1234,6 +1234,32 @@ body.library-front #modal.overlay { z-index: 67; }
 .modal-text::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 .modal-text::-webkit-scrollbar-track { background: transparent; }
 
+/* ---- 32: rotating prompts (editor) ---- */
+.modal-rotate-toggle { padding: 6px 0; }
+.modal-rotate-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.modal-rotate-entries { display: flex; flex-direction: column; gap: 6px; }
+.rotate-entry-row { display: flex; align-items: flex-start; gap: 6px; }
+.rotate-entry-num {
+  flex: 0 0 auto;
+  min-width: 18px;
+  padding-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+}
+.rotate-entry-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  resize: none;
+  overflow-y: hidden;
+}
+.rotate-entry-btns { display: flex; flex: 0 0 auto; gap: 2px; }
+.rotate-entry-btns .icon-btn:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
+.modal-rotate-add { align-self: flex-start; }
+.modal-rotate-mode-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.modal-rotate-mode { flex: 0 0 auto; width: auto; }
+.modal-rotate-next { font-size: 12px; color: var(--muted); }
+
 /* ---- F14 Markdown preview / F15 syntax colours ---- */
 /* The wrapper is invisible to layout, so every flex rule the editor already had keeps
    applying to the textarea unchanged. */

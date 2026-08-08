@@ -2640,6 +2640,89 @@ PROBE = """
         await sleep(120);
       }
     }
+    // 32: editor UI — the rotation switch converts the textarea into a list, "+
+    // Entry" adds a row, and saving calls add_prompt with the split payload.
+    {
+      const rowByLabel6 = (text, sel) => {
+        const tabs = [...document.querySelectorAll('.expert-tab')];
+        const find = () => [...document.querySelectorAll('#expert-flags ' + sel)]
+          .find(r => (r.querySelector('span') || {}).textContent === text) || null;
+        if (!tabs.length) return find();
+        for (const tb of tabs) { tb.click(); const hit = find(); if (hit) return hit; }
+        return null;
+      };
+      await click('gear');
+      await click('expert-open');
+      const rotSw2 = rowByLabel6('Rotating prompts', '.switch-field')?.querySelector('input.switch');
+      if (rotSw2 && !rotSw2.checked) { rotSw2.checked = true; rotSw2.dispatchEvent(new Event('change', { bubbles: true })); }
+      await sleep(150);
+      document.getElementById('settings-close')?.click();
+      await sleep(150);
+      const homeTab2 = document.querySelector('.view-btn[data-view-id="home"]');
+      if (homeTab2) { homeTab2.click(); await sleep(150); }
+      const freeCell = [...document.querySelectorAll('#grid .cell')].find(c => !c.firstElementChild);
+      if (!freeCell) {
+        out.errors.push('no free grid cell to test the rotating-prompts editor with');
+      } else {
+        freeCell.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+        await sleep(200);
+        const rotRow = document.getElementById('modal-rotate-toggle-row');
+        if (!rotRow || rotRow.classList.contains('hidden')) {
+          out.errors.push('the rotating-texts switch did not appear in the editor with the flag on');
+        } else {
+          document.getElementById('modal-name').value = 'Rotate Test';
+          document.getElementById('modal-text').value = 'Entry one';
+          const rotSwitch = document.getElementById('modal-rotate-switch');
+          rotSwitch.checked = true;
+          rotSwitch.dispatchEvent(new Event('change', { bubbles: true }));
+          await sleep(120);
+          if (!document.getElementById('modal-text').classList.contains('hidden')) {
+            out.errors.push('the plain textarea stayed visible after turning rotation on');
+          }
+          const list = document.getElementById('modal-rotate-list');
+          if (!list || list.classList.contains('hidden')) {
+            out.errors.push('the rotate entry list did not appear after turning rotation on');
+          }
+          let rows = document.querySelectorAll('.rotate-entry-row');
+          if (rows.length !== 1 || rows[0].querySelector('.rotate-entry-input').value !== 'Entry one') {
+            out.errors.push('turning rotation on did not seed entry 1 with the existing text');
+          }
+          document.getElementById('modal-rotate-add').click();
+          await sleep(80);
+          rows = document.querySelectorAll('.rotate-entry-row');
+          if (rows.length !== 2) {
+            out.errors.push('"+ Entry" did not add a second entry row');
+          } else {
+            const ta2 = rows[1].querySelector('.rotate-entry-input');
+            ta2.value = 'Entry two';
+            ta2.dispatchEvent(new Event('input', { bubbles: true }));
+            const modeSel = document.getElementById('modal-rotate-mode');
+            modeSel.value = 'random';
+            modeSel.dispatchEvent(new Event('change', { bubbles: true }));
+            window.__SMOKE_ARGS__ = [];
+            document.getElementById('modal-confirm').click();
+            await sleep(250);
+            const addCall = (window.__SMOKE_ARGS__ || []).find(([cmd]) => cmd === 'add_prompt');
+            if (!addCall) {
+              out.errors.push('saving a rotating prompt did not call add_prompt');
+            } else {
+              const a = addCall[1];
+              if (a.text !== 'Entry one' || JSON.stringify(a.variants) !== JSON.stringify(['Entry two']) || a.rotateMode !== 'random') {
+                out.errors.push('add_prompt got the wrong rotating payload: ' + JSON.stringify({ text: a.text, variants: a.variants, rotateMode: a.rotateMode }));
+              }
+            }
+          }
+        }
+      }
+      // Restore the flag to its default (off) for later blocks / a re-run.
+      await click('gear');
+      await click('expert-open');
+      const rotSw3 = rowByLabel6('Rotating prompts', '.switch-field')?.querySelector('input.switch');
+      if (rotSw3 && rotSw3.checked) { rotSw3.checked = false; rotSw3.dispatchEvent(new Event('change', { bubbles: true })); }
+      await sleep(120);
+      document.getElementById('settings-close')?.click();
+      await sleep(120);
+    }
     // 81: colour-pick toast shows all three notations as separate copy chips.
     {
       window.__SMOKE_ARGS__ = window.__SMOKE_ARGS__ || [];

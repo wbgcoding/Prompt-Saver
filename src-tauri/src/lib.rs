@@ -3812,6 +3812,8 @@ async fn add_prompt(
     notes: Option<String>,
     hotkey: Option<String>,
     hotkey_paste: Option<String>,
+    variants: Option<Vec<String>>,
+    rotate_mode: Option<String>,
 ) -> Result<Prompt, String> {
     // One lock for the whole op so the storeFiles flag can't change mid-insert.
     let prompt = {
@@ -3819,6 +3821,8 @@ async fn add_prompt(
         let store_files = store_files_enabled(&store);
         let tags = sanitize_tags(tags.unwrap_or_default(), &canonical_tags(&store.prompts))?;
         let notes = sanitize_notes(&notes.unwrap_or_default())?;
+        let variants = sanitize_variants(variants.unwrap_or_default());
+        let rotate_mode = sanitize_rotate_mode(rotate_mode.unwrap_or_default(), &variants);
         let others: Vec<&Prompt> = store.prompts.iter().collect();
         let hotkey = sanitize_hotkey(&hotkey.unwrap_or_default(), &store.settings.hotkey, &others)?;
         let hotkey_paste = if hotkey.is_empty() {
@@ -3853,8 +3857,8 @@ async fn add_prompt(
             notes,
             hotkey,
             hotkey_paste,
-            variants: Vec::new(),
-            rotate_mode: String::new(),
+            variants,
+            rotate_mode,
         };
         // A grid folder owns its cell OUTSIDE view.layouts, and the renderer gives a
         // folder priority — so a cell handed out without excluding them saves fine and
@@ -3991,7 +3995,11 @@ async fn update_prompt(
     notes: Option<String>,
     hotkey: Option<String>,
     hotkey_paste: Option<String>,
+    variants: Vec<String>,
+    rotate_mode: String,
 ) -> Result<Option<Prompt>, String> {
+    let variants = sanitize_variants(variants);
+    let rotate_mode = sanitize_rotate_mode(rotate_mode, &variants);
     let updated = {
         let mut store = lock(&state);
         let store_files = store_files_enabled(&store);
@@ -4029,6 +4037,8 @@ async fn update_prompt(
                 p.name = name;
                 p.text = text;
                 p.color = color;
+                p.variants = variants;
+                p.rotate_mode = rotate_mode;
                 if let Some(img) = image { p.image = img; }
                 if let Some(si) = show_image { p.show_image = si; }
                 if let Some(ci) = copy_image { p.copy_image = ci; }
@@ -6334,6 +6344,34 @@ fn copy_payload(p: &Prompt) -> &str {
     &p.text
 }
 
+// 32: absolute ceiling regardless of the expert value rotateMaxEntries (a UI-level
+// soft cap on how many the editor lets you ADD) — this is the hard backend floor
+// against a corrupted or hand-edited settings/import file.
+const MAX_ROTATE_VARIANTS: usize = 49; // + entry 0 (text) = 50 total, matching rotateMaxEntries' own max
+
+// 32: trims, drops empty entries and enforces the hard ceiling — "leere Einträge
+// werden beim Speichern verworfen" applies to add_prompt/update_prompt alike.
+fn sanitize_variants(list: Vec<String>) -> Vec<String> {
+    list.into_iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .take(MAX_ROTATE_VARIANTS)
+        .collect()
+}
+
+// 32: only "random" is ever stored as anything other than "" (order); a prompt
+// with no variants has nothing to rotate, so its mode is meaningless — keeping it
+// empty avoids a stale mode surviving in storage past the point it can affect anything.
+fn sanitize_rotate_mode(mode: String, variants: &[String]) -> String {
+    if variants.is_empty() {
+        String::new()
+    } else if mode == "random" {
+        "random".to_string()
+    } else {
+        String::new()
+    }
+}
+
 // 32: "text" is entry 0 (every non-rotating consumer stays correct unchanged),
 // `variants` hold entries 1..n.
 fn rotation_total(p: &Prompt) -> usize {
@@ -6494,6 +6532,15 @@ fn rotation_commit(app: AppHandle, state: State<Db>, id: String) {
         rotation_advance(&p, &mut store.settings);
         save_settings(&app, &store.settings);
     }
+}
+
+// 32: editor's "From the start" button — back to entry 1, same as a freshly
+// created rotating prompt, without touching the entries themselves.
+#[tauri::command]
+fn rotation_reset(app: AppHandle, state: State<Db>, id: String) {
+    let mut store = lock(&state);
+    rotation_forget(&mut store.settings, std::slice::from_ref(&id));
+    save_settings(&app, &store.settings);
 }
 
 // Put arbitrary text on the clipboard — used after filling prompt placeholders.
@@ -11283,6 +11330,7 @@ pub fn run() {
             copy_prompt,
             rotation_peek,
             rotation_commit,
+            rotation_reset,
             copy_text,
             clipboard_text,
             record_copy,
@@ -12741,6 +12789,25 @@ mod tests {
         }
         assert!(settings.rotate_pos.is_empty());
         assert!(settings.rotate_bag.is_empty());
+    }
+
+    #[test]
+    fn sanitize_variants_trims_drops_empties_and_caps_the_count() {
+        let raw: Vec<String> = vec!["  b  ".into(), "".into(), "   ".into(), "c".into()];
+        assert_eq!(sanitize_variants(raw), vec!["b".to_string(), "c".to_string()]);
+
+        let oversized: Vec<String> = (0..80).map(|i| format!("v{i}")).collect();
+        assert_eq!(sanitize_variants(oversized).len(), MAX_ROTATE_VARIANTS);
+    }
+
+    #[test]
+    fn sanitize_rotate_mode_is_empty_without_variants_and_only_random_survives() {
+        let none: Vec<String> = Vec::new();
+        let some = vec!["b".to_string()];
+        assert_eq!(sanitize_rotate_mode("random".into(), &none), "");
+        assert_eq!(sanitize_rotate_mode("random".into(), &some), "random");
+        assert_eq!(sanitize_rotate_mode("garbage".into(), &some), "");
+        assert_eq!(sanitize_rotate_mode("".into(), &some), "");
     }
 
     #[test]
