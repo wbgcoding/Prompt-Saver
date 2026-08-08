@@ -119,7 +119,7 @@ the main window forward.
 
 ### Appearance & themes
 
-Eight built-in themes: system, light, dark, Programmer, AI Enthusiast, Ocean,
+Eight built-in themes: system, light, dark, Programmer, Neon Violet, Ocean,
 Cyberpunk and Black & White. The theme editor (opt-in) lets you tweak any theme's colours
 and save the result as your own custom theme.
 

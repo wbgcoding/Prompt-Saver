@@ -126,7 +126,7 @@ export const HELP_CONTENT = {
     {
       section: "Look and feel",
       title: "Appearance & themes",
-      overview: "Eight built-in themes: system, light, dark, Programmer, AI Enthusiast, Ocean, Cyberpunk and Black & White.",
+      overview: "Eight built-in themes: system, light, dark, Programmer, Neon Violet, Ocean, Cyberpunk and Black & White.",
       settings: ["Theme editor — tweak any theme's colours and save it as your own custom theme"],
       tip: "Custom themes are an opt-in feature — the editor button appears once it's turned on.",
     },
@@ -346,7 +346,7 @@ export const HELP_CONTENT = {
     {
       section: "Optik",
       title: "Aussehen & Themes",
-      overview: "Acht mitgelieferte Themes: System, hell, dunkel, Programmierer, KI-Enthusiast, Ozean, Cyberpunk und Schwarzweiß.",
+      overview: "Acht mitgelieferte Themes: System, hell, dunkel, Programmierer, Neon-Violett, Ozean, Cyberpunk und Schwarzweiß.",
       settings: ["Theme-Editor — Farben jedes Themes anpassen und als eigenes Theme speichern"],
       tip: "Eigene Themes sind eine optionale Funktion — der Editor-Knopf erscheint erst, wenn sie eingeschaltet ist.",
     },

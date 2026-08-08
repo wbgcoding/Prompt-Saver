@@ -210,7 +210,7 @@ const THEME_VAR_GROUPS = [
 ];
 // The built-in themes a custom theme can inherit from ("system" is not one of
 // them — it has no rules of its own). Order matches the settings dropdown.
-const BUILTIN_THEMES = ["light", "dark", "programmer", "ai", "cyberpunk", "mono", "ocean"];
+const BUILTIN_THEMES = ["light", "dark", "programmer", "neon", "cyberpunk", "mono", "ocean"];
 
 const customThemes = () => (flag("customThemes") ? settings.custom_themes || [] : []);
 const customThemeId = (pref) => (String(pref || "").startsWith("custom:") ? String(pref).slice(7) : "");
@@ -7553,7 +7553,7 @@ $("tag-modal")?.addEventListener("pointerdown", (e) => {
 
 // ---- F3 custom theme editor ----
 const THEME_LABELS = {
-  light: "themeLight", dark: "themeDark", programmer: "themeProgrammer", ai: "themeAi",
+  light: "themeLight", dark: "themeDark", programmer: "themeProgrammer", neon: "themeNeon",
   cyberpunk: "themeCyberpunk", mono: "themeMono", ocean: "themeOcean",
 };
 const THEME_VAR_LABELS = {

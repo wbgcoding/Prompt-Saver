@@ -303,7 +303,7 @@ Everything new is an expert-menu switch, most of it off until you turn it on.
 ### Removed
 
 - **Eight themes are gone**: Gradient, Sunset, Forest, Midnight, Retro, Lavender,
-  Candy and Coffee. Eight remain — System, Light, Dark, Programmer, AI Enthusiast,
+  Candy and Coffee. Eight remain — System, Light, Dark, Programmer, Neon Violet,
   Ocean, Cyberpunk and Black & White — each covering something the others do not.
   An installation set to one of the removed themes (or a custom theme built on
   one) falls back to System; the theme editor still reproduces any of the old

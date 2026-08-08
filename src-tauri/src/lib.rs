@@ -1563,6 +1563,17 @@ impl Settings {
                 self.ui_flags.insert(ALLOW_SCREENSHOT_KEY.to_string(), true);
             }
         }
+        // 24: the "ai" theme was renamed to "neon" (Ben: no "ai" anywhere, even
+        // internally). Rewrite a stored preference so nobody's colours reset to
+        // "system" on update.
+        if self.theme == "ai" {
+            self.theme = "neon".to_string();
+        }
+        for c in self.custom_themes.iter_mut() {
+            if c.base == "ai" {
+                c.base = "neon".to_string();
+            }
+        }
         if self.views.is_empty() {
             let mut layouts = HashMap::new();
             if !self.legacy_layout.is_empty() {
@@ -2376,6 +2387,11 @@ fn load_store(app: &AppHandle) -> Store {
                 }
             }
         }
+        // 24: force a resave when the "ai" theme is about to be rewritten to
+        // "neon" — otherwise the fix only lives in memory until some unrelated
+        // setting change happens to persist it.
+        let theme_ai_before =
+            settings.theme == "ai" || settings.custom_themes.iter().any(|c| c.base == "ai");
         settings.migrate();
         // One-time: move any legacy in-blob copy history into the copy_log table.
         // Gated on a persistent `meta` marker (written in the same transaction as
@@ -2429,6 +2445,8 @@ fn load_store(app: &AppHandle) -> Store {
             // One-time: re-encrypt legacy plaintext rows / drop the migrated log from the blob.
             save_prompts(app, &store);
             save_settings(app, &store.settings);
+        } else if theme_ai_before {
+            save_settings(app, &store.settings);
         }
         return store;
     }
@@ -2465,7 +2483,7 @@ fn lock<'a>(state: &'a State<'a, Db>) -> std::sync::MutexGuard<'a, Store> {
 // Every theme that has its own rules in main.css. "system" is not in here: it
 // resolves to light/dark at runtime, and it is not a valid custom-theme base.
 const BUILTIN_THEMES: [&str; 7] =
-    ["light", "dark", "programmer", "ai", "ocean", "cyberpunk", "mono"];
+    ["light", "dark", "programmer", "neon", "ocean", "cyberpunk", "mono"];
 // The colour variables a custom theme may override — the `:root` colour tokens of
 // main.css. Everything else (shadow, radius, timings) stays with the base theme.
 const THEME_VAR_KEYS: [&str; 9] = [
@@ -2595,7 +2613,7 @@ fn apply_window_bg(app: &AppHandle, theme: &str, custom_bg: Option<&str>) {
         let color = match theme {
             "dark" => tauri::webview::Color(27, 27, 29, 255),
             "programmer" => tauri::webview::Color(13, 17, 23, 255),
-            "ai" => tauri::webview::Color(12, 8, 23, 255),
+            "neon" => tauri::webview::Color(12, 8, 23, 255),
             "ocean" => tauri::webview::Color(238, 249, 254, 255),
             "cyberpunk" => tauri::webview::Color(10, 10, 18, 255),
             "mono" => tauri::webview::Color(250, 250, 250, 255),
@@ -11512,6 +11530,24 @@ mod tests {
             vars: HashMap::new(),
         });
         assert_eq!(theme_base_of(&s, "custom:t1"), "system");
+    }
+
+    #[test]
+    fn stored_ai_theme_migrates_to_neon_not_system() {
+        // 24: "ai" was renamed to "neon" — a saved preference must land on the
+        // renamed theme, not fall through known_theme() to "system".
+        let mut s = Settings::default();
+        s.theme = "ai".into();
+        s.custom_themes.push(CustomTheme {
+            id: "t1".into(),
+            name: "Mine".into(),
+            base: "ai".into(),
+            vars: HashMap::new(),
+        });
+        s.migrate();
+        assert_eq!(s.theme, "neon");
+        assert_eq!(s.custom_themes[0].base, "neon");
+        assert_eq!(theme_base_of(&s, &s.theme), "neon");
     }
 
     // ---- 80: colour-picker history ----

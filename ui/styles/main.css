@@ -68,8 +68,8 @@
 :root[data-theme="programmer"] body {
   font-family: Consolas, "Cascadia Mono", monospace;
 }
-/* AI Enthusiast: deep space purple with a neon glow around accents. */
-:root[data-theme="ai"] {
+/* Neon Violet: deep space purple with a neon glow around accents. */
+:root[data-theme="neon"] {
   --bg: #0c0817;
   --surface: #171028;
   --surface-2: #221739;

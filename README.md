@@ -72,7 +72,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 
 | | |
 |---|---|
-| **8 themes** | Light, dark and system (live OS detection), plus Programmer, AI Enthusiast, Ocean, Cyberpunk and Black & White — or build your own in the theme editor |
+| **8 themes** | Light, dark and system (live OS detection), plus Programmer, Neon Violet, Ocean, Cyberpunk and Black & White — or build your own in the theme editor |
 | **Custom themes** | Build your own on top of any built-in one — a color per value, grouped and previewed live |
 | **Colors & fonts** | Tint tiles and pills from a palette or a color picker; 20 fonts, per prompt if you like |
 | **Auto-fit text** | Tile text grows to fill the button, or pick a fixed size |

@@ -24,7 +24,7 @@
   --menu-fg: #c9d1d9;
   --menu-line: rgba(255, 255, 255, 0.1);
 }
-:root[data-theme="ai"] {
+:root[data-theme="neon"] {
   --pill-bg: rgba(168, 85, 247, 0.96);
   --menu-bg: rgba(23, 16, 40, 0.98);
   --menu-fg: #ede9fe;
