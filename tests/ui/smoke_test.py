@@ -1281,6 +1281,30 @@ PROBE = """
         t5.querySelector('.tile-select').click();
         await sleep(120);
         if (!batchCount.textContent.trim().startsWith('2')) out.errors.push('selecting a second tile did not update the count to 2');
+        // 26: with a third tile selected the composer folds away and the grid
+        // must not clip its own bottom row under the batch bar / banner above it.
+        {
+          const composer = document.querySelector('.composer');
+          const composerWasVisible = composer && getComputedStyle(composer).display !== 'none';
+          const t6 = gridTile('p6');
+          t6?.querySelector('.tile-select').click();
+          await sleep(150);
+          if (!batchCount.textContent.trim().startsWith('3')) out.errors.push('selecting a third tile did not update the count to 3');
+          if (composer && getComputedStyle(composer).display !== 'none') {
+            out.errors.push('26: the composer did not fold away while a grid selection is active');
+          }
+          const wrapRect = document.querySelector('.grid-wrap').getBoundingClientRect();
+          const overflowing = [...document.querySelectorAll('#grid .tile')]
+            .filter((tile) => tile.getBoundingClientRect().bottom > wrapRect.bottom + 1);
+          if (overflowing.length) {
+            out.errors.push('26: ' + overflowing.length + ' tile(s) run past the bottom of .grid-wrap while selecting');
+          }
+          t6?.querySelector('.tile-select').click(); // deselect again, back to 2
+          await sleep(150);
+          if (composerWasVisible && composer && getComputedStyle(composer).display === 'none') {
+            out.errors.push('26: the composer did not come back once the selection dropped below 3');
+          }
+        }
         // Recolor both, then confirm the change actually reached the tiles. 28:
         // the batch bar now uses the same free-color swatches as the editor
         // (.swatch, not .lib-color) — skip "none" and the free-pick swatch.

@@ -8485,9 +8485,14 @@ function fillBatchViews(selId = "lib-batch-view") {
 // selection state and toolbar (folder tiles are excluded, see gridSelected). ----
 function toggleGridSelect(id) {
   if (gridSelected.has(id)) gridSelected.delete(id); else gridSelected.add(id);
-  document.body.classList.toggle("grid-selecting", gridSelected.size > 0);
+  const was = document.body.classList.contains("grid-selecting");
+  const now = gridSelected.size > 0;
+  document.body.classList.toggle("grid-selecting", now);
   applyGridSelectionDom();
   updateGridBatchBar();
+  // 26: the composer folds away only at the 0<->1 transition — refit tile text
+  // to the grid's new height then, not on every further checkbox click.
+  if (was !== now) fitAllTiles();
 }
 function applyGridSelectionDom() {
   for (const tile of gridEl.querySelectorAll(".tile")) {
@@ -8505,10 +8510,12 @@ function updateGridBatchBar() {
   if (n > 0) { buildBatchColors("grid-batch-colors"); fillBatchViews("grid-batch-view"); }
 }
 function clearGridSelection() {
+  const was = document.body.classList.contains("grid-selecting");
   gridSelected.clear();
   document.body.classList.remove("grid-selecting");
   applyGridSelectionDom();
   updateGridBatchBar();
+  if (was) fitAllTiles(); // 26: composer reappeared — refit tile text to the new height
 }
 // 104: addView is all-or-nothing on the backend now — a full target view rejects
 // the whole batch with this one error string instead of silently dropping ids.
