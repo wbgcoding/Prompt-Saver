@@ -1458,6 +1458,16 @@ body.library-front #modal.overlay { z-index: 67; }
 .hl-kw { color: var(--hl-kw); font-weight: 600; }
 .hl-fn { color: var(--hl-fn); }
 
+/* 67: "only changed" toggle, right under the search field. */
+.expert-only-changed-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
 /* Expert menu: caution line on the left + reset button on the right. */
 .expert-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .expert-top #expert-reset { flex: 0 0 auto; }

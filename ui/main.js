@@ -1177,6 +1177,7 @@ function enumDropdown(key, labelKey, opts, def, gate) {
   return {
     label: labelKey,
     gate,
+    def, // 67: "only changed" filter compares get() against this
     options: () => opts.map(([v, lk]) => [v, t(lk)]),
     get: () => settings.ui_texts?.[key] || def,
     set: async (v) => {
@@ -1211,6 +1212,7 @@ const EXPERT_DROPDOWNS = {
     [["hex", "optFmtHex"], ["rgb", "optFmtRgb"], ["hsl", "optFmtHsl"]], "hex", "colorPicker"),
   copySize: {
     label: "valCopySize",
+    def: 0,
     options: () => {
       const o = [["0", t("langAuto")]];
       for (let s = SIZE_MIN; s <= SIZE_MAX; s += SIZE_STEP) o.push([String(s), String(s)]);
@@ -1224,6 +1226,7 @@ const EXPERT_DROPDOWNS = {
   },
   copyFont: {
     label: "valCopyFont",
+    def: "",
     options: () => {
       const o = [["", t("styleDefault"), ""]];
       for (const [key, stack] of Object.entries(FONTS)) {
@@ -1479,7 +1482,10 @@ function flagRow(key) {
     // cannot change which guard is already running.
     if (key === "allowMultipleInstances") toast(t("toastRestartNeeded"));
     applyFlags();
-    if (GATING_FLAGS.has(key)) renderExpert(); // reveal/hide its parameter rows live
+    // 67: "only changed" has to recompute after EVERY flag (not just gating ones,
+    // which is all a plain re-render used to care about) — the row set depends on
+    // this flag's own value now, not only on what it gates.
+    if (GATING_FLAGS.has(key) || expertOnlyChanged) renderExpert();
     renderViews();
     // Only these flags change what a tile contains; the rest are body classes,
     // so a full grid rebuild (and its flash) is unnecessary.
@@ -1512,6 +1518,9 @@ async function commitValue(key, value) {
   try { await invoke("set_ui_value", { key, value }); } catch (err) { toast(String(err)); }
   applyValues();
   await refreshTiles(key);
+  // 67: fires once on release, not per drag frame — same "no flash mid-drag" reason
+  // previewValue() never calls this, safe to rebuild the (possibly filtered) list here.
+  if (expertOnlyChanged) renderExpert();
 }
 
 function valueRow(key) {
@@ -1607,17 +1616,23 @@ function selectRow(key) {
       num.classList.remove("hidden");
       unit.classList.remove("hidden");
       num.focus();
+      // 67: no re-render here even under "only changed" — it would rebuild the row
+      // (a fresh, unfocused num) right out from under the focus() above, right as
+      // the user is about to type into it. The number field's own "change" below
+      // covers the filter once a value is actually committed.
       persist(Math.max(1, Number(num.value) || cfg.def));
     } else {
       num.classList.add("hidden");
       unit.classList.add("hidden");
       persist(Number(sel.value));
+      if (expertOnlyChanged) renderExpert();
     }
   });
   num.addEventListener("change", () => {
     const v = Math.max(1, Math.min(3650, Number(num.value) || cfg.def));
     num.value = v;
     persist(v);
+    if (expertOnlyChanged) renderExpert();
   });
   row.append(head, sel, num, unit);
   return row;
@@ -1644,7 +1659,10 @@ function dropdownRow(key) {
     sel.appendChild(o);
   }
   sel.value = cfg.get();
-  sel.addEventListener("change", () => cfg.set(sel.value));
+  sel.addEventListener("change", async () => {
+    await cfg.set(sel.value);
+    if (expertOnlyChanged) renderExpert(); // 67
+  });
   attachSelectPicker(sel); // themed popup instead of the native OS dropdown
   row.append(head, sel);
   return row;
@@ -1732,6 +1750,27 @@ function pathRow(key) {
 
 let expertTab = 0;
 let expertQuery = ""; // expert-menu search filter
+let expertOnlyChanged = false; // 67: hide every row still at its default
+// 67: does this row differ from its shipped default? Actions and the colour palette
+// have no single "default value" to diff against, so they are excluded up in
+// renderExpert() instead of handled here.
+function isRowChanged(kind, key) {
+  if (kind === "flags") return flagState(key) !== shipsOn(key);
+  if (kind === "values" || kind === "selects") {
+    const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key];
+    return val(key) !== cfg.def;
+  }
+  if (kind === "dropdowns") {
+    const cfg = EXPERT_DROPDOWNS[key];
+    return cfg.def !== undefined && cfg.get() !== cfg.def;
+  }
+  if (kind === "paths") {
+    // Only a path with a "reset to default" button (screenshotDir) has a default to
+    // diff against — dataDir is always "current", never changed from anything.
+    return !!EXPERT_PATHS[key].onReset && !!settings.ui_texts?.[key];
+  }
+  return false;
+}
 // Editable default-color palette: one native color picker per hue + reset.
 function paletteRow() {
   const row = document.createElement("div");
@@ -1915,9 +1954,12 @@ function renderExpert() {
   if (expertTab >= EXPERT_TABS.length) expertTab = 0;
   const q = expertQuery.trim().toLowerCase();
   const searching = q.length > 0;
+  // 67: like searching, "only changed" scans every tab at once — a per-tab filter
+  // would defeat the point of a diff view across the whole expert menu.
+  const globalView = searching || expertOnlyChanged;
   // Tab bar lives in the fixed header (stays visible while the rows scroll); it is
-  // hidden while searching, when every tab's groups are scanned at once.
-  if (!searching) {
+  // hidden while scanning every tab at once.
+  if (!globalView) {
     const bar = document.createElement("div");
     bar.className = "expert-tabs";
     EXPERT_TABS.forEach((tab, i) => {
@@ -1930,37 +1972,43 @@ function renderExpert() {
     });
     tabBar.appendChild(bar);
   }
-  const tabs = searching ? EXPERT_TABS : [EXPERT_TABS[expertTab]];
+  const tabs = globalView ? EXPERT_TABS : [EXPERT_TABS[expertTab]];
   const collapsed = expertCollapsedSet();
   let shown = 0;
   for (const tab of tabs) {
     for (const group of tab.groups) {
       const groupHit = searching && i18nHit(group.title, q);
       // A row whose gating feature is off is dropped in every mode, search included:
-      // a setting the user cannot act on has no business being on screen.
+      // a setting the user cannot act on has no business being on screen. "Only
+      // changed" stacks on top: a row also needs to differ from its default.
       const keep = (kind) => (group[kind] || []).filter((k) => {
         if (!gateOpen(EXPERT_DEFS[kind]?.[k]?.gate)) return false;
+        if (expertOnlyChanged && !isRowChanged(kind, k)) return false;
         return !searching || groupHit || settingHit(k, EXPERT_LABEL_KEYS[kind](k), q);
       });
       const flags = groupFlags(group)
-        .filter((f) => gateOpen(f.gate) && (!searching || groupHit || settingHit(f.key, flagLabelKey(f.key), q)))
+        .filter((f) => gateOpen(f.gate) && (!expertOnlyChanged || isRowChanged("flags", f.key)))
+        .filter((f) => !searching || groupHit || settingHit(f.key, flagLabelKey(f.key), q))
         .map((f) => f.key);
       const values = keep("values");
       const selects = keep("selects");
       const dropdowns = keep("dropdowns");
       const paths = keep("paths");
-      const palette = group.palette && (!searching || groupHit || i18nHit("expGroupColors", q));
-      const actions = (group.actions || []).filter((a) => gateOpen(a.gate) && (!searching || groupHit || i18nHit(a.label, q)));
-      if (searching && !flags.length && !values.length && !selects.length && !dropdowns.length && !paths.length && !palette && !actions.length) continue;
+      // Neither has a single "default" to diff against (a palette colour would need
+      // its own per-swatch compare; an action is a button, not a value) — "only
+      // changed" drops both rather than showing them unconditionally.
+      const palette = !expertOnlyChanged && group.palette && (!searching || groupHit || i18nHit("expGroupColors", q));
+      const actions = expertOnlyChanged ? [] : (group.actions || []).filter((a) => gateOpen(a.gate) && (!searching || groupHit || i18nHit(a.label, q)));
+      if (globalView && !flags.length && !values.length && !selects.length && !dropdowns.length && !paths.length && !palette && !actions.length) continue;
       shown++;
-      // Categories collapse on click (persisted); searching always shows them.
-      const isCollapsed = !searching && collapsed.has(group.title);
+      // Categories collapse on click (persisted); scanning every tab always shows them.
+      const isCollapsed = !globalView && collapsed.has(group.title);
       const sec = document.createElement("div");
       sec.className = "expert-group" + (isCollapsed ? " collapsed" : "");
       const head = document.createElement("div");
       head.className = "expert-group-title";
       head.textContent = t(group.title);
-      if (!searching) {
+      if (!globalView) {
         head.classList.add("collapsible");
         head.addEventListener("click", () => toggleExpertGroup(group.title, sec));
       }
@@ -2005,10 +2053,10 @@ function renderExpert() {
       box.appendChild(sec);
     }
   }
-  if (searching && !shown) {
+  if (globalView && !shown) {
     const empty = document.createElement("div");
     empty.className = "hint";
-    empty.textContent = t("libraryNoResults");
+    empty.textContent = t(!searching && expertOnlyChanged ? "expertNothingChanged" : "libraryNoResults");
     box.appendChild(empty);
   }
   box.scrollTop = keepScroll;
@@ -9200,10 +9248,13 @@ function bind() {
   $("expert-open").addEventListener("click", () => {
     expertQuery = "";
     $("expert-search").value = "";
+    expertOnlyChanged = false;
+    $("expert-only-changed").checked = false;
     showExpertPage(true);
   });
   $("expert-back").addEventListener("click", () => showExpertPage(false));
   $("expert-search").addEventListener("input", (e) => { expertQuery = e.target.value; renderExpert(); });
+  $("expert-only-changed").addEventListener("change", (e) => { expertOnlyChanged = e.target.checked; renderExpert(); });
   // Two-step confirm: first click arms it red, second within 3s resets.
   $("expert-reset").addEventListener("click", (e) => {
     const btn = e.currentTarget;

@@ -2096,6 +2096,63 @@ PROBE = """
         await sleep(200);
       }
     }
+    // 67: "only changed" filter — a flag at its default is hidden, flipping it in
+    // makes the row (re)appear, flipping it back to default hides it again.
+    {
+      const onlyChanged = document.getElementById('expert-only-changed');
+      // Unlike the badge-lookup above, this also has to work while "only changed" is
+      // checked — the tab bar hides then (every tab is scanned in one flat pass, see
+      // renderExpert's globalView), so there are no `.expert-tab` buttons to click.
+      const rowByLabel = (text) => {
+        const tabs = [...document.querySelectorAll('.expert-tab')];
+        const find = () => [...document.querySelectorAll('#expert-flags .switch-field')]
+          .find(r => (r.querySelector('span') || {}).textContent === text) || null;
+        if (!tabs.length) return find();
+        for (const tb of tabs) {
+          tb.click();
+          const hit = find();
+          if (hit) return hit;
+        }
+        return null;
+      };
+      if (!onlyChanged) {
+        out.errors.push('the expert menu has no "only changed" checkbox');
+      } else {
+        // Not asserting an empty filtered view here: by this point in the suite
+        // other blocks have already toggled several real settings away from their
+        // defaults, so "nothing changed yet" would be a false assumption. The
+        // self-contained check below (flip one flag, watch it appear, flip it back,
+        // watch it vanish) proves the filter without needing a clean slate.
+        onlyChanged.checked = false;
+        onlyChanged.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(150);
+        // "Always show grid lines" ships off — flip it on, off is its default.
+        const row = rowByLabel('Always show grid lines');
+        const sw = row && row.querySelector('input.switch');
+        if (!sw) {
+          out.errors.push('could not find a flag row to drive the "only changed" test');
+        } else {
+          sw.click();
+          await sleep(150);
+          onlyChanged.checked = true;
+          onlyChanged.dispatchEvent(new Event('change', { bubbles: true }));
+          await sleep(200);
+          if (!rowByLabel('Always show grid lines')) {
+            out.errors.push('"only changed" did not surface a flag flipped away from its default');
+          }
+          // Flip it straight back to its default — must vanish from the filtered view.
+          const swAgain = rowByLabel('Always show grid lines')?.querySelector('input.switch');
+          if (swAgain) swAgain.click();
+          await sleep(150);
+          if (rowByLabel('Always show grid lines')) {
+            out.errors.push('"only changed" kept showing a flag restored to its default');
+          }
+          onlyChanged.checked = false;
+          onlyChanged.dispatchEvent(new Event('change', { bubbles: true }));
+          await sleep(150);
+        }
+      }
+    }
     // Exercise the interactions that rebuild the menu: collapsing a group and
     // flipping switches (gated ones re-render, plain ones must not).
     // Collapsing must flip a class, not rebuild the list — rebuilding is what made
