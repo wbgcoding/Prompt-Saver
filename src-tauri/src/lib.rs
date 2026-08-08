@@ -2051,6 +2051,29 @@ struct JournalEntry {
     ts: u64,
 }
 
+// 58: copy counts for the last `days` UTC days, oldest first, zero-filled — a
+// single GROUP BY query bucketed by day-since-epoch, merged against a dense day
+// range in Rust (cheaper than one query per day, and never skips an empty day).
+fn db_daily_copies(conn: &Connection, days: u32) -> Vec<DayCount> {
+    const DAY: u64 = 86400;
+    let today_bucket = now_secs() / DAY;
+    let start_bucket = today_bucket.saturating_sub(days as u64 - 1);
+    let mut counts: std::collections::HashMap<u64, usize> = std::collections::HashMap::new();
+    if let Ok(mut stmt) = conn.prepare("SELECT ts / 86400, COUNT(*) FROM copy_log WHERE ts >= ?1 GROUP BY ts / 86400") {
+        if let Ok(rows) = stmt.query_map(params![(start_bucket * DAY) as i64], |r| {
+            Ok((r.get::<_, i64>(0)? as u64, r.get::<_, i64>(1)? as usize))
+        }) {
+            counts.extend(rows.flatten());
+        }
+    }
+    (0..days as u64)
+        .map(|i| {
+            let bucket = start_bucket + i;
+            DayCount { ts: bucket * DAY, count: counts.get(&bucket).copied().unwrap_or(0) }
+        })
+        .collect()
+}
+
 // Newest copy events for the journal. grouped = one row per prompt (its most
 // recent copy); otherwise every event. Capped so the UI never renders millions.
 fn db_recent_copies(conn: &Connection, limit: usize, grouped: bool) -> Vec<JournalEntry> {
@@ -5175,6 +5198,14 @@ struct ViewCount {
     name: String,
     count: usize,
 }
+// 58: one day's copy count. `ts` is that day's UTC midnight (unix seconds) — the
+// frontend already has locale-aware date formatting via Intl, no reason to
+// duplicate it (or pull in a date crate) on the Rust side for a label string.
+#[derive(Serialize)]
+struct DayCount {
+    ts: u64,
+    count: usize,
+}
 #[derive(Serialize)]
 struct UsageStats {
     total_prompts: usize,
@@ -5192,6 +5223,7 @@ struct UsageStats {
     top: Vec<StatBar>,
     never_used: Vec<StatBar>,
     per_view: Vec<ViewCount>,
+    daily: Vec<DayCount>, // 58: last 14 UTC days, oldest first, zero-filled
     history_on: bool,
 }
 
@@ -5291,7 +5323,7 @@ async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Resu
             ViewCount { name: v.name.clone(), count }
         })
         .collect();
-    let (copies7, copies30) = db_conn(&app)
+    let (copies7, copies30, daily) = db_conn(&app)
         .map(|c| {
             let c7 = c
                 .query_row("SELECT COUNT(*) FROM copy_log WHERE ts >= ?1", params![now.saturating_sub(7 * 86400) as i64], |r| r.get::<_, i64>(0))
@@ -5299,9 +5331,10 @@ async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Resu
             let c30 = c
                 .query_row("SELECT COUNT(*) FROM copy_log WHERE ts >= ?1", params![cutoff30 as i64], |r| r.get::<_, i64>(0))
                 .unwrap_or(0) as u64;
-            (c7, c30)
+            let daily = db_daily_copies(&c, 14);
+            (c7, c30, daily)
         })
-        .unwrap_or((0, 0));
+        .unwrap_or((0, 0, Vec::new()));
     let history_on = store.settings.ui_flags.get("copyHistory") != Some(&false);
     Ok(UsageStats {
         total_prompts,
@@ -5319,6 +5352,7 @@ async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Resu
         top,
         never_used,
         per_view,
+        daily,
         history_on,
     })
 }
@@ -11437,6 +11471,35 @@ mod tests {
         }
         let n: i64 = conn.query_row("SELECT COUNT(*) FROM copy_log", [], |r| r.get(0)).unwrap();
         assert!(n <= 5, "cap exceeded after gaps: {n}");
+    }
+
+    #[test]
+    fn daily_copies_are_zero_filled_and_bucketed() {
+        // 58: a day with no copies must still appear (as 0), not be skipped —
+        // otherwise a gap in the chart would read as "the app broke that day"
+        // instead of "nothing was copied".
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
+             CREATE INDEX idx_copy_log_ts ON copy_log(ts);",
+        )
+        .unwrap();
+        const DAY: u64 = 86400;
+        let today = now_secs() / DAY * DAY;
+        // Two copies today, three two days ago, none yesterday, one outside the window.
+        db_append_copy(&conn, &CopyEntry { id: "a".into(), ts: today + 10 }, 100, None).unwrap();
+        db_append_copy(&conn, &CopyEntry { id: "b".into(), ts: today + 20 }, 100, None).unwrap();
+        for i in 0..3u64 {
+            db_append_copy(&conn, &CopyEntry { id: format!("c{i}"), ts: today - 2 * DAY + i }, 100, None).unwrap();
+        }
+        db_append_copy(&conn, &CopyEntry { id: "old".into(), ts: today - 20 * DAY }, 100, None).unwrap();
+        let daily = db_daily_copies(&conn, 14);
+        assert_eq!(daily.len(), 14, "must always return exactly `days` buckets");
+        assert_eq!(daily.last().unwrap().ts, today, "the newest bucket is today");
+        assert_eq!(daily.last().unwrap().count, 2);
+        assert_eq!(daily[daily.len() - 2].count, 0, "yesterday had nothing — must be 0, not missing");
+        assert_eq!(daily[daily.len() - 3].count, 3, "two days ago");
+        assert!(daily.iter().all(|d| d.ts % DAY == 0), "every bucket is a UTC day boundary");
     }
 
     #[test]

@@ -2355,6 +2355,24 @@ PROBE = """
       if (!document.querySelector('#stats-panel .stat-overview-split')) {
         out.errors.push('the overview is not split from the per-view list');
       }
+      // 58: the last-14-days chart — one bar per day, zero days marked distinctly.
+      {
+        const bars = [...document.querySelectorAll('#stats-panel .stat-daily-bar')];
+        if (bars.length !== 14) {
+          out.errors.push('the daily-copies chart does not show 14 bars (found ' + bars.length + ')');
+        } else {
+          if (!bars.some((b) => b.classList.contains('zero'))) {
+            out.errors.push('the daily-copies chart never marks a zero day');
+          }
+          if (bars.some((b) => b.classList.contains('zero') && parseFloat(b.style.height) > 3)) {
+            out.errors.push('a zero-count day has a non-baseline bar height');
+          }
+          const busiest = bars.reduce((a, b) => parseFloat(b.style.height) > parseFloat(a.style.height) ? b : a);
+          if (!busiest.title.includes(': 6')) {
+            out.errors.push('the tallest bar does not report the known busiest day count (6)');
+          }
+        }
+      }
       // A stored password shows as dots — as a placeholder, never as a value.
       const pw = document.querySelector('#backup-panel .backup-pw-wrap .modal-input');
       if (!pw || pw.type !== 'password' || pw.value !== '' || !/^•+$/.test(pw.placeholder)) {

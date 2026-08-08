@@ -535,6 +535,11 @@ const RESULTS = {
     top: [{ name: "Prompt 1", count: 9 }],
     never_used: [{ name: "Prompt 9", count: 0 }],
     per_view: [{ name: "Home", count: 12 }],
+    // 58: 14 days, newest last — a couple of zero days mixed in like a real history.
+    daily: Array.from({ length: 14 }, (_, i) => ({
+      ts: 1750000000 - (13 - i) * 86400,
+      count: [0, 3, 1, 0, 5, 2, 4, 0, 1, 6, 2, 3, 1, 4][i],
+    })),
     history_on: true,
   }),
 };

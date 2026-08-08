@@ -5926,6 +5926,24 @@ async function renderStatsPanel(body) {
     card(t("statPerDay"), s.history_on ? (s.copies30 / 30).toFixed(1) : "—"),
   );
   body.appendChild(cards);
+  // 58: last 14 days as a small bar chart — copies7/copies30 above are just two flat
+  // totals, this fills the gap between them without a day/week toggle (deliberately
+  // scoped down from "day or week" to daily only, see WORK.md).
+  if (s.history_on && s.daily && s.daily.length) {
+    body.appendChild(statSection(t("statDaily")));
+    const chart = document.createElement("div");
+    chart.className = "stat-daily-chart";
+    const maxD = Math.max(...s.daily.map((d) => d.count), 1);
+    for (const d of s.daily) {
+      const bar = document.createElement("span");
+      bar.className = "stat-daily-bar" + (d.count === 0 ? " zero" : "");
+      bar.style.height = `${Math.max(3, (d.count / maxD) * 100)}%`;
+      const dateLabel = new Date(d.ts * 1000).toLocaleDateString(LANG, { weekday: "short", day: "numeric", month: "short" });
+      bar.title = `${dateLabel}: ${nf(d.count)}`;
+      chart.appendChild(bar);
+    }
+    body.appendChild(chart);
+  }
   // Overview (2 columns wide) next to the per-view breakdown (1 column).
   const infoRow = (label, value) => {
     const r = document.createElement("div"); r.className = "stat-view-row";
