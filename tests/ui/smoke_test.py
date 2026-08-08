@@ -2318,6 +2318,46 @@ PROBE = """
         }
       }
     }
+    // Prompt-folders-as-Markdown: the sync-folder path row is gated on the feature
+    // flag, same contract every other gated expert row already follows. Checked via
+    // the backend call each click makes, not the live DOM — cross-tab lookups here
+    // proved to hit the same detached-checkbox harness quirk seen in 71's test.
+    {
+      const rowByLabel3 = (text, sel) => {
+        const tabs = [...document.querySelectorAll('.expert-tab')];
+        const find = () => [...document.querySelectorAll('#expert-flags ' + sel)]
+          .find(r => (r.querySelector('span') || {}).textContent === text) || null;
+        if (!tabs.length) return find();
+        for (const tb of tabs) { tb.click(); const hit = find(); if (hit) return hit; }
+        return null;
+      };
+      const syncRow = rowByLabel3('Sync prompts as Markdown files', '.switch-field');
+      const syncSw = syncRow && syncRow.querySelector('input.switch');
+      if (!syncSw) {
+        out.errors.push('the prompt-sync toggle is missing from the expert menu');
+      } else {
+        if (syncSw.checked) out.errors.push('prompt sync is not off by default');
+        if (rowByLabel3('Sync folder', '.path-field')) {
+          out.errors.push('the sync-folder path shows while prompt sync is off');
+        }
+        window.__SMOKE_ARGS__ = [];
+        syncSw.checked = true;
+        syncSw.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(150);
+        const flagCall = window.__SMOKE_ARGS__.find(([cmd, args]) => cmd === 'set_ui_flag' && args && args.key === 'promptSync');
+        if (!flagCall || flagCall[1].enabled !== true) {
+          out.errors.push('turning on prompt sync did not call set_ui_flag(promptSync, true)');
+        }
+        if (!rowByLabel3('Sync folder', '.path-field')) {
+          out.errors.push('the sync-folder path did not appear once prompt sync was turned on');
+        }
+        // Restore the default so later blocks (and a real re-run of this suite)
+        // see the same starting state.
+        const backSw = rowByLabel3('Sync prompts as Markdown files', '.switch-field')?.querySelector('input.switch');
+        if (backSw) { backSw.checked = false; backSw.dispatchEvent(new Event('change', { bubbles: true })); }
+        await sleep(120);
+      }
+    }
     // 81: colour-pick toast shows all three notations as separate copy chips.
     {
       window.__SMOKE_ARGS__ = window.__SMOKE_ARGS__ || [];

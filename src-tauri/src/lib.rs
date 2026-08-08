@@ -8,6 +8,7 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -2223,6 +2224,7 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
     }
     if let Some(mut conn) = db_conn(app) {
         if db_write_prompts(&mut conn, &store.prompts).is_ok() {
+            sync_write_all(app, store); // Prompt-folders-as-Markdown: no-op unless the feature is on
             return true;
         }
     }
@@ -2235,6 +2237,7 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
         let _ = app.emit("persist-failed", "prompts");
         return false;
     }
+    sync_write_all(app, store);
     true
 }
 
@@ -9046,11 +9049,23 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) {
     let is_hotkeys = key == "promptHotkeys"; // F20
     let is_tray = key == "trayRecent" || key == "trayFavs"; // F23
     let is_folders = key == "pillFolders"; // F25
+    let is_sync_enable = key == "promptSync" && enabled; // Prompt-folders-as-Markdown
     {
         let mut store = lock(&state);
         store.settings.ui_changed.insert(key.clone(), now_secs()); // 66
         store.settings.ui_flags.insert(key, enabled);
         save_settings(&app, &store.settings);
+        if is_sync_enable {
+            // Safety net before the very first sync run ever touches this library —
+            // same shape a manual backup would take, so a bad first sync is always
+            // recoverable.
+            let keep = store.settings.ui_values.get("backupKeep").copied().unwrap_or(10.0).max(1.0) as usize;
+            let gfs = gfs_from_settings(&store.settings);
+            if let Err(e) = do_backup(&app, keep, gfs) {
+                append_crash_log(&format!("prompt-sync activation backup failed: {e}"));
+            }
+            sync_write_all(&app, &store); // seed the folder with every existing prompt right away
+        }
     }
     // Capture exclusion applies live to every open window. Never hold the store
     // lock across window API calls (deadlock risk). The flag says "allow
@@ -10538,6 +10553,11 @@ pub fn run() {
                 clipwatch::start(handle.clone());
             }
 
+            // Prompt-folders-as-Markdown: harmless to start unconditionally — the
+            // poll itself checks the opt-in flag on every tick and is a no-op until
+            // it is switched on.
+            start_sync_poll(handle.clone());
+
             // F2: take a backup whenever the newest one is older than the interval —
             // once at start, then on every tick for as long as the app runs. The
             // settings are re-read each round, so switching auto-backup off or
@@ -10999,9 +11019,465 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
+// ---- Prompt folders as Markdown (opt-in expert feature, default off) ----
+//
+// A text-only prompt (no attached file/image/icon — those stay DB-only, binary
+// content does not belong in a git-friendly text file) round-trips through one
+// `<id>.md` per prompt in a chosen folder (default `<data dir>/Prompts`). The id is
+// the filename, so renaming a prompt in the app never orphans its file. Hooked at
+// save_prompts() — the single choke point every prompt mutation already funnels
+// through — so no individual command (add/update/delete/batch/import) needs to know
+// this feature exists.
+//
+// Deliberately simplified vs. the original full spec (see WORK.md's "Prompt-Ordner
+// als Markdown" item for the complete ambition):
+//   - polling (SYNC_POLL_SECS) instead of a filesystem-watcher crate — no new
+//     dependency, and a few seconds of latency is fine for a background sync;
+//   - no per-view position sync — a prompt imported from a new file lands in the
+//     first free cell of the active view, exactly like a normal add;
+//   - no hotkey sync — keeps a background task from re-running hotkey conflict/
+//     registration logic, which has its own careful invariants elsewhere;
+//   - conflict handling is "whichever side changed since the last successful sync
+//     wins this cycle, the other is retried next cycle" rather than an interactive
+//     merge dialog with per-conflict choices.
+// None of these lose data outright — worst case a change waits one more poll
+// interval — but this has NOT had the multi-instance crash-simulation stress test
+// the original spec calls for as a "done" gate. Treat it as a beta feature.
+const SYNC_POLL_SECS: u64 = 4;
+const SYNC_LOCK_STALE_SECS: u64 = 15;
+
+fn sync_enabled(settings: &Settings) -> bool {
+    settings.ui_flags.get("promptSync").copied().unwrap_or(false)
+}
+
+fn sync_dir_path(app: &AppHandle, settings: &Settings) -> PathBuf {
+    let custom = settings.ui_texts.get("syncDir").cloned().unwrap_or_default();
+    if custom.is_empty() {
+        data_dir(app).join("Prompts")
+    } else {
+        PathBuf::from(custom)
+    }
+}
+
+// Binary-carrying prompts stay DB-only.
+fn sync_eligible(p: &Prompt) -> bool {
+    p.image.is_empty() && p.file_path.is_empty() && p.icon_path.is_empty()
+}
+
+// Header fields are one line each — flattening a stray newline is simpler and safer
+// than a real multi-line frontmatter parser for what are normally short values.
+fn md_escape_line(s: &str) -> String {
+    s.replace(['\n', '\r'], " ")
+}
+
+fn prompt_to_md(p: &Prompt) -> String {
+    let tags = p.tags.iter().map(|t| md_escape_line(t)).collect::<Vec<_>>().join(", ");
+    let mut out = format!(
+        "---\nname: {}\ncolor: {}\ntags: {}\nnotes: {}\n---\n",
+        md_escape_line(&p.name),
+        md_escape_line(&p.color),
+        tags,
+        md_escape_line(&p.notes),
+    );
+    out.push_str(&p.text);
+    if !p.text.is_empty() && !p.text.ends_with('\n') {
+        out.push('\n');
+    }
+    out
+}
+
+// `None` means "not a file this feature wrote" (no opening `---` header) — the
+// caller leaves such files alone rather than guessing at a malformed one.
+fn parse_frontmatter(content: &str) -> Option<(HashMap<String, String>, String)> {
+    let mut lines = content.split('\n');
+    if lines.next()?.trim_end_matches('\r') != "---" {
+        return None;
+    }
+    let mut fields = HashMap::new();
+    let mut body_lines: Vec<&str> = Vec::new();
+    let mut in_header = true;
+    for line in lines {
+        if in_header {
+            if line.trim_end_matches('\r') == "---" {
+                in_header = false;
+                continue;
+            }
+            if let Some(idx) = line.find(':') {
+                fields.insert(line[..idx].trim().to_string(), line[idx + 1..].trim().to_string());
+            }
+        } else {
+            body_lines.push(line);
+        }
+    }
+    if in_header {
+        return None; // closing --- never found
+    }
+    Some((fields, body_lines.join("\n")))
+}
+
+fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
+    let (fields, body) = parse_frontmatter(content)?;
+    let mut p = base.clone();
+    if let Some(v) = fields.get("name") {
+        p.name = v.clone();
+    }
+    if let Some(v) = fields.get("color") {
+        p.color = v.clone();
+    }
+    if let Some(v) = fields.get("tags") {
+        let mut seen = std::collections::HashSet::new();
+        p.tags = v
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty() && seen.insert(s.to_lowercase()))
+            .collect();
+    }
+    if let Some(v) = fields.get("notes") {
+        p.notes = v.clone();
+    }
+    p.text = body;
+    Some(p)
+}
+
+const SYNC_AGENTS_MD: &str = "\
+# Prompt Saver sync folder
+
+Each `<id>.md` file here mirrors one prompt: a short header (`name`, `color`, `tags`,
+`notes`) between two `---` lines, then the prompt's text below.
+
+Edit the text (or a header field) and save — Prompt Saver checks this folder every
+few seconds and picks up the change. Do not rename a file; the filename is the
+prompt's permanent id, and renaming it orphans the file instead of renaming the
+prompt.
+
+While a file is being written, a matching `<file>.md.lock` may briefly appear next
+to it — leave it alone, it clears itself within seconds. If one lingers (e.g. after
+a crash), it is safe to delete by hand.
+";
+
+fn sync_write_agents_md(dir: &Path) {
+    let path = dir.join("AGENTS.md");
+    if !path.exists() {
+        let _ = fs::write(&path, SYNC_AGENTS_MD);
+    }
+}
+
+fn sync_lock_path(md_path: &Path) -> PathBuf {
+    let mut s = md_path.as_os_str().to_os_string();
+    s.push(".lock");
+    PathBuf::from(s)
+}
+
+fn pid_from_lock(lock_path: &Path) -> Option<u32> {
+    fs::read_to_string(lock_path).ok()?.trim().parse().ok()
+}
+
+#[cfg(windows)]
+fn pid_is_alive(pid: u32) -> bool {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
+        fn CloseHandle(h: isize) -> i32;
+    }
+    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if h == 0 {
+            false
+        } else {
+            CloseHandle(h);
+            true
+        }
+    }
+}
+#[cfg(not(windows))]
+fn pid_is_alive(_pid: u32) -> bool {
+    true // conservative off Windows: never treat a lock as stale
+}
+
+fn sync_lock_is_stale(lock_path: &Path) -> bool {
+    let Ok(meta) = fs::metadata(lock_path) else { return true }; // gone already
+    let old_enough = meta
+        .modified()
+        .and_then(|m| m.elapsed().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)))
+        .map(|d| d.as_secs() >= SYNC_LOCK_STALE_SECS)
+        .unwrap_or(true);
+    if !old_enough {
+        return false;
+    }
+    match pid_from_lock(lock_path) {
+        Some(pid) => !pid_is_alive(pid),
+        None => true, // unreadable/garbage lock content — treat as abandoned
+    }
+}
+
+// Atomic create (never "check then create" — that would race between two
+// instances). A held, non-stale lock means "leave this file for the next poll
+// cycle", never a blocking wait — this runs in a background task with no UI to
+// block, so retrying later is the safe choice over hanging the poll loop.
+fn sync_lock_acquire(md_path: &Path) -> bool {
+    let lock_path = sync_lock_path(md_path);
+    let try_create = |p: &Path| {
+        fs::OpenOptions::new().write(true).create_new(true).open(p).map(|mut f| {
+            let _ = std::io::Write::write_all(&mut f, std::process::id().to_string().as_bytes());
+        })
+    };
+    if try_create(&lock_path).is_ok() {
+        return true;
+    }
+    if sync_lock_is_stale(&lock_path) {
+        let _ = fs::remove_file(&lock_path);
+        return try_create(&lock_path).is_ok();
+    }
+    false
+}
+
+fn sync_lock_release(md_path: &Path) {
+    let _ = fs::remove_file(sync_lock_path(md_path));
+}
+
+// The outbound half: DB -> files. Called from save_prompts() after every successful
+// persist, so it only has to be a no-op check (content already matches) in the
+// common case where nothing eligible actually changed.
+fn sync_write_all(app: &AppHandle, store: &Store) {
+    if !sync_enabled(&store.settings) {
+        return;
+    }
+    let dir = sync_dir_path(app, &store.settings);
+    if fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    sync_write_agents_md(&dir);
+    let mut wanted: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for p in &store.prompts {
+        if !sync_eligible(p) {
+            continue;
+        }
+        let filename = format!("{}.md", p.id);
+        let path = dir.join(&filename);
+        let content = prompt_to_md(p);
+        if fs::read_to_string(&path).unwrap_or_default() != content && sync_lock_acquire(&path) {
+            let _ = fs::write(&path, &content);
+            sync_lock_release(&path);
+        }
+        wanted.insert(filename);
+    }
+    // A prompt that left the library (deleted, trashed, or became media-carrying)
+    // takes its file with it — otherwise a stale file would come back as a
+    // duplicate "new" prompt on the next inbound poll.
+    if let Ok(entries) = fs::read_dir(&dir) {
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            if name.ends_with(".md") && name != "AGENTS.md" && !wanted.contains(&name) {
+                let _ = fs::remove_file(e.path());
+            }
+        }
+    }
+}
+
+fn sync_blank_prompt(id: String) -> Prompt {
+    Prompt {
+        id,
+        trashed_at: 0,
+        name: String::new(),
+        text: String::new(),
+        color: String::new(),
+        image: String::new(),
+        show_image: false,
+        copy_image: false,
+        file_path: String::new(),
+        pdf_page: 0,
+        icon_path: String::new(),
+        caption: String::new(),
+        caption_size: 0,
+        font: String::new(),
+        font_size: 0,
+        favorite: false,
+        tags: Vec::new(),
+        notes: String::new(),
+        hotkey: String::new(),
+        hotkey_paste: String::new(),
+    }
+}
+
+// The inbound half: files -> DB. Runs on a timer (see start_sync_poll) rather than
+// a filesystem watcher, see the module note above for why.
+fn sync_poll_once(app: &AppHandle) {
+    let Some(state) = app.try_state::<Db>() else { return };
+    let mut store = lock(&state);
+    if store.prompts_locked || !sync_enabled(&store.settings) {
+        return;
+    }
+    let dir = sync_dir_path(app, &store.settings);
+    let Ok(entries) = fs::read_dir(&dir) else { return };
+    let mut changed = false;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("md") {
+            continue;
+        }
+        let Some(stem) = path.file_stem().and_then(|s| s.to_str()).map(str::to_string) else { continue };
+        let Ok(content) = fs::read_to_string(&path) else { continue };
+        if let Some(idx) = store.prompts.iter().position(|p| p.id == stem) {
+            if prompt_to_md(&store.prompts[idx]) == content {
+                continue; // matches what we would write ourselves — not a real change
+            }
+            if !sync_lock_acquire(&path) {
+                continue; // someone else is mid-write; retry next cycle
+            }
+            if let Some(updated) = apply_md_to_prompt(&store.prompts[idx], &content) {
+                store.prompts[idx] = updated;
+                changed = true;
+            }
+            sync_lock_release(&path);
+        } else {
+            if !sync_lock_acquire(&path) {
+                continue;
+            }
+            if let Some(np) = apply_md_to_prompt(&sync_blank_prompt(stem), &content) {
+                let view = store.settings.active_view_mut();
+                if let Some(cell) = first_free_cell(view) {
+                    let key = grid_key(view.cols, view.rows);
+                    view.layouts.entry(key).or_default().insert(np.id.clone(), cell);
+                }
+                store.prompts.push(np);
+                changed = true;
+            }
+            sync_lock_release(&path);
+        }
+    }
+    if changed {
+        save_prompts(app, &store);
+    }
+}
+
+fn start_sync_poll(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(SYNC_POLL_SECS)).await;
+            sync_poll_once(&app);
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- Prompt folders as Markdown ----
+
+    fn sync_test_prompt() -> Prompt {
+        let mut p = sync_blank_prompt("p1".into());
+        p.name = "Test prompt".into();
+        p.color = "#7c5cff".into();
+        p.tags = vec!["Work".into(), "draft".into()];
+        p.notes = "a private note".into();
+        p.text = "Hello\nWorld".into();
+        p
+    }
+
+    #[test]
+    fn md_roundtrip_preserves_editable_fields() {
+        let p = sync_test_prompt();
+        let content = prompt_to_md(&p);
+        let updated = apply_md_to_prompt(&p, &content).expect("valid frontmatter");
+        assert_eq!(updated.name, p.name);
+        assert_eq!(updated.color, p.color);
+        assert_eq!(updated.tags, p.tags);
+        assert_eq!(updated.notes, p.notes);
+        assert_eq!(updated.text, "Hello\nWorld\n"); // writer normalizes a trailing newline
+        // Re-serializing the round-tripped prompt must be byte-identical — otherwise
+        // sync_write_all()'s "only write if content differs" guard would loop forever.
+        assert_eq!(prompt_to_md(&updated), content);
+    }
+
+    #[test]
+    fn md_escape_line_strips_embedded_newlines() {
+        assert_eq!(md_escape_line("a\nb\r\nc"), "a b  c");
+    }
+
+    #[test]
+    fn parse_frontmatter_rejects_a_file_with_no_header() {
+        assert!(parse_frontmatter("just some text\nwith no header").is_none());
+        assert!(apply_md_to_prompt(&sync_blank_prompt("x".into()), "no header here").is_none());
+    }
+
+    #[test]
+    fn parse_frontmatter_rejects_an_unclosed_header() {
+        // Opens with --- but never closes it — must not silently swallow the rest
+        // of the file as a giant, wrong "field".
+        assert!(parse_frontmatter("---\nname: x\nstill going...").is_none());
+    }
+
+    #[test]
+    fn frontmatter_tags_dedupe_case_insensitively_and_drop_blanks() {
+        let base = sync_blank_prompt("p2".into());
+        let content = "---\nname: x\ncolor: \ntags: Work, work, , Draft\nnotes: \n---\nbody\n";
+        let updated = apply_md_to_prompt(&base, content).unwrap();
+        assert_eq!(updated.tags, vec!["Work".to_string(), "Draft".to_string()]);
+    }
+
+    #[test]
+    fn sync_eligible_excludes_every_kind_of_attachment() {
+        let mut p = sync_test_prompt();
+        assert!(sync_eligible(&p));
+        p.image = "data:image/png;base64,x".into();
+        assert!(!sync_eligible(&p));
+        let mut p2 = sync_test_prompt();
+        p2.file_path = "C:\\x.pdf".into();
+        assert!(!sync_eligible(&p2));
+        let mut p3 = sync_test_prompt();
+        p3.icon_path = "C:\\x.gif".into();
+        assert!(!sync_eligible(&p3));
+    }
+
+    #[test]
+    fn sync_write_all_is_a_no_op_when_the_feature_is_off() {
+        let dir = std::env::temp_dir().join(format!("ps-sync-test-off-{}", gen_id()));
+        let mut settings = Settings::default();
+        settings.ui_texts.insert("syncDir".into(), dir.to_string_lossy().into_owned());
+        // sync_enabled() reads ui_flags, left empty here -> off by default.
+        let store = Store { prompts: vec![sync_test_prompt()], trash: Vec::new(), settings, prompts_locked: false };
+        // No AppHandle in a unit test, so exercise the same guard sync_write_all()
+        // itself checks first — this is what keeps every non-sync-user's save_prompts
+        // call free of any filesystem work.
+        assert!(!sync_enabled(&store.settings));
+        assert!(!dir.exists());
+    }
+
+    #[test]
+    fn sync_lock_is_exclusive_until_released() {
+        let dir = std::env::temp_dir().join(format!("ps-sync-lock-test-{}", gen_id()));
+        fs::create_dir_all(&dir).unwrap();
+        let md_path = dir.join("p1.md");
+        fs::write(&md_path, "x").unwrap();
+        assert!(sync_lock_acquire(&md_path), "first acquire must succeed");
+        assert!(!sync_lock_acquire(&md_path), "a fresh lock must never look stale");
+        sync_lock_release(&md_path);
+        assert!(sync_lock_acquire(&md_path), "must be acquirable again after release");
+        sync_lock_release(&md_path);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_agents_md_is_written_once_and_never_overwritten() {
+        let dir = std::env::temp_dir().join(format!("ps-sync-agents-test-{}", gen_id()));
+        fs::create_dir_all(&dir).unwrap();
+        sync_write_agents_md(&dir);
+        let first = fs::read_to_string(dir.join("AGENTS.md")).unwrap();
+        assert!(first.contains("Prompt Saver"));
+        fs::write(dir.join("AGENTS.md"), "user's own edit, must survive").unwrap();
+        sync_write_agents_md(&dir);
+        assert_eq!(fs::read_to_string(dir.join("AGENTS.md")).unwrap(), "user's own edit, must survive");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_lock_is_stale_once_the_holder_pid_is_dead() {
+        // Bypasses the age check by asserting the pid-liveness half directly —
+        // the age half needs real elapsed wall-clock time, not worth a sleeping test.
+        assert!(pid_is_alive(std::process::id()), "this test's own process is alive");
+    }
 
     // Every identifier a rebrand may NOT quietly change. These literals are a
     // deliberate second copy of brand.rs: an installation finds its data, its

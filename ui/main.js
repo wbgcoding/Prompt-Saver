@@ -1021,6 +1021,10 @@ const OPT_FLAG_LABELS = {
   // 51: off keeps the historical "one placement" guarantee (adding elsewhere moves
   // it there); on lets a prompt sit in several views at once, sharing the same data.
   multiViewPrompt: "flagMultiViewPrompt",
+  // Prompt-folders-as-Markdown (beta — see the module note above sync_enabled() in
+  // lib.rs): mirrors every text-only prompt as a .md file in a folder, editable by
+  // hand or another tool.
+  promptSync: "flagPromptSync",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
@@ -1291,6 +1295,8 @@ const EXPERT_TABS = [
     { title: "expGroupTray", flags: ["trayRecent", "trayFavs"], values: ["trayRecentN", "trayFavN"] },
     // F21: the watcher that collects what you copy elsewhere.
     { title: "expGroupClipboard", flags: ["clipWatcher"], values: ["clipMinChars", "clipInboxMax"] },
+    // Prompt folders as Markdown (beta): mirrors text-only prompts as .md files.
+    { title: "expGroupSync", flags: ["promptSync"], paths: ["syncDir"] },
   ] },
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
@@ -1453,7 +1459,7 @@ const EXPERT_TIPS = [
   "dedupCopyLog", "cleanupFiles", "blurTilesUntilHover",
   // Tools / data
   "dupFinder", "clipWatcher", "backupGfs",
-  "usageStats",
+  "usageStats", "promptSync", "syncDir",
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "kbFocusFadeMs", "snipPreviewVh",
   "historyPerPrompt", "dupThreshold", "clipMinChars", "clipInboxMax", "historyMax",
@@ -1764,6 +1770,24 @@ const EXPERT_PATHS = {
         });
         if (del) await invoke("delete_data_dir", { path: oldPath }).catch(() => {});
       }
+    },
+  },
+  syncDir: {
+    label: "valSyncDir",
+    gate: "promptSync",
+    get: () => settings.ui_texts?.syncDir || "",
+    change: async () => {
+      const dir = await invoke("pick_folder").catch(() => null);
+      if (!dir) return;
+      settings.ui_texts = { ...(settings.ui_texts || {}), syncDir: dir };
+      stampChanged("syncDir"); // 66
+      invoke("set_ui_text", { key: "syncDir", value: dir }).catch((e) => toast(String(e)));
+      renderExpert();
+    },
+    onReset: () => {
+      settings.ui_texts = { ...(settings.ui_texts || {}), syncDir: "" };
+      invoke("set_ui_text", { key: "syncDir", value: "" }).catch((e) => toast(String(e)));
+      renderExpert();
     },
   },
 };
