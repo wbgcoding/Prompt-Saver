@@ -955,6 +955,8 @@ const FLAG_LABELS = {
   copyFlash: "flagCopyFlash",
   headerSeparators: "flagHeaderSeparators",
   cleanupFiles: "flagCleanupFiles",
+  // 32: sub-toggle of a default-off feature, itself default on (mirrors cleanupFiles/storeFiles above).
+  rotateBadge: "flagRotateBadge",
   // New features (default on).
   lengthCounter: "flagLengthCounter",   // F16
   smartSort: "flagSmartSort",           // F10
@@ -1054,6 +1056,9 @@ const OPT_FLAG_LABELS = {
   // lib.rs): mirrors every text-only prompt as a .md file in a folder, editable by
   // hand or another tool.
   promptSync: "flagPromptSync",
+  // 32: a text prompt can hold a list of variants instead of one text; each copy
+  // serves the next entry (in order, or shuffled without repeats).
+  rotatingPrompts: "flagRotatingPrompts",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
@@ -1217,6 +1222,8 @@ const EXPERT_VALUES = {
   loupeZoom: { label: "valLoupeZoom", min: 4, max: 16, step: 1, def: 8, unit: "×", gate: "colorPicker" },
   // 19: how many recent picks the right-click popover (and the overlay strip) keep. 0 = off.
   pickHistoryN: { label: "valPickHistoryN", min: 0, max: 20, step: 1, def: 5, unit: "", gate: "colorPicker" },
+  // 32: cap on how many variants one rotating prompt may hold.
+  rotateMaxEntries: { label: "valRotateMaxEntries", min: 2, max: 50, step: 1, def: 20, unit: "", gate: "rotatingPrompts" },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -1269,6 +1276,10 @@ const EXPERT_DROPDOWNS = {
   // F22: which key turns a press into a drag-out instead of the plain drag.
   dragOutModifier: enumDropdown("dragOutModifier", "valDragOutModifier",
     [["ctrl", "keyCtrl"], ["alt", "keyAlt"], ["shift", "keyShift"]], "ctrl", "dragOut"),
+  // 32: mode a NEW rotating prompt starts with (each prompt can still switch its
+  // own mode afterward in the editor).
+  rotateDefaultMode: enumDropdown("rotateDefaultMode", "valRotateDefaultMode",
+    [["order", "optRotateOrder"], ["random", "optRotateRandom"]], "order", "rotatingPrompts"),
   // F26: the notation the picked colour is copied in.
   pickerFormat: enumDropdown("pickerFormat", "valPickerFormat",
     [["hex", "optFmtHex"], ["rgb", "optFmtRgb"], ["hsl", "optFmtHsl"]], "hex", "colorPicker"),
@@ -1312,7 +1323,7 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app. F26 (pipette) sits with the
     // screenshot tool: both are capture tools on the composer bar.
-    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", "colorPicker", "pasteMedia", "dragDrop"], values: ["snipPreviewVh", "loupeZoom", "pickHistoryN"], dropdowns: ["pickerFormat"], paths: ["screenshotDir"] },
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", "colorPicker", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }], values: ["snipPreviewVh", "loupeZoom", "pickHistoryN", "rotateMaxEntries"], dropdowns: ["pickerFormat", "rotateDefaultMode"], paths: ["screenshotDir"] },
     // F12/F13 placeholders, from the grammar to where the app asks for them.
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
     // The editor: what it shows beside the text box. F14/F15 belong together — the
@@ -1476,6 +1487,7 @@ const EXPERT_TIPS = [
   "headerSeparators", "floating",
   "pillFolders", "pillMergeRadius", "folderGridCols",
   "tileFolders", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols",
+  "rotatingPrompts", "rotateDefaultMode", "rotateMaxEntries", "rotateBadge",
   // Tiles / copying
   "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "autoPasteEnter", "closeOnCopy",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutModifier",

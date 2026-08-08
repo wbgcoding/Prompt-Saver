@@ -2588,6 +2588,58 @@ PROBE = """
         await sleep(120);
       }
     }
+    // 32: rotating-prompts flag gates its default-mode dropdown, max-entries slider
+    // and badge sub-flag — same contract every other gated expert row follows.
+    {
+      const rowByLabel5 = (text, sel) => {
+        const tabs = [...document.querySelectorAll('.expert-tab')];
+        const find = () => [...document.querySelectorAll('#expert-flags ' + sel)]
+          .find(r => (r.querySelector('.value-head span, span') || {}).textContent === text) || null;
+        if (!tabs.length) return find();
+        for (const tb of tabs) { tb.click(); const hit = find(); if (hit) return hit; }
+        return null;
+      };
+      const rotSw = rowByLabel5('Rotating prompts', '.switch-field')?.querySelector('input.switch');
+      if (!rotSw) {
+        out.errors.push('the rotating-prompts toggle is missing from the expert menu');
+      } else {
+        if (rotSw.checked) out.errors.push('rotating prompts is not off by default');
+        if (rowByLabel5('New prompt starts in', '.expert-dropdown-row')) {
+          out.errors.push('the rotation-mode dropdown shows while rotating prompts is off');
+        }
+        if (rowByLabel5('Max. entries per prompt', '.value-field')) {
+          out.errors.push('the max-entries slider shows while rotating prompts is off');
+        }
+        if (rowByLabel5('Show the next-entry badge', '.switch-field')) {
+          out.errors.push('the badge sub-flag shows while rotating prompts is off');
+        }
+        window.__SMOKE_ARGS__ = [];
+        rotSw.checked = true;
+        rotSw.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(150);
+        const flagCall = window.__SMOKE_ARGS__.find(([cmd, args]) => cmd === 'set_ui_flag' && args && args.key === 'rotatingPrompts');
+        if (!flagCall || flagCall[1].enabled !== true) {
+          out.errors.push('turning on rotating prompts did not call set_ui_flag(rotatingPrompts, true)');
+        }
+        if (!rowByLabel5('New prompt starts in', '.expert-dropdown-row')) {
+          out.errors.push('the rotation-mode dropdown did not appear once rotating prompts was turned on');
+        }
+        if (!rowByLabel5('Max. entries per prompt', '.value-field')) {
+          out.errors.push('the max-entries slider did not appear once rotating prompts was turned on');
+        }
+        const badgeSw = rowByLabel5('Show the next-entry badge', '.switch-field')?.querySelector('input.switch');
+        if (!badgeSw) {
+          out.errors.push('the badge sub-flag did not appear once rotating prompts was turned on');
+        } else if (!badgeSw.checked) {
+          out.errors.push('the next-entry badge is not on by default');
+        }
+        // Restore the default so later blocks (and a real re-run of this suite) see
+        // the same starting state.
+        const backSw = rowByLabel5('Rotating prompts', '.switch-field')?.querySelector('input.switch');
+        if (backSw) { backSw.checked = false; backSw.dispatchEvent(new Event('change', { bubbles: true })); }
+        await sleep(120);
+      }
+    }
     // 81: colour-pick toast shows all three notations as separate copy chips.
     {
       window.__SMOKE_ARGS__ = window.__SMOKE_ARGS__ || [];

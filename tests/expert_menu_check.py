@@ -60,6 +60,10 @@ DEPENDENCIES = {
     "notesTipLen": "notesInTooltip",
     "pickerFormat": "colorPicker",
     "loupeZoom": "colorPicker",
+    # 32: rotating prompts
+    "rotateDefaultMode": "rotatingPrompts",
+    "rotateMaxEntries": "rotatingPrompts",
+    "rotateBadge": "rotatingPrompts",
     # Markdown preview
     "codeHighlight": "mdPreview",
     "codeAutoDetect": "mdPreview",
