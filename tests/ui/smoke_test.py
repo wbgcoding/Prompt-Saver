@@ -2508,6 +2508,46 @@ PROBE = """
         }
       }
     }
+    // 31: per-value reset — a row's own undo icon appears only once IT changes,
+    // resets just that row, then disappears again.
+    {
+      const rowByLabel4 = (text) => {
+        const tabs = [...document.querySelectorAll('.expert-tab')];
+        const find = () => [...document.querySelectorAll('#expert-flags .switch-field')]
+          .find(r => (r.querySelector('span') || {}).textContent === text) || null;
+        if (!tabs.length) return find();
+        for (const tb of tabs) { tb.click(); const hit = find(); if (hit) return hit; }
+        return null;
+      };
+      const row = rowByLabel4('Always show grid lines');
+      const sw = row && row.querySelector('input.switch');
+      if (!sw) {
+        out.errors.push('could not find a flag row for the per-value reset test');
+      } else {
+        if (row.querySelector('.expert-row-reset')) {
+          out.errors.push('per-value reset icon showed on an already-default row');
+        }
+        const before = sw.checked;
+        sw.click();
+        await sleep(150);
+        const rowNow = rowByLabel4('Always show grid lines');
+        const resetBtn = rowNow && rowNow.querySelector('.expert-row-reset');
+        if (!resetBtn) {
+          out.errors.push('per-value reset icon did not appear on a changed row');
+        } else {
+          resetBtn.click();
+          await sleep(200);
+          const rowAfter = rowByLabel4('Always show grid lines');
+          const swAfter = rowAfter && rowAfter.querySelector('input.switch');
+          if (!swAfter || swAfter.checked !== before) {
+            out.errors.push('per-value reset did not restore the row to its default');
+          }
+          if (rowAfter && rowAfter.querySelector('.expert-row-reset')) {
+            out.errors.push('per-value reset icon stayed visible after resetting');
+          }
+        }
+      }
+    }
     // Prompt-folders-as-Markdown: the sync-folder path row is gated on the feature
     // flag, same contract every other gated expert row already follows. Checked via
     // the backend call each click makes, not the live DOM — cross-tab lookups here

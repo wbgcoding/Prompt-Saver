@@ -1648,6 +1648,24 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   cursor: pointer;
 }
 .expert-group-reset:hover { color: var(--accent); }
+/* 31: per-row reset icon, next to any single expert setting that differs from its
+   default — same look as the per-category button above, fixed footprint so it
+   doesn't reflow the row when it appears/disappears. */
+.expert-row-reset {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.expert-row-reset:hover { color: var(--accent); }
 /* 97: in-app documentation. .help-group reuses .expert-group's own collapse
    mechanic (unscoped rules, see above) — only the body typography is new here. */
 #help .modal { width: min(760px, 94vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden; }
@@ -1698,6 +1716,9 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .value-field { gap: 6px; }
 .value-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .value-head span { font-size: 13px; color: var(--fg); }
+/* 31: keeps .value-head's space-between working over exactly two children once a
+   per-row reset icon joins the value-out span on the right. */
+.value-head-right { display: flex; align-items: center; gap: 4px; }
 .value-out { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .value-range { width: 100%; accent-color: var(--accent); cursor: pointer; }
 .expert-reset { margin-top: 8px; align-self: flex-start; }

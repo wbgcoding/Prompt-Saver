@@ -304,6 +304,26 @@ else:
         if key not in known_settings:
             problems.append(f"tooltip: EXPERT_TIPS lists '{key}', which is not a setting")
 
+# ---- per-row reset (31) --------------------------------------------------------
+# Every row kind must wire the single-value reset button; a row builder that lost
+# its rowResetBtn() call would silently make that setting kind un-resettable.
+for kind, fn in (("flags", "flagRow"), ("values", "valueRow"), ("selects", "selectRow"),
+                 ("dropdowns", "dropdownRow"), ("paths", "pathRow")):
+    body = block(f"function {fn}(", "{", "}")
+    if f'rowResetBtn("{kind}"' not in body:
+        problems.append(f"reset: {fn}() does not call rowResetBtn(\"{kind}\", ...)")
+
+# A group with a colour palette has no single key for the generic per-kind loop to
+# diff — changedKeysInGroup()/resetExpertGroup() need their own explicit palette
+# branch, or that category can never show/act on its own reset button.
+if re.search(r'palette:\s*true', tabs):
+    changed_src = block("function changedKeysInGroup", "{", "}")
+    if "group.palette" not in changed_src:
+        problems.append("reset: changedKeysInGroup() does not detect a changed palette")
+    reset_src = block("async function resetExpertGroup", "{", "}")
+    if "changed.palette" not in reset_src:
+        problems.append("reset: resetExpertGroup() does not reset a changed palette")
+
 for p in problems:
     print("FAIL", p)
 print("PASS" if not problems else f"{len(problems)} problem(s)")

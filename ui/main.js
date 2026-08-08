@@ -1527,6 +1527,52 @@ function withChangedTip(row, kind, key) {
   return row;
 }
 
+// 31: a small per-row undo icon, visible only while this exact row differs from its
+// default — resets just this one key. Reuses the same isRowChanged() diff as 66/67
+// and the same per-key commands resetExpertGroup() uses; no confirmation, since one
+// click back is reversible.
+function rowResetBtn(kind, key) {
+  if (!isRowChanged(kind, key)) return null;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "expert-row-reset";
+  const label = t("expertResetOne");
+  btn.title = label;
+  btn.setAttribute("aria-label", label);
+  btn.innerHTML = ICON_UNDO;
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resetOneExpertValue(kind, key);
+  });
+  return btn;
+}
+async function resetOneExpertValue(kind, key) {
+  if (kind === "flags") {
+    const enabled = shipsOn(key);
+    settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
+    stampChanged(key);
+    try { await invoke("set_ui_flag", { key, enabled }); } catch (err) { toast(String(err)); }
+    applyFlags();
+    if (TILE_DOM_FLAGS.has(key)) await renderGrid(true); else fitAllTiles();
+  } else if (kind === "values" || kind === "selects") {
+    const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key];
+    settings.ui_values = { ...(settings.ui_values || {}), [key]: cfg.def };
+    stampChanged(key);
+    try { await invoke("set_ui_value", { key, value: cfg.def }); } catch (err) { toast(String(err)); }
+    applyValues();
+    await refreshTiles(key);
+  } else if (kind === "dropdowns") {
+    const cfg = EXPERT_DROPDOWNS[key];
+    await cfg.set(cfg.def);
+    stampChanged(key);
+  } else if (kind === "paths") {
+    EXPERT_PATHS[key].onReset(); // already re-renders itself
+    return;
+  }
+  renderExpert();
+}
+
 // Flags whose state changes the tile DOM itself (everything else is a body class).
 const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip"]);
 
@@ -1581,6 +1627,8 @@ function flagRow(key) {
     if (TILE_DOM_FLAGS.has(key)) await renderGrid(true);
     else fitAllTiles();
   });
+  const resetBtn = rowResetBtn("flags", key);
+  if (resetBtn) row.append(resetBtn);
   row.append(input);
   withChangedTip(row, "flags", key);
   return row;
@@ -1650,7 +1698,14 @@ function valueRow(key) {
   out.textContent = show(cur());
   slider.addEventListener("input", () => { out.textContent = show(cur()); previewValue(key, cur()); });
   slider.addEventListener("change", () => commitValue(key, cur()));
-  head.append(span, out);
+  // .value-head is `justify-content: space-between` over exactly two children —
+  // a 3rd sibling would misplace, so the reset icon joins `out` in one flex group.
+  const right = document.createElement("span");
+  right.className = "value-head-right";
+  right.append(out);
+  const resetBtn = rowResetBtn("values", key);
+  if (resetBtn) right.append(resetBtn);
+  head.append(span, right);
   row.append(head, slider);
   withChangedTip(row, "values", key);
   return row;
@@ -1668,6 +1723,8 @@ function selectRow(key) {
   const span = document.createElement("span");
   span.textContent = t(cfg.label);
   head.appendChild(span);
+  const resetBtn = rowResetBtn("selects", key);
+  if (resetBtn) head.appendChild(resetBtn);
   const sel = document.createElement("select");
   sel.className = "modal-input expert-select";
   for (const o of cfg.options) {
@@ -1743,6 +1800,8 @@ function dropdownRow(key) {
   const span = document.createElement("span");
   span.textContent = t(cfg.label);
   head.appendChild(span);
+  const resetBtn = rowResetBtn("dropdowns", key);
+  if (resetBtn) head.appendChild(resetBtn);
   const sel = document.createElement("select");
   sel.className = "modal-input expert-select";
   for (const [value, lbl, stack] of cfg.options()) {
@@ -1851,14 +1910,8 @@ function pathRow(key) {
   change.textContent = t("pathChange");
   change.addEventListener("click", cfg.change);
   btns.appendChild(change);
-  if (cfg.onReset) {
-    const reset = document.createElement("button");
-    reset.type = "button";
-    reset.className = "ghost-btn";
-    reset.textContent = t("pathDefault");
-    reset.addEventListener("click", cfg.onReset);
-    btns.appendChild(reset);
-  }
+  const resetBtn = rowResetBtn("paths", key);
+  if (resetBtn) btns.appendChild(resetBtn);
   row.append(head, btns);
   withChangedTip(row, "paths", key);
   return row;
@@ -2140,7 +2193,8 @@ function renderExpert() {
       right.className = "expert-group-title-right";
       const changedHere = changedKeysInGroup(group);
       const changedCount = changedHere.flags.length + changedHere.values.length +
-        changedHere.selects.length + changedHere.dropdowns.length + changedHere.paths.length;
+        changedHere.selects.length + changedHere.dropdowns.length + changedHere.paths.length +
+        (changedHere.palette ? 1 : 0);
       if (changedCount) {
         const resetBtn = document.createElement("button");
         resetBtn.type = "button";
@@ -2210,7 +2264,7 @@ function renderExpert() {
 // standalone so the reset button can both decide whether to show itself and know
 // exactly what to touch.
 function changedKeysInGroup(group) {
-  const out = { flags: [], values: [], selects: [], dropdowns: [], paths: [] };
+  const out = { flags: [], values: [], selects: [], dropdowns: [], paths: [], palette: false };
   for (const f of groupFlags(group)) {
     if (gateOpen(f.gate) && isRowChanged("flags", f.key)) out.flags.push(f.key);
   }
@@ -2219,6 +2273,9 @@ function changedKeysInGroup(group) {
       if (gateOpen(EXPERT_DEFS[kind]?.[k]?.gate) && isRowChanged(kind, k)) out[kind].push(k);
     }
   }
+  // 31: closes the one category the per-kind loop above cannot see — the colour
+  // palette has no single key, just PALETTE_LEN live hues to diff against defaults.
+  if (group.palette) out.palette = COLORS.slice(1).some((c, i) => c !== DEFAULT_COLORS[i + 1]);
   return out;
 }
 
@@ -2253,6 +2310,7 @@ async function resetExpertGroup(group, changed, count) {
     stampChanged(key);
   }
   for (const key of changed.paths) EXPERT_PATHS[key].onReset?.();
+  if (changed.palette) await savePalette(null); // does its own remap + refresh
   // Batched once for the whole category instead of per key — same reasoning as
   // onResetExpert()'s own full-reset refresh below.
   applyFlags();
