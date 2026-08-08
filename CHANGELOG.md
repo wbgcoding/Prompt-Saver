@@ -302,6 +302,15 @@ Everything new is an expert-menu switch, most of it off until you turn it on.
 
 ### Removed
 
+- **Eight themes are gone**: Gradient, Sunset, Forest, Midnight, Retro, Lavender,
+  Candy and Coffee. Eight remain — System, Light, Dark, Programmer, AI Enthusiast,
+  Ocean, Cyberpunk and Black & White — each covering something the others do not.
+  An installation set to one of the removed themes (or a custom theme built on
+  one) falls back to System; the theme editor still reproduces any of the old
+  looks from a kept base.
+- **The count badge on folders**, both in the grid and on the floating folder
+  icon. The preview identifies the folder and the tooltip names its members, so
+  the number only covered a preview cell.
 - **Nine UI languages are gone**: French, Hindi, Indonesian, Vietnamese, Czech,
   Ukrainian, Swedish, Russian and Korean. Eleven remain — English, German,
   Spanish, Italian, Portuguese, Polish, Chinese, Japanese, Dutch, Turkish and

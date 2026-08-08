@@ -119,7 +119,8 @@ the main window forward.
 
 ### Appearance & themes
 
-16 built-in themes. The theme editor (opt-in) lets you tweak any theme's colours
+Eight built-in themes: system, light, dark, Programmer, AI Enthusiast, Ocean,
+Cyberpunk and Black & White. The theme editor (opt-in) lets you tweak any theme's colours
 and save the result as your own custom theme.
 
 ### Standalone: Theme editor
@@ -203,7 +204,7 @@ Notizen (Markdown-Vorschau und Notizen standardmäßig aus).
 
 **Skalierung & Zoom** — UI-, Dialog-, Composer- und Icon-Größe getrennt einstellbar.
 
-**Aussehen & Themes** — 16 mitgelieferte Themes, optionaler Theme-Editor.
+**Aussehen & Themes** — acht mitgelieferte Themes, optionaler Theme-Editor.
 
 **Bibliothek & Suche** — unscharfe Suche, intelligente Sortierung, Filter.
 
