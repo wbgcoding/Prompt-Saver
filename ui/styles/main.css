@@ -1131,6 +1131,9 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 #dupes-modal.overlay,
 #trash-modal.overlay,
 #clip-modal.overlay { z-index: 65; }
+/* 20: help is opened from inside settings, but both shared the base z-index and
+   help sits earlier in the DOM — it rendered behind the dialog that opened it. */
+#help.overlay { z-index: 60; }
 /* Wide enough that the title, the on/off switch and "Clear all" stay on one line. */
 #clip-modal .modal { width: min(580px, 92vw); }
 /* Recording on/off: greyed out while paused, accent-filled while collecting. */

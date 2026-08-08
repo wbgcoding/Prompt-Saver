@@ -257,6 +257,22 @@ PROBE = """
         out.errors.push('the "remove examples" button does not call dismiss_example_prompts');
       }
     }
+    // 20: help is opened from a button INSIDE settings, so settings stays open
+    // behind it — both used to share the same base z-index, so help rendered
+    // under the very dialog it was opened from.
+    {
+      document.getElementById('gear').click();
+      await sleep(120);
+      document.getElementById('help-open').click();
+      await sleep(150);
+      const helpModal = document.querySelector('#help .modal');
+      const r = helpModal.getBoundingClientRect();
+      const topEl = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      if (!helpModal.contains(topEl)) out.errors.push('20: help dialog does not stack above settings');
+      document.getElementById('help-close').click();
+      await sleep(120);
+      document.getElementById('settings').classList.add('hidden');
+    }
     // 97: in-app documentation — every category reaches the page, none is empty,
     // search narrows the list, a "did you know" callout shows up somewhere.
     {
