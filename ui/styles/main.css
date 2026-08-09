@@ -1722,6 +1722,13 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .help-body { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .help-group-body { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; }
 .help-overview { margin: 0; font-size: 13px; line-height: 1.5; color: var(--fg); }
+/* 22-A: numbered "how to" steps — same weight as the overview since these are the
+   actual instructions, not secondary detail. */
+.help-steps { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.5; color: var(--fg); }
+.help-steps li { margin-bottom: 2px; }
+/* "What happens" is detail (storage, side effects, limits), not the lead sentence —
+   muted like a settings row so the two paragraphs don't read as equally important. */
+.help-happens { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .help-settings { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.5; color: var(--fg); }
 .help-settings li { margin-bottom: 2px; }
 .help-tip {

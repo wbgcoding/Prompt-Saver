@@ -9300,7 +9300,8 @@ function renderHelp() {
   }
   const activeSection = searching ? null : sections[helpTab];
   for (const cat of cats) {
-    const haystack = [cat.title, cat.overview, ...cat.settings, cat.tip || ""].join(" ").toLowerCase();
+    const haystack = [cat.title, cat.whatItIs || cat.overview, ...(cat.howTo || []), cat.whatHappens || "", ...cat.settings, cat.tip || ""]
+      .join(" ").toLowerCase();
     if (searching && !haystack.includes(q)) continue;
     if (!searching && cat.section !== activeSection) continue;
     shown++;
@@ -9319,10 +9320,31 @@ function renderHelp() {
     sec.appendChild(head);
     const body = document.createElement("div");
     body.className = "help-group-body";
+    // 22-A: four parts per entry — what it is, how to do it, what happens, and the
+    // settings that tune it. howTo/whatHappens are optional so a short standalone
+    // entry (e.g. the quick launcher) doesn't have to force a step list. DE still
+    // carries the pre-22-A overview field until phase C migrates it — fall back to
+    // that instead of rendering the literal string "undefined".
     const ov = document.createElement("p");
     ov.className = "help-overview";
-    ov.textContent = cat.overview;
+    ov.textContent = cat.whatItIs || cat.overview;
     body.appendChild(ov);
+    if (cat.howTo && cat.howTo.length) {
+      const ol = document.createElement("ol");
+      ol.className = "help-steps";
+      for (const step of cat.howTo) {
+        const li = document.createElement("li");
+        li.textContent = step;
+        ol.appendChild(li);
+      }
+      body.appendChild(ol);
+    }
+    if (cat.whatHappens) {
+      const wh = document.createElement("p");
+      wh.className = "help-happens";
+      wh.textContent = cat.whatHappens;
+      body.appendChild(wh);
+    }
     if (cat.settings.length) {
       const ul = document.createElement("ul");
       ul.className = "help-settings";
