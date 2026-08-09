@@ -9583,10 +9583,12 @@ fn open_repo(page: Option<String>) -> Result<(), String> {
 // Scale the whole main-window UI with the browser's native zoom (like Ctrl +/-).
 // Native zoom keeps event coordinates and getBoundingClientRect in one coordinate
 // space, so — unlike a CSS `zoom` on <body> — it never desyncs popup positioning
-// or grid hit-testing. Clamped to the slider's 50–300% range.
+// or grid hit-testing. Clamped to the slider's 75–300% range (16: this used to
+// say 50% and clamp to 0.5 - the slider (ui/main.js EXPERT_TABS uiScale) has
+// always had a 75% floor, this just never matched it).
 #[tauri::command]
 fn set_ui_zoom(app: AppHandle, factor: f64) -> Result<(), String> {
-    let f = factor.clamp(0.5, 3.0);
+    let f = factor.clamp(0.75, 3.0);
     if let Some(win) = app.get_webview_window("main") {
         win.set_zoom(f).map_err(|e| e.to_string())?;
     }
@@ -9904,10 +9906,10 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
         return Err("installer too large / truncated".to_string());
     }
     // Sanity-check the download is actually a Windows executable (PE "MZ" header)
-    // before we ever run it — a corruption/wrong-format guard. NOTE: this is not
-    // cryptographic authentication; integrity today rests on TLS to the pinned repo
-    // path. Publishing a per-release SHA-256 (or code-signing) and verifying it here
-    // is the next hardening step.
+    // before we ever run it — a corruption/wrong-format guard, not authentication
+    // on its own. The real integrity check is the SHA-256 verification directly
+    // below (16: this comment used to describe that check as still-TODO, but it
+    // was already implemented and fail-closed right underneath it).
     if bytes.len() < 2 || &bytes[0..2] != b"MZ" {
         return Err("downloaded file is not a valid installer".to_string());
     }
