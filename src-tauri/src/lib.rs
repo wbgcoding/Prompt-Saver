@@ -6633,19 +6633,31 @@ fn rotation_entry_text(p: &Prompt, idx: usize) -> String {
 // is never trusted blindly: `% total` keeps a stale `rotate_pos` in range, and any
 // bag containing an out-of-range index is treated as absent (discarded on the next
 // rotation_advance) instead of ever indexing past the end.
-fn rotation_next(p: &Prompt, settings: &Settings) -> (usize, String) {
+// 33: alongside `idx` (the absolute entry position, used to resolve the text),
+// also returns `pos` — a 1-based "draw number within the current cycle", for a
+// badge that counts up 1..total and restarts, instead of random mode's `idx`
+// jumping to an arbitrary absolute position each time. Order mode's `idx` is
+// already such a natural count (the pointer only ever moves forward), so
+// `pos` there is just `idx + 1`; random mode derives it from how many entries
+// remain undrawn in the current shuffle bag (`total - bag.len() + 1`) — a
+// freshly reshuffled, still-untouched bag always holds exactly `total`
+// entries, so the very first upcoming draw of a cycle is always `1`.
+fn rotation_next(p: &Prompt, settings: &Settings) -> (usize, usize, String) {
     let total = rotation_total(p);
-    let idx = if p.variants.is_empty() || settings.ui_flags.get("rotatingPrompts") == Some(&false) {
-        0
+    let (idx, pos) = if p.variants.is_empty() || settings.ui_flags.get("rotatingPrompts") == Some(&false) {
+        (0, 1)
     } else if p.rotate_mode == "random" {
         match settings.rotate_bag.get(&p.id) {
-            Some(bag) if !bag.is_empty() && bag.iter().all(|&i| (i as usize) < total) => bag[0] as usize,
-            _ => 0,
+            Some(bag) if !bag.is_empty() && bag.iter().all(|&i| (i as usize) < total) => {
+                (bag[0] as usize, total - bag.len() + 1)
+            }
+            _ => (0, 1),
         }
     } else {
-        settings.rotate_pos.get(&p.id).copied().unwrap_or(0) as usize % total
+        let idx = settings.rotate_pos.get(&p.id).copied().unwrap_or(0) as usize % total;
+        (idx, idx + 1)
     };
-    (idx, rotation_entry_text(p, idx))
+    (idx, pos, rotation_entry_text(p, idx))
 }
 
 // 32: advances the pointer past the entry rotation_next() just reported — call ONLY
@@ -6717,7 +6729,7 @@ async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result
             Some(p) if !p.file_path.is_empty() => CopyPayload::File(p.file_path.clone()),
             // 32: rotation_next() itself falls back to p.text when there is nothing
             // to rotate, so a plain prompt goes through this exact same branch.
-            Some(p) => CopyPayload::Text(rotation_next(p, &store.settings).1),
+            Some(p) => CopyPayload::Text(rotation_next(p, &store.settings).2),
             None => CopyPayload::Missing,
         }
     };
@@ -6751,6 +6763,8 @@ async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result
 #[derive(Serialize)]
 struct RotationPeek {
     index: usize,
+    // 33: 1-based "draw number within the current cycle" — see rotation_next.
+    pos: usize,
     total: usize,
     text: String,
 }
@@ -6759,8 +6773,8 @@ struct RotationPeek {
 fn rotation_peek(state: State<Db>, id: String) -> Option<RotationPeek> {
     let store = lock(&state);
     let p = store.prompts.iter().find(|p| p.id == id)?;
-    let (index, text) = rotation_next(p, &store.settings);
-    Some(RotationPeek { index, total: rotation_total(p), text })
+    let (index, pos, text) = rotation_next(p, &store.settings);
+    Some(RotationPeek { index, pos, total: rotation_total(p), text })
 }
 
 // 32: every window's tile/pill/folder-member badge stays live off ONE event, fired
@@ -6770,6 +6784,8 @@ fn rotation_peek(state: State<Db>, id: String) -> Option<RotationPeek> {
 struct RotationChanged {
     id: String,
     index: usize,
+    // 33: 1-based "draw number within the current cycle" — see rotation_next.
+    pos: usize,
     total: usize,
     text: String,
 }
@@ -6778,10 +6794,10 @@ fn emit_rotation_changed(app: &AppHandle, p: &Prompt, settings: &Settings) {
     if p.variants.is_empty() {
         return;
     }
-    let (index, text) = rotation_next(p, settings);
+    let (index, pos, text) = rotation_next(p, settings);
     let _ = app.emit(
         "rotation-changed",
-        RotationChanged { id: p.id.clone(), index, total: rotation_total(p), text },
+        RotationChanged { id: p.id.clone(), index, pos, total: rotation_total(p), text },
     );
 }
 
@@ -13303,7 +13319,7 @@ mod tests {
         let mut settings = Settings::default();
         let seen: Vec<usize> = (0..7)
             .map(|_| {
-                let (idx, _) = rotation_next(&p, &settings);
+                let (idx, _, _) = rotation_next(&p, &settings);
                 rotation_advance(&p, &mut settings);
                 idx
             })
@@ -13318,17 +13334,30 @@ mod tests {
         p.variants = vec!["b".into(), "c".into(), "d".into(), "e".into()]; // total = 5
         let mut settings = Settings::default();
         let total = 5;
+        // Prime past the cold-start bootstrap: with no bag yet, rotation_next()
+        // falls back to (idx 0, pos 1) — the same "1" a freshly reshuffled bag
+        // also reports for its own first, still-untouched peek, so pos briefly
+        // repeats once (1, 1, 2, 3, 4, 5) before this one-time double 1 settles
+        // into a clean cycle. This one throwaway draw gets a real bag seeded so
+        // the loop below observes steady-state behaviour only.
+        rotation_advance(&p, &mut settings);
         let mut first_cycle = std::collections::HashSet::new();
         let mut last_shown = None;
+        let mut positions = Vec::new();
         for _ in 0..total {
-            let (idx, _) = rotation_next(&p, &settings);
+            let (idx, pos, _) = rotation_next(&p, &settings);
             assert!(first_cycle.insert(idx), "the bag repeated an entry within one cycle");
+            positions.push(pos);
             rotation_advance(&p, &mut settings);
             last_shown = Some(idx);
         }
         assert_eq!(first_cycle.len(), total, "the bag skipped an entry within one cycle");
-        let (next_idx, _) = rotation_next(&p, &settings);
+        // 33: the draw-number badge counts 1..total across one cycle, in order —
+        // even though the entries themselves are shuffled.
+        assert_eq!(positions, vec![1, 2, 3, 4, 5]);
+        let (next_idx, next_pos, _) = rotation_next(&p, &settings);
         assert_ne!(Some(next_idx), last_shown, "reshuffle repeated the last-shown entry immediately");
+        assert_eq!(next_pos, 1, "the draw-number badge must restart at 1 for the new cycle");
     }
 
     #[test]
@@ -13337,13 +13366,13 @@ mod tests {
         p.variants = vec!["b".into()]; // total = 2 now, but state below predates the shrink
         let mut settings = Settings::default();
         settings.rotate_pos.insert(p.id.clone(), 9);
-        let (idx, text) = rotation_next(&p, &settings);
+        let (idx, _, text) = rotation_next(&p, &settings);
         assert_eq!(idx, 9 % 2, "a stale order-mode pointer must clamp back into range");
         assert_eq!(text, p.variants[0]);
 
         p.rotate_mode = "random".into();
         settings.rotate_bag.insert(p.id.clone(), vec![4, 0]); // 4 no longer exists
-        let (idx2, _) = rotation_next(&p, &settings);
+        let (idx2, _, _) = rotation_next(&p, &settings);
         assert_eq!(idx2, 0, "a bag containing any stale index must be discarded, not partially trusted");
         rotation_advance(&p, &mut settings);
         let bag = settings.rotate_bag.get(&p.id).unwrap();
@@ -13358,7 +13387,7 @@ mod tests {
         let mut settings = Settings::default();
         settings.ui_flags.insert("rotatingPrompts".into(), false);
         for _ in 0..3 {
-            let (idx, text) = rotation_next(&p, &settings);
+            let (idx, _, text) = rotation_next(&p, &settings);
             assert_eq!(idx, 0);
             assert_eq!(text, p.text);
             rotation_advance(&p, &mut settings); // must be a no-op while off

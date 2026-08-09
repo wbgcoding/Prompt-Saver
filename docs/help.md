@@ -68,10 +68,14 @@ survives a restart too.
 
 A prompt can hold a list of texts instead of one — each copy serves the next
 entry, in order or shuffled without repeats, instead of always the same text.
+On by default; the per-prompt switch sits under Advanced options in the editor.
 
-- A small badge shows the position (like "2/5") on a tile, floating pill or
-  pill-folder member — a grid-folder member shows only its file-type icon instead
-- The position survives restarts and full backups; a CSV/TXT import starts a
+- A small badge counts up (like "2/5") on a tile, floating pill or pill-folder
+  member — a grid-folder member shows only its file-type icon instead. In order
+  mode it is the absolute position; in shuffle mode it counts draws within the
+  current cycle and restarts at 1 once every entry has been shown once, rather
+  than jumping to an arbitrary position
+- The count survives restarts and full backups; a CSV/TXT import starts a
   fresh pointer, since the imported prompt gets a new id
 
 ## Copying
@@ -313,9 +317,11 @@ Task-Manager) direkt zu einem neuen Kopierknopf.
 Auswahlen überstehen einen Neustart. Standardmäßig aus.
 
 **Wechselnde Prompts** — ein Prompt trägt eine Liste von Texten, jede Kopie
-liefert den nächsten Eintrag (Reihenfolge oder Zufall). Abzeichen auf
-Kachel/Pille/Pillen-Ordner-Mitglied; übersteht Neustart und Sicherung, aber
-keinen CSV/TXT-Import (neuer Prompt, neuer Zeiger).
+liefert den nächsten Eintrag (Reihenfolge oder Zufall). Standardmäßig an; der
+Schalter pro Prompt sitzt im Editor unter Erweiterte Optionen. Abzeichen auf
+Kachel/Pille/Pillen-Ordner-Mitglied zählt hoch — im Zufalls-Modus die Ziehungen
+im aktuellen Durchlauf statt einer springenden Position; übersteht Neustart und
+Sicherung, aber keinen CSV/TXT-Import (neuer Prompt, neuer Zeiger).
 
 **Kopieren** — Verketten, Prompt-Hotkeys, Herausziehen, automatisches Einfügen.
 

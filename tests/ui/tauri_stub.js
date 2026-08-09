@@ -503,7 +503,10 @@ const RESULTS = {
     if (!p) return null;
     const total = 1 + (p.variants || []).length;
     const idx = (ROTATE_POS.get(p.id) || 0) % total;
-    return { index: idx, total, text: idx === 0 ? p.text : p.variants[idx - 1] };
+    // 33: the stub only ever simulates sequential advance (real random-bag shuffling
+    // is a backend concern, proven in Rust unit tests) — pos = idx + 1 mirrors what
+    // order mode itself returns, which is all the UI-side wiring needs to exercise.
+    return { index: idx, pos: idx + 1, total, text: idx === 0 ? p.text : p.variants[idx - 1] };
   },
   rotation_commit: (a) => {
     const p = PROMPTS.find((x) => x.id === (a && a.id));

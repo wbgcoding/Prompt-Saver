@@ -409,14 +409,15 @@ export const HELP_CONTENT = {
       title: "Rotating prompts",
       whatItIs: "A prompt can hold a list of texts instead of one — each copy serves the next entry instead of always the same text.",
       howTo: [
-        "Turn rotating prompts on in the expert menu (off by default).",
-        "In a prompt's editor, add more than one text entry.",
+        "Rotating prompts is on by default — turn it off in the expert menu if you never use it.",
+        "In a prompt's editor, open Advanced options and turn on \"Rotating texts\": the entry list replaces the plain text field.",
+        "Add more than one text entry with \"+ Entry\"; the icons beside each entry reorder or remove it.",
         "Choose order (cycles through in sequence) or shuffle (random, without repeating until every entry has been used once).",
         "Copy the tile as normal — it always serves the next entry, never asks which one.",
       ],
       whatHappens:
-        "A small badge shows the position, like \"2/5\", on a grid tile, a floating pill, and a pill-folder member (a grid-folder member shows only its file-type icon, not this badge). The position survives restarts and full backups; a CSV/TXT import creates a new prompt with a fresh pointer, so only the list of texts and its order/shuffle mode carry over there, not the exact position. Turning rotation off on a prompt with several entries keeps them all — only the first one is used until you turn it back on.",
-      settings: ["Rotating prompts, default order/shuffle, badge, max entries — Expert menu → Features → Create prompts"],
+        "A small badge counts up on a grid tile, a floating pill, and a pill-folder member, like \"2/5\" (a grid-folder member shows only its file-type icon, not this badge). In order mode it is the absolute position; in shuffle mode it counts draws within the current cycle and restarts at 1 once every entry has been shown once, so it never jumps to an arbitrary position. The count survives restarts and full backups; a CSV/TXT import creates a new prompt with a fresh pointer, so only the list of texts and its order/shuffle mode carry over there, not the exact position. Turning rotation off on a prompt with several entries keeps them all — only the first one is used until you turn it back on.",
+      settings: ["Rotating prompts (on by default), default order/shuffle, badge, max entries — Expert menu → Features → Create prompts. The per-prompt switch itself sits under Advanced options in the editor."],
     },
     {
       section: "system",
@@ -882,14 +883,15 @@ export const HELP_CONTENT = {
       title: "Wechselnde Prompts",
       whatItIs: "Ein Prompt kann eine Liste von Texten statt nur einem enthalten — jede Kopie serviert den nächsten Eintrag, anstatt immer denselben Text.",
       howTo: [
-        "Schalte wechselnde Prompts im Experten-Menü ein (standardmäßig aus).",
-        "Füge im Editor eines Prompts mehr als einen Texteintrag hinzu.",
+        "Wechselnde Prompts sind standardmäßig an — schalte sie im Experten-Menü aus, falls du sie nie nutzt.",
+        "Öffne im Editor eines Prompts Erweiterte Optionen und schalte \"Wechselnde Texte\" ein: die Eintragsliste ersetzt dann das normale Textfeld.",
+        "Füge mit \"+ Eintrag\" mehr als einen Texteintrag hinzu; die Icons neben jedem Eintrag sortieren um oder entfernen ihn.",
         "Wähle Reihenfolge (durchläuft der Reihe nach) oder Mischen (zufällig, ohne Wiederholung, bis jeder Eintrag einmal genutzt wurde).",
         "Kopiere die Kachel wie gewohnt — sie serviert immer den nächsten Eintrag, es wird nie gefragt, welchen.",
       ],
       whatHappens:
-        "Ein kleines Badge zeigt die Position, wie \"2/5\", auf einer Raster-Kachel, einer schwebenden Pille und einem Mitglied eines Pillen-Ordners (ein Raster-Ordner-Mitglied zeigt nur sein Dateityp-Icon, nicht dieses Badge). Die Position bleibt nach Neustarts und vollständigen Backups erhalten; ein CSV/TXT-Import erstellt einen neuen Prompt mit einem frischen Zeiger, sodass nur die Textliste und ihr Reihenfolge-/Mischen-Modus übernommen werden, nicht die genaue Position. Wird die Rotation bei einem Prompt mit mehreren Einträgen deaktiviert, bleiben alle erhalten — nur der erste wird verwendet, bis sie wieder aktiviert wird.",
-      settings: ["Wechselnde Prompts, Standard Reihenfolge/Mischen, Badge, maximale Einträge — Experten-Menü → Funktionen → Prompts erstellen"],
+        "Ein kleines Badge zählt hoch auf einer Raster-Kachel, einer schwebenden Pille und einem Mitglied eines Pillen-Ordners, wie \"2/5\" (ein Raster-Ordner-Mitglied zeigt nur sein Dateityp-Icon, nicht dieses Badge). Im Reihenfolge-Modus ist das die absolute Position; im Zufalls-Modus zählt es die Ziehungen im aktuellen Durchlauf und beginnt wieder bei 1, sobald jeder Eintrag einmal drankam — es springt also nie auf eine beliebige Position. Der Zählerstand bleibt nach Neustarts und vollständigen Backups erhalten; ein CSV/TXT-Import erstellt einen neuen Prompt mit einem frischen Zeiger, sodass nur die Textliste und ihr Reihenfolge-/Mischen-Modus übernommen werden, nicht die genaue Position. Wird die Rotation bei einem Prompt mit mehreren Einträgen deaktiviert, bleiben alle erhalten — nur der erste wird verwendet, bis sie wieder aktiviert wird.",
+      settings: ["Wechselnde Prompts (standardmäßig an), Standard Reihenfolge/Mischen, Badge, maximale Einträge — Experten-Menü → Funktionen → Prompts erstellen. Der Schalter pro Prompt selbst sitzt im Editor unter Erweiterte Optionen."],
     },
     {
       section: "system",

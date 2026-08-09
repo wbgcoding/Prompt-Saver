@@ -2634,40 +2634,43 @@ PROBE = """
       if (!rotSw) {
         out.errors.push('the rotating-prompts toggle is missing from the expert menu');
       } else {
-        if (rotSw.checked) out.errors.push('rotating prompts is not off by default');
-        if (rowByLabel5('New prompt starts in', '.expert-dropdown-row')) {
-          out.errors.push('the rotation-mode dropdown shows while rotating prompts is off');
-        }
-        if (rowByLabel5('Max. entries per prompt', '.value-field')) {
-          out.errors.push('the max-entries slider shows while rotating prompts is off');
-        }
-        if (rowByLabel5('Show the next-entry badge', '.switch-field')) {
-          out.errors.push('the badge sub-flag shows while rotating prompts is off');
-        }
-        window.__SMOKE_ARGS__ = [];
-        rotSw.checked = true;
-        rotSw.dispatchEvent(new Event('change', { bubbles: true }));
-        await sleep(150);
-        const flagCall = window.__SMOKE_ARGS__.find(([cmd, args]) => cmd === 'set_ui_flag' && args && args.key === 'rotatingPrompts');
-        if (!flagCall || flagCall[1].enabled !== true) {
-          out.errors.push('turning on rotating prompts did not call set_ui_flag(rotatingPrompts, true)');
-        }
+        // 33: default flipped ON (was off at 32's original ship).
+        if (!rotSw.checked) out.errors.push('rotating prompts is not on by default (33)');
         if (!rowByLabel5('New prompt starts in', '.expert-dropdown-row')) {
-          out.errors.push('the rotation-mode dropdown did not appear once rotating prompts was turned on');
+          out.errors.push('the rotation-mode dropdown does not show while rotating prompts is on by default');
         }
         if (!rowByLabel5('Max. entries per prompt', '.value-field')) {
-          out.errors.push('the max-entries slider did not appear once rotating prompts was turned on');
+          out.errors.push('the max-entries slider does not show while rotating prompts is on by default');
         }
         const badgeSw = rowByLabel5('Show the next-entry badge', '.switch-field')?.querySelector('input.switch');
         if (!badgeSw) {
-          out.errors.push('the badge sub-flag did not appear once rotating prompts was turned on');
+          out.errors.push('the badge sub-flag does not show while rotating prompts is on by default');
         } else if (!badgeSw.checked) {
           out.errors.push('the next-entry badge is not on by default');
+        }
+        // Turn it off and confirm the gate hides its dependents too (same contract
+        // every other gated expert row follows), then restore the default-on state.
+        window.__SMOKE_ARGS__ = [];
+        rotSw.checked = false;
+        rotSw.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(150);
+        const flagCall = window.__SMOKE_ARGS__.find(([cmd, args]) => cmd === 'set_ui_flag' && args && args.key === 'rotatingPrompts');
+        if (!flagCall || flagCall[1].enabled !== false) {
+          out.errors.push('turning off rotating prompts did not call set_ui_flag(rotatingPrompts, false)');
+        }
+        if (rowByLabel5('New prompt starts in', '.expert-dropdown-row')) {
+          out.errors.push('the rotation-mode dropdown still shows after turning rotating prompts off');
+        }
+        if (rowByLabel5('Max. entries per prompt', '.value-field')) {
+          out.errors.push('the max-entries slider still shows after turning rotating prompts off');
+        }
+        if (rowByLabel5('Show the next-entry badge', '.switch-field')) {
+          out.errors.push('the badge sub-flag still shows after turning rotating prompts off');
         }
         // Restore the default so later blocks (and a real re-run of this suite) see
         // the same starting state.
         const backSw = rowByLabel5('Rotating prompts', '.switch-field')?.querySelector('input.switch');
-        if (backSw) { backSw.checked = false; backSw.dispatchEvent(new Event('change', { bubbles: true })); }
+        if (backSw) { backSw.checked = true; backSw.dispatchEvent(new Event('change', { bubbles: true })); }
         await sleep(120);
       }
     }
@@ -2698,9 +2701,17 @@ PROBE = """
         freeCell.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
         await sleep(200);
         const rotRow = document.getElementById('modal-rotate-toggle-row');
+        const advBody = document.getElementById('modal-advanced-body');
         if (!rotRow || rotRow.classList.contains('hidden')) {
           out.errors.push('the rotating-texts switch did not appear in the editor with the flag on');
+        } else if (!advBody.contains(rotRow)) {
+          out.errors.push('the rotating-texts switch is not under Advanced options (33)');
+        } else if (!advBody.classList.contains('hidden')) {
+          out.errors.push('advanced options does not start collapsed');
         } else {
+          document.getElementById('modal-advanced-head').click();
+          await sleep(150);
+          if (advBody.classList.contains('hidden')) out.errors.push('advanced options did not expand');
           document.getElementById('modal-name').value = 'Rotate Test';
           document.getElementById('modal-text').value = 'Entry one';
           const rotSwitch = document.getElementById('modal-rotate-switch');
@@ -2763,7 +2774,7 @@ PROBE = """
                 // The backend advances the pointer and pushes rotation-changed to every
                 // window after a real commit — simulated the same way every other
                 // push-event probe in this suite delivers a backend event.
-                window.__FIRE__('rotation-changed', { id: newId, index: 1, total: 2, text: 'Entry two' });
+                window.__FIRE__('rotation-changed', { id: newId, index: 1, pos: 2, total: 2, text: 'Entry two' });
                 await sleep(50);
                 const badge1 = newTile.querySelector('.tile-rotate-badge');
                 if (!badge1 || badge1.textContent !== '2/2') {
@@ -2777,11 +2788,11 @@ PROBE = """
           }
         }
       }
-      // Restore the flag to its default (off) for later blocks / a re-run.
+      // Restore the flag to its default (on, since 33) for later blocks / a re-run.
       await click('gear');
       await click('expert-open');
       const rotSw3 = rowByLabel6('Rotating prompts', '.switch-field')?.querySelector('input.switch');
-      if (rotSw3 && rotSw3.checked) { rotSw3.checked = false; rotSw3.dispatchEvent(new Event('change', { bubbles: true })); }
+      if (rotSw3 && !rotSw3.checked) { rotSw3.checked = true; rotSw3.dispatchEvent(new Event('change', { bubbles: true })); }
       await sleep(120);
       document.getElementById('settings-close')?.click();
       await sleep(120);

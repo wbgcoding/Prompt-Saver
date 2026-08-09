@@ -63,19 +63,22 @@ let dragOutOn = false, dragOutMod = "ctrlKey";
 
 // 32: rotating prompt — "next entry" badge per member, kept live by the backend's
 // rotation-changed event (any window's copy can move another member's pointer).
-const rotateInfo = new Map(); // member id -> { index, total }
+const rotateInfo = new Map(); // member id -> { index, pos, total }
 let rotateBadgeOn = true; // Phase B default: on
 
+// 33: pos (not index + 1) — in random mode index is the absolute entry that will
+// be drawn next (jumps around); pos is the 1-based draw number within the current
+// shuffle cycle, counting up and restarting on reshuffle.
 function rotateBadgeLabel(id) {
   const s = rotateInfo.get(id);
-  return s ? `${s.index + 1}/${s.total}` : "";
+  return s ? `${s.pos}/${s.total}` : "";
 }
 
 function primeMemberRotate(id) {
   if (rotateInfo.has(id)) return;
   invoke("rotation_peek", { id }).then((r) => {
     if (!r) return;
-    rotateInfo.set(id, { index: r.index, total: r.total });
+    rotateInfo.set(id, { index: r.index, pos: r.pos, total: r.total });
     const el = gridEl.querySelector(`.folder-member[data-id="${CSS.escape(id)}"] .rotate-badge`);
     if (el) el.textContent = rotateBadgeLabel(id);
   }).catch(() => {});
@@ -658,9 +661,9 @@ listen("prompt-updated", (e) => {
 });
 // 32: a member's rotation pointer moved (any window may have copied it).
 listen("rotation-changed", (e) => {
-  const { id, index, total } = e.payload || {};
+  const { id, index, pos, total } = e.payload || {};
   if (!id || !state.members.some((p) => p.id === id)) return;
-  rotateInfo.set(id, { index, total });
+  rotateInfo.set(id, { index, pos, total });
   const el = gridEl.querySelector(`.folder-member[data-id="${CSS.escape(id)}"] .rotate-badge`);
   if (el) el.textContent = rotateBadgeLabel(id);
 });

@@ -1251,15 +1251,17 @@ body.library-front #modal.overlay { z-index: 67; }
 .modal-text::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 .modal-text::-webkit-scrollbar-track { background: transparent; }
 
-/* ---- 32: rotating prompts (editor) ---- */
+/* ---- 32/33: rotating prompts (editor) ---- */
 .modal-rotate-toggle { padding: 6px 0; }
-.modal-rotate-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+/* No own margin-bottom: the .modal flex column already puts a 12px gap after
+   this row (33: an extra margin on top of that read as "a big gap" before the
+   colour swatches). */
+.modal-rotate-list { display: flex; flex-direction: column; gap: 6px; }
 .modal-rotate-entries { display: flex; flex-direction: column; gap: 6px; }
-.rotate-entry-row { display: flex; align-items: flex-start; gap: 6px; }
+.rotate-entry-row { display: flex; align-items: center; gap: 6px; }
 .rotate-entry-num {
   flex: 0 0 auto;
   min-width: 18px;
-  padding-top: 8px;
   font-size: 12px;
   color: var(--muted);
   text-align: right;
@@ -1272,8 +1274,10 @@ body.library-front #modal.overlay { z-index: 67; }
 }
 .rotate-entry-btns { display: flex; flex: 0 0 auto; gap: 2px; }
 .rotate-entry-btns .icon-btn:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
-.modal-rotate-add { align-self: flex-start; }
-.modal-rotate-mode-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* 33: "+ Entry" left, mode dropdown pinned to the right edge with "From the
+   start" immediately left of it (and the "Next: n/total" readout left of that). */
+.modal-rotate-controls-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.modal-rotate-mode-group { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
 .modal-rotate-mode { flex: 0 0 auto; width: auto; }
 .modal-rotate-next { font-size: 12px; color: var(--muted); }
 

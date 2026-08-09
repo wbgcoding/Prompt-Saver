@@ -51,7 +51,7 @@ const dragOutHeld = (e) => dragOutOn && e[dragOutMod] === true;
 // is enough; kept live by the backend's rotation-changed event.
 let rotateBadgeOn = true; // Phase B default: on
 let rotateVariants = 0;
-let rotateInfo = null; // { index, total } once known
+let rotateInfo = null; // { index, pos, total } once known
 let rotateReq = 0; // bumped on every primeRotateBadge call, so an in-flight peek
                     // from a superseded call (the prompt was re-applied again
                     // before the first one resolved) can never overwrite a newer
@@ -61,7 +61,10 @@ const rotateBadgeEl = document.getElementById("rotate-badge");
 function renderRotateBadge() {
   const show = rotateBadgeOn && rotateVariants > 0 && !!rotateInfo;
   rotateBadgeEl.classList.toggle("hidden", !show);
-  if (show) rotateBadgeEl.textContent = `${rotateInfo.index + 1}/${rotateInfo.total}`;
+  // 33: pos (not index + 1) — in random mode index is the absolute entry that
+  // will be drawn next (jumps around); pos is the 1-based draw number within
+  // the current shuffle cycle, counting up and restarting on reshuffle.
+  if (show) rotateBadgeEl.textContent = `${rotateInfo.pos}/${rotateInfo.total}`;
 }
 
 function primeRotateBadge() {
@@ -70,7 +73,7 @@ function primeRotateBadge() {
   if (!rotateVariants) { renderRotateBadge(); return; }
   invoke("rotation_peek", { id: promptId }).then((r) => {
     if (!r || req !== rotateReq) return;
-    rotateInfo = { index: r.index, total: r.total };
+    rotateInfo = { index: r.index, pos: r.pos, total: r.total };
     renderRotateBadge();
   }).catch(() => {});
   renderRotateBadge(); // hide immediately; primeRotateBadge's own peek fills it in
@@ -848,7 +851,7 @@ listen("prompt-updated", (e) => {
 listen("rotation-changed", (e) => {
   if (e.payload && e.payload.id === promptId) {
     rotateReq++;
-    rotateInfo = { index: e.payload.index, total: e.payload.total };
+    rotateInfo = { index: e.payload.index, pos: e.payload.pos, total: e.payload.total };
     renderRotateBadge();
   }
 });

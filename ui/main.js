@@ -968,7 +968,11 @@ const FLAG_LABELS = {
   copyFlash: "flagCopyFlash",
   headerSeparators: "flagHeaderSeparators",
   cleanupFiles: "flagCleanupFiles",
-  // 32: sub-toggle of a default-off feature, itself default on (mirrors cleanupFiles/storeFiles above).
+  // 32/33: a text prompt can hold a list of variants instead of one text; each
+  // copy serves the next entry (in order, or shuffled without repeats). Default
+  // on since 33 (Ben, 09.08.) — shipped default off at 32's original release.
+  rotatingPrompts: "flagRotatingPrompts",
+  // 32: sub-toggle of rotatingPrompts, itself also default on.
   rotateBadge: "flagRotateBadge",
   // New features (default on).
   lengthCounter: "flagLengthCounter",   // F16
@@ -1069,9 +1073,6 @@ const OPT_FLAG_LABELS = {
   // lib.rs): mirrors every text-only prompt as a .md file in a folder, editable by
   // hand or another tool.
   promptSync: "flagPromptSync",
-  // 32: a text prompt can hold a list of variants instead of one text; each copy
-  // serves the next entry (in order, or shuffled without repeats).
-  rotatingPrompts: "flagRotatingPrompts",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
@@ -3589,17 +3590,21 @@ const clipNote = (s) => {
   return max > 0 && s.length > max ? `${s.slice(0, max)}…` : s;
 };
 
-// 32: client-side cache of each rotating prompt's "next entry" state (index/total/
-// text), kept in sync by the backend's rotation-changed event — fired by every copy
-// path in every window after the pointer actually moves. Populated lazily the first
-// time a tile for that id renders (primeRotateState), so a fresh render never has to
-// await anything itself; the badge/tooltip just stay blank for one frame.
-const rotateState = new Map(); // id -> { index, total, text }
+// 32: client-side cache of each rotating prompt's "next entry" state (index/pos/
+// total/text), kept in sync by the backend's rotation-changed event — fired by every
+// copy path in every window after the pointer actually moves. Populated lazily the
+// first time a tile for that id renders (primeRotateState), so a fresh render never
+// has to await anything itself; the badge/tooltip just stay blank for one frame.
+const rotateState = new Map(); // id -> { index, pos, total, text }
 const ROTATE_SHORT_MAX = 60; // tooltip preview length, independent of the notes cap
 
+// 33: `pos` (not `index + 1`) — in random mode `index` is the absolute entry that
+// will be drawn next (jumps around), while `pos` is the 1-based draw number within
+// the current shuffle cycle, counting up and restarting at the next reshuffle. In
+// order mode the two coincide (the backend already returns pos = index + 1 there).
 function rotateBadgeLabel(id) {
   const s = rotateState.get(id);
-  return s ? `${s.index + 1}/${s.total}` : "";
+  return s ? `${s.pos}/${s.total}` : "";
 }
 
 // Pushes the cached state (however stale/empty) into one tile's badge + tooltip.
@@ -5672,8 +5677,9 @@ let lenRaf = 0;
 function updateLenCounter() {
   const el = $("modal-length");
   if (!el) return;
-  // Still a text prompt while the F14 preview stands in for the textarea.
-  const on = flag("lengthCounter") &&
+  // Still a text prompt while the F14 preview stands in for the textarea; never
+  // while 32/33 rotation replaced the textarea with the variants list instead.
+  const on = flag("lengthCounter") && !rotationActive() &&
     !(modal.text.classList.contains("hidden") && modal.mdPreview.classList.contains("hidden"));
   el.classList.toggle("hidden", !on);
   if (!on) return;
@@ -7126,7 +7132,7 @@ async function refreshRotateNext() {
     const peek = await invoke("rotation_peek", { id: modalState.id });
     if (peek && modalState.id) {
       modal.rotateNext.textContent = t("rotateNextLabel")
-        .replace("{n}", String(peek.index + 1)).replace("{total}", String(peek.total));
+        .replace("{n}", String(peek.pos)).replace("{total}", String(peek.total));
     }
   } catch (_) { /* the peek is a convenience readout, never worth surfacing an error for */ }
 }
@@ -10302,9 +10308,9 @@ function bind() {
   // 32: any window's copy of a rotating prompt lands here — refresh every tile of
   // that id (usually one, but "prompt in multiple views" can place several).
   listen("rotation-changed", (e) => {
-    const { id, index, total, text } = e.payload || {};
+    const { id, index, pos, total, text } = e.payload || {};
     if (!id) return;
-    rotateState.set(id, { index, total, text });
+    rotateState.set(id, { index, pos, total, text });
     document.querySelectorAll(`.tile[data-id="${CSS.escape(id)}"]`).forEach((tile) => applyRotateState(tile, id));
   });
   // Clicking the app logo opens the project's GitHub page (drag still moves the window).
