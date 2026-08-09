@@ -9580,6 +9580,16 @@ fn open_repo(page: Option<String>) -> Result<(), String> {
     Ok(())
 }
 
+// The window's minimum logical size at a given webview zoom factor: growing the
+// 680x460 floor by the same factor keeps at least 680x460 CSS pixels visible
+// (zoom scales CSS pixels inside a fixed window frame), capped to the monitor
+// so this never asks for a window bigger than the screen.
+fn zoom_min_size(factor: f64, cap: (u32, u32)) -> (u32, u32) {
+    let min_w = ((MAIN_WIN_MIN_W as f64 * factor).round() as u32).min(cap.0);
+    let min_h = ((MAIN_WIN_MIN_H as f64 * factor).round() as u32).min(cap.1);
+    (min_w, min_h)
+}
+
 // Scale the whole main-window UI with the browser's native zoom (like Ctrl +/-).
 // Native zoom keeps event coordinates and getBoundingClientRect in one coordinate
 // space, so — unlike a CSS `zoom` on <body> — it never desyncs popup positioning
@@ -9591,6 +9601,29 @@ fn set_ui_zoom(app: AppHandle, factor: f64) -> Result<(), String> {
     let f = factor.clamp(0.75, 3.0);
     if let Some(win) = app.get_webview_window("main") {
         win.set_zoom(f).map_err(|e| e.to_string())?;
+        // See zoom_min_size: without this, the fixed 680x460 OS minimum leaves
+        // fewer and fewer CSS pixels visible as zoom climbs (250% => 272x184,
+        // header/composer become unreachable). Grow the window's minimum by the
+        // same factor — and the window itself, if it is currently smaller than
+        // that — so the header/composer stay reachable at any zoom level.
+        // The window may sit on any monitor by now (this runs live, not just at
+        // startup) — cap against the monitor it is actually on, not always the
+        // primary one, falling back to primary if that can't be read either.
+        let cap = monitor_cap(win.current_monitor().ok().flatten().or_else(|| win.primary_monitor().ok().flatten()));
+        let (min_w, min_h) = zoom_min_size(f, cap);
+        let _ = win.set_min_size(Some(tauri::LogicalSize::new(min_w, min_h)));
+        if let Ok(size) = win.outer_size() {
+            let scale = win.scale_factor().unwrap_or(1.0);
+            // Round like zoom_min_size does (not truncate) — otherwise a window
+            // whose true logical size sits right at the new minimum can read 1px
+            // under it here, and the set_size call below would then shave that
+            // truncated value off the OTHER (already-fine) dimension too.
+            let cur_w = (size.width as f64 / scale).round() as u32;
+            let cur_h = (size.height as f64 / scale).round() as u32;
+            if cur_w < min_w || cur_h < min_h {
+                let _ = win.set_size(tauri::LogicalSize::new(cur_w.max(min_w), cur_h.max(min_h)));
+            }
+        }
     }
     Ok(())
 }
@@ -11053,14 +11086,12 @@ fn centered_on_primary(main: &tauri::WebviewWindow, width: u32, height: u32) -> 
     WindowGeom { x: 100, y: 100, width, height }
 }
 
-// First start: 50% of the primary monitor, centered. Afterwards the saved size
-// is kept (capped at the monitor); if its monitor is gone, re-center.
-fn resolve_geometry(main: &tauri::WebviewWindow, saved: Option<WindowGeom>) -> WindowGeom {
-    // Hard cap: the window can never start larger than the primary monitor.
-    let cap = main
-        .primary_monitor()
-        .ok()
-        .flatten()
+// A monitor's usable size in logical (DPI-independent) pixels, or effectively
+// "no cap" if none is given (lookup failed) — the multiplication that feeds
+// zoom_min_size is already bounded by the 75-300% zoom clamp, so an unread
+// monitor never produces a runaway size, just an un-clamped (bounded) one.
+fn monitor_cap(monitor: Option<tauri::window::Monitor>) -> (u32, u32) {
+    monitor
         .map(|m| {
             let s = m.size();
             (
@@ -11068,7 +11099,14 @@ fn resolve_geometry(main: &tauri::WebviewWindow, saved: Option<WindowGeom>) -> W
                 (s.height as f64 / m.scale_factor()) as u32,
             )
         })
-        .unwrap_or((u32::MAX, u32::MAX));
+        .unwrap_or((u32::MAX, u32::MAX))
+}
+
+// First start: 50% of the primary monitor, centered. Afterwards the saved size
+// is kept (capped at the monitor); if its monitor is gone, re-center.
+fn resolve_geometry(main: &tauri::WebviewWindow, saved: Option<WindowGeom>) -> WindowGeom {
+    // Hard cap: the window can never start larger than the primary monitor.
+    let cap = monitor_cap(main.primary_monitor().ok().flatten());
     if let Some(mut g) = saved {
         if g.width > 0 && g.height > 0 {
             g.width = g.width.min(cap.0);
@@ -14491,6 +14529,20 @@ mod tests {
         let cfg = tray_cfg(&s);
         assert_eq!(cfg.recent_n, 10);
         assert_eq!(cfg.fav_n, 1);
+    }
+
+    #[test]
+    fn zoom_min_size_grows_with_zoom_and_shrinks_back() {
+        let big_screen = (10_000, 10_000);
+        assert_eq!(zoom_min_size(1.0, big_screen), (680, 460));
+        assert_eq!(zoom_min_size(2.5, big_screen), (1700, 1150));
+        assert_eq!(zoom_min_size(0.75, big_screen), (510, 345));
+    }
+
+    #[test]
+    fn zoom_min_size_never_exceeds_the_monitor() {
+        let small_screen = (1000, 800);
+        assert_eq!(zoom_min_size(3.0, small_screen), (1000, 800));
     }
 
     #[test]
