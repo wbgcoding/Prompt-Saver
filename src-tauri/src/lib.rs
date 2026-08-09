@@ -6747,7 +6747,12 @@ async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String) -> Result
                 return Ok(()); // identical consecutive copy — don't add another row
             }
         }
-        let _ = db_append_copy(&conn, &entry, cap, cutoff);
+        // 11: an insert failure used to be swallowed here and still report success,
+        // so the entry was silently missing from the journal with no trace anywhere.
+        if let Err(e) = db_append_copy(&conn, &entry, cap, cutoff) {
+            append_crash_log(&format!("copy history append failed: {e}"));
+            return Err("history-failed".into());
+        }
     }
     rebuild_tray(&app); // F23: the "recently used" section follows every copy
     Ok(())
