@@ -87,7 +87,6 @@ let TOAST_MS = 1400; // toast lifetime for plain messages (expert-tunable)
 const SIZE_MIN = 10; // text size range, steps of 2 (keep in sync with backend)
 const SIZE_MAX = 40;
 const SIZE_STEP = 2;
-const FILE_POLL_MS = 5000; // missing-file watcher interval
 const DISARM_MS = 3000; // confirm-button auto-disarm delay
 
 const clampGrid = (n, fallback) =>
@@ -3852,8 +3851,19 @@ document.addEventListener("visibilitychange", () => {
   });
 });
 
-// ---- Missing-file watcher (every few seconds) ----
+// ---- Missing-file watcher ----
+// 10: the ambient every-few-seconds refresh is a backend-pushed "missing-files"
+// event now (listened for below), not this window's own timer - see
+// start_missing_files_poll in lib.rs. pollMissingFiles stays for the one-off
+// "recheck right now" calls (initial load, right after an edit).
 let missingFiles = new Set();
+
+function applyMissingFiles(ids) {
+  missingFiles = new Set(ids);
+  document.querySelectorAll(".tile").forEach((tile) => {
+    tile.classList.toggle("file-missing", missingFiles.has(tile.dataset.id));
+  });
+}
 
 async function pollMissingFiles() {
   if (!prompts.some((p) => p.file_path || p.icon_path)) {
@@ -3861,10 +3871,7 @@ async function pollMissingFiles() {
     return;
   }
   try {
-    missingFiles = new Set(await invoke("missing_files"));
-    document.querySelectorAll(".tile").forEach((tile) => {
-      tile.classList.toggle("file-missing", missingFiles.has(tile.dataset.id));
-    });
+    applyMissingFiles(await invoke("missing_files"));
   } catch {}
 }
 
@@ -10825,6 +10832,9 @@ function bind() {
   // and the JSON fallback failed (disk full, permissions). One toast per event —
   // a stuck disk would otherwise spam this on every edit.
   listen("persist-failed", () => toast(t("persistFailed")));
+  // 10: pushed by the backend every few seconds instead of this window polling
+  // missing_files on its own timer.
+  listen("missing-files", (e) => applyMissingFiles(e.payload || []));
   // The standalone fill-in window answered (null = cancelled or closed).
   listen("vars-filled", (e) => {
     const resolve = varsWindowPending;
@@ -11012,8 +11022,7 @@ async function init() {
     applyTileStyle();
     autoGrow(inputEl);
     inputEl.focus();
-    pollMissingFiles();
-    setInterval(pollMissingFiles, FILE_POLL_MS);
+    pollMissingFiles(); // this window's own first check - the ambient refresh below is a pushed event, not a timer
   } catch (e) {
     // Never strand the user with an invisible app: log, surface a toast if the
     // UI got far enough to have one, and still reveal the window below.

@@ -90,7 +90,6 @@ const PILL_FONT_DEFAULT = 26; // text pill font size at scale 1
 const PILL_TEXT_MIN_W = 200; // smallest text-pill width; grows with the label
 const PILL_BORDER = 5; // colored frame width around media pills
 const SIZE_EPSILON = 2; // px tolerance ending the self-healing resize loop
-const FILE_POLL_MS = 5000;
 const COPIED_MS = 900;
 const RING_MIN = 8; // smallest resize-ring thickness (px)
 const RING_MAX = 60; // largest resize-ring thickness (px)
@@ -433,6 +432,10 @@ async function loadName() {
 }
 
 // ---- Missing-file watcher ----
+// 10: the ambient every-few-seconds refresh is a backend-pushed "missing-files"
+// event now (listened for below), not this pill's own timer - one pushed check
+// covers every open pill instead of each running its own poll. pollFileMissing
+// stays for the one-off "recheck right now" call in applyPrompt above.
 let hasFile = false;
 
 async function pollFileMissing() {
@@ -445,7 +448,9 @@ async function pollFileMissing() {
     pill.classList.toggle("file-missing", ids.includes(promptId));
   } catch {}
 }
-setInterval(pollFileMissing, FILE_POLL_MS);
+listen("missing-files", (e) => {
+  if (hasFile) pill.classList.toggle("file-missing", (e.payload || []).includes(promptId));
+});
 
 function showCopied() {
   const fb = document.getElementById("feedback");

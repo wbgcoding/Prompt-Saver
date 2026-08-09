@@ -3702,7 +3702,10 @@ async fn pdf_preview(app: AppHandle, path: String, page: Option<u32>) -> Option<
     if result.is_empty() { None } else { Some(result) }
 }
 
-// IDs of prompts whose attached file OR media icon is gone (polled by the UI).
+// IDs of prompts whose attached file OR media icon is gone. Still directly
+// invokable for a one-off "I just fixed/replaced a file, recheck now" refresh
+// (main.js after an edit, floating.js whenever a pill's prompt data reloads) -
+// the AMBIENT every-few-seconds refresh is start_missing_files_poll below.
 #[tauri::command]
 fn missing_files(state: State<Db>) -> Vec<String> {
     // Snapshot ids + paths under the lock, then stat OUTSIDE it: a slow or dead
@@ -3720,6 +3723,23 @@ fn missing_files(state: State<Db>) -> Vec<String> {
         .filter(|(_, fp, ip)| gone(fp) || gone(ip))
         .map(|(id, _, _)| id)
         .collect()
+}
+
+// 10: main.js and every open floating.js pill window used to each run their own
+// 5-second missing_files poll - N pills meant N+1 redundant full-library stat
+// scans every cycle, all of which could block on the same slow or unreachable
+// network path. One backend-side timer runs the check once and pushes the
+// result to every window instead.
+const MISSING_FILES_POLL_SECS: u64 = 5;
+fn start_missing_files_poll(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            if let Some(state) = app.try_state::<Db>() {
+                let _ = app.emit("missing-files", missing_files(state));
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(MISSING_FILES_POLL_SECS)).await;
+        }
+    });
 }
 
 // ---------- Prompt commands ----------
@@ -11284,6 +11304,10 @@ pub fn run() {
             // poll itself checks the opt-in flag on every tick and is a no-op until
             // it is switched on.
             start_sync_poll(handle.clone());
+
+            // 10: one shared poll instead of every window running its own -
+            // see start_missing_files_poll.
+            start_missing_files_poll(handle.clone());
 
             // F2: take a backup whenever the newest one is older than the interval —
             // once at start, then on every tick for as long as the app runs. The
