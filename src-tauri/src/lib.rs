@@ -1982,6 +1982,32 @@ fn db_write_trash(conn: &mut Connection, trash: &[Prompt]) -> rusqlite::Result<(
     tx.commit()
 }
 
+// 6: delete_prompt/restore_prompt move one row between these two tables. Writing
+// them as two independent transactions (the old db_write_prompts + db_write_trash
+// pair) left a window where the first commit could durably land while the second
+// failed, stranding the prompt in neither table. One transaction for both DELETE+
+// INSERT pairs means either the whole move lands or neither half does.
+fn db_write_prompts_and_trash(conn: &mut Connection, prompts: &[Prompt], trash: &[Prompt]) -> rusqlite::Result<()> {
+    let tx = conn.transaction()?;
+    tx.execute("DELETE FROM prompts", [])?;
+    {
+        let mut stmt = tx.prepare("INSERT INTO prompts(id, ord, data) VALUES(?1, ?2, ?3)")?;
+        for (i, p) in prompts.iter().enumerate() {
+            let data = enc_str(&serde_json::to_string(p).unwrap_or_default());
+            stmt.execute(params![p.id, i as i64, data])?;
+        }
+    }
+    tx.execute("DELETE FROM trash", [])?;
+    {
+        let mut stmt = tx.prepare("INSERT INTO trash(id, ord, data) VALUES(?1, ?2, ?3)")?;
+        for (i, p) in trash.iter().enumerate() {
+            let data = enc_str(&serde_json::to_string(p).unwrap_or_default());
+            stmt.execute(params![p.id, i as i64, data])?;
+        }
+    }
+    tx.commit()
+}
+
 fn db_load_trash(conn: &Connection) -> Vec<Prompt> {
     let mut trash = Vec::new();
     if let Ok(mut stmt) = conn.prepare("SELECT data FROM trash ORDER BY ord") {
@@ -2317,6 +2343,24 @@ fn save_trash(app: &AppHandle, store: &Store) -> bool {
         }
     }
     append_crash_log("persist failed: trash could not be written to the database");
+    let _ = app.emit("persist-failed", "trash");
+    false
+}
+
+// 6: the atomic counterpart to save_prompts+save_trash for delete_prompt/
+// restore_prompt - see db_write_prompts_and_trash for why the two tables can no
+// longer be saved as two separate commits for a single move.
+fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
+    if store.prompts_locked {
+        return false;
+    }
+    if let Some(mut conn) = db_conn(app) {
+        if db_write_prompts_and_trash(&mut conn, &store.prompts, &store.trash).is_ok() {
+            sync_write_all(app, store); // Prompt-folders-as-Markdown mirrors prompts, same as save_prompts
+            return true;
+        }
+    }
+    append_crash_log("persist failed: trash move could not be written to the database");
     let _ = app.emit("persist-failed", "trash");
     false
 }
@@ -4242,14 +4286,15 @@ async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Resu
     close_floating_window(&app, &id);
     let changed = {
         let mut store = lock(&state);
+        let original_settings = store.settings.clone();
         let moved = match store.prompts.iter().position(|p| p.id == id) {
             Some(pos) => {
                 let mut p = store.prompts.remove(pos);
                 p.trashed_at = now_secs();
                 store.trash.insert(0, p); // newest-deleted first
-                true
+                Some(pos)
             }
-            None => false,
+            None => None,
         };
         for view in &mut store.settings.views {
             for layout in view.layouts.values_mut() {
@@ -4260,12 +4305,25 @@ async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Resu
         store.settings.float_scale.remove(&id);
         store.settings.video_prefs.remove(&id);
         store.normalize_folders(); // F25: and out of whatever folder held it
-        if moved {
-            save_prompts(&app, &store);
-            save_trash(&app, &store);
+        if let Some(pos) = moved {
+            // 6: prompts+trash now move in one transaction, so a failed write can no
+            // longer strand the prompt in neither table. Report success only once it
+            // actually committed - on failure, undo the in-memory move (the trash
+            // entry AND the settings housekeeping above) instead of reporting success
+            // for a move that never reached disk.
+            if !save_prompts_and_trash(&app, &store) {
+                if !store.trash.is_empty() {
+                    let mut p = store.trash.remove(0);
+                    p.trashed_at = 0;
+                    let at = pos.min(store.prompts.len());
+                    store.prompts.insert(at, p);
+                }
+                store.settings = original_settings;
+                return Err("save-failed".into());
+            }
             save_settings(&app, &store.settings);
         }
-        moved
+        moved.is_some()
     };
     if changed {
         rearm_hotkeys(&app); // F20: a deleted prompt gives its accelerator back
@@ -4301,6 +4359,7 @@ async fn batch_prompts(
         "delete" => {
             // 91: move to trash, same as the single-prompt delete_prompt command —
             // media files and version history stay untouched until a real purge.
+            let original_settings = store.settings.clone();
             let mut moved: Vec<Prompt> = Vec::new();
             store.prompts.retain(|p| {
                 if idset.contains(p.id.as_str()) {
@@ -4310,25 +4369,41 @@ async fn batch_prompts(
                     true
                 }
             });
-            let now = now_secs();
-            for mut p in moved.into_iter().rev() {
-                p.trashed_at = now;
-                store.trash.insert(0, p); // newest-deleted first, preserving the batch's own order
-            }
-            for view in &mut store.settings.views {
-                for layout in view.layouts.values_mut() {
-                    layout.retain(|k, _| !idset.contains(k.as_str()));
+            if !moved.is_empty() {
+                let now = now_secs();
+                // .cloned() (not .into_iter()) so `moved` still holds the untouched
+                // (trashed_at: 0) originals below if the save fails.
+                for mut p in moved.iter().cloned().rev() {
+                    p.trashed_at = now;
+                    store.trash.insert(0, p); // newest-deleted first, preserving the batch's own order
                 }
+                for view in &mut store.settings.views {
+                    for layout in view.layouts.values_mut() {
+                        layout.retain(|k, _| !idset.contains(k.as_str()));
+                    }
+                }
+                for id in &ids {
+                    store.settings.floating.remove(id);
+                    store.settings.float_scale.remove(id);
+                    store.settings.video_prefs.remove(id);
+                }
+                store.normalize_folders(); // F25
+                // 6: same atomic prompts+trash write as delete_prompt/restore_prompt,
+                // found while fixing those two — batch delete had the identical
+                // stranded-prompt risk. On failure, undo the batch move instead of
+                // reporting success for a save that never reached disk. The moved
+                // prompts go back at the END of store.prompts rather than their exact
+                // original scattered indices - this is a failure-recovery path only,
+                // and the grid position the user actually sees lives in
+                // view.layouts, not the prompts Vec's own order.
+                if !save_prompts_and_trash(&app, &store) {
+                    store.trash.drain(0..moved.len());
+                    store.prompts.extend(moved);
+                    store.settings = original_settings;
+                    return Err("save-failed".into());
+                }
+                save_settings(&app, &store.settings);
             }
-            for id in &ids {
-                store.settings.floating.remove(id);
-                store.settings.float_scale.remove(id);
-                store.settings.video_prefs.remove(id);
-            }
-            store.normalize_folders(); // F25
-            save_prompts(&app, &store);
-            save_trash(&app, &store);
-            save_settings(&app, &store.settings);
         }
         "favorite" => {
             let fav = favorite.unwrap_or(true);
@@ -4410,7 +4485,9 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
         let Some(pos) = pos else {
             return Err("not-found".into());
         };
+        let original_settings = store.settings.clone();
         let mut p = store.trash.remove(pos);
+        let original_trashed_at = p.trashed_at;
         p.trashed_at = 0;
         let folder_cells = active_view_folder_cells(&store.settings);
         let view = store.settings.active_view_mut();
@@ -4419,8 +4496,18 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
             view.layouts.entry(key).or_default().insert(p.id.clone(), cell);
         }
         store.prompts.push(p);
-        save_prompts(&app, &store);
-        save_trash(&app, &store);
+        // 6: same atomic prompts+trash write as delete_prompt - on failure, undo the
+        // in-memory move (including the layout cell claimed above) instead of
+        // reporting success for a restore that never reached disk.
+        if !save_prompts_and_trash(&app, &store) {
+            if let Some(mut p) = store.prompts.pop() {
+                p.trashed_at = original_trashed_at;
+                let at = pos.min(store.trash.len());
+                store.trash.insert(at, p);
+            }
+            store.settings = original_settings;
+            return Err("save-failed".into());
+        }
         save_settings(&app, &store.settings);
         (AppState { prompts: store.prompts.clone(), settings: store.settings.clone() }, true)
     };
@@ -12546,6 +12633,45 @@ mod tests {
         assert_eq!(count("prompt_versions"), 0);
         assert_eq!(count("clip_inbox"), 0);
         assert_eq!(count("meta"), 1, "settings must survive a data-only wipe");
+    }
+
+    #[test]
+    fn prompts_and_trash_write_together_or_not_at_all() {
+        // 6: the whole point of the combined write - a failure partway through must
+        // roll back BOTH tables, not just the one it failed on (the old two-
+        // transaction version could durably commit prompts and then fail on trash,
+        // stranding a moved prompt in neither table).
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+             CREATE TABLE trash(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+             INSERT INTO prompts VALUES('before', 0, '{}');
+             INSERT INTO trash VALUES('trashed-before', 0, '{}');",
+        )
+        .unwrap();
+        let base = sample_prompts()[0].clone();
+        let good_prompts = vec![Prompt { id: "a".into(), ..base.clone() }];
+        // A duplicate id makes the second trash INSERT violate its PRIMARY KEY,
+        // forcing the write to fail after the prompts half (same transaction)
+        // already succeeded.
+        let dup_trash = vec![
+            Prompt { id: "dup".into(), ..base.clone() },
+            Prompt { id: "dup".into(), ..base },
+        ];
+        assert!(db_write_prompts_and_trash(&mut conn, &good_prompts, &dup_trash).is_err());
+        let ids = |table: &str| -> Vec<String> {
+            conn.prepare(&format!("SELECT id FROM {table} ORDER BY id"))
+                .unwrap()
+                .query_map([], |r| r.get(0))
+                .unwrap()
+                .flatten()
+                .collect()
+        };
+        assert_eq!(
+            ids("prompts"), vec!["before".to_string()],
+            "a failed write must not touch prompts either, even though the prompts half alone would have succeeded"
+        );
+        assert_eq!(ids("trash"), vec!["trashed-before".to_string()]);
     }
 
     // ---- 70: selective backup restore ----

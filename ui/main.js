@@ -6417,7 +6417,7 @@ async function keepOneDup(group, keepId) {
     const gone = new Set(remove);
     settings = await invoke("batch_prompts", { ids: remove, action: "delete", color: null, favorite: null, viewId: null });
     prompts = prompts.filter((p) => !gone.has(p.id));
-  } catch (e) { toast(String(e)); return; }
+  } catch (e) { toast(String(e) === "save-failed" ? t("persistFailed") : String(e)); return; }
   renderViews();
   await renderGrid(true);
   scanDupes();
@@ -6476,7 +6476,7 @@ function renderTrashList() {
 }
 async function restoreTrashItem(id) {
   let st;
-  try { st = await invoke("restore_prompt", { id }); } catch (e) { toast(String(e)); return; }
+  try { st = await invoke("restore_prompt", { id }); } catch (e) { toast(String(e) === "save-failed" ? t("persistFailed") : String(e)); return; }
   prompts = st.prompts;
   settings = st.settings;
   trashList = trashList.filter((p) => p.id !== id);
@@ -8761,7 +8761,7 @@ function renderLibrary() {
       try {
         await invoke("delete_prompt", { id: p.id });
       } catch (err) {
-        toast(String(err));
+        toast(String(err) === "save-failed" ? t("persistFailed") : String(err));
         return;
       }
       prompts = prompts.filter((x) => x.id !== p.id);
@@ -10058,8 +10058,13 @@ function bind() {
     if (!modalState || modalState.mode !== "edit") return;
     if (!armButton(modal.delete, t("deleteConfirm"))) return;
     const id = modalState.id;
+    try {
+      await invoke("delete_prompt", { id });
+    } catch (err) {
+      toast(String(err) === "save-failed" ? t("persistFailed") : String(err)); // keep the editor open so the user can retry
+      return;
+    }
     closeModal();
-    await invoke("delete_prompt", { id });
     await renderGrid();
     if (!libraryEl.classList.contains("hidden")) renderLibrary();
   });
@@ -10538,7 +10543,12 @@ function bind() {
     if (act === "delete") {
       if (!armButton(btn, t("deleteConfirm"))) return;
       closeCtx();
-      await invoke("delete_prompt", { id });
+      try {
+        await invoke("delete_prompt", { id });
+      } catch (err) {
+        toast(String(err) === "save-failed" ? t("persistFailed") : String(err));
+        return;
+      }
       await renderGrid();
       return;
     }
