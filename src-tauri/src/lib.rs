@@ -2314,7 +2314,7 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
     }
     if let Some(mut conn) = db_conn(app) {
         if db_write_prompts(&mut conn, &store.prompts).is_ok() {
-            sync_write_all(app, store); // Prompt-folders-as-Markdown: no-op unless the feature is on
+            spawn_sync_write_all(app, store); // Prompt-folders-as-Markdown: no-op unless the feature is on
             return true;
         }
     }
@@ -2327,7 +2327,7 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
         let _ = app.emit("persist-failed", "prompts");
         return false;
     }
-    sync_write_all(app, store);
+    spawn_sync_write_all(app, store);
     true
 }
 
@@ -2356,7 +2356,7 @@ fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
     }
     if let Some(mut conn) = db_conn(app) {
         if db_write_prompts_and_trash(&mut conn, &store.prompts, &store.trash).is_ok() {
-            sync_write_all(app, store); // Prompt-folders-as-Markdown mirrors prompts, same as save_prompts
+            spawn_sync_write_all(app, store); // Prompt-folders-as-Markdown mirrors prompts, same as save_prompts
             return true;
         }
     }
@@ -9715,7 +9715,11 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
                 save_settings(&app, &store.settings);
                 return Err(format!("sync-backup-failed: {e}"));
             }
-            sync_write_all(&app, &store); // seed the folder with every existing prompt right away
+            // Synchronous and immediate on purpose (unlike spawn_sync_write_all
+            // below) - this is a one-time, user-initiated activation, not a hot
+            // save path, and the point is the folder really exists before this
+            // command returns "on".
+            sync_write_all_impl(&app, &store.prompts, &store.settings);
         }
     }
     // Capture exclusion applies live to every open window. Never hold the store
@@ -11264,6 +11268,7 @@ pub fn run() {
             app.manage(HiddenFloats(Mutex::new(std::collections::HashSet::new()))); // 43
             app.manage(DragHint(Mutex::new((0, None)))); // F25 live merge highlight
             app.manage(VarPrompt::new()); // F12 standalone fill-in window
+            app.manage(SyncWriteQueue(Mutex::new(SyncWriteState::default()))); // 9
 
             // F19 auto-paste: start tracking the last external foreground window.
             #[cfg(windows)]
@@ -12004,20 +12009,24 @@ fn sync_lock_release(md_path: &Path) {
     let _ = fs::remove_file(sync_lock_path(md_path));
 }
 
-// The outbound half: DB -> files. Called from save_prompts() after every successful
-// persist, so it only has to be a no-op check (content already matches) in the
-// common case where nothing eligible actually changed.
-fn sync_write_all(app: &AppHandle, store: &Store) {
-    if !sync_enabled(&store.settings) {
+// 9: split from the old sync_write_all(app, store) so the per-prompt file I/O
+// below (a read to compare content, sometimes a write, once per eligible prompt)
+// can run on owned data instead of a &Store borrow - every call site already
+// holds the store mutex, and this loop's cost scales with the whole library on
+// every single save. spawn_sync_write_all below clones what it needs and runs
+// this on a blocking task after the lock is dropped; the one genuinely
+// synchronous caller (activating the feature) calls this directly.
+fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings) {
+    if !sync_enabled(settings) {
         return;
     }
-    let dir = sync_dir_path(app, &store.settings);
+    let dir = sync_dir_path(app, settings);
     if fs::create_dir_all(&dir).is_err() {
         return;
     }
     sync_write_agents_md(&dir);
     let mut wanted: std::collections::HashSet<String> = std::collections::HashSet::new();
-    for p in &store.prompts {
+    for p in prompts {
         if !sync_eligible(p) {
             continue;
         }
@@ -12031,6 +12040,82 @@ fn sync_write_all(app: &AppHandle, store: &Store) {
         wanted.insert(filename);
     }
     sync_sweep_orphans(&dir, &wanted);
+}
+
+// 9: a queue rather than one independent spawn_blocking task per call - two rapid
+// saves used to race as two unrelated tasks, and whichever finished LAST won even
+// if it started from the OLDER snapshot, silently reverting the newer save's files
+// (and letting the orphan sweep delete/recreate files based on that stale state).
+// Only a dirty flag is queued, not a data snapshot: the worker re-fetches prompts/
+// settings fresh right before every write. A second review round of this fix
+// caught that queuing a snapshot at save time let an already-queued write still
+// land after the user disabled the feature (the snapshot's OWN captured settings
+// still read "enabled"); re-checking the live settings immediately before writing
+// closes that gap, and also means the actual file content written is never staler
+// than it has to be even if the worker was mid-write for a while.
+struct SyncWriteQueue(Mutex<SyncWriteState>);
+#[derive(Default)]
+struct SyncWriteState {
+    pending: bool,
+    active: bool,
+}
+
+// Called from save_prompts()/save_prompts_and_trash() after every successful
+// persist, all of which already hold the store mutex - this only ever sets two
+// bools under a brief lock, never touching the filesystem or cloning the library
+// itself, so it keeps that mutex from being held for however long a large or slow
+// sync folder takes to read and compare.
+fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
+    if !sync_enabled(&store.settings) {
+        return; // common case (feature off): nothing to queue
+    }
+    let Some(q) = app.try_state::<SyncWriteQueue>() else { return };
+    let should_spawn = {
+        let mut s = q.0.lock().unwrap_or_else(|e| e.into_inner());
+        s.pending = true;
+        if s.active {
+            false // a worker is already draining the queue and will pick this up
+        } else {
+            s.active = true;
+            true
+        }
+    };
+    if !should_spawn {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            let Some(q) = app.try_state::<SyncWriteQueue>() else { return };
+            {
+                // Check-and-clear (or check-and-go-inactive) as ONE critical section -
+                // a deposit between "queue looked empty" and "mark inactive" would
+                // otherwise sit unprocessed until some later unrelated save.
+                let mut s = q.0.lock().unwrap_or_else(|e| e.into_inner());
+                if !s.pending {
+                    s.active = false;
+                    return;
+                }
+                s.pending = false;
+            }
+            let Some(state) = app.try_state::<Db>() else { continue };
+            let job = {
+                let store = lock(&state);
+                if !sync_enabled(&store.settings) {
+                    None // disabled since this was queued - nothing to write
+                } else {
+                    Some((store.prompts.clone(), store.settings.clone()))
+                }
+            };
+            if let Some((prompts, settings)) = job {
+                let app2 = app.clone();
+                let _ = tauri::async_runtime::spawn_blocking(move || {
+                    sync_write_all_impl(&app2, &prompts, &settings);
+                })
+                .await;
+            }
+        }
+    });
 }
 
 // A prompt that left the library (deleted, trashed, or became media-carrying) takes
@@ -12086,15 +12171,32 @@ fn sync_blank_prompt(id: String) -> Prompt {
 
 // The inbound half: files -> DB. Runs on a timer (see start_sync_poll) rather than
 // a filesystem watcher, see the module note above for why.
+//
+// 9: used to hold the store mutex for the entire fs::read_dir + per-file
+// fs::read_to_string scan below - every other command needing that mutex (which
+// is nearly all of them) blocked for as long as reading the user's sync folder
+// took, and a slow or unreachable path (network share, unmounted drive) could
+// have blocked the whole app indefinitely. Now takes a brief lock only to check
+// the two guards and clone the prompt list, does every bit of file I/O against
+// that snapshot with no lock held, then takes a second brief lock to apply
+// whatever it actually found. Deliberately does NOT compute apply_md_to_prompt
+// during the unlocked scan (an earlier version of this fix did, and a review
+// caught that it would silently discard a UI edit made during the scan - the
+// snapshot-derived prompt would win over the real, more current one when
+// written back). Only the cheap "does this file differ from the snapshot" check
+// and the file-level lock happen unlocked; apply_md_to_prompt runs once the
+// store lock is back, against each prompt's CURRENT state.
 fn sync_poll_once(app: &AppHandle) {
     let Some(state) = app.try_state::<Db>() else { return };
-    let mut store = lock(&state);
-    if store.prompts_locked || !sync_enabled(&store.settings) {
-        return;
-    }
-    let dir = sync_dir_path(app, &store.settings);
+    let (dir, snapshot) = {
+        let store = lock(&state);
+        if store.prompts_locked || !sync_enabled(&store.settings) {
+            return;
+        }
+        (sync_dir_path(app, &store.settings), store.prompts.clone())
+    };
     let Ok(entries) = fs::read_dir(&dir) else { return };
-    let mut changed = false;
+    let mut candidates: Vec<(String, String, bool)> = Vec::new(); // (stem, content, is_new)
     for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) != Some("md") {
@@ -12106,35 +12208,57 @@ fn sync_poll_once(app: &AppHandle) {
         if !sync_safe_id(&stem) {
             continue;
         }
-        let Ok(content) = fs::read_to_string(&path) else { continue };
-        if let Some(idx) = store.prompts.iter().position(|p| p.id == stem) {
-            if prompt_to_md(&store.prompts[idx]) == content {
+        // 9 (Codex round 2): acquire the file lock BEFORE reading, not after - the
+        // lock is meant to protect the read from a concurrent writer, which it did
+        // not while the read happened first and the lock was only taken afterward
+        // for the (much cheaper) bookkeeping. This is unchanged from the original
+        // pre-item-9 code, carried forward without noticing until flagged.
+        if !sync_lock_acquire(&path) {
+            continue; // someone else is mid-write; retry next cycle
+        }
+        let content = fs::read_to_string(&path);
+        sync_lock_release(&path);
+        let Ok(content) = content else { continue };
+        if let Some(idx) = snapshot.iter().position(|p| p.id == stem) {
+            if prompt_to_md(&snapshot[idx]) == content {
                 continue; // matches what we would write ourselves — not a real change
             }
-            if !sync_lock_acquire(&path) {
-                continue; // someone else is mid-write; retry next cycle
+            candidates.push((stem, content, false));
+        } else {
+            candidates.push((stem, content, true));
+        }
+    }
+    if candidates.is_empty() {
+        return;
+    }
+    let mut store = lock(&state);
+    if store.prompts_locked || !sync_enabled(&store.settings) {
+        return;
+    }
+    let mut changed = false;
+    for (stem, content, is_new) in candidates {
+        if is_new {
+            if store.prompts.iter().any(|p| p.id == stem) {
+                continue; // added by something else in the meantime
+            }
+            let Some(np) = apply_md_to_prompt(&sync_blank_prompt(stem), &content) else { continue };
+            let folder_cells = active_view_folder_cells(&store.settings);
+            let view = store.settings.active_view_mut();
+            if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
+                let key = grid_key(view.cols, view.rows);
+                view.layouts.entry(key).or_default().insert(np.id.clone(), cell);
+            }
+            store.prompts.push(np);
+            changed = true;
+        } else if let Some(idx) = store.prompts.iter().position(|p| p.id == stem) {
+            if prompt_to_md(&store.prompts[idx]) == content {
+                continue; // a concurrent edit already made this file's content current
             }
             if let Some(updated) = apply_md_to_prompt(&store.prompts[idx], &content) {
                 store.prompts[idx] = updated;
                 changed = true;
             }
-            sync_lock_release(&path);
-        } else {
-            if !sync_lock_acquire(&path) {
-                continue;
-            }
-            if let Some(np) = apply_md_to_prompt(&sync_blank_prompt(stem), &content) {
-                let folder_cells = active_view_folder_cells(&store.settings);
-                let view = store.settings.active_view_mut();
-                if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
-                    let key = grid_key(view.cols, view.rows);
-                    view.layouts.entry(key).or_default().insert(np.id.clone(), cell);
-                }
-                store.prompts.push(np);
-                changed = true;
-            }
-            sync_lock_release(&path);
-        }
+        } // else: deleted while we were reading files — nothing left to update
     }
     if changed {
         save_prompts(app, &store);
