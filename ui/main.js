@@ -1061,6 +1061,9 @@ const OPT_FLAG_LABELS = {
   promptNotes: "flagPromptNotes",               // F17 private notes row in the editor
   promptHotkeyPaste: "flagPromptHotkeyPaste",   // F20 hotkey also pastes into the last app
   dragOut: "flagDragOut",                       // F22 drag a prompt into another app
+  // Swaps the two gestures: off (shipped) = hold the key to drag out, plain drag
+  // moves the tile; on = plain drag leaves the app and the key moves the tile.
+  dragOutInvert: "flagDragOutInvert",
   // Off = one instance app-wide (a second launch focuses the first, as always). On =
   // the OS-level single-instance guard is skipped entirely at startup, so several
   // windows can run side by side. Read once at launch, before settings normally
@@ -1233,7 +1236,7 @@ const EXPERT_VALUES = {
   // F17 how much of a private note the tile tooltip shows (0 = the whole note).
   notesTipLen: { label: "valNotesTipLen", min: 0, max: 2000, step: 20, def: 300, unit: "", gate: "notesInTooltip" },
   // F26 how far the picker's loupe magnifies the pixels around the cursor.
-  loupeZoom: { label: "valLoupeZoom", min: 4, max: 16, step: 1, def: 8, unit: "×", gate: "colorPicker" },
+  loupeZoom: { label: "valLoupeZoom", min: 4, max: 16, step: 1, def: 4, unit: "×", gate: "colorPicker" },
   // 19: how many recent picks the right-click popover (and the overlay strip) keep. 0 = off.
   pickHistoryN: { label: "valPickHistoryN", min: 0, max: 20, step: 1, def: 5, unit: "", gate: "colorPicker" },
   // 32: cap on how many variants one rotating prompt may hold.
@@ -1344,7 +1347,7 @@ const EXPERT_TABS = [
     // highlighter only ever paints inside the preview.
     { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, "lengthCounter", "promptHistory", "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
-    { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "autoPasteEnter", gate: "autoPaste" }, "closeOnCopy", "copyBubble", "copyFlash"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"], dropdowns: ["dragOutModifier"] },
+    { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "closeOnCopy", "copyBubble", "copyFlash"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"], dropdowns: ["dragOutModifier"] },
     // Floating buttons and the two kinds of folder they can form.
     { title: "expGroupFolders", flags: ["floating", { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillMergeRadius", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
     // F23: the quick-copy sections of the tray menu, each with its own entry count.
@@ -1504,7 +1507,7 @@ const EXPERT_TIPS = [
   "rotatingPrompts", "rotateDefaultMode", "rotateMaxEntries", "rotateBadge",
   // Tiles / copying
   "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "autoPasteEnter", "closeOnCopy",
-  "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutModifier",
+  "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
   "tooltipDelay", "tooltipTimeout", "iconTooltips",
   // Appearance
   "hideScrollbars", "gridLines", "pausedIcons",
@@ -1863,6 +1866,7 @@ function dropdownRow(key) {
 // where applicable, a reset-to-default button.
 let currentDataDir = "";
 let defaultScreenshotDir = "";
+let defaultSyncDir = "";
 const EXPERT_PATHS = {
   screenshotDir: {
     label: "valScreenshotDir",
@@ -1907,7 +1911,7 @@ const EXPERT_PATHS = {
   syncDir: {
     label: "valSyncDir",
     gate: "promptSync",
-    get: () => settings.ui_texts?.syncDir || "",
+    get: () => settings.ui_texts?.syncDir || defaultSyncDir,
     change: async () => {
       const dir = await invoke("pick_folder").catch(() => null);
       if (!dir) return;
@@ -3373,6 +3377,9 @@ function wireTooltips() {
       }
       lenEl.textContent = "";
       notesEl.textContent = "";
+      // The rotate line is shared with the rich tile tip — leaving it filled here
+      // stuck the last hovered tile's "next entry" text under every plain tooltip.
+      rotateEl.textContent = "";
       hintEl.textContent = "";
     }
     placeAt(tipPtrX, tipPtrY);
@@ -3946,7 +3953,9 @@ function dragOutText(p) {
 // Called on pointerdown. Returns true when this press should become a drag-out;
 // the caller then leaves the plain drag alone.
 function armDragOut(el, e, getPrompt) {
-  const on = optFlag("dragOut") && e[dragOutMod()] === true;
+  // XOR: with dragOutInvert on, the plain drag is the one that leaves the app and
+  // the modifier is what still moves the tile inside the grid.
+  const on = optFlag("dragOut") && (e[dragOutMod()] === true) !== flag("dragOutInvert");
   el.draggable = on;
   if (on) {
     const p = getPrompt();
@@ -6129,8 +6138,12 @@ function scheduleMdPreview() {
 }
 
 // Bring toolbar, textarea and preview in line with the flags and the picked layout.
-function syncMdUi(textVisible) {
-  const on = textVisible && flag("mdPreview");
+// `rotating` (33): the variants list IS the editing surface then, so neither the
+// textarea nor the rendered pane may stay in flow. Both used to survive it — the
+// clear-X wrapper as an empty 120px box (the gap above the colour row) and, with
+// F14 on, the preview still rendering entry 1, which read as a stray field.
+function syncMdUi(textVisible, rotating = false) {
+  const on = textVisible && !rotating && flag("mdPreview");
   if (!on) mdEditing = false;
   // ONE field: the rendered pane stands in for the textarea and hands it back on a
   // click. Two panes side by side was the second thing on screen that did the same
@@ -6141,8 +6154,9 @@ function syncMdUi(textVisible) {
   // 19px every time it handed over.
   const field = modal.text.closest(".clear-wrap-ta") || modal.text;
   if (textVisible) {
-    field.classList.toggle("hidden", on && !mdEditing);
-    modal.text.classList.toggle("hidden", on && !mdEditing);
+    const hide = rotating || (on && !mdEditing);
+    field.classList.toggle("hidden", hide);
+    modal.text.classList.toggle("hidden", hide);
   }
   // Fill the pane whenever the feature is on, visible or not: the first paint must
   // never depend on the pane already being on screen, or switching to it shows a
@@ -7122,7 +7136,7 @@ function syncModalImageUi(mode) {
   modal.textBar.classList.toggle("hidden", !varsUi);
   modal.varsHint.classList.toggle("hidden", !varsUi);
   if (varsUi) renderVarHelper(); // F12/F13 chips + insert row follow their flags
-  syncMdUi(textVisible);         // F14 preview toolbar + rendered pane
+  syncMdUi(textVisible, rotating); // F14 preview toolbar + rendered pane
   updateLenCounter();
   // F12/F13: the variable helper is a reference, so it reopens collapsed too.
   modal.varsBody.classList.add("hidden");
@@ -9842,7 +9856,17 @@ function bind() {
       modalState.rotateEntries = [];
     }
     renderRotateUi();
-    modal.text.classList.toggle("hidden", modal.rotateSwitch.checked);
+    // The switch row only exists for a text prompt, so textVisible is true here.
+    // Flipping it has to move the same three surfaces syncModalImageUi does — only
+    // hiding the textarea left the clear-X wrapper (an empty 120px box) and, with
+    // F14 on, the rendered pane still showing entry 1 sitting above the colours.
+    const rotating = rotationActive();
+    modal.text.classList.toggle("hidden", rotating);
+    const varsUi = !rotating && flag("promptVars");
+    modal.textBar.classList.toggle("hidden", !varsUi);
+    modal.varsHint.classList.toggle("hidden", !varsUi);
+    if (varsUi) renderVarHelper();
+    syncMdUi(true, rotating);
     if (!modal.rotateSwitch.checked) modal.text.focus();
     scheduleLenCounter();
   });
@@ -11180,6 +11204,7 @@ async function init() {
     }).catch(() => {});
     invoke("current_data_dir").then((d) => { currentDataDir = d || ""; }).catch(() => {});
     invoke("default_screenshot_dir").then((d) => { defaultScreenshotDir = d || ""; }).catch(() => {});
+    invoke("default_sync_dir").then((d) => { defaultSyncDir = d || ""; }).catch(() => {});
     applyTileStyle();
     autoGrow(inputEl);
     inputEl.focus();

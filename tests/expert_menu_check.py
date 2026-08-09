@@ -87,6 +87,7 @@ DEPENDENCIES = {
     "dblClickMs": "autoPaste",
     "promptHotkeyPaste": "promptHotkeys",
     "dragOutModifier": "dragOut",
+    "dragOutInvert": "dragOut",
     "tooltipWidth": "tilePreview",
     "tooltipDelayMs": "tooltipDelay",
     "tooltipTimeoutMs": "tooltipTimeout",

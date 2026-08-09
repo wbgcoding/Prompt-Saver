@@ -1721,9 +1721,17 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
    mechanic (unscoped rules, see above) — only the body typography is new here.
    Section chips became a fixed tab bar (#help-tabs-bar, .expert-tabs reused —
    21), so only one section renders at a time and needs no jump nav or divider. */
-#help .modal { width: min(760px, 94vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden; }
+/* padding-right: 0 on the dialog, restored on every child EXCEPT the scroll body —
+   that puts the topic list's scrollbar flush against the window edge instead of
+   floating 20px inside it, while the text column still ends where the head, the
+   search field and the tab bar end. */
+#help .modal { width: min(760px, 94vw); height: var(--full-modal-h); max-height: var(--full-modal-h); overflow: hidden; padding-right: 0; }
+/* By child rather than by id: wireClear() moves the search field into a .clear-wrap
+   span at runtime, so the direct child there is not #help-search itself. */
+#help .modal > *:not(.help-body) { margin-right: 20px; }
 #help .modal > #help-tabs-bar { flex: 0 0 auto; }
 .help-body { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+#help .help-body { padding-right: 8px; }
 .help-group-body { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; }
 .help-overview { margin: 0; font-size: 13px; line-height: 1.5; color: var(--fg); }
 /* 22-A: numbered "how to" steps — same weight as the overview since these are the
@@ -1998,7 +2006,11 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
    without the extra class it would win on equal specificity and stack the row. */
 .field.field-inline { flex-direction: row; align-items: center; justify-content: space-between; gap: 16px; }
 .field.field-inline > span { color: var(--fg); font-size: 13px; }
-.field.field-inline .hotkey-row { flex: 0 1 320px; }
+/* The global-hotkey row carries the field plus TWO buttons, so a 320px cap left the
+   recorded combination clipped. Take the width the label does not need, shrink
+   before overflowing, and keep a readable floor under the field itself. */
+.field.field-inline .hotkey-row { flex: 1 1 460px; min-width: 0; }
+.field.field-inline .hotkey-row .clear-wrap { min-width: 150px; }
 /* Delete-all + expert-menu buttons share one row (delete left, expert right) — same
    `.field.` specificity guard so the column default can't stack them. */
 .field.settings-btn-row { flex-direction: row; gap: 10px; }
@@ -2524,6 +2536,11 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 /* The password row spans both columns: label left, field + Save + Remove right. */
 .backup-cols > .backup-pw-row { grid-column: 1 / -1; }
 .backup-pw-controls { display: flex; flex-wrap: wrap; row-gap: 8px; align-items: center; gap: 8px; min-width: 0; }
+/* The consequence-of-forgetting warning is a grid child like everything else here,
+   so it used to be squeezed into one column and wrapped over three lines. Full
+   width plus a slightly smaller size fits it on one line in most languages; it
+   still wraps by itself where a translation is genuinely too long. */
+.backup-cols > .backup-pw-hint { grid-column: 1 / -1; margin: 0; font-size: 11.5px; }
 .backup-pw-wrap { position: relative; flex: 1 1 120px; min-width: 0; max-width: 240px; display: flex; align-items: center; }
 .backup-pw-wrap .modal-input { padding-right: 36px; }
 .backup-pw-eye { position: absolute; right: 4px; width: 28px; height: 28px; }
@@ -2765,7 +2782,9 @@ select,
    theirs on the option text ("7d"), so the number alone would look unit-less. */
 .expert-num-unit { flex: 0 0 auto; color: var(--muted); font-size: 13px; }
 .path-out { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.75; font-size: 12px; }
-.path-btns { display: flex; gap: 8px; margin-top: 4px; }
+/* align-items: the reset icon has a fixed 22px height, so without this it hangs at
+   the top edge of the taller Change button instead of sitting level with it. */
+.path-btns { display: flex; gap: 8px; margin-top: 4px; align-items: center; }
 .path-btns .ghost-btn { flex: 1; }
 .expert-num { width: 90px; margin-top: 6px; }
 

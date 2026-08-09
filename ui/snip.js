@@ -47,7 +47,7 @@ const ZOOM_MIN = 4, ZOOM_MAX = 16; // same range as the loupeZoom expert slider
 const TILE = 192;       // patch edge in physical px (backend caps this at 512)
 const TILE_MARGIN = 48; // refetch once the cursor comes this close to the patch edge
 let pickMode = false;
-let pickZoom = 8;      // magnification (expert: loupeZoom)
+let pickZoom = 4;      // magnification (expert: loupeZoom)
 let pickFmt = "hex";   // output notation (expert: pickerFormat)
 let pickBusy = false;
 let tile = null;       // { x, y, w, h, px } in stitched-image physical pixels
@@ -122,7 +122,7 @@ async function beginSession() {
   // through a cached patch around the cursor (see `tile`).
   pickMode = !!b.pick;
   if (pickMode) {
-    pickZoom = clampZoom(Number(b.pick_zoom) || 8);
+    pickZoom = clampZoom(Number(b.pick_zoom) || 4);
     readZoom.textContent = `${pickZoom}×`;
     pickFmt = b.pick_format || "hex";
     pickHistory = Array.isArray(b.pick_history) ? b.pick_history : [];

@@ -8433,7 +8433,7 @@ fn color_format(raw: &str) -> &'static str {
 
 fn pick_cfg(settings: &Settings) -> PickCfg {
     PickCfg {
-        zoom: settings.ui_values.get("loupeZoom").copied().unwrap_or(8.0).clamp(4.0, 16.0) as u32,
+        zoom: settings.ui_values.get("loupeZoom").copied().unwrap_or(4.0).clamp(4.0, 16.0) as u32,
         format: color_format(settings.ui_texts.get("pickerFormat").map(String::as_str).unwrap_or("hex")).to_string(),
     }
 }
@@ -9125,6 +9125,13 @@ async fn delete_screenshot_file(state: State<'_, Db>, path: String) -> Result<bo
 #[tauri::command]
 fn default_screenshot_dir() -> String {
     screenshot_dir("").to_string_lossy().to_string()
+}
+
+// Same idea for the Markdown-sync folder: without this the expert row could only
+// say "default", which tells the user nothing about where their files went.
+#[tauri::command]
+fn default_sync_dir(app: AppHandle) -> String {
+    data_dir(&app).join("Prompts").to_string_lossy().to_string()
 }
 
 // Native folder picker (used by the expert screenshot-dir + data-dir options).
@@ -9865,11 +9872,21 @@ fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
 // Set an expert string option (e.g. the copy-feedback font key).
 #[tauri::command]
 fn set_ui_text(app: AppHandle, state: State<Db>, key: String, value: String) {
+    let is_sync_dir = key == "syncDir";
     {
         let mut store = lock(&state);
         store.settings.ui_changed.insert(key.clone(), now_secs()); // 66
         store.settings.ui_texts.insert(key, value);
         save_settings(&app, &store.settings);
+        // Pointing the sync at a different folder used to change nothing until the
+        // next prompt save happened to flush it — the folder the user just picked
+        // stayed empty and the feature looked broken. Same synchronous, one-off
+        // treatment activation gets: when this returns, the files are there. Files
+        // in the PREVIOUS folder are deliberately left alone; that folder is the
+        // user's own, and this app never deletes outside the folder it syncs to.
+        if is_sync_dir && sync_enabled(&store.settings) {
+            sync_write_all_impl(&app, &store.prompts, &store.settings);
+        }
     }
     notify_float_settings(&app);
 }
@@ -11826,6 +11843,7 @@ pub fn run() {
             save_screenshot_as,
             delete_screenshot_file,
             default_screenshot_dir,
+            default_sync_dir,
             pick_folder,
             current_data_dir,
             set_data_dir,
@@ -11876,11 +11894,18 @@ fn sync_dir_path(app: &AppHandle, settings: &Settings) -> PathBuf {
     }
 }
 
-// Binary-carrying prompts stay DB-only. A prompt whose id is not a plain, filename-
-// safe token stays out too: the id becomes the FILE NAME here, and ids can arrive
-// from an imported backup, i.e. from outside this app.
+// A media prompt syncs too, but only ever as a REFERENCE: the `file`/`icon` headers
+// carry the paths the user picked, so the button keeps its name, colour, tags, notes
+// and placement in step across machines while whoever set it up makes sure the paths
+// resolve there. Embedded binary data (a pasted screenshot lives base64-encoded in
+// `Prompt.image`) has no path to write and is never put in the file — it stays
+// DB-only and survives untouched, since apply_md_to_prompt only ever overwrites the
+// fields the header actually carries.
+// A prompt whose id is not a plain, filename-safe token stays out entirely: the id
+// becomes the FILE NAME here, and ids can arrive from an imported backup, i.e. from
+// outside this app.
 fn sync_eligible(p: &Prompt) -> bool {
-    p.image.is_empty() && p.file_path.is_empty() && p.icon_path.is_empty() && sync_safe_id(&p.id)
+    sync_safe_id(&p.id)
 }
 
 // Refused rather than escaped: the id is also how the inbound half finds the prompt
@@ -11973,7 +11998,7 @@ fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
     // and the six placement fields below (2) are additive, which md_is_ours()
     // already tolerates.
     let mut out = format!(
-        "---\nname: {}\ncolor: {}\ntags: {}\nnotes: {}\nvariants: {}\nview: {}\ngrid: {}\ncell: {}\ntile_folder: {}\ntile_folder_color: {}\nfloat_folder: {}\n---\n",
+        "---\nname: {}\ncolor: {}\ntags: {}\nnotes: {}\nvariants: {}\nview: {}\ngrid: {}\ncell: {}\ntile_folder: {}\ntile_folder_color: {}\nfloat_folder: {}\nfile: {}\nicon: {}\npdf_page: {}\n---\n",
         md_escape_line(&p.name),
         md_escape_line(&p.color),
         tags,
@@ -11985,6 +12010,9 @@ fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
         md_escape_line(&placement.tile_folder),
         placement.tile_folder_color,
         md_escape_line(&placement.float_folder),
+        md_escape_line(&p.file_path),
+        md_escape_line(&p.icon_path),
+        p.pdf_page,
     );
     let text = join_variants(&p.text, &p.variants);
     out.push_str(&text);
@@ -12052,6 +12080,23 @@ fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
     }
     if let Some(v) = fields.get("notes") {
         p.notes = v.clone();
+    }
+    // Media by reference. Absent field = an older or hand-written file that does not
+    // describe media at all — leave whatever the prompt already has. Present but
+    // empty = "this button carries no file", which really does clear it. `image`
+    // (embedded binary) is deliberately not in this list; nothing here can express it.
+    if let Some(v) = fields.get("file") {
+        p.file_path = v.clone();
+    }
+    if let Some(v) = fields.get("icon") {
+        p.icon_path = v.clone();
+    }
+    if let Some(v) = fields.get("pdf_page") {
+        // A garbled page number is ignored rather than reset to 0: page 0 is a valid
+        // value, so guessing it would silently move the reader to the front page.
+        if let Ok(n) = v.trim().parse::<u32>() {
+            p.pdf_page = n;
+        }
     }
     // The writer closes the body with a newline; keeping it out of the stored text is
     // what stops every round trip through the folder from adding another blank line.
@@ -12558,8 +12603,8 @@ fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
     });
 }
 
-// A prompt that left the library (deleted, trashed, or became media-carrying) takes
-// its file with it — otherwise a stale file would come back as a duplicate "new"
+// A prompt that left the library (deleted, trashed, or given an id this feature
+// refuses) takes its file with it — otherwise a stale file would come back as a "new"
 // prompt on the next inbound poll. ONLY files this feature could have written are
 // swept: the sync folder is a directory the USER picks, so it can hold their own
 // documents. A document without our `---` frontmatter is never imported by
@@ -13363,17 +13408,59 @@ mod tests {
     }
 
     #[test]
-    fn sync_eligible_excludes_every_kind_of_attachment() {
+    fn sync_eligible_takes_media_prompts_but_still_refuses_an_unsafe_id() {
         let mut p = sync_test_prompt();
         assert!(sync_eligible(&p));
+        // Attachments no longer disqualify a prompt — they sync as path references.
         p.image = "data:image/png;base64,x".into();
-        assert!(!sync_eligible(&p));
-        let mut p2 = sync_test_prompt();
-        p2.file_path = "C:\\x.pdf".into();
-        assert!(!sync_eligible(&p2));
-        let mut p3 = sync_test_prompt();
-        p3.icon_path = "C:\\x.gif".into();
-        assert!(!sync_eligible(&p3));
+        p.file_path = "C:\\x.pdf".into();
+        p.icon_path = "C:\\x.gif".into();
+        assert!(sync_eligible(&p));
+        // The id is still the file name, so it still has to be a safe token.
+        let mut bad = sync_test_prompt();
+        bad.id = "../evil".into();
+        assert!(!sync_eligible(&bad));
+    }
+
+    #[test]
+    fn media_paths_round_trip_through_the_markdown_file() {
+        let mut p = sync_test_prompt();
+        p.file_path = "C:\\docs\\manual.pdf".into();
+        p.icon_path = "C:\\icons\\book.png".into();
+        p.pdf_page = 7;
+        // The embedded copy has no path to write, so it must not appear in the file
+        // at all — and must survive the round trip untouched.
+        p.image = "data:image/png;base64,AAA".into();
+        let md = prompt_to_md(&p, &SyncPlacement::default());
+        assert!(md.contains("\nfile: C:\\docs\\manual.pdf\n"));
+        assert!(md.contains("\nicon: C:\\icons\\book.png\n"));
+        assert!(md.contains("\npdf_page: 7\n"));
+        assert!(!md.contains("base64"));
+        let back = apply_md_to_prompt(&p, &md).unwrap();
+        assert_eq!(back.file_path, p.file_path);
+        assert_eq!(back.icon_path, p.icon_path);
+        assert_eq!(back.pdf_page, 7);
+        assert_eq!(back.image, p.image);
+    }
+
+    #[test]
+    fn a_media_field_is_only_cleared_when_the_file_actually_says_so() {
+        let mut p = sync_test_prompt();
+        p.file_path = "C:\\docs\\manual.pdf".into();
+        p.pdf_page = 3;
+        // An older/hand-written file without the media headers leaves them alone…
+        let legacy = "---\nname: x\ncolor: \ntags: \nnotes: \n---\nbody\n";
+        let kept = apply_md_to_prompt(&p, legacy).unwrap();
+        assert_eq!(kept.file_path, "C:\\docs\\manual.pdf");
+        assert_eq!(kept.pdf_page, 3);
+        // …while an explicitly empty one really does detach the file.
+        let cleared = "---\nname: x\ncolor: \ntags: \nnotes: \nfile: \nicon: \n---\nbody\n";
+        let out = apply_md_to_prompt(&p, cleared).unwrap();
+        assert_eq!(out.file_path, "");
+        assert_eq!(out.icon_path, "");
+        // A garbled page number is ignored, never reset to the front page.
+        let garbled = "---\nname: x\ncolor: \ntags: \nnotes: \npdf_page: seven\n---\nbody\n";
+        assert_eq!(apply_md_to_prompt(&p, garbled).unwrap().pdf_page, 3);
     }
 
     #[test]
@@ -15991,7 +16078,7 @@ mod tests {
     fn picker_settings_are_clamped_to_their_range() {
         let mut s = Settings::default();
         let d = pick_cfg(&s);
-        assert_eq!((d.zoom, d.format.as_str()), (8, "hex"));
+        assert_eq!((d.zoom, d.format.as_str()), (4, "hex"));
         s.ui_values.insert("loupeZoom".into(), 99.0);
         assert_eq!(pick_cfg(&s).zoom, 16);
         s.ui_values.insert("loupeZoom".into(), 0.0);

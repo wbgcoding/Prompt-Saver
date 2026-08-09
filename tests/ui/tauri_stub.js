@@ -243,6 +243,7 @@ const RESULTS = {
   app_version: () => "0.0.0",
   current_data_dir: () => "C:\\Data",
   default_screenshot_dir: () => "C:\\Pictures",
+  default_sync_dir: () => "C:\\Data\\Prompts",
   // One snapshot carries its prompt count and names (61), one is from an older
   // build and has neither — the list has to show both without a gap in the row.
   open_backups_folder: () => null,
