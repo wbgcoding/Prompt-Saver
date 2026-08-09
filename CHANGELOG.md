@@ -54,7 +54,9 @@ until you turn it on.
   it straight away. Conflicts with the app hotkey or another prompt are refused
   in the editor.
 - **Drag-out** — hold Ctrl and drag a tile, a library row or a floating button
-  into any other app to drop its text there.
+  into any other app to drop its text there. The key is switchable, and a second
+  switch swaps the two gestures so a plain drag leaves the app and the key moves
+  the tile instead.
 - **Tray quick menu** — the tray icon's menu can list your recently used and
   your favorite prompts; clicking one copies it without opening the window.
 - **Floating-button folders** — drag one floating button onto another and they
@@ -96,9 +98,28 @@ until you turn it on.
   list with a mode switch and a "from the start" reset. Entries survive
   export/import, backups, Markdown-sync and version history, and the library
   search finds a match inside any entry, not just the first.
+- **Markdown folder sync** (expert menu, off by default, beta) — mirrors every
+  prompt as its own readable `.md` file in a folder you pick: a short header
+  with name, color, tags and notes, then the text. Edit a file by hand or with
+  another tool and the change comes back a few seconds later. The header also
+  carries where the prompt sits — view, grid cell, grid folder and pill folder —
+  so a second machine reading the same folder reproduces the arrangement,
+  creating a view or folder it does not know yet by name. An attached file, icon
+  or PDF page travels as a path reference, never as data; a screenshot pasted
+  straight into a prompt has no path and stays in the database. Switching the
+  feature on takes a backup first, and the folder is written the moment you pick
+  it. **The files are plain text** — the database is not — so keep anything
+  sensitive out of a folder other people or other services can read.
 
 ### Improved
 
+- The color picker's magnifier now starts at 4× instead of 8×, so you see more of
+  the area around the pixel you are aiming at; the wheel still changes it and the
+  value you stop on is remembered.
+- The global-hotkey field in the settings is wider, so a long combination is no
+  longer clipped by the two buttons beside it.
+- The help window's scrollbar sits at the window edge instead of floating inside
+  it, and the backup password warning fits on one line instead of three.
 - Deleting several prompts at once confirms on the button itself: the first press
   turns it red and names the count, the second deletes and reports what moved to
   the trash. No dialog jumps under the pointer any more.
@@ -239,6 +260,16 @@ until you turn it on.
 
 ### Fixed
 
+- **Every expert-menu tooltip carried a line from the last tile you hovered.**
+  The tile tooltip's "next entry" line was left in place when the box switched to
+  a plain setting hint, so it stayed glued under unrelated tooltips.
+- **The editor left an empty band above the colors while rotation was on**, and
+  with the Markdown preview switched on the rendered pane kept showing entry 1
+  there, which read as a stray field of its own.
+- **Picking a sync folder appeared to do nothing.** The folder stayed empty until
+  the next unrelated save happened to flush it; the files are now written the
+  moment you pick it. The row also shows the real default path instead of the
+  word "default", and its reset arrow sits level with the Change button.
 - **The trash opened invisibly.** Opening it from the expert menu drew it behind
   the still-open settings panel, so the dialog appeared not to open at all.
 - **Prompt data could be written to disk unencrypted without any sign of it.**
