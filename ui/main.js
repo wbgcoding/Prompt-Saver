@@ -9897,10 +9897,7 @@ function bind() {
   });
   // 19: right-click reaches the picker's history without opening the overlay —
   // it lives in the backend (survives a restart), this popover just displays it.
-  $("picker-btn").addEventListener("contextmenu", async (e) => {
-    e.preventDefault();
-    let hex = [];
-    try { hex = (await invoke("pick_history")) || []; } catch { /* history stays empty */ }
+  function renderPickHistoryPop(hex) {
     pickHistoryPop.innerHTML = "";
     if (!hex.length) {
       const empty = document.createElement("div");
@@ -9929,9 +9926,15 @@ function bind() {
         pickHistoryPop.appendChild(row);
       }
     }
+  }
+  $("picker-btn").addEventListener("contextmenu", async (e) => {
+    e.preventDefault();
+    let hex = [];
+    try { hex = (await invoke("pick_history")) || []; } catch { /* history stays empty */ }
+    renderPickHistoryPop(hex);
     placePopover(pickHistoryPop, $("picker-btn").getBoundingClientRect());
   });
-  listen("color-picked", (e) => {
+  listen("color-picked", async (e) => {
     const value = e.payload?.text || "";
     if (!value) return;
     // 81: the picked notation is already on the clipboard (unchanged behaviour);
@@ -9947,6 +9950,11 @@ function bind() {
         onClick: () => invoke("copy_text", { text: v }).catch((err) => toast(String(err))),
       }));
     toast(t("colorCopied"), null, e.payload?.hex || "", chips);
+    // Live-update the recent-colours popover if the user left it open across a
+    // pick, instead of it staying frozen at whatever it showed when it opened.
+    if (!pickHistoryPop.classList.contains("hidden")) {
+      try { renderPickHistoryPop((await invoke("pick_history")) || []); } catch { /* leave it as-is on a read hiccup */ }
+    }
   });
 
   // Chain mode: combine several text buttons into one clipboard copy. Single

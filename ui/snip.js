@@ -535,6 +535,13 @@ async function pickHere() {
     // The backend records the picked colour in its own history (it is the side that
     // knows what really reached the clipboard); the next session reads it back.
     await invoke("pick_color", { x: cur.x, y: cur.y });
+    // Refresh the strip too, for a session the backend keeps alive for another pick
+    // rather than tearing down right away (the reused-window path) - without this
+    // the strip stayed frozen at whatever it showed when THIS session began.
+    try {
+      pickHistory = (await invoke("pick_history")) || [];
+      renderHistory();
+    } catch { /* keep the last known strip rather than clearing it on a read hiccup */ }
   } catch {
     pickBusy = false;
     showError();
