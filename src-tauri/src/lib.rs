@@ -12397,26 +12397,36 @@ fn sync_normalize_float_folders(folders: &mut Vec<FloatFolder>, prompt_ids: &[St
     folders.truncate(MAX_FLOAT_FOLDERS);
 }
 
-const SYNC_AGENTS_MD: &str = "\
-# Prompt Saver sync folder
+// Written into the user's own folder, so it obeys the fork rule like every other
+// visible text: the product name and the word for what it stores both come from
+// the brand, never from a literal here.
+fn sync_agents_md() -> String {
+    let app = brand::DISPLAY_NAME;
+    let item = brand::ITEM;
+    format!(
+        "# {app} sync folder
 
-Each `<id>.md` file here mirrors one prompt: a short header (`name`, `color`, `tags`,
-`notes`) between two `---` lines, then the prompt's text below.
+Each `<id>.md` file here mirrors one {item}: a short header (`name`, `color`, `tags`,
+`notes`) between two `---` lines, then the {item}'s text below. A {item} that carries a
+file, an icon or a PDF page lists those as paths in the header — the files themselves
+stay where they are.
 
-Edit the text (or a header field) and save — Prompt Saver checks this folder every
+Edit the text (or a header field) and save — {app} checks this folder every
 few seconds and picks up the change. Do not rename a file; the filename is the
-prompt's permanent id, and renaming it orphans the file instead of renaming the
-prompt.
+{item}'s permanent id, and renaming it orphans the file instead of renaming the
+{item}.
 
 While a file is being written, a matching `<file>.md.lock` may briefly appear next
 to it — leave it alone, it clears itself within seconds. If one lingers (e.g. after
 a crash), it is safe to delete by hand.
-";
+"
+    )
+}
 
 fn sync_write_agents_md(dir: &Path) {
     let path = dir.join("AGENTS.md");
     if !path.exists() {
-        let _ = fs::write(&path, SYNC_AGENTS_MD);
+        let _ = fs::write(&path, sync_agents_md());
     }
 }
 
@@ -12905,7 +12915,7 @@ mod tests {
         // Someone else's frontmatter is still not ours.
         fs::write(&obsidian, "---\ntitle: Books\ntags: reading\n---\n\n- Dune\n").unwrap();
         fs::write(&kept, prompt_to_md(&sync_test_prompt(), &SyncPlacement::default())).unwrap();
-        fs::write(dir.join("AGENTS.md"), SYNC_AGENTS_MD).unwrap();
+        fs::write(dir.join("AGENTS.md"), sync_agents_md()).unwrap();
 
         let mut wanted = std::collections::HashSet::new();
         wanted.insert("p_live.md".to_string());
@@ -13497,7 +13507,10 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         sync_write_agents_md(&dir);
         let first = fs::read_to_string(dir.join("AGENTS.md")).unwrap();
-        assert!(first.contains("Prompt Saver"));
+        // Whatever this build is called — a literal here would have to be rewritten
+        // for every fork, which is exactly what the brand layer exists to avoid.
+        assert!(first.contains(brand::DISPLAY_NAME));
+        assert!(first.contains(brand::ITEM));
         fs::write(dir.join("AGENTS.md"), "user's own edit, must survive").unwrap();
         sync_write_agents_md(&dir);
         assert_eq!(fs::read_to_string(dir.join("AGENTS.md")).unwrap(), "user's own edit, must survive");
@@ -13880,8 +13893,8 @@ mod tests {
     #[test]
     fn restore_selective_data_scope_leaves_settings_untouched() {
         let dir = std::env::temp_dir();
-        let target = dir.join("prompt-saver-test-restore-data-target.db");
-        let staged = dir.join("prompt-saver-test-restore-data-staged.db");
+        let target = dir.join(format!("{}-test-restore-data-target.db", brand::SLUG));
+        let staged = dir.join(format!("{}-test-restore-data-staged.db", brand::SLUG));
         {
             let conn = full_schema_db(&target, "target");
             conn.execute_batch(
@@ -13914,8 +13927,8 @@ mod tests {
     #[test]
     fn restore_selective_settings_scope_leaves_data_untouched() {
         let dir = std::env::temp_dir();
-        let target = dir.join("prompt-saver-test-restore-settings-target.db");
-        let staged = dir.join("prompt-saver-test-restore-settings-staged.db");
+        let target = dir.join(format!("{}-test-restore-settings-target.db", brand::SLUG));
+        let staged = dir.join(format!("{}-test-restore-settings-staged.db", brand::SLUG));
         {
             let conn = full_schema_db(&target, "target");
             conn.execute_batch(
@@ -13947,7 +13960,7 @@ mod tests {
 
     #[test]
     fn purge_clip_inbox_from_backups_scrubs_every_snapshot() {
-        let dir = std::env::temp_dir().join("prompt-saver-test-purge-backups");
+        let dir = std::env::temp_dir().join(format!("{}-test-purge-backups", brand::SLUG));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
@@ -14007,8 +14020,8 @@ mod tests {
     #[test]
     fn restore_selective_skips_a_table_missing_from_an_older_backup() {
         let dir = std::env::temp_dir();
-        let target = dir.join("prompt-saver-test-restore-oldbackup-target.db");
-        let staged = dir.join("prompt-saver-test-restore-oldbackup-staged.db");
+        let target = dir.join(format!("{}-test-restore-oldbackup-target.db", brand::SLUG));
+        let staged = dir.join(format!("{}-test-restore-oldbackup-staged.db", brand::SLUG));
         {
             let conn = full_schema_db(&target, "target");
             conn.execute_batch(
@@ -14048,8 +14061,8 @@ mod tests {
         // "trash" is made incompatible (extra column) so its INSERT fails — proving
         // the whole thing runs in ONE transaction, not one commit per table.
         let dir = std::env::temp_dir();
-        let target = dir.join("prompt-saver-test-restore-rollback-target.db");
-        let staged = dir.join("prompt-saver-test-restore-rollback-staged.db");
+        let target = dir.join(format!("{}-test-restore-rollback-target.db", brand::SLUG));
+        let staged = dir.join(format!("{}-test-restore-rollback-staged.db", brand::SLUG));
         {
             let conn = full_schema_db(&target, "target");
             conn.execute_batch("INSERT INTO prompts VALUES('live', 0, '{}');").unwrap();

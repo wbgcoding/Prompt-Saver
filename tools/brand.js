@@ -380,12 +380,17 @@ function stampBuildFiles(root, b) {
 function stampPinTest(root, b) {
   const libPath = path.join(root, "src-tauri", "src", "lib.rs");
   const src = read(libPath);
-  const start = "        // BRAND-PIN-START\n";
-  const end = "        // BRAND-PIN-END\n";
+  // lib.rs is checked out with CRLF on Windows, so the markers cannot be matched
+  // against a hardcoded "\n" — find the real terminator and write the generated
+  // block with the SAME one, or the file ends up with mixed endings.
+  const eol = src.includes("\r\n") ? "\r\n" : "\n";
+  const start = `        // BRAND-PIN-START${eol}`;
+  const end = `        // BRAND-PIN-END${eol}`;
   const i = src.indexOf(start);
   const j = src.indexOf(end);
   if (i < 0 || j < 0 || j < i) fail("lib.rs: BRAND-PIN markers not found");
-  const body =
+  const nl = (s) => s.split("\n").join(eol);
+  const body = nl(
     `        assert_eq!(brand::DISPLAY_NAME, ${rs(b.displayName)});\n` +
     `        assert_eq!(brand::SLUG, ${rs(b.slug)});\n` +
     `        assert_eq!(brand::IDENTIFIER, ${rs(b.identifier)});\n` +
@@ -404,7 +409,7 @@ function stampPinTest(root, b) {
     `        assert!(conf.contains(${rs(`"productName": ${rs(b.displayName)}`)}));\n` +
     `        assert!(conf.contains(${rs(`"identifier": ${rs(b.identifier)}`)}));\n` +
     `        let js = include_str!("../../ui/brand.js");\n` +
-    `        assert!(js.contains(${rs(`APP_NAME = ${rs(b.displayName)};`)}));\n`;
+    `        assert!(js.contains(${rs(`APP_NAME = ${rs(b.displayName)};`)}));\n`);
   write(libPath, src.slice(0, i + start.length) + body + src.slice(j));
 }
 
