@@ -5776,14 +5776,27 @@ fn uf_find(parent: &mut [usize], mut x: usize) -> usize {
 async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<DupGroup>, String> {
     use rayon::prelude::*;
     use std::collections::{HashMap as Map, HashSet as Set};
-    let store = lock(&state);
+    // 8: clone the (few) fields this scan needs and drop the lock before the O(n^2)
+    // comparison below - this used to hold the store mutex for the whole scan,
+    // blocking every other command (add/update/delete, all of which also need this
+    // same mutex) for however long comparing a few hundred prompts took. The result
+    // is a snapshot - a prompt changed concurrently mid-scan might be very slightly
+    // stale in this one report, an acceptable trade for a read-only finder.
+    let (prompts, dup_ignored, views, usage) = {
+        let store = lock(&state);
+        (
+            store.prompts.clone(),
+            store.settings.dup_ignored.clone(),
+            store.settings.views.clone(),
+            store.settings.usage.clone(),
+        )
+    };
     let thr = (threshold / 100.0).clamp(0.0, 1.0);
     // 32: a rotating prompt is compared on entry 1 (p.text) only, deliberately —
     // two prompts that happen to share their FIRST entry but differ in the rest are
     // not "near duplicates" of each other, and comparing every entry pair would
     // turn this already-O(n^2) scan into O(n^2 * entries).
-    let items: Vec<(&Prompt, String)> = store
-        .prompts
+    let items: Vec<(&Prompt, String)> = prompts
         .iter()
         .map(|p| {
             let base = if !p.text.is_empty() { p.text.as_str() } else { p.name.as_str() };
@@ -5796,9 +5809,7 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
         return Ok(Vec::new());
     }
     let grams: Vec<Set<[char; 3]>> = items.par_iter().map(|(_, s)| dup_trigrams(s)).collect();
-    let ignored: Set<(String, String)> = store
-        .settings
-        .dup_ignored
+    let ignored: Set<(String, String)> = dup_ignored
         .iter()
         .map(|p| {
             let (a, b) = (p[0].clone(), p[1].clone());
@@ -5848,7 +5859,7 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
     }
     // Precompute view membership: prompt id -> view names containing it.
     let mut in_views: Map<&str, Vec<String>> = Map::new();
-    for v in &store.settings.views {
+    for v in &views {
         let mut seen: Set<&str> = Set::new();
         for layout in v.layouts.values() {
             for id in layout.keys() {
@@ -5870,7 +5881,7 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
                         id: p.id.clone(),
                         name: if p.name.is_empty() { p.text.chars().take(40).collect() } else { p.name.clone() },
                         text: p.text.clone(),
-                        usage: store.settings.usage.get(&p.id).copied().unwrap_or(0),
+                        usage: usage.get(&p.id).copied().unwrap_or(0),
                         views: in_views.get(p.id.as_str()).cloned().unwrap_or_default(),
                     }
                 })
