@@ -814,6 +814,32 @@ PROBE = """
           out.errors.push('the tile tooltip does not highlight both variables: ' + JSON.stringify(varTexts));
         }
       }
+      // B1: the rotate line is shared between the rich tile tip and the plain
+      // setting/icon tip. It used to survive the switch, so the last hovered
+      // tile-s next-entry text stayed glued under every plain tooltip.
+      const rotLine = () => document.querySelector('.tile-tip .tile-tip-rotate');
+      noteTile.dataset.tipRotate = 'Rotating, next entry: probe';
+      await hover(noteTile, 30);
+      const withRot = rotLine();
+      if (!withRot || !withRot.textContent.includes('probe')) {
+        out.errors.push('the tile tooltip does not show the rotate line at all');
+      }
+      const plainTarget = document.createElement('div');
+      plainTarget.dataset.tip = 'A plain setting tooltip';
+      plainTarget.style.cssText = 'position:fixed;left:180px;top:30px;width:40px;height:20px';
+      document.body.appendChild(plainTarget);
+      await hover(plainTarget, 200);
+      const plainName = document.querySelector('.tile-tip .tile-tip-name');
+      if (!plainName || !plainName.textContent.includes('plain setting')) {
+        out.errors.push('the plain tooltip never showed, so the rotate-line check proves nothing');
+      } else {
+        const leaked = rotLine();
+        if (leaked && leaked.textContent.trim()) {
+          out.errors.push('a plain tooltip carries the rotate line: "' + leaked.textContent + '"');
+        }
+      }
+      plainTarget.remove();
+      delete noteTile.dataset.tipRotate;
       document.body.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
       await sleep(200);
     }
@@ -2794,6 +2820,24 @@ PROBE = """
           await sleep(120);
           if (!document.getElementById('modal-text').classList.contains('hidden')) {
             out.errors.push('the plain textarea stayed visible after turning rotation on');
+          }
+          // B4: neither the clear-X wrapper around the textarea nor the rendered
+          // Markdown pane may keep a box while the variants list is the editor —
+          // both used to survive and left a tall empty gap above the colour row,
+          // the pane still showing entry 1 as a stray field.
+          const taWrap = document.querySelector('#modal .clear-wrap-ta');
+          if (taWrap && taWrap.getBoundingClientRect().height > 0) {
+            out.errors.push('the textarea wrapper still takes ' + Math.round(taWrap.getBoundingClientRect().height) + 'px while rotation is on');
+          }
+          const mdWrap = document.getElementById('modal-md-wrap');
+          if (mdWrap && mdWrap.getBoundingClientRect().height > 0) {
+            out.errors.push('the Markdown pane is still shown while rotation is on');
+          }
+          const ctrlRow = document.querySelector('.modal-rotate-controls-row');
+          const colorRow = document.getElementById('color-row');
+          if (ctrlRow && colorRow) {
+            const gap = colorRow.getBoundingClientRect().top - ctrlRow.getBoundingClientRect().bottom;
+            if (gap > 40) out.errors.push('gap between the entry controls and the colours is ' + Math.round(gap) + 'px');
           }
           const list = document.getElementById('modal-rotate-list');
           if (!list || list.classList.contains('hidden')) {
