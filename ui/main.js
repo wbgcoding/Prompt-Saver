@@ -9258,52 +9258,52 @@ function renderJournal() {
 // 97: in-app documentation. EN + DE only (ui/help.js) — every other language
 // falls back to English rather than showing untranslated placeholder text.
 let helpQuery = "";
+let helpTab = 0;
 let helpCollapsed = new Set(); // in-memory only; resets each time the dialog opens
 
 function helpCategories() {
   return HELP_CONTENT[LANG] || HELP_CONTENT.en;
 }
 
+// Section ids are stable keys (see ui/help.js), never translated text — the
+// label comes from a helpSec-prefixed key (via t) so it follows the app's own
+// 11 languages even though the article content itself stays EN/DE-only.
+function helpSectionLabel(id) {
+  return t(`helpSec${id.charAt(0).toUpperCase()}${id.slice(1)}`);
+}
+
 function renderHelp() {
   const box = $("help-body");
+  const tabBar = $("help-tabs-bar");
   box.innerHTML = "";
+  tabBar.innerHTML = "";
   const q = helpQuery.trim().toLowerCase();
   const searching = q.length > 0;
   let shown = 0;
   const cats = helpCategories();
-  // Twenty-five collapsibles in one flat column is a wall, not a manual. They are
-  // grouped into a handful of sections, with a chip per section at the top that
-  // jumps to it — the whole page stays readable at the app's minimum width.
   const sections = [...new Set(cats.map((c) => c.section))];
+  if (helpTab >= sections.length) helpTab = 0;
+  // Tab bar lives in the fixed header (stays visible while the rows scroll); it is
+  // hidden while searching across every section, same pattern as the expert menu.
   if (!searching && sections.length > 1) {
-    const nav = document.createElement("div");
-    nav.className = "help-nav";
-    for (const name of sections) {
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "help-nav-chip";
-      chip.textContent = name;
-      chip.addEventListener("click", () => {
-        box.querySelector(`[data-help-section="${CSS.escape(name)}"]`)
-          ?.scrollIntoView({ block: "start", behavior: "smooth" });
-      });
-      nav.appendChild(chip);
-    }
-    box.appendChild(nav);
+    const bar = document.createElement("div");
+    bar.className = "expert-tabs";
+    sections.forEach((id, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "expert-tab" + (i === helpTab ? " active" : "");
+      b.textContent = helpSectionLabel(id);
+      b.addEventListener("click", () => { helpTab = i; box.scrollTop = 0; renderHelp(); });
+      bar.appendChild(b);
+    });
+    tabBar.appendChild(bar);
   }
-  let lastSection = null;
+  const activeSection = searching ? null : sections[helpTab];
   for (const cat of cats) {
     const haystack = [cat.title, cat.overview, ...cat.settings, cat.tip || ""].join(" ").toLowerCase();
     if (searching && !haystack.includes(q)) continue;
+    if (!searching && cat.section !== activeSection) continue;
     shown++;
-    if (!searching && cat.section !== lastSection) {
-      lastSection = cat.section;
-      const sh = document.createElement("h3");
-      sh.className = "help-section";
-      sh.dataset.helpSection = cat.section;
-      sh.textContent = cat.section;
-      box.appendChild(sh);
-    }
     // Reuses the expert menu's own group/collapse styling (arrow, spacing, hover) —
     // same visual language, zero new CSS for the mechanic itself.
     const sec = document.createElement("div");

@@ -273,7 +273,7 @@ PROBE = """
       await sleep(120);
       document.getElementById('settings').classList.add('hidden');
     }
-    // 97: in-app documentation — every category reaches the page, none is empty,
+    // 97/21: in-app documentation — every tab reaches the page, none is empty,
     // search narrows the list, a "did you know" callout shows up somewhere.
     {
       document.getElementById('help-open').click();
@@ -285,21 +285,40 @@ PROBE = """
         layoutScan('help menu');
         mustReach('help menu', '#help-close, #help-search');
         const groups = () => [...document.querySelectorAll('#help-body .help-group')];
-        const allGroups = groups();
-        if (allGroups.length < 15) {
-          out.errors.push('the help menu shows too few categories (' + allGroups.length + ')');
+        const rawKeyCheck = (where) => {
+          for (const el of document.querySelectorAll('#help-tabs-bar *, #help-body *')) {
+            const txt = (el.children.length ? '' : el.textContent || '').trim();
+            if (/^help[A-Z][A-Za-z]+$/.test(txt)) out.errors.push(where + ' shows a raw i18n key: ' + txt);
+          }
+        };
+        // 21: one tab renders at a time now — click through every one, summing what
+        // each shows instead of expecting them all stacked in a single render.
+        const tabs = [...document.querySelectorAll('#help-tabs-bar .expert-tab')];
+        if (tabs.length < 2) out.errors.push('the help menu shows too few section tabs (' + tabs.length + ')');
+        let totalGroups = 0;
+        let sawTip = false;
+        for (let i = 0; i < tabs.length; i++) {
+          document.querySelectorAll('#help-tabs-bar .expert-tab')[i].click();
+          await sleep(120);
+          layoutScan('help menu tab ' + i);
+          rawKeyCheck('help menu tab ' + i);
+          const here = groups();
+          if (!here.length) out.errors.push('help tab ' + i + ' shows no categories');
+          totalGroups += here.length;
+          const empties = here.filter(g => !g.querySelector('.help-overview').textContent.trim());
+          if (empties.length) out.errors.push(empties.length + ' help category has an empty overview (tab ' + i + ')');
+          if (document.querySelector('#help-body .help-tip')) sawTip = true;
         }
-        const empties = allGroups.filter(g => !g.querySelector('.help-overview').textContent.trim());
-        if (empties.length) out.errors.push(empties.length + ' help category has an empty overview');
-        if (!document.querySelector('#help-body .help-tip')) {
-          out.errors.push('no help category shows a "did you know" callout');
+        if (totalGroups < 15) {
+          out.errors.push('the help menu shows too few categories across all tabs (' + totalGroups + ')');
         }
+        if (!sawTip) out.errors.push('no help category shows a "did you know" callout');
         const search = document.getElementById('help-search');
         search.value = 'markdown';
         search.dispatchEvent(new Event('input', { bubbles: true }));
         await sleep(150);
         const filtered = groups();
-        if (!filtered.length || filtered.length >= allGroups.length) {
+        if (!filtered.length || filtered.length >= totalGroups) {
           out.errors.push('searching the help menu did not narrow the category list');
         }
         search.value = 'zzz_no_such_help_topic_zzz';
@@ -1247,7 +1266,7 @@ PROBE = """
       const hit = () => [...document.querySelectorAll('#expert-flags .switch-field')]
         .find(r => ((r.querySelector('span') || {}).textContent || '').startsWith(label));
       if (hit()) return hit();
-      for (const tb of [...document.querySelectorAll('.expert-tab')]) {
+      for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
         tb.click();
         await sleep(200);
         if (hit()) return hit();
@@ -1276,7 +1295,7 @@ PROBE = """
       const back = await expertRow('Prompt hotkey also pastes');
       if (back) { back.querySelector('input.switch').click(); await sleep(200); }
       // The walk above left another tab active; later checks expect the first one.
-      const firstTab = document.querySelector('.expert-tab');
+      const firstTab = document.querySelector('#expert-tabs-bar .expert-tab');
       if (firstTab) { firstTab.click(); await sleep(200); }
       await click('expert-back');
       document.getElementById('settings').classList.add('hidden');
@@ -1299,7 +1318,7 @@ PROBE = """
       const row = await expertRow(label);
       const sw = row && row.querySelector('input.switch');
       if (sw && sw.checked !== on) { sw.click(); await sleep(250); }
-      const tab0 = document.querySelector('.expert-tab');
+      const tab0 = document.querySelector('#expert-tabs-bar .expert-tab');
       if (tab0) { tab0.click(); await sleep(150); }
       await click('expert-back');
       document.getElementById('settings').classList.add('hidden');
@@ -1476,7 +1495,7 @@ PROBE = """
       const expertAction = async (label) => {
         const hit = () => [...document.querySelectorAll('.expert-action')].find(b => b.textContent === label);
         if (hit()) return hit();
-        for (const tb of [...document.querySelectorAll('.expert-tab')]) {
+        for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
           tb.click();
           await sleep(200);
           if (hit()) return hit();
@@ -1538,7 +1557,7 @@ PROBE = """
         document.getElementById('trash-close').click();
         await sleep(100);
       }
-      const firstTab = document.querySelector('.expert-tab');
+      const firstTab = document.querySelector('#expert-tabs-bar .expert-tab');
       if (firstTab) { firstTab.click(); await sleep(150); }
       await click('expert-back');
       document.getElementById('settings').classList.add('hidden');
@@ -2009,7 +2028,7 @@ PROBE = """
     // in the "System & data" tab, not whatever tab was last active.
     document.getElementById('settings').classList.remove('hidden');
     await click('expert-open');
-    const sysTab = [...document.querySelectorAll('.expert-tab')].find(b => /system/i.test(b.textContent));
+    const sysTab = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')].find(b => /system/i.test(b.textContent));
     if (sysTab) { sysTab.click(); await sleep(200); }
     const dupBtn = [...document.querySelectorAll('#expert-flags button')]
       .find(b => /duplicat|duplik|dupli/i.test(b.textContent));
@@ -2116,7 +2135,7 @@ PROBE = """
       await flip('Markdown preview');
       if (!rowFor('Detect code without fences')) out.errors.push('the code detection toggle did not come back');
     }
-    const firstTab2 = document.querySelector('.expert-tab');
+    const firstTab2 = document.querySelector('#expert-tabs-bar .expert-tab');
     if (firstTab2) { firstTab2.click(); await sleep(150); }
     await click('expert-back');
     document.getElementById('settings').classList.add('hidden');
@@ -2319,19 +2338,19 @@ PROBE = """
     layoutScan('settings');
     mustReach('settings', '#settings .modal-x, #settings-main > .field > button');
     await click('expert-open');
-    for (const tb of [...document.querySelectorAll('.expert-tab')]) {
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
       tb.click();
       await sleep(200);
       out.tabs.push(tb.textContent.trim() + ':' +
         document.querySelectorAll('#expert-flags .expert-group').length);
       layoutScan('expert tab ' + tb.textContent.trim());
     }
-    mustReach('expert menu', '.expert-tab');
+    mustReach('expert menu', '#expert-tabs-bar .expert-tab');
     // P69: a default-off feature gets a small dot badge instead of a "(Default
     // off)" text suffix crowding the label — find the rows across all tabs.
     {
       const rowByLabel = (text) => {
-        for (const tb of [...document.querySelectorAll('.expert-tab')]) {
+        for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
           tb.click();
           const hit = [...document.querySelectorAll('#expert-flags .switch-field')]
             .find(r => (r.querySelector('span') || {}).textContent === text);
@@ -2384,7 +2403,7 @@ PROBE = """
       // checked — the tab bar hides then (every tab is scanned in one flat pass, see
       // renderExpert's globalView), so there are no `.expert-tab` buttons to click.
       const rowByLabel = (text) => {
-        const tabs = [...document.querySelectorAll('.expert-tab')];
+        const tabs = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
         const find = () => [...document.querySelectorAll('#expert-flags .switch-field')]
           .find(r => (r.querySelector('span') || {}).textContent === text) || null;
         if (!tabs.length) return find();
@@ -2443,7 +2462,7 @@ PROBE = """
     // whose button was clicked, a flag changed in a DIFFERENT group must survive.
     {
       const rowByLabel2 = (text) => {
-        const tabs = [...document.querySelectorAll('.expert-tab')];
+        const tabs = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
         const find = () => [...document.querySelectorAll('#expert-flags .switch-field')]
           .find(r => (r.querySelector('span') || {}).textContent === text) || null;
         if (!tabs.length) return find();
@@ -2512,7 +2531,7 @@ PROBE = """
     // resets just that row, then disappears again.
     {
       const rowByLabel4 = (text) => {
-        const tabs = [...document.querySelectorAll('.expert-tab')];
+        const tabs = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
         const find = () => [...document.querySelectorAll('#expert-flags .switch-field')]
           .find(r => (r.querySelector('span') || {}).textContent === text) || null;
         if (!tabs.length) return find();
@@ -2554,7 +2573,7 @@ PROBE = """
     // proved to hit the same detached-checkbox harness quirk seen in 71's test.
     {
       const rowByLabel3 = (text, sel) => {
-        const tabs = [...document.querySelectorAll('.expert-tab')];
+        const tabs = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
         const find = () => [...document.querySelectorAll('#expert-flags ' + sel)]
           .find(r => (r.querySelector('span') || {}).textContent === text) || null;
         if (!tabs.length) return find();
@@ -2592,7 +2611,7 @@ PROBE = """
     // and badge sub-flag — same contract every other gated expert row follows.
     {
       const rowByLabel5 = (text, sel) => {
-        const tabs = [...document.querySelectorAll('.expert-tab')];
+        const tabs = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
         const find = () => [...document.querySelectorAll('#expert-flags ' + sel)]
           .find(r => (r.querySelector('.value-head span, span') || {}).textContent === text) || null;
         if (!tabs.length) return find();
@@ -2644,7 +2663,7 @@ PROBE = """
     // Entry" adds a row, and saving calls add_prompt with the split payload.
     {
       const rowByLabel6 = (text, sel) => {
-        const tabs = [...document.querySelectorAll('.expert-tab')];
+        const tabs = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
         const find = () => [...document.querySelectorAll('#expert-flags ' + sel)]
           .find(r => (r.querySelector('span') || {}).textContent === text) || null;
         if (!tabs.length) return find();
@@ -3232,7 +3251,7 @@ PROBE = """
   // t() falls back to the key name, so an untranslated string shows up verbatim.
   for (const el of document.querySelectorAll('body *')) {
     const txt = (el.children.length ? '' : el.textContent || '').trim();
-    if (/^(flag|val|tip|exp|stat|backup)[A-Z][A-Za-z]+$/.test(txt)) out.rawKeys.push(txt);
+    if (/^(flag|val|tip|exp|stat|backup|help)[A-Z][A-Za-z]+$/.test(txt)) out.rawKeys.push(txt);
   }
   out.errors.push(...(window.__SMOKE_ERRORS__ || []));
   const pre = document.createElement('pre');

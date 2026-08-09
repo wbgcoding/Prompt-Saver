@@ -9,14 +9,14 @@
 export const HELP_CONTENT = {
   en: [
     {
-      section: "Basics",
+      section: "basics",
       title: "Getting started",
       overview:
         "A tile is one saved prompt. Double-click an empty grid cell (or the + button) to create one, click any tile to copy it. Three example tiles (an email with placeholders, an image, and a Markdown template) ship on first launch — a button above the grid removes them with one click once you don't need them anymore.",
       settings: [],
     },
     {
-      section: "Basics",
+      section: "basics",
       title: "Creating prompts",
       overview:
         "Beyond plain text, a prompt can carry an attached file, a screenshot, or a picked screen colour.",
@@ -29,7 +29,7 @@ export const HELP_CONTENT = {
       tip: "The colour picker (pipette) is off by default.",
     },
     {
-      section: "Basics",
+      section: "basics",
       title: "Variables & placeholders",
       overview:
         "Write {#{name}#} anywhere in a prompt's text — copying it opens a small popup asking for each placeholder's value before the filled-in text reaches the clipboard.",
@@ -41,7 +41,7 @@ export const HELP_CONTENT = {
       ],
     },
     {
-      section: "Basics",
+      section: "basics",
       title: "The editor",
       overview:
         "The prompt editor is a plain text box by default; a few opt-in features add structure and history to it.",
@@ -54,7 +54,7 @@ export const HELP_CONTENT = {
       tip: "Markdown preview and private notes both ship off.",
     },
     {
-      section: "Copying",
+      section: "copying",
       title: "Copying",
       overview: "What happens between clicking a tile and the text landing on the clipboard.",
       settings: [
@@ -65,7 +65,7 @@ export const HELP_CONTENT = {
       ],
     },
     {
-      section: "Always on top",
+      section: "alwaysOnTop",
       title: "Floating buttons & folders",
       overview:
         "Floating buttons are small always-on-top copy buttons that sit outside the main window, over whatever app you're using.",
@@ -76,7 +76,7 @@ export const HELP_CONTENT = {
       tip: "Both kinds of folder ship off.",
     },
     {
-      section: "Immer im Vordergrund",
+      section: "alwaysOnTop",
       title: "Tray",
       overview: "The system tray icon's right-click menu offers quick access without opening the main window.",
       settings: [
@@ -85,7 +85,7 @@ export const HELP_CONTENT = {
       ],
     },
     {
-      section: "Copying",
+      section: "copying",
       title: "Clipboard watcher",
       overview:
         "When switched on, everything you copy anywhere on the system (not just from this app) is logged into an inbox you can review and turn into prompts later.",
@@ -96,7 +96,7 @@ export const HELP_CONTENT = {
       tip: "Off by default — nothing is watched until you turn it on.",
     },
     {
-      section: "Organising",
+      section: "organising",
       title: "Tile behaviour & appearance",
       overview: "How a tile reacts to the mouse, and what it looks like.",
       settings: [
@@ -106,32 +106,32 @@ export const HELP_CONTENT = {
       ],
     },
     {
-      section: "Optik",
+      section: "look",
       title: "Tooltips",
       overview: "Hovering a tile shows its full text, length, and (if present) its private note.",
       settings: ["Delay before showing", "Auto-hide timeout", "Tooltip width"],
     },
     {
-      section: "Organising",
+      section: "organising",
       title: "Favourites",
       overview: "Star a prompt to mark it as a favourite.",
       settings: ["Favourites view — a dedicated view listing only starred prompts, reorderable on its own"],
     },
     {
-      section: "Look and feel",
+      section: "look",
       title: "Scaling & zoom",
       overview: "Independent size sliders for different parts of the window, in case the defaults don't fit your screen or preference.",
       settings: ["Overall UI scale", "Modal (dialog) scale", "Composer scale", "Icon scale"],
     },
     {
-      section: "Look and feel",
+      section: "look",
       title: "Appearance & themes",
       overview: "Eight built-in themes: system, light, dark, Programmer, Neon Violet, Ocean, Cyberpunk and Black & White.",
       settings: ["Theme editor — tweak any theme's colours and save it as your own custom theme"],
       tip: "Custom themes are an opt-in feature — the editor button appears once it's turned on.",
     },
     {
-      section: "Organising",
+      section: "organising",
       title: "Library & search",
       overview: "The library lists every prompt as a searchable, filterable list — the grid only shows what fits on screen, the library shows everything.",
       settings: [
@@ -141,13 +141,13 @@ export const HELP_CONTENT = {
       ],
     },
     {
-      section: "Ordnen",
+      section: "organising",
       title: "Tags",
       overview: "Free-form labels you assign to prompts; filter the library or the grid down to a set of tags.",
       settings: ["Tag filter mode — match ANY selected tag, or ALL of them"],
     },
     {
-      section: "Copying",
+      section: "copying",
       title: "Copy history",
       overview: "A log of what you've copied and when — separate from the clipboard watcher, this only records copies made through this app.",
       settings: [
@@ -158,19 +158,19 @@ export const HELP_CONTENT = {
       ],
     },
     {
-      section: "Organising",
+      section: "organising",
       title: "Media",
       overview: "Settings for prompts that carry a video or image.",
       settings: ["Video controls, autoplay, mute, loop", "Grayscale / dim until hovered — privacy-leaning looks for media tiles"],
     },
     {
-      section: "Look and feel",
+      section: "look",
       title: "Toolbar",
       overview: "Which buttons the header and composer bar show.",
       settings: ["Quick grid-size control", "Library / history / pin buttons", "Multiple views + view groups (tabs for the grid)"],
     },
     {
-      section: "System and data",
+      section: "system",
       title: "Privacy",
       overview: "Options that keep this window's contents out of screenshots, screen shares, or a passer-by's glance.",
       settings: [
@@ -182,7 +182,7 @@ export const HELP_CONTENT = {
       tip: "Screen-capture exclusion ships OFF — turn it on if you want it.",
     },
     {
-      section: "System und Daten",
+      section: "system",
       title: "System",
       overview: "App-level behaviour that isn't about any one prompt.",
       settings: [
@@ -193,7 +193,7 @@ export const HELP_CONTENT = {
       ],
     },
     {
-      section: "System and data",
+      section: "system",
       title: "Data maintenance",
       overview: "Housekeeping tools reached from the expert menu's Data group.",
       settings: [
@@ -203,7 +203,7 @@ export const HELP_CONTENT = {
       ],
     },
     {
-      section: "System and data",
+      section: "system",
       title: "Standalone: Backup manager",
       overview: "Encrypted, compressed snapshots of your entire prompt library and settings, on your own schedule.",
       settings: [
@@ -213,19 +213,19 @@ export const HELP_CONTENT = {
       ],
     },
     {
-      section: "Always on top",
+      section: "alwaysOnTop",
       title: "Standalone: Quick launcher",
       overview: "A small always-on-top popup (default hotkey Ctrl+Alt+P) with fuzzy search across every prompt's name and text — pick one and it copies immediately, no need to bring the main window forward.",
       settings: [],
     },
     {
-      section: "Organising",
+      section: "organising",
       title: "Standalone: Multiple views",
       overview: "A view is one grid page with its own size and arrangement; a prompt can live in several views. View groups turn views into tabs instead of a dropdown.",
       settings: [],
     },
     {
-      section: "Look and feel",
+      section: "look",
       title: "Standalone: Theme editor",
       overview: "Start from any built-in theme, change individual colours, and save the result as your own theme — the original stays untouched.",
       settings: [],
@@ -233,14 +233,14 @@ export const HELP_CONTENT = {
   ],
   de: [
     {
-      section: "Grundlagen",
+      section: "basics",
       title: "Erste Schritte",
       overview:
         "Eine Kachel ist ein gespeicherter Prompt. Doppelklick auf eine leere Rasterzelle (oder der +-Knopf) legt eine an, ein Klick auf eine Kachel kopiert sie. Beim ersten Start sind drei Beispielkacheln vorhanden (eine E-Mail mit Platzhaltern, ein Bild, eine Markdown-Vorlage) — ein Knopf über dem Raster entfernt sie mit einem Klick, sobald sie nicht mehr gebraucht werden.",
       settings: [],
     },
     {
-      section: "Grundlagen",
+      section: "basics",
       title: "Prompts anlegen",
       overview: "Neben reinem Text kann ein Prompt eine angehängte Datei, einen Screenshot oder eine per Pipette abgelesene Bildschirmfarbe tragen.",
       settings: [
@@ -252,7 +252,7 @@ export const HELP_CONTENT = {
       tip: "Die Farbpipette ist standardmäßig aus.",
     },
     {
-      section: "Grundlagen",
+      section: "basics",
       title: "Variablen & Platzhalter",
       overview:
         "Schreib {#{Name}#} irgendwo in den Prompt-Text — beim Kopieren öffnet sich ein kleines Popup, das nach jedem Platzhalterwert fragt, bevor der ausgefüllte Text in der Zwischenablage landet.",
@@ -264,7 +264,7 @@ export const HELP_CONTENT = {
       ],
     },
     {
-      section: "Grundlagen",
+      section: "basics",
       title: "Der Editor",
       overview: "Der Prompt-Editor ist standardmäßig ein reines Textfeld; ein paar optionale Funktionen geben ihm Struktur und Verlauf.",
       settings: [
@@ -276,7 +276,7 @@ export const HELP_CONTENT = {
       tip: "Markdown-Vorschau und private Notizen sind beide standardmäßig aus.",
     },
     {
-      section: "Kopieren",
+      section: "copying",
       title: "Kopieren",
       overview: "Was zwischen dem Klick auf eine Kachel und der Zwischenablage passiert.",
       settings: [
@@ -287,7 +287,7 @@ export const HELP_CONTENT = {
       ],
     },
     {
-      section: "Immer im Vordergrund",
+      section: "alwaysOnTop",
       title: "Schwebende Buttons & Ordner",
       overview: "Schwebende Buttons sind kleine, immer-oben-Kopierknöpfe außerhalb des Hauptfensters, über jedem beliebigen Programm.",
       settings: [
@@ -297,7 +297,7 @@ export const HELP_CONTENT = {
       tip: "Beide Ordnerarten sind standardmäßig aus.",
     },
     {
-      section: "Immer im Vordergrund",
+      section: "alwaysOnTop",
       title: "Tray",
       overview: "Das Rechtsklick-Menü des Symbols in der Taskleiste bietet schnellen Zugriff, ohne das Hauptfenster zu öffnen.",
       settings: [
@@ -306,7 +306,7 @@ export const HELP_CONTENT = {
       ],
     },
     {
-      section: "Kopieren",
+      section: "copying",
       title: "Zwischenablage-Wächter",
       overview: "Eingeschaltet wird alles, was irgendwo im System kopiert wird (nicht nur aus diesem Programm), in einem Eingang protokolliert, den man später durchsehen und zu Prompts machen kann.",
       settings: [
@@ -316,7 +316,7 @@ export const HELP_CONTENT = {
       tip: "Standardmäßig aus — nichts wird beobachtet, bis es eingeschaltet wird.",
     },
     {
-      section: "Ordnen",
+      section: "organising",
       title: "Kachelverhalten & Aussehen",
       overview: "Wie eine Kachel auf die Maus reagiert und wie sie aussieht.",
       settings: [
@@ -326,32 +326,32 @@ export const HELP_CONTENT = {
       ],
     },
     {
-      section: "Optik",
+      section: "look",
       title: "Tooltips",
       overview: "Hovern über eine Kachel zeigt ihren vollen Text, die Länge und (falls vorhanden) ihre private Notiz.",
       settings: ["Verzögerung bis zum Anzeigen", "Automatisches Ausblenden", "Tooltip-Breite"],
     },
     {
-      section: "Ordnen",
+      section: "organising",
       title: "Favoriten",
       overview: "Ein Prompt lässt sich als Favorit markieren (Stern).",
       settings: ["Favoriten-Ansicht — eine eigene Ansicht nur mit markierten Prompts, eigenständig sortierbar"],
     },
     {
-      section: "Optik",
+      section: "look",
       title: "Skalierung & Zoom",
       overview: "Unabhängige Größenregler für verschiedene Teile des Fensters, falls die Standardgrößen nicht zu Bildschirm oder Geschmack passen.",
       settings: ["Gesamte UI-Größe", "Dialog-Größe", "Composer-Größe", "Icon-Größe"],
     },
     {
-      section: "Optik",
+      section: "look",
       title: "Aussehen & Themes",
       overview: "Acht mitgelieferte Themes: System, hell, dunkel, Programmierer, Neon-Violett, Ozean, Cyberpunk und Schwarzweiß.",
       settings: ["Theme-Editor — Farben jedes Themes anpassen und als eigenes Theme speichern"],
       tip: "Eigene Themes sind eine optionale Funktion — der Editor-Knopf erscheint erst, wenn sie eingeschaltet ist.",
     },
     {
-      section: "Ordnen",
+      section: "organising",
       title: "Bibliothek & Suche",
       overview: "Die Bibliothek listet jeden Prompt als durchsuch- und filterbare Liste — das Raster zeigt nur, was auf den Bildschirm passt, die Bibliothek zeigt alles.",
       settings: [
@@ -361,13 +361,13 @@ export const HELP_CONTENT = {
       ],
     },
     {
-      section: "Ordnen",
+      section: "organising",
       title: "Tags",
       overview: "Frei vergebene Schlagwörter für Prompts; Bibliothek oder Raster lassen sich auf bestimmte Tags eingrenzen.",
       settings: ["Tag-Filtermodus — trifft EIN ausgewählter Tag, oder müssen ALLE zutreffen"],
     },
     {
-      section: "Kopieren",
+      section: "copying",
       title: "Kopierverlauf",
       overview: "Ein Protokoll, was wann kopiert wurde — getrennt vom Zwischenablage-Wächter, erfasst nur Kopien aus diesem Programm.",
       settings: [
@@ -378,19 +378,19 @@ export const HELP_CONTENT = {
       ],
     },
     {
-      section: "Ordnen",
+      section: "organising",
       title: "Medien",
       overview: "Einstellungen für Prompts mit Video oder Bild.",
       settings: ["Video-Steuerung, Autoplay, Stumm, Wiederholung", "Graustufen / Abdunkeln bis Hover — datenschutzfreundliche Optik für Medienkacheln"],
     },
     {
-      section: "Optik",
+      section: "look",
       title: "Symbolleiste",
       overview: "Welche Knöpfe Kopfzeile und Composer-Leiste zeigen.",
       settings: ["Schnellraster-Größenregler", "Bibliothek-/Verlauf-/Anheften-Knöpfe", "Mehrfachansichten + Ansichtsgruppen (Reiter fürs Raster)"],
     },
     {
-      section: "System und Daten",
+      section: "system",
       title: "Datenschutz",
       overview: "Einstellungen, die den Fensterinhalt aus Screenshots, Bildschirmfreigaben oder fremden Blicken heraushalten.",
       settings: [
@@ -402,7 +402,7 @@ export const HELP_CONTENT = {
       tip: "Der Bildschirmaufnahme-Ausschluss ist standardmäßig AUS — bei Bedarf einschalten.",
     },
     {
-      section: "System und Daten",
+      section: "system",
       title: "System",
       overview: "Programmweites Verhalten, das keinen einzelnen Prompt betrifft.",
       settings: [
@@ -413,7 +413,7 @@ export const HELP_CONTENT = {
       ],
     },
     {
-      section: "System und Daten",
+      section: "system",
       title: "Datenpflege",
       overview: "Aufräum-Werkzeuge, erreichbar über die Datengruppe im Expertenmenü.",
       settings: [
@@ -423,7 +423,7 @@ export const HELP_CONTENT = {
       ],
     },
     {
-      section: "System und Daten",
+      section: "system",
       title: "Eigenständig: Backup-Manager",
       overview: "Verschlüsselte, komprimierte Momentaufnahmen der gesamten Prompt-Bibliothek und Einstellungen, nach eigenem Zeitplan.",
       settings: [
@@ -433,19 +433,19 @@ export const HELP_CONTENT = {
       ],
     },
     {
-      section: "Immer im Vordergrund",
+      section: "alwaysOnTop",
       title: "Eigenständig: Schnellstarter",
       overview: "Ein kleines, immer-oben-Popup (Standard-Hotkey Strg+Alt+P) mit unscharfer Suche über Name und Text jedes Prompts — Auswahl kopiert sofort, ohne das Hauptfenster hervorzuholen.",
       settings: [],
     },
     {
-      section: "Ordnen",
+      section: "organising",
       title: "Eigenständig: Mehrfachansichten",
       overview: "Eine Ansicht ist eine Rasterseite mit eigener Größe und Anordnung; ein Prompt kann in mehreren Ansichten liegen. Ansichtsgruppen machen aus Ansichten Reiter statt eines Dropdowns.",
       settings: [],
     },
     {
-      section: "Optik",
+      section: "look",
       title: "Eigenständig: Theme-Editor",
       overview: "Von einem mitgelieferten Theme ausgehen, einzelne Farben ändern und das Ergebnis als eigenes Theme speichern — das Original bleibt unangetastet.",
       settings: [],
