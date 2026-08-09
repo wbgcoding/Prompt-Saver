@@ -4060,7 +4060,7 @@ async fn dismiss_example_prompts(app: AppHandle, state: State<'_, Db>) -> Result
     if ids.is_empty() {
         return Ok(());
     }
-    batch_prompts(app, state, ids, "delete".to_string(), None, None, None)
+    batch_prompts(app, state, ids, "delete".to_string(), None, None, None, None)
         .await
         .map(|_| ())
 }
@@ -4346,6 +4346,7 @@ async fn batch_prompts(
     color: Option<String>,
     favorite: Option<bool>,
     view_id: Option<String>,
+    from_view_id: Option<String>,
 ) -> Result<Settings, String> {
     if action == "delete" {
         // Tauri window calls must stay OUTSIDE the store mutex (deadlock trap).
@@ -4446,6 +4447,43 @@ async fn batch_prompts(
                     }
                 } else if !place_ids_in_view(layout, &ids, cols, rows, &folder_cells) {
                     return Err("view-full".into());
+                }
+                save_settings(&app, &store.settings);
+            }
+        }
+        // 13: doGridMove used to call addView then removeView as two separate
+        // IPC round-trips (two separate save_settings) - a crash between them left
+        // the prompt placed in both views. Both layouts now change in the SAME
+        // in-memory settings before the single save_settings below, so a failure
+        // (or a crash) can only ever be seen before or after the whole move, never
+        // mid-way.
+        "moveView" => {
+            let to_id = view_id.unwrap_or_default();
+            let from_id = from_view_id.unwrap_or_default();
+            let folder_cells: std::collections::HashSet<(u32, u32)> = store
+                .settings
+                .tile_folders
+                .iter()
+                .filter(|f| f.view_id == to_id)
+                .map(|f| (f.cell[0], f.cell[1]))
+                .collect();
+            let to_idx = store.settings.views.iter().position(|v| v.id == to_id);
+            let from_idx = store.settings.views.iter().position(|v| v.id == from_id);
+            if let (Some(to_idx), Some(from_idx)) = (to_idx, from_idx) {
+                let (cols, rows) = (store.settings.views[to_idx].cols, store.settings.views[to_idx].rows);
+                let key = grid_key(cols, rows);
+                let layout = store.settings.views[to_idx].layouts.entry(key).or_default();
+                // 104: all-or-nothing - only drop the source placement once the
+                // target has durably accepted every id.
+                if !place_ids_in_view(layout, &ids, cols, rows, &folder_cells) {
+                    return Err("view-full".into());
+                }
+                if to_idx != from_idx {
+                    for layout in store.settings.views[from_idx].layouts.values_mut() {
+                        for id in &ids {
+                            layout.remove(id);
+                        }
+                    }
                 }
                 save_settings(&app, &store.settings);
             }

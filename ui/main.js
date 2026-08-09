@@ -8917,11 +8917,10 @@ async function doGridMove(targetViewId) {
   const ids = [...gridSelected];
   if (!ids.length || !targetViewId) return;
   try {
-    // 104: place into the target FIRST — addView is all-or-nothing (backend), so a
-    // full target throws here and every id is still exactly where it was. Only once
-    // the target accepted them all does dropping the source placement become safe.
-    await invoke("batch_prompts", { ids, action: "addView", color: null, favorite: null, viewId: targetViewId });
-    settings = await invoke("batch_prompts", { ids, action: "removeView", color: null, favorite: null, viewId: settings.active_view });
+    // 13: one moveView call - both layouts change in the same backend settings
+    // write, so a crash mid-call can no longer leave a tile placed in both views
+    // (the old addView-then-removeView pair was two separate IPC round-trips).
+    settings = await invoke("batch_prompts", { ids, action: "moveView", color: null, favorite: null, viewId: targetViewId, fromViewId: settings.active_view });
   } catch (e) { batchErrorToast(e); return; }
   clearGridSelection();
   await renderGrid(true);
