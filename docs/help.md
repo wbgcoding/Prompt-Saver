@@ -20,7 +20,7 @@ screen colour.
 
 - File attach — clicking the tile copies the file itself, not text
 - Screenshot tool — snip a region or a whole window straight into a new prompt
-- Colour picker *(off by default)* — pick any on-screen pixel, copies as hex/RGB/HSL
+- Colour picker — pick any on-screen pixel, copies as hex/RGB/HSL
 - Drag & drop — drop a file or image straight onto the grid
 
 ### Variables & placeholders
@@ -59,7 +59,7 @@ save it as a button, save it as a file, or just leave it on the clipboard.
 
 ### Colour picker & pick history
 
-A pipette *(off by default)* that freezes the screen, magnifies the pixel under
+A pipette that freezes the screen, magnifies the pixel under
 your cursor, and copies it as hex, rgb or hsl. Right-click the pipette icon to
 reopen your last few picks — the history is mirrored into settings, so it
 survives a restart too.
@@ -84,7 +84,9 @@ On by default; the per-prompt switch sits under Advanced options in the editor.
 
 - Prompt chaining — click several tiles in a row, they combine into one clipboard copy
 - Per-prompt hotkeys — copy a specific prompt from anywhere, without opening the app
-- Drag-out — drag a tile onto another window to paste directly, no clipboard round-trip
+- Drag-out — hold the modifier key and drag a tile onto another window to paste
+  directly, no clipboard round-trip. An expert switch swaps the two gestures, so a
+  plain drag leaves the app and the key moves the tile instead.
 - Auto-paste — after copying, the app switches to your last window and presses
   paste for you
 
@@ -150,7 +152,7 @@ privacy-leaning media tiles.
 ### Floating buttons & folders
 
 Floating buttons are small always-on-top copy buttons that sit outside the main
-window, over whatever app you're using. Pill folders and grid folders (both off by
+window, over whatever app you're using. Pill folders and grid folders (both on by
 default) merge several of them, or several grid tiles, into one expandable group
 the same way — a tile can only ever belong to one grid folder at a time.
 
@@ -170,7 +172,7 @@ the main window forward.
 ### Appearance & themes
 
 Eight built-in themes: system, light, dark, Programmer, Neon Violet, Ocean,
-Cyberpunk and Black & White. The theme editor (opt-in) lets you tweak any theme's colours
+Cyberpunk and Black & White. The theme editor lets you tweak any theme's colours
 and save the result as your own custom theme.
 
 ### Standalone: Theme editor
@@ -233,14 +235,16 @@ duplicate — before anything is written; a full backup restores directly.
 
 ### Markdown folder sync (beta)
 
-An optional, off-by-default mirror that writes every text-only prompt as its own
+An optional, off-by-default mirror that writes every prompt as its own
 readable `.md` file in a folder you pick, alongside the encrypted database —
 including which view, grid cell and folder it sits in. A view or folder named in
 an incoming file that does not exist yet on this machine is created
 automatically, matched by name.
 **The `.md` files are plain text** — unlike the database, anyone with access to
 that folder can read the prompts, so avoid a synced or shared folder for anything
-sensitive.
+sensitive. A prompt with an attached file, image or PDF syncs as a reference: the
+header carries the path and the PDF page, never the file itself. A screenshot
+pasted straight into a prompt has no path and stays in the database only.
 
 ### The expert menu
 
@@ -251,7 +255,7 @@ one value's own undo icon, a whole group's reset, or everything at once.
 
 ### Keyboard-only use
 
-Arrow keys move a focus ring across the grid (opt-in); Enter or Space copies
+Arrow keys move a focus ring across the grid; Enter or Space copies
 whichever tile is focused. The ring fades out a short while after the window
 loses focus.
 
@@ -330,7 +334,8 @@ Kachel/Pille/Pillen-Ordner-Mitglied zählt hoch — im Zufalls-Modus die Ziehung
 im aktuellen Durchlauf statt einer springenden Position; übersteht Neustart und
 Sicherung, aber keinen CSV/TXT-Import (neuer Prompt, neuer Zeiger).
 
-**Kopieren** — Verketten, Prompt-Hotkeys, Herausziehen, automatisches Einfügen.
+**Kopieren** — Verketten, Prompt-Hotkeys, Herausziehen (mit oder, per Schalter,
+ohne Modifikatortaste), automatisches Einfügen.
 
 **Hotkeys** — ein globaler Hotkey öffnet den Schnellstarter (Standard
 Strg+Alt+P), ein eigener Hotkey pro Prompt kopiert (und fügt optional ein). Bei
@@ -386,9 +391,11 @@ aus. Ein wechselnder Prompt wird nur nach seinem ersten Eintrag verglichen.
 alles. Ein CSV/TXT-Import zeigt vorher eine Vorschau mit Name und
 Duplikat-Kennzeichnung; eine volle Sicherung stellt direkt wieder her.
 
-**Markdown-Ordner-Sync (Beta)** — spiegelt reine Textprompts als lesbare
-`.md`-Dateien in einem gewählten Ordner, inklusive Ansicht, Rasterzelle und
-Ordner. Eine in einer eingehenden Datei genannte Ansicht oder ein Ordner, den
+**Markdown-Ordner-Sync (Beta)** — spiegelt jeden Prompt als lesbare
+`.md`-Datei in einem gewählten Ordner, inklusive Ansicht, Rasterzelle und
+Ordner. Angehängte Dateien, Bilder und PDFs wandern als Verweis mit (Pfad und
+PDF-Seite im Kopf, nie die Datei selbst); ein direkt eingefügter Screenshot hat
+keinen Pfad und bleibt nur in der Datenbank. Eine in einer eingehenden Datei genannte Ansicht oder ein Ordner, den
 es auf diesem Rechner noch nicht gibt, wird automatisch angelegt, per
 Namensabgleich. **Die Dateien sind Klartext** — anders als die Datenbank, also
 kein synchronisierter oder geteilter Ordner für Sensibles.

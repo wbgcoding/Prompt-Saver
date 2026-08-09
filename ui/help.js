@@ -32,8 +32,8 @@ export const HELP_CONTENT = {
         "Drag & drop — drop a file or image straight onto the grid.",
       ],
       whatHappens: "The attached file, screenshot or colour becomes the prompt's content — copying it later copies that file, image or colour, not text.",
-      settings: ["File attach, screenshot tool, colour picker, drag & drop — Expert menu → Features → Create prompts"],
-      tip: "The colour picker (pipette) is off by default.",
+      settings: ["File attach, screenshot tool, colour picker, drag & drop — Expert menu → Features → Create prompts", "Keep a copy of an attached file, and delete that copy with its prompt — Expert menu → Features → Create prompts"],
+      tip: "Colour formats: click the format you want in the toast that appears after a pick.",
     },
     {
       section: "basics",
@@ -61,7 +61,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Version history keeps every saved change so any earlier version can be restored. Markdown preview renders next to (or instead of) the text box without altering what's actually stored. Private notes are never copied or exported with the prompt text.",
-      settings: ["Markdown preview, syntax highlighting, version history, private notes — Expert menu → Features → Editor"],
+      settings: ["Markdown preview, syntax highlighting, version history, private notes — Expert menu → Features → Editor", "Monospace text box — Expert menu → Features → Editor"],
       tip: "Markdown preview and private notes both ship off.",
     },
     {
@@ -75,7 +75,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "A short confirmation bubble or flash confirms the copy. Chaining (clicking several tiles in a row) combines them into one clipboard entry instead of overwriting each other.",
-      settings: ["Prompt chaining, per-prompt hotkeys, auto-paste, drag-out, close-on-copy — Expert menu → Features → Copying"],
+      settings: ["Prompt chaining, per-prompt hotkeys, auto-paste, drag-out, close-on-copy — Expert menu → Features → Copying", "Which key drags a prompt out, and whether that key drags out or moves the tile — Expert menu → Features → Copying"],
     },
     {
       section: "alwaysOnTop",
@@ -91,7 +91,7 @@ export const HELP_CONTENT = {
       whatHappens:
         "Positions survive app restarts. A folder (either kind) shows up to four member previews and a count; dragging a member out frees it, and the folder dissolves once one member is left. A tile can only ever belong to one grid folder at a time.",
       settings: ["Pill folders, grid folders — Expert menu → Features → Floating buttons & folders"],
-      tip: "Both kinds of folder ship off.",
+      tip: "Both kinds of folder are on out of the box; switch either off in the expert menu if you never group buttons.",
     },
     {
       section: "alwaysOnTop",
@@ -164,8 +164,8 @@ export const HELP_CONTENT = {
       whatItIs: "Eight built-in themes: system, light, dark, Programmer, Neon Violet, Ocean, Cyberpunk and Black & White.",
       howTo: ["Pick a theme from Settings.", "Open the theme editor (once enabled) to tweak any theme's colours and save your own."],
       whatHappens: "\"System\" follows the OS light/dark setting live. A custom theme is saved separately — the built-in it was based on stays untouched.",
-      settings: ["Theme choice — Settings", "Theme editor — Expert menu → Appearance → Global colour palette"],
-      tip: "Custom themes are an opt-in feature — the editor button appears once it's turned on.",
+      settings: ["Theme choice — Settings", "Theme editor — Expert menu → Appearance → Global colour palette", "Accent-coloured header, frosted dialogs, hidden or accent-coloured scrollbars, smooth scrolling — Expert menu → Appearance → Visual"],
+      tip: "Custom themes are on out of the box; switching them off in the expert menu also hides the editor button.",
     },
     {
       section: "organising",
@@ -177,7 +177,7 @@ export const HELP_CONTENT = {
         "Click a row to copy, or use its menu to edit, drag onto the grid, tag or delete.",
       ],
       whatHappens: "Search is typo-tolerant (fuzzy) by default and, unless turned off, sorts by most-used or most-recently-used.",
-      settings: ["Fuzzy search, smart sort, type/colour filters — Expert menu → Library & History → Library"],
+      settings: ["Fuzzy search, smart sort, type/colour filters — Expert menu → Library & History → Library", "Focus the search field on opening, multi-select for batch actions, image and video previews in the rows — Expert menu → Library & History → Library"],
     },
     {
       section: "organising",
@@ -200,7 +200,7 @@ export const HELP_CONTENT = {
         "Delete a single row, or clear the whole history.",
       ],
       whatHappens: "Grouped view shows one row per prompt (its most recent copy) instead of every event. History older than the retention setting is dropped automatically.",
-      settings: ["Grouped view, retention — Expert menu → Library & History → Copy history"],
+      settings: ["Grouped view, retention — Expert menu → Library & History → Copy history", "Skip an entry that repeats the copy before it — Expert menu → Library & History → Copy history"],
     },
     {
       section: "organising",
@@ -211,7 +211,7 @@ export const HELP_CONTENT = {
         "Adjust playback and privacy-leaning looks in the expert menu.",
       ],
       whatHappens: "Video settings (autoplay, mute, loop, volume) apply to every video tile; grayscale/dim-until-hovered only changes how media looks, never what gets copied.",
-      settings: ["Video controls, autoplay, mute, loop — Expert menu → Media", "Grayscale / dim until hovered — Expert menu → Media"],
+      settings: ["Video controls, autoplay, mute, loop — Expert menu → Media", "Grayscale / dim until hovered — Expert menu → Media", "Accent border and rounded corners around media — Expert menu → Media"],
     },
     {
       section: "look",
@@ -219,7 +219,7 @@ export const HELP_CONTENT = {
       whatItIs: "Which buttons the header and composer bar show.",
       howTo: ["Right-click the header for a quick toggle list, or use the expert menu for the full set."],
       whatHappens: "Hiding a button only hides it — the feature behind it, if any, keeps working through its own hotkey or menu entry.",
-      settings: ["Quick grid-size control, library/history/pin buttons, multiple views, view groups — Expert menu → System & data → Toolbar"],
+      settings: ["Quick grid-size control, library/history/pin buttons, multiple views, view groups — Expert menu → System & data → Toolbar", "Reveal the quick grid-size control on hover only, dim the whole bar until hovered, keep the buttons of switched-off features around — Expert menu → System & data → Toolbar"],
     },
     {
       section: "system",
@@ -247,7 +247,7 @@ export const HELP_CONTENT = {
       howTo: ["Open the expert menu → System & data → Data & maintenance.", "Run the duplicate finder, open the trash, or import/export from there."],
       whatHappens:
         "A deleted prompt sits in the trash, with its own retention setting, before it's gone for good. The duplicate finder only flags near-identical prompts by text similarity — it never deletes anything on its own.",
-      settings: ["Duplicate finder, trash retention, import/export — Expert menu → System & data → Data & maintenance"],
+      settings: ["Duplicate finder, trash retention, import/export — Expert menu → System & data → Data & maintenance", "Take a backup before a reset or a delete-everything — Expert menu → System & data → Data & maintenance"],
     },
     {
       section: "system",
@@ -278,21 +278,21 @@ export const HELP_CONTENT = {
       section: "organising",
       title: "Standalone: Multiple views",
       whatItIs:
-        "A view is one grid page with its own size and arrangement; a prompt can live in several views. View groups turn views into tabs instead of a dropdown.",
+        "A view is one grid page with its own size and arrangement. A prompt normally sits in exactly one view — adding it somewhere else moves it there — unless you turn on \"Prompt in several views\", which ships off. View groups turn views into tabs instead of a dropdown.",
       howTo: [
         "Click + next to the view tabs to add a view.",
         "Right-click a tab to rename, resize, recolour or delete it.",
         "Drag one view tab onto another to merge them into a group.",
       ],
       whatHappens: "Deleting a view does not delete the prompts placed on it — a prompt also shown in another view keeps working there.",
-      settings: [],
+      settings: ["Multiple views, view groups, prompt in several views — Expert menu → System & data → Toolbar"],
     },
     {
       section: "look",
       title: "Standalone: Theme editor",
       whatItIs: "Start from any built-in theme, change individual colours, and save the result as your own theme — the original stays untouched.",
       howTo: [
-        "Open the theme editor (Expert menu → Appearance → Global colour palette, once custom themes are on).",
+        "Open the theme editor (Expert menu → Appearance → Global colour palette; custom themes have to be on, which they are by default).",
         "Pick a base theme, adjust colours, and save under a new name.",
       ],
       whatHappens: "A custom theme appears in the regular theme dropdown alongside the built-ins; deleting it does not affect the theme it was based on.",
@@ -368,13 +368,13 @@ export const HELP_CONTENT = {
       section: "system",
       title: "Markdown folder sync (beta)",
       whatItIs:
-        "An optional, off-by-default mirror that writes every text-only prompt as its own readable .md file in a folder you pick, alongside the encrypted database — including which view, grid cell and folder it sits in.",
+        "An optional, off-by-default mirror that writes every prompt as its own readable .md file in a folder you pick, alongside the encrypted database — including which view, grid cell and folder it sits in.",
       howTo: [
         "Turn it on and pick a folder in the expert menu.",
         "Edit a prompt normally, or edit its .md file directly — either direction syncs to the other, position and folder included.",
       ],
       whatHappens:
-        "Unlike the database, the .md files are plain text — anyone with access to that folder can read the prompts, so avoid a synced or shared folder for anything sensitive. A prompt with an attached file, image or video is skipped; it never had a text-only .md form to sync. A view or folder named in an incoming file that does not exist yet on this machine is created automatically, matched by name.",
+        "Unlike the database, the .md files are plain text — anyone with access to that folder can read the prompts, so avoid a synced or shared folder for anything sensitive. A prompt with an attached file, image or PDF syncs as a REFERENCE: the header carries the path and the PDF page, never the file itself, so the other machine needs the same path for the button to work there. A screenshot pasted straight into a prompt has no path at all and stays in the database only. A view or folder named in an incoming file that does not exist yet on this machine is created automatically, matched by name.",
       settings: ["Prompt sync, sync folder — Expert menu → Features → Prompt sync"],
       tip: "This is a beta feature — keep the sync folder somewhere only you can read.",
     },
@@ -396,14 +396,14 @@ export const HELP_CONTENT = {
       title: "Colour picker & pick history",
       whatItIs: "A pipette that freezes the screen, magnifies the pixel under your cursor, and copies it as hex, rgb or hsl.",
       howTo: [
-        "Click the pipette icon (off by default — turn it on in the expert menu first).",
+        "Click the pipette icon in the composer bar.",
         "Move the loupe to the pixel you want; scroll or +/- to zoom.",
         "Click to copy the colour; right-click the pipette icon to reopen your last few picks.",
       ],
       whatHappens:
         "Nothing is ever saved to a prompt automatically — a pick only reaches the clipboard. The pick history holds your last few colours and survives a restart, capped by its own setting.",
       settings: ["Colour picker, zoom, format, pick-history length — Expert menu → Features → Create prompts"],
-      tip: "The colour picker (pipette) is off by default.",
+      tip: "Colour formats: click the format you want in the toast that appears after a pick.",
     },
     {
       section: "basics",
@@ -438,7 +438,7 @@ export const HELP_CONTENT = {
       title: "Keyboard-only use",
       whatItIs: "Arrow keys move a focus ring across the grid; Enter or Space copies whichever tile is focused.",
       howTo: [
-        "Turn on keyboard navigation in the expert menu.",
+        "Keyboard navigation is on out of the box (expert menu → System & data if you ever want it off).",
         "Use the arrow keys to move the focus ring, Enter or Space to copy.",
         "Tab still moves through buttons and fields everywhere else in the app, as usual.",
       ],
@@ -507,8 +507,8 @@ export const HELP_CONTENT = {
         "Drag & Drop — ziehe eine Datei oder ein Bild direkt auf das Raster.",
       ],
       whatHappens: "Die angehängte Datei, der Screenshot oder die Farbe wird zum Inhalt des Prompts — das Kopieren kopiert später diese Datei, dieses Bild oder diese Farbe, nicht den Text.",
-      settings: ["Dateianhang, Screenshot-Tool, Farbpipette, Drag & Drop — Experten-Menü → Funktionen → Prompts erstellen"],
-      tip: "Die Farbpipette ist standardmäßig deaktiviert.",
+      settings: ["Dateianhang, Screenshot-Tool, Farbpipette, Drag & Drop — Experten-Menü → Funktionen → Prompts erstellen", "Kopie einer angehängten Datei behalten und diese Kopie mit dem Prompt löschen — Experten-Menü → Funktionen → Prompts erstellen"],
+      tip: "Farbformate: Klick im Hinweis nach der Auswahl das Format an, das du haben willst.",
     },
     {
       section: "basics",
@@ -536,7 +536,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Der Versionsverlauf speichert jede Änderung, sodass jede frühere Version wiederhergestellt werden kann. Die Markdown-Vorschau wird neben (oder anstelle) des Textfelds gerendert, ohne das zu verändern, was tatsächlich gespeichert wird. Private Notizen werden niemals kopiert oder mit dem Prompt-Text exportiert.",
-      settings: ["Markdown-Vorschau, Syntax-Hervorhebung, Versionsverlauf, private Notizen — Experten-Menü → Funktionen → Editor"],
+      settings: ["Markdown-Vorschau, Syntax-Hervorhebung, Versionsverlauf, private Notizen — Experten-Menü → Funktionen → Editor", "Textfeld in dicktengleicher Schrift — Experten-Menü → Funktionen → Editor"],
       tip: "Markdown-Vorschau und private Notizen sind standardmäßig deaktiviert.",
     },
     {
@@ -550,7 +550,7 @@ export const HELP_CONTENT = {
       ],
       whatHappens:
         "Eine kurze Bestätigungsblase oder ein Aufblinken bestätigt den Kopiervorgang. Chaining (Klicken auf mehrere Kacheln hintereinander) fasst sie zu einem Eintrag in der Zwischenablage zusammen, anstatt sie gegenseitig zu überschreiben.",
-      settings: ["Prompt-Chaining, eigene Hotkeys pro Prompt, Auto-Paste, Drag-out, Schließen-nach-Kopieren — Experten-Menü → Funktionen → Kopieren"],
+      settings: ["Prompt-Chaining, eigene Hotkeys pro Prompt, Auto-Paste, Drag-out, Schließen-nach-Kopieren — Experten-Menü → Funktionen → Kopieren", "Welche Taste einen Prompt herauszieht und ob diese Taste herauszieht oder die Kachel verschiebt — Experten-Menü → Funktionen → Kopieren"],
     },
     {
       section: "alwaysOnTop",
@@ -566,7 +566,7 @@ export const HELP_CONTENT = {
       whatHappens:
         "Positionen bleiben nach App-Neustarts erhalten. Ein Ordner (beider Arten) zeigt bis zu vier Vorschauen seiner Mitglieder und eine Anzahl; das Herausziehen eines Mitglieds gibt es frei, und der Ordner löst sich auf, sobald nur noch ein Mitglied übrig ist. Eine Kachel kann immer nur zu einem Raster-Ordner gleichzeitig gehören.",
       settings: ["Pillen-Ordner, Raster-Ordner — Experten-Menü → Funktionen → Schwebende Buttons & Ordner"],
-      tip: "Beide Ordnerarten sind standardmäßig deaktiviert.",
+      tip: "Beide Ordnerarten sind ab Werk an; schalte sie im Experten-Menü aus, wenn du Buttons nie gruppierst.",
     },
     {
       section: "alwaysOnTop",
@@ -639,8 +639,8 @@ export const HELP_CONTENT = {
       whatItIs: "Acht integrierte Themes: System, Hell, Dunkel, Programmer, Neon Violet, Ocean, Cyberpunk und Black & White.",
       howTo: ["Wähle ein Theme in den Einstellungen.", "Öffne den Theme-Editor (sobald aktiviert), um die Farben eines Themes anzupassen und ein eigenes zu speichern."],
       whatHappens: "\"System\" folgt live der Hell-/Dunkel-Einstellung des Betriebssystems. Ein benutzerdefiniertes Theme wird separat gespeichert — das integrierte, auf dem es basierte, bleibt unangetastet.",
-      settings: ["Theme-Wahl — Einstellungen", "Theme-Editor — Experten-Menü → Aussehen → Globale Farbauswahl"],
-      tip: "Benutzerdefinierte Themes sind eine optionale Funktion — der Editor-Button erscheint, sobald sie aktiviert ist.",
+      settings: ["Theme-Wahl — Einstellungen", "Theme-Editor — Experten-Menü → Aussehen → Globale Farbauswahl", "Kopfzeile in Akzentfarbe, milchige Dialoge, versteckte oder eingefärbte Scrollbalken, weiches Scrollen — Experten-Menü → Aussehen → Visuell"],
+      tip: "Benutzerdefinierte Themes sind ab Werk an; schaltest du sie im Experten-Menü aus, verschwindet auch der Editor-Button.",
     },
     {
       section: "organising",
@@ -652,7 +652,7 @@ export const HELP_CONTENT = {
         "Klicke auf eine Zeile zum Kopieren oder nutze das Menü, um sie zu bearbeiten, auf das Raster zu ziehen, zu taggen oder zu löschen.",
       ],
       whatHappens: "Die Suche ist standardmäßig fehlertolerant (Fuzzy) und sortiert, falls nicht deaktiviert, nach den am häufigsten oder am kürzlichsten verwendeten.",
-      settings: ["Fuzzy-Suche, clevere Sortierung, Typ-/Farb-Filter — Experten-Menü → Bibliothek & Verlauf → Bibliothek"],
+      settings: ["Fuzzy-Suche, clevere Sortierung, Typ-/Farb-Filter — Experten-Menü → Bibliothek & Verlauf → Bibliothek", "Suchfeld beim Öffnen fokussieren, Mehrfachauswahl für Stapelaktionen, Bild- und Video-Vorschau in den Zeilen — Experten-Menü → Bibliothek & Verlauf → Bibliothek"],
     },
     {
       section: "organising",
@@ -675,7 +675,7 @@ export const HELP_CONTENT = {
         "Lösche eine einzelne Zeile oder leere den gesamten Verlauf.",
       ],
       whatHappens: "Die gruppierte Ansicht zeigt eine Zeile pro Prompt (seine letzte Kopie) anstatt jedes Ereignisses. Verlauf, der älter ist als die Aufbewahrungs-Einstellung, wird automatisch gelöscht.",
-      settings: ["Gruppierte Ansicht, Aufbewahrungsdauer — Experten-Menü → Bibliothek & Verlauf → Kopierverlauf"],
+      settings: ["Gruppierte Ansicht, Aufbewahrungsdauer — Experten-Menü → Bibliothek & Verlauf → Kopierverlauf", "Einen Eintrag überspringen, der die Kopie davor wiederholt — Experten-Menü → Bibliothek & Verlauf → Kopierverlauf"],
     },
     {
       section: "organising",
@@ -686,7 +686,7 @@ export const HELP_CONTENT = {
         "Passe Wiedergabe und privatsphärefreundliche Optiken im Experten-Menü an.",
       ],
       whatHappens: "Video-Einstellungen (Autoplay, Stumm, Schleife, Lautstärke) gelten für jede Video-Kachel; Graustufen/Abgedunkelt-bis-Hover ändert nur das Aussehen der Medien, niemals das, was kopiert wird.",
-      settings: ["Video-Steuerung, Autoplay, Stumm, Schleife — Experten-Menü → Medien", "Graustufen / abgedunkelt bis gehovert — Experten-Menü → Medien"],
+      settings: ["Video-Steuerung, Autoplay, Stumm, Schleife — Experten-Menü → Medien", "Graustufen / abgedunkelt bis gehovert — Experten-Menü → Medien", "Akzentrahmen und abgerundete Ecken um Medien — Experten-Menü → Medien"],
     },
     {
       section: "look",
@@ -694,7 +694,7 @@ export const HELP_CONTENT = {
       whatItIs: "Welche Buttons der Kopfbereich und die Composer-Leiste anzeigen.",
       howTo: ["Rechtsklick auf den Kopfbereich für eine schnelle Umschaltliste, oder nutze das Experten-Menü für das komplette Set."],
       whatHappens: "Das Ausblenden eines Buttons blendet ihn nur aus — die dahinterliegende Funktion (falls vorhanden) funktioniert weiterhin über ihren eigenen Hotkey oder Menüeintrag.",
-      settings: ["Schnelle Rastergrößen-Steuerung, Bibliothek/Verlauf/Anheft-Buttons, mehrere Ansichten, Ansichtsgruppen — Experten-Menü → System & Daten → Werkzeugleiste"],
+      settings: ["Schnelle Rastergrößen-Steuerung, Bibliothek/Verlauf/Anheft-Buttons, mehrere Ansichten, Ansichtsgruppen — Experten-Menü → System & Daten → Werkzeugleiste", "Rastergrößen-Steuerung erst beim Hovern zeigen, die ganze Leiste bis zum Hovern abdunkeln, Buttons abgeschalteter Funktionen behalten — Experten-Menü → System & Daten → Werkzeugleiste"],
     },
     {
       section: "system",
@@ -722,7 +722,7 @@ export const HELP_CONTENT = {
       howTo: ["Öffne das Experten-Menü → System & Daten → Daten & Wartung.", "Führe den Duplikat-Finder aus, öffne den Papierkorb, oder importiere/exportiere von dort."],
       whatHappens:
         "Ein gelöschter Prompt liegt im Papierkorb mit seiner eigenen Aufbewahrungsdauer, bevor er endgültig weg ist. Der Duplikat-Finder markiert nur nahezu identische Prompts durch Textähnlichkeit — er löscht von sich aus niemals etwas.",
-      settings: ["Duplikat-Finder, Papierkorb-Aufbewahrung, Import/Export — Experten-Menü → System & Daten → Daten & Wartung"],
+      settings: ["Duplikat-Finder, Papierkorb-Aufbewahrung, Import/Export — Experten-Menü → System & Daten → Daten & Wartung", "Vor einem Zurücksetzen oder Alles-Löschen eine Sicherung anlegen — Experten-Menü → System & Daten → Daten & Wartung"],
     },
     {
       section: "system",
@@ -753,21 +753,21 @@ export const HELP_CONTENT = {
       section: "organising",
       title: "Eigenständig: Mehrere Ansichten",
       whatItIs:
-        "Eine Ansicht ist eine Rasterseite mit eigener Größe und Anordnung; ein Prompt kann in mehreren Ansichten existieren. Ansichtsgruppen verwandeln Ansichten in Tabs statt eines Dropdowns.",
+        "Eine Ansicht ist eine Rasterseite mit eigener Größe und Anordnung. Ein Prompt sitzt normalerweise in genau einer Ansicht — legst du ihn woanders ab, wandert er dorthin — es sei denn, du schaltest „Prompt in mehreren Ansichten“ ein, das ab Werk aus ist. Ansichtsgruppen verwandeln Ansichten in Tabs statt eines Dropdowns.",
       howTo: [
         "Klick auf + neben den Ansichts-Tabs fügt eine Ansicht hinzu.",
         "Rechtsklick auf einen Tab, um ihn umzubenennen, in der Größe zu ändern, umzufärben oder zu löschen.",
         "Ziehe einen Ansichts-Tab auf einen anderen, um sie zu einer Gruppe zusammenzufassen.",
       ],
       whatHappens: "Das Löschen einer Ansicht löscht nicht die darauf platzierten Prompts — ein Prompt, der auch in einer anderen Ansicht angezeigt wird, funktioniert dort weiterhin.",
-      settings: [],
+      settings: ["Mehrere Ansichten, Ansichtsgruppen, Prompt in mehreren Ansichten — Experten-Menü → System & Daten → Werkzeugleiste"],
     },
     {
       section: "look",
       title: "Eigenständig: Theme-Editor",
       whatItIs: "Beginne mit einem beliebigen integrierten Theme, ändere einzelne Farben und speichere das Ergebnis als eigenes Theme — das Original bleibt unangetastet.",
       howTo: [
-        "Öffne den Theme-Editor (Experten-Menü → Aussehen → Globale Farbauswahl, sobald benutzerdefinierte Themes aktiviert sind).",
+        "Öffne den Theme-Editor (Experten-Menü → Aussehen → Globale Farbauswahl; benutzerdefinierte Themes müssen an sein, was ab Werk der Fall ist).",
         "Wähle ein Basis-Theme, passe Farben an, und speichere es unter einem neuen Namen.",
       ],
       whatHappens: "Ein benutzerdefiniertes Theme erscheint im regulären Theme-Dropdown neben den integrierten; wenn es gelöscht wird, betrifft das nicht das Theme, auf dem es basierte.",
@@ -843,13 +843,13 @@ export const HELP_CONTENT = {
       section: "system",
       title: "Markdown-Ordner-Sync (Beta)",
       whatItIs:
-        "Ein optionaler, standardmäßig deaktivierter Spiegel, der jeden Nur-Text-Prompt als eigene lesbare .md-Datei in einen selbst gewählten Ordner schreibt, neben die verschlüsselte Datenbank — inklusive Ansicht, Rasterzelle und Ordner.",
+        "Ein optionaler, standardmäßig deaktivierter Spiegel, der jeden Prompt als eigene lesbare .md-Datei in einen selbst gewählten Ordner schreibt, neben die verschlüsselte Datenbank — inklusive Ansicht, Rasterzelle und Ordner.",
       howTo: [
         "Schalte es ein und wähle im Experten-Menü einen Ordner aus.",
         "Bearbeite einen Prompt normal oder bearbeite seine .md-Datei direkt — beide Richtungen synchronisieren sich zur anderen, Position und Ordner inklusive.",
       ],
       whatHappens:
-        "Im Gegensatz zur Datenbank sind die .md-Dateien im Klartext — jeder mit Zugriff auf diesen Ordner kann die Prompts lesen. Vermeide also einen synchronisierten oder freigegebenen Ordner für sensible Daten. Ein Prompt mit einer angehängten Datei, einem Bild oder Video wird übersprungen; er hatte ohnehin nie eine Nur-Text-.md-Form zum Synchronisieren. Eine in einer eingehenden Datei genannte Ansicht oder ein Ordner, den es auf diesem Rechner noch nicht gibt, wird automatisch angelegt, per Namensabgleich.",
+        "Im Gegensatz zur Datenbank sind die .md-Dateien im Klartext — jeder mit Zugriff auf diesen Ordner kann die Prompts lesen. Vermeide also einen synchronisierten oder freigegebenen Ordner für sensible Daten. Ein Prompt mit angehängter Datei, Bild oder PDF wird als VERWEIS synchronisiert: im Kopf stehen Pfad und PDF-Seite, nie die Datei selbst — der andere Rechner braucht also denselben Pfad, damit der Button dort funktioniert. Ein direkt eingefügter Screenshot hat gar keinen Pfad und bleibt nur in der Datenbank. Eine in einer eingehenden Datei genannte Ansicht oder ein Ordner, den es auf diesem Rechner noch nicht gibt, wird automatisch angelegt, per Namensabgleich.",
       settings: ["Prompt-Synchronisierung, Synchronisierungsordner — Experten-Menü → Funktionen → Prompt-Synchronisierung"],
       tip: "Dies ist eine Beta-Funktion — bewahre den Synchronisierungsordner an einem sicheren Ort auf.",
     },
@@ -871,14 +871,14 @@ export const HELP_CONTENT = {
       title: "Farbpipette & Auswahlverlauf",
       whatItIs: "Eine Pipette, die den Bildschirm einfriert, den Pixel unter dem Cursor vergrößert und ihn als Hex, RGB oder HSL kopiert.",
       howTo: [
-        "Klicke auf das Pipetten-Icon (standardmäßig aus — schalte es zuerst im Experten-Menü ein).",
+        "Klicke auf das Pipetten-Icon in der Eingabeleiste.",
         "Bewege die Lupe zu dem gewünschten Pixel; scrolle oder nutze +/- zum Zoomen.",
         "Klicke, um die Farbe zu kopieren; Rechtsklick auf das Pipetten-Icon, um die letzten paar Auswahlen wieder zu öffnen.",
       ],
       whatHappens:
         "Es wird niemals automatisch etwas in einem Prompt gespeichert — eine Auswahl landet nur in der Zwischenablage. Der Auswahlverlauf speichert die letzten paar Farben und übersteht einen Neustart, begrenzt durch eine eigene Einstellung.",
       settings: ["Farbpipette, Zoom, Format, Länge des Auswahlverlaufs — Experten-Menü → Funktionen → Prompts erstellen"],
-      tip: "Die Farbpipette ist standardmäßig deaktiviert.",
+      tip: "Farbformate: Klick im Hinweis nach der Auswahl das Format an, das du haben willst.",
     },
     {
       section: "basics",
@@ -913,7 +913,7 @@ export const HELP_CONTENT = {
       title: "Tastaturnavigation",
       whatItIs: "Pfeiltasten bewegen einen Fokusring über das Raster; Enter oder Leertaste kopiert die Kachel, die gerade fokussiert ist.",
       howTo: [
-        "Schalte die Tastaturnavigation im Experten-Menü ein.",
+        "Die Tastaturnavigation ist ab Werk an (Experten-Menü → System & Daten, falls du sie doch abschalten willst).",
         "Verwende die Pfeiltasten, um den Fokusring zu bewegen, und Enter oder Leertaste, um zu kopieren.",
         "Tabulator springt weiterhin wie gewohnt durch Buttons und Felder überall sonst in der App.",
       ],
