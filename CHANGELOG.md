@@ -6,13 +6,14 @@ All notable changes to **Prompt Saver**. Download the latest version from the
 
 ## 2.7.0 (unreleased)
 
-Eighteen new features: tags, custom themes, folders for view tabs and for
+Nineteen new features: tags, custom themes, folders for view tabs and for
 floating buttons, self-filling and choice variables, a markdown preview with
 syntax colors, private notes, per-prompt hotkeys, drag-out into other apps, a
 tray quick-copy menu, a screen color picker, a standalone quick launcher,
 multi-select in the grid, a trash for deleted prompts, placing one prompt in
-several views at once, and restoring a backup's data and settings separately.
-Everything new is an expert-menu switch, most of it off until you turn it on.
+several views at once, restoring a backup's data and settings separately, and
+rotating prompts. Everything new is an expert-menu switch, most of it off
+until you turn it on.
 
 ### Added
 
@@ -89,6 +90,12 @@ Everything new is an expert-menu switch, most of it off until you turn it on.
 - **Restore data and settings separately** — restoring a backup now offers two
   checkboxes instead of an all-or-nothing swap: bring back your prompts
   without touching your current setup, or the other way around.
+- **Rotating prompts** — a text prompt can hold a list of texts instead of one;
+  each copy serves the next entry, in order or shuffled, and a small badge on
+  the tile shows the position. The editor turns the text field into a numbered
+  list with a mode switch and a "from the start" reset. Entries survive
+  export/import, backups, Markdown-sync and version history, and the library
+  search finds a match inside any entry, not just the first.
 
 ### Improved
 
