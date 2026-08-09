@@ -7901,8 +7901,11 @@ async fn set_video_prefs(app: AppHandle, state: State<'_, Db>, id: String, volum
 // copies it to the clipboard, saves a PNG and hands the crop to the main UI.
 
 // One frozen monitor: its capture plus its global physical origin and size.
+// image is Arc'd so the background JPEG encode and the stored capture share one
+// buffer instead of each owning an ~80 MB copy of the frozen desktop — every
+// reader (crop_rgb/crop_rgba/sample_frozen) only ever borrows it.
 struct MonitorCap {
-    image: image::RgbaImage,
+    image: Arc<image::RgbaImage>,
     x: i32,
     y: i32,
     width: u32,
@@ -7945,10 +7948,17 @@ fn close_all_snip(app: &AppHandle) {
 // Hide (or restore) the app's own windows — the main window and floating pills —
 // around a snip, so a screenshot never contains the app itself (this also
 // reveals whatever the main window was covering, e.g. Task Manager).
-fn set_app_windows_hidden(app: &AppHandle, hidden: bool) {
+// Returns whether any matching window was visible beforehand — begin_capture
+// uses this on the hide path to skip its post-hide settle delay when there was
+// nothing on screen to hide in the first place.
+fn set_app_windows_hidden(app: &AppHandle, hidden: bool) -> bool {
+    let mut was_visible = false;
     for (label, win) in app.webview_windows() {
         if label == "main" || label.starts_with("float-") {
             if hidden {
+                if win.is_visible().unwrap_or(true) {
+                    was_visible = true;
+                }
                 let _ = win.hide();
             } else {
                 let _ = win.show();
@@ -7962,6 +7972,7 @@ fn set_app_windows_hidden(app: &AppHandle, hidden: bool) {
             }
         }
     }
+    was_visible
 }
 
 // Hide (or re-show) only the snip overlay(s). Used by the window-capture
@@ -8574,12 +8585,17 @@ async fn begin_capture(
     // Hide our own windows BEFORE freezing so they're never in the capture and
     // the target underneath (e.g. Task Manager behind the main window) is
     // revealed. A short settle lets the hide reach the screen first.
-    set_app_windows_hidden(&app, true);
-    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+    let had_visible = set_app_windows_hidden(&app, true);
+    // Nothing was on screen to hide, so there is nothing the freeze could catch
+    // mid-hide either — the settle delay only matters when we just hid something.
+    if had_visible {
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+    }
     let (canvas, min_x, min_y) = freeze_desktop()?;
     let (total_w, total_h) = canvas.dimensions();
-    // Kick off the preview encode immediately (clone for the worker; the original
-    // stays in state for full-res crops). snip_background just awaits the result.
+    // Arc'd so the preview encode (worker thread) and the stored capture (full-res
+    // crops) share one buffer instead of each paying for their own ~80 MB copy.
+    let canvas = Arc::new(canvas);
     let enc_img = canvas.clone();
     *state.0.lock().unwrap_or_else(|e| e.into_inner()) = vec![MonitorCap {
         image: canvas,
@@ -14707,7 +14723,7 @@ mod tests {
         // ...and one in the far bottom-right of the right-hand monitor.
         canvas.put_pixel(rx as u32 + right_w - 1, right_h - 1, image::Rgba([1, 2, 3, 255]));
         (
-            vec![MonitorCap { image: canvas, x: origin_x, y: origin_y, width: total_w, height: total_h }],
+            vec![MonitorCap { image: Arc::new(canvas), x: origin_x, y: origin_y, width: total_w, height: total_h }],
             lx,
             rx,
         )
