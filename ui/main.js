@@ -7374,12 +7374,16 @@ async function confirmModal() {
       saved = await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode });
     }
   } catch (err) {
-    toast(hotkeyMessage(String(err))); // keep the modal open so nothing typed is lost
+    const errStr = String(err);
+    // save-failed has no hotkey involved - route it through the same friendly
+    // message the persist-failed event uses, instead of hotkeyMessage's fallback
+    // of showing the raw error code verbatim.
+    toast(errStr === "save-failed" ? t("persistFailed") : hotkeyMessage(errStr)); // keep the modal open so nothing typed is lost
     // A binding the backend refused was never stored, so the field must not keep
     // showing it: drop it and name the reason where it was captured.
-    if (HOTKEY_ERRORS[String(err)] && hotkey) {
+    if (HOTKEY_ERRORS[errStr] && hotkey) {
       setPromptHotkey("");
-      showHotkeyError(hotkeyMessage(String(err)));
+      showHotkeyError(hotkeyMessage(errStr));
     }
     return;
   } finally {

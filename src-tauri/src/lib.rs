@@ -3903,7 +3903,16 @@ async fn add_prompt(
             view.layouts.entry(key).or_default().insert(prompt.id.clone(), cell);
         }
         store.prompts.push(prompt.clone());
-        save_prompts(&app, &store);
+        if !save_prompts(&app, &store) {
+            // Nothing actually reached disk (or the JSON fallback) - undo the
+            // in-memory add and report it, instead of handing back an id the
+            // editor will believe is safely saved. The layout entry above was
+            // never persisted (save_settings below is skipped too), so it is
+            // harmless to leave dangling in memory: no prompt id means nothing
+            // ever draws it.
+            store.prompts.pop();
+            return Err("save-failed".into());
+        }
         save_settings(&app, &store.settings);
         prompt
     };
@@ -4060,6 +4069,10 @@ async fn update_prompt(
         let found = store.prompts.iter_mut().find(|p| p.id == id);
         match found {
             Some(p) => {
+                // 7: full pre-edit snapshot so a failed save can roll the live entry
+                // back instead of leaving the UI showing unsaved changes as if they
+                // had taken (they would silently revert on the next restart).
+                let original = p.clone();
                 // F7/32: snapshot the previous name/text/variants before overwriting,
                 // if changed — entries ARE content (WORK.md 32), so editing only
                 // entry 2 of a rotating prompt (name/text untouched) must still get a
@@ -4099,12 +4112,19 @@ async fn update_prompt(
                 if let Some(h) = hotkey { p.hotkey = h; }
                 if p.hotkey.is_empty() { p.hotkey_paste.clear(); } // no binding, no action
                 let clone = p.clone();
+                // 7: nothing reached disk (or the JSON fallback) - restore the pre-edit
+                // snapshot instead of handing back an id the editor will believe is
+                // safely saved.
+                if !save_prompts(&app, &store) {
+                    if let Some(slot) = store.prompts.iter_mut().find(|x| x.id == id) {
+                        *slot = original;
+                    }
+                    return Err("save-failed".into());
+                }
                 // 102: only sweep the old attachment once the new reference is durably
                 // saved -- otherwise a failed save leaves the DB pointing at a file the
                 // sweep just deleted, with no fallback (101) to recover it from.
-                if save_prompts(&app, &store) {
-                    cleanup_orphan_files(&app, &store); // a replaced attachment orphans its old copy
-                }
+                cleanup_orphan_files(&app, &store); // a replaced attachment orphans its old copy
                 let scale = float_scale_of(&store.settings, &id);
                 Some((clone, scale, rebind))
             }
