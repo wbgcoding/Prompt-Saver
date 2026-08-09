@@ -1300,9 +1300,14 @@ struct Settings {
     // those three (and only those) without guessing by name/content.
     #[serde(default)]
     example_prompt_ids: Vec<String>,
-    // F6: prompt-id pairs (sorted) the user marked "not a duplicate" — never regrouped.
+    // F6/14: each entry is one group of prompt ids the user dismissed together as
+    // "not a duplicate" - never re-suggested as a group. Was Vec<[String; 2]> (one
+    // entry per PAIR): ignoring an N-member group wrote N*(N-1)/2 entries, 79800 for
+    // a 400-item group. A JSON array of strings deserializes into a Vec<String> the
+    // same whether it has 2 elements or more, so every already-stored pair loads
+    // here unchanged as a 2-member group - no migration needed.
     #[serde(default)]
-    dup_ignored: Vec<[String; 2]>,
+    dup_ignored: Vec<Vec<String>>,
     // F1: tag key (the lowercased name) -> chip color (#rrggbb). Keyed lowercase so a
     // recased tag keeps its color. A tag without an entry renders neutral.
     #[serde(default)]
@@ -5790,6 +5795,14 @@ fn uf_find(parent: &mut [usize], mut x: usize) -> usize {
     x
 }
 
+// 14: true if some previously-ignored group contains BOTH ids - a pair only
+// counts as ignored when some single ignore_dups call covered them together,
+// not just because each independently belongs to some (possibly different)
+// ignored group.
+fn dup_pair_is_ignored(groups: &[Vec<String>], a: &str, b: &str) -> bool {
+    groups.iter().any(|g| g.iter().any(|id| id == a) && g.iter().any(|id| id == b))
+}
+
 // Find near-duplicate prompts by trigram/Dice similarity. Rayon-parallel over the
 // upper-triangle of pairs; 1000 prompts finish well under a second.
 #[tauri::command]
@@ -5829,13 +5842,6 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
         return Ok(Vec::new());
     }
     let grams: Vec<Set<[char; 3]>> = items.par_iter().map(|(_, s)| dup_trigrams(s)).collect();
-    let ignored: Set<(String, String)> = dup_ignored
-        .iter()
-        .map(|p| {
-            let (a, b) = (p[0].clone(), p[1].clone());
-            if a <= b { (a, b) } else { (b, a) }
-        })
-        .collect();
     let edges: Vec<(usize, usize, f64)> = (0..n)
         .into_par_iter()
         .flat_map(|i| {
@@ -5843,12 +5849,8 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
             let mut local = Vec::new();
             for j in (i + 1)..n {
                 let d = dup_dice(gi, &grams[j]);
-                if d >= thr {
-                    let (a, b) = (&items[i].0.id, &items[j].0.id);
-                    let key = if a <= b { (a.clone(), b.clone()) } else { (b.clone(), a.clone()) };
-                    if !ignored.contains(&key) {
-                        local.push((i, j, d));
-                    }
+                if d >= thr && !dup_pair_is_ignored(&dup_ignored, &items[i].0.id, &items[j].0.id) {
+                    local.push((i, j, d));
                 }
             }
             local
@@ -5913,23 +5915,26 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
     Ok(out)
 }
 
-// F6: mark all pairwise combinations of these prompt ids as "not duplicates".
+// F6/14: mark this whole group of prompt ids as "not duplicates" (of each other).
+// One entry for the whole group instead of every pairwise combination - see the
+// dup_ignored field comment for why.
 #[tauri::command]
 async fn ignore_dups(app: AppHandle, state: State<'_, Db>, ids: Vec<String>) -> Result<(), String> {
+    if ids.len() < 2 {
+        return Ok(()); // nothing to ignore a duplicate relationship between
+    }
     let mut store = lock(&state);
-    let mut existing: std::collections::HashSet<(String, String)> = store
-        .settings
-        .dup_ignored
-        .iter()
-        .map(|p| (p[0].clone(), p[1].clone()))
-        .collect();
-    for a in 0..ids.len() {
-        for b in (a + 1)..ids.len() {
-            let (x, y) = if ids[a] <= ids[b] { (ids[a].clone(), ids[b].clone()) } else { (ids[b].clone(), ids[a].clone()) };
-            if existing.insert((x.clone(), y.clone())) {
-                store.settings.dup_ignored.push([x, y]);
-            }
-        }
+    let mut sorted = ids;
+    sorted.sort();
+    sorted.dedup();
+    // Skip an exact repeat of an already-stored group (e.g. a double-click) so this
+    // cannot grow unbounded from the same action fired twice.
+    if !store.settings.dup_ignored.iter().any(|g| {
+        let mut existing = g.clone();
+        existing.sort();
+        existing == sorted
+    }) {
+        store.settings.dup_ignored.push(sorted);
     }
     save_settings(&app, &store.settings);
     Ok(())
@@ -14155,6 +14160,25 @@ mod tests {
         let ids: Vec<String> = vec!["a".to_string()];
         assert!(place_ids_in_view(&mut layout, &ids, 2, 1, &folder_cells));
         assert_eq!(layout.get("a"), Some(&[1, 0])); // [0,0] was the folder's, must be skipped
+    }
+
+    #[test]
+    fn dup_pair_is_ignored_checks_shared_group_membership() {
+        // 14: groups replace pairs - "a" and "d" each belong to a DIFFERENT ignored
+        // group (from two separate ignore_dups calls); neither call ever put them
+        // together, so they must NOT count as ignored even though both ids are
+        // independently "in some ignored group somewhere".
+        let groups = vec![
+            vec!["a".to_string(), "b".to_string(), "c".to_string()],
+            vec!["c".to_string(), "d".to_string(), "e".to_string()],
+        ];
+        assert!(dup_pair_is_ignored(&groups, "a", "b"), "same group, both directions");
+        assert!(dup_pair_is_ignored(&groups, "b", "a"));
+        assert!(dup_pair_is_ignored(&groups, "d", "e"), "second group on its own");
+        assert!(dup_pair_is_ignored(&groups, "a", "c"), "c belongs to both groups - still ignored with a");
+        assert!(dup_pair_is_ignored(&groups, "c", "d"), "and still ignored with d");
+        assert!(!dup_pair_is_ignored(&groups, "a", "d"), "never co-ignored in any single call");
+        assert!(!dup_pair_is_ignored(&groups, "a", "z"), "z was never ignored at all");
     }
 
     #[test]
