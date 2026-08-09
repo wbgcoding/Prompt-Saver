@@ -368,13 +368,13 @@ export const HELP_CONTENT = {
       section: "system",
       title: "Markdown folder sync (beta)",
       whatItIs:
-        "An optional, off-by-default mirror that writes every text-only prompt as its own readable .md file in a folder you pick, alongside the encrypted database.",
+        "An optional, off-by-default mirror that writes every text-only prompt as its own readable .md file in a folder you pick, alongside the encrypted database — including which view, grid cell and folder it sits in.",
       howTo: [
         "Turn it on and pick a folder in the expert menu.",
-        "Edit a prompt normally, or edit its .md file directly — either direction syncs to the other.",
+        "Edit a prompt normally, or edit its .md file directly — either direction syncs to the other, position and folder included.",
       ],
       whatHappens:
-        "Unlike the database, the .md files are plain text — anyone with access to that folder can read the prompts, so avoid a synced or shared folder for anything sensitive. A prompt with an attached file, image or video is skipped; it never had a text-only .md form to sync.",
+        "Unlike the database, the .md files are plain text — anyone with access to that folder can read the prompts, so avoid a synced or shared folder for anything sensitive. A prompt with an attached file, image or video is skipped; it never had a text-only .md form to sync. A view or folder named in an incoming file that does not exist yet on this machine is created automatically, matched by name.",
       settings: ["Prompt sync, sync folder — Expert menu → Features → Prompt sync"],
       tip: "This is a beta feature — keep the sync folder somewhere only you can read.",
     },
@@ -843,13 +843,13 @@ export const HELP_CONTENT = {
       section: "system",
       title: "Markdown-Ordner-Sync (Beta)",
       whatItIs:
-        "Ein optionaler, standardmäßig deaktivierter Spiegel, der jeden Nur-Text-Prompt als eigene lesbare .md-Datei in einen selbst gewählten Ordner schreibt, neben die verschlüsselte Datenbank.",
+        "Ein optionaler, standardmäßig deaktivierter Spiegel, der jeden Nur-Text-Prompt als eigene lesbare .md-Datei in einen selbst gewählten Ordner schreibt, neben die verschlüsselte Datenbank — inklusive Ansicht, Rasterzelle und Ordner.",
       howTo: [
         "Schalte es ein und wähle im Experten-Menü einen Ordner aus.",
-        "Bearbeite einen Prompt normal oder bearbeite seine .md-Datei direkt — beide Richtungen synchronisieren sich zur anderen.",
+        "Bearbeite einen Prompt normal oder bearbeite seine .md-Datei direkt — beide Richtungen synchronisieren sich zur anderen, Position und Ordner inklusive.",
       ],
       whatHappens:
-        "Im Gegensatz zur Datenbank sind die .md-Dateien im Klartext — jeder mit Zugriff auf diesen Ordner kann die Prompts lesen. Vermeide also einen synchronisierten oder freigegebenen Ordner für sensible Daten. Ein Prompt mit einer angehängten Datei, einem Bild oder Video wird übersprungen; er hatte ohnehin nie eine Nur-Text-.md-Form zum Synchronisieren.",
+        "Im Gegensatz zur Datenbank sind die .md-Dateien im Klartext — jeder mit Zugriff auf diesen Ordner kann die Prompts lesen. Vermeide also einen synchronisierten oder freigegebenen Ordner für sensible Daten. Ein Prompt mit einer angehängten Datei, einem Bild oder Video wird übersprungen; er hatte ohnehin nie eine Nur-Text-.md-Form zum Synchronisieren. Eine in einer eingehenden Datei genannte Ansicht oder ein Ordner, den es auf diesem Rechner noch nicht gibt, wird automatisch angelegt, per Namensabgleich.",
       settings: ["Prompt-Synchronisierung, Synchronisierungsordner — Experten-Menü → Funktionen → Prompt-Synchronisierung"],
       tip: "Dies ist eine Beta-Funktion — bewahre den Synchronisierungsordner an einem sicheren Ort auf.",
     },

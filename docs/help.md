@@ -234,7 +234,10 @@ duplicate — before anything is written; a full backup restores directly.
 ### Markdown folder sync (beta)
 
 An optional, off-by-default mirror that writes every text-only prompt as its own
-readable `.md` file in a folder you pick, alongside the encrypted database.
+readable `.md` file in a folder you pick, alongside the encrypted database —
+including which view, grid cell and folder it sits in. A view or folder named in
+an incoming file that does not exist yet on this machine is created
+automatically, matched by name.
 **The `.md` files are plain text** — unlike the database, anyone with access to
 that folder can read the prompts, so avoid a synced or shared folder for anything
 sensitive.
@@ -384,9 +387,11 @@ alles. Ein CSV/TXT-Import zeigt vorher eine Vorschau mit Name und
 Duplikat-Kennzeichnung; eine volle Sicherung stellt direkt wieder her.
 
 **Markdown-Ordner-Sync (Beta)** — spiegelt reine Textprompts als lesbare
-`.md`-Dateien in einem gewählten Ordner. **Die Dateien sind Klartext** — anders
-als die Datenbank, also kein synchronisierter oder geteilter Ordner für
-Sensibles.
+`.md`-Dateien in einem gewählten Ordner, inklusive Ansicht, Rasterzelle und
+Ordner. Eine in einer eingehenden Datei genannte Ansicht oder ein Ordner, den
+es auf diesem Rechner noch nicht gibt, wird automatisch angelegt, per
+Namensabgleich. **Die Dateien sind Klartext** — anders als die Datenbank, also
+kein synchronisierter oder geteilter Ordner für Sensibles.
 
 **Das Experten-Menü** — jede Funktion hat einen Schalter mit ihren Parametern
 direkt darunter. Die Suche durchsucht alle Tabs auf einmal; ausgeschaltete

@@ -11897,20 +11897,94 @@ fn md_escape_line(s: &str) -> String {
     s.replace(['\n', '\r'], " ")
 }
 
-fn prompt_to_md(p: &Prompt) -> String {
+// Item 2: what a prompt's synced .md file's placement header lines should say —
+// derived from Settings (view.layouts / tile_folders / float_folders), never
+// stored on Prompt itself. An empty field means "not applicable".
+#[derive(Default)]
+struct SyncPlacement {
+    view: String,
+    grid: String,
+    cell: String,
+    tile_folder: String,
+    tile_folder_color: String,
+    float_folder: String,
+}
+
+// A grid-folder member has no view.layouts entry of its own — save_tile_folder
+// drops it the moment it joins (F27) — so its view/grid/cell describe the
+// FOLDER's own placement instead. Every member's file ends up saying the same
+// (redundant, but self-consistent and self-healing: sync_write_all_impl rewrites
+// EVERY member's file the moment the folder moves, since prompt_to_md's output
+// changes for each of them). Float-folder membership is a fully separate axis —
+// a prompt can be a floating pill grouped into a pill-folder independently of
+// whatever grid tile it also is — and only membership syncs there, never the
+// folder's own desktop pixel position/scale, which is inherently per-machine
+// (a coordinate valid on one monitor layout can be off-screen on another).
+fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlacement {
+    let float_folder = settings
+        .float_folders
+        .iter()
+        .find(|f| f.members.iter().any(|m| m == &p.id))
+        .map(|f| f.name.clone())
+        .unwrap_or_default();
+    if let Some(tf) = settings.tile_folders.iter().find(|f| f.members.iter().any(|m| m == &p.id)) {
+        let view = settings.views.iter().find(|v| v.id == tf.view_id);
+        return SyncPlacement {
+            view: view.map(|v| v.name.clone()).unwrap_or_default(),
+            grid: view.map(|v| grid_key(v.cols, v.rows)).unwrap_or_default(),
+            cell: format!("{},{}", tf.cell[0], tf.cell[1]),
+            tile_folder: tf.name.clone(),
+            tile_folder_color: tf.color.clone(),
+            float_folder,
+        };
+    }
+    // Only the CURRENT grid size's saved layout — a view can hold one placement
+    // per size it has ever been resized to, but only the one matching its live
+    // cols/rows is "where the user sees it right now."
+    for view in &settings.views {
+        let key = grid_key(view.cols, view.rows);
+        if let Some(cell) = view.layouts.get(&key).and_then(|m| m.get(&p.id)) {
+            return SyncPlacement {
+                view: view.name.clone(),
+                grid: key,
+                cell: format!("{},{}", cell[0], cell[1]),
+                tile_folder: String::new(),
+                tile_folder_color: String::new(),
+                float_folder,
+            };
+        }
+    }
+    SyncPlacement {
+        view: String::new(),
+        grid: String::new(),
+        cell: String::new(),
+        tile_folder: String::new(),
+        tile_folder_color: String::new(),
+        float_folder,
+    }
+}
+
+fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
     let tags = p.tags.iter().map(|t| md_escape_line(t)).collect::<Vec<_>>().join(", ");
     // 32: `variants` is informational only (a human glancing at the header sees the
     // entry count at a glance) — NEVER read back by apply_md_to_prompt, which always
     // re-derives the real list from the body's own VARIANT_SEP markers. The four
-    // REQUIRED fields (name/color/tags/notes, md_is_ours()) are unchanged; this is a
-    // fifth, additive field, which md_is_ours() already tolerates.
+    // REQUIRED fields (name/color/tags/notes, md_is_ours()) are unchanged; `variants`
+    // and the six placement fields below (2) are additive, which md_is_ours()
+    // already tolerates.
     let mut out = format!(
-        "---\nname: {}\ncolor: {}\ntags: {}\nnotes: {}\nvariants: {}\n---\n",
+        "---\nname: {}\ncolor: {}\ntags: {}\nnotes: {}\nvariants: {}\nview: {}\ngrid: {}\ncell: {}\ntile_folder: {}\ntile_folder_color: {}\nfloat_folder: {}\n---\n",
         md_escape_line(&p.name),
         md_escape_line(&p.color),
         tags,
         md_escape_line(&p.notes),
         p.variants.len(),
+        md_escape_line(&placement.view),
+        placement.grid,
+        placement.cell,
+        md_escape_line(&placement.tile_folder),
+        placement.tile_folder_color,
+        md_escape_line(&placement.float_folder),
     );
     let text = join_variants(&p.text, &p.variants);
     out.push_str(&text);
@@ -11995,6 +12069,287 @@ fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
     // sanitize_rotate_mode already enforces for every other entry point.
     p.rotate_mode = sanitize_rotate_mode(p.rotate_mode.clone(), &p.variants);
     Some(p)
+}
+
+// Item 2 (Phase B): the incoming half of the six placement fields. Unlike
+// apply_md_to_prompt (Prompt fields), these land on Settings — a view/folder is
+// found by NAME (an id is meaningless across machines) and created here if this
+// machine has never seen it. Every part below is independently best-effort, same
+// "never lose data outright" philosophy as content sync — nothing here aborts the
+// whole file over one malformed field. Returns (grid_placed, folders_touched):
+// grid_placed tells the caller whether to skip today's "active view, first free
+// cell" fallback (only when the grid fields were absent or unusable — an older
+// version's file, a hand-created one, or a folder name this machine rejected);
+// folders_touched tells it whether a tile/float folder was created, joined or
+// LEFT, which needs a normalize pass — the two are independent, since a
+// float_folder join/leave carries no grid fields at all.
+//
+// A field that is PRESENT but empty ("tile_folder: ") is a deliberate "not in a
+// folder any more" from the writer — prompt_to_md always writes all six fields,
+// so an empty one is never ambiguous with "this file predates the feature." That
+// case must actively leave whatever folder this machine still has the prompt in,
+// or a folder left on one machine reappears there forever: this machine's own
+// next outgoing write would keep re-asserting the stale membership, and the
+// machine that dropped it would re-join on the next poll.
+fn apply_md_placement(settings: &mut Settings, prompt_id: &str, fields: &HashMap<String, String>) -> (bool, bool) {
+    let mut folders_touched = false;
+    if let Some(raw) = fields.get("float_folder") {
+        let name = raw.trim();
+        let touched = if name.is_empty() {
+            sync_leave_float_folder(settings, prompt_id)
+        } else {
+            sync_join_float_folder(settings, prompt_id, name)
+        };
+        if touched {
+            folders_touched = true;
+        }
+    }
+    let (view_name, cols, rows, cell) = sync_parse_view_grid_cell(fields);
+    if let Some(raw) = fields.get("tile_folder") {
+        let name = raw.trim();
+        if name.is_empty() {
+            if sync_leave_tile_folder(settings, prompt_id) {
+                folders_touched = true;
+            }
+        } else {
+            let color = fields.get("tile_folder_color").map(|s| s.as_str()).unwrap_or("");
+            let view_id = if view_name.trim().is_empty() {
+                settings.active_view.clone()
+            } else {
+                sync_find_or_create_view(settings, view_name, cols, rows)
+            };
+            if sync_join_tile_folder(settings, prompt_id, name, color, &view_id, cell.unwrap_or([0, 0])) {
+                folders_touched = true;
+                return (true, folders_touched);
+            }
+            // An unusable folder name (too long, control characters only) falls
+            // through to plain grid placement below instead of leaving a
+            // brand-new prompt with nowhere to land at all.
+        }
+    }
+    if view_name.trim().is_empty() || cell.is_none() {
+        return (false, folders_touched);
+    }
+    let view_id = sync_find_or_create_view(settings, view_name, cols, rows);
+    sync_place_in_view(settings, prompt_id, &view_id, cell.unwrap());
+    (true, folders_touched)
+}
+
+// Parses the "view" / "grid" / "cell" trio out of an incoming file's header. An
+// unparsable `grid` falls back to the app's own default size (only matters when
+// the view has to be created); an unparsable `cell` is None, not a wrong guess.
+fn sync_parse_view_grid_cell(fields: &HashMap<String, String>) -> (&str, u32, u32, Option<[u32; 2]>) {
+    let view = fields.get("view").map(|s| s.as_str()).unwrap_or("");
+    let (cols, rows) = fields
+        .get("grid")
+        .and_then(|g| g.split_once('x'))
+        .and_then(|(c, r)| Some((c.trim().parse().ok()?, r.trim().parse().ok()?)))
+        .unwrap_or((default_cols(), default_rows()));
+    let cell = fields
+        .get("cell")
+        .and_then(|c| c.split_once(','))
+        .and_then(|(x, y)| Some([x.trim().parse().ok()?, y.trim().parse().ok()?]));
+    (view, cols, rows, cell)
+}
+
+fn folder_cells_in_view(settings: &Settings, view_id: &str) -> Vec<[u32; 2]> {
+    settings.tile_folders.iter().filter(|f| f.view_id == view_id).map(|f| f.cell).collect()
+}
+
+// The exact incoming cell wins when nothing ELSE sits there yet on THIS machine;
+// otherwise the first free cell stands in, the same fallback a brand-new tile
+// gets today. `prompt_id`'s OWN existing entry at that cell never counts as a
+// collision — without this, re-importing a placement that already matches
+// (e.g. only the prompt's text changed on the other machine) would read as
+// "occupied by ourselves" and bounce the tile to a different free cell on every
+// unrelated content edit. Bounds-checks against the view's OWN size, which may
+// differ from the machine that sent the file — a view only takes its incoming
+// grid size once, at creation (sync_find_or_create_view), never a forced resize
+// afterward.
+fn sync_resolve_cell(settings: &Settings, view_id: &str, prompt_id: &str, wanted: [u32; 2]) -> Option<[u32; 2]> {
+    let view = settings.views.iter().find(|v| v.id == view_id)?;
+    let folder_cells = folder_cells_in_view(settings, view_id);
+    let key = grid_key(view.cols, view.rows);
+    let fits = wanted[0] < view.cols
+        && wanted[1] < view.rows
+        && !folder_cells.contains(&wanted)
+        && !view
+            .layouts
+            .get(&key)
+            .map(|m| m.iter().any(|(pid, c)| pid != prompt_id && *c == wanted))
+            .unwrap_or(false);
+    if fits { Some(wanted) } else { first_free_cell_excluding(view, &folder_cells) }
+}
+
+fn sync_place_in_view(settings: &mut Settings, prompt_id: &str, view_id: &str, wanted: [u32; 2]) {
+    let Some(cell) = sync_resolve_cell(settings, view_id, prompt_id, wanted) else { return };
+    let Some(view) = settings.views.iter_mut().find(|v| v.id == view_id) else { return };
+    let key = grid_key(view.cols, view.rows);
+    view.layouts.entry(key).or_default().insert(prompt_id.to_string(), cell);
+}
+
+// Finds a view by NAME or creates one at the incoming grid size (clamped like
+// every other view creation). Ids never travel between machines — the name is the
+// only thing an incoming file and a local view can agree on.
+fn sync_find_or_create_view(settings: &mut Settings, name: &str, cols: u32, rows: u32) -> String {
+    if let Some(v) = settings.views.iter().find(|v| v.name == name) {
+        return v.id.clone();
+    }
+    if settings.views.len() >= MAX_VIEWS {
+        return settings.active_view.clone();
+    }
+    let id = gen_id();
+    settings.views.push(View {
+        id: id.clone(),
+        name: name.to_string(),
+        cols: cols.clamp(GRID_MIN, GRID_MAX),
+        rows: rows.clamp(GRID_MIN, GRID_MAX),
+        layouts: HashMap::new(),
+        color: String::new(),
+    });
+    id
+}
+
+// Removes a prompt from every grid folder it happens to be in — the "leave" half
+// of an explicit-empty tile_folder field, and the shared first step both a leave
+// and a re-join take (moving folders is a leave-then-join). Returns whether it
+// actually removed anything, so a no-op leave (never was a member) doesn't count
+// as a change worth persisting.
+fn sync_leave_tile_folder(settings: &mut Settings, prompt_id: &str) -> bool {
+    let mut removed = false;
+    for folder in settings.tile_folders.iter_mut() {
+        let before = folder.members.len();
+        folder.members.retain(|m| m != prompt_id);
+        if folder.members.len() != before {
+            removed = true;
+        }
+    }
+    removed
+}
+
+fn sync_leave_float_folder(settings: &mut Settings, prompt_id: &str) -> bool {
+    let mut removed = false;
+    for folder in settings.float_folders.iter_mut() {
+        let before = folder.members.len();
+        folder.members.retain(|m| m != prompt_id);
+        if folder.members.len() != before {
+            removed = true;
+        }
+    }
+    removed
+}
+
+// Finds a grid folder by NAME or creates one — every member's file redundantly
+// carries the same name/color/place, so any one of them can recreate it. Mirrors
+// save_tile_folder: pulled out of every OTHER folder first, and a folder member is
+// not a tile of its own, so its own layout entry is dropped the moment it joins.
+fn sync_join_tile_folder(settings: &mut Settings, prompt_id: &str, name: &str, color: &str, view_id: &str, cell: [u32; 2]) -> bool {
+    let Ok(name) = folder_name_of(name) else { return false };
+    if name.is_empty() {
+        return false;
+    }
+    let color = valid_tag_color(color).unwrap_or_default();
+    let exists = settings.tile_folders.iter().any(|f| f.name == name);
+    let cell = if exists { cell } else { sync_resolve_cell(settings, view_id, prompt_id, cell).unwrap_or(cell) };
+    sync_leave_tile_folder(settings, prompt_id);
+    match settings.tile_folders.iter_mut().find(|f| f.name == name) {
+        Some(folder) => folder.members.push(prompt_id.to_string()),
+        None => settings.tile_folders.push(TileFolder {
+            id: gen_id(),
+            name,
+            color,
+            view_id: view_id.to_string(),
+            cell,
+            members: vec![prompt_id.to_string()],
+        }),
+    }
+    let inside: Vec<String> = settings.tile_folders.iter().flat_map(|f| f.members.iter().cloned()).collect();
+    for view in settings.views.iter_mut() {
+        for layout in view.layouts.values_mut() {
+            layout.retain(|pid, _| !inside.contains(pid));
+        }
+    }
+    true
+}
+
+// Same for pill folders, but only ever joins a prompt that is ALREADY a floating
+// pill on this machine (has a `floating` entry) — a folder can group pills, but
+// conjuring a brand-new OS pill window out of a background sync poll is exactly
+// the kind of machine-specific side effect item 2 deliberately keeps out of scope
+// (position/monitor layout differ per machine, and so does whether the feature is
+// even in use here).
+fn sync_join_float_folder(settings: &mut Settings, prompt_id: &str, name: &str) -> bool {
+    if !settings.floating.contains_key(prompt_id) {
+        return false;
+    }
+    let Ok(name) = folder_name_of(name) else { return false };
+    if name.is_empty() {
+        return false;
+    }
+    sync_leave_float_folder(settings, prompt_id);
+    match settings.float_folders.iter_mut().find(|f| f.name == name) {
+        Some(folder) => folder.members.push(prompt_id.to_string()),
+        None => settings.float_folders.push(FloatFolder {
+            id: gen_id(),
+            name,
+            pos: Pos { x: 100, y: 100 },
+            scale: default_folder_scale(),
+            members: vec![prompt_id.to_string()],
+        }),
+    }
+    true
+}
+
+// The general normalize_tile_folders/normalize_float_folders dissolve any folder
+// under 2 members — correct after a UI-driven removal (the user just took the
+// last-but-one member out), but wrong straight after an INCOMING sync batch: a
+// folder's members can legitimately arrive across SEPARATE poll cycles (a cloud
+// provider propagates several file writes with no ordering or batching guarantee
+// between machines). Dissolving a still-forming folder the moment it has only 1
+// member means it can never reach 2 at all — the next member's file finds no
+// folder to join, creates its own 1-member one, that gets dissolved too, forever.
+// These run every other invariant the general versions do (drop unknown/duplicate
+// members, drop a folder whose view no longer exists, resolve cell collisions,
+// cap the count) but only dissolve at 0 members, not 1 — a folder that genuinely
+// never grows past 1 still gets cleaned up the next time a NON-sync path (any
+// UI-driven folder command) touches it, since those keep calling the general,
+// stricter version.
+fn sync_normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], view_ids: &[String]) {
+    let mut taken: Vec<String> = Vec::new();
+    for folder in folders.iter_mut() {
+        folder.members.retain(|id| {
+            let ok = prompt_ids.iter().any(|p| p == id) && !taken.contains(id);
+            if ok {
+                taken.push(id.clone());
+            }
+            ok
+        });
+    }
+    folders.retain(|f| !f.members.is_empty() && view_ids.iter().any(|id| id == &f.view_id));
+    let mut cells: Vec<(String, [u32; 2])> = Vec::new();
+    for folder in folders.iter_mut() {
+        while cells.iter().any(|(v, c)| v == &folder.view_id && *c == folder.cell) {
+            folder.cell[0] = folder.cell[0].saturating_add(1);
+        }
+        cells.push((folder.view_id.clone(), folder.cell));
+    }
+    folders.truncate(MAX_TILE_FOLDERS);
+}
+
+fn sync_normalize_float_folders(folders: &mut Vec<FloatFolder>, prompt_ids: &[String]) {
+    let mut taken: Vec<String> = Vec::new();
+    for folder in folders.iter_mut() {
+        folder.scale = if folder.scale.is_finite() { folder.scale.clamp(0.5, 3.0) } else { 1.0 };
+        folder.members.retain(|id| {
+            let ok = prompt_ids.iter().any(|p| p == id) && !taken.contains(id);
+            if ok {
+                taken.push(id.clone());
+            }
+            ok
+        });
+    }
+    folders.retain(|f| !f.members.is_empty());
+    folders.truncate(MAX_FLOAT_FOLDERS);
 }
 
 const SYNC_AGENTS_MD: &str = "\
@@ -12117,7 +12472,7 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
         }
         let filename = format!("{}.md", p.id);
         let path = dir.join(&filename);
-        let content = prompt_to_md(p);
+        let content = prompt_to_md(p, &sync_placement_for(p, settings));
         if fs::read_to_string(&path).unwrap_or_default() != content && sync_lock_acquire(&path) {
             let _ = fs::write(&path, &content);
             sync_lock_release(&path);
@@ -12273,12 +12628,12 @@ fn sync_blank_prompt(id: String) -> Prompt {
 // store lock is back, against each prompt's CURRENT state.
 fn sync_poll_once(app: &AppHandle) {
     let Some(state) = app.try_state::<Db>() else { return };
-    let (dir, snapshot) = {
+    let (dir, snapshot, settings_snapshot) = {
         let store = lock(&state);
         if store.prompts_locked || !sync_enabled(&store.settings) {
             return;
         }
-        (sync_dir_path(app, &store.settings), store.prompts.clone())
+        (sync_dir_path(app, &store.settings), store.prompts.clone(), store.settings.clone())
     };
     let Ok(entries) = fs::read_dir(&dir) else { return };
     let mut candidates: Vec<(String, String, bool)> = Vec::new(); // (stem, content, is_new)
@@ -12305,7 +12660,8 @@ fn sync_poll_once(app: &AppHandle) {
         sync_lock_release(&path);
         let Ok(content) = content else { continue };
         if let Some(idx) = snapshot.iter().position(|p| p.id == stem) {
-            if prompt_to_md(&snapshot[idx]) == content {
+            let placement = sync_placement_for(&snapshot[idx], &settings_snapshot);
+            if prompt_to_md(&snapshot[idx], &placement) == content {
                 continue; // matches what we would write ourselves — not a real change
             }
             candidates.push((stem, content, false));
@@ -12321,29 +12677,76 @@ fn sync_poll_once(app: &AppHandle) {
         return;
     }
     let mut changed = false;
+    let mut settings_changed = false;
+    let mut placements_touched = false;
     for (stem, content, is_new) in candidates {
+        // 2: fields lives alongside content/name/etc — parse_frontmatter is cheap
+        // (string splitting) and apply_md_to_prompt already re-parses it itself, so
+        // a second pass here isn't worth threading through that function's own
+        // signature just to share one HashMap.
+        let fields = parse_frontmatter(&content).filter(|(f, _)| md_is_ours(f)).map(|(f, _)| f);
         if is_new {
             if store.prompts.iter().any(|p| p.id == stem) {
                 continue; // added by something else in the meantime
             }
             let Some(np) = apply_md_to_prompt(&sync_blank_prompt(stem), &content) else { continue };
-            let folder_cells = active_view_folder_cells(&store.settings);
-            let view = store.settings.active_view_mut();
-            if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
-                let key = grid_key(view.cols, view.rows);
-                view.layouts.entry(key).or_default().insert(np.id.clone(), cell);
-            }
+            let id = np.id.clone();
             store.prompts.push(np);
+            let (placed, folders_touched_here) = fields
+                .as_ref()
+                .map(|f| apply_md_placement(&mut store.settings, &id, f))
+                .unwrap_or((false, false));
+            if folders_touched_here {
+                placements_touched = true;
+                settings_changed = true;
+            }
+            if placed {
+                settings_changed = true;
+            } else {
+                let folder_cells = active_view_folder_cells(&store.settings);
+                let view = store.settings.active_view_mut();
+                if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
+                    let key = grid_key(view.cols, view.rows);
+                    view.layouts.entry(key).or_default().insert(id, cell);
+                    settings_changed = true;
+                }
+            }
             changed = true;
         } else if let Some(idx) = store.prompts.iter().position(|p| p.id == stem) {
-            if prompt_to_md(&store.prompts[idx]) == content {
+            let placement = sync_placement_for(&store.prompts[idx], &store.settings);
+            let unchanged = prompt_to_md(&store.prompts[idx], &placement) == content;
+            if unchanged {
                 continue; // a concurrent edit already made this file's content current
             }
             if let Some(updated) = apply_md_to_prompt(&store.prompts[idx], &content) {
                 store.prompts[idx] = updated;
                 changed = true;
             }
+            if let Some(f) = fields.as_ref() {
+                let (placed, folders_touched_here) = apply_md_placement(&mut store.settings, &stem, f);
+                if placed {
+                    settings_changed = true;
+                }
+                if folders_touched_here {
+                    placements_touched = true;
+                    settings_changed = true;
+                }
+            }
         } // else: deleted while we were reading files — nothing left to update
+    }
+    if placements_touched {
+        let prompt_ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+        let view_ids: Vec<String> = store.settings.views.iter().map(|v| v.id.clone()).collect();
+        sync_normalize_tile_folders(&mut store.settings.tile_folders, &prompt_ids, &view_ids);
+        sync_normalize_float_folders(&mut store.settings.float_folders, &prompt_ids);
+    }
+    // Prompts and Settings are separate tables/files (save_prompts never touches
+    // settings) — a placement-only change with no content change would otherwise be
+    // applied in memory, echoed straight back out to the sync folder by
+    // save_prompts' own spawn_sync_write_all, and then silently lost on the next
+    // restart while the file on disk kept claiming the new placement forever.
+    if settings_changed {
+        save_settings(app, &store.settings);
     }
     if changed {
         save_prompts(app, &store);
@@ -12452,11 +12855,11 @@ mod tests {
         let theirs = dir.join("My shopping list.md");
         let obsidian = dir.join("Reading list.md");
         let kept = dir.join("p_live.md");
-        fs::write(&mine, prompt_to_md(&sync_test_prompt())).unwrap();
+        fs::write(&mine, prompt_to_md(&sync_test_prompt(), &SyncPlacement::default())).unwrap();
         fs::write(&theirs, "# Shopping\n\n- milk\n").unwrap();
         // Someone else's frontmatter is still not ours.
         fs::write(&obsidian, "---\ntitle: Books\ntags: reading\n---\n\n- Dune\n").unwrap();
-        fs::write(&kept, prompt_to_md(&sync_test_prompt())).unwrap();
+        fs::write(&kept, prompt_to_md(&sync_test_prompt(), &SyncPlacement::default())).unwrap();
         fs::write(dir.join("AGENTS.md"), SYNC_AGENTS_MD).unwrap();
 
         let mut wanted = std::collections::HashSet::new();
@@ -12486,7 +12889,7 @@ mod tests {
     #[test]
     fn md_roundtrip_preserves_editable_fields() {
         let p = sync_test_prompt();
-        let content = prompt_to_md(&p);
+        let content = prompt_to_md(&p, &SyncPlacement::default());
         let updated = apply_md_to_prompt(&p, &content).expect("valid frontmatter");
         assert_eq!(updated.name, p.name);
         assert_eq!(updated.color, p.color);
@@ -12497,7 +12900,440 @@ mod tests {
         assert_eq!(updated.text, "Hello\nWorld");
         // Re-serializing the round-tripped prompt must be byte-identical — otherwise
         // sync_write_all()'s "only write if content differs" guard would loop forever.
-        assert_eq!(prompt_to_md(&updated), content);
+        assert_eq!(prompt_to_md(&updated, &SyncPlacement::default()), content);
+    }
+
+    #[test]
+    fn sync_placement_for_is_empty_when_the_prompt_has_no_placement() {
+        let settings = Settings::default();
+        let placement = sync_placement_for(&sync_test_prompt(), &settings);
+        assert_eq!(placement.view, "");
+        assert_eq!(placement.grid, "");
+        assert_eq!(placement.cell, "");
+        assert_eq!(placement.tile_folder, "");
+        assert_eq!(placement.float_folder, "");
+    }
+
+    #[test]
+    fn sync_placement_for_reports_a_plain_grid_cell() {
+        let mut settings = Settings::default();
+        let mut view = test_view("v1");
+        view.layouts.insert(grid_key(view.cols, view.rows), HashMap::from([("p1".to_string(), [2, 3])]));
+        settings.views.push(view);
+        let placement = sync_placement_for(&sync_test_prompt(), &settings);
+        assert_eq!(placement.view, "V1");
+        assert_eq!(placement.grid, grid_key(default_cols(), default_rows()));
+        assert_eq!(placement.cell, "2,3");
+        assert_eq!(placement.tile_folder, "");
+    }
+
+    #[test]
+    fn sync_placement_for_reports_tile_folder_membership_over_a_plain_cell() {
+        let mut settings = Settings::default();
+        settings.views.push(test_view("v1"));
+        let mut folder = test_tile_folder("f1", "v1", [4, 5], &["p1"]);
+        folder.name = "Team".to_string();
+        folder.color = "#ff0000".to_string();
+        settings.tile_folders.push(folder);
+        let placement = sync_placement_for(&sync_test_prompt(), &settings);
+        assert_eq!(placement.view, "V1");
+        assert_eq!(placement.cell, "4,5");
+        assert_eq!(placement.tile_folder, "Team");
+        assert_eq!(placement.tile_folder_color, "#ff0000");
+    }
+
+    #[test]
+    fn sync_placement_for_reports_float_folder_membership_independently() {
+        let mut settings = Settings::default();
+        settings.float_folders.push(FloatFolder {
+            id: "ff1".into(),
+            name: "Pills".into(),
+            pos: Pos { x: 0, y: 0 },
+            scale: 1.0,
+            members: vec!["p1".to_string(), "p2".to_string()],
+        });
+        let placement = sync_placement_for(&sync_test_prompt(), &settings);
+        assert_eq!(placement.float_folder, "Pills");
+        assert_eq!(placement.view, "", "a floating pill with no grid tile has no grid placement");
+    }
+
+    #[test]
+    fn apply_md_placement_creates_a_view_by_name_and_places_the_cell() {
+        let mut settings = Settings::default();
+        let fields = HashMap::from([
+            ("view".to_string(), "Work".to_string()),
+            ("grid".to_string(), "5x4".to_string()),
+            ("cell".to_string(), "1,2".to_string()),
+        ]);
+        assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (true, false));
+        assert_eq!(settings.views.len(), 1);
+        let view = &settings.views[0];
+        assert_eq!(view.name, "Work");
+        assert_eq!(view.cols, 5);
+        assert_eq!(view.rows, 4);
+        assert_eq!(view.layouts.get(&grid_key(5, 4)).and_then(|m| m.get("p1")), Some(&[1, 2]));
+    }
+
+    #[test]
+    fn apply_md_placement_reuses_an_existing_view_with_the_same_name() {
+        let mut settings = Settings::default();
+        settings.views.push(test_view("v1")); // name "V1"
+        let existing_count = settings.views.len();
+        let fields = HashMap::from([
+            ("view".to_string(), "V1".to_string()),
+            ("grid".to_string(), grid_key(default_cols(), default_rows())),
+            ("cell".to_string(), "0,0".to_string()),
+        ]);
+        assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (true, false));
+        assert_eq!(settings.views.len(), existing_count, "must not create a second view for a name that already exists");
+    }
+
+    #[test]
+    fn apply_md_placement_falls_back_to_a_free_cell_on_collision() {
+        let mut settings = Settings::default();
+        let mut view = test_view("v1");
+        view.cols = 2;
+        view.rows = 1;
+        view.layouts.insert(grid_key(2, 1), HashMap::from([("other".to_string(), [0, 0])]));
+        settings.views.push(view);
+        let fields = HashMap::from([
+            ("view".to_string(), "V1".to_string()),
+            ("grid".to_string(), "2x1".to_string()),
+            ("cell".to_string(), "0,0".to_string()),
+        ]);
+        assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (true, false));
+        let key = grid_key(2, 1);
+        assert_eq!(settings.views[0].layouts.get(&key).and_then(|m| m.get("p1")), Some(&[1, 0]));
+    }
+
+    #[test]
+    fn apply_md_placement_creates_a_tile_folder_and_drops_the_members_own_layout_entry() {
+        let mut settings = Settings::default();
+        settings.views.push(test_view("v1"));
+        let fields = HashMap::from([
+            ("view".to_string(), "V1".to_string()),
+            ("grid".to_string(), grid_key(default_cols(), default_rows())),
+            ("cell".to_string(), "0,0".to_string()),
+            ("tile_folder".to_string(), "Team".to_string()),
+            ("tile_folder_color".to_string(), "#00ff00".to_string()),
+        ]);
+        assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (true, true));
+        assert_eq!(settings.tile_folders.len(), 1);
+        assert_eq!(settings.tile_folders[0].name, "Team");
+        assert!(settings.tile_folders[0].members.iter().any(|m| m == "p1"));
+        let key = grid_key(default_cols(), default_rows());
+        assert!(
+            settings.views[0].layouts.get(&key).map(|m| !m.contains_key("p1")).unwrap_or(true),
+            "a folder member is not a tile of its own"
+        );
+    }
+
+    #[test]
+    fn apply_md_placement_never_turns_a_grid_only_prompt_into_a_floating_pill() {
+        let mut settings = Settings::default();
+        let fields = HashMap::from([("float_folder".to_string(), "Pills".to_string())]);
+        assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (false, false));
+        assert!(settings.float_folders.is_empty(), "joining a pill folder from sync must never conjure a new pill window");
+    }
+
+    #[test]
+    fn apply_md_placement_joins_an_existing_floating_pill_to_a_pill_folder() {
+        let mut settings = Settings::default();
+        settings.floating.insert("p1".to_string(), Pos { x: 10, y: 10 });
+        let fields = HashMap::from([("float_folder".to_string(), "Pills".to_string())]);
+        let (grid_placed, folders_touched) = apply_md_placement(&mut settings, "p1", &fields);
+        assert!(!grid_placed, "no grid fields were supplied, so the caller should still fall back for the grid");
+        assert!(folders_touched);
+        assert_eq!(settings.float_folders.len(), 1);
+        assert!(settings.float_folders[0].members.iter().any(|m| m == "p1"));
+    }
+
+    #[test]
+    fn apply_md_placement_returns_nothing_placed_when_every_field_is_absent() {
+        let mut settings = Settings::default();
+        let fields = HashMap::new();
+        assert_eq!(apply_md_placement(&mut settings, "p1", &fields), (false, false));
+        assert!(settings.views.is_empty());
+    }
+
+    #[test]
+    fn prompt_to_md_and_apply_md_placement_round_trip_a_tile_folder() {
+        let mut settings = Settings::default();
+        settings.views.push(test_view("v1"));
+        let mut folder = test_tile_folder("f1", "v1", [2, 2], &["p1"]);
+        folder.name = "Team".to_string();
+        folder.color = "#7c5cff".to_string();
+        settings.tile_folders.push(folder);
+        let p = sync_test_prompt();
+        let placement = sync_placement_for(&p, &settings);
+        let md = prompt_to_md(&p, &placement);
+        let (fields, _) = parse_frontmatter(&md).unwrap();
+        let mut target = Settings::default();
+        assert_eq!(apply_md_placement(&mut target, "p1", &fields), (true, true));
+        assert_eq!(target.tile_folders[0].name, "Team");
+        assert_eq!(target.tile_folders[0].color, "#7c5cff");
+        assert_eq!(target.views[0].name, "V1");
+    }
+
+    // Re-importing a placement that already matches (only the prompt's TEXT
+    // changed on the other machine, not its position) must leave the cell alone —
+    // sync_resolve_cell must not see the prompt's own existing entry as a
+    // collision with itself.
+    #[test]
+    fn apply_md_placement_is_idempotent_for_the_prompts_own_current_cell() {
+        let mut settings = Settings::default();
+        let mut view = test_view("v1");
+        view.layouts.insert(grid_key(view.cols, view.rows), HashMap::from([("p1".to_string(), [1, 1])]));
+        settings.views.push(view);
+        let fields = HashMap::from([
+            ("view".to_string(), "V1".to_string()),
+            ("grid".to_string(), grid_key(default_cols(), default_rows())),
+            ("cell".to_string(), "1,1".to_string()),
+        ]);
+        apply_md_placement(&mut settings, "p1", &fields);
+        let key = grid_key(default_cols(), default_rows());
+        assert_eq!(
+            settings.views[0].layouts.get(&key).and_then(|m| m.get("p1")),
+            Some(&[1, 1]),
+            "the prompt's own current cell must never read as occupied by itself"
+        );
+    }
+
+    // A field that is PRESENT but empty ("tile_folder: ") is a deliberate "left
+    // this folder" from the writer, distinct from the key being absent entirely
+    // (an older file, untouched). It must actually remove existing local
+    // membership, or a folder left on one machine is silently restored by the
+    // other machine's own echo on the next poll.
+    #[test]
+    fn apply_md_placement_leaves_a_tile_folder_on_an_explicit_empty_field() {
+        let mut settings = Settings::default();
+        settings.views.push(test_view("v1"));
+        settings.tile_folders.push(test_tile_folder("f1", "v1", [0, 0], &["p1", "p2"]));
+        let fields = HashMap::from([
+            ("view".to_string(), "V1".to_string()),
+            ("grid".to_string(), grid_key(default_cols(), default_rows())),
+            ("cell".to_string(), "3,3".to_string()),
+            ("tile_folder".to_string(), String::new()),
+        ]);
+        let (placed, folders_touched) = apply_md_placement(&mut settings, "p1", &fields);
+        assert!(placed);
+        assert!(folders_touched);
+        assert!(!settings.tile_folders[0].members.iter().any(|m| m == "p1"));
+        let key = grid_key(default_cols(), default_rows());
+        assert_eq!(settings.views[0].layouts.get(&key).and_then(|m| m.get("p1")), Some(&[3, 3]));
+    }
+
+    #[test]
+    fn apply_md_placement_leaves_a_float_folder_on_an_explicit_empty_field() {
+        let mut settings = Settings::default();
+        settings.floating.insert("p1".to_string(), Pos { x: 0, y: 0 });
+        settings.float_folders.push(FloatFolder {
+            id: "ff1".into(),
+            name: "Pills".into(),
+            pos: Pos { x: 0, y: 0 },
+            scale: 1.0,
+            members: vec!["p1".to_string(), "p2".to_string()],
+        });
+        let fields = HashMap::from([("float_folder".to_string(), String::new())]);
+        let (_, folders_touched) = apply_md_placement(&mut settings, "p1", &fields);
+        assert!(folders_touched);
+        assert!(!settings.float_folders[0].members.iter().any(|m| m == "p1"));
+    }
+
+    // A field the key is entirely ABSENT for (as opposed to present-but-empty)
+    // means "this file predates the six placement fields" — must NOT be read as a
+    // leave instruction, or every legacy sync file would strip every prompt out
+    // of every folder the moment this version first polls it.
+    #[test]
+    fn apply_md_placement_never_treats_a_missing_field_as_a_leave() {
+        let mut settings = Settings::default();
+        settings.tile_folders.push(test_tile_folder("f1", "v1", [0, 0], &["p1", "p2"]));
+        let fields = HashMap::new(); // no tile_folder / float_folder key at all
+        let (_, folders_touched) = apply_md_placement(&mut settings, "p1", &fields);
+        assert!(!folders_touched);
+        assert!(settings.tile_folders[0].members.iter().any(|m| m == "p1"));
+    }
+
+    // An unusable folder name (rejected by folder_name_of) must fall through to
+    // plain grid placement instead of claiming grid_placed=true for nothing — a
+    // brand-new prompt imported this way would otherwise land nowhere at all,
+    // invisible in every view.
+    #[test]
+    fn apply_md_placement_falls_back_to_the_grid_when_the_folder_name_is_rejected() {
+        let mut settings = Settings::default();
+        settings.views.push(test_view("v1"));
+        let too_long = "x".repeat(MAX_FOLDER_NAME + 1);
+        let fields = HashMap::from([
+            ("view".to_string(), "V1".to_string()),
+            ("grid".to_string(), grid_key(default_cols(), default_rows())),
+            ("cell".to_string(), "0,0".to_string()),
+            ("tile_folder".to_string(), too_long),
+        ]);
+        let (placed, folders_touched) = apply_md_placement(&mut settings, "p1", &fields);
+        assert!(placed, "grid fields were valid — must not report nothing placed");
+        assert!(!folders_touched);
+        assert!(settings.tile_folders.is_empty());
+        let key = grid_key(default_cols(), default_rows());
+        assert_eq!(settings.views[0].layouts.get(&key).and_then(|m| m.get("p1")), Some(&[0, 0]));
+    }
+
+    // A folder whose members arrive in separate poll cycles (a cloud provider has
+    // no ordering/batching guarantee between two machines) must survive at 1
+    // member instead of being dissolved before the second file ever lands.
+    #[test]
+    fn sync_normalize_tile_folders_tolerates_a_still_forming_one_member_folder() {
+        let ids = vec!["p1".to_string()];
+        let view_ids = vec!["v1".to_string()];
+        let mut folders = vec![test_tile_folder("f1", "v1", [0, 0], &["p1"])];
+        sync_normalize_tile_folders(&mut folders, &ids, &view_ids);
+        assert_eq!(folders.len(), 1, "a still-forming folder must survive a sync-triggered normalize");
+        // But a genuinely empty folder (its only member vanished) still goes —
+        // and the general, UI-facing normalize still dissolves anything under 2.
+        let mut empty = vec![test_tile_folder("f2", "v1", [1, 0], &["gone"])];
+        sync_normalize_tile_folders(&mut empty, &ids, &view_ids);
+        assert!(empty.is_empty());
+        let mut general = vec![test_tile_folder("f3", "v1", [0, 0], &["p1"])];
+        normalize_tile_folders(&mut general, &ids, &view_ids);
+        assert!(general.is_empty(), "the UI-facing normalize must keep dissolving a real 1-member folder");
+    }
+
+    #[test]
+    fn sync_normalize_float_folders_tolerates_a_still_forming_one_member_folder() {
+        let ids = vec!["p1".to_string()];
+        let mut folders = vec![FloatFolder {
+            id: "f1".into(),
+            name: "Team".into(),
+            pos: Pos { x: 0, y: 0 },
+            scale: 1.0,
+            members: vec!["p1".to_string()],
+        }];
+        sync_normalize_float_folders(&mut folders, &ids);
+        assert_eq!(folders.len(), 1);
+        let mut general = vec![FloatFolder {
+            id: "f2".into(),
+            name: "Team".into(),
+            pos: Pos { x: 0, y: 0 },
+            scale: 1.0,
+            members: vec!["p1".to_string()],
+        }];
+        normalize_float_folders(&mut general, &ids);
+        assert!(general.is_empty());
+    }
+
+    // ---- Item 2 Phase C: multi-instance crash simulation ----
+    //
+    // sync_poll_once itself needs a live AppHandle (Tauri window/state), which this
+    // test module has no harness for - every existing sync test works the same
+    // way, exercising the pure building blocks sync_poll_once is made of instead of
+    // the function itself. This helper replays exactly sync_poll_once's own
+    // per-file sequence (parse -> apply content -> apply placement -> normalize)
+    // against a real temp directory, so interleaving it under two independent
+    // (Vec<Prompt>, Settings) pairs stands in for two real instances syncing
+    // through the same cloud folder. Normalizing after every single file (finer
+    // grain than sync_poll_once's real once-per-batch) makes this the STRICTER
+    // case - since sync_normalize_* now tolerates a 1-member folder, that no
+    // longer breaks anything, and proves the fix holds at the worst-case
+    // granularity too.
+    fn poll_apply(prompts: &mut Vec<Prompt>, settings: &mut Settings, content: &str, stem: &str) {
+        let fields = parse_frontmatter(content).filter(|(f, _)| md_is_ours(f)).map(|(f, _)| f);
+        match prompts.iter().position(|p| p.id == stem) {
+            Some(idx) => {
+                if let Some(updated) = apply_md_to_prompt(&prompts[idx], content) {
+                    prompts[idx] = updated;
+                }
+                if let Some(f) = fields.as_ref() {
+                    apply_md_placement(settings, stem, f);
+                }
+            }
+            None => {
+                let Some(np) = apply_md_to_prompt(&sync_blank_prompt(stem.to_string()), content) else { return };
+                prompts.push(np);
+                if let Some(f) = fields.as_ref() {
+                    apply_md_placement(settings, stem, f);
+                }
+            }
+        }
+        let ids: Vec<String> = prompts.iter().map(|p| p.id.clone()).collect();
+        let view_ids: Vec<String> = settings.views.iter().map(|v| v.id.clone()).collect();
+        sync_normalize_tile_folders(&mut settings.tile_folders, &ids, &view_ids);
+        sync_normalize_float_folders(&mut settings.float_folders, &ids);
+    }
+
+    // The scenario docs/INVARIANTS.md calls out by name: a cloud provider gives no
+    // ordering/batching guarantee between two files it propagates to a second
+    // machine. Instance A groups two prompts into a folder and writes both files;
+    // instance B's poll only sees the first one, then the second "arrives" a cycle
+    // later. Must end up with ONE folder holding both members, on a view B never
+    // had until this ran - never two folders, and never a folder that got
+    // dissolved before the second member could join.
+    #[test]
+    fn multi_instance_staggered_folder_arrival_never_loses_or_duplicates_the_folder() {
+        let dir = std::env::temp_dir().join(format!("ps-multi-inst-{}", gen_id()));
+        fs::create_dir_all(&dir).unwrap();
+
+        let mut a_prompts = vec![sync_test_prompt(), {
+            let mut p = sync_test_prompt();
+            p.id = "p2".into();
+            p
+        }];
+        for p in a_prompts.iter_mut() {
+            p.name = format!("Prompt {}", p.id);
+        }
+        let mut a_settings = Settings::default();
+        a_settings.views.push(test_view("v1"));
+        a_settings.tile_folders.push({
+            let mut f = test_tile_folder("f1", "v1", [0, 0], &["p1", "p2"]);
+            f.name = "Team".to_string();
+            f
+        });
+        for p in &a_prompts {
+            let content = prompt_to_md(p, &sync_placement_for(p, &a_settings));
+            fs::write(dir.join(format!("{}.md", p.id)), content).unwrap();
+        }
+
+        // Instance B starts from nothing - no matching view either, so this also
+        // exercises auto-creating the view by name.
+        let mut b_prompts: Vec<Prompt> = Vec::new();
+        let mut b_settings = Settings::default();
+
+        let p1_content = fs::read_to_string(dir.join("p1.md")).unwrap();
+        poll_apply(&mut b_prompts, &mut b_settings, &p1_content, "p1");
+        assert_eq!(b_settings.views.len(), 1, "the missing view must be auto-created by name");
+        assert_eq!(b_settings.views[0].name, "V1");
+        assert_eq!(b_settings.tile_folders.len(), 1, "a still-forming folder must survive its first poll");
+        assert_eq!(b_settings.tile_folders[0].members, vec!["p1".to_string()]);
+
+        // p2.md "arrives" one poll cycle later.
+        let p2_content = fs::read_to_string(dir.join("p2.md")).unwrap();
+        poll_apply(&mut b_prompts, &mut b_settings, &p2_content, "p2");
+        assert_eq!(b_settings.views.len(), 1, "must reuse the view it already created, not duplicate it");
+        assert_eq!(b_settings.tile_folders.len(), 1, "the second member must join the SAME folder, never create a second one");
+        assert_eq!(b_settings.tile_folders[0].name, "Team");
+        let mut members = b_settings.tile_folders[0].members.clone();
+        members.sort();
+        assert_eq!(members, vec!["p1".to_string(), "p2".to_string()]);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // The other half of docs/INVARIANTS.md's crash-simulation requirement: a file
+    // cut off mid-write (crash between lock acquire and the write completing)
+    // never has a closing "---" at all. Must be skipped outright, never applied
+    // partially - no half-updated name, no fabricated placement from whatever
+    // fragment of the header made it to disk.
+    #[test]
+    fn a_file_truncated_by_a_simulated_crash_mid_write_is_skipped_not_misapplied() {
+        let p = sync_test_prompt();
+        let settings = Settings::default();
+        let full = prompt_to_md(&p, &sync_placement_for(&p, &settings));
+        let truncated = &full[..full.len() / 3];
+        assert!(parse_frontmatter(truncated).is_none(), "an unclosed header must never parse as valid frontmatter");
+
+        let mut prompts = vec![p.clone()];
+        let mut target_settings = Settings::default();
+        poll_apply(&mut prompts, &mut target_settings, truncated, "p1");
+        assert_eq!(prompts[0].name, p.name, "a truncated file must never overwrite the prompt with garbage");
+        assert!(target_settings.views.is_empty(), "a truncated file must never fabricate a placement either");
     }
 
     #[test]
@@ -13809,7 +14645,7 @@ mod tests {
     fn markdown_sync_roundtrip_keeps_rotating_entries() {
         let mut p = sample_prompts().remove(0);
         p.variants = vec!["Second entry".to_string(), "Third entry".to_string()];
-        let md = prompt_to_md(&p);
+        let md = prompt_to_md(&p, &SyncPlacement::default());
         assert!(md.contains("variants: 2"), "the header count is informational but should still be right");
         let restored = apply_md_to_prompt(&p, &md)
             .expect("a file this function itself just wrote must always be recognised as ours");
@@ -13825,7 +14661,7 @@ mod tests {
         let mut p = sample_prompts().remove(0);
         p.variants = vec!["Second entry".to_string()];
         p.rotate_mode = "random".to_string();
-        let md = prompt_to_md(&p).replace(&format!("{VARIANT_SEP}Second entry"), "");
+        let md = prompt_to_md(&p, &SyncPlacement::default()).replace(&format!("{VARIANT_SEP}Second entry"), "");
         let restored = apply_md_to_prompt(&p, &md).unwrap();
         assert!(restored.variants.is_empty());
         assert_eq!(restored.rotate_mode, "", "empty variants must never leave a stranded rotate_mode");
