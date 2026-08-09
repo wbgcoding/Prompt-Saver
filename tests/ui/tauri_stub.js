@@ -381,6 +381,16 @@ const RESULTS = {
     }
     return prompt;
   },
+  // Item 1: the popup's per-prompt rows write straight through this (no editor
+  // save step of their own) — mirrors the real backend's "hands back what it
+  // really stored" contract closely enough for the wiring the smoke test proves.
+  update_prompt: (a) => {
+    const p = PROMPTS.find((x) => x.id === (a && a.id));
+    if (!p) return null;
+    if (a.hotkey !== undefined) p.hotkey = a.hotkey;
+    if (a.hotkeyPaste !== undefined) p.hotkey_paste = a.hotkeyPaste;
+    return p;
+  },
   set_active_view: (a) => {
     if (SETTINGS.views.some((v) => v.id === (a && a.id))) SETTINGS.active_view = a.id;
     return clone();
@@ -540,6 +550,14 @@ const RESULTS = {
     const accel = String((a && a.hotkey) || "").toLowerCase();
     if (/^(commandorcontrol|ctrl)\+[a-z]$/.test(accel)) throw new Error("hotkey-system");
     if (accel === "commandorcontrol+alt+b") throw new Error("hotkey-conflict");
+    return null;
+  },
+  // Item 1: the global hotkey, same three rejections check_hotkey already gives.
+  set_hotkey: (a) => {
+    const accel = String((a && a.hotkey) || "").toLowerCase();
+    if (/^(commandorcontrol|ctrl)\+[a-z]$/.test(accel)) throw new Error("hotkey-system");
+    if (accel === "commandorcontrol+alt+b") throw new Error("hotkey-conflict");
+    SETTINGS.hotkey = a && a.hotkey ? a.hotkey : "";
     return null;
   },
   // F12: the standalone fill-in window. The main window hands over a request here;

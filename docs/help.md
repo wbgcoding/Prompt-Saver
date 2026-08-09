@@ -97,6 +97,10 @@ app hotkey always wins a conflict, and among prompts the first one in the list
 keeps a combination two prompts happen to share. Importing a backup that carries
 a colliding hotkey drops the losing one instead of failing the import.
 
+"All hotkeys", next to the global hotkey field in Settings, lists every hotkey —
+global and per-prompt — in one searchable, live-rebindable list, so rebinding or
+clearing one no longer means opening that prompt's editor.
+
 ### Clipboard watcher
 
 Off by default. When switched on, everything you copy anywhere on the system (not
@@ -328,6 +332,8 @@ Sicherung, aber keinen CSV/TXT-Import (neuer Prompt, neuer Zeiger).
 **Hotkeys** — ein globaler Hotkey öffnet den Schnellstarter (Standard
 Strg+Alt+P), ein eigener Hotkey pro Prompt kopiert (und fügt optional ein). Bei
 einer Kollision gewinnt der App-Hotkey, sonst der erste Prompt in der Liste.
+"Alle Hotkeys" neben dem globalen Feld listet jeden Hotkey durchsuchbar auf und
+belegt jede Zeile direkt um, ohne den jeweiligen Prompt-Editor zu öffnen.
 
 **Schwebende Buttons & Ordner** — Pillen-Ordner und Raster-Ordner (beide aus);
 eine Kachel gehört immer nur zu einem Raster-Ordner gleichzeitig.

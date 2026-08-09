@@ -791,6 +791,7 @@
         <div class="hotkey-row">
           <input id="opt-hotkey" class="modal-input" type="text" readonly data-i18n-ph="hotkeyPh" data-i18n-aria="hotkeyLabel" />
           <button id="hotkey-clear" class="ghost-btn" data-i18n="hotkeyClear">Clear</button>
+          <button id="hotkey-list-btn" type="button" class="ghost-btn" data-i18n="hotkeysAllBtn">All hotkeys</button>
         </div>
       </div>
       <div id="impexp-field" class="field">
@@ -877,6 +878,22 @@
         <button id="view-modal-delete" class="ghost-btn danger-btn hidden" data-i18n="delete">Delete</button>
         <button id="view-modal-confirm" class="primary-btn" data-i18n="save">Save</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Item 1: every hotkey (global + per-prompt) in one place, each row live-rebindable -->
+  <div id="hotkeys-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 class="modal-title" data-i18n="hotkeysAllTitle">All hotkeys</h2>
+        <button id="hotkeys-modal-close" class="icon-btn" type="button" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <input id="hotkeys-search" class="modal-input" type="text" data-i18n-ph="hotkeysSearchPh" data-i18n-aria="hotkeysSearchPh" />
+      <div id="hotkeys-list" class="hotkeys-list"></div>
     </div>
   </div>
 

@@ -1125,6 +1125,80 @@ PROBE = """
       const cm2 = document.getElementById('confirm-modal');
       if (!cm2.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
     }
+    // Item 1: "All hotkeys" popup — global + every per-prompt hotkey in one list,
+    // each row live-rebindable with the same collision/free-combo behaviour the
+    // editor's own field already has. Prompt 1 (p0) starts with a bound hotkey in
+    // the fixture; every mutating step below restores it before the block ends, so
+    // later blocks that fire a 'prompt-hotkey' event for p0/p1/p2 see it unchanged.
+    {
+      await click('gear');
+      const listBtn = document.getElementById('hotkey-list-btn');
+      if (!listBtn) {
+        out.errors.push('the "All hotkeys" button is missing next to the global hotkey field');
+      } else {
+        listBtn.click();
+        await sleep(150);
+        const popup = document.getElementById('hotkeys-modal');
+        if (popup.classList.contains('hidden')) {
+          out.errors.push('the "All hotkeys" popup did not open');
+        } else {
+          const rowByName = (name) => [...document.querySelectorAll('.hotkeys-row-name')]
+            .find((el) => el.textContent === name)?.closest('.hotkeys-row');
+          const globalRow = () => document.querySelector('.hotkeys-row-global')?.closest('.hotkeys-row');
+          const globalInput = () => globalRow()?.querySelector('.modal-input');
+          const p1Input = () => rowByName('Prompt 1')?.querySelector('.modal-input');
+          if (!globalRow() || !/P$/.test(globalInput().value)) {
+            out.errors.push('the popup does not list the global hotkey');
+          }
+          if (!rowByName('Prompt 1') || !/9$/.test(p1Input().value)) {
+            out.errors.push('the popup does not list Prompt 1 with its stored hotkey');
+          }
+          if (rowByName('Prompt 4')) out.errors.push('the popup lists a prompt with no hotkey bound');
+          // Search filters by name — a prompt-name query hides the global row.
+          const search = document.getElementById('hotkeys-search');
+          search.value = 'Prompt 1';
+          search.dispatchEvent(new Event('input', { bubbles: true }));
+          await sleep(80);
+          if (!rowByName('Prompt 1')) out.errors.push('the search hid a matching row');
+          if (globalRow()) out.errors.push('the search did not filter out the non-matching global row');
+          search.value = '';
+          search.dispatchEvent(new Event('input', { bubbles: true }));
+          await sleep(80);
+          const pressRow = async (input, opts) => {
+            input.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ bubbles: true, cancelable: true }, opts)));
+            await sleep(150);
+          };
+          // A combination owned by another running app is refused, unchanged.
+          const beforeP1 = p1Input().value;
+          await pressRow(p1Input(), { key: 'B', ctrlKey: true, altKey: true });
+          if (p1Input().value !== beforeP1) out.errors.push('the popup captured a combination owned by another app');
+          // A free combination is captured and actually persisted (update_prompt).
+          window.__SMOKE_ARGS__ = [];
+          await pressRow(p1Input(), { key: 'K', ctrlKey: true, altKey: true });
+          if (!/K$/.test(p1Input().value)) out.errors.push('the popup did not capture a free combination: ' + p1Input().value);
+          const upd = (window.__SMOKE_ARGS__ || []).find(([cmd]) => cmd === 'update_prompt');
+          if (!upd || !/\\+K$/i.test(upd[1].hotkey || '')) {
+            out.errors.push('rebinding a popup row did not persist through update_prompt');
+          }
+          // Restore Prompt 1's original hotkey so later blocks see it unchanged.
+          await pressRow(p1Input(), { key: '9', ctrlKey: true, shiftKey: true });
+          if (!/9$/.test(p1Input().value)) out.errors.push('restoring Prompt 1s original hotkey failed: ' + p1Input().value);
+          // The global row clears (and restores) the same way — it never disappears
+          // from the list even with no binding, unlike a per-prompt row.
+          const clearBtn = globalRow().querySelector('.ghost-btn');
+          clearBtn.click();
+          await sleep(150);
+          if (globalInput().value) out.errors.push('clearing the global row from the popup left a value behind');
+          if (!globalRow()) out.errors.push('the global row disappeared after being cleared');
+          await pressRow(globalInput(), { key: 'P', ctrlKey: true, shiftKey: true });
+          if (!/P$/.test(globalInput().value)) out.errors.push('restoring the global hotkey failed: ' + globalInput().value);
+        }
+        document.getElementById('hotkeys-modal-close').click();
+        await sleep(120);
+      }
+      document.getElementById('settings-close')?.click();
+      await sleep(120);
+    }
     // F26: the pipette is in the composer bar, and a picked colour reports back as a
     // toast tinted with that colour.
     const pickBtn = document.getElementById('picker-btn');

@@ -5572,14 +5572,18 @@ function openModal({ mode, id, name = "", text = "", color = "", image = "", sho
 const promptHotkeysOn = () => flag("promptHotkeys");
 
 // The backend answers a rejected accelerator with a code so the reason can be shown
-// in the app language; anything else passes through unchanged.
+// in the app language; anything else passes through unchanged. "save-failed" isn't a
+// hotkey code at all (update_prompt's generic write failure) but reaches this same
+// mapper from Item-1's popup rows, so it gets the same friendly text the editor's
+// own save path already shows for it.
 const HOTKEY_ERRORS = {
   "hotkey-invalid": "promptHotkeyInvalid",
   "hotkey-taken": "promptHotkeyTaken",
   "hotkey-system": "promptHotkeySystem",
   "hotkey-conflict": "promptHotkeyConflict",
 };
-const hotkeyMessage = (err) => (HOTKEY_ERRORS[err] ? t(HOTKEY_ERRORS[err]) : err);
+const hotkeyMessage = (err) =>
+  HOTKEY_ERRORS[err] ? t(HOTKEY_ERRORS[err]) : err === "save-failed" ? t("persistFailed") : t("hotkeyFail");
 
 // Show an inline reason and drop the capture; empty text clears the message again.
 function showHotkeyError(msg) {
@@ -5620,12 +5624,13 @@ const accelKey = (a) => String(a || "").trim().toLowerCase()
 
 // Who already holds this combination inside the app: the app hotkey, another
 // prompt, or nobody. Naming the owner is the difference between "taken" and a
-// message the user can act on.
-function hotkeyOwner(accel) {
+// message the user can act on. `excludeId` is the prompt (if any) THIS field
+// belongs to, so its own current binding never reads back as "already taken".
+function hotkeyOwner(accel, excludeId = null) {
   const key = accelKey(accel);
   if (!key) return null;
   if (accelKey(settings.hotkey) === key) return { app: true };
-  const p = prompts.find((x) => x.id !== modalState?.id && accelKey(x.hotkey) === key);
+  const p = prompts.find((x) => x.id !== excludeId && accelKey(x.hotkey) === key);
   return p ? { name: p.name } : null;
 }
 const hotkeyTakenMsg = (owner) =>
@@ -5649,20 +5654,62 @@ function reassertHotkeyCapture() {
   hotkeyCapture(true);
 }
 
-// The captured combination is checked by the BACKEND before it is kept: only the
-// backend knows the blocklist of system shortcuts and can ask Windows whether
-// another app already owns the combination. A refusal leaves the previous binding
-// exactly as it was.
-async function tryPromptHotkey(accel) {
-  const before = modalState?.id;
-  try {
-    await invoke("check_hotkey", { hotkey: accel, id: modalState?.id || null });
-  } catch (err) {
-    if (modalState?.id === before) showHotkeyError(hotkeyMessage(String(err)));
-    return;
-  }
-  if (modalState?.id !== before) return; // the editor moved on while we asked
-  setPromptHotkey(accel);
+// Item 1: ONE reusable hotkey-recording field, wired onto `input` — click, press a
+// combo. A client-side pre-check (hotkeyOwner) gives instant feedback; the BACKEND
+// re-checks before anything is actually kept (only it knows the system blocklist
+// and can ask Windows whether another app already owns the combination), so a
+// refusal here always leaves the previous binding exactly as it was.
+//   id      — the prompt this field belongs to (null for the global hotkey), or a
+//             function returning it fresh each time, for a field reused across
+//             different prompts (the singleton editor).
+//   errEl   — element for an inline error message; omitted falls back to a toast.
+//   current — () => the accel to restore the field to after a refused capture.
+//   onCommit(accel) — persists (or, for the editor, only stages) the change; must
+//             throw the backend's rejection code on failure, and returns the accel
+//             actually stored (not always what was requested — see Item 1's note
+//             on update_prompt's own late OS-conflict check). Returning `null`
+//             aborts silently without touching the field or showing an error — the
+//             editor uses this when the user moved to a different prompt while an
+//             await was in flight, so a stale answer never overwrites what is by
+//             then a completely different prompt's row.
+function bindHotkeyField(input, { id = null, errEl = null, current, onCommit }) {
+  const resolveId = () => (typeof id === "function" ? id() : id);
+  const showErr = (msg) => {
+    if (errEl) { errEl.textContent = msg || ""; errEl.classList.toggle("hidden", !msg); }
+    else if (msg) toast(msg);
+  };
+  // A commit is a round trip (check_hotkey, maybe update_prompt); a second keypress
+  // landing before the first resolves could otherwise finish out of order and
+  // clobber the newer request with the older one's result.
+  let busy = false;
+  input.addEventListener("focus", () => hotkeyCapture(true));
+  input.addEventListener("blur", () => hotkeyCapture(false));
+  input.addEventListener("keydown", async (e) => {
+    if (e.key === "Tab" || e.key === "Escape") return; // let focus leave the field
+    e.preventDefault();
+    if (busy) return;
+    const clearing = e.key === "Backspace" || e.key === "Delete";
+    let accel = "";
+    if (!clearing) {
+      accel = accelFromEvent(e);
+      if (!accel) { showErr(t("promptHotkeyInvalid")); return; }
+      const owner = hotkeyOwner(accel, resolveId());
+      if (owner) { showErr(hotkeyTakenMsg(owner)); return; }
+    }
+    showErr("");
+    busy = true;
+    try {
+      const stored = await onCommit(accel);
+      if (stored === null) return; // aborted silently, see onCommit's doc above
+      input.value = prettyAccel(stored);
+      reassertHotkeyCapture(); // the field still has the focus
+    } catch (err) {
+      input.value = prettyAccel(current());
+      showErr(hotkeyMessage(String(err)));
+    } finally {
+      busy = false;
+    }
+  });
 }
 
 function setPromptHotkey(accel) {
@@ -5670,6 +5717,103 @@ function setPromptHotkey(accel) {
   modalState.hotkey = accel;
   if (!accel) modalState.hotkeyPaste = ""; // no binding, no action to choose
   renderPromptHotkey();
+}
+
+// ---- Item 1: "All hotkeys" — global + every per-prompt hotkey, each row live ----
+
+// The ONE place that actually persists the global hotkey — shared by the Settings
+// panel's own field and the popup's global row, so they can never disagree.
+async function commitGlobalHotkey(accel) {
+  await invoke("set_hotkey", { hotkey: accel });
+  settings.hotkey = accel;
+  if (accel) toast(t("hotkeySet"));
+  renderHotkeysList(); // a no-op while the popup is closed
+  return accel;
+}
+
+// Unlike the editor (which only stages a hotkey until Save), a popup row has no
+// save step of its own — it writes straight through update_prompt with every OTHER
+// field taken from the prompt's own in-memory copy, unchanged. check_hotkey runs
+// first so a live OS conflict shows up immediately instead of only being caught by
+// update_prompt's own late rearm (see the "F20: the backend hands back what it
+// really stored" note at the editor's save path).
+async function commitPromptHotkeyDirect(id, accel) {
+  const p = prompts.find((x) => x.id === id);
+  if (!p) throw "save-failed";
+  if (accel) await invoke("check_hotkey", { hotkey: accel, id });
+  const saved = await invoke("update_prompt", {
+    id: p.id, name: p.name, text: p.text, color: p.color,
+    image: p.image, showImage: p.show_image, copyImage: p.copy_image,
+    filePath: p.file_path, pdfPage: p.pdf_page, iconPath: p.icon_path,
+    caption: p.caption, captionSize: p.caption_size, font: p.font, fontSize: p.font_size,
+    favorite: p.favorite, tags: p.tags, notes: p.notes,
+    hotkey: accel, hotkeyPaste: accel ? p.hotkey_paste : "",
+    variants: p.variants || [], rotateMode: p.rotate_mode || "",
+  });
+  if (!saved) throw "save-failed";
+  p.hotkey = saved.hotkey;
+  p.hotkey_paste = saved.hotkey_paste;
+  if (accel && !saved.hotkey) toast(t("promptHotkeyFail")); // OS refused between check and save
+  renderHotkeysList();
+  return saved.hotkey;
+}
+
+function openHotkeysModal() {
+  $("hotkeys-search").value = "";
+  $("hotkeys-modal").classList.remove("hidden");
+  renderHotkeysList();
+  $("hotkeys-search").focus();
+}
+function closeHotkeysModal() {
+  $("hotkeys-modal").classList.add("hidden");
+}
+
+function renderHotkeysList() {
+  const box = $("hotkeys-list");
+  if (!box || $("hotkeys-modal").classList.contains("hidden")) return;
+  const q = ($("hotkeys-search").value || "").trim().toLowerCase();
+  const rows = [{ id: null, name: t("hotkeysGlobalRow"), accel: settings.hotkey }].concat(
+    promptHotkeysOn() ? prompts.filter((p) => p.hotkey).map((p) => ({ id: p.id, name: p.name, accel: p.hotkey })) : []
+  );
+  const hit = (r) => !q || r.name.toLowerCase().includes(q) || prettyAccel(r.accel).toLowerCase().includes(q);
+  const filtered = rows.filter(hit);
+  box.innerHTML = "";
+  if (!filtered.length) {
+    const empty = document.createElement("p");
+    empty.className = "hotkeys-empty";
+    empty.textContent = t("hotkeysNoMatch");
+    box.appendChild(empty);
+    return;
+  }
+  for (const r of filtered) {
+    const row = document.createElement("div");
+    row.className = "hotkeys-row";
+    const name = document.createElement("span");
+    name.className = "hotkeys-row-name" + (r.id ? "" : " hotkeys-row-global");
+    name.textContent = r.name;
+    const input = document.createElement("input");
+    input.className = "modal-input";
+    input.type = "text";
+    input.readOnly = true;
+    input.placeholder = t("hotkeyPh");
+    input.value = prettyAccel(r.accel);
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "ghost-btn";
+    clear.textContent = t("hotkeyClear");
+    row.append(name, input, clear);
+    box.appendChild(row);
+    bindHotkeyField(input, {
+      id: r.id,
+      current: () => (r.id ? (prompts.find((x) => x.id === r.id)?.hotkey || "") : settings.hotkey),
+      onCommit: (accel) => (r.id ? commitPromptHotkeyDirect(r.id, accel) : commitGlobalHotkey(accel)),
+    });
+    clear.addEventListener("click", async () => {
+      try {
+        input.value = prettyAccel(await (r.id ? commitPromptHotkeyDirect(r.id, "") : commitGlobalHotkey("")));
+      } catch (err) { toast(hotkeyMessage(String(err))); }
+    });
+  }
 }
 
 // ---- F16: live length counter (chars / words / ~tokens) in the editor ----
@@ -9780,19 +9924,23 @@ function bind() {
     }
   });
   // Capture: the field is read-only, the key press itself is the input.
-  modal.hotkeyInput.addEventListener("keydown", (e) => {
-    if (e.key === "Tab" || e.key === "Escape") return; // let focus leave the field
-    e.preventDefault();
-    if (e.key === "Backspace" || e.key === "Delete") { setPromptHotkey(""); return; }
-    const accel = accelFromEvent(e);
-    if (!accel) { showHotkeyError(t("promptHotkeyInvalid")); return; }
-    const owner = hotkeyOwner(accel);
-    if (owner) { showHotkeyError(hotkeyTakenMsg(owner)); return; } // binding unchanged
-    showHotkeyError("");
-    tryPromptHotkey(accel);
+  bindHotkeyField(modal.hotkeyInput, {
+    id: () => modalState?.id || null,
+    errEl: modal.hotkeyErr,
+    current: () => modalState?.hotkey || "",
+    onCommit: async (accel) => {
+      const before = modalState?.id;
+      try {
+        await invoke("check_hotkey", { hotkey: accel, id: modalState?.id || null });
+      } catch (err) {
+        if (modalState?.id !== before) return null; // moved on — nothing to show for it
+        throw err;
+      }
+      if (modalState?.id !== before) return null; // moved on between the check and here
+      setPromptHotkey(accel);
+      return accel;
+    },
   });
-  modal.hotkeyInput.addEventListener("focus", () => hotkeyCapture(true));
-  modal.hotkeyInput.addEventListener("blur", () => hotkeyCapture(false));
   $("modal-hotkey-clear").addEventListener("click", () => setPromptHotkey(""));
   modal.hotkeyAction.addEventListener("change", () => {
     if (modalState) modalState.hotkeyPaste = modal.hotkeyAction.value;
@@ -10461,31 +10609,20 @@ function bind() {
   $("fav-view-btn").addEventListener("click", () => setFavView(!favView));
 
   // Global hotkey: click the field and press a key combo to capture it.
-  $("opt-hotkey").addEventListener("focus", () => hotkeyCapture(true));
-  $("opt-hotkey").addEventListener("blur", () => hotkeyCapture(false));
-  $("opt-hotkey").addEventListener("keydown", async (e) => {
-    if (e.key === "Tab" || e.key === "Escape") return; // let focus leave the field
-    e.preventDefault();
-    const accel = accelFromEvent(e);
-    if (!accel) return; // a modifier + key is required
-    try {
-      await invoke("set_hotkey", { hotkey: accel });
-      settings.hotkey = accel;
-      $("opt-hotkey").value = prettyAccel(accel);
-      reassertHotkeyCapture(); // the field still has the focus
-      toast(t("hotkeySet"));
-    } catch (err) {
-      // A refused combination changed nothing in the backend either, so the field
-      // keeps showing the hotkey that is really registered — with the reason why.
-      $("opt-hotkey").value = prettyAccel(settings.hotkey);
-      toast(HOTKEY_ERRORS[String(err)] ? hotkeyMessage(String(err)) : t("hotkeyFail"));
-    }
+  bindHotkeyField($("opt-hotkey"), {
+    current: () => settings.hotkey,
+    onCommit: commitGlobalHotkey,
   });
   $("hotkey-clear").addEventListener("click", async () => {
-    await invoke("set_hotkey", { hotkey: "" }).catch(() => {});
-    settings.hotkey = "";
+    try { await commitGlobalHotkey(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
     $("opt-hotkey").value = "";
   });
+  $("hotkey-list-btn").addEventListener("click", openHotkeysModal);
+  $("hotkeys-modal-close").addEventListener("click", closeHotkeysModal);
+  $("hotkeys-modal").addEventListener("pointerdown", (e) => {
+    if (e.target === $("hotkeys-modal")) closeHotkeysModal();
+  });
+  $("hotkeys-search").addEventListener("input", renderHotkeysList);
   // The global hotkey summons the window + opens the quick launcher (library).
   listen("summon-launcher", () => { $("library-btn").click(); });
 

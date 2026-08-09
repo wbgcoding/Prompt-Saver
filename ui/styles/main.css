@@ -3143,9 +3143,20 @@ body.drag-over::after {
 .lib-type.lib-fav-chip.active { background: #f5b301; border-color: #f5b301; color: #1a1a1a; }
 
 /* Expert: copy text-size + font dropdowns share one row. */
-.hotkey-row { display: flex; gap: 8px; align-items: center; }
+.hotkey-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .hotkey-row .modal-input { flex: 1; min-width: 0; cursor: pointer; }
 .hotkey-row .ghost-btn { flex: 0 0 auto; }
+
+/* Item 1: "All hotkeys" popup — global row pinned first, then every prompt with
+   one, each row its own live hotkey-recording field (see bindHotkeyField). */
+#hotkeys-modal .modal { width: min(460px, 92vw); display: flex; flex-direction: column; gap: 10px; }
+.hotkeys-list { display: flex; flex-direction: column; gap: 4px; max-height: 400px; overflow-y: auto; min-height: 0; }
+.hotkeys-row { display: flex; align-items: center; gap: 8px; padding: 4px 2px; }
+.hotkeys-row-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.hotkeys-row-name.hotkeys-row-global { font-weight: 600; }
+.hotkeys-row .modal-input { flex: 0 0 150px; min-width: 0; cursor: pointer; }
+.hotkeys-row .ghost-btn { flex: 0 0 auto; }
+.hotkeys-empty { color: var(--muted); font-size: 13px; padding: 12px 4px; text-align: center; margin: 0; }
 .vars-remember { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: var(--muted); cursor: pointer; }
 .vars-remember .switch { flex: 0 0 auto; }
 /* Paired dropdowns now stack full-width so each keeps the label-left layout. */

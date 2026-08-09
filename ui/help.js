@@ -319,11 +319,12 @@ export const HELP_CONTENT = {
       howTo: [
         "Set the global hotkey in Settings (default Ctrl+Alt+P).",
         "Give a prompt its own hotkey from its editor, and choose whether it should paste as well as copy.",
+        "\"All hotkeys\", next to the global hotkey field, opens every hotkey — global and per-prompt — in one searchable list; each row rebinds or clears on the spot, no need to open each prompt's editor separately.",
         "If a combination is already used, the field explains why — already used in this app, or held by another running app — instead of silently accepting it.",
       ],
       whatHappens:
         "A combination must include Ctrl or Alt; Shift alone, or a bare key, is refused so ordinary typing is never swallowed. The app hotkey always wins a conflict; among prompts, the first one in the list keeps a combination two prompts happen to share. Importing a backup that carries a colliding hotkey drops the losing one instead of failing the import, and the import summary says how many were dropped.",
-      settings: ["Global hotkey — Settings", "Per-prompt hotkeys, paste-after-copy — Expert menu → Features → Copying"],
+      settings: ["Global hotkey, All hotkeys — Settings", "Per-prompt hotkeys, paste-after-copy — Expert menu → Features → Copying"],
     },
     {
       section: "system",
@@ -793,11 +794,12 @@ export const HELP_CONTENT = {
       howTo: [
         "Stelle den globalen Hotkey in den Einstellungen ein (Standard Strg+Alt+P).",
         "Gib einem Prompt seinen eigenen Hotkey in seinem Editor und wähle, ob er nach dem Kopieren auch einfügen soll.",
+        "\"Alle Hotkeys\" neben dem globalen Hotkey-Feld öffnet jeden Hotkey — global und pro Prompt — in einer durchsuchbaren Liste; jede Zeile wird direkt umbelegt oder gelöscht, ohne dafür jeden Prompt einzeln zu öffnen.",
         "Wenn eine Kombination bereits vergeben ist, erklärt das Feld den Grund — bereits in dieser App verwendet oder von einer anderen laufenden App belegt —, anstatt sie stillschweigend zu akzeptieren.",
       ],
       whatHappens:
         "Eine Kombination muss Strg oder Alt enthalten; Shift alleine oder eine bloße Taste wird abgelehnt, damit normales Tippen niemals verschluckt wird. Der App-Hotkey gewinnt bei einem Konflikt immer; bei Prompts behält der erste in der Liste eine Kombination, die zwei Prompts zufällig teilen. Der Import eines Backups, das einen kollidierenden Hotkey enthält, verwirft den verlierenden, anstatt den Import abzubrechen, und die Import-Zusammenfassung gibt an, wie viele verworfen wurden.",
-      settings: ["Globaler Hotkey — Einstellungen", "Eigene Hotkeys pro Prompt, Einfügen nach Kopieren — Experten-Menü → Funktionen → Kopieren"],
+      settings: ["Globaler Hotkey, Alle Hotkeys — Einstellungen", "Eigene Hotkeys pro Prompt, Einfügen nach Kopieren — Experten-Menü → Funktionen → Kopieren"],
     },
     {
       section: "system",
