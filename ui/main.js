@@ -1625,6 +1625,16 @@ function flagRow(key) {
   input.checked = flagState(key);
   input.addEventListener("change", async () => {
     const enabled = input.checked;
+    // 17: turning sync on starts writing every text prompt as a plain-text .md file
+    // next to the encrypted DB — say so before it happens, not just in the help doc.
+    if (key === "promptSync" && enabled) {
+      const ok = await confirmDialog({
+        title: t(flagLabelKey(key)),
+        message: t("syncPlaintextConfirm"),
+        confirmLabel: t("syncPlaintextConfirmOk"),
+      });
+      if (!ok) { input.checked = false; return; }
+    }
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
     stampChanged(key);
     try {

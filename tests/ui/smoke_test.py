@@ -2593,6 +2593,18 @@ PROBE = """
         syncSw.checked = true;
         syncSw.dispatchEvent(new Event('change', { bubbles: true }));
         await sleep(150);
+        // 17: turning sync on now warns about the plaintext .md files first, via the
+        // shared confirm modal, before set_ui_flag is ever called.
+        const syncCm = document.getElementById('confirm-modal');
+        if (syncCm.classList.contains('hidden')) {
+          out.errors.push('turning on prompt sync did not show the plaintext warning');
+        } else {
+          if (!/plain text|Klartext/i.test(document.getElementById('confirm-msg').textContent)) {
+            out.errors.push('the prompt-sync confirm dialog does not mention plain text');
+          }
+          document.getElementById('confirm-ok').click();
+          await sleep(150);
+        }
         const flagCall = window.__SMOKE_ARGS__.find(([cmd, args]) => cmd === 'set_ui_flag' && args && args.key === 'promptSync');
         if (!flagCall || flagCall[1].enabled !== true) {
           out.errors.push('turning on prompt sync did not call set_ui_flag(promptSync, true)');
