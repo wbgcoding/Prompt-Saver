@@ -80,14 +80,16 @@ export const HELP_CONTENT = {
     {
       section: "alwaysOnTop",
       title: "Floating buttons & folders",
-      whatItIs: "Floating buttons are small always-on-top copy buttons that sit outside the main window, over whatever app you're using.",
+      whatItIs:
+        "Floating buttons (pills) are small always-on-top copy buttons that sit outside the main window; grid folders group tiles inside the main grid the same way pill folders group pills.",
       howTo: [
-        "Right-click a tile → \"Toggle floating button\" to pin it.",
+        "Right-click a tile → \"Toggle floating button\" to pin it as a pill.",
         "Drag the pill to move it; right-click it for size, edit or remove.",
-        "Drag one floating button onto another to merge them into a folder.",
+        "Drag one floating button onto another to merge them into a pill folder.",
+        "On the main grid, drag one tile onto another to group them into a grid folder the same way — drag a member back out to free it.",
       ],
       whatHappens:
-        "Positions survive app restarts. A folder shows up to four member previews and a count; dragging a member out frees it, and the folder dissolves once one member is left.",
+        "Positions survive app restarts. A folder (either kind) shows up to four member previews and a count; dragging a member out frees it, and the folder dissolves once one member is left. A tile can only ever belong to one grid folder at a time.",
       settings: ["Pill folders, grid folders — Expert menu → Features → Floating buttons & folders"],
       tip: "Both kinds of folder ship off.",
     },
@@ -294,6 +296,187 @@ export const HELP_CONTENT = {
         "Pick a base theme, adjust colours, and save under a new name.",
       ],
       whatHappens: "A custom theme appears in the regular theme dropdown alongside the built-ins; deleting it does not affect the theme it was based on.",
+      settings: [],
+    },
+    {
+      section: "basics",
+      title: "The grid",
+      whatItIs: "The main window's grid is a free-placement board of prompt tiles — up to 20×20 cells by default, with its own layout per view.",
+      howTo: [
+        "Drag a tile to any empty cell.",
+        "Drop a tile on an occupied cell to swap the two.",
+        "Adjust the grid size with the quick columns/rows fields above it, or in a view's own settings.",
+      ],
+      whatHappens:
+        "A tile keeps its cell until you move it — the grid never auto-arranges itself. Shrinking the grid does not delete tiles that fall outside the new size; they stay assigned and reappear if you grow it back. The 20×20 ceiling is only the default — the expert menu's limit setting raises it up to 200×200.",
+      settings: ["Quick grid-size control, grid border — Expert menu → System & data → Toolbar", "Maximum grid size — Expert menu → Appearance → Limits & values"],
+    },
+    {
+      section: "copying",
+      title: "Hotkeys",
+      whatItIs:
+        "Two independent kinds of hotkey: one global key combination that opens the quick launcher, and a key combination per prompt that copies (and optionally pastes) that one prompt directly.",
+      howTo: [
+        "Set the global hotkey in Settings (default Ctrl+Alt+P).",
+        "Give a prompt its own hotkey from its editor, and choose whether it should paste as well as copy.",
+        "If a combination is already used, the field explains why — already used in this app, or held by another running app — instead of silently accepting it.",
+      ],
+      whatHappens:
+        "A combination must include Ctrl or Alt; Shift alone, or a bare key, is refused so ordinary typing is never swallowed. The app hotkey always wins a conflict; among prompts, the first one in the list keeps a combination two prompts happen to share. Importing a backup that carries a colliding hotkey drops the losing one instead of failing the import, and the import summary says how many were dropped.",
+      settings: ["Global hotkey — Settings", "Per-prompt hotkeys, paste-after-copy — Expert menu → Features → Copying"],
+    },
+    {
+      section: "system",
+      title: "Trash & restoring prompts",
+      whatItIs: "A deleted prompt goes to the trash first, not straight to permanent deletion.",
+      howTo: [
+        "Delete a prompt as normal (a second click on the delete button confirms it).",
+        "Open the trash from the expert menu's Data group.",
+        "Restore a prompt from there, or let retention clear it automatically.",
+      ],
+      whatHappens:
+        "Retention is set in days; 0 means keep forever. Restoring places the prompt in the active view's first free cell — not necessarily its original view or cell — and does not bring back a floating button, folder membership or hotkey it had before deletion; those need setting up again.",
+      settings: ["Trash retention — Expert menu → System & data → Data & maintenance"],
+    },
+    {
+      section: "system",
+      title: "Duplicate finder",
+      whatItIs: "Flags prompts that are textually very similar, without deleting anything on its own.",
+      howTo: [
+        "Open the duplicate finder from the expert menu's Data group.",
+        "Review each flagged pair side by side.",
+        "Keep one, or mark the pair as not a duplicate to stop it being flagged again.",
+      ],
+      whatHappens:
+        "Matching compares each prompt's main text (its name, if it has no text) by similarity, not an exact match — the threshold controls how close counts as close enough. A rotating prompt is only compared on its first entry.",
+      settings: ["Duplicate finder, similarity threshold — Expert menu → System & data → Data & maintenance"],
+    },
+    {
+      section: "system",
+      title: "Import & export",
+      whatItIs: "Plain CSV/TXT export for the text alone, or a full backup file with everything — prompts, views, layouts, colours, styles and language.",
+      howTo: [
+        "Export or import from the expert menu's Data group.",
+        "A CSV/TXT import shows a preview first — every incoming prompt's name and whether it would land as a duplicate — before anything is written. A full backup restores directly, from its own window.",
+        "Confirm to actually import, or cancel and nothing changes.",
+      ],
+      whatHappens: "CSV/TXT only round-trips text; images, files, layout and settings need the full backup format instead.",
+      settings: ["Import / export — Expert menu → System & data → Data & maintenance"],
+    },
+    {
+      section: "system",
+      title: "Markdown folder sync (beta)",
+      whatItIs:
+        "An optional, off-by-default mirror that writes every text-only prompt as its own readable .md file in a folder you pick, alongside the encrypted database.",
+      howTo: [
+        "Turn it on and pick a folder in the expert menu.",
+        "Edit a prompt normally, or edit its .md file directly — either direction syncs to the other.",
+      ],
+      whatHappens:
+        "Unlike the database, the .md files are plain text — anyone with access to that folder can read the prompts, so avoid a synced or shared folder for anything sensitive. A prompt with an attached file, image or video is skipped; it never had a text-only .md form to sync.",
+      settings: ["Prompt sync, sync folder — Expert menu → Features → Prompt sync"],
+      tip: "This is a beta feature — keep the sync folder somewhere only you can read.",
+    },
+    {
+      section: "basics",
+      title: "Screenshot tool",
+      whatItIs: "Captures part or all of your screen straight into a new copy button, without a separate screenshot app.",
+      howTo: [
+        "Click the camera icon.",
+        "Drag a region, or click a window to capture it whole — even a normally-protected one like the Task Manager.",
+        "In the confirmation dialog, save it as a button, save it as a file, or just leave it on the clipboard.",
+      ],
+      whatHappens:
+        "The app's own windows are hidden for the moment of capture so they never end up in the shot. The result reaches the clipboard immediately; saving it as a button or file is a separate, optional step.",
+      settings: ["Screenshot tool, save location, preview size — Expert menu → Features → Create prompts"],
+    },
+    {
+      section: "basics",
+      title: "Colour picker & pick history",
+      whatItIs: "A pipette that freezes the screen, magnifies the pixel under your cursor, and copies it as hex, rgb or hsl.",
+      howTo: [
+        "Click the pipette icon (off by default — turn it on in the expert menu first).",
+        "Move the loupe to the pixel you want; scroll or +/- to zoom.",
+        "Click to copy the colour; right-click the pipette icon to reopen your last few picks.",
+      ],
+      whatHappens:
+        "Nothing is ever saved to a prompt automatically — a pick only reaches the clipboard. The pick history holds your last few colours and survives a restart, capped by its own setting.",
+      settings: ["Colour picker, zoom, format, pick-history length — Expert menu → Features → Create prompts"],
+      tip: "The colour picker (pipette) is off by default.",
+    },
+    {
+      section: "basics",
+      title: "Rotating prompts",
+      whatItIs: "A prompt can hold a list of texts instead of one — each copy serves the next entry instead of always the same text.",
+      howTo: [
+        "Turn rotating prompts on in the expert menu (off by default).",
+        "In a prompt's editor, add more than one text entry.",
+        "Choose order (cycles through in sequence) or shuffle (random, without repeating until every entry has been used once).",
+        "Copy the tile as normal — it always serves the next entry, never asks which one.",
+      ],
+      whatHappens:
+        "A small badge shows the position, like \"2/5\", on a grid tile, a floating pill, and a pill-folder member (a grid-folder member shows only its file-type icon, not this badge). The position survives restarts and full backups; a CSV/TXT import creates a new prompt with a fresh pointer, so only the list of texts and its order/shuffle mode carry over there, not the exact position. Turning rotation off on a prompt with several entries keeps them all — only the first one is used until you turn it back on.",
+      settings: ["Rotating prompts, default order/shuffle, badge, max entries — Expert menu → Features → Create prompts"],
+    },
+    {
+      section: "system",
+      title: "The expert menu",
+      whatItIs: "Every optional feature lives behind an on/off switch here, with its own parameters right underneath once it's on.",
+      howTo: [
+        "Open Settings → the expert menu.",
+        "Pick a tab, or type in the search box to scan every tab at once.",
+        "Turn on \"Only changed\" to see just what you've adjusted from the defaults.",
+      ],
+      whatHappens:
+        "A feature that ships switched off carries a small dot badge on its label, with a tooltip explaining what it does. Reset works at three levels: one value's own undo icon, a whole group's reset icon in its header, or every setting at once from the general reset action.",
+      settings: [],
+    },
+    {
+      section: "system",
+      title: "Keyboard-only use",
+      whatItIs: "Arrow keys move a focus ring across the grid; Enter or Space copies whichever tile is focused.",
+      howTo: [
+        "Turn on keyboard navigation in the expert menu.",
+        "Use the arrow keys to move the focus ring, Enter or Space to copy.",
+        "Tab still moves through buttons and fields everywhere else in the app, as usual.",
+      ],
+      whatHappens: "The focus ring fades out a short while after the window loses focus, so it doesn't linger over a tile once you've moved on to another app.",
+      settings: ["Keyboard navigation, fade delay — Expert menu → System & data → System"],
+    },
+    {
+      section: "system",
+      title: "Where your data lives",
+      whatItIs:
+        "Everything — prompts, views, settings — lives in one local SQLite database (plus its small companion WAL file); where that pair sits depends on whether you're running the portable exe or the installed version.",
+      howTo: [
+        "Installed: your data folder is under AppData, shown (and changeable) in the expert menu.",
+        "Portable: the data folder sits right next to the exe, so the whole thing stays on a USB stick or synced folder as one unit.",
+      ],
+      whatHappens: "Moving from portable to installed (or back) is detected automatically and offered as a one-time migration — your existing data is never silently left behind.",
+      settings: ["Data folder — Expert menu → System & data → System"],
+    },
+    {
+      section: "system",
+      title: "Updates & security",
+      whatItIs: "An optional check for a newer version, on by default, that only ever talks to the update server — never anything else.",
+      howTo: [
+        "Leave update checks on (default) to be notified when a new version is out, or turn them off in the expert menu.",
+        "Accept an offered update to download and install it with one click.",
+      ],
+      whatHappens:
+        "The update check is the only network traffic the app makes on its own; the one exception is a first-run download of the Microsoft WebView2 installer if that runtime isn't already on your system. A downloaded app update is verified against a published checksum before it runs — a missing or mismatching checksum blocks the install instead of running an unverified file.",
+      settings: ["Update checks — Expert menu → System & data → System"],
+    },
+    {
+      section: "system",
+      title: "Common questions",
+      whatItIs: "Quick answers to the things that come up most.",
+      howTo: [
+        "\"My screenshot of this app came out empty\" — the privacy setting that excludes the window from screen capture is working as intended; turn it off in the expert menu if you don't want that.",
+        "\"The app won't start\" — it needs the Microsoft WebView2 runtime; the installer offers it automatically if missing.",
+        "\"I can't find a setting\" — check the expert menu's search box first; it scans every tab at once.",
+        "\"A hotkey doesn't do anything\" — another app may already hold that combination; the editor explains this instead of accepting it silently.",
+      ],
       settings: [],
     },
   ],
