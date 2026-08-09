@@ -1364,7 +1364,7 @@ PROBE = """
     // The menu only renders the active tab, so walk the tabs until the row shows up.
     const expertRow = async (label) => {
       const hit = () => [...document.querySelectorAll('#expert-flags .switch-field')]
-        .find(r => ((r.querySelector('span') || {}).textContent || '').startsWith(label));
+        .find(r => ((r.querySelector('span') || {}).textContent || '').includes(label));
       if (hit()) return hit();
       for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
         tb.click();
@@ -1375,7 +1375,7 @@ PROBE = """
     };
     document.getElementById('settings').classList.remove('hidden');
     await click('expert-open');
-    const pasteRow = await expertRow('Prompt hotkey also pastes');
+    const pasteRow = await expertRow('hotkey also pastes');
     if (!pasteRow) {
       out.errors.push('the prompt-hotkey paste option is missing from the expert menu');
     } else {
@@ -1392,7 +1392,7 @@ PROBE = """
       // Put it back so the rest of the run sees the shipped default.
       document.getElementById('settings').classList.remove('hidden');
       await click('expert-open');
-      const back = await expertRow('Prompt hotkey also pastes');
+      const back = await expertRow('hotkey also pastes');
       if (back) { back.querySelector('input.switch').click(); await sleep(200); }
       // The walk above left another tab active; later checks expect the first one.
       const firstTab = document.querySelector('#expert-tabs-bar .expert-tab');
@@ -1666,7 +1666,7 @@ PROBE = """
     // the tile menu, which places/unplaces the SAME prompt (shared data, no copy)
     // in another view via addView/removeView.
     {
-      const gotFlag = await setExpertFlag('Prompt in multiple views', true);
+      const gotFlag = await setExpertFlag('in multiple views', true);
       if (!gotFlag) {
         out.errors.push('the "Prompt in multiple views" expert toggle is missing');
       } else {
@@ -1717,7 +1717,7 @@ PROBE = """
         }
       }
       // Off again: the tile action must disappear, restoring the "one placement" guarantee.
-      const restored = await setExpertFlag('Prompt in multiple views', false);
+      const restored = await setExpertFlag('in multiple views', false);
       if (restored) {
         const t0b = gridTile('p0');
         if (t0b) {
@@ -1802,7 +1802,7 @@ PROBE = """
         }
       }
     }
-    const DRAG_OUT = 'Drag prompt into another app';
+    const DRAG_OUT = 'into another app';
     const offTile = gridTile('p1');
     if (offTile) {
       // Ships off: the modifier must not arm anything.
@@ -2505,7 +2505,7 @@ PROBE = """
       const rowByLabel = (text) => {
         const tabs = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
         const find = () => [...document.querySelectorAll('#expert-flags .switch-field')]
-          .find(r => (r.querySelector('span') || {}).textContent === text) || null;
+          .find(r => ((r.querySelector('span') || {}).textContent || '').includes(text)) || null;
         if (!tabs.length) return find();
         for (const tb of tabs) {
           tb.click();
@@ -2564,7 +2564,7 @@ PROBE = """
       const rowByLabel2 = (text) => {
         const tabs = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
         const find = () => [...document.querySelectorAll('#expert-flags .switch-field')]
-          .find(r => (r.querySelector('span') || {}).textContent === text) || null;
+          .find(r => ((r.querySelector('span') || {}).textContent || '').includes(text)) || null;
         if (!tabs.length) return find();
         for (const tb of tabs) { tb.click(); const hit = find(); if (hit) return hit; }
         return null;
@@ -2633,7 +2633,7 @@ PROBE = """
       const rowByLabel4 = (text) => {
         const tabs = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
         const find = () => [...document.querySelectorAll('#expert-flags .switch-field')]
-          .find(r => (r.querySelector('span') || {}).textContent === text) || null;
+          .find(r => ((r.querySelector('span') || {}).textContent || '').includes(text)) || null;
         if (!tabs.length) return find();
         for (const tb of tabs) { tb.click(); const hit = find(); if (hit) return hit; }
         return null;
@@ -2675,12 +2675,12 @@ PROBE = """
       const rowByLabel3 = (text, sel) => {
         const tabs = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
         const find = () => [...document.querySelectorAll('#expert-flags ' + sel)]
-          .find(r => (r.querySelector('span') || {}).textContent === text) || null;
+          .find(r => ((r.querySelector('span') || {}).textContent || '').includes(text)) || null;
         if (!tabs.length) return find();
         for (const tb of tabs) { tb.click(); const hit = find(); if (hit) return hit; }
         return null;
       };
-      const syncRow = rowByLabel3('Sync prompts as Markdown files', '.switch-field');
+      const syncRow = rowByLabel3('as Markdown files', '.switch-field');
       const syncSw = syncRow && syncRow.querySelector('input.switch');
       if (!syncSw) {
         out.errors.push('the prompt-sync toggle is missing from the expert menu');
@@ -2714,7 +2714,7 @@ PROBE = """
         }
         // Restore the default so later blocks (and a real re-run of this suite)
         // see the same starting state.
-        const backSw = rowByLabel3('Sync prompts as Markdown files', '.switch-field')?.querySelector('input.switch');
+        const backSw = rowByLabel3('as Markdown files', '.switch-field')?.querySelector('input.switch');
         if (backSw) { backSw.checked = false; backSw.dispatchEvent(new Event('change', { bubbles: true })); }
         await sleep(120);
       }
@@ -2725,21 +2725,21 @@ PROBE = """
       const rowByLabel5 = (text, sel) => {
         const tabs = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
         const find = () => [...document.querySelectorAll('#expert-flags ' + sel)]
-          .find(r => (r.querySelector('.value-head span, span') || {}).textContent === text) || null;
+          .find(r => ((r.querySelector('.value-head span, span') || {}).textContent || '').includes(text)) || null;
         if (!tabs.length) return find();
         for (const tb of tabs) { tb.click(); const hit = find(); if (hit) return hit; }
         return null;
       };
-      const rotSw = rowByLabel5('Rotating prompts', '.switch-field')?.querySelector('input.switch');
+      const rotSw = rowByLabel5('Rotating', '.switch-field')?.querySelector('input.switch');
       if (!rotSw) {
         out.errors.push('the rotating-prompts toggle is missing from the expert menu');
       } else {
         // 33: default flipped ON (was off at 32's original ship).
         if (!rotSw.checked) out.errors.push('rotating prompts is not on by default (33)');
-        if (!rowByLabel5('New prompt starts in', '.expert-dropdown-row')) {
+        if (!rowByLabel5('starts in', '.expert-dropdown-row')) {
           out.errors.push('the rotation-mode dropdown does not show while rotating prompts is on by default');
         }
-        if (!rowByLabel5('Max. entries per prompt', '.value-field')) {
+        if (!rowByLabel5('Max. entries per', '.value-field')) {
           out.errors.push('the max-entries slider does not show while rotating prompts is on by default');
         }
         const badgeSw = rowByLabel5('Show the next-entry badge', '.switch-field')?.querySelector('input.switch');
@@ -2758,10 +2758,10 @@ PROBE = """
         if (!flagCall || flagCall[1].enabled !== false) {
           out.errors.push('turning off rotating prompts did not call set_ui_flag(rotatingPrompts, false)');
         }
-        if (rowByLabel5('New prompt starts in', '.expert-dropdown-row')) {
+        if (rowByLabel5('starts in', '.expert-dropdown-row')) {
           out.errors.push('the rotation-mode dropdown still shows after turning rotating prompts off');
         }
-        if (rowByLabel5('Max. entries per prompt', '.value-field')) {
+        if (rowByLabel5('Max. entries per', '.value-field')) {
           out.errors.push('the max-entries slider still shows after turning rotating prompts off');
         }
         if (rowByLabel5('Show the next-entry badge', '.switch-field')) {
@@ -2769,7 +2769,7 @@ PROBE = """
         }
         // Restore the default so later blocks (and a real re-run of this suite) see
         // the same starting state.
-        const backSw = rowByLabel5('Rotating prompts', '.switch-field')?.querySelector('input.switch');
+        const backSw = rowByLabel5('Rotating', '.switch-field')?.querySelector('input.switch');
         if (backSw) { backSw.checked = true; backSw.dispatchEvent(new Event('change', { bubbles: true })); }
         await sleep(120);
       }
@@ -2780,14 +2780,14 @@ PROBE = """
       const rowByLabel6 = (text, sel) => {
         const tabs = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
         const find = () => [...document.querySelectorAll('#expert-flags ' + sel)]
-          .find(r => (r.querySelector('span') || {}).textContent === text) || null;
+          .find(r => ((r.querySelector('span') || {}).textContent || '').includes(text)) || null;
         if (!tabs.length) return find();
         for (const tb of tabs) { tb.click(); const hit = find(); if (hit) return hit; }
         return null;
       };
       await click('gear');
       await click('expert-open');
-      const rotSw2 = rowByLabel6('Rotating prompts', '.switch-field')?.querySelector('input.switch');
+      const rotSw2 = rowByLabel6('Rotating', '.switch-field')?.querySelector('input.switch');
       if (rotSw2 && !rotSw2.checked) { rotSw2.checked = true; rotSw2.dispatchEvent(new Event('change', { bubbles: true })); }
       await sleep(150);
       document.getElementById('settings-close')?.click();
@@ -2909,7 +2909,7 @@ PROBE = """
       // Restore the flag to its default (on, since 33) for later blocks / a re-run.
       await click('gear');
       await click('expert-open');
-      const rotSw3 = rowByLabel6('Rotating prompts', '.switch-field')?.querySelector('input.switch');
+      const rotSw3 = rowByLabel6('Rotating', '.switch-field')?.querySelector('input.switch');
       if (rotSw3 && !rotSw3.checked) { rotSw3.checked = true; rotSw3.dispatchEvent(new Event('change', { bubbles: true })); }
       await sleep(120);
       document.getElementById('settings-close')?.click();

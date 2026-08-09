@@ -447,20 +447,47 @@ function stampDocs(root, oldB, b, withChangelog, enabled) {
     return;
   }
   const map = tokenMap(oldB, b);
-  if (!map.length) return;
-  const files = ["README.md", "docs/release-notes.md", "THIRD-PARTY-NOTICES.md"];
-  if (withChangelog) files.push("CHANGELOG.md");
-  for (const rel of files) {
-    const p = path.join(root, rel);
-    if (!fs.existsSync(p)) continue;
-    let text = read(p);
-    // Placeholders keep an already-replaced token from being matched again.
+  // The prose also spells out the word for the thing the app stores, which the
+  // identifier tokens above do not cover — a fork that calls it something else
+  // would otherwise ship a README about "prompts". The brand's own per-language
+  // surface forms are the same ones the UI uses (ui/terms.js).
+  const forms = (lang) => Object.entries(b.terms?.forms?.[lang] || {}).filter(([o, n]) => o && n && o !== n);
+  const order = (pairs) => pairs.slice().sort((a, b2) => b2[0].length - a[0].length);
+  const english = order([...map, ...forms("en")]);
+  if (!english.length) return;
+  const files = [
+    ["README.md", english],
+    ["docs/release-notes.md", english],
+    ["THIRD-PARTY-NOTICES.md", english],
+  ];
+  if (withChangelog) files.push(["CHANGELOG.md", english]);
+  const german = order([...map, ...forms("de")]);
+  // Placeholders keep an already-replaced token from being matched again.
+  const apply = (text, pairs) => {
     const holes = [];
-    for (const [from, to] of map) {
+    for (const [from, to] of pairs) {
       text = text.split(from).join(`\u0000${holes.push(to) - 1}\u0000`);
     }
-    text = text.replace(/\u0000(\d+)\u0000/g, (_, n) => holes[Number(n)]);
-    write(p, text);
+    return text.replace(/\u0000(\d+)\u0000/g, (_, n) => holes[Number(n)]);
+  };
+  for (const [rel, pairs] of files) {
+    const f = path.join(root, rel);
+    if (fs.existsSync(f)) write(f, apply(read(f), pairs));
+  }
+  // help.md carries an English half and a German one in the same file, and a single
+  // flat token list cannot tell them apart — "Prompt" is a source token in both
+  // languages, so whichever set ran first would win in both halves. Split at the
+  // German heading and map each half with its own language's forms.
+  const helpPath = path.join(root, "docs", "help.md");
+  if (fs.existsSync(helpPath)) {
+    const text = read(helpPath);
+    const at = text.indexOf("\n## Hilfe (Deutsch)");
+    if (at < 0) {
+      console.warn("brand: docs/help.md has no German heading — mapped as English only");
+      write(helpPath, apply(text, english));
+    } else {
+      write(helpPath, apply(text.slice(0, at), english) + apply(text.slice(at), german));
+    }
   }
 }
 
