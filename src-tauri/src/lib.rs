@@ -2321,15 +2321,23 @@ fn save_trash(app: &AppHandle, store: &Store) -> bool {
     false
 }
 
-fn save_settings(app: &AppHandle, settings: &Settings) {
+// 12: mirrors save_prompts' shape below - same DB-then-JSON-fallback order, same
+// choke point every settings mutation already funnels through. Returning bool
+// (instead of nothing) plus the same persist-failed event lets the existing
+// frontend listener cover all of this function's callers for free instead of
+// the setting silently reverting, unexplained, on the next restart.
+fn save_settings(app: &AppHandle, settings: &Settings) -> bool {
     if let Some(conn) = db_conn(app) {
         if db_write_settings(&conn, settings).is_ok() {
-            return;
+            return true;
         }
     }
     if !write_sealed_json(&data_dir(app).join("settings.json"), settings) {
         append_crash_log("persist failed: settings could not be written to the database or the JSON fallback");
+        let _ = app.emit("persist-failed", "settings");
+        return false;
     }
+    true
 }
 
 // Pre-1.9 builds saved image prompts without copy_image but copied on click.
