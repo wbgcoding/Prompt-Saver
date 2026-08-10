@@ -8559,7 +8559,14 @@ function thumbEl(p, cache) {
   const key = vsrc ? `v:${vsrc}` : src ? `i:${src}` : "";
   if (!key) return thumbDot(p);
   const cached = cache.get(p.id);
-  if (cached && cached.key === key) return cached.el;
+  if (cached && cached.key === key) {
+    // 48: renderLibrary/renderJournal build a FRESH IntersectionObserver every
+    // render (disconnecting the old one) -- a cache hit must re-observe with the
+    // current one, or a video that survives a re-render (e.g. the search field)
+    // stops being paused/started by scroll after the first refresh.
+    if (vsrc && _activeVidObs) _activeVidObs.observe(cached.el);
+    return cached.el;
+  }
   let el;
   if (vsrc) {
     el = document.createElement("video");
