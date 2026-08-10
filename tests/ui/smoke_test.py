@@ -4011,6 +4011,20 @@ VARS_PROBE = """
       await sleep(120);
       if (!list.classList.contains('hidden')) errs.push('picking an option left the dropdown open');
       if (choice.textContent !== 'witty') errs.push('the pick did not land in the button');
+      // 58: Enter landing on a choice control (the button, or a focused item in an
+      // open list) must not be hijacked into an immediate whole-window confirm --
+      // it belongs to that control alone (open the list / pick the item).
+      choice.click();
+      await sleep(120);
+      window.__VAR_RESULT__ = undefined;
+      const firstItem = list.querySelector('.vars-choice-item');
+      (firstItem || choice).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await sleep(80);
+      if (window.__VAR_RESULT__ !== undefined) {
+        errs.push('Enter on a choice control confirmed the whole window instead of staying local to it');
+      }
+      if (!list.classList.contains('hidden')) choice.click(); // close it again for what follows
+      await sleep(80);
     }
     if (text) text.value = 'Rust';
     // Nothing may have been sent before the user confirms.

@@ -117,7 +117,11 @@ function render(data) {
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") { e.preventDefault(); answer(null); }
-  else if (e.key === "Enter") { e.preventDefault(); confirm(); }
+  // 58: Enter inside a choice control (the collapsed button, or a focused item in
+  // the open list) must reach that control's OWN native activation (open the list,
+  // or pick the focused item) instead of being hijacked into an immediate confirm
+  // with whatever value was already selected before.
+  else if (e.key === "Enter" && !e.target.closest(".vars-choice")) { e.preventDefault(); confirm(); }
 });
 okEl.addEventListener("click", confirm);
 cancelEl.addEventListener("click", () => answer(null));
@@ -132,6 +136,14 @@ window.addEventListener("blur", () => {
 // A click on the transparent margin around the card is an outside click too.
 document.body.addEventListener("mousedown", (e) => {
   if (!cardEl.contains(e.target)) answer(null);
+});
+// 58: a click elsewhere in the card (a different row, say) left any other open
+// choice list standing open — nothing ever closed one except picking an item or
+// clicking its own button again.
+cardEl.addEventListener("mousedown", (e) => {
+  for (const list of cardEl.querySelectorAll(".vars-choice-list:not(.hidden)")) {
+    if (!list.parentElement.contains(e.target)) list.classList.add("hidden");
+  }
 });
 
 // Pull the request only once this window can render it: pushing it would race the
