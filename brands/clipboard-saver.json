@@ -109,8 +109,7 @@
         "promptului": "intrării",
         "Prompturile": "Intrările",
         "Promptul": "Intrarea",
-        "prompturilor": "intrărilor",
-        "Prompturilor": "Intrărilor"
+        "prompturilor": "intrărilor"
       },
       "tr": {
         "istem": "kayıt",
@@ -119,13 +118,16 @@
         "istemleri": "kayıtları",
         "istemiyle": "kaydıyla",
         "istemle": "kayıtla",
-        "isteme": "kayda"
+        "isteme": "kayda",
+        "prompt": "prompt"
       },
       "zh": {
-        "提示词": "条目"
+        "提示词": "条目",
+        "prompt": "prompt"
       },
       "ja": {
-        "プロンプト": "項目"
+        "プロンプト": "項目",
+        "prompt": "prompt"
       }
     }
   }
