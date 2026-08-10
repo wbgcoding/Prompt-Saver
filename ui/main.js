@@ -6348,7 +6348,12 @@ function numRow(labelKey, key, min, max, onSet, extraClass) {
   i.type = "number"; i.min = min; i.max = max; i.className = "modal-input"; i.value = String(val(key));
   const def = EXPERT_VALUES[key]?.def ?? min;
   const commit = async (raw) => {
-    const v = raw === "" ? def : Math.max(min, Math.min(max, Number(raw) || def));
+    // 46: Number(raw) || def treated a typed 0 as falsy and silently fell back to
+    // the default -- a GFS retention tier (min 0 = "none") could never be set to 0.
+    // 46: Number(raw) || def treated a typed 0 as falsy and silently fell back to
+    // the default -- a GFS retention tier (min 0 = "none") could never be set to 0.
+    const n = Number(raw);
+    const v = raw === "" || !Number.isFinite(n) ? def : Math.max(min, Math.min(max, n));
     i.value = String(v);
     // The clear-X wipes the field programmatically, so only an `input` event
     // brings it back once the default has been written into the field again.

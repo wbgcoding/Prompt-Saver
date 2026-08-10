@@ -3100,6 +3100,19 @@ PROBE = """
       if (document.querySelectorAll('#backup-panel .backup-col').length !== 2) {
         out.errors.push('the backup settings are not split in two columns');
       }
+      // 46: a typed 0 in a min-0 number field (a GFS retention tier, "none") used to
+      // silently reset to the default via Number(raw) || def, since 0 is falsy.
+      {
+        const tierInput = document.querySelector('#backup-panel .backup-tier-grid input');
+        if (tierInput) {
+          tierInput.value = '0';
+          tierInput.dispatchEvent(new Event('change', { bubbles: true }));
+          await sleep(80);
+          if (tierInput.value !== '0') {
+            out.errors.push('typing 0 in a min-0 number field reset to ' + tierInput.value + ' instead of staying 0');
+          }
+        }
+      }
       // 65: opens the snapshot folder — must exist and never throw.
       const openFolderBtn = [...document.querySelectorAll('#backup-panel .ghost-btn')]
         .find(b => b.textContent === 'Open in Explorer');
