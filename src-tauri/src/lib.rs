@@ -6996,6 +6996,7 @@ async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result
             None => CopyPayload::Missing,
         }
     };
+    let is_text = matches!(&payload, CopyPayload::Text(_));
     let ok = match payload {
         CopyPayload::Image(img) => copy_image_to_clipboard(&img),
         CopyPayload::File(path) => set_clipboard_file(&path),
@@ -7005,9 +7006,11 @@ async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result
         }
         CopyPayload::Missing => false,
     };
-    // 32: only a successful clipboard write may consume a rotation entry — a failed
-    // copy must leave the pointer exactly where it was.
-    if ok {
+    // 32/44: only a successful TEXT copy may consume a rotation entry — a failed copy
+    // must leave the pointer exactly where it was, and an Image/File payload never
+    // showed any entry at all (the copy_image/file_path branches above short-circuit
+    // before rotation_next ever runs) so it must not silently advance it either.
+    if ok && is_text {
         let mut store = lock(&state);
         if let Some(pos) = store.prompts.iter().position(|p| p.id == id) {
             let p = store.prompts[pos].clone();
