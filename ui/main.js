@@ -6254,6 +6254,9 @@ async function loadHistory(id) {
   body.innerHTML = "";
   let list = [];
   try { list = await invoke("list_versions", { promptId: id }); } catch (_) {}
+  // 49: a slower response for a since-abandoned prompt must not land in the editor
+  // after it has already moved on to a different one.
+  if (modalState?.id !== id) return;
   if (!list.length) {
     const e = document.createElement("div");
     e.className = "hint";
@@ -7335,9 +7338,10 @@ async function refreshRotateNext() {
   modal.rotateNext.classList.toggle("hidden", !showPeek);
   modal.rotateReset.classList.toggle("hidden", !showPeek);
   if (!showPeek) return;
+  const id = modalState.id; // 49: snapshot before the await, re-check after
   try {
-    const peek = await invoke("rotation_peek", { id: modalState.id });
-    if (peek && modalState.id) {
+    const peek = await invoke("rotation_peek", { id });
+    if (peek && modalState.id === id) {
       modal.rotateNext.textContent = t("rotateNextLabel")
         .replace("{n}", String(peek.pos)).replace("{total}", String(peek.total));
     }
