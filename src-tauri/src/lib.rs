@@ -7288,6 +7288,13 @@ async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: String) -> Re
         };
         match prompt {
             Some(p) => {
+                // 51: HiddenFloats is never cleared anywhere else — re-pinning a pill
+                // that was previously "hidden until restart" must take it out, or the
+                // next sync_float_windows (triggered by literally any other settings
+                // change) immediately closes it again.
+                if let Some(hs) = app.try_state::<HiddenFloats>() {
+                    hs.0.lock().unwrap_or_else(|e| e.into_inner()).remove(&id);
+                }
                 open_floating(&app, &p);
                 Ok(true)
             }
