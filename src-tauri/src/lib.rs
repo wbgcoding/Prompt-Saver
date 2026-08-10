@@ -8427,7 +8427,11 @@ fn close_all_snip(app: &AppHandle) {
 fn set_app_windows_hidden(app: &AppHandle, hidden: bool) -> bool {
     let mut was_visible = false;
     for (label, win) in app.webview_windows() {
-        if label == "main" || label.starts_with("float-") {
+        // 42: a folder window is always-on-top exactly like a pill, and every other
+        // caller that hides float- windows for a screenshot already pairs it with
+        // folder- (2924, 4662, 4700, 8009) — missing it here left an open folder
+        // sitting in the snip capture.
+        if label == "main" || label.starts_with("float-") || label.starts_with("folder-") {
             if hidden {
                 if win.is_visible().unwrap_or(true) {
                     was_visible = true;
