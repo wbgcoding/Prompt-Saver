@@ -3078,6 +3078,24 @@ PROBE = """
       if (fld && fld.getBoundingClientRect().right > row.getBoundingClientRect().right + 1) {
         out.errors.push('the top-list length field overflows its row');
       }
+      // 45: toggling the stats switch used to re-render into the inner panel from
+      // the previous render instead of the real container, nesting one deeper each
+      // time. Re-query fresh each click -- a re-render replaces the whole subtree,
+      // so a reference from before the first click is stale for the second.
+      {
+        for (let i = 0; i < 2; i++) {
+          const sw = document.querySelector('#stats-panel .stats-head-row .switch');
+          if (!sw) break;
+          sw.click();
+          await sleep(150);
+        }
+        const stillOn = document.querySelector('#stats-panel .stats-head-row .switch')?.checked;
+        if (!stillOn) out.errors.push('two stats-switch toggles did not end back on');
+        const heads = document.querySelectorAll('#stats-panel .stats-panel-body');
+        if (heads.length !== 1) {
+          out.errors.push('toggling stats twice left ' + heads.length + ' stats-panel-body elements instead of 1');
+        }
+      }
       // Two-column settings, 8 diagnostic cards, 12 statistic cards, overview split.
       if (document.querySelectorAll('#backup-panel .backup-col').length !== 2) {
         out.errors.push('the backup settings are not split in two columns');

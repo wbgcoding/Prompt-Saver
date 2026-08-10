@@ -6386,13 +6386,16 @@ async function renderStatsPanel(body) {
   const sw = document.createElement("label"); sw.className = "field switch-field";
   const swl = document.createElement("span"); swl.textContent = t("statsEnable");
   const swi = document.createElement("input"); swi.type = "checkbox"; swi.className = "switch"; swi.checked = on;
-  swi.addEventListener("change", async () => { await saveBackupSetting("flag", "usageStats", swi.checked); renderStatsPanel(body); });
+  // 45: root, not body — body was reassigned to the INNER panel just above, and
+  // re-rendering with it would build a new stats-panel-body inside the previous
+  // one instead of replacing it, nesting one deeper on every toggle.
+  swi.addEventListener("change", async () => { await saveBackupSetting("flag", "usageStats", swi.checked); renderStatsPanel(root); });
   sw.append(swl, swi); headRow.appendChild(withTip(sw, "usageStats"));
   if (on) {
     // Top-N param (how many prompts the "most used" chart lists), right of the toggle.
     headRow.appendChild(numRow("valStatsTopN", "statsTopN", 5, 100, async (v) => {
       await saveBackupSetting("value", "statsTopN", v);
-      renderStatsPanel(body);
+      renderStatsPanel(root); // 45: see the toggle handler above
     }, "stats-topn-row"));
   }
   body.appendChild(headRow);
