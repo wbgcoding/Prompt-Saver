@@ -1832,6 +1832,18 @@ fn write_sealed_json<T: Serialize>(path: &PathBuf, data: &T) -> bool {
     false
 }
 
+// 36: never truncate an existing file in place — a crash or a cloud-sync client
+// reading mid-write would otherwise see a valid frontmatter head with a truncated
+// body, and a later poll then imports that as truth. Temp-then-rename next to the
+// target, same pattern write_sealed_json already uses. The temp name deliberately
+// does not carry the caller's own extension (path.md -> path.tmp), so a filter that
+// only touches one specific extension (sync_sweep_orphans' ".md" check) leaves a
+// leftover temp file alone if the rename is ever interrupted.
+fn write_file_atomic(path: &Path, content: &str) -> bool {
+    let tmp = path.with_extension("tmp");
+    fs::write(&tmp, content).is_ok() && fs::rename(&tmp, path).is_ok()
+}
+
 // Capitalise a brand word for a dialog title ("prompts" -> "Prompts").
 fn title_case(w: &str) -> String {
     let mut c = w.chars();
@@ -12625,7 +12637,7 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
         let path = dir.join(&filename);
         let content = prompt_to_md(p, &sync_placement_for(p, settings));
         if fs::read_to_string(&path).unwrap_or_default() != content && sync_lock_acquire(&path) {
-            let _ = fs::write(&path, &content);
+            write_file_atomic(&path, &content);
             sync_lock_release(&path);
         }
         wanted.insert(filename);
@@ -13711,6 +13723,34 @@ mod tests {
             SealedRead::Loaded(legacy) => assert_eq!(legacy, vec!["legacy entry".to_string()]),
             _ => panic!("expected legacy plaintext to load"),
         }
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // 36: a sync file write must never be an in-place truncate — a reader (this
+    // machine's own next poll, or a cloud-sync client) must only ever see either the
+    // old content or the new content, never a partial body.
+    #[test]
+    fn write_file_atomic_replaces_without_leaving_a_truncated_body() {
+        let dir = std::env::temp_dir().join(format!("ps-atomic-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("p1.md");
+        fs::write(&path, "---\nname: Old\n---\n\nold body").unwrap();
+
+        let new_content = "---\nname: New\n---\n\n".to_string() + &"x".repeat(5000);
+        assert!(write_file_atomic(&path, &new_content));
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            new_content,
+            "must be fully replaced, never a partial write"
+        );
+
+        // The temp name must not collide with sync_sweep_orphans' ".md" filter — a
+        // leftover temp file from an interrupted rename must never be treated as a
+        // real synced document.
+        let tmp = path.with_extension("tmp");
+        assert!(!tmp.exists(), "temp file must be gone after a successful rename");
+        assert!(!tmp.to_string_lossy().ends_with(".md"), "temp name must not look like a real sync file");
 
         let _ = fs::remove_dir_all(&dir);
     }
