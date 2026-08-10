@@ -4754,17 +4754,20 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
 fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) {
     let idset: std::collections::HashSet<&str> = ids.iter().map(|s| s.as_str()).collect();
     store.trash.retain(|p| !idset.contains(p.id.as_str()));
-    rotation_forget(&mut store.settings, ids); // 32: no orphaned pointer/bag left behind
-    save_settings(app, &store.settings);
 
-    // 102: same guard as update_prompt -- a failed trash save must not still trigger
-    // the file sweep, or the DB keeps referencing files the sweep just removed.
+    // 39/102: a failed trash save means the purged prompt is still coming back on
+    // the next restart (trash has no JSON fallback the way save_prompts does) — its
+    // rotation position and version history must come back with it, not vanish
+    // permanently for a purge that never actually persisted. Same guard shape as
+    // the 102 fix on cleanup_orphan_files just below.
     if save_trash(app, store) {
         cleanup_orphan_files(app, store);
-    }
-    if let Some(c) = db_conn(app) {
-        for id in ids {
-            db_delete_versions(&c, id);
+        rotation_forget(&mut store.settings, ids); // 32: no orphaned pointer/bag left behind
+        save_settings(app, &store.settings);
+        if let Some(c) = db_conn(app) {
+            for id in ids {
+                db_delete_versions(&c, id);
+            }
         }
     }
 }
