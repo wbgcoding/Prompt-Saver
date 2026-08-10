@@ -653,7 +653,10 @@ listen("merge-hint", (e) => iconEl.classList.toggle("merge-hint", e.payload === 
 listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 listen("language-changed", () => applySettings());
 // Same as the pill: an expert change has to reach a folder that is already open.
-listen("settings-changed", () => applySettings());
+// 57: applySettings() alone never reaches state.cols (folderGridCols) -- that only
+// arrives through loadState()'s own float_folder_state call, so a changed grid
+// column count never reached an already-open folder window without it too.
+listen("settings-changed", () => { applySettings(); loadState(); });
 listen("prompt-updated", (e) => {
   if (e.payload && state.members.some((p) => p.id === e.payload.id)) {
     // 32: an edit can change entry count/text — drop the cached rotation state so
