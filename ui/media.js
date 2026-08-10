@@ -56,7 +56,7 @@ export function applyVideoPrefs(video, prefs) {
 // Play/pause, scrubber, time, loop and sound toggle. The bar swallows pointer
 // events so the surface underneath neither copies nor starts a drag.
 // onChange (debounced) reports {volume, muted, looped} for persistence.
-export function buildMediaBar(video, { onChange } = {}) {
+export function buildMediaBar(video, { onChange, labels } = {}) {
   const bar = document.createElement("div");
   bar.className = "media-bar";
   for (const ev of ["pointerdown", "mousedown", "click"]) {
@@ -70,11 +70,17 @@ export function buildMediaBar(video, { onChange } = {}) {
     b.innerHTML = svg;
     return b;
   };
+  const nameBtn = (btn, text) => {
+    if (!text) return; // labels not resolved yet (floating pill loads them async)
+    btn.title = text;
+    btn.setAttribute("aria-label", text);
+  };
+  let L = labels || {};
 
   const playBtn = mkBtn(ICON_PAUSE); // media autoplays
   playBtn.addEventListener("click", () => (video.paused ? video.play().catch(() => {}) : video.pause()));
-  video.addEventListener("play", () => (playBtn.innerHTML = ICON_PAUSE));
-  video.addEventListener("pause", () => (playBtn.innerHTML = ICON_PLAY));
+  video.addEventListener("play", () => { playBtn.innerHTML = ICON_PAUSE; nameBtn(playBtn, L.pause); });
+  video.addEventListener("pause", () => { playBtn.innerHTML = ICON_PLAY; nameBtn(playBtn, L.play); });
 
   const seek = document.createElement("input");
   seek.type = "range";
@@ -116,9 +122,10 @@ export function buildMediaBar(video, { onChange } = {}) {
   loopBtn.addEventListener("click", () => {
     video.loop = !video.loop;
     loopBtn.innerHTML = video.loop ? ICON_LOOP : ICON_LOOP_ONCE;
+    nameBtn(loopBtn, video.loop ? L.loopOn : L.loopOff);
     persist();
   });
-  video.addEventListener("ended", () => (playBtn.innerHTML = ICON_PLAY));
+  video.addEventListener("ended", () => { playBtn.innerHTML = ICON_PLAY; nameBtn(playBtn, L.play); });
 
   const soundBtn = mkBtn(ICON_MUTED); // muted by default
   soundBtn.addEventListener("click", () => {
@@ -160,13 +167,26 @@ export function buildMediaBar(video, { onChange } = {}) {
   // when a saved state is applied from the outside (applyVideoPrefs).
   const syncSound = () => {
     soundBtn.innerHTML = video.muted ? ICON_MUTED : ICON_SOUND;
+    nameBtn(soundBtn, video.muted ? L.unmute : L.mute);
     vol.value = Math.round(video.volume * 100);
   };
   video.addEventListener("volumechange", syncSound);
   video.addEventListener("prefs-applied", () => {
     syncSound();
     loopBtn.innerHTML = video.loop ? ICON_LOOP : ICON_LOOP_ONCE;
+    nameBtn(loopBtn, video.loop ? L.loopOn : L.loopOff);
   });
+
+  // Re-applies every label from the current L — called now with whatever the
+  // caller passed synchronously, and again via setLabels once a window whose
+  // translations load asynchronously (the floating pill) has them ready.
+  const applyLabels = () => {
+    nameBtn(playBtn, video.paused ? L.play : L.pause);
+    nameBtn(loopBtn, video.loop ? L.loopOn : L.loopOff);
+    nameBtn(soundBtn, video.muted ? L.unmute : L.mute);
+  };
+  bar.setLabels = (newLabels) => { L = newLabels; applyLabels(); };
+  applyLabels();
   syncSound();
 
   bar.append(playBtn, seek, time, loopBtn, soundWrap);

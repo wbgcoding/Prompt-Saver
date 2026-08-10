@@ -2159,10 +2159,17 @@ PROBE = """
     // The colour picker must fit the window at ANY size: it may neither scroll (the
     // knob would be out of reach) nor spill (the hex field gets cut off).
     if (await openEditor('p1')) {
+      // 66: every colour swatch is icon-only (a coloured square, no text) and
+      // needs a real name for screen readers, not just a visible colour.
+      const noneSwatch = document.querySelector('#color-row .swatch.none');
       const custom = document.querySelector('#color-row .swatch.custom');
+      if (!noneSwatch || !noneSwatch.title) out.errors.push('66: the none-colour swatch has no accessible name');
       if (!custom) {
         out.errors.push('the editor colour row has no custom-colour swatch');
-      } else {
+      } else if (!custom.title) {
+        out.errors.push('66: the custom-colour swatch has no accessible name');
+      }
+      if (custom) {
         custom.click();
         await sleep(300);
         const cp = document.querySelector('.color-pop:not(.hidden)');

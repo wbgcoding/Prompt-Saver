@@ -193,6 +193,14 @@ function resolveLang(pref) {
 const t = (key) =>
   applyTerms(String(I18N[LANG][key] ?? I18N.en[key] ?? key).replaceAll("{app}", APP_NAME), LANG);
 
+// buildMediaBar (media.js) is shared with the floating pill, which has no
+// synchronous access to t() — so it takes plain resolved strings, not keys.
+const mediaBarLabels = () => ({
+  play: t("mediaPlay"), pause: t("mediaPause"),
+  loopOn: t("mediaLoopOn"), loopOff: t("mediaLoopOff"),
+  mute: t("mediaMute"), unmute: t("mediaUnmute"),
+});
+
 // The product name never appears in the markup — every [data-brand] element (the
 // <title> and the header label) is filled from ui/brand.js. Runs at load, before
 // the first backend round trip, so the header is never briefly blank.
@@ -208,6 +216,9 @@ function applyI18n() {
   document.querySelectorAll("[data-i18n-ph]").forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
   document.querySelectorAll("[data-i18n-title]").forEach((el) => { el.title = t(el.dataset.i18nTitle); });
   document.querySelectorAll("[data-i18n-aria]").forEach((el) => { el.setAttribute("aria-label", t(el.dataset.i18nAria)); });
+  // Cached video tiles keep their media bar across a language switch — its
+  // button labels are not markup, so data-i18n above never reaches them.
+  document.querySelectorAll(".media-bar").forEach((bar) => bar.setLabels?.(mediaBarLabels()));
 }
 
 // ---- Helpers ----
@@ -3837,6 +3848,7 @@ function getVideoWrap(p, src) {
   if (flag("videoControls")) {
     wrap.append(buildMediaBar(video, {
       onChange: (prefs) => invoke("set_video_prefs", { id: p.id, ...prefs }).catch(() => {}),
+      labels: mediaBarLabels(),
     }));
   }
   applyVideoPrefs(video, settings.video_prefs?.[p.id]);
@@ -4813,13 +4825,19 @@ function buildSwatches(container, selected, onPick, onCustom) {
   };
 
   const none = mkSwatch("none" + (selected === "" ? " sel" : ""));
+  none.title = t("colorNone");
+  none.setAttribute("aria-label", t("colorNone"));
   none.addEventListener("click", () => onPick(""));
 
   const custom = mkSwatch("custom" + (isCustom ? " sel" : ""), isCustom ? selected : "");
+  custom.title = t("colorCustom");
+  custom.setAttribute("aria-label", t("colorCustom"));
   custom.addEventListener("click", () => onCustom(custom, isCustom ? selected : ""));
 
   for (const c of COLORS.slice(1)) {
     const sw = mkSwatch(c === selected ? "sel" : "", c);
+    sw.title = c;
+    sw.setAttribute("aria-label", c);
     sw.addEventListener("click", () => onPick(c));
   }
 }
@@ -6279,6 +6297,7 @@ async function loadHistory(id) {
     const expand = document.createElement("button");
     expand.type = "button";
     expand.className = "hist-expand";
+    expand.title = t("historyExpandToggle");
     expand.setAttribute("aria-expanded", "false");
     expand.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>';
     const restore = document.createElement("button");
@@ -8316,6 +8335,8 @@ function themeVarRow(key, fallback) {
   const swatch = document.createElement("button");
   swatch.type = "button";
   swatch.className = "theme-swatch";
+  swatch.title = t("colorCustom");
+  swatch.setAttribute("aria-label", t("colorCustom"));
   const hex = document.createElement("input");
   hex.type = "text";
   hex.className = "modal-input theme-hex";

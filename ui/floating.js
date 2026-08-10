@@ -203,6 +203,11 @@ async function applyTexts(s) {
   closeBtn.title = t.close;
   closeBtn.setAttribute("aria-label", t.close);
   document.getElementById("file-error").textContent = t.missing;
+  mediaBar.setLabels({
+    play: t.mediaPlay, pause: t.mediaPause,
+    loopOn: t.mediaLoopOn, loopOff: t.mediaLoopOff,
+    mute: t.mediaMute, unmute: t.mediaUnmute,
+  });
 }
 
 function applyPrefs(s) {
