@@ -4155,8 +4155,21 @@ async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, examples: Ve
             created.push(prompt);
         }
         store.settings.examples_seeded = true;
-        save_prompts(&app, &store);
-        save_settings(&app, &store.settings);
+        // 38: a failed save must not hand the UI prompts that never reached disk —
+        // roll every in-memory change back (view placement included) so a restart
+        // does not silently disagree with what was just shown.
+        if !save_prompts(&app, &store) || !save_settings(&app, &store.settings) {
+            let ids: std::collections::HashSet<String> = created.iter().map(|p| p.id.clone()).collect();
+            store.prompts.retain(|p| !ids.contains(&p.id));
+            store.settings.example_prompt_ids.retain(|id| !ids.contains(id));
+            store.settings.examples_seeded = false;
+            let view = store.settings.active_view_mut();
+            let key = grid_key(view.cols, view.rows);
+            if let Some(layout) = view.layouts.get_mut(&key) {
+                layout.retain(|id, _| !ids.contains(id));
+            }
+            return Err("save-failed".into());
+        }
         created
     };
     rebuild_tray(&app); // F23: mirrors add_prompt — the tray's recent/fav sections can list these too
@@ -4396,15 +4409,32 @@ async fn restore_version(app: AppHandle, state: State<'_, Db>, version_id: i64) 
 
 // Star / unstar a prompt in the library.
 #[tauri::command]
-fn set_favorite(app: AppHandle, state: State<Db>, id: String, favorite: bool) {
-    {
+fn set_favorite(app: AppHandle, state: State<Db>, id: String, favorite: bool) -> Result<(), String> {
+    let ok = {
         let mut store = lock(&state);
-        if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
-            p.favorite = favorite;
-            save_prompts(&app, &store);
+        match store.prompts.iter_mut().find(|p| p.id == id) {
+            Some(p) => {
+                let previous = p.favorite;
+                p.favorite = favorite;
+                // 38: a failed save must not leave the UI believing the star took —
+                // roll the in-memory flag back so the next render shows the truth.
+                if save_prompts(&app, &store) {
+                    true
+                } else {
+                    if let Some(slot) = store.prompts.iter_mut().find(|x| x.id == id) {
+                        slot.favorite = previous;
+                    }
+                    false
+                }
+            }
+            None => true, // nothing to persist
         }
+    };
+    if !ok {
+        return Err("save-failed".into());
     }
     rebuild_tray(&app); // F23: the favourites section follows the stars
+    Ok(())
 }
 
 // Async: keeps the prompt-table rewrite off the UI thread.
@@ -4541,21 +4571,50 @@ async fn batch_prompts(
         }
         "favorite" => {
             let fav = favorite.unwrap_or(true);
+            let previous: Vec<(String, bool)> = store
+                .prompts
+                .iter()
+                .filter(|p| idset.contains(p.id.as_str()))
+                .map(|p| (p.id.clone(), p.favorite))
+                .collect();
             for p in store.prompts.iter_mut() {
                 if idset.contains(p.id.as_str()) {
                     p.favorite = fav;
                 }
             }
-            save_prompts(&app, &store);
+            // 38: a failed save must roll every touched prompt back, same pattern as
+            // the "delete" branch above — otherwise the UI shows a batch-favorite that
+            // silently reverts for some or all of the selection on the next launch.
+            if !save_prompts(&app, &store) {
+                for (id, was) in previous {
+                    if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
+                        p.favorite = was;
+                    }
+                }
+                return Err("save-failed".into());
+            }
         }
         "color" => {
             let c = color.unwrap_or_default();
+            let previous: Vec<(String, String)> = store
+                .prompts
+                .iter()
+                .filter(|p| idset.contains(p.id.as_str()))
+                .map(|p| (p.id.clone(), p.color.clone()))
+                .collect();
             for p in store.prompts.iter_mut() {
                 if idset.contains(p.id.as_str()) {
                     p.color = c.clone();
                 }
             }
-            save_prompts(&app, &store);
+            if !save_prompts(&app, &store) {
+                for (id, was) in previous {
+                    if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
+                        p.color = was;
+                    }
+                }
+                return Err("save-failed".into());
+            }
         }
         "addView" | "removeView" => {
             let vid = view_id.unwrap_or_default();
@@ -5167,15 +5226,41 @@ async fn rename_tag(
     let new = valid_tag_name(&new)?;
     let (old_key, new_key) = (tag_key(&old), tag_key(&new));
     let mut store = lock(&state);
+    // 38: snapshot everything this command can touch before mutating, so a failed
+    // save can put it back exactly instead of reporting success for a rename that
+    // never reached disk.
+    let original_tags: Vec<(String, Vec<String>)> = store
+        .prompts
+        .iter()
+        .filter(|p| p.tags.iter().any(|t| tag_key(t) == old_key))
+        .map(|p| (p.id.clone(), p.tags.clone()))
+        .collect();
     let prompts_changed = rename_tag_in(&mut store.prompts, &old_key, &new);
+    if prompts_changed && !save_prompts(&app, &store) {
+        for (id, tags) in original_tags {
+            if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
+                p.tags = tags;
+            }
+        }
+        return Err("save-failed".into());
+    }
+    let original_old_color = store.settings.tag_colors.get(&old_key).cloned();
+    let original_new_color = store.settings.tag_colors.get(&new_key).cloned();
     if let Some(color) = store.settings.tag_colors.remove(&old_key) {
         // The target's own color wins if it already has one — it is the surviving tag.
-        store.settings.tag_colors.entry(new_key).or_insert(color);
+        store.settings.tag_colors.entry(new_key.clone()).or_insert(color);
     }
-    if prompts_changed {
-        save_prompts(&app, &store);
+    if !save_settings(&app, &store.settings) {
+        match original_old_color {
+            Some(c) => { store.settings.tag_colors.insert(old_key, c); }
+            None => { store.settings.tag_colors.remove(&old_key); }
+        }
+        match original_new_color {
+            Some(c) => { store.settings.tag_colors.insert(new_key, c); }
+            None => { store.settings.tag_colors.remove(&new_key); }
+        }
+        return Err("save-failed".into());
     }
-    save_settings(&app, &store.settings);
     Ok(store.settings.clone())
 }
 
@@ -5184,12 +5269,28 @@ async fn rename_tag(
 async fn delete_tag(app: AppHandle, state: State<'_, Db>, name: String) -> Result<Settings, String> {
     let key = tag_key(&valid_tag_name(&name)?);
     let mut store = lock(&state);
+    let original_tags: Vec<(String, Vec<String>)> = store
+        .prompts
+        .iter()
+        .filter(|p| p.tags.iter().any(|t| tag_key(t) == key))
+        .map(|p| (p.id.clone(), p.tags.clone()))
+        .collect();
     let prompts_changed = remove_tag_from(&mut store.prompts, &key);
-    store.settings.tag_colors.remove(&key);
-    if prompts_changed {
-        save_prompts(&app, &store);
+    if prompts_changed && !save_prompts(&app, &store) {
+        for (id, tags) in original_tags {
+            if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
+                p.tags = tags;
+            }
+        }
+        return Err("save-failed".into());
     }
-    save_settings(&app, &store.settings);
+    let original_color = store.settings.tag_colors.remove(&key);
+    if !save_settings(&app, &store.settings) {
+        if let Some(c) = original_color {
+            store.settings.tag_colors.insert(key, c);
+        }
+        return Err("save-failed".into());
+    }
     Ok(store.settings.clone())
 }
 
@@ -5261,15 +5362,24 @@ fn set_view_color(app: AppHandle, state: State<Db>, id: String, color: String) -
 // Recolor saved data when the global palette changes: every prompt/view whose
 // color equals an old palette hex is moved to the new one (pairs = [[old,new],...]).
 #[tauri::command]
-fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String, String)>) {
+fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String, String)>) -> Result<(), String> {
     if pairs.is_empty() {
-        return;
+        return Ok(());
     }
     let map: HashMap<String, String> = pairs.into_iter().filter(|(o, n)| o != n).collect();
     if map.is_empty() {
-        return;
+        return Ok(());
     }
     let mut store = lock(&state);
+    // 38: snapshot every color this can touch before mutating, so a failed save can
+    // put it back exactly instead of reporting success for a remap that never
+    // reached disk (a whole theme's tiles would then look remapped until restart).
+    let original_prompt_colors: Vec<(String, String)> = store
+        .prompts
+        .iter()
+        .filter(|p| map.contains_key(&p.color))
+        .map(|p| (p.id.clone(), p.color.clone()))
+        .collect();
     let mut prompts_changed = false;
     for p in &mut store.prompts {
         if let Some(nc) = map.get(&p.color) {
@@ -5277,6 +5387,28 @@ fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String, String)>) 
             prompts_changed = true;
         }
     }
+    if prompts_changed && !save_prompts(&app, &store) {
+        for (id, c) in original_prompt_colors {
+            if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
+                p.color = c;
+            }
+        }
+        return Err("save-failed".into());
+    }
+    let original_view_colors: Vec<(String, String)> = store
+        .settings
+        .views
+        .iter()
+        .filter(|v| map.contains_key(&v.color))
+        .map(|v| (v.id.clone(), v.color.clone()))
+        .collect();
+    let original_group_colors: Vec<(String, String)> = store
+        .settings
+        .view_groups
+        .iter()
+        .filter(|g| map.contains_key(&g.color))
+        .map(|g| (g.id.clone(), g.color.clone()))
+        .collect();
     let mut views_changed = false;
     for v in &mut store.settings.views {
         if let Some(nc) = map.get(&v.color) {
@@ -5290,12 +5422,20 @@ fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String, String)>) 
             views_changed = true;
         }
     }
-    if prompts_changed {
-        save_prompts(&app, &store);
+    if views_changed && !save_settings(&app, &store.settings) {
+        for (id, c) in original_view_colors {
+            if let Some(v) = store.settings.views.iter_mut().find(|v| v.id == id) {
+                v.color = c;
+            }
+        }
+        for (id, c) in original_group_colors {
+            if let Some(g) = store.settings.view_groups.iter_mut().find(|g| g.id == id) {
+                g.color = c;
+            }
+        }
+        return Err("save-failed".into());
     }
-    if views_changed {
-        save_settings(&app, &store.settings);
-    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -10815,6 +10955,7 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String) -> R
         .map(|p| import_sig(&p.name, &p.text, &p.file_path, &p.image, p.copy_image))
         .collect();
     let mut count = 0usize;
+    let before_len = store.prompts.len(); // 38: everything imported is appended after this
     // Grows while importing so tags introduced by the file itself also settle on one casing.
     let mut known = canonical_tags(&store.prompts);
     for item in data.prompts {
@@ -10860,7 +11001,12 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String) -> R
         store.prompts.push(prompt);
         count += 1;
     }
-    save_prompts(&app, &store);
+    // 38: a failed save must not report N prompts imported for a write that never
+    // reached disk — an appended tail is trivial to roll back exactly.
+    if !save_prompts(&app, &store) {
+        store.prompts.truncate(before_len);
+        return Err("save-failed".into());
+    }
     let settings = store.settings.clone();
     drop(store);
     push_theme(&app, &settings);
@@ -11019,6 +11165,7 @@ async fn set_backup_password(app: AppHandle, state: State<'_, Db>, password: Str
     }
     {
         let mut store = lock(&state);
+        let original = store.settings.ui_texts.get(BACKUP_PW_KEY).cloned();
         if password.is_empty() {
             store.settings.ui_texts.remove(BACKUP_PW_KEY);
         } else {
@@ -11027,7 +11174,16 @@ async fn set_backup_password(app: AppHandle, state: State<'_, Db>, password: Str
                 .ui_texts
                 .insert(BACKUP_PW_KEY.to_string(), enc_str(&password));
         }
-        save_settings(&app, &store.settings);
+        // 38: a failed save must not report the new backup password as set — the
+        // very next export would otherwise silently use the OLD (or no) password
+        // while the UI believes it changed.
+        if !save_settings(&app, &store.settings) {
+            match original {
+                Some(v) => { store.settings.ui_texts.insert(BACKUP_PW_KEY.to_string(), v); }
+                None => { store.settings.ui_texts.remove(BACKUP_PW_KEY); }
+            }
+            return Err("save-failed".into());
+        }
     }
     Ok(())
 }
@@ -11123,6 +11279,12 @@ async fn import_all(
 
     let (settings, count, dropped_hotkeys) = {
         let mut store = lock(&state);
+        // 38: this wholesale-replaces prompts AND settings — a failed write must put
+        // the ENTIRE previous store back, not just leave the imported data sitting
+        // unsaved in memory while the UI reports the import as done.
+        let original_prompts = store.prompts.clone();
+        let original_settings = store.settings.clone();
+        let original_locked = store.prompts_locked;
         store.prompts = backup.prompts;
         // A backup written by hand could miss ids; keep every prompt addressable.
         for p in store.prompts.iter_mut() {
@@ -11143,8 +11305,12 @@ async fn import_all(
         let app_hotkey = store.settings.hotkey.clone();
         let dropped = drop_colliding_hotkeys(&app_hotkey, &mut store.prompts);
         store.normalize_folders(); // F25: the restored folders must match the restored prompts
-        save_prompts(&app, &store);
-        save_settings(&app, &store.settings);
+        if !save_prompts(&app, &store) || !save_settings(&app, &store.settings) {
+            store.prompts = original_prompts;
+            store.settings = original_settings;
+            store.prompts_locked = original_locked;
+            return Err("save-failed".into());
+        }
         (store.settings.clone(), store.prompts.len(), dropped)
     };
     // Re-apply the visible parts of the imported settings without a restart.

@@ -2026,7 +2026,7 @@ async function savePalette(colors) {
     if (oldHues[i] && newHues[i] && oldHues[i] !== newHues[i]) pairs.push([oldHues[i], newHues[i]]);
   }
   if (pairs.length) {
-    try { await invoke("remap_colors", { pairs }); } catch (e) { toast(String(e)); }
+    try { await invoke("remap_colors", { pairs }); } catch (e) { toast(String(e) === "save-failed" ? t("persistFailed") : String(e)); }
     // Reload the caches so the grid/views reflect the remap without a restart.
     try {
       const s = await invoke("get_state");
@@ -6900,7 +6900,7 @@ async function renderBackupPanel(body) {
       pwIn.value = "";
       pwIn.type = "password";
       syncPwButtons();
-    } catch (e) { toast(String(e)); }
+    } catch (e) { toast(String(e) === "save-failed" ? t("persistFailed") : String(e)); }
   });
   remove.type = "button";
   remove.className = "ghost-btn danger-btn backup-pw-remove";
@@ -6921,7 +6921,7 @@ async function renderBackupPanel(body) {
       pwIn.value = "";
       pwIn.type = "password";
       syncPwButtons();
-    } catch (e) { toast(String(e)); }
+    } catch (e) { toast(String(e) === "save-failed" ? t("persistFailed") : String(e)); }
   });
   syncPwButtons();
   pwWrap.append(pwIn, eye);
@@ -8913,7 +8913,12 @@ function renderLibrary() {
       fav.addEventListener("click", async (e) => {
         e.stopPropagation();
         p.favorite = !p.favorite;
-        try { await invoke("set_favorite", { id: p.id, favorite: p.favorite }); } catch (err) { toast(String(err)); }
+        try {
+          await invoke("set_favorite", { id: p.id, favorite: p.favorite });
+        } catch (err) {
+          p.favorite = !p.favorite; // 38: backend rolled back on a failed save — mirror it locally
+          toast(String(err) === "save-failed" ? t("persistFailed") : String(err));
+        }
         renderLibrary();
         if (favView) renderGrid(true); // favorites grid updates live underneath
       });
