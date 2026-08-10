@@ -374,7 +374,10 @@ function applyPrefs(s) {
   apDblMs = Number.isFinite(adb) ? adb : DBL_CLICK_MS_DEFAULT;
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
-  rotateBadgeOn = s.ui_flags?.rotateBadge !== false; // default on
+  // 47: rotateBadge is a sub-toggle of rotatingPrompts — the parent off must freeze
+  // the whole feature (gating rule: nothing dependent stays visible with its parent
+  // off), same fix as floating.js/main.js.
+  rotateBadgeOn = s.ui_flags?.rotateBadge !== false && s.ui_flags?.rotatingPrompts !== false;
   // The folder animation reuses the global animation setting.
   const speed = Number(s.ui_values?.animSpeed);
   animMs = s.ui_flags?.animations === false ? 0 : Number.isFinite(speed) ? Math.max(0, speed) : 150;

@@ -1603,7 +1603,10 @@ async function resetOneExpertValue(kind, key) {
 }
 
 // Flags whose state changes the tile DOM itself (everything else is a body class).
-const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip"]);
+// 47: rotatingPrompts/rotateBadge gate a tile's own rotate-badge element -- without
+// a full rebuild here, an already-open grid keeps showing (or hiding) it until some
+// unrelated re-render happens to catch up.
+const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip", "rotatingPrompts", "rotateBadge"]);
 
 function flagRow(key) {
   const row = document.createElement("label");
@@ -3755,7 +3758,11 @@ function buildTile(p) {
   // 32: rotating prompt — "next entry" position pill, bottom-left (a rotating
   // prompt is always text-only, so that corner never competes with a media
   // caption/control bar). Text fills in from the cache once primed below.
-  if ((p.variants || []).length && flag("rotateBadge")) {
+  // 47: rotateBadge is a sub-toggle of rotatingPrompts (gating rule: nothing
+  // dependent stays visible/active with its parent off) — flag() alone ignores
+  // the parent, gateOpen() walks the declared chain.
+  const rotateUiOn = flag("rotateBadge") && gateOpen(FLAG_GATES.rotateBadge);
+  if ((p.variants || []).length && rotateUiOn) {
     const rbadge = document.createElement("span");
     rbadge.className = "tile-rotate-badge";
     tile.appendChild(rbadge);
@@ -3798,7 +3805,10 @@ function buildTile(p) {
     tile.appendChild(err);
     if (missingFiles.has(p.id)) tile.classList.add("file-missing");
   }
-  if ((p.variants || []).length) {
+  // 47: gated the same as the badge element above — an unconditional peek here was
+  // firing one rotation_peek IPC call per rotating tile even with the badge (or its
+  // whole parent feature) switched off.
+  if ((p.variants || []).length && rotateUiOn) {
     primeRotateState(p.id); // async — patches this tile again once the peek lands
     applyRotateState(tile, p.id); // sync — reflects whatever is cached right now
   }

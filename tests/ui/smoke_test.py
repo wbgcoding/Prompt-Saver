@@ -2957,6 +2957,22 @@ PROBE = """
           }
         }
       }
+      // 47: rotateBadge is a sub-toggle of rotatingPrompts -- switching the PARENT
+      // off must hide the badge too, not just leave it keyed to its own toggle.
+      await click('gear');
+      await click('expert-open');
+      const rotSwOff = rowByLabel6('Rotating', '.switch-field')?.querySelector('input.switch');
+      if (rotSwOff && rotSwOff.checked) { rotSwOff.checked = false; rotSwOff.dispatchEvent(new Event('change', { bubbles: true })); }
+      await sleep(150);
+      document.getElementById('settings-close')?.click();
+      await sleep(150);
+      const homeTabOff = document.querySelector('.view-btn[data-view-id="home"]');
+      if (homeTabOff) { homeTabOff.click(); await sleep(150); }
+      const rotTileOff = [...document.querySelectorAll('#grid .tile-name')]
+        .find(n => n.textContent === 'Rotate Test')?.closest('.tile');
+      if (rotTileOff && rotTileOff.querySelector('.tile-rotate-badge')) {
+        out.errors.push('the rotate badge is still shown with rotatingPrompts switched off');
+      }
       // Restore the flag to its default (on, since 33) for later blocks / a re-run.
       await click('gear');
       await click('expert-open');

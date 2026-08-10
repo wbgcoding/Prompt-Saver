@@ -70,7 +70,7 @@ function renderRotateBadge() {
 function primeRotateBadge() {
   rotateInfo = null;
   const req = ++rotateReq;
-  if (!rotateVariants) { renderRotateBadge(); return; }
+  if (!rotateVariants || !rotateBadgeOn) { renderRotateBadge(); return; } // 47: no peek while off
   invoke("rotation_peek", { id: promptId }).then((r) => {
     if (!r || req !== rotateReq) return;
     rotateInfo = { index: r.index, pos: r.pos, total: r.total };
@@ -227,7 +227,10 @@ function applyPrefs(s) {
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
   foldersOn = s.ui_flags?.pillFolders !== false; // 41: default ON, mirrors folders_on() in lib.rs
-  rotateBadgeOn = s.ui_flags?.rotateBadge !== false; // default on
+  // 47: rotateBadge is a sub-toggle of rotatingPrompts — the parent off must freeze
+  // the whole feature, not just the badge (gating rule: nothing dependent stays
+  // visible/active with its parent off).
+  rotateBadgeOn = s.ui_flags?.rotateBadge !== false && s.ui_flags?.rotatingPrompts !== false;
   renderRotateBadge();
   copyFont = s.ui_texts?.copyFont || "";
   document.getElementById("feedback").style.fontFamily = FONTS[copyFont] || "";
