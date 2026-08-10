@@ -4928,6 +4928,14 @@ fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool) -> Result<(
                 fs::copy(src.join(f), dir.join(f)).map_err(|e| e.to_string())?;
             }
         }
+        // 54: same gap as set_data_dir -- an adopted store must bring its backup
+        // history along too, or the Backup panel shows 0 snapshots right after.
+        let src_backups = src.join("backups");
+        if src_backups.is_dir() {
+            if let Err(e) = copy_dir_all(&src_backups, &dir.join("backups")) {
+                append_crash_log(&format!("takeover: could not copy backups/ ({e})"));
+            }
+        }
         // The freshly copied database supersedes whatever the empty one wrote, so
         // its write-ahead files must not survive into the new one.
         let _ = fs::remove_file(dir.join("data.db-wal"));
@@ -9451,6 +9459,23 @@ fn current_data_dir(app: AppHandle) -> String {
 // at another app's folder full of same-named files (settings.json / data.db).
 static LAST_OLD_DATA_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
+// 54: plain recursive copy — used to bring backups/ along on a data-dir move/adopt,
+// which only ever copied the store files themselves (data.db/prompts.json/
+// settings.json), leaving the Backup panel showing 0 snapshots at the new location.
+fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let target = dst.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_all(&entry.path(), &target)?;
+        } else {
+            fs::copy(entry.path(), &target)?;
+        }
+    }
+    Ok(())
+}
+
 // Redirect the store to a new folder (applies on next launch). Adopts an existing
 // store in the target if present, otherwise copies the current one across. The old
 // data is left untouched; the caller may offer to delete it. Returns the old path.
@@ -9491,6 +9516,17 @@ async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: String) -> Resu
             let src = current.join(f);
             if src.exists() {
                 fs::copy(&src, new.join(f)).map_err(|e| format!("copy store: {}", e))?;
+            }
+        }
+        // 54: bring local backup history along -- otherwise the Backup panel shows 0
+        // snapshots at the new location, and the old (still full) backups/ folder,
+        // now invisible from there, is exactly what the next cleanup dialog offers
+        // to delete. Best-effort: the store copy above is the critical part and has
+        // already succeeded by this point.
+        let old_backups = current.join("backups");
+        if old_backups.is_dir() {
+            if let Err(e) = copy_dir_all(&old_backups, &new.join("backups")) {
+                append_crash_log(&format!("data dir move: could not copy backups/ ({e})"));
             }
         }
     }
@@ -14022,6 +14058,29 @@ mod tests {
         assert!(!tmp.to_string_lossy().ends_with(".md"), "temp name must not look like a real sync file");
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    // 54: a data-dir move must bring backups/ along, nested subfolders included --
+    // otherwise the Backup panel shows 0 snapshots right after moving.
+    #[test]
+    fn copy_dir_all_copies_nested_files() {
+        let base = std::env::temp_dir().join(format!("ps-copydir-{}", std::process::id()));
+        let src = base.join("src");
+        let dst = base.join("dst");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(src.join("2026-01-01_00-00-00")).unwrap();
+        fs::write(src.join("2026-01-01_00-00-00").join("data.db.gz"), b"snapshot").unwrap();
+        fs::write(src.join("prompts.names.json"), b"[]").unwrap();
+
+        copy_dir_all(&src, &dst).unwrap();
+
+        assert_eq!(
+            fs::read(dst.join("2026-01-01_00-00-00").join("data.db.gz")).unwrap(),
+            b"snapshot"
+        );
+        assert_eq!(fs::read(dst.join("prompts.names.json")).unwrap(), b"[]");
+
+        let _ = fs::remove_dir_all(&base);
     }
 
     // 53: a snip preview or an update stage dir surviving a crash/abnormal exit is
