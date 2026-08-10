@@ -28,8 +28,10 @@ screen colour.
 Write `{#{name}#}` anywhere in a prompt's text — copying it opens a small popup
 asking for each placeholder's value before the filled-in text reaches the clipboard.
 
-- Dynamic placeholders — `{#{date}#}`, `{#{time}#}`, `{#{clipboard}#}` fill
-  themselves in, no popup
+- Dynamic placeholders — `{#{/date\}#}`, `{#{/time\}#}`, `{#{/clipboard\}#}`
+  fill themselves in, no popup; their own slash-fenced syntax (not the plain
+  `{#{date}#}` form) is what triggers it — insert them from the chip buttons
+  under the editor's text box rather than typing them by hand
 - Choice placeholders — a dropdown of preset values instead of free text
 - Remember choices — the popup pre-fills your last answer per prompt
 - Popup in its own window — useful with the floating buttons, where the main
@@ -198,7 +200,7 @@ library/history/pin buttons, multiple views and view groups.
 
 ### Privacy
 
-Exclude the window from screen capture (off by default), blur tiles/media until
+Exclude the window from screen capture (on by default), blur tiles/media until
 hovered, hide tile names, dim unhovered tiles.
 
 ### System

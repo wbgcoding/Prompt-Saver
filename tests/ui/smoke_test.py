@@ -431,6 +431,35 @@ PROBE = """
       layoutScan('grid folder');
       document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
       await sleep(120);
+      // 70: dragging in the colour picker fires on every pointer-move frame — must
+      // paint just this one folder tile in place, not rebuild the whole grid.
+      fTile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(150);
+      const colorBtn = document.querySelectorAll('.tab-menu button')[1];
+      if (!colorBtn) {
+        out.errors.push('70: the grid folder context menu has no colour option');
+      } else {
+        colorBtn.click();
+        await sleep(150);
+        const pick = document.querySelector('.color-pop:not(.hidden)');
+        const sv = pick ? pick.querySelector('.cp-sv') : null;
+        if (!pick || !sv) {
+          out.errors.push('70: the folder colour picker did not open');
+        } else {
+          const r = sv.getBoundingClientRect();
+          sv.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, clientX: r.left + 5, clientY: r.top + 5 }));
+          sv.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: r.left + 25, clientY: r.top + 25 }));
+          await sleep(30);
+          if (document.querySelector('.tile.folder-tile') !== fTile) {
+            out.errors.push('70: painting a folder colour rebuilt the whole grid instead of the one tile');
+          }
+          if (!fTile.style.background) {
+            out.errors.push('70: the folder tile did not pick up the live colour preview');
+          }
+        }
+        document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+        await sleep(120);
+      }
       // Dissolving must not just remove the folder tile — every member has to land
       // back on the grid as its own tile, not vanish into the library.
       fTile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));

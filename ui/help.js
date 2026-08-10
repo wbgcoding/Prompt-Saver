@@ -42,11 +42,12 @@ export const HELP_CONTENT = {
         "Write {#{name}#} anywhere in a prompt's text — copying it opens a small popup asking for each placeholder's value before the filled-in text reaches the clipboard.",
       howTo: [
         "Type {#{PlaceholderName}#} inside the prompt text.",
+        "For a self-filling value (today's date, a UUID, …) click one of the dynamic-placeholder chips under the text box instead of typing it by hand — they use their own syntax, {#{/date\\}#}, not the plain {#{name}#} form.",
         "Click the tile to copy — the fill-in popup opens automatically.",
         "Enter a value per placeholder (or pick one, for choice placeholders) and confirm.",
       ],
       whatHappens:
-        "Only the filled-in text reaches the clipboard — the raw {#{...}#} markup is never copied. Dynamic placeholders (date/time/clipboard/uuid) fill themselves in with no popup at all.",
+        "Only the filled-in text reaches the clipboard — the raw {#{...}#} markup is never copied. A dynamic placeholder (date/time/clipboard/uuid) fills itself in with no popup at all.",
       settings: [
         "Dynamic placeholders, choice placeholders, remember choices, popup in its own window — Expert menu → Features → Placeholders",
       ],
@@ -225,11 +226,11 @@ export const HELP_CONTENT = {
       section: "system",
       title: "Privacy",
       whatItIs: "Options that keep this window's contents out of screenshots, screen shares, or a passer-by's glance.",
-      howTo: ["Turn on screen-capture exclusion, tile/media blur, hidden tile names or dim-unhovered in the expert menu, as needed."],
+      howTo: ["Screen-capture exclusion is on from the start; turn on tile/media blur, hidden tile names or dim-unhovered in the expert menu, as needed."],
       whatHappens:
         "Screen-capture exclusion makes the window invisible to screenshot and recording tools — including your own, so if a capture comes out empty, check this setting first.",
       settings: ["Exclude from screen capture, blur tiles/media, hide names, dim unhovered — Expert menu → System & data → Privacy"],
-      tip: "Screen-capture exclusion ships OFF — turn it on if you want it.",
+      tip: "Screen-capture exclusion ships ON — turn it off if you need normal screenshots or recordings of this window.",
     },
     {
       section: "system",
@@ -517,11 +518,12 @@ export const HELP_CONTENT = {
         "Schreibe {#{Name}#} irgendwo in den Text eines Prompts — beim Kopieren öffnet sich ein kleines Popup, das nach dem Wert für jeden Platzhalter fragt, bevor der ausgefüllte Text in die Zwischenablage gelangt.",
       howTo: [
         "Tippe {#{PlatzhalterName}#} in den Text des Prompts.",
+        "Für einen sich selbst ausfüllenden Wert (heutiges Datum, eine UUID, …) klick auf einen der dynamischen Platzhalter-Chips unter dem Textfeld statt ihn selbst zu tippen — sie verwenden eine eigene Schreibweise, {#{/date\\}#}, nicht die einfache {#{Name}#}-Form.",
         "Klick auf die Kachel zum Kopieren — das Popup zum Ausfüllen öffnet sich automatisch.",
         "Gib einen Wert pro Platzhalter ein (oder wähle einen bei Auswahl-Platzhaltern) und bestätige.",
       ],
       whatHappens:
-        "Nur der ausgefüllte Text erreicht die Zwischenablage — das rohe {#{...}#}-Markup wird niemals kopiert. Dynamische Platzhalter (Datum/Uhrzeit/Zwischenablage/UUID) füllen sich von selbst ohne Popup aus.",
+        "Nur der ausgefüllte Text erreicht die Zwischenablage — das rohe {#{...}#}-Markup wird niemals kopiert. Ein dynamischer Platzhalter (Datum/Uhrzeit/Zwischenablage/UUID) füllt sich von selbst aus, ganz ohne Popup.",
       settings: [
         "Dynamische Platzhalter, Auswahl-Platzhalter, Auswahl merken, Popup im eigenen Fenster — Experten-Menü → Funktionen → Variablen",
       ],
@@ -700,11 +702,11 @@ export const HELP_CONTENT = {
       section: "system",
       title: "Datenschutz",
       whatItIs: "Optionen, die den Inhalt dieses Fensters aus Screenshots, Screen-Shares oder vor dem Blick von Passanten fernhalten.",
-      howTo: ["Aktiviere im Experten-Menü bei Bedarf den Ausschluss von Bildschirmaufnahmen, Unschärfe für Kacheln/Medien, versteckte Kachelnamen oder abgedunkelte inaktive Elemente."],
+      howTo: ["Der Ausschluss von Bildschirmaufnahmen ist von Anfang an aktiv; aktiviere im Experten-Menü bei Bedarf Unschärfe für Kacheln/Medien, versteckte Kachelnamen oder abgedunkelte inaktive Elemente."],
       whatHappens:
         "Der Ausschluss von Bildschirmaufnahmen macht das Fenster für Screenshot- und Aufnahmeprogramme unsichtbar — auch für die eigenen. Wenn also eine Aufnahme leer bleibt, überprüfe zuerst diese Einstellung.",
       settings: ["Von Bildschirmaufnahmen ausschließen, Kacheln/Medien unscharf machen, Namen verbergen, Ungehoverte abdunkeln — Experten-Menü → System & Daten → Datenschutz"],
-      tip: "Der Ausschluss von Bildschirmaufnahmen ist standardmäßig AUS — schalte ihn ein, falls gewünscht.",
+      tip: "Der Ausschluss von Bildschirmaufnahmen ist standardmäßig AN — schalte ihn aus, falls du normale Screenshots oder Aufnahmen dieses Fensters brauchst.",
     },
     {
       section: "system",

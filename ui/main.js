@@ -4342,7 +4342,15 @@ function pickTileFolderColor(f, anchor) {
     const live = folderById(f.id);
     if (!live) return;
     live.color = hex;
-    renderGrid(true);
+    // The free picker's SV field fires this on every drag frame — a full
+    // renderGrid per frame would rebuild every tile in the view. Paint just
+    // this one folder tile live, the same way buildFolderTile itself does.
+    const tile = gridEl.querySelector(`.folder-tile[data-folder-id="${f.id}"]`);
+    if (tile) {
+      tile.classList.toggle("tinted", !!hex);
+      tile.style.background = hex;
+      tile.style.borderColor = hex;
+    }
     clearTimeout(folderColorTimer);
     // Re-read the folder on write: the settings object was replaced in between.
     folderColorTimer = setTimeout(() => {
@@ -7464,7 +7472,7 @@ let confirmCleanup = null;
 // the promise resolves true (the return value itself stays plain bool/string, so
 // no existing `if (!ok) return` caller needs to change). At least one must stay
 // checked, or the confirm button offers nothing to actually do.
-function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input, checkboxes, danger = true }) {
+function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input, checkboxes, danger = true, oneButton = false }) {
   const root = $("confirm-modal");
   $("confirm-title").textContent = title;
   $("confirm-msg").textContent = message;
@@ -7477,6 +7485,10 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input,
   row.classList.toggle("hidden", !input);
   const ok = $("confirm-ok");
   const cancel = $("confirm-cancel");
+  // Part of THIS call's own render, not a side effect toggled by the caller
+  // around await confirmDialog(...) — a second, unrelated dialog opening while
+  // this one is still pending must never flip the wrong dialog's cancel button.
+  cancel.classList.toggle("hidden", oneButton);
   ok.classList.toggle("danger-confirm", danger);
   ok.textContent = confirmLabel;
   cancel.textContent = cancelLabel || t("cancel");
@@ -7543,13 +7555,7 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input,
 
 // Same dialog with nothing to decide: one button, used to report a result.
 async function infoDialog(title, message, icon) {
-  const cancel = $("confirm-cancel");
-  cancel.classList.add("hidden");
-  try {
-    await confirmDialog({ title, message, confirmLabel: t("close"), icon, danger: false });
-  } finally {
-    cancel.classList.remove("hidden");
-  }
+  await confirmDialog({ title, message, confirmLabel: t("close"), icon, danger: false, oneButton: true });
 }
 
 // Ask before dismissing the modal via the background. A new save dialog (text,
