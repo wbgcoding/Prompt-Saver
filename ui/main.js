@@ -9718,6 +9718,9 @@ async function runImportAll() {
       let msg = t("importAllDone").replace("{f}", res.name).replace("{n}", res.count);
       // F20: a hotkey the restore could not keep is named, never silently dropped.
       if (res.dropped_hotkeys) msg += "\n" + t("importHotkeysDropped").replace("{n}", res.dropped_hotkeys);
+      // 40: the file's own backup password is a foreign-machine DPAPI blob and was
+      // discarded — say so, or a following export silently ships unprotected.
+      if (res.backup_pw_dropped) msg += "\n" + t("importBackupPwKept");
       await infoDialog(t("backupImport"), msg);
       return;
     } catch (err) {

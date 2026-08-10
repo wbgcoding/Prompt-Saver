@@ -11245,6 +11245,9 @@ struct ImportSummary {
     count: usize,
     // F20: prompt hotkeys the restore had to give up (unusable or already bound).
     dropped_hotkeys: usize,
+    // 40: the file carried its own (foreign-machine, undecryptable-here) backup
+    // password, which was discarded in favour of this machine's own.
+    backup_pw_dropped: bool,
 }
 
 #[tauri::command]
@@ -11280,7 +11283,7 @@ async fn import_all(
     let backup: Backup =
         serde_json::from_str(&content).map_err(|_| format!("not a {} backup", brand::DISPLAY_NAME))?;
 
-    let (settings, count, dropped_hotkeys) = {
+    let (settings, count, dropped_hotkeys, backup_pw_dropped) = {
         let mut store = lock(&state);
         // 38: this wholesale-replaces prompts AND settings — a failed write must put
         // the ENTIRE previous store back, not just leave the imported data sitting
@@ -11288,6 +11291,14 @@ async fn import_all(
         let original_prompts = store.prompts.clone();
         let original_settings = store.settings.clone();
         let original_locked = store.prompts_locked;
+        // 40: the imported backupPw is DPAPI-sealed on a DIFFERENT machine — it
+        // decrypts to "" here, and a following export_all would then silently write
+        // UNPROTECTED with the fixed key, with nothing telling the user their
+        // password stopped applying. Keep THIS machine's own password across the
+        // import instead (reset_settings already does the identical rescue for the
+        // identical reason).
+        let local_backup_pw = original_settings.ui_texts.get(BACKUP_PW_KEY).cloned();
+        let backup_pw_dropped = backup.settings.ui_texts.contains_key(BACKUP_PW_KEY);
         store.prompts = backup.prompts;
         // A backup written by hand could miss ids; keep every prompt addressable.
         for p in store.prompts.iter_mut() {
@@ -11301,6 +11312,10 @@ async fn import_all(
         // hand-edited backup with "views": [] makes active_view_mut index [0] panic
         // on the next mutation (and poisons the Db mutex).
         store.settings.migrate();
+        store.settings.ui_texts.remove(BACKUP_PW_KEY);
+        if let Some(pw) = local_backup_pw {
+            store.settings.ui_texts.insert(BACKUP_PW_KEY.to_string(), pw);
+        }
         load_pick_history(&store.settings); // 19: restore brings its own history mirror
         store.prompts_locked = false; // a full import supersedes any decrypt lock
         // F20: a colliding or unusable accelerator must not fail the restore — drop
@@ -11314,7 +11329,7 @@ async fn import_all(
             store.prompts_locked = original_locked;
             return Err("save-failed".into());
         }
-        (store.settings.clone(), store.prompts.len(), dropped)
+        (store.settings.clone(), store.prompts.len(), dropped, backup_pw_dropped)
     };
     // Re-apply the visible parts of the imported settings without a restart.
     push_theme(&app, &settings);
@@ -11328,6 +11343,7 @@ async fn import_all(
             .unwrap_or_default(),
         count,
         dropped_hotkeys,
+        backup_pw_dropped,
     })
 }
 
