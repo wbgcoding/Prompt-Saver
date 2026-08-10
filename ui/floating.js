@@ -226,7 +226,7 @@ function applyPrefs(s) {
   apDblMs = Number.isFinite(adb) ? adb : DBL_CLICK_MS_DEFAULT;
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
-  foldersOn = s.ui_flags?.pillFolders === true;
+  foldersOn = s.ui_flags?.pillFolders !== false; // 41: default ON, mirrors folders_on() in lib.rs
   rotateBadgeOn = s.ui_flags?.rotateBadge !== false; // default on
   renderRotateBadge();
   copyFont = s.ui_texts?.copyFont || "";
