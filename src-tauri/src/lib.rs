@@ -12609,8 +12609,24 @@ fn sync_resolve_cell(settings: &Settings, view_id: &str, prompt_id: &str, wanted
     if fits { Some(wanted) } else { first_free_cell_excluding(view, &folder_cells) }
 }
 
+// 56: mirrors the frontend's placeTile() (WORK.md 51/INVARIANTS.md "Prompt in
+// multiple views") — with multiViewPrompt off (default), a prompt lives in exactly
+// ONE view. Without stripping the others here, a machine re-importing a placement
+// that already matches (only the prompt's content changed elsewhere) left the
+// prompt duplicated across every view it was ever placed in on ANY machine. With
+// the flag on, multiple placements are legitimate and deliberately left alone.
 fn sync_place_in_view(settings: &mut Settings, prompt_id: &str, view_id: &str, wanted: [u32; 2]) {
     let Some(cell) = sync_resolve_cell(settings, view_id, prompt_id, wanted) else { return };
+    let multi_view = settings.ui_flags.get("multiViewPrompt") == Some(&true);
+    if !multi_view {
+        for v in settings.views.iter_mut() {
+            if v.id != view_id {
+                for layout in v.layouts.values_mut() {
+                    layout.remove(prompt_id);
+                }
+            }
+        }
+    }
     let Some(view) = settings.views.iter_mut().find(|v| v.id == view_id) else { return };
     let key = grid_key(view.cols, view.rows);
     view.layouts.entry(key).or_default().insert(prompt_id.to_string(), cell);
@@ -14087,6 +14103,38 @@ mod tests {
         assert_eq!(fs::read(dst.join("prompts.names.json")).unwrap(), b"[]");
 
         let _ = fs::remove_dir_all(&base);
+    }
+
+    // 56: with multiViewPrompt off (default), a synced placement must strip the
+    // prompt from every OTHER view -- otherwise re-syncing an unrelated content
+    // change duplicates it across every view it was ever placed in on any machine.
+    #[test]
+    fn sync_place_in_view_strips_other_views_unless_multi_view_is_on() {
+        let mut settings = Settings::default();
+        settings.views = vec![test_view("v1"), test_view("v2")];
+        let key1 = grid_key(settings.views[0].cols, settings.views[0].rows);
+        settings.views[0].layouts.entry(key1.clone()).or_default().insert("p1".to_string(), [2, 2]);
+
+        // Default: placing into v2 must remove the v1 placement.
+        sync_place_in_view(&mut settings, "p1", "v2", [0, 0]);
+        assert!(
+            !settings.views[0].layouts.get(&key1).is_some_and(|m| m.contains_key("p1")),
+            "must be removed from v1"
+        );
+        let key2 = grid_key(settings.views[1].cols, settings.views[1].rows);
+        assert_eq!(settings.views[1].layouts.get(&key2).and_then(|m| m.get("p1")), Some(&[0, 0]));
+
+        // With multiViewPrompt on, a placement into a THIRD view must not touch v2's.
+        settings.ui_flags.insert("multiViewPrompt".to_string(), true);
+        settings.views.push(test_view("v3"));
+        sync_place_in_view(&mut settings, "p1", "v3", [1, 1]);
+        let key3 = grid_key(settings.views[2].cols, settings.views[2].rows);
+        assert_eq!(settings.views[2].layouts.get(&key3).and_then(|m| m.get("p1")), Some(&[1, 1]));
+        assert_eq!(
+            settings.views[1].layouts.get(&key2).and_then(|m| m.get("p1")),
+            Some(&[0, 0]),
+            "v2 placement must survive with multi-view on"
+        );
     }
 
     // 53: a snip preview or an update stage dir surviving a crash/abnormal exit is
