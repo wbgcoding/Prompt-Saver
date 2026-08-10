@@ -5450,6 +5450,12 @@ fn set_view_group_member(
 fn normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], view_ids: &[String]) {
     let mut taken: Vec<String> = Vec::new();
     for folder in folders.iter_mut() {
+        // 37: a hand-edited/imported cell far outside any real grid (up to u32::MAX)
+        // must not reach the collision loop below — saturating_add stops advancing
+        // once it hits the cap, which would spin the loop forever with the store
+        // mutex held (app dead on startup).
+        folder.cell[0] = folder.cell[0].min(GRID_MAX);
+        folder.cell[1] = folder.cell[1].min(GRID_MAX);
         folder.members.retain(|id| {
             let ok = prompt_ids.iter().any(|p| p == id) && !taken.contains(id);
             if ok {
@@ -5463,7 +5469,13 @@ fn normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], 
     // which the renderer resolves to the first free cell anyway.
     let mut cells: Vec<(String, [u32; 2])> = Vec::new();
     for folder in folders.iter_mut() {
-        while cells.iter().any(|(v, c)| v == &folder.view_id && *c == folder.cell) {
+        // 37: bounded even if every cell in a full grid is already taken — the clamp
+        // above keeps this from ever needing more than GRID_MAX steps in practice,
+        // but the guard is what actually guarantees termination.
+        for _ in 0..=GRID_MAX {
+            if !cells.iter().any(|(v, c)| v == &folder.view_id && *c == folder.cell) {
+                break;
+            }
             folder.cell[0] = folder.cell[0].saturating_add(1);
         }
         cells.push((folder.view_id.clone(), folder.cell));
@@ -12470,6 +12482,10 @@ fn sync_join_float_folder(settings: &mut Settings, prompt_id: &str, name: &str) 
 fn sync_normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], view_ids: &[String]) {
     let mut taken: Vec<String> = Vec::new();
     for folder in folders.iter_mut() {
+        // 37: see normalize_tile_folders — an incoming sync file's `cell:` header is
+        // exactly as untrusted as a hand-edited backup.
+        folder.cell[0] = folder.cell[0].min(GRID_MAX);
+        folder.cell[1] = folder.cell[1].min(GRID_MAX);
         folder.members.retain(|id| {
             let ok = prompt_ids.iter().any(|p| p == id) && !taken.contains(id);
             if ok {
@@ -12481,7 +12497,10 @@ fn sync_normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[Stri
     folders.retain(|f| !f.members.is_empty() && view_ids.iter().any(|id| id == &f.view_id));
     let mut cells: Vec<(String, [u32; 2])> = Vec::new();
     for folder in folders.iter_mut() {
-        while cells.iter().any(|(v, c)| v == &folder.view_id && *c == folder.cell) {
+        for _ in 0..=GRID_MAX {
+            if !cells.iter().any(|(v, c)| v == &folder.view_id && *c == folder.cell) {
+                break;
+            }
             folder.cell[0] = folder.cell[0].saturating_add(1);
         }
         cells.push((folder.view_id.clone(), folder.cell));
@@ -15449,6 +15468,32 @@ mod tests {
         normalize_tile_folders(&mut folders, &ids, &view_ids);
         assert_eq!(folders.len(), 1);
         assert_eq!(folders[0].id, "f2");
+    }
+
+    // 37: a hand-edited/imported cell at u32::MAX used to hang normalize_tile_folders
+    // forever (saturating_add never moves off the cap while the store mutex is held,
+    // i.e. the app is dead on the next launch). Must terminate and clamp instead.
+    #[test]
+    fn tile_folder_cell_collision_at_u32_max_terminates() {
+        let view_ids: Vec<String> = vec![test_view("v1").id];
+        let ids: Vec<String> = ["a", "b", "c", "d"].iter().map(|s| s.to_string()).collect();
+        let mut folders = vec![
+            test_tile_folder("f1", "v1", [u32::MAX, 0], &["a", "b"]),
+            test_tile_folder("f2", "v1", [u32::MAX, 0], &["c", "d"]),
+        ];
+        normalize_tile_folders(&mut folders, &ids, &view_ids); // must return, not hang
+        assert_eq!(folders.len(), 2);
+        assert!(folders.iter().all(|f| f.cell[0] <= GRID_MAX + 5), "cell must be clamped into range");
+        assert_ne!(folders[0].cell, folders[1].cell, "still resolved to different cells");
+
+        let mut sync_folders = vec![
+            test_tile_folder("f1", "v1", [u32::MAX, 0], &["a", "b"]),
+            test_tile_folder("f2", "v1", [u32::MAX, 0], &["c", "d"]),
+        ];
+        sync_normalize_tile_folders(&mut sync_folders, &ids, &view_ids);
+        assert_eq!(sync_folders.len(), 2);
+        assert!(sync_folders.iter().all(|f| f.cell[0] <= GRID_MAX + 5));
+        assert_ne!(sync_folders[0].cell, sync_folders[1].cell);
     }
 
     #[test]
