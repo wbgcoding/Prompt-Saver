@@ -4226,20 +4226,9 @@ async fn update_prompt(
             Some(p) => {
                 // 7: full pre-edit snapshot so a failed save can roll the live entry
                 // back instead of leaving the UI showing unsaved changes as if they
-                // had taken (they would silently revert on the next restart).
+                // had taken (they would silently revert on the next restart). Also
+                // doubles as the version-history snapshot source below.
                 let original = p.clone();
-                // F7/32: snapshot the previous name/text/variants before overwriting,
-                // if changed — entries ARE content (WORK.md 32), so editing only
-                // entry 2 of a rotating prompt (name/text untouched) must still get a
-                // version row or a restore could never bring that entry back.
-                // rotate_mode is deliberately excluded (order/random is a setting,
-                // not versioned content, and isn't stored in the snapshot).
-                if hist_on && (p.name != name || p.text != text || p.variants != variants) {
-                    let (old_name, old_text, old_variants) = (p.name.clone(), p.text.clone(), p.variants.clone());
-                    if let Some(c) = db_conn(&app) {
-                        let _ = db_add_version(&c, &id, now_secs(), &old_name, &old_text, &old_variants, hist_cap);
-                    }
-                }
                 p.name = name;
                 p.text = text;
                 p.color = color;
@@ -4275,6 +4264,19 @@ async fn update_prompt(
                         *slot = original;
                     }
                     return Err("save-failed".into());
+                }
+                // F7/32 (35b): snapshot the PRE-edit name/text/variants only once the
+                // edit is durably saved — inserting it before save_prompts (the old
+                // order) left a version row for an edit that never actually happened
+                // whenever the save then failed, and could push real history out past
+                // hist_cap for nothing. Entries ARE content (WORK.md 32), so editing
+                // only entry 2 of a rotating prompt (name/text untouched) must still
+                // get a row or a restore could never bring that entry back. rotate_mode
+                // is deliberately excluded (order/random is a setting, not content).
+                if hist_on && (original.name != clone.name || original.text != clone.text || original.variants != clone.variants) {
+                    if let Some(c) = db_conn(&app) {
+                        let _ = db_add_version(&c, &id, now_secs(), &original.name, &original.text, &original.variants, hist_cap);
+                    }
                 }
                 // 102: only sweep the old attachment once the new reference is durably
                 // saved -- otherwise a failed save leaves the DB pointing at a file the
@@ -4338,8 +4340,16 @@ async fn restore_version(app: AppHandle, state: State<'_, Db>, version_id: i64) 
         let (pid, name, text, variants) = record;
         let cap = history_cap(&store.settings);
         if let Some(p) = store.prompts.iter_mut().find(|p| p.id == pid) {
-            if let Some(c) = db_conn(&app) {
-                let _ = db_add_version(&c, &pid, now_secs(), &p.name, &p.text, &p.variants, cap);
+            let original = p.clone();
+            // 35a: the undo snapshot of the CURRENT state must itself succeed before
+            // overwriting it — silently proceeding on failure would make a restore
+            // that can never itself be undone, breaking the "nothing is ever lost"
+            // promise this command exists for.
+            let snapshot_ok = db_conn(&app)
+                .map(|c| db_add_version(&c, &pid, now_secs(), &p.name, &p.text, &p.variants, cap).is_ok())
+                .unwrap_or(false);
+            if !snapshot_ok {
+                return Err("snapshot-failed".into());
             }
             p.name = name;
             p.text = text;
@@ -4351,7 +4361,15 @@ async fn restore_version(app: AppHandle, state: State<'_, Db>, version_id: i64) 
             // stranded on an empty list (same invariant as everywhere else).
             p.rotate_mode = sanitize_rotate_mode(p.rotate_mode.clone(), &p.variants);
             let clone = p.clone();
-            save_prompts(&app, &store);
+            // 35a/38: a failed save must roll the live entry back, same pattern as
+            // update_prompt (7) — otherwise the UI shows a restored prompt that
+            // silently reverts to the pre-restore text on the next launch.
+            if !save_prompts(&app, &store) {
+                if let Some(slot) = store.prompts.iter_mut().find(|x| x.id == pid) {
+                    *slot = original;
+                }
+                return Err("save-failed".into());
+            }
             Some(clone)
         } else {
             None

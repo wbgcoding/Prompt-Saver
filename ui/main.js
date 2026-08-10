@@ -6257,7 +6257,10 @@ async function loadHistory(id) {
           await renderGrid(true);
           loadHistory(id); // the restore itself added a fresh snapshot
         }
-      } catch (err) { toast(String(err)); }
+      } catch (err) {
+        const s = String(err);
+        toast(s === "save-failed" || s === "snapshot-failed" ? t("persistFailed") : s);
+      }
     });
     head.append(time, prev, expand, restore);
     const full = document.createElement("div");
