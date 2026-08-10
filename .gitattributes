@@ -1,0 +1,6 @@
+# brand.rs and brand.js are regenerated from scratch by tools/brand.js on every
+# rebrand, always as LF. Without this, core.autocrlf=true converts them to CRLF
+# on checkout, so the very next rebrand re-writes them as LF and dirties the tree
+# even when nothing about the brand changed.
+src-tauri/src/brand.rs text eol=lf
+ui/brand.js text eol=lf

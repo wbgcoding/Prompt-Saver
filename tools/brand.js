@@ -34,6 +34,11 @@ function fail(msg) {
   process.exit(1);
 }
 
+// String.replace treats $&, $`, $', $$ and $<n> specially in the replacement even
+// when it came from data, not a capture group — escape a free-text value before
+// splicing it into a sub() replacement string.
+const escDollar = (s) => String(s).replace(/\$/g, "$$$$");
+
 // Replace exactly one anchored occurrence. Anything else means the file drifted
 // away from what this generator knows how to stamp — that must be loud, not silent.
 function sub(text, re, replacement, what) {
@@ -289,7 +294,7 @@ function stampManifests(root, b, current) {
   const pkgPath = path.join(root, "package.json");
   let pkg = read(pkgPath);
   pkg = sub(pkg, /^(  "name": ")[^"]*(")/m, `$1${b.slug}$2`, "package.json name");
-  pkg = sub(pkg, /^(  "description": ")[^"]*(")/m, `$1${b.npmDescription}$2`, "package.json description");
+  pkg = sub(pkg, /^(  "description": ")[^"]*(")/m, `$1${escDollar(b.npmDescription)}$2`, "package.json description");
   pkg = sub(
     pkg,
     /^(    "release:publish": ").*(",?)$/m,
@@ -306,7 +311,7 @@ function stampManifests(root, b, current) {
   let cargo = read(cargoPath);
   cargo = sub(cargo, /^name = "[a-z0-9-]+"$/m, `name = "${b.slug}"`, "Cargo.toml package name");
   cargo = sub(cargo, /^name = "[a-z0-9_]+_lib"$/m, `name = "${b.slug.replace(/-/g, "_")}_lib"`, "Cargo.toml lib name");
-  cargo = sub(cargo, /^description = ".*"$/m, `description = "${b.description}"`, "Cargo.toml description");
+  cargo = sub(cargo, /^description = ".*"$/m, `description = "${escDollar(b.description)}"`, "Cargo.toml description");
   write(cargoPath, cargo);
 
   // main.rs follows the lib name.
