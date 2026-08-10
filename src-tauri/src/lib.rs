@@ -12613,10 +12613,12 @@ fn sync_join_tile_folder(settings: &mut Settings, prompt_id: &str, name: &str, c
         return false;
     }
     let color = valid_tag_color(color).unwrap_or_default();
-    let exists = settings.tile_folders.iter().any(|f| f.name == name);
+    // 52: match on (name, view_id) — a bare name match merges same-named folders
+    // from DIFFERENT views into whichever one the scan happens to find first.
+    let exists = settings.tile_folders.iter().any(|f| f.name == name && f.view_id == view_id);
     let cell = if exists { cell } else { sync_resolve_cell(settings, view_id, prompt_id, cell).unwrap_or(cell) };
     sync_leave_tile_folder(settings, prompt_id);
-    match settings.tile_folders.iter_mut().find(|f| f.name == name) {
+    match settings.tile_folders.iter_mut().find(|f| f.name == name && f.view_id == view_id) {
         Some(folder) => folder.members.push(prompt_id.to_string()),
         None => settings.tile_folders.push(TileFolder {
             id: gen_id(),
@@ -13556,6 +13558,33 @@ mod tests {
         assert!(settings.tile_folders.is_empty());
         let key = grid_key(default_cols(), default_rows());
         assert_eq!(settings.views[0].layouts.get(&key).and_then(|m| m.get("p1")), Some(&[0, 0]));
+    }
+
+    // 52: a folder name is only unique WITHIN its own view -- matching by name alone
+    // merged two same-named folders from different views into whichever the scan
+    // found first.
+    #[test]
+    fn sync_join_tile_folder_scopes_by_view_not_just_name() {
+        let mut settings = Settings::default();
+        settings.views = vec![test_view("v1"), test_view("v2")];
+        settings.tile_folders = vec![test_tile_folder("f1", "v1", [0, 0], &["a"])];
+        settings.tile_folders[0].name = "Work".to_string();
+
+        // Same name, DIFFERENT view -> must NOT merge into v1's folder.
+        let ok = sync_join_tile_folder(&mut settings, "b", "Work", "", "v2", [0, 0]);
+        assert!(ok);
+        assert_eq!(settings.tile_folders.len(), 2, "same name in a different view must not merge");
+        let v1_folder = settings.tile_folders.iter().find(|f| f.view_id == "v1").unwrap();
+        let v2_folder = settings.tile_folders.iter().find(|f| f.view_id == "v2").unwrap();
+        assert_eq!(v1_folder.members, vec!["a".to_string()]);
+        assert_eq!(v2_folder.members, vec!["b".to_string()]);
+
+        // Same name, SAME view -> must merge.
+        let ok2 = sync_join_tile_folder(&mut settings, "c", "Work", "", "v1", [0, 0]);
+        assert!(ok2);
+        let v1_folder2 = settings.tile_folders.iter().find(|f| f.view_id == "v1").unwrap();
+        assert!(v1_folder2.members.contains(&"c".to_string()));
+        assert_eq!(settings.tile_folders.len(), 2, "the same-view join must still merge, not add a third folder");
     }
 
     // A folder whose members arrive in separate poll cycles (a cloud provider has
