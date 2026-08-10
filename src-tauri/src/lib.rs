@@ -1780,10 +1780,24 @@ fn data_dir(app: &AppHandle) -> PathBuf {
 // DPAPI-sealed exactly like the SQLite rows. `dec_str` passes an un-prefixed value
 // through unchanged, which is what still lets a genuinely old plaintext install be
 // migrated in; it is re-sealed the next time it is written.
-fn read_sealed_json<T: for<'de> Deserialize<'de> + Default>(path: &PathBuf) -> T {
+// "Missing" (nothing there yet, safe to treat as empty) and "unreadable" (a file IS
+// there but DPAPI/JSON decoding failed — wrong Windows account, corruption) are
+// different situations: a caller that folds both into a bare default silently
+// replaces real, still-present data with an empty one (34).
+enum SealedRead<T> {
+    Missing,
+    Unreadable,
+    Loaded(T),
+}
+
+fn read_sealed_json<T: for<'de> Deserialize<'de>>(path: &PathBuf) -> SealedRead<T> {
     match fs::read_to_string(path) {
-        Ok(raw) if !raw.trim().is_empty() => serde_json::from_str(&dec_str(&raw)).unwrap_or_default(),
-        _ => T::default(),
+        Ok(raw) if !raw.trim().is_empty() => match serde_json::from_str(&dec_str(&raw)) {
+            Ok(v) => SealedRead::Loaded(v),
+            Err(_) => SealedRead::Unreadable,
+        },
+        Ok(_) => SealedRead::Missing, // empty file: nothing meaningful was ever written
+        Err(_) => SealedRead::Missing,
     }
 }
 
@@ -2457,22 +2471,41 @@ fn load_store(app: &AppHandle) -> Store {
         let mut settings = settings_opt.clone().unwrap_or_default();
         // Empty DB but legacy JSON present → import it once, then own the data.
         if prompts.is_empty() && settings_opt.is_none() {
-            let j_settings: Settings = read_sealed_json(&dir.join("settings.json"));
-            let j_prompts: Vec<Prompt> = read_sealed_json(&dir.join("prompts.json"));
-            if !j_prompts.is_empty() || dir.join("settings.json").exists() {
-                let prompts_ok = db_conn(app)
-                    .map(|mut c2| db_write_prompts(&mut c2, &j_prompts).is_ok())
-                    .unwrap_or(false);
-                let settings_ok = db_write_settings(&conn, &j_settings).is_ok();
-                // Once the data is safely in the DB, drop the legacy JSON files so
-                // the import never runs again and stale copies cannot diverge.
-                if prompts_ok && settings_ok {
-                    let _ = fs::remove_file(dir.join("prompts.json"));
-                    let _ = fs::remove_file(dir.join("settings.json"));
+            let j_settings_r: SealedRead<Settings> = read_sealed_json(&dir.join("settings.json"));
+            let j_prompts_r: SealedRead<Vec<Prompt>> = read_sealed_json(&dir.join("prompts.json"));
+            // An unreadable legacy file (wrong Windows account, corruption) must never be
+            // treated as "nothing to import" — that would both skip real data AND, below,
+            // still be eligible for the empty-DB path to run again forever, or worse, look
+            // imported. Skip the whole import this launch and leave the file for inspection.
+            if matches!(j_settings_r, SealedRead::Unreadable) || matches!(j_prompts_r, SealedRead::Unreadable) {
+                append_crash_log(
+                    "legacy prompts.json/settings.json present but could not be decrypted/parsed; \
+                     import skipped this launch, files kept",
+                );
+            } else {
+                let j_prompts = match j_prompts_r {
+                    SealedRead::Loaded(v) => v,
+                    _ => Vec::new(),
+                };
+                let j_settings = match j_settings_r {
+                    SealedRead::Loaded(v) => v,
+                    _ => Settings::default(),
+                };
+                if !j_prompts.is_empty() || dir.join("settings.json").exists() {
+                    let prompts_ok = db_conn(app)
+                        .map(|mut c2| db_write_prompts(&mut c2, &j_prompts).is_ok())
+                        .unwrap_or(false);
+                    let settings_ok = db_write_settings(&conn, &j_settings).is_ok();
+                    // Once the data is safely in the DB, drop the legacy JSON files so
+                    // the import never runs again and stale copies cannot diverge.
+                    if prompts_ok && settings_ok {
+                        let _ = fs::remove_file(dir.join("prompts.json"));
+                        let _ = fs::remove_file(dir.join("settings.json"));
+                    }
                 }
+                prompts = j_prompts;
+                settings = j_settings;
             }
-            prompts = j_prompts;
-            settings = j_settings;
         } else {
             // 101: prompts.json/settings.json otherwise only exist as a save_prompts/
             // save_settings fallback from a failed DB write earlier this session (they
@@ -2481,19 +2514,41 @@ fn load_store(app: &AppHandle) -> Store {
             // is the truth. Retry the write; keep the file (and the loaded data) if the
             // DB still refuses, so this keeps retrying every launch instead of quietly
             // losing the edit.
-            let pj = dir.join("prompts.json");
-            if pj.exists() {
-                let fallback: Vec<Prompt> = read_sealed_json(&pj);
-                prompts = fallback;
-                if db_write_prompts(&mut conn, &prompts).is_ok() {
-                    let _ = fs::remove_file(&pj);
+            // Rows that failed to decrypt already lock the store below (prompts_locked);
+            // do not also retry the fallback write here, or a partially-successful DB
+            // write would fight with that lock over what the DB is supposed to contain.
+            if decrypt_fails == 0 {
+                let pj = dir.join("prompts.json");
+                if pj.exists() {
+                    match read_sealed_json::<Vec<Prompt>>(&pj) {
+                        SealedRead::Loaded(fallback) => {
+                            prompts = fallback;
+                            if db_write_prompts(&mut conn, &prompts).is_ok() {
+                                let _ = fs::remove_file(&pj);
+                            }
+                        }
+                        SealedRead::Unreadable => append_crash_log(
+                            "prompts.json fallback present but could not be decrypted/parsed; \
+                             DB left untouched, file kept for inspection",
+                        ),
+                        SealedRead::Missing => {}
+                    }
                 }
-            }
-            let sj = dir.join("settings.json");
-            if sj.exists() {
-                settings = read_sealed_json(&sj);
-                if db_write_settings(&conn, &settings).is_ok() {
-                    let _ = fs::remove_file(&sj);
+                let sj = dir.join("settings.json");
+                if sj.exists() {
+                    match read_sealed_json::<Settings>(&sj) {
+                        SealedRead::Loaded(s) => {
+                            settings = s;
+                            if db_write_settings(&conn, &settings).is_ok() {
+                                let _ = fs::remove_file(&sj);
+                            }
+                        }
+                        SealedRead::Unreadable => append_crash_log(
+                            "settings.json fallback present but could not be decrypted/parsed; \
+                             DB left untouched, file kept for inspection",
+                        ),
+                        SealedRead::Missing => {}
+                    }
                 }
             }
         }
@@ -2561,14 +2616,37 @@ fn load_store(app: &AppHandle) -> Store {
         }
         return store;
     }
-    // Fallback: DB unavailable → read the JSON files directly.
-    let mut settings: Settings = read_sealed_json(&dir.join("settings.json"));
+    // Fallback: DB unavailable → read the JSON files directly. There is no second
+    // source to fall back to here, so an unreadable file must lock writes (like the
+    // decrypt_fails case above) rather than silently present/save an empty store.
+    let mut unreadable = false;
+    let mut settings = match read_sealed_json::<Settings>(&dir.join("settings.json")) {
+        SealedRead::Loaded(s) => s,
+        SealedRead::Unreadable => {
+            unreadable = true;
+            Settings::default()
+        }
+        SealedRead::Missing => Settings::default(),
+    };
     settings.migrate();
     load_pick_history(&settings); // 19: restore the colour-pick history mirror
     prune_history(&mut settings);
-    let mut prompts: Vec<Prompt> = read_sealed_json(&dir.join("prompts.json"));
+    let mut prompts = match read_sealed_json::<Vec<Prompt>>(&dir.join("prompts.json")) {
+        SealedRead::Loaded(p) => p,
+        SealedRead::Unreadable => {
+            unreadable = true;
+            Vec::new()
+        }
+        SealedRead::Missing => Vec::new(),
+    };
     migrate_prompts(&mut prompts);
-    let mut store = Store { prompts, trash: Vec::new(), settings, prompts_locked: false };
+    if unreadable {
+        append_crash_log(
+            "DB unavailable and prompts.json/settings.json fallback could not be decrypted/parsed; \
+             writes locked to avoid saving an empty store over real data",
+        );
+    }
+    let mut store = Store { prompts, trash: Vec::new(), settings, prompts_locked: unreadable };
     store.normalize_folders();
     sweep_trash(app, &mut store); // 91: no-op here (fallback path never loads trash), kept for symmetry
     store
@@ -13604,13 +13682,50 @@ mod tests {
         let raw = fs::read_to_string(&path).expect("written");
         assert!(raw.starts_with(ENC_PREFIX), "fallback must be sealed, got: {raw}");
         assert!(!raw.contains("confidential"), "plaintext leaked into the fallback file");
-        let back: Vec<String> = read_sealed_json(&path);
-        assert_eq!(back, secret);
+        match read_sealed_json::<Vec<String>>(&path) {
+            SealedRead::Loaded(back) => assert_eq!(back, secret),
+            _ => panic!("expected a loaded value"),
+        }
 
         // A genuinely old plaintext install still migrates in.
         fs::write(&path, r#"["legacy entry"]"#).expect("write legacy");
-        let legacy: Vec<String> = read_sealed_json(&path);
-        assert_eq!(legacy, vec!["legacy entry".to_string()]);
+        match read_sealed_json::<Vec<String>>(&path) {
+            SealedRead::Loaded(legacy) => assert_eq!(legacy, vec!["legacy entry".to_string()]),
+            _ => panic!("expected legacy plaintext to load"),
+        }
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // 34: a fallback file that exists but cannot be decrypted/parsed (DPAPI from a
+    // different Windows account, truncated write) must never be silently treated as
+    // "nothing here" — that used to erase the whole DB on the next load_store.
+    #[test]
+    fn sealed_json_distinguishes_missing_from_unreadable() {
+        let dir = std::env::temp_dir().join(format!("ps-sealed-missing-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+
+        let missing = dir.join("nope.json");
+        assert!(matches!(
+            read_sealed_json::<Vec<String>>(&missing),
+            SealedRead::Missing
+        ));
+
+        let garbled = dir.join("garbled.json");
+        fs::write(&garbled, "not json at all {{{").expect("write garbled");
+        assert!(matches!(
+            read_sealed_json::<Vec<String>>(&garbled),
+            SealedRead::Unreadable
+        ));
+
+        // A prefixed value that fails to decrypt yields "" from dec_str, which is
+        // likewise not valid JSON — the exact path that used to silently default.
+        let sealed_garbage = dir.join("sealed.json");
+        fs::write(&sealed_garbage, format!("{}not-real-base64!!", ENC_PREFIX)).expect("write");
+        assert!(matches!(
+            read_sealed_json::<Vec<String>>(&sealed_garbage),
+            SealedRead::Unreadable
+        ));
 
         let _ = fs::remove_dir_all(&dir);
     }
