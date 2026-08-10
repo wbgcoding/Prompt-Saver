@@ -2839,6 +2839,28 @@ PROBE = """
             const gap = colorRow.getBoundingClientRect().top - ctrlRow.getBoundingClientRect().bottom;
             if (gap > 40) out.errors.push('gap between the entry controls and the colours is ' + Math.round(gap) + 'px');
           }
+          // 33: the length readout belongs to the plain text box and must be gone
+          // while the variants list stands in for it.
+          const lenBox = document.getElementById('modal-length');
+          if (lenBox && lenBox.getBoundingClientRect().height > 0) {
+            out.errors.push('the chars/words readout is still shown while rotation is on');
+          }
+          // 33: the order/random control sits in the "+ Entry" row, pushed right,
+          // with the reset ("from the start") to its left — not on a row of its own.
+          const addBtn = document.getElementById('modal-rotate-add');
+          const modeSel = document.getElementById('modal-rotate-mode');
+          const resetBtn = document.getElementById('modal-rotate-reset');
+          if (addBtn && modeSel && ctrlRow) {
+            const a = addBtn.getBoundingClientRect(), m = modeSel.getBoundingClientRect();
+            const r = ctrlRow.getBoundingClientRect();
+            if (Math.abs(a.top - m.top) > 6) out.errors.push('the mode control is not on the "+ Entry" row');
+            if (m.left <= a.right) out.errors.push('the mode control is not right of "+ Entry"');
+            if (r.right - m.right > 12) out.errors.push('the mode control is not flush right in its row');
+            if (resetBtn && !resetBtn.classList.contains('hidden')) {
+              const rs = resetBtn.getBoundingClientRect();
+              if (rs.right > m.left + 1) out.errors.push('"from the start" is not left of the mode control');
+            }
+          }
           const list = document.getElementById('modal-rotate-list');
           if (!list || list.classList.contains('hidden')) {
             out.errors.push('the rotate entry list did not appear after turning rotation on');
@@ -2853,6 +2875,35 @@ PROBE = """
           if (rows.length !== 2) {
             out.errors.push('"+ Entry" did not add a second entry row');
           } else {
+            // 33: on a row whose text box has grown past one line, the number on the
+            // left and the icons on the right must sit at the row-s vertical middle,
+            // not stuck to its top edge.
+            const tall = rows[0].querySelector('.rotate-entry-input');
+            if (tall) {
+              // String.fromCharCode(10), not an escape: Python eats a backslash-n in
+              // this probe string before the browser ever sees it (see CLAUDE.md).
+              tall.value = ['line one', 'line two', 'line three', 'line four'].join(String.fromCharCode(10));
+              tall.dispatchEvent(new Event('input', { bubbles: true }));
+              await sleep(120);
+            }
+            const rowBox = rows[0].getBoundingClientRect();
+            for (const sel of ['.rotate-entry-num', '.rotate-entry-btns']) {
+              const el = rows[0].querySelector(sel);
+              if (!el) { out.errors.push('the entry row is missing ' + sel); continue; }
+              const b = el.getBoundingClientRect();
+              if (b.height >= rowBox.height - 2) continue; // fills the row, nothing to centre
+              const off = (b.top + b.height / 2) - (rowBox.top + rowBox.height / 2);
+              if (Math.abs(off) > 3) {
+                out.errors.push(sel + ' is ' + Math.round(off) + 'px off the row centre');
+              }
+            }
+            // 67: the centering check above overwrote entry 1 with throwaway text —
+            // put it back before the save below, or the payload check further down
+            // fails on content this probe itself corrupted.
+            if (tall) {
+              tall.value = 'Entry one';
+              tall.dispatchEvent(new Event('input', { bubbles: true }));
+            }
             const ta2 = rows[1].querySelector('.rotate-entry-input');
             ta2.value = 'Entry two';
             ta2.dispatchEvent(new Event('input', { bubbles: true }));

@@ -9879,7 +9879,10 @@ function bind() {
     if (varsUi) renderVarHelper();
     syncMdUi(true, rotating);
     if (!modal.rotateSwitch.checked) modal.text.focus();
-    scheduleLenCounter();
+    // 67: this must hide/show the readout on the SAME tick as the toggle — the
+    // rAF-deferred scheduleLenCounter() left it visible for one frame, long enough
+    // for a synchronous check right after the toggle to see it.
+    updateLenCounter();
   });
   modal.rotateAdd.addEventListener("click", () => {
     const max = Math.max(2, Math.round(val("rotateMaxEntries")) || 20);
