@@ -5870,7 +5870,7 @@ function updateLenCounter() {
   if (!el) return;
   // Still a text prompt while the F14 preview stands in for the textarea; never
   // while 32/33 rotation replaced the textarea with the variants list instead.
-  const on = flag("lengthCounter") && !rotationActive() &&
+  const on = flag("lengthCounter") && !rotationUiOn() &&
     !(modal.text.classList.contains("hidden") && modal.mdPreview.classList.contains("hidden"));
   el.classList.toggle("hidden", !on);
   if (!on) return;
@@ -7182,7 +7182,11 @@ function syncModalImageUi(mode) {
   // 32: only a text prompt, and only while the feature is on, ever offers rotation.
   modal.rotateToggleRow.classList.toggle("hidden", !textVisible || !flag("rotatingPrompts"));
   renderRotateUi();
-  const rotating = textVisible && rotationActive();
+  // 50: rotationUiOn(), not rotationActive() — with the feature off but the prompt
+  // still holding stored entries, the plain textarea is what must show (entry 0,
+  // editable), or the editor is stuck showing a list with no way back to it (its
+  // own toggle row is hidden too while the feature is off).
+  const rotating = textVisible && rotationUiOn();
   modal.text.classList.toggle("hidden", !textVisible || rotating);
   const varsUi = textVisible && !rotating && flag("promptVars");
   modal.textBar.classList.toggle("hidden", !varsUi);
@@ -7268,10 +7272,20 @@ function syncModalImageUi(mode) {
 // otherwise be modal.text's own value) — kept separate from modal.text so the two
 // never fight over which one is "the" source of truth while the switch is on.
 const rotationActive = () => (modalState?.rotateEntries || []).length > 0;
+// 50: rotationActive() alone answers "does this prompt have stored entries" (used
+// by confirmModal to decide what to preserve on save); this answers "is the rotate
+// list actually the thing shown right now" — false while the feature itself is off,
+// even with entries still stored. DISPLAY decisions (which surface to show/hide)
+// must use this one, or a prompt edited while the feature is off gets its rotate
+// list shown with no way back to the textarea (its own toggle row is hidden too).
+const rotationUiOn = () => rotationActive() && flag("rotatingPrompts");
 
 function renderRotateUi() {
   if (!modalState) return;
-  const active = rotationActive();
+  // 50: UI-gated, same reasoning as syncModalImageUi -- the list must stay hidden
+  // (in favour of the plain textarea) while the feature itself is off, even with
+  // entries still stored on the prompt.
+  const active = rotationUiOn();
   modal.rotateSwitch.checked = active;
   modal.rotateList.classList.toggle("hidden", !active);
   if (!active) return;
@@ -7546,10 +7560,21 @@ async function confirmModal() {
   const name = modal.name.value.trim();
   if (!name) { modal.name.focus(); return; }
   // 32: while rotating, the real text lives in rotateEntries, not modal.text.
-  const rotating = rotationActive();
+  // 50: rotationActive() (raw) — with the feature off but the prompt still holding
+  // stored entries, they must still be preserved on save (WORK.md 50), just sourced
+  // from wherever each one actually lives right now: entry 0 from the visible,
+  // editable textarea (rotationUiOn() is false, so THAT is the surface the user just
+  // edited), entries 1..n untouched from modalState (never shown, never editable
+  // while the feature is off).
+  const rotating = rotationUiOn();
+  const hasVariants = rotationActive();
+  const rawTexts = rotating
+    ? modalState.rotateEntries
+    : hasVariants
+      ? [modal.text.value, ...modalState.rotateEntries.slice(1)]
+      : [modal.text.value];
   // 34: a {#{ }#} with no name inside never becomes a fillable variable — warn now,
   // while it is still one click away from being fixed, instead of after it is saved.
-  const rawTexts = rotating ? modalState.rotateEntries : [modal.text.value];
   if (rawTexts.some(hasEmptyVarToken)) {
     const proceed = await confirmDialog({
       title: t("emptyVarTitle"),
@@ -7561,7 +7586,7 @@ async function confirmModal() {
   }
   // 32: "empty entries are dropped on save" applies to entry 1 too — the first
   // surviving non-blank entry becomes the prompt's own text.
-  const rotateFilled = rotating ? modalState.rotateEntries.map((s) => s.trim()).filter(Boolean) : [];
+  const rotateFilled = (rotating || hasVariants) ? rawTexts.map((s) => s.trim()).filter(Boolean) : [];
   const variants = rotateFilled.slice(1);
   const rotateMode = variants.length ? (modalState.rotateMode === "random" ? "random" : "") : "";
 
@@ -7594,7 +7619,7 @@ async function confirmModal() {
   modal.confirm.disabled = true;
   try {
     if (modalState.mode === "create") {
-      const text = rotating ? (rotateFilled[0] || "") : modal.text.value.trim();
+      const text = (rotating || hasVariants) ? (rotateFilled[0] || "") : modal.text.value.trim();
       if (!text) { closeModal(); return; }
       saved = await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode });
       inputEl.value = "";
@@ -7604,7 +7629,7 @@ async function confirmModal() {
       // The name doubles as the copy text when shown as text.
       saved = await invoke("add_prompt", { name, text: name, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants: [], rotateMode: "" });
     } else {
-      const text = copyImage || filePath ? name : (rotating ? (rotateFilled[0] || "") : modal.text.value);
+      const text = copyImage || filePath ? name : ((rotating || hasVariants) ? (rotateFilled[0] || "") : modal.text.value);
       saved = await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode });
     }
   } catch (err) {
