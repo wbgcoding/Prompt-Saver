@@ -69,11 +69,13 @@ const SEED = {
     hint: "Drag a region · click a window · Esc to cancel",
     failed: "This window can't be captured. Try a region or another window.",
     pick: "Click to copy the color · scroll or +/- to zoom · arrow keys move one pixel · Esc to cancel",
+    pickFailed: "Couldn't copy the color. Try picking again.",
   },
   de: {
     hint: "Bereich ziehen · Fenster anklicken · Esc zum Abbrechen",
     failed: "Dieses Fenster kann nicht aufgenommen werden. Versuche einen Bereich oder ein anderes Fenster.",
     pick: "Klicken kopiert die Farbe · Scrollen oder +/- zoomt · Pfeiltasten bewegen ein Pixel · Esc zum Abbrechen",
+    pickFailed: "Farbe konnte nicht kopiert werden. Bitte erneut versuchen.",
   },
 };
 const T = { ...((navigator.language || "en").toLowerCase().startsWith("de") ? SEED.de : SEED.en) };
@@ -172,6 +174,7 @@ async function beginSession() {
       T.hint = d.snipHint ?? I18N.en.snipHint;
       T.failed = d.snipFailed ?? I18N.en.snipFailed ?? T.failed;
       T.pick = d.pickHint ?? I18N.en.pickHint ?? T.pick;
+      T.pickFailed = d.pickFailed ?? I18N.en.pickFailed ?? T.pickFailed;
       if (!hint.classList.contains("error")) hint.textContent = pickMode ? T.pick : T.hint;
     })
     .catch(() => {});
@@ -202,8 +205,10 @@ function toCss(ix, iy, iw, ih) {
   return { x: r.left + ix * sx, y: r.top + iy * sy, w: iw * sx, h: ih * sy };
 }
 
-function showError() {
-  hint.textContent = T.failed;
+// 59: msg lets a caller show its OWN failure reason (the color picker) instead of
+// always the window-capture wording, which made no sense for anything else.
+function showError(msg) {
+  hint.textContent = msg ?? T.failed;
   hint.classList.add("error");
   hint.classList.remove("hidden");
   // Dimming while picking would stop the screen matching the colour being read.
@@ -515,9 +520,13 @@ function renderHistory() {
     btn.addEventListener("mouseup", async (e) => {
       e.stopPropagation();
       try {
-        await invoke("copy_text", { text: formatColor(pickFmt, r, g, b) });
-        btn.classList.add("copied");
-        setTimeout(() => btn.classList.remove("copied"), 250);
+        // 59: check the return value too — a resolved false (write rejected) must
+        // not flash "copied" any more than a thrown error would.
+        const ok = await invoke("copy_text", { text: formatColor(pickFmt, r, g, b) });
+        if (ok) {
+          btn.classList.add("copied");
+          setTimeout(() => btn.classList.remove("copied"), 250);
+        }
       } catch { /* clipboard write failed — nothing to show inside this overlay */ }
     });
     historyEl.appendChild(btn);
@@ -544,7 +553,7 @@ async function pickHere() {
     } catch { /* keep the last known strip rather than clearing it on a read hiccup */ }
   } catch {
     pickBusy = false;
-    showError();
+    showError(T.pickFailed); // 59: a color-pick failure, not a window-capture one
   }
 }
 

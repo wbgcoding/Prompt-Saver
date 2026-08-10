@@ -838,6 +838,7 @@ export const I18N = {
     // F26 colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "Pick a color from the screen (right-click: recent colors)",
     pickHint: "Click to copy the color · scroll or +/- to zoom · arrow keys move one pixel · Esc to cancel",
+    pickFailed: "Couldn't copy the color. Try picking again.",
     colorCopied: "Color copied",
     flagColorPicker: "Color picker (pipette)",
     tipColorPicker: "Adds a pipette next to the screenshot button. It freezes the screen, magnifies the pixels under the pointer and copies the color you click to the clipboard — no prompt is created and nothing lands in the copy history.",
@@ -1721,6 +1722,7 @@ export const I18N = {
     // F26 colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "Farbe vom Bildschirm aufnehmen (Rechtsklick: letzte Farben)",
     pickHint: "Klicken kopiert die Farbe · Scrollen oder +/- zoomt · Pfeiltasten bewegen ein Pixel · Esc zum Abbrechen",
+    pickFailed: "Farbe konnte nicht kopiert werden. Bitte erneut versuchen.",
     colorCopied: "Farbe kopiert",
     flagColorPicker: "Farbpipette",
     tipColorPicker: "Setzt eine Pipette neben den Screenshot-Button. Sie friert den Bildschirm ein, vergrößert die Pixel unter dem Zeiger und kopiert die angeklickte Farbe in die Zwischenablage — es entsteht kein Prompt und nichts landet im Kopierverlauf.",
@@ -2604,6 +2606,7 @@ export const I18N = {
     // F26 colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "Capturar un color de la pantalla (clic derecho: colores recientes)",
     pickHint: "Haz clic para copiar el color · la rueda o +/- hace zoom · las flechas mueven un píxel · Esc para cancelar",
+    pickFailed: "No se pudo copiar el color. Inténtalo de nuevo.",
     colorCopied: "Color copiado",
     flagColorPicker: "Selector de color (cuentagotas)",
     tipColorPicker: "Añade un cuentagotas junto al botón de captura. Congela la pantalla, amplía los píxeles bajo el puntero y copia al portapapeles el color en el que hagas clic; no se crea ningún prompt ni queda nada en el historial de copias.",
@@ -3487,6 +3490,7 @@ export const I18N = {
     // F26 colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "Preleva un colore dallo schermo (clic destro: colori recenti)",
     pickHint: "Fai clic per copiare il colore · la rotellina o +/- ingrandisce · le frecce spostano di un pixel · Esc per annullare",
+    pickFailed: "Impossibile copiare il colore. Riprova.",
     colorCopied: "Colore copiato",
     flagColorPicker: "Selettore colore (contagocce)",
     tipColorPicker: "Aggiunge un contagocce accanto al pulsante di cattura. Congela lo schermo, ingrandisce i pixel sotto il puntatore e copia negli appunti il colore su cui fai clic; non viene creato alcun prompt e nulla finisce nella cronologia delle copie.",
@@ -4370,6 +4374,7 @@ export const I18N = {
     // F26 colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "Capturar uma cor da tela (clique direito: cores recentes)",
     pickHint: "Clique para copiar a cor · a roda ou +/- amplia · as setas movem um pixel · Esc para cancelar",
+    pickFailed: "Não foi possível copiar a cor. Tenta novamente.",
     colorCopied: "Cor copiada",
     flagColorPicker: "Seletor de cor (conta-gotas)",
     tipColorPicker: "Acrescenta um conta-gotas ao lado do botão de captura. Ele congela a tela, amplia os pixels sob o ponteiro e copia para a área de transferência a cor em que você clicar — nenhum prompt é criado e nada entra no histórico de cópias.",
@@ -5253,6 +5258,7 @@ export const I18N = {
     // F26 colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "Pobierz kolor z ekranu (kliknięcie prawym przyciskiem: ostatnie kolory)",
     pickHint: "Kliknij, aby skopiować kolor · kółko lub +/- przybliża · strzałki przesuwają o jeden piksel · Esc anuluje",
+    pickFailed: "Nie udało się skopiować koloru. Spróbuj ponownie.",
     colorCopied: "Skopiowano kolor",
     flagColorPicker: "Próbnik kolorów (pipeta)",
     tipColorPicker: "Dodaje pipetę obok przycisku zrzutu ekranu. Zamraża ekran, powiększa piksele pod wskaźnikiem i kopiuje kliknięty kolor do schowka — nie powstaje żaden prompt i nic nie trafia do historii kopiowania.",
@@ -6136,6 +6142,7 @@ export const I18N = {
     // F26 colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "从屏幕上拾取颜色（右键：最近的颜色）",
     pickHint: "点击复制颜色 · 滚轮或 +/- 缩放 · 方向键移动一个像素 · Esc 取消",
+    pickFailed: "无法复制颜色，请重试。",
     colorCopied: "已复制颜色",
     flagColorPicker: "颜色拾取器（吸管）",
     tipColorPicker: "在截图按钮旁添加一支吸管。它会冻结屏幕、放大指针下的像素，并把你点击的颜色直接复制到剪贴板——不会创建提示词，也不会写入复制历史。",
@@ -7019,6 +7026,7 @@ export const I18N = {
     // F26 colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "画面から色を取得（右クリック：最近の色）",
     pickHint: "クリックで色をコピー · ホイールまたは +/- で拡大縮小 · 矢印キーで1ピクセル移動 · Esc でキャンセル",
+    pickFailed: "色をコピーできませんでした。もう一度お試しください。",
     colorCopied: "色をコピーしました",
     flagColorPicker: "カラーピッカー（スポイト）",
     tipColorPicker: "スクリーンショットボタンの隣にスポイトを追加します。画面を固定してポインター下のピクセルを拡大し、クリックした色をそのままクリップボードにコピーします。プロンプトは作られず、コピー履歴にも残りません。",
@@ -7902,6 +7910,7 @@ export const I18N = {
     // F26 colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "Een kleur van het scherm prikken (rechtsklik: recente kleuren)",
     pickHint: "Klik om de kleur te kopiëren · scrollen of +/- zoomt · pijltoetsen verplaatsen één pixel · Esc annuleert",
+    pickFailed: "Kleur kopiëren is mislukt. Probeer het opnieuw.",
     colorCopied: "Kleur gekopieerd",
     flagColorPicker: "Kleurenkiezer (pipet)",
     tipColorPicker: "Zet een pipet naast de schermafbeeldingsknop. Die bevriest het scherm, vergroot de pixels onder de aanwijzer en kopieert de aangeklikte kleur naar het klembord — er wordt geen prompt gemaakt en er komt niets in de kopieergeschiedenis.",
@@ -8785,6 +8794,7 @@ export const I18N = {
     // F26 colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "Ekrandan renk seç (sağ tık: son renkler)",
     pickHint: "Rengi kopyalamak için tıklayın · tekerlek veya +/- yakınlaştırır · ok tuşları bir piksel kaydırır · İptal için Esc",
+    pickFailed: "Renk kopyalanamadı. Lütfen tekrar deneyin.",
     colorCopied: "Renk kopyalandı",
     flagColorPicker: "Renk seçici (damlalık)",
     tipColorPicker: "Ekran görüntüsü düğmesinin yanına bir damlalık ekler. Ekranı dondurur, imlecin altındaki pikselleri büyütür ve tıkladığınız rengi doğrudan panoya kopyalar; hiçbir istem oluşturulmaz ve kopyalama geçmişine bir şey eklenmez.",
@@ -9668,6 +9678,7 @@ export const I18N = {
     // F26 colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "Preia o culoare de pe ecran (clic dreapta: culori recente)",
     pickHint: "Clic pentru a copia culoarea · rotița sau +/- mărește · săgețile mută cu un pixel · Esc anulează",
+    pickFailed: "Culoarea nu a putut fi copiată. Încearcă din nou.",
     colorCopied: "Culoare copiată",
     flagColorPicker: "Selector de culoare (pipetă)",
     tipColorPicker: "Adaugă o pipetă lângă butonul de captură de ecran. Îngheață ecranul, mărește pixelii de sub cursor și copiază direct în clipboard culoarea pe care dai clic — nu se creează niciun prompt și nimic nu ajunge în istoricul copierilor.",
