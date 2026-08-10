@@ -8493,6 +8493,27 @@ fn write_snip_preview(jpeg: &[u8]) -> Option<String> {
     Some(path.to_string_lossy().into_owned())
 }
 
+// 53: crash-mid-session leftovers in the OS temp dir are never cleaned by anything
+// else — the snip preview only ever deletes its own immediate predecessor (that
+// bookkeeping is in-memory only, lost on a crash or a plain restart), and
+// update.cmd deletes the installer + itself but never its own staging folder.
+// Swept once at startup rather than on every write, since these are rare leftovers
+// from an abnormal exit, not a live resource any running instance still needs.
+fn sweep_stale_temp_files() {
+    let dir = std::env::temp_dir();
+    let Ok(entries) = fs::read_dir(&dir) else { return };
+    let snip_prefix = format!("{}-snip-", brand::TEMP_PREFIX);
+    let update_prefix = format!("{}-update-", brand::SLUG);
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if name.starts_with(&snip_prefix) && name.ends_with(".jpg") {
+            let _ = fs::remove_file(e.path());
+        } else if name.starts_with(&update_prefix) {
+            let _ = fs::remove_dir_all(e.path());
+        }
+    }
+}
+
 fn remove_snip_preview() {
     if let Some(p) = SNIP_PREVIEW_FILE.lock().unwrap_or_else(|e| e.into_inner()).take() {
         let _ = fs::remove_file(p);
@@ -11667,6 +11688,7 @@ pub fn run() {
         )
         .setup(|app| {
             let handle = app.handle().clone();
+            sweep_stale_temp_files(); // 53: crash/abnormal-exit leftovers from a previous run
             let store = load_store(&handle);
 
             let saved_geom = store.settings.window;
@@ -14000,6 +14022,34 @@ mod tests {
         assert!(!tmp.to_string_lossy().ends_with(".md"), "temp name must not look like a real sync file");
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    // 53: a snip preview or an update stage dir surviving a crash/abnormal exit is
+    // never cleaned by anything else -- must be swept at the next startup.
+    #[test]
+    fn sweep_stale_temp_files_removes_only_its_own_leftovers() {
+        let dir = std::env::temp_dir();
+        let pid = std::process::id();
+        let snip = dir.join(format!("{}-snip-{}.jpg", brand::TEMP_PREFIX, pid));
+        let update_dir = dir.join(format!("{}-update-{}-1", brand::SLUG, pid));
+        let unrelated_ext = dir.join(format!("{}-snip-{}.png", brand::TEMP_PREFIX, pid)); // wrong extension
+        let unrelated_file = dir.join(format!("ps-sweep-unrelated-{}.txt", pid));
+
+        fs::write(&snip, b"jpeg").unwrap();
+        fs::create_dir_all(&update_dir).unwrap();
+        fs::write(update_dir.join("setup.exe"), b"x").unwrap();
+        fs::write(&unrelated_ext, b"x").unwrap();
+        fs::write(&unrelated_file, b"x").unwrap();
+
+        sweep_stale_temp_files();
+
+        assert!(!snip.exists(), "a leftover snip preview must be swept");
+        assert!(!update_dir.exists(), "a leftover update stage dir must be swept");
+        assert!(unrelated_ext.exists(), "a differently-suffixed file must survive");
+        assert!(unrelated_file.exists(), "an unrelated file must survive");
+
+        let _ = fs::remove_file(&unrelated_ext);
+        let _ = fs::remove_file(&unrelated_file);
     }
 
     // 34: a fallback file that exists but cannot be decrypted/parsed (DPAPI from a
