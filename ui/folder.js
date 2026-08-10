@@ -48,7 +48,10 @@ let seq = 0;
 // newer openPopover() call that started in the meantime (its close finishes after
 // the newer one already opened something) — this catches that case specifically.
 let openReq = 0;
-let TXT = { copied: "Copied!", size: "Size", edit: "Edit prompt", close: "Close", rename: "Rename", dissolve: "Dissolve folder", takeOut: "Take out of folder" };
+// 61: "edit" starts empty, not a hardcoded English literal -- unlike every other
+// field here it spells the item word, which must only ever reach the screen
+// through the real (lazily loaded) i18n text and its fork-brand substitution.
+let TXT = { copied: "Copied!", size: "Size", edit: "", close: "Close", rename: "Rename", dissolve: "Dissolve folder", takeOut: "Take out of folder" };
 
 // Copy behaviour, mirrored from the pill window.
 let cooldownMs = COOLDOWN_MS_DEFAULT;
