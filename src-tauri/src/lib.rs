@@ -1976,7 +1976,13 @@ fn db_conn(app: &AppHandle) -> Option<Connection> {
                            // badly wrong with the connection — do not also spam an
                            // ALTER TABLE into that same broken state.
     if !has_variants_column {
-        let _ = conn.execute("ALTER TABLE prompt_versions ADD COLUMN variants TEXT NOT NULL DEFAULT ''", []);
+        // 55: the whole point of checking has_variants_column first (rather than
+        // firing the ALTER unconditionally and swallowing whatever comes back) was
+        // to tell "already migrated" apart from a REAL failure -- discarding the
+        // ALTER's own result here threw that away again. A real failure now fails
+        // db_conn itself, which every caller already treats as "DB unavailable".
+        conn.execute("ALTER TABLE prompt_versions ADD COLUMN variants TEXT NOT NULL DEFAULT ''", [])
+            .ok()?;
     }
     Some(conn)
 }
