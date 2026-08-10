@@ -4092,7 +4092,8 @@ window.addEventListener("pointerup", async (e) => {
       // A prompt that still needs input ALWAYS routes through the dialog — the
       // double-click paste shortcut would otherwise fire on the 2nd click and paste
       // stale clipboard without ever asking. A click only copies, never pastes.
-      if (p && dialogTokens(p).length) {
+      // 43: check the entry rotation is actually about to copy, not always entry 0.
+      if (p && dialogTokens(p, await peekRotatedText(p)).length) {
         await copyTextWithVars(p, el);
         return;
       }
@@ -4540,7 +4541,7 @@ window.addEventListener("pointerup", async (e) => {
   if (!d.moved) {
     // A plain click copies, exactly like the tile it stands for.
     if (!p) return;
-    if (dialogTokens(p).length) { await copyTextWithVars(p, d.el); return; }
+    if (dialogTokens(p, await peekRotatedText(p)).length) { await copyTextWithVars(p, d.el); return; }
     if (copyOnCooldown(d.id)) return;
     if (await copyResolved(p)) {
       showCopied(d.el);
@@ -5017,7 +5018,21 @@ function dynValue(name, now, ctx) {
 const varTokens = (p, text) =>
   (flag("promptVars") && p && !p.copy_image && !p.file_path ? extractVars(text ?? p.text) : []);
 // The subset the user still has to fill in by hand — the only reason to open a dialog.
-const dialogTokens = (p) => varTokens(p).filter((tok) => !isDynVar(parseVar(tok).name));
+// 43: an override text (the peeked rotating entry) must flow through the same as
+// varTokens takes one, or a placeholder living only in a later entry never gets
+// noticed at all -- checking p.text (entry 0) unconditionally.
+const dialogTokens = (p, text) => varTokens(p, text).filter((tok) => !isDynVar(parseVar(tok).name));
+
+// 43: the text a copy of `p` is actually about to use — the pointer's CURRENT entry
+// for a rotating prompt, p.text otherwise. Read-only (never advances the pointer),
+// so it is safe to call ahead of a decision (dialogTokens) as well as the copy
+// itself. Every path that resolves p.text directly instead of this one silently
+// mis-detects (and mis-copies) once rotation has moved past entry 0.
+async function peekRotatedText(p) {
+  if (!(p.variants || []).length) return p.text;
+  const peek = await invoke("rotation_peek", { id: p.id }).catch(() => null);
+  return peek ? peek.text : p.text;
+}
 
 // The one place every copy path goes through: reserved names resolve themselves,
 // the rest are asked for once. Returns the finished text, null when the user
@@ -5347,7 +5362,12 @@ async function copyTextWithVars(p, el, paste = false) {
   };
   overlay.addEventListener("pointerdown", onSecond, true); // capture: before the dismiss
   const stopArming = setTimeout(() => overlay.removeEventListener("pointerdown", onSecond, true), val("dblClickMs"));
-  const text = await resolveVars(p.text);
+  // 43: peek -> resolve -> copy -> commit, same order copyResolved uses -- this used
+  // to always resolve p.text (entry 0) even once rotation had moved past it.
+  const rotating = (p.variants || []).length > 0;
+  const peek = rotating ? await invoke("rotation_peek", { id: p.id }).catch(() => null) : null;
+  const rawText = peek ? peek.text : p.text;
+  const text = await resolveVars(rawText);
   clearTimeout(stopArming);
   overlay.removeEventListener("pointerdown", onSecond, true);
   if (text === null) return;
@@ -5356,6 +5376,9 @@ async function copyTextWithVars(p, el, paste = false) {
   if (ok) {
     showCopied(el);
     recordCopy(p.id);
+    // A failed peek already fell back to p.text above -- only a successful peek may
+    // be followed by a commit (copyResolved's own rule).
+    if (rotating && peek) invoke("rotation_commit", { id: p.id }).catch(() => {});
     if (paste || (quickSecond && flag("autoPaste"))) await autoPasteNow(el);
     maybeCloseOnCopy();
   }
@@ -5487,7 +5510,7 @@ async function activateTile(id, paste = flag("autoPaste")) {
   const el = gridEl.querySelector(`.tile[data-id="${CSS.escape(id)}"]`);
   if (chainMode) { await toggleChainPick(p); return; }
   if (copyOnCooldown(id)) return;
-  if (dialogTokens(p).length) {
+  if (dialogTokens(p, await peekRotatedText(p)).length) {
     await copyTextWithVars(p, el, paste);
   } else if (await copyResolved(p)) {
     if (el) showCopied(el);
@@ -5504,7 +5527,7 @@ async function activateTile(id, paste = flag("autoPaste")) {
 async function onPromptHotkey(id, paste) {
   const p = prompts.find((x) => x.id === id);
   if (!p) return;
-  if (dialogTokens(p).length) {
+  if (dialogTokens(p, await peekRotatedText(p)).length) {
     // Chain mode is an in-window gesture — a hotkey then still goes through the grid.
     if (flag("varPopupWindow") && !chainMode) { await copyOutsideApp(p, paste); return; }
     await invoke("focus_main_window").catch(() => {}); // fallback: the in-window dialog
@@ -5517,7 +5540,11 @@ async function onPromptHotkey(id, paste) {
 // in-window dialog if the small window cannot be opened at all.
 async function copyOutsideApp(p, paste) {
   if (copyOnCooldown(p.id)) return;
-  const text = await resolveVars(p.text, true);
+  // 43: same peek -> resolve -> copy -> commit order as copyTextWithVars/copyResolved.
+  const rotating = (p.variants || []).length > 0;
+  const peek = rotating ? await invoke("rotation_peek", { id: p.id }).catch(() => null) : null;
+  const rawText = peek ? peek.text : p.text;
+  const text = await resolveVars(rawText, true);
   if (text === null) return; // cancelled
   if (text === false) { // no standalone window available
     await invoke("focus_main_window").catch(() => {});
@@ -5526,6 +5553,7 @@ async function copyOutsideApp(p, paste) {
   }
   if (await invoke("copy_text", { text }).catch((e) => { toast(String(e)); return false; })) {
     recordCopy(p.id);
+    if (rotating && peek) invoke("rotation_commit", { id: p.id }).catch(() => {});
     if (paste) await autoPasteNow(null);
   }
 }
@@ -9198,7 +9226,7 @@ function toastCopied(p) {
 async function libraryCopy(p) {
   // Prompts that still need input skip the double-click shortcut: they must reach
   // the dialog (copyResolved) so the variables get asked before copy + auto-paste.
-  if (!dialogTokens(p).length && autoPasteDouble(p.id)) { await autoPasteNow(null); return; } // F19: 2nd fast click pastes
+  if (!dialogTokens(p, await peekRotatedText(p)).length && autoPasteDouble(p.id)) { await autoPasteNow(null); return; } // F19: 2nd fast click pastes
   if (copyOnCooldown(p.id)) return;
   if (!(await copyResolved(p))) return;
   recordCopy(p.id);
