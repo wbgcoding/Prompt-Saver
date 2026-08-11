@@ -9627,12 +9627,10 @@ function renderHelp() {
     body.className = "help-group-body";
     // 22-A: four parts per entry — what it is, how to do it, what happens, and the
     // settings that tune it. howTo/whatHappens are optional so a short standalone
-    // entry (e.g. the quick launcher) doesn't have to force a step list. DE still
-    // carries the pre-22-A overview field until phase C migrates it — fall back to
-    // that instead of rendering the literal string "undefined".
+    // entry (e.g. the quick launcher) doesn't have to force a step list.
     const ov = document.createElement("p");
     ov.className = "help-overview";
-    ov.textContent = cat.whatItIs || cat.overview;
+    ov.textContent = cat.whatItIs;
     body.appendChild(ov);
     if (cat.howTo && cat.howTo.length) {
       const ol = document.createElement("ol");
@@ -9663,7 +9661,14 @@ function renderHelp() {
     if (cat.tip) {
       const tip = document.createElement("p");
       tip.className = "help-tip";
-      tip.textContent = `${t("helpDidYouKnow")} ${cat.tip}`;
+      const ico = document.createElement("span");
+      ico.className = "help-tip-ico";
+      ico.setAttribute("aria-hidden", "true");
+      ico.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a5 5 0 0 0-3 9v1.5a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V10a5 5 0 0 0-3-9zm-1.5 13h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1 0-1z"/></svg>';
+      const txt = document.createElement("span");
+      txt.textContent = cat.tip;
+      tip.appendChild(ico);
+      tip.appendChild(txt);
       body.appendChild(tip);
     }
     sec.appendChild(body);

@@ -274,7 +274,7 @@ PROBE = """
       document.getElementById('settings').classList.add('hidden');
     }
     // 97/21: in-app documentation — every tab reaches the page, none is empty,
-    // search narrows the list, a "did you know" callout shows up somewhere.
+    // search narrows the list, a tip callout shows up somewhere.
     {
       document.getElementById('help-open').click();
       await sleep(150);
@@ -312,7 +312,7 @@ PROBE = """
         if (totalGroups < 15) {
           out.errors.push('the help menu shows too few categories across all tabs (' + totalGroups + ')');
         }
-        if (!sawTip) out.errors.push('no help category shows a "did you know" callout');
+        if (!sawTip) out.errors.push('no help category shows a tip callout');
         const search = document.getElementById('help-search');
         search.value = 'markdown';
         search.dispatchEvent(new Event('input', { bubbles: true }));
