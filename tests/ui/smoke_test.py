@@ -1806,6 +1806,9 @@ PROBE = """
         if (!pop || pop.classList.contains('hidden') || chips().length < 2) {
           out.errors.push('the grid tag popover shows ' + chips().length + ' chips instead of at least 2');
         } else {
+          // 81: chips line up in a fixed-column grid instead of free-wrapping.
+          const tracks = getComputedStyle(pop).gridTemplateColumns.trim().split(/[ ]+/);
+          if (tracks.length < 2) out.errors.push('81: the tag popover is not laid out in at least two columns');
           const draftChip = chips().find(c => (c.querySelector('.tag-chip-label') || {}).textContent === 'Draft');
           if (!draftChip) {
             out.errors.push('the grid tag popover is missing the "Draft" chip');
@@ -1820,6 +1823,13 @@ PROBE = """
             if (t0 && getComputedStyle(t0).display === 'none') out.errors.push('a dimmed tile was hidden instead of dimmed');
             // Clear filter restores every tile and the button's active state.
             const clearBtn = [...pop.querySelectorAll('.tag-action')].find(b => b.textContent === 'Clear filter');
+            if (clearBtn) {
+              // Full width minus the popover's own left+right padding (10px each).
+              const pr = pop.getBoundingClientRect(), cr = clearBtn.getBoundingClientRect();
+              if (cr.width < pr.width - 30) {
+                out.errors.push('81: Clear filter does not span the full popover width');
+              }
+            }
             clearBtn?.click();
             await sleep(200);
             if (tagBtn.classList.contains('active')) out.errors.push('clearing the filter left the toolbar button active');

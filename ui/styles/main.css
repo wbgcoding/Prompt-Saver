@@ -1433,7 +1433,15 @@ body.library-front #modal.overlay { z-index: 67; }
 /* 24: grid tag filter — same filled-look active state as the pin toggle. */
 .grid-tag-btn.active { color: var(--accent-fg); background: var(--accent); }
 .grid-tag-btn.active:hover { color: var(--accent-fg); background: var(--accent); filter: brightness(1.08); }
-.grid-tag-pop { min-width: 200px; max-width: 320px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 10px; z-index: 90; }
+/* 81: fixed column count instead of free wrap — a run of short tags no longer
+   trails off ragged on the right, it lines up in a grid like the expert menu's own
+   two-column rows. --tag-pop-cols is set from the tagPopCols expert value. */
+.grid-tag-pop { display: grid; grid-template-columns: repeat(var(--tag-pop-cols, 2), minmax(0, 1fr)); gap: 6px; align-items: start; min-width: 200px; max-width: 420px; padding: 10px; z-index: 90; }
+/* .tag-action:last-child normally gets margin-left:auto to hug the right edge of a
+   flex row (the library tagbar) — inside this grid it must stretch full width instead. */
+.grid-tag-pop > .tag-action, .grid-tag-pop > .hint { grid-column: 1 / -1; }
+.grid-tag-pop > .tag-action { margin-left: 0; width: 100%; text-align: center; }
+.grid-tag-pop .tag-chip { min-width: 0; justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* A tile that does not match the active filter stays in place (drag/reorder,
    grid geometry unaffected) but reads as excluded, not deleted. */
 .tile.tile-dimmed { opacity: 0.35; }
