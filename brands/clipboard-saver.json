@@ -31,8 +31,7 @@
         "eines Prompts": "eines Eintrags",
         "allen Prompts": "allen Einträgen",
         "Prompts": "Einträge",
-        "Prompt": "Eintrag",
-        "prompt": "prompt"
+        "Prompt": "Eintrag"
       },
       "es": {
         "prompt": "entrada",
@@ -118,16 +117,13 @@
         "istemleri": "kayıtları",
         "istemiyle": "kaydıyla",
         "istemle": "kayıtla",
-        "isteme": "kayda",
-        "prompt": "prompt"
+        "isteme": "kayda"
       },
       "zh": {
-        "提示词": "条目",
-        "prompt": "prompt"
+        "提示词": "条目"
       },
       "ja": {
-        "プロンプト": "項目",
-        "prompt": "prompt"
+        "プロンプト": "項目"
       }
     }
   }

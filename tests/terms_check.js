@@ -51,6 +51,22 @@ const FLOAT = sandbox.__FLOAT;
 // themselves match Latin "prompt" text, which is exactly how 62 went undetected.
 const LOANWORD_LEAK = /\bprompts?\b/gi;
 
+// tipFuzzySearch's whole point is the English "promt"/"prompt" typo pair as a
+// literal example — the one deliberate exception, not a translation gap. A
+// self-map entry ("prompt": "prompt") would "explain" it, but formsIn() below
+// only tracks distinct SURFACE FORMS across a whole language, not per string,
+// so a self-map for that one string would just as well hide any unrelated,
+// genuine "prompt" leak elsewhere in the same language. Skip the exempt key
+// instead, so the loanword scan still catches everything else.
+const LOANWORD_EXEMPT_KEYS = new Set(["tipFuzzySearch"]);
+
+// Drop the exempt keys once, up front — every scan below, FAMILY or
+// LOANWORD_LEAK alike, must skip them the same way, or a language whose own
+// FAMILY pattern happens to equal LOANWORD_LEAK (en/de/es/it/pt/nl, and a
+// superset for pl/ro) picks tipFuzzySearch's "prompt" straight back up.
+const withoutExempt = (obj) =>
+  Object.fromEntries(Object.entries(obj || {}).filter(([k]) => !LOANWORD_EXEMPT_KEYS.has(k)));
+
 // Every distinct surface form a language's visible strings contain.
 function formsIn(lang) {
   const found = new Set();
@@ -59,9 +75,11 @@ function formsIn(lang) {
       for (const m of String(v).matchAll(re)) found.add(m[0]);
     }
   };
-  if (FAMILY[lang]) { scan(I18N[lang], FAMILY[lang]); scan(FLOAT[lang], FAMILY[lang]); }
-  scan(I18N[lang], LOANWORD_LEAK);
-  scan(FLOAT[lang], LOANWORD_LEAK);
+  const i18nLang = withoutExempt(I18N[lang]);
+  const floatLang = withoutExempt(FLOAT[lang]);
+  if (FAMILY[lang]) { scan(i18nLang, FAMILY[lang]); scan(floatLang, FAMILY[lang]); }
+  scan(i18nLang, LOANWORD_LEAK);
+  scan(floatLang, LOANWORD_LEAK);
   return found;
 }
 
