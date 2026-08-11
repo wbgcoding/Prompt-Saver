@@ -9577,14 +9577,50 @@ function helpSectionLabel(id) {
   return t(`helpSec${id.charAt(0).toUpperCase()}${id.slice(1)}`);
 }
 
+// Strips case and diacritics so "ordner"/"Übersicht" match "Ordner"/"ubersicht" alike.
+const helpNorm = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+// Splits text into plain text nodes + <mark> spans around every term match. Never
+// innerHTML — the search query is user input and must not be parsed as markup.
+function markTerms(el, text, terms) {
+  el.textContent = "";
+  const norm = helpNorm(text);
+  const ranges = [];
+  for (const term of terms) {
+    if (!term) continue;
+    let from = 0;
+    for (let idx; (idx = norm.indexOf(term, from)) !== -1; from = idx + term.length) {
+      ranges.push([idx, idx + term.length]);
+    }
+  }
+  if (!ranges.length) { el.appendChild(document.createTextNode(text)); return; }
+  ranges.sort((a, b) => a[0] - b[0]);
+  const merged = [ranges[0]];
+  for (const r of ranges.slice(1)) {
+    const last = merged[merged.length - 1];
+    if (r[0] <= last[1]) last[1] = Math.max(last[1], r[1]);
+    else merged.push(r);
+  }
+  let pos = 0;
+  for (const [start, end] of merged) {
+    if (start > pos) el.appendChild(document.createTextNode(text.slice(pos, start)));
+    const mark = document.createElement("mark");
+    mark.className = "help-mark";
+    mark.textContent = text.slice(start, end);
+    el.appendChild(mark);
+    pos = end;
+  }
+  if (pos < text.length) el.appendChild(document.createTextNode(text.slice(pos)));
+}
+
 function renderHelp() {
   const box = $("help-body");
   const tabBar = $("help-tabs-bar");
   box.innerHTML = "";
   tabBar.innerHTML = "";
-  const q = helpQuery.trim().toLowerCase();
-  const searching = q.length > 0;
-  let shown = 0;
+  const highlight = flag("helpHighlight");
+  const terms = helpNorm(helpQuery).trim().split(/\s+/).filter(Boolean);
+  const searching = terms.length > 0;
   const cats = helpCategories();
   const sections = [...new Set(cats.map((c) => c.section))];
   if (helpTab >= sections.length) helpTab = 0;
@@ -9604,19 +9640,65 @@ function renderHelp() {
     tabBar.appendChild(bar);
   }
   const activeSection = searching ? null : sections[helpTab];
-  for (const cat of cats) {
-    const haystack = [cat.title, cat.whatItIs || cat.overview, ...(cat.howTo || []), cat.whatHappens || "", ...cat.settings, cat.tip || ""]
-      .join(" ").toLowerCase();
-    if (searching && !haystack.includes(q)) continue;
-    if (!searching && cat.section !== activeSection) continue;
-    shown++;
+  // Fields carry a search weight (title matters far more than a settings line); a
+  // term must appear in SOME field for the article to count as a hit at all.
+  let list;
+  if (searching) {
+    const wholeQuery = helpNorm(helpQuery).trim();
+    const scored = [];
+    for (const cat of cats) {
+      const fields = [
+        [cat.title, 10],
+        [cat.whatItIs, 4],
+        [(cat.howTo || []).join(" "), 3],
+        [cat.whatHappens || "", 2],
+        [cat.settings.join(" "), 2],
+        [cat.tip || "", 1],
+      ];
+      let score = 0;
+      let allTermsHit = true;
+      for (const term of terms) {
+        let termHit = false;
+        for (const [text, weight] of fields) {
+          if (helpNorm(text).includes(term)) { score += weight; termHit = true; }
+        }
+        if (!termHit) { allTermsHit = false; break; }
+      }
+      if (!allTermsHit) continue;
+      if (helpNorm(cat.title).includes(wholeQuery)) score += 20;
+      scored.push({ cat, score });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    list = scored.map((s) => s.cat);
+  } else {
+    list = cats.filter((cat) => cat.section === activeSection);
+  }
+  const shown = list.length;
+  if (searching) {
+    const hits = document.createElement("div");
+    hits.className = "hint help-hits";
+    hits.textContent = t("helpHits").replace("{n}", String(shown));
+    box.appendChild(hits);
+  }
+  for (const cat of list) {
     // Reuses the expert menu's own group/collapse styling (arrow, spacing, hover) —
     // same visual language, zero new CSS for the mechanic itself.
+    const collapsedNow = searching ? shown > 1 : helpCollapsed.has(cat.title);
     const sec = document.createElement("div");
-    sec.className = "expert-group help-group" + (!searching && helpCollapsed.has(cat.title) ? " collapsed" : "");
+    sec.className = "expert-group help-group" + (collapsedNow ? " collapsed" : "");
     const head = document.createElement("div");
     head.className = "expert-group-title collapsible";
-    head.textContent = cat.title;
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "help-group-title-text";
+    if (searching && highlight) markTerms(titleSpan, cat.title, terms);
+    else titleSpan.textContent = cat.title;
+    head.appendChild(titleSpan);
+    if (searching) {
+      const badge = document.createElement("span");
+      badge.className = "help-sec-badge";
+      badge.textContent = helpSectionLabel(cat.section);
+      head.appendChild(badge);
+    }
     head.addEventListener("click", () => {
       if (helpCollapsed.has(cat.title)) helpCollapsed.delete(cat.title);
       else helpCollapsed.add(cat.title);
@@ -9630,14 +9712,16 @@ function renderHelp() {
     // entry (e.g. the quick launcher) doesn't have to force a step list.
     const ov = document.createElement("p");
     ov.className = "help-overview";
-    ov.textContent = cat.whatItIs;
+    if (searching && highlight) markTerms(ov, cat.whatItIs, terms);
+    else ov.textContent = cat.whatItIs;
     body.appendChild(ov);
     if (cat.howTo && cat.howTo.length) {
       const ol = document.createElement("ol");
       ol.className = "help-steps";
       for (const step of cat.howTo) {
         const li = document.createElement("li");
-        li.textContent = step;
+        if (searching && highlight) markTerms(li, step, terms);
+        else li.textContent = step;
         ol.appendChild(li);
       }
       body.appendChild(ol);
@@ -9677,7 +9761,7 @@ function renderHelp() {
   if (searching && !shown) {
     const empty = document.createElement("div");
     empty.className = "hint";
-    empty.textContent = t("libraryNoResults");
+    empty.textContent = t("helpNoResults");
     box.appendChild(empty);
   }
 }
@@ -10627,7 +10711,8 @@ function bind() {
   helpEl.addEventListener("pointerdown", (e) => {
     if (e.target === helpEl) helpEl.classList.add("hidden");
   });
-  $("help-search").addEventListener("input", (e) => { helpQuery = e.target.value; renderHelp(); });
+  const renderHelpDebounced = debounced(renderHelp);
+  $("help-search").addEventListener("input", (e) => { helpQuery = e.target.value; renderHelpDebounced(); });
 
   // Copy history & usage journal.
   const journalEl = $("journal");

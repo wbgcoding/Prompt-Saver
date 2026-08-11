@@ -314,16 +314,23 @@ PROBE = """
         }
         if (!sawTip) out.errors.push('no help category shows a tip callout');
         const search = document.getElementById('help-search');
-        search.value = 'markdown';
+        // Multi-word query whose words are not literally adjacent anywhere — only the
+        // term-AND-logic search (73) finds it, a plain includes() search finds nothing.
+        search.value = 'grid tags';
         search.dispatchEvent(new Event('input', { bubbles: true }));
-        await sleep(150);
+        await sleep(200);
         const filtered = groups();
         if (!filtered.length || filtered.length >= totalGroups) {
           out.errors.push('searching the help menu did not narrow the category list');
         }
+        const hitsEl = document.querySelector('#help-body .help-hits');
+        if (!hitsEl || !/[0-9]/.test(hitsEl.textContent)) out.errors.push('the help search shows no hit counter');
+        if (filtered.length > 1 && !filtered[0].classList.contains('collapsed')) {
+          out.errors.push('help search results with more than one hit are not collapsed by default');
+        }
         search.value = 'zzz_no_such_help_topic_zzz';
         search.dispatchEvent(new Event('input', { bubbles: true }));
-        await sleep(150);
+        await sleep(200);
         if (groups().length) out.errors.push('a nonsense help search still shows categories');
         if (!document.querySelector('#help-body .hint')) out.errors.push('an empty help search shows no "no results" hint');
         search.value = '';

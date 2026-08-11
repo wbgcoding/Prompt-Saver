@@ -1733,6 +1733,13 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .help-body { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 #help .help-body { padding-right: 8px; }
 .help-group-body { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; }
+/* 73: search mode adds a section-chapter badge after the title — flex row keeps it
+   pinned to the right regardless of title length, scoped to #help so the expert
+   menu's own group headers (no badge, different children) stay untouched. */
+#help .expert-group-title.collapsible { display: flex; align-items: center; gap: 8px; }
+.help-sec-badge { margin-left: auto; flex: 0 0 auto; font-size: 11px; color: var(--muted); }
+.help-hits { margin: 0; }
+.help-mark { background: var(--accent); color: var(--accent-fg); border-radius: 3px; padding: 0 2px; }
 .help-overview { margin: 0; font-size: 13px; line-height: 1.5; color: var(--fg); }
 /* 22-A: numbered "how to" steps — same weight as the overview since these are the
    actual instructions, not secondary detail. */
