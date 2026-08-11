@@ -1394,6 +1394,9 @@ body.library-front #modal.overlay { z-index: 67; }
 .expert-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .expert-top #expert-reset { flex: 0 0 auto; }
 .expert-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
   flex: 1;
   min-width: 0;
@@ -1401,7 +1404,9 @@ body.library-front #modal.overlay { z-index: 67; }
   font-size: 12px;
   font-weight: 600;
   line-height: 1.4;
+  text-wrap: balance;
 }
+.expert-hint svg { flex: 0 0 auto; }
 .noflag-fileAttach #file-btn { display: none; }
 .noflag-screenshot #snip-btn { display: none; }
 .noflag-colorPicker #picker-btn { display: none; }
