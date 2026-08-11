@@ -599,14 +599,16 @@
             </button>
           </div>
         </label>
-        <label class="field">
-          <span data-i18n="themeName">Name</span>
-          <input id="theme-edit-name" class="modal-input" type="text" maxlength="40" spellcheck="false" data-i18n-ph="themeNamePh" />
-        </label>
-        <label class="field">
-          <span data-i18n="themeBase">Based on</span>
-          <select id="theme-edit-base" class="modal-input"></select>
-        </label>
+        <div class="theme-edit-top">
+          <label class="field">
+            <span data-i18n="themeName">Name</span>
+            <input id="theme-edit-name" class="modal-input" type="text" maxlength="40" spellcheck="false" data-i18n-ph="themeNamePh" />
+          </label>
+          <label class="field">
+            <span data-i18n="themeBase">Based on</span>
+            <select id="theme-edit-base" class="modal-input"></select>
+          </label>
+        </div>
         <div id="theme-edit-vars" class="theme-var-list"></div>
       </div>
       <div class="modal-actions">

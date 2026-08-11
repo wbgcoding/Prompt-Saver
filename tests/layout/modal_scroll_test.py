@@ -242,6 +242,77 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
     return page
 
 
+# 80: two-column colour grid in the theme editor — a narrow window falls back to one
+# column (auto-fit), a wide one gets two, and Save must stay reachable either way.
+THEME_SIZES = [(520, 600), (900, 600)]
+MEASURE_THEME = """
+function measure() {
+  const m = document.querySelector('#theme-modal .modal');
+  const list = document.getElementById('theme-edit-vars');
+  const save = document.getElementById('theme-edit-save');
+  m.scrollTop = m.scrollHeight;
+  const mr = m.getBoundingClientRect();
+  const sr = save.getBoundingClientRect();
+  const top = Math.max(mr.top, 0), bottom = Math.min(mr.bottom, innerHeight);
+  const columns = getComputedStyle(list).gridTemplateColumns.trim().split(/\\s+/).length;
+  const out = {
+    viewport: innerWidth + 'x' + innerHeight,
+    columns,
+    saveReachable: sr.top >= top - 1 && sr.bottom <= bottom + 1,
+  };
+  document.getElementById('RESULT').textContent = JSON.stringify(out);
+}
+const tick = setInterval(() => {
+  document.documentElement.style.setProperty('--tick', String(Date.now()));
+  document.body.getBoundingClientRect();
+}, 30);
+requestAnimationFrame(() => requestAnimationFrame(() => {
+  clearInterval(tick);
+  document.documentElement.style.removeProperty('--tick');
+  measure();
+}));
+"""
+
+
+def build_theme_page(out_dir: Path, name: str = "theme.html", n_groups: int = 4, rows_per_group: int = 5) -> Path:
+    if not (out_dir / "styles").exists():
+        shutil.copytree(STYLES, out_dir / "styles")
+    rows = "\n".join(
+        f'<div class="theme-var-group">Group {g}</div>' + "\n".join(
+            f'<div class="theme-var-row"><span class="theme-var-name">Colour {g}.{i}</span>'
+            f'<button type="button" class="theme-swatch"></button>'
+            f'<input type="text" class="modal-input theme-hex" value="#336699">'
+            f'<button type="button" class="icon-btn theme-var-reset" disabled></button></div>'
+            for i in range(rows_per_group)
+        )
+        for g in range(n_groups)
+    )
+    html = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="styles/main.css"><style>body{{margin:0}}</style></head><body>
+<div id="theme-modal" class="overlay" role="dialog" aria-modal="true"><div class="modal modal-narrow">
+  <div class="modal-head"><h2 class="modal-title">Theme editor</h2>
+    <button class="icon-btn" type="button">X</button></div>
+  <div class="theme-edit-body">
+    <div class="theme-edit-top">
+      <label class="field"><span>Name</span><input class="modal-input" type="text" value="My theme"></label>
+      <label class="field"><span>Based on</span><select class="modal-input"><option>Dark</option></select></label>
+    </div>
+    <div id="theme-edit-vars" class="theme-var-list">{rows}</div>
+  </div>
+  <div class="modal-actions">
+    <button class="ghost-btn danger-btn" type="button">Delete</button>
+    <button class="ghost-btn" type="button">Revert changes</button>
+    <button class="ghost-btn" type="button">Cancel</button>
+    <button id="theme-edit-save" class="primary-btn" type="button">Save</button>
+  </div>
+</div></div>
+<pre id="RESULT"></pre>
+<script>{MEASURE_THEME}</script></body></html>"""
+    page = out_dir / name
+    page.write_text(html, encoding="utf-8")
+    return page
+
+
 _run = 0
 
 
@@ -330,6 +401,23 @@ def main() -> int:
                   f"content={r['histContentH']}px slack={slack}px")
             if not ok:
                 failed += 1
+
+        # 80: theme editor colour grid — one column on a narrow window, two on a wide
+        # one, Save reachable either way.
+        theme_page = build_theme_page(tmp)
+        for size in THEME_SIZES:
+            r = measure(browser, tmp, theme_page, size)
+            if not r:
+                print(f"FAIL theme editor {size[0]}x{size[1]}: no measurement")
+                failed += 1
+                continue
+            want_cols = 1 if size[0] < 700 else 2
+            ok = r["columns"] >= want_cols and r["saveReachable"]
+            print(f"{'ok  ' if ok else 'FAIL'} theme editor win={size[0]}x{size[1]} "
+                  f"columns={r['columns']} saveReachable={r['saveReachable']}")
+            if not ok:
+                failed += 1
+
         print("PASS" if not failed else f"{failed} check(s) regressed")
         return 1 if failed else 0
     finally:

@@ -3806,7 +3806,8 @@ body.noflag-customThemes .theme-edit-btn { display: none; }
 #theme-modal.overlay { z-index: 68; }
 /* The colour list scrolls inside the dialog so Cancel/Save stay reachable at any
    window height (a shrinking flex child would otherwise spill over them). */
-#theme-modal .modal { overflow: hidden; }
+#theme-modal .modal { width: min(680px, 94vw); overflow: hidden; }
+.theme-edit-top { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
 #theme-modal .modal-actions {
   flex: 0 0 auto;
   /* Marks where the scrolling list ends. Without it the half-visible last row looked
@@ -3828,8 +3829,11 @@ body.noflag-customThemes .theme-edit-btn { display: none; }
 }
 .theme-edit-body::-webkit-scrollbar { width: var(--sb-width, 12px); }
 .theme-edit-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--surface); }
-.theme-var-list { display: flex; flex-direction: column; gap: 4px; }
+/* 80: two columns of colour rows on a wide window, falling back to one column on a
+   narrow one (auto-fit, same rule as .expert-cols — never forced from CSS). */
+.theme-var-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 4px 16px; align-items: start; }
 .theme-var-group {
+  grid-column: 1 / -1;
   margin-top: 4px;
   color: var(--muted);
   font-size: 11px;
