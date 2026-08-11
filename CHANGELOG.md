@@ -337,6 +337,73 @@ until you turn it on.
   clicked — inside the loupe they moved away with the cursor.
 - **The editor's text box could be drawn over the colour swatches** once the
   variable helper above it was expanded.
+- **An unreadable recovery file could silently empty your whole library or
+  settings** the next time anything saved. It is now left alone and logged
+  instead of being treated as "nothing to restore."
+- **Undo/restore could report success even when its own safety snapshot
+  failed to save**, and several other actions (import, restoring a version,
+  favoriting, batch edits, renaming or deleting a tag, recoloring, seeding the
+  example prompts) could report success while the write to disk had actually
+  failed — each now rolls back cleanly and reports the real error.
+- **The prompt-sync folder could save a half-written file** if the app lost
+  power mid-write; it now writes through a temp file and an atomic rename.
+- **A hand-edited or imported folder position at the far edge of the grid
+  could hang the app on startup.** Positions are now kept in range and the
+  placement loop always terminates.
+- **Emptying the trash could delete a prompt's version history even when the
+  trash itself failed to save**, so the prompt came back with no history.
+- **Importing a backup from another PC could silently clear your backup
+  password**, leaving the next export unprotected with no warning.
+- **Pill-button folders never worked on a fresh install** due to an inverted
+  setting check.
+- **The folder window stayed visible, and could appear in a screenshot,**
+  while screen-capture-safe mode hid every other window.
+- **Copying a rotating prompt from a tile, a folder member, or the library
+  skipped rotation and always copied the first entry**; the placeholder-fill
+  dialog could also fail to appear when only a later entry had a placeholder.
+  Rotation also no longer advances on copying an image or file entry.
+- The usage-statistics panel grew an extra header every time it was toggled.
+- A number field could not be set to `0` (it fell back to the default),
+  blocking a GFS backup tier from being turned off entirely.
+- The rotation badge ignored the rotating-prompts toggle and kept polling in
+  the background even with the feature switched off.
+- Cached video thumbnails stopped starting or pausing with scroll after the
+  library had been re-rendered once.
+- A slow response for one prompt's history or rotation state could land in a
+  different prompt's editor if you switched prompts quickly.
+- The editor could get stuck showing a rotating-prompt variant list even
+  after the feature was switched off.
+- A pill hidden with "hide for now" could reappear on its own after being
+  unpinned and re-pinned.
+- Grid folders with the same name in two different views could merge into
+  one, and moving the data folder left backup history behind in the old
+  location.
+- Leftover snip-preview images and update-staging folders from a crash were
+  never cleaned up.
+- A failed schema migration on an older database was silently ignored
+  instead of being reported.
+- Placing a prompt in a second view could duplicate it there once multi-view
+  was switched off.
+- The folder window did not pick up a changed grid-column count while
+  already open.
+- Enter inside a choice-style variable field could confirm the dialog with a
+  stale value, or do nothing at all on a single-option choice.
+- The colour-history strip's copy failures were silent, and a failed colour
+  pick reused an unrelated error message.
+- Some builds under a different product name still showed English fallback
+  text before translations loaded, and Turkish mixed the loanword and the
+  localized word for the same thing in the same build.
+- A `$` in a rebranded product's text could corrupt the generated identity
+  files, and rebrand-generated files could show as changed on a fresh
+  checkout due to line-ending drift.
+- The icon-only-button check only covered the five static windows, missing
+  every dynamically created button; it now covers those too.
+- A closing dialog could re-enable the wrong dialog's Cancel button if a
+  second one opened while the first was still closing.
+- Dragging a colour onto a grid folder redrew the entire grid on every
+  pointer move.
+- The help text had the screen-capture-protection default backwards, and
+  documented the wrong syntax for self-filling placeholders.
 
 ### Removed
 
