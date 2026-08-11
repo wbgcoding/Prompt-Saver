@@ -2861,8 +2861,9 @@ body.drag-over::after {
 .update-actions { grid-column: span 3; display: flex; flex-wrap: wrap; row-gap: 6px; align-items: center; gap: 10px; min-width: 0; }
 .update-actions .ghost-btn { flex: 0 0 auto; }
 /* One column of the grid above: the box is 3 columns + 2 gaps wide, so one column is
-   (width - 2*gap) / 3 — the exact width a button in .settings-btn-row gets. */
-.update-actions > #update-btn { flex: 0 0 calc((100% - 20px) / 3); min-width: 0; }
+   (width - 2*gap) / 3 — the exact width a button in .settings-btn-row gets. About and
+   Check-for-updates each take one, the version label takes the third. */
+.update-actions > #about-btn, .update-actions > #update-btn { flex: 0 0 calc((100% - 20px) / 3); min-width: 0; }
 /* Clickable version/status label (left of the check button) → releases page, or the
    update dialog once an update is pending. */
 .update-version {
