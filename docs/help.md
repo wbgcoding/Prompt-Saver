@@ -8,112 +8,112 @@ version follows the same rule and falls back to English in every other language.
 
 ### Getting started
 
-A tile is one saved prompt. Double-click an empty grid cell (or the + button) to
-create one, click any tile to copy it. Three example tiles (an email with
-placeholders, an image, and a Markdown template) ship on first launch — a button
-above the grid removes them with one click once you don't need them anymore.
+A tile is a saved item on the grid. Double-click an empty grid cell (or the plus
+button) to create one, click any tile to copy it. Three sample tiles (an email with
+placeholders, an image, and a Markdown template) are already there on first launch —
+a button above the grid removes them with one click once they're no longer needed.
 
-### Creating prompts
+### Creating tiles
 
-Beyond plain text, a prompt can carry an attached file, a screenshot, or a picked
+Beyond plain text, a tile can carry an attached file, a screenshot, or a picked
 screen colour.
 
 - File attach — clicking the tile copies the file itself, not text
-- Screenshot tool — snip a region or a whole window straight into a new prompt
+- Screenshot tool — capture a region or a whole window straight into a new tile
 - Colour picker — pick any on-screen pixel, copies as hex/RGB/HSL
-- Drag & drop — drop a file or image straight onto the grid
+- Drag and drop — drop a file or image straight onto the grid
 
 ### Variables & placeholders
 
-Write `{#{name}#}` anywhere in a prompt's text — copying it opens a small popup
-asking for each placeholder's value before the filled-in text reaches the clipboard.
+Placeholder markup inside a tile's text opens a small popup asking for each value
+before the finished text reaches the clipboard.
 
 - Dynamic placeholders — `{#{/date\}#}`, `{#{/time\}#}`, `{#{/clipboard\}#}`
   fill themselves in, no popup; their own slash-fenced syntax (not the plain
   `{#{date}#}` form) is what triggers it — insert them from the chip buttons
   under the editor's text box rather than typing them by hand
 - Choice placeholders — a dropdown of preset values instead of free text
-- Remember choices — the popup pre-fills your last answer per prompt
+- Remember choices — the popup pre-fills the last answer for that tile
 - Popup in its own window — useful with the floating buttons, where the main
   window may be hidden
 
 ### The editor
 
-The prompt editor is a plain text box by default; a few opt-in features
-(**Markdown preview**, **private notes** — both off by default) add structure and
-history to it: rendered Markdown preview with syntax-highlighted code blocks, full
-version history, and a private note field never copied or exported with the text.
+The editor is a plain text box by default; a few opt-in features (**Markdown
+preview**, **private notes** — both off by default) add structure and history to it:
+a rendered Markdown preview with syntax-highlighted code blocks, a full version
+history, and a private note field never copied or exported with the text.
 
 ### The grid
 
-The main window's grid is a free-placement board of prompt tiles — up to 20×20
-cells by default (adjustable to 200×200 in the expert menu), with its own layout
-per view. Drag a tile to any empty cell, or drop it on an occupied one to swap
-the two; the grid never rearranges itself on its own.
+The main window's grid is a free-placement board of tiles — up to 20×20 cells by
+default (adjustable to 200×200 in the expert menu), with its own layout per view.
+Drag a tile to any empty cell, or drop it on an occupied one to swap the two; the
+grid never rearranges itself on its own.
 
 ### Screenshot tool
 
-Captures part or all of your screen straight into a new copy button. Drag a
-region, or click a window to capture it whole — even a normally-protected one
-like the Task Manager. The app's own windows are hidden for the moment of
-capture so they never end up in the shot; the confirmation dialog then lets you
-save it as a button, save it as a file, or just leave it on the clipboard.
+Captures part or all of the screen straight into a new tile. Drag a region, or
+click a window to capture it whole — even a normally-protected one like the Task
+Manager. The app's own windows are hidden for the moment of capture so they never
+end up in the shot; the confirmation dialog then offers saving it as a tile, saving
+it as a file, or leaving it on the clipboard.
 
 ### Colour picker & pick history
 
-A pipette that freezes the screen, magnifies the pixel under
-your cursor, and copies it as hex, rgb or hsl. Right-click the pipette icon to
-reopen your last few picks — the history is mirrored into settings, so it
-survives a restart too.
+A pipette that freezes the screen, magnifies the pixel under the cursor, and copies
+it as hex, rgb, or hsl. Right-click the pipette icon to reopen the last few picks —
+the history is mirrored into settings, so it survives a restart too.
 
-### Rotating prompts
+### Rotating tiles
 
-A prompt can hold a list of texts instead of one — each copy serves the next
-entry, in order or shuffled without repeats, instead of always the same text.
-On by default; the per-prompt switch sits under Advanced options in the editor.
+A tile can hold a list of texts instead of one — each copy serves the next entry,
+in order or shuffled without repeats, instead of always the same text. On by
+default; the per-tile switch sits under Advanced options in the editor.
 
-- A small badge counts up (like "2/5") on a tile, floating pill or pill-folder
+- A small badge counts up (like "2/5") on a tile, floating pill, or pill-folder
   member — a grid-folder member shows only its file-type icon instead. In order
   mode it is the absolute position; in shuffle mode it counts draws within the
   current cycle and restarts at 1 once every entry has been shown once, rather
   than jumping to an arbitrary position
 - The count survives restarts and full backups; a CSV/TXT import starts a
-  fresh pointer, since the imported prompt gets a new id
+  fresh pointer, since the imported tile gets a new id
 
 ## Copying
 
 ### Copying
 
-- Prompt chaining — click several tiles in a row, they combine into one clipboard copy
-- Per-prompt hotkeys — copy a specific prompt from anywhere, without opening the app
+- Chaining — click several tiles in a row, they combine into one clipboard copy
+- Per-tile hotkeys — copy a specific tile from anywhere, without opening the app
 - Drag-out — hold the modifier key and drag a tile onto another window to paste
   directly, no clipboard round-trip. An expert switch swaps the two gestures, so a
   plain drag leaves the app and the key moves the tile instead.
-- Auto-paste — after copying, the app switches to your last window and presses
-  paste for you
+- Auto-paste — after copying, the app switches to the last active window and
+  presses paste automatically
 
 ### Hotkeys
 
 Two independent kinds: one global combination that opens the quick launcher
-(default Ctrl+Alt+P), and a combination per prompt that copies — and optionally
-pastes — that one prompt directly. A combination must include Ctrl or Alt; the
-app hotkey always wins a conflict, and among prompts the first one in the list
-keeps a combination two prompts happen to share. Importing a backup that carries
+(default Ctrl+Alt+P), and a combination per tile that copies — and optionally
+pastes — that one tile directly. A combination must include Ctrl or Alt; the
+app hotkey always wins a conflict, and among tiles the first one in the list
+keeps a combination two tiles happen to share. Importing a backup that carries
 a colliding hotkey drops the losing one instead of failing the import.
 
 "All hotkeys", next to the global hotkey field in Settings, lists every hotkey —
-global and per-prompt — in one searchable, live-rebindable list, so rebinding or
-clearing one no longer means opening that prompt's editor.
+global and per-tile — in one searchable, live-rebindable list, so rebinding or
+clearing one no longer means opening that tile's editor.
 
 ### Clipboard watcher
 
-Off by default. When switched on, everything you copy anywhere on the system (not
-just from this app) is logged into an inbox you can review and turn into prompts
-later — a minimum-length filter and an inbox cap keep it from growing unbounded.
+Off by default. When switched on, everything copied anywhere on the system (not
+just from this app) is logged into an inbox that can be reviewed and turned into
+tiles later — a minimum-length filter and an inbox cap keep it from growing
+unbounded.
 
 ### Copy history
 
-A log of what you've copied and when, separate from the clipboard watcher (this
+A log of what was copied and when, separate from the clipboard watcher (this
 only records copies made through the app). Grouped view, automatic retention,
 per-entry delete, and usage statistics including a 14-day activity chart.
 
@@ -121,22 +121,22 @@ per-entry delete, and usage statistics including a 14-day activity chart.
 
 ### Library & search
 
-The library lists every prompt as a searchable, filterable list — fuzzy search,
+The library lists every tile as a searchable, filterable list — fuzzy search,
 smart sort (most-used / most-recent), and type/colour filters.
 
 ### Tags
 
-Free-form labels assigned to prompts; filter the library or the grid down to a set
-of tags, matching ANY or ALL of them.
+Free-form labels assigned to tiles; filter the library or the grid down to a set
+of tags, matching any or all of them.
 
 ### Favourites
 
-Star a prompt to mark it as a favourite; an optional dedicated view lists only
-starred prompts.
+A star marks a tile as a favourite; an optional dedicated view lists only
+starred tiles.
 
 ### Standalone: Multiple views
 
-A view is one grid page with its own size and arrangement; a prompt can live in
+A view is one grid page with its own size and arrangement; a tile can live in
 several views. View groups turn views into tabs instead of a dropdown.
 
 ### Tile behaviour & appearance
@@ -154,9 +154,9 @@ privacy-leaning media tiles.
 ### Floating buttons & folders
 
 Floating buttons are small always-on-top copy buttons that sit outside the main
-window, over whatever app you're using. Pill folders and grid folders (both on by
+window, over whatever app is in use. Pill folders and grid folders (both on by
 default) merge several of them, or several grid tiles, into one expandable group
-the same way — a tile can only ever belong to one grid folder at a time.
+the same way — a tile belongs to only one grid folder at a time.
 
 ### Tray
 
@@ -166,7 +166,7 @@ The system tray icon's right-click menu offers a "recently copied" and a
 ### Standalone: Quick launcher
 
 A small always-on-top popup (default hotkey Ctrl+Alt+P) with fuzzy search across
-every prompt's name and text — pick one and it copies immediately, no need to bring
+every tile's name and text — pick one and it copies immediately, no need to bring
 the main window forward.
 
 ## Look and feel
@@ -174,13 +174,13 @@ the main window forward.
 ### Appearance & themes
 
 Eight built-in themes: system, light, dark, Programmer, Neon Violet, Ocean,
-Cyberpunk and Black & White. The theme editor lets you tweak any theme's colours
-and save the result as your own custom theme.
+Cyberpunk, and Black & White. The theme editor adjusts any theme's colours and
+saves the result as a custom theme.
 
 ### Standalone: Theme editor
 
-Start from any built-in theme, change individual colours, and save the result as
-your own theme — the original stays untouched.
+Starts from any built-in theme, changes individual colours, and saves the result
+as a new theme — the original stays untouched.
 
 ### Scaling & zoom
 
@@ -194,14 +194,14 @@ Delay, auto-hide timeout, and width are all adjustable.
 ### Toolbar
 
 Which buttons the header and composer bar show — quick grid-size control,
-library/history/pin buttons, multiple views and view groups.
+library/history/pin buttons, multiple views, and view groups.
 
 ## System and data
 
 ### Privacy
 
-Exclude the window from screen capture (on by default), blur tiles/media until
-hovered, hide tile names, dim unhovered tiles.
+Excludes the window from screen capture (on by default), blurs tiles/media until
+hovered, hides tile names, dims unhovered tiles.
 
 ### System
 
@@ -210,43 +210,43 @@ multiple instances at once, and where the data folder lives.
 
 ### Data maintenance
 
-Duplicate finder, trash (with its own retention setting), CSV/TXT export, and full
-backup export/import — reached from the expert menu's Data group.
+Duplicate finder, trash (with its own retention setting), CSV/TXT export, and
+full backup export/import — reached from the expert menu's data group.
 
-### Trash & restoring prompts
+### Trash & restoring tiles
 
-A deleted prompt goes to the trash first, not straight to permanent deletion.
-Retention is in days (0 means keep forever). Restoring places the prompt in the
+A deleted tile goes to the trash first, not straight to permanent deletion.
+Retention is in days (0 means keep forever). Restoring places the tile in the
 active view's first free cell — not necessarily its original view or cell — and
-does not bring back a floating button, folder membership or hotkey it had before
+does not bring back a floating button, folder membership, or hotkey it had before
 deletion; those need setting up again.
 
 ### Duplicate finder
 
-Flags prompts that are textually very similar, by a similarity score rather than
+Flags tiles that are textually very similar, by a similarity score rather than
 an exact match, without deleting anything on its own. Review a flagged pair side
 by side, keep one, or mark the pair as not a duplicate to stop it being flagged
-again. A rotating prompt is only compared on its first entry.
+again. A rotating tile is only compared on its first entry.
 
 ### Import & export
 
 Plain CSV/TXT export for the text alone, or a full backup file with everything —
-prompts, views, layouts, colours, styles and language. A CSV/TXT import shows a
-preview first — every incoming prompt's name and whether it would land as a
+tiles, views, layouts, colours, styles, and language. A CSV/TXT import shows a
+preview first — every incoming item's name and whether it would land as a
 duplicate — before anything is written; a full backup restores directly.
 
 ### Markdown folder sync (beta)
 
-An optional, off-by-default mirror that writes every prompt as its own
-readable `.md` file in a folder you pick, alongside the encrypted database —
-including which view, grid cell and folder it sits in. A view or folder named in
+An optional, off-by-default mirror that writes every text tile as its own
+readable `.md` file in a chosen folder, alongside the encrypted database —
+including which view, grid cell, and folder it sits in. A view or folder named in
 an incoming file that does not exist yet on this machine is created
 automatically, matched by name.
 **The `.md` files are plain text** — unlike the database, anyone with access to
-that folder can read the prompts, so avoid a synced or shared folder for anything
-sensitive. A prompt with an attached file, image or PDF syncs as a reference: the
-header carries the path and the PDF page, never the file itself. A screenshot
-pasted straight into a prompt has no path and stays in the database only.
+that folder can read the content, so a synced or shared folder should be avoided
+for anything sensitive. A tile with an attached file, image, or PDF syncs as a
+reference: the header carries the path and the PDF page, never the file itself. A
+screenshot pasted straight into a tile has no path and stays in the database only.
 
 ### The expert menu
 
@@ -257,9 +257,8 @@ one value's own undo icon, a whole group's reset, or everything at once.
 
 ### Keyboard-only use
 
-Arrow keys move a focus ring across the grid; Enter or Space copies
-whichever tile is focused. The ring fades out a short while after the window
-loses focus.
+Arrow keys move a focus ring across the grid; Enter or Space copies whichever
+tile is focused. The ring fades out a short while after the window loses focus.
 
 ### Where your data lives
 
@@ -280,8 +279,8 @@ running an unverified file.
 ### Common questions
 
 - *My screenshot of this app came out empty* — the screen-capture exclusion
-  privacy setting is working as intended; turn it off in the expert menu if you
-  don't want that
+  privacy setting is working as intended; turn it off in the expert menu if
+  that's not wanted
 - *The app won't start* — it needs the Microsoft WebView2 runtime; the installer
   offers it automatically if missing
 - *I can't find a setting* — check the expert menu's search box first; it scans
@@ -291,10 +290,10 @@ running an unverified file.
 
 ### Standalone: Backup manager
 
-Encrypted, compressed snapshots of your entire prompt library and settings, on an
+Encrypted, compressed snapshots of the entire library and settings, on an
 automatic schedule with smart GFS-style retention tiers, and a restore that can
 target data only, settings only, or both. The same window also has a
-usage-statistics section (totals, a 14-day activity chart, most-used prompts),
+usage-statistics section (totals, a 14-day activity chart, most-used tiles),
 unrelated to the backups themselves.
 
 ---
@@ -305,12 +304,12 @@ Derselbe Inhalt wie oben, wie er auch im Hilfe-Menü der App steht (Einstellunge
 Hilfe). Nur Englisch und Deutsch — jede andere Sprache in der App fällt auf
 Englisch zurück.
 
-**Erste Schritte** — Eine Kachel ist ein gespeicherter Prompt. Doppelklick auf eine
-leere Rasterzelle (oder der +-Knopf) legt eine an, ein Klick kopiert sie. Drei
-Beispielkacheln (E-Mail mit Platzhaltern, Bild, Markdown-Vorlage) sind beim ersten
-Start dabei — ein Knopf über dem Raster entfernt sie mit einem Klick.
+**Erste Schritte** — Eine Kachel ist ein gespeicherter Eintrag im Raster. Doppelklick
+auf eine leere Rasterzelle (oder der Plus-Button) legt eine an, ein Klick kopiert sie.
+Drei Beispielkacheln (E-Mail mit Platzhaltern, Bild, Markdown-Vorlage) sind beim
+ersten Start bereits da — ein Button über dem Raster entfernt sie mit einem Klick.
 
-**Prompts anlegen** — Datei-Anhang, Screenshot-Werkzeug, Farbpipette (aus),
+**Kacheln anlegen** — Dateianhang, Screenshot-Werkzeug, Farbpipette (aus),
 Ziehen & Ablegen.
 
 **Variablen & Platzhalter** — `{#{Name}#}` im Text öffnet beim Kopieren ein Popup
@@ -324,41 +323,42 @@ Notizen (Markdown-Vorschau und Notizen standardmäßig aus).
 Experten-Menü bis 200×200 einstellbar), eigenes Layout je Ansicht.
 
 **Screenshot-Werkzeug** — Bereich oder ganzes Fenster (auch geschützte wie den
-Task-Manager) direkt zu einem neuen Kopierknopf.
+Task-Manager) direkt zu einer neuen Kachel.
 
 **Farbpipette & Auswahlverlauf** — Pixel als Hex/RGB/HSL kopieren; die letzten
 Auswahlen überstehen einen Neustart. Standardmäßig aus.
 
-**Wechselnde Prompts** — ein Prompt trägt eine Liste von Texten, jede Kopie
+**Wechselnde Kacheln** — eine Kachel trägt eine Liste von Texten, jede Kopie
 liefert den nächsten Eintrag (Reihenfolge oder Zufall). Standardmäßig an; der
-Schalter pro Prompt sitzt im Editor unter Erweiterte Optionen. Abzeichen auf
+Schalter pro Kachel sitzt im Editor unter Erweiterte Optionen. Ein Badge auf
 Kachel/Pille/Pillen-Ordner-Mitglied zählt hoch — im Zufalls-Modus die Ziehungen
 im aktuellen Durchlauf statt einer springenden Position; übersteht Neustart und
-Sicherung, aber keinen CSV/TXT-Import (neuer Prompt, neuer Zeiger).
+Sicherung, aber keinen CSV/TXT-Import (neue Kachel, neuer Zeiger).
 
-**Kopieren** — Verketten, Prompt-Hotkeys, Herausziehen (mit oder, per Schalter,
+**Kopieren** — Verketten, Hotkeys pro Kachel, Herausziehen (mit oder, per Schalter,
 ohne Modifikatortaste), automatisches Einfügen.
 
 **Hotkeys** — ein globaler Hotkey öffnet den Schnellstarter (Standard
-Strg+Alt+P), ein eigener Hotkey pro Prompt kopiert (und fügt optional ein). Bei
-einer Kollision gewinnt der App-Hotkey, sonst der erste Prompt in der Liste.
+Strg+Alt+P), ein eigener Hotkey pro Kachel kopiert (und fügt optional ein). Bei
+einer Kollision gewinnt der App-Hotkey, sonst die erste Kachel in der Liste.
 "Alle Hotkeys" neben dem globalen Feld listet jeden Hotkey durchsuchbar auf und
-belegt jede Zeile direkt um, ohne den jeweiligen Prompt-Editor zu öffnen.
+belegt jede Zeile direkt um, ohne den jeweiligen Editor zu öffnen.
 
 **Schwebende Buttons & Ordner** — Pillen-Ordner und Raster-Ordner (beide aus);
 eine Kachel gehört immer nur zu einem Raster-Ordner gleichzeitig.
 
-**Tray** — Zuletzt kopiert, Favoriten.
+**Taskleistenmenü** — Zuletzt kopiert, Favoriten.
 
-**Zwischenablage-Wächter** — aus, protokolliert bei Bedarf alles Kopierte im System.
+**Zwischenablage-Überwachung** — aus, protokolliert bei Bedarf alles Kopierte im
+System.
 
-**Kachelverhalten & Aussehen** — Menü, Umsortieren, Hover-Anhebung, Optik.
+**Kachel-Verhalten & -Aussehen** — Menü, Umsortieren, Hover-Anhebung, Optik.
 
 **Tooltips** — Verzögerung, Ausblenden, Breite.
 
 **Favoriten** — Stern-Markierung, eigene Favoriten-Ansicht.
 
-**Skalierung & Zoom** — UI-, Dialog-, Composer- und Icon-Größe getrennt einstellbar.
+**Skalierung & Zoom** — UI-, Dialog-, Editor- und Icon-Größe getrennt einstellbar.
 
 **Aussehen & Themes** — acht mitgelieferte Themes, optionaler Theme-Editor.
 
@@ -371,36 +371,37 @@ Statistik mit 14-Tage-Diagramm.
 
 **Medien** — Video-Steuerung, Graustufen/Abdunkeln.
 
-**Symbolleiste** — welche Knöpfe Kopf-/Composer-Leiste zeigen.
+**Werkzeugleiste** — welche Buttons Kopf- und Composer-Leiste zeigen.
 
-**Datenschutz** — Bildschirmaufnahme-Ausschluss (aus), Weichzeichnen, Namen
+**Datenschutz** — Bildschirmaufnahme-Ausschluss (an), Weichzeichnen, Namen
 verbergen, Abdunkeln.
 
 **System** — Updates, Tastatur-Navigation, mehrere Instanzen, Datenordner.
 
-**Datenpflege** — Duplikatfinder, Papierkorb, Import/Export.
+**Datenwartung** — Duplikatfinder, Papierkorb, Import/Export.
 
-**Papierkorb & Wiederherstellen** — gelöschte Prompts landen zuerst im
+**Papierkorb & Kacheln wiederherstellen** — gelöschte Kacheln landen zuerst im
 Papierkorb (Aufbewahrung in Tagen, 0 = für immer). Wiederherstellen legt in die
 erste freie Zelle der aktiven Ansicht, nicht zwingend an den Originalplatz, und
 ohne Pille, Ordner-Mitgliedschaft oder Hotkey von vorher.
 
-**Duplikatfinder** — findet textlich sehr ähnliche Prompts nach
+**Duplikatfinder** — findet textlich sehr ähnliche Kacheln nach
 Ähnlichkeitswert, keine exakte Übereinstimmung nötig, löscht nichts von sich
-aus. Ein wechselnder Prompt wird nur nach seinem ersten Eintrag verglichen.
+aus. Eine wechselnde Kachel wird nur nach ihrem ersten Eintrag verglichen.
 
 **Import & Export** — CSV/TXT nur für den reinen Text, volle Sicherung für
 alles. Ein CSV/TXT-Import zeigt vorher eine Vorschau mit Name und
 Duplikat-Kennzeichnung; eine volle Sicherung stellt direkt wieder her.
 
-**Markdown-Ordner-Sync (Beta)** — spiegelt jeden Prompt als lesbare
+**Markdown-Ordner-Sync (Beta)** — spiegelt jede Text-Kachel als lesbare
 `.md`-Datei in einem gewählten Ordner, inklusive Ansicht, Rasterzelle und
 Ordner. Angehängte Dateien, Bilder und PDFs wandern als Verweis mit (Pfad und
 PDF-Seite im Kopf, nie die Datei selbst); ein direkt eingefügter Screenshot hat
-keinen Pfad und bleibt nur in der Datenbank. Eine in einer eingehenden Datei genannte Ansicht oder ein Ordner, den
-es auf diesem Rechner noch nicht gibt, wird automatisch angelegt, per
-Namensabgleich. **Die Dateien sind Klartext** — anders als die Datenbank, also
-kein synchronisierter oder geteilter Ordner für Sensibles.
+keinen Pfad und bleibt nur in der Datenbank. Eine in einer eingehenden Datei
+genannte Ansicht oder ein Ordner, den es auf diesem Rechner noch nicht gibt,
+wird automatisch angelegt, per Namensabgleich. **Die Dateien sind Klartext** —
+anders als die Datenbank, also kein synchronisierter oder geteilter Ordner für
+Sensibles.
 
 **Das Experten-Menü** — jede Funktion hat einen Schalter mit ihren Parametern
 direkt darunter. Die Suche durchsucht alle Tabs auf einmal; ausgeschaltete
@@ -408,7 +409,7 @@ Funktionen tragen ein kleines Punkt-Abzeichen. Zurücksetzen auf drei Ebenen:
 ein Wert, eine ganze Gruppe, oder alles auf einmal.
 
 **Tastaturbedienung** — Pfeiltasten bewegen einen Fokusring über das Raster
-(aus), Enter oder Leertaste kopiert die fokussierte Kachel.
+(an), Enter oder Leertaste kopiert die fokussierte Kachel.
 
 **Wo die Daten liegen** — eine lokale SQLite-Datenbank (plus ihre kleine
 WAL-Datei). Installiert: unter AppData, im Experten-Menü einsehbar und
@@ -429,7 +430,7 @@ vermutlich schon.
 
 **Eigenständig: Backup-Manager** — verschlüsselte Backups, GFS-Aufbewahrung,
 gezieltes Wiederherstellen. Im selben Fenster außerdem eine
-Nutzungsstatistik (Summen, 14-Tage-Diagramm, meistgenutzte Prompts) —
+Nutzungsstatistik (Summen, 14-Tage-Diagramm, meistgenutzte Kacheln) —
 unabhängig von den Backups selbst.
 
 **Eigenständig: Schnellstarter** — Strg+Alt+P, unscharfe Suche, sofortiges Kopieren.
