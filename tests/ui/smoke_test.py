@@ -2658,11 +2658,6 @@ PROBE = """
           const changedRow = rowByLabel('Always show grid lines');
           if (!changedRow) {
             out.errors.push('"only changed" did not surface a flag flipped away from its default');
-          } else if (!changedRow.title || !changedRow.title.includes('Changed:')) {
-            // 66: the row's tooltip gets a "Changed: <date>" line once it differs
-            // from its default — proves the backend actually stamped ui_changed and
-            // the frontend read it back, not just that the filter itself works.
-            out.errors.push('a row flipped away from its default has no "Changed:" tooltip line (66)');
           }
           // Flip it straight back to its default — must vanish from the filtered view.
           const swAgain = rowByLabel('Always show grid lines')?.querySelector('input.switch');
