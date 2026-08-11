@@ -217,8 +217,12 @@ function applyI18n() {
   document.querySelectorAll("[data-i18n-title]").forEach((el) => { el.title = t(el.dataset.i18nTitle); });
   document.querySelectorAll("[data-i18n-aria]").forEach((el) => { el.setAttribute("aria-label", t(el.dataset.i18nAria)); });
   // Cached video tiles keep their media bar across a language switch — its
-  // button labels are not markup, so data-i18n above never reaches them.
-  document.querySelectorAll(".media-bar").forEach((bar) => bar.setLabels?.(mediaBarLabels()));
+  // button labels are not markup, so data-i18n above never reaches them. Walk
+  // videoCache itself, not just the live DOM: a tile from a view that is not
+  // the active one is cached but detached, so querySelectorAll would miss it.
+  for (const { wrap } of videoCache.values()) {
+    wrap.querySelector(".media-bar")?.setLabels?.(mediaBarLabels());
+  }
 }
 
 // ---- Helpers ----

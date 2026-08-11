@@ -186,6 +186,10 @@ export function buildMediaBar(video, { onChange, labels } = {}) {
     nameBtn(soundBtn, video.muted ? L.unmute : L.mute);
   };
   bar.setLabels = (newLabels) => { L = newLabels; applyLabels(); };
+  // mkBtn(ICON_PAUSE) above assumes autoplay always wins the race — wrong when
+  // flag("videoAutoplay") is off, so re-sync the glyph itself to the real state
+  // now instead of leaving it stuck on pause until the next play/pause event.
+  playBtn.innerHTML = video.paused ? ICON_PLAY : ICON_PAUSE;
   applyLabels();
   syncSound();
 

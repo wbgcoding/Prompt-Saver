@@ -236,7 +236,10 @@ function applyPrefs(s) {
   // the whole feature, not just the badge (gating rule: nothing dependent stays
   // visible/active with its parent off).
   rotateBadgeOn = s.ui_flags?.rotateBadge !== false && s.ui_flags?.rotatingPrompts !== false;
-  renderRotateBadge();
+  // primeRotateBadge, not renderRotateBadge alone: rotateInfo stays null while the
+  // badge is off (47's own "no peek while off" guard), so flipping the flag back on
+  // here needs a fresh peek, not just a re-render of whatever was last known.
+  primeRotateBadge();
   copyFont = s.ui_texts?.copyFont || "";
   document.getElementById("feedback").style.fontFamily = FONTS[copyFont] || "";
   const op = Number(s.ui_values?.floatOpacity);

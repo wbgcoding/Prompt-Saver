@@ -120,8 +120,15 @@ document.addEventListener("keydown", (e) => {
   // 58: Enter inside a choice control (the collapsed button, or a focused item in
   // the open list) must reach that control's OWN native activation (open the list,
   // or pick the focused item) instead of being hijacked into an immediate confirm
-  // with whatever value was already selected before.
-  else if (e.key === "Enter" && !e.target.closest(".vars-choice")) { e.preventDefault(); confirm(); }
+  // with whatever value was already selected before. A single-option choice has no
+  // list to open at all (buildChoice only toggles it past options.length > 1) — its
+  // button's native Enter activation is then a no-op, so Enter must fall through to
+  // confirm() there same as any other row, or it does nothing at all.
+  else if (e.key === "Enter") {
+    const choice = e.target.closest(".vars-choice");
+    const hasChoices = choice && choice.querySelectorAll(".vars-choice-item").length > 1;
+    if (!hasChoices) { e.preventDefault(); confirm(); }
+  }
 });
 okEl.addEventListener("click", confirm);
 cancelEl.addEventListener("click", () => answer(null));
