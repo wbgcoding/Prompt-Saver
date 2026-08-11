@@ -12,7 +12,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::menu::{IconMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{
@@ -2638,26 +2638,44 @@ fn load_store(app: &AppHandle) -> Store {
     // source to fall back to here, so an unreadable file must lock writes (like the
     // decrypt_fails case above) rather than silently present/save an empty store.
     let mut unreadable = false;
+    let mut settings_missing = false;
     let mut settings = match read_sealed_json::<Settings>(&dir.join("settings.json")) {
         SealedRead::Loaded(s) => s,
         SealedRead::Unreadable => {
             unreadable = true;
             Settings::default()
         }
-        SealedRead::Missing => Settings::default(),
+        SealedRead::Missing => {
+            settings_missing = true;
+            Settings::default()
+        }
     };
     settings.migrate();
     load_pick_history(&settings); // 19: restore the colour-pick history mirror
     prune_history(&mut settings);
+    let mut prompts_missing = false;
     let mut prompts = match read_sealed_json::<Vec<Prompt>>(&dir.join("prompts.json")) {
         SealedRead::Loaded(p) => p,
         SealedRead::Unreadable => {
             unreadable = true;
             Vec::new()
         }
-        SealedRead::Missing => Vec::new(),
+        SealedRead::Missing => {
+            prompts_missing = true;
+            Vec::new()
+        }
     };
     migrate_prompts(&mut prompts);
+    // A previous session already wrote data.db, so its rows still exist on disk —
+    // db_conn just could not open it this time (e.g. a transient ALTER failure).
+    // With neither JSON fallback file present either, this launch has literally no
+    // way to see the real data; presenting an empty-but-unlocked store would let the
+    // very next save (or a stray auto-save) write that emptiness to prompts.json,
+    // which load_store's own "101" rule then trusts over the DB on the next launch —
+    // wiping it for good the moment data.db is reachable again.
+    if !unreadable && settings_missing && prompts_missing && dir.join("data.db").exists() {
+        unreadable = true;
+    }
     if unreadable {
         append_crash_log(
             "DB unavailable and prompts.json/settings.json fallback could not be decrypted/parsed; \
@@ -4163,16 +4181,27 @@ async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, examples: Ve
         store.settings.examples_seeded = true;
         // 38: a failed save must not hand the UI prompts that never reached disk —
         // roll every in-memory change back (view placement included) so a restart
-        // does not silently disagree with what was just shown.
-        if !save_prompts(&app, &store) || !save_settings(&app, &store.settings) {
+        // does not silently disagree with what was just shown. The two saves are
+        // rolled back independently: if save_prompts already landed the new prompts,
+        // leaving them in store.prompts is what keeps memory matching disk — undoing
+        // them here too would make the NEXT unrelated save silently erase a write
+        // that already succeeded, and (since examples_seeded would go back to false)
+        // let a retry seed a second, duplicate batch on top of the first.
+        let prompts_ok = save_prompts(&app, &store);
+        let settings_ok = save_settings(&app, &store.settings);
+        if !prompts_ok || !settings_ok {
             let ids: std::collections::HashSet<String> = created.iter().map(|p| p.id.clone()).collect();
-            store.prompts.retain(|p| !ids.contains(&p.id));
-            store.settings.example_prompt_ids.retain(|id| !ids.contains(id));
-            store.settings.examples_seeded = false;
-            let view = store.settings.active_view_mut();
-            let key = grid_key(view.cols, view.rows);
-            if let Some(layout) = view.layouts.get_mut(&key) {
-                layout.retain(|id, _| !ids.contains(id));
+            if !prompts_ok {
+                store.prompts.retain(|p| !ids.contains(&p.id));
+            }
+            if !settings_ok {
+                store.settings.example_prompt_ids.retain(|id| !ids.contains(id));
+                store.settings.examples_seeded = false;
+                let view = store.settings.active_view_mut();
+                let key = grid_key(view.cols, view.rows);
+                if let Some(layout) = view.layouts.get_mut(&key) {
+                    layout.retain(|id, _| !ids.contains(id));
+                }
             }
             return Err("save-failed".into());
         }
@@ -4759,6 +4788,7 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
 // here instead of running at every "delete" click.
 fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) {
     let idset: std::collections::HashSet<&str> = ids.iter().map(|s| s.as_str()).collect();
+    let before = store.trash.clone();
     store.trash.retain(|p| !idset.contains(p.id.as_str()));
 
     // 39/102: a failed trash save means the purged prompt is still coming back on
@@ -4775,6 +4805,12 @@ fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) {
                 db_delete_versions(&c, id);
             }
         }
+    } else {
+        // A failed save already means the disk-side trash still has these rows and
+        // they will reappear on restart — restore the in-memory copy to match now,
+        // so this session's trash view (and any callers returning store.trash) does
+        // not show them as gone in the meantime.
+        store.trash = before;
     }
 }
 
@@ -8513,16 +8549,30 @@ fn write_snip_preview(jpeg: &[u8]) -> Option<String> {
 // update.cmd deletes the installer + itself but never its own staging folder.
 // Swept once at startup rather than on every write, since these are rare leftovers
 // from an abnormal exit, not a live resource any running instance still needs.
+// A snip preview lives only for the few minutes between taking a screenshot and
+// saving/discarding it, so anything older than this was abandoned (a crash, a
+// kill) rather than in active use — well short of catching a file another,
+// concurrently running instance ("Allow multiple instances") is using right now.
+const STALE_TEMP_FILE_AGE: Duration = Duration::from_secs(3600);
+
 fn sweep_stale_temp_files() {
     let dir = std::env::temp_dir();
     let Ok(entries) = fs::read_dir(&dir) else { return };
     let snip_prefix = format!("{}-snip-", brand::TEMP_PREFIX);
     let update_prefix = format!("{}-update-", brand::SLUG);
+    let is_stale = |e: &fs::DirEntry| {
+        e.metadata()
+            .and_then(|m| m.modified())
+            .and_then(|t| SystemTime::now().duration_since(t).map_err(std::io::Error::other))
+            .is_ok_and(|age| age >= STALE_TEMP_FILE_AGE)
+    };
     for e in entries.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
         if name.starts_with(&snip_prefix) && name.ends_with(".jpg") {
-            let _ = fs::remove_file(e.path());
-        } else if name.starts_with(&update_prefix) {
+            if is_stale(&e) {
+                let _ = fs::remove_file(e.path());
+            }
+        } else if name.starts_with(&update_prefix) && is_stale(&e) {
             let _ = fs::remove_dir_all(e.path());
         }
     }
@@ -9530,7 +9580,10 @@ async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: String) -> Resu
         // to delete. Best-effort: the store copy above is the critical part and has
         // already succeeded by this point.
         let old_backups = current.join("backups");
-        if old_backups.is_dir() {
+        // The new folder could itself be a descendant of old_backups (a user browsing
+        // into it and picking, say, its own backups/ subfolder) — copying a directory
+        // into its own descendant recurses into what it just created and never stops.
+        if old_backups.is_dir() && !new.starts_with(&old_backups) {
             if let Err(e) = copy_dir_all(&old_backups, &new.join("backups")) {
                 append_crash_log(&format!("data dir move: could not copy backups/ ({e})"));
             }
@@ -11400,9 +11453,19 @@ async fn import_all(
         let app_hotkey = store.settings.hotkey.clone();
         let dropped = drop_colliding_hotkeys(&app_hotkey, &mut store.prompts);
         store.normalize_folders(); // F25: the restored folders must match the restored prompts
-        if !save_prompts(&app, &store) || !save_settings(&app, &store.settings) {
-            store.prompts = original_prompts;
-            store.settings = original_settings;
+        // Rolled back independently, not as one combined check: if save_prompts
+        // already landed the new prompts on disk, undoing them in memory here only
+        // means the next unrelated save silently overwrites that disk state back to
+        // the pre-import prompts, discarding a write that actually succeeded.
+        let prompts_ok = save_prompts(&app, &store);
+        let settings_ok = save_settings(&app, &store.settings);
+        if !prompts_ok || !settings_ok {
+            if !prompts_ok {
+                store.prompts = original_prompts;
+            }
+            if !settings_ok {
+                store.settings = original_settings;
+            }
             store.prompts_locked = original_locked;
             return Err("save-failed".into());
         }
@@ -14137,30 +14200,53 @@ mod tests {
         );
     }
 
+    // Backdates a path's mtime so a staleness check sees it as old. FILE_FLAG_BACKUP_
+    // SEMANTICS is what lets Windows open a directory handle at all here.
+    fn backdate(path: &std::path::Path, age: Duration) {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+        let f = std::fs::OpenOptions::new()
+            .write(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(path)
+            .unwrap();
+        let old = SystemTime::now() - age;
+        f.set_times(std::fs::FileTimes::new().set_modified(old)).unwrap();
+    }
+
     // 53: a snip preview or an update stage dir surviving a crash/abnormal exit is
-    // never cleaned by anything else -- must be swept at the next startup.
+    // never cleaned by anything else -- must be swept at the next startup. 2: but
+    // NOT a fresh one -- "Allow multiple instances" lets a second launch run this
+    // same sweep while a concurrently open instance still has its own snip preview
+    // in active use, so only files older than STALE_TEMP_FILE_AGE are fair game.
     #[test]
-    fn sweep_stale_temp_files_removes_only_its_own_leftovers() {
+    fn sweep_stale_temp_files_removes_only_its_own_stale_leftovers() {
         let dir = std::env::temp_dir();
         let pid = std::process::id();
         let snip = dir.join(format!("{}-snip-{}.jpg", brand::TEMP_PREFIX, pid));
         let update_dir = dir.join(format!("{}-update-{}-1", brand::SLUG, pid));
+        let fresh_snip = dir.join(format!("{}-snip-{}-fresh.jpg", brand::TEMP_PREFIX, pid));
         let unrelated_ext = dir.join(format!("{}-snip-{}.png", brand::TEMP_PREFIX, pid)); // wrong extension
         let unrelated_file = dir.join(format!("ps-sweep-unrelated-{}.txt", pid));
 
         fs::write(&snip, b"jpeg").unwrap();
         fs::create_dir_all(&update_dir).unwrap();
         fs::write(update_dir.join("setup.exe"), b"x").unwrap();
+        fs::write(&fresh_snip, b"jpeg").unwrap();
         fs::write(&unrelated_ext, b"x").unwrap();
         fs::write(&unrelated_file, b"x").unwrap();
+        backdate(&snip, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
+        backdate(&update_dir, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
 
         sweep_stale_temp_files();
 
-        assert!(!snip.exists(), "a leftover snip preview must be swept");
-        assert!(!update_dir.exists(), "a leftover update stage dir must be swept");
+        assert!(!snip.exists(), "a stale leftover snip preview must be swept");
+        assert!(!update_dir.exists(), "a stale leftover update stage dir must be swept");
+        assert!(fresh_snip.exists(), "a snip preview still in active use must survive");
         assert!(unrelated_ext.exists(), "a differently-suffixed file must survive");
         assert!(unrelated_file.exists(), "an unrelated file must survive");
 
+        let _ = fs::remove_file(&fresh_snip);
         let _ = fs::remove_file(&unrelated_ext);
         let _ = fs::remove_file(&unrelated_file);
     }
