@@ -329,6 +329,22 @@ if re.search(r'palette:\s*true', tabs):
     if "changed.palette" not in reset_src:
         problems.append("reset: resetExpertGroup() does not reset a changed palette")
 
+
+# ---- 83: EXPERT_DROPDOWNS def type vs get() return type -----------------------
+# isRowChanged() compares val()/cfg.get() to cfg.def with strict !==. A numeric def
+# on an entry whose get() returns a String() is permanently "changed" ("0" !== 0) —
+# the copySize bug. Object-literal entries only (enumDropdown()'s default is a
+# positional arg, already a string there).
+for key in top_keys(dropdowns_src):
+    m = re.search(r'\b' + re.escape(key) + r'\s*:\s*\{', dropdowns_src)
+    if not m:
+        continue
+    entry = balanced(dropdowns_src, m.end() - 1, "{", "}")
+    def_m = re.search(r'def:\s*-?\d+(\.\d+)?\s*,', entry)
+    if def_m and "String(" in entry:
+        problems.append(f"dropdowns: '{key}' has a numeric def but get() returns a String — "
+                         "isRowChanged will always see it as changed")
+
 for p in problems:
     print("FAIL", p)
 print("PASS" if not problems else f"{len(problems)} problem(s)")

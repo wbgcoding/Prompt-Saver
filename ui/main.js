@@ -1305,7 +1305,6 @@ const EXPERT_DROPDOWNS = {
   // F12: how the self-filling date/time placeholders are written.
   dateStyle: enumDropdown("dateStyle", "valDateStyle", STYLE_OPTS, "short", "dynVars"),
   timeStyle: enumDropdown("timeStyle", "valTimeStyle", STYLE_OPTS, "short", "dynVars"),
-  // F14: preview replaces the textarea, or sits next to it.
   // F22: which key turns a press into a drag-out instead of the plain drag.
   dragOutModifier: enumDropdown("dragOutModifier", "valDragOutModifier",
     [["ctrl", "keyCtrl"], ["alt", "keyAlt"], ["shift", "keyShift"]], "ctrl", "dragOut"),
@@ -1318,7 +1317,9 @@ const EXPERT_DROPDOWNS = {
     [["hex", "optFmtHex"], ["rgb", "optFmtRgb"], ["hsl", "optFmtHsl"]], "hex", "colorPicker"),
   copySize: {
     label: "valCopySize",
-    def: 0,
+    // 83: get() always returns a String (see below) — a numeric def here made
+    // isRowChanged's strict !== comparison permanently true ("0" !== 0).
+    def: "0",
     options: () => {
       const o = [["0", t("langAuto")]];
       for (let s = SIZE_MIN; s <= SIZE_MAX; s += SIZE_STEP) o.push([String(s), String(s)]);
@@ -1890,6 +1891,7 @@ const EXPERT_PATHS = {
   screenshotDir: {
     label: "valScreenshotDir",
     gate: "screenshot", // no folder picker when the screenshot tool is off
+    def: () => defaultScreenshotDir,
     get: () => settings.ui_texts?.screenshotDir || defaultScreenshotDir,
     change: async () => {
       const dir = await invoke("pick_folder").catch(() => null);
@@ -1930,6 +1932,7 @@ const EXPERT_PATHS = {
   syncDir: {
     label: "valSyncDir",
     gate: "promptSync",
+    def: () => defaultSyncDir,
     get: () => settings.ui_texts?.syncDir || defaultSyncDir,
     change: async () => {
       const dir = await invoke("pick_folder").catch(() => null);
@@ -1997,9 +2000,14 @@ function isRowChanged(kind, key) {
     return cfg.def !== undefined && cfg.get() !== cfg.def;
   }
   if (kind === "paths") {
-    // Only a path with a "reset to default" button (screenshotDir) has a default to
-    // diff against — dataDir is always "current", never changed from anything.
-    return !!EXPERT_PATHS[key].onReset && !!settings.ui_texts?.[key];
+    // Only a path with a "reset to default" button (screenshotDir, syncDir) has a
+    // default to diff against — dataDir is always "current", never changed from
+    // anything. 83: a stored value equal to the (computed) default is unchanged —
+    // picking exactly the default folder must not mark the row as changed.
+    const cfg = EXPERT_PATHS[key];
+    if (!cfg.onReset || !cfg.def) return false;
+    const stored = settings.ui_texts?.[key] || "";
+    return !!stored && stored !== cfg.def();
   }
   return false;
 }
