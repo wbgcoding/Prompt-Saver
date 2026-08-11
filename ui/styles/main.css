@@ -2379,7 +2379,18 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .hist-expand svg { transition: transform var(--transition); }
 .hist-row.open .hist-expand svg { transform: rotate(180deg); }
 .hist-restore { flex: 0 0 auto; padding: 3px 8px; font-size: 12px; }
+/* 79: chip beside the preview when a snapshot carries rotation entries, so the row
+   itself hints there is more than one text before the user even expands it. */
+.hist-entries { flex: 0 0 auto; font-size: 10.5px; color: var(--muted); background: var(--surface-2); border-radius: 999px; padding: 1px 6px; }
 .hist-full { margin-top: 2px; padding: 8px 10px; border-radius: 6px; background: var(--bg); color: var(--fg); font-size: 12px; white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow-y: auto; }
+/* 79: one bordered block per rotation entry (numbered) — only rendered at all when
+   a snapshot or its comparison side has more than one entry, so a plain text prompt
+   keeps today's borderless single block. */
+.hist-entry-block { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.hist-entry-block:last-child { border-bottom: none; }
+.hist-entry-num { flex: 0 0 auto; min-width: 14px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.hist-name-change { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.hist-name-label { color: var(--muted); }
 /* P31: word-diff against whatever this version turned into next — no themed
    "success" colour exists yet, so added text gets a fixed, theme-independent
    green rather than inventing a 16-theme variable for one spot. */

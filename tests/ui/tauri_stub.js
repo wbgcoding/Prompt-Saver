@@ -106,7 +106,9 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   // F22: one prompt points at a file, so a drag-out can be checked against the path
   // payload and its file URI instead of the prompt body.
   file_path: i === 9 ? "C:\\Notes\\brief.txt" : "",
-  variants: [],
+  // 79: one rotating prompt, so the version-history probe can open an editor that
+  // actually has more than one entry (list_versions below gives it real snapshots).
+  variants: i === 10 ? ["Example prompt body number 11, second entry.", "Example prompt body number 11, third entry."] : [],
   rotate_mode: "",
 }));
 
@@ -275,9 +277,22 @@ const RESULTS = {
   clip_inbox_list: () => [],
   // P31: two snapshots for p6, each one word off from the next, so the diff
   // view has something real to highlight (list_versions is newest-first).
+  // 79: two snapshots for p10 (the rotating prompt) with different variant lists,
+  // so the per-entry diff/chip/name-change rendering has real rotation data to show.
   list_versions: (a) => (a && a.promptId === "p6" ? [
     { id: 2, ts: 1700000200, name: "Prompt 7", text: "Example draft body number 7." },
     { id: 1, ts: 1700000100, name: "Prompt 7", text: "Example draft text number 7." },
+  ] : a && a.promptId === "p10" ? [
+    {
+      id: 4, ts: 1700000400, name: "Prompt 11",
+      text: "Example prompt body number 11, second entry.",
+      variants: ["Example prompt body number 11, third entry."],
+    },
+    {
+      id: 3, ts: 1700000300, name: "Prompt eleven (old name)",
+      text: "Example prompt body number 11, first entry.",
+      variants: [],
+    },
   ] : []),
   missing_files: () => [],
   has_backup_password: () => true,

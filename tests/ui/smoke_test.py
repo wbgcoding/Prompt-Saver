@@ -2182,6 +2182,49 @@ PROBE = """
       const cmHist = document.getElementById('confirm-modal');
       if (!cmHist.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
     }
+    // 79: version history for a rotating prompt shows every entry, numbered, each
+    // with its own diff, an entry-count chip on the row, and a name-change line
+    // wherever the snapshot's name differs from what it became next.
+    if (!await openEditor('p10')) {
+      out.errors.push('79: the rotating prompt did not open in the editor');
+    } else {
+      document.getElementById('modal-advanced-head').click();
+      await sleep(250);
+      layoutScan('rotating prompt history');
+      const rows10 = [...document.querySelectorAll('#modal-history-body .hist-row')];
+      if (rows10.length !== 2) {
+        out.errors.push('79: the rotating prompt history shows ' + rows10.length + ' versions instead of 2');
+      } else {
+        const chip = rows10[0].querySelector('.hist-entries');
+        if (!chip || !chip.textContent.includes('2')) {
+          out.errors.push('79: the newest rotating-prompt row is missing its entry-count chip');
+        }
+        const blocks = rows10[0].querySelectorAll('.hist-entry-block');
+        if (blocks.length < 2) out.errors.push('79: the rotating prompt diff does not show a numbered block per entry');
+        if (!rows10[1].querySelector('.hist-name-change')) {
+          out.errors.push('79: a renamed version does not show the old to new name line');
+        }
+      }
+      await click('modal-close-x');
+      await sleep(200);
+      const cmHist10 = document.getElementById('confirm-modal');
+      if (!cmHist10.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+    }
+    // 79: a file/image prompt has no text field but still gets version history —
+    // only a name change to show, never an empty box.
+    if (!await openEditor('p9')) {
+      out.errors.push('79: the file prompt did not open in the editor');
+    } else {
+      document.getElementById('modal-advanced-head').click();
+      await sleep(200);
+      if (document.getElementById('modal-history').classList.contains('hidden')) {
+        out.errors.push('79: version history is hidden for a file prompt');
+      }
+      await click('modal-close-x');
+      await sleep(200);
+      const cmHist9 = document.getElementById('confirm-modal');
+      if (!cmHist9.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+    }
     // Duplicates: its own dialog, reachable only from the expert menu, and the last
     // window of the main surface that no scan had ever opened. Its group (147) lives
     // in the "System & data" tab, not whatever tab was last active.

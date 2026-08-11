@@ -6279,6 +6279,11 @@ function renderDiffInto(el, tokens) {
 }
 
 // ---- F7 version history: render the collapsible list in the editor ----
+const HISTORY_PREVIEW_LEN = 80;
+// A snapshot's full entry list — index 0 is the base text, 1..n are rotation variants.
+const versionEntries = (v) => (v.variants?.length ? [v.text || "", ...v.variants] : [v.text || ""]);
+// The editor's current, unsaved state — the "newer" side of the newest row's diff.
+const liveEntries = () => (modalState?.rotateEntries?.length ? [...modalState.rotateEntries] : [modal.text.value || ""]);
 async function loadHistory(id) {
   const body = $("modal-history-body");
   if (!body || !id) return;
@@ -6296,6 +6301,12 @@ async function loadHistory(id) {
     return;
   }
   list.forEach((v, idx) => {
+    // 79: diff against whatever came right after this snapshot — the live editor
+    // state for the newest row, the next-newer snapshot for every other one. Each
+    // side is the FULL entry list (rotation variants included), not just entry 1.
+    const olderEntries = versionEntries(v);
+    const newerEntries = idx === 0 ? liveEntries() : versionEntries(list[idx - 1]);
+    const newerName = idx === 0 ? modal.name.value : list[idx - 1].name;
     const row = document.createElement("div");
     row.className = "hist-row";
     const head = document.createElement("div");
@@ -6305,7 +6316,14 @@ async function loadHistory(id) {
     time.textContent = new Date(v.ts * 1000).toLocaleString(LANG);
     const prev = document.createElement("span");
     prev.className = "hist-preview";
-    prev.textContent = (v.name ? v.name + " — " : "") + (v.text || "").slice(0, 80);
+    prev.textContent = (v.name ? v.name + " — " : "") + olderEntries[0].slice(0, HISTORY_PREVIEW_LEN);
+    head.append(time, prev);
+    if (olderEntries.length > 1) {
+      const chip = document.createElement("span");
+      chip.className = "hist-entries";
+      chip.textContent = t("historyEntriesN").replace("{n}", String(olderEntries.length));
+      head.appendChild(chip);
+    }
     // Explicit expand chevron (collapsed by default) → reveals the COMPLETE text.
     const expand = document.createElement("button");
     expand.type = "button";
@@ -6321,10 +6339,15 @@ async function loadHistory(id) {
       try {
         const p = await invoke("restore_version", { versionId: v.id });
         if (p) {
-          const idx = prompts.findIndex((x) => x.id === p.id);
-          if (idx >= 0) prompts[idx] = p;
+          const pIdx = prompts.findIndex((x) => x.id === p.id);
+          if (pIdx >= 0) prompts[pIdx] = p;
           modal.name.value = p.name;
           modal.text.value = p.text;
+          // The open editor must pick up the restored rotation entries too, or the
+          // next save writes the still-open (stale) entries back over them.
+          modalState.rotateEntries = (p.variants || []).length ? [p.text, ...p.variants] : [];
+          modalState.rotateMode = p.rotate_mode || "";
+          renderRotateUi();
           updateLenCounter();
           toast(t("historyRestored"));
           await renderGrid(true);
@@ -6335,15 +6358,63 @@ async function loadHistory(id) {
         toast(s === "save-failed" || s === "snapshot-failed" ? t("persistFailed") : s);
       }
     });
-    head.append(time, prev, expand, restore);
+    head.append(expand, restore);
     const full = document.createElement("div");
     full.className = "hist-full hidden";
-    // 31: diff against whatever came right after this snapshot — the live editor
-    // text for the newest row, the next-newer snapshot for every other one.
-    const newerText = idx === 0 ? modal.text.value : list[idx - 1].text;
-    const tokens = diffWords(v.text || "", newerText || "");
-    if (tokens) renderDiffInto(full, tokens);
-    else full.textContent = v.text || ""; // DIFF_WORD_CAP fallback: plain text
+    if (v.name !== newerName) {
+      const nameRow = document.createElement("div");
+      nameRow.className = "hist-name-change";
+      const label = document.createElement("span");
+      label.className = "hist-name-label";
+      label.textContent = t("historyNameChanged") + ": ";
+      const oldSpan = document.createElement("span");
+      oldSpan.className = "diff-del";
+      oldSpan.textContent = v.name || "";
+      const newSpan = document.createElement("span");
+      newSpan.className = "diff-add";
+      newSpan.textContent = newerName || "";
+      nameRow.append(label, oldSpan, document.createTextNode(" → "), newSpan);
+      full.appendChild(nameRow);
+    }
+    if (olderEntries.every((e) => !e) && newerEntries.every((e) => !e)) {
+      const hint = document.createElement("div");
+      hint.className = "hint";
+      hint.textContent = t("historyNoText");
+      full.appendChild(hint);
+    } else {
+      const maxLen = Math.max(olderEntries.length, newerEntries.length);
+      for (let i = 0; i < maxLen; i++) {
+        const hasOlder = i < olderEntries.length;
+        const hasNewer = i < newerEntries.length;
+        const block = document.createElement("div");
+        if (maxLen > 1) {
+          block.className = "hist-entry-block";
+          const num = document.createElement("div");
+          num.className = "hist-entry-num";
+          num.textContent = String(i + 1);
+          block.appendChild(num);
+        }
+        const content = document.createElement("div");
+        content.className = "hist-entry-content";
+        if (!hasNewer) {
+          const span = document.createElement("span");
+          span.className = "diff-del";
+          span.textContent = olderEntries[i];
+          content.appendChild(span);
+        } else if (!hasOlder) {
+          const span = document.createElement("span");
+          span.className = "diff-add";
+          span.textContent = newerEntries[i];
+          content.appendChild(span);
+        } else {
+          const tokens = diffWords(olderEntries[i], newerEntries[i]);
+          if (tokens) renderDiffInto(content, tokens);
+          else content.textContent = olderEntries[i]; // DIFF_WORD_CAP fallback: plain text
+        }
+        block.appendChild(content);
+        full.appendChild(block);
+      }
+    }
     const toggle = () => {
       const open = !full.classList.toggle("hidden");
       expand.setAttribute("aria-expanded", String(open));
@@ -7237,11 +7308,13 @@ function syncModalImageUi(mode) {
   modal.notes.classList.remove("open");
   // 28: tags/hotkey/history share one "Advanced options" collapsible, which always
   // reopens collapsed. F20: the hotkey row exists for every prompt kind (a hotkey
-  // copies whatever the prompt holds). F7: version history only for existing text
-  // prompts. The outer section itself hides only if none of the three apply.
+  // copies whatever the prompt holds). F7/79: version history for every existing
+  // prompt kind — a snapshot also captures name-only changes on an image/file/colour
+  // prompt, so it stays reachable there too. The outer section itself hides only if
+  // none of the three apply.
   modal.hotkey.classList.toggle("hidden", !promptHotkeysOn());
   showHotkeyError("");
-  const histOn = mode === "edit" && textVisible && flag("promptHistory");
+  const histOn = mode === "edit" && flag("promptHistory");
   $("modal-history").classList.toggle("hidden", !histOn);
   if (histOn) $("modal-history-body").innerHTML = "";
   modal.advanced.classList.toggle("hidden", !tagsOn() && !promptHotkeysOn() && !histOn);
