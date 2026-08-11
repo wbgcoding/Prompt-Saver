@@ -128,6 +128,7 @@ let deleteAllTimer = null;
 let resetSettingsTimer = null;
 let expertResetTimer = null;
 let versionLabel = ""; // "Version 1.6.0", shown as the clickable releases link
+let appVersion = ""; // raw "1.6.0", for the About dialog
 
 // Hide the settings modal and reset the Updates status line back to the version
 // number — unless a real update is pending (the "update available" state stays).
@@ -10704,6 +10705,17 @@ function bind() {
   // Clicking the app logo opens the project's GitHub page (drag still moves the window).
   $("app-logo")?.addEventListener("click", () => invoke("open_repo").catch((e) => toast(String(e))));
 
+  // 76: About dialog — version + project page link.
+  const aboutEl = $("about-modal");
+  const closeAbout = () => aboutEl.classList.add("hidden");
+  $("about-btn").addEventListener("click", () => aboutEl.classList.remove("hidden"));
+  $("about-close").addEventListener("click", closeAbout);
+  $("about-ok").addEventListener("click", closeAbout);
+  $("about-repo").addEventListener("click", () => invoke("open_repo").catch((e) => toast(String(e))));
+  aboutEl.addEventListener("pointerdown", (e) => {
+    if (e.target === aboutEl) closeAbout();
+  });
+
   // 97: in-app documentation.
   const helpEl = $("help");
   $("help-open").addEventListener("click", openHelp);
@@ -11037,6 +11049,7 @@ function bind() {
     else if (!$("tag-modal").classList.contains("hidden")) closeTagManager();
     else if (!ctxEl.classList.contains("hidden")) closeCtx();
     else if (!$("update-modal").classList.contains("hidden")) $("update-modal").classList.add("hidden");
+    else if (!$("about-modal").classList.contains("hidden")) $("about-modal").classList.add("hidden");
     else if (!$("snip-modal").classList.contains("hidden")) $("snip-modal").classList.add("hidden");
     else if (!viewModal.root.classList.contains("hidden")) closeViewModal();
     else if (!modal.root.classList.contains("hidden")) confirmDiscardIfDirty().then((ok) => { if (ok) closeModal(); });
@@ -11416,8 +11429,10 @@ async function init() {
     setupDragDrop();
     await applySettingsUi();
     invoke("app_version").then((v) => {
+      appVersion = v;
       versionLabel = t("versionInstalled").replace("{v}", v);
       $("update-version").textContent = versionLabel;
+      $("about-version").textContent = t("versionInstalled").replace("{v}", appVersion);
     }).catch(() => {});
     invoke("current_data_dir").then((d) => { currentDataDir = d || ""; }).catch(() => {});
     invoke("default_screenshot_dir").then((d) => { defaultScreenshotDir = d || ""; }).catch(() => {});

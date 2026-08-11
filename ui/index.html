@@ -919,6 +919,30 @@
     </div>
   </div>
 
+  <!-- About: version + project page link -->
+  <div id="about-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal modal-narrow">
+      <div class="modal-titlebar">
+        <h2 class="modal-title" data-i18n="aboutTitle">About</h2>
+        <button id="about-close" class="icon-btn modal-x" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="about-body">
+        <img class="about-logo" src="assets/icon.svg" alt="" aria-hidden="true" />
+        <div class="about-name" data-brand></div>
+        <div id="about-version" class="about-version"></div>
+        <div class="about-copy">© 2026 BG Coding</div>
+      </div>
+      <div class="modal-actions">
+        <button id="about-repo" class="ghost-btn" data-i18n="aboutRepo">Project page on GitHub</button>
+        <button id="about-ok" class="primary-btn" data-i18n="close">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Screenshot taken: offer to keep it as a button -->
   <div id="snip-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal snip-modal-box">

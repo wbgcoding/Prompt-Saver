@@ -1826,6 +1826,12 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 /* Release notes need a little more width than a plain confirm dialog: their tables
    and headings would otherwise wrap after every other word. */
 #update-modal .modal { width: min(580px, 94vw); }
+/* 76: About dialog — logo, name, version, copyright, all centered like a splash. */
+.about-body { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.about-logo { width: 56px; height: 56px; }
+.about-name { font-size: 16px; font-weight: 700; }
+.about-version { color: var(--muted); font-size: 13px; }
+.about-copy { color: var(--muted); font-size: 12px; }
 /* The box takes the height of whatever the release brought — a two-line note stays
    two lines tall, a long one scrolls instead of pushing the buttons off screen. */
 .update-notes {

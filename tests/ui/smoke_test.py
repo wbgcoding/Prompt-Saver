@@ -273,6 +273,29 @@ PROBE = """
       await sleep(120);
       document.getElementById('settings').classList.add('hidden');
     }
+    // 76: About dialog — version fills in, no raw i18n key, closes again.
+    {
+      document.getElementById('gear').click();
+      await sleep(120);
+      document.getElementById('about-btn').click();
+      await sleep(120);
+      const aboutModal = document.getElementById('about-modal');
+      if (aboutModal.classList.contains('hidden')) {
+        out.errors.push('76: the About dialog did not open');
+      } else {
+        layoutScan('about dialog');
+        const verText = document.getElementById('about-version').textContent.trim();
+        if (!verText) out.errors.push('76: the About dialog version is empty');
+        for (const el of aboutModal.querySelectorAll('*')) {
+          const txt = (el.children.length ? '' : el.textContent || '').trim();
+          if (/^about[A-Z][A-Za-z]+$/.test(txt)) out.errors.push('76: About dialog shows a raw i18n key: ' + txt);
+        }
+        document.getElementById('about-ok').click();
+        await sleep(120);
+        if (!aboutModal.classList.contains('hidden')) out.errors.push('76: the About dialog did not close');
+      }
+      document.getElementById('settings').classList.add('hidden');
+    }
     // 97/21: in-app documentation — every tab reaches the page, none is empty,
     // search narrows the list, a tip callout shows up somewhere.
     {
