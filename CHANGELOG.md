@@ -110,6 +110,21 @@ until you turn it on.
   feature on takes a backup first, and the folder is written the moment you pick
   it. **The files are plain text** — the database is not — so keep anything
   sensitive out of a folder other people or other services can read.
+- **An About dialog** — a button beside Check for updates opens the current
+  version and a link to the project page.
+- **A real help search** — searching now matches several words in any order,
+  ranks title hits above body hits, highlights the matching words, shows which
+  chapter each result belongs to, and collapses results down to one line each
+  so a broad search stays scannable instead of a wall of expanded text.
+- **Twenty settings that were fixed constants are now expert values**: the
+  colour-picker loupe grid size, screenshot quality and an optional capture
+  delay, a rotating prompt's tooltip preview length, the Markdown-preview and
+  syntax-highlight size caps, the version-history diff word cap and preview
+  length (with a switch to turn the word diff off entirely), the drag-vs-click
+  distance, the prompt box's max height, popover edge padding, the toast width
+  and position, dialog max height, the library search delay, the copy-history
+  window width, the tag-filter popover's column count and sort order, how long
+  a confirm button stays armed, and the background update-check interval.
 
 ### Improved
 
@@ -404,6 +419,16 @@ until you turn it on.
   pointer move.
 - The help text had the screen-capture-protection default backwards, and
   documented the wrong syntax for self-filling placeholders.
+- **The version-history diff never showed a change if only a rotating
+  prompt's later entries changed** — only entry 1 was ever compared, and
+  restoring a version left the editor's still-open rotation entries in place,
+  so the next save quietly overwrote what had just been restored. Prompts
+  with no visible text (images, files, colours) never showed version history
+  at all, even though a name change still creates a snapshot for them.
+- **The copy-text-size and screenshot/sync-folder path rows always showed
+  as "changed"**, permanently offering an undo and matching the "only
+  changed" filter, because their stored value was compared against a
+  default of a different type.
 
 ### Removed
 
@@ -428,6 +453,12 @@ until you turn it on.
 - **The safety backup before Reset settings and before Delete all data is now
   on by default**, and split into two separate switches so either case can be
   turned off on its own.
+- **Every expert-menu row's "changed" tooltip no longer shows when it was last
+  changed.** The undo arrow and the "only changed" filter stay exactly as
+  before; only the date/time line is gone.
+- The help tip line now sits behind a lightbulb icon instead of a text prefix,
+  and the warning line above the expert menu is shorter and carries a warning
+  icon.
 - The product name now lives in one generated file per layer instead of being
   spelled out across the code, the interface and the build scripts. Nothing about
   the app changes: it keeps the same data folder, autostart entry and update
