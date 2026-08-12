@@ -425,6 +425,9 @@ until you turn it on.
 
 ### Changed
 
+- **The safety backup before Reset settings and before Delete all data is now
+  on by default**, and split into two separate switches so either case can be
+  turned off on its own.
 - The product name now lives in one generated file per layer instead of being
   spelled out across the code, the interface and the build scripts. Nothing about
   the app changes: it keeps the same data folder, autostart entry and update

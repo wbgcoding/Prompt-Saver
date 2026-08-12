@@ -1018,6 +1018,10 @@ const FLAG_LABELS = {
   trayFavs: "flagTrayFavs",             // F23 favourites section in the tray menu
   // Checks at launch, but only while the normal auto-update setting is on.
   checkUpdateOnStart: "flagCheckUpdateOnStart",
+  // 85: split from the old single autoBackupBeforeWipe so either case can be
+  // switched off on its own. Both ship default on.
+  backupBeforeReset: "flagBackupBeforeReset",
+  backupBeforeDelete: "flagBackupBeforeDelete",
 };
 const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -1070,7 +1074,6 @@ const OPT_FLAG_LABELS = {
   dimToolbar: "flagDimToolbar",                 // header dims until hovered
   closeOnCopy: "flagCloseOnCopy",               // hide window after copying a prompt
   dedupCopyLog: "flagDedupCopyLog",             // skip identical consecutive copies
-  autoBackupBeforeWipe: "flagAutoBackupBeforeWipe", // backup before reset/delete
   // Keep the clipboard-inbox and copy-history buttons in the toolbar even while
   // their feature is switched off, so the feature can be paused, not hidden.
   pausedIcons: "flagPausedIcons",
@@ -1402,7 +1405,7 @@ const EXPERT_TABS = [
     { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "gridViewBorder", "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }, "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
     { title: "expGroupPrivacy", flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
     { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances"], values: ["kbFocusFadeMs"], paths: ["dataDir"] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "autoBackupBeforeWipe", "importExport"], values: ["dupThreshold"], selects: ["trashRetentionDays"],
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport"], values: ["dupThreshold"], selects: ["trashRetentionDays"],
       actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }] },
   ] },
 ];
@@ -1535,7 +1538,7 @@ const EXPERT_TIPS = [
   "allowScreenshot", "copyHistory", "historyTimestamps", "historyGrouped",
   "dedupCopyLog", "cleanupFiles", "blurTilesUntilHover",
   // Tools / data
-  "dupFinder", "clipWatcher", "backupGfs",
+  "dupFinder", "clipWatcher", "backupGfs", "backupBeforeReset", "backupBeforeDelete",
   "usageStats", "promptSync", "syncDir",
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "kbFocusFadeMs", "snipPreviewVh",
@@ -7150,9 +7153,9 @@ async function restoreBackup(name) {
   const dataOn = $("confirm-cb-data").checked;
   const settingsOn = $("confirm-cb-settings").checked;
   const scope = dataOn && settingsOn ? "all" : dataOn ? "data" : "settings";
-  // P64: the same safety net as reset/delete — restoring replaces the current
-  // data just as permanently, so it earns the same offer of a backup first.
-  await maybeBackupBeforeWipe();
+  // P64/85: the same safety net as delete — restoring replaces the current
+  // data just as permanently, so it follows the same "before delete" switch.
+  await maybeBackupBeforeWipe("delete");
   try { await invoke("restore_backup", { name, keep: Math.round(val("backupKeep")), scope }); }
   catch (e) { toast(String(e)); } // on success the app relaunches
 }
@@ -10024,14 +10027,15 @@ async function deleteData() {
   }
   clearTimeout(deleteAllTimer);
   disarmButton(btn, t("deleteData"));
-  await maybeBackupBeforeWipe();
+  await maybeBackupBeforeWipe("delete");
   await invoke("delete_all_data");
   await reloadEverything(); // in place: a page reload repaints the whole window
 }
 
-// Expert opt: take a safety backup before a destructive reset/delete.
-async function maybeBackupBeforeWipe() {
-  if (!optFlag("autoBackupBeforeWipe")) return;
+// 85: expert opt (Standard-an, split so a user who only wants one of the two can
+// switch the other off). Take a safety backup before a destructive reset/delete.
+async function maybeBackupBeforeWipe(kind) {
+  if (!flag(kind === "reset" ? "backupBeforeReset" : "backupBeforeDelete")) return;
   try { await invoke("create_backup", { keep: Math.round(val("backupKeep")) }); } catch { /* best-effort */ }
 }
 
@@ -10045,7 +10049,7 @@ async function resetSettings() {
   }
   clearTimeout(resetSettingsTimer);
   disarmButton(btn, t("resetSettings"));
-  await maybeBackupBeforeWipe();
+  await maybeBackupBeforeWipe("reset");
   await invoke("reset_settings");
   await reloadEverything(); // in place: a page reload repaints the whole window
 }

@@ -3417,14 +3417,12 @@ PROBE = """
       if (document.body.classList.contains('library-front')) out.errors.push('the raised-library state outlives the library');
       if (bm.classList.contains('hidden')) out.errors.push('there is no backups dialog left to jump back to');
     }
-    // P64: restoring a managed backup goes through maybeBackupBeforeWipe() — the
-    // same safety net already used before reset/delete-all. That helper's own
-    // gating (the default-off autoBackupBeforeWipe flag) is this app's
-    // established, already-relied-on mechanism; here we only prove restoreBackup
-    // actually calls it, using the fixture's default (off) state, so a nothing-
-    // happens result is the correct one and cheap to verify without walking the
-    // expert menu (which a later 130%-zoom layout check turned out to be
-    // sensitive to — not worth touching under this pass's time budget).
+    // P64/85: restoring a managed backup goes through maybeBackupBeforeWipe("delete")
+    // — the same safety net used before delete-all, gated by the backupBeforeDelete
+    // flag. That flag ships default ON (85), so the fixture's default state proves
+    // restoreBackup actually wires the call through, cheap to verify without
+    // walking the expert menu (which a later 130%-zoom layout check turned out to
+    // be sensitive to — not worth touching under this pass's time budget).
     {
       const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
       calls().length = 0;
@@ -3450,8 +3448,8 @@ PROBE = """
         if (!allArgs || allArgs[1].scope !== 'all') {
           out.errors.push('both checkboxes checked must restore scope "all", got ' + (allArgs && allArgs[1].scope));
         }
-        if (calls().includes('create_backup')) {
-          out.errors.push('a safety backup ran although autoBackupBeforeWipe is off by default');
+        if (!calls().includes('create_backup')) {
+          out.errors.push('no safety backup ran although backupBeforeDelete is on by default');
         }
       }
     }
