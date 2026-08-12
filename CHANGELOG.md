@@ -116,9 +116,10 @@ until you turn it on.
   ranks title hits above body hits, highlights the matching words, shows which
   chapter each result belongs to, and collapses results down to one line each
   so a broad search stays scannable instead of a wall of expanded text.
-- **Twenty settings that were fixed constants are now expert values**: the
-  colour-picker loupe grid size, screenshot quality and an optional capture
-  delay, a rotating prompt's tooltip preview length, the Markdown-preview and
+- **Twenty-one settings that were fixed constants are now expert values**: the
+  colour-history swatch size, the colour-picker loupe grid size, screenshot
+  quality and an optional capture delay, a rotating prompt's tooltip preview
+  length, the Markdown-preview and
   syntax-highlight size caps, the version-history diff word cap and preview
   length (with a switch to turn the word diff off entirely), the drag-vs-click
   distance, the prompt box's max height, popover edge padding, the toast width

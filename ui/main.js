@@ -3679,7 +3679,9 @@ function applyRotateState(tile, id) {
   if (badge) badge.textContent = rotateBadgeLabel(id);
   const s = rotateState.get(id);
   if (s && flag("tilePreview")) {
-    const short = s.text.length > ROTATE_SHORT_MAX ? `${s.text.slice(0, ROTATE_SHORT_MAX)}…` : s.text;
+    // 87: 0 = show the whole entry, same convention as notesTipLen/clipNote.
+    const short = ROTATE_SHORT_MAX > 0 && s.text.length > ROTATE_SHORT_MAX
+      ? `${s.text.slice(0, ROTATE_SHORT_MAX)}…` : s.text;
     tile.dataset.tipRotate = t("tileTipRotate").replace("{text}", short);
   }
 }
