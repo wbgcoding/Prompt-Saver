@@ -1258,6 +1258,8 @@ const EXPERT_VALUES = {
   loupeZoom: { label: "valLoupeZoom", min: 4, max: 16, step: 1, def: 4, unit: "×", gate: "colorPicker" },
   // 19: how many recent picks the right-click popover (and the overlay strip) keep. 0 = off.
   pickHistoryN: { label: "valPickHistoryN", min: 0, max: 20, step: 1, def: 5, unit: "", gate: "colorPicker" },
+  // 86: swatch diameter in the right-click colour-history popover.
+  pickSwatchPx: { label: "valPickSwatchPx", min: 12, max: 40, step: 1, def: 22, unit: "px", gate: "colorPicker" },
   // 32: cap on how many variants one rotating prompt may hold.
   rotateMaxEntries: { label: "valRotateMaxEntries", min: 2, max: 50, step: 1, def: 20, unit: "", gate: "rotatingPrompts" },
 };
@@ -1360,7 +1362,7 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app. F26 (pipette) sits with the
     // screenshot tool: both are capture tools on the composer bar.
-    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", "colorPicker", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }], values: ["snipPreviewVh", "loupeZoom", "pickHistoryN", "rotateMaxEntries"], dropdowns: ["pickerFormat", "rotateDefaultMode"], paths: ["screenshotDir"] },
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", "colorPicker", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }], values: ["snipPreviewVh", "loupeZoom", "pickHistoryN", "pickSwatchPx", "rotateMaxEntries"], dropdowns: ["pickerFormat", "rotateDefaultMode"], paths: ["screenshotDir"] },
     // F12/F13 placeholders, from the grammar to where the app asks for them.
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
     // The editor: what it shows beside the text box. F14/F15 belong together — the
@@ -1498,6 +1500,7 @@ function applyValues() {
   root.setProperty("--tag-chip-px", `${val("tagChipPx")}px`);
   root.setProperty("--hl-font-px", `${val("hlFontPx")}px`);
   root.setProperty("--view-group-rows", String(val("viewGroupMaxRows")));
+  root.setProperty("--pick-swatch", `${val("pickSwatchPx")}px`);
   BUBBLE_MS = val("bubbleMs");
   TOAST_MS = val("toastMs");
   PREVIEW_MAX = val("previewLen");
@@ -1518,7 +1521,7 @@ const EXPERT_TIPS = [
   "lengthCounter", "promptHistory", "editorMonospace",
   "promptNotes", "notesInTooltip", "notesTipLen",
   "mdPreview", "codeHighlight", "codeAutoDetect", "hlFontPx",
-  "colorPicker", "pickerFormat", "loupeZoom", "pickHistoryN",
+  "colorPicker", "pickerFormat", "loupeZoom", "pickHistoryN", "pickSwatchPx",
   "trayRecent", "trayFavs", "trayRecentN", "trayFavN",
   "checkUpdateOnStart", "showUpdates", "importExport", "dimToolbar", "keyboardNav", "allowMultipleInstances",
   "headerSeparators", "floating",

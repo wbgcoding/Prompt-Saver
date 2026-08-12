@@ -3401,7 +3401,9 @@ body.drag-over::after {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 140px;
+  min-width: 0;
+  width: max-content;
+  max-width: 280px;
   max-height: 240px;
   overflow-y: auto;
   padding: 4px;
@@ -3413,7 +3415,7 @@ body.drag-over::after {
 .pick-history-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 4px 8px;
   border: none;
   border-radius: 6px;
@@ -3424,13 +3426,13 @@ body.drag-over::after {
 }
 .pick-history-row:hover { background: var(--surface-2); }
 .pick-history-swatch {
-  width: 16px;
-  height: 16px;
+  width: var(--pick-swatch, 22px);
+  height: var(--pick-swatch, 22px);
   flex: 0 0 auto;
   border-radius: 50%;
   border: 1px solid var(--border);
 }
-.pick-history-hex { font-family: monospace; font-size: 12px; }
+.pick-history-hex { font-family: monospace; font-size: 12.5px; }
 .pick-history-empty { padding: 6px 10px; color: var(--muted); font-size: 12px; max-width: 220px; }
 .num-pop::-webkit-scrollbar { width: 6px; }
 .num-pop::-webkit-scrollbar-track { background: transparent; margin: 6px 0; }
