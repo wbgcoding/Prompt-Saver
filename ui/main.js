@@ -4,7 +4,7 @@ import { applyTerms } from "./terms.js";
 import { I18N, LANGS } from "./i18n.js";
 import { FONTS, FONT_LABELS, fitText } from "./fonts.js";
 import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./media.js";
-import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT } from "./copyDefaults.js";
+import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
 
@@ -77,8 +77,8 @@ const modal = {
   rotateReset: $("modal-rotate-reset"),
 };
 
-const DRAG_THRESHOLD = 5;
-const INPUT_MAX = 160; // keep in sync with .input max-height
+let DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT; // 87: expert-tunable
+let INPUT_MAX = 160; // keep in sync with .input max-height (87: expert-tunable via composerMaxH)
 // Grid-dimension and view-count limits are expert values: val("gridMax") /
 // val("maxViews"). The backend keeps a hard ceiling of 100 for both.
 let PREVIEW_MAX = 600; // tooltip preview length (expert-tunable)
@@ -87,7 +87,7 @@ let TOAST_MS = 1400; // toast lifetime for plain messages (expert-tunable)
 const SIZE_MIN = 10; // text size range, steps of 2 (keep in sync with backend)
 const SIZE_MAX = 40;
 const SIZE_STEP = 2;
-const DISARM_MS = 3000; // confirm-button auto-disarm delay
+let DISARM_MS = 3000; // confirm-button auto-disarm delay (87: expert-tunable)
 
 const clampGrid = (n, fallback) =>
   Math.min(val("gridMax"), Math.max(1, Math.round(Number(n) || fallback)));
@@ -610,7 +610,7 @@ const uiZoom = () => 1;
 // the window on both axes — a popover that opens past an edge is unreachable, and
 // that was the same defect in the theme editor, the value pickers and the colour
 // row. Call it AFTER the content is built: the size has to be measurable.
-const POP_PAD = 6;
+let POP_PAD = 6; // 87: expert-tunable
 function placePopover(el, rect, gap = 4) {
   el.classList.remove("hidden"); // a hidden element has no box to measure
   el.style.maxHeight = "";
@@ -1022,6 +1022,11 @@ const FLAG_LABELS = {
   // switched off on its own. Both ship default on.
   backupBeforeReset: "flagBackupBeforeReset",
   backupBeforeDelete: "flagBackupBeforeDelete",
+  // 87: help panel — the tip line under each article, and search-hit highlighting.
+  helpTips: "flagHelpTips",
+  helpHighlight: "flagHelpHighlight",
+  // 87: word-level diff in the version-history expanded view.
+  historyDiff: "flagHistoryDiff",
 };
 const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -1187,6 +1192,8 @@ const EXPERT_VALUES = {
   historyMax: { label: "valHistoryMax", def: 100, unit: "", stops: HISTORY_STOPS, gate: "copyHistory" },
   // Max copy-history rows the journal renders at once (UI cap, not storage).
   journalLimit: { label: "valJournalLimit", min: 50, max: 10000, step: 50, def: 100, unit: "", gate: "copyHistory" },
+  // 87: copy-history dialog width.
+  journalWidth: { label: "valJournalWidth", min: 520, max: 1400, step: 20, def: 980, unit: "px", gate: "copyHistory" },
   // Block re-copying the SAME prompt within this window (0 = off). Never blocks others.
   copyCooldownMs: { label: "valCopyCooldown", min: 0, max: 10000, step: 100, def: COOLDOWN_MS_DEFAULT, unit: "ms" },
   // Header favorites-star size.
@@ -1200,18 +1207,30 @@ const EXPERT_VALUES = {
   libraryWidth: { label: "valLibraryWidth", min: 520, max: 1400, step: 20, def: 900, unit: "px" },
   // How many recent search terms the suggestions dropdown keeps + shows.
   searchRecentMax: { label: "valSearchRecentMax", min: 1, max: 20, step: 1, def: 8, unit: "", gate: "searchSuggest" },
+  // 87: how long the library search waits after the last keystroke before it re-filters.
+  searchDebounceMs: { label: "valSearchDebounceMs", min: 0, max: 600, step: 10, def: 120, unit: "ms", gate: "librarySearch" },
   // Tile geometry.
   tileRadius: { label: "valTileRadius", min: 0, max: 30, step: 1, def: 10, unit: "px" },
   tileBorderWidth: { label: "valTileBorderWidth", min: 0, max: 6, step: 1, def: 1, unit: "px" },
   // Tile hover-lift travel (paired with the tileHoverLift toggle).
   hoverLift: { label: "valHoverLift", min: 1, max: 12, step: 1, def: 1, unit: "px", gate: "tileHoverLift" },
+  // 87: drag-vs-click distance before a pointer-down turns into a drag (tiles, tabs, folders).
+  dragThreshold: { label: "valDragThreshold", min: 2, max: 20, step: 1, def: DRAG_THRESHOLD_DEFAULT, unit: "px" },
   // Header vertical padding + screenshot-preview max height.
   headerPadY: { label: "valHeaderPadY", min: 2, max: 30, step: 1, def: 10, unit: "px" },
   snipPreviewVh: { label: "valSnipPreviewVh", min: 30, max: 92, step: 1, def: 74, unit: "%", gate: "screenshot" },
+  // 87: screenshot JPEG quality + a delay before the capture (lets a menu stay open in shot).
+  snipQuality: { label: "valSnipQuality", min: 50, max: 100, step: 5, def: 80, unit: "%", gate: "screenshot" },
+  snipDelayMs: { label: "valSnipDelayMs", min: 0, max: 5000, step: 100, def: 0, unit: "ms", gate: "screenshot" },
   // Scrollbar thickness across every dialog (thumb keeps its 3px inset border).
   scrollbarWidth: { label: "valScrollbarWidth", min: 8, max: 20, step: 1, def: 12, unit: "px", gate: "!hideScrollbars" },
   // Frosted-glass dialog background blur (paired with the frostedModals toggle).
   frostedBlur: { label: "valFrostedBlur", min: 0, max: 20, step: 1, def: 4, unit: "px", gate: "frostedModals" },
+  // 87: composer textarea auto-grow cap, popover edge padding, toast width, modal max height.
+  composerMaxH: { label: "valComposerMaxH", min: 80, max: 400, step: 10, def: 160, unit: "px" },
+  popoverPad: { label: "valPopoverPad", min: 2, max: 24, step: 1, def: 6, unit: "px" },
+  toastWidth: { label: "valToastWidth", min: 260, max: 700, step: 20, def: 440, unit: "px" },
+  modalMaxVh: { label: "valModalMaxVh", min: 60, max: 95, step: 1, def: 88, unit: "%" },
   // Privacy blur strength (each paired with its "blur until hover" toggle).
   tileBlur: { label: "valTileBlur", min: 1, max: 16, step: 1, def: 4, unit: "px", gate: "blurTilesUntilHover" },
   mediaBlur: { label: "valMediaBlur", min: 1, max: 30, step: 1, def: 10, unit: "px", gate: "blurMediaUntilHover" },
@@ -1226,6 +1245,8 @@ const EXPERT_VALUES = {
   statsTopN: { label: "valStatsTopN", min: 5, max: 100, step: 1, def: 10, unit: "", gate: "usageStats" },
   // F6 duplicate finder: similarity threshold.
   dupThreshold: { label: "valDupThreshold", min: 70, max: 100, step: 1, def: 90, unit: "%", gate: "dupFinder" },
+  // 87: how long a confirm button (delete etc.) stays armed before it auto-resets.
+  disarmMs: { label: "valDisarmMs", min: 1000, max: 10000, step: 500, def: 3000, unit: "ms" },
   // F2 automatic backups: how many rotating snapshots to keep.
   backupKeep: { label: "valBackupKeep", min: 1, max: 50, step: 1, def: 10, unit: "", gate: "autoBackup" },
   // F2 GFS retention tiers (kept per distinct day / week / month / year).
@@ -1243,6 +1264,8 @@ const EXPERT_VALUES = {
   kbFocusFadeMs: { label: "valKbFocusFade", min: 500, max: 10000, step: 500, def: 2000, unit: "ms", gate: "keyboardNav" },
   // F1 tag chip text size (editor, library filter row, manager).
   tagChipPx: { label: "valTagChipPx", min: 10, max: 20, step: 1, def: 12, unit: "px", gate: "tags" },
+  // 87: column count for the grid tag-filter popover (81).
+  tagPopCols: { label: "valTagPopCols", min: 1, max: 3, step: 1, def: 2, unit: "", gate: "tags" },
   // F3 how many custom themes may be stored (keeps the settings blob bounded).
   customThemeMax: { label: "valCustomThemeMax", min: 1, max: 20, step: 1, def: 8, unit: "", gate: "customThemes" },
   // F9 how many views a group popover lists before it starts scrolling.
@@ -1252,16 +1275,27 @@ const EXPERT_VALUES = {
   trayFavN: { label: "valTrayFavN", min: 1, max: 10, step: 1, def: 10, unit: "", gate: "trayFavs" },
   // F15 code text size inside the Markdown preview.
   hlFontPx: { label: "valHlFontPx", min: 10, max: 18, step: 1, def: 13, unit: "px", gate: "codeHighlight" },
+  // 87: Markdown preview + syntax-highlight size caps, past which they fall back to plain text.
+  mdMaxChars: { label: "valMdMaxChars", min: 10000, max: 500000, step: 10000, def: 100000, unit: "", gate: "mdPreview" },
+  hlMaxChars: { label: "valHlMaxChars", min: 2000, max: 100000, step: 1000, def: 20000, unit: "", gate: "codeHighlight" },
+  // 87: word-diff cap in version history (500: minimum where a diff is still worth it).
+  diffWordCap: { label: "valDiffWordCap", min: 500, max: 20000, step: 500, def: 4000, unit: "", gate: "historyDiff" },
+  // 87: version-history preview line length.
+  historyPreviewLen: { label: "valHistoryPreviewLen", min: 20, max: 300, step: 10, def: 80, unit: "", gate: "promptHistory" },
   // F17 how much of a private note the tile tooltip shows (0 = the whole note).
   notesTipLen: { label: "valNotesTipLen", min: 0, max: 2000, step: 20, def: 300, unit: "", gate: "notesInTooltip" },
   // F26 how far the picker's loupe magnifies the pixels around the cursor.
   loupeZoom: { label: "valLoupeZoom", min: 4, max: 16, step: 1, def: 4, unit: "×", gate: "colorPicker" },
+  // 87: loupe grid size (odd numbers only — the centre cell must be the exact picked pixel).
+  loupeCells: { label: "valLoupeCells", min: 7, max: 25, step: 2, def: 15, unit: "", gate: "colorPicker" },
   // 19: how many recent picks the right-click popover (and the overlay strip) keep. 0 = off.
   pickHistoryN: { label: "valPickHistoryN", min: 0, max: 20, step: 1, def: 5, unit: "", gate: "colorPicker" },
   // 86: swatch diameter in the right-click colour-history popover.
   pickSwatchPx: { label: "valPickSwatchPx", min: 12, max: 40, step: 1, def: 22, unit: "px", gate: "colorPicker" },
   // 32: cap on how many variants one rotating prompt may hold.
   rotateMaxEntries: { label: "valRotateMaxEntries", min: 2, max: 50, step: 1, def: 20, unit: "", gate: "rotatingPrompts" },
+  // 87: tile tooltip preview length for a rotating prompt's short text.
+  rotateTipLen: { label: "valRotateTipLen", min: 0, max: 300, step: 10, def: 60, unit: "", gate: "rotatingPrompts" },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -1272,6 +1306,8 @@ const EXPERT_SELECTS = {
   // 91: how long a deleted prompt sits in the trash before it is purged automatically.
   // No feature gate — trash is not optional, delete always goes through it.
   trashRetentionDays: { label: "valTrashRetentionDays", options: [0, 7, 30, 90, 365], def: 30, unit: "d", zeroLabel: "retentionForever" },
+  // 87: how often the background thread checks for a new release.
+  updateCheckH: { label: "valUpdateCheckH", options: [6, 12, 24, 48, 168], def: 24, unit: "h", gate: "showUpdates" },
 };
 
 // F12 date/time width, shared by both style dropdowns. "iso" is the only entry
@@ -1320,6 +1356,12 @@ const EXPERT_DROPDOWNS = {
   // F26: the notation the picked colour is copied in.
   pickerFormat: enumDropdown("pickerFormat", "valPickerFormat",
     [["hex", "optFmtHex"], ["rgb", "optFmtRgb"], ["hsl", "optFmtHsl"]], "hex", "colorPicker"),
+  // 87: which edge the toast notifications rise from.
+  toastPos: enumDropdown("toastPos", "valToastPos",
+    [["bottom", "optToastBottom"], ["top", "optToastTop"]], "bottom"),
+  // 87: tag manager / filter chip order.
+  tagSort: enumDropdown("tagSort", "valTagSort",
+    [["alpha", "optTagSortAlpha"], ["usage", "optTagSortUsage"]], "alpha", "tags"),
   copySize: {
     label: "valCopySize",
     // 83: get() always returns a String (see below) — a numeric def here made
@@ -1362,12 +1404,12 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app. F26 (pipette) sits with the
     // screenshot tool: both are capture tools on the composer bar.
-    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", "colorPicker", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }], values: ["snipPreviewVh", "loupeZoom", "pickHistoryN", "pickSwatchPx", "rotateMaxEntries"], dropdowns: ["pickerFormat", "rotateDefaultMode"], paths: ["screenshotDir"] },
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", "colorPicker", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipDelayMs", "rotateMaxEntries", "rotateTipLen"], dropdowns: ["pickerFormat", "rotateDefaultMode"], paths: ["screenshotDir"] },
     // F12/F13 placeholders, from the grammar to where the app asks for them.
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
     // The editor: what it shows beside the text box. F14/F15 belong together — the
     // highlighter only ever paints inside the preview.
-    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, "lengthCounter", "promptHistory", "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen"], dropdowns: ["counterUnits"] },
+    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
     { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "closeOnCopy", "copyBubble", "copyFlash"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"], dropdowns: ["dragOutModifier"] },
     // Floating buttons and the two kinds of folder they can form.
@@ -1382,22 +1424,22 @@ const EXPERT_TABS = [
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
     // and pure looks. One 26-entry blob made everything hard to find.
-    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale"], values: ["hoverLift"] },
+    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale"], values: ["hoverLift", "dragThreshold"] },
     { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipDelay", "tooltipTimeout"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow"], values: ["tileRadius", "tileBorderWidth"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
   ] },
   { title: "expTabAppearance", groups: [
     { title: "expGroupScale", values: ["uiScale", "modalScale", "composerScale", "iconScale", "primaryScale"] },
-    { title: "expGroupVisual", flags: ["animations", "accentHeader", "hideScrollbars", { key: "accentScrollbar", gate: "!hideScrollbars" }, "smoothScroll", "frostedModals"], values: ["animSpeed", "gridGap", "gridPad", "headerPadY", "modalRadius", "overlayDim", "scrollbarWidth", "frostedBlur"], dropdowns: ["copySize", "copyFont"] },
+    { title: "expGroupVisual", flags: ["animations", "accentHeader", "hideScrollbars", { key: "accentScrollbar", gate: "!hideScrollbars" }, "smoothScroll", "frostedModals"], values: ["animSpeed", "gridGap", "gridPad", "headerPadY", "modalRadius", "overlayDim", "scrollbarWidth", "frostedBlur", "composerMaxH", "popoverPad", "toastWidth", "modalMaxVh"], dropdowns: ["copySize", "copyFont", "toastPos"] },
     { title: "expGroupColors", flags: ["customThemes"], values: ["customThemeMax"], palette: true },
     { title: "expGroupLimits", values: ["maxViews", "gridMax", "previewLen", "nameMaxLen", "bubbleMs", "toastMs"] },
   ] },
   { title: "expTabLibrary", groups: [
-    { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "confirmDiscard"], values: ["searchRecentMax", "libraryCols", "libraryWidth", "libPreviewLines"], dropdowns: ["fuzzyMaxTypos"] },
-    { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx"], dropdowns: ["tagFilterMode"] },
+    { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "confirmDiscard"], values: ["searchRecentMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs"], dropdowns: ["fuzzyMaxTypos"] },
+    { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx", "tagPopCols"], dropdowns: ["tagFilterMode", "tagSort"] },
     // Everything that records or shows copy history lives with the history view.
-    { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalLimit"], selects: ["historyDays"] },
+    { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalLimit", "journalWidth"], selects: ["historyDays"] },
   ] },
   { title: "expTabMedia", groups: [
     { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "grayscaleMedia", "dimMedia", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaDimOpacity", "mediaRadius"] },
@@ -1406,8 +1448,9 @@ const EXPERT_TABS = [
     // Toolbar button visibility (mirrors the header right-click tool list).
     { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "gridViewBorder", "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }, "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
     { title: "expGroupPrivacy", flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
-    { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances"], values: ["kbFocusFadeMs"], paths: ["dataDir"] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport"], values: ["dupThreshold"], selects: ["trashRetentionDays"],
+    { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances"], values: ["kbFocusFadeMs"], selects: ["updateCheckH"], paths: ["dataDir"] },
+    { title: "expGroupHelp", flags: ["helpTips", "helpHighlight"] },
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport"], values: ["dupThreshold", "disarmMs"], selects: ["trashRetentionDays"],
       actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }] },
   ] },
 ];
@@ -1501,6 +1544,22 @@ function applyValues() {
   root.setProperty("--hl-font-px", `${val("hlFontPx")}px`);
   root.setProperty("--view-group-rows", String(val("viewGroupMaxRows")));
   root.setProperty("--pick-swatch", `${val("pickSwatchPx")}px`);
+  root.setProperty("--composer-max-h", `${val("composerMaxH")}px`);
+  root.setProperty("--toast-width", `${val("toastWidth")}px`);
+  root.setProperty("--modal-max-vh", `${val("modalMaxVh")}vh`);
+  root.setProperty("--tag-pop-cols", String(Math.round(val("tagPopCols"))));
+  root.setProperty("--journal-width", `${val("journalWidth")}px`);
+  // 87: caps/lengths that were fixed constants, now expert-tunable.
+  ROTATE_SHORT_MAX = Math.round(val("rotateTipLen"));
+  MD_MAX_CHARS = Math.round(val("mdMaxChars"));
+  HL_MAX_CHARS = Math.round(val("hlMaxChars"));
+  DIFF_WORD_CAP = Math.round(val("diffWordCap"));
+  HISTORY_PREVIEW_LEN = Math.round(val("historyPreviewLen"));
+  DRAG_THRESHOLD = val("dragThreshold");
+  INPUT_MAX = Math.round(val("composerMaxH"));
+  POP_PAD = Math.round(val("popoverPad"));
+  DISARM_MS = Math.round(val("disarmMs"));
+  document.body.classList.toggle("toast-top", settings.ui_texts?.toastPos === "top");
   BUBBLE_MS = val("bubbleMs");
   TOAST_MS = val("toastMs");
   PREVIEW_MAX = val("previewLen");
@@ -1518,16 +1577,18 @@ function applyValues() {
 const EXPERT_TIPS = [
   // General / creating
   "storeFiles", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "varPopupWindow",
-  "lengthCounter", "promptHistory", "editorMonospace",
+  "lengthCounter", "promptHistory", "historyDiff", "diffWordCap", "historyPreviewLen", "editorMonospace",
   "promptNotes", "notesInTooltip", "notesTipLen",
-  "mdPreview", "codeHighlight", "codeAutoDetect", "hlFontPx",
-  "colorPicker", "pickerFormat", "loupeZoom", "pickHistoryN", "pickSwatchPx",
+  "mdPreview", "mdMaxChars", "codeHighlight", "codeAutoDetect", "hlFontPx", "hlMaxChars",
+  "colorPicker", "pickerFormat", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx",
+  "snipQuality", "snipDelayMs",
   "trayRecent", "trayFavs", "trayRecentN", "trayFavN",
-  "checkUpdateOnStart", "showUpdates", "importExport", "dimToolbar", "keyboardNav", "allowMultipleInstances",
+  "checkUpdateOnStart", "showUpdates", "updateCheckH", "importExport", "dimToolbar", "keyboardNav", "allowMultipleInstances",
   "headerSeparators", "floating",
   "pillFolders", "pillMergeRadius", "folderGridCols",
   "tileFolders", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols",
-  "rotatingPrompts", "rotateDefaultMode", "rotateMaxEntries", "rotateBadge",
+  "rotatingPrompts", "rotateDefaultMode", "rotateMaxEntries", "rotateBadge", "rotateTipLen",
+  "helpTips", "helpHighlight",
   // Tiles / copying
   "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "autoPasteEnter", "closeOnCopy",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
@@ -1535,13 +1596,14 @@ const EXPERT_TIPS = [
   // Appearance
   "hideScrollbars", "gridLines", "pausedIcons",
   "customThemes", "customThemeMax",
+  "dragThreshold", "composerMaxH", "popoverPad", "toastWidth", "toastPos", "modalMaxVh",
   // Library / privacy
-  "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus", "libraryCloseToggle",
-  "tags", "tagChipPx", "tagFilterMode",
-  "allowScreenshot", "copyHistory", "historyTimestamps", "historyGrouped",
+  "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus", "libraryCloseToggle", "searchDebounceMs",
+  "tags", "tagChipPx", "tagFilterMode", "tagPopCols", "tagSort",
+  "allowScreenshot", "copyHistory", "historyTimestamps", "historyGrouped", "journalWidth",
   "dedupCopyLog", "cleanupFiles", "blurTilesUntilHover",
   // Tools / data
-  "dupFinder", "clipWatcher", "backupGfs", "backupBeforeReset", "backupBeforeDelete",
+  "dupFinder", "clipWatcher", "backupGfs", "backupBeforeReset", "backupBeforeDelete", "disarmMs",
   "usageStats", "promptSync", "syncDir",
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "kbFocusFadeMs", "snipPreviewVh",
@@ -3600,7 +3662,7 @@ const clipNote = (s) => {
 // first time a tile for that id renders (primeRotateState), so a fresh render never
 // has to await anything itself; the badge/tooltip just stay blank for one frame.
 const rotateState = new Map(); // id -> { index, pos, total, text }
-const ROTATE_SHORT_MAX = 60; // tooltip preview length, independent of the notes cap
+let ROTATE_SHORT_MAX = 60; // tooltip preview length, independent of the notes cap (87: expert-tunable)
 
 // 33: `pos` (not `index + 1`) — in random mode `index` is the absolute entry that
 // will be drawn next (jumps around), while `pos` is the 1-based draw number within
@@ -5905,11 +5967,14 @@ function scheduleLenCounter() {
 // keystroke. The field itself stays live; only the list waits for a short pause in
 // typing. Short enough to feel immediate, long enough that a fast typist renders once.
 const SEARCH_DEBOUNCE_MS = 120;
+// 87: ms may be a getter, so a caller can stay live-tunable (library search reads
+// the searchDebounceMs expert value on every keystroke instead of a value baked
+// in when the debounced wrapper was created).
 function debounced(fn, ms = SEARCH_DEBOUNCE_MS) {
   let timer = 0;
   return () => {
     clearTimeout(timer);
-    timer = setTimeout(fn, ms);
+    timer = setTimeout(fn, typeof ms === "function" ? ms() : ms);
   };
 }
 
@@ -5918,10 +5983,10 @@ function debounced(fn, ms = SEARCH_DEBOUNCE_MS) {
 // transform below only ever slices that escaped string, so nothing a user types can
 // come out as markup. A link keeps its label as plain styled text and never becomes
 // an <a>, which is why no href/src exists for a click to follow.
-const MD_MAX_CHARS = 100000; // past this the preview is cut, so split-mode typing stays smooth
+let MD_MAX_CHARS = 100000; // past this the preview is cut, so split-mode typing stays smooth (87: expert-tunable)
 // A single huge fence is rendered plain: an unterminated block comment makes the
 // lazy scan quadratic, and nobody reads 20k characters of colour anyway.
-const HL_MAX_CHARS = 20000;
+let HL_MAX_CHARS = 20000; // 87: expert-tunable
 const MD_ESC_RE = /[&<>"']/g;
 const MD_ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 const mdEsc = (s) => String(s).replace(MD_ESC_RE, (c) => MD_ESC_MAP[c]);
@@ -6216,7 +6281,7 @@ function syncMdUi(textVisible, rotating = false) {
 // dependency, the whole thing is a couple dozen lines. O(n*m) on word count, so
 // a pathologically huge pasted text falls back to plain text (DIFF_WORD_CAP)
 // rather than freezing the editor while it opens the history panel.
-const DIFF_WORD_CAP = 4000;
+let DIFF_WORD_CAP = 4000; // 87: expert-tunable
 function diffWords(oldText, newText) {
   const tokenize = (s) => (s || "").split(/(\s+)/).filter((t) => t !== "");
   const a = tokenize(oldText);
@@ -6257,7 +6322,7 @@ function renderDiffInto(el, tokens) {
 }
 
 // ---- F7 version history: render the collapsible list in the editor ----
-const HISTORY_PREVIEW_LEN = 80;
+let HISTORY_PREVIEW_LEN = 80; // 87: expert-tunable
 // A snapshot's full entry list — index 0 is the base text, 1..n are rotation variants.
 const versionEntries = (v) => (v.variants?.length ? [v.text || "", ...v.variants] : [v.text || ""]);
 // The editor's current, unsaved state — the "newer" side of the newest row's diff.
@@ -6384,6 +6449,8 @@ async function loadHistory(id) {
           span.className = "diff-add";
           span.textContent = newerEntries[i];
           content.appendChild(span);
+        } else if (!flag("historyDiff")) {
+          content.textContent = olderEntries[i]; // 87: word diff switched off, show the plain old text
         } else {
           const tokens = diffWords(olderEntries[i], newerEntries[i]);
           if (tokens) renderDiffInto(content, tokens);
@@ -7820,6 +7887,8 @@ const tagColor = (name) => settings.tag_colors?.[tagKey(name)] || "";
 const TAG_MAX_LEN = 60; // keep in sync with MAX_TAG_LEN in lib.rs
 
 // Every tag in the library, first-seen casing, sorted for a stable filter row.
+// 87: tagSort switches alphabetical (default) for usage-count order, ties broken
+// alphabetically either way.
 function allTags() {
   const seen = new Map();
   for (const p of prompts) {
@@ -7828,7 +7897,14 @@ function allTags() {
       if (key && !seen.has(key)) seen.set(key, name);
     }
   }
-  return [...seen.values()].sort((a, b) => a.localeCompare(b, LANG));
+  const names = [...seen.values()];
+  if (settings.ui_texts?.tagSort === "usage") {
+    const counts = tagUsage();
+    names.sort((a, b) => (counts.get(tagKey(b)) || 0) - (counts.get(tagKey(a)) || 0) || a.localeCompare(b, LANG));
+  } else {
+    names.sort((a, b) => a.localeCompare(b, LANG));
+  }
+  return names;
 }
 
 function tagUsage() {
@@ -9794,7 +9870,7 @@ function renderHelp() {
       }
       body.appendChild(ul);
     }
-    if (cat.tip) {
+    if (cat.tip && flag("helpTips")) {
       const tip = document.createElement("p");
       tip.className = "help-tip";
       const ico = document.createElement("span");
@@ -10624,7 +10700,7 @@ function bind() {
     try { await invoke("set_ui_flag", { key: "closeAfterCopy", enabled }); } catch (err) { toast(String(err)); }
     syncLibraryToggle();
   });
-  const renderLibraryDebounced = debounced(renderLibrary);
+  const renderLibraryDebounced = debounced(renderLibrary, () => val("searchDebounceMs"));
   $("library-q").addEventListener("input", (e) => { libQuery = e.target.value; renderLibraryDebounced(); });
   wireSearchSuggest($("library-q"), "recentSearchLib");
   $("library-sort").addEventListener("change", (e) => { // F10

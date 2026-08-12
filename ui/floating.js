@@ -6,7 +6,7 @@ import { mediaKind, buildMediaBar, applyVideoPrefs } from "./media.js";
 // F3 custom themes: shared with the folder window (floattheme.js).
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
-import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT } from "./copyDefaults.js";
+import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -223,6 +223,8 @@ function applyPrefs(s) {
   copySize = Number(s.ui_values?.copySize) || 0;
   const cd = Number(s.ui_values?.copyCooldownMs);
   cooldownMs = Number.isFinite(cd) ? cd : COOLDOWN_MS_DEFAULT;
+  const dt = Number(s.ui_values?.dragThreshold);
+  DRAG_THRESHOLD = Number.isFinite(dt) ? dt : DRAG_THRESHOLD_DEFAULT;
   apOn = s.ui_flags?.autoPaste !== false; // default on
   apEnter = s.ui_flags?.autoPasteEnter === true;
   const apd = Number(s.ui_values?.autoPasteDelayMs);
@@ -279,7 +281,7 @@ window.addEventListener("resize", () => {
 });
 updateResizeRing();
 
-const DRAG_THRESHOLD = 4;
+let DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT; // 87: expert-tunable
 let drag = null; // {x, y, moved}
 let copiedTimer = null;
 

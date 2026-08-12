@@ -56,19 +56,28 @@ DEPENDENCIES = {
     "timeStyle": "dynVars",
     "counterUnits": "lengthCounter",
     "historyPerPrompt": "promptHistory",
+    "historyDiff": "promptHistory",
+    "diffWordCap": "historyDiff",
+    "historyPreviewLen": "promptHistory",
     "notesInTooltip": "promptNotes",
     "notesTipLen": "notesInTooltip",
     "pickerFormat": "colorPicker",
     "loupeZoom": "colorPicker",
     "pickSwatchPx": "colorPicker",
+    "loupeCells": "colorPicker",
+    "snipQuality": "screenshot",
+    "snipDelayMs": "screenshot",
     # 32: rotating prompts
     "rotateDefaultMode": "rotatingPrompts",
     "rotateMaxEntries": "rotatingPrompts",
     "rotateBadge": "rotatingPrompts",
+    "rotateTipLen": "rotatingPrompts",
     # Markdown preview
     "codeHighlight": "mdPreview",
     "codeAutoDetect": "mdPreview",
     "hlFontPx": "codeHighlight",
+    "mdMaxChars": "mdPreview",
+    "hlMaxChars": "codeHighlight",
     # Workspace
     "floatOpacity": "floating",
     "pillFolders": "floating",
@@ -106,12 +115,16 @@ DEPENDENCIES = {
     "customThemeMax": "customThemes",
     # Library, history, privacy
     "searchRecentMax": "searchSuggest",
+    "searchDebounceMs": "librarySearch",
     "fuzzyMaxTypos": "fuzzySearch",
     "libraryCols": "librarySearch",
     "tagChipPx": "tags",
     "tagFilterMode": "tags",
+    "tagPopCols": "tags",
+    "tagSort": "tags",
     "historyMax": "copyHistory",
     "journalLimit": "copyHistory",
+    "journalWidth": "copyHistory",
     "historyDays": "copyHistory",
     "tileBlur": "blurTilesUntilHover",
     "mediaBlur": "blurMediaUntilHover",
@@ -136,6 +149,7 @@ DEPENDENCIES = {
     "backupMonthly": "backupGfs",
     "backupYearly": "backupGfs",
     "statsTopN": "usageStats",
+    "updateCheckH": "showUpdates",
 }
 
 

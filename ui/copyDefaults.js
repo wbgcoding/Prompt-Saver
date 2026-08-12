@@ -3,3 +3,5 @@
 export const COOLDOWN_MS_DEFAULT = 2000;
 export const AUTO_PASTE_DELAY_MS_DEFAULT = 80;
 export const DBL_CLICK_MS_DEFAULT = 400;
+// 87: drag-vs-click distance (px) before a pointer-down becomes a drag.
+export const DRAG_THRESHOLD_DEFAULT = 5;

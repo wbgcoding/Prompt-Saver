@@ -8594,6 +8594,8 @@ struct SnipBg {
     pick: bool,
     pick_zoom: u32,
     pick_format: String,
+    // 87: loupe grid size, expert-tunable (kept odd by the frontend).
+    pick_cells: u32,
     // 80: the last picked colours as #rrggbb, newest first. Handed over with the
     // session so the overlay page never has to keep history state of its own.
     pick_history: Vec<String>,
@@ -8777,6 +8779,7 @@ fn stitch_offset(global: i32, origin: i32) -> i64 {
 struct PickCfg {
     zoom: u32,
     format: String,
+    cells: u32,
 }
 
 // Only the three notations the expert dropdown offers; anything else is hex.
@@ -8792,6 +8795,7 @@ fn pick_cfg(settings: &Settings) -> PickCfg {
     PickCfg {
         zoom: settings.ui_values.get("loupeZoom").copied().unwrap_or(4.0).clamp(4.0, 16.0) as u32,
         format: color_format(settings.ui_texts.get("pickerFormat").map(String::as_str).unwrap_or("hex")).to_string(),
+        cells: settings.ui_values.get("loupeCells").copied().unwrap_or(15.0).clamp(7.0, 25.0) as u32,
     }
 }
 
@@ -9129,17 +9133,20 @@ async fn begin_capture(
         SNIP_ACTIVE.store(true, Ordering::SeqCst);
     }
     PICK_ACTIVE.store(pick, Ordering::SeqCst);
-    // Loupe settings are read once here, while nothing else holds the store.
-    let (cfg, hist_max) = if pick {
-        app.try_state::<Db>()
-            .map(|s| {
-                let guard = s.lock().unwrap_or_else(|e| e.into_inner());
-                (pick_cfg(&guard.settings), pick_history_max(&guard.settings))
-            })
-    } else {
-        None
-    }
-    .unwrap_or((PickCfg { zoom: 8, format: "hex".to_string() }, PICK_HISTORY_DEFAULT));
+    // 87: loupe/quality/delay settings are read once here, in both capture modes,
+    // while nothing else holds the store.
+    let (cfg, hist_max, snip_q, snip_delay) = app
+        .try_state::<Db>()
+        .map(|s| {
+            let guard = s.lock().unwrap_or_else(|e| e.into_inner());
+            let settings = &guard.settings;
+            let snip_q = settings.ui_values.get("snipQuality").copied().unwrap_or(80.0).clamp(50.0, 100.0) as u8;
+            let snip_delay = settings.ui_values.get("snipDelayMs").copied().unwrap_or(0.0).clamp(0.0, 5000.0) as u64;
+            let cfg = if pick { pick_cfg(settings) } else { PickCfg { zoom: 8, format: "hex".to_string(), cells: 15 } };
+            let hist_max = if pick { pick_history_max(settings) } else { PICK_HISTORY_DEFAULT };
+            (cfg, hist_max, snip_q, snip_delay)
+        })
+        .unwrap_or((PickCfg { zoom: 8, format: "hex".to_string(), cells: 15 }, PICK_HISTORY_DEFAULT, 80, 0));
     // Wake the overlay's WebView2 NOW (off-screen) so a long-idle, background-throttled
     // webview un-throttles DURING the freeze+encode below. Without this head start the
     // icon path (overlay idle a while) lags behind a retry (whose webview was just
@@ -9158,6 +9165,12 @@ async fn begin_capture(
     if had_visible {
         tokio::time::sleep(std::time::Duration::from_millis(30)).await;
     }
+    // 87: an optional extra delay before the freeze, so an opened menu can be
+    // captured too. Screenshot path only — the colour picker needs the frozen
+    // desktop as fast as possible.
+    if !pick && snip_delay > 0 {
+        tokio::time::sleep(std::time::Duration::from_millis(snip_delay)).await;
+    }
     let (canvas, min_x, min_y) = freeze_desktop()?;
     let (total_w, total_h) = canvas.dimensions();
     // Arc'd so the preview encode (worker thread) and the stored capture (full-res
@@ -9175,7 +9188,7 @@ async fn begin_capture(
     *slot.lock().unwrap_or_else(|e| e.into_inner()) = None;
     tauri::async_runtime::spawn_blocking(move || {
         // Encode the capture at NATIVE resolution — pixel-sharp overlay, no downscale.
-        let bg = encode_snip_jpeg(enc_img.as_raw(), total_w, total_h, if pick { PICK_Q } else { SNIP_Q }).map(|j| {
+        let bg = encode_snip_jpeg(enc_img.as_raw(), total_w, total_h, if pick { PICK_Q } else { snip_q }).map(|j| {
             let (src, is_file) = match write_snip_preview(&j) {
                 Some(path) => (path, true),
                 None => (format!("data:image/jpeg;base64,{}", base64_encode(&j)), false),
@@ -9188,6 +9201,7 @@ async fn begin_capture(
                 pick,
                 pick_zoom: cfg.zoom,
                 pick_format: cfg.format,
+                pick_cells: cfg.cells,
                 pick_history: if pick {
                     let mut h = pick_history_hex();
                     h.truncate(hist_max);
@@ -9339,8 +9353,8 @@ fn snip_windows(state: State<SnipState>, index: usize) -> Vec<SnipWindow> {
     out
 }
 
-// Overlay preview JPEG quality (encoded at native resolution — pixel-sharp).
-const SNIP_Q: u8 = 80;
+// Overlay preview JPEG quality (encoded at native resolution — pixel-sharp) is the
+// expert-tunable snipQuality value now (87), read as snip_q in begin_capture.
 // The colour picker shows the frozen desktop as the reference for the colour it is
 // about to copy, so its background must not carry JPEG's subsampled chroma: below
 // quality 90 the encoder halves the colour resolution, which is exactly the "washed
@@ -12128,7 +12142,22 @@ pub fn run() {
                             }
                         }
                     }
-                    std::thread::sleep(std::time::Duration::from_secs(24 * 60 * 60));
+                    // 87: expert-tunable check interval; the change takes effect from
+                    // this sleep onward, not mid-wait.
+                    let hours = h2
+                        .try_state::<Db>()
+                        .map(|s| {
+                            s.lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .settings
+                                .ui_values
+                                .get("updateCheckH")
+                                .copied()
+                                .unwrap_or(24.0)
+                        })
+                        .unwrap_or(24.0)
+                        .clamp(1.0, 168.0);
+                    std::thread::sleep(std::time::Duration::from_secs((hours * 3600.0) as u64));
                 }
             });
             Ok(())
@@ -16881,13 +16910,14 @@ mod tests {
         // names snip.js indexes.
         let bg = SnipBg {
             src: "x".into(), is_file: true, width: 4, height: 2,
-            pick: true, pick_zoom: 12, pick_format: "rgb".into(),
+            pick: true, pick_zoom: 12, pick_format: "rgb".into(), pick_cells: 21,
             pick_history: vec!["#FF0000".into()],
         };
         let j = serde_json::to_value(&bg).unwrap();
         assert_eq!(j["pick"], serde_json::json!(true));
         assert_eq!(j["pick_zoom"], serde_json::json!(12));
         assert_eq!(j["pick_format"], serde_json::json!("rgb"));
+        assert_eq!(j["pick_cells"], serde_json::json!(21));
         assert_eq!(j["pick_history"], serde_json::json!(["#FF0000"]));
     }
 }

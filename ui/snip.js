@@ -36,7 +36,7 @@ let FULL_W = 1, FULL_H = 1; // full stitched dimensions (display image may be sm
 
 // ---- F26 colour picker state ----
 // Same overlay, second mode: no selection, a loupe on the cursor instead.
-const LOUPE_CELLS = 15; // odd, so one cell is exactly the picked pixel
+let loupeCells = 15; // odd, so one cell is exactly the picked pixel (87: expert-tunable)
 const ZOOM_MIN = 4, ZOOM_MAX = 16; // same range as the loupeZoom expert slider
 // The frozen desktop is sampled through ONE cached patch around the cursor, not as a
 // whole. Handing the overlay the entire desktop meant a ~58 MB transfer on a
@@ -127,6 +127,8 @@ async function beginSession() {
     pickZoom = clampZoom(Number(b.pick_zoom) || 4);
     readZoom.textContent = `${pickZoom}×`;
     pickFmt = b.pick_format || "hex";
+    // 87: must stay odd — one cell has to be exactly the picked pixel.
+    loupeCells = 2 * Math.floor((Number(b.pick_cells) || 15) / 2) + 1;
     pickHistory = Array.isArray(b.pick_history) ? b.pick_history : [];
     renderHistory(); // 80: the picks made earlier in this app run
     document.body.classList.add("pick");
@@ -398,14 +400,14 @@ function drawLoupe() {
     return;
   }
   const z = pickZoom;
-  const half = (LOUPE_CELLS - 1) / 2;
-  const size = LOUPE_CELLS * z;
+  const half = (loupeCells - 1) / 2;
+  const size = loupeCells * z;
   if (grid.width !== size) { grid.width = size; grid.height = size; }
   const ctx = grid.getContext("2d");
   ctx.fillStyle = "#000"; // off-desktop cells stay black
   ctx.fillRect(0, 0, size, size);
-  for (let gy = 0; gy < LOUPE_CELLS; gy++) {
-    for (let gx = 0; gx < LOUPE_CELLS; gx++) {
+  for (let gy = 0; gy < loupeCells; gy++) {
+    for (let gx = 0; gx < loupeCells; gx++) {
       const c = pixelAt(cur.x + gx - half, cur.y + gy - half);
       if (!c) continue;
       ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
@@ -417,7 +419,7 @@ function drawLoupe() {
     ctx.lineWidth = 1;
     ctx.strokeStyle = "rgba(0, 0, 0, 0.16)";
     ctx.beginPath();
-    for (let i = 1; i < LOUPE_CELLS; i++) {
+    for (let i = 1; i < loupeCells; i++) {
       ctx.moveTo(i * z + 0.5, 0);
       ctx.lineTo(i * z + 0.5, size);
       ctx.moveTo(0, i * z + 0.5);

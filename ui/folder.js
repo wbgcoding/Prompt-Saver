@@ -7,7 +7,7 @@ import { FONTS, fitText } from "./fonts.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { mediaKind } from "./media.js";
 import { APP_NAME } from "./brand.js";
-import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT } from "./copyDefaults.js";
+import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -36,7 +36,7 @@ const PAD = 10; // padding inside the popover
 const POP_GAP = 6; // gap between icon and popover
 const PREVIEW_MAX = 4; // mini previews on the closed folder (2x2)
 const COPIED_MS = 900;
-const DRAG_THRESHOLD = 4;
+let DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT; // 87: expert-tunable
 const MENU_W = 230; // matches .menu in floating.css
 
 let state = { id: folderId, name: "", scale: 1, cols: 3, members: [] };
@@ -369,6 +369,8 @@ function applyPrefs(s) {
   document.body.style.fontFamily = FONTS[s.tile_font] || FONTS.system;
   const cd = Number(s.ui_values?.copyCooldownMs);
   cooldownMs = Number.isFinite(cd) ? cd : COOLDOWN_MS_DEFAULT;
+  const dt = Number(s.ui_values?.dragThreshold);
+  DRAG_THRESHOLD = Number.isFinite(dt) ? dt : DRAG_THRESHOLD_DEFAULT;
   apOn = s.ui_flags?.autoPaste !== false; // default on
   apEnter = s.ui_flags?.autoPasteEnter === true;
   const apd = Number(s.ui_values?.autoPasteDelayMs);
