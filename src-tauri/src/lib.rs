@@ -1119,6 +1119,10 @@ struct Prompt {
     // "" = in order, "random" = shuffled bag (see rotation_next).
     #[serde(default)]
     rotate_mode: String,
+    // 90: Auto-Wechsel — nach jedem Einfügen rückt die Zwischenablage auf den
+    // nächsten Eintrag vor. Ohne variants bedeutungslos (wie rotate_mode).
+    #[serde(default)]
+    rotate_auto: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Default)]
@@ -4033,6 +4037,7 @@ async fn add_prompt(
     hotkey_paste: Option<String>,
     variants: Option<Vec<String>>,
     rotate_mode: Option<String>,
+    rotate_auto: Option<bool>,
 ) -> Result<Prompt, String> {
     // One lock for the whole op so the storeFiles flag can't change mid-insert.
     let prompt = {
@@ -4042,6 +4047,7 @@ async fn add_prompt(
         let notes = sanitize_notes(&notes.unwrap_or_default())?;
         let variants = sanitize_variants(variants.unwrap_or_default());
         let rotate_mode = sanitize_rotate_mode(rotate_mode.unwrap_or_default(), &variants);
+        let rotate_auto = sanitize_rotate_auto(rotate_auto.unwrap_or(false), &variants);
         let others: Vec<&Prompt> = store.prompts.iter().collect();
         let hotkey = sanitize_hotkey(&hotkey.unwrap_or_default(), &store.settings.hotkey, &others)?;
         let hotkey_paste = if hotkey.is_empty() {
@@ -4078,6 +4084,7 @@ async fn add_prompt(
             hotkey_paste,
             variants,
             rotate_mode,
+            rotate_auto,
         };
         // A grid folder owns its cell OUTSIDE view.layouts, and the renderer gives a
         // folder priority — so a cell handed out without excluding them saves fine and
@@ -4163,6 +4170,7 @@ async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, examples: Ve
                 hotkey_paste: String::new(),
                 variants: Vec::new(),
                 rotate_mode: String::new(),
+                rotate_auto: false,
             };
             let view = store.settings.active_view_mut();
             if let Some(cell) = first_free_cell(view) {
@@ -4249,6 +4257,10 @@ async fn update_prompt(
     hotkey_paste: Option<String>,
     variants: Vec<String>,
     rotate_mode: String,
+    // Option, unlike variants/rotate_mode: added in 90, the editor UI wiring
+    // (frontend) lands only in 92 — an interim caller that omits it must not
+    // reset an unrelated field, so a missing value keeps the prompt's own.
+    rotate_auto: Option<bool>,
 ) -> Result<Option<Prompt>, String> {
     let variants = sanitize_variants(variants);
     let rotate_mode = sanitize_rotate_mode(rotate_mode, &variants);
@@ -4289,6 +4301,7 @@ async fn update_prompt(
                 p.color = color;
                 p.variants = variants;
                 p.rotate_mode = rotate_mode;
+                if let Some(auto) = rotate_auto { p.rotate_auto = sanitize_rotate_auto(auto, &p.variants); }
                 if let Some(img) = image { p.image = img; }
                 if let Some(si) = show_image { p.show_image = si; }
                 if let Some(ci) = copy_image { p.copy_image = ci; }
@@ -4415,6 +4428,7 @@ async fn restore_version(app: AppHandle, state: State<'_, Db>, version_id: i64) 
             // A restore that lands on zero entries must not leave "random" mode
             // stranded on an empty list (same invariant as everywhere else).
             p.rotate_mode = sanitize_rotate_mode(p.rotate_mode.clone(), &p.variants);
+            p.rotate_auto = sanitize_rotate_auto(p.rotate_auto, &p.variants);
             let clone = p.clone();
             // 35a/38: a failed save must roll the live entry back, same pattern as
             // update_prompt (7) — otherwise the UI shows a restored prompt that
@@ -6918,6 +6932,12 @@ fn sanitize_rotate_mode(mode: String, variants: &[String]) -> String {
     }
 }
 
+// 90: same reasoning as sanitize_rotate_mode — without variants, auto-advance
+// has nothing to advance through, so it can never survive as a stored true.
+fn sanitize_rotate_auto(auto: bool, variants: &[String]) -> bool {
+    auto && !variants.is_empty()
+}
+
 // 32: "text" is entry 0 (every non-rotating consumer stays correct unchanged),
 // `variants` hold entries 1..n.
 fn rotation_total(p: &Prompt) -> usize {
@@ -7121,6 +7141,18 @@ fn rotation_commit(app: AppHandle, state: State<Db>, id: String) {
         save_settings(&app, &store.settings);
         emit_rotation_changed(&app, &p, &store.settings);
     }
+}
+
+// 90: may this prompt start an auto-session (advance on every paste, not just
+// on copy)? Image/file prompts have no rotation_next text path at all, so they
+// are excluded here rather than relying on callers to check separately.
+fn auto_eligible(p: &Prompt, s: &Settings) -> bool {
+    s.ui_flags.get("rotatingPrompts") != Some(&false)
+        && !p.variants.is_empty()
+        && p.rotate_auto
+        && s.ui_flags.get("rotateAuto") != Some(&false)
+        && p.image.is_empty()
+        && p.file_path.is_empty()
 }
 
 // 32: editor's "From the start" button — back to entry 1, same as a freshly
@@ -11135,6 +11167,9 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String) -> R
             hotkey_paste: String::new(),
             variants,
             rotate_mode,
+            // A CSV/TXT file never carries the auto-session state either — it is a
+            // per-machine live behaviour, not portable prompt content.
+            rotate_auto: false,
         };
         store.prompts.push(prompt);
         count += 1;
@@ -12579,6 +12614,7 @@ fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
     // "random" mode stranded on an empty list — the same invariant
     // sanitize_rotate_mode already enforces for every other entry point.
     p.rotate_mode = sanitize_rotate_mode(p.rotate_mode.clone(), &p.variants);
+    p.rotate_auto = sanitize_rotate_auto(p.rotate_auto, &p.variants);
     Some(p)
 }
 
@@ -13152,6 +13188,7 @@ fn sync_blank_prompt(id: String) -> Prompt {
         hotkey_paste: String::new(),
         variants: Vec::new(),
         rotate_mode: String::new(),
+        rotate_auto: false,
     }
 }
 
@@ -14904,6 +14941,7 @@ mod tests {
                 hotkey_paste: "paste".into(),
                 variants: Vec::new(),
                 rotate_mode: String::new(),
+                rotate_auto: false,
             },
             Prompt {
                 id: "p2".into(),
@@ -14928,6 +14966,7 @@ mod tests {
                 hotkey_paste: String::new(),
                 variants: Vec::new(),
                 rotate_mode: String::new(),
+                rotate_auto: false,
             },
         ]
     }
@@ -15038,6 +15077,83 @@ mod tests {
         assert_eq!(sanitize_rotate_mode("random".into(), &some), "random");
         assert_eq!(sanitize_rotate_mode("garbage".into(), &some), "");
         assert_eq!(sanitize_rotate_mode("".into(), &some), "");
+    }
+
+    #[test]
+    fn rotate_auto_is_dropped_without_variants() {
+        let none: Vec<String> = Vec::new();
+        let some = vec!["b".to_string()];
+        assert_eq!(sanitize_rotate_auto(true, &none), false);
+        assert_eq!(sanitize_rotate_auto(true, &some), true);
+        assert_eq!(sanitize_rotate_auto(false, &some), false);
+    }
+
+    #[test]
+    fn auto_eligible_rejects_placeholders_images_and_files() {
+        // "placeholders" (variable text) are explicitly ALLOWED (90) — this test
+        // instead covers every gate auto_eligible actually enforces.
+        let mut p = sample_prompts().remove(0);
+        p.variants = vec!["b".into(), "c".into()];
+        p.rotate_auto = true;
+        p.image = String::new();
+        p.file_path = String::new();
+        let settings = Settings::default();
+        assert!(auto_eligible(&p, &settings), "a plain multi-entry text prompt must be eligible");
+
+        let mut no_variants = p.clone();
+        no_variants.variants.clear();
+        assert!(!auto_eligible(&no_variants, &settings));
+
+        let mut not_auto = p.clone();
+        not_auto.rotate_auto = false;
+        assert!(!auto_eligible(&not_auto, &settings));
+
+        let mut has_image = p.clone();
+        has_image.image = "data:image/png;base64,QUJD".into();
+        assert!(!auto_eligible(&has_image, &settings));
+
+        let mut has_file = p.clone();
+        has_file.file_path = "C:\\tmp\\report.pdf".into();
+        assert!(!auto_eligible(&has_file, &settings));
+
+        let mut rotation_off = Settings::default();
+        rotation_off.ui_flags.insert("rotatingPrompts".into(), false);
+        assert!(!auto_eligible(&p, &rotation_off));
+
+        let mut feature_off = Settings::default();
+        feature_off.ui_flags.insert("rotateAuto".into(), false);
+        assert!(!auto_eligible(&p, &feature_off));
+    }
+
+    #[test]
+    fn auto_session_order_matches_rotation_next() {
+        // 90: the auto flag must never change what rotation_next/rotation_advance
+        // themselves return — same order-mode and random-mode guarantee as the
+        // plain copy path, just proven again with rotate_auto set.
+        let mut p = sample_prompts().remove(0);
+        p.variants = vec!["b".into(), "c".into()];
+        p.rotate_auto = true;
+        let mut settings = Settings::default();
+        let seen: Vec<usize> = (0..6)
+            .map(|_| {
+                let (idx, _, _) = rotation_next(&p, &settings);
+                rotation_advance(&p, &mut settings);
+                idx
+            })
+            .collect();
+        assert_eq!(seen, vec![0, 1, 2, 0, 1, 2]);
+
+        p.rotate_mode = "random".into();
+        let mut settings = Settings::default();
+        let mut cycle: Vec<usize> = (0..3)
+            .map(|_| {
+                let (idx, _, _) = rotation_next(&p, &settings);
+                rotation_advance(&p, &mut settings);
+                idx
+            })
+            .collect();
+        cycle.sort();
+        assert_eq!(cycle, vec![0, 1, 2], "every entry exactly once per random cycle");
     }
 
     #[test]
