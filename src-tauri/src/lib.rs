@@ -7036,6 +7036,33 @@ fn rotation_forget(settings: &mut Settings, ids: &[String]) {
     }
 }
 
+// 90/91: the single place that decides whether a text copy goes to the clipboard
+// normally or opens an auto-advance session (Windows only — delayed rendering is a
+// Win32 mechanism, see mod clipwatch). `id` is None for a text copy that never
+// carries rotation state (e.g. a resolved placeholder fill copied ad hoc).
+#[cfg(windows)]
+fn put_text(state: &State<Db>, id: Option<&str>, text: &str) -> bool {
+    if let Some(id) = id {
+        let auto = {
+            let store = lock(state);
+            store.prompts.iter().find(|p| p.id == id)
+                .map(|p| auto_eligible(p, &store.settings))
+                .unwrap_or(false)
+        };
+        if auto {
+            clipwatch::arm(id, text, Vec::new());
+            return true;
+        }
+    }
+    note_own_copy(text);
+    arboard::Clipboard::new().and_then(|mut c| c.set_text(text.to_string())).is_ok()
+}
+#[cfg(not(windows))]
+fn put_text(_state: &State<Db>, _id: Option<&str>, text: &str) -> bool {
+    note_own_copy(text);
+    arboard::Clipboard::new().and_then(|mut c| c.set_text(text.to_string())).is_ok()
+}
+
 // The most-called command in the app (every tile/pill/hotkey copy goes through it),
 // so it clones only the ONE field the chosen branch actually needs — not the whole
 // Prompt (134), which on an image prompt meant cloning that base64 blob on every
@@ -7065,10 +7092,8 @@ async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result
     let ok = match payload {
         CopyPayload::Image(img) => copy_image_to_clipboard(&img),
         CopyPayload::File(path) => set_clipboard_file(&path),
-        CopyPayload::Text(text) => {
-            note_own_copy(&text); // F21: don't echo our own copy into the inbox
-            arboard::Clipboard::new().and_then(|mut c| c.set_text(text)).is_ok()
-        }
+        // 90/91: put_text is the one place that decides plain copy vs. auto-session.
+        CopyPayload::Text(text) => put_text(&state, Some(&id), &text),
         CopyPayload::Missing => false,
     };
     // 32/44: only a successful TEXT copy may consume a rotation entry — a failed copy
@@ -7164,13 +7189,57 @@ fn rotation_reset(app: AppHandle, state: State<Db>, id: String) {
     save_settings(&app, &store.settings);
 }
 
-// Put arbitrary text on the clipboard — used after filling prompt placeholders.
+// 90/91/92: the placeholder round's entry point. The frontend resolves every
+// entry's placeholders ONCE (union of variables across all of them, one dialog)
+// and hands back `resolved` in absolute entry order; this arms entry
+// rotation_next() currently points at and advances the pointer — replacing what
+// copy_prompt would otherwise have done for this one copy, so it must never be
+// called together with copy_prompt for the same click.
 #[tauri::command]
-async fn copy_text(text: String) -> bool {
-    note_own_copy(&text); // F21
-    arboard::Clipboard::new()
-        .and_then(|mut c| c.set_text(text))
-        .is_ok()
+fn rotation_arm_session(app: AppHandle, state: State<Db>, id: String, resolved: Vec<String>) -> bool {
+    let mut store = lock(&state);
+    let Some(p) = store.prompts.iter().find(|p| p.id == id).cloned() else {
+        return false;
+    };
+    if !auto_eligible(&p, &store.settings) {
+        return false;
+    }
+    let (idx, _, raw) = rotation_next(&p, &store.settings);
+    let text = resolved.get(idx).cloned().unwrap_or(raw);
+    rotation_advance(&p, &mut store.settings);
+    save_settings(&app, &store.settings);
+    emit_rotation_changed(&app, &p, &store.settings);
+    drop(store);
+    #[cfg(windows)]
+    clipwatch::arm(&id, &text, resolved);
+    #[cfg(not(windows))]
+    {
+        let _ = resolved;
+        note_own_copy(&text);
+        let _ = arboard::Clipboard::new().and_then(|mut c| c.set_text(text));
+    }
+    true
+}
+
+// 92: the tile menu / editor Auto toggle switching off while its session is the
+// one running — end it immediately instead of waiting for the next paste/copy.
+// A no-op if `id` is not the active session (stale click, already ended itself).
+#[tauri::command]
+fn rotation_end_auto(id: String) {
+    #[cfg(windows)]
+    clipwatch::end_if(&id);
+    #[cfg(not(windows))]
+    let _ = id;
+}
+
+// Put arbitrary text on the clipboard — used after filling prompt placeholders,
+// chains, drag-out, hotkeys, tray and quick-launch. `id` (90/91) is the source
+// prompt when there is one, so an auto-eligible prompt still opens its session
+// even when the actual copy went through variable resolution first — a plain
+// copy_prompt call for it would have double-resolved the placeholders.
+#[tauri::command]
+async fn copy_text(state: State<'_, Db>, text: String, id: Option<String>) -> Result<bool, String> {
+    Ok(put_text(&state, id.as_deref(), &text))
 }
 
 // F12 `{#{clipboard}#}`: the clipboard's current text for the placeholder resolver.
@@ -7606,10 +7675,57 @@ async fn paste_into_previous(delay_ms: u64, enter: bool) -> Result<(), String> {
     }
 }
 
+// 91: tunable knobs for the auto-advance clipboard session (93 exposes these in the
+// expert menu; defaults here are what ships until a user overrides them there).
+#[cfg(windows)]
+#[derive(Clone, Copy)]
+struct AutoCfg {
+    settle_ms: u32,
+    cooldown_ms: u32,
+    input_ms: u32,
+    rearm_max: u32,
+    timeout_min: u32,
+}
+
+#[cfg(windows)]
+fn auto_cfg(settings: &Settings) -> AutoCfg {
+    let v = |key: &str, def: f64| settings.ui_values.get(key).copied().unwrap_or(def).max(0.0);
+    AutoCfg {
+        settle_ms: v("rotateAutoSettleMs", 350.0) as u32,
+        cooldown_ms: v("rotateAutoCooldownMs", 250.0) as u32,
+        input_ms: v("rotateAutoInputMs", 3000.0) as u32,
+        rearm_max: v("rotateAutoRearmMax", 12.0) as u32,
+        timeout_min: v("rotateAutoTimeoutMin", 60.0) as u32,
+    }
+}
+
+// 91: "did this WM_RENDERFORMAT answer a real Ctrl+V / right-click-Paste, or just a
+// clipboard-history spy / our own read?" Pure and table-tested (cargo test --lib) —
+// the Win32 plumbing around it is only provable on the VM (94).
+#[cfg(windows)]
+fn counts_as_paste(now: u32, armed_at: u32, last_paste: u32, last_input: u32, self_read: bool, cfg: &AutoCfg) -> bool {
+    if self_read {
+        return false;
+    }
+    if now.wrapping_sub(armed_at) < cfg.settle_ms {
+        return false;
+    }
+    if last_paste != 0 && now.wrapping_sub(last_paste) < cfg.cooldown_ms {
+        return false;
+    }
+    if now.wrapping_sub(last_input) > cfg.input_ms {
+        return false;
+    }
+    true
+}
+
 // ---- F21 clipboard watcher: a message-only window with AddClipboardFormatListener
 // (event-driven, no polling). New external TEXT is appended to the clip_inbox table;
 // our own copies and consecutive duplicates are skipped. Off by default; toggling it
 // registers/unregisters the listener with no leaked handle.
+// 91: the SAME window also carries the auto-advance delayed-rendering session (Strg+V
+// AND right-click-Paste both end up requesting CF_UNICODETEXT, which is the one thing
+// Windows tells us about) — one window, one thread, per WORK.md's explicit ask.
 #[cfg(windows)]
 mod clipwatch {
     use super::{db_add_clip, db_conn, lock, now_secs, text_hash, Db};
@@ -7626,8 +7742,40 @@ mod clipwatch {
     static LAST_OWN: AtomicU64 = AtomicU64::new(0);
     static LAST_INSERTED: AtomicU64 = AtomicU64::new(0);
 
+    // 91: auto-advance session state. All ticks are GetTickCount() units (u32,
+    // wraps every ~49.7 days — every comparison below uses wrapping_sub for that
+    // reason). SELF_READ brackets our OWN clipboard_text()/on_clipboard_update()
+    // reads so they can never be mistaken for a real paste. OWN_EMPTY brackets our
+    // own EmptyClipboard calls so WM_DESTROYCLIPBOARD can tell "we re-armed" from
+    // "another app just took ownership".
+    static SELF_READ: AtomicBool = AtomicBool::new(false);
+    static OWN_EMPTY: AtomicBool = AtomicBool::new(false);
+    static SESSION: Mutex<Option<AutoSession>> = Mutex::new(None);
+
+    struct AutoSession {
+        id: String,
+        // Frontend-resolved text per absolute entry index (90/92); empty = no
+        // placeholder round happened, fall back to the raw rotation_next() text.
+        resolved: Vec<String>,
+        text: String,
+        armed_at: u32,
+        session_start: u32,
+        last_paste: u32,
+        uncounted_rearms: u32,
+    }
+
     const WM_DESTROY: u32 = 0x0002;
     const WM_CLIPBOARDUPDATE: u32 = 0x031D;
+    const WM_RENDERFORMAT: u32 = 0x0305;
+    const WM_RENDERALLFORMATS: u32 = 0x0306;
+    const WM_DESTROYCLIPBOARD: u32 = 0x0307;
+    const WM_APP_ARM: u32 = 0x8001;
+    const WM_APP_REARM: u32 = 0x8002;
+    // Force-end the active session (e.g. the user flips the per-tile Auto switch
+    // off mid-session) and deliver real data instead of leaving a dangling promise.
+    const WM_APP_END: u32 = 0x8003;
+    const CF_UNICODETEXT: u32 = 13;
+    const GMEM_MOVEABLE: u32 = 0x0002;
     const HWND_MESSAGE: isize = -3;
 
     #[repr(C)]
@@ -7670,6 +7818,48 @@ mod clipwatch {
         fn DestroyWindow(hwnd: isize) -> i32;
         fn RegisterClipboardFormatW(name: *const u16) -> u32;
         fn IsClipboardFormatAvailable(format: u32) -> i32;
+        // 91: delayed-rendering primitives.
+        fn OpenClipboard(hwnd: isize) -> i32;
+        fn CloseClipboard() -> i32;
+        fn EmptyClipboard() -> i32;
+        fn SetClipboardData(format: u32, hmem: isize) -> isize;
+        fn GetClipboardOwner() -> isize;
+    }
+
+    #[repr(C)]
+    struct LastInputInfo {
+        cb_size: u32,
+        dw_time: u32,
+    }
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GlobalAlloc(flags: u32, bytes: usize) -> isize;
+        fn GlobalLock(hmem: isize) -> *mut core::ffi::c_void;
+        fn GlobalUnlock(hmem: isize) -> i32;
+        fn GetTickCount() -> u32;
+    }
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetLastInputInfo(info: *mut LastInputInfo) -> i32;
+    }
+
+    fn tick() -> u32 {
+        unsafe { GetTickCount() }
+    }
+
+    // 0 (GetLastInputInfo failing) reads as "ancient" rather than "just now" — the
+    // input-recency gate in counts_as_paste must fail closed, not open, if Windows
+    // ever can't answer.
+    fn last_input_tick() -> u32 {
+        let mut info = LastInputInfo { cb_size: std::mem::size_of::<LastInputInfo>() as u32, dw_time: 0 };
+        unsafe {
+            if GetLastInputInfo(&mut info) != 0 {
+                info.dw_time
+            } else {
+                0
+            }
+        }
     }
 
     fn wide(s: &str) -> Vec<u16> {
@@ -7682,6 +7872,12 @@ mod clipwatch {
     }
 
     fn on_clipboard_update() {
+        // 91: our own delayed-rendering promise is never inbox material, and reading
+        // it here would itself trigger WM_RENDERFORMAT — without this the collector
+        // would render its own promise on every update.
+        if unsafe { GetClipboardOwner() } == WATCHER_HWND.load(Ordering::Acquire) {
+            return;
+        }
         // Poison-tolerant locks: a panic elsewhere must never turn a clipboard event
         // into a process abort (this runs inside an extern "system" wndproc).
         let app = match WATCHER_APP.lock().unwrap_or_else(|e| e.into_inner()).clone() {
@@ -7707,8 +7903,12 @@ mod clipwatch {
                 return;
             }
         }
-        // Text only — image/file clipboard payloads are ignored.
-        let text = match arboard::Clipboard::new().and_then(|mut c| c.get_text()) {
+        // Text only — image/file clipboard payloads are ignored. Bracketed with
+        // SELF_READ (91) in case ownership changed between the guard above and here.
+        SELF_READ.store(true, Ordering::Release);
+        let read = arboard::Clipboard::new().and_then(|mut c| c.get_text());
+        SELF_READ.store(false, Ordering::Release);
+        let text = match read {
             Ok(t) => t,
             Err(_) => return,
         };
@@ -7727,6 +7927,259 @@ mod clipwatch {
         let _ = app.emit("clip-inbox-changed", ());
     }
 
+    // 91: writes `text` as CF_UNICODETEXT into whatever clipboard bracket is
+    // currently open (the caller decides who opened it). Ownership of the
+    // GMEM_MOVEABLE block passes to Windows on success — never GlobalFree it.
+    unsafe fn set_unicode_text(text: &str) {
+        let units = wide(text);
+        let bytes = units.len() * std::mem::size_of::<u16>();
+        let hmem = GlobalAlloc(GMEM_MOVEABLE, bytes);
+        if hmem == 0 {
+            return;
+        }
+        let ptr = GlobalLock(hmem);
+        if ptr.is_null() {
+            return;
+        }
+        std::ptr::copy_nonoverlapping(units.as_ptr(), ptr as *mut u16, units.len());
+        GlobalUnlock(hmem);
+        SetClipboardData(CF_UNICODETEXT, hmem);
+    }
+
+    // 92: drives the tile badge's is-auto class.
+    #[derive(serde::Serialize, Clone)]
+    struct RotationAuto {
+        id: String,
+        active: bool,
+    }
+
+    fn emit_active(id: &str, active: bool) {
+        if let Some(app) = WATCHER_APP.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+            let _ = app.emit("rotation-auto", RotationAuto { id: id.to_string(), active });
+        }
+    }
+
+    // 91: (re-)claim ownership and promise CF_UNICODETEXT without delivering real
+    // data yet — used both for the very first arm (is_first) and every re-arm after
+    // a render. Must run on the window thread (posted here, never called directly).
+    fn open_and_promise(hwnd: isize, is_first: bool) {
+        unsafe {
+            if OpenClipboard(hwnd) == 0 {
+                // Another app has the clipboard open right now — do not spin; end the
+                // session, the text last delivered (or about to be, on first arm)
+                // simply stays whatever it already is.
+                *SESSION.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                return;
+            }
+            OWN_EMPTY.store(true, Ordering::Release);
+            EmptyClipboard();
+            OWN_EMPTY.store(false, Ordering::Release);
+            SetClipboardData(CF_UNICODETEXT, 0);
+            CloseClipboard();
+        }
+        let now = tick();
+        let id = {
+            let mut g = SESSION.lock().unwrap_or_else(|e| e.into_inner());
+            let Some(session) = g.as_mut() else { return };
+            session.armed_at = now;
+            if is_first {
+                session.session_start = now;
+            }
+            session.id.clone()
+        };
+        if is_first {
+            emit_active(&id, true);
+        }
+    }
+
+    // 91: answers WM_RENDERFORMAT — the pasting app already has the clipboard open,
+    // so this delivers directly (no Open/CloseClipboard) then judges, off the clock,
+    // whether that render was a real paste and whether to keep tracking.
+    fn handle_render_format() {
+        let now = tick();
+        let self_read = SELF_READ.load(Ordering::Acquire);
+        let last_input = last_input_tick();
+        let app = WATCHER_APP.lock().unwrap_or_else(|e| e.into_inner()).clone();
+
+        let mut g = SESSION.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(session) = g.as_mut() else {
+            drop(g);
+            unsafe { set_unicode_text("") };
+            return;
+        };
+        unsafe { set_unicode_text(&session.text) }; // must answer before anything else
+
+        let Some(app) = app else {
+            *g = None;
+            return;
+        };
+        let (rearm, blocked, id) = {
+            let state = app.state::<Db>();
+            let mut store = lock(&state);
+            let cfg = super::auto_cfg(&store.settings);
+            let timed_out = cfg.timeout_min != 0
+                && now.wrapping_sub(session.session_start) >= cfg.timeout_min.saturating_mul(60_000);
+            let counted = !timed_out
+                && super::counts_as_paste(now, session.armed_at, session.last_paste, last_input, self_read, &cfg);
+            let mut rearm = false;
+            let mut blocked = false;
+            if counted {
+                match store.prompts.iter().find(|p| p.id == session.id).cloned() {
+                    Some(p) if super::auto_eligible(&p, &store.settings) => {
+                        let (idx, _, raw) = super::rotation_next(&p, &store.settings);
+                        let next = session.resolved.get(idx).cloned().unwrap_or(raw);
+                        super::rotation_advance(&p, &mut store.settings);
+                        super::save_settings(&app, &store.settings);
+                        super::emit_rotation_changed(&app, &p, &store.settings);
+                        session.text = next;
+                        session.last_paste = now;
+                        session.uncounted_rearms = 0;
+                        rearm = true;
+                    }
+                    _ => {} // prompt gone or turned off mid-session — end quietly
+                }
+            } else if !timed_out {
+                session.uncounted_rearms += 1;
+                if session.uncounted_rearms <= cfg.rearm_max {
+                    rearm = true;
+                } else {
+                    blocked = true;
+                }
+            }
+            (rearm, blocked, session.id.clone())
+        };
+
+        if rearm {
+            let hwnd = WATCHER_HWND.load(Ordering::Acquire);
+            if hwnd != 0 {
+                unsafe { PostMessageW(hwnd, WM_APP_REARM, 0, 0) };
+            }
+        } else {
+            *g = None;
+            drop(g);
+            emit_active(&id, false);
+            if blocked {
+                #[derive(serde::Serialize, Clone)]
+                struct RotationAutoBlocked {
+                    id: String,
+                }
+                let _ = app.emit("rotation-auto-blocked", RotationAutoBlocked { id });
+            }
+        }
+    }
+
+    // 91: WM_RENDERALLFORMATS — Windows asking us to render everything we still owe
+    // before the owner window (or the whole process) goes away. Unlike RENDERFORMAT
+    // we must open the clipboard ourselves, and this never counts as a paste.
+    fn handle_render_all(hwnd: isize) {
+        let text = SESSION.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|s| s.text.clone());
+        let Some(text) = text else { return };
+        unsafe {
+            if OpenClipboard(hwnd) != 0 {
+                set_unicode_text(&text);
+                CloseClipboard();
+            }
+        }
+        let id = SESSION.lock().unwrap_or_else(|e| e.into_inner()).take().map(|s| s.id);
+        if let Some(id) = id {
+            emit_active(&id, false);
+        }
+    }
+
+    // 91: WM_DESTROYCLIPBOARD — someone else just called EmptyClipboard. Our own
+    // re-arm does that too, so OWN_EMPTY tells the two apart; only a real foreign
+    // takeover ends the session here.
+    fn handle_destroy_clipboard() {
+        if OWN_EMPTY.load(Ordering::Acquire) {
+            return;
+        }
+        let id = SESSION.lock().unwrap_or_else(|e| e.into_inner()).take().map(|s| s.id);
+        if let Some(id) = id {
+            emit_active(&id, false);
+        }
+    }
+
+    // 91/92: force-end the session for `id` (the tile's Auto switch flipped off, or
+    // the prompt was deleted/edited out of eligibility) without waiting for a paste.
+    // Delivers the last armed text as real data — never leaves a dangling promise.
+    fn handle_app_end() {
+        let ended = SESSION.lock().unwrap_or_else(|e| e.into_inner()).take();
+        let Some(session) = ended else { return };
+        let hwnd = WATCHER_HWND.load(Ordering::Acquire);
+        unsafe {
+            if hwnd != 0 && OpenClipboard(hwnd) != 0 {
+                OWN_EMPTY.store(true, Ordering::Release);
+                EmptyClipboard();
+                OWN_EMPTY.store(false, Ordering::Release);
+                set_unicode_text(&session.text);
+                CloseClipboard();
+            }
+        }
+        emit_active(&session.id, false);
+    }
+
+    // 91: called from the app's normal copy path (put_text) once a prompt has been
+    // judged auto-eligible. `resolved` is the frontend's once-per-copy placeholder
+    // resolution (90/92); empty for a prompt with no placeholders, where every
+    // render instead falls back to the raw rotation_next() text.
+    pub fn arm(id: &str, text: &str, resolved: Vec<String>) {
+        note_own(text);
+        let old_id = {
+            let mut g = SESSION.lock().unwrap_or_else(|e| e.into_inner());
+            let old = g.take().map(|s| s.id);
+            *g = Some(AutoSession {
+                id: id.to_string(),
+                resolved,
+                text: text.to_string(),
+                armed_at: 0,
+                session_start: 0,
+                last_paste: 0,
+                uncounted_rearms: 0,
+            });
+            old
+        };
+        if let Some(old_id) = old_id {
+            if old_id != id {
+                emit_active(&old_id, false);
+            }
+        }
+        let hwnd = WATCHER_HWND.load(Ordering::Acquire);
+        if hwnd != 0 {
+            unsafe { PostMessageW(hwnd, WM_APP_ARM, 0, 0) };
+        } else {
+            // The message window is not running — fall back to a normal, untracked
+            // copy rather than silently dropping the text.
+            *SESSION.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            let _ = arboard::Clipboard::new().and_then(|mut c| c.set_text(text.to_string()));
+        }
+    }
+
+    // 92: the tile menu / editor toggle flips Auto off, or the prompt no longer
+    // qualifies — end its session immediately if it is the one currently running.
+    pub fn end_if(id: &str) {
+        let matches = SESSION.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|s| s.id == id).unwrap_or(false);
+        if !matches {
+            return;
+        }
+        let hwnd = WATCHER_HWND.load(Ordering::Acquire);
+        if hwnd != 0 {
+            unsafe { PostMessageW(hwnd, WM_APP_END, 0, 0) };
+        }
+    }
+
+    // 93: the global rotatingPrompts/rotateAuto feature switch flipped off — end
+    // whatever session happens to be running, regardless of its id.
+    pub fn end_any() {
+        let running = SESSION.lock().unwrap_or_else(|e| e.into_inner()).is_some();
+        if !running {
+            return;
+        }
+        let hwnd = WATCHER_HWND.load(Ordering::Acquire);
+        if hwnd != 0 {
+            unsafe { PostMessageW(hwnd, WM_APP_END, 0, 0) };
+        }
+    }
+
     unsafe extern "system" fn wndproc(hwnd: isize, msg: u32, w: usize, l: isize) -> isize {
         match msg {
             WM_CLIPBOARDUPDATE => {
@@ -7734,7 +8187,32 @@ mod clipwatch {
                 let _ = std::panic::catch_unwind(on_clipboard_update);
                 0
             }
+            WM_RENDERFORMAT => {
+                let _ = std::panic::catch_unwind(handle_render_format);
+                0
+            }
+            WM_RENDERALLFORMATS => {
+                let _ = std::panic::catch_unwind(|| handle_render_all(hwnd));
+                0
+            }
+            WM_DESTROYCLIPBOARD => {
+                let _ = std::panic::catch_unwind(handle_destroy_clipboard);
+                0
+            }
+            WM_APP_ARM => {
+                let _ = std::panic::catch_unwind(|| open_and_promise(hwnd, true));
+                0
+            }
+            WM_APP_REARM => {
+                let _ = std::panic::catch_unwind(|| open_and_promise(hwnd, false));
+                0
+            }
+            WM_APP_END => {
+                let _ = std::panic::catch_unwind(handle_app_end);
+                0
+            }
             WM_DESTROY => {
+                *SESSION.lock().unwrap_or_else(|e| e.into_inner()) = None; // safety net
                 RemoveClipboardFormatListener(hwnd);
                 PostQuitMessage(0);
                 0
@@ -10214,6 +10692,8 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     let is_tray = key == "trayRecent" || key == "trayFavs"; // F23
     let is_folders = key == "pillFolders"; // F25
     let is_sync_enable = key == "promptSync" && enabled; // Prompt-folders-as-Markdown
+    // 93: turning either gate off must not leave a session silently running.
+    let end_auto_session = !enabled && (key == "rotatingPrompts" || key == "rotateAuto");
     {
         let mut store = lock(&state);
         store.settings.ui_flags.insert(key, enabled);
@@ -10247,14 +10727,13 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
             set_capture_exclusion(&win, !enabled);
         }
     }
-    // F21: start/stop the clipboard listener as the toggle flips (no leaked handle).
+    // F21/91: the window itself now always runs (started at boot) since 91's
+    // auto-advance session needs it independently of this toggle; on/off just
+    // changes what on_clipboard_update does with each event, checked live.
+    let _ = is_clip;
     #[cfg(windows)]
-    if is_clip {
-        if enabled {
-            clipwatch::start(app.clone());
-        } else {
-            clipwatch::stop();
-        }
+    if end_auto_session {
+        clipwatch::end_any();
     }
     // F20: switching the feature off unregisters every prompt accelerator but keeps
     // the stored ones, so switching it back on restores them all.
@@ -10468,6 +10947,8 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
             let store = state.lock().unwrap_or_else(|e| e.into_inner());
             save_settings(&app, &store.settings);
         }
+        #[cfg(windows)]
+        clipwatch::stop(); // 91: lets DestroyWindow flush a pending auto-session for real
         app.exit(0);
     });
     Ok(())
@@ -11842,8 +12323,6 @@ pub fn run() {
             let on_top = store.settings.always_on_top;
             let capture_excl = capture_excluded(&store.settings);
 
-            let clip_on = store.settings.ui_flags.get("clipWatcher") == Some(&true); // F21, off by default
-
             app.manage(Mutex::new(store));
             app.manage(SnipState(Mutex::new(Vec::new())));
             app.manage(SnipPreview(Arc::new(Mutex::new(None))));
@@ -11858,11 +12337,12 @@ pub fn run() {
             #[cfg(windows)]
             autopaste::install_hook();
 
-            // F21: start the clipboard watcher only if the user opted in.
+            // F21/91: the message-only window is harmless to run unconditionally (same
+            // reasoning as the sync poll below) — on_clipboard_update itself checks the
+            // clipWatcher opt-in on every event, and 91's auto-advance session needs this
+            // window regardless of that flag.
             #[cfg(windows)]
-            if clip_on {
-                clipwatch::start(handle.clone());
-            }
+            clipwatch::start(handle.clone());
 
             // Prompt-folders-as-Markdown: harmless to start unconditionally — the
             // poll itself checks the opt-in flag on every tick and is a no-op until
@@ -12059,6 +12539,8 @@ pub fn run() {
                                 let store = state.lock().unwrap_or_else(|e| e.into_inner());
                                 save_settings(&handle2, &store.settings);
                             }
+                            #[cfg(windows)]
+                            clipwatch::stop(); // 91: flush a pending auto-session for real
                             handle2.exit(0);
                         }
                     }
@@ -12098,6 +12580,8 @@ pub fn run() {
                             let store = state.lock().unwrap_or_else(|e| e.into_inner());
                             save_settings(app, &store.settings);
                         }
+                        #[cfg(windows)]
+                        clipwatch::stop(); // 91: flush a pending auto-session for real
                         app.exit(0);
                     }
                     // F23: a quick-copy entry. Unknown ids (section headers, leftovers
@@ -12264,6 +12748,8 @@ pub fn run() {
             rotation_peek,
             rotation_commit,
             rotation_reset,
+            rotation_arm_session,
+            rotation_end_auto,
             copy_text,
             clipboard_text,
             record_copy,
@@ -15154,6 +15640,28 @@ mod tests {
             .collect();
         cycle.sort();
         assert_eq!(cycle, vec![0, 1, 2], "every entry exactly once per random cycle");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn counts_as_paste_gates_on_settle_cooldown_input_and_self_read() {
+        let cfg = AutoCfg { settle_ms: 350, cooldown_ms: 250, input_ms: 3000, rearm_max: 12, timeout_min: 60 };
+        // now, armed_at, last_paste, last_input, self_read, expected
+        let cases: Vec<(u32, u32, u32, u32, bool, bool)> = vec![
+            (10_000, 9_650, 0, 10_000, false, true),   // settle elapsed, no prior paste, fresh input -> counts
+            (10_000, 9_800, 0, 10_000, false, false),  // still inside the settle window -> rejected
+            (10_000, 9_650, 9_900, 10_000, false, false), // inside the cooldown since the last counted paste
+            (10_000, 9_650, 9_600, 10_000, false, true),  // cooldown has elapsed -> counts
+            (10_000, 9_650, 0, 6_000, false, false),   // last input too long ago -> a background actor, not a human
+            (10_000, 9_650, 0, 10_000, true, false),   // our own get_text() triggered the render -> never counts
+        ];
+        for (now, armed_at, last_paste, last_input, self_read, expected) in cases {
+            assert_eq!(
+                counts_as_paste(now, armed_at, last_paste, last_input, self_read, &cfg),
+                expected,
+                "now={now} armed_at={armed_at} last_paste={last_paste} last_input={last_input} self_read={self_read}"
+            );
+        }
     }
 
     #[test]
