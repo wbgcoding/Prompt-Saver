@@ -29,6 +29,7 @@
   },
   "bundle": {
     "active": true,
+    "publisher": "BGCoding",
     "targets": ["nsis"],
     "windows": {
       "webviewInstallMode": { "type": "embedBootstrapper" },
