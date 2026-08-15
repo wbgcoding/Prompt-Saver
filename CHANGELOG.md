@@ -476,6 +476,29 @@ until you turn it on.
   comma-separated line.** It is now a real list, one row per prompt with its
   type and character count; an older backup's cache still made before this
   existed upgrades the next time it is listed.
+- **The floating pill's and pill folder's "Edit prompt" button showed no text
+  at all** until the window's language finished loading, a brief blank button
+  on every open.
+- **Placing a prompt on the grid could silently do nothing** for a prompt that
+  was already a member of a grid folder — the library's "add to layout" icon
+  still offered it, since a folder member has no layout entry of its own.
+- **Turning off the Favorites feature left its filter reachable in two
+  places**: the copy history's star filter and the library's batch
+  favorite/unfavorite buttons stayed visible and working.
+- **Color filter and picker swatches without a written label had no
+  accessible name** for keyboard and screen-reader users.
+- Editing an expert-menu path setting (screenshot folder, data folder, sync
+  folder) now shows its explanatory tooltip like every other expert row.
+- Backup statistics ("average copies" and "copies per day") and the "prompts
+  imported" count now use the app's number formatting instead of always the
+  English decimal point.
+- The password-reveal eye icon in the backup dialog now has a hover tooltip,
+  not just a name for screen readers.
+- Replacing a prompt's media or attached file while the editor was being
+  closed at the same time could throw an error partway through instead of
+  quietly doing nothing.
+- A handful of remaining error toasts (among them a failed backup) still
+  showed the raw English message instead of the translated one.
 
 ### Removed
 

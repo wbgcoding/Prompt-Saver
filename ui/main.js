@@ -1370,7 +1370,7 @@ function enumDropdown(key, labelKey, opts, def, gate) {
     get: () => settings.ui_texts?.[key] || def,
     set: async (v) => {
       settings.ui_texts = { ...(settings.ui_texts || {}), [key]: v };
-      try { await invoke("set_ui_text", { key, value: v }); } catch (e) { toast(String(e)); }
+      try { await invoke("set_ui_text", { key, value: v }); } catch (e) { errToast(e); }
       applyValues();
     },
   };
@@ -1420,7 +1420,7 @@ const EXPERT_DROPDOWNS = {
     get: () => String(Number(settings.ui_values?.copySize) || 0),
     set: async (v) => {
       settings.ui_values = { ...(settings.ui_values || {}), copySize: Number(v) };
-      try { await invoke("set_ui_value", { key: "copySize", value: Number(v) }); } catch (e) { toast(String(e)); }
+      try { await invoke("set_ui_value", { key: "copySize", value: Number(v) }); } catch (e) { errToast(e); }
     },
   },
   copyFont: {
@@ -1436,7 +1436,7 @@ const EXPERT_DROPDOWNS = {
     get: () => settings.ui_texts?.copyFont ?? "",
     set: async (v) => {
       settings.ui_texts = { ...(settings.ui_texts || {}), copyFont: v };
-      try { await invoke("set_ui_text", { key: "copyFont", value: v }); } catch (e) { toast(String(e)); }
+      try { await invoke("set_ui_text", { key: "copyFont", value: v }); } catch (e) { errToast(e); }
     },
   },
 };
@@ -1985,12 +1985,12 @@ const EXPERT_PATHS = {
       const dir = await invoke("pick_folder").catch(() => null);
       if (!dir) return;
       settings.ui_texts = { ...(settings.ui_texts || {}), screenshotDir: dir };
-      invoke("set_ui_text", { key: "screenshotDir", value: dir }).catch((e) => toast(String(e)));
+      invoke("set_ui_text", { key: "screenshotDir", value: dir }).catch((e) => errToast(e));
       renderExpert();
     },
     onReset: () => {
       settings.ui_texts = { ...(settings.ui_texts || {}), screenshotDir: "" };
-      invoke("set_ui_text", { key: "screenshotDir", value: "" }).catch((e) => toast(String(e)));
+      invoke("set_ui_text", { key: "screenshotDir", value: "" }).catch((e) => errToast(e));
       renderExpert();
     },
   },
@@ -2001,7 +2001,7 @@ const EXPERT_PATHS = {
       const dir = await invoke("pick_folder").catch(() => null);
       if (!dir) return;
       let oldPath;
-      try { oldPath = await invoke("set_data_dir", { dir }); } catch (e) { toast(String(e)); return; }
+      try { oldPath = await invoke("set_data_dir", { dir }); } catch (e) { errToast(e); return; }
       currentDataDir = dir;
       renderExpert();
       // Offer to delete the old data (default = keep). Message notes the restart.
@@ -2025,12 +2025,12 @@ const EXPERT_PATHS = {
       const dir = await invoke("pick_folder").catch(() => null);
       if (!dir) return;
       settings.ui_texts = { ...(settings.ui_texts || {}), syncDir: dir };
-      invoke("set_ui_text", { key: "syncDir", value: dir }).catch((e) => toast(String(e)));
+      invoke("set_ui_text", { key: "syncDir", value: dir }).catch((e) => errToast(e));
       renderExpert();
     },
     onReset: () => {
       settings.ui_texts = { ...(settings.ui_texts || {}), syncDir: "" };
-      invoke("set_ui_text", { key: "syncDir", value: "" }).catch((e) => toast(String(e)));
+      invoke("set_ui_text", { key: "syncDir", value: "" }).catch((e) => errToast(e));
       renderExpert();
     },
   },
@@ -2061,7 +2061,7 @@ function pathRow(key) {
   const resetBtn = rowResetBtn("paths", key);
   if (resetBtn) btns.appendChild(resetBtn);
   row.append(head, btns);
-  return row;
+  return withTip(row, key);
 }
 
 let expertTab = 0;
@@ -2137,7 +2137,7 @@ async function savePalette(colors) {
   const oldHues = COLORS.slice(1);
   const value = colors ? JSON.stringify(colors) : "";
   settings.ui_texts = { ...(settings.ui_texts || {}), palette: value };
-  try { await invoke("set_ui_text", { key: "palette", value }); } catch (e) { toast(String(e)); }
+  try { await invoke("set_ui_text", { key: "palette", value }); } catch (e) { errToast(e); }
   loadPalette();
   const newHues = COLORS.slice(1);
   const pairs = [];
@@ -2995,7 +2995,7 @@ async function saveViewGroup(g, patch) {
       viewIds: patch.viewIds ?? (g.view_ids || []),
     });
   } catch (e) {
-    toast(String(e));
+    errToast(e);
     return false;
   }
   renderViews();
@@ -3014,7 +3014,7 @@ async function newViewGroup(viewIds, suggested) {
   try {
     settings = await invoke("save_view_group", { id: "", name: name.trim(), color: "", viewIds });
   } catch (e) {
-    toast(String(e));
+    errToast(e);
     return;
   }
   renderViews();
@@ -3060,7 +3060,7 @@ async function dissolveViewGroup(g) {
   try {
     settings = await invoke("delete_view_group", { id: g.id });
   } catch (e) {
-    toast(String(e));
+    errToast(e);
     return;
   }
   renderViews();
@@ -3073,7 +3073,7 @@ async function moveViewToGroup(viewId, groupId) {
   try {
     settings = await invoke("set_view_group_member", { groupId, viewId });
   } catch (e) {
-    toast(String(e));
+    errToast(e);
     return;
   }
   closeViewGroupPop();
@@ -3275,7 +3275,7 @@ function pushChainClipboard(commitId) {
   if (!chainSel.length) return;
   invoke("copy_text", { text: chainText() })
     .then((ok) => { if (ok && commitId) invoke("rotation_commit", { id: commitId }).catch(() => {}); })
-    .catch((e) => toast(String(e)));
+    .catch((e) => errToast(e));
 }
 
 // Reflect one tile's chain state (skip / picked + order badge) without a re-render.
@@ -4374,7 +4374,7 @@ async function placeTile(id, col, row) {
   }
   layout[id] = [col, row];
   view.layouts[gridKeyOf(view)] = layout;
-  invoke("set_layout", { layout }).catch((e) => toast(String(e)));
+  invoke("set_layout", { layout }).catch((e) => errToast(e));
   if (!moveTileDom(id, col, row)) await renderGrid(true);
 }
 
@@ -4417,7 +4417,7 @@ async function saveFolder(f, patch) {
       members: patch.members ?? f.members ?? [],
     });
   } catch (e) {
-    toast(String(e));
+    errToast(e);
     return false;
   }
   return true;
@@ -4487,7 +4487,7 @@ async function dissolveTileFolder(f) {
   try {
     settings = await invoke("delete_tile_folder", { id: f.id });
   } catch (e) {
-    toast(String(e));
+    errToast(e);
     return;
   }
   closeTileFolderPop();
@@ -4500,7 +4500,7 @@ async function takeOutOfFolder(id, cell) {
   try {
     settings = await invoke("take_out_of_tile_folder", { id, cell });
   } catch (e) {
-    toast(String(e));
+    errToast(e);
     return;
   }
   closeTileFolderPop();
@@ -4921,13 +4921,13 @@ function buildToolbarMenu() {
     b.addEventListener("click", async () => {
       const next = !toolFlagOn(key);
       settings.ui_flags = { ...(settings.ui_flags || {}), [key]: next };
-      await invoke("set_ui_flag", { key, enabled: next }).catch((e) => toast(String(e)));
+      await invoke("set_ui_flag", { key, enabled: next }).catch((e) => errToast(e));
       // The ★ button only shows/works when the favorites-view feature is on, so
       // enabling it from the toolbar turns the feature on too (otherwise the menu
       // shows a checkmark but no star appears).
       if (key === "favViewButton" && next && !favViewEnabled()) {
         settings.ui_flags.favView = true;
-        await invoke("set_ui_flag", { key: "favView", enabled: true }).catch((e) => toast(String(e)));
+        await invoke("set_ui_flag", { key: "favView", enabled: true }).catch((e) => errToast(e));
       }
       applyFlags();
       renderViews();
@@ -5535,7 +5535,7 @@ async function copyTextWithVars(p, el, paste = false) {
   overlay.removeEventListener("pointerdown", onSecond, true);
   if (text === null) return;
   const ok = await invoke("copy_text", { text })
-    .catch((e) => { toast(String(e)); return false; });
+    .catch((e) => { errToast(e); return false; });
   if (ok) {
     showCopied(el);
     recordCopy(p.id);
@@ -5714,7 +5714,7 @@ async function copyOutsideApp(p, paste) {
     await activateTile(p.id, paste);
     return;
   }
-  if (await invoke("copy_text", { text }).catch((e) => { toast(String(e)); return false; })) {
+  if (await invoke("copy_text", { text }).catch((e) => { errToast(e); return false; })) {
     recordCopy(p.id);
     if (rotating && peek) invoke("rotation_commit", { id: p.id }).catch(() => {});
     if (paste) await autoPasteNow(null);
@@ -6652,7 +6652,7 @@ async function renderStatsPanel(body) {
   let s = null;
   if (on) {
     try { s = await invoke("usage_stats", { topN: Math.round(val("statsTopN")) }); }
-    catch (e) { toast(String(e)); return; }
+    catch (e) { errToast(e); return; }
   }
   body.innerHTML = "";
   // ONE collapsible head for the whole section, its own switch included — folding it
@@ -6684,6 +6684,7 @@ async function renderStatsPanel(body) {
   body.appendChild(headRow);
   if (!on) return;
   const nf = (n) => Number(n).toLocaleString(LANG);
+  const nf1 = (n) => Number(n).toLocaleString(LANG, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const cards = document.createElement("div");
   cards.className = "stat-cards";
   const card = (label, value) => {
@@ -6702,14 +6703,14 @@ async function renderStatsPanel(body) {
     card(t("statViews"), nf((settings.views || []).length)),
     // — Content + intensity —
     card(t("statTopCopies"), s.top && s.top.length ? nf(s.top[0].count) : "—"),
-    card(t("statAvg"), s.used_count ? s.avg_copies.toFixed(1) : "—"),
+    card(t("statAvg"), s.used_count ? nf1(s.avg_copies) : "—"),
     card(t("statChars"), nf(s.total_chars)),
     card(t("statAvgLen"), s.total_prompts ? nf(Math.round(s.total_chars / s.total_prompts)) : "—"),
     // — Copy activity —
     card(t("statTotalCopies"), nf(s.total_copies)),
     card(t("statCopies7"), s.history_on ? nf(s.copies7) : "—"),
     card(t("statCopies30"), s.history_on ? nf(s.copies30) : "—"),
-    card(t("statPerDay"), s.history_on ? (s.copies30 / 30).toFixed(1) : "—"),
+    card(t("statPerDay"), s.history_on ? nf1(s.copies30 / 30) : "—"),
   );
   body.appendChild(cards);
   // 58: last 14 days as a small bar chart — copies7/copies30 above are just two flat
@@ -6848,7 +6849,7 @@ async function scanDupes() {
   body.appendChild(loading);
   let groups;
   try { groups = await invoke("find_duplicates", { threshold: Math.round(val("dupThreshold")) }); }
-  catch (e) { toast(String(e)); body.innerHTML = ""; return; }
+  catch (e) { errToast(e); body.innerHTML = ""; return; }
   body.innerHTML = "";
   if (!groups.length) {
     const e = document.createElement("div");
@@ -6897,7 +6898,7 @@ async function scanDupes() {
     ignore.className = "ghost-btn";
     ignore.textContent = t("dupIgnore");
     ignore.addEventListener("click", async () => {
-      await invoke("ignore_dups", { ids: g.members.map((m) => m.id) }).catch((e) => toast(String(e)));
+      await invoke("ignore_dups", { ids: g.members.map((m) => m.id) }).catch((e) => errToast(e));
       scanDupes();
     });
     actions.appendChild(ignore);
@@ -6936,7 +6937,7 @@ EXPERT_ACTIONS["dupes-open"] = openDupes;
 let trashList = [];
 async function openTrash() {
   $("trash-modal").classList.remove("hidden");
-  try { trashList = await invoke("list_trash"); } catch (e) { toast(String(e)); trashList = []; }
+  try { trashList = await invoke("list_trash"); } catch (e) { errToast(e); trashList = []; }
   renderTrashList();
 }
 function renderTrashList() {
@@ -6985,14 +6986,14 @@ async function restoreTrashItem(id) {
 async function purgeTrashItem(id, name) {
   const ok = await confirmDialog({ title: t("trashPurge"), message: `${t("trashPurgeConfirm")}\n\n${name}`, confirmLabel: t("trashPurge") });
   if (!ok) return;
-  try { trashList = await invoke("purge_prompt", { id }); } catch (e) { toast(String(e)); return; }
+  try { trashList = await invoke("purge_prompt", { id }); } catch (e) { errToast(e); return; }
   renderTrashList();
 }
 async function emptyTrashAll() {
   if (!trashList.length) return;
   const ok = await confirmDialog({ title: t("trashTitle"), message: t("trashEmptyConfirm").replace("{n}", String(trashList.length)), confirmLabel: t("trashPurge") });
   if (!ok) return;
-  try { trashList = await invoke("empty_trash"); } catch (e) { toast(String(e)); return; }
+  try { trashList = await invoke("empty_trash"); } catch (e) { errToast(e); return; }
   renderTrashList();
 }
 EXPERT_ACTIONS["trash-open"] = openTrash;
@@ -7020,11 +7021,11 @@ function parseStamp(name) {
 async function saveBackupSetting(kind, key, value) {
   if (kind === "flag") {
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: value };
-    await invoke("set_ui_flag", { key, enabled: value }).catch((e) => toast(String(e)));
+    await invoke("set_ui_flag", { key, enabled: value }).catch((e) => errToast(e));
     applyFlags();
   } else {
     settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
-    await invoke("set_ui_value", { key, value }).catch((e) => toast(String(e)));
+    await invoke("set_ui_value", { key, value }).catch((e) => errToast(e));
     applyValues();
   }
 }
@@ -7057,7 +7058,7 @@ async function renderBackupPanel(body) {
   // re-render (backup now, value change …).
   let backups, hadPw;
   try { [backups, hadPw] = await Promise.all([invoke("list_backups"), invoke("has_backup_password").catch(() => false)]); }
-  catch (e) { toast(String(e)); return; }
+  catch (e) { errToast(e); return; }
   body.innerHTML = "";
   const nf = (n) => Number(n).toLocaleString(LANG);
   const card = (l, v) => {
@@ -7103,7 +7104,7 @@ async function renderBackupPanel(body) {
   const nowBtn = document.createElement("button"); nowBtn.type = "button"; nowBtn.className = "ghost-btn backup-now-btn"; nowBtn.textContent = t("backupNow");
   nowBtn.addEventListener("click", async () => {
     try { await invoke("create_backup", { keep: Math.round(val("backupKeep")) }); toast(t("backupDone")); }
-    catch (e) { toast(String(e)); }
+    catch (e) { errToast(e); }
     await saveUiState("backupListOpen", true); // reveal the fresh backup right away
     renderBackupPanel(body);
   });
@@ -7112,7 +7113,7 @@ async function renderBackupPanel(body) {
   openFolderBtn.type = "button";
   openFolderBtn.className = "ghost-btn";
   openFolderBtn.textContent = t("backupOpenFolder");
-  openFolderBtn.addEventListener("click", () => invoke("open_backups_folder").catch((e) => toast(String(e))));
+  openFolderBtn.addEventListener("click", () => invoke("open_backups_folder").catch((e) => errToast(e)));
   left.appendChild(openFolderBtn);
   left.appendChild(switchRow(t("flagAutoBackup"), flag("autoBackup"), async (on) => {
     await saveBackupSetting("flag", "autoBackup", on);
@@ -7188,6 +7189,7 @@ async function renderBackupPanel(body) {
   pwIn.addEventListener("input", () => { backupPwDraft = pwIn.value; });
   const eye = document.createElement("button");
   eye.type = "button"; eye.className = "icon-btn backup-pw-eye";
+  eye.title = t("showPassword");
   eye.setAttribute("aria-label", t("showPassword"));
   eye.innerHTML = EYE_SVG;
   // Reveals what is typed right now. A stored password is never loaded back into
@@ -7195,6 +7197,7 @@ async function renderBackupPanel(body) {
   eye.addEventListener("click", () => {
     const show = pwIn.type === "password";
     pwIn.type = show ? "text" : "password";
+    eye.title = t(show ? "hidePassword" : "showPassword");
     eye.setAttribute("aria-label", t(show ? "hidePassword" : "showPassword"));
   });
   // Saving happens ONLY through this button — leaving the field must never change
@@ -7332,7 +7335,7 @@ async function renderBackupPanel(body) {
       const del = document.createElement("button"); del.type = "button"; del.className = "ghost-btn danger-btn"; del.textContent = t("delete");
       del.addEventListener("click", async () => {
         if (!armButton(del, `${t("delete")}?`)) { setTimeout(() => disarmButton(del, t("delete")), DISARM_MS); return; }
-        await invoke("delete_backup", { name: b.name }).catch((e) => toast(String(e)));
+        await invoke("delete_backup", { name: b.name }).catch((e) => errToast(e));
         await saveUiState("backupListOpen", true); // stay in the list after delete
         renderBackupPanel(body);
       });
@@ -7362,7 +7365,7 @@ async function restoreBackup(name) {
   // data just as permanently, so it follows the same "before delete" switch.
   await maybeBackupBeforeWipe("delete");
   try { await invoke("restore_backup", { name, keep: Math.round(val("backupKeep")), scope }); }
-  catch (e) { toast(String(e)); } // on success the app relaunches
+  catch (e) { errToast(e); } // on success the app relaunches
 }
 
 // ---- F21 clipboard inbox ----
@@ -7429,10 +7432,10 @@ function renderClipList(items) {
     });
     const copy = document.createElement("button");
     copy.type = "button"; copy.className = "ghost-btn"; copy.textContent = t("clipCopy");
-    copy.addEventListener("click", () => { invoke("copy_text", { text: it.text }).then(() => toast(t("copied"))).catch((e) => toast(String(e))); });
+    copy.addEventListener("click", () => { invoke("copy_text", { text: it.text }).then(() => toast(t("copied"))).catch((e) => errToast(e)); });
     const dismiss = document.createElement("button");
     dismiss.type = "button"; dismiss.className = "ghost-btn"; dismiss.textContent = t("clipDismiss");
-    dismiss.addEventListener("click", async () => { await invoke("clip_inbox_dismiss", { id: it.id }).catch((e) => toast(String(e))); refreshClipInbox(); });
+    dismiss.addEventListener("click", async () => { await invoke("clip_inbox_dismiss", { id: it.id }).catch((e) => errToast(e)); refreshClipInbox(); });
     actions.append(save, copy, dismiss);
     row.append(time, prev, actions);
     list.appendChild(row);
@@ -9101,7 +9104,11 @@ function buildColorFilter(wrap, current) {
     b.type = "button";
     b.className = `lib-color ${cls}`.trim();
     b.dataset.color = color;
-    if (color && color !== "all") b.style.background = color;
+    if (color && color !== "all") {
+      b.style.background = color;
+      b.title = color;
+      b.setAttribute("aria-label", color);
+    }
     if (color === current) b.classList.add("active");
     return b;
   };
@@ -9235,6 +9242,10 @@ function renderLibrary() {
     return;
   }
   const placed = new Set(Object.keys(layoutOf(activeView())));
+  // F27: a folder member has no layout entry of its own (the folder draws it), so
+  // without this it would show as addable — placing it would silently no-op since
+  // renderGrid always skips ids listed in a folder's members.
+  for (const f of foldersOfView(activeView().id)) for (const id of f.members || []) placed.add(id);
   libDisplayOrder = items.map((p) => p.id); // F8: range-select uses display order
   for (const p of items) {
     const row = document.createElement("button");
@@ -9560,7 +9571,7 @@ async function batchExport(format) {
     const n = await invoke("export_prompts", { format, ids });
     toast(t("exportDone").replace("{n}", String(n)));
   } catch (e) {
-    if (String(e) !== "canceled") toast(String(e));
+    if (String(e) !== "canceled") errToast(e);
   }
 }
 
@@ -9590,7 +9601,7 @@ async function copyResolved(p) {
     if (text === null) return false;
     return invoke("copy_text", { text }).catch(() => false);
   }
-  return invoke("copy_prompt", { id: p.id }).catch((e) => { toast(String(e)); return false; });
+  return invoke("copy_prompt", { id: p.id }).catch((e) => { errToast(e); return false; });
 }
 
 // A blink says "something happened"; the character count says the whole prompt went
@@ -9722,7 +9733,7 @@ const fmtCopyTime = (ts) => {
 
 function journalMatches(p) {
   if (!typeAllowed(journalTypes, p)) return false;
-  if (journalFav && !p.favorite) return false;
+  if (journalFav && flag("favorites") && !p.favorite) return false;
   if (journalColor !== "all" && (p.color || "") !== journalColor) return false;
   if (flag("journalTagFilter") && !tagMatches(p, journalTags)) return false;
   const q = journalQuery.trim().toLowerCase();
@@ -10261,9 +10272,9 @@ async function runImportAll() {
     try {
       const res = await invoke("import_all", { path, password, scope });
       await reloadEverything();
-      let msg = t("importAllDone").replace("{f}", res.name).replace("{n}", res.count);
+      let msg = t("importAllDone").replace("{f}", res.name).replace("{n}", Number(res.count).toLocaleString(LANG));
       // F20: a hotkey the restore could not keep is named, never silently dropped.
-      if (res.dropped_hotkeys) msg += "\n" + t("importHotkeysDropped").replace("{n}", res.dropped_hotkeys);
+      if (res.dropped_hotkeys) msg += "\n" + t("importHotkeysDropped").replace("{n}", Number(res.dropped_hotkeys).toLocaleString(LANG));
       // 40: the file's own backup password is a foreign-machine DPAPI blob and was
       // discarded — say so, or a following export silently ships unprotected.
       if (res.backup_pw_dropped) msg += "\n" + t("importBackupPwKept");
@@ -10306,7 +10317,7 @@ async function offerTakeover() {
   try {
     await invoke("takeover_apply", { adopt });
   } catch (e) {
-    toast(String(e));
+    errToast(e);
     return;
   }
   if (adopt) await reloadEverything();
@@ -10582,7 +10593,7 @@ function bind() {
     }
     if (kind === "image") {
       const data = await loadFilePreview(path);
-      if (!data) return false;
+      if (!data || !modalState) return false;
       modalState.image = data;
       modalState.iconPath = "";
     } else {
@@ -10617,7 +10628,9 @@ function bind() {
     modalState.filePath = path;
     modalState.pdfPage = 0; // 83: a different file starts back at its own first page
     const kind = mediaKind(path);
-    modalState.image = await loadFilePreview(path);
+    const data = await loadFilePreview(path);
+    if (!modalState) return;
+    modalState.image = data;
     modalState.copyImage = false; // the file itself is what gets copied
     modalState.showImage = !!kind;
     syncModalImageUi(modalState.mode);
@@ -10630,7 +10643,7 @@ function bind() {
     const page = Math.max(0, (Number(modal.pdfPage.value) || 1) - 1);
     modalState.pdfPage = page;
     const data = await loadFilePreview(modalState.filePath, page);
-    if (data) { modalState.image = data; modal.img.src = data; }
+    if (data && modalState) { modalState.image = data; modal.img.src = data; }
   });
 
   // Paperclip button in the composer bar (files, images, gifs, videos).
@@ -11010,14 +11023,14 @@ function bind() {
     const on = !optFlag("clipWatcher");
     settings.ui_flags = { ...(settings.ui_flags || {}), clipWatcher: on };
     try { await invoke("set_ui_flag", { key: "clipWatcher", enabled: on }); }
-    catch (e) { toast(String(e)); }
+    catch (e) { errToast(e); }
     applyFlags();
     await refreshClipInbox();
     updateClipBadge();
   });
   $("clip-close").addEventListener("click", () => $("clip-modal").classList.add("hidden"));
   $("clip-modal").addEventListener("pointerdown", (e) => { if (e.target === $("clip-modal")) $("clip-modal").classList.add("hidden"); });
-  $("clip-clear").addEventListener("click", async () => { await invoke("clip_inbox_clear").catch((e) => toast(String(e))); refreshClipInbox(); });
+  $("clip-clear").addEventListener("click", async () => { await invoke("clip_inbox_clear").catch((e) => errToast(e)); refreshClipInbox(); });
   // Emergency wipe: clears the live inbox AND scrubs clip_inbox rows out of every
   // rotating backup snapshot. Irreversible and touches every backup, so it asks
   // twice — the second dialog spells out that it cannot be undone.
@@ -11038,8 +11051,8 @@ function bind() {
       danger: true,
     });
     if (!step2) return;
-    await invoke("clip_inbox_clear").catch((e) => toast(String(e)));
-    const n = await invoke("purge_clip_inbox_from_backups").catch((e) => { toast(String(e)); return null; });
+    await invoke("clip_inbox_clear").catch((e) => errToast(e));
+    const n = await invoke("purge_clip_inbox_from_backups").catch((e) => { errToast(e); return null; });
     refreshClipInbox();
     if (n !== null) toast(t("clipPurgeBackupsDone").replace("{n}", String(n)));
   });
@@ -11065,7 +11078,7 @@ function bind() {
     toast(t("rotateAutoBlocked"));
   });
   // Clicking the app logo opens the project's GitHub page (drag still moves the window).
-  $("app-logo")?.addEventListener("click", () => invoke("open_repo").catch((e) => toast(String(e))));
+  $("app-logo")?.addEventListener("click", () => invoke("open_repo").catch((e) => errToast(e)));
 
   // 76: About dialog — version + project page link.
   const aboutEl = $("about-modal");
@@ -11073,7 +11086,7 @@ function bind() {
   $("about-btn").addEventListener("click", () => aboutEl.classList.remove("hidden"));
   $("about-close").addEventListener("click", closeAbout);
   $("about-ok").addEventListener("click", closeAbout);
-  $("about-repo").addEventListener("click", () => invoke("open_repo").catch((e) => toast(String(e))));
+  $("about-repo").addEventListener("click", () => invoke("open_repo").catch((e) => errToast(e)));
   aboutEl.addEventListener("pointerdown", (e) => {
     if (e.target === aboutEl) closeAbout();
   });
@@ -11122,7 +11135,7 @@ function bind() {
       });
       if (!ok) return;
     }
-    await invoke("clear_copy_history").catch((e) => toast(String(e)));
+    await invoke("clear_copy_history").catch((e) => errToast(e));
     settings.usage = {};
     settings.last_used = {};
     await loadJournal();
@@ -11351,7 +11364,7 @@ function bind() {
       const layout = { ...layoutOf(view) };
       delete layout[id];
       view.layouts[gridKeyOf(view)] = layout;
-      invoke("set_layout", { layout }).catch((e) => toast(String(e)));
+      invoke("set_layout", { layout }).catch((e) => errToast(e));
       await renderGrid(true);
     } else if (act === "pin") {
       await invoke("toggle_floating", { id });
@@ -11447,7 +11460,7 @@ function bind() {
   // GitHub releases page.
   updateVersion.addEventListener("click", () => {
     if (updateInfo?.available) openUpdateModal(updateInfo);
-    else invoke("open_repo", { page: "releases" }).catch((e) => toast(String(e)));
+    else invoke("open_repo", { page: "releases" }).catch((e) => errToast(e));
   });
 
   // Changelog popup shown before any install (manual check or daily toast).

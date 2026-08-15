@@ -1444,6 +1444,9 @@ body.library-front #modal.overlay { z-index: 67; }
 .noflag-libraryTypeFilter #library-types .lib-type[data-type] { display: none; }
 .noflag-favorites #library-fav { display: none; }
 .noflag-favorites .lib-item .lib-fav { display: none; }
+.noflag-favorites #journal-fav { display: none; }
+.noflag-favorites #lib-batch-fav,
+.noflag-favorites #lib-batch-unfav { display: none; }
 .noflag-journalSearch #journal-q { display: none; }
 .noflag-journalTypeFilter #journal-types { display: none; }
 .noflag-journalColorFilter #journal-colors { display: none; }

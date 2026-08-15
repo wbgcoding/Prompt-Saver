@@ -125,6 +125,10 @@ document.addEventListener("keydown", (e) => {
   // button's native Enter activation is then a no-op, so Enter must fall through to
   // confirm() there same as any other row, or it does nothing at all.
   else if (e.key === "Enter") {
+    // 114: Cancel already gets its own native Enter activation (-> answer(null)) --
+    // hijacking that into confirm() when Cancel has focus would confirm the form a
+    // keyboard user just tried to dismiss.
+    if (e.target === cancelEl) return;
     const choice = e.target.closest(".vars-choice");
     const hasChoices = choice && choice.querySelectorAll(".vars-choice-item").length > 1;
     if (!hasChoices) { e.preventDefault(); confirm(); }
