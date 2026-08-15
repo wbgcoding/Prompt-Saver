@@ -10068,6 +10068,14 @@ async fn delete_screenshot_file(state: State<'_, Db>, path: String) -> Result<bo
     Ok(in_allowed && fs::remove_file(p).is_ok())
 }
 
+// 117/118: screenshot editor "Copy" / re-apply-to-clipboard after "Apply" — the
+// edited image never goes through finalize_capture, so it needs its own thin
+// path onto the existing copy_image_to_clipboard helper.
+#[tauri::command]
+fn copy_image_data(data_url: String) -> bool {
+    copy_image_to_clipboard(&data_url)
+}
+
 // Default screenshot folder path (shown greyed in the expert menu when no custom
 // folder is set), so the user always sees where screenshots would go.
 #[tauri::command]
@@ -12825,6 +12833,7 @@ pub fn run() {
             save_view_group,
             set_view_group_member,
             delete_view_group,
+            copy_image_data,
             save_tile_folder,
             take_out_of_tile_folder,
             delete_tile_folder,

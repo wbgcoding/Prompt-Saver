@@ -6,14 +6,14 @@ All notable changes to **Prompt Saver**. Download the latest version from the
 
 ## 2.7.0 (unreleased)
 
-Nineteen new features: tags, custom themes, folders for view tabs and for
+Twenty new features: tags, custom themes, folders for view tabs and for
 floating buttons, self-filling and choice variables, a markdown preview with
 syntax colors, private notes, per-prompt hotkeys, drag-out into other apps, a
 tray quick-copy menu, a screen color picker, a standalone quick launcher,
 multi-select in the grid, a trash for deleted prompts, placing one prompt in
-several views at once, restoring a backup's data and settings separately, and
-rotating prompts. Everything new is an expert-menu switch, most of it off
-until you turn it on.
+several views at once, restoring a backup's data and settings separately,
+rotating prompts, and a screenshot editor. Everything new is an expert-menu
+switch, most of it off until you turn it on (the screenshot editor ships on).
 
 ### Added
 
@@ -132,6 +132,16 @@ until you turn it on.
   and position, dialog max height, the library search delay, the copy-history
   window width, the tag-filter popover's column count and sort order, how long
   a confirm button stays armed, and the background update-check interval.
+- **A screenshot editor** (on by default) — every capture opens for editing before
+  it reaches a tile, the clipboard or a folder. Eleven tools: crop, pen, marker,
+  highlighter-style multiply blend, line, arrow, rectangle, ellipse, text, a
+  self-numbering step marker for annotating instructions, pixelation, and a
+  spotlight that dims everything outside a chosen area. Full undo/redo, an
+  eyedropper, live width×height while dragging a crop or shape, snapping to the
+  image edges and center, nudging the last-placed mark with the arrow keys, and
+  holding **V** to peek at the unedited shot. Cancel leaves the original capture
+  untouched; Apply re-copies the edited image and re-saves it to the screenshot
+  folder if that setting is on.
 
 ### Improved
 

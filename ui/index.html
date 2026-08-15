@@ -987,6 +987,49 @@
     </div>
   </div>
 
+  <!-- 117/118/119: screenshot editor -- opens right after a capture, before
+       #snip-modal, when flagSnipEditor is on. Full-bleed overlay (no centered
+       modal box): toolbar on top, canvas below, actions bottom-right. -->
+  <div id="snip-edit" class="overlay snip-edit hidden" role="dialog" aria-modal="true" data-i18n-aria="snipEditTitle">
+    <div class="snip-edit-toolbar">
+      <div id="snip-edit-tools" class="snip-edit-tools" role="toolbar" data-i18n-aria="snipEditToolsLabel"></div>
+      <div id="snip-edit-context" class="snip-edit-context"></div>
+      <div class="snip-edit-view">
+        <button id="snip-edit-undo" class="icon-btn" type="button" data-i18n-title="snipEditUndoTip" data-i18n-aria="undo">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M7 7 3 11l4 4M3 11h11a6 6 0 0 1 0 12h-2"/></svg>
+        </button>
+        <button id="snip-edit-redo" class="icon-btn" type="button" data-i18n-title="snipEditRedoTip" data-i18n-aria="redo">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M17 7l4 4-4 4M21 11H10a6 6 0 0 0 0 12h2"/></svg>
+        </button>
+        <span class="snip-edit-sep" aria-hidden="true"></span>
+        <button id="snip-edit-zoom-out" class="icon-btn" type="button" data-i18n-title="snipEditZoomOut" data-i18n-aria="snipEditZoomOut">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 21l-4.3-4.3M8 11h6"/></svg>
+        </button>
+        <span id="snip-edit-zoom-val" class="snip-edit-zoom-val">100%</span>
+        <button id="snip-edit-zoom-in" class="icon-btn" type="button" data-i18n-title="snipEditZoomIn" data-i18n-aria="snipEditZoomIn">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg>
+        </button>
+        <button id="snip-edit-fit" class="ghost-btn" type="button" data-i18n="snipEditFit" data-i18n-title="snipEditFitTip"></button>
+      </div>
+    </div>
+    <div id="snip-edit-canvas-wrap" class="snip-edit-canvas-wrap">
+      <div id="snip-edit-stage" class="snip-edit-stage">
+        <canvas id="snip-edit-base"></canvas>
+        <canvas id="snip-edit-live"></canvas>
+        <input id="snip-edit-text-input" class="snip-edit-text-input hidden" type="text" maxlength="500" data-i18n-aria="snipToolText" />
+      </div>
+      <div id="snip-edit-measure" class="snip-edit-measure hidden"></div>
+    </div>
+    <div class="snip-edit-actions">
+      <button id="snip-edit-cancel" class="ghost-btn" type="button" data-i18n="cancel" data-i18n-title="snipEditCancelTip"></button>
+      <button id="snip-edit-copy" class="ghost-btn" type="button" data-i18n="copy" data-i18n-title="snipEditCopyTip"></button>
+      <button id="snip-edit-apply" class="primary-btn" type="button" data-i18n="apply" data-i18n-title="snipEditApplyTip"></button>
+    </div>
+    <button id="snip-edit-close" class="icon-btn snip-edit-close" type="button" data-i18n-title="close" data-i18n-aria="close">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>
+    </button>
+  </div>
+
   <!-- Generic confirm dialog (e.g. discard unsaved changes) -->
   <div id="confirm-modal" class="overlay hidden" role="alertdialog" aria-modal="true">
     <div class="modal modal-narrow">

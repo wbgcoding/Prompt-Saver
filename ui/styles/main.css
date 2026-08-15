@@ -1682,6 +1682,130 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 /* Two-line question under the preview. */
 .snip-question { margin: 0; text-align: center; line-height: 1.5; }
 .snip-question span { display: block; }
+
+/* ---- 117/118: screenshot editor -- full-bleed overlay, no centered modal box.
+   Sits above #snip-modal (which it replaces on the way in) and everything else;
+   every color comes off the shared theme tokens so it re-skins with all 8 themes. */
+#snip-edit.overlay {
+  z-index: 90;
+  padding: 0;
+  align-items: stretch;
+  justify-content: stretch;
+  flex-direction: column;
+  background: var(--surface);
+}
+.snip-edit-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  flex-wrap: wrap;
+}
+.snip-edit-tools { display: flex; gap: 4px; flex: 0 0 auto; }
+.snip-edit-tools .icon-btn.active { background: var(--accent); color: var(--accent-fg); }
+.snip-edit-context {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+  padding-inline: 12px;
+  margin-inline: 4px;
+  border-inline: 1px solid var(--border);
+  min-height: 30px;
+}
+.snip-edit-view { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+.snip-edit-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+.snip-edit-zoom-val { min-width: 42px; text-align: center; font-size: 12px; color: var(--muted); }
+.snip-edit-view .ghost-btn { padding: 4px 10px; font-size: 12px; }
+
+/* Contextual (tool-specific) controls: swatches, width presets, toggles, sliders. */
+.snip-edit-field { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.snip-edit-width-row { display: flex; align-items: center; gap: 4px; }
+.snip-edit-width-btn {
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.snip-edit-width-btn:hover { border-color: var(--accent); }
+.snip-edit-width-btn.sel { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
+.snip-edit-num {
+  width: 46px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--fg);
+}
+.snip-edit-context .swatches { grid-template-columns: repeat(auto-fit, 20px); max-width: none; margin: 0; gap: 6px; }
+.snip-edit-context .swatch { width: 20px; height: 20px; }
+.snip-edit-eyedrop { display: inline-flex; }
+.snip-edit-eyedrop.active { color: var(--accent); }
+.snip-edit-toggle { display: flex; align-items: center; gap: 4px; }
+
+.snip-edit-canvas-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--surface-2);
+  /* Neutral checkerboard hint so the image edge is visible once zoomed/panned past it. */
+  background-image:
+    linear-gradient(45deg, var(--border) 25%, transparent 25%, transparent 75%, var(--border) 75%),
+    linear-gradient(45deg, var(--border) 25%, transparent 25%, transparent 75%, var(--border) 75%);
+  background-size: 18px 18px;
+  background-position: 0 0, 9px 9px;
+  cursor: crosshair;
+}
+.snip-edit-canvas-wrap.panning { cursor: grab; }
+.snip-edit-canvas-wrap.panning:active { cursor: grabbing; }
+.snip-edit-stage { position: relative; flex: 0 0 auto; box-shadow: var(--shadow); }
+.snip-edit-stage canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+#snip-edit-text-input {
+  position: absolute;
+  z-index: 5;
+  border: 1px dashed var(--accent);
+  background: var(--surface);
+  color: var(--fg);
+  padding: 2px 4px;
+  font-family: inherit;
+  min-width: 60px;
+}
+.snip-edit-measure {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  z-index: 6;
+  white-space: nowrap;
+}
+.snip-edit-actions {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.snip-edit-close { position: absolute; top: 8px; right: 8px; }
+.snip-edit-toolbar .icon-btn:disabled,
+.snip-edit-toolbar .icon-btn:disabled:hover { opacity: 0.35; cursor: default; background: transparent; color: var(--muted); }
 .snip-question span:last-child { color: var(--muted); font-size: 13px; }
 .noflag-barToggles .bar-toggle,
 .noflag-barToggles .bar-restore { display: none !important; }

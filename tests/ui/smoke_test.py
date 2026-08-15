@@ -3924,6 +3924,56 @@ PROBE = """
     await click('expert-open');
     layoutScan('expert menu in German');
     await click('expert-back');
+    // 117/118/119: screenshot editor -- window.__FIRE__ is the same hook every other
+    // probe uses to exercise a backend-started flow (see tauri_stub.js), here firing
+    // the snip-captured event finalize_capture would normally send.
+    {
+      const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      window.__FIRE__('snip-captured', { data_url: TINY_PNG, path: '', name: 'test.png' });
+      await sleep(300);
+      const edit = document.getElementById('snip-edit');
+      if (!edit || edit.classList.contains('hidden')) {
+        out.errors.push('screenshot editor did not open on snip-captured');
+      } else {
+        const toolBtns = [...document.querySelectorAll('#snip-edit-tools button[data-tool]')];
+        if (toolBtns.length !== 11) {
+          out.errors.push('screenshot editor: expected 11 tool buttons, found ' + toolBtns.length);
+        }
+        for (const b of toolBtns) {
+          b.click();
+          await sleep(30);
+          if (b.getAttribute('aria-pressed') !== 'true') {
+            out.errors.push('screenshot editor: ' + b.dataset.tool + ' did not mark aria-pressed after click');
+          }
+          const pressedCount = toolBtns.filter((x) => x.getAttribute('aria-pressed') === 'true').length;
+          if (pressedCount !== 1) {
+            out.errors.push('screenshot editor: ' + pressedCount + ' tools show aria-pressed at once (expected exactly 1)');
+          }
+        }
+        const penBtn = toolBtns.find((b) => b.dataset.tool === 'pen');
+        if (penBtn) { penBtn.click(); await sleep(30); }
+        layoutScan('screenshot editor');
+        const live = document.getElementById('snip-edit-live');
+        const undoBtn = document.getElementById('snip-edit-undo');
+        if (live && undoBtn) {
+          const r = live.getBoundingClientRect();
+          const x = r.left + r.width / 2, y = r.top + r.height / 2;
+          live.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: x, clientY: y }));
+          live.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: x + 5, clientY: y + 5 }));
+          window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, clientX: x + 5, clientY: y + 5 }));
+          await sleep(100);
+          if (undoBtn.disabled) out.errors.push('screenshot editor: undo stayed disabled after a drawn stroke');
+          undoBtn.click();
+          await sleep(100);
+          if (!undoBtn.disabled) out.errors.push('screenshot editor: undo stayed enabled after undoing the only stroke');
+        }
+        document.getElementById('snip-edit-cancel').click();
+        await sleep(200);
+        if (!document.getElementById('snip-edit').classList.contains('hidden')) {
+          out.errors.push('screenshot editor did not close on Cancel');
+        }
+      }
+    }
   } catch (e) { out.errors.push('probe: ' + e.message); }
   for (const el of document.querySelectorAll('.overlay *, #expert-flags *')) {
     const r = el.getBoundingClientRect();

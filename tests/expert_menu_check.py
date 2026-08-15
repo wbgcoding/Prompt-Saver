@@ -67,6 +67,17 @@ DEPENDENCIES = {
     "loupeCells": "colorPicker",
     "snipQuality": "screenshot",
     "snipDelayMs": "screenshot",
+    # 117/118: screenshot editor
+    "snipEditor": "screenshot",
+    "snipEditSnap": "snipEditor",
+    "snipTextPlate": "snipEditor",
+    "snipPenPx": "snipEditor",
+    "snipMarkerPx": "snipEditor",
+    "snipTextPx": "snipEditor",
+    "snipPixelBlock": "snipEditor",
+    "snipSpotlightDim": "snipEditor",
+    "snipEditUndoMax": "snipEditor",
+    "snipEditDefaultTool": "snipEditor",
     # 32: rotating prompts
     "rotateDefaultMode": "rotatingPrompts",
     "rotateMaxEntries": "rotatingPrompts",
