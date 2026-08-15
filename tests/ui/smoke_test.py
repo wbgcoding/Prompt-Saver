@@ -3761,6 +3761,67 @@ PROBE = """
         }
       }
     }
+    // 109: hide-top (left of Minimize) and hide-bottom (left of Save) share the
+    // same left/right edges -- both bars right-align on the same window edge and
+    // win-controls/Save share --winctl-w. Also: hiding both toggles (barToggles
+    // off) must not leave a gap where they used to sit. Only checked >= 700px:
+    // below the header's own ~690px wrap breakpoint, header-actions becomes the
+    // SOLE item on its wrapped line and `.header`'s justify-content:space-between
+    // has no second item left to space against, so it falls back to packing left
+    // instead of right -- a pre-existing quirk outside this point's scope, and
+    // exactly why Ben's own spec only asks for 900px/1280px here.
+    {
+      if (!document.getElementById('settings').classList.contains('hidden')) {
+        await click('settings-close');
+        await sleep(50);
+      }
+      const ht = document.getElementById('hide-top');
+      const hb = document.getElementById('hide-bottom');
+      const winMin = document.getElementById('win-min');
+      const winControls = document.querySelector('.win-controls');
+      const saveBtn = document.getElementById('save');
+      if (!ht || !hb || !winMin || !winControls || !saveBtn) {
+        out.errors.push('hide-top, hide-bottom, win-min, win-controls or save missing');
+      } else if (window.innerWidth >= 700) {
+        const htR = ht.getBoundingClientRect();
+        const hbR = hb.getBoundingClientRect();
+        if (Math.abs(htR.right - hbR.right) > 1 || Math.abs(htR.left - hbR.left) > 1) {
+          out.errors.push('hide-top/hide-bottom are not aligned at ' + window.innerWidth + 'px: left ' +
+            Math.round(htR.left) + '/' + Math.round(hbR.left) + ', right ' + Math.round(htR.right) + '/' + Math.round(hbR.right));
+        }
+        if (htR.right > winMin.getBoundingClientRect().left + 1) {
+          out.errors.push('hide-top is not left of win-min at ' + window.innerWidth + 'px');
+        }
+        if (hbR.right > saveBtn.getBoundingClientRect().left + 1) {
+          out.errors.push('hide-bottom is not left of save at ' + window.innerWidth + 'px');
+        }
+        const wcRightBefore = Math.round(winControls.getBoundingClientRect().right);
+        const saveRightBefore = Math.round(saveBtn.getBoundingClientRect().right);
+        document.body.classList.add('noflag-barToggles');
+        const wcRightAfter = Math.round(winControls.getBoundingClientRect().right);
+        const saveRightAfter = Math.round(saveBtn.getBoundingClientRect().right);
+        document.body.classList.remove('noflag-barToggles');
+        if (Math.abs(wcRightAfter - wcRightBefore) > 1 || Math.abs(saveRightAfter - saveRightBefore) > 1) {
+          out.errors.push('hiding the bar-toggle buttons shifts win-controls/save at ' + window.innerWidth + 'px');
+        }
+      }
+    }
+    // 108: Save must fit --winctl-w in every language -- the longest translations
+    // ("Speichern", "Speichern" DE at 9 chars is the longest of the 11) must not
+    // overflow the fixed-width button.
+    {
+      const saveBtn = document.getElementById('save');
+      if (saveBtn) {
+        const prev = saveBtn.textContent;
+        for (const word of ['Save', 'Speichern', 'Guardar', 'Salva', 'Salvar', 'Zapisz', 'Opslaan', 'Kaydet', 'Salveaza', '保存']) {
+          saveBtn.textContent = word;
+          if (saveBtn.scrollWidth > saveBtn.clientWidth + 1) {
+            out.errors.push('save button overflows with "' + word + '" at ' + window.innerWidth + 'px');
+          }
+        }
+        saveBtn.textContent = prev;
+      }
+    }
     // The changelog popup renders the release Markdown instead of dumping it, and
     // grows with the text rather than clipping it.
     await click('update-btn');

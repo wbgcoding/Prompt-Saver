@@ -16,6 +16,12 @@
   --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-ms: 150ms;
   --gap: 8px;
+  /* 109: win-controls (Minimize/Maximize/Close) and the composer's Save button
+     share this width so hide-top/hide-bottom, each left of its own row's fixed-
+     width block, line up vertically on the same right-aligned edge. */
+  --win-btn-w: 36px;
+  --win-btn-gap: 2px;
+  --winctl-w: calc(3 * var(--win-btn-w) + 2 * var(--win-btn-gap));
   /* Full-height modals (library/journal/settings/tall). Divided by the compounding
      CSS zooms (body ui-scale × modal-scale) so the modal never exceeds the viewport
      and its action buttons stay reachable at raised appearance scales. Identity at
@@ -389,6 +395,10 @@ body.no-composer .composer { display: none; }
 body.grid-selecting .composer { display: none; }
 .bar-toggle { opacity: 0.45; }
 .bar-toggle:hover { opacity: 1; }
+/* 109: header-actions narrows every icon-btn's padding to 4px (below), but
+   hide-top needs the default 6px to match hide-bottom's width exactly (composer
+   is not narrowed) -- otherwise hide-top/hide-bottom stop lining up. */
+#hide-top { padding: 6px; }
 /* Bottom toggle: same height as the Save button -> shared center line. */
 .composer .bar-toggle {
   height: 40px;
@@ -456,17 +466,19 @@ body.drag-active .bar-restore { opacity: 0.1; pointer-events: none; }
 .win-controls {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--win-btn-gap);
   flex: 0 0 auto;
+  /* 109: no divider line/padding here anymore -- hide-top now sits directly left
+     of win-min (the composer has no equivalent divider before Save, and matching
+     that gap exactly is what makes hide-top/hide-bottom line up). hide-top's own
+     hover highlight already reads as a clear break from the icons before it. */
   margin-left: 6px;
-  padding-left: 8px;
-  border-left: 1px solid var(--border);
 }
 .win-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
+  width: var(--win-btn-w);
   height: 30px;
   padding: 0;
   border: none;
@@ -1084,6 +1096,13 @@ body.grid-selecting .tile-type { opacity: 0; }
 }
 .input:focus { border-color: var(--accent); }
 .input::-webkit-scrollbar { display: none; width: 0; }
+/* 109: fixed to --winctl-w so Save lines up under win-controls (same width) and
+   hide-bottom, left of it, lines up under hide-top, left of win-controls -- both
+   bars right-align on the same window edge. Holds at the default UI scale; the
+   composer carries its own zoom (--composer-zoom) and Save its own icon zoom
+   (--icon-zoom) on top of that, so a non-default scale can still drift the two
+   edges apart by a rounding pixel or two. */
+.composer #save { flex: 0 0 var(--winctl-w); text-align: center; }
 
 /* Match number inputs to the tool: kill native spin buttons completely. */
 input[type="number"]::-webkit-outer-spin-button,

@@ -282,6 +282,10 @@ until you turn it on.
 
 ### Fixed
 
+- **The bar-hide buttons sat far from the row they collapse.** They now sit
+  directly left of Minimize (top) and Save (bottom), lined up with each
+  other; Save is now exactly as wide as the Minimize–Maximize–Close row
+  above it.
 - **"Reset settings" and "Delete all data" wrapped to a second line** in
   several languages, making the button row taller than the rest of the
   dialog. Both buttons now show a single short word, with the full
