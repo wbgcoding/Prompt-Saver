@@ -13,6 +13,15 @@ button) to create one, click any tile to copy it. Three sample tiles (an email w
 placeholders, an image, and a Markdown template) are already there on first launch —
 a button above the grid removes them with one click once they're no longer needed.
 
+### Introduction tour
+
+A five-step walkthrough shown once on first launch, right after the sample tiles
+appear. The last step offers to switch on the screenshot editor, colour picker, or
+OCR right there — skipping the tour writes nothing. Reopen it anytime from Settings
+("Introduction") or the expert menu; reopened this way, a switch on that last step
+takes effect immediately instead of waiting for a Finish click. The step frame's
+minimum height is adjustable in the expert menu, for very small screens.
+
 ### Creating tiles
 
 Beyond plain text, a tile can carry an attached file, a screenshot, or a picked
@@ -58,6 +67,27 @@ click a window to capture it whole — even a normally-protected one like the Ta
 Manager. The app's own windows are hidden for the moment of capture so they never
 end up in the shot; the confirmation dialog then offers saving it as a tile, saving
 it as a file, or leaving it on the clipboard.
+
+Before that dialog, an editor opens on the capture (on by default): crop, a
+freehand pen and highlighter marker, straight lines and arrows, rectangles and
+ellipses, text labels, numbered step markers, a pixelate tool for blurring out
+sensitive details, and a spotlight that dims everything outside a chosen area —
+with undo/redo.
+
+### Text recognition (OCR)
+
+Off by default. Once switched on, a button on the composer and in the screenshot
+dialog pulls the text out of a screenshot or an image file, entirely on this
+device via Windows' own text recognizer — nothing is uploaded or sent anywhere.
+It needs a Windows language pack: the app offers to download one the first time
+it's needed, and installing it needs administrator rights (the usual Windows
+confirmation prompt appears). The language dropdown's "Manage languages…" entry
+opens a dialog listing what's installed and what's available, and lets you
+install or update from there; listing normally needs no special rights, but on
+some Windows systems it does too — the dialog says so plainly instead of coming
+up blank. Recognized text can auto-copy to the clipboard and auto-join wrapped
+lines into full sentences, both adjustable, and the app can check in the
+background for language packs that need updating.
 
 ### Colour picker & pick history
 
@@ -320,6 +350,13 @@ auf eine leere Rasterzelle (oder der Plus-Button) legt eine an, ein Klick kopier
 Drei Beispielkacheln (E-Mail mit Platzhaltern, Bild, Markdown-Vorlage) sind beim
 ersten Start bereits da — ein Button über dem Raster entfernt sie mit einem Klick.
 
+**Einführungstour** — fünf Schritte beim ersten Start, direkt nach den
+Beispielkacheln; der letzte Schritt bietet an, Screenshot-Editor, Farbpipette
+oder OCR gleich einzuschalten. Überspringen schreibt nichts. Jederzeit erneut
+aufrufbar über die Einstellungen („Einführung") oder das Experten-Menü — dort
+wirkt ein Schalter auf dem letzten Schritt sofort statt erst bei „Fertig". Die
+Mindesthöhe des Schritt-Rahmens ist im Experten-Menü einstellbar.
+
 **Kacheln anlegen** — Dateianhang, Screenshot-Werkzeug, Farbpipette (aus),
 Ziehen & Ablegen.
 
@@ -334,7 +371,23 @@ Notizen (Markdown-Vorschau und Notizen standardmäßig aus).
 Experten-Menü bis 200×200 einstellbar), eigenes Layout je Ansicht.
 
 **Screenshot-Werkzeug** — Bereich oder ganzes Fenster (auch geschützte wie den
-Task-Manager) direkt zu einer neuen Kachel.
+Task-Manager) direkt zu einer neuen Kachel. Davor öffnet sich standardmäßig ein
+Editor: Zuschneiden, Stift, Marker, Linien, Pfeile, Rechtecke, Ellipsen, Text,
+nummerierte Schritte, Pixelieren und ein Spotlight, das alles außerhalb eines
+Bereichs abdunkelt — mit Rückgängig/Wiederholen.
+
+**Texterkennung (OCR)** — standardmäßig aus; liest per Knopf in der Leiste und
+im Screenshot-Dialog Text aus einem Screenshot oder einer Bilddatei, komplett
+offline über die eigene Texterkennung von Windows. Braucht ein
+Windows-Sprachpaket — die App bietet den Download beim ersten Bedarf an, die
+Installation braucht Administratorrechte (übliche Windows-Bestätigung).
+„Sprachen verwalten…" im Sprachen-Dropdown listet Installiertes und
+Verfügbares und startet Installation/Update; das Auflisten selbst braucht
+normalerweise keine Sonderrechte, auf manchen Windows-Systemen aber doch — der
+Dialog sagt das dann offen statt leer zu bleiben. Erkannter Text kann
+automatisch kopiert und umgebrochene Zeilen zu ganzen Sätzen zusammengefügt
+werden, beides einstellbar; eine Hintergrundprüfung meldet veraltete
+Sprachpakete.
 
 **Farbpipette & Auswahlverlauf** — Pixel als Hex/RGB/HSL kopieren; die letzten
 Auswahlen überstehen einen Neustart. Standardmäßig aus.

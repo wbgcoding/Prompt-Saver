@@ -64,7 +64,8 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Images, GIFs & videos** | Save a picture from the clipboard or a file and paste it anywhere with one click |
 | **Video player** | Looping previews on tiles *and* floating buttons, with scrubber, loop and volume — remembered per prompt |
 | **PDF & files** | Attach any file by path; a PDF's first page becomes the button's image |
-| **Screenshot tool** | Capture a region or a whole window — even protected ones like the Task Manager — and turn it into a copy button |
+| **Screenshot tool** | Capture a region or a whole window — even protected ones like the Task Manager — then crop, draw, annotate or pixelate it in a built-in editor before it becomes a copy button |
+| **Text recognition (OCR)** | Pull text out of a screenshot or an image file with Windows' own on-device recognizer — fully offline, nothing uploaded. Off by default; needs a Windows language pack, which the app offers to install for you (needs administrator rights) |
 | **Color picker** | A pipette freezes the screen, magnifies the pixel under the cursor and copies it as hex, rgb or hsl |
 | **Markdown preview** | Render a prompt in the editor — headings, lists, quotes and syntax-colored code, toggled or side by side |
 | **Full-screen viewer** | Click any preview to open it full-screen: scroll to zoom up to 8×, drag to pan |
@@ -98,6 +99,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 |---|---|
 | **Expert menu** | Six tabs with an on/off switch for every feature and a parameter for everything adjustable. Settings that are not self-explanatory carry a tooltip |
 | **Runs in the background** | Optional minimize-to-tray, autostart at login, global hotkey |
+| **Guided first run** | A short walkthrough on first launch covering the basics, with a step to turn on the screenshot editor, color picker or OCR right there; reopen it anytime from Settings |
 | **Auto updates** | Checks for a new version on start (switchable off) with one-click install, verified against a published checksum |
 | **100 % local** | A single local database. No account, no telemetry, no network traffic except the update check |
 | **Small** | ~8 MB installer (Rust / Tauri), using the Windows WebView2 runtime |
@@ -158,7 +160,7 @@ npm run build              # portable exe + NSIS installer
 
 ## Tech stack
 
-[Tauri 2](https://tauri.app) (Rust backend, WebView2 frontend) · vanilla HTML/CSS/JS, no bundler, no framework · SQLite store · `arboard` (clipboard), `rfd` (native dialogs), `pdfium-render` (PDF previews), `xcap` (screen capture), `winreg` (autostart), `sys-locale` (language detection).
+[Tauri 2](https://tauri.app) (Rust backend, WebView2 frontend) · vanilla HTML/CSS/JS, no bundler, no framework · SQLite store · `arboard` (clipboard), `rfd` (native dialogs), `pdfium-render` (PDF previews), `xcap` (screen capture), `winreg` (autostart), `sys-locale` (language detection), `windows` (on-device OCR, opt-in).
 
 Third-party components and their licenses: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
 

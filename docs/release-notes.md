@@ -1,10 +1,15 @@
 ## Prompt Saver 2.7.0
 
-Fourteen new features: tags, custom themes, folders for view tabs and for
+Twenty-two new features: tags, custom themes, folders for view tabs and for
 floating buttons, self-filling and choice variables, a markdown preview with
-syntax colors, rotating prompts, private notes, per-prompt hotkeys, drag-out
-into other apps, a tray quick-copy menu and a screen color picker. Everything
-new is an expert-menu switch, most of it off until you turn it on.
+syntax colors, a standalone quick launcher, multi-select in the grid, a trash
+for deleted prompts, placing one prompt in several views at once, restoring a
+backup's data and settings separately, rotating prompts, private notes,
+per-prompt hotkeys, drag-out into other apps, a tray quick-copy menu, a screen
+color picker, a screenshot editor, offline text recognition (OCR) and a
+first-run introduction tour. Everything new is an expert-menu switch, most of
+it off until you turn it on (the screenshot editor and the introduction tour
+ship on).
 
 ### Downloads
 
@@ -15,11 +20,19 @@ new is an expert-menu switch, most of it off until you turn it on.
 
 Requires the Microsoft WebView2 runtime (preinstalled on Windows 11 and current Windows 10). If it is missing, the app offers the official Microsoft installer on first start.
 
+### Getting started
+
+- **Introduction tour** — a five-step walkthrough on first launch: what the app does and that it stays offline, saving and using a tile, organizing tiles and views, the library and search, then a quick table of the three optional features (screenshot editor, color picker, OCR) with a one-click reset to their shipped default. Nothing is written until you finish. Reopen it any time from Settings; ships on.
+
 ### Organise
 
 - **Tags** — label prompts with free-form, colored tags. Type-ahead chips in the editor, a multi-select filter row in the library that matches all or any of the picked tags and stacks with the search, and a manager to rename, recolor or delete a tag everywhere at once.
 - **View groups** — drag one view tab onto another and they become a folder tab with a popover listing its views. Rename, recolor or dissolve it from its context menu; Ctrl+Tab cycles through views in visual order.
 - **Private notes** — a collapsible notes row per prompt for context you keep but never copy. Shown dimmed in the tile tooltip, found by the search, never on the clipboard.
+- **Multi-select in the grid** — point at a tile to reveal a checkbox; a toolbar above the grid then recolors, moves to another view, or deletes everything checked at once.
+- **Trash** — deleting a prompt moves it to a trash instead of removing it right away. Restore it or delete it forever from the expert menu's Data group, or let it clear itself after a retention period you choose (30 days by default, or never).
+- **Prompt in multiple views** (expert menu, off by default) — right-click a tile and pick which other views should also show it; editing it in one place updates every view.
+- **Quick launcher** — the global hotkey (Ctrl+Alt+P by default) opens a small standalone search window instead of the main library: type to fuzzy-find a prompt, Enter or click copies it instantly.
 
 ### Write
 
@@ -36,9 +49,17 @@ Requires the Microsoft WebView2 runtime (preinstalled on Windows 11 and current 
 - **Drag-out** — hold Ctrl and drag a tile, library row or floating button into another app to drop its text there.
 - **Floating-button folders** — drag one floating button onto another and they merge into a folder showing up to four previews and a count. Click to open it in place, drag a member out to free it, and it dissolves when one is left.
 
+### Capture and read
+
+- **Screenshot editor** — every capture opens for editing before it reaches a tile, the clipboard or a folder: crop, pen, marker, a highlighter-style blend, line, arrow, rectangle, ellipse, text, a self-numbering step marker, pixelation and a spotlight that dims everything outside a chosen area. Full undo/redo, an eyedropper, live width×height while dragging, snapping to the image edges and center. Cancel keeps the original untouched; Apply re-copies the edited image. Ships on.
+- **Text recognition (OCR)** — pull editable text out of a screenshot or an image file, fully offline through Windows' own recognizer. A composer button grabs a new screenshot or a file; the screenshot dialog also gets a "Recognize text" button for the capture you already have. The result opens ready to copy or save as a new prompt, with small text enlarged first so it reads reliably. Missing a language pack? A "Manage languages" dialog lists everything Windows can recognize with the download size shown up front, walks through Windows' own installer, and can keep installed packs current automatically. Expert menu, off by default.
+
 ### Also in this release
 
 - **Grid folders** — drop one tile onto another and both move into a folder in that cell; drag one out and it goes back to the layout.
+- **Restore data and settings separately** — restoring a backup, or importing a `.psb`/`.json` backup file, now offers two checkboxes instead of an all-or-nothing swap: bring back your prompts without touching your current setup, or the other way around.
+- **Markdown folder sync** (expert menu, off by default, beta) — mirrors every prompt as its own readable `.md` file in a folder you pick, kept in sync both ways. The files are plain text — the database is not — so keep anything sensitive out of a folder other people or services can read.
+- **An About dialog** and **a real help search** that matches several words in any order and highlights what it found.
 - **Allow multiple instances** (expert menu, off by default) — run the app more than once at the same time, e.g. against two different data folders. Off keeps the familiar single-instance behaviour. Takes a restart to apply.
 - The backups window can open its snapshot folder in Explorer directly.
 - Dragging a button, tab or tile onto another shows what would happen: the target dims behind a folder mark in the accent colour — the same gesture in all three places.

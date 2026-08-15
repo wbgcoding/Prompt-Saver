@@ -539,6 +539,15 @@ ship on).
   quietly doing nothing.
 - A handful of remaining error toasts (among them a failed backup) still
   showed the raw English message instead of the translated one.
+- **Escape** did not close the help panel, unlike every other panel in the app.
+- The journal's favorites-only filter chip disappeared when it was the only
+  active filter, making it impossible to turn back off.
+- The journal did not redraw its content when the app language changed while
+  it was open.
+- Restoring a prompt version could overwrite a different prompt's editor if
+  you switched away before the restore finished loading.
+- Changing a PDF's active page did not count as an unsaved change, so closing
+  the editor right after skipped the usual "discard changes?" prompt.
 
 ### Removed
 
