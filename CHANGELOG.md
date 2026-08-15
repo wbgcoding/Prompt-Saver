@@ -446,6 +446,9 @@ until you turn it on.
 - **Two expert-menu dropdowns paired side by side could look inconsistent**
   when one's label wrapped to a second line and the other's did not — the
   label now always sits above the field in that two-column layout instead.
+- **The "Create backup" button was noticeably narrower than "Open in
+  Explorer" right below it** in the backup dialog's left column; both now
+  match the column width.
 
 ### Removed
 

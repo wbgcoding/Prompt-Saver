@@ -2575,7 +2575,6 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 /* Settings split in two: left "make a backup / how often", right "how many are kept". */
 .backup-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 24px; align-items: start; }
 .backup-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.backup-now-btn { align-self: flex-start; }
 @media (max-width: 720px) { .backup-cols { grid-template-columns: minmax(0, 1fr); } }
 /* GFS tiers as a 2x2 block of small fields (day / week over month / year). */
 /* The slot takes its height from the tier grid itself, which is always rendered and

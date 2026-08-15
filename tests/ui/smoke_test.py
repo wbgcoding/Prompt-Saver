@@ -3323,6 +3323,15 @@ PROBE = """
         if (!(window.__SMOKE_CALLS__ || []).includes('open_backups_folder')) {
           out.errors.push('the "open backups folder" button did not call the backend');
         }
+        // 102: "Create backup" used to shrink to its own text while "Open in
+        // Explorer" (a plain ghost-btn) took the full column width.
+        const nowBtn = document.querySelector('#backup-panel .backup-now-btn');
+        if (!nowBtn) {
+          out.errors.push('the "create backup" button is missing');
+        } else if (Math.abs(nowBtn.getBoundingClientRect().width - openFolderBtn.getBoundingClientRect().width) > 1) {
+          out.errors.push('102: create-backup width ' + Math.round(nowBtn.getBoundingClientRect().width) +
+            'px does not match open-folder width ' + Math.round(openFolderBtn.getBoundingClientRect().width) + 'px');
+        }
       }
       if (document.querySelectorAll('#backup-panel .stat-cards .stat-card').length !== 8) {
         out.errors.push('the backup diagnostics do not show 8 cards');
