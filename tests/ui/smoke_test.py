@@ -3432,14 +3432,30 @@ PROBE = """
           out.errors.push('a backup with names has no clickable count toggle');
         } else {
           const box = withNames.nextElementSibling;
-          if (!box || !box.classList.contains('backup-names') || !box.classList.contains('hidden')) {
+          if (!box || !box.classList.contains('backup-names-list') || !box.classList.contains('hidden')) {
             out.errors.push('the names box is not collapsed by default');
           } else {
             toggle.click();
             await sleep(150);
             if (box.classList.contains('hidden')) out.errors.push('clicking the count did not reveal the names');
-            if (!box.textContent.includes('Draft reply') || !box.textContent.includes('Meeting notes')) {
-              out.errors.push('the expanded names box is missing a fixture name: ' + box.textContent);
+            // 103: real li rows (name / type chip / char count), not one comma string.
+            const li = [...box.querySelectorAll('li.backup-name-row')];
+            if (li.length !== 2) {
+              out.errors.push('the expanded list does not show 2 real li rows (found ' + li.length + ')');
+            } else {
+              const text = box.textContent;
+              if (!text.includes('Draft reply') || !text.includes('Meeting notes')) {
+                out.errors.push('the expanded list is missing a fixture name: ' + text);
+              }
+              if (!li[0].querySelector('.backup-name-row-kind') || !li[0].querySelector('.backup-name-row-chars')) {
+                out.errors.push('a backup name row is missing its type chip or char count');
+              }
+              if (li[1].querySelector('.backup-name-row-chars').textContent !== '—') {
+                out.errors.push('a zero-char (legacy-cache) row does not show the placeholder dash');
+              }
+            }
+            if (box.scrollWidth > box.clientWidth + 1) {
+              out.errors.push('the expanded names list overflows horizontally');
             }
             toggle.click();
             await sleep(150);

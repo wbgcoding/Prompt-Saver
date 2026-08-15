@@ -6263,6 +6263,21 @@ async fn ignore_dups(app: AppHandle, state: State<'_, Db>, ids: Vec<String>) -> 
 }
 
 // ---- F2 automatic backups & restore ----
+// 103: name + size/kind, so the expanded backup list can show a real per-prompt
+// row instead of one long comma string. `kind` reuses prompt_stat_type()'s
+// categories (text/image/video/pdf/file) -- one shared classifier, not a second.
+#[derive(Serialize, Deserialize)]
+struct BackupPrompt {
+    name: String,
+    #[serde(default)]
+    chars: usize,
+    #[serde(default = "default_backup_kind")]
+    kind: String,
+}
+fn default_backup_kind() -> String {
+    "text".into()
+}
+
 #[derive(Serialize)]
 struct BackupInfo {
     name: String,
@@ -6271,13 +6286,13 @@ struct BackupInfo {
     // made (exact, and free to read back); a backup from an older build has no note
     // yet, so its count is read out of the snapshot itself once.
     prompts: Option<usize>,
-    // 61: the prompt names themselves, same "written once, cheap to read back after"
-    // treatment as `prompts` above. The snapshot beside it has every row DPAPI-sealed,
-    // so this cache is sealed the same way — plaintext here would hand anyone copying
-    // the data folder to another Windows account the full list of prompt names while
-    // the snapshot itself stayed unreadable, which is exactly the protection the seal
-    // exists for.
-    names: Vec<String>,
+    // 61/103: the prompt names themselves, same "written once, cheap to read back
+    // after" treatment as `prompts` above. The snapshot beside it has every row
+    // DPAPI-sealed, so this cache is sealed the same way — plaintext here would hand
+    // anyone copying the data folder to another Windows account the full list of
+    // prompt names while the snapshot itself stayed unreadable, which is exactly the
+    // protection the seal exists for.
+    items: Vec<BackupPrompt>,
 }
 
 const BACKUP_COUNT_FILE: &str = "prompts.count";
@@ -6312,16 +6327,23 @@ fn backup_prompt_count(folder: &std::path::Path) -> Option<usize> {
     n
 }
 
+// Total characters across a rotating prompt's entry 1 (`text`) and every variant —
+// what the version history diff and 90-94's auto-advance already treat as "the
+// whole prompt", so the backup list counts the same thing.
+fn prompt_char_count(p: &Prompt) -> usize {
+    p.text.chars().count() + p.variants.iter().map(|v| v.chars().count()).sum::<usize>()
+}
+
 // Decrypt each row (same DPAPI seal `db_load` uses on the live store) and pull out
-// just the name — best-effort, a row that fails to decrypt/parse is skipped rather
+// name/size/kind — best-effort, a row that fails to decrypt/parse is skipped rather
 // than failing the whole list.
-fn read_prompt_names(path: &std::path::Path) -> Vec<String> {
+fn read_prompt_names(path: &std::path::Path) -> Vec<BackupPrompt> {
     let Ok(conn) = Connection::open(path) else { return Vec::new() };
     let Ok(mut stmt) = conn.prepare("SELECT data FROM prompts ORDER BY ord") else { return Vec::new() };
     let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) else { return Vec::new() };
     rows.flatten()
         .filter_map(|data| serde_json::from_str::<Prompt>(&dec_str(&data)).ok())
-        .map(|p| p.name)
+        .map(|p| BackupPrompt { name: p.name.clone(), chars: prompt_char_count(&p), kind: prompt_stat_type(&p).to_string() })
         .collect()
 }
 
@@ -6329,24 +6351,37 @@ fn read_prompt_names(path: &std::path::Path) -> Vec<String> {
 // the snapshot it sits beside. `dec_str` passes an un-prefixed value straight through,
 // so a plaintext cache written by an earlier build still reads and is re-sealed on the
 // next write — no migration step needed.
-fn write_prompt_names(cache: &std::path::Path, names: &[String]) {
-    if let Ok(json) = serde_json::to_string(names) {
+fn write_prompt_names(cache: &std::path::Path, items: &[BackupPrompt]) {
+    if let Ok(json) = serde_json::to_string(items) {
         let _ = fs::write(cache, enc_str(&json));
     }
 }
-fn read_prompt_names_cache(cache: &std::path::Path) -> Vec<String> {
-    fs::read_to_string(cache)
-        .ok()
-        .and_then(|raw| serde_json::from_str(&dec_str(&raw)).ok())
+// 103: an older build's cache is a plain Vec<String> — try the current shape first,
+// fall back to strings-with-zero-chars. The bool says whether the fallback fired, so
+// the caller can upgrade the cache file once instead of re-writing it on every read.
+fn read_prompt_names_cache(cache: &std::path::Path) -> (Vec<BackupPrompt>, bool) {
+    let Some(text) = fs::read_to_string(cache).ok().map(|raw| dec_str(&raw)) else { return (Vec::new(), false) };
+    if let Ok(items) = serde_json::from_str::<Vec<BackupPrompt>>(&text) {
+        return (items, false);
+    }
+    let items = serde_json::from_str::<Vec<String>>(&text)
         .unwrap_or_default()
+        .into_iter()
+        .map(|name| BackupPrompt { name, chars: 0, kind: default_backup_kind() })
+        .collect();
+    (items, true)
 }
 
 // 61: same cached-note treatment as `backup_prompt_count` — computed once (here, or
 // at creation time in `do_backup`) and read straight back after.
-fn backup_prompt_names(folder: &std::path::Path) -> Vec<String> {
+fn backup_prompt_names(folder: &std::path::Path) -> Vec<BackupPrompt> {
     let cache = folder.join(BACKUP_NAMES_FILE);
     if cache.exists() {
-        return read_prompt_names_cache(&cache);
+        let (items, legacy) = read_prompt_names_cache(&cache);
+        if legacy {
+            write_prompt_names(&cache, &items);
+        }
+        return items;
     }
     let Some(db) = backup_db_file(folder) else { return Vec::new() };
     let tmp;
@@ -6359,12 +6394,12 @@ fn backup_prompt_names(folder: &std::path::Path) -> Vec<String> {
     } else {
         db
     };
-    let names = read_prompt_names(&path);
+    let items = read_prompt_names(&path);
     let _ = fs::remove_file(folder.join("names.tmp"));
-    if !names.is_empty() {
-        write_prompt_names(&cache, &names);
+    if !items.is_empty() {
+        write_prompt_names(&cache, &items);
     }
-    names
+    items
 }
 fn backups_dir(app: &AppHandle) -> std::path::PathBuf {
     data_dir(app).join("backups")
@@ -6392,8 +6427,8 @@ fn list_backups_impl(app: &AppHandle) -> Vec<BackupInfo> {
                 .map(|m| m.len())
                 .unwrap_or(0);
             let prompts = backup_prompt_count(&e.path());
-            let names = backup_prompt_names(&e.path());
-            BackupInfo { name, size, prompts, names }
+            let items = backup_prompt_names(&e.path());
+            BackupInfo { name, size, prompts, items }
         })
         .collect();
     out.sort_by(|a, b| b.name.cmp(&a.name)); // newest first (stamp sorts chronologically)
@@ -6590,9 +6625,9 @@ fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<Str
             let _ = fs::write(folder.join(BACKUP_COUNT_FILE), n.max(0).to_string());
         }
     }
-    let names = read_prompt_names(&tmp);
-    if !names.is_empty() {
-        write_prompt_names(&folder.join(BACKUP_NAMES_FILE), &names);
+    let items = read_prompt_names(&tmp);
+    if !items.is_empty() {
+        write_prompt_names(&folder.join(BACKUP_NAMES_FILE), &items);
     }
     let _ = fs::remove_file(&tmp);
     if let Err(e) = packed {
@@ -14836,6 +14871,36 @@ mod tests {
             read_sealed_json::<Vec<String>>(&sealed_garbage),
             SealedRead::Unreadable
         ));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // 103: a cache written by a build before BackupPrompt existed is a sealed
+    // Vec<String> -- must read back as name-only items instead of an empty list,
+    // and the caller must be told to re-write it (once), not on every read.
+    #[test]
+    fn backup_names_cache_upgrades_a_legacy_string_list() {
+        let dir = std::env::temp_dir().join(format!("ps-backup-names-legacy-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let cache = dir.join("prompts.names.json");
+
+        let legacy = enc_str(&serde_json::to_string(&vec!["Draft reply", "Meeting notes"]).unwrap());
+        fs::write(&cache, legacy).expect("write legacy cache");
+        let (items, legacy) = read_prompt_names_cache(&cache);
+        assert!(legacy);
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].name, "Draft reply");
+        assert_eq!(items[0].chars, 0);
+        assert_eq!(items[0].kind, "text");
+
+        // Current-shape cache round-trips without the migration flag.
+        write_prompt_names(&cache, &items.iter().map(|i| BackupPrompt {
+            name: i.name.clone(), chars: 42, kind: "image".into(),
+        }).collect::<Vec<_>>());
+        let (items2, legacy2) = read_prompt_names_cache(&cache);
+        assert!(!legacy2);
+        assert_eq!(items2[0].chars, 42);
+        assert_eq!(items2[0].kind, "image");
 
         let _ = fs::remove_dir_all(&dir);
     }

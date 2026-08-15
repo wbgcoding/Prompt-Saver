@@ -2650,11 +2650,29 @@ input[type="password"]::-ms-clear { display: none; }
 /* 61: the count doubles as a click-to-expand toggle when names are available. */
 .backup-count-toggle { cursor: pointer; }
 .backup-count-toggle:hover, .backup-count-toggle:focus-visible { color: var(--fg); }
-.backup-names {
-  font-size: 12px; line-height: 1.6; color: var(--muted);
-  padding: 6px 10px; margin-top: -6px;
+/* 103: one real row per prompt (name / type / char count) instead of one long
+   comma string -- scrolls once it grows past a handful of rows. */
+.backup-names-list {
+  list-style: none; margin: -6px 0 0; padding: 4px 10px;
   border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px;
-  max-height: 160px; overflow-y: auto;
+  max-height: 240px; overflow-y: auto;
+}
+.backup-name-row {
+  display: flex; align-items: center; gap: 8px; padding: 3px 0;
+  font-size: 12px; border-bottom: 1px solid var(--border);
+}
+.backup-name-row:last-child { border-bottom: none; }
+.backup-name-row-name {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; color: var(--fg);
+}
+.backup-name-row-kind {
+  flex: 0 0 auto; color: var(--muted); font-size: 11px;
+  padding: 1px 6px; border: 1px solid var(--border); border-radius: 999px;
+}
+.backup-name-row-chars {
+  flex: 0 0 auto; min-width: 48px; text-align: right; color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* F21 clipboard inbox. */

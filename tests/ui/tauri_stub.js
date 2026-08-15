@@ -264,8 +264,11 @@ const RESULTS = {
     ],
   }),
   list_backups: () => [
-    { name: "2026-07-25_18-30-00", size: 812345, prompts: 12, names: ["Draft reply", "Meeting notes"] },
-    { name: "2026-07-24_09-05-00", size: 654321, prompts: null, names: [] },
+    { name: "2026-07-25_18-30-00", size: 812345, prompts: 12, items: [
+      { name: "Draft reply", chars: 214, kind: "text" },
+      { name: "Meeting notes", chars: 0, kind: "text" }, // 103: legacy-cache stand-in (chars unknown -> "-")
+    ] },
+    { name: "2026-07-24_09-05-00", size: 654321, prompts: null, items: [] },
   ],
   recent_copies: () => PROMPTS.slice(0, 4).map((p, i) => ({ id: p.id, ts: 1750000000 + i, rowid: i + 1 })),
   delete_copy_entry: () => true,

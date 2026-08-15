@@ -6606,6 +6606,10 @@ function numRow(labelKey, key, min, max, onSet, extraClass, after) {
   return l;
 }
 
+// Shared with the backup list's per-prompt type chip (103) -- one classifier's
+// worth of i18n keys, not two.
+const PROMPT_TYPE_LABELS = { text: "statTypeText", image: "filterImage", video: "filterVideo", pdf: "filterPdf", file: "filterFile" };
+
 async function renderStatsPanel(body) {
   // Feature toggle + (when on) the top-N field share one row.
   const on = flag("usageStats");
@@ -6740,11 +6744,10 @@ async function renderStatsPanel(body) {
   if (s.types.length) {
     body.appendChild(statSection(t("statTypes")));
     const list = document.createElement("div"); list.className = "stat-bars";
-    const typeLabel = { text: "statTypeText", image: "filterImage", video: "filterVideo", pdf: "filterPdf", file: "filterFile" };
     const maxT = Math.max(...s.types.map((x) => x.count), 1);
     for (const ty of s.types) {
       const row = document.createElement("div"); row.className = "stat-bar-row";
-      const name = document.createElement("span"); name.className = "stat-bar-name"; name.textContent = t(typeLabel[ty.name] || ty.name);
+      const name = document.createElement("span"); name.className = "stat-bar-name"; name.textContent = t(PROMPT_TYPE_LABELS[ty.name] || ty.name);
       const track = document.createElement("div"); track.className = "stat-bar-track";
       const fill = document.createElement("div"); fill.className = "stat-bar-fill";
       fill.style.width = `${Math.max(4, (ty.count / maxT) * 100)}%`;
@@ -7259,15 +7262,26 @@ async function renderBackupPanel(body) {
       const count = document.createElement("span"); count.className = "backup-count";
       count.textContent = b.prompts === null || b.prompts === undefined ? "—" : nf(b.prompts);
       count.title = t("backupPrompts");
-      // 61: names are read straight from the snapshot (DPAPI-sealed exactly like the
-      // live library — a local snapshot is never password-protected, only the
+      // 61/103: names are read straight from the snapshot (DPAPI-sealed exactly like
+      // the live library — a local snapshot is never password-protected, only the
       // separate manual export-to-file has that option), so there is nothing to ask
       // for here. An empty list just means an older backup made before this existed.
       let namesBox = null;
-      if (b.names && b.names.length) {
-        namesBox = document.createElement("div");
-        namesBox.className = "backup-names hidden";
-        namesBox.textContent = b.names.join(", ");
+      if (b.items && b.items.length) {
+        namesBox = document.createElement("ul");
+        namesBox.className = "backup-names-list hidden";
+        for (const item of b.items) {
+          const li = document.createElement("li"); li.className = "backup-name-row";
+          const nm = document.createElement("span"); nm.className = "backup-name-row-name"; nm.textContent = item.name;
+          const kind = document.createElement("span");
+          kind.className = "backup-name-row-kind";
+          kind.textContent = t(PROMPT_TYPE_LABELS[item.kind] || item.kind);
+          const chars = document.createElement("span");
+          chars.className = "backup-name-row-chars";
+          chars.textContent = item.chars ? nf(item.chars) : "—";
+          li.append(nm, kind, chars);
+          namesBox.appendChild(li);
+        }
         count.classList.add("backup-count-toggle");
         count.setAttribute("role", "button");
         count.tabIndex = 0;

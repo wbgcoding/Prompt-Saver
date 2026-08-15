@@ -449,6 +449,10 @@ until you turn it on.
 - **The "Create backup" button was noticeably narrower than "Open in
   Explorer" right below it** in the backup dialog's left column; both now
   match the column width.
+- **The expanded backup list showed every prompt name run together in one
+  comma-separated line.** It is now a real list, one row per prompt with its
+  type and character count; an older backup's cache still made before this
+  existed upgrades the next time it is listed.
 
 ### Removed
 
