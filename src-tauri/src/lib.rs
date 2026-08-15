@@ -9018,6 +9018,17 @@ struct MonitorCap {
 }
 struct SnipState(Mutex<Vec<MonitorCap>>);
 
+// 121: arms the NEXT capture_region call to run OCR instead of a normal screenshot
+// save/copy. Single-shot by construction -- close_all_snip resets it the moment
+// any snip session actually ends (a successful capture, a cancel, or a window
+// click), so it can never leak into a later, unrelated screenshot.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SnipMode {
+    Capture,
+    Ocr,
+}
+struct SnipModeState(Mutex<SnipMode>);
+
 // Overlay preview prepared in the background the instant the desktop is frozen,
 // so the (heavy) JPEG encode overlaps WebView creation instead of running after
 // it. None = still encoding, Some(None) = encode failed, Some(Some) = ready.
@@ -9048,6 +9059,12 @@ fn close_all_snip(app: &AppHandle) {
     remove_snip_preview();
     SNIP_ACTIVE.store(false, Ordering::SeqCst);
     PICK_ACTIVE.store(false, Ordering::SeqCst);
+    // 121: every path that ends a snip session (capture, cancel, window click)
+    // funnels through here, so this is the one place that can guarantee OCR mode
+    // never survives past the session it was armed for.
+    if let Some(m) = app.try_state::<SnipModeState>() {
+        *m.0.lock().unwrap_or_else(|e| e.into_inner()) = SnipMode::Capture;
+    }
 }
 
 // Hide (or restore) the app's own windows — the main window and floating pills —
@@ -9975,6 +9992,16 @@ fn snip_cancel(app: AppHandle, state: State<SnipState>) {
     state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
 }
 
+// 121: arms (or disarms) OCR mode for the very next capture_region call, called by
+// the frontend right before it opens the capture overlay for the "Screenshot" entry
+// of the OCR menu. close_all_snip is what guarantees this never stays armed past
+// that one session.
+#[tauri::command]
+fn set_snip_mode(state: State<'_, SnipModeState>, mode: String) -> Result<(), String> {
+    *state.0.lock().unwrap_or_else(|e| e.into_inner()) = if mode == "ocr" { SnipMode::Ocr } else { SnipMode::Capture };
+    Ok(())
+}
+
 // Target folder for saved screenshots: a custom expert path, else Pictures\Screenshots.
 fn screenshot_dir(custom: &str) -> PathBuf {
     let c = custom.trim();
@@ -10298,6 +10325,57 @@ fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Option<St
     Ok(())
 }
 
+// 121: OCR settings live in the same expert-menu ui_values/ui_flags as everything
+// else. ocr_image/ocr_region/ocr_image_data receive them straight from the frontend
+// (the UI calls those directly and already knows the live values via val()/flag()),
+// but capture_region's OCR branch has no such call site of its own -- it reads them
+// here instead, the same way finalize_capture just above reads screenshotSave and
+// screenshotDir off the Db state rather than needing them passed in.
+fn ocr_settings_from(app: &AppHandle) -> (u32, bool) {
+    app.try_state::<Db>()
+        .map(|s| {
+            let g = s.lock().unwrap_or_else(|e| e.into_inner());
+            let upscale = g
+                .settings
+                .ui_values
+                .get("ocrUpscaleUnderPx")
+                .copied()
+                .unwrap_or(300.0)
+                .clamp(100.0, 800.0) as u32;
+            let join = g.settings.ui_flags.get("ocrJoinLines").copied().unwrap_or(true);
+            (upscale, join)
+        })
+        .unwrap_or((300, true))
+}
+
+// 121: the OCR counterpart to finalize_capture, taken when set_snip_mode armed the
+// session. Recognition can fail (e.g. no language pack installed) -- unlike
+// finalize_capture, that failure runs BEFORE close_all_snip, so the overlay stays
+// open and the caller's showError() can offer a retry with the freeze still in
+// place, instead of silently ending the session on a failed recognition.
+async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, SnipState>, crop: image::RgbaImage) -> Result<(), String> {
+    let (cw, ch) = crop.dimensions();
+    if cw == 0 || ch == 0 {
+        return Err("empty region".to_string());
+    }
+    let (upscale, join) = ocr_settings_from(app);
+    #[cfg(windows)]
+    {
+        let result = tauri::async_runtime::spawn_blocking(move || ocr::recognize_crop(crop, upscale, join))
+            .await
+            .map_err(|e| e.to_string())??;
+        close_all_snip(app);
+        state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        let _ = app.emit("ocr-captured", result);
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (crop, upscale, join);
+        Err("ocr is only available on Windows".to_string())
+    }
+}
+
 // Crop an image at a physical-pixel rect (clamped to its bounds).
 fn crop_rgba(img: &image::RgbaImage, x: i32, y: i32, width: u32, height: u32) -> Option<image::RgbaImage> {
     let (iw, ih) = img.dimensions();
@@ -10364,11 +10442,13 @@ fn capture_is_blank(img: &image::RgbaImage) -> bool {
     }
 }
 
-// Crop the frozen capture (physical pixels) and finalize.
+// Crop the frozen capture (physical pixels) and finalize -- as a saved screenshot,
+// or (121) run it through OCR instead when the mode was armed via set_snip_mode.
 #[tauri::command]
 async fn capture_region(
     app: AppHandle,
     state: State<'_, SnipState>,
+    snip_mode: State<'_, SnipModeState>,
     index: usize,
     x: i32,
     y: i32,
@@ -10376,6 +10456,10 @@ async fn capture_region(
     height: u32,
 ) -> Result<(), String> {
     let crop = crop_frozen(&state, index, x, y, width, height).ok_or("empty region")?;
+    let ocr_armed = *snip_mode.0.lock().unwrap_or_else(|e| e.into_inner()) == SnipMode::Ocr;
+    if ocr_armed {
+        return finalize_ocr_capture(&app, &state, crop).await;
+    }
     finalize_capture(&app, crop, None)
 }
 
@@ -10654,7 +10738,7 @@ struct OcrLang {
     label: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct OcrResult {
     text: String,
     lang: String,
@@ -10662,6 +10746,22 @@ struct OcrResult {
 
 const MAX_OCR_IMAGE_BYTES: u64 = 200 * 1024 * 1024; // a single image, not a whole export (MAX_IMPORT_BYTES)
 const OCR_IMAGE_EXTS: [&str; 5] = ["png", "jpg", "jpeg", "bmp", "webp"];
+
+// Pure decision for mod ocr's resize_for_ocr: shrink an oversized image down to
+// max_dim, enlarge a very small one 2x, or leave it alone. Kept outside
+// `#[cfg(windows)]` so it is unit-testable on any platform, same as ocr_join_lines.
+fn ocr_resize_target(w: u32, h: u32, max_dim: u32, upscale_below_px: u32) -> Option<(u32, u32)> {
+    if w > max_dim || h > max_dim {
+        let scale = max_dim as f64 / (w.max(h) as f64);
+        let nw = ((w as f64 * scale).round() as u32).max(1);
+        let nh = ((h as f64 * scale).round() as u32).max(1);
+        Some((nw, nh))
+    } else if w.max(h) < upscale_below_px {
+        Some((w * 2, h * 2))
+    } else {
+        None
+    }
+}
 
 fn ocr_validate_path(path: &str) -> Result<PathBuf, String> {
     let p = Path::new(path);
@@ -10735,18 +10835,22 @@ async fn ocr_languages() -> Result<Vec<OcrLang>, String> {
     }
 }
 
+// 121: upscale_under_px/join_lines are the ocrUpscaleUnderPx/ocrJoinLines expert
+// settings, sent by the frontend on every call (it already holds the live values
+// via val()/flag()) instead of the backend hardcoding them.
 #[tauri::command]
-async fn ocr_image(path: String) -> Result<OcrResult, String> {
+async fn ocr_image(path: String, upscale_under_px: u32, join_lines: bool) -> Result<OcrResult, String> {
     let validated = ocr_validate_path(&path)?;
+    let upscale_under_px = upscale_under_px.clamp(100, 800);
     #[cfg(windows)]
     {
-        tauri::async_runtime::spawn_blocking(move || ocr::recognize_file(&validated))
+        tauri::async_runtime::spawn_blocking(move || ocr::recognize_file(&validated, upscale_under_px, join_lines))
             .await
             .map_err(|e| e.to_string())?
     }
     #[cfg(not(windows))]
     {
-        let _ = validated;
+        let _ = (validated, upscale_under_px, join_lines);
         Err("ocr is only available on Windows".to_string())
     }
 }
@@ -10759,17 +10863,42 @@ async fn ocr_region(
     y: i32,
     width: u32,
     height: u32,
+    upscale_under_px: u32,
+    join_lines: bool,
 ) -> Result<OcrResult, String> {
     let crop = crop_frozen(&state, index, x, y, width, height).ok_or("empty region")?;
+    let upscale_under_px = upscale_under_px.clamp(100, 800);
     #[cfg(windows)]
     {
-        tauri::async_runtime::spawn_blocking(move || ocr::recognize_crop(crop))
+        tauri::async_runtime::spawn_blocking(move || ocr::recognize_crop(crop, upscale_under_px, join_lines))
             .await
             .map_err(|e| e.to_string())?
     }
     #[cfg(not(windows))]
     {
-        let _ = crop;
+        let _ = (crop, upscale_under_px, join_lines);
+        Err("ocr is only available on Windows".to_string())
+    }
+}
+
+// 121: entry point (a) -- "Recognize text" in #snip-modal runs on the capture
+// already shown there, which at that point only ever exists as a data URL (it may
+// not have been saved to disk yet). Thin command taking the data URL directly,
+// same shape as copy_image_data (117/118) for the screenshot editor.
+#[tauri::command]
+async fn ocr_image_data(data_url: String, upscale_under_px: u32, join_lines: bool) -> Result<OcrResult, String> {
+    let bytes = data_url_bytes(&data_url);
+    let img = decode_image_mem(&bytes).ok_or("could not decode image")?.to_rgba8();
+    let upscale_under_px = upscale_under_px.clamp(100, 800);
+    #[cfg(windows)]
+    {
+        tauri::async_runtime::spawn_blocking(move || ocr::recognize_crop(img, upscale_under_px, join_lines))
+            .await
+            .map_err(|e| e.to_string())?
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (img, upscale_under_px, join_lines);
         Err("ocr is only available on Windows".to_string())
     }
 }
@@ -10796,8 +10925,9 @@ mod ocr {
     // A very small crop is upscaled 2x before recognition -- the actual trick that
     // makes small on-screen text (button labels, tooltips) recognizable. An image
     // can only ever be too big (downscaled to MaxImageDimension) or too small
-    // (upscaled here), never both.
-    const UPSCALE_BELOW_PX: u32 = 300;
+    // (upscaled here), never both. 121: the threshold used to be a fixed constant
+    // here; it is now the ocrUpscaleUnderPx expert setting, threaded down as a
+    // parameter (100-800, default 300 -- see EXPERT_VALUES in main.js).
 
     // COM must be initialized once per thread that calls into WinRT, and never on
     // the UI thread. Every OCR call runs inside spawn_blocking; those pool threads
@@ -10906,19 +11036,11 @@ mod ocr {
     // `path` itself (which may be the user's own file for ocr_image) is never
     // modified. Returns `path` unchanged, with no extra disk write at all, when
     // no resize is needed.
-    fn resize_for_ocr(path: &Path, max_dim: u32) -> Result<(PathBuf, TempFileGuard), String> {
+    fn resize_for_ocr(path: &Path, max_dim: u32, upscale_below_px: u32) -> Result<(PathBuf, TempFileGuard), String> {
         let img = image::open(path).map_err(|e| e.to_string())?;
         let (w, h) = img.dimensions();
-        let resized = if w > max_dim || h > max_dim {
-            let scale = max_dim as f64 / (w.max(h) as f64);
-            let nw = ((w as f64 * scale).round() as u32).max(1);
-            let nh = ((h as f64 * scale).round() as u32).max(1);
-            Some(img.resize(nw, nh, FilterType::Lanczos3))
-        } else if w.max(h) < UPSCALE_BELOW_PX {
-            Some(img.resize(w * 2, h * 2, FilterType::Lanczos3))
-        } else {
-            None
-        };
+        let resized = super::ocr_resize_target(w, h, max_dim, upscale_below_px)
+            .map(|(nw, nh)| img.resize(nw, nh, FilterType::Lanczos3));
         match resized {
             None => Ok((path.to_path_buf(), TempFileGuard(None))),
             Some(im) => {
@@ -10932,11 +11054,13 @@ mod ocr {
         }
     }
 
-    fn recognize(path: &Path) -> Result<OcrResult, String> {
+    // 121: join_lines picks between the paragraph-joined text (ocr_join_lines) and
+    // the raw one-line-per-recognized-line text -- the ocrJoinLines expert setting.
+    fn recognize(path: &Path, upscale_below_px: u32, join_lines: bool) -> Result<OcrResult, String> {
         ensure_com();
         let engine = resolve_engine("auto")?;
         let max_dim = OcrEngine::MaxImageDimension().map_err(|e| e.to_string())?;
-        let (sized_path, _resize_guard) = resize_for_ocr(path, max_dim)?;
+        let (sized_path, _resize_guard) = resize_for_ocr(path, max_dim, upscale_below_px)?;
         let bitmap = bitmap_from_path(&sized_path)?;
         // Recognition runs exactly once per call.
         let result = engine.RecognizeAsync(&bitmap).map_err(|e| e.to_string())?.get().map_err(|e| e.to_string())?;
@@ -10949,7 +11073,8 @@ mod ocr {
         }
         // Nothing recognized -> Ok with empty text, never an error (a later pass
         // turns that into a friendly toast, not an error dialog).
-        Ok(OcrResult { text: super::ocr_join_lines(&lines), lang: engine_tag(&engine) })
+        let text = if join_lines { super::ocr_join_lines(&lines) } else { lines.join("\n") };
+        Ok(OcrResult { text, lang: engine_tag(&engine) })
     }
 
     pub(super) fn languages() -> Result<Vec<OcrLang>, String> {
@@ -10967,21 +11092,21 @@ mod ocr {
         Ok(out)
     }
 
-    pub(super) fn recognize_file(path: &Path) -> Result<OcrResult, String> {
-        recognize(path)
+    pub(super) fn recognize_file(path: &Path, upscale_below_px: u32, join_lines: bool) -> Result<OcrResult, String> {
+        recognize(path, upscale_below_px, join_lines)
     }
 
     // Writes the crop out as a temp PNG under the branded temp dir (same naming
     // convention as write_snip_preview / pdfium_cache_path), then runs it through
     // the same recognize() path -- deleted in every code path via TempFileGuard.
-    pub(super) fn recognize_crop(crop: image::RgbaImage) -> Result<OcrResult, String> {
+    pub(super) fn recognize_crop(crop: image::RgbaImage, upscale_below_px: u32, join_lines: bool) -> Result<OcrResult, String> {
         let path = ocr_temp_path();
         if let Some(dir) = path.parent() {
             let _ = fs::create_dir_all(dir);
         }
         crop.save(&path).map_err(|e| e.to_string())?;
         let _guard = TempFileGuard(Some(path.clone()));
-        recognize(&path)
+        recognize(&path, upscale_below_px, join_lines)
     }
 }
 
@@ -12777,6 +12902,7 @@ pub fn run() {
             app.manage(Mutex::new(store));
             app.manage(SnipState(Mutex::new(Vec::new())));
             app.manage(SnipPreview(Arc::new(Mutex::new(None))));
+            app.manage(SnipModeState(Mutex::new(SnipMode::Capture))); // 121
             app.manage(HotkeyTargets(Mutex::new(Vec::new()))); // F20
             app.manage(FolderExpand(Mutex::new(HashMap::new()))); // F25
             app.manage(HiddenFloats(Mutex::new(std::collections::HashSet::new()))); // 43
@@ -13290,7 +13416,9 @@ pub fn run() {
             paste_into_previous,
             ocr_languages,
             ocr_image,
-            ocr_region
+            ocr_region,
+            ocr_image_data,
+            set_snip_mode
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -14318,6 +14446,66 @@ mod tests {
     fn ocr_join_lines_empty_input_yields_empty_string() {
         let lines: Vec<String> = vec![];
         assert_eq!(ocr_join_lines(&lines), "");
+    }
+
+    // A hyphen is not sentence-ending punctuation, so a hyphen-wrapped word is
+    // space-joined the same as any other mid-sentence wrap -- there is no special
+    // dehyphenation, matching the spec (120): one rule, no script-specific cases.
+    #[test]
+    fn ocr_join_lines_hyphenated_wrap_gets_a_plain_space_join() {
+        let lines = vec!["This is a hyphen-".to_string(), "ated example.".to_string()];
+        assert_eq!(ocr_join_lines(&lines), "This is a hyphen- ated example.");
+    }
+
+    // Right-to-left scripts are not special-cased: the same edge-only rule applies,
+    // and it never assumes an LTR character order, so a joined Arabic line is
+    // untouched beyond the same whitespace handling as any other script.
+    #[test]
+    fn ocr_join_lines_right_to_left_script_is_not_reordered() {
+        let lines = vec!["مرحبا بالعالم".to_string()];
+        assert_eq!(ocr_join_lines(&lines), "مرحبا بالعالم");
+    }
+
+    #[test]
+    fn ocr_validate_path_rejects_a_disallowed_extension() {
+        let mut p = std::env::temp_dir();
+        p.push("ocr_validate_path_test.txt");
+        fs::write(&p, b"not an image").unwrap();
+        let result = ocr_validate_path(p.to_str().unwrap());
+        let _ = fs::remove_file(&p);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn ocr_validate_path_rejects_a_missing_file() {
+        let p = std::env::temp_dir().join("ocr_validate_path_does_not_exist.png");
+        assert!(ocr_validate_path(p.to_str().unwrap()).is_err());
+    }
+
+    #[test]
+    fn ocr_validate_path_accepts_a_real_image_file() {
+        let mut p = std::env::temp_dir();
+        p.push("ocr_validate_path_test.png");
+        fs::write(&p, b"\x89PNG\r\n\x1a\nnot a real png body, just a valid extension/size check").unwrap();
+        let result = ocr_validate_path(p.to_str().unwrap());
+        let _ = fs::remove_file(&p);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn ocr_resize_target_leaves_a_normally_sized_image_alone() {
+        assert_eq!(ocr_resize_target(800, 600, 4200, 300), None);
+    }
+
+    #[test]
+    fn ocr_resize_target_downscales_an_oversized_image_proportionally() {
+        let (nw, nh) = ocr_resize_target(8400, 4200, 4200, 300).unwrap();
+        assert_eq!((nw, nh), (4200, 2100));
+    }
+
+    #[test]
+    fn ocr_resize_target_upscales_a_small_crop_2x() {
+        assert_eq!(ocr_resize_target(120, 80, 4200, 300), Some((240, 160)));
     }
 
     #[test]

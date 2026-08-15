@@ -6,14 +6,15 @@ All notable changes to **Prompt Saver**. Download the latest version from the
 
 ## 2.7.0 (unreleased)
 
-Twenty new features: tags, custom themes, folders for view tabs and for
+Twenty-one new features: tags, custom themes, folders for view tabs and for
 floating buttons, self-filling and choice variables, a markdown preview with
 syntax colors, private notes, per-prompt hotkeys, drag-out into other apps, a
 tray quick-copy menu, a screen color picker, a standalone quick launcher,
 multi-select in the grid, a trash for deleted prompts, placing one prompt in
 several views at once, restoring a backup's data and settings separately,
-rotating prompts, and a screenshot editor. Everything new is an expert-menu
-switch, most of it off until you turn it on (the screenshot editor ships on).
+rotating prompts, a screenshot editor, and offline text recognition (OCR).
+Everything new is an expert-menu switch, most of it off until you turn it on
+(the screenshot editor ships on).
 
 ### Added
 
@@ -142,6 +143,16 @@ switch, most of it off until you turn it on (the screenshot editor ships on).
   holding **V** to peek at the unedited shot. Cancel leaves the original capture
   untouched; Apply re-copies the edited image and re-saves it to the screenshot
   folder if that setting is on.
+- **Text recognition (OCR)** (expert menu, off by default) — pull editable text
+  out of a screenshot or an image file, fully offline through Windows' own
+  recognizer. A composer button opens a small menu to grab a new screenshot or
+  pick a file; the screenshot dialog also gets a "Recognize text" button that
+  works on the capture you already have. The result opens in an editable dialog
+  with the detected language and character count, ready to copy or create as a
+  new prompt. Small on-screen text is enlarged before recognition so it reads
+  reliably, wrapped lines can be joined back into paragraphs, and the result can
+  copy itself to the clipboard automatically — all three tunable in the expert
+  menu, along with which installed language to use.
 
 ### Improved
 

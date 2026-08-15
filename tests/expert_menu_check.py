@@ -78,6 +78,12 @@ DEPENDENCIES = {
     "snipSpotlightDim": "snipEditor",
     "snipEditUndoMax": "snipEditor",
     "snipEditDefaultTool": "snipEditor",
+    # 121: OCR -- "ocr" itself stands alone (no parent flag; its group placement
+    # right after the screenshot block is list order, not a gating relationship).
+    "ocrAutoCopy": "ocr",
+    "ocrJoinLines": "ocr",
+    "ocrUpscaleUnderPx": "ocr",
+    "ocrLang": "ocr",
     # 32: rotating prompts
     "rotateDefaultMode": "rotatingPrompts",
     "rotateMaxEntries": "rotatingPrompts",

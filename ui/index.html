@@ -154,6 +154,14 @@
         <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21.2 11.2l-8.4 8.4a5.5 5.5 0 0 1-7.8-7.8l8.4-8.4a3.7 3.7 0 0 1 5.2 5.2l-8.4 8.4a1.9 1.9 0 0 1-2.6-2.6l7.7-7.7"/>
       </svg>
     </button>
+    <!-- 121: OCR -- corner brackets around three text lines. Opens a small menu
+         (screenshot / image file); off by default (flagOcr), hidden until on. -->
+    <button id="ocr-btn" class="icon-btn composer-img-btn" data-i18n-title="ocrBtnTitle" data-i18n-aria="ocrBtnTitle">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/>
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M8 9h8M8 12h8M8 15h5"/>
+      </svg>
+    </button>
     <textarea id="input" class="input" rows="1" data-i18n-ph="promptPh" data-i18n-aria="promptPh"></textarea>
     <!-- 109: left of Save, directly under hide-top (same fixed width, both bars
          right-aligned) -->
@@ -981,8 +989,34 @@
           <span data-i18n="screenshotToFolder">Save screenshots to the Screenshots folder</span>
           <input id="snip-save-folder" type="checkbox" class="switch" />
         </label>
+        <!-- 121: OCR -- runs on the capture already shown above; off by default
+             (flagOcr), hidden until on. -->
+        <button id="snip-modal-ocr" class="ghost-btn" data-i18n="snipModalOcr" data-i18n-title="snipModalOcr"></button>
         <button id="snip-modal-saveas" class="ghost-btn" data-i18n="screenshotSaveAs">Save as…</button>
         <button id="snip-modal-yes" class="primary-btn" data-i18n="snipKeepBtn">Save as button</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 121: OCR result -- editable text, recognized language + character count,
+       copy / create-as-prompt / close. Off by default (flagOcr). -->
+  <div id="ocr-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 class="modal-title" data-i18n="ocrModalTitle">Recognized text</h2>
+        <button id="ocr-modal-close-x" class="icon-btn" data-i18n-title="close" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <textarea id="ocr-result-text" class="modal-input modal-text" rows="10"></textarea>
+      <p id="ocr-result-meta" class="modal-hint"></p>
+      <p id="ocr-autocopy-note" class="modal-hint hidden" data-i18n="ocrAutoCopiedNote">Already copied to the clipboard.</p>
+      <div class="modal-actions">
+        <button id="ocr-modal-copy" class="ghost-btn" data-i18n="copy"></button>
+        <button id="ocr-modal-create" class="ghost-btn" data-i18n="ocrModalCreate"></button>
+        <button id="ocr-modal-close" class="primary-btn" data-i18n="close"></button>
       </div>
     </div>
   </div>

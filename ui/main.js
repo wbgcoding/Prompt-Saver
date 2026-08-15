@@ -1070,6 +1070,9 @@ const FLAG_LABELS = {
   helpHighlight: "flagHelpHighlight",
   // 87: word-level diff in the version-history expanded view.
   historyDiff: "flagHistoryDiff",
+  // 121: sub-toggles of ocr (OPT_FLAG_LABELS, default off), themselves default on.
+  ocrAutoCopy: "flagOcrAutoCopy",
+  ocrJoinLines: "flagOcrJoinLines",
 };
 const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -1142,6 +1145,8 @@ const OPT_FLAG_LABELS = {
   // lib.rs): mirrors every text-only prompt as a .md file in a folder, editable by
   // hand or another tool.
   promptSync: "flagPromptSync",
+  // 121: Windows Media.Ocr text recognition (screenshot / image file -> editable text).
+  ocr: "flagOcr",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
@@ -1271,6 +1276,9 @@ const EXPERT_VALUES = {
   snipPixelBlock: { label: "valSnipPixelBlock", min: 4, max: 64, step: 2, def: 12, unit: "px", gate: "snipEditor" },
   snipSpotlightDim: { label: "valSnipSpotlightDim", min: 10, max: 90, step: 5, def: 55, unit: "%", gate: "snipEditor" },
   snipEditUndoMax: { label: "valSnipEditUndoMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "snipEditor" },
+  // 121: a crop smaller than this (either side) is upscaled 2x before recognition --
+  // the trick that makes small on-screen text readable to the OCR engine.
+  ocrUpscaleUnderPx: { label: "valOcrUpscaleUnderPx", min: 100, max: 800, step: 50, def: 300, unit: "px", gate: "ocr" },
   // Scrollbar thickness across every dialog (thumb keeps its 3px inset border).
   scrollbarWidth: { label: "valScrollbarWidth", min: 8, max: 20, step: 1, def: 12, unit: "px", gate: "!hideScrollbars" },
   // Frosted-glass dialog background blur (paired with the frostedModals toggle).
@@ -1415,6 +1423,20 @@ const EXPERT_DROPDOWNS = {
   snipEditDefaultTool: enumDropdown("snipEditDefaultTool", "valSnipEditDefaultTool",
     [["crop", "snipToolCrop"], ["pen", "snipToolPen"], ["marker", "snipToolMarker"],
      ["arrow", "snipToolArrow"], ["text", "snipToolText"], ["step", "snipToolStep"]], "pen", "snipEditor"),
+  // 121: options are fetched once from ocr_languages() at startup and cached
+  // (ocrLangsCache, near the OCR wiring below) -- "Automatic" is always first,
+  // regardless of what the OS itself reports.
+  ocrLang: {
+    label: "valOcrLang",
+    gate: "ocr",
+    def: "auto",
+    options: () => [["auto", t("langAuto")], ...ocrLangsCache.map((l) => [l.tag, l.label])],
+    get: () => settings.ui_texts?.ocrLang || "auto",
+    set: async (v) => {
+      settings.ui_texts = { ...(settings.ui_texts || {}), ocrLang: v };
+      try { await invoke("set_ui_text", { key: "ocrLang", value: v }); } catch (e) { errToast(e); }
+    },
+  },
   // 87: which edge the toast notifications rise from.
   toastPos: enumDropdown("toastPos", "valToastPos",
     [["bottom", "optToastBottom"], ["top", "optToastTop"]], "bottom"),
@@ -1463,7 +1485,7 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app. F26 (pipette) sits with the
     // screenshot tool: both are capture tools on the composer bar.
-    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "colorPicker", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax"], dropdowns: ["pickerFormat", "snipEditDefaultTool", "rotateDefaultMode"], paths: ["screenshotDir"] },
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, "colorPicker", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax", "ocrUpscaleUnderPx", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax"], dropdowns: ["pickerFormat", "snipEditDefaultTool", "ocrLang", "rotateDefaultMode"], paths: ["screenshotDir"] },
     // F12/F13 placeholders, from the grammar to where the app asks for them.
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
     // The editor: what it shows beside the text box. F14/F15 belong together — the
@@ -1643,6 +1665,7 @@ const EXPERT_TIPS = [
   "snipQuality", "snipDelayMs",
   "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim",
   "snipEditUndoMax", "snipEditSnap", "snipTextPlate", "snipEditDefaultTool",
+  "ocr", "ocrUpscaleUnderPx", "ocrLang",
   "trayRecent", "trayFavs", "trayRecentN", "trayFavN",
   "checkUpdateOnStart", "showUpdates", "updateCheckH", "importExport", "dimToolbar", "keyboardNav", "allowMultipleInstances",
   "headerSeparators", "floating",
@@ -1991,6 +2014,7 @@ function dropdownRow(key) {
 let currentDataDir = "";
 let defaultScreenshotDir = "";
 let defaultSyncDir = "";
+let ocrLangsCache = []; // 121: [{tag, label}], fetched once at startup (init())
 const EXPERT_PATHS = {
   screenshotDir: {
     label: "valScreenshotDir",
@@ -11872,6 +11896,76 @@ function bind() {
     if (e.target === snipModal) closeSnipModal();
   });
 
+  // ---- 121: OCR (text recognition, off by default -- flag "ocr") ----
+  const ocrModal = $("ocr-modal");
+  const ocrSettings = () => ({ upscaleUnderPx: Math.round(val("ocrUpscaleUnderPx")), joinLines: flag("ocrJoinLines") });
+  const closeOcrModal = () => ocrModal.classList.add("hidden");
+  // Shared by all three entry points (snip-modal, composer screenshot, composer
+  // file) and the ocr-captured event below -- one place decides "empty -> toast
+  // only" and "auto-copy -> copy now + footer note instead of a toast".
+  function showOcrResult(result) {
+    const text = result?.text || "";
+    if (!text) { toast(t("ocrNoTextFound")); return; }
+    const autoCopy = flag("ocrAutoCopy");
+    if (autoCopy) invoke("copy_text", { text }).catch(() => {});
+    $("ocr-result-text").value = text;
+    $("ocr-result-meta").textContent = `${result.lang || ""} · ${text.length}`;
+    $("ocr-autocopy-note").classList.toggle("hidden", !autoCopy);
+    ocrModal.classList.remove("hidden");
+  }
+  // (a) "Recognize text" in #snip-modal -- runs on the capture already shown there.
+  // pendingSnip only ever holds a data URL at this point (it may not be saved to
+  // disk yet, see the folder-toggle handler above), hence ocr_image_data.
+  $("snip-modal-ocr").addEventListener("click", async () => {
+    if (!pendingSnip) return;
+    try {
+      showOcrResult(await invoke("ocr_image_data", { dataUrl: pendingSnip, ...ocrSettings() }));
+    } catch (err) { errToast(err); }
+  });
+  // (b) standalone composer button -- small menu (Screenshot / From image file).
+  $("ocr-btn").addEventListener("click", () => {
+    const r = $("ocr-btn").getBoundingClientRect();
+    openMiniMenu([
+      {
+        label: t("ocrMenuScreenshot"),
+        run: async () => {
+          // Arms the NEXT capture for OCR instead of a normal screenshot save; the
+          // backend resets this the moment the session ends (capture or cancel).
+          await invoke("set_snip_mode", { mode: "ocr" }).catch(() => {});
+          invoke("open_snip").catch((err) => errToast(err));
+        },
+      },
+      {
+        label: t("ocrMenuFromFile"),
+        run: async () => {
+          const path = await withDialog(() => invoke("pick_file_path"));
+          if (!path) return;
+          try {
+            showOcrResult(await invoke("ocr_image", { path, ...ocrSettings() }));
+          } catch (err) { errToast(err); }
+        },
+      },
+    ], r.left, r.bottom + 4);
+  });
+  // Screenshot-into-OCR result, emitted by capture_region's OCR branch -- a
+  // separate event from "snip-captured" so the normal screenshot flow above is
+  // completely unaffected by OCR mode being armed.
+  listen("ocr-captured", (e) => showOcrResult(e.payload));
+  $("ocr-modal-copy").addEventListener("click", () => {
+    const text = $("ocr-result-text").value;
+    invoke("copy_text", { text }).then(() => toast(t("copied"))).catch((err) => errToast(err));
+  });
+  $("ocr-modal-create").addEventListener("click", () => {
+    const text = $("ocr-result-text").value;
+    closeOcrModal();
+    openModal({ mode: "create", text, title: t("nameModalTitle") });
+  });
+  $("ocr-modal-close").addEventListener("click", closeOcrModal);
+  $("ocr-modal-close-x").addEventListener("click", closeOcrModal);
+  ocrModal.addEventListener("pointerdown", (e) => {
+    if (e.target === ocrModal) closeOcrModal();
+  });
+
   // Delete from the edit dialog, with the same two-step confirmation.
   modal.delete.addEventListener("click", async () => {
     if (!modalState || modalState.mode !== "edit") return;
@@ -12864,6 +12958,9 @@ async function init() {
     invoke("current_data_dir").then((d) => { currentDataDir = d || ""; }).catch(() => {});
     invoke("default_screenshot_dir").then((d) => { defaultScreenshotDir = d || ""; }).catch(() => {});
     invoke("default_sync_dir").then((d) => { defaultSyncDir = d || ""; }).catch(() => {});
+    // 121: OCR language list -- fetched once, cached, "Automatic" is always
+    // prepended separately (see EXPERT_DROPDOWNS.ocrLang above).
+    invoke("ocr_languages").then((langs) => { ocrLangsCache = langs || []; }).catch(() => {});
     applyTileStyle();
     autoGrow(inputEl);
     inputEl.focus();

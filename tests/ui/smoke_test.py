@@ -3974,6 +3974,78 @@ PROBE = """
         }
       }
     }
+    // 121: OCR -- default-off feature (flag "ocr"). Gate check first (both entry
+    // points hidden while off), then enable it via the real expert-menu checkbox
+    // and exercise the composer menu plus the result dialog.
+    {
+      const ocrBtn = document.getElementById('ocr-btn');
+      const snipModalOcrBtn = document.getElementById('snip-modal-ocr');
+      const hiddenNow = (el) => !el || getComputedStyle(el).display === 'none';
+      if (!hiddenNow(ocrBtn) || !hiddenNow(snipModalOcrBtn)) {
+        out.errors.push('OCR entry points are visible while the ocr flag is off');
+      }
+      const rowByLabel = (text) => {
+        for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+          tb.click();
+          const hit = [...document.querySelectorAll('#expert-flags .switch-field')]
+            .find(r => (r.querySelector('span') || {}).textContent === text);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const toggleOcrFlag = async (on) => {
+        await click('expert-open');
+        const row = rowByLabel('Text erkennen (OCR)');
+        if (!row) { out.errors.push('OCR flag row not found in the expert menu'); return; }
+        const cb = row.querySelector('input.switch');
+        cb.checked = on;
+        cb.dispatchEvent(new Event('change'));
+        await sleep(150);
+        await click('expert-back');
+        await sleep(50);
+      };
+      await toggleOcrFlag(true);
+      if (hiddenNow(ocrBtn) || hiddenNow(snipModalOcrBtn)) {
+        out.errors.push('OCR entry points stayed hidden after switching the flag on');
+      }
+      if (!ocrBtn.title.trim() || /^[a-z]+[A-Z]/.test(ocrBtn.title)) {
+        out.errors.push('OCR composer button has no real title (raw i18n key or empty)');
+      }
+      ocrBtn.click();
+      await sleep(100);
+      const menu = document.querySelector('.tab-menu:not(.hidden)');
+      const menuItems = menu ? [...menu.querySelectorAll('button[role=menuitem]')] : [];
+      if (menuItems.length !== 2) {
+        out.errors.push('OCR menu: expected 2 entries, found ' + menuItems.length);
+      }
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await sleep(50);
+      const injected = '<b>bold</b> and a tag look-alike </p>';
+      window.__FIRE__('ocr-captured', { text: injected, lang: 'en' });
+      await sleep(150);
+      const ocrModal = document.getElementById('ocr-modal');
+      if (!ocrModal || ocrModal.classList.contains('hidden')) {
+        out.errors.push('OCR result dialog did not open on ocr-captured');
+      } else {
+        const resultBox = document.getElementById('ocr-result-text');
+        if (resultBox.value !== injected) {
+          out.errors.push('OCR result textarea does not hold the recognized text verbatim');
+        }
+        if (document.querySelector('#ocr-modal b')) {
+          out.errors.push('OCR result rendered markup instead of literal text');
+        }
+        layoutScan('OCR result dialog');
+        document.getElementById('ocr-modal-close').click();
+        await sleep(100);
+        if (!ocrModal.classList.contains('hidden')) {
+          out.errors.push('OCR result dialog did not close');
+        }
+      }
+      await toggleOcrFlag(false);
+      if (!hiddenNow(ocrBtn) || !hiddenNow(snipModalOcrBtn)) {
+        out.errors.push('OCR entry points stayed visible after switching the flag back off');
+      }
+    }
   } catch (e) { out.errors.push('probe: ' + e.message); }
   for (const el of document.querySelectorAll('.overlay *, #expert-flags *')) {
     const r = el.getBoundingClientRect();

@@ -1434,6 +1434,9 @@ body.library-front #modal.overlay { z-index: 67; }
 .noflag-fileAttach #file-btn { display: none; }
 .noflag-screenshot #snip-btn { display: none; }
 .noflag-colorPicker #picker-btn { display: none; }
+/* 121: OCR ships off by default -- both entry points stay hidden until flagOcr is on. */
+body:not(.flag-ocr) #ocr-btn,
+body:not(.flag-ocr) #snip-modal-ocr { display: none; }
 .noflag-quickGrid #quick-grid { display: none; }
 .flag-quickGridHoverOnly .header #quick-grid { opacity: 0; pointer-events: none; }
 .flag-quickGridHoverOnly .header:hover #quick-grid, .flag-quickGridHoverOnly .header:focus-within #quick-grid { opacity: 1; pointer-events: auto; }
