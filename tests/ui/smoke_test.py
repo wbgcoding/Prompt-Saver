@@ -3029,6 +3029,35 @@ PROBE = """
             const ta2 = rows[1].querySelector('.rotate-entry-input');
             ta2.value = 'Entry two';
             ta2.dispatchEvent(new Event('input', { bubbles: true }));
+            // 94: Auto-advance toggle -- visible and clickable with two plain entries,
+            // aria-pressed flips on click, stays enabled for a placeholder entry (90
+            // explicitly allows them), and disables itself live the moment the entry
+            // count drops below two, without needing the editor reopened (92-D fix).
+            const autoBtn2 = document.getElementById('modal-rotate-auto');
+            if (!autoBtn2) {
+              out.errors.push('the Auto toggle is missing from the rotate editor');
+            } else {
+              if (autoBtn2.disabled) out.errors.push('the Auto toggle is disabled with two plain entries present');
+              if (autoBtn2.getAttribute('aria-pressed') !== 'false') out.errors.push('the Auto toggle starts pressed');
+              autoBtn2.click();
+              if (autoBtn2.getAttribute('aria-pressed') !== 'true') out.errors.push('the Auto toggle did not flip to pressed on click');
+              if (!autoBtn2.classList.contains('active')) out.errors.push('the Auto toggle did not gain the active class on click');
+              ta2.value = 'Entry two {#{name}#}';
+              ta2.dispatchEvent(new Event('input', { bubbles: true }));
+              if (autoBtn2.disabled) out.errors.push('the Auto toggle disabled itself for a placeholder entry');
+              ta2.value = 'Entry two';
+              ta2.dispatchEvent(new Event('input', { bubbles: true }));
+              const delBtn2 = rows[1].querySelector('.rotate-entry-del');
+              delBtn2.click();
+              if (!autoBtn2.disabled) out.errors.push('the Auto toggle stayed enabled after dropping to a single entry');
+              document.getElementById('modal-rotate-add').click();
+              const rowsAfterAuto = document.querySelectorAll('.rotate-entry-row');
+              const ta2b = rowsAfterAuto[1].querySelector('.rotate-entry-input');
+              ta2b.value = 'Entry two';
+              ta2b.dispatchEvent(new Event('input', { bubbles: true }));
+              if (autoBtn2.disabled) out.errors.push('the Auto toggle stayed disabled once a second entry came back');
+              if (autoBtn2.getAttribute('aria-pressed') !== 'true') autoBtn2.click();
+            }
             const modeSel = document.getElementById('modal-rotate-mode');
             modeSel.value = 'random';
             modeSel.dispatchEvent(new Event('change', { bubbles: true }));
@@ -3040,8 +3069,8 @@ PROBE = """
               out.errors.push('saving a rotating prompt did not call add_prompt');
             } else {
               const a = addCall[1];
-              if (a.text !== 'Entry one' || JSON.stringify(a.variants) !== JSON.stringify(['Entry two']) || a.rotateMode !== 'random') {
-                out.errors.push('add_prompt got the wrong rotating payload: ' + JSON.stringify({ text: a.text, variants: a.variants, rotateMode: a.rotateMode }));
+              if (a.text !== 'Entry one' || JSON.stringify(a.variants) !== JSON.stringify(['Entry two']) || a.rotateMode !== 'random' || a.rotateAuto !== true) {
+                out.errors.push('add_prompt got the wrong rotating payload: ' + JSON.stringify({ text: a.text, variants: a.variants, rotateMode: a.rotateMode, rotateAuto: a.rotateAuto }));
               }
               // 32-D: the tile this created shows a live "next entry" badge, and a
               // real click copies the CURRENT entry (peek→copy_text→commit, not

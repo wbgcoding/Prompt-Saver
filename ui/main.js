@@ -7514,7 +7514,8 @@ function renderRotateUi() {
 // (the feature switch, 93) is checked here so the button disables live if it
 // gets flipped off with the editor open.
 function rotateAutoEligibleHere() {
-  return flag("rotateAuto") && !modalState.image && !modalState.filePath;
+  const filled = (modalState.rotateEntries || []).filter((e) => (e || "").trim()).length;
+  return flag("rotateAuto") && !modalState.image && !modalState.filePath && filled >= 2;
 }
 
 function renderRotateAutoBtn() {
@@ -7541,7 +7542,9 @@ function renderRotateEntries() {
     ta.className = "modal-input rotate-entry-input";
     ta.rows = 1;
     ta.value = entry;
-    ta.addEventListener("input", () => { list[i] = ta.value; autoGrow(ta); });
+    // 90-94: typing can flip an entry between blank/filled (eligibility) or add/remove
+    // a placeholder (the button's hint tooltip) — both must stay live, not just on open.
+    ta.addEventListener("input", () => { list[i] = ta.value; autoGrow(ta); renderRotateAutoBtn(); });
     const btns = document.createElement("div");
     btns.className = "rotate-entry-btns";
     const up = document.createElement("button");
@@ -7551,7 +7554,7 @@ function renderRotateEntries() {
     up.setAttribute("aria-label", t("rotateMoveUp"));
     up.innerHTML = ICON_UP;
     up.disabled = i === 0;
-    up.addEventListener("click", () => { [list[i - 1], list[i]] = [list[i], list[i - 1]]; renderRotateEntries(); });
+    up.addEventListener("click", () => { [list[i - 1], list[i]] = [list[i], list[i - 1]]; renderRotateEntries(); renderRotateAutoBtn(); });
     const down = document.createElement("button");
     down.type = "button";
     down.className = "icon-btn rotate-entry-move";
@@ -7559,7 +7562,7 @@ function renderRotateEntries() {
     down.setAttribute("aria-label", t("rotateMoveDown"));
     down.innerHTML = ICON_DOWN;
     down.disabled = i === list.length - 1;
-    down.addEventListener("click", () => { [list[i + 1], list[i]] = [list[i], list[i + 1]]; renderRotateEntries(); });
+    down.addEventListener("click", () => { [list[i + 1], list[i]] = [list[i], list[i + 1]]; renderRotateEntries(); renderRotateAutoBtn(); });
     const del = document.createElement("button");
     del.type = "button";
     del.className = "icon-btn rotate-entry-del";
@@ -7567,7 +7570,7 @@ function renderRotateEntries() {
     del.setAttribute("aria-label", t("delete"));
     del.innerHTML = ICON_TRASH;
     del.disabled = list.length <= 1;
-    del.addEventListener("click", () => { list.splice(i, 1); renderRotateEntries(); });
+    del.addEventListener("click", () => { list.splice(i, 1); renderRotateEntries(); renderRotateAutoBtn(); });
     btns.append(up, down, del);
     row.append(num, ta, btns);
     modal.rotateEntries.appendChild(row);
@@ -10305,6 +10308,7 @@ function bind() {
     if ((modalState.rotateEntries || []).length >= max) return;
     modalState.rotateEntries.push("");
     renderRotateEntries();
+    renderRotateAutoBtn();
     const rows = modal.rotateEntries.querySelectorAll(".rotate-entry-input");
     rows[rows.length - 1]?.focus();
   });
