@@ -10948,6 +10948,29 @@ fn ocr_tag_from_capability_name(name: &str) -> Option<String> {
 // when there is exactly one match -- both shapes are accepted here. A field
 // Windows did not report (DownloadSize/InstallSize on an already-installed
 // capability, for instance) becomes `None`, never `Some(0)`.
+//
+// `State` was originally assumed to always be the enum's STRING name (matching
+// the spec author's own observation and this file's own now-corrected unit
+// tests) -- real capture on a VM showed it comes back as the BARE INTEGER
+// instead (`Microsoft.Dism.Commands.WindowsCapabilityState`, e.g. 0 = not
+// present, 4 = installed; confirmed against two capabilities independently
+// proven Installed/NotPresent by actually using/not using them). Both shapes
+// are accepted here since which one a given Windows build/PowerShell version
+// emits is apparently not something to rely on. An unrecognized numeric code
+// maps to NotPresent -- for a feature this consequential (it gates whether the
+// UI thinks a language is already usable), understating readiness is the safe
+// default, never the reverse.
+fn ocr_capability_state_from_value(v: &serde_json::Value) -> String {
+    match v {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Number(n) => match n.as_i64() {
+            Some(4) => "Installed".to_string(),
+            _ => "NotPresent".to_string(),
+        },
+        _ => String::new(),
+    }
+}
+
 fn ocr_parse_capabilities_json(json: &str) -> Result<Vec<OcrCapRaw>, String> {
     let trimmed = json.trim();
     if trimmed.is_empty() {
@@ -10967,10 +10990,14 @@ fn ocr_parse_capabilities_json(json: &str) -> Result<Vec<OcrCapRaw>, String> {
             continue;
         }
         let tag = ocr_tag_from_capability_name(&name).unwrap_or_default();
-        let state = item.get("State").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        let state = item.get("State").map(ocr_capability_state_from_value).unwrap_or_default();
         let version = item.get("Version").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-        let download_size = item.get("DownloadSize").and_then(|v| v.as_u64());
-        let install_size = item.get("InstallSize").and_then(|v| v.as_u64());
+        // Real Windows output showed 0 used as a "not reported" placeholder, not a
+        // genuine zero-byte size -- even for an already-Installed capability with
+        // real disk usage. Fold it into None too, same as an absent field, so the
+        // UI shows the honest "-" rather than a misleading "Download (0 B)".
+        let download_size = item.get("DownloadSize").and_then(|v| v.as_u64()).filter(|&n| n != 0);
+        let install_size = item.get("InstallSize").and_then(|v| v.as_u64()).filter(|&n| n != 0);
         out.push(OcrCapRaw { name, tag, state, version, download_size, install_size });
     }
     Ok(out)
@@ -15182,6 +15209,41 @@ mod tests {
         assert_eq!(caps.len(), 1);
         assert_eq!(caps[0].download_size, None);
         assert_eq!(caps[0].install_size, None);
+    }
+
+    // Real capture from a VM: `State` comes back as a bare integer, `Version` as
+    // JSON null, and DownloadSize/InstallSize as a literal 0 rather than absent
+    // -- none of which the original hand-authored fixtures above (a wrong guess
+    // at the real shape, not tested against actual PowerShell output) exercised.
+    // A codex second-opinion review + a real VM capture both caught this; the
+    // automated suite passed the whole time regardless. State 4 = Installed
+    // (confirmed against a capability independently proven installed by using
+    // it for real OCR), 0 = NotPresent.
+    #[test]
+    fn ocr_parse_capabilities_json_handles_the_real_numeric_shape() {
+        let json = r#"[
+            { "Name": "Language.OCR~~~de-DE~0.0.1.0", "State": 4, "Version": null, "DownloadSize": 0, "InstallSize": 0 },
+            { "Name": "Language.OCR~~~fr-FR~0.0.1.0", "State": 0, "Version": null, "DownloadSize": 0, "InstallSize": 0 },
+            { "Name": "Language.OCR~~~ar-SA~0.0.1.0", "State": 4, "Version": null, "DownloadSize": 0, "InstallSize": 1053812 }
+        ]"#;
+        let caps = ocr_parse_capabilities_json(json).unwrap();
+        assert_eq!(caps.len(), 3);
+        assert_eq!(caps[0].state, "Installed");
+        assert_eq!(caps[0].version, "");
+        assert_eq!(caps[0].download_size, None);
+        assert_eq!(caps[0].install_size, None); // literal 0 is "not reported", not a real zero-byte install
+        assert_eq!(caps[1].state, "NotPresent");
+        assert_eq!(caps[2].state, "Installed");
+        assert_eq!(caps[2].install_size, Some(1053812)); // a real nonzero size still comes through
+    }
+
+    // An unrecognized numeric state code must not be mistaken for Installed --
+    // understating readiness is the safe direction to be wrong in.
+    #[test]
+    fn ocr_parse_capabilities_json_unknown_numeric_state_is_not_present() {
+        let json = r#"{ "Name": "Language.OCR~~~de-DE~0.0.1.0", "State": 2, "Version": null, "DownloadSize": 0, "InstallSize": 0 }"#;
+        let caps = ocr_parse_capabilities_json(json).unwrap();
+        assert_eq!(caps[0].state, "NotPresent");
     }
 
     // 122: "updatable?" decision -- table-driven per the spec's five cases.
