@@ -6,15 +6,16 @@ All notable changes to **Prompt Saver**. Download the latest version from the
 
 ## 2.7.0 (unreleased)
 
-Twenty-one new features: tags, custom themes, folders for view tabs and for
+Twenty-two new features: tags, custom themes, folders for view tabs and for
 floating buttons, self-filling and choice variables, a markdown preview with
 syntax colors, private notes, per-prompt hotkeys, drag-out into other apps, a
 tray quick-copy menu, a screen color picker, a standalone quick launcher,
 multi-select in the grid, a trash for deleted prompts, placing one prompt in
 several views at once, restoring a backup's data and settings separately,
-rotating prompts, a screenshot editor, and offline text recognition (OCR).
-Everything new is an expert-menu switch, most of it off until you turn it on
-(the screenshot editor ships on).
+rotating prompts, a screenshot editor, offline text recognition (OCR), and a
+first-run introduction tour. Everything new is an expert-menu switch, most of
+it off until you turn it on (the screenshot editor and the introduction tour
+ship on).
 
 ### Added
 
@@ -159,6 +160,18 @@ Everything new is an expert-menu switch, most of it off until you turn it on
   rights exactly once and explaining why beforehand. Installed packs can also be
   kept current automatically, with a quiet, cancelable notice when one needs an
   update.
+- **Introduction tour** (expert menu, on by default) — a five-step walkthrough
+  on first launch, opened right after the example prompts are seeded so step
+  two already has a tile to point at: what the app is and that everything
+  stays offline, how to save and use a tile, organizing tiles and views,
+  the library and search, then a table of the three optional features
+  (screenshot, color picker, OCR) with the shipped default shown next to
+  each and a one-click reset back to it — nothing is written until you
+  finish, and only the switches you actually changed. Step-by-step dots,
+  ←/→ and Enter to navigate, Esc or "Skip" to leave any time. Reopen it later
+  from the settings dialog or the expert menu; a data-folder or WebView2
+  prompt on first launch always wins, and the tour just waits for the next
+  one.
 
 ### Improved
 

@@ -4120,6 +4120,99 @@ PROBE = """
       window.__OCR_CAPS_TEST__ = null;
       await toggleOcrFlag(false);
     }
+    // 123: first-run tour -- all five steps reachable, each with a heading and at
+    // least one text line, no raw i18n key, no overflow, height barely moves
+    // between steps (tourStepMinH), step 5's three switches match shipsOn() and
+    // Restore defaults restores them, Skip/Finish both close the dialog.
+    {
+      document.getElementById('settings').classList.remove('hidden');
+      await sleep(50);
+      document.getElementById('tour-open-btn').click();
+      await sleep(150);
+      // The height-per-step comparison below is sensitive to font-metric settling;
+      // wait for webfonts to finish loading so it does not race one.
+      try { await document.fonts.ready; } catch (e) {}
+      await sleep(50);
+      const tourEl = document.getElementById('tour-modal');
+      if (!tourEl || tourEl.classList.contains('hidden')) {
+        out.errors.push('Tour did not open from the settings-dialog button');
+      } else {
+        const isRawKey = (s) => /^(flag|val|tip|exp|stat|backup|help|tour)[A-Z][A-Za-z0-9]+$/.test((s || '').trim());
+        const body = document.getElementById('tour-body');
+        const heights = [];
+        for (let step = 0; step < 5; step++) {
+          const title = document.getElementById('tour-title').textContent.trim();
+          if (!title || isRawKey(title)) out.errors.push('Tour step ' + step + ': heading missing or raw key (' + title + ')');
+          if (step < 4) {
+            const art = body.querySelector('.tour-art svg');
+            if (!art) out.errors.push('Tour step ' + step + ': no drawing');
+            const lines = [...body.querySelectorAll('.tour-text p')].map((p) => p.textContent.trim());
+            if (!lines.length || lines.some((l) => !l || isRawKey(l))) {
+              out.errors.push('Tour step ' + step + ': missing text line or raw key (' + JSON.stringify(lines) + ')');
+            }
+            if (lines.length > 3) out.errors.push('Tour step ' + step + ': more than three text lines');
+          } else {
+            const rows = [...document.querySelectorAll('.tour-opt-row')];
+            if (rows.length !== 3) out.errors.push('Tour step 5: expected 3 option rows, found ' + rows.length);
+            const wantOn = { screenshot: true, colorPicker: true, ocr: false };
+            for (const row of rows) {
+              const cb = row.querySelector('input.switch');
+              const note = row.querySelector('.tour-opt-default').textContent.trim();
+              if (isRawKey(note)) out.errors.push('Tour step 5: default-note renders a raw key (' + note + ')');
+              const desc = row.querySelector('.tour-opt-desc').textContent.trim();
+              if (!desc || isRawKey(desc)) out.errors.push('Tour step 5: option description missing or raw key');
+            }
+            const boxes = rows.map((r) => r.querySelector('input.switch').checked);
+            if (JSON.stringify(boxes) !== JSON.stringify([true, true, false])) {
+              out.errors.push('Tour step 5: default switch states are ' + JSON.stringify(boxes) + ', expected [true,true,false] (shipsOn defaults)');
+            }
+            // Flip every switch, then Restore defaults should bring them all back.
+            for (const row of rows) {
+              const cb = row.querySelector('input.switch');
+              cb.checked = !cb.checked;
+              cb.dispatchEvent(new Event('change'));
+            }
+            await sleep(50);
+            document.querySelector('.tour-restore-btn').click();
+            await sleep(50);
+            const restored = [...document.querySelectorAll('.tour-opt-row')].map((r) => r.querySelector('input.switch').checked);
+            if (JSON.stringify(restored) !== JSON.stringify([true, true, false])) {
+              out.errors.push('Tour step 5: Restore defaults left switches at ' + JSON.stringify(restored));
+            }
+          }
+          void body.offsetHeight; // force layout before measuring, no stale reflow
+          heights.push(body.getBoundingClientRect().height);
+          layoutScan('Tour step ' + step);
+          if (step < 4) document.getElementById('tour-next').click();
+          await sleep(150);
+        }
+        // tourStepMinH's job is to stop a SHORT step from looking tiny next to a
+        // long one -- it floors every step to the same height. It does not (and
+        // per WORK.md 123.5 is not meant to) force a longer step's wrapped text
+        // to occupy zero extra room; one line-height of headroom absorbs that and
+        // sub-pixel wrap jitter between runs, while still catching the case that
+        // matters: the variable genuinely not wired up (a many-line gap).
+        const spread = Math.max(...heights) - Math.min(...heights);
+        if (spread > 20) out.errors.push('Tour content area height varies by ' + spread + 'px across steps (tourStepMinH not holding): ' + JSON.stringify(heights));
+        const dots = [...document.querySelectorAll('.tour-dot')];
+        if (dots.length !== 5) out.errors.push('Tour: expected 5 step dots, found ' + dots.length);
+        // Back should be visible and clickable everywhere but step 0.
+        if (document.getElementById('tour-back').classList.contains('hidden')) {
+          out.errors.push('Tour: Back is hidden on the last step');
+        }
+        dots[0].click();
+        await sleep(80);
+        if (!document.getElementById('tour-back').classList.contains('hidden')) {
+          out.errors.push('Tour: Back is visible on step 0');
+        }
+        // Skip closes and must not touch the option flags (tourFirstRun is false here).
+        document.getElementById('tour-skip').click();
+        await sleep(80);
+        if (!tourEl.classList.contains('hidden')) out.errors.push('Tour did not close on Skip');
+      }
+      document.getElementById('settings').classList.add('hidden');
+      await sleep(50);
+    }
   } catch (e) { out.errors.push('probe: ' + e.message); }
   for (const el of document.querySelectorAll('.overlay *, #expert-flags *')) {
     const r = el.getBoundingClientRect();

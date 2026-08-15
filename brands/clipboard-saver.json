@@ -117,7 +117,9 @@
         "istemleri": "kayıtları",
         "istemiyle": "kaydıyla",
         "istemle": "kayıtla",
-        "isteme": "kayda"
+        "isteme": "kayda",
+        "istemini": "kaydını",
+        "istemlerinizi": "kayıtlarınızı"
       },
       "zh": {
         "提示词": "条目"

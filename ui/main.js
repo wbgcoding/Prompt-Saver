@@ -1080,6 +1080,10 @@ const FLAG_LABELS = {
   // 122: sub-toggles of ocr, themselves default on.
   ocrAutoPickLang: "flagOcrAutoPickLang",
   ocrLangAutoUpdate: "flagOcrLangAutoUpdate",
+  // 123: auto-opens the five-step first-run tour once, right after the example
+  // prompts are seeded. Off only stops the AUTOMATIC open — the Help-menu entry
+  // that reopens the tour manually stays available either way.
+  firstRunTour: "flagFirstRunTour",
 };
 const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -1378,6 +1382,11 @@ const EXPERT_VALUES = {
   rotateAutoCooldownMs: { label: "valRotateAutoCooldownMs", min: 0, max: 2000, step: 50, def: 250, unit: "ms", gate: "rotateAuto" },
   rotateAutoInputMs: { label: "valRotateAutoInputMs", min: 500, max: 10000, step: 250, def: 3000, unit: "ms", gate: "rotateAuto" },
   rotateAutoRearmMax: { label: "valRotateAutoRearmMax", min: 0, max: 50, step: 1, def: 12, unit: "", gate: "rotateAuto" },
+  // 123: minimum height of the tour's content area so switching between its five
+  // (unevenly long) steps never visibly resizes the dialog. Deliberately NOT gated
+  // on firstRunTour — the Help-menu reopen works regardless of that toggle, and the
+  // sizing still applies then.
+  tourStepMinH: { label: "valTourStepMinH", min: 160, max: 420, step: 10, def: 240, unit: "px" },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -1554,7 +1563,8 @@ const EXPERT_TABS = [
     { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "gridViewBorder", "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }, "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
     { title: "expGroupPrivacy", flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
     { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances"], values: ["kbFocusFadeMs"], selects: ["updateCheckH"], paths: ["dataDir"] },
-    { title: "expGroupHelp", flags: ["helpTips", "helpHighlight"] },
+    { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"], values: ["tourStepMinH"],
+      actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
     { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport"], values: ["dupThreshold", "disarmMs"], selects: ["trashRetentionDays"],
       actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }] },
   ] },
@@ -1654,6 +1664,7 @@ function applyValues() {
   root.setProperty("--modal-max-vh", `${val("modalMaxVh")}vh`);
   root.setProperty("--tag-pop-cols", String(Math.round(val("tagPopCols"))));
   root.setProperty("--journal-width", `${val("journalWidth")}px`);
+  root.setProperty("--tour-step-min-h", `${val("tourStepMinH")}px`);
   // 87: caps/lengths that were fixed constants, now expert-tunable.
   ROTATE_SHORT_MAX = Math.round(val("rotateTipLen"));
   MD_MAX_CHARS = Math.round(val("mdMaxChars"));
@@ -1698,7 +1709,7 @@ const EXPERT_TIPS = [
   "tileFolders", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols",
   "rotatingPrompts", "rotateDefaultMode", "rotateMaxEntries", "rotateBadge", "rotateTipLen",
   "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax",
-  "helpTips", "helpHighlight",
+  "helpTips", "helpHighlight", "firstRunTour", "tourStepMinH",
   // Tiles / copying
   "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "autoPasteEnter", "closeOnCopy",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
@@ -10522,9 +10533,12 @@ async function runImportAll() {
 
 // Portable start with an installed copy's store present: offer to adopt it. Runs
 // after the window is up, so the dialog already has the theme and language.
+// 123: returns whether it actually showed a dialog — the first-run tour must not
+// open on top of (or right after burying) this more urgent prompt; it retries next
+// launch instead, since tourSeen was never written this time.
 async function offerTakeover() {
   const src = await invoke("takeover_offer").catch(() => null);
-  if (!src) return;
+  if (!src) return false;
   const adopt = await confirmDialog({
     title: t("takeoverTitle"),
     message: t("takeoverBody").replace("{path}", src),
@@ -10537,9 +10551,10 @@ async function offerTakeover() {
     await invoke("takeover_apply", { adopt });
   } catch (e) {
     errToast(e);
-    return;
+    return true;
   }
   if (adopt) await reloadEverything();
+  return true;
 }
 
 // Delete all DATA (prompts, versions, copy history, clip inbox) — settings kept.
@@ -12428,6 +12443,16 @@ function bind() {
     if (e.target === aboutEl) closeAbout();
   });
 
+  // 123: reopen the five-step tour (Help-menu style entry, always available
+  // regardless of the firstRunTour toggle — that flag only gates the automatic
+  // open). Step 5 writes live from here, see openTour()'s firstRun param.
+  $("tour-open-btn").addEventListener("click", () => openTour({ firstRun: false }));
+  $("tour-skip").addEventListener("click", tourSkip);
+  $("tour-back").addEventListener("click", () => tourGoto(tourStep - 1));
+  $("tour-next").addEventListener("click", () => (tourStep === TOUR_LAST_STEP ? tourFinish() : tourGoto(tourStep + 1)));
+  const tourEl = $("tour-modal");
+  tourEl.addEventListener("pointerdown", (e) => { if (e.target === tourEl) tourSkip(); });
+
   // 97: in-app documentation.
   const helpEl = $("help");
   $("help-open").addEventListener("click", openHelp);
@@ -13094,6 +13119,267 @@ function setupDragDrop() {
   });
 }
 
+// ---- 123: first-run tour ----
+// Five fixed steps in one shared frame (#tour-modal), content swapped per step.
+// Steps 1-4 are a small hand-drawn illustration + up to three lines of text; step 5
+// is the "optional features" settings table (TOUR_OPTIONS below). Opened two ways:
+//  - Automatically once, right after the example prompts are seeded on a genuinely
+//    fresh install (maybeOpenFirstRunTour, called from init()'s reveal()). Step 5
+//    buffers its switches in a local draft and only writes what differs from the
+//    shipped default, on Finish. Skip writes nothing but tourSeen.
+//  - Manually via the settings dialog's "tour-open-btn" (always available) or the
+//    expert menu's gated "tour-open" action (EXPERT_ACTIONS). Step 5 then writes
+//    live, exactly like a normal expert-menu flag row — nothing is buffered or reset
+//    just from reopening it this way.
+
+// Tiny hand-drawn illustrations, ~110x110, currentColor + var(--accent) on the one
+// interactive element each drawing highlights (never a raster asset, matches the
+// toolbar icon convention just at a bigger size).
+const TOUR_SVG_WELCOME = `<svg viewBox="0 0 100 100" width="110" height="110" aria-hidden="true">
+  <rect x="8" y="14" width="84" height="72" rx="6" fill="none" stroke="currentColor" stroke-width="3"/>
+  <line x1="8" y1="30" x2="92" y2="30" stroke="currentColor" stroke-width="3"/>
+  <circle cx="16" cy="22" r="2" fill="currentColor"/>
+  <circle cx="24" cy="22" r="2" fill="currentColor"/>
+  <circle cx="32" cy="22" r="2" fill="currentColor"/>
+  <rect x="16" y="38" width="20" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/>
+  <rect x="40" y="38" width="20" height="16" rx="3" fill="var(--accent)" stroke="var(--accent)" stroke-width="2.5"/>
+  <rect x="64" y="38" width="20" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/>
+  <rect x="16" y="60" width="20" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/>
+  <rect x="40" y="60" width="20" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/>
+  <rect x="64" y="60" width="20" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/>
+  <line x1="46" y1="43" x2="54" y2="43" stroke="var(--accent-fg)" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="46" y1="48" x2="54" y2="48" stroke="var(--accent-fg)" stroke-width="1.5" stroke-linecap="round"/>
+</svg>`;
+const TOUR_SVG_USAGE = `<svg viewBox="0 0 100 100" width="110" height="110" aria-hidden="true">
+  <rect x="2" y="40" width="32" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/>
+  <line x1="8" y1="49" x2="28" y2="49" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  <path d="M36 49 L46 49" stroke="currentColor" stroke-width="2.5" fill="none"/>
+  <path d="M43 45 L47 49 L43 53" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="49" y="38" width="22" height="22" rx="3" fill="var(--accent)" stroke="var(--accent)" stroke-width="2.5"/>
+  <path d="M56 49 h8 M60 45 v8" stroke="var(--accent-fg)" stroke-width="2" stroke-linecap="round"/>
+  <path d="M74 49 L84 49" stroke="currentColor" stroke-width="2.5" fill="none"/>
+  <path d="M81 45 L85 49 L81 53" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="86" y="34" width="12" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2.5"/>
+  <rect x="90" y="31" width="4" height="4" rx="1" fill="currentColor"/>
+  <line x1="89" y1="41" x2="95" y2="41" stroke="currentColor" stroke-width="1.5"/>
+  <line x1="89" y1="46" x2="95" y2="46" stroke="currentColor" stroke-width="1.5"/>
+</svg>`;
+const TOUR_SVG_TILES = `<svg viewBox="0 0 100 100" width="110" height="110" aria-hidden="true">
+  <rect x="8" y="14" width="22" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2.2"/>
+  <rect x="8" y="41" width="22" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-dasharray="3 3" opacity="0.55"/>
+  <rect x="8" y="68" width="22" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2.2"/>
+  <rect x="70" y="14" width="22" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2.2"/>
+  <rect x="70" y="41" width="22" height="18" rx="3" fill="var(--accent)" stroke="var(--accent)" stroke-width="2.5"/>
+  <rect x="70" y="68" width="22" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2.2"/>
+  <path d="M32 23 Q50 6 68 23" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="4 3"/>
+  <path d="M64 20 L69 23 L65 27" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="13" y1="19" x2="25" y2="19" stroke="currentColor" stroke-width="1.4"/>
+  <line x1="13" y1="73" x2="25" y2="73" stroke="currentColor" stroke-width="1.4"/>
+  <line x1="75" y1="19" x2="87" y2="19" stroke="currentColor" stroke-width="1.4"/>
+  <line x1="75" y1="73" x2="87" y2="73" stroke="currentColor" stroke-width="1.4"/>
+</svg>`;
+const TOUR_SVG_LIBRARY = `<svg viewBox="0 0 100 100" width="110" height="110" aria-hidden="true">
+  <line x1="10" y1="18" x2="68" y2="18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="10" y1="32" x2="58" y2="32" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="10" y1="46" x2="64" y2="46" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+  <rect x="10" y="60" width="18" height="10" rx="5" fill="none" stroke="currentColor" stroke-width="2"/>
+  <rect x="32" y="60" width="18" height="10" rx="5" fill="none" stroke="currentColor" stroke-width="2"/>
+  <circle cx="4" cy="65" r="2" fill="currentColor"/>
+  <circle cx="26" cy="65" r="2" fill="currentColor"/>
+  <circle cx="64" cy="52" r="17" fill="none" stroke="var(--accent)" stroke-width="3"/>
+  <line x1="76" y1="64" x2="90" y2="78" stroke="var(--accent)" stroke-width="3.5" stroke-linecap="round"/>
+  <line x1="56" y1="46" x2="72" y2="46" stroke="var(--accent)" stroke-width="1.6" opacity="0.6"/>
+  <line x1="56" y1="58" x2="66" y2="58" stroke="var(--accent)" stroke-width="1.6" opacity="0.6"/>
+</svg>`;
+
+// The steps drawing + text (step 5, the settings table, is handled separately below).
+const TOUR_STEPS = [
+  { titleKey: "tourStep1Title", lineKeys: ["tourStep1Line1", "tourStep1Line2"], svg: TOUR_SVG_WELCOME },
+  { titleKey: "tourStep2Title", lineKeys: ["tourStep2Line1", "tourStep2Line2", "tourStep2Line3"], svg: TOUR_SVG_USAGE },
+  { titleKey: "tourStep3Title", lineKeys: ["tourStep3Line1", "tourStep3Line2", "tourStep3Line3"], svg: TOUR_SVG_TILES },
+  { titleKey: "tourStep4Title", lineKeys: ["tourStep4Line1", "tourStep4Line2", "tourStep4Line3"], svg: TOUR_SVG_LIBRARY },
+];
+const TOUR_STEP_COUNT = TOUR_STEPS.length + 1; // + the settings step
+const TOUR_LAST_STEP = TOUR_STEP_COUNT - 1;
+
+// 123.3: step 5's table — written so a later point (the announced screenshot
+// recording feature) can add its own row with exactly one new line.
+const TOUR_OPTIONS = [
+  { key: "screenshot", labelKey: "flagScreenshot", descKey: "tourOptScreenshot" },
+  { key: "colorPicker", labelKey: "flagColorPicker", descKey: "tourOptPicker" },
+  { key: "ocr", labelKey: "flagOcr", descKey: "tourOptOcr" },
+];
+
+let tourStep = 0;
+let tourFirstRun = false; // draft-buffered (true) vs. live-writing (false) step 5
+let tourDraft = {}; // key -> bool, only meaningful while tourFirstRun is true
+
+// Shared by both step-5 modes' "write it now" path: identical to flagRow()'s own
+// change handler (minus the promptSync confirmation, which none of these three need).
+async function tourSetFlagLive(key, enabled) {
+  settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
+  try { await invoke("set_ui_flag", { key, enabled }); } catch (err) { errToast(err); }
+  applyFlags();
+}
+
+function renderTourDrawingStep(step) {
+  const wrap = document.createElement("div");
+  wrap.className = "tour-step";
+  const art = document.createElement("div");
+  art.className = "tour-art";
+  art.setAttribute("aria-hidden", "true");
+  art.innerHTML = step.svg;
+  const text = document.createElement("div");
+  text.className = "tour-text";
+  for (const lk of step.lineKeys) {
+    const p = document.createElement("p");
+    p.textContent = t(lk);
+    text.appendChild(p);
+  }
+  wrap.append(art, text);
+  return wrap;
+}
+
+function renderTourOptionsStep() {
+  const wrap = document.createElement("div");
+  wrap.className = "tour-options";
+  for (const opt of TOUR_OPTIONS) {
+    const row = document.createElement("label");
+    row.className = "field switch-field tour-opt-row";
+    const label = document.createElement("span");
+    label.className = "tour-opt-label";
+    const name = document.createElement("b");
+    name.textContent = t(opt.labelKey);
+    const desc = document.createElement("span");
+    desc.className = "tour-opt-desc";
+    desc.textContent = t(opt.descKey);
+    label.append(name, desc);
+    const note = document.createElement("span");
+    note.className = "tour-opt-default";
+    note.textContent = shipsOn(opt.key) ? t("tourDefaultOn") : t("tourDefaultOff");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.className = "switch";
+    input.checked = tourFirstRun ? tourDraft[opt.key] : flagState(opt.key);
+    input.addEventListener("change", () => {
+      if (tourFirstRun) tourDraft[opt.key] = input.checked;
+      else tourSetFlagLive(opt.key, input.checked);
+    });
+    row.append(label, note, input);
+    wrap.appendChild(row);
+  }
+  const restore = document.createElement("button");
+  restore.type = "button";
+  restore.className = "ghost-btn tour-restore-btn";
+  restore.textContent = t("tourRestoreDefaults");
+  restore.addEventListener("click", async () => {
+    if (tourFirstRun) {
+      tourDraft = Object.fromEntries(TOUR_OPTIONS.map((o) => [o.key, shipsOn(o.key)]));
+    } else {
+      for (const opt of TOUR_OPTIONS) await tourSetFlagLive(opt.key, shipsOn(opt.key));
+    }
+    renderTourStep(); // reflect the reset switches (and re-focus Next)
+  });
+  wrap.appendChild(restore);
+  const foot = document.createElement("p");
+  foot.className = "hint tour-options-foot";
+  foot.textContent = t("tourFooterNote");
+  wrap.appendChild(foot);
+  return wrap;
+}
+
+function renderTourStep() {
+  const isLast = tourStep === TOUR_LAST_STEP;
+  const titleKey = tourStep < TOUR_STEPS.length ? TOUR_STEPS[tourStep].titleKey : "tourStep5Title";
+  $("tour-title").textContent = t(titleKey);
+  const body = $("tour-body");
+  body.innerHTML = "";
+  body.appendChild(tourStep < TOUR_STEPS.length ? renderTourDrawingStep(TOUR_STEPS[tourStep]) : renderTourOptionsStep());
+  const dots = $("tour-dots");
+  dots.innerHTML = "";
+  for (let i = 0; i < TOUR_STEP_COUNT; i++) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "tour-dot" + (i === tourStep ? " active" : "");
+    b.textContent = i === tourStep ? "●" : "○";
+    b.setAttribute("aria-label", t(i < TOUR_STEPS.length ? TOUR_STEPS[i].titleKey : "tourStep5Title"));
+    b.addEventListener("click", () => tourGoto(i));
+    dots.appendChild(b);
+  }
+  $("tour-back").classList.toggle("hidden", tourStep === 0);
+  $("tour-next").textContent = t(isLast ? "tourFinish" : "tourNext");
+  $("tour-next").focus();
+}
+
+function tourGoto(i) {
+  tourStep = Math.max(0, Math.min(TOUR_LAST_STEP, i));
+  renderTourStep();
+}
+
+function tourKeydown(e) {
+  if (e.key === "Escape") { e.preventDefault(); tourSkip(); return; }
+  if (e.key === "ArrowLeft") { e.preventDefault(); tourGoto(tourStep - 1); return; }
+  if (e.key === "ArrowRight") { e.preventDefault(); tourGoto(tourStep + 1); return; }
+  if (e.key === "Enter" && !e.target.closest("button")) {
+    // A focused button already turns Enter into its own click; only steps in for
+    // everything else (e.g. focus left on a step-5 switch).
+    e.preventDefault();
+    tourStep === TOUR_LAST_STEP ? tourFinish() : tourGoto(tourStep + 1);
+  }
+}
+
+async function openTour({ firstRun }) {
+  tourFirstRun = firstRun;
+  tourStep = 0;
+  tourDraft = firstRun ? Object.fromEntries(TOUR_OPTIONS.map((o) => [o.key, shipsOn(o.key)])) : {};
+  $("tour-modal").classList.remove("hidden");
+  renderTourStep();
+  document.addEventListener("keydown", tourKeydown);
+}
+
+function closeTour() {
+  $("tour-modal").classList.add("hidden");
+  document.removeEventListener("keydown", tourKeydown);
+}
+
+async function tourSkip() {
+  closeTour();
+  await saveUiState("tourSeen", true); // Skip writes nothing else
+}
+
+// Only the switches that differ from the shipped default get written — an
+// untouched draft leaves ui_flags exactly as it was, so a later default change
+// still reaches this install.
+async function tourFinishDraft() {
+  for (const opt of TOUR_OPTIONS) {
+    const shipped = shipsOn(opt.key);
+    if (tourDraft[opt.key] !== shipped) await tourSetFlagLive(opt.key, tourDraft[opt.key]);
+  }
+}
+
+async function tourFinish() {
+  if (tourFirstRun) await tourFinishDraft();
+  closeTour();
+  await saveUiState("tourSeen", true);
+}
+
+EXPERT_ACTIONS["tour-open"] = () => openTour({ firstRun: false });
+
+// Called once, right after seedExamplesIfNeeded(), from init()'s reveal(). Never
+// opens on top of (or the same launch as) a more urgent dialog — offerTakeover()
+// (the portable/installed data-folder adoption offer) is the only OTHER dialog that
+// can fire this early, so its return value is the gate. A missing-WebView2 message
+// cannot race this at all: that one is native and shown, if ever, before the
+// WebView2 runtime — and therefore this whole JS module — exists (see
+// ensure_webview2 in lib.rs and the CLAUDE.md dialog rule), so there is nothing left
+// to check for it here by the time init() runs.
+async function maybeOpenFirstRunTour(urgentDialogShown) {
+  if (urgentDialogShown) return; // retried next launch — tourSeen was never written
+  if (settings.ui_flags?.tourSeen) return;
+  if (!flag("firstRunTour")) return;
+  await openTour({ firstRun: true });
+}
+
 // ---- Init ----
 // Re-read settings from the backend and apply the global, order-sensitive parts
 // (palette, language, sizing, theme). Shared by init() and reloadEverything() so a
@@ -13186,7 +13472,12 @@ async function init() {
       if (revealed) return;
       revealed = true;
       // Ask about adopting an installed store only once the themed window is up.
-      invoke("show_main_window").catch(() => {}).finally(() => offerTakeover());
+      // 123: the first-run tour comes right after, but only if that offer (the one
+      // other dialog that can fire this early) did not itself appear this launch.
+      invoke("show_main_window").catch(() => {}).finally(async () => {
+        const urgentDialogShown = await offerTakeover();
+        await maybeOpenFirstRunTour(urgentDialogShown);
+      });
     };
     setTimeout(reveal, 1500);
     requestAnimationFrame(() => {

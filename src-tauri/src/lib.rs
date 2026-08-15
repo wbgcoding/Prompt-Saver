@@ -1645,6 +1645,17 @@ impl Settings {
     }
 }
 
+// 123: whether an install should be marked as having already seen the first-run
+// tour, so it is never sprung on an existing user. Mirrors seed_example_prompts'
+// own freshness check exactly (real prompts already exist, OR the example-seeding
+// marker is set -- the latter still counts a store as non-fresh even if its
+// examples were later dismissed/deleted). A pure function, not a Settings method,
+// so it is testable without a whole Store around it (called from load_store, once
+// prompts are known, right after the Store itself is built).
+fn tour_should_be_marked_seen(has_prompts: bool, examples_seeded: bool) -> bool {
+    has_prompts || examples_seeded
+}
+
 // In-memory store, flushed to disk on mutations.
 struct Store {
     prompts: Vec<Prompt>,
@@ -2622,6 +2633,12 @@ fn load_store(app: &AppHandle) -> Store {
         let _ = db_trim_copy(&conn, cap, cutoff);
         migrate_prompts(&mut prompts);
         let mut store = Store { prompts, trash, settings, prompts_locked: decrypt_fails > 0 };
+        // 123: never let an existing install see the first-run tour -- a store
+        // this is discovered for is, by definition, not the one that will ever
+        // write the flag itself via the tour's own Finish/Skip.
+        if tour_should_be_marked_seen(!store.prompts.is_empty(), store.settings.examples_seeded) {
+            store.settings.ui_flags.entry("tourSeen".to_string()).or_insert(true);
+        }
         store.normalize_folders(); // F25: drop members whose prompt is gone
         sweep_trash(app, &mut store); // 91: drop anything past the retention window
         if needs_mig || migrated_log {
@@ -2682,6 +2699,9 @@ fn load_store(app: &AppHandle) -> Store {
         );
     }
     let mut store = Store { prompts, trash: Vec::new(), settings, prompts_locked: unreadable };
+    if tour_should_be_marked_seen(!store.prompts.is_empty(), store.settings.examples_seeded) {
+        store.settings.ui_flags.entry("tourSeen".to_string()).or_insert(true);
+    }
     store.normalize_folders();
     sweep_trash(app, &mut store); // 91: no-op here (fallback path never loads trash), kept for symmetry
     store
@@ -15231,6 +15251,21 @@ mod tests {
         assert_eq!(s.theme, "neon");
         assert_eq!(s.custom_themes[0].base, "neon");
         assert_eq!(theme_base_of(&s, &s.theme), "neon");
+    }
+
+    // 123: an existing install (real prompts, or the example-seeding marker set --
+    // even if those examples were later dismissed) must never see the first-run
+    // tour; only a genuinely blank store should.
+    #[test]
+    fn tour_is_marked_seen_for_an_existing_store() {
+        assert!(tour_should_be_marked_seen(true, false), "prompts already exist");
+        assert!(tour_should_be_marked_seen(false, true), "examples were seeded (even if later dismissed)");
+        assert!(tour_should_be_marked_seen(true, true), "both signal a non-fresh store");
+    }
+
+    #[test]
+    fn tour_is_not_marked_seen_for_a_blank_store() {
+        assert!(!tour_should_be_marked_seen(false, false));
     }
 
     // ---- 80: colour-picker history ----
