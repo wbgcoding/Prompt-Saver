@@ -3339,6 +3339,44 @@ PROBE = """
       if (document.querySelectorAll('#stats-panel .stat-cards .stat-card').length !== 12) {
         out.errors.push('the usage statistics do not show 12 cards');
       }
+      // 104: measure before guessing -- the top-list-length field sits in a 2-col
+      // grid row (.stats-head-row) right under the section's own collapsible header
+      // button; check it against every neighbour it could plausibly overlap
+      // (the header above, the toggle beside it, the cards below), stays permanently
+      // as an overlap guard for the whole statistics header. Checked at every tested
+      // width, with the statistics section open (it must be, to reach the row at
+      // all) both before and after a round trip through hiding/showing the row via
+      // the record-statistics toggle.
+      {
+        const overlaps = (a, b) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
+        const checkTopN = (label) => {
+          const row = document.querySelector('#stats-panel .stats-topn-row');
+          const header = document.querySelector('#stats-panel > .stat-section');
+          const toggle = document.querySelector('#stats-panel .stats-head-row .switch-field');
+          const cards = document.querySelector('#stats-panel .stat-cards');
+          if (!row) { out.errors.push('104 (' + label + '): the top-list-length row is missing'); return; }
+          const rb = row.getBoundingClientRect();
+          for (const [name, el] of [['header', header], ['toggle', toggle], ['cards', cards]]) {
+            if (el && overlaps(rb, el.getBoundingClientRect())) {
+              out.errors.push('104 (' + label + '): the top-list-length row overlaps the ' + name);
+            }
+          }
+        };
+        checkTopN('statistics on');
+        const findToggle = () => document.querySelector('#stats-panel .stats-head-row .switch-field input');
+        const findRow = () => document.querySelector('#stats-panel .stats-topn-row');
+        const waitFor = async (fn) => { for (let i = 0; i < 40 && !fn(); i++) await sleep(50); return fn(); };
+        if (findToggle()) {
+          findToggle().click();
+          await waitFor(() => !findRow()); // re-render dropped the row while off
+          const t2 = findToggle(); // 104: a fresh node -- the click above rebuilt the panel
+          if (t2) {
+            t2.click(); // back on: statistics stays on for the rest of the walk
+            await waitFor(() => !!findRow());
+          }
+          checkTopN('statistics re-enabled');
+        }
+      }
       if (!document.querySelector('#stats-panel .stat-overview-split')) {
         out.errors.push('the overview is not split from the per-view list');
       }
