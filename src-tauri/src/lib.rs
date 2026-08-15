@@ -10638,6 +10638,353 @@ fn set_ui_zoom(app: AppHandle, factor: f64) -> Result<(), String> {
     Ok(())
 }
 
+// ---------- OCR (Windows Media.Ocr, fully offline) ----------
+//
+// Text recognition from an image file or a snip-tool crop, using Windows' own
+// built-in recognizer -- no bundled third-party OCR library, no network.
+// Backend only: point 121 (a later pass) wires this into the UI.
+//
+// `ocr_join_lines` is pure text logic (no Windows API), so it is covered by
+// plain `cargo test --lib` on any platform. Everything else lives behind
+// `#[cfg(windows)]`, the same split this file already uses for `mod clipwatch`.
+
+#[derive(Serialize)]
+struct OcrLang {
+    tag: String,
+    label: String,
+}
+
+#[derive(Serialize)]
+struct OcrResult {
+    text: String,
+    lang: String,
+}
+
+const MAX_OCR_IMAGE_BYTES: u64 = 200 * 1024 * 1024; // a single image, not a whole export (MAX_IMPORT_BYTES)
+const OCR_IMAGE_EXTS: [&str; 5] = ["png", "jpg", "jpeg", "bmp", "webp"];
+
+fn ocr_validate_path(path: &str) -> Result<PathBuf, String> {
+    let p = Path::new(path);
+    let meta = fs::metadata(p).map_err(|e| e.to_string())?;
+    if !meta.is_file() {
+        return Err("not a file".to_string());
+    }
+    let ext_ok = p
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| OCR_IMAGE_EXTS.contains(&e.to_lowercase().as_str()))
+        .unwrap_or(false);
+    if !ext_ok {
+        return Err("unsupported image type".to_string());
+    }
+    check_import_size(p, MAX_OCR_IMAGE_BYTES)?;
+    Ok(p.to_path_buf())
+}
+
+// Join OCR'd lines back into readable text. A line that does not end in
+// sentence-ending punctuation, followed by a line that starts with a lowercase
+// letter, is a mid-sentence wrap -- joined with a single space. An empty
+// recognized line is a paragraph break, kept as a blank line. Everything else
+// stays on its own line. Right-to-left scripts are not special-cased: Windows'
+// own result already has lines in correct reading order, and this function
+// only ever inspects whitespace/case at the edges, so it never assumes an
+// LTR character order.
+fn ocr_join_lines(lines: &[String]) -> String {
+    fn ends_sentence(line: &str) -> bool {
+        let trimmed = line.trim_end_matches(|c: char| matches!(c, '"' | '\'' | ')' | ']' | '\u{201d}' | '\u{2019}'));
+        matches!(trimmed.chars().last(), Some(c) if matches!(c, '.' | '!' | '?' | '\u{2026}'))
+    }
+    fn starts_lowercase(line: &str) -> bool {
+        line.trim_start().chars().next().map(|c| c.is_lowercase()).unwrap_or(false)
+    }
+
+    let mut out = String::new();
+    let mut prev: Option<&str> = None;
+    for raw in lines {
+        let line = raw.trim_end_matches(['\r', '\n']);
+        if line.trim().is_empty() {
+            out.push_str("\n\n");
+            prev = None;
+            continue;
+        }
+        match prev {
+            None => out.push_str(line),
+            Some(p) if !ends_sentence(p) && starts_lowercase(line) => {
+                out.push(' ');
+                out.push_str(line.trim_start());
+            }
+            Some(_) => {
+                out.push('\n');
+                out.push_str(line);
+            }
+        }
+        prev = Some(line);
+    }
+    out
+}
+
+#[tauri::command]
+async fn ocr_languages() -> Result<Vec<OcrLang>, String> {
+    #[cfg(windows)]
+    {
+        tauri::async_runtime::spawn_blocking(ocr::languages).await.map_err(|e| e.to_string())?
+    }
+    #[cfg(not(windows))]
+    {
+        Err("ocr is only available on Windows".to_string())
+    }
+}
+
+#[tauri::command]
+async fn ocr_image(path: String) -> Result<OcrResult, String> {
+    let validated = ocr_validate_path(&path)?;
+    #[cfg(windows)]
+    {
+        tauri::async_runtime::spawn_blocking(move || ocr::recognize_file(&validated))
+            .await
+            .map_err(|e| e.to_string())?
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = validated;
+        Err("ocr is only available on Windows".to_string())
+    }
+}
+
+#[tauri::command]
+async fn ocr_region(
+    state: State<'_, SnipState>,
+    index: usize,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+) -> Result<OcrResult, String> {
+    let crop = crop_frozen(&state, index, x, y, width, height).ok_or("empty region")?;
+    #[cfg(windows)]
+    {
+        tauri::async_runtime::spawn_blocking(move || ocr::recognize_crop(crop))
+            .await
+            .map_err(|e| e.to_string())?
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = crop;
+        Err("ocr is only available on Windows".to_string())
+    }
+}
+
+// Windows.Media.Ocr binding. Deliberately goes through the file system for the
+// bitmap load (StorageFile -> BitmapDecoder -> SoftwareBitmap) rather than
+// IMemoryBufferByteAccess buffer wrangling -- that keeps this module almost
+// entirely free of unsafe code; the one unsafe call is COM's own RoInitialize.
+#[cfg(windows)]
+mod ocr {
+    use super::{brand, fs, gen_id, OcrLang, OcrResult};
+    use image::imageops::FilterType;
+    use image::GenericImageView;
+    use std::collections::HashMap;
+    use std::path::{Path, PathBuf};
+    use std::sync::{Mutex, OnceLock};
+    use windows::core::HSTRING;
+    use windows::Globalization::Language;
+    use windows::Graphics::Imaging::{BitmapDecoder, SoftwareBitmap};
+    use windows::Media::Ocr::OcrEngine;
+    use windows::Storage::{FileAccessMode, StorageFile};
+    use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
+
+    // A very small crop is upscaled 2x before recognition -- the actual trick that
+    // makes small on-screen text (button labels, tooltips) recognizable. An image
+    // can only ever be too big (downscaled to MaxImageDimension) or too small
+    // (upscaled here), never both.
+    const UPSCALE_BELOW_PX: u32 = 300;
+
+    // COM must be initialized once per thread that calls into WinRT, and never on
+    // the UI thread. Every OCR call runs inside spawn_blocking; those pool threads
+    // are reused across calls, so a thread-local guard keeps this to once per
+    // thread rather than once per recognition.
+    fn ensure_com() {
+        thread_local! {
+            static DONE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+        }
+        DONE.with(|d| {
+            if !d.get() {
+                unsafe {
+                    let _ = RoInitialize(RO_INIT_MULTITHREADED);
+                }
+                d.set(true);
+            }
+        });
+    }
+
+    // Engine cache: one OcrEngine per language tag, created once and reused --
+    // never recreated per call.
+    fn engine_cache() -> &'static Mutex<HashMap<String, OcrEngine>> {
+        static CACHE: OnceLock<Mutex<HashMap<String, OcrEngine>>> = OnceLock::new();
+        CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+    }
+
+    fn engine_tag(engine: &OcrEngine) -> String {
+        engine
+            .RecognizerLanguage()
+            .and_then(|l| l.LanguageTag())
+            .map(|s| s.to_string())
+            .unwrap_or_default()
+    }
+
+    // "auto" -> the user's profile languages; if none of those has a recognition
+    // pack installed, fall back to whichever recognition language IS installed
+    // instead of failing (Ben: "use whatever language packs are already
+    // present"). Only when NOTHING is installed does this become a real error.
+    fn create_auto_engine() -> Result<OcrEngine, String> {
+        if let Ok(e) = OcrEngine::TryCreateFromUserProfileLanguages() {
+            return Ok(e);
+        }
+        let langs = OcrEngine::AvailableRecognizerLanguages().map_err(|e| e.to_string())?;
+        let size = langs.Size().map_err(|e| e.to_string())?;
+        if size == 0 {
+            return Err("ocr-no-language".to_string());
+        }
+        let first = langs.GetAt(0).map_err(|e| e.to_string())?;
+        OcrEngine::TryCreateFromLanguage(&first).map_err(|_| "ocr-no-language".to_string())
+    }
+
+    // Resolve (and cache) the OcrEngine for `lang` ("auto" or an explicit BCP-47
+    // tag). Never recreates an engine that is already cached.
+    fn resolve_engine(lang: &str) -> Result<OcrEngine, String> {
+        if let Some(e) = engine_cache().lock().unwrap_or_else(|e| e.into_inner()).get(lang) {
+            return Ok(e.clone());
+        }
+        let engine = if lang == "auto" {
+            create_auto_engine()?
+        } else {
+            let language = Language::CreateLanguage(&HSTRING::from(lang)).map_err(|e| e.to_string())?;
+            OcrEngine::TryCreateFromLanguage(&language).map_err(|_| "ocr-no-language".to_string())?
+        };
+        engine_cache()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(lang.to_string(), engine.clone());
+        Ok(engine)
+    }
+
+    fn bitmap_from_path(path: &Path) -> Result<SoftwareBitmap, String> {
+        let hpath = HSTRING::from(path.to_string_lossy().as_ref());
+        let file = StorageFile::GetFileFromPathAsync(&hpath)
+            .map_err(|e| e.to_string())?
+            .get()
+            .map_err(|e| e.to_string())?;
+        let stream = file
+            .OpenAsync(FileAccessMode::Read)
+            .map_err(|e| e.to_string())?
+            .get()
+            .map_err(|e| e.to_string())?;
+        let decoder = BitmapDecoder::CreateAsync(&stream)
+            .map_err(|e| e.to_string())?
+            .get()
+            .map_err(|e| e.to_string())?;
+        decoder.GetSoftwareBitmapAsync().map_err(|e| e.to_string())?.get().map_err(|e| e.to_string())
+    }
+
+    // Deletes its file on drop, on every path (success, recognition failure, or
+    // an early return) -- guarantees the temp PNG never survives the call.
+    struct TempFileGuard(Option<PathBuf>);
+    impl Drop for TempFileGuard {
+        fn drop(&mut self) {
+            if let Some(p) = self.0.take() {
+                let _ = fs::remove_file(p);
+            }
+        }
+    }
+
+    fn ocr_temp_path() -> PathBuf {
+        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-ocr-{}.png", brand::TEMP_PREFIX, gen_id()))
+    }
+
+    // Downscale a too-large image (proportionally, to MaxImageDimension) or
+    // upscale a very small one 2x, writing the result to a NEW temp file --
+    // `path` itself (which may be the user's own file for ocr_image) is never
+    // modified. Returns `path` unchanged, with no extra disk write at all, when
+    // no resize is needed.
+    fn resize_for_ocr(path: &Path, max_dim: u32) -> Result<(PathBuf, TempFileGuard), String> {
+        let img = image::open(path).map_err(|e| e.to_string())?;
+        let (w, h) = img.dimensions();
+        let resized = if w > max_dim || h > max_dim {
+            let scale = max_dim as f64 / (w.max(h) as f64);
+            let nw = ((w as f64 * scale).round() as u32).max(1);
+            let nh = ((h as f64 * scale).round() as u32).max(1);
+            Some(img.resize(nw, nh, FilterType::Lanczos3))
+        } else if w.max(h) < UPSCALE_BELOW_PX {
+            Some(img.resize(w * 2, h * 2, FilterType::Lanczos3))
+        } else {
+            None
+        };
+        match resized {
+            None => Ok((path.to_path_buf(), TempFileGuard(None))),
+            Some(im) => {
+                let out = ocr_temp_path();
+                if let Some(dir) = out.parent() {
+                    let _ = fs::create_dir_all(dir);
+                }
+                im.save(&out).map_err(|e| e.to_string())?;
+                Ok((out.clone(), TempFileGuard(Some(out))))
+            }
+        }
+    }
+
+    fn recognize(path: &Path) -> Result<OcrResult, String> {
+        ensure_com();
+        let engine = resolve_engine("auto")?;
+        let max_dim = OcrEngine::MaxImageDimension().map_err(|e| e.to_string())?;
+        let (sized_path, _resize_guard) = resize_for_ocr(path, max_dim)?;
+        let bitmap = bitmap_from_path(&sized_path)?;
+        // Recognition runs exactly once per call.
+        let result = engine.RecognizeAsync(&bitmap).map_err(|e| e.to_string())?.get().map_err(|e| e.to_string())?;
+        let win_lines = result.Lines().map_err(|e| e.to_string())?;
+        let size = win_lines.Size().map_err(|e| e.to_string())?;
+        let mut lines = Vec::with_capacity(size as usize);
+        for i in 0..size {
+            let l = win_lines.GetAt(i).map_err(|e| e.to_string())?;
+            lines.push(l.Text().map_err(|e| e.to_string())?.to_string());
+        }
+        // Nothing recognized -> Ok with empty text, never an error (a later pass
+        // turns that into a friendly toast, not an error dialog).
+        Ok(OcrResult { text: super::ocr_join_lines(&lines), lang: engine_tag(&engine) })
+    }
+
+    pub(super) fn languages() -> Result<Vec<OcrLang>, String> {
+        ensure_com();
+        let langs = OcrEngine::AvailableRecognizerLanguages().map_err(|e| e.to_string())?;
+        let size = langs.Size().map_err(|e| e.to_string())?;
+        let mut out = Vec::with_capacity(size as usize);
+        for i in 0..size {
+            let lang = langs.GetAt(i).map_err(|e| e.to_string())?;
+            out.push(OcrLang {
+                tag: lang.LanguageTag().map_err(|e| e.to_string())?.to_string(),
+                label: lang.DisplayName().map_err(|e| e.to_string())?.to_string(),
+            });
+        }
+        Ok(out)
+    }
+
+    pub(super) fn recognize_file(path: &Path) -> Result<OcrResult, String> {
+        recognize(path)
+    }
+
+    // Writes the crop out as a temp PNG under the branded temp dir (same naming
+    // convention as write_snip_preview / pdfium_cache_path), then runs it through
+    // the same recognize() path -- deleted in every code path via TempFileGuard.
+    pub(super) fn recognize_crop(crop: image::RgbaImage) -> Result<OcrResult, String> {
+        let path = ocr_temp_path();
+        if let Some(dir) = path.parent() {
+            let _ = fs::create_dir_all(dir);
+        }
+        crop.save(&path).map_err(|e| e.to_string())?;
+        let _guard = TempFileGuard(Some(path.clone()));
+        recognize(&path)
+    }
+}
+
 // ---------- Updates (GitHub releases) ----------
 
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -12940,7 +13287,10 @@ pub fn run() {
             current_data_dir,
             set_data_dir,
             delete_data_dir,
-            paste_into_previous
+            paste_into_previous,
+            ocr_languages,
+            ocr_image,
+            ocr_region
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -13939,6 +14289,36 @@ fn start_sync_poll(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // 120: pure text-logic tests for ocr_join_lines -- no Windows API involved, so
+    // these run on any platform via plain `cargo test --lib`.
+    #[test]
+    fn ocr_join_lines_joins_a_wrapped_sentence() {
+        let lines = vec!["This line wraps".to_string(), "into the next one.".to_string()];
+        assert_eq!(ocr_join_lines(&lines), "This line wraps into the next one.");
+    }
+
+    #[test]
+    fn ocr_join_lines_keeps_complete_sentences_separate() {
+        let lines = vec!["First sentence.".to_string(), "Second sentence.".to_string()];
+        assert_eq!(ocr_join_lines(&lines), "First sentence.\nSecond sentence.");
+    }
+
+    #[test]
+    fn ocr_join_lines_blank_line_separates_paragraphs() {
+        let lines = vec![
+            "Paragraph one.".to_string(),
+            "".to_string(),
+            "Paragraph two.".to_string(),
+        ];
+        assert_eq!(ocr_join_lines(&lines), "Paragraph one.\n\nParagraph two.");
+    }
+
+    #[test]
+    fn ocr_join_lines_empty_input_yields_empty_string() {
+        let lines: Vec<String> = vec![];
+        assert_eq!(ocr_join_lines(&lines), "");
+    }
 
     #[test]
     fn a_theme_that_no_longer_ships_falls_back_to_system() {

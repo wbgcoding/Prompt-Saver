@@ -54,6 +54,13 @@ pdfium-render = "0.8"
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
 clipboard-win = "5"
+# OCR (point 120): Windows' own built-in text recognizer, fully offline. Version
+# pinned exactly -- a newer release may need a newer compiler than this project's
+# rust-version = "1.77".
+windows = { version = "0.58", features = [
+  "Media_Ocr", "Graphics_Imaging", "Storage", "Storage_Streams",
+  "Globalization", "Foundation_Collections", "Win32_System_WinRT",
+] }
 
 # Small release binary, but tuned for much faster builds:
 # thin LTO + parallel codegen cut compile time a lot for a few KB more size.
