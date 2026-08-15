@@ -7866,6 +7866,11 @@ async function confirmModal() {
     } else {
       const text = copyImage || filePath ? name : ((rotating || hasVariants) ? (rotateFilled[0] || "") : modal.text.value);
       saved = await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode, rotateAuto });
+      // 94: Save can turn rotateAuto off (or drop it below two entries) while a
+      // session for THIS prompt happens to be armed — end it now instead of
+      // waiting for the next paste to notice, same as the tile-menu toggle.
+      // A no-op on the backend if no session is running for this id.
+      if (!rotateAuto) await invoke("rotation_end_auto", { id: modalState.id }).catch(() => {});
     }
   } catch (err) {
     const errStr = String(err);

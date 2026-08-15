@@ -7963,14 +7963,27 @@ mod clipwatch {
     // data yet — used both for the very first arm (is_first) and every re-arm after
     // a render. Must run on the window thread (posted here, never called directly).
     fn open_and_promise(hwnd: isize, is_first: bool) {
-        unsafe {
-            if OpenClipboard(hwnd) == 0 {
-                // Another app has the clipboard open right now — do not spin; end the
-                // session, the text last delivered (or about to be, on first arm)
-                // simply stays whatever it already is.
-                *SESSION.lock().unwrap_or_else(|e| e.into_inner()) = None;
-                return;
+        let opened = unsafe { OpenClipboard(hwnd) != 0 };
+        if !opened {
+            // Another app has the clipboard open right now — do not spin, end the
+            // session either way. On the very first arm nothing has ever reached the
+            // real clipboard yet (the promise itself is what failed), so fall back to
+            // a plain untracked write instead of leaving a "successful" copy empty —
+            // same fallback `arm()` already uses when the watcher thread is not even
+            // running. A re-arm failure keeps the text already delivered by the last
+            // render as-is, but must still tell the UI the session is gone, or the
+            // tile badge is stuck "active" forever.
+            let dropped = SESSION.lock().unwrap_or_else(|e| e.into_inner()).take();
+            if let Some(session) = dropped {
+                if is_first {
+                    let _ = arboard::Clipboard::new().and_then(|mut c| c.set_text(session.text));
+                } else {
+                    emit_active(&session.id, false);
+                }
             }
+            return;
+        }
+        unsafe {
             OWN_EMPTY.store(true, Ordering::Release);
             EmptyClipboard();
             OWN_EMPTY.store(false, Ordering::Release);
