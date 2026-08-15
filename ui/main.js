@@ -11316,6 +11316,9 @@ function bind() {
     updateInfo = info;
     updateVersion.textContent = t("updateAvailableBtn").replace("{v}", info.version);
     updateVersion.classList.add("update-avail");
+    // 96: undo a previous "up to date" check's tooltip override, if any.
+    updateVersion.dataset.i18nTitle = "openReleases";
+    updateVersion.title = t("openReleases");
   };
   // Clicking the status line: open the update dialog if one is pending, else the
   // GitHub releases page.
@@ -11412,7 +11415,16 @@ function bind() {
     try {
       const info = await invoke("check_update");
       if (info.available) offerUpdate(info);          // status → "Update to X available"
-      else { updateVersion.textContent = t("upToDate"); updateVersion.classList.remove("update-avail"); }
+      else {
+        // 96: the short form keeps this single-line at the same width the long
+        // sentence used to wrap at; the full sentence survives as a tooltip.
+        // dataset.i18nTitle (not just .title) keeps it correct across a later
+        // language switch too, the same as every other data-i18n-title element.
+        updateVersion.textContent = t("upToDate").replace("{v}", appVersion);
+        updateVersion.dataset.i18nTitle = "upToDateTip";
+        updateVersion.title = t("upToDateTip");
+        updateVersion.classList.remove("update-avail");
+      }
     } catch (err) {
       toast(String(err));
     }

@@ -3552,6 +3552,34 @@ PROBE = """
       }
       await click('confirm-ok');
     }
+    // 96: the short "Latest X.Y.Z" status keeps update-actions no taller than
+    // before, with the longest of the 11 translations (Romanian) -- and exactly
+    // as tall as the button row below it once the window has real room (740px+;
+    // below that the About/Check-for-updates button labels themselves already
+    // do not fit beside a third item, independent of what that item says).
+    {
+      if (document.getElementById('settings').classList.contains('hidden')) await click('gear');
+      const ua = document.querySelector('.update-actions');
+      const btnRow = document.querySelector('.settings-btn-row');
+      const uv = document.getElementById('update-version');
+      if (ua && btnRow && uv) {
+        const prevText = uv.textContent;
+        uv.textContent = 'Cea mai recenta 2.7.0';
+        const uaH = ua.getBoundingClientRect().height;
+        uv.textContent = 'Neueste Version bereits installiert';
+        const uaHOld = ua.getBoundingClientRect().height;
+        const rowH = btnRow.getBoundingClientRect().height;
+        if (uaH > uaHOld + 1) {
+          out.errors.push('the short status is taller than the old long sentence was: ' + Math.round(uaH) + ' vs ' + Math.round(uaHOld));
+        }
+        if (window.innerWidth >= 740 && uaH > rowH + 1) {
+          out.errors.push('update-actions is taller than settings-btn-row at ' + window.innerWidth + 'px: ' + Math.round(uaH) + ' vs ' + Math.round(rowH));
+        }
+        uv.textContent = prevText;
+      } else {
+        out.errors.push('update-actions, settings-btn-row or update-version missing from the settings panel');
+      }
+    }
     // The changelog popup renders the release Markdown instead of dumping it, and
     // grows with the text rather than clipping it.
     await click('update-btn');
