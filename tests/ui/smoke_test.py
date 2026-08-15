@@ -290,6 +290,23 @@ PROBE = """
           const txt = (el.children.length ? '' : el.textContent || '').trim();
           if (/^about[A-Z][A-Za-z]+$/.test(txt)) out.errors.push('76: About dialog shows a raw i18n key: ' + txt);
         }
+        // 97: the button row is centered, so the FIRST button sits as far from the
+        // modal's left edge as the LAST button sits from its right edge -- checking
+        // .modal-actions itself would be wrong, that flex container always spans the
+        // full inner width regardless of justify-content; only its children move.
+        const aboutBox = aboutModal.querySelector('.modal');
+        const firstBtn = document.getElementById('about-repo');
+        const lastBtn = document.getElementById('about-ok');
+        if (aboutBox && firstBtn && lastBtn) {
+          const mb = aboutBox.getBoundingClientRect();
+          const fb = firstBtn.getBoundingClientRect();
+          const lb = lastBtn.getBoundingClientRect();
+          const leftGap = fb.left - mb.left;
+          const rightGap = mb.right - lb.right;
+          if (Math.abs(leftGap - rightGap) > 1) {
+            out.errors.push('97: About dialog buttons are not centered, left gap ' + Math.round(leftGap) + 'px vs right gap ' + Math.round(rightGap) + 'px');
+          }
+        }
         document.getElementById('about-ok').click();
         await sleep(120);
         if (!aboutModal.classList.contains('hidden')) out.errors.push('76: the About dialog did not close');
