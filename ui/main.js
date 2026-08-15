@@ -1639,7 +1639,9 @@ function withTip(row, key) {
 // default — resets just this one key. Reuses the same isRowChanged() diff as 66/67
 // and the same per-key commands resetExpertGroup() uses; no confirmation, since one
 // click back is reversible.
-function rowResetBtn(kind, key) {
+// 99: `after` lets a caller outside the main expert menu (the backup/statistics
+// panels, their own top-level window) redraw itself instead of renderExpert().
+function rowResetBtn(kind, key, after) {
   if (!isRowChanged(kind, key)) return null;
   const btn = document.createElement("button");
   btn.type = "button";
@@ -1651,11 +1653,11 @@ function rowResetBtn(kind, key) {
   btn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    resetOneExpertValue(kind, key);
+    resetOneExpertValue(kind, key, after);
   });
   return btn;
 }
-async function resetOneExpertValue(kind, key) {
+async function resetOneExpertValue(kind, key, after) {
   if (kind === "flags") {
     const enabled = shipsOn(key);
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
@@ -1675,7 +1677,7 @@ async function resetOneExpertValue(kind, key) {
     EXPERT_PATHS[key].onReset(); // already re-renders itself
     return;
   }
-  renderExpert();
+  if (after) after(); else renderExpert();
 }
 
 // Flags whose state changes the tile DOM itself (everything else is a body class).
@@ -2079,12 +2081,19 @@ function paletteRow() {
     inputs.push(c);
     grid.appendChild(c);
   }
-  const reset = document.createElement("button");
-  reset.type = "button";
-  reset.className = "ghost-btn palette-reset";
-  reset.textContent = t("paletteReset");
-  reset.addEventListener("click", () => savePalette(null));
-  row.append(grid, reset);
+  // 99: only show it while a hue actually differs from DEFAULT_COLORS -- same rule
+  // as every other row's rowResetBtn(), the palette just has no single key to diff.
+  const changed = cur.some((c, i) => (HEX_RE.test(c) ? c : DEFAULT_COLORS[i + 1]) !== DEFAULT_COLORS[i + 1]);
+  if (changed) {
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.className = "ghost-btn palette-reset";
+    reset.textContent = t("paletteReset");
+    reset.addEventListener("click", () => savePalette(null));
+    row.append(grid, reset);
+  } else {
+    row.append(grid);
+  }
   return row;
 }
 
@@ -6567,7 +6576,9 @@ function collapsibleHead(labelText, contentEl, stateKey) {
 // Label + bounded number field, as used by the backup and statistics panels.
 // Clearing the field means "back to the default" — it is committed on blur, so
 // an empty field mid-typing is left alone.
-function numRow(labelKey, key, min, max, onSet, extraClass) {
+// `after` (99): redraws the caller's own panel once a reset restores the default,
+// same job renderExpert() does for the main expert menu's rows.
+function numRow(labelKey, key, min, max, onSet, extraClass, after) {
   const l = document.createElement("label");
   l.className = "field backup-set-row" + (extraClass ? " " + extraClass : "");
   const s = document.createElement("span"); s.textContent = t(labelKey);
@@ -6575,8 +6586,6 @@ function numRow(labelKey, key, min, max, onSet, extraClass) {
   i.type = "number"; i.min = min; i.max = max; i.className = "modal-input"; i.value = String(val(key));
   const def = EXPERT_VALUES[key]?.def ?? min;
   const commit = async (raw) => {
-    // 46: Number(raw) || def treated a typed 0 as falsy and silently fell back to
-    // the default -- a GFS retention tier (min 0 = "none") could never be set to 0.
     // 46: Number(raw) || def treated a typed 0 as falsy and silently fell back to
     // the default -- a GFS retention tier (min 0 = "none") could never be set to 0.
     const n = Number(raw);
@@ -6589,7 +6598,11 @@ function numRow(labelKey, key, min, max, onSet, extraClass) {
   };
   i.addEventListener("change", () => commit(i.value.trim()));
   i.addEventListener("blur", () => { if (i.value.trim() === "") commit(""); });
-  l.append(s, i);
+  const right = document.createElement("span"); right.className = "numrow-right";
+  const resetBtn = rowResetBtn("values", key, after);
+  if (resetBtn) right.append(resetBtn);
+  right.append(i);
+  l.append(s, right);
   return l;
 }
 
@@ -6628,7 +6641,7 @@ async function renderStatsPanel(body) {
     headRow.appendChild(numRow("valStatsTopN", "statsTopN", 5, 100, async (v) => {
       await saveBackupSetting("value", "statsTopN", v);
       renderStatsPanel(root); // 45: see the toggle handler above
-    }, "stats-topn-row"));
+    }, "stats-topn-row", () => renderStatsPanel(root)));
   }
   body.appendChild(headRow);
   if (!on) return;
@@ -7077,7 +7090,11 @@ async function renderBackupPanel(body) {
     ivs.value = String(val("backupIntervalH"));
     ivs.addEventListener("change", async () => { await saveBackupSetting("value", "backupIntervalH", Number(ivs.value)); renderBackupPanel(body); });
     attachSelectPicker(ivs); // themed popup instead of the native OS dropdown
-    iv.append(ivl, ivs); left.appendChild(iv);
+    const ivRight = document.createElement("span"); ivRight.className = "numrow-right";
+    const ivReset = rowResetBtn("selects", "backupIntervalH", () => renderBackupPanel(body));
+    if (ivReset) ivRight.append(ivReset);
+    ivRight.append(ivs);
+    iv.append(ivl, ivRight); left.appendChild(iv);
   }
 
   // Right column — retention. 25: a plain number field replaces the three preset
@@ -7090,7 +7107,8 @@ async function renderBackupPanel(body) {
   }, "tipBackupGfs"));
   const keepRow = numRow("valBackupKeep", "backupKeep", 1, 50, async (v) => {
     await saveBackupSetting("value", "backupKeep", v);
-  }, "backup-keep-row");
+    renderBackupPanel(body); // 99: without this the reset icon never appears live
+  }, "backup-keep-row", () => renderBackupPanel(body));
   if (gfsOn) {
     keepRow.classList.add("is-disabled");
     keepRow.querySelector("input").disabled = true;
@@ -7107,11 +7125,14 @@ async function renderBackupPanel(body) {
   right.appendChild(slot);
   const tiers = document.createElement("div");
   tiers.className = "backup-tier-grid" + (gfsOn ? "" : " is-parked");
-  const onTier = (key) => async (v) => { await saveBackupSetting("value", key, v); };
-  tiers.appendChild(numRow("valBackupDaily", "backupDaily", 0, 30, onTier("backupDaily")));
-  tiers.appendChild(numRow("valBackupWeekly", "backupWeekly", 0, 52, onTier("backupWeekly")));
-  tiers.appendChild(numRow("valBackupMonthly", "backupMonthly", 0, 60, onTier("backupMonthly")));
-  tiers.appendChild(numRow("valBackupYearly", "backupYearly", 0, 20, onTier("backupYearly")));
+  // 99: re-renders like every other row in this panel, so a tier's reset icon
+  // appears/disappears live instead of only after some unrelated change.
+  const onTier = (key) => async (v) => { await saveBackupSetting("value", key, v); renderBackupPanel(body); };
+  const rerenderPanel = () => renderBackupPanel(body);
+  tiers.appendChild(numRow("valBackupDaily", "backupDaily", 0, 30, onTier("backupDaily"), null, rerenderPanel));
+  tiers.appendChild(numRow("valBackupWeekly", "backupWeekly", 0, 52, onTier("backupWeekly"), null, rerenderPanel));
+  tiers.appendChild(numRow("valBackupMonthly", "backupMonthly", 0, 60, onTier("backupMonthly"), null, rerenderPanel));
+  tiers.appendChild(numRow("valBackupYearly", "backupYearly", 0, 20, onTier("backupYearly"), null, rerenderPanel));
   slot.appendChild(tiers);
   // Optional backup password. Without one, backups use a fixed key and restore on any
   // PC; with one they need exactly this password. The stored password is never sent

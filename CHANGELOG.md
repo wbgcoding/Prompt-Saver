@@ -440,6 +440,9 @@ until you turn it on.
   as "changed"**, permanently offering an undo and matching the "only
   changed" filter, because their stored value was compared against a
   default of a different type.
+- **The backup-count and retention rows in the backup dialog had no undo
+  arrow at all**, unlike every other expert setting, and the color palette's
+  reset button showed even when every colour was still the default.
 
 ### Removed
 

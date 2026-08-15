@@ -178,6 +178,24 @@ def balanced(text, start, opener, closer):
         j += 1
 
 
+def top_level_args(s):
+    """Split a call's argument text at bracket depth 0."""
+    args, depth, cur = [], 0, ""
+    for ch in s:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        if ch == "," and depth == 0:
+            args.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    if cur.strip():
+        args.append(cur)
+    return args
+
+
 def top_keys(text):
     """Keys of an object literal at nesting depth 1."""
     keys, depth, i = [], 0, 0
@@ -366,6 +384,46 @@ for key in top_keys(dropdowns_src):
     if def_m and "String(" in entry:
         problems.append(f"dropdowns: '{key}' has a numeric def but get() returns a String — "
                          "isRowChanged will always see it as changed")
+
+# ---- 99: every dropdown needs a `def`, or isRowChanged() can never flag it ----
+for m in re.finditer(r'(\w+):\s*enumDropdown\(([\s\S]*?)\),\n', dropdowns_src):
+    key, args = m.group(1), top_level_args(m.group(2))
+    if len(args) < 4 or not args[3].strip():
+        problems.append(f"dropdowns: '{key}' calls enumDropdown() without a def argument")
+for key in top_keys(dropdowns_src):
+    m = re.search(r'\b' + re.escape(key) + r'\s*:\s*\{', dropdowns_src)
+    if not m:
+        continue  # an enumDropdown() entry, checked above
+    entry = balanced(dropdowns_src, m.end() - 1, "{", "}")
+    if "def:" not in entry:
+        problems.append(f"dropdowns: '{key}' has no def — its reset button can never appear")
+
+# Same requirement for plain values/selects (a missing `def` would crash isRowChanged
+# with "cannot read .def of undefined" before it could ever show a wrong result, but
+# a static check catches it at review time instead of at first click).
+for kind_name, src in (("values", values_src), ("selects", selects_src)):
+    for key in top_keys(src):
+        m = re.search(r'\b' + re.escape(key) + r'\s*:\s*\{', src)
+        entry = balanced(src, m.end() - 1, "{", "}") if m else ""
+        if "def:" not in entry:
+            problems.append(f"{kind_name}: '{key}' has no def — its reset button can never appear")
+
+# The backup/statistics panels (their own top-level window, not the expert menu —
+# see NOT_IN_EXPERT above) reuse rowResetBtn()/resetOneExpertValue() through numRow()
+# and the hand-rolled backupIntervalH select, rather than a second implementation.
+numrow_body = block("function numRow(", "{", "}")
+if 'rowResetBtn("values"' not in numrow_body:
+    problems.append('reset: numRow() does not call rowResetBtn("values", ...)')
+backup_panel_body = block("async function renderBackupPanel", "{", "}")
+if 'rowResetBtn("selects", "backupIntervalH"' not in backup_panel_body:
+    problems.append("reset: renderBackupPanel() does not wire a reset button for backupIntervalH")
+
+# The colour palette's reset button used to show unconditionally; it must now follow
+# the same "only while changed" rule every other row's rowResetBtn() already has —
+# i.e. the button element is only ever appended inside a conditional.
+palette_body = block("function paletteRow(", "{", "}")
+if not re.search(r'if\s*\(\s*\w+\s*\)\s*\{[^}]*palette-reset', palette_body, re.S):
+    problems.append("reset: paletteRow() shows its reset button even when unchanged")
 
 for p in problems:
     print("FAIL", p)

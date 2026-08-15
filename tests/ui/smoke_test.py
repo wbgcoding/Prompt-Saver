@@ -3383,6 +3383,18 @@ PROBE = """
         }
         if (keepInput().disabled) out.errors.push('the retention field stayed disabled after turning smart retention off');
         if (keepInput().value !== '15') out.errors.push('the retention value was lost while smart retention was on: ' + keepInput().value);
+        // 99: a row that differs from its default (15 vs 10) gets a reset icon that
+        // restores it and then disappears again -- reused from the main expert menu.
+        const keepReset = () => keepInput()?.closest('.backup-keep-row')?.querySelector('.expert-row-reset');
+        if (!keepReset()) {
+          out.errors.push('backupKeep at 15 (default 10) shows no reset button');
+        } else {
+          keepReset().click();
+          if (!await settle(() => keepInput()?.value === '10')) {
+            out.errors.push('clicking the backupKeep reset button did not restore 10: ' + keepInput()?.value);
+          }
+          if (keepReset()) out.errors.push('the backupKeep reset button is still visible after resetting to default');
+        }
       }
       // 61: the count column doubles as a click-to-expand toggle for the backup's
       // prompt names, when the backend supplied any (the fixture's first entry has
