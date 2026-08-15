@@ -23,7 +23,8 @@ until you turn it on.
   matching all or any of the picked tags) that combines with search and the
   other filters, plus a small manager to rename, recolor or delete a tag
   everywhere at once, with a usage count per tag. Tags travel with TXT and CSV
-  exports.
+  exports. The copy history gets its own tag filter alongside its type and
+  color filters, same picking logic as the library's.
 - **Custom themes** — build your own theme on top of any of the 16 built-in
   ones: a palette button beside the theme dropdown opens an editor with a color
   input per themable value, grouped by background, surfaces, text and accent,

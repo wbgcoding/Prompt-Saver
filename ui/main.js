@@ -124,6 +124,7 @@ let journalQuery = ""; // copy-history search text
 const journalTypes = new Set(); // additive, like the library's
 let journalColor = "all"; // copy-history color filter
 let journalFav = false; // copy-history "favorites only" filter
+const journalTags = new Set(); // 105: same idea as libTags/gridTags, own selection
 let toastTimer = null;
 let deleteAllTimer = null;
 let resetSettingsTimer = null;
@@ -966,6 +967,7 @@ const FLAG_LABELS = {
   journalSearch: "flagJournalSearch",
   journalTypeFilter: "flagJournalTypeFilter",
   journalColorFilter: "flagJournalColorFilter",
+  journalTagFilter: "flagJournalTagFilter",
   journalClear: "flagJournalClear",
   journalMostUsed: "flagJournalMostUsed",
   journalRecent: "flagJournalRecent",
@@ -1450,7 +1452,7 @@ const EXPERT_TABS = [
     { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "confirmDiscard"], values: ["searchRecentMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs"], dropdowns: ["fuzzyMaxTypos"] },
     { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx", "tagPopCols"], dropdowns: ["tagFilterMode", "tagSort"] },
     // Everything that records or shows copy history lives with the history view.
-    { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalLimit", "journalWidth"], selects: ["historyDays"] },
+    { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", { key: "journalTagFilter", gate: "tags" }, "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalLimit", "journalWidth"], selects: ["historyDays"] },
   ] },
   { title: "expTabMedia", groups: [
     { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "grayscaleMedia", "dimMedia", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaDimOpacity", "mediaRadius"] },
@@ -9690,6 +9692,7 @@ function journalMatches(p) {
   if (!typeAllowed(journalTypes, p)) return false;
   if (journalFav && !p.favorite) return false;
   if (journalColor !== "all" && (p.color || "") !== journalColor) return false;
+  if (flag("journalTagFilter") && !tagMatches(p, journalTags)) return false;
   const q = journalQuery.trim().toLowerCase();
   if (!q) return true;
   return [p.name, p.text, p.file_path].some((s) => (s || "").toLowerCase().includes(q));
@@ -9711,9 +9714,47 @@ async function loadJournal() {
   renderJournal();
 }
 
+// 105: same picking logic as the library's renderTagFilter() (tagMatches/tagFilterMode
+// are already shared), just the compact chip-row markup the journal's other filters
+// use instead of the library's labelled bar with its own "manage tags" button.
+let _lastJournalTagFilterSig = null;
+function renderJournalTagFilter() {
+  const bar = $("journal-tags");
+  if (!bar) return;
+  if (!tagsOn() || !flag("journalTagFilter")) {
+    bar.innerHTML = "";
+    bar.classList.add("hidden");
+    _lastJournalTagFilterSig = null;
+    journalTags.clear();
+    return;
+  }
+  const names = allTags();
+  const live = new Set(names.map(tagKey));
+  for (const key of [...journalTags]) if (!live.has(key)) journalTags.delete(key);
+  bar.classList.toggle("hidden", !names.length);
+  const sig = names.join("") + "" + [...journalTags].sort().join("");
+  if (sig === _lastJournalTagFilterSig) return;
+  _lastJournalTagFilterSig = sig;
+  bar.innerHTML = "";
+  for (const name of names) {
+    const chip = tagChipEl(name, "button");
+    chip.classList.add("tag-filter");
+    const on = journalTags.has(tagKey(name));
+    chip.classList.toggle("active", on);
+    chip.setAttribute("aria-pressed", String(on));
+    chip.addEventListener("click", () => {
+      const key = tagKey(name);
+      if (journalTags.has(key)) journalTags.delete(key); else journalTags.add(key);
+      renderJournal();
+    });
+    bar.appendChild(chip);
+  }
+}
+
 // Render from the cached log. Filters run client-side, so typing in the search
 // box re-renders instantly without an IPC roundtrip (and without a render race).
 function renderJournal() {
+  renderJournalTagFilter();
   const body = $("journal-body");
   if (_journalObs) _journalObs.disconnect();
   _journalObs = makeVideoObserver();
@@ -10043,7 +10084,7 @@ async function openJournal() {
   $("journal-fav").classList.remove("active");
   setJournalColor("all");
   // Hide the whole filter bar when every filter is switched off (expert menu).
-  const anyFilter = flag("journalSearch") || flag("journalTypeFilter") || flag("journalColorFilter");
+  const anyFilter = flag("journalSearch") || flag("journalTypeFilter") || flag("journalColorFilter") || (flag("journalTagFilter") && tagsOn());
   $("journal-search").classList.toggle("hidden", !anyFilter);
   await loadJournal();
   $("journal").classList.remove("hidden");

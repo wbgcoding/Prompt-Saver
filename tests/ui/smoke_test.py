@@ -839,6 +839,41 @@ PROBE = """
         }
       }
     }
+    // 105: the copy-history tag filter -- same picking logic as the library's own
+    // tag bar (tagMatches/tagFilterMode), narrows both journal columns.
+    {
+      const tagBar = document.getElementById('journal-tags');
+      if (!tagBar || tagBar.classList.contains('hidden')) {
+        out.errors.push('105: the journal tag filter bar is missing or hidden');
+      } else {
+        const findChip = () => [...document.querySelectorAll('#journal-tags .tag-chip')].find((c) => c.textContent.trim() === 'Work');
+        const countRecent = () => document.querySelectorAll('#journal-body .journal-col-recent .journal-item').length;
+        if (!findChip()) {
+          out.errors.push('105: the journal tag filter has no Work chip');
+        } else {
+          const before = countRecent();
+          findChip().click();
+          await sleep(150);
+          const activeChip = findChip();
+          if (!activeChip || !activeChip.classList.contains('active')) {
+            out.errors.push('105: clicking a journal tag chip did not mark it active');
+          }
+          const after = countRecent();
+          if (after >= before) {
+            out.errors.push('105: filtering the journal by tag Work did not narrow the list (' + before + ' vs ' + after + ')');
+          }
+          findChip().click(); // deselect again
+          await sleep(150);
+          const clearedChip = findChip();
+          if (clearedChip && clearedChip.classList.contains('active')) {
+            out.errors.push('105: clicking the journal tag chip again did not deselect it');
+          }
+          if (countRecent() !== before) {
+            out.errors.push('105: clearing the journal tag filter did not restore the full list');
+          }
+        }
+      }
+    }
     await click('journal-close');
     const tile = document.querySelector('#grid .tile');
     if (tile) { tile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })); await sleep(150); }

@@ -133,6 +133,7 @@ DEPENDENCIES = {
     "journalLimit": "copyHistory",
     "journalWidth": "copyHistory",
     "historyDays": "copyHistory",
+    "journalTagFilter": "tags",
     "tileBlur": "blurTilesUntilHover",
     "mediaBlur": "blurMediaUntilHover",
     "dimOpacity": "dimUnhovered",
@@ -304,11 +305,20 @@ for kind, known in (("flags", all_flags), ("values", values),
         problems.append(f"{kind}: '{key}' is defined but unreachable in the menu")
 
 # ---- gates --------------------------------------------------------------------
+# 105: a group whose ONLY flag is itself (everything else it owns is gated on it,
+# same group -- e.g. expGroupTags: flags=["tags"]) is a whole-subsystem switch, not
+# a narrow feature toggle. A row in another group may legitimately depend on it
+# (journalTagFilter needs both its own toggle AND the global tags flag) without
+# moving in beside it -- unlike a local flag (chainPrompts, promptHotkeys, ...)
+# whose only sensible dependents are its own immediate parameters.
+subsystem_toggles = {ks[0] for _, kinds, _, _ in groups for ks in [kinds.get("flags", [])] if len(ks) == 1}
+
 for key, gate in sorted(declared.items()):
     parent = gate.lstrip("!")
     if parent not in all_flags:
         problems.append(f"gate: '{gate}' (on '{key}') points at an unknown flag")
-    elif key in group_of and parent in group_of and group_of[key] != group_of[parent]:
+    elif (key in group_of and parent in group_of and group_of[key] != group_of[parent]
+          and parent not in subsystem_toggles):
         problems.append(f"gate: '{key}' sits in {group_of[key]} but its parent "
                         f"'{parent}' is in {group_of[parent]} — keep them together")
     if key == parent:
