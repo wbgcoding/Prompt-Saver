@@ -33,7 +33,8 @@ let copyFont = ""; // expert copy-text font key ("" = pill font)
 let pFont = ""; // per-prompt overrides ("" / 0 = follow settings)
 let cooldownMs = COOLDOWN_MS_DEFAULT; // re-copy throttle for this pill (expert value)
 let lastCopyTs = 0;
-// F19 auto-paste on this pill (all default off; a fast second click pastes).
+// F19 auto-paste on this pill (autoPaste itself defaults on; the rest default off;
+// a fast second click pastes).
 let apOn = false, apEnter = false, apDelay = AUTO_PASTE_DELAY_MS_DEFAULT, apDblMs = DBL_CLICK_MS_DEFAULT, lastPillTs = 0;
 let pSize = 0;
 let pCaptionSize = 0; // per-prompt caption size (0 = default, 1 = auto)

@@ -1523,7 +1523,7 @@ const EXPERT_TABS = [
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
     // The editor: what it shows beside the text box. F14/F15 belong together — the
     // highlighter only ever paints inside the preview.
-    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen"], dropdowns: ["counterUnits"] },
+    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
     { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "closeOnCopy", "copyBubble", "copyFlash"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"], dropdowns: ["dragOutModifier"] },
     // Floating buttons and the two kinds of folder they can form.
@@ -1550,7 +1550,7 @@ const EXPERT_TABS = [
     { title: "expGroupLimits", values: ["maxViews", "gridMax", "previewLen", "nameMaxLen", "bubbleMs", "toastMs"] },
   ] },
   { title: "expTabLibrary", groups: [
-    { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "confirmDiscard"], values: ["searchRecentMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs"], dropdowns: ["fuzzyMaxTypos"] },
+    { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle"], values: ["searchRecentMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs"], dropdowns: ["fuzzyMaxTypos"] },
     { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx", "tagPopCols"], dropdowns: ["tagFilterMode", "tagSort"] },
     // Everything that records or shows copy history lives with the history view.
     { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", { key: "journalTagFilter", gate: "tags" }, "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalLimit", "journalWidth"], selects: ["historyDays"] },
@@ -2774,7 +2774,7 @@ async function renderGrid(skipFetch = false) {
     } catch (e) {
       // IPC hiccup: keep the last good state instead of throwing into the
       // global handler and leaving a half-rendered grid.
-      toast(String((e && e.message) || e));
+      errToast(e);
       if (!settings || !prompts) return;
     }
   }
@@ -5095,6 +5095,7 @@ function modalSnapshot() {
     modalState.tags || [], modal.notesText.value, modalState.hotkey || "", modalState.hotkeyPaste || "",
     // 32: the entry list + mode are edited entirely in memory until Save.
     modalState.rotateEntries || [], modalState.rotateMode || "", !!modalState.rotateAuto,
+    modalState.pdfPage || 0,
   ]);
 }
 
@@ -6572,6 +6573,9 @@ async function loadHistory(id) {
     restore.addEventListener("click", async () => {
       try {
         const p = await invoke("restore_version", { versionId: v.id });
+        // 114: the editor may have moved on to a different (or no) prompt while this
+        // invoke was in flight — never write a stale restore into the wrong modal.
+        if (modalState?.id !== id) return;
         if (p) {
           const pIdx = prompts.findIndex((x) => x.id === p.id);
           if (pIdx >= 0) prompts[pIdx] = p;
@@ -8292,7 +8296,7 @@ async function editPrompt(id) {
 // ---- F1 tags: chips in the editor, filter row + manager in the library ----
 // Names are compared case-insensitively; the backend keeps one canonical casing
 // and stores chip colors under the lowercase key, so a recased tag keeps its color.
-const tagsOn = () => optFlag("tags");
+const tagsOn = () => flag("tags");
 const tagKey = (name) => String(name ?? "").trim().toLowerCase();
 const tagColor = (name) => settings.tag_colors?.[tagKey(name)] || "";
 const TAG_MAX_LEN = 60; // keep in sync with MAX_TAG_LEN in lib.rs
@@ -10371,7 +10375,7 @@ async function openJournal() {
   $("journal-fav").classList.remove("active");
   setJournalColor("all");
   // Hide the whole filter bar when every filter is switched off (expert menu).
-  const anyFilter = flag("journalSearch") || flag("journalTypeFilter") || flag("journalColorFilter") || (flag("journalTagFilter") && tagsOn());
+  const anyFilter = flag("journalSearch") || flag("journalTypeFilter") || flag("journalColorFilter") || (flag("journalTagFilter") && tagsOn()) || flag("favorites");
   $("journal-search").classList.toggle("hidden", !anyFilter);
   await loadJournal();
   $("journal").classList.remove("hidden");
@@ -12663,6 +12667,7 @@ function bind() {
     $("tile-size").value = String(normSize(Number(settings.tile_size ?? 0)));
     await renderGrid(); // fresh state: tooltips + a renamed default view
     if (!libraryEl.classList.contains("hidden")) renderLibrary();
+    if (!$("journal").classList.contains("hidden")) renderJournal();
   });
 
   // Prompt-tile font + size.
@@ -12815,6 +12820,9 @@ function bind() {
     else if (!$("backup-modal").classList.contains("hidden")) closeBackups();
     else if (!journalEl.classList.contains("hidden")) journalEl.classList.add("hidden");
     else if (!libraryEl.classList.contains("hidden")) hideLibrary();
+    // Help opens over the settings panel (from expGroupHelp) — close it before the
+    // settings underneath, same pattern as library-front/journal above.
+    else if (!helpEl.classList.contains("hidden")) helpEl.classList.add("hidden");
     else if (!settingsEl.classList.contains("hidden")) hideSettings();
   });
 
