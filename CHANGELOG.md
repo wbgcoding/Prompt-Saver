@@ -97,7 +97,11 @@ until you turn it on.
   the tile shows the position. The editor turns the text field into a numbered
   list with a mode switch and a "from the start" reset. Entries survive
   export/import, backups, Markdown-sync and version history, and the library
-  search finds a match inside any entry, not just the first.
+  search finds a match inside any entry, not just the first. An eligible entry
+  (2+ items, no image/file) can also auto-advance on every real paste instead
+  of only on copy — a per-tile switch in the editor or a tile's right-click
+  menu, tunable session timeout and timing window in the expert menu, and a
+  toast instead of a loop if pasting happens too fast too often.
 - **Markdown folder sync** (expert menu, off by default, beta) — mirrors every
   prompt as its own readable `.md` file in a folder you pick: a short header
   with name, color, tags and notes, then the text. Edit a file by hand or with

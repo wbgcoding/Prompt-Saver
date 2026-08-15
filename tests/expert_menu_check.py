@@ -72,6 +72,13 @@ DEPENDENCIES = {
     "rotateMaxEntries": "rotatingPrompts",
     "rotateBadge": "rotatingPrompts",
     "rotateTipLen": "rotatingPrompts",
+    # 90-94: auto-advance
+    "rotateAuto": "rotatingPrompts",
+    "rotateAutoTimeoutMin": "rotateAuto",
+    "rotateAutoSettleMs": "rotateAuto",
+    "rotateAutoCooldownMs": "rotateAuto",
+    "rotateAutoInputMs": "rotateAuto",
+    "rotateAutoRearmMax": "rotateAuto",
     # Markdown preview
     "codeHighlight": "mdPreview",
     "codeAutoDetect": "mdPreview",

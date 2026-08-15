@@ -4266,10 +4266,11 @@ def main():
                  # raised to 60s, then to 75s once the P10 quick-grid hover-only check
                  # (two more expert-menu round trips) pushed past that too, then to 95s
                  # once 91/51/70's regressions (trash dialog, multi-view popover, three
-                 # restore-scope round trips) added their own expert-menu detours.
+                 # restore-scope round trips) added their own expert-menu detours, then
+                 # to 110s once 90-94's six new expert rows pushed past that too.
                  # The window has to hold the iframe plus Chrome's own frame.
                  f"--window-size={max(w + 30, 520)},{h + 140}",
-                 "--virtual-time-budget=95000", "--dump-dom",
+                 "--virtual-time-budget=110000", "--dump-dom",
                  wrapper.as_uri()],
                 # The dumped DOM carries all 20 languages; without an explicit
                 # codec Windows decodes it as cp1252 and the reader thread dies,

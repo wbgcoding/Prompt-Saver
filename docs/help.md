@@ -79,6 +79,17 @@ default; the per-tile switch sits under Advanced options in the editor.
 - The count survives restarts and full backups; a CSV/TXT import starts a
   fresh pointer, since the imported tile gets a new id
 
+An eligible tile (2+ entries, no image/file attached) can also **auto-advance on
+paste**: switch it on with the Auto button next to the order/random control, or
+from a tile's right-click menu once both the per-tile and the app-wide switch
+allow it. With auto-advance on, the next entry loads on every real Ctrl+V or
+right-click-Paste, not only when copying again — the badge picks up an accent
+while a session is running. Placeholders still work; the popup asks once per
+session and the same values are reused for every entry. Five expert-menu
+settings (all under the same toggle) tune the session timeout and the timing
+window that tells a real paste apart from other clipboard activity; pasting too
+fast too often pauses the session with a toast instead of looping.
+
 ## Copying
 
 ### Copying
@@ -333,7 +344,15 @@ liefert den nächsten Eintrag (Reihenfolge oder Zufall). Standardmäßig an; der
 Schalter pro Kachel sitzt im Editor unter Erweiterte Optionen. Ein Badge auf
 Kachel/Pille/Pillen-Ordner-Mitglied zählt hoch — im Zufalls-Modus die Ziehungen
 im aktuellen Durchlauf statt einer springenden Position; übersteht Neustart und
-Sicherung, aber keinen CSV/TXT-Import (neue Kachel, neuer Zeiger).
+Sicherung, aber keinen CSV/TXT-Import (neue Kachel, neuer Zeiger). Eine geeignete
+Kachel (2+ Einträge, kein Bild/Datei) kann zusätzlich **beim Einfügen
+automatisch weiterschalten** — Auto-Knopf im Editor oder Rechtsklickmenü,
+solange Kachel- und App-Schalter beide an sind. Bei jedem echten Einfügen
+rückt der nächste Eintrag nach, nicht nur beim Kopieren; das Abzeichen zeigt
+eine Akzentfarbe, solange die Sitzung läuft. Platzhalter werden einmal pro
+Sitzung abgefragt, dieselben Werte gelten für jeden Eintrag. Fünf
+Experteneinstellungen regeln Zeitlimit und Erkennungsfenster; zu schnelles,
+zu häufiges Einfügen pausiert die Sitzung mit einem Hinweis statt zu wiederholen.
 
 **Kopieren** — Verketten, Hotkeys pro Kachel, Herausziehen (mit oder, per Schalter,
 ohne Modifikatortaste), automatisches Einfügen.

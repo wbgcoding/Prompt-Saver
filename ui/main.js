@@ -991,6 +991,8 @@ const FLAG_LABELS = {
   rotatingPrompts: "flagRotatingPrompts",
   // 32: sub-toggle of rotatingPrompts, itself also default on.
   rotateBadge: "flagRotateBadge",
+  // 90-94: sub-toggle of rotatingPrompts, default on (Ben, 14.08.).
+  rotateAuto: "flagRotateAuto",
   // New features (default on).
   lengthCounter: "flagLengthCounter",   // F16
   smartSort: "flagSmartSort",           // F10
@@ -1297,6 +1299,12 @@ const EXPERT_VALUES = {
   rotateMaxEntries: { label: "valRotateMaxEntries", min: 2, max: 50, step: 1, def: 20, unit: "", gate: "rotatingPrompts" },
   // 87: tile tooltip preview length for a rotating prompt's short text.
   rotateTipLen: { label: "valRotateTipLen", min: 0, max: 300, step: 10, def: 60, unit: "", gate: "rotatingPrompts" },
+  // 90-94: auto-advance session tuning — mirrors the backend's auto_cfg() defaults.
+  rotateAutoTimeoutMin: { label: "valRotateAutoTimeoutMin", min: 0, max: 480, step: 5, def: 60, unit: "min", zeroLabel: "valUnlimited", gate: "rotateAuto" },
+  rotateAutoSettleMs: { label: "valRotateAutoSettleMs", min: 100, max: 2000, step: 50, def: 350, unit: "ms", gate: "rotateAuto" },
+  rotateAutoCooldownMs: { label: "valRotateAutoCooldownMs", min: 0, max: 2000, step: 50, def: 250, unit: "ms", gate: "rotateAuto" },
+  rotateAutoInputMs: { label: "valRotateAutoInputMs", min: 500, max: 10000, step: 250, def: 3000, unit: "ms", gate: "rotateAuto" },
+  rotateAutoRearmMax: { label: "valRotateAutoRearmMax", min: 0, max: 50, step: 1, def: 12, unit: "", gate: "rotateAuto" },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -1405,7 +1413,7 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app. F26 (pipette) sits with the
     // screenshot tool: both are capture tools on the composer bar.
-    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", "colorPicker", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipDelayMs", "rotateMaxEntries", "rotateTipLen"], dropdowns: ["pickerFormat", "rotateDefaultMode"], paths: ["screenshotDir"] },
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", "colorPicker", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipDelayMs", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax"], dropdowns: ["pickerFormat", "rotateDefaultMode"], paths: ["screenshotDir"] },
     // F12/F13 placeholders, from the grammar to where the app asks for them.
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
     // The editor: what it shows beside the text box. F14/F15 belong together — the
@@ -1589,6 +1597,7 @@ const EXPERT_TIPS = [
   "pillFolders", "pillMergeRadius", "folderGridCols",
   "tileFolders", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols",
   "rotatingPrompts", "rotateDefaultMode", "rotateMaxEntries", "rotateBadge", "rotateTipLen",
+  "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax",
   "helpTips", "helpHighlight",
   // Tiles / copying
   "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "autoPasteEnter", "closeOnCopy",
@@ -1768,7 +1777,8 @@ async function commitValue(key, value) {
 
 function valueRow(key) {
   const cfg = EXPERT_VALUES[key];
-  const fmt = (v) => `${v}${cfg.unit}`;
+  // A 0-stop can carry a special label (e.g. auto-advance "unlimited") instead of "0min".
+  const fmt = (v) => v === 0 && cfg.zeroLabel ? t(cfg.zeroLabel) : `${v}${cfg.unit}`;
   const row = document.createElement("div");
   row.className = "field value-field";
   withTip(row, key);

@@ -26,7 +26,7 @@ Requires the Microsoft WebView2 runtime (preinstalled on Windows 11 and current 
 - **Self-filling variables** — `date`, `time`, `datetime`, `weekday`, `clipboard` and `uuid` fill themselves in on copy with no dialog, formatted in the app language. A prompt that mixes them with your own variables only asks for yours.
 - **Choice variables** — `{#{tone|formal,casual,witty}#}` turns into a dropdown in the copy dialog and remembers your last pick.
 - **Markdown preview** — the editor shows the prompt rendered: headings, lists, quotes, emphasis and code blocks. One field, not two: the rendered view stands where the text field was and hands it back the moment you click into it, in the same box at the same size. Code is syntax-colored for JavaScript, TypeScript, Python, HTML, CSS, JSON, SQL, Bash and Rust.
-- **Rotating prompts** — a text prompt can hold a list of texts instead of one; each copy serves the next entry, in order or shuffled, with a small badge on the tile showing the position. Entries travel with export/import, backups, Markdown-sync and version history, and the search finds a match inside any of them.
+- **Rotating prompts** — a text prompt can hold a list of texts instead of one; each copy serves the next entry, in order or shuffled, with a small badge on the tile showing the position. Entries travel with export/import, backups, Markdown-sync and version history, and the search finds a match inside any of them. An eligible entry can also auto-advance on every real paste instead of only on copy.
 - The fill-in dialog gets a "Clear all" button, and saving a prompt with an empty `{#{ }#}` placeholder now warns first instead of leaving it stuck in the copied text.
 
 ### Copy from anywhere
