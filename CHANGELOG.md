@@ -282,6 +282,10 @@ until you turn it on.
 
 ### Fixed
 
+- **"Reset settings" and "Delete all data" wrapped to a second line** in
+  several languages, making the button row taller than the rest of the
+  dialog. Both buttons now show a single short word, with the full
+  description as a tooltip.
 - **The theme editor's export and import icons were swapped** — export drew
   a download arrow, import an upload arrow.
 - **The installer appeared to close by itself when updating over an existing

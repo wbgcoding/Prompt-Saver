@@ -3730,6 +3730,37 @@ PROBE = """
         out.errors.push('update-actions, settings-btn-row or update-version missing from the settings panel');
       }
     }
+    // 108: neither reset-settings nor delete-data wraps to a second line, even
+    // with the longest of the 11 translations' one-word labels (German
+    // "Zuruecksetzen", Dutch "Verwijderen") -- flex-row default stretch means a
+    // single wrapped button grows the WHOLE row, so compare against the row's
+    // own single-line reference height rather than siblings.
+    {
+      if (document.getElementById('settings-main').classList.contains('hidden')) {
+        document.getElementById('expert-open').click();
+        await sleep(50);
+      }
+      const reset = document.getElementById('reset-settings');
+      const del = document.getElementById('delete-data');
+      const help = document.getElementById('help-open');
+      if (!reset || !del || !help) {
+        out.errors.push('reset-settings, delete-data or help-open missing from settings-btn-row');
+      } else if (help.getBoundingClientRect().height < 10) {
+        out.errors.push('settings-btn-row is not visible at ' + window.innerWidth + 'px');
+      } else {
+        const baseH = Math.round(help.getBoundingClientRect().height);
+        const prevReset = reset.textContent;
+        const prevDel = del.textContent;
+        reset.textContent = 'Zuruecksetzen';
+        del.textContent = 'Verwijderen';
+        const longH = Math.round(help.getBoundingClientRect().height);
+        reset.textContent = prevReset;
+        del.textContent = prevDel;
+        if (longH > baseH + 1) {
+          out.errors.push('settings-btn-row grows with the longest one-word translation at ' + window.innerWidth + 'px: ' + baseH + ' -> ' + longH);
+        }
+      }
+    }
     // The changelog popup renders the release Markdown instead of dumping it, and
     // grows with the text rather than clipping it.
     await click('update-btn');
