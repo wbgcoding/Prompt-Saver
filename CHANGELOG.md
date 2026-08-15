@@ -281,6 +281,8 @@ until you turn it on.
 
 ### Fixed
 
+- **The theme editor's export and import icons were swapped** — export drew
+  a download arrow, import an upload arrow.
 - **The installer appeared to close by itself when updating over an existing
   install.** Upgrading or reinstalling silently removes the previous version
   first; the window used to hide itself for as long as that took instead of
