@@ -10581,7 +10581,17 @@ fn window_is_protected(id: u32) -> bool {
 // overlay, minimize the covering windows, grab the now-clear area live, then
 // restore them.
 #[tauri::command]
-async fn capture_window(app: AppHandle, state: State<'_, SnipState>, id: u32) -> Result<(), String> {
+async fn capture_window(
+    app: AppHandle,
+    state: State<'_, SnipState>,
+    snip_mode: State<'_, SnipModeState>,
+    id: u32,
+) -> Result<(), String> {
+    // 122 review fix: every one of this function's four capture paths used to call
+    // finalize_capture() unconditionally, so clicking a WINDOW while OCR mode was
+    // armed (set_snip_mode) silently produced a normal screenshot instead of running
+    // OCR -- capture_region already branched on this, capture_window never did.
+    let ocr_armed = *snip_mode.0.lock().unwrap_or_else(|e| e.into_inner()) == SnipMode::Ocr;
     // Source app name for the button label (best-effort; empty for unknown windows).
     let app_name = xcap::Window::all()
         .ok()
@@ -10610,7 +10620,7 @@ async fn capture_window(app: AppHandle, state: State<'_, SnipState>, id: u32) ->
             .filter(|im| !capture_looks_bad(im))
     };
     if let Some(im) = direct {
-        return finalize_capture(&app, im, app_name.clone());
+        return if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()) };
     }
 
     // Target's global physical rect + frozen-image origin.
@@ -10636,7 +10646,7 @@ async fn capture_window(app: AppHandle, state: State<'_, SnipState>, id: u32) ->
             if let Some((ox, oy)) = origin {
                 if let Some(im) = crop_frozen(&state, 0, wx - ox, wy - oy, ww as u32, wh as u32) {
                     if !capture_is_blank(&im) {
-                        return finalize_capture(&app, im, app_name.clone());
+                        return if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()) };
                     }
                 }
             }
@@ -10657,7 +10667,9 @@ async fn capture_window(app: AppHandle, state: State<'_, SnipState>, id: u32) ->
             show_window(o, SW_SHOWNOACTIVATE);
         }
         match grab {
-            Some(im) if !capture_is_blank(&im) => finalize_capture(&app, im, app_name.clone()),
+            Some(im) if !capture_is_blank(&im) => {
+                if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()) }
+            }
             _ => {
                 set_snip_overlay_hidden(&app, false);
                 Err("blocked".to_string())
@@ -10670,7 +10682,9 @@ async fn capture_window(app: AppHandle, state: State<'_, SnipState>, id: u32) ->
             .and_then(|(ox, oy)| crop_frozen(&state, 0, wx - ox, wy - oy, ww as u32, wh as u32))
             .filter(|im| !capture_is_blank(im));
         match img {
-            Some(im) => finalize_capture(&app, im, app_name.clone()),
+            Some(im) => {
+                if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()) }
+            }
             None => Err("blocked".to_string()),
         }
     }
@@ -11085,7 +11099,11 @@ async fn ocr_image_data(data_url: String, upscale_under_px: u32, join_lines: boo
     }
 }
 
-// 122: list recognition-language capabilities (no elevated rights needed).
+// 122: list recognition-language capabilities. Usually no elevated rights are
+// needed (Microsoft's own docs agree), but some Windows builds throw
+// ERROR_ELEVATION_REQUIRED even for this read-only query -- see the HResult
+// check in ocr::fetch_capabilities, which surfaces that case as its own
+// "ocr-caps-need-elevation" error instead of a raw failure.
 // `force` bypasses the in-memory cache (ocrLangCacheH hours, default 24); the
 // cache is what ocr_install_language's whitelist check is validated against,
 // so a name can never be installed without having actually been enumerated.
@@ -11513,9 +11531,20 @@ mod ocr {
     // this app keeping its own name table.
     fn fetch_capabilities() -> Result<Vec<OcrCap>, String> {
         ensure_com();
+        // The spec (and Microsoft's own docs) says listing needs no elevated rights,
+        // but on at least some Windows builds `Get-WindowsCapability -Online` throws
+        // COMException HResult -2147024156 (Win32 ERROR_ELEVATION_REQUIRED, 740) even
+        // for a read-only query -- confirmed by testing unprivileged on a real
+        // machine. Catch exactly that HResult (locale-independent, unlike parsing the
+        // exception's message text) and surface it as its own error rather than a
+        // raw PowerShell failure blob, so the UI can show an honest, specific reason
+        // instead of a broken/empty list.
         let output = run_powershell_command(
-            r#"Get-WindowsCapability -Online -Name "Language.OCR*" | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json"#,
+            r#"try { Get-WindowsCapability -Online -Name "Language.OCR*" | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json } catch { if ($_.Exception.HResult -eq -2147024156) { Write-Output "ELEVATION_REQUIRED" } else { throw } }"#,
         )?;
+        if output.trim() == "ELEVATION_REQUIRED" {
+            return Err("ocr-caps-need-elevation".to_string());
+        }
         let raw = ocr_parse_capabilities_json(&output)?;
         let mut out = Vec::with_capacity(raw.len());
         for r in raw {

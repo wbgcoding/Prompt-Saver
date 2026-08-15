@@ -7112,7 +7112,21 @@ async function loadOcrCaps(force) {
   try {
     ocrCapsCache = await invoke("ocr_capabilities", { force: !!force });
     ocrCapsChecked = Math.floor(Date.now() / 1000);
-  } catch (e) { body.innerHTML = ""; errToast(e); return; }
+  } catch (e) {
+    body.innerHTML = "";
+    // Listing is supposed to need no elevated rights, but some Windows builds
+    // require it even for this read-only query -- an honest inline reason
+    // beats a blank dialog plus a generic error toast.
+    if (String(e) === "ocr-caps-need-elevation") {
+      const note = document.createElement("div");
+      note.className = "hint";
+      note.textContent = t("ocrLangsNeedElevation");
+      body.appendChild(note);
+    } else {
+      errToast(e);
+    }
+    return;
+  }
   renderOcrLangsBody();
 }
 function renderOcrLangsBody() {
