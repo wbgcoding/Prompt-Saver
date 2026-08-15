@@ -10331,7 +10331,7 @@ fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Option<St
 // but capture_region's OCR branch has no such call site of its own -- it reads them
 // here instead, the same way finalize_capture just above reads screenshotSave and
 // screenshotDir off the Db state rather than needing them passed in.
-fn ocr_settings_from(app: &AppHandle) -> (u32, bool) {
+fn ocr_settings_from(app: &AppHandle) -> (u32, bool, String, bool) {
     app.try_state::<Db>()
         .map(|s| {
             let g = s.lock().unwrap_or_else(|e| e.into_inner());
@@ -10343,9 +10343,11 @@ fn ocr_settings_from(app: &AppHandle) -> (u32, bool) {
                 .unwrap_or(300.0)
                 .clamp(100.0, 800.0) as u32;
             let join = g.settings.ui_flags.get("ocrJoinLines").copied().unwrap_or(true);
-            (upscale, join)
+            let lang = g.settings.ui_texts.get("ocrLang").cloned().unwrap_or_else(|| "auto".to_string());
+            let auto_pick = g.settings.ui_flags.get("ocrAutoPickLang").copied().unwrap_or(true);
+            (upscale, join, lang, auto_pick)
         })
-        .unwrap_or((300, true))
+        .unwrap_or((300, true, "auto".to_string(), true))
 }
 
 // 121: the OCR counterpart to finalize_capture, taken when set_snip_mode armed the
@@ -10358,10 +10360,10 @@ async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, SnipState>, cro
     if cw == 0 || ch == 0 {
         return Err("empty region".to_string());
     }
-    let (upscale, join) = ocr_settings_from(app);
+    let (upscale, join, lang, auto_pick) = ocr_settings_from(app);
     #[cfg(windows)]
     {
-        let result = tauri::async_runtime::spawn_blocking(move || ocr::recognize_crop(crop, upscale, join))
+        let result = tauri::async_runtime::spawn_blocking(move || ocr::recognize_crop(crop, upscale, join, &lang, auto_pick))
             .await
             .map_err(|e| e.to_string())??;
         close_all_snip(app);
@@ -10371,7 +10373,7 @@ async fn finalize_ocr_capture(app: &AppHandle, state: &State<'_, SnipState>, cro
     }
     #[cfg(not(windows))]
     {
-        let _ = (crop, upscale, join);
+        let _ = (crop, upscale, join, lang, auto_pick);
         Err("ocr is only available on Windows".to_string())
     }
 }
@@ -10744,6 +10746,60 @@ struct OcrResult {
     lang: String,
 }
 
+// ---------- 122: OCR language packs, managed from inside the app ----------
+//
+// `OcrCap` mirrors one row of `Get-WindowsCapability -Online -Name
+// "Language.OCR*"`. Size/version are exactly what Windows reports -- a size
+// Windows does not know becomes `None` (frontend renders "-"), never a guess.
+#[derive(Serialize, Clone)]
+struct OcrCap {
+    name: String,
+    tag: String,
+    label: String,
+    state: String,
+    version: String,
+    download_size: Option<u64>,
+    install_size: Option<u64>,
+}
+
+// A capability row before its localized label is looked up. The label needs
+// the WinRT `Language::CreateLanguage` call (Windows-only); everything else
+// here is plain JSON parsing, kept free of any Windows API so the parser is
+// unit-testable on any platform, same split as ocr_join_lines/ocr_resize_target.
+#[derive(Debug, Clone, PartialEq)]
+struct OcrCapRaw {
+    name: String,
+    tag: String,
+    state: String,
+    version: String,
+    download_size: Option<u64>,
+    install_size: Option<u64>,
+}
+
+// What was last seen while a language WAS installed -- kept across restarts
+// (serialized into Settings.ui_texts, see ocr_lang_load_snapshots) so a
+// Windows feature update that silently drops a language pack is still
+// detected as "needs update" after the app relaunches.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+struct OcrCapSnapshot {
+    version: String,
+    installed: bool,
+}
+
+#[derive(Serialize, Clone)]
+struct OcrInstallResult {
+    ok: bool,
+    error: Option<String>,
+}
+
+// Payload for the "ocr-lang-update-due" event (background watcher, point 5).
+#[derive(Serialize, Clone)]
+struct OcrLangUpdateDue {
+    name: String,
+    tag: String,
+    label: String,
+}
+
 const MAX_OCR_IMAGE_BYTES: u64 = 200 * 1024 * 1024; // a single image, not a whole export (MAX_IMPORT_BYTES)
 const OCR_IMAGE_EXTS: [&str; 5] = ["png", "jpg", "jpeg", "bmp", "webp"];
 
@@ -10823,6 +10879,109 @@ fn ocr_join_lines(lines: &[String]) -> String {
     out
 }
 
+// 122: strict allowlist check for a capability Name, BEFORE it is ever used to
+// build a PowerShell/process argument (G10). Anchored on the whole string (not
+// a substring scan), so something like
+// "Language.OCR~~~de-DE~0.0.1.0; rm -rf" is rejected outright -- its trailing
+// bytes do not match the required "~0.0.1.0" suffix once the injected part is
+// accounted for. The tag itself is further restricted to [A-Za-z0-9-], so a
+// name that passes this check can never contain a shell metacharacter.
+fn ocr_capability_name_is_well_formed(name: &str) -> bool {
+    const PREFIX: &str = "Language.OCR~~~";
+    const SUFFIX: &str = "~0.0.1.0";
+    if name.len() < PREFIX.len() + SUFFIX.len() + 2 {
+        return false; // too short to hold prefix + a 2-char tag + suffix
+    }
+    if !name.starts_with(PREFIX) || !name.ends_with(SUFFIX) {
+        return false;
+    }
+    let tag = &name[PREFIX.len()..name.len() - SUFFIX.len()];
+    tag.len() >= 2 && tag.len() <= 12 && tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
+// Pulls "<tag>" out of "Language.OCR~~~<tag>~0.0.1.0". None for anything that
+// does not have that exact shape (callers only ever pass an already-validated
+// name, but this stays total rather than panicking).
+fn ocr_tag_from_capability_name(name: &str) -> Option<String> {
+    let rest = name.strip_prefix("Language.OCR~~~")?;
+    let tag = rest.split('~').next()?;
+    (!tag.is_empty()).then(|| tag.to_string())
+}
+
+// Parses `Get-WindowsCapability -Online -Name "Language.OCR*" | Select-Object
+// Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json` output.
+// PowerShell's ConvertTo-Json emits a single OBJECT (not a one-element array)
+// when there is exactly one match -- both shapes are accepted here. A field
+// Windows did not report (DownloadSize/InstallSize on an already-installed
+// capability, for instance) becomes `None`, never `Some(0)`.
+fn ocr_parse_capabilities_json(json: &str) -> Result<Vec<OcrCapRaw>, String> {
+    let trimmed = json.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+    let value: serde_json::Value = serde_json::from_str(trimmed).map_err(|e| e.to_string())?;
+    let items: Vec<serde_json::Value> = match value {
+        serde_json::Value::Array(a) => a,
+        obj @ serde_json::Value::Object(_) => vec![obj],
+        serde_json::Value::Null => Vec::new(),
+        _ => return Err("unexpected PowerShell output shape".to_string()),
+    };
+    let mut out = Vec::with_capacity(items.len());
+    for item in items {
+        let name = item.get("Name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        if name.is_empty() {
+            continue;
+        }
+        let tag = ocr_tag_from_capability_name(&name).unwrap_or_default();
+        let state = item.get("State").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        let version = item.get("Version").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        let download_size = item.get("DownloadSize").and_then(|v| v.as_u64());
+        let install_size = item.get("InstallSize").and_then(|v| v.as_u64());
+        out.push(OcrCapRaw { name, tag, state, version, download_size, install_size });
+    }
+    Ok(out)
+}
+
+// "Updatable" (worth a background notice) is narrower than "not installed": a
+// language Windows has never reported as installed is simply new, not a
+// regression. Only a previously-Installed language that either changed
+// version or vanished (state flipped to NotPresent, the real case after a
+// Windows feature update removes language packs) counts.
+fn ocr_lang_needs_update(previous: Option<&OcrCapSnapshot>, current_state: &str, current_version: &str) -> bool {
+    match previous {
+        None => false,
+        Some(prev) => {
+            if !prev.installed {
+                return false;
+            }
+            if current_state != "Installed" {
+                return true;
+            }
+            current_version != prev.version
+        }
+    }
+}
+
+const OCR_LANG_VERSIONS_KEY: &str = "ocrLangVersions";
+const OCR_LANG_NEXT_CHECK_KEY: &str = "ocrLangNextCheck";
+
+// Cross-restart bookkeeping for the "updatable?" decision -- a JSON blob
+// (tag -> OcrCapSnapshot) tucked into the existing free-form ui_texts map
+// rather than a new Settings field, per point 122.
+fn ocr_lang_load_snapshots(settings: &Settings) -> HashMap<String, OcrCapSnapshot> {
+    settings
+        .ui_texts
+        .get(OCR_LANG_VERSIONS_KEY)
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default()
+}
+
+fn ocr_lang_save_snapshots(settings: &mut Settings, snapshots: &HashMap<String, OcrCapSnapshot>) {
+    if let Ok(json) = serde_json::to_string(snapshots) {
+        settings.ui_texts.insert(OCR_LANG_VERSIONS_KEY.to_string(), json);
+    }
+}
+
 #[tauri::command]
 async fn ocr_languages() -> Result<Vec<OcrLang>, String> {
     #[cfg(windows)]
@@ -10835,22 +10994,23 @@ async fn ocr_languages() -> Result<Vec<OcrLang>, String> {
     }
 }
 
-// 121: upscale_under_px/join_lines are the ocrUpscaleUnderPx/ocrJoinLines expert
-// settings, sent by the frontend on every call (it already holds the live values
-// via val()/flag()) instead of the backend hardcoding them.
+// 121/122: upscale_under_px/join_lines/lang/auto_pick_lang are the
+// ocrUpscaleUnderPx/ocrJoinLines/ocrLang/ocrAutoPickLang expert settings, sent by
+// the frontend on every call (it already holds the live values via val()/flag()/
+// txt()) instead of the backend hardcoding or re-reading them from Db state.
 #[tauri::command]
-async fn ocr_image(path: String, upscale_under_px: u32, join_lines: bool) -> Result<OcrResult, String> {
+async fn ocr_image(path: String, upscale_under_px: u32, join_lines: bool, lang: String, auto_pick_lang: bool) -> Result<OcrResult, String> {
     let validated = ocr_validate_path(&path)?;
     let upscale_under_px = upscale_under_px.clamp(100, 800);
     #[cfg(windows)]
     {
-        tauri::async_runtime::spawn_blocking(move || ocr::recognize_file(&validated, upscale_under_px, join_lines))
+        tauri::async_runtime::spawn_blocking(move || ocr::recognize_file(&validated, upscale_under_px, join_lines, &lang, auto_pick_lang))
             .await
             .map_err(|e| e.to_string())?
     }
     #[cfg(not(windows))]
     {
-        let _ = (validated, upscale_under_px, join_lines);
+        let _ = (validated, upscale_under_px, join_lines, lang, auto_pick_lang);
         Err("ocr is only available on Windows".to_string())
     }
 }
@@ -10865,18 +11025,20 @@ async fn ocr_region(
     height: u32,
     upscale_under_px: u32,
     join_lines: bool,
+    lang: String,
+    auto_pick_lang: bool,
 ) -> Result<OcrResult, String> {
     let crop = crop_frozen(&state, index, x, y, width, height).ok_or("empty region")?;
     let upscale_under_px = upscale_under_px.clamp(100, 800);
     #[cfg(windows)]
     {
-        tauri::async_runtime::spawn_blocking(move || ocr::recognize_crop(crop, upscale_under_px, join_lines))
+        tauri::async_runtime::spawn_blocking(move || ocr::recognize_crop(crop, upscale_under_px, join_lines, &lang, auto_pick_lang))
             .await
             .map_err(|e| e.to_string())?
     }
     #[cfg(not(windows))]
     {
-        let _ = (crop, upscale_under_px, join_lines);
+        let _ = (crop, upscale_under_px, join_lines, lang, auto_pick_lang);
         Err("ocr is only available on Windows".to_string())
     }
 }
@@ -10886,21 +11048,178 @@ async fn ocr_region(
 // not have been saved to disk yet). Thin command taking the data URL directly,
 // same shape as copy_image_data (117/118) for the screenshot editor.
 #[tauri::command]
-async fn ocr_image_data(data_url: String, upscale_under_px: u32, join_lines: bool) -> Result<OcrResult, String> {
+async fn ocr_image_data(data_url: String, upscale_under_px: u32, join_lines: bool, lang: String, auto_pick_lang: bool) -> Result<OcrResult, String> {
     let bytes = data_url_bytes(&data_url);
     let img = decode_image_mem(&bytes).ok_or("could not decode image")?.to_rgba8();
     let upscale_under_px = upscale_under_px.clamp(100, 800);
     #[cfg(windows)]
     {
-        tauri::async_runtime::spawn_blocking(move || ocr::recognize_crop(img, upscale_under_px, join_lines))
+        tauri::async_runtime::spawn_blocking(move || ocr::recognize_crop(img, upscale_under_px, join_lines, &lang, auto_pick_lang))
             .await
             .map_err(|e| e.to_string())?
     }
     #[cfg(not(windows))]
     {
-        let _ = (img, upscale_under_px, join_lines);
+        let _ = (img, upscale_under_px, join_lines, lang, auto_pick_lang);
         Err("ocr is only available on Windows".to_string())
     }
+}
+
+// 122: list recognition-language capabilities (no elevated rights needed).
+// `force` bypasses the in-memory cache (ocrLangCacheH hours, default 24); the
+// cache is what ocr_install_language's whitelist check is validated against,
+// so a name can never be installed without having actually been enumerated.
+#[tauri::command]
+async fn ocr_capabilities(state: State<'_, Db>, force: bool) -> Result<Vec<OcrCap>, String> {
+    let cache_hours = {
+        let store = lock(&state);
+        store.settings.ui_values.get("ocrLangCacheH").copied().unwrap_or(24.0)
+    }
+    .clamp(1.0, 168.0);
+    #[cfg(windows)]
+    {
+        tauri::async_runtime::spawn_blocking(move || ocr::capabilities(force, cache_hours))
+            .await
+            .map_err(|e| e.to_string())?
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (force, cache_hours);
+        Err("ocr is only available on Windows".to_string())
+    }
+}
+
+// 122: kick off an elevated install for one language capability. Validates
+// `name` BEFORE any string is built or a process is touched (G10): first the
+// anchored character-class check, then -- only if that already passed --
+// membership in the capability set ocr_capabilities() most recently actually
+// enumerated. Returns as soon as the elevated process has been launched (or
+// launch was rejected); it never waits for Add-WindowsCapability to finish --
+// the frontend polls ocr_install_result / ocr_capabilities(force: true)
+// instead (no blocking, no wait-dialog without a cancel option).
+#[tauri::command]
+fn ocr_install_language(name: String) -> Result<(), String> {
+    if !ocr_capability_name_is_well_formed(&name) {
+        return Err("invalid OCR capability name".to_string());
+    }
+    #[cfg(windows)]
+    {
+        if !ocr::is_known_capability(&name) {
+            return Err("unknown OCR capability name".to_string());
+        }
+        ocr::install_language(&name)
+    }
+    #[cfg(not(windows))]
+    {
+        Err("ocr is only available on Windows".to_string())
+    }
+}
+
+// 122: read (and, on a terminal result, clear) the result file the elevated
+// installer writes for `name`. None while the install is still running or was
+// never started; Some(...) once it finished, one way or the other. A
+// successful result is the point where the capability + engine caches get
+// invalidated -- see the comment in mod ocr::install_result for why here.
+#[tauri::command]
+fn ocr_install_result(name: String) -> Option<OcrInstallResult> {
+    if !ocr_capability_name_is_well_formed(&name) {
+        return None;
+    }
+    #[cfg(windows)]
+    {
+        ocr::install_result(&name)
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
+// 122: "Abbrechen" on the background update notice -- defers the NEXT
+// automatic notice by ocrLangSnoozeH hours, so the user is not re-nagged on
+// every restart. Does not touch the check cadence itself (ocrLangCheckH); a
+// manual "Jetzt prüfen" (ocr_capabilities(force: true)) is unaffected by this.
+#[tauri::command]
+fn ocr_lang_snooze(app: AppHandle, state: State<Db>) {
+    let mut store = lock(&state);
+    let hours = store.settings.ui_values.get("ocrLangSnoozeH").copied().unwrap_or(168.0).clamp(24.0, 720.0);
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let next = now + (hours * 3600.0) as u64;
+    store.settings.ui_texts.insert(OCR_LANG_NEXT_CHECK_KEY.to_string(), next.to_string());
+    save_settings(&app, &store.settings);
+}
+
+// 122: background watcher for "an installed language pack is now updatable".
+// Notification-ONLY -- it never calls ocr_install_language itself (elevation
+// always needs the frontend's confirmDialog explanation first, run in the
+// background or not). Because of that, "multiple due packages processed
+// sequentially, never in parallel" is automatically satisfied: this thread
+// only ever lists what is due in one event, it does not install anything.
+#[cfg(windows)]
+fn spawn_ocr_lang_update_watcher(app: AppHandle) {
+    std::thread::spawn(move || {
+        // Well after launch -- this must never compete with window build.
+        std::thread::sleep(std::time::Duration::from_secs(30));
+        loop {
+            let snapshot = app.try_state::<Db>().map(|s| {
+                let store = s.lock().unwrap_or_else(|e| e.into_inner());
+                (
+                    store.settings.ui_flags.get("ocrLangAutoUpdate").copied().unwrap_or(true),
+                    store.settings.ui_values.get("ocrLangCacheH").copied().unwrap_or(24.0).clamp(1.0, 168.0),
+                    store
+                        .settings
+                        .ui_texts
+                        .get(OCR_LANG_NEXT_CHECK_KEY)
+                        .and_then(|s| s.parse::<u64>().ok())
+                        .unwrap_or(0),
+                    ocr_lang_load_snapshots(&store.settings),
+                )
+            });
+            if let Some((auto_update, cache_hours, next_check, snapshots)) = snapshot {
+                let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+                if auto_update && now >= next_check {
+                    if let Ok(caps) = ocr::capabilities(false, cache_hours) {
+                        let mut due = Vec::new();
+                        let mut new_snapshots = snapshots.clone();
+                        for cap in &caps {
+                            let prev = snapshots.get(&cap.tag);
+                            if ocr_lang_needs_update(prev, &cap.state, &cap.version) {
+                                due.push(OcrLangUpdateDue {
+                                    name: cap.name.clone(),
+                                    tag: cap.tag.clone(),
+                                    label: cap.label.clone(),
+                                });
+                            }
+                            // Keep the remembered snapshot in step with what Windows
+                            // reports right now, so the NEXT check compares against
+                            // today's truth rather than a stale one.
+                            let now_installed = cap.state == "Installed";
+                            if now_installed || prev.is_some() {
+                                new_snapshots.insert(
+                                    cap.tag.clone(),
+                                    OcrCapSnapshot { version: cap.version.clone(), installed: now_installed },
+                                );
+                            }
+                        }
+                        if !due.is_empty() {
+                            let _ = app.emit("ocr-lang-update-due", &due);
+                        }
+                        if let Some(s) = app.try_state::<Db>() {
+                            let mut store = s.lock().unwrap_or_else(|e| e.into_inner());
+                            ocr_lang_save_snapshots(&mut store.settings, &new_snapshots);
+                            save_settings(&app, &store.settings);
+                        }
+                    }
+                }
+            }
+            let hours = app
+                .try_state::<Db>()
+                .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("ocrLangCheckH").copied().unwrap_or(168.0))
+                .unwrap_or(168.0)
+                .clamp(24.0, 720.0);
+            std::thread::sleep(std::time::Duration::from_secs((hours * 3600.0) as u64));
+        }
+    });
 }
 
 // Windows.Media.Ocr binding. Deliberately goes through the file system for the
@@ -10909,18 +11228,25 @@ async fn ocr_image_data(data_url: String, upscale_under_px: u32, join_lines: boo
 // entirely free of unsafe code; the one unsafe call is COM's own RoInitialize.
 #[cfg(windows)]
 mod ocr {
-    use super::{brand, fs, gen_id, OcrLang, OcrResult};
+    use super::{
+        brand, fs, gen_id, ocr_parse_capabilities_json, ocr_tag_from_capability_name, OcrCap,
+        OcrInstallResult, OcrLang, OcrResult,
+    };
     use image::imageops::FilterType;
     use image::GenericImageView;
     use std::collections::HashMap;
+    use std::os::windows::process::CommandExt;
     use std::path::{Path, PathBuf};
     use std::sync::{Mutex, OnceLock};
-    use windows::core::HSTRING;
+    use windows::core::{HSTRING, PCWSTR};
     use windows::Globalization::Language;
     use windows::Graphics::Imaging::{BitmapDecoder, SoftwareBitmap};
     use windows::Media::Ocr::OcrEngine;
     use windows::Storage::{FileAccessMode, StorageFile};
+    use windows::Win32::Foundation::HWND;
     use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
     // A very small crop is upscaled 2x before recognition -- the actual trick that
     // makes small on-screen text (button labels, tooltips) recognizable. An image
@@ -10980,16 +11306,30 @@ mod ocr {
     }
 
     // Resolve (and cache) the OcrEngine for `lang` ("auto" or an explicit BCP-47
-    // tag). Never recreates an engine that is already cached.
-    fn resolve_engine(lang: &str) -> Result<OcrEngine, String> {
+    // tag). Never recreates an engine that is already cached. 122: when `lang` is
+    // an explicit tag whose recognition pack is not actually installed,
+    // `auto_pick` (the ocrAutoPickLang expert setting, default on) decides
+    // whether to fall back to whatever IS installed (Ben, 120: "use whatever
+    // language packs are already present") or to fail with ocr-no-language. The
+    // cache key stays the ORIGINAL requested `lang`, matching how "auto" already
+    // caches whatever engine it happened to resolve to -- installing a new
+    // language pack clears the whole cache (see mod ocr::install_result), so a
+    // stale fallback never lingers once the desired pack becomes available.
+    fn resolve_engine(lang: &str, auto_pick: bool) -> Result<OcrEngine, String> {
         if let Some(e) = engine_cache().lock().unwrap_or_else(|e| e.into_inner()).get(lang) {
             return Ok(e.clone());
         }
         let engine = if lang == "auto" {
             create_auto_engine()?
         } else {
-            let language = Language::CreateLanguage(&HSTRING::from(lang)).map_err(|e| e.to_string())?;
-            OcrEngine::TryCreateFromLanguage(&language).map_err(|_| "ocr-no-language".to_string())?
+            let explicit = Language::CreateLanguage(&HSTRING::from(lang))
+                .ok()
+                .and_then(|language| OcrEngine::TryCreateFromLanguage(&language).ok());
+            match explicit {
+                Some(e) => e,
+                None if auto_pick => create_auto_engine()?,
+                None => return Err("ocr-no-language".to_string()),
+            }
         };
         engine_cache()
             .lock()
@@ -11056,9 +11396,9 @@ mod ocr {
 
     // 121: join_lines picks between the paragraph-joined text (ocr_join_lines) and
     // the raw one-line-per-recognized-line text -- the ocrJoinLines expert setting.
-    fn recognize(path: &Path, upscale_below_px: u32, join_lines: bool) -> Result<OcrResult, String> {
+    fn recognize(path: &Path, upscale_below_px: u32, join_lines: bool, lang: &str, auto_pick_lang: bool) -> Result<OcrResult, String> {
         ensure_com();
-        let engine = resolve_engine("auto")?;
+        let engine = resolve_engine(lang, auto_pick_lang)?;
         let max_dim = OcrEngine::MaxImageDimension().map_err(|e| e.to_string())?;
         let (sized_path, _resize_guard) = resize_for_ocr(path, max_dim, upscale_below_px)?;
         let bitmap = bitmap_from_path(&sized_path)?;
@@ -11092,21 +11432,210 @@ mod ocr {
         Ok(out)
     }
 
-    pub(super) fn recognize_file(path: &Path, upscale_below_px: u32, join_lines: bool) -> Result<OcrResult, String> {
-        recognize(path, upscale_below_px, join_lines)
+    pub(super) fn recognize_file(path: &Path, upscale_below_px: u32, join_lines: bool, lang: &str, auto_pick_lang: bool) -> Result<OcrResult, String> {
+        recognize(path, upscale_below_px, join_lines, lang, auto_pick_lang)
     }
 
     // Writes the crop out as a temp PNG under the branded temp dir (same naming
     // convention as write_snip_preview / pdfium_cache_path), then runs it through
     // the same recognize() path -- deleted in every code path via TempFileGuard.
-    pub(super) fn recognize_crop(crop: image::RgbaImage, upscale_below_px: u32, join_lines: bool) -> Result<OcrResult, String> {
+    pub(super) fn recognize_crop(crop: image::RgbaImage, upscale_below_px: u32, join_lines: bool, lang: &str, auto_pick_lang: bool) -> Result<OcrResult, String> {
         let path = ocr_temp_path();
         if let Some(dir) = path.parent() {
             let _ = fs::create_dir_all(dir);
         }
         crop.save(&path).map_err(|e| e.to_string())?;
         let _guard = TempFileGuard(Some(path.clone()));
-        recognize(&path, upscale_below_px, join_lines)
+        recognize(&path, upscale_below_px, join_lines, lang, auto_pick_lang)
+    }
+
+    // ---- 122: OCR language-pack management ----
+
+    struct CapCache {
+        fetched_at: std::time::Instant,
+        caps: Vec<OcrCap>,
+    }
+    fn cap_cache() -> &'static Mutex<Option<CapCache>> {
+        static CACHE: OnceLock<Mutex<Option<CapCache>>> = OnceLock::new();
+        CACHE.get_or_init(|| Mutex::new(None))
+    }
+
+    // The set most recently returned by `capabilities()` doubles as the
+    // install allowlist (see install_language) -- a name that was never
+    // actually enumerated is rejected even if it happens to match the naming
+    // regex.
+    pub(super) fn is_known_capability(name: &str) -> bool {
+        cap_cache()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|c| c.caps.iter().any(|cap| cap.name == name))
+            .unwrap_or(false)
+    }
+
+    pub(super) fn capabilities(force: bool, cache_hours: f64) -> Result<Vec<OcrCap>, String> {
+        if !force {
+            if let Some(c) = cap_cache().lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+                if c.fetched_at.elapsed() < std::time::Duration::from_secs_f64(cache_hours * 3600.0) {
+                    return Ok(c.caps.clone());
+                }
+            }
+        }
+        let caps = fetch_capabilities()?;
+        *cap_cache().lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(CapCache { fetched_at: std::time::Instant::now(), caps: caps.clone() });
+        Ok(caps)
+    }
+
+    // Runs PowerShell exactly once (no window), parses its JSON, and resolves
+    // each capability's localized display name via the same WinRT Language
+    // lookup the recognizer itself uses -- so this list is localized without
+    // this app keeping its own name table.
+    fn fetch_capabilities() -> Result<Vec<OcrCap>, String> {
+        ensure_com();
+        let output = run_powershell_command(
+            r#"Get-WindowsCapability -Online -Name "Language.OCR*" | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json"#,
+        )?;
+        let raw = ocr_parse_capabilities_json(&output)?;
+        let mut out = Vec::with_capacity(raw.len());
+        for r in raw {
+            let label = Language::CreateLanguage(&HSTRING::from(r.tag.as_str()))
+                .and_then(|l| l.DisplayName())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|_| r.tag.clone());
+            out.push(OcrCap {
+                name: r.name,
+                tag: r.tag,
+                label,
+                state: r.state,
+                version: r.version,
+                download_size: r.download_size,
+                install_size: r.install_size,
+            });
+        }
+        Ok(out)
+    }
+
+    // Runs a PowerShell command with no visible window and returns its stdout.
+    fn run_powershell_command(script: &str) -> Result<String, String> {
+        let out = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", script])
+            .creation_flags(super::CREATE_NO_WINDOW)
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !out.status.success() {
+            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            return Err(if stderr.is_empty() { "PowerShell command failed".to_string() } else { stderr });
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).to_string())
+    }
+
+    // PowerShell single-quoted-string escaping (double an embedded quote). Used
+    // for both the (already-validated) capability name and our own generated
+    // temp paths, which can contain non-ASCII characters from the user's
+    // profile path even though they can never contain a single quote in
+    // practice -- escaping unconditionally costs nothing and removes the doubt.
+    fn ps_single_quote(s: &str) -> String {
+        format!("'{}'", s.replace('\'', "''"))
+    }
+
+    // Windows PowerShell 5.1 (not pwsh core) needs a byte-order mark to reliably
+    // read a UTF-8 script file back as UTF-8 -- without it, non-ASCII bytes in a
+    // path can be misread under the system ANSI code page. See CLAUDE.md's
+    // ".ps1 -> ASCII or UTF-8 WITH BOM" convention.
+    fn write_ps1_with_bom(path: &Path, content: &str) -> std::io::Result<()> {
+        let mut bytes = vec![0xEFu8, 0xBB, 0xBF];
+        bytes.extend_from_slice(content.as_bytes());
+        fs::write(path, bytes)
+    }
+
+    fn install_result_path(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-ocr-install-{}.json", brand::TEMP_PREFIX, tag))
+    }
+    fn install_script_path(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-ocr-install-{}.ps1", brand::TEMP_PREFIX, tag))
+    }
+
+    // Launches an elevated PowerShell that runs Add-WindowsCapability and writes
+    // its own success/failure (including whatever error message Windows gave)
+    // to a result file, then returns immediately -- this call never waits for
+    // that process. The elevation script is written out to a temp .ps1 file
+    // rather than passed inline via `-Command "..."`: `name` and the result
+    // path are already safe to embed (name is regex+whitelist-validated by the
+    // caller; the path is entirely ours), but a script FILE sidesteps the
+    // nested-quoting hazard of building a `try{...}catch{...}` PowerShell
+    // one-liner inside a Win32 argument string, which is judged the safer
+    // "equivalent" the spec allows.
+    pub(super) fn install_language(name: &str) -> Result<(), String> {
+        let tag = ocr_tag_from_capability_name(name).unwrap_or_default();
+        let result_path = install_result_path(&tag);
+        let script_path = install_script_path(&tag);
+        let _ = fs::remove_file(&result_path); // a stale result must never look fresh
+
+        let script = format!(
+            "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  Add-WindowsCapability -Online -Name {name}\r\n  @{{ ok = $true }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} catch {{\r\n  @{{ ok = $false; error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}}\r\n",
+            name = ps_single_quote(name),
+            result = ps_single_quote(&result_path.to_string_lossy()),
+        );
+        if let Some(dir) = script_path.parent() {
+            fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        }
+        write_ps1_with_bom(&script_path, &script).map_err(|e| e.to_string())?;
+
+        // Standard Win32 argv quoting (double quotes for a path that may
+        // contain spaces) -- this is CreateProcess's own command-line
+        // convention, not PowerShell's, since it is powershell.exe's argv.
+        let params = format!(
+            "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{}\"",
+            script_path.display()
+        );
+        let code = unsafe {
+            ShellExecuteW(
+                HWND::default(),
+                &HSTRING::from("runas"),
+                &HSTRING::from("powershell.exe"),
+                &HSTRING::from(params),
+                PCWSTR::null(),
+                SW_SHOWNORMAL,
+            )
+        };
+        let code = code.0 as isize;
+        if code <= 32 {
+            // SE_ERR_ACCESSDENIED (5) is what ShellExecuteW returns when the user
+            // declines the UAC prompt; ERROR_CANCELLED (1223) shows up on some
+            // Windows versions for the same outcome. Both are "no admin rights
+            // given", not a real failure (122 / Ben 14.08.: no error tone, no
+            // hung state).
+            if code == 5 || code == 1223 {
+                return Err("ocr-elevate-cancelled".to_string());
+            }
+            return Err(format!("could not start the elevated installer (ShellExecuteW code {})", code));
+        }
+        Ok(())
+    }
+
+    // Reads (and, once a terminal result is found, deletes) the result file
+    // install_language's elevated process writes. Deleting on a terminal read
+    // keeps a later poll from re-triggering the cache invalidation below on
+    // every subsequent call.
+    pub(super) fn install_result(name: &str) -> Option<OcrInstallResult> {
+        let tag = ocr_tag_from_capability_name(name).unwrap_or_default();
+        let path = install_result_path(&tag);
+        let text = fs::read_to_string(&path).ok()?;
+        let value: serde_json::Value = serde_json::from_str(text.trim()).ok()?;
+        let ok = value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+        let error = value.get("error").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let _ = fs::remove_file(&path);
+        if ok {
+            // Installation is done -- both caches must reflect it immediately, no
+            // restart needed (122). This command is the natural place to do that:
+            // it is the point where the backend already has fresh proof the
+            // install finished, rather than waiting on the frontend to notice
+            // state == "Installed" via a second ocr_capabilities() round trip.
+            *cap_cache().lock().unwrap_or_else(|e| e.into_inner()) = None;
+            engine_cache().lock().unwrap_or_else(|e| e.into_inner()).clear();
+        }
+        Some(OcrInstallResult { ok, error })
     }
 }
 
@@ -13256,6 +13785,11 @@ pub fn run() {
                     std::thread::sleep(std::time::Duration::from_secs((hours * 3600.0) as u64));
                 }
             });
+
+            // 122: OCR language-pack "updatable" watcher -- delayed, silent when
+            // there is nothing to do, never runs at window build.
+            #[cfg(windows)]
+            spawn_ocr_lang_update_watcher(handle.clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -13418,6 +13952,10 @@ pub fn run() {
             ocr_image,
             ocr_region,
             ocr_image_data,
+            ocr_capabilities,
+            ocr_install_language,
+            ocr_install_result,
+            ocr_lang_snooze,
             set_snip_mode
         ])
         .run(tauri::generate_context!())
@@ -14464,6 +15002,155 @@ mod tests {
     fn ocr_join_lines_right_to_left_script_is_not_reordered() {
         let lines = vec!["مرحبا بالعالم".to_string()];
         assert_eq!(ocr_join_lines(&lines), "مرحبا بالعالم");
+    }
+
+    // 122: capability-name allowlist -- the G10 gate everything in
+    // ocr_install_language relies on. Valid, realistic tags pass; anything
+    // malformed or injection-flavored is rejected outright.
+    #[test]
+    fn ocr_capability_name_accepts_realistic_tags() {
+        for name in [
+            "Language.OCR~~~de-DE~0.0.1.0",
+            "Language.OCR~~~en-US~0.0.1.0",
+            "Language.OCR~~~ja-JP~0.0.1.0",
+            "Language.OCR~~~zh-Hans-CN~0.0.1.0",
+        ] {
+            assert!(ocr_capability_name_is_well_formed(name), "expected {name} to be accepted");
+        }
+    }
+
+    #[test]
+    fn ocr_capability_name_rejects_the_spec_example_payload() {
+        assert!(!ocr_capability_name_is_well_formed("Language.OCR~~~de-DE~0.0.1.0; rm -rf"));
+    }
+
+    #[test]
+    fn ocr_capability_name_rejects_command_injection_payloads() {
+        for name in [
+            "Language.OCR~~~de-DE~0.0.1.0;whoami",
+            "Language.OCR~~~de-DE~0.0.1.0`whoami`",
+            "Language.OCR~~~de-DE~0.0.1.0|whoami",
+            "Language.OCR~~~de-DE~0.0.1.0\nwhoami",
+        ] {
+            assert!(!ocr_capability_name_is_well_formed(name), "expected {name} to be rejected");
+        }
+    }
+
+    #[test]
+    fn ocr_capability_name_rejects_empty_string() {
+        assert!(!ocr_capability_name_is_well_formed(""));
+    }
+
+    #[test]
+    fn ocr_capability_name_rejects_missing_prefix() {
+        assert!(!ocr_capability_name_is_well_formed("de-DE~0.0.1.0"));
+    }
+
+    #[test]
+    fn ocr_capability_name_rejects_wrong_trailing_version() {
+        assert!(!ocr_capability_name_is_well_formed("Language.OCR~~~de-DE~1.0.0.0"));
+    }
+
+    #[test]
+    fn ocr_capability_name_rejects_a_tag_over_12_chars() {
+        assert!(!ocr_capability_name_is_well_formed("Language.OCR~~~thirteenchars~0.0.1.0"));
+    }
+
+    #[test]
+    fn ocr_capability_name_rejects_tag_chars_outside_the_allowed_class() {
+        assert!(!ocr_capability_name_is_well_formed("Language.OCR~~~de_DE~0.0.1.0"));
+        assert!(!ocr_capability_name_is_well_formed("Language.OCR~~~de DE~0.0.1.0"));
+    }
+
+    // Same allowlist string, as a tag extractor: pulls the tag back out of an
+    // already-valid name.
+    #[test]
+    fn ocr_tag_from_capability_name_extracts_the_tag() {
+        assert_eq!(ocr_tag_from_capability_name("Language.OCR~~~de-DE~0.0.1.0"), Some("de-DE".to_string()));
+        assert_eq!(ocr_tag_from_capability_name("not-a-capability-name"), None);
+    }
+
+    // 122: PowerShell `Get-WindowsCapability | ConvertTo-Json` output parsing --
+    // fixed sample strings standing in for the three shapes PowerShell actually
+    // produces.
+    #[test]
+    fn ocr_parse_capabilities_json_handles_a_single_object() {
+        let json = r#"{
+            "Name": "Language.OCR~~~de-DE~0.0.1.0",
+            "State": "Installed",
+            "Version": "0.0.1.0",
+            "DownloadSize": 12345678,
+            "InstallSize": 23456789
+        }"#;
+        let caps = ocr_parse_capabilities_json(json).unwrap();
+        assert_eq!(caps.len(), 1);
+        assert_eq!(caps[0].name, "Language.OCR~~~de-DE~0.0.1.0");
+        assert_eq!(caps[0].tag, "de-DE");
+        assert_eq!(caps[0].state, "Installed");
+        assert_eq!(caps[0].version, "0.0.1.0");
+        assert_eq!(caps[0].download_size, Some(12345678));
+        assert_eq!(caps[0].install_size, Some(23456789));
+    }
+
+    #[test]
+    fn ocr_parse_capabilities_json_handles_an_array() {
+        let json = r#"[
+            {
+                "Name": "Language.OCR~~~de-DE~0.0.1.0",
+                "State": "NotPresent",
+                "Version": "0.0.1.0",
+                "DownloadSize": 12345678,
+                "InstallSize": 23456789
+            },
+            {
+                "Name": "Language.OCR~~~en-US~0.0.1.0",
+                "State": "Installed",
+                "Version": "0.0.1.0",
+                "DownloadSize": 9999999,
+                "InstallSize": 8888888
+            }
+        ]"#;
+        let caps = ocr_parse_capabilities_json(json).unwrap();
+        assert_eq!(caps.len(), 2);
+        assert_eq!(caps[0].tag, "de-DE");
+        assert_eq!(caps[0].state, "NotPresent");
+        assert_eq!(caps[1].tag, "en-US");
+        assert_eq!(caps[1].state, "Installed");
+    }
+
+    // An already-installed capability commonly has no DownloadSize/InstallSize
+    // at all -- that must become None, never Some(0) or a panic.
+    #[test]
+    fn ocr_parse_capabilities_json_missing_size_becomes_none() {
+        let json = r#"{
+            "Name": "Language.OCR~~~fr-FR~0.0.1.0",
+            "State": "Installed",
+            "Version": "0.0.1.0",
+            "DownloadSize": null,
+            "InstallSize": null
+        }"#;
+        let caps = ocr_parse_capabilities_json(json).unwrap();
+        assert_eq!(caps.len(), 1);
+        assert_eq!(caps[0].download_size, None);
+        assert_eq!(caps[0].install_size, None);
+    }
+
+    // 122: "updatable?" decision -- table-driven per the spec's five cases.
+    #[test]
+    fn ocr_lang_needs_update_table() {
+        let installed = |v: &str| Some(OcrCapSnapshot { version: v.to_string(), installed: true });
+        let not_installed = |v: &str| Some(OcrCapSnapshot { version: v.to_string(), installed: false });
+
+        // same version + Installed -> not updatable
+        assert!(!ocr_lang_needs_update(installed("0.0.1.0").as_ref(), "Installed", "0.0.1.0"));
+        // different version + Installed -> updatable
+        assert!(ocr_lang_needs_update(installed("0.0.1.0").as_ref(), "Installed", "0.0.2.0"));
+        // previously Installed, now NotPresent -> updatable
+        assert!(ocr_lang_needs_update(installed("0.0.1.0").as_ref(), "NotPresent", "0.0.1.0"));
+        // never-installed NotPresent (a remembered-but-never-installed snapshot) -> not updatable
+        assert!(!ocr_lang_needs_update(not_installed("0.0.1.0").as_ref(), "NotPresent", "0.0.1.0"));
+        // first-time-seen language, no previous snapshot at all -> not updatable
+        assert!(!ocr_lang_needs_update(None, "NotPresent", "0.0.1.0"));
     }
 
     #[test]

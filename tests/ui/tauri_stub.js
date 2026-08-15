@@ -244,6 +244,11 @@ const RESULTS = {
   },
   app_version: () => "0.0.0",
   current_data_dir: () => "C:\\Data",
+  // 122: a probe sets window.__OCR_CAPS_TEST__ before opening #ocr-langs-modal.
+  // Read fresh on every call (unlike main.js's own `const { invoke } = ...`
+  // capture at module load), so a probe can set it any time before triggering
+  // the actual invoke call, no matter how long main.js has already been running.
+  ocr_capabilities: () => window.__OCR_CAPS_TEST__ || [],
   default_screenshot_dir: () => "C:\\Pictures",
   default_sync_dir: () => "C:\\Data\\Prompts",
   // One snapshot carries its prompt count and names (61), one is from an older

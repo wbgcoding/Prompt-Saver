@@ -4046,6 +4046,80 @@ PROBE = """
         out.errors.push('OCR entry points stayed visible after switching the flag back off');
       }
     }
+    // 122: OCR language-pack management dialog -- WORK.md's own test list for
+    // this probe: list renders, size sits inside the download button, buttons
+    // are named, no overflow at 520px.
+    {
+      const rowByLabel = (text) => {
+        for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+          tb.click();
+          const hit = [...document.querySelectorAll('#expert-flags .switch-field, #expert-flags .expert-action')]
+            .find((r) => {
+              const span = r.tagName === 'BUTTON' ? r : r.querySelector('span');
+              return span && span.textContent === text;
+            });
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const toggleOcrFlag = async (on) => {
+        await click('expert-open');
+        const row = rowByLabel('Text erkennen (OCR)');
+        if (!row) { out.errors.push('OCR flag row not found for the langs-modal probe'); return; }
+        const cb = row.querySelector('input.switch');
+        cb.checked = on;
+        cb.dispatchEvent(new Event('change'));
+        await sleep(150);
+      };
+      await toggleOcrFlag(true);
+
+      const FAKE_CAPS = [
+        { name: 'Language.OCR~~~de-DE~0.0.1.0', tag: 'de-DE', label: 'German', state: 'Installed', version: '0.0.1.0', download_size: null, install_size: 45000000 },
+        { name: 'Language.OCR~~~fr-FR~0.0.1.0', tag: 'fr-FR', label: 'French', state: 'NotPresent', version: '0.0.1.0', download_size: 13000000, install_size: null },
+        { name: 'Language.OCR~~~ja-JP~0.0.1.0', tag: 'ja-JP', label: 'Japanese', state: 'NotPresent', version: '0.0.1.0', download_size: null, install_size: null },
+      ];
+      // main.js captures `invoke` once at module load (const { invoke } = ...),
+      // so overriding window.__TAURI__.core.invoke this late would have no
+      // effect -- tauri_stub.js's own ocr_capabilities entry reads this global
+      // fresh on every call instead.
+      window.__OCR_CAPS_TEST__ = FAKE_CAPS;
+
+      const langsRow = rowByLabel('Sprachen verwalten…');
+      if (!langsRow) {
+        out.errors.push('OCR langs-modal action button not found in the expert menu');
+      } else {
+        langsRow.click();
+        await sleep(150);
+        const modal = document.getElementById('ocr-langs-modal');
+        if (!modal || modal.classList.contains('hidden')) {
+          out.errors.push('OCR langs modal did not open from the expert action button');
+        } else {
+          const rows = [...document.querySelectorAll('#ocr-langs-body .ocr-lang-row')];
+          if (rows.length !== FAKE_CAPS.length) {
+            out.errors.push('OCR langs modal: expected ' + FAKE_CAPS.length + ' rows, found ' + rows.length);
+          }
+          const buttons = [...document.querySelectorAll('#ocr-langs-body .ghost-btn')];
+          if (buttons.length !== 2) {
+            out.errors.push('OCR langs modal: expected 2 download buttons, found ' + buttons.length);
+          }
+          for (const b of buttons) {
+            if (!b.textContent.trim()) out.errors.push('OCR langs modal: a download button has no label');
+          }
+          if (!buttons.some((b) => b.textContent.includes('12.4 MB'))) {
+            out.errors.push('OCR langs modal: download button does not show the size in its own label');
+          }
+          if (!buttons.some((b) => b.textContent.includes('—'))) {
+            out.errors.push('OCR langs modal: a missing size did not render as a dash');
+          }
+          layoutScan('OCR langs modal');
+          document.getElementById('ocr-langs-close-x').click();
+          await sleep(100);
+          if (!modal.classList.contains('hidden')) out.errors.push('OCR langs modal did not close');
+        }
+      }
+      window.__OCR_CAPS_TEST__ = null;
+      await toggleOcrFlag(false);
+    }
   } catch (e) { out.errors.push('probe: ' + e.message); }
   for (const el of document.querySelectorAll('.overlay *, #expert-flags *')) {
     const r = el.getBoundingClientRect();

@@ -84,6 +84,15 @@ DEPENDENCIES = {
     "ocrJoinLines": "ocr",
     "ocrUpscaleUnderPx": "ocr",
     "ocrLang": "ocr",
+    # 122: OCR language packs -- ocrAutoPickLang/ocrLangCacheH gate on "ocr" alone
+    # (they matter regardless of the auto-update setting); the other three are
+    # nested under ocrLangAutoUpdate itself, since they tune ITS behaviour.
+    "ocrAutoPickLang": "ocr",
+    "ocrLangAutoUpdate": "ocr",
+    "ocrLangCacheH": "ocr",
+    "ocrLangCheckH": "ocrLangAutoUpdate",
+    "ocrLangNoticeMs": "ocrLangAutoUpdate",
+    "ocrLangSnoozeH": "ocrLangAutoUpdate",
     # 32: rotating prompts
     "rotateDefaultMode": "rotatingPrompts",
     "rotateMaxEntries": "rotatingPrompts",

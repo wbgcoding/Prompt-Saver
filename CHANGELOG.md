@@ -152,7 +152,13 @@ Everything new is an expert-menu switch, most of it off until you turn it on
   new prompt. Small on-screen text is enlarged before recognition so it reads
   reliably, wrapped lines can be joined back into paragraphs, and the result can
   copy itself to the clipboard automatically — all three tunable in the expert
-  menu, along with which installed language to use.
+  menu, along with which installed language to use. Missing a language pack? A
+  "Manage languages" dialog lists everything Windows can recognize, installed or
+  not, with the download size right on the button so nothing downloads blind;
+  picking one walks through Windows' own installer, asking for administrator
+  rights exactly once and explaining why beforehand. Installed packs can also be
+  kept current automatically, with a quiet, cancelable notice when one needs an
+  update.
 
 ### Improved
 

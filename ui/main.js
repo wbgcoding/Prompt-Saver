@@ -491,7 +491,11 @@ function readableInk(hex) {
 // (e.g. the three colour notations) instead of the single `.toast-btn`. Kept
 // separate from `action` rather than folding it in, so every existing single-action
 // caller (undo, update-available, …) is untouched.
-function toast(msg, action = null, tint = "", chips = null) {
+// 122: `duration` overrides the computed auto-hide delay (ms) for this one call --
+// the background OCR-language-update notice uses its own ocrLangNoticeMs expert
+// setting instead of the generic TOAST_MS/action-bonus math below. Every existing
+// caller omits it and keeps the old behaviour.
+function toast(msg, action = null, tint = "", chips = null, duration = null) {
   toastEl.textContent = "";
   const hasChips = !!(chips && chips.length);
   // Only actionable toasts capture clicks; plain ones stay click-through so they
@@ -550,7 +554,7 @@ function toast(msg, action = null, tint = "", chips = null) {
   // plain message, but was a flat 12000ms regardless of the toastMs expert
   // setting -- longer than that setting's own 10000ms max. Scale it off the same
   // knob instead (same 12000ms result at the 1400ms default).
-  toastTimer = setTimeout(hideToast, (action || hasChips) ? TOAST_MS + 10600 : TOAST_MS);
+  toastTimer = setTimeout(hideToast, duration ?? ((action || hasChips) ? TOAST_MS + 10600 : TOAST_MS));
 }
 
 // The backend returns Err(String) with a plain English sentence; most call sites
@@ -1073,6 +1077,9 @@ const FLAG_LABELS = {
   // 121: sub-toggles of ocr (OPT_FLAG_LABELS, default off), themselves default on.
   ocrAutoCopy: "flagOcrAutoCopy",
   ocrJoinLines: "flagOcrJoinLines",
+  // 122: sub-toggles of ocr, themselves default on.
+  ocrAutoPickLang: "flagOcrAutoPickLang",
+  ocrLangAutoUpdate: "flagOcrLangAutoUpdate",
 };
 const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -1279,6 +1286,18 @@ const EXPERT_VALUES = {
   // 121: a crop smaller than this (either side) is upscaled 2x before recognition --
   // the trick that makes small on-screen text readable to the OCR engine.
   ocrUpscaleUnderPx: { label: "valOcrUpscaleUnderPx", min: 100, max: 800, step: 50, def: 300, unit: "px", gate: "ocr" },
+  // 122: how often the background thread checks installed language packs for an
+  // update, how long the "update available" toast stays before it counts as a
+  // silent no-op, and how long a click on its Cancel button postpones the next
+  // check. All three only matter while ocrLangAutoUpdate itself is on.
+  ocrLangCheckH: { label: "valOcrLangCheckH", min: 24, max: 720, step: 24, def: 168, unit: "h", gate: "ocrLangAutoUpdate" },
+  ocrLangNoticeMs: { label: "valOcrLangNoticeMs", min: 2000, max: 20000, step: 500, def: 8000, unit: "ms", gate: "ocrLangAutoUpdate" },
+  ocrLangSnoozeH: { label: "valOcrLangSnoozeH", min: 24, max: 720, step: 24, def: 168, unit: "h", gate: "ocrLangAutoUpdate" },
+  // How long ocr_capabilities()'s own result is cached backend-side, so opening
+  // the management dialog (or a manual "Check now") does not always wait on
+  // PowerShell. Gated on "ocr" alone, not ocrLangAutoUpdate -- manual "Check now"
+  // uses this cache too, even with automatic updates switched off.
+  ocrLangCacheH: { label: "valOcrLangCacheH", min: 1, max: 168, step: 1, def: 24, unit: "h", gate: "ocr" },
   // Scrollbar thickness across every dialog (thumb keeps its 3px inset border).
   scrollbarWidth: { label: "valScrollbarWidth", min: 8, max: 20, step: 1, def: 12, unit: "px", gate: "!hideScrollbars" },
   // Frosted-glass dialog background blur (paired with the frostedModals toggle).
@@ -1430,9 +1449,12 @@ const EXPERT_DROPDOWNS = {
     label: "valOcrLang",
     gate: "ocr",
     def: "auto",
-    options: () => [["auto", t("langAuto")], ...ocrLangsCache.map((l) => [l.tag, l.label])],
+    // 122: trailing "Manage languages..." entry opens #ocr-langs-modal instead of
+    // ever being persisted as the chosen language -- see set() below.
+    options: () => [["auto", t("langAuto")], ...ocrLangsCache.map((l) => [l.tag, l.label]), ["__manage__", t("ocrLangsManage")]],
     get: () => settings.ui_texts?.ocrLang || "auto",
     set: async (v) => {
+      if (v === "__manage__") { openOcrLangsModal(); return; }
       settings.ui_texts = { ...(settings.ui_texts || {}), ocrLang: v };
       try { await invoke("set_ui_text", { key: "ocrLang", value: v }); } catch (e) { errToast(e); }
     },
@@ -1485,7 +1507,9 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app. F26 (pipette) sits with the
     // screenshot tool: both are capture tools on the composer bar.
-    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, "colorPicker", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax", "ocrUpscaleUnderPx", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax"], dropdowns: ["pickerFormat", "snipEditDefaultTool", "ocrLang", "rotateDefaultMode"], paths: ["screenshotDir"] },
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax"], dropdowns: ["pickerFormat", "snipEditDefaultTool", "ocrLang", "rotateDefaultMode"], paths: ["screenshotDir"],
+      // 122: opens #ocr-langs-modal -- same gate as the rest of OCR.
+      actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }] },
     // F12/F13 placeholders, from the grammar to where the app asks for them.
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
     // The editor: what it shows beside the text box. F14/F15 belong together — the
@@ -1666,6 +1690,7 @@ const EXPERT_TIPS = [
   "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim",
   "snipEditUndoMax", "snipEditSnap", "snipTextPlate", "snipEditDefaultTool",
   "ocr", "ocrUpscaleUnderPx", "ocrLang",
+  "ocrAutoPickLang", "ocrLangAutoUpdate", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "ocrLangCacheH",
   "trayRecent", "trayFavs", "trayRecentN", "trayFavN",
   "checkUpdateOnStart", "showUpdates", "updateCheckH", "importExport", "dimToolbar", "keyboardNav", "allowMultipleInstances",
   "headerSeparators", "floating",
@@ -2002,6 +2027,12 @@ function dropdownRow(key) {
   sel.value = cfg.get();
   sel.addEventListener("change", async () => {
     await cfg.set(sel.value);
+    // A setter may decline the picked value instead of persisting it (122:
+    // ocrLang's "Manage languages..." entry opens a dialog and leaves the actual
+    // language untouched) -- resync so the select never keeps showing a choice
+    // that never took effect. A no-op for every other dropdown, whose get()
+    // already reports back exactly what set() just wrote.
+    sel.value = cfg.get();
     if (expertOnlyChanged) renderExpert(); // 67
   });
   attachSelectPicker(sel); // themed popup instead of the native OS dropdown
@@ -7038,6 +7069,154 @@ async function emptyTrashAll() {
 }
 EXPERT_ACTIONS["trash-open"] = openTrash;
 
+// ---- 122: OCR language pack management (#ocr-langs-modal) ----
+// ocr_capabilities() lists every OCR-capable language Windows knows about
+// (installed AND not-installed) with size/version straight from Windows -- a
+// different list from ocrLangsCache above, which is only the WinRT-installed set
+// used to actually pick a recognition language.
+let ocrCapsCache = [];
+let ocrCapsChecked = 0; // unix seconds of the last successful ocr_capabilities() call, 0 = never
+let ocrInstallTimers = {}; // capability name -> setInterval id, while its install is polled
+let ocrInstallErrors = {}; // capability name -> true (UAC declined) or the backend's own error string
+function openOcrLangsModal() {
+  $("ocr-langs-modal").classList.remove("hidden");
+  loadOcrCaps(false);
+}
+function closeOcrLangsModal() {
+  $("ocr-langs-modal").classList.add("hidden");
+  // Installs are OS processes and keep running regardless -- only the polling
+  // loop (and the DOM it repaints) needs to stop while nobody is looking.
+  for (const id of Object.values(ocrInstallTimers)) clearInterval(id);
+  ocrInstallTimers = {};
+}
+async function loadOcrCaps(force) {
+  const body = $("ocr-langs-body");
+  if (!ocrCapsCache.length || force) {
+    body.innerHTML = "";
+    const loading = document.createElement("div");
+    loading.className = "hint";
+    loading.textContent = t("ocrLangsScanning");
+    body.appendChild(loading);
+  }
+  try {
+    ocrCapsCache = await invoke("ocr_capabilities", { force: !!force });
+    ocrCapsChecked = Math.floor(Date.now() / 1000);
+  } catch (e) { body.innerHTML = ""; errToast(e); return; }
+  renderOcrLangsBody();
+}
+function renderOcrLangsBody() {
+  const body = $("ocr-langs-body");
+  body.innerHTML = "";
+  for (const cap of ocrCapsCache) body.appendChild(ocrLangRow(cap));
+  $("ocr-langs-checked").textContent = ocrCapsChecked
+    ? t("ocrLangsLastChecked").replace("{t}", fmtCopyTime(ocrCapsChecked))
+    : t("ocrLangsNeverChecked");
+}
+function ocrLangRow(cap) {
+  const row = document.createElement("div");
+  row.className = "clip-row ocr-lang-row";
+  const head = document.createElement("span");
+  head.className = "clip-time";
+  head.textContent = `${cap.label} · ${cap.tag} · ${cap.version || "—"}`;
+  const installed = cap.state === "Installed";
+  const meta = document.createElement("div");
+  meta.className = "clip-preview";
+  const size = installed ? cap.install_size : cap.download_size;
+  // Windows does not always report a size -- never guess one, show the dash instead.
+  meta.textContent = `${installed ? t("ocrLangsInstalled") : cap.state} · ${size == null ? "—" : fmtBytes(size)}`;
+  const actions = document.createElement("div");
+  actions.className = "clip-actions";
+  row.append(head, meta, actions);
+  if (installed) {
+    const check = document.createElement("span");
+    check.className = "ocr-lang-check";
+    check.textContent = "✓";
+    check.title = t("ocrLangsInstalled");
+    actions.appendChild(check);
+    return row;
+  }
+  const note = ocrInstallErrors[cap.name];
+  if (note) {
+    const hint = document.createElement("span");
+    hint.className = "ocr-lang-note";
+    // A string is the backend's own reason (a real install failure); `true` is
+    // the calm "you declined the rights prompt" case, which gets its own text.
+    hint.textContent = typeof note === "string" ? note : t("ocrElevateCancelled");
+    actions.appendChild(hint);
+  }
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "ghost-btn";
+  const busy = !!ocrInstallTimers[cap.name];
+  btn.disabled = busy;
+  // The size sits INSIDE the button label on purpose -- nobody should start a
+  // download blind (Ben, 14.08.).
+  btn.textContent = busy
+    ? t("ocrLangsInstalling")
+    : t("ocrLangsDownloadBtn").replace("{size}", cap.download_size == null ? "—" : fmtBytes(cap.download_size));
+  btn.addEventListener("click", () => startOcrInstall(cap));
+  actions.appendChild(btn);
+  return row;
+}
+// Every path that can lead to an elevated install goes through here first (1a,
+// Ben 14.08.): explain the language, its size and that Windows will ask for
+// admin rights once, BEFORE that prompt ever appears. No exceptions.
+async function startOcrInstall(cap) {
+  const size = cap.download_size == null ? "—" : fmtBytes(cap.download_size);
+  const ok = await confirmDialog({
+    title: t("ocrElevateTitle"),
+    message: t("ocrElevateInfo").replace("{lang}", cap.label).replace("{size}", size),
+    confirmLabel: t("ocrElevateInstall"),
+    danger: false,
+  });
+  if (!ok) return;
+  delete ocrInstallErrors[cap.name];
+  try {
+    await invoke("ocr_install_language", { name: cap.name });
+  } catch (e) {
+    // A declined UAC prompt is not an error (1a/2, Ben 14.08.): a calm inline
+    // note on the row, no error tone, the row stays "not installed".
+    if (String(e) === "ocr-elevate-cancelled") { ocrInstallErrors[cap.name] = true; renderOcrLangsBody(); }
+    else errToast(e);
+    return;
+  }
+  renderOcrLangsBody(); // shows the row's busy/disabled state right away
+  pollOcrInstall(cap.name);
+}
+// ocr_install_language() only resolves once the elevated process has LAUNCHED,
+// not once it finished -- poll the result file ourselves, a few seconds apart,
+// until it stops being null.
+function pollOcrInstall(name) {
+  if (ocrInstallTimers[name]) return;
+  ocrInstallTimers[name] = setInterval(async () => {
+    let res;
+    try { res = await invoke("ocr_install_result", { name }); } catch (_) { return; }
+    if (res == null) return; // still running
+    clearInterval(ocrInstallTimers[name]);
+    delete ocrInstallTimers[name];
+    if (res.ok) {
+      // Clear both caches so the new pack is selectable immediately, no restart.
+      invoke("ocr_languages").then((langs) => { ocrLangsCache = langs || []; }).catch(() => {});
+      await loadOcrCaps(true); // force -- also drops the backend's own cache
+      return;
+    }
+    // A real failure (e.g. Windows Home / policy blocked) -- the reason belongs
+    // in the row, never a silent failure.
+    ocrInstallErrors[name] = res.error || true;
+    renderOcrLangsBody();
+  }, 3000);
+}
+EXPERT_ACTIONS["ocr-langs-open"] = openOcrLangsModal;
+// "ocr-no-language" always has the same fix: open this dialog. Used at every
+// call site that would otherwise show that error as a bare errToast().
+function ocrErrToast(err) {
+  if (String(err) === "ocr-no-language") {
+    toast(t("ocrNoLanguageMsg"), { label: t("ocrLangsManage"), onClick: openOcrLangsModal });
+    return;
+  }
+  errToast(err);
+}
+
 // ---- F2 backups & restore ----
 function fmtBytes(n) {
   if (n < 1024) return `${n} B`;
@@ -11898,7 +12077,12 @@ function bind() {
 
   // ---- 121: OCR (text recognition, off by default -- flag "ocr") ----
   const ocrModal = $("ocr-modal");
-  const ocrSettings = () => ({ upscaleUnderPx: Math.round(val("ocrUpscaleUnderPx")), joinLines: flag("ocrJoinLines") });
+  const ocrSettings = () => ({
+    upscaleUnderPx: Math.round(val("ocrUpscaleUnderPx")),
+    joinLines: flag("ocrJoinLines"),
+    lang: txt("ocrLang") || "auto",
+    autoPickLang: flag("ocrAutoPickLang"),
+  });
   const closeOcrModal = () => ocrModal.classList.add("hidden");
   // Shared by all three entry points (snip-modal, composer screenshot, composer
   // file) and the ocr-captured event below -- one place decides "empty -> toast
@@ -11920,7 +12104,7 @@ function bind() {
     if (!pendingSnip) return;
     try {
       showOcrResult(await invoke("ocr_image_data", { dataUrl: pendingSnip, ...ocrSettings() }));
-    } catch (err) { errToast(err); }
+    } catch (err) { ocrErrToast(err); }
   });
   // (b) standalone composer button -- small menu (Screenshot / From image file).
   $("ocr-btn").addEventListener("click", () => {
@@ -11942,7 +12126,7 @@ function bind() {
           if (!path) return;
           try {
             showOcrResult(await invoke("ocr_image", { path, ...ocrSettings() }));
-          } catch (err) { errToast(err); }
+          } catch (err) { ocrErrToast(err); }
         },
       },
     ], r.left, r.bottom + 4);
@@ -11951,6 +12135,28 @@ function bind() {
   // separate event from "snip-captured" so the normal screenshot flow above is
   // completely unaffected by OCR mode being armed.
   listen("ocr-captured", (e) => showOcrResult(e.payload));
+  // 122: background thread found one or more installed language packs that need
+  // updating (a version change, or Windows silently dropped one after a feature
+  // update). Purely a notice -- the backend never auto-installs on its own, so a
+  // toast the user ignores until it auto-hides is a complete no-op, not a missed
+  // action. Cancel snoozes the next automatic check by ocrLangSnoozeH.
+  listen("ocr-lang-update-due", (e) => {
+    const due = e.payload || [];
+    if (!due.length) return;
+    const msg = due.length === 1
+      ? t("ocrLangUpdateOne").replace("{lang}", due[0].label)
+      : t("ocrLangUpdateMany").replace("{n}", String(due.length));
+    toast(
+      msg,
+      { label: t("cancel"), onClick: () => invoke("ocr_lang_snooze").catch(() => {}) },
+      "", null,
+      Math.round(val("ocrLangNoticeMs")),
+    );
+  });
+  // 122: management dialog chrome.
+  $("ocr-langs-close-x").addEventListener("click", closeOcrLangsModal);
+  $("ocr-langs-modal").addEventListener("pointerdown", (e) => { if (e.target === $("ocr-langs-modal")) closeOcrLangsModal(); });
+  $("ocr-langs-recheck").addEventListener("click", () => loadOcrCaps(true));
   $("ocr-modal-copy").addEventListener("click", () => {
     const text = $("ocr-result-text").value;
     invoke("copy_text", { text }).then(() => toast(t("copied"))).catch((err) => errToast(err));

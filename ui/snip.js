@@ -70,12 +70,14 @@ const SEED = {
     failed: "This window can't be captured. Try a region or another window.",
     pick: "Click to copy the color · scroll or +/- to zoom · arrow keys move one pixel · Esc to cancel",
     pickFailed: "Couldn't copy the color. Try picking again.",
+    ocrNoLang: "No OCR language is installed. Open Manage languages in the expert menu, then try again.",
   },
   de: {
     hint: "Bereich ziehen · Fenster anklicken · Esc zum Abbrechen",
     failed: "Dieses Fenster kann nicht aufgenommen werden. Versuche einen Bereich oder ein anderes Fenster.",
     pick: "Klicken kopiert die Farbe · Scrollen oder +/- zoomt · Pfeiltasten bewegen ein Pixel · Esc zum Abbrechen",
     pickFailed: "Farbe konnte nicht kopiert werden. Bitte erneut versuchen.",
+    ocrNoLang: "Es ist keine OCR-Sprache installiert. Öffne Sprachen verwalten im Expertenmenü und versuche es erneut.",
   },
 };
 const T = { ...((navigator.language || "en").toLowerCase().startsWith("de") ? SEED.de : SEED.en) };
@@ -177,6 +179,7 @@ async function beginSession() {
       T.failed = d.snipFailed ?? I18N.en.snipFailed ?? T.failed;
       T.pick = d.pickHint ?? I18N.en.pickHint ?? T.pick;
       T.pickFailed = d.pickFailed ?? I18N.en.pickFailed ?? T.pickFailed;
+      T.ocrNoLang = d.snipOcrNoLang ?? I18N.en.snipOcrNoLang ?? T.ocrNoLang;
       if (!hint.classList.contains("error")) hint.textContent = pickMode ? T.pick : T.hint;
     })
     .catch(() => {});
@@ -652,9 +655,13 @@ window.addEventListener("mouseup", async (e) => {
       width: Math.round(b.x - a.x),
       height: Math.round(b.y - a.y),
     });
-  } catch {
+  } catch (err) {
     busy = false;
-    showError();
+    // 122: a bare "something failed" is exactly wrong for this one cause -- no
+    // OCR language installed at all. The overlay itself has no reach into the
+    // main window's #ocr-langs-modal, so this stays a specific, honest message
+    // rather than a generic retry hint; the overlay stays open either way.
+    showError(String(err) === "ocr-no-language" ? T.ocrNoLang : undefined);
   }
 });
 

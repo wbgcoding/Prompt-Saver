@@ -2844,6 +2844,15 @@ input[type="password"]::-ms-clear { display: none; }
 .clip-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .clip-actions .ghost-btn { padding: 3px 10px; font-size: 12px; }
 
+/* 122: OCR language pack management dialog (#ocr-langs-modal) -- rows reuse the
+   .clip-row/.clip-list list chrome above, these three add just the checkmark,
+   the disabled-while-installing button and the declined/failed inline note. */
+.ocr-lang-row .ghost-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ocr-lang-check { color: var(--accent); font-weight: 700; align-self: center; }
+.ocr-lang-note { color: var(--muted); font-size: 11px; align-self: center; }
+.ocr-langs-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.ocr-langs-foot .modal-hint { margin: 0; }
+
 /* Prompt-variable fill dialog */
 .modal-text-bar { display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
 .modal-vars-hint { flex: 1; min-width: 0; margin: 0; }
