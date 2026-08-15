@@ -75,6 +75,7 @@ const modal = {
   rotateMode: $("modal-rotate-mode"),
   rotateNext: $("modal-rotate-next"),
   rotateReset: $("modal-rotate-reset"),
+  rotateAuto: $("modal-rotate-auto"), // 90-94
 };
 
 let DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT; // 87: expert-tunable
@@ -3686,6 +3687,19 @@ function applyRotateState(tile, id) {
   }
 }
 
+// 90-94: ids with a live auto-advance session, kept by the backend's rotation-auto
+// event (fired on arm/end from clipwatch — see mod clipwatch in lib.rs, 91).
+const autoActiveIds = new Set();
+
+function applyAutoBadge(tile, id) {
+  const badge = tile.querySelector(".tile-rotate-badge");
+  if (!badge) return;
+  const active = autoActiveIds.has(id);
+  badge.classList.toggle("is-auto", active);
+  if (active) badge.title = t("rotateAutoActive");
+  else badge.removeAttribute("title");
+}
+
 function primeRotateState(id) {
   if (rotateState.has(id)) return;
   invoke("rotation_peek", { id }).then((r) => {
@@ -3824,6 +3838,7 @@ function buildTile(p) {
     const rbadge = document.createElement("span");
     rbadge.className = "tile-rotate-badge";
     tile.appendChild(rbadge);
+    applyAutoBadge(tile, p.id); // 90-94: survives a re-render mid-session
   }
 
   // The actions menu (⋯ button + right-click) can be switched off entirely.
@@ -4697,6 +4712,16 @@ function openCtx(id, x, y) {
   ctxEl.querySelector('[data-act="hide"]').classList.toggle("hidden", favView);
   // 51: nothing to place this prompt into besides the view it is already on.
   ctxEl.querySelector('[data-act="views"]').classList.toggle("hidden", !optFlag("multiViewPrompt") || settings.views.length < 2);
+  // 92: only visible when this prompt actually rotates and both auto gates are on —
+  // grey-and-disabled would still be a control the user cannot act on.
+  const rmenuBtn = ctxEl.querySelector('[data-act="rotateAutoMenu"]');
+  const rp = prompts.find((x) => x.id === id);
+  const rotateMenuEligible = !!rp && (rp.variants || []).length > 0 && flag("rotatingPrompts") && flag("rotateAuto");
+  rmenuBtn.classList.toggle("hidden", !rotateMenuEligible);
+  if (rotateMenuEligible) {
+    rmenuBtn.setAttribute("aria-checked", String(!!rp.rotate_auto));
+    rmenuBtn.querySelector(".tb-check").innerHTML = rp.rotate_auto ? TB_CHECK : "";
+  }
   placePopoverAt(ctxEl, x, y);
 }
 function closeCtx() {
@@ -4932,7 +4957,7 @@ function modalSnapshot() {
     !!modalState.showImage, modalState.filePath || "", modalState.iconPath || "", modal.fav.classList.contains("active"),
     modalState.tags || [], modal.notesText.value, modalState.hotkey || "", modalState.hotkeyPaste || "",
     // 32: the entry list + mode are edited entirely in memory until Save.
-    modalState.rotateEntries || [], modalState.rotateMode || "",
+    modalState.rotateEntries || [], modalState.rotateMode || "", !!modalState.rotateAuto,
   ]);
 }
 
@@ -5646,13 +5671,14 @@ function maybeCloseOnCopy() {
   try { window.__TAURI__?.window?.getCurrentWindow?.()?.hide?.().catch?.(() => {}); } catch { /* no-op */ }
 }
 
-function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", pdfPage = 0, iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", variants = [], rotateMode = "", title, targetCell }) {
+function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", pdfPage = 0, iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", variants = [], rotateMode = "", rotateAuto = false, title, targetCell }) {
   modalState = {
     mode, id, color, image, showImage, copyImage, filePath, pdfPage, iconPath, tags: [...tags], hotkey, hotkeyPaste, targetCell,
     // 32: the FULL entry list (entry 0 = what would otherwise be modal.text's value)
     // while rotation is active, empty while it is not.
     rotateEntries: variants.length ? [text, ...variants] : [],
     rotateMode,
+    rotateAuto: !!rotateAuto, // 90-94
   };
   modal.title.textContent = title;
   modal.fav.classList.toggle("active", !!favorite);
@@ -5868,7 +5894,7 @@ async function commitPromptHotkeyDirect(id, accel) {
     caption: p.caption, captionSize: p.caption_size, font: p.font, fontSize: p.font_size,
     favorite: p.favorite, tags: p.tags, notes: p.notes,
     hotkey: accel, hotkeyPaste: accel ? p.hotkey_paste : "",
-    variants: p.variants || [], rotateMode: p.rotate_mode || "",
+    variants: p.variants || [], rotateMode: p.rotate_mode || "", rotateAuto: p.rotate_auto || false,
   });
   if (!saved) throw "save-failed";
   p.hotkey = saved.hotkey;
@@ -5876,6 +5902,32 @@ async function commitPromptHotkeyDirect(id, accel) {
   if (accel && !saved.hotkey) toast(t("promptHotkeyFail")); // OS refused between check and save
   renderHotkeysList();
   return saved.hotkey;
+}
+
+// 92: tile-menu checkmark entry — same "write straight through with everything
+// else unchanged" shape as commitPromptHotkeyDirect. Turning it off also ends a
+// session that happens to be running right now, instead of waiting for the next
+// paste to notice the prompt no longer qualifies.
+async function toggleRotateAutoDirect(id) {
+  const p = prompts.find((x) => x.id === id);
+  if (!p) return;
+  const nextAuto = !p.rotate_auto;
+  try {
+    const saved = await invoke("update_prompt", {
+      id: p.id, name: p.name, text: p.text, color: p.color,
+      image: p.image, showImage: p.show_image, copyImage: p.copy_image,
+      filePath: p.file_path, pdfPage: p.pdf_page, iconPath: p.icon_path,
+      caption: p.caption, captionSize: p.caption_size, font: p.font, fontSize: p.font_size,
+      favorite: p.favorite, tags: p.tags, notes: p.notes,
+      hotkey: p.hotkey || "", hotkeyPaste: p.hotkey_paste || "",
+      variants: p.variants || [], rotateMode: p.rotate_mode || "", rotateAuto: nextAuto,
+    });
+    if (!saved) throw "save-failed";
+    p.rotate_auto = saved.rotate_auto;
+    if (!p.rotate_auto) await invoke("rotation_end_auto", { id }).catch(() => {});
+  } catch (err) {
+    toast(String(err) === "save-failed" ? t("persistFailed") : String(err));
+  }
 }
 
 function openHotkeysModal() {
@@ -7444,6 +7496,25 @@ function renderRotateUi() {
   renderRotateEntries();
   modal.rotateMode.value = modalState.rotateMode === "random" ? "random" : "order";
   refreshRotateNext();
+  renderRotateAutoBtn();
+}
+
+// 90-94: mirrors the backend's auto_eligible (90) minus the two feature gates —
+// rotatingPrompts already gates this whole row (rotationUiOn), and rotateAuto
+// (the feature switch, 93) is checked here so the button disables live if it
+// gets flipped off with the editor open.
+function rotateAutoEligibleHere() {
+  return flag("rotateAuto") && !modalState.image && !modalState.filePath;
+}
+
+function renderRotateAutoBtn() {
+  const eligible = rotateAutoEligibleHere();
+  modal.rotateAuto.disabled = !eligible;
+  const on = eligible && !!modalState.rotateAuto;
+  modal.rotateAuto.classList.toggle("active", on);
+  modal.rotateAuto.setAttribute("aria-pressed", String(on));
+  const hasVars = (modalState.rotateEntries || []).some((entry) => extractVars(entry).length);
+  modal.rotateAuto.title = !eligible ? t("rotateAutoUnavailable") : hasVars ? t("rotateAutoVarsHint") : t("rotateAutoTip");
 }
 
 function renderRotateEntries() {
@@ -7739,6 +7810,7 @@ async function confirmModal() {
   const rotateFilled = (rotating || hasVariants) ? rawTexts.map((s) => s.trim()).filter(Boolean) : [];
   const variants = rotateFilled.slice(1);
   const rotateMode = variants.length ? (modalState.rotateMode === "random" ? "random" : "") : "";
+  const rotateAuto = variants.length ? !!modalState.rotateAuto : false; // 90-94
 
   const color = modalState.color || "";
   const image = modalState.image || "";
@@ -7771,16 +7843,16 @@ async function confirmModal() {
     if (modalState.mode === "create") {
       const text = (rotating || hasVariants) ? (rotateFilled[0] || "") : modal.text.value.trim();
       if (!text) { closeModal(); return; }
-      saved = await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode });
+      saved = await invoke("add_prompt", { name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode, rotateAuto });
       inputEl.value = "";
       autoGrow(inputEl);
       saveBtn.disabled = true;
     } else if (modalState.mode === "image-create" || modalState.mode === "file-create") {
       // The name doubles as the copy text when shown as text.
-      saved = await invoke("add_prompt", { name, text: name, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants: [], rotateMode: "" });
+      saved = await invoke("add_prompt", { name, text: name, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants: [], rotateMode: "", rotateAuto: false });
     } else {
       const text = copyImage || filePath ? name : ((rotating || hasVariants) ? (rotateFilled[0] || "") : modal.text.value);
-      saved = await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode });
+      saved = await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode, rotateAuto });
     }
   } catch (err) {
     const errStr = String(err);
@@ -7853,6 +7925,7 @@ function promptToModal(p) {
     hotkeyPaste: p.hotkey_paste || "",
     variants: p.variants || [],
     rotateMode: p.rotate_mode || "",
+    rotateAuto: p.rotate_auto || false, // 90-94
     title: p.file_path
       ? t(kind === "video" ? "videoEditTitle" : kind ? "imageEditTitle" : "fileEditTitle")
       : p.copy_image ? t("imageEditTitle") : t("editModalTitle"),
@@ -10228,6 +10301,11 @@ function bind() {
   modal.rotateMode.addEventListener("change", () => {
     modalState.rotateMode = modal.rotateMode.value === "random" ? "random" : "";
   });
+  modal.rotateAuto.addEventListener("click", () => {
+    if (modal.rotateAuto.disabled) return;
+    modalState.rotateAuto = !modalState.rotateAuto;
+    renderRotateAutoBtn();
+  });
   modal.rotateReset.addEventListener("click", async () => {
     if (!modalState?.id) return;
     await invoke("rotation_reset", { id: modalState.id });
@@ -10832,6 +10910,18 @@ function bind() {
     rotateState.set(id, { index, pos, total, text });
     document.querySelectorAll(`.tile[data-id="${CSS.escape(id)}"]`).forEach((tile) => applyRotateState(tile, id));
   });
+  // 90-94: auto-advance session start/end — drives the badge's is-auto accent and,
+  // on start only, a toast (no toast on end — that would just be noise).
+  listen("rotation-auto", (e) => {
+    const { id, active } = e.payload || {};
+    if (!id) return;
+    if (active) autoActiveIds.add(id); else autoActiveIds.delete(id);
+    document.querySelectorAll(`.tile[data-id="${CSS.escape(id)}"]`).forEach((tile) => applyAutoBadge(tile, id));
+    if (active && flag("copyBubble")) toast(t("rotateAutoStarted"));
+  });
+  listen("rotation-auto-blocked", () => {
+    toast(t("rotateAutoBlocked"));
+  });
   // Clicking the app logo opens the project's GitHub page (drag still moves the window).
   $("app-logo")?.addEventListener("click", () => invoke("open_repo").catch((e) => toast(String(e))));
 
@@ -11123,6 +11213,8 @@ function bind() {
       await renderGrid(true);
     } else if (act === "pin") {
       await invoke("toggle_floating", { id });
+    } else if (act === "rotateAutoMenu") {
+      await toggleRotateAutoDirect(id);
     }
   });
 

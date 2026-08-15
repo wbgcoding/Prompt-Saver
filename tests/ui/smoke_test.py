@@ -2959,20 +2959,28 @@ PROBE = """
           if (lenBox && lenBox.getBoundingClientRect().height > 0) {
             out.errors.push('the chars/words readout is still shown while rotation is on');
           }
-          // 33: the order/random control sits in the "+ Entry" row, pushed right,
-          // with the reset ("from the start") to its left — not on a row of its own.
+          // 33/90-94: the order/random control sits in the "+ Entry" row, pushed
+          // right, with the reset ("from the start") to its left and the Auto
+          // toggle (90-94) flush right of the mode control — not on a row of its own.
           const addBtn = document.getElementById('modal-rotate-add');
           const modeSel = document.getElementById('modal-rotate-mode');
           const resetBtn = document.getElementById('modal-rotate-reset');
+          const autoBtn = document.getElementById('modal-rotate-auto');
           if (addBtn && modeSel && ctrlRow) {
             const a = addBtn.getBoundingClientRect(), m = modeSel.getBoundingClientRect();
             const r = ctrlRow.getBoundingClientRect();
             if (Math.abs(a.top - m.top) > 6) out.errors.push('the mode control is not on the "+ Entry" row');
             if (m.left <= a.right) out.errors.push('the mode control is not right of "+ Entry"');
-            if (r.right - m.right > 12) out.errors.push('the mode control is not flush right in its row');
             if (resetBtn && !resetBtn.classList.contains('hidden')) {
               const rs = resetBtn.getBoundingClientRect();
               if (rs.right > m.left + 1) out.errors.push('"from the start" is not left of the mode control');
+            }
+            if (autoBtn) {
+              const au = autoBtn.getBoundingClientRect();
+              if (au.left < m.right - 1) out.errors.push('the Auto toggle is not right of the mode control');
+              if (r.right - au.right > 12) out.errors.push('the Auto toggle is not flush right in its row');
+            } else if (r.right - m.right > 12) {
+              out.errors.push('the mode control is not flush right in its row');
             }
           }
           const list = document.getElementById('modal-rotate-list');

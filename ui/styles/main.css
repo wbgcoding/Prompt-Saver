@@ -800,6 +800,11 @@ body.drag-active .cell.drag-over {
   line-height: 1.5;
   pointer-events: none;
 }
+/* 90-94: accent while an auto-advance session is running for this tile. */
+.tile-rotate-badge.is-auto {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
 
 /* 11: bulk-selection checkbox — same corner as the type badge, so the two never
    compete: hovering (or once ANY tile is checked) swaps the badge out for it. */
@@ -2880,6 +2885,13 @@ body.drag-over::after {
   border-color: var(--accent);
   color: var(--accent-fg);
 }
+/* 90-94: the rotate-mode row's Auto toggle. */
+.modal-rotate-auto.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+.modal-rotate-auto:disabled { opacity: 0.4; pointer-events: none; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field > span { color: var(--muted); font-size: 12px; }
 /* A real basis, not 0: with `flex: 1` all three buttons report a zero base size, so
@@ -3353,6 +3365,7 @@ body.drag-over::after {
   cursor: pointer;
 }
 .ctx button:hover { background: var(--surface-2); }
+.ctx button[data-act="rotateAutoMenu"] { display: flex; align-items: center; gap: 8px; }
 .ctx button.danger:hover { color: var(--danger); }
 .ctx button.confirm,
 .ctx button.confirm:hover { background: var(--danger); color: #fff; }

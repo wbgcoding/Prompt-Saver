@@ -275,6 +275,10 @@
               <option value="order" data-i18n="optRotateOrder">In order</option>
               <option value="random" data-i18n="optRotateRandom">Random</option>
             </select>
+            <!-- 90-94: auto-advance on every real paste, not just on copy. Disabled
+                 (with a reason in the tooltip) for image/file prompts and single-entry
+                 prompts — never a silent no-op button. -->
+            <button type="button" id="modal-rotate-auto" class="ghost-btn modal-rotate-auto" aria-pressed="false" data-i18n="rotateAuto" data-i18n-title="rotateAutoTip">Auto</button>
           </div>
         </div>
       </div>
@@ -1010,6 +1014,13 @@
     <button data-act="views" role="menuitem" data-i18n="alsoShowIn">Also show in…</button>
     <!-- Label set in openCtx() -- it names the action ("Show"/"Remove"), not a state-less "Toggle". -->
     <button data-act="pin" role="menuitem"></button>
+    <!-- 90-94: only shown when this prompt actually rotates AND both auto gates are
+         on (openCtx toggles .hidden) — never a greyed-out entry for a case where it
+         cannot do anything. -->
+    <button data-act="rotateAutoMenu" role="menuitemcheckbox" class="hidden">
+      <span class="tb-check"></span>
+      <span data-i18n="rotateAutoMenu">Auto-advance on paste</span>
+    </button>
     <button data-act="delete" role="menuitem" class="danger" data-i18n="delete">Delete</button>
   </div>
 
