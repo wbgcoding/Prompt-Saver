@@ -443,6 +443,9 @@ until you turn it on.
 - **The backup-count and retention rows in the backup dialog had no undo
   arrow at all**, unlike every other expert setting, and the color palette's
   reset button showed even when every colour was still the default.
+- **Two expert-menu dropdowns paired side by side could look inconsistent**
+  when one's label wrapped to a second line and the other's did not — the
+  label now always sits above the field in that two-column layout instead.
 
 ### Removed
 

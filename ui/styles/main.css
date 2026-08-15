@@ -3255,6 +3255,18 @@ body.drag-over::after {
    translation drops back to one per line instead of squeezing the labels. */
 .expert-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 14px; align-items: stretch; }
 .expert-cols > .field { min-width: 0; margin: 0; }
+/* 101: a two-column dropdown row is too narrow for label-beside-field -- a short
+   label (copySize) fit, a long one (tagFilterMode) wrapped and looked different
+   from its neighbour. Always stack here; the full-width row above keeps label
+   left of field per CLAUDE.md. */
+.expert-cols .expert-dropdown-row { flex-direction: column; align-items: stretch; }
+.expert-cols .expert-dropdown-row .expert-select,
+.expert-cols .expert-dropdown-row .expert-num {
+  align-self: stretch; width: 100%;
+  /* the base rule's flex-basis is a WIDTH for the row's normal (row) axis; stacked
+     into a column here, the same basis would pin the control's HEIGHT instead. */
+  flex: 0 0 auto;
+}
 /* A setting that hangs off a toggle is stepped in, so a feature and its parameters
    read as one block. Indentation alone carries it — a rule down the left edge only
    added noise. Each further level steps in again, so a parameter unlocked by an

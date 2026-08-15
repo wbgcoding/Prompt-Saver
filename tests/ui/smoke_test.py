@@ -2582,6 +2582,19 @@ PROBE = """
       out.tabs.push(tb.textContent.trim() + ':' +
         document.querySelectorAll('#expert-flags .expert-group').length);
       layoutScan('expert tab ' + tb.textContent.trim());
+      // 101: paired two-up, a dropdown row stacks its label above the field (a
+      // 240px column has no room for label-beside-field) -- checked wherever the
+      // grid actually produces a pair, which needs no fixed pixel width of its own.
+      for (const row of document.querySelectorAll('.expert-cols > .expert-dropdown-row')) {
+        const label = row.querySelector('.value-head');
+        const field = row.querySelector('.expert-select');
+        if (!label || !field) continue;
+        const lb = label.getBoundingClientRect();
+        const fb = field.getBoundingClientRect();
+        if (fb.top < lb.bottom - 1) {
+          out.errors.push('101: paired dropdown row label is not above its field in ' + tb.textContent.trim());
+        }
+      }
     }
     mustReach('expert menu', '#expert-tabs-bar .expert-tab');
     // P69: a default-off feature gets a small dot badge instead of a "(Default
