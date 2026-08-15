@@ -92,7 +92,8 @@ until you turn it on.
   prompt everywhere: editing it in one view updates it in all of them.
 - **Restore data and settings separately** — restoring a backup now offers two
   checkboxes instead of an all-or-nothing swap: bring back your prompts
-  without touching your current setup, or the other way around.
+  without touching your current setup, or the other way around. Importing a
+  `.psb`/`.json` backup file gets the same choice.
 - **Rotating prompts** — a text prompt can hold a list of texts instead of one;
   each copy serves the next entry, in order or shuffled, and a small badge on
   the tile shows the position. The editor turns the text field into a numbered

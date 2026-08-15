@@ -10208,13 +10208,26 @@ async function runExportAll() {
 async function runImportAll() {
   const path = await withDialog(() => invoke("pick_backup_file")).catch(() => null);
   if (!path) return;
+  // 107: same two checkboxes as restoreBackup, both preselected -- the dialog
+  // itself refuses zero checked.
+  const ok = await confirmDialog({
+    title: t("backupImport"), message: t("importAllConfirm"), confirmLabel: t("backupImport"),
+    checkboxes: [
+      { key: "data", label: t("backupRestoreData"), checked: true },
+      { key: "settings", label: t("backupRestoreSettings"), checked: true },
+    ],
+  });
+  if (!ok) return;
+  const dataOn = $("confirm-cb-data").checked;
+  const settingsOn = $("confirm-cb-settings").checked;
+  const scope = dataOn && settingsOn ? "all" : dataOn ? "data" : "settings";
   // The file stays picked while the password is retried, so a typo does not send
   // the user back through the file picker.
   let password = null;
   let asked = false;
   for (;;) {
     try {
-      const res = await invoke("import_all", { path, password });
+      const res = await invoke("import_all", { path, password, scope });
       await reloadEverything();
       let msg = t("importAllDone").replace("{f}", res.name).replace("{n}", res.count);
       // F20: a hotkey the restore could not keep is named, never silently dropped.

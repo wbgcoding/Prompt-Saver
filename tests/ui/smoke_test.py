@@ -3671,7 +3671,15 @@ PROBE = """
     // password with a new message, then accept the right one and confirm the result.
     const until = async (fn) => { for (let i = 0; i < 40 && !fn(); i++) await sleep(100); return fn(); };
     const pwShown = () => !document.getElementById('confirm-input-row').classList.contains('hidden');
+    const scopeShown = () => document.getElementById('confirm-cb-data') && !document.getElementById('confirm-modal').classList.contains('hidden');
     document.getElementById('import-all').click();
+    // 107: a scope-pick dialog (data/settings checkboxes, both preselected) now
+    // comes first -- confirm it before the password prompt can appear.
+    if (!await until(scopeShown)) {
+      out.errors.push('no scope-pick dialog before a full import');
+    } else {
+      await click('confirm-ok');
+    }
     if (!await until(pwShown)) {
       out.errors.push('no password prompt for a protected backup');
     } else {

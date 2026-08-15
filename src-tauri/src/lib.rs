@@ -11957,6 +11957,57 @@ async fn pick_backup_file(app: AppHandle) -> Option<String> {
         .map(|p| p.display().to_string())
 }
 
+// 107: pure scope-branching core of import_all -- split out so it is unit-testable
+// without an AppHandle/State (the async command below owns the save/rollback/
+// AppHandle-dependent side of the contract). Returns (prompt count, dropped
+// hotkeys, whether the backup's own backup-password was dropped in favour of
+// this machine's).
+fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_settings: bool) -> (usize, usize, bool) {
+    if want_data {
+        store.prompts = backup.prompts;
+        // A backup written by hand could miss ids; keep every prompt addressable.
+        for p in store.prompts.iter_mut() {
+            if p.id.is_empty() {
+                p.id = gen_id();
+            }
+        }
+        migrate_prompts(&mut store.prompts);
+        store.prompts_locked = false; // a full import supersedes any decrypt lock
+    }
+    // 40: the imported backupPw is DPAPI-sealed on a DIFFERENT machine — it
+    // decrypts to "" here, and a following export_all would then silently write
+    // UNPROTECTED with the fixed key, with nothing telling the user their
+    // password stopped applying. Keep THIS machine's own password across the
+    // import instead (reset_settings already does the identical rescue for the
+    // identical reason). Only meaningful once settings are actually touched.
+    let backup_pw_dropped = want_settings && backup.settings.ui_texts.contains_key(BACKUP_PW_KEY);
+    if want_settings {
+        let local_backup_pw = store.settings.ui_texts.get(BACKUP_PW_KEY).cloned();
+        store.settings = backup.settings;
+        // migrate() fills defaults and guarantees at least one view — without it a
+        // hand-edited backup with "views": [] makes active_view_mut index [0] panic
+        // on the next mutation (and poisons the Db mutex).
+        store.settings.migrate();
+        store.settings.ui_texts.remove(BACKUP_PW_KEY);
+        if let Some(pw) = local_backup_pw {
+            store.settings.ui_texts.insert(BACKUP_PW_KEY.to_string(), pw);
+        }
+        load_pick_history(&store.settings); // 19: restore brings its own history mirror
+    }
+    // F20: a colliding or unusable accelerator must not fail the restore — drop
+    // it and let the summary say so. Runs regardless of scope: an imported
+    // app-level hotkey can collide with untouched prompts, and imported prompts
+    // can collide with an untouched app-level hotkey.
+    let app_hotkey = store.settings.hotkey.clone();
+    let dropped = drop_colliding_hotkeys(&app_hotkey, &mut store.prompts);
+    // F25: folders index into prompts, so only re-normalize when prompts actually
+    // changed -- a settings-only import must not touch the current grid.
+    if want_data {
+        store.normalize_folders();
+    }
+    (store.prompts.len(), dropped, backup_pw_dropped)
+}
+
 // The file is picked separately so a wrong password can be retried on the SAME
 // file instead of sending the user back through the picker.
 #[tauri::command]
@@ -11965,6 +12016,10 @@ async fn import_all(
     state: State<'_, Db>,
     path: String,
     password: Option<String>,
+    // 107: "all" (default) | "data" | "settings" -- same three values and the same
+    // restore_selective-style "only touch/roll back what that scope owns" contract
+    // as restore_backup, just applied to a file import instead of a stored snapshot.
+    scope: String,
 ) -> Result<ImportSummary, String> {
     let path = PathBuf::from(path);
     check_import_size(&path, MAX_IMPORT_BYTES)?;
@@ -11981,6 +12036,8 @@ async fn import_all(
     };
     let backup: Backup =
         serde_json::from_str(&content).map_err(|_| format!("not a {} backup", brand::DISPLAY_NAME))?;
+    let want_data = scope != "settings";
+    let want_settings = scope != "data";
 
     let (settings, count, dropped_hotkeys, backup_pw_dropped) = {
         let mut store = lock(&state);
@@ -11990,44 +12047,16 @@ async fn import_all(
         let original_prompts = store.prompts.clone();
         let original_settings = store.settings.clone();
         let original_locked = store.prompts_locked;
-        // 40: the imported backupPw is DPAPI-sealed on a DIFFERENT machine — it
-        // decrypts to "" here, and a following export_all would then silently write
-        // UNPROTECTED with the fixed key, with nothing telling the user their
-        // password stopped applying. Keep THIS machine's own password across the
-        // import instead (reset_settings already does the identical rescue for the
-        // identical reason).
-        let local_backup_pw = original_settings.ui_texts.get(BACKUP_PW_KEY).cloned();
-        let backup_pw_dropped = backup.settings.ui_texts.contains_key(BACKUP_PW_KEY);
-        store.prompts = backup.prompts;
-        // A backup written by hand could miss ids; keep every prompt addressable.
-        for p in store.prompts.iter_mut() {
-            if p.id.is_empty() {
-                p.id = gen_id();
-            }
-        }
-        migrate_prompts(&mut store.prompts);
-        store.settings = backup.settings;
-        // migrate() fills defaults and guarantees at least one view — without it a
-        // hand-edited backup with "views": [] makes active_view_mut index [0] panic
-        // on the next mutation (and poisons the Db mutex).
-        store.settings.migrate();
-        store.settings.ui_texts.remove(BACKUP_PW_KEY);
-        if let Some(pw) = local_backup_pw {
-            store.settings.ui_texts.insert(BACKUP_PW_KEY.to_string(), pw);
-        }
-        load_pick_history(&store.settings); // 19: restore brings its own history mirror
-        store.prompts_locked = false; // a full import supersedes any decrypt lock
-        // F20: a colliding or unusable accelerator must not fail the restore — drop
-        // it and let the summary say so.
-        let app_hotkey = store.settings.hotkey.clone();
-        let dropped = drop_colliding_hotkeys(&app_hotkey, &mut store.prompts);
-        store.normalize_folders(); // F25: the restored folders must match the restored prompts
+        let (count, dropped, backup_pw_dropped) = apply_import(&mut store, backup, want_data, want_settings);
         // Rolled back independently, not as one combined check: if save_prompts
         // already landed the new prompts on disk, undoing them in memory here only
         // means the next unrelated save silently overwrites that disk state back to
-        // the pre-import prompts, discarding a write that actually succeeded.
-        let prompts_ok = save_prompts(&app, &store);
-        let settings_ok = save_settings(&app, &store.settings);
+        // the pre-import prompts, discarding a write that actually succeeded. A scope
+        // that never touched a side never writes it, so it trivially "succeeds" and
+        // that side's rollback branch below never fires -- same contract as
+        // restore_selective: only roll back what was actually written.
+        let prompts_ok = !want_data || save_prompts(&app, &store);
+        let settings_ok = !want_settings || save_settings(&app, &store.settings);
         if !prompts_ok || !settings_ok {
             if !prompts_ok {
                 store.prompts = original_prompts;
@@ -12038,7 +12067,7 @@ async fn import_all(
             store.prompts_locked = original_locked;
             return Err("save-failed".into());
         }
-        (store.settings.clone(), store.prompts.len(), dropped, backup_pw_dropped)
+        (store.settings.clone(), count, dropped, backup_pw_dropped)
     };
     // Re-apply the visible parts of the imported settings without a restart.
     push_theme(&app, &settings);
@@ -15246,6 +15275,72 @@ mod tests {
         assert_eq!(migrated, "1", "settings scope must never touch the migration marker");
         let _ = std::fs::remove_file(&target);
         let _ = std::fs::remove_file(&staged);
+    }
+
+    // ---- 107: import_all scope ----
+
+    fn test_prompt(id: &str) -> Prompt {
+        serde_json::from_str(&format!(r#"{{"id":"{id}","name":"N","text":"T"}}"#)).unwrap()
+    }
+
+    #[test]
+    fn import_all_data_scope_leaves_settings_untouched() {
+        let mut store = Store {
+            prompts: vec![test_prompt("live")],
+            trash: Vec::new(),
+            settings: Settings::default(),
+            prompts_locked: true, // must be cleared once data is actually replaced
+        };
+        store.settings.ui_texts.insert("marker".into(), "LIVE".into());
+        let mut backup_settings = Settings::default();
+        backup_settings.ui_texts.insert("marker".into(), "BACKUP".into());
+        let backup = Backup { prompts: vec![test_prompt("backed-up")], settings: backup_settings };
+
+        let (count, dropped, pw_dropped) = apply_import(&mut store, backup, true, false);
+
+        assert_eq!(store.prompts.len(), 1, "data scope must replace the prompts list");
+        assert_eq!(store.prompts[0].id, "backed-up");
+        assert_eq!(count, 1);
+        assert_eq!(dropped, 0);
+        assert!(!pw_dropped, "settings were never touched, so no backup password can have been dropped");
+        assert!(!store.prompts_locked, "a full data import supersedes any decrypt lock");
+        assert_eq!(
+            store.settings.ui_texts.get("marker").map(String::as_str),
+            Some("LIVE"),
+            "data scope must never touch settings"
+        );
+    }
+
+    #[test]
+    fn import_all_settings_scope_leaves_data_untouched() {
+        let mut store = Store {
+            prompts: vec![test_prompt("live")],
+            trash: Vec::new(),
+            settings: Settings::default(),
+            prompts_locked: false,
+        };
+        store.settings.ui_texts.insert("marker".into(), "LIVE".into());
+        let mut backup_settings = Settings::default();
+        backup_settings.ui_texts.insert("marker".into(), "BACKUP".into());
+        backup_settings.ui_texts.insert(BACKUP_PW_KEY.into(), "foreign-pw".into());
+        let backup = Backup { prompts: vec![test_prompt("backed-up")], settings: backup_settings };
+
+        let (count, dropped, pw_dropped) = apply_import(&mut store, backup, false, true);
+
+        assert_eq!(store.prompts.len(), 1, "settings scope must never touch prompts");
+        assert_eq!(store.prompts[0].id, "live");
+        assert_eq!(count, 1);
+        assert_eq!(dropped, 0);
+        assert!(pw_dropped, "the backup carried its own backup password, which must be reported as dropped");
+        assert_eq!(
+            store.settings.ui_texts.get("marker").map(String::as_str),
+            Some("BACKUP"),
+            "settings scope must apply the backup's settings"
+        );
+        assert!(
+            !store.settings.ui_texts.contains_key(BACKUP_PW_KEY),
+            "the foreign backup password must not survive — this machine had none to restore"
+        );
     }
 
     #[test]
