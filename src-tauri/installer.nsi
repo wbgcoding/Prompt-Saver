@@ -360,7 +360,14 @@ Function PageLeaveReinstall
   ${EndIf}
 
   reinst_uninstall:
-    HideWindow
+    ; 95: HideWindow/BringToFront used to bracket the ExecWait below -- the old
+    ; uninstaller runs with /S (no window of its own to overlap), so all that
+    ; did was make the whole installer vanish for as long as the uninstall
+    ; took, reading as "the installer closed" instead of "still working".
+    ; The window now just stays up and on top the entire time; the header
+    ; changes so it is visible that something is happening.
+    !insertmacro MUI_HEADER_TEXT "$(removingPrevious)" ""
+    DetailPrint "$(removingPrevious)"
     ClearErrors
 
     ${If} $WixMode = 1
@@ -368,15 +375,28 @@ Function PageLeaveReinstall
       ExecWait '$R1' $0
     ${Else}
       ReadRegStr $4 SHCTX "${MANUPRODUCTKEY}" ""
+      ${If} $4 == ""
+        ; 95: an empty product-location key must not turn into an empty _?=
+        ; suffix -- that lets the uninstaller's own ExecWait return instantly
+        ; while it is still deleting files in the background, so the fresh
+        ; install below can start writing into the same folder mid-delete.
+        ; Fall back to the uninstall key's own InstallLocation, then to this
+        ; installer's own target dir; if even that is somehow empty, skip the
+        ; automatic uninstall instead of running it blind with no directory.
+        ReadRegStr $4 SHCTX "${UNINSTKEY}" "InstallLocation"
+        ${IfThen} $4 == "" ${|} StrCpy $4 "$INSTDIR" ${|}
+      ${EndIf}
+      ${If} $4 == ""
+        StrCpy $0 0
+        Goto reinst_done
+      ${EndIf}
       ReadRegStr $R1 SHCTX "${UNINSTKEY}" "UninstallString"
       ${IfThen} $UpdateMode = 1 ${|} StrCpy $R1 "$R1 /UPDATE" ${|} ; append /UPDATE
       ${IfThen} $PassiveMode = 1 ${|} StrCpy $R1 "$R1 /P" ${|} ; append /P
       StrCpy $R1 "$R1 /S" ; silent: the auto-uninstall of the old version shows no window (data kept)
-      StrCpy $R1 "$R1 _?=$4" ; append uninstall directory
+      StrCpy $R1 "$R1 _?=$4" ; append uninstall directory -- forces ExecWait to actually wait
       ExecWait '$R1' $0
     ${EndIf}
-
-    BringToFront
 
     ${IfThen} ${Errors} ${|} StrCpy $0 2 ${|} ; ExecWait failed, set fake exit code
 
@@ -668,6 +688,30 @@ LangString dirTitle ${LANG_ROMANIAN} "Alegeți locația"
 LangString dirInfo ${LANG_ROMANIAN} "Selectați folderul de instalare:"
 LangString portableCheck ${LANG_ROMANIAN} "Instalare portabilă"
 LangString portableInfo ${LANG_ROMANIAN} "Modul portabil nu creează scurtături sau intrări de registru - aplicația este doar plasată în folderul ales."
+
+; 95: header shown while the previous version is silently removed during an
+; upgrade/reinstall (reinst_uninstall) -- the window itself stays visible and
+; on top the whole time now, this just says what it is waiting on.
+LangString removingPrevious ${LANG_ENGLISH} "Removing the previous version"
+LangString removingPrevious ${LANG_GERMAN} "Vorherige Version wird entfernt"
+LangString removingPrevious ${LANG_SPANISH} "Eliminando la versión anterior"
+LangString removingPrevious ${LANG_FRENCH} "Suppression de la version précédente"
+LangString removingPrevious ${LANG_ITALIAN} "Rimozione della versione precedente"
+LangString removingPrevious ${LANG_PORTUGUESEBR} "Removendo a versão anterior"
+LangString removingPrevious ${LANG_POLISH} "Usuwanie poprzedniej wersji"
+LangString removingPrevious ${LANG_RUSSIAN} "Удаление предыдущей версии"
+LangString removingPrevious ${LANG_SIMPCHINESE} "正在删除旧版本"
+LangString removingPrevious ${LANG_JAPANESE} "以前のバージョンを削除しています"
+LangString removingPrevious ${LANG_DUTCH} "Vorige versie wordt verwijderd"
+LangString removingPrevious ${LANG_TURKISH} "Önceki sürüm kaldırılıyor"
+LangString removingPrevious ${LANG_KOREAN} "이전 버전 제거 중"
+LangString removingPrevious ${LANG_HINDI} "पिछला संस्करण हटाया जा रहा है"
+LangString removingPrevious ${LANG_INDONESIAN} "Menghapus versi sebelumnya"
+LangString removingPrevious ${LANG_VIETNAMESE} "Đang gỡ bỏ phiên bản trước"
+LangString removingPrevious ${LANG_CZECH} "Odebírání předchozí verze"
+LangString removingPrevious ${LANG_UKRAINIAN} "Видалення попередньої версії"
+LangString removingPrevious ${LANG_SWEDISH} "Tar bort tidigare version"
+LangString removingPrevious ${LANG_ROMANIAN} "Se elimină versiunea anterioară"
 
 Function .onInit
   ${GetOptions} $CMDLINE "/P" $PassiveMode

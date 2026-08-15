@@ -280,6 +280,12 @@ until you turn it on.
 
 ### Fixed
 
+- **The installer appeared to close by itself when updating over an existing
+  install.** Upgrading or reinstalling silently removes the previous version
+  first; the window used to hide itself for as long as that took instead of
+  staying visible with a status line. A second issue in the same step could
+  let the old version's files still be mid-delete while the new install
+  started writing into the same folder.
 - **Every expert-menu tooltip carried a line from the last tile you hovered.**
   The tile tooltip's "next entry" line was left in place when the box switched to
   a plain setting hint, so it stayed glued under unrelated tooltips.
