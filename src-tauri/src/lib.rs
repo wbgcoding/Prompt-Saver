@@ -11648,10 +11648,14 @@ mod ocr {
         let script_path = install_script_path(&tag);
         let _ = fs::remove_file(&result_path); // a stale result must never look fresh
 
+        // finally: the script deletes itself once it is done, elevated or not —
+        // otherwise every install attempt (success, failure, or a declined UAC
+        // prompt) left its .ps1 behind in the temp folder forever.
         let script = format!(
-            "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  Add-WindowsCapability -Online -Name {name}\r\n  @{{ ok = $true }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} catch {{\r\n  @{{ ok = $false; error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}}\r\n",
+            "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  Add-WindowsCapability -Online -Name {name}\r\n  @{{ ok = $true }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} catch {{\r\n  @{{ ok = $false; error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} finally {{\r\n  Remove-Item -LiteralPath {script} -Force -ErrorAction SilentlyContinue\r\n}}\r\n",
             name = ps_single_quote(name),
             result = ps_single_quote(&result_path.to_string_lossy()),
+            script = ps_single_quote(&script_path.to_string_lossy()),
         );
         if let Some(dir) = script_path.parent() {
             fs::create_dir_all(dir).map_err(|e| e.to_string())?;
@@ -11677,6 +11681,10 @@ mod ocr {
         };
         let code = code.0 as isize;
         if code <= 32 {
+            // The script's own `finally` only runs once PowerShell actually starts —
+            // a launch failure (including a declined UAC prompt) never gets that far,
+            // so the .ps1 would otherwise sit in the temp folder forever.
+            let _ = fs::remove_file(&script_path);
             // SE_ERR_ACCESSDENIED (5) is what ShellExecuteW returns when the user
             // declines the UAC prompt; ERROR_CANCELLED (1223) shows up on some
             // Windows versions for the same outcome. Both are "no admin rights
