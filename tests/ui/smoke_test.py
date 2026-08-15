@@ -3899,6 +3899,31 @@ PROBE = """
       document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
       await sleep(150);
     }
+    await click('theme-modal-close');
+    // 112: proofread the longest translation (German, per Ben's own note "meist
+    // de/ro") across the same views the 130% pass just covered -- clipped labels
+    // and overlapping boxes are exactly what layoutScan already catches, this
+    // just re-runs it against real long strings instead of a synthetic scale.
+    document.getElementById('settings-expert').classList.add('hidden');
+    document.getElementById('settings-main').classList.remove('hidden');
+    document.getElementById('settings').classList.remove('hidden');
+    const langSel = document.getElementById('lang-select');
+    langSel.value = 'de';
+    langSel.dispatchEvent(new Event('change'));
+    await sleep(300);
+    if (document.documentElement.lang !== 'de') {
+      out.errors.push('lang-select change did not switch the active language (still ' + document.documentElement.lang + ')');
+    }
+    layoutScan('main window in German');
+    mustReach('main window in German', '.win-btn, .composer > button');
+    await click('library-btn');
+    layoutScan('library in German');
+    await click('library-close');
+    layoutScan('settings in German');
+    mustReach('settings in German', '#settings-main button, #settings-main select');
+    await click('expert-open');
+    layoutScan('expert menu in German');
+    await click('expert-back');
   } catch (e) { out.errors.push('probe: ' + e.message); }
   for (const el of document.querySelectorAll('.overlay *, #expert-flags *')) {
     const r = el.getBoundingClientRect();

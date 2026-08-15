@@ -546,7 +546,39 @@ function toast(msg, action = null, tint = "", chips = null) {
   void toastEl.offsetWidth;
   toastEl.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(hideToast, (action || hasChips) ? 12000 : TOAST_MS);
+  // A toast carrying an action button or chips needs longer to read/click than a
+  // plain message, but was a flat 12000ms regardless of the toastMs expert
+  // setting -- longer than that setting's own 10000ms max. Scale it off the same
+  // knob instead (same 12000ms result at the 1400ms default).
+  toastTimer = setTimeout(hideToast, (action || hasChips) ? TOAST_MS + 10600 : TOAST_MS);
+}
+
+// The backend returns Err(String) with a plain English sentence; most call sites
+// just did errToast(err), which shows raw English no matter the app language.
+// Known error strings get mapped to a translated key here; anything not in the map
+// (an unexpected error, or a plain error code like "canceled"/"save-failed" a
+// caller already checks for itself) still falls back to the raw string so nothing
+// is silently swallowed.
+const ERROR_MSG_KEYS = {
+  "cannot delete the last view": "errLastView",
+  "theme name is empty": "errThemeNameEmpty",
+  "theme name contains a control character": "errThemeNameControlChar",
+  "group name is empty": "errGroupNameEmpty",
+  "a group needs at least one view": "errGroupNeedsView",
+  "tag name is empty": "errTagNameEmpty",
+  "tag name contains a comma or a control character": "errTagNameInvalid",
+  "installer too large / truncated": "errUpdaterTooLarge",
+  "downloaded file is not a valid installer": "errUpdaterInvalidInstaller",
+  "update hash mismatch — download rejected": "errUpdaterHashMismatch",
+  "backup expands to more than 512 MB": "errBackupTooLarge",
+  "not in a folder": "errNotInFolder",
+  "not a member of this folder": "errNotFolderMember",
+  "color picker is off": "errColorPickerOff",
+  "autostart is only supported on Windows": "errAutostartWindowsOnly",
+};
+function errToast(err) {
+  const s = String(err);
+  toast(ERROR_MSG_KEYS[s] ? t(ERROR_MSG_KEYS[s]) : s);
 }
 
 function autoGrow(el) {
@@ -1663,13 +1695,13 @@ async function resetOneExpertValue(kind, key, after) {
   if (kind === "flags") {
     const enabled = shipsOn(key);
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
-    try { await invoke("set_ui_flag", { key, enabled }); } catch (err) { toast(String(err)); }
+    try { await invoke("set_ui_flag", { key, enabled }); } catch (err) { errToast(err); }
     applyFlags();
     if (TILE_DOM_FLAGS.has(key)) await renderGrid(true); else fitAllTiles();
   } else if (kind === "values" || kind === "selects") {
     const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key];
     settings.ui_values = { ...(settings.ui_values || {}), [key]: cfg.def };
-    try { await invoke("set_ui_value", { key, value: cfg.def }); } catch (err) { toast(String(err)); }
+    try { await invoke("set_ui_value", { key, value: cfg.def }); } catch (err) { errToast(err); }
     applyValues();
     await refreshTiles(key);
   } else if (kind === "dropdowns") {
@@ -1773,7 +1805,7 @@ function previewValue(key, value) {
 }
 async function commitValue(key, value) {
   settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
-  try { await invoke("set_ui_value", { key, value }); } catch (err) { toast(String(err)); }
+  try { await invoke("set_ui_value", { key, value }); } catch (err) { errToast(err); }
   applyValues();
   await refreshTiles(key);
   // 67: fires once on release, not per drag frame — same "no flash mid-drag" reason
@@ -1877,7 +1909,7 @@ function selectRow(key) {
   attachSelectPicker(sel); // themed popup instead of the native OS dropdown
   const persist = async (value) => {
     settings.ui_values = { ...(settings.ui_values || {}), [key]: value };
-    try { await invoke("set_ui_value", { key, value }); } catch (err) { toast(String(err)); }
+    try { await invoke("set_ui_value", { key, value }); } catch (err) { errToast(err); }
   };
   sel.addEventListener("change", () => {
     if (sel.value === "custom") {
@@ -2421,12 +2453,12 @@ async function resetExpertGroup(group, changed, count) {
   for (const key of changed.flags) {
     const enabled = shipsOn(key);
     settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
-    try { await invoke("set_ui_flag", { key, enabled }); } catch (err) { toast(String(err)); }
+    try { await invoke("set_ui_flag", { key, enabled }); } catch (err) { errToast(err); }
   }
   for (const key of [...changed.values, ...changed.selects]) {
     const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key];
     settings.ui_values = { ...(settings.ui_values || {}), [key]: cfg.def };
-    try { await invoke("set_ui_value", { key, value: cfg.def }); } catch (err) { toast(String(err)); }
+    try { await invoke("set_ui_value", { key, value: cfg.def }); } catch (err) { errToast(err); }
   }
   for (const key of changed.dropdowns) {
     const cfg = EXPERT_DROPDOWNS[key];
@@ -2453,7 +2485,7 @@ async function onResetExpert() {
   try {
     await invoke("reset_expert");
   } catch (err) {
-    toast(String(err));
+    errToast(err);
   }
   loadPalette();
   refreshColorUI();
@@ -3191,7 +3223,7 @@ async function confirmViewModal() {
       settings = await invoke("add_view", { name, color: viewModalColor });
     }
   } catch (err) {
-    toast(String(err));
+    errToast(err);
     return;
   }
   closeViewModal();
@@ -3208,7 +3240,7 @@ async function duplicateView(v) {
     const newId = settings.active_view; // add_view switches to the view it just created
     settings = await invoke("set_view_grid", { id: newId, cols: v.cols, rows: v.rows });
   } catch (err) {
-    toast(String(err));
+    errToast(err);
     return;
   }
   renderViews();
@@ -8092,7 +8124,7 @@ function openTagColorPop(anchor, name, after) {
   const apply = async (hex) => {
     try {
       settings = await invoke("set_tag_color", { name, color: hex });
-    } catch (err) { toast(String(err)); return; }
+    } catch (err) { errToast(err); return; }
     after?.();
   };
   buildSwatches(box, tagColor(name), (hex) => { closeTagPop(); apply(hex); },
@@ -8380,7 +8412,7 @@ function renderTagManager() {
       });
       if (next == null || !next.trim() || tagKey(next) === tagKey(name)) return;
       try { settings = await invoke("rename_tag", { old: name, new: next.trim() }); }
-      catch (err) { toast(String(err)); return; }
+      catch (err) { errToast(err); return; }
       await refresh();
     });
     const del = document.createElement("button");
@@ -8395,7 +8427,7 @@ function renderTagManager() {
       });
       if (!ok) return;
       try { settings = await invoke("delete_tag", { name }); }
-      catch (err) { toast(String(err)); return; }
+      catch (err) { errToast(err); return; }
       libTags.delete(tagKey(name));
       await refresh();
     });
@@ -8415,7 +8447,7 @@ $("tag-colorize")?.addEventListener("click", async () => {
   let i = 0;
   for (const name of uncolored) {
     try { settings = await invoke("set_tag_color", { name, color: palette[i % palette.length] }); }
-    catch (err) { toast(String(err)); return; }
+    catch (err) { errToast(err); return; }
     i++;
   }
   renderTagManager();
@@ -8678,7 +8710,7 @@ async function saveThemeDraft() {
       vars: themeDraft.vars,
     });
   } catch (err) {
-    toast(String(err));
+    errToast(err);
     return;
   }
   // A new theme is created active by the backend; editing an existing one switches
@@ -8687,7 +8719,7 @@ async function saveThemeDraft() {
   const pref = `custom:${id}`;
   if (settings.theme !== pref) {
     settings.theme = pref;
-    await invoke("set_theme", { theme: pref }).catch((err) => toast(String(err)));
+    await invoke("set_theme", { theme: pref }).catch((err) => errToast(err));
   }
   fillThemeSelect();
   applyTheme(themeBase(pref));
@@ -8705,7 +8737,7 @@ async function deleteThemeDraft() {
   try {
     settings = await invoke("delete_custom_theme", { id: themeDraft.id });
   } catch (err) {
-    toast(String(err));
+    errToast(err);
     return;
   }
   fillThemeSelect();
@@ -8765,7 +8797,7 @@ $("theme-edit-export")?.addEventListener("click", async () => {
   try {
     await invoke("export_custom_theme", { id: themeDraft.id });
   } catch (err) {
-    if (err !== "canceled") toast(String(err));
+    if (err !== "canceled") errToast(err);
   }
 });
 // Import creates a new saved theme on the backend right away (the same validation
@@ -8775,7 +8807,7 @@ $("theme-edit-import")?.addEventListener("click", async () => {
   try {
     settings = await invoke("import_custom_theme");
   } catch (err) {
-    if (err !== "canceled") toast(String(err));
+    if (err !== "canceled") errToast(err);
     return;
   }
   fillThemeSelect();
@@ -9674,7 +9706,7 @@ function journalRow(p, meta, onClick) {
         confirmLabel: t("delete"),
       });
       if (!ok) return;
-      try { await invoke("delete_copy_entry", { rowid: meta.rowid }); } catch (err) { toast(String(err)); return; }
+      try { await invoke("delete_copy_entry", { rowid: meta.rowid }); } catch (err) { errToast(err); return; }
       await loadJournal(); // refetch — the entry (and only it) disappears
     });
     row.appendChild(del);
@@ -9834,7 +9866,7 @@ function renderJournal() {
     groupBtn.addEventListener("click", async () => {
       const next = !grouped;
       settings.ui_flags = { ...(settings.ui_flags || {}), historyGrouped: next };
-      try { await invoke("set_ui_flag", { key: "historyGrouped", enabled: next }); } catch (err) { toast(String(err)); }
+      try { await invoke("set_ui_flag", { key: "historyGrouped", enabled: next }); } catch (err) { errToast(err); }
       await loadJournal(); // grouping changes the query → refetch
     });
   }
@@ -10610,13 +10642,13 @@ function bind() {
 
   // Snipping tool: open the overlay; the backend notifies us with the crop.
   $("snip-btn").addEventListener("click", () => {
-    invoke("open_snip").catch((err) => toast(String(err)));
+    invoke("open_snip").catch((err) => errToast(err));
   });
 
   // F26 pipette: the same frozen-desktop overlay, in colour-pick mode. The result
   // is a clipboard value only — no prompt is created and nothing enters the history.
   $("picker-btn").addEventListener("click", () => {
-    invoke("open_picker").catch((err) => toast(String(err)));
+    invoke("open_picker").catch((err) => errToast(err));
   });
   // 19: right-click reaches the picker's history without opening the overlay —
   // it lives in the backend (survives a restart), this popover just displays it.
@@ -10644,7 +10676,7 @@ function bind() {
           try {
             const text = await invoke("copy_pick_history_entry", { hex: h });
             toast(t("colorCopied"), null, text);
-          } catch (err) { toast(String(err)); }
+          } catch (err) { errToast(err); }
         });
         pickHistoryPop.appendChild(row);
       }
@@ -10670,7 +10702,7 @@ function bind() {
         // The notation already on the clipboard is marked instead of being repeated
         // in the message — that duplication was what pushed the row onto a second line.
         current: v === value,
-        onClick: () => invoke("copy_text", { text: v }).catch((err) => toast(String(err))),
+        onClick: () => invoke("copy_text", { text: v }).catch((err) => errToast(err)),
       }));
     toast(t("colorCopied"), null, e.payload?.hex || "", chips);
     // Live-update the recent-colours popover if the user left it open across a
@@ -10748,7 +10780,7 @@ function bind() {
   $("snip-save-folder").addEventListener("change", async (ev) => {
     const on = ev.target.checked;
     settings.ui_flags = { ...(settings.ui_flags || {}), screenshotSave: on };
-    invoke("set_ui_flag", { key: "screenshotSave", enabled: on }).catch((err) => toast(String(err)));
+    invoke("set_ui_flag", { key: "screenshotSave", enabled: on }).catch((err) => errToast(err));
     const optBox = $("opt-screenshot-folder");
     if (optBox) optBox.checked = on;
     if (on) {
@@ -10762,7 +10794,7 @@ function bind() {
   });
   $("snip-modal-saveas").addEventListener("click", async () => {
     if (!pendingSnip) return;
-    await invoke("save_screenshot_as", { dataUrl: pendingSnip }).catch((err) => toast(String(err)));
+    await invoke("save_screenshot_as", { dataUrl: pendingSnip }).catch((err) => errToast(err));
   });
   $("snip-modal-yes").addEventListener("click", () => {
     const image = pendingSnip;
@@ -10782,7 +10814,7 @@ function bind() {
   // Discard this shot and immediately start a new one.
   $("snip-modal-retry").addEventListener("click", () => {
     closeSnipModal();
-    invoke("open_snip").catch((err) => toast(String(err)));
+    invoke("open_snip").catch((err) => errToast(err));
   });
   $("snip-modal-close").addEventListener("click", closeSnipModal);
   $("snip-preview").addEventListener("click", () => { const s = $("snip-preview").src; if (s) openLightbox(s, false); });
@@ -10887,7 +10919,7 @@ function bind() {
   $("library-close-toggle").addEventListener("click", async () => {
     const enabled = !flag("closeAfterCopy");
     settings.ui_flags = { ...(settings.ui_flags || {}), closeAfterCopy: enabled };
-    try { await invoke("set_ui_flag", { key: "closeAfterCopy", enabled }); } catch (err) { toast(String(err)); }
+    try { await invoke("set_ui_flag", { key: "closeAfterCopy", enabled }); } catch (err) { errToast(err); }
     syncLibraryToggle();
   });
   const renderLibraryDebounced = debounced(renderLibrary, () => val("searchDebounceMs"));
@@ -10895,7 +10927,7 @@ function bind() {
   wireSearchSuggest($("library-q"), "recentSearchLib");
   $("library-sort").addEventListener("change", (e) => { // F10
     settings.ui_texts = { ...(settings.ui_texts || {}), librarySort: e.target.value };
-    invoke("set_ui_text", { key: "librarySort", value: e.target.value }).catch((err) => toast(String(err)));
+    invoke("set_ui_text", { key: "librarySort", value: e.target.value }).catch((err) => errToast(err));
     renderLibrary();
   });
   $("library-types").addEventListener("click", (e) => {
@@ -10957,7 +10989,7 @@ function bind() {
   // 2: "gone with one click" per spec — no confirm dialog, unlike a real delete
   // (these are throwaway onboarding content, not the user's own data).
   $("examples-dismiss").addEventListener("click", async () => {
-    try { await invoke("dismiss_example_prompts"); } catch (err) { toast(String(err)); return; }
+    try { await invoke("dismiss_example_prompts"); } catch (err) { errToast(err); return; }
     await renderGrid();
   });
   $("library-close").addEventListener("click", hideLibrary);
@@ -11121,7 +11153,7 @@ function bind() {
     try {
       settings = await invoke("delete_view", { id: viewModalId });
     } catch (err) {
-      toast(String(err));
+      errToast(err);
       return;
     }
     closeViewModal();
@@ -11130,21 +11162,21 @@ function bind() {
   });
 
   $("opt-minimize").addEventListener("change", (e) => {
-    invoke("set_minimize_on_close", { enabled: e.target.checked }).catch((err) => toast(String(err)));
+    invoke("set_minimize_on_close", { enabled: e.target.checked }).catch((err) => errToast(err));
   });
   $("opt-screenshot-folder").addEventListener("change", (e) => {
     settings.ui_flags = { ...(settings.ui_flags || {}), screenshotSave: e.target.checked };
-    invoke("set_ui_flag", { key: "screenshotSave", enabled: e.target.checked }).catch((err) => toast(String(err)));
+    invoke("set_ui_flag", { key: "screenshotSave", enabled: e.target.checked }).catch((err) => errToast(err));
   });
   // Master tooltip switch (default on): off = no hover tooltips anywhere.
   $("opt-tooltips").addEventListener("change", (e) => {
     settings.ui_flags = { ...(settings.ui_flags || {}), tooltipsEnabled: e.target.checked };
-    invoke("set_ui_flag", { key: "tooltipsEnabled", enabled: e.target.checked }).catch((err) => toast(String(err)));
+    invoke("set_ui_flag", { key: "tooltipsEnabled", enabled: e.target.checked }).catch((err) => errToast(err));
   });
   // F19 auto-paste (default on): normal setting; enter-after stays in the expert menu.
   $("opt-autopaste").addEventListener("change", (e) => {
     settings.ui_flags = { ...(settings.ui_flags || {}), autoPaste: e.target.checked };
-    invoke("set_ui_flag", { key: "autoPaste", enabled: e.target.checked }).catch((err) => toast(String(err)));
+    invoke("set_ui_flag", { key: "autoPaste", enabled: e.target.checked }).catch((err) => errToast(err));
   });
   // F21 clipboard inbox is toggled from the expert menu + toolbar right-click only.
   $("opt-autostart").addEventListener("change", async (e) => {
@@ -11152,7 +11184,7 @@ function bind() {
       await invoke("set_autostart", { enabled: e.target.checked });
     } catch (err) {
       e.target.checked = !e.target.checked;
-      toast(String(err));
+      errToast(err);
     }
   });
   $("opt-startmin").addEventListener("change", async (e) => {
@@ -11160,7 +11192,7 @@ function bind() {
       await invoke("set_start_minimized", { enabled: e.target.checked });
     } catch (err) {
       e.target.checked = !e.target.checked;
-      toast(String(err));
+      errToast(err);
     }
   });
   // Always-on-top: the header pin and the settings switch stay in sync; the
@@ -11170,7 +11202,7 @@ function bind() {
     $("opt-ontop").checked = on;
     $("pin-top").classList.toggle("active", on);
     $("pin-top").setAttribute("aria-pressed", String(on));
-    invoke("set_always_on_top", { enabled: on }).catch((err) => toast(String(err)));
+    invoke("set_always_on_top", { enabled: on }).catch((err) => errToast(err));
   };
   $("opt-ontop").addEventListener("change", (e) => setOnTop(e.target.checked));
   $("pin-top").addEventListener("click", () => setOnTop(!settings.always_on_top));
@@ -11184,7 +11216,7 @@ function bind() {
   $("opt-favview").addEventListener("change", (e) => {
     const on = e.target.checked;
     settings.ui_flags = { ...(settings.ui_flags || {}), favView: on };
-    invoke("set_ui_flag", { key: "favView", enabled: on }).catch((err) => toast(String(err)));
+    invoke("set_ui_flag", { key: "favView", enabled: on }).catch((err) => errToast(err));
     if (!on && favView) favView = false;
     refreshFavViewUi();
     renderGrid(true);
@@ -11277,7 +11309,7 @@ function bind() {
   const scaleChanged = (key) => async (e) => {
     const v = Number(e.target.value);
     settings.ui_values = { ...(settings.ui_values || {}), [key]: v };
-    await invoke("set_ui_value", { key, value: v }).catch((err) => toast(String(err)));
+    await invoke("set_ui_value", { key, value: v }).catch((err) => errToast(err));
     applyValues();
   };
   $("ui-scale").addEventListener("change", scaleChanged("uiScale"));
@@ -11517,7 +11549,7 @@ function bind() {
         updateVersion.classList.remove("update-avail");
       }
     } catch (err) {
-      toast(String(err));
+      errToast(err);
     }
     updateBtn.disabled = false;
   });
@@ -11532,13 +11564,13 @@ function bind() {
       await invoke("install_update", { url: updateInfo.url }); // app exits
     } catch (err) {
       updateModal.install.disabled = false;
-      toast(String(err));
+      errToast(err);
     }
   });
   updateModal.skip.addEventListener("click", async () => {
     const v = updateInfo?.version;
     if (!v) return;
-    try { await invoke("skip_version", { version: v }); } catch (err) { toast(String(err)); }
+    try { await invoke("skip_version", { version: v }); } catch (err) { errToast(err); }
     updateInfo = null;
     updateVersion.textContent = versionLabel;
     updateVersion.classList.remove("update-avail");
@@ -11552,7 +11584,7 @@ function bind() {
   });
 
   $("opt-autoupdate").addEventListener("change", (e) => {
-    invoke("set_auto_update", { enabled: e.target.checked }).catch((err) => toast(String(err)));
+    invoke("set_auto_update", { enabled: e.target.checked }).catch((err) => errToast(err));
   });
   listen("update-available", (e) => {
     offerUpdate(e.payload);
@@ -11614,7 +11646,7 @@ function bind() {
       input: { type: "text", value: String(e.payload?.name || "") },
     });
     if (name === null) return;
-    invoke("rename_float_folder", { id, name }).catch((err) => toast(String(err)));
+    invoke("rename_float_folder", { id, name }).catch((err) => errToast(err));
   });
 }
 
@@ -11693,7 +11725,7 @@ function setupDragDrop() {
     if (kind === "drop") {
       document.body.classList.remove("drag-over");
       const path = e.payload?.paths?.[0];
-      if (path) openFileCreate(path).catch((err) => toast(String(err)));
+      if (path) openFileCreate(path).catch((err) => errToast(err));
     }
   }).catch?.(() => {});
   // Text dropped from another app (no file paths) — native handler ignores it.

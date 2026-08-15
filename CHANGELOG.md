@@ -282,6 +282,10 @@ until you turn it on.
 
 ### Fixed
 
+- **A handful of backend error messages always showed in English**, no
+  matter the app language (deleting the last view, an empty theme/group/tag
+  name, an oversized or corrupt update download, a backup over 512 MB, and a
+  few others). They're translated now.
 - **The PDF-preview library left every version's copy behind in the temp
   folder.** An update now removes the previous version's cached copy instead
   of accumulating one file per historical version forever.
