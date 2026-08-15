@@ -1012,6 +1012,9 @@ const FLAG_LABELS = {
   codeAutoDetect: "flagCodeAutoDetect", // F15 render an unfenced code prompt as code
   notesInTooltip: "flagNotesInTooltip", // F17 show the private note in the tile tooltip
   promptHotkeys: "flagPromptHotkeys",   // F20 per-prompt global hotkeys
+  // 98: sub-toggle of promptHotkeys, default on since 14.08. (Ben) -- moved from
+  // OPT_FLAG_LABELS; no CSS class keys on this flag, so the move is risk-free.
+  promptHotkeyPaste: "flagPromptHotkeyPaste",
   trayRecent: "flagTrayRecent",         // F23 "recently used" section in the tray menu
   colorPicker: "flagColorPicker",       // F26 pipette — pick a screen colour to the clipboard
   customThemes: "flagCustomThemes",     // F3 theme editor + custom entries in the theme list
@@ -1086,7 +1089,6 @@ const OPT_FLAG_LABELS = {
   // their feature is switched off, so the feature can be paused, not hidden.
   pausedIcons: "flagPausedIcons",
   promptNotes: "flagPromptNotes",               // F17 private notes row in the editor
-  promptHotkeyPaste: "flagPromptHotkeyPaste",   // F20 hotkey also pastes into the last app
   dragOut: "flagDragOut",                       // F22 drag a prompt into another app
   // Swaps the two gestures: off (shipped) = hold the key to drag out, plain drag
   // moves the tile; on = plain drag leaves the app and the key moves the tile.
@@ -5749,7 +5751,7 @@ function showHotkeyError(msg) {
 
 // What a hotkey without its own choice inherits — named on the row, so "Default"
 // never leaves the user guessing which of the two it means.
-const hotkeyPasteDefault = () => (optFlag("promptHotkeyPaste") ? t("promptHotkeyPaste") : t("promptHotkeyCopy"));
+const hotkeyPasteDefault = () => (flag("promptHotkeyPaste") ? t("promptHotkeyPaste") : t("promptHotkeyCopy"));
 
 function renderPromptHotkey() {
   const accel = modalState?.hotkey || "";
@@ -11483,7 +11485,7 @@ function bind() {
   listen("prompt-hotkey", (e) => {
     const id = String(e.payload);
     const mode = prompts.find((p) => p.id === id)?.hotkey_paste || "";
-    onPromptHotkey(id, mode ? mode === "paste" : optFlag("promptHotkeyPaste"));
+    onPromptHotkey(id, mode ? mode === "paste" : flag("promptHotkeyPaste"));
   });
   // F23: a quick-copy entry in the tray menu — same activation, never auto-paste.
   listen("prompt-tray-copy", (e) => onPromptHotkey(String(e.payload), false));

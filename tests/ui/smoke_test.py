@@ -1359,8 +1359,9 @@ PROBE = """
       out.errors.push('an automatic backup gave no "Backup created" toast: ' + toastEl.textContent);
     }
 
-    // F20: pressing a prompt hotkey runs the same activation a tile does — the copy
-    // is recorded, and whether it also pastes follows the expert option alone.
+    // F20/98: pressing a prompt hotkey runs the same activation a tile does — the
+    // copy is recorded, and whether it also pastes follows the expert option alone
+    // (default on since 98).
     const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
     calls().length = 0;
     window.__FIRE__('prompt-hotkey', 'p0');
@@ -1369,8 +1370,8 @@ PROBE = """
       out.errors.push('a prompt hotkey did not copy the prompt');
     }
     if (!calls().includes('record_copy')) out.errors.push('a prompt hotkey did not record the copy');
-    if (calls().includes('paste_into_previous')) {
-      out.errors.push('a prompt hotkey pasted although the paste option is off');
+    if (!calls().includes('paste_into_previous')) {
+      out.errors.push('a prompt hotkey did not paste although the paste option defaults on');
     }
     // F12: a hotkey copy of a prompt with MANUAL placeholders asks in the small
     // standalone window — the main window must not be pulled forward for it.
@@ -1455,6 +1456,7 @@ PROBE = """
     if (!pasteRow) {
       out.errors.push('the prompt-hotkey paste option is missing from the expert menu');
     } else {
+      // 98: default on -- one click turns it off.
       pasteRow.querySelector('input.switch').click();
       await sleep(250);
       await click('expert-back');
@@ -1462,8 +1464,8 @@ PROBE = """
       calls().length = 0;
       window.__FIRE__('prompt-hotkey', 'p2');
       await sleep(500);
-      if (!calls().includes('paste_into_previous')) {
-        out.errors.push('the prompt hotkey did not paste although the option is on');
+      if (calls().includes('paste_into_previous')) {
+        out.errors.push('the prompt hotkey pasted although the option was just switched off');
       }
       // Put it back so the rest of the run sees the shipped default.
       document.getElementById('settings').classList.remove('hidden');

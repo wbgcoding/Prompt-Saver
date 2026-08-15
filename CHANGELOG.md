@@ -464,6 +464,8 @@ until you turn it on.
 - **The safety backup before Reset settings and before Delete all data is now
   on by default**, and split into two separate switches so either case can be
   turned off on its own.
+- **A prompt hotkey now also pastes into the previously focused app by
+  default.** A saved choice to have it off is kept.
 - **Every expert-menu row's "changed" tooltip no longer shows when it was last
   changed.** The undo arrow and the "only changed" filter stay exactly as
   before; only the date/time line is gone.
