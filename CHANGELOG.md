@@ -282,6 +282,13 @@ until you turn it on.
 
 ### Fixed
 
+- **The PDF-preview library left every version's copy behind in the temp
+  folder.** An update now removes the previous version's cached copy instead
+  of accumulating one file per historical version forever.
+- **Two high-severity denial-of-service dependencies were pulled in
+  transitively** (a quadratic-runtime and a memory-exhaustion issue in an XML
+  parser used by an unrelated OS-integration dependency). Routine dependency
+  updates resolve both.
 - **The bar-hide buttons sat far from the row they collapse.** They now sit
   directly left of Minimize (top) and Save (bottom), lined up with each
   other; Save is now exactly as wide as the Minimize–Maximize–Close row

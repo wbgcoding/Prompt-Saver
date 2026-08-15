@@ -3757,6 +3757,24 @@ fn pdfium_cache_path() -> PathBuf {
         .join(format!("pdfium-{APP_VERSION}.dll"))
 }
 
+// Every app version writes its own pdfium-<version>.dll (the cache key changes
+// with APP_VERSION so an update never loads a stale binary), but nothing ever
+// removed the PREVIOUS version's copy -- it just accumulated forever across
+// updates. Best-effort, called whenever the current version's cache path is about
+// to be used; never lets a sweep failure block the actual pdfium lookup.
+fn sweep_stale_pdfium_dlls(current: &std::path::Path) {
+    let Some(dir) = current.parent() else { return };
+    let Some(keep) = current.file_name() else { return };
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if name != keep && name_str.starts_with("pdfium-") && name_str.ends_with(".dll") {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+}
+
 // A DLL next to the exe wins (lets a user drop in a newer pdfium); otherwise the
 // embedded copy is written to the cache path once and reused.
 fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
@@ -3774,6 +3792,7 @@ fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
         return Some(found);
     }
     let cached = pdfium_cache_path();
+    sweep_stale_pdfium_dlls(&cached);
     // The cache path is predictable and lives in a world-writable %TEMP%, so the file
     // found there is only trusted when its CONTENT matches the copy compiled into this
     // exe — a length check alone would let any process running as this user pre-plant a
@@ -14869,6 +14888,27 @@ mod tests {
         let _ = fs::remove_file(&fresh_snip);
         let _ = fs::remove_file(&unrelated_ext);
         let _ = fs::remove_file(&unrelated_file);
+    }
+
+    #[test]
+    fn sweep_stale_pdfium_dlls_keeps_only_the_current_version() {
+        let dir = std::env::temp_dir().join(format!("ps-test-pdfium-sweep-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let current = dir.join("pdfium-2.7.0.dll");
+        let older = dir.join("pdfium-2.6.3.dll");
+        let unrelated = dir.join("pdfium-LICENSE");
+        fs::write(&current, b"current").unwrap();
+        fs::write(&older, b"stale").unwrap();
+        fs::write(&unrelated, b"license text").unwrap();
+
+        sweep_stale_pdfium_dlls(&current);
+
+        assert!(current.exists(), "the current version's own DLL must survive its own sweep");
+        assert!(!older.exists(), "a previous version's DLL must be removed");
+        assert!(unrelated.exists(), "a same-prefix non-.dll file must survive");
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     // 34: a fallback file that exists but cannot be decrypted/parsed (DPAPI from a
