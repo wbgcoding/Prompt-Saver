@@ -319,9 +319,46 @@ ship on).
   combinable with a normal search term.
 - The private-note field in the editor now has a quieter fill than the
   prompt text box, so the two don't read as the same kind of field.
+- **Saving is noticeably lighter.** Every write used to re-check the whole
+  database layout first; that now happens once when the app starts. A copy
+  went through it twice per click and no longer does.
+- **Text recognition no longer decodes the same image three times** on its way
+  through resizing — one pass now, which shows on large screenshots.
+- **Taking a screenshot no longer blocks** while the image is compressed and
+  written; the work moved off the thread that keeps the app responsive.
+- Typing in the expert menu's search box no longer rebuilds all five tabs on
+  every keystroke, and the quick launcher prepares its search index once
+  instead of on every keypress.
 
 ### Fixed
 
+- **Opening the version history of a long prompt could freeze the window.**
+  Every version's word-by-word comparison was computed up front even though
+  the rows start collapsed; it is now done when you actually open a row.
+- **The screenshot editor silently erased old drawings.** Once you passed the
+  undo limit, the oldest step vanished from the picture — a crop or a
+  pixelated area included. Everything you draw now stays; only how far back
+  undo can walk is limited.
+- **The screenshot editor's language, and two more strings, were still
+  English** in German and Dutch.
+- **Switching off the video controls left the hover bar on the floating
+  buttons**, and those buttons ignored the volume, mute, loop and autoplay
+  settings entirely — they now follow the same settings as the grid.
+- **A failed view switch, edit or duplicate did nothing at all.** The click
+  now reports what went wrong instead of quietly leaving the old screen up.
+- **A language pack could be installed twice.** The download row stayed
+  clickable for a moment after the install had already started.
+- **The reminder about outdated recognition packs came back on every start**
+  instead of waiting for its interval.
+- **The floating buttons' menus flashed English labels** for a moment in every
+  other language, and one of them spelled a word the app is free to rename.
+- **The volume slider on a video could be cut off** at the top edge of the
+  window; it now opens downwards when there is no room above.
+- Clicking a floating button twice in quick succession could copy the same
+  prompt twice while the first copy was still in flight.
+- A handful of leftovers survived a crash: recognized-text images, the
+  language-pack helper file, and the WebView2 setup download were never
+  cleaned up. The startup sweep now covers them.
 - **A handful of backend error messages always showed in English**, no
   matter the app language (deleting the last view, an empty theme/group/tag
   name, an oversized or corrupt update download, a backup over 512 MB, and a
@@ -548,6 +585,15 @@ ship on).
   you switched away before the restore finished loading.
 - Changing a PDF's active page did not count as an unsaved change, so closing
   the editor right after skipped the usual "discard changes?" prompt.
+
+### Security
+
+- **The WebView2 runtime download is now checked for Microsoft's signature**
+  before it is run. It is the one file the app may have to fetch before its
+  own window exists, and until now only the connection vouched for it.
+- **The updater refuses to install an older version than the one you are
+  running.** The download was already rejected unless its checksum matched;
+  the version itself is now re-checked as well.
 
 ### Removed
 
