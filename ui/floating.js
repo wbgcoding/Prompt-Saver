@@ -2,11 +2,12 @@
 // right-click opens a small menu (size, edit prompt, remove).
 // i18n is loaded lazily (dynamic import) so the pill window opens fast.
 import { FONTS, fitText } from "./fonts.js";
-import { mediaKind, buildMediaBar, applyVideoPrefs } from "./media.js";
+import { mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./media.js";
 // F3 custom themes: shared with the folder window (floattheme.js).
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
+import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -32,6 +33,8 @@ let copySize = 0; // expert copy-text size (0 = auto-fit to the pill)
 let copyFont = ""; // expert copy-text font key ("" = pill font)
 let pFont = ""; // per-prompt overrides ("" / 0 = follow settings)
 let cooldownMs = COOLDOWN_MS_DEFAULT; // re-copy throttle for this pill (expert value)
+let videoControlsOn = true; // 125: gates the hover media bar, mirrors flag("videoControls") in main.js
+let videoAutoplayOn = true; // 125: gates the initial auto-start, mirrors flag("videoAutoplay") in main.js
 let lastCopyTs = 0;
 // F19 auto-paste on this pill (autoPaste itself defaults on; the rest default off;
 // a fast second click pastes).
@@ -41,7 +44,6 @@ let pCaptionSize = 0; // per-prompt caption size (0 = default, 1 = auto)
 let menuOpen = false;
 // F22 drag-out (default off): the modifier separates "drag the prompt into another
 // app" from the plain drag, which moves this window.
-const DRAG_OUT_MODS = { ctrl: "ctrlKey", alt: "altKey", shift: "shiftKey" };
 let dragOutOn = false, dragOutMod = "ctrlKey";
 let foldersOn = false; // F25 pill folders (default off)
 let pText = "", pFile = "";
@@ -94,9 +96,6 @@ const PILL_FONT_DEFAULT = 26; // text pill font size at scale 1
 const PILL_TEXT_MIN_W = 200; // smallest text-pill width; grows with the label
 const PILL_BORDER = 5; // colored frame width around media pills
 const SIZE_EPSILON = 2; // px tolerance ending the self-healing resize loop
-const COPIED_MS = 900;
-const RING_MIN = 8; // smallest resize-ring thickness (px)
-const RING_MAX = 60; // largest resize-ring thickness (px)
 const RING_FRAC = 0.18; // ring thickness as a fraction of the shorter window side
 
 // Resizes and visibility flips can leave the looping video paused — make
@@ -104,6 +103,10 @@ const RING_FRAC = 0.18; // ring thickness as a fraction of the shorter window si
 // through the control bar (or play-once ending) is respected.
 function ensureVideoPlaying() {
   if (userPaused) return;
+  // 125: a video that never started because videoAutoplay is off must stay
+  // paused until the user starts it themselves -- once it HAS played, app-driven
+  // pauses (drag, hidden window) keep auto-resuming regardless of the setting.
+  if (!videoAutoplayOn && !videoEverPlayed) return;
   if (!videoEl.classList.contains("hidden") && videoEl.paused) {
     videoEl.play().catch(() => {});
   }
@@ -181,12 +184,8 @@ async function applySettings() {
 }
 
 async function applyTexts(s) {
-  const { FLOAT_TXT: TXT } = await import("./i18n.js");
-  const pref = (s.language && s.language !== "auto"
-    ? s.language
-    : navigator.language || "en"
-  ).toLowerCase();
-  const lang = Object.keys(TXT).find((c) => pref.startsWith(c)) || "en";
+  const { FLOAT_TXT: TXT, LANGS } = await import("./i18n.js");
+  const lang = resolveLang(s.language, LANGS);
   const { applyTerms } = await import("./terms.js");
   const t = Object.fromEntries(
     Object.entries(TXT[lang]).map(([k, v]) => [k, applyTerms(v, lang)]));
@@ -213,6 +212,13 @@ async function applyTexts(s) {
 
 function applyPrefs(s) {
   applyVideoPrefs(videoEl, s.video_prefs && s.video_prefs[promptId]);
+  // 125: pills used media.js's hardcoded {volume:100, muted:true, looped:true} --
+  // the expert videoVolume/videoMuted/videoLoop settings never reached them. Same
+  // defaults main.js's applyValues() pushes for the grid tiles.
+  setMediaDefaults({ volume: Number(s.ui_values?.videoVolume) || 100, muted: s.ui_flags?.videoMuted !== false, looped: s.ui_flags?.videoLoop !== false });
+  videoAutoplayOn = s.ui_flags?.videoAutoplay !== false; // default on, matches flag("videoAutoplay")
+  videoControlsOn = s.ui_flags?.videoControls !== false; // default on, matches flag("videoControls")
+  if (!videoControlsOn) mediaBar.classList.add("hidden"); // off mid-hover must not leave it stuck open
   // Clamp to the backend's stored range (SCALE_MIN–SCALE_MAX): a corrupt
   // 0/negative/NaN factor would otherwise produce a degenerate window. The range
   // must match the backend's, or the "L" preset and every freely resized pill
@@ -294,6 +300,11 @@ let borderW = 0;
 // Apply name, color and media (stored still, gif or video) onto the pill.
 const videoEl = document.getElementById("video");
 const imgEl = document.getElementById("img");
+// 125: floating.html hardcodes the autoplay attribute (owned by another agent) --
+// strip it here, before any source is ever assigned, so flag("videoAutoplay")=off
+// is honoured the same way main.js's grid tiles honour it (explicit play() call
+// instead of the unreliable attribute).
+videoEl.removeAttribute("autoplay");
 
 // ---- Video controls + freeze watchdog ----
 // Pause bookkeeping: only pauses made through the control bar (or a video
@@ -301,8 +312,13 @@ const imgEl = document.getElementById("img");
 // itself (drag, hidden window) is resumed automatically.
 let appPause = false;
 let userPaused = false;
+// True once THIS loaded source has actually started playing at least once —
+// distinguishes "never started because autoplay is off" (must stay paused) from
+// "already playing/was app-paused" (app-driven pauses keep auto-resuming
+// regardless of the autoplay setting, same as before this fix).
+let videoEverPlayed = false;
 videoEl.addEventListener("pause", () => { userPaused = !appPause; appPause = false; });
-videoEl.addEventListener("play", () => { userPaused = false; appPause = false; });
+videoEl.addEventListener("play", () => { userPaused = false; appPause = false; videoEverPlayed = true; });
 
 function pauseByApp() {
   if (!videoEl.paused) {
@@ -324,7 +340,7 @@ document.body.appendChild(mediaBar);
 const volDragging = () => !!mediaBar.querySelector(".media-sound.dragging");
 window.addEventListener("mousemove", (e) => {
   const zone = Math.max(48, window.innerHeight * 0.35);
-  const show = !videoEl.classList.contains("hidden") && !menuOpen &&
+  const show = videoControlsOn && !videoEl.classList.contains("hidden") && !menuOpen &&
     (e.clientY > window.innerHeight - zone ||
       !!e.target.closest?.(".media-bar") || volDragging());
   mediaBar.classList.toggle("hidden", !show);
@@ -351,7 +367,7 @@ setInterval(() => {
     return;
   }
   if (videoEl.paused) {
-    videoEl.play().catch(() => {});
+    ensureVideoPlaying(); // 125: respects videoAutoplay for a not-yet-started video
     return;
   }
   if (videoEl.currentTime === lastVideoTime && !videoEl.seeking) {
@@ -401,6 +417,7 @@ function applyPrompt(p) {
       const src = convertFileSrc(showPath);
       if (videoEl.getAttribute("src") !== src) {
         videoEl.src = src; // only a changed source reloads the video
+        videoEverPlayed = false; // 125: a new source must re-honour videoAutoplay
         videoEl.onloadedmetadata = () =>
           onRatio(videoEl.videoWidth / videoEl.videoHeight);
       } else if (videoEl.videoWidth) {
@@ -725,11 +742,20 @@ window.addEventListener("mouseup", async () => {
     invoke("paste_into_previous", { delayMs: apDelay, enter: apEnter }).catch(() => {});
   } else if (cooldownMs && Date.now() - lastCopyTs < cooldownMs) {
     // Same pill copied moments ago — throttle to avoid accidental repeats.
-  } else if (await invoke("copy_prompt", { id: promptId }).catch(() => false)) {
+  } else {
+    // 125: stamp BEFORE the await, not after -- a fast second click while
+    // copy_prompt's IPC is still in flight must see the fresh timestamps right
+    // away (both were 0 until the call resolved, so the double-click/cooldown
+    // checks above missed it and a fast click issued a duplicate copy).
     lastCopyTs = Date.now();
     lastPillTs = Date.now(); // arm the double-click paste window
-    showCopied();
-    invoke("record_copy", { id: promptId }).catch(() => {});
+    if (await invoke("copy_prompt", { id: promptId }).catch(() => false)) {
+      showCopied();
+      invoke("record_copy", { id: promptId }).catch(() => {});
+    } else {
+      lastCopyTs = 0;
+      lastPillTs = 0; // roll back -- the copy never actually happened
+    }
   }
 });
 
@@ -920,10 +946,10 @@ listen("merge-hint", async (e) => {
 
 listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 // Language switched in the settings — re-translate the pill texts in place.
-listen("language-changed", () => applySettings());
+listen("language-changed", () => applySettings().catch(() => {}));
 // An expert setting changed: re-read it here too, or a feature switched on while
 // this pill is already on screen would stay off until the next restart.
-listen("settings-changed", () => applySettings());
+listen("settings-changed", () => applySettings().catch(() => {}));
 
 // Moving onto a monitor with a different DPI can leave a stale frame —
 // re-apply the size so the window repaints at the new scale factor.

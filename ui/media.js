@@ -162,6 +162,14 @@ export function buildMediaBar(video, { onChange, labels } = {}) {
   });
   volPop.appendChild(vol);
   soundWrap.append(volPop, soundBtn);
+  // The slider opens upwards. Sitting at the top edge of the window there is no
+  // room for it, so it flips below the button rather than being cut off.
+  soundWrap.addEventListener("pointerenter", () => {
+    soundWrap.classList.remove("below");
+    const btn = soundBtn.getBoundingClientRect();
+    if (btn.top - volPop.offsetHeight < 0 && btn.bottom + volPop.offsetHeight <= window.innerHeight)
+      soundWrap.classList.add("below");
+  });
 
   // Keep icon, slider and loop button in sync with the video element — also
   // when a saved state is applied from the outside (applyVideoPrefs).

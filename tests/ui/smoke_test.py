@@ -2205,7 +2205,7 @@ PROBE = """
     }
     // 10: the quick-grid header control hides until you point at the header — pure
     // CSS :hover, so a synthetic event can't prove the reveal itself; this only
-    // proves the flag actually hides/unhides the control (Ben checks the hover by eye).
+    // proves the flag actually hides/unhides the control (the hover is checked by eye).
     const qgEl = document.getElementById('quick-grid');
     if (!await setExpertFlag('Quick grid: hover to reveal', true)) {
       out.errors.push('the quick-grid hover-only option is missing from the expert menu');
@@ -2228,6 +2228,9 @@ PROBE = """
       if (rows.length !== 2) {
         out.errors.push('the history panel shows ' + rows.length + ' versions instead of 2');
       } else {
+        // 125: each row's full diff is now built lazily on first expand -- open
+        // every row before reading its .hist-full content.
+        for (const r of rows) r.querySelector('.hist-expand')?.click();
         // Newest row (id 2): "draft"->"prompt" against the live current text.
         const newRowText = rows[0].querySelector('.hist-full').textContent;
         if (!newRowText.includes('draft') || !newRowText.includes('prompt')) {
@@ -2259,6 +2262,8 @@ PROBE = """
       if (rows10.length !== 2) {
         out.errors.push('79: the rotating prompt history shows ' + rows10.length + ' versions instead of 2');
       } else {
+        // 125: each row's full diff is now built lazily on first expand.
+        for (const r of rows10) r.querySelector('.hist-expand')?.click();
         const chip = rows10[0].querySelector('.hist-entries');
         if (!chip || !chip.textContent.includes('2')) {
           out.errors.push('79: the newest rotating-prompt row is missing its entry-count chip');
@@ -3769,7 +3774,7 @@ PROBE = """
     // SOLE item on its wrapped line and `.header`'s justify-content:space-between
     // has no second item left to space against, so it falls back to packing left
     // instead of right -- a pre-existing quirk outside this point's scope, and
-    // exactly why Ben's own spec only asks for 900px/1280px here.
+    // exactly why the spec only asks for 900px/1280px here.
     {
       if (!document.getElementById('settings').classList.contains('hidden')) {
         await click('settings-close');
@@ -3900,8 +3905,8 @@ PROBE = """
       await sleep(150);
     }
     await click('theme-modal-close');
-    // 112: proofread the longest translation (German, per Ben's own note "meist
-    // de/ro") across the same views the 130% pass just covered -- clipped labels
+    // 112: proofread the longest translation (German, the longest being mostly
+    // de/ro) across the same views the 130% pass just covered -- clipped labels
     // and overlapping boxes are exactly what layoutScan already catches, this
     // just re-runs it against real long strings instead of a synthetic scale.
     document.getElementById('settings-expert').classList.add('hidden');

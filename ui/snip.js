@@ -91,8 +91,13 @@ let i18nLoaded = false;
 // still-pending timer from a session that got replaced before it fired (the window
 // is reused across snips), instead of it firing snip_present into the next one.
 let revealTimer = 0;
+// 125: the overlay window is reused across snips, so a reply from a superseded
+// session (snip_background / snip_windows / pick_tile) must never land after a
+// newer session has already reset state -- same shape as folder.js's `seq` token.
+let sessionSeq = 0;
 
 function resetSession() {
+  sessionSeq++;
   start = null;
   busy = false;
   windows = [];
@@ -118,7 +123,9 @@ function resetSession() {
 
 async function beginSession() {
   resetSession();
+  const tok = sessionSeq;
   const b = await invoke("snip_background", { index: IDX });
+  if (tok !== sessionSeq) return; // a newer session already started while this was in flight
   if (!b) { invoke("snip_cancel").catch(() => {}); return; }
   FULL_W = b.width || 1;
   FULL_H = b.height || 1;
@@ -162,18 +169,16 @@ async function beginSession() {
   // Hover highlight loads in the background — it must not gate the overlay. The
   // picker has no window selection, so it never pays for the enumeration.
   if (!pickMode) {
-    invoke("snip_windows", { index: IDX }).then((w) => { windows = w || []; }).catch(() => { windows = []; });
+    invoke("snip_windows", { index: IDX })
+      .then((w) => { if (tok === sessionSeq) windows = w || []; })
+      .catch(() => { if (tok === sessionSeq) windows = []; });
   }
   // Localized hint/error text: load once, then reuse for every later session.
   if (i18nLoaded) return;
   i18nLoaded = true;
-  Promise.all([invoke("get_settings"), import("./i18n.js")])
-    .then(([s, { I18N, LANGS }]) => {
-      const pref = (s.language && s.language !== "auto"
-        ? s.language
-        : navigator.language || "en"
-      ).toLowerCase();
-      const lang = LANGS.find((c) => pref.startsWith(c)) || "en";
+  Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.js")])
+    .then(([s, { I18N, LANGS }, { resolveLang }]) => {
+      const lang = resolveLang(s.language, LANGS);
       const d = I18N[lang] || I18N.en;
       T.hint = d.snipHint ?? I18N.en.snipHint;
       T.failed = d.snipFailed ?? I18N.en.snipFailed ?? T.failed;
@@ -301,6 +306,7 @@ async function ensureTile() {
   const r = tileRectFor(cur.x, cur.y);
   if (tile && tile.x === r.x && tile.y === r.y && tile.w === r.w && tile.h === r.h) return;
   tileBusy = true;
+  const tok = sessionSeq;
   let buf;
   try {
     buf = await invoke("pick_tile", { x: r.x, y: r.y, width: r.w, height: r.h });
@@ -308,6 +314,7 @@ async function ensureTile() {
     buf = null;
   }
   tileBusy = false;
+  if (tok !== sessionSeq) return; // a newer session started while this fetch was in flight
   const bytes = toBytes(buf);
   if (!bytes || bytes.length < r.w * r.h * 3) return;
   tile = { ...r, px: bytes };

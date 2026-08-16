@@ -495,6 +495,9 @@ function readableInk(hex) {
 // the background OCR-language-update notice uses its own ocrLangNoticeMs expert
 // setting instead of the generic TOAST_MS/action-bonus math below. Every existing
 // caller omits it and keeps the old behaviour.
+// 125: named (not the pill/folder windows' shared COPIED_MS=900 -- this toast
+// chip flash has always run shorter; unifying the value would be a behaviour change).
+const CHIP_COPIED_MS = 400;
 function toast(msg, action = null, tint = "", chips = null, duration = null) {
   toastEl.textContent = "";
   const hasChips = !!(chips && chips.length);
@@ -540,7 +543,7 @@ function toast(msg, action = null, tint = "", chips = null, duration = null) {
       chip.addEventListener("click", () => {
         c.onClick();
         chip.classList.add("copied");
-        setTimeout(() => chip.classList.remove("copied"), 400);
+        setTimeout(() => chip.classList.remove("copied"), CHIP_COPIED_MS);
       });
       row.appendChild(chip);
     }
@@ -1028,11 +1031,11 @@ const FLAG_LABELS = {
   cleanupFiles: "flagCleanupFiles",
   // 32/33: a text prompt can hold a list of variants instead of one text; each
   // copy serves the next entry (in order, or shuffled without repeats). Default
-  // on since 33 (Ben, 09.08.) — shipped default off at 32's original release.
+  // on since 33 — shipped default off at 32's original release.
   rotatingPrompts: "flagRotatingPrompts",
   // 32: sub-toggle of rotatingPrompts, itself also default on.
   rotateBadge: "flagRotateBadge",
-  // 90-94: sub-toggle of rotatingPrompts, default on (Ben, 14.08.).
+  // 90-94: sub-toggle of rotatingPrompts, default on.
   rotateAuto: "flagRotateAuto",
   // New features (default on).
   lengthCounter: "flagLengthCounter",   // F16
@@ -1053,7 +1056,7 @@ const FLAG_LABELS = {
   codeAutoDetect: "flagCodeAutoDetect", // F15 render an unfenced code prompt as code
   notesInTooltip: "flagNotesInTooltip", // F17 show the private note in the tile tooltip
   promptHotkeys: "flagPromptHotkeys",   // F20 per-prompt global hotkeys
-  // 98: sub-toggle of promptHotkeys, default on since 14.08. (Ben) -- moved from
+  // 98: sub-toggle of promptHotkeys, default on -- moved from
   // OPT_FLAG_LABELS; no CSS class keys on this flag, so the move is risk-free.
   promptHotkeyPaste: "flagPromptHotkeyPaste",
   trayRecent: "flagTrayRecent",         // F23 "recently used" section in the tray menu
@@ -1606,6 +1609,10 @@ function applyFlags() {
     document.body.classList.toggle(`flag-${key}`, optFlag(key));
   }
   refreshCustomThemes(); // F3: the feature may have just been switched on or off
+  // 125: uppercaseTiles/boldTileNames/monospaceTiles/italicTiles change .tile-name
+  // metrics via CSS but are plain flags (no dedicated apply* path), so a cached fit
+  // size from before the toggle would otherwise linger until fitCache's own 1000-entry eviction.
+  fitCache.clear();
   if (chainMode && !flag("chainPrompts")) setChainMode(false); // killed in expert menu
   if (chainLock && !flag("chainLock")) { chainLock = false; $("chain-btn")?.classList.remove("chain-locked"); }
   applyValues();
@@ -1971,7 +1978,7 @@ function selectRow(key) {
   num.className = "modal-input expert-num";
   // The presets show their unit ("7d", "24h") right on the option — the free-entry
   // field cannot, since it holds only the number. Without this, a value typed here
-  // looked unit-less and Ben tried typing the unit into the number field itself
+  // looked unit-less, inviting the unit to be typed into the number field itself
   // ("7d"), which a number input silently discards with no error at all.
   const unit = document.createElement("span");
   unit.className = "expert-num-unit";
@@ -2880,7 +2887,12 @@ function renderViews() {
 async function switchToView(id) {
   favView = false; // picking a normal view leaves the favorites grid
   if (gridSelected.size) clearGridSelection(); // 11: a selection belongs to what's on screen
-  settings = await invoke("set_active_view", { id });
+  try {
+    settings = await invoke("set_active_view", { id });
+  } catch (err) {
+    errToast(err);
+    return; // 125: a rejection must not leave the click doing nothing silently
+  }
   await renderGrid(true); // prompts unchanged, settings already fresh
 }
 
@@ -4380,10 +4392,13 @@ function styleCopyText(el, maxW, maxH, cap) {
   else fitText(el, maxW, maxH, cap);
 }
 
+// 125: named (not the pill/folder windows' shared COPIED_MS=900 -- this tile flash
+// has always run shorter; unifying the value would be a behaviour change).
+const TILE_COPIED_MS = 350;
 // Flash + small "Copied!" bubble at the bottom of the tile.
 function showCopied(tile, label) {
   tile.classList.add("copied");
-  setTimeout(() => tile.classList.remove("copied"), 350);
+  setTimeout(() => tile.classList.remove("copied"), TILE_COPIED_MS);
   if (!flag("copyBubble")) return; // border flash stays; bubble is optional
   const pop = document.createElement("div");
   pop.className = "copy-pop";
@@ -6478,8 +6493,10 @@ function diffWords(oldText, newText) {
   const tokenize = (s) => (s || "").split(/(\s+)/).filter((t) => t !== "");
   const a = tokenize(oldText);
   const b = tokenize(newText);
-  if (a.length > DIFF_WORD_CAP || b.length > DIFF_WORD_CAP) return null;
   const n = a.length, m = b.length;
+  // 87/125: cap on the PRODUCT n*m (the actual DP cost), not each side independently --
+  // a long old text diffed against a short new one (or vice versa) is cheap either way.
+  if (n * m > DIFF_WORD_CAP * DIFF_WORD_CAP) return null;
   const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
   for (let i = n - 1; i >= 0; i--) {
     for (let j = m - 1; j >= 0; j--) {
@@ -6599,64 +6616,73 @@ async function loadHistory(id) {
     head.append(expand, restore);
     const full = document.createElement("div");
     full.className = "hist-full hidden";
-    if (v.name !== newerName) {
-      const nameRow = document.createElement("div");
-      nameRow.className = "hist-name-change";
-      const label = document.createElement("span");
-      label.className = "hist-name-label";
-      label.textContent = t("historyNameChanged") + ": ";
-      const oldSpan = document.createElement("span");
-      oldSpan.className = "diff-del";
-      oldSpan.textContent = v.name || "";
-      const newSpan = document.createElement("span");
-      newSpan.className = "diff-add";
-      newSpan.textContent = newerName || "";
-      nameRow.append(label, oldSpan, document.createTextNode(" → "), newSpan);
-      full.appendChild(nameRow);
-    }
-    if (olderEntries.every((e) => !e) && newerEntries.every((e) => !e)) {
-      const hint = document.createElement("div");
-      hint.className = "hint";
-      hint.textContent = t("historyNoText");
-      full.appendChild(hint);
-    } else {
-      const maxLen = Math.max(olderEntries.length, newerEntries.length);
-      for (let i = 0; i < maxLen; i++) {
-        const hasOlder = i < olderEntries.length;
-        const hasNewer = i < newerEntries.length;
-        const block = document.createElement("div");
-        if (maxLen > 1) {
-          block.className = "hist-entry-block";
-          const num = document.createElement("div");
-          num.className = "hist-entry-num";
-          num.textContent = String(i + 1);
-          block.appendChild(num);
-        }
-        const content = document.createElement("div");
-        content.className = "hist-entry-content";
-        if (!hasNewer) {
-          const span = document.createElement("span");
-          span.className = "diff-del";
-          span.textContent = olderEntries[i];
-          content.appendChild(span);
-        } else if (!hasOlder) {
-          const span = document.createElement("span");
-          span.className = "diff-add";
-          span.textContent = newerEntries[i];
-          content.appendChild(span);
-        } else if (!flag("historyDiff")) {
-          content.textContent = olderEntries[i]; // 87: word diff switched off, show the plain old text
-        } else {
-          const tokens = diffWords(olderEntries[i], newerEntries[i]);
-          if (tokens) renderDiffInto(content, tokens);
-          else content.textContent = olderEntries[i]; // DIFF_WORD_CAP fallback: plain text
-        }
-        block.appendChild(content);
-        full.appendChild(block);
+    // 125: building this (word-diffing every entry) is expensive at long prompts /
+    // many rotation entries; each row starts collapsed, so defer it to first expand
+    // and cache the result -- most rows are never opened at all.
+    let fullBuilt = false;
+    const buildFull = () => {
+      if (fullBuilt) return;
+      fullBuilt = true;
+      if (v.name !== newerName) {
+        const nameRow = document.createElement("div");
+        nameRow.className = "hist-name-change";
+        const label = document.createElement("span");
+        label.className = "hist-name-label";
+        label.textContent = t("historyNameChanged") + ": ";
+        const oldSpan = document.createElement("span");
+        oldSpan.className = "diff-del";
+        oldSpan.textContent = v.name || "";
+        const newSpan = document.createElement("span");
+        newSpan.className = "diff-add";
+        newSpan.textContent = newerName || "";
+        nameRow.append(label, oldSpan, document.createTextNode(" → "), newSpan);
+        full.appendChild(nameRow);
       }
-    }
+      if (olderEntries.every((e) => !e) && newerEntries.every((e) => !e)) {
+        const hint = document.createElement("div");
+        hint.className = "hint";
+        hint.textContent = t("historyNoText");
+        full.appendChild(hint);
+      } else {
+        const maxLen = Math.max(olderEntries.length, newerEntries.length);
+        for (let i = 0; i < maxLen; i++) {
+          const hasOlder = i < olderEntries.length;
+          const hasNewer = i < newerEntries.length;
+          const block = document.createElement("div");
+          if (maxLen > 1) {
+            block.className = "hist-entry-block";
+            const num = document.createElement("div");
+            num.className = "hist-entry-num";
+            num.textContent = String(i + 1);
+            block.appendChild(num);
+          }
+          const content = document.createElement("div");
+          content.className = "hist-entry-content";
+          if (!hasNewer) {
+            const span = document.createElement("span");
+            span.className = "diff-del";
+            span.textContent = olderEntries[i];
+            content.appendChild(span);
+          } else if (!hasOlder) {
+            const span = document.createElement("span");
+            span.className = "diff-add";
+            span.textContent = newerEntries[i];
+            content.appendChild(span);
+          } else if (!flag("historyDiff")) {
+            content.textContent = olderEntries[i]; // 87: word diff switched off, show the plain old text
+          } else {
+            const tokens = diffWords(olderEntries[i], newerEntries[i]);
+            if (tokens) renderDiffInto(content, tokens);
+            else content.textContent = olderEntries[i]; // DIFF_WORD_CAP fallback: plain text
+          }
+          block.appendChild(content);
+          full.appendChild(block);
+        }
+      }
+    };
     const toggle = () => {
       const open = !full.classList.toggle("hidden");
+      if (open) buildFull();
       expand.setAttribute("aria-expanded", String(open));
       row.classList.toggle("open", open);
     };
@@ -7091,7 +7117,7 @@ EXPERT_ACTIONS["trash-open"] = openTrash;
 // used to actually pick a recognition language.
 let ocrCapsCache = [];
 let ocrCapsChecked = 0; // unix seconds of the last successful ocr_capabilities() call, 0 = never
-let ocrInstallTimers = {}; // capability name -> setInterval id, while its install is polled
+let ocrInstallTimers = {}; // capability name -> setTimeout id, while its install is polled
 let ocrInstallErrors = {}; // capability name -> true (UAC declined) or the backend's own error string
 function openOcrLangsModal() {
   $("ocr-langs-modal").classList.remove("hidden");
@@ -7101,7 +7127,7 @@ function closeOcrLangsModal() {
   $("ocr-langs-modal").classList.add("hidden");
   // Installs are OS processes and keep running regardless -- only the polling
   // loop (and the DOM it repaints) needs to stop while nobody is looking.
-  for (const id of Object.values(ocrInstallTimers)) clearInterval(id);
+  for (const id of Object.values(ocrInstallTimers)) clearTimeout(id);
   ocrInstallTimers = {};
 }
 async function loadOcrCaps(force) {
@@ -7179,7 +7205,7 @@ function ocrLangRow(cap) {
   const busy = !!ocrInstallTimers[cap.name];
   btn.disabled = busy;
   // The size sits INSIDE the button label on purpose -- nobody should start a
-  // download blind (Ben, 14.08.).
+  // download blind.
   btn.textContent = busy
     ? t("ocrLangsInstalling")
     : t("ocrLangsDownloadBtn").replace("{size}", cap.download_size == null ? "—" : fmtBytes(cap.download_size));
@@ -7187,9 +7213,9 @@ function ocrLangRow(cap) {
   actions.appendChild(btn);
   return row;
 }
-// Every path that can lead to an elevated install goes through here first (1a,
-// Ben 14.08.): explain the language, its size and that Windows will ask for
-// admin rights once, BEFORE that prompt ever appears. No exceptions.
+// Every path that can lead to an elevated install goes through here first:
+// explain the language, its size and that Windows will ask for admin rights
+// once, BEFORE that prompt ever appears. No exceptions.
 async function startOcrInstall(cap) {
   const size = cap.download_size == null ? "—" : fmtBytes(cap.download_size);
   const ok = await confirmDialog({
@@ -7203,25 +7229,30 @@ async function startOcrInstall(cap) {
   try {
     await invoke("ocr_install_language", { name: cap.name });
   } catch (e) {
-    // A declined UAC prompt is not an error (1a/2, Ben 14.08.): a calm inline
+    // A declined UAC prompt is not an error: a calm inline
     // note on the row, no error tone, the row stays "not installed".
     if (String(e) === "ocr-elevate-cancelled") { ocrInstallErrors[cap.name] = true; renderOcrLangsBody(); }
     else errToast(e);
     return;
   }
-  renderOcrLangsBody(); // shows the row's busy/disabled state right away
+  // 125: arm the poller (marks the row busy) BEFORE repainting, or the render still
+  // reads ocrInstallTimers[cap.name] as empty and shows an enabled Download button --
+  // a second click then starts a second UAC-elevated install.
   pollOcrInstall(cap.name);
+  renderOcrLangsBody();
 }
 // ocr_install_language() only resolves once the elevated process has LAUNCHED,
 // not once it finished -- poll the result file ourselves, a few seconds apart,
 // until it stops being null.
 function pollOcrInstall(name) {
   if (ocrInstallTimers[name]) return;
-  ocrInstallTimers[name] = setInterval(async () => {
+  // 125: setTimeout re-armed after each result, not setInterval -- the callback
+  // awaits an invoke, and a reply slower than the 3s tick would otherwise overlap
+  // itself (two ocr_install_result calls, or two clearInterval/repaint races).
+  const tick = async () => {
     let res;
-    try { res = await invoke("ocr_install_result", { name }); } catch (_) { return; }
-    if (res == null) return; // still running
-    clearInterval(ocrInstallTimers[name]);
+    try { res = await invoke("ocr_install_result", { name }); } catch (_) { res = undefined; }
+    if (res == null) { ocrInstallTimers[name] = setTimeout(tick, 3000); return; } // still running (or a transient probe failure)
     delete ocrInstallTimers[name];
     if (res.ok) {
       // Clear both caches so the new pack is selectable immediately, no restart.
@@ -7233,7 +7264,8 @@ function pollOcrInstall(name) {
     // in the row, never a silent failure.
     ocrInstallErrors[name] = res.error || true;
     renderOcrLangsBody();
-  }, 3000);
+  };
+  ocrInstallTimers[name] = setTimeout(tick, 3000);
 }
 EXPERT_ACTIONS["ocr-langs-open"] = openOcrLangsModal;
 // "ocr-no-language" always has the same fix: open this dialog. Used at every
@@ -8049,8 +8081,11 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input,
       cbRow.appendChild(label);
     }
   }
+  // 125: resolve any stale dialog BEFORE syncOk(), not after -- its done() resets
+  // ok.disabled = false unconditionally, which otherwise clobbered a fresh
+  // checkbox dialog's correct disabled-with-nothing-checked state.
+  confirmCleanup?.(false);
   syncOk();
-  confirmCleanup?.(false); // resolve any stale dialog first
   root.classList.remove("hidden");
   return new Promise((resolve) => {
     const done = (val) => {
@@ -8273,7 +8308,13 @@ function promptToModal(p) {
 }
 
 async function duplicatePrompt(id) {
-  const p = await invoke("get_prompt", { id });
+  let p;
+  try {
+    p = await invoke("get_prompt", { id });
+  } catch (err) {
+    errToast(err);
+    return;
+  }
   if (!p) return;
   // A copy starts unstarred and unbound: one accelerator belongs to one prompt.
   openModal({
@@ -8287,7 +8328,13 @@ async function duplicatePrompt(id) {
 }
 
 async function editPrompt(id) {
-  const p = await invoke("get_prompt", { id });
+  let p;
+  try {
+    p = await invoke("get_prompt", { id });
+  } catch (err) {
+    errToast(err);
+    return;
+  }
   if (p) {
     openModal({ ...promptToModal(p), mode: "edit", id });
   }
@@ -9495,6 +9542,9 @@ function renderLibrary() {
   // renderGrid always skips ids listed in a folder's members.
   for (const f of foldersOfView(activeView().id)) for (const id of f.members || []) placed.add(id);
   libDisplayOrder = items.map((p) => p.id); // F8: range-select uses display order
+  // 125: batch through a fragment -- appending straight into the live list forced
+  // a reflow per row on a large library.
+  const frag = document.createDocumentFragment();
   for (const p of items) {
     const row = document.createElement("button");
     row.type = "button";
@@ -9628,8 +9678,9 @@ function renderLibrary() {
       if (libSelectMode) { toggleLibSelect(p.id, e.shiftKey); return; }
       libraryCopy(p);
     });
-    list.appendChild(row);
+    frag.appendChild(row);
   }
+  list.appendChild(frag);
 }
 
 // ---- F8 batch operations ----
@@ -10704,6 +10755,7 @@ function bind() {
     rows[rows.length - 1]?.focus();
   });
   modal.rotateMode.addEventListener("change", () => {
+    if (!modalState) return;
     modalState.rotateMode = modal.rotateMode.value === "random" ? "random" : "";
   });
   modal.rotateAuto.addEventListener("click", () => {
@@ -10713,7 +10765,12 @@ function bind() {
   });
   modal.rotateReset.addEventListener("click", async () => {
     if (!modalState?.id) return;
-    await invoke("rotation_reset", { id: modalState.id });
+    try {
+      await invoke("rotation_reset", { id: modalState.id });
+    } catch (err) {
+      errToast(err);
+      return;
+    }
     toast(t("rotateResetDone"));
     refreshRotateNext();
   });
@@ -10890,12 +10947,17 @@ function bind() {
 
   // 83: re-requests the preview at the chosen page and saves it into pdf_page —
   // the field only ever shows for a PDF attachment (syncModalImageUi).
+  // 125: request token -- a fast second page change must not let the slower
+  // older reply land after the newer one and overwrite its already-fresher preview.
+  let pdfPageReq = 0;
   modal.pdfPage.addEventListener("change", async () => {
     if (!modalState) return;
     const page = Math.max(0, (Number(modal.pdfPage.value) || 1) - 1);
     modalState.pdfPage = page;
+    const req = ++pdfPageReq;
     const data = await loadFilePreview(modalState.filePath, page);
-    if (data && modalState) { modalState.image = data; modal.img.src = data; }
+    if (req !== pdfPageReq || !modalState) return;
+    if (data) { modalState.image = data; modal.img.src = data; }
   });
 
   // Paperclip button in the composer bar (files, images, gifs, videos).
@@ -11094,7 +11156,7 @@ function bind() {
   // size) so pixelate always samples the base, never already-drawn operations.
   const SE = {
     active: false, img: null, rawCanvas: null, w: 0, h: 0,
-    ops: [], redo: [], perTool: {}, tool: SNIP_EDIT_DEFAULT_TOOL(),
+    ops: [], redo: [], floor: 0, perTool: {}, tool: SNIP_EDIT_DEFAULT_TOOL(),
     zoom: 1, drag: null, panState: null, spaceDown: false, showRaw: false,
     cropRect: null, lastNudged: null, eyedropArm: null, textEdit: null,
     onApply: null, onCancel: null,
@@ -11356,12 +11418,16 @@ function bind() {
   function snipEditClearLive() { snipEditLiveCtx.clearRect(0, 0, SE.w, SE.h); }
 
   function snipEditUpdateUndoRedoButtons() {
-    $("snip-edit-undo").disabled = !SE.ops.length;
+    $("snip-edit-undo").disabled = SE.ops.length <= SE.floor;
     $("snip-edit-redo").disabled = !SE.redo.length;
   }
   function snipEditPushOp(op) {
     SE.ops.push(op);
-    if (SE.ops.length > SNIP_EDIT_UNDO_MAX()) SE.ops.shift();
+    // 125: SE.ops IS the render list -- never drop a rendered op. Once the undo
+    // window is exceeded, advance the floor instead of shifting the oldest op out;
+    // it stays drawn (snipEditRedrawBase still walks every op) but becomes
+    // permanent, undo just can no longer walk back past it.
+    if (SE.ops.length - SE.floor > SNIP_EDIT_UNDO_MAX()) SE.floor = SE.ops.length - SNIP_EDIT_UNDO_MAX();
     SE.redo.length = 0;
     SE.lastNudged = op;
     snipEditRedrawBase();
@@ -11370,11 +11436,16 @@ function bind() {
   // Spotlight/crop: exactly one may exist -- a new one replaces the old rather than
   // stacking two dimming layers.
   function snipEditPushUniqueOp(tool, op) {
+    const before = SE.ops.length;
     SE.ops = SE.ops.filter((o) => o.tool !== tool);
+    // floor is a count-based boundary into SE.ops; removing an entry shifts every
+    // later index down by one, so shrink the floor by the same amount to keep
+    // pointing at the same logical (never re-lock an already-undoable op).
+    SE.floor = Math.max(0, SE.floor - (before - SE.ops.length));
     snipEditPushOp(op);
   }
   function snipEditUndo() {
-    if (!SE.ops.length) return;
+    if (SE.ops.length <= SE.floor) return;
     SE.redo.push(SE.ops.pop());
     SE.lastNudged = null;
     snipEditRedrawBase();
@@ -11927,6 +11998,7 @@ function bind() {
       SE.h = img.naturalHeight;
       SE.ops = [];
       SE.redo = [];
+      SE.floor = 0;
       SE.perTool = {};
       SE.tool = SNIP_EDIT_DEFAULT_TOOL();
       SE.cropRect = null;
@@ -12238,7 +12310,8 @@ function bind() {
     showExpertPage(true);
   });
   $("expert-back").addEventListener("click", () => showExpertPage(false));
-  $("expert-search").addEventListener("input", (e) => { expertQuery = e.target.value; renderExpert(); });
+  const renderExpertDebounced = debounced(renderExpert, () => val("searchDebounceMs"));
+  $("expert-search").addEventListener("input", (e) => { expertQuery = e.target.value; renderExpertDebounced(); });
   $("expert-only-changed").addEventListener("change", (e) => {
     expertOnlyChanged = e.target.checked;
     syncOnlyChangedChip();
@@ -12631,8 +12704,6 @@ function bind() {
     if (e.target === $("hotkeys-modal")) closeHotkeysModal();
   });
   $("hotkeys-search").addEventListener("input", renderHotkeysList);
-  // The global hotkey summons the window + opens the quick launcher (library).
-  listen("summon-launcher", () => { $("library-btn").click(); });
 
   $("import-btn").addEventListener("click", runImport);
   $("export-csv").addEventListener("click", () => runExport("csv"));

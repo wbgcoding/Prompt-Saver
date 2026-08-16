@@ -9,8 +9,9 @@ import { APP_NAME } from "./brand.js";
 // Static, not dynamic: this window has to boot instantly (it opens on a hotkey
 // press) and unlike floating.js's pill, it needs the translated placeholder/empty
 // text from the very first frame, not after a lazy follow-up load.
-import { FLOAT_TXT } from "./i18n.js";
+import { FLOAT_TXT, LANGS } from "./i18n.js";
 import { applyTerms } from "./terms.js";
+import { resolveLang } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -49,14 +50,13 @@ function select(id) {
 // Case-insensitive substring score: a name hit ranks far above a body hit, an
 // earlier match ranks above a later one. No dependency, no fuzzy typo-tolerance —
 // this is a quick filter, not the library's full search.
+// 125: p.lname/p.ltext are precomputed once in boot() -- re-lowercasing every
+// item's name and (often much longer) body on every keystroke was the jank.
 function score(p, q) {
-  const name = (p.name || "").toLowerCase();
-  const ni = name.indexOf(q);
+  const ni = p.lname.indexOf(q);
   if (ni === 0) return 1000;
   if (ni > 0) return 500 - ni;
-  // Only lowercase the (often much longer) body once a name hit is ruled out.
-  const text = (p.text || "").toLowerCase();
-  const ti = text.indexOf(q);
+  const ti = p.ltext.indexOf(q);
   if (ti >= 0) return 100 - Math.min(ti, 90);
   return -1;
 }
@@ -150,15 +150,12 @@ async function boot() {
   applyFloatTheme(await invoke("current_theme").catch(() => null), await invoke("theme_vars").catch(() => ({})));
   listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 
-  const pref = (state.language && state.language !== "auto"
-    ? state.language
-    : navigator.language || "en"
-  ).toLowerCase();
-  const lang = Object.keys(FLOAT_TXT).find((c) => pref.startsWith(c)) || "en";
+  const lang = resolveLang(state.language, LANGS);
   TXT = Object.fromEntries(Object.entries(FLOAT_TXT[lang]).map(([k, v]) => [k, applyTerms(v, lang)]));
   searchEl.placeholder = TXT.searchPh;
 
   prompts = state.prompts || [];
+  for (const p of prompts) { p.lname = (p.name || "").toLowerCase(); p.ltext = (p.text || "").toLowerCase(); }
   usage = state.usage || {};
   lastUsed = state.last_used || {};
   render();

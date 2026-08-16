@@ -8,6 +8,7 @@ import { applyFloatTheme } from "./floattheme.js";
 import { mediaKind } from "./media.js";
 import { APP_NAME } from "./brand.js";
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
+import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -35,7 +36,6 @@ const GAP = 8; // gap between tiles
 const PAD = 10; // padding inside the popover
 const POP_GAP = 6; // gap between icon and popover
 const PREVIEW_MAX = 4; // mini previews on the closed folder (2x2)
-const COPIED_MS = 900;
 let DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT; // 87: expert-tunable
 const MENU_W = 230; // matches .menu in floating.css
 
@@ -61,7 +61,6 @@ const lastClick = {};
 let animMs = 150;
 // F22 drag-out: the modifier hands a member to the OS instead of pulling it out of
 // the folder, so the two gestures never fight over the same drag.
-const DRAG_OUT_MODS = { ctrl: "ctrlKey", alt: "altKey", shift: "shiftKey" };
 let dragOutOn = false, dragOutMod = "ctrlKey";
 
 // 32: rotating prompt — "next entry" badge per member, kept live by the backend's
@@ -126,9 +125,6 @@ function paintFace(el, p, withName) {
 
 // Ring thickness, in proportion to the icon — the same reasoning as the pill's:
 // a fixed band is a hairline on a large folder and swallows a small one whole.
-const RING_MIN = 8;
-const RING_MAX = 60;
-
 function renderIcon() {
   const box = FOLDER_BOX * state.scale;
   document.body.style.setProperty("--folder-box", px(box));
@@ -259,7 +255,9 @@ async function openPopover(kind) {
     if (!(await layout(kind, el, token))) return;
     open = kind;
     // Let the browser see the start state before the transition runs.
-    requestAnimationFrame(() => el.classList.add("shown"));
+    // 125: re-check the token -- a blur-driven closePopover() between the await
+    // above and this frame must not re-add "shown" onto an el already hidden again.
+    requestAnimationFrame(() => { if (token === seq) el.classList.add("shown"); });
   } catch (_) {
     el.classList.add("hidden");
   }
@@ -314,11 +312,17 @@ async function copyMember(id) {
     return;
   }
   if (cooldownMs && lastCopy[id] && now - lastCopy[id] < cooldownMs) return;
+  // 125: stamp BEFORE the await -- a fast second click while copy_prompt's IPC is
+  // still in flight must see the fresh timestamps right away, or the double-click/
+  // cooldown checks above miss it and a fast click issues a duplicate copy.
+  lastCopy[id] = Date.now();
+  lastClick[id] = Date.now();
   if (await invoke("copy_prompt", { id }).catch(() => false)) {
-    lastCopy[id] = Date.now();
-    lastClick[id] = Date.now();
     flash(id);
     invoke("record_copy", { id }).catch(() => {});
+  } else {
+    lastCopy[id] = 0;
+    lastClick[id] = 0; // roll back -- the copy never actually happened
   }
 }
 
@@ -345,8 +349,7 @@ async function applySettings() {
 
 async function applyTexts(s) {
   const i18n = await import("./i18n.js");
-  const pref = (s.language && s.language !== "auto" ? s.language : navigator.language || "en").toLowerCase();
-  const lang = Object.keys(i18n.FLOAT_TXT).find((c) => pref.startsWith(c)) || "en";
+  const lang = resolveLang(s.language, i18n.LANGS);
   const { applyTerms } = await import("./terms.js");
   TXT = Object.fromEntries(
     Object.entries(i18n.FLOAT_TXT[lang]).map(([k, v]) => [k, applyTerms(v, lang)]));
@@ -629,8 +632,11 @@ gridEl.addEventListener("contextmenu", (e) => {
   memberMenu.style.left = px(left);
   memberMenu.style.top = px(top);
 });
-gridEl.addEventListener("mousedown", (e) => {
-  if (!memberMenu.contains(e.target)) memberMenu.classList.add("hidden");
+// 125: #member-menu is a sibling of #pop, never inside #grid -- a listener bound
+// to gridEl never sees a mousedown on the popover's own padding (or anywhere else
+// outside the grid), so the menu was stuck open. document catches every click.
+document.addEventListener("mousedown", (e) => {
+  if (!memberMenu.classList.contains("hidden") && !memberMenu.contains(e.target)) memberMenu.classList.add("hidden");
 });
 
 document.getElementById("mm-edit").addEventListener("click", async () => {
@@ -656,12 +662,12 @@ listen("folder-changed", () => loadState());
 // A pill is being dragged over this folder — show that letting go drops it in.
 listen("merge-hint", (e) => iconEl.classList.toggle("merge-hint", e.payload === true));
 listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
-listen("language-changed", () => applySettings());
+listen("language-changed", () => applySettings().catch(() => {}));
 // Same as the pill: an expert change has to reach a folder that is already open.
 // 57: applySettings() alone never reaches state.cols (folderGridCols) -- that only
 // arrives through loadState()'s own float_folder_state call, so a changed grid
 // column count never reached an already-open folder window without it too.
-listen("settings-changed", () => { applySettings(); loadState(); });
+listen("settings-changed", () => { applySettings().catch(() => {}); loadState(); });
 listen("prompt-updated", (e) => {
   if (e.payload && state.members.some((p) => p.id === e.payload.id)) {
     // 32: an edit can change entry count/text — drop the cached rotation state so

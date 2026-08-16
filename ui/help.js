@@ -274,7 +274,7 @@ export const HELP_CONTENT = {
       section: "alwaysOnTop",
       title: "Standalone: Quick launcher",
       whatItIs:
-        "The quick launcher is a small always-on-top popup with fuzzy search across every tile's name and text.",
+        "The quick launcher is a small always-on-top popup that searches every tile's name and text as you type — a plain substring match, not a fuzzy one, so a name hit ranks above a text hit but a typo will not find a match.",
       howTo: ["Press Ctrl+Alt+P, or the configured hotkey, from anywhere.", "Type to search, then click or press Enter on a result to copy it."],
       whatHappens: "The launcher closes itself right after copying, so it never lingers on screen.",
       settings: [],
@@ -761,7 +761,7 @@ export const HELP_CONTENT = {
       section: "alwaysOnTop",
       title: "Eigenständig: Schneller Launcher",
       whatItIs:
-        "Der schnelle Launcher ist ein kleines, immer im Vordergrund liegendes Popup mit Fuzzy-Suche über Name und Text jeder Kachel.",
+        "Der schnelle Launcher ist ein kleines, immer im Vordergrund liegendes Popup, das beim Tippen Name und Text jeder Kachel durchsucht — ein einfacher Text-Treffer, kein unscharfer Abgleich: Ein Treffer im Namen steht über einem Treffer im Text, aber ein Tippfehler findet nichts.",
       howTo: ["Strg+Alt+P, oder den konfigurierten Hotkey, von überall drücken.", "Tippen zum Suchen, dann Klick oder Enter auf einem Ergebnis zum Kopieren."],
       whatHappens: "Der Launcher schließt sich direkt nach dem Kopieren selbst, sodass er nie auf dem Bildschirm bleibt.",
       settings: [],
