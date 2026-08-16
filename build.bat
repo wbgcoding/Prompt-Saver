@@ -60,12 +60,24 @@ rem Panic locations from the dependencies survive "strip" as string literals, wh
 rem would put the build machine's account name (%%USERPROFILE%%\.cargo\registry\...)
 rem into a public download. Remap them to a neutral prefix. Changing RUSTFLAGS
 rem invalidates the dependency cache, so the first build after this is a full one.
-rem rustc splits RUSTFLAGS on spaces, so a profile path containing one cannot be
-rem remapped this way - skip it rather than break the build.
-set "CARGO_REG=%USERPROFILE%\.cargo\registry"
-set "RUSTFLAGS=--remap-path-prefix=%CARGO_REG%=cargo"
+rem rustc splits RUSTFLAGS on spaces, so a raw profile path containing one breaks the
+rem flag outright. Resolve the short (8.3) form first - it never contains a space -
+rem and point CARGO_HOME at that same short alias (the identical on-disk folder, just
+rem a different name for it) so the paths cargo/rustc actually embed match what
+rem RUSTFLAGS remaps, instead of the remap silently not matching anything while the
+rem long, space-containing path still ends up in the public exe.
+for %%I in ("%USERPROFILE%") do set "USERPROFILE_SHORT=%%~sI"
+set "CARGO_REG=%USERPROFILE_SHORT%\.cargo\registry"
 echo %CARGO_REG%| find " " >nul
-if not errorlevel 1 set "RUSTFLAGS=" & echo [WARN] Profile path contains a space - build paths stay in the exe.
+if not errorlevel 1 (
+    echo [ERROR] Build machine user path still contains a space even in short ^(8.3^) form.
+    echo [ERROR] Refusing to build a public release that would embed it - move the build
+    echo [ERROR] environment to a path without spaces, or enable 8.3 name generation
+    echo [ERROR] ^(fsutil 8dot3name^) for this volume.
+    goto :fail
+)
+set "CARGO_HOME=%USERPROFILE_SHORT%\.cargo"
+set "RUSTFLAGS=--remap-path-prefix=%CARGO_REG%=cargo"
 rem Full bundle: produces BOTH the portable exe (target\release\<slug>.exe)
 rem AND the NSIS installer (target\release\bundle\nsis). Never pass --no-bundle
 rem here or the installer is skipped (that was the "no installer created" bug).

@@ -62,6 +62,10 @@ windows = { version = "0.58", features = [
   "Globalization", "Foundation_Collections", "Win32_System_WinRT",
   # 122: elevated install launch (ShellExecuteW) for OCR language packs.
   "Win32_UI_Shell", "Win32_Foundation", "Win32_UI_WindowsAndMessaging",
+  # Authenticode check (WinVerifyTrust) on the downloaded WebView2 bootstrapper
+  # before it is ever run. Win32_Security_Cryptography is needed for the
+  # WINTRUST_DATA struct itself, not just the WinTrust function bindings.
+  "Win32_Security_WinTrust", "Win32_Security_Cryptography",
 ] }
 
 # Small release binary, but tuned for much faster builds:

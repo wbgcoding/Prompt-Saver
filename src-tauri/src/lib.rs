@@ -4,7 +4,7 @@
 pub mod brand;
 
 use image::imageops::FilterType;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, Transaction};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -1587,8 +1587,8 @@ impl Settings {
                 self.ui_flags.insert(ALLOW_SCREENSHOT_KEY.to_string(), true);
             }
         }
-        // 24: the "ai" theme was renamed to "neon" (Ben: no "ai" anywhere, even
-        // internally). Rewrite a stored preference so nobody's colours reset to
+        // The "ai" theme was renamed to "neon"; no "ai" anywhere, even
+        // internally. Rewrite a stored preference so nobody's colours reset to
         // "system" on update.
         if self.theme == "ai" {
             self.theme = "neon".to_string();
@@ -1957,21 +1957,28 @@ fn dec_str(stored: &str) -> String {
     stored.to_string()
 }
 
-fn db_conn(app: &AppHandle) -> Option<Connection> {
-    let conn = Connection::open(data_dir(app).join("data.db")).ok()?;
-    conn.execute_batch(
-        "PRAGMA journal_mode=WAL;
-         PRAGMA busy_timeout=3000;
-         CREATE TABLE IF NOT EXISTS prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
-         CREATE TABLE IF NOT EXISTS trash(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
-         CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
-         CREATE TABLE IF NOT EXISTS copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
-         CREATE INDEX IF NOT EXISTS idx_copy_log_ts ON copy_log(ts);
-         CREATE TABLE IF NOT EXISTS prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '');
-         CREATE INDEX IF NOT EXISTS idx_pv_prompt ON prompt_versions(prompt_id);
-         CREATE TABLE IF NOT EXISTS clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);",
-    )
-    .ok()?;
+// Schema + migration probe for a data.db connection, run at most ONCE per process
+// (see db_conn below). Returns false on any failure; db_conn then fails closed for
+// every call for the rest of the process, same as it already did per-call before —
+// a schema/migration failure here means the DB file itself is unusable, which no
+// retry on a later call would fix differently.
+fn db_conn_init_schema(conn: &Connection) -> bool {
+    if conn
+        .execute_batch(
+            "PRAGMA journal_mode=WAL;
+             CREATE TABLE IF NOT EXISTS prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+             CREATE TABLE IF NOT EXISTS trash(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+             CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+             CREATE TABLE IF NOT EXISTS copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
+             CREATE INDEX IF NOT EXISTS idx_copy_log_ts ON copy_log(ts);
+             CREATE TABLE IF NOT EXISTS prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '');
+             CREATE INDEX IF NOT EXISTS idx_pv_prompt ON prompt_versions(prompt_id);
+             CREATE TABLE IF NOT EXISTS clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);",
+        )
+        .is_err()
+    {
+        return false;
+    }
     // 32: first-ever schema migration in this app — `prompt_versions` predates
     // `variants`. `CREATE TABLE IF NOT EXISTS` above already gives a brand-new
     // install the column; an EXISTING data.db still has the old 5-column table.
@@ -1991,22 +1998,44 @@ fn db_conn(app: &AppHandle) -> Option<Connection> {
         // to tell "already migrated" apart from a REAL failure -- discarding the
         // ALTER's own result here threw that away again. A real failure now fails
         // db_conn itself, which every caller already treats as "DB unavailable".
-        conn.execute("ALTER TABLE prompt_versions ADD COLUMN variants TEXT NOT NULL DEFAULT ''", [])
-            .ok()?;
+        if conn.execute("ALTER TABLE prompt_versions ADD COLUMN variants TEXT NOT NULL DEFAULT ''", []).is_err() {
+            return false;
+        }
+    }
+    true
+}
+
+fn db_conn(app: &AppHandle) -> Option<Connection> {
+    let conn = Connection::open(data_dir(app).join("data.db")).ok()?;
+    // busy_timeout is connection-scoped (NOT persisted in the DB file, unlike
+    // journal_mode below) so it must be set on every connection, but the schema
+    // batch + migration probe are idempotent and only ever need to run once per
+    // process — every call used to pay for a 10-statement execute_batch plus a
+    // pragma_table_info probe just to open a connection for one write.
+    conn.execute_batch("PRAGMA busy_timeout=3000;").ok()?;
+    static SCHEMA_READY: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if !*SCHEMA_READY.get_or_init(|| db_conn_init_schema(&conn)) {
+        return None;
     }
     Some(conn)
 }
 
+// Replace-all write of one row set into one table, always inside the caller's own
+// transaction. `table` is always one of our own two hardcoded table names below,
+// never user input, so interpolating it into the SQL text is safe.
+fn write_rows(tx: &Transaction, table: &str, rows: &[Prompt]) -> rusqlite::Result<()> {
+    tx.execute(&format!("DELETE FROM {table}"), [])?;
+    let mut stmt = tx.prepare(&format!("INSERT INTO {table}(id, ord, data) VALUES(?1, ?2, ?3)"))?;
+    for (i, p) in rows.iter().enumerate() {
+        let data = enc_str(&serde_json::to_string(p).unwrap_or_default());
+        stmt.execute(params![p.id, i as i64, data])?;
+    }
+    Ok(())
+}
+
 fn db_write_prompts(conn: &mut Connection, prompts: &[Prompt]) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
-    tx.execute("DELETE FROM prompts", [])?;
-    {
-        let mut stmt = tx.prepare("INSERT INTO prompts(id, ord, data) VALUES(?1, ?2, ?3)")?;
-        for (i, p) in prompts.iter().enumerate() {
-            let data = enc_str(&serde_json::to_string(p).unwrap_or_default());
-            stmt.execute(params![p.id, i as i64, data])?;
-        }
-    }
+    write_rows(&tx, "prompts", prompts)?;
     tx.commit()
 }
 
@@ -2018,14 +2047,7 @@ fn db_write_prompts(conn: &mut Connection, prompts: &[Prompt]) -> rusqlite::Resu
 // those call sites found and fixed, with real risk of missing one.
 fn db_write_trash(conn: &mut Connection, trash: &[Prompt]) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
-    tx.execute("DELETE FROM trash", [])?;
-    {
-        let mut stmt = tx.prepare("INSERT INTO trash(id, ord, data) VALUES(?1, ?2, ?3)")?;
-        for (i, p) in trash.iter().enumerate() {
-            let data = enc_str(&serde_json::to_string(p).unwrap_or_default());
-            stmt.execute(params![p.id, i as i64, data])?;
-        }
-    }
+    write_rows(&tx, "trash", trash)?;
     tx.commit()
 }
 
@@ -2036,22 +2058,8 @@ fn db_write_trash(conn: &mut Connection, trash: &[Prompt]) -> rusqlite::Result<(
 // INSERT pairs means either the whole move lands or neither half does.
 fn db_write_prompts_and_trash(conn: &mut Connection, prompts: &[Prompt], trash: &[Prompt]) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
-    tx.execute("DELETE FROM prompts", [])?;
-    {
-        let mut stmt = tx.prepare("INSERT INTO prompts(id, ord, data) VALUES(?1, ?2, ?3)")?;
-        for (i, p) in prompts.iter().enumerate() {
-            let data = enc_str(&serde_json::to_string(p).unwrap_or_default());
-            stmt.execute(params![p.id, i as i64, data])?;
-        }
-    }
-    tx.execute("DELETE FROM trash", [])?;
-    {
-        let mut stmt = tx.prepare("INSERT INTO trash(id, ord, data) VALUES(?1, ?2, ?3)")?;
-        for (i, p) in trash.iter().enumerate() {
-            let data = enc_str(&serde_json::to_string(p).unwrap_or_default());
-            stmt.execute(params![p.id, i as i64, data])?;
-        }
-    }
+    write_rows(&tx, "prompts", prompts)?;
+    write_rows(&tx, "trash", trash)?;
     tx.commit()
 }
 
@@ -9166,23 +9174,46 @@ const STALE_TEMP_FILE_AGE: Duration = Duration::from_secs(3600);
 
 fn sweep_stale_temp_files() {
     let dir = std::env::temp_dir();
-    let Ok(entries) = fs::read_dir(&dir) else { return };
     let snip_prefix = format!("{}-snip-", brand::TEMP_PREFIX);
     let update_prefix = format!("{}-update-", brand::SLUG);
+    // Each of these dirs holds a staged ~8 MB MicrosoftEdgeWebview2Setup.exe that
+    // nothing else ever deletes once the bootstrapper has run or been declined.
+    let wv2_prefix = format!("{}-wv2-", brand::SLUG);
     let is_stale = |e: &fs::DirEntry| {
         e.metadata()
             .and_then(|m| m.modified())
             .and_then(|t| SystemTime::now().duration_since(t).map_err(std::io::Error::other))
             .is_ok_and(|age| age >= STALE_TEMP_FILE_AGE)
     };
-    for e in entries.flatten() {
-        let name = e.file_name().to_string_lossy().to_string();
-        if name.starts_with(&snip_prefix) && name.ends_with(".jpg") {
-            if is_stale(&e) {
+    if let Ok(entries) = fs::read_dir(&dir) {
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            if name.starts_with(&snip_prefix) && name.ends_with(".jpg") {
+                if is_stale(&e) {
+                    let _ = fs::remove_file(e.path());
+                }
+            } else if (name.starts_with(&update_prefix) || name.starts_with(&wv2_prefix)) && is_stale(&e) {
+                let _ = fs::remove_dir_all(e.path());
+            }
+        }
+    }
+
+    // OCR leftovers (a crop/page image and its install-result json) live one level
+    // down, in the app's own TEMP_DIR subfolder -- the same folder the versioned
+    // pdfium cache (`pdfium_cache_path`) lives in. Only the ocr-* names below are
+    // ever touched here; the pdfium-<version>.dll cache is swept separately, by
+    // version, in `sweep_stale_pdfium_dlls` -- never by age here.
+    let ocr_dir = dir.join(brand::TEMP_DIR);
+    if let Ok(entries) = fs::read_dir(&ocr_dir) {
+        let ocr_prefix = format!("{}-ocr-", brand::TEMP_PREFIX);
+        let ocr_install_prefix = format!("{}-ocr-install-", brand::TEMP_PREFIX);
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            let is_ocr_png = name.starts_with(&ocr_prefix) && name.ends_with(".png");
+            let is_ocr_install_json = name.starts_with(&ocr_install_prefix) && name.ends_with(".json");
+            if (is_ocr_png || is_ocr_install_json) && is_stale(&e) {
                 let _ = fs::remove_file(e.path());
             }
-        } else if name.starts_with(&update_prefix) && is_stale(&e) {
-            let _ = fs::remove_dir_all(e.path());
         }
     }
 }
@@ -10291,21 +10322,15 @@ fn clean_app_name(raw: &str) -> String {
 
 // Encode as JPEG, copy to the clipboard, optionally archive to the folder, close the
 // overlay and notify the UI. JPEG (not PNG): a full-res PNG data URL stalled the save.
-fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Option<String>) -> Result<(), String> {
+// The encode/clipboard/file-write work runs in spawn_blocking, the same shape as its
+// sibling finalize_ocr_capture -- this used to run inline on the async worker thread,
+// blocking whichever other command happened to land on it for however long the encode
+// and disk write take.
+async fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Option<String>) -> Result<(), String> {
     let (cw, ch) = crop.dimensions();
     if cw == 0 || ch == 0 {
         return Err("empty region".to_string());
     }
-    let jpeg = encode_snip_jpeg(crop.as_raw(), cw, ch, SNIP_SAVE_Q).ok_or("encode failed")?;
-    let data_url = format!("data:image/jpeg;base64,{}", base64_encode(&jpeg));
-
-    let _ = arboard::Clipboard::new().and_then(|mut c| {
-        c.set_image(arboard::ImageData {
-            width: cw as usize,
-            height: ch as usize,
-            bytes: crop.into_raw().into(),
-        })
-    });
 
     // "Screenshot" + a precise timestamp (+ the source app for a window shot) — the
     // button name and the optional folder file share the same stamp.
@@ -10329,11 +10354,26 @@ fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Option<St
             )
         })
         .unwrap_or((false, String::new()));
-    let path = if save_to_folder {
-        save_screenshot(&jpeg, &screenshot_dir(&custom_dir), &stem)
-    } else {
-        String::new()
-    };
+
+    let (data_url, path) = tauri::async_runtime::spawn_blocking(move || -> Result<(String, String), String> {
+        let jpeg = encode_snip_jpeg(crop.as_raw(), cw, ch, SNIP_SAVE_Q).ok_or("encode failed")?;
+        let data_url = format!("data:image/jpeg;base64,{}", base64_encode(&jpeg));
+        let _ = arboard::Clipboard::new().and_then(|mut c| {
+            c.set_image(arboard::ImageData {
+                width: cw as usize,
+                height: ch as usize,
+                bytes: crop.into_raw().into(),
+            })
+        });
+        let path = if save_to_folder {
+            save_screenshot(&jpeg, &screenshot_dir(&custom_dir), &stem)
+        } else {
+            String::new()
+        };
+        Ok((data_url, path))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
 
     close_all_snip(app);
     app.state::<SnipState>()
@@ -10482,7 +10522,7 @@ async fn capture_region(
     if ocr_armed {
         return finalize_ocr_capture(&app, &state, crop).await;
     }
-    finalize_capture(&app, crop, None)
+    finalize_capture(&app, crop, None).await
 }
 
 // Top-level windows stacked ABOVE the target that overlap its rect (global
@@ -10620,7 +10660,7 @@ async fn capture_window(
             .filter(|im| !capture_looks_bad(im))
     };
     if let Some(im) = direct {
-        return if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()) };
+        return if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()).await };
     }
 
     // Target's global physical rect + frozen-image origin.
@@ -10646,7 +10686,7 @@ async fn capture_window(
             if let Some((ox, oy)) = origin {
                 if let Some(im) = crop_frozen(&state, 0, wx - ox, wy - oy, ww as u32, wh as u32) {
                     if !capture_is_blank(&im) {
-                        return if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()) };
+                        return if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()).await };
                     }
                 }
             }
@@ -10668,7 +10708,7 @@ async fn capture_window(
         }
         match grab {
             Some(im) if !capture_is_blank(&im) => {
-                if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()) }
+                if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()).await }
             }
             _ => {
                 set_snip_overlay_hidden(&app, false);
@@ -10683,7 +10723,7 @@ async fn capture_window(
             .filter(|im| !capture_is_blank(im));
         match img {
             Some(im) => {
-                if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()) }
+                if ocr_armed { finalize_ocr_capture(&app, &state, im).await } else { finalize_capture(&app, im, app_name.clone()).await }
             }
             None => Err("blocked".to_string()),
         }
@@ -11272,6 +11312,19 @@ fn spawn_ocr_lang_update_watcher(app: AppHandle) {
                         if let Some(s) = app.try_state::<Db>() {
                             let mut store = s.lock().unwrap_or_else(|e| e.into_inner());
                             ocr_lang_save_snapshots(&mut store.settings, &new_snapshots);
+                            // Persist the next-due time so a user who dismisses the
+                            // notice any way other than "Abbrechen" (ocr_lang_snooze)
+                            // is not re-nagged on every app start -- the in-process
+                            // thread::sleep cadence alone resets on every launch.
+                            let check_hours = store
+                                .settings
+                                .ui_values
+                                .get("ocrLangCheckH")
+                                .copied()
+                                .unwrap_or(168.0)
+                                .clamp(24.0, 720.0);
+                            let next = now + (check_hours * 3600.0) as u64;
+                            store.settings.ui_texts.insert(OCR_LANG_NEXT_CHECK_KEY.to_string(), next.to_string());
                             save_settings(&app, &store.settings);
                         }
                     }
@@ -11355,8 +11408,8 @@ mod ocr {
 
     // "auto" -> the user's profile languages; if none of those has a recognition
     // pack installed, fall back to whichever recognition language IS installed
-    // instead of failing (Ben: "use whatever language packs are already
-    // present"). Only when NOTHING is installed does this become a real error.
+    // instead of failing (use whatever language packs are already present).
+    // Only when NOTHING is installed does this become a real error.
     fn create_auto_engine() -> Result<OcrEngine, String> {
         if let Ok(e) = OcrEngine::TryCreateFromUserProfileLanguages() {
             return Ok(e);
@@ -11371,17 +11424,21 @@ mod ocr {
     }
 
     // Resolve (and cache) the OcrEngine for `lang` ("auto" or an explicit BCP-47
-    // tag). Never recreates an engine that is already cached. 122: when `lang` is
+    // tag). Never recreates an engine that is already cached. When `lang` is
     // an explicit tag whose recognition pack is not actually installed,
     // `auto_pick` (the ocrAutoPickLang expert setting, default on) decides
-    // whether to fall back to whatever IS installed (Ben, 120: "use whatever
-    // language packs are already present") or to fail with ocr-no-language. The
+    // whether to fall back to whatever IS installed (use whatever language
+    // packs are already present) or to fail with ocr-no-language. The
     // cache key stays the ORIGINAL requested `lang`, matching how "auto" already
     // caches whatever engine it happened to resolve to -- installing a new
     // language pack clears the whole cache (see mod ocr::install_result), so a
     // stale fallback never lingers once the desired pack becomes available.
     fn resolve_engine(lang: &str, auto_pick: bool) -> Result<OcrEngine, String> {
-        if let Some(e) = engine_cache().lock().unwrap_or_else(|e| e.into_inner()).get(lang) {
+        // Hold ONE guard across the whole check-then-insert -- releasing it between
+        // the read and the write let two concurrent OCR calls both miss the cache
+        // and each build their own engine (wasted work, not a correctness bug).
+        let mut cache = engine_cache().lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(e) = cache.get(lang) {
             return Ok(e.clone());
         }
         let engine = if lang == "auto" {
@@ -11396,10 +11453,7 @@ mod ocr {
                 None => return Err("ocr-no-language".to_string()),
             }
         };
-        engine_cache()
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(lang.to_string(), engine.clone());
+        cache.insert(lang.to_string(), engine.clone());
         Ok(engine)
     }
 
@@ -11688,8 +11742,7 @@ mod ocr {
             // SE_ERR_ACCESSDENIED (5) is what ShellExecuteW returns when the user
             // declines the UAC prompt; ERROR_CANCELLED (1223) shows up on some
             // Windows versions for the same outcome. Both are "no admin rights
-            // given", not a real failure (122 / Ben 14.08.: no error tone, no
-            // hung state).
+            // given", not a real failure (no error tone, no hung state).
             if code == 5 || code == 1223 {
                 return Err("ocr-elevate-cancelled".to_string());
             }
@@ -12016,6 +12069,20 @@ fn valid_update_url(url: &str) -> bool {
     !tag.is_empty() && !asset.is_empty() && extra.is_none() && low.ends_with(".exe")
 }
 
+// Re-derive the release tag from a pinned download URL (see `valid_update_url` above)
+// and confirm it is actually newer than the installed version. Kept as its own pure
+// function so `install_update` cannot install a version-shaped-but-old release, and so
+// the downgrade rejection is unit-testable without needing a live AppHandle.
+fn update_url_is_newer_release(url: &str) -> bool {
+    let prefix = format!("{}/releases/download/", repo_url());
+    let tag = url
+        .strip_prefix(prefix.as_str())
+        .and_then(|rest| rest.split('/').next())
+        .unwrap_or("")
+        .trim_start_matches('v');
+    !tag.is_empty() && version_newer(tag, APP_VERSION)
+}
+
 // Download the installer to %TEMP%, run it fully silent (/S), restart the
 // app afterwards and quit so the installer can replace the binaries.
 #[tauri::command]
@@ -12023,6 +12090,14 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
     // Only our own release assets under the exact pinned repo path — not any github.com URL.
     if !valid_update_url(&url) {
         return Err("invalid update source".to_string());
+    }
+    // The URL shape check above only proves the download stays inside our own repo's
+    // release path — it says nothing about the version. Re-assert the release tag
+    // embedded in that same pinned path is actually newer than what's installed, so
+    // an older release reachable at a valid, pinned-repo URL (a stale link, a rolled-back
+    // asset) can never be installed as an "update".
+    if !update_url_is_newer_release(&url) {
+        return Err("this release is not newer than the installed version".to_string());
     }
     let resp = ureq::get(&url)
         .set("User-Agent", brand::USER_AGENT)
@@ -13397,6 +13472,56 @@ fn ensure_webview2() -> bool {
     false
 }
 
+// Authenticode-verify a staged file via WinVerifyTrust (WINTRUST_ACTION_GENERIC_VERIFY_V2,
+// no UI, no revocation check against a network CRL/OCSP responder -- this only needs to
+// prove the file is validly signed, not chase a live revocation list on every launch).
+// The update path (install_update) is fail-closed on a published SHA-256; this download
+// has no such hash to check against (it is Microsoft's own bootstrapper, not our own
+// release asset), so an Authenticode check is the equivalent integrity gate here: the
+// size cap + "MZ" header check above are only a corruption/wrong-format guard, not
+// authentication on their own.
+#[cfg(windows)]
+fn verify_authenticode_signature(path: &std::path::Path) -> bool {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Security::WinTrust::{
+        WinVerifyTrust, WINTRUST_ACTION_GENERIC_VERIFY_V2, WINTRUST_DATA, WINTRUST_DATA_0,
+        WINTRUST_FILE_INFO, WTD_CHOICE_FILE, WTD_REVOKE_NONE, WTD_STATEACTION_CLOSE,
+        WTD_STATEACTION_VERIFY, WTD_UICONTEXT_EXECUTE, WTD_UI_NONE,
+    };
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    let mut file_info = WINTRUST_FILE_INFO {
+        cbStruct: std::mem::size_of::<WINTRUST_FILE_INFO>() as u32,
+        pcwszFilePath: PCWSTR(wide.as_ptr()),
+        ..Default::default()
+    };
+    let mut data = WINTRUST_DATA {
+        cbStruct: std::mem::size_of::<WINTRUST_DATA>() as u32,
+        dwUIChoice: WTD_UI_NONE,
+        fdwRevocationChecks: WTD_REVOKE_NONE,
+        dwUnionChoice: WTD_CHOICE_FILE,
+        Anonymous: WINTRUST_DATA_0 { pFile: &mut file_info },
+        dwStateAction: WTD_STATEACTION_VERIFY,
+        dwUIContext: WTD_UICONTEXT_EXECUTE,
+        ..Default::default()
+    };
+    let mut action = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    // SAFETY: `data` and `file_info` are valid, live, correctly-sized WINTRUST_DATA/
+    // WINTRUST_FILE_INFO values for the whole call; `wide` (the file path buffer) and
+    // `file_info` both outlive the WinVerifyTrust call that borrows them by reference.
+    let status = unsafe {
+        WinVerifyTrust(HWND(std::ptr::null_mut()), &mut action, &mut data as *mut _ as *mut core::ffi::c_void)
+    };
+    // WTD_STATEACTION_CLOSE releases WinVerifyTrust's own per-call state -- required
+    // after a WTD_STATEACTION_VERIFY call regardless of the verify result.
+    data.dwStateAction = WTD_STATEACTION_CLOSE;
+    unsafe {
+        let _ = WinVerifyTrust(HWND(std::ptr::null_mut()), &mut action, &mut data as *mut _ as *mut core::ffi::c_void);
+    }
+    status == 0 // ERROR_SUCCESS: a validly (chain-trusted) signed file
+}
+
 // Download the Microsoft Evergreen WebView2 bootstrapper to %TEMP% and run it.
 // Returns true only if the installer reports success. Fully guarded: any failure
 // falls back to the manual download link.
@@ -13444,6 +13569,12 @@ fn install_webview2_runtime() -> bool {
     }
     let path = dir.join("MicrosoftEdgeWebview2Setup.exe");
     if fs::write(&path, &bytes).is_err() {
+        return false;
+    }
+    // Integrity: only Microsoft's own genuinely, chain-trust-signed bootstrapper is ever
+    // run. Unlike install_update, there is no separately-published hash to check this
+    // download against -- Authenticode is the equivalent fail-closed gate here.
+    if !verify_authenticode_signature(&path) {
         return false;
     }
     std::process::Command::new(&path)
@@ -14798,8 +14929,14 @@ fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
     }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
+        // Fetch the queue state ONCE for this task's whole lifetime rather than
+        // re-fetching every loop iteration: a `try_state` miss mid-loop used to
+        // `return` without ever clearing `active`, which permanently latches
+        // `should_spawn` to false above and disables Markdown sync writes for the
+        // rest of the process. `Db` state (below) is refetched per-iteration on
+        // purpose -- only this queue's own liveness needs to be pinned down.
+        let Some(q) = app.try_state::<SyncWriteQueue>() else { return };
         loop {
-            let Some(q) = app.try_state::<SyncWriteQueue>() else { return };
             {
                 // Check-and-clear (or check-and-go-inactive) as ONE critical section -
                 // a deposit between "queue looked empty" and "mark inactive" would
@@ -16119,6 +16256,23 @@ mod tests {
     }
 
     #[test]
+    fn install_update_rejects_a_release_older_than_the_installed_version() {
+        let base = format!("https://github.com/{}/releases/download", brand::REPO);
+        // An older or equal tag than APP_VERSION must never pass, even at an
+        // otherwise perfectly pinned, valid-shaped URL.
+        assert!(!update_url_is_newer_release(&format!("{base}/v0.0.1/App_0.0.1_x64-setup.exe")));
+        assert!(!update_url_is_newer_release(&format!(
+            "{base}/v{APP_VERSION}/App_{APP_VERSION}_x64-setup.exe"
+        )));
+        // A genuinely newer tag still passes.
+        assert!(update_url_is_newer_release(&format!(
+            "{base}/v99.0.0/App_99.0.0_x64-setup.exe"
+        )));
+        // A malformed/missing tag is rejected rather than treated as newer.
+        assert!(!update_url_is_newer_release(&format!("{base}//App-setup.exe")));
+    }
+
+    #[test]
     fn store_crypt_roundtrip() {
         let secret = "prompt with sécret 🔐 {#{x}#}";
         assert_eq!(dec_str(&enc_str(secret)), secret);
@@ -16262,28 +16416,52 @@ mod tests {
         let pid = std::process::id();
         let snip = dir.join(format!("{}-snip-{}.jpg", brand::TEMP_PREFIX, pid));
         let update_dir = dir.join(format!("{}-update-{}-1", brand::SLUG, pid));
+        let wv2_dir = dir.join(format!("{}-wv2-{}-1", brand::SLUG, pid));
         let fresh_snip = dir.join(format!("{}-snip-{}-fresh.jpg", brand::TEMP_PREFIX, pid));
         let unrelated_ext = dir.join(format!("{}-snip-{}.png", brand::TEMP_PREFIX, pid)); // wrong extension
         let unrelated_file = dir.join(format!("ps-sweep-unrelated-{}.txt", pid));
+        let ocr_subdir = dir.join(brand::TEMP_DIR);
+        let ocr_png = ocr_subdir.join(format!("{}-ocr-{}.png", brand::TEMP_PREFIX, pid));
+        let ocr_json = ocr_subdir.join(format!("{}-ocr-install-{}.json", brand::TEMP_PREFIX, pid));
+        let fresh_ocr_png = ocr_subdir.join(format!("{}-ocr-{}-fresh.png", brand::TEMP_PREFIX, pid));
+        let pdfium_cache = ocr_subdir.join(format!("pdfium-test-{}.dll", pid));
 
         fs::write(&snip, b"jpeg").unwrap();
         fs::create_dir_all(&update_dir).unwrap();
         fs::write(update_dir.join("setup.exe"), b"x").unwrap();
+        fs::create_dir_all(&wv2_dir).unwrap();
+        fs::write(wv2_dir.join("MicrosoftEdgeWebview2Setup.exe"), b"x").unwrap();
         fs::write(&fresh_snip, b"jpeg").unwrap();
         fs::write(&unrelated_ext, b"x").unwrap();
         fs::write(&unrelated_file, b"x").unwrap();
+        fs::create_dir_all(&ocr_subdir).unwrap();
+        fs::write(&ocr_png, b"png").unwrap();
+        fs::write(&ocr_json, b"{}").unwrap();
+        fs::write(&fresh_ocr_png, b"png").unwrap();
+        fs::write(&pdfium_cache, b"dll").unwrap();
         backdate(&snip, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
         backdate(&update_dir, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
+        backdate(&wv2_dir, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
+        backdate(&ocr_png, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
+        backdate(&ocr_json, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
+        backdate(&pdfium_cache, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
 
         sweep_stale_temp_files();
 
         assert!(!snip.exists(), "a stale leftover snip preview must be swept");
         assert!(!update_dir.exists(), "a stale leftover update stage dir must be swept");
+        assert!(!wv2_dir.exists(), "a stale leftover WebView2 bootstrapper dir must be swept");
+        assert!(!ocr_png.exists(), "a stale leftover OCR image must be swept");
+        assert!(!ocr_json.exists(), "a stale leftover OCR install-result json must be swept");
         assert!(fresh_snip.exists(), "a snip preview still in active use must survive");
+        assert!(fresh_ocr_png.exists(), "an OCR image still in active use must survive");
         assert!(unrelated_ext.exists(), "a differently-suffixed file must survive");
         assert!(unrelated_file.exists(), "an unrelated file must survive");
+        assert!(pdfium_cache.exists(), "the pdfium dll cache must never be touched by this sweep");
 
         let _ = fs::remove_file(&fresh_snip);
+        let _ = fs::remove_file(&fresh_ocr_png);
+        let _ = fs::remove_file(&pdfium_cache);
         let _ = fs::remove_file(&unrelated_ext);
         let _ = fs::remove_file(&unrelated_file);
     }
