@@ -643,6 +643,11 @@ ship on).
   permanent warning row at the top of the privacy settings for as long as it
   is true, with no switch to silence it. The next save that succeeds seals
   everything again by itself.
+- **Backups are now off-limits to the app's own page.** Attached pictures, videos
+  and PDFs may live in any folder you pick, so the window is allowed to read
+  files by path — with the database and its settings files excluded by name.
+  Backup snapshots and exported `.psb` files hold the same data and were not on
+  that list; they are now. Nothing about attachments changes.
 
 ### Removed
 

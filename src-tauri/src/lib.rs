@@ -9788,7 +9788,11 @@ fn sweep_stale_temp_files() {
             let name = e.file_name().to_string_lossy().to_string();
             let is_ocr_png = name.starts_with(&ocr_prefix) && name.ends_with(".png");
             let is_ocr_install_json = name.starts_with(&ocr_install_prefix) && name.ends_with(".json");
-            if (is_ocr_png || is_ocr_install_json) && is_stale(&e) {
+            // The elevated language-pack install script deletes itself in its own
+            // PowerShell `finally`, so this only ever catches one left behind by a
+            // hard kill mid-run.
+            let is_ocr_install_script = name.starts_with(&ocr_install_prefix) && name.ends_with(".ps1");
+            if (is_ocr_png || is_ocr_install_json || is_ocr_install_script) && is_stale(&e) {
                 let _ = fs::remove_file(e.path());
             }
         }
@@ -17230,6 +17234,50 @@ mod tests {
         assert!(!update_url_is_newer_release(&format!("{base}//App-setup.exe")));
     }
 
+    // The webview may load media and PDF attachments from anywhere the user picked,
+    // so the asset protocol's allow list is deliberately wide. Everything that holds
+    // the store itself has to be denied by name, or a crafted attachment path would
+    // hand the page the whole database. Backups count: a snapshot folder holds a
+    // gzipped copy of data.db, and a .psb is the same store in one file.
+    #[test]
+    fn asset_scope_denies_every_store_file() {
+        // A narrow glob match good enough for this fixed pattern shape: "**/name",
+        // "**/prefix*" and "**/dir/**" -- not a general glob engine.
+        fn covers(pattern: &str, path: &str) -> bool {
+            let Some(rest) = pattern.strip_prefix("**/") else { return false };
+            if let Some(dir) = rest.strip_suffix("/**") {
+                path.split('/').any(|seg| seg == dir)
+            } else if let Some(prefix) = rest.strip_suffix('*') {
+                path.rsplit('/').next().is_some_and(|name| name.starts_with(prefix))
+            } else {
+                path.rsplit('/').next() == Some(rest)
+            }
+        }
+
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json parses");
+        let deny = conf["app"]["security"]["assetProtocol"]["scope"]["deny"]
+            .as_array()
+            .expect("a deny list");
+        let patterns: Vec<&str> = deny.iter().filter_map(|v| v.as_str()).collect();
+        for path in [
+            "C:/Users/x/AppData/Roaming/Prompt-Saver/data.db",
+            "C:/Users/x/AppData/Roaming/Prompt-Saver/data.db-wal",
+            "C:/Users/x/AppData/Roaming/Prompt-Saver/data.db-shm",
+            "C:/Users/x/AppData/Roaming/Prompt-Saver/data.db.locked.bak",
+            "C:/Users/x/AppData/Roaming/Prompt-Saver/data.db.tmp",
+            "C:/Users/x/AppData/Roaming/Prompt-Saver/settings.json",
+            "C:/Users/x/AppData/Roaming/Prompt-Saver/prompts.json",
+            "C:/Users/x/AppData/Roaming/Prompt-Saver/backups/2026-08-19.psb",
+            "C:/Users/x/AppData/Roaming/Prompt-Saver/backups/subdir/2026-08-19.psb",
+        ] {
+            assert!(
+                patterns.iter().any(|p| covers(p, path)),
+                "asset scope must deny {path}"
+            );
+        }
+    }
+
     #[test]
     fn store_crypt_roundtrip() {
         let secret = "prompt with sécret 🔐 {#{x}#}";
@@ -17381,6 +17429,7 @@ mod tests {
         let ocr_subdir = dir.join(brand::TEMP_DIR);
         let ocr_png = ocr_subdir.join(format!("{}-ocr-{}.png", brand::TEMP_PREFIX, pid));
         let ocr_json = ocr_subdir.join(format!("{}-ocr-install-{}.json", brand::TEMP_PREFIX, pid));
+        let ocr_script = ocr_subdir.join(format!("{}-ocr-install-{}.ps1", brand::TEMP_PREFIX, pid));
         let fresh_ocr_png = ocr_subdir.join(format!("{}-ocr-{}-fresh.png", brand::TEMP_PREFIX, pid));
         let pdfium_cache = ocr_subdir.join(format!("pdfium-test-{}.dll", pid));
 
@@ -17395,6 +17444,7 @@ mod tests {
         fs::create_dir_all(&ocr_subdir).unwrap();
         fs::write(&ocr_png, b"png").unwrap();
         fs::write(&ocr_json, b"{}").unwrap();
+        fs::write(&ocr_script, b"# elevated install").unwrap();
         fs::write(&fresh_ocr_png, b"png").unwrap();
         fs::write(&pdfium_cache, b"dll").unwrap();
         backdate(&snip, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
@@ -17402,6 +17452,7 @@ mod tests {
         backdate(&wv2_dir, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
         backdate(&ocr_png, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
         backdate(&ocr_json, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
+        backdate(&ocr_script, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
         backdate(&pdfium_cache, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
 
         sweep_stale_temp_files();
@@ -17411,6 +17462,7 @@ mod tests {
         assert!(!wv2_dir.exists(), "a stale leftover WebView2 bootstrapper dir must be swept");
         assert!(!ocr_png.exists(), "a stale leftover OCR image must be swept");
         assert!(!ocr_json.exists(), "a stale leftover OCR install-result json must be swept");
+        assert!(!ocr_script.exists(), "a stale leftover OCR elevation script must be swept");
         assert!(fresh_snip.exists(), "a snip preview still in active use must survive");
         assert!(fresh_ocr_png.exists(), "an OCR image still in active use must survive");
         assert!(unrelated_ext.exists(), "a differently-suffixed file must survive");
