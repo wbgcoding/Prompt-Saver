@@ -1,0 +1,39 @@
+# Build output
+node_modules/
+dist/
+build/
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# pdfium: downloaded separately, see "Building from source" in the README
+pdfium.dll
+pdfium-LICENSE
+
+# Editor / OS / logs
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+*.log
+__pycache__/
+
+# User data — lives in %APPDATA% or next to the portable exe, never in the repo
+data.db
+*.db
+*.db-wal
+*.db-shm
+prompts.json
+settings.json
+backups/
+*.psb
+test-data/
+
+# Secrets — a signing certificate or a token must never reach the repo
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+*.cer
+*.crt

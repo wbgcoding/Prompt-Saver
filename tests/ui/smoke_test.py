@@ -3115,7 +3115,7 @@ PROBE = """
             const tall = rows[0].querySelector('.rotate-entry-input');
             if (tall) {
               // String.fromCharCode(10), not an escape: Python eats a backslash-n in
-              // this probe string before the browser ever sees it (see CLAUDE.md).
+              // this probe string before the browser ever sees it.
               tall.value = ['line one', 'line two', 'line three', 'line four'].join(String.fromCharCode(10));
               tall.dispatchEvent(new Event('input', { bubbles: true }));
               await sleep(120);
@@ -4091,9 +4091,8 @@ PROBE = """
         out.errors.push('OCR entry points stayed visible after switching the flag back off');
       }
     }
-    // 122: OCR language-pack management dialog -- WORK.md's own test list for
-    // this probe: list renders, size sits inside the download button, buttons
-    // are named, no overflow at 520px.
+    // OCR language-pack management dialog: list renders, size sits inside the
+    // download button, buttons are named, no overflow at 520px.
     {
       const rowByLabel = (text) => {
         for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
@@ -4232,9 +4231,9 @@ PROBE = """
           await sleep(150);
         }
         // tourStepMinH's job is to stop a SHORT step from looking tiny next to a
-        // long one -- it floors every step to the same height. It does not (and
-        // per WORK.md 123.5 is not meant to) force a longer step's wrapped text
-        // to occupy zero extra room; one line-height of headroom absorbs that and
+        // long one -- it floors every step to the same height. It is not meant to
+        // force a longer step's wrapped text to occupy zero extra room; one
+        // line-height of headroom absorbs that and
         // sub-pixel wrap jitter between runs, while still catching the case that
         // matters: the variable genuinely not wired up (a many-line gap).
         const spread = Math.max(...heights) - Math.min(...heights);
