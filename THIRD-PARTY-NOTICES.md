@@ -22,32 +22,32 @@ Unlicense/CC0) that allow redistribution in a binary with attribution.
 
 ## Rust crates
 
-The application links ~640 Rust crates (direct and transitive). Direct dependencies:
+The application links ~650 Rust crates (direct and transitive). Direct dependencies:
 
 `tauri`, `tauri-plugin-single-instance`, `tauri-plugin-global-shortcut`, `tokio`,
 `serde`, `serde_json`, `arboard`, `clipboard-win`, `rfd`, `sys-locale`, `image`,
 `ureq`, `sha2`, `aes-gcm`, `argon2`, `rand`, `flate2`, `xcap`, `rayon`,
-`jpeg-encoder`, `rusqlite`, `pdfium-render`, `winreg`.
+`jpeg-encoder`, `rusqlite`, `pdfium-render`, `winreg`, `windows`.
 
-Aggregate license breakdown of the full dependency tree (644 packages, from
+Aggregate license breakdown of the full dependency tree (649 packages, from
 `cargo metadata`):
 
 | Count | License (SPDX) |
 |------:|----------------|
-| 294 | MIT OR Apache-2.0 |
-| 144 | MIT |
-| 57 | Apache-2.0 OR MIT |
-| 29 | MIT/Apache-2.0 |
+| 299 | MIT OR Apache-2.0 |
+| 149 | MIT |
+| 59 | Apache-2.0 OR MIT |
+| 27 | MIT/Apache-2.0 |
 | 18 | Unicode-3.0 |
 | 17 | Zlib OR Apache-2.0 OR MIT |
-| 15 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
+| 10 | Unlicense OR MIT |
 | 7 | BSD-3-Clause |
-| 6 | MIT OR Apache-2.0 OR Zlib · Apache-2.0/MIT |
-| 5 | Unlicense OR MIT · MPL-2.0 |
-| 4 | ISC · Apache-2.0 |
+| 6 | Apache-2.0/MIT · MIT OR Apache-2.0 OR Zlib |
+| 5 | ISC · MPL-2.0 · Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
+| 4 | Apache-2.0 |
 | 3 | BSD-2-Clause |
-| 2 | CDLA-Permissive-2.0 · BSL-1.0 · Zlib · Unlicense/MIT · various BSD/Apache/MIT combinations |
-| 1 | 0BSD · NCSA, IJG and CC0-1.0 combinations · other permissive combinations |
+| 2 | BSL-1.0 · CDLA-Permissive-2.0 · Unlicense/MIT · MIT OR Apache-2.0 OR LGPL-2.1-or-later · various BSD/Apache/MIT combinations |
+| 1 | 0BSD · Zlib · NCSA, IJG and CC0-1.0 combinations · other permissive combinations |
 
 Every license above is permissive or weak-copyleft (MPL-2.0 is file-level and no MPL
 files are modified; the two crates offering LGPL-2.1-or-later as an alternative are
