@@ -6880,9 +6880,37 @@ fn rotate_backups(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) {
 // takes a few MB down to a fraction of that — and ten of them are kept by default.
 // `data.db` (uncompressed) is still accepted so older backups keep working.
 const BACKUP_DB_GZ: &str = "data.db.gz";
-// How often the auto-backup thread looks at the clock. The shortest interval the UI
+// How often the auto-backup job looks at the clock. The shortest interval the UI
 // offers is 6 h, so a quarter of an hour is precise enough and costs nothing.
 const BACKUP_CHECK_SECS: u64 = 900;
+
+// One round of the auto-backup job. Due-ness comes from the age of the newest
+// backup on disk, never from a counter this process keeps, so a restart neither
+// skips a due backup nor takes an extra one.
+fn auto_backup_tick(app: &AppHandle) {
+    // The lock is held across the snapshot, exactly like the manual "backup now"
+    // command, so no write races with the VACUUM read.
+    let state = app.state::<Db>();
+    let store = lock(&state);
+    let on = store.settings.ui_flags.get("autoBackup") != Some(&false);
+    let keep = store.settings.ui_values.get("backupKeep").copied().unwrap_or(10.0).clamp(1.0, 50.0) as usize;
+    let interval_h = store
+        .settings
+        .ui_values
+        .get("backupIntervalH")
+        .copied()
+        .filter(|v| *v >= 1.0)
+        .unwrap_or(24.0) as u64;
+    let due = newest_backup_age(app).map_or(true, |age| age >= interval_h.saturating_mul(3600));
+    if on && due {
+        // P60: the manual "backup now" toast fires from the same command's own
+        // success path in the frontend — the automatic one has no such call site,
+        // so it needs its own signal here.
+        if do_backup(app, keep, gfs_from_settings(&store.settings)).is_ok() {
+            let _ = app.emit_to("main", "backup-done", ());
+        }
+    }
+}
 
 fn backup_db_file(folder: &std::path::Path) -> Option<PathBuf> {
     let gz = folder.join(BACKUP_DB_GZ);
@@ -9461,16 +9489,22 @@ fn write_snip_preview(jpeg: &[u8]) -> Option<String> {
 // else — the snip preview only ever deletes its own immediate predecessor (that
 // bookkeeping is in-memory only, lost on a crash or a plain restart), and
 // update.cmd deletes the installer + itself but never its own staging folder.
-// Swept once at startup rather than on every write, since these are rare leftovers
+// Swept at startup and then on a slow cadence, since these are rare leftovers
 // from an abnormal exit, not a live resource any running instance still needs.
 // A snip preview lives only for the few minutes between taking a screenshot and
 // saving/discarding it, so anything older than this was abandoned (a crash, a
 // kill) rather than in active use — well short of catching a file another,
 // concurrently running instance ("Allow multiple instances") is using right now.
 const STALE_TEMP_FILE_AGE: Duration = Duration::from_secs(3600);
+// How often the sweep repeats while the app keeps running.
+const STALE_TEMP_SWEEP_SECS: u64 = 6 * 3600;
 
 fn sweep_stale_temp_files() {
     let dir = std::env::temp_dir();
+    // This process's own live preview is exempt whatever its age says. A modal
+    // left open past the stale age is unusual but perfectly legitimate, and the
+    // repeat sweeps mean the file is no longer guaranteed to be young.
+    let live_preview = SNIP_PREVIEW_FILE.lock().unwrap_or_else(|e| e.into_inner()).clone();
     let snip_prefix = format!("{}-snip-", brand::TEMP_PREFIX);
     let update_prefix = format!("{}-update-", brand::SLUG);
     // Each of these dirs holds a staged ~8 MB MicrosoftEdgeWebview2Setup.exe that
@@ -9486,7 +9520,7 @@ fn sweep_stale_temp_files() {
         for e in entries.flatten() {
             let name = e.file_name().to_string_lossy().to_string();
             if name.starts_with(&snip_prefix) && name.ends_with(".jpg") {
-                if is_stale(&e) {
+                if is_stale(&e) && live_preview.as_deref() != Some(e.path().as_path()) {
                     let _ = fs::remove_file(e.path());
                 }
             } else if (name.starts_with(&update_prefix) || name.starts_with(&wv2_prefix)) && is_stale(&e) {
@@ -11555,90 +11589,105 @@ fn ocr_lang_snooze(app: AppHandle, state: State<Db>) {
     save_settings(&app, &store.settings);
 }
 
+// Well after launch -- the first round must never compete with window build.
+#[cfg(windows)]
+const OCR_LANG_FIRST_DELAY_SECS: u64 = 30;
+
+#[cfg(windows)]
+fn ocr_lang_check_interval(app: &AppHandle) -> Duration {
+    let hours = app
+        .try_state::<Db>()
+        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("ocrLangCheckH").copied().unwrap_or(168.0))
+        .unwrap_or(168.0)
+        .clamp(24.0, 720.0);
+    Duration::from_secs((hours * 3600.0) as u64)
+}
+
 // Background watcher for "an installed language pack is now updatable".
 // Notification-ONLY -- it never calls ocr_install_language itself (elevation
 // always needs the frontend's confirmDialog explanation first, run in the
 // background or not). Because of that, "multiple due packages processed
-// sequentially, never in parallel" is automatically satisfied: this thread
-// only ever lists what is due in one event, it does not install anything.
+// sequentially, never in parallel" is automatically satisfied: one round only
+// ever lists what is due in one event, it does not install anything.
 #[cfg(windows)]
-fn spawn_ocr_lang_update_watcher(app: AppHandle) {
-    std::thread::spawn(move || {
-        // Well after launch -- this must never compete with window build.
-        std::thread::sleep(std::time::Duration::from_secs(30));
-        loop {
-            let snapshot = app.try_state::<Db>().map(|s| {
-                let store = s.lock().unwrap_or_else(|e| e.into_inner());
-                (
-                    store.settings.ui_flags.get("ocrLangAutoUpdate").copied().unwrap_or(true),
-                    store.settings.ui_values.get("ocrLangCacheH").copied().unwrap_or(24.0).clamp(1.0, 168.0),
-                    store
-                        .settings
-                        .ui_texts
-                        .get(OCR_LANG_NEXT_CHECK_KEY)
-                        .and_then(|s| s.parse::<u64>().ok())
-                        .unwrap_or(0),
-                    ocr_lang_load_snapshots(&store.settings),
-                )
-            });
-            if let Some((auto_update, cache_hours, next_check, snapshots)) = snapshot {
-                let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-                if auto_update && now >= next_check {
-                    if let Ok(caps) = ocr::capabilities(false, cache_hours) {
-                        let mut due = Vec::new();
-                        let mut new_snapshots = snapshots.clone();
-                        for cap in &caps {
-                            let prev = snapshots.get(&cap.tag);
-                            if ocr_lang_needs_update(prev, &cap.state, &cap.version) {
-                                due.push(OcrLangUpdateDue {
-                                    name: cap.name.clone(),
-                                    tag: cap.tag.clone(),
-                                    label: cap.label.clone(),
-                                });
-                            }
-                            // Keep the remembered snapshot in step with what Windows
-                            // reports right now, so the NEXT check compares against
-                            // today's truth rather than a stale one.
-                            let now_installed = cap.state == "Installed";
-                            if now_installed || prev.is_some() {
-                                new_snapshots.insert(
-                                    cap.tag.clone(),
-                                    OcrCapSnapshot { version: cap.version.clone(), installed: now_installed },
-                                );
-                            }
-                        }
-                        if !due.is_empty() {
-                            let _ = app.emit("ocr-lang-update-due", &due);
-                        }
-                        if let Some(s) = app.try_state::<Db>() {
-                            let mut store = s.lock().unwrap_or_else(|e| e.into_inner());
-                            ocr_lang_save_snapshots(&mut store.settings, &new_snapshots);
-                            // Persist the next-due time so a user who dismisses the
-                            // notice any way other than "Abbrechen" (ocr_lang_snooze)
-                            // is not re-nagged on every app start -- the in-process
-                            // thread::sleep cadence alone resets on every launch.
-                            let check_hours = store
-                                .settings
-                                .ui_values
-                                .get("ocrLangCheckH")
-                                .copied()
-                                .unwrap_or(168.0)
-                                .clamp(24.0, 720.0);
-                            let next = now + (check_hours * 3600.0) as u64;
-                            store.settings.ui_texts.insert(OCR_LANG_NEXT_CHECK_KEY.to_string(), next.to_string());
-                            save_settings(&app, &store.settings);
-                        }
-                    }
-                }
-            }
-            let hours = app
-                .try_state::<Db>()
-                .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("ocrLangCheckH").copied().unwrap_or(168.0))
-                .unwrap_or(168.0)
-                .clamp(24.0, 720.0);
-            std::thread::sleep(std::time::Duration::from_secs((hours * 3600.0) as u64));
-        }
+fn start_ocr_lang_update_watcher(app: AppHandle) {
+    scheduler::register_periodic(
+        "ocr-lang-check",
+        Duration::from_secs(OCR_LANG_FIRST_DELAY_SECS),
+        ocr_lang_check_interval(&app),
+        move || {
+            ocr_lang_update_tick(&app);
+            scheduler::retime("ocr-lang-check", ocr_lang_check_interval(&app));
+        },
+    );
+}
+
+// One round of the watcher. The persisted next-due time is what really decides
+// whether anything happens, so a restart neither skips nor duplicates a check.
+#[cfg(windows)]
+fn ocr_lang_update_tick(app: &AppHandle) {
+    let snapshot = app.try_state::<Db>().map(|s| {
+        let store = s.lock().unwrap_or_else(|e| e.into_inner());
+        (
+            store.settings.ui_flags.get("ocrLangAutoUpdate").copied().unwrap_or(true),
+            store.settings.ui_values.get("ocrLangCacheH").copied().unwrap_or(24.0).clamp(1.0, 168.0),
+            store
+                .settings
+                .ui_texts
+                .get(OCR_LANG_NEXT_CHECK_KEY)
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(0),
+            ocr_lang_load_snapshots(&store.settings),
+        )
     });
+    let Some((auto_update, cache_hours, next_check, snapshots)) = snapshot else { return };
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    if !auto_update || now < next_check {
+        return;
+    }
+    let Ok(caps) = ocr::capabilities(false, cache_hours) else { return };
+    let mut due = Vec::new();
+    let mut new_snapshots = snapshots.clone();
+    for cap in &caps {
+        let prev = snapshots.get(&cap.tag);
+        if ocr_lang_needs_update(prev, &cap.state, &cap.version) {
+            due.push(OcrLangUpdateDue {
+                name: cap.name.clone(),
+                tag: cap.tag.clone(),
+                label: cap.label.clone(),
+            });
+        }
+        // Keep the remembered snapshot in step with what Windows reports right
+        // now, so the NEXT check compares against today's truth rather than a
+        // stale one.
+        let now_installed = cap.state == "Installed";
+        if now_installed || prev.is_some() {
+            new_snapshots.insert(
+                cap.tag.clone(),
+                OcrCapSnapshot { version: cap.version.clone(), installed: now_installed },
+            );
+        }
+    }
+    if !due.is_empty() {
+        let _ = app.emit("ocr-lang-update-due", &due);
+    }
+    if let Some(s) = app.try_state::<Db>() {
+        let mut store = s.lock().unwrap_or_else(|e| e.into_inner());
+        ocr_lang_save_snapshots(&mut store.settings, &new_snapshots);
+        // Persist the next-due time so a user who dismisses the notice any way
+        // other than "Abbrechen" (ocr_lang_snooze) is not re-nagged on every app
+        // start -- the in-process wait cadence alone resets on every launch.
+        let check_hours = store
+            .settings
+            .ui_values
+            .get("ocrLangCheckH")
+            .copied()
+            .unwrap_or(168.0)
+            .clamp(24.0, 720.0);
+        let next = now + (check_hours * 3600.0) as u64;
+        store.settings.ui_texts.insert(OCR_LANG_NEXT_CHECK_KEY.to_string(), next.to_string());
+        save_settings(app, &store.settings);
+    }
 }
 
 // Windows.Media.Ocr binding. Deliberately goes through the file system for the
@@ -12154,6 +12203,54 @@ fn updater_check() -> Option<UpdateInfo> {
         notes,
         skipped: false,
     })
+}
+
+// Far enough past launch that the first check never competes with window build.
+const UPDATE_CHECK_FIRST_DELAY_SECS: u64 = 2;
+
+// Expert-tunable, clamped to the range the setting offers.
+fn update_check_interval(app: &AppHandle) -> Duration {
+    let hours = app
+        .try_state::<Db>()
+        .map(|s| {
+            s.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .settings
+                .ui_values
+                .get("updateCheckH")
+                .copied()
+                .unwrap_or(24.0)
+        })
+        .unwrap_or(24.0)
+        .clamp(1.0, 168.0);
+    Duration::from_secs((hours * 3600.0) as u64)
+}
+
+// One round of the automatic update check.
+fn update_check_tick(app: &AppHandle) {
+    let enabled = app
+        .try_state::<Db>()
+        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.auto_update)
+        .unwrap_or(true);
+    if !enabled {
+        return;
+    }
+    let Some(info) = updater_check() else { return };
+    // Honour the skip list: a skipped version never pops up on its own, only on
+    // a manual check.
+    let skipped = app
+        .try_state::<Db>()
+        .map(|s| {
+            s.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .settings
+                .skipped_versions
+                .contains(&info.version)
+        })
+        .unwrap_or(false);
+    if !skipped {
+        let _ = app.emit("update-available", info);
+    }
 }
 
 #[tauri::command]
@@ -13893,6 +13990,240 @@ fn install_webview2_runtime() -> bool {
         .unwrap_or(false)
 }
 
+// ---- One timer thread for every periodic background job ----
+//
+// Each recurring chore used to own a thread that spent its entire life inside
+// `sleep(interval)`: a stack per chore, an independent wake-up per chore, and no
+// way to end any of them other than letting the process die on top of them.
+// They share one thread now. It keeps its jobs sorted by due time, sleeps exactly
+// until the earliest one, and is woken early through its channel whenever a job is
+// added, re-timed, removed, or the app is shutting down.
+//
+// Only genuinely periodic work belongs here — the `loop { sleep(fixed); work(); }`
+// shape, with nothing else feeding it. Event-driven threads stay where they are:
+// the clipboard watcher runs a Win32 message pump and has to own its thread, and
+// the tray rebuild is a one-shot debounce that fires per burst, not on a cadence.
+//
+// Registering is a `register_periodic(name, first_delay, interval, job)` call from
+// anywhere; the first one starts the thread. A job that reads its own interval out
+// of the settings calls `retime(name, interval)` at the end of each run, so a
+// changed setting takes effect from the next wait onward.
+mod scheduler {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender, TryRecvError};
+    use std::sync::{Arc, Mutex, OnceLock};
+    use std::time::{Duration, Instant};
+
+    type Job = Box<dyn Fn() + Send + 'static>;
+
+    // Nothing due: park on the channel instead of spinning. Any message still
+    // wakes the thread instantly, so the length only bounds a pointless wake-up.
+    const IDLE_WAIT: Duration = Duration::from_secs(3600);
+    // A zero interval would turn the loop into a busy-wait.
+    const MIN_INTERVAL: Duration = Duration::from_millis(1);
+
+    enum Msg {
+        Add {
+            name: String,
+            first_delay: Duration,
+            interval: Duration,
+            job: Job,
+        },
+        Retime {
+            name: String,
+            interval: Duration,
+        },
+        Remove(String),
+        Stop,
+    }
+
+    struct Entry {
+        name: String,
+        interval: Duration,
+        last_run: Instant,
+        due: Instant,
+        seq: u64,
+        job: Job,
+    }
+
+    pub struct Scheduler {
+        // A Mutex rather than a bare Sender so the type is Sync on every
+        // supported toolchain — it is never held across the job itself.
+        tx: Mutex<Sender<Msg>>,
+        stopped: Arc<AtomicBool>,
+    }
+
+    impl Scheduler {
+        pub fn start() -> Scheduler {
+            let (tx, rx) = channel();
+            let stopped = Arc::new(AtomicBool::new(false));
+            let flag = stopped.clone();
+            let spawned = std::thread::Builder::new()
+                .name("periodic-jobs".into())
+                .spawn(move || run_loop(rx, flag));
+            if spawned.is_err() {
+                // No thread means nothing to wait for at shutdown.
+                stopped.store(true, Ordering::Release);
+            }
+            Scheduler { tx: Mutex::new(tx), stopped }
+        }
+
+        fn send(&self, msg: Msg) {
+            let _ = self.tx.lock().unwrap_or_else(|e| e.into_inner()).send(msg);
+        }
+
+        // Registering a name twice replaces the earlier job rather than doubling it.
+        pub fn register_periodic(
+            &self,
+            name: &str,
+            first_delay: Duration,
+            interval: Duration,
+            job: impl Fn() + Send + 'static,
+        ) {
+            self.send(Msg::Add {
+                name: name.to_string(),
+                first_delay,
+                interval,
+                job: Box::new(job),
+            });
+        }
+
+        // The new interval counts from the job's last run, so a shortened one can
+        // make it due immediately instead of serving out the old wait first.
+        pub fn retime(&self, name: &str, interval: Duration) {
+            self.send(Msg::Retime { name: name.to_string(), interval });
+        }
+
+        #[allow(dead_code)]
+        pub fn remove(&self, name: &str) {
+            self.send(Msg::Remove(name.to_string()));
+        }
+
+        // Wakes the thread out of its wait and waits a bounded time for it to
+        // finish. False means a job was still running when the deadline passed;
+        // the caller carries on rather than holding the app open for it.
+        pub fn shutdown(&self, wait: Duration) -> bool {
+            self.send(Msg::Stop);
+            let deadline = Instant::now() + wait;
+            while !self.stopped.load(Ordering::Acquire) {
+                if Instant::now() >= deadline {
+                    return false;
+                }
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            true
+        }
+    }
+
+    fn sort_jobs(jobs: &mut [Entry]) {
+        // The sequence number keeps two jobs due at the same instant in
+        // registration order, so firing order is never left to chance.
+        jobs.sort_by_key(|e| (e.due, e.seq));
+    }
+
+    fn apply(msg: Msg, jobs: &mut Vec<Entry>, seq: &mut u64) {
+        match msg {
+            Msg::Add { name, first_delay, interval, job } => {
+                jobs.retain(|e| e.name != name);
+                let now = Instant::now();
+                *seq += 1;
+                jobs.push(Entry {
+                    name,
+                    interval: interval.max(MIN_INTERVAL),
+                    last_run: now,
+                    due: now + first_delay,
+                    seq: *seq,
+                    job,
+                });
+            }
+            Msg::Retime { name, interval } => {
+                let interval = interval.max(MIN_INTERVAL);
+                if let Some(e) = jobs.iter_mut().find(|e| e.name == name) {
+                    e.interval = interval;
+                    e.due = e.last_run + interval;
+                }
+            }
+            Msg::Remove(name) => jobs.retain(|e| e.name != name),
+            Msg::Stop => {}
+        }
+        sort_jobs(jobs);
+    }
+
+    fn run_loop(rx: Receiver<Msg>, stopped: Arc<AtomicBool>) {
+        let mut jobs: Vec<Entry> = Vec::new();
+        let mut seq = 0u64;
+        'outer: loop {
+            // Everything already queued is applied before the wait is computed, so
+            // a stop request never sits behind an overdue job.
+            loop {
+                match rx.try_recv() {
+                    Ok(Msg::Stop) | Err(TryRecvError::Disconnected) => break 'outer,
+                    Ok(msg) => apply(msg, &mut jobs, &mut seq),
+                    Err(TryRecvError::Empty) => break,
+                }
+            }
+            let wait = jobs
+                .first()
+                .map_or(IDLE_WAIT, |e| e.due.saturating_duration_since(Instant::now()));
+            if wait > Duration::ZERO {
+                match rx.recv_timeout(wait) {
+                    Ok(Msg::Stop) | Err(RecvTimeoutError::Disconnected) => break 'outer,
+                    Ok(msg) => {
+                        apply(msg, &mut jobs, &mut seq);
+                        continue;
+                    }
+                    Err(RecvTimeoutError::Timeout) => {}
+                }
+            }
+            // Exactly one job per round — the earliest due one. A job that re-times
+            // itself or another therefore always sees a fully ordered list again
+            // before anything else runs.
+            if jobs.first().is_some_and(|e| e.due <= Instant::now()) {
+                (jobs[0].job)();
+                let now = Instant::now();
+                let e = &mut jobs[0];
+                e.last_run = now;
+                e.due = now + e.interval;
+                sort_jobs(&mut jobs);
+            }
+        }
+        stopped.store(true, Ordering::Release);
+    }
+
+    static GLOBAL: OnceLock<Scheduler> = OnceLock::new();
+
+    fn global() -> &'static Scheduler {
+        GLOBAL.get_or_init(Scheduler::start)
+    }
+
+    pub fn register_periodic(
+        name: &str,
+        first_delay: Duration,
+        interval: Duration,
+        job: impl Fn() + Send + 'static,
+    ) {
+        global().register_periodic(name, first_delay, interval, job);
+    }
+
+    pub fn retime(name: &str, interval: Duration) {
+        global().retime(name, interval);
+    }
+
+    #[allow(dead_code)]
+    pub fn remove(name: &str) {
+        global().remove(name);
+    }
+
+    // Never started (no periodic job was ever registered) means nothing to stop.
+    pub fn shutdown(wait: Duration) -> bool {
+        GLOBAL.get().map_or(true, |s| s.shutdown(wait))
+    }
+}
+
+// How long app close waits for the timer thread to leave a running job before
+// going ahead without it.
+const SCHEDULER_STOP_WAIT_MS: u64 = 500;
+
 pub fn run() {
     #[cfg(windows)]
     if !ensure_webview2() {
@@ -13989,33 +14320,12 @@ pub fn run() {
             // so it never delays the first paint.
             {
                 let h = handle.clone();
-                std::thread::spawn(move || loop {
-                    {
-                        // The lock is held across the snapshot, exactly like the manual
-                        // "backup now" command, so no write races with the VACUUM read.
-                        let state = h.state::<Db>();
-                        let store = lock(&state);
-                        let on = store.settings.ui_flags.get("autoBackup") != Some(&false);
-                        let keep = store.settings.ui_values.get("backupKeep").copied().unwrap_or(10.0).clamp(1.0, 50.0) as usize;
-                        let interval_h = store
-                            .settings
-                            .ui_values
-                            .get("backupIntervalH")
-                            .copied()
-                            .filter(|v| *v >= 1.0)
-                            .unwrap_or(24.0) as u64;
-                        let due = newest_backup_age(&h).map_or(true, |age| age >= interval_h.saturating_mul(3600));
-                        if on && due {
-                            // P60: the manual "backup now" toast fires from the same
-                            // command's own success path in the frontend — the automatic
-                            // one has no such call site, so it needs its own signal here.
-                            if do_backup(&h, keep, gfs_from_settings(&store.settings)).is_ok() {
-                                let _ = h.emit_to("main", "backup-done", ());
-                            }
-                        }
-                    }
-                    std::thread::sleep(std::time::Duration::from_secs(BACKUP_CHECK_SECS));
-                });
+                scheduler::register_periodic(
+                    "auto-backup",
+                    Duration::ZERO,
+                    Duration::from_secs(BACKUP_CHECK_SECS),
+                    move || auto_backup_tick(&h),
+                );
             }
 
             // Re-arm the app hotkey plus every prompt accelerator (F20). Each
@@ -14263,56 +14573,35 @@ pub fn run() {
             });
 
             // Update check: right after launch, then once a day (if enabled).
-            let h2 = handle.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_secs(2));
-                loop {
-                    let enabled = h2
-                        .try_state::<Db>()
-                        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.auto_update)
-                        .unwrap_or(true);
-                    if enabled {
-                        if let Some(info) = updater_check() {
-                            // Honour the skip list: a skipped version never
-                            // pops up on its own, only on a manual check.
-                            let skipped = h2
-                                .try_state::<Db>()
-                                .map(|s| {
-                                    s.lock()
-                                        .unwrap_or_else(|e| e.into_inner())
-                                        .settings
-                                        .skipped_versions
-                                        .contains(&info.version)
-                                })
-                                .unwrap_or(false);
-                            if !skipped {
-                                let _ = h2.emit("update-available", info);
-                            }
-                        }
-                    }
-                    // Expert-tunable check interval; the change takes effect from
-                    // this sleep onward, not mid-wait.
-                    let hours = h2
-                        .try_state::<Db>()
-                        .map(|s| {
-                            s.lock()
-                                .unwrap_or_else(|e| e.into_inner())
-                                .settings
-                                .ui_values
-                                .get("updateCheckH")
-                                .copied()
-                                .unwrap_or(24.0)
-                        })
-                        .unwrap_or(24.0)
-                        .clamp(1.0, 168.0);
-                    std::thread::sleep(std::time::Duration::from_secs((hours * 3600.0) as u64));
-                }
-            });
+            {
+                let h2 = handle.clone();
+                scheduler::register_periodic(
+                    "update-check",
+                    Duration::from_secs(UPDATE_CHECK_FIRST_DELAY_SECS),
+                    update_check_interval(&handle),
+                    move || {
+                        update_check_tick(&h2);
+                        // Expert-tunable interval, re-read after every round: the
+                        // change takes effect from the next wait onward.
+                        scheduler::retime("update-check", update_check_interval(&h2));
+                    },
+                );
+            }
+
+            // Sweep the temp dir again now and then, not only at launch — an
+            // instance left running for days otherwise never collects the
+            // leftovers a crashed sibling dropped after it started.
+            scheduler::register_periodic(
+                "temp-sweep",
+                Duration::from_secs(STALE_TEMP_SWEEP_SECS),
+                Duration::from_secs(STALE_TEMP_SWEEP_SECS),
+                sweep_stale_temp_files,
+            );
 
             // OCR language-pack "updatable" watcher -- delayed, silent when
             // there is nothing to do, never runs at window build.
             #[cfg(windows)]
-            spawn_ocr_lang_update_watcher(handle.clone());
+            start_ocr_lang_update_watcher(handle.clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -14482,8 +14771,15 @@ pub fn run() {
             ocr_lang_snooze,
             set_snip_mode
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|_app, event| {
+            // The timer thread is normally parked for hours; tell it to leave
+            // rather than tearing the process down around a sleeping thread.
+            if matches!(event, tauri::RunEvent::Exit) {
+                scheduler::shutdown(Duration::from_millis(SCHEDULER_STOP_WAIT_MS));
+            }
+        });
 }
 
 // ---- Prompt folders as Markdown (opt-in expert feature, default off) ----
@@ -19897,6 +20193,217 @@ mod tests {
         assert_eq!(j["pick_format"], serde_json::json!("rgb"));
         assert_eq!(j["pick_cells"], serde_json::json!(21));
         assert_eq!(j["pick_history"], serde_json::json!(["#FF0000"]));
+    }
+
+    // ---- The shared timer thread ----
+    //
+    // Real intervals here are hours; every test below injects millisecond ones
+    // through the same registration call the app uses, so the behaviour under
+    // test is the scheduling itself and not a production constant.
+
+    use super::scheduler::Scheduler;
+    use std::time::Instant;
+
+    fn wait_until(mut cond: impl FnMut() -> bool, timeout: Duration) -> bool {
+        let deadline = Instant::now() + timeout;
+        while Instant::now() < deadline {
+            if cond() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        cond()
+    }
+
+    const NEVER_AGAIN: Duration = Duration::from_secs(3600);
+
+    #[test]
+    fn every_registered_job_fires_in_due_order() {
+        let log: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
+        let s = Scheduler::start();
+        // Deliberately registered out of order — the due time decides, not the
+        // order they arrived in.
+        for (name, delay_ms) in [("third", 90u64), ("first", 30), ("second", 60)] {
+            let log = log.clone();
+            s.register_periodic(name, Duration::from_millis(delay_ms), NEVER_AGAIN, move || {
+                log.lock().unwrap_or_else(|e| e.into_inner()).push(name);
+            });
+        }
+        let done = wait_until(
+            || log.lock().unwrap_or_else(|e| e.into_inner()).len() == 3,
+            Duration::from_secs(5),
+        );
+        let fired = log.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        assert!(done, "only {fired:?} fired");
+        assert_eq!(fired, vec!["first", "second", "third"]);
+    }
+
+    #[test]
+    fn a_removed_job_stops_firing() {
+        let hits = Arc::new(AtomicU64::new(0));
+        let s = Scheduler::start();
+        {
+            let hits = hits.clone();
+            s.register_periodic("tick", Duration::from_millis(5), Duration::from_millis(5), move || {
+                hits.fetch_add(1, Ordering::SeqCst);
+            });
+        }
+        assert!(
+            wait_until(|| hits.load(Ordering::SeqCst) >= 3, Duration::from_secs(5)),
+            "the job never got going"
+        );
+        s.remove("tick");
+        // Long enough for a round already under way to finish and for the removal
+        // to be applied, then a stretch that would have carried many more ticks.
+        std::thread::sleep(Duration::from_millis(60));
+        let settled = hits.load(Ordering::SeqCst);
+        std::thread::sleep(Duration::from_millis(120));
+        assert_eq!(hits.load(Ordering::SeqCst), settled, "a removed job kept firing");
+    }
+
+    #[test]
+    fn a_shortened_interval_wakes_the_thread_early() {
+        let hits = Arc::new(AtomicU64::new(0));
+        let s = Scheduler::start();
+        {
+            let hits = hits.clone();
+            s.register_periodic("slow", NEVER_AGAIN, NEVER_AGAIN, move || {
+                hits.fetch_add(1, Ordering::SeqCst);
+            });
+        }
+        s.retime("slow", Duration::from_millis(10));
+        assert!(
+            wait_until(|| hits.load(Ordering::SeqCst) >= 1, Duration::from_secs(5)),
+            "the job was still serving out its old wait"
+        );
+    }
+
+    // Counts the threads this process currently owns, so the "one thread instead
+    // of one per chore" claim is a measured number rather than an assertion about
+    // the source.
+    #[cfg(windows)]
+    mod thread_census {
+        #[repr(C)]
+        #[derive(Default)]
+        struct ThreadEntry32 {
+            size: u32,
+            usage: u32,
+            thread_id: u32,
+            owner_pid: u32,
+            base_pri: i32,
+            delta_pri: i32,
+            flags: u32,
+        }
+
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn CreateToolhelp32Snapshot(flags: u32, pid: u32) -> isize;
+            fn Thread32First(snap: isize, entry: *mut ThreadEntry32) -> i32;
+            fn Thread32Next(snap: isize, entry: *mut ThreadEntry32) -> i32;
+            fn CloseHandle(handle: isize) -> i32;
+            fn GetCurrentProcessId() -> u32;
+        }
+
+        pub fn live_threads() -> usize {
+            const SNAP_THREAD: u32 = 0x0000_0004;
+            let size = std::mem::size_of::<ThreadEntry32>() as u32;
+            unsafe {
+                let snap = CreateToolhelp32Snapshot(SNAP_THREAD, 0);
+                if snap == -1 {
+                    return 0;
+                }
+                let me = GetCurrentProcessId();
+                let mut entry = ThreadEntry32 { size, ..Default::default() };
+                let mut n = 0usize;
+                if Thread32First(snap, &mut entry) != 0 {
+                    loop {
+                        if entry.owner_pid == me {
+                            n += 1;
+                        }
+                        entry.size = size;
+                        if Thread32Next(snap, &mut entry) == 0 {
+                            break;
+                        }
+                    }
+                }
+                CloseHandle(snap);
+                n
+            }
+        }
+    }
+
+    // The whole point of the shared thread: four idle chores used to mean four
+    // parked threads. Both shapes are built here and counted for real.
+    //
+    // The census sees every thread in the process, the test harness's own
+    // included, so each attempt brackets its measurement with a baseline reading
+    // and only accepts a round where the baseline did not move underneath it.
+    #[cfg(windows)]
+    #[test]
+    fn four_idle_chores_cost_one_thread_instead_of_four() {
+        use thread_census::live_threads;
+        const CHORES: usize = 4;
+
+        let mut measured = None;
+        for _ in 0..40 {
+            let before = live_threads();
+
+            // The old shape: one thread per chore, each parked in a sleep.
+            let stop = Arc::new(AtomicBool::new(false));
+            let parked: Vec<_> = (0..CHORES)
+                .map(|_| {
+                    let stop = stop.clone();
+                    std::thread::spawn(move || {
+                        while !stop.load(Ordering::SeqCst) {
+                            std::thread::sleep(Duration::from_millis(2));
+                        }
+                    })
+                })
+                .collect();
+            wait_until(|| live_threads() >= before + CHORES, Duration::from_secs(5));
+            let one_each = live_threads();
+            stop.store(true, Ordering::SeqCst);
+            for h in parked {
+                let _ = h.join();
+            }
+            wait_until(|| live_threads() <= before, Duration::from_secs(5));
+
+            // The new shape: the same four chores on one shared timer thread.
+            let mid = live_threads();
+            let s = Scheduler::start();
+            for name in ["one", "two", "three", "four"] {
+                s.register_periodic(name, NEVER_AGAIN, NEVER_AGAIN, || {});
+            }
+            wait_until(|| live_threads() > mid, Duration::from_secs(5));
+            let shared = live_threads();
+            s.shutdown(Duration::from_millis(500));
+            wait_until(|| live_threads() <= mid, Duration::from_secs(5));
+            let after = live_threads();
+
+            if before == mid && mid == after {
+                measured = Some((before, one_each, shared));
+                break;
+            }
+        }
+
+        let (idle, one_each, shared) =
+            measured.expect("the process never stayed quiet long enough to count its threads");
+        println!("idle threads: {idle} baseline, {one_each} with a thread per chore, {shared} with the shared timer thread");
+        assert_eq!(one_each - idle, CHORES, "the old shape should cost one thread per chore");
+        assert_eq!(shared - idle, 1, "the shared timer thread should cost exactly one, whatever it holds");
+    }
+
+    #[test]
+    fn shutdown_stops_the_thread_promptly() {
+        let s = Scheduler::start();
+        s.register_periodic("parked", NEVER_AGAIN, NEVER_AGAIN, || {});
+        // Let it actually reach the long wait before asking it to leave.
+        std::thread::sleep(Duration::from_millis(20));
+        let started = Instant::now();
+        let stopped = s.shutdown(Duration::from_millis(100));
+        let took = started.elapsed();
+        assert!(stopped, "the timer thread was still running after {took:?}");
+        assert!(took < Duration::from_millis(100), "shutdown took {took:?}");
     }
 }
 

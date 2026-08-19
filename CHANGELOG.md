@@ -344,6 +344,13 @@ ship on).
 - Typing in the expert menu's search box no longer rebuilds all five tabs on
   every keystroke, and the quick launcher prepares its search index once
   instead of on every keypress.
+- **The background chores share one timer instead of one each.** The automatic
+  backup, the update check, the language-pack watch and the temp-file cleanup
+  used to keep a thread apiece, each asleep almost all the time; they now take
+  turns on a single one, which also means closing the app no longer has to wait
+  on a chore that was parked for the next few hours. The temp-file cleanup runs
+  every few hours now instead of only at startup, so an instance left running
+  for days keeps tidying up after itself.
 
 ### Fixed
 
