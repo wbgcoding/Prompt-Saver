@@ -1,4 +1,4 @@
-// 2: image example prompt's attached picture — a small original abstract graphic
+// Image example prompt's attached picture — a small original abstract graphic
 // (no photo/logo/copyrighted content), generated once and embedded as a data URL
 // so the portable exe still ships as one file. Isolated into its own module so the
 // big base64 blob does not bloat main.js.

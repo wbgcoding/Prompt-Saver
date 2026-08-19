@@ -48,7 +48,7 @@ let seq = 0;
 // newer openPopover() call that started in the meantime (its close finishes after
 // the newer one already opened something) — this catches that case specifically.
 let openReq = 0;
-// 61: "edit" starts empty, not a hardcoded English literal -- unlike every other
+// "edit" starts empty, not a hardcoded English literal -- unlike every other
 // field here it spells the item word, which must only ever reach the screen
 // through the real (lazily loaded) i18n text and its fork-brand substitution.
 let TXT = { copied: "Copied!", size: "Size", edit: "", close: "Close", rename: "Rename", dissolve: "Dissolve folder", takeOut: "Take out of folder" };
@@ -63,12 +63,12 @@ let animMs = 150;
 // the folder, so the two gestures never fight over the same drag.
 let dragOutOn = false, dragOutMod = "ctrlKey";
 
-// 32: rotating prompt — "next entry" badge per member, kept live by the backend's
+// Rotating prompt — "next entry" badge per member, kept live by the backend's
 // rotation-changed event (any window's copy can move another member's pointer).
 const rotateInfo = new Map(); // member id -> { index, pos, total }
 let rotateBadgeOn = true; // Phase B default: on
 
-// 33: pos (not index + 1) — in random mode index is the absolute entry that will
+// Pos (not index + 1) — in random mode index is the absolute entry that will
 // be drawn next (jumps around); pos is the 1-based draw number within the current
 // shuffle cycle, counting up and restarting on reshuffle.
 function rotateBadgeLabel(id) {
@@ -196,7 +196,7 @@ function renderGrid() {
   // small font left a large folder full of unreadable labels. Same auto-fit pass
   // the grid tiles and the pills use.
   const cap = Math.max(9, Math.round(t / 3));
-  // 30: 0.86 gave away 14% of the edge length unused — raised to use nearly the
+  // 0.86 gave away 14% of the edge length unused — raised to use nearly the
   // whole face, matching the padding cut below.
   for (const el of gridEl.querySelectorAll(".member-face .face-text")) {
     fitText(el, t * 0.92, t * 0.92, cap);
@@ -255,7 +255,7 @@ async function openPopover(kind) {
     if (!(await layout(kind, el, token))) return;
     open = kind;
     // Let the browser see the start state before the transition runs.
-    // 125: re-check the token -- a blur-driven closePopover() between the await
+    // Re-check the token -- a blur-driven closePopover() between the await
     // above and this frame must not re-add "shown" onto an el already hidden again.
     requestAnimationFrame(() => { if (token === seq) el.classList.add("shown"); });
   } catch (_) {
@@ -312,7 +312,7 @@ async function copyMember(id) {
     return;
   }
   if (cooldownMs && lastCopy[id] && now - lastCopy[id] < cooldownMs) return;
-  // 125: stamp BEFORE the await -- a fast second click while copy_prompt's IPC is
+  // Stamp BEFORE the await -- a fast second click while copy_prompt's IPC is
   // still in flight must see the fresh timestamps right away, or the double-click/
   // cooldown checks above miss it and a fast click issues a duplicate copy.
   lastCopy[id] = Date.now();
@@ -382,7 +382,7 @@ function applyPrefs(s) {
   apDblMs = Number.isFinite(adb) ? adb : DBL_CLICK_MS_DEFAULT;
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
-  // 47: rotateBadge is a sub-toggle of rotatingPrompts — the parent off must freeze
+  // rotateBadge is a sub-toggle of rotatingPrompts — the parent off must freeze
   // the whole feature (gating rule: nothing dependent stays visible with its parent
   // off), same fix as floating.js/main.js.
   rotateBadgeOn = s.ui_flags?.rotateBadge !== false && s.ui_flags?.rotatingPrompts !== false;
@@ -632,7 +632,7 @@ gridEl.addEventListener("contextmenu", (e) => {
   memberMenu.style.left = px(left);
   memberMenu.style.top = px(top);
 });
-// 125: #member-menu is a sibling of #pop, never inside #grid -- a listener bound
+// #member-menu is a sibling of #pop, never inside #grid -- a listener bound
 // to gridEl never sees a mousedown on the popover's own padding (or anywhere else
 // outside the grid), so the menu was stuck open. document catches every click.
 document.addEventListener("mousedown", (e) => {
@@ -664,19 +664,19 @@ listen("merge-hint", (e) => iconEl.classList.toggle("merge-hint", e.payload === 
 listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
 listen("language-changed", () => applySettings().catch(() => {}));
 // Same as the pill: an expert change has to reach a folder that is already open.
-// 57: applySettings() alone never reaches state.cols (folderGridCols) -- that only
+// applySettings() alone never reaches state.cols (folderGridCols) -- that only
 // arrives through loadState()'s own float_folder_state call, so a changed grid
 // column count never reached an already-open folder window without it too.
 listen("settings-changed", () => { applySettings().catch(() => {}); loadState(); });
 listen("prompt-updated", (e) => {
   if (e.payload && state.members.some((p) => p.id === e.payload.id)) {
-    // 32: an edit can change entry count/text — drop the cached rotation state so
+    // An edit can change entry count/text — drop the cached rotation state so
     // the reload below primes it fresh (primeMemberRotate only peeks once per id).
     rotateInfo.delete(e.payload.id);
     loadState();
   }
 });
-// 32: a member's rotation pointer moved (any window may have copied it).
+// A member's rotation pointer moved (any window may have copied it).
 listen("rotation-changed", (e) => {
   const { id, index, pos, total } = e.payload || {};
   if (!id || !state.members.some((p) => p.id === id)) return;

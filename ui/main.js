@@ -56,7 +56,7 @@ const modal = {
   notesHead: $("modal-notes-head"),
   notesBody: $("modal-notes-body"),
   notesText: $("modal-notes-text"),
-  // 28: tags/hotkey/history share one collapsible now.
+  // Tags/hotkey/history share one collapsible now.
   advanced: $("modal-advanced"),
   advancedHead: $("modal-advanced-head"),
   advancedBody: $("modal-advanced-body"),
@@ -66,7 +66,7 @@ const modal = {
   hotkeyErr: $("modal-hotkey-err"),
   hotkeyAction: $("modal-hotkey-action"),
   hotkeyActionRow: $("modal-hotkey-action-row"),
-  // 32: rotating prompts.
+  // Rotating prompts.
   rotateToggleRow: $("modal-rotate-toggle-row"),
   rotateSwitch: $("modal-rotate-switch"),
   rotateList: $("modal-rotate-list"),
@@ -116,7 +116,7 @@ let libSelected = new Set();
 let libLastId = null;          // anchor for shift-click range select
 let libDisplayOrder = [];      // ids in current display order (for range select)
 let gridDirty = false;         // batch ops changed prompts; rebuild grid on library close
-// 11: grid bulk selection — its own Set, independent of the library's libSelected.
+// Grid bulk selection — its own Set, independent of the library's libSelected.
 // Folder tiles are excluded: a folder stands for several prompts, and "select,
 // then recolor/move/delete" has no single obvious meaning for the group itself.
 let gridSelected = new Set();
@@ -172,7 +172,7 @@ const ICON_TRASH =
   '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13M10 11v6M14 11v6"/></svg>';
 const ICON_UNDO =
   '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M8 7 3 12l5 5M3 12h11a5 5 0 0 1 0 10h-4"/></svg>';
-// 32: reorder a rotating prompt's entries (no drag & drop — YAGNI, and testable).
+// Reorder a rotating prompt's entries (no drag & drop — YAGNI, and testable).
 const ICON_UP =
   '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 15l6-6 6 6"/></svg>';
 const ICON_DOWN =
@@ -487,15 +487,15 @@ function readableInk(hex) {
 // picked colour is visible next to its value.
 // Every toast is now the same themed card (icon badge + message), matching the
 // update notification, so nothing looks like the old flat pill.
-// 81: `chips` is a second, independent action slot — a row of small pill buttons
+// `chips` is a second, independent action slot — a row of small pill buttons
 // (e.g. the three colour notations) instead of the single `.toast-btn`. Kept
 // separate from `action` rather than folding it in, so every existing single-action
 // caller (undo, update-available, …) is untouched.
-// 122: `duration` overrides the computed auto-hide delay (ms) for this one call --
+// `duration` overrides the computed auto-hide delay (ms) for this one call --
 // the background OCR-language-update notice uses its own ocrLangNoticeMs expert
 // setting instead of the generic TOAST_MS/action-bonus math below. Every existing
 // caller omits it and keeps the old behaviour.
-// 125: named (not the pill/folder windows' shared COPIED_MS=900 -- this toast
+// Named (not the pill/folder windows' shared COPIED_MS=900 -- this toast
 // chip flash has always run shorter; unifying the value would be a behaviour change).
 const CHIP_COPIED_MS = 400;
 function toast(msg, action = null, tint = "", chips = null, duration = null) {
@@ -916,7 +916,7 @@ function disarmButton(btn, label) {
   btn.classList.remove("confirm");
   btn.textContent = label;
 }
-// 21: a delete confirms on the button itself instead of in a dialog — first press
+// A delete confirms on the button itself instead of in a dialog — first press
 // arms it (fully red, warning glyph, the count spelled out), a second press within
 // DISARM_MS deletes. One place to look instead of two, and the pointer never has to
 // travel to a dialog that just appeared under it.
@@ -1033,7 +1033,7 @@ const FLAG_LABELS = {
   // copy serves the next entry (in order, or shuffled without repeats). Default
   // on since 33 — shipped default off at 32's original release.
   rotatingPrompts: "flagRotatingPrompts",
-  // 32: sub-toggle of rotatingPrompts, itself also default on.
+  // Sub-toggle of rotatingPrompts, itself also default on.
   rotateBadge: "flagRotateBadge",
   // 90-94: sub-toggle of rotatingPrompts, default on.
   rotateAuto: "flagRotateAuto",
@@ -1056,7 +1056,7 @@ const FLAG_LABELS = {
   codeAutoDetect: "flagCodeAutoDetect", // F15 render an unfenced code prompt as code
   notesInTooltip: "flagNotesInTooltip", // F17 show the private note in the tile tooltip
   promptHotkeys: "flagPromptHotkeys",   // F20 per-prompt global hotkeys
-  // 98: sub-toggle of promptHotkeys, default on -- moved from
+  // Sub-toggle of promptHotkeys, default on -- moved from
   // OPT_FLAG_LABELS; no CSS class keys on this flag, so the move is risk-free.
   promptHotkeyPaste: "flagPromptHotkeyPaste",
   trayRecent: "flagTrayRecent",         // F23 "recently used" section in the tray menu
@@ -1068,22 +1068,22 @@ const FLAG_LABELS = {
   trayFavs: "flagTrayFavs",             // F23 favourites section in the tray menu
   // Checks at launch, but only while the normal auto-update setting is on.
   checkUpdateOnStart: "flagCheckUpdateOnStart",
-  // 85: split from the old single autoBackupBeforeWipe so either case can be
+  // Split from the old single autoBackupBeforeWipe so either case can be
   // switched off on its own. Both ship default on.
   backupBeforeReset: "flagBackupBeforeReset",
   backupBeforeDelete: "flagBackupBeforeDelete",
-  // 87: help panel — the tip line under each article, and search-hit highlighting.
+  // Help panel — the tip line under each article, and search-hit highlighting.
   helpTips: "flagHelpTips",
   helpHighlight: "flagHelpHighlight",
-  // 87: word-level diff in the version-history expanded view.
+  // Word-level diff in the version-history expanded view.
   historyDiff: "flagHistoryDiff",
-  // 121: sub-toggles of ocr (OPT_FLAG_LABELS, default off), themselves default on.
+  // Sub-toggles of ocr (OPT_FLAG_LABELS, default off), themselves default on.
   ocrAutoCopy: "flagOcrAutoCopy",
   ocrJoinLines: "flagOcrJoinLines",
-  // 122: sub-toggles of ocr, themselves default on.
+  // Sub-toggles of ocr, themselves default on.
   ocrAutoPickLang: "flagOcrAutoPickLang",
   ocrLangAutoUpdate: "flagOcrLangAutoUpdate",
-  // 123: auto-opens the five-step first-run tour once, right after the example
+  // Auto-opens the five-step first-run tour once, right after the example
   // prompts are seeded. Off only stops the AUTOMATIC open — the Help-menu entry
   // that reopens the tour manually stays available either way.
   firstRunTour: "flagFirstRunTour",
@@ -1152,14 +1152,14 @@ const OPT_FLAG_LABELS = {
   // windows can run side by side. Read once at launch, before settings normally
   // load — toggling it needs a restart to take effect (flagRow() toasts that).
   allowMultipleInstances: "flagAllowMultipleInstances",
-  // 51: off keeps the historical "one placement" guarantee (adding elsewhere moves
+  // Off keeps the historical "one placement" guarantee (adding elsewhere moves
   // it there); on lets a prompt sit in several views at once, sharing the same data.
   multiViewPrompt: "flagMultiViewPrompt",
   // Prompt-folders-as-Markdown (beta — see the module note above sync_enabled() in
   // lib.rs): mirrors every text-only prompt as a .md file in a folder, editable by
   // hand or another tool.
   promptSync: "flagPromptSync",
-  // 121: Windows Media.Ocr text recognition (screenshot / image file -> editable text).
+  // Windows Media.Ocr text recognition (screenshot / image file -> editable text).
   ocr: "flagOcr",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
@@ -1253,7 +1253,7 @@ const EXPERT_VALUES = {
   historyMax: { label: "valHistoryMax", def: 100, unit: "", stops: HISTORY_STOPS, gate: "copyHistory" },
   // Max copy-history rows the journal renders at once (UI cap, not storage).
   journalLimit: { label: "valJournalLimit", min: 50, max: 10000, step: 50, def: 100, unit: "", gate: "copyHistory" },
-  // 87: copy-history dialog width.
+  // Copy-history dialog width.
   journalWidth: { label: "valJournalWidth", min: 520, max: 1400, step: 20, def: 980, unit: "px", gate: "copyHistory" },
   // Block re-copying the SAME prompt within this window (0 = off). Never blocks others.
   copyCooldownMs: { label: "valCopyCooldown", min: 0, max: 10000, step: 100, def: COOLDOWN_MS_DEFAULT, unit: "ms" },
@@ -1268,19 +1268,19 @@ const EXPERT_VALUES = {
   libraryWidth: { label: "valLibraryWidth", min: 520, max: 1400, step: 20, def: 900, unit: "px" },
   // How many recent search terms the suggestions dropdown keeps + shows.
   searchRecentMax: { label: "valSearchRecentMax", min: 1, max: 20, step: 1, def: 8, unit: "", gate: "searchSuggest" },
-  // 87: how long the library search waits after the last keystroke before it re-filters.
+  // How long the library search waits after the last keystroke before it re-filters.
   searchDebounceMs: { label: "valSearchDebounceMs", min: 0, max: 600, step: 10, def: 120, unit: "ms", gate: "librarySearch" },
   // Tile geometry.
   tileRadius: { label: "valTileRadius", min: 0, max: 30, step: 1, def: 10, unit: "px" },
   tileBorderWidth: { label: "valTileBorderWidth", min: 0, max: 6, step: 1, def: 1, unit: "px" },
   // Tile hover-lift travel (paired with the tileHoverLift toggle).
   hoverLift: { label: "valHoverLift", min: 1, max: 12, step: 1, def: 1, unit: "px", gate: "tileHoverLift" },
-  // 87: drag-vs-click distance before a pointer-down turns into a drag (tiles, tabs, folders).
+  // Drag-vs-click distance before a pointer-down turns into a drag (tiles, tabs, folders).
   dragThreshold: { label: "valDragThreshold", min: 2, max: 20, step: 1, def: DRAG_THRESHOLD_DEFAULT, unit: "px" },
   // Header vertical padding + screenshot-preview max height.
   headerPadY: { label: "valHeaderPadY", min: 2, max: 30, step: 1, def: 10, unit: "px" },
   snipPreviewVh: { label: "valSnipPreviewVh", min: 30, max: 92, step: 1, def: 74, unit: "%", gate: "screenshot" },
-  // 87: screenshot JPEG quality + a delay before the capture (lets a menu stay open in shot).
+  // Screenshot JPEG quality + a delay before the capture (lets a menu stay open in shot).
   snipQuality: { label: "valSnipQuality", min: 50, max: 100, step: 5, def: 80, unit: "%", gate: "screenshot" },
   snipDelayMs: { label: "valSnipDelayMs", min: 0, max: 5000, step: 100, def: 0, unit: "ms", gate: "screenshot" },
   // 117/118: screenshot-editor drawing defaults.
@@ -1290,10 +1290,10 @@ const EXPERT_VALUES = {
   snipPixelBlock: { label: "valSnipPixelBlock", min: 4, max: 64, step: 2, def: 12, unit: "px", gate: "snipEditor" },
   snipSpotlightDim: { label: "valSnipSpotlightDim", min: 10, max: 90, step: 5, def: 55, unit: "%", gate: "snipEditor" },
   snipEditUndoMax: { label: "valSnipEditUndoMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "snipEditor" },
-  // 121: a crop smaller than this (either side) is upscaled 2x before recognition --
+  // A crop smaller than this (either side) is upscaled 2x before recognition --
   // the trick that makes small on-screen text readable to the OCR engine.
   ocrUpscaleUnderPx: { label: "valOcrUpscaleUnderPx", min: 100, max: 800, step: 50, def: 300, unit: "px", gate: "ocr" },
-  // 122: how often the background thread checks installed language packs for an
+  // How often the background thread checks installed language packs for an
   // update, how long the "update available" toast stays before it counts as a
   // silent no-op, and how long a click on its Cancel button postpones the next
   // check. All three only matter while ocrLangAutoUpdate itself is on.
@@ -1309,7 +1309,7 @@ const EXPERT_VALUES = {
   scrollbarWidth: { label: "valScrollbarWidth", min: 8, max: 20, step: 1, def: 12, unit: "px", gate: "!hideScrollbars" },
   // Frosted-glass dialog background blur (paired with the frostedModals toggle).
   frostedBlur: { label: "valFrostedBlur", min: 0, max: 20, step: 1, def: 4, unit: "px", gate: "frostedModals" },
-  // 87: composer textarea auto-grow cap, popover edge padding, toast width, modal max height.
+  // Composer textarea auto-grow cap, popover edge padding, toast width, modal max height.
   composerMaxH: { label: "valComposerMaxH", min: 80, max: 400, step: 10, def: 160, unit: "px" },
   popoverPad: { label: "valPopoverPad", min: 2, max: 24, step: 1, def: 6, unit: "px" },
   toastWidth: { label: "valToastWidth", min: 260, max: 700, step: 20, def: 440, unit: "px" },
@@ -1328,7 +1328,7 @@ const EXPERT_VALUES = {
   statsTopN: { label: "valStatsTopN", min: 5, max: 100, step: 1, def: 10, unit: "", gate: "usageStats" },
   // F6 duplicate finder: similarity threshold.
   dupThreshold: { label: "valDupThreshold", min: 70, max: 100, step: 1, def: 90, unit: "%", gate: "dupFinder" },
-  // 87: how long a confirm button (delete etc.) stays armed before it auto-resets.
+  // How long a confirm button (delete etc.) stays armed before it auto-resets.
   disarmMs: { label: "valDisarmMs", min: 1000, max: 10000, step: 500, def: 3000, unit: "ms" },
   // F2 automatic backups: how many rotating snapshots to keep.
   backupKeep: { label: "valBackupKeep", min: 1, max: 50, step: 1, def: 10, unit: "", gate: "autoBackup" },
@@ -1347,7 +1347,7 @@ const EXPERT_VALUES = {
   kbFocusFadeMs: { label: "valKbFocusFade", min: 500, max: 10000, step: 500, def: 2000, unit: "ms", gate: "keyboardNav" },
   // F1 tag chip text size (editor, library filter row, manager).
   tagChipPx: { label: "valTagChipPx", min: 10, max: 20, step: 1, def: 12, unit: "px", gate: "tags" },
-  // 87: column count for the grid tag-filter popover (81).
+  // Column count for the grid tag-filter popover (81).
   tagPopCols: { label: "valTagPopCols", min: 1, max: 3, step: 1, def: 2, unit: "", gate: "tags" },
   // F3 how many custom themes may be stored (keeps the settings blob bounded).
   customThemeMax: { label: "valCustomThemeMax", min: 1, max: 20, step: 1, def: 8, unit: "", gate: "customThemes" },
@@ -1358,26 +1358,26 @@ const EXPERT_VALUES = {
   trayFavN: { label: "valTrayFavN", min: 1, max: 10, step: 1, def: 10, unit: "", gate: "trayFavs" },
   // F15 code text size inside the Markdown preview.
   hlFontPx: { label: "valHlFontPx", min: 10, max: 18, step: 1, def: 13, unit: "px", gate: "codeHighlight" },
-  // 87: Markdown preview + syntax-highlight size caps, past which they fall back to plain text.
+  // Markdown preview + syntax-highlight size caps, past which they fall back to plain text.
   mdMaxChars: { label: "valMdMaxChars", min: 10000, max: 500000, step: 10000, def: 100000, unit: "", gate: "mdPreview" },
   hlMaxChars: { label: "valHlMaxChars", min: 2000, max: 100000, step: 1000, def: 20000, unit: "", gate: "codeHighlight" },
-  // 87: word-diff cap in version history (500: minimum where a diff is still worth it).
+  // Word-diff cap in version history (500: minimum where a diff is still worth it).
   diffWordCap: { label: "valDiffWordCap", min: 500, max: 20000, step: 500, def: 4000, unit: "", gate: "historyDiff" },
-  // 87: version-history preview line length.
+  // Version-history preview line length.
   historyPreviewLen: { label: "valHistoryPreviewLen", min: 20, max: 300, step: 10, def: 80, unit: "", gate: "promptHistory" },
   // F17 how much of a private note the tile tooltip shows (0 = the whole note).
   notesTipLen: { label: "valNotesTipLen", min: 0, max: 2000, step: 20, def: 300, unit: "", gate: "notesInTooltip" },
   // F26 how far the picker's loupe magnifies the pixels around the cursor.
   loupeZoom: { label: "valLoupeZoom", min: 4, max: 16, step: 1, def: 4, unit: "×", gate: "colorPicker" },
-  // 87: loupe grid size (odd numbers only — the centre cell must be the exact picked pixel).
+  // Loupe grid size (odd numbers only — the centre cell must be the exact picked pixel).
   loupeCells: { label: "valLoupeCells", min: 7, max: 25, step: 2, def: 15, unit: "", gate: "colorPicker" },
-  // 19: how many recent picks the right-click popover (and the overlay strip) keep. 0 = off.
+  // How many recent picks the right-click popover (and the overlay strip) keep. 0 = off.
   pickHistoryN: { label: "valPickHistoryN", min: 0, max: 20, step: 1, def: 5, unit: "", gate: "colorPicker" },
-  // 86: swatch diameter in the right-click colour-history popover.
+  // Swatch diameter in the right-click colour-history popover.
   pickSwatchPx: { label: "valPickSwatchPx", min: 12, max: 40, step: 1, def: 22, unit: "px", gate: "colorPicker" },
-  // 32: cap on how many variants one rotating prompt may hold.
+  // Cap on how many variants one rotating prompt may hold.
   rotateMaxEntries: { label: "valRotateMaxEntries", min: 2, max: 50, step: 1, def: 20, unit: "", gate: "rotatingPrompts" },
-  // 87: tile tooltip preview length for a rotating prompt's short text.
+  // Tile tooltip preview length for a rotating prompt's short text.
   rotateTipLen: { label: "valRotateTipLen", min: 0, max: 300, step: 10, def: 60, unit: "", gate: "rotatingPrompts" },
   // 90-94: auto-advance session tuning — mirrors the backend's auto_cfg() defaults.
   rotateAutoTimeoutMin: { label: "valRotateAutoTimeoutMin", min: 0, max: 480, step: 5, def: 60, unit: "min", zeroLabel: "valUnlimited", gate: "rotateAuto" },
@@ -1385,7 +1385,7 @@ const EXPERT_VALUES = {
   rotateAutoCooldownMs: { label: "valRotateAutoCooldownMs", min: 0, max: 2000, step: 50, def: 250, unit: "ms", gate: "rotateAuto" },
   rotateAutoInputMs: { label: "valRotateAutoInputMs", min: 500, max: 10000, step: 250, def: 3000, unit: "ms", gate: "rotateAuto" },
   rotateAutoRearmMax: { label: "valRotateAutoRearmMax", min: 0, max: 50, step: 1, def: 12, unit: "", gate: "rotateAuto" },
-  // 123: minimum height of the tour's content area so switching between its five
+  // Minimum height of the tour's content area so switching between its five
   // (unevenly long) steps never visibly resizes the dialog. Deliberately NOT gated
   // on firstRunTour — the Help-menu reopen works regardless of that toggle, and the
   // sizing still applies then.
@@ -1397,10 +1397,10 @@ const EXPERT_SELECTS = {
   historyDays: { label: "valHistoryDays", options: [0, 7, 30, 90, 365], def: 0, unit: "d", zeroLabel: "retentionForever", gate: "copyHistory" },
   // F2 backup interval (hours) — a preset-or-custom select right under backupKeep.
   backupIntervalH: { label: "valBackupInterval", options: [6, 12, 24, 48, 168], def: 24, unit: "h", gate: "autoBackup" },
-  // 91: how long a deleted prompt sits in the trash before it is purged automatically.
+  // How long a deleted prompt sits in the trash before it is purged automatically.
   // No feature gate — trash is not optional, delete always goes through it.
   trashRetentionDays: { label: "valTrashRetentionDays", options: [0, 7, 30, 90, 365], def: 30, unit: "d", zeroLabel: "retentionForever" },
-  // 87: how often the background thread checks for a new release.
+  // How often the background thread checks for a new release.
   updateCheckH: { label: "valUpdateCheckH", options: [6, 12, 24, 48, 168], def: 24, unit: "h", gate: "showUpdates" },
 };
 
@@ -1443,7 +1443,7 @@ const EXPERT_DROPDOWNS = {
   // F22: which key turns a press into a drag-out instead of the plain drag.
   dragOutModifier: enumDropdown("dragOutModifier", "valDragOutModifier",
     [["ctrl", "keyCtrl"], ["alt", "keyAlt"], ["shift", "keyShift"]], "ctrl", "dragOut"),
-  // 32: mode a NEW rotating prompt starts with (each prompt can still switch its
+  // Mode a NEW rotating prompt starts with (each prompt can still switch its
   // own mode afterward in the editor).
   rotateDefaultMode: enumDropdown("rotateDefaultMode", "valRotateDefaultMode",
     [["order", "optRotateOrder"], ["random", "optRotateRandom"]], "order", "rotatingPrompts"),
@@ -1454,14 +1454,14 @@ const EXPERT_DROPDOWNS = {
   snipEditDefaultTool: enumDropdown("snipEditDefaultTool", "valSnipEditDefaultTool",
     [["crop", "snipToolCrop"], ["pen", "snipToolPen"], ["marker", "snipToolMarker"],
      ["arrow", "snipToolArrow"], ["text", "snipToolText"], ["step", "snipToolStep"]], "pen", "snipEditor"),
-  // 121: options are fetched once from ocr_languages() at startup and cached
+  // Options are fetched once from ocr_languages() at startup and cached
   // (ocrLangsCache, near the OCR wiring below) -- "Automatic" is always first,
   // regardless of what the OS itself reports.
   ocrLang: {
     label: "valOcrLang",
     gate: "ocr",
     def: "auto",
-    // 122: trailing "Manage languages..." entry opens #ocr-langs-modal instead of
+    // Trailing "Manage languages..." entry opens #ocr-langs-modal instead of
     // ever being persisted as the chosen language -- see set() below.
     options: () => [["auto", t("langAuto")], ...ocrLangsCache.map((l) => [l.tag, l.label]), ["__manage__", t("ocrLangsManage")]],
     get: () => settings.ui_texts?.ocrLang || "auto",
@@ -1471,15 +1471,15 @@ const EXPERT_DROPDOWNS = {
       try { await invoke("set_ui_text", { key: "ocrLang", value: v }); } catch (e) { errToast(e); }
     },
   },
-  // 87: which edge the toast notifications rise from.
+  // Which edge the toast notifications rise from.
   toastPos: enumDropdown("toastPos", "valToastPos",
     [["bottom", "optToastBottom"], ["top", "optToastTop"]], "bottom"),
-  // 87: tag manager / filter chip order.
+  // Tag manager / filter chip order.
   tagSort: enumDropdown("tagSort", "valTagSort",
     [["alpha", "optTagSortAlpha"], ["usage", "optTagSortUsage"]], "alpha", "tags"),
   copySize: {
     label: "valCopySize",
-    // 83: get() always returns a String (see below) — a numeric def here made
+    // get() always returns a String (see below) — a numeric def here made
     // isRowChanged's strict !== comparison permanently true ("0" !== 0).
     def: "0",
     options: () => {
@@ -1520,7 +1520,7 @@ const EXPERT_TABS = [
     // Everything that puts new content into the app. F26 (pipette) sits with the
     // screenshot tool: both are capture tools on the composer bar.
     { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax"], dropdowns: ["pickerFormat", "snipEditDefaultTool", "ocrLang", "rotateDefaultMode"], paths: ["screenshotDir"],
-      // 122: opens #ocr-langs-modal -- same gate as the rest of OCR.
+      // Opens #ocr-langs-modal -- same gate as the rest of OCR.
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }] },
     // F12/F13 placeholders, from the grammar to where the app asks for them.
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
@@ -1609,7 +1609,7 @@ function applyFlags() {
     document.body.classList.toggle(`flag-${key}`, optFlag(key));
   }
   refreshCustomThemes(); // F3: the feature may have just been switched on or off
-  // 125: uppercaseTiles/boldTileNames/monospaceTiles/italicTiles change .tile-name
+  // uppercaseTiles/boldTileNames/monospaceTiles/italicTiles change .tile-name
   // metrics via CSS but are plain flags (no dedicated apply* path), so a cached fit
   // size from before the toggle would otherwise linger until fitCache's own 1000-entry eviction.
   fitCache.clear();
@@ -1672,7 +1672,7 @@ function applyValues() {
   root.setProperty("--tag-pop-cols", String(Math.round(val("tagPopCols"))));
   root.setProperty("--journal-width", `${val("journalWidth")}px`);
   root.setProperty("--tour-step-min-h", `${val("tourStepMinH")}px`);
-  // 87: caps/lengths that were fixed constants, now expert-tunable.
+  // Caps/lengths that were fixed constants, now expert-tunable.
   ROTATE_SHORT_MAX = Math.round(val("rotateTipLen"));
   MD_MAX_CHARS = Math.round(val("mdMaxChars"));
   HL_MAX_CHARS = Math.round(val("hlMaxChars"));
@@ -1751,11 +1751,11 @@ function withTip(row, key) {
   return row;
 }
 
-// 31: a small per-row undo icon, visible only while this exact row differs from its
+// A small per-row undo icon, visible only while this exact row differs from its
 // default — resets just this one key. Reuses the same isRowChanged() diff as 66/67
 // and the same per-key commands resetExpertGroup() uses; no confirmation, since one
 // click back is reversible.
-// 99: `after` lets a caller outside the main expert menu (the backup/statistics
+// `after` lets a caller outside the main expert menu (the backup/statistics
 // panels, their own top-level window) redraw itself instead of renderExpert().
 function rowResetBtn(kind, key, after) {
   if (!isRowChanged(kind, key)) return null;
@@ -1797,7 +1797,7 @@ async function resetOneExpertValue(kind, key, after) {
 }
 
 // Flags whose state changes the tile DOM itself (everything else is a body class).
-// 47: rotatingPrompts/rotateBadge gate a tile's own rotate-badge element -- without
+// rotatingPrompts/rotateBadge gate a tile's own rotate-badge element -- without
 // a full rebuild here, an already-open grid keeps showing (or hiding) it until some
 // unrelated re-render happens to catch up.
 const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip", "rotatingPrompts", "rotateBadge"]);
@@ -1826,7 +1826,7 @@ function flagRow(key) {
   input.checked = flagState(key);
   input.addEventListener("change", async () => {
     const enabled = input.checked;
-    // 17: turning sync on starts writing every text prompt as a plain-text .md file
+    // Turning sync on starts writing every text prompt as a plain-text .md file
     // next to the encrypted DB — say so before it happens, not just in the help doc.
     if (key === "promptSync" && enabled) {
       const ok = await confirmDialog({
@@ -1852,7 +1852,7 @@ function flagRow(key) {
     // cannot change which guard is already running.
     if (key === "allowMultipleInstances") toast(t("toastRestartNeeded"));
     applyFlags();
-    // 67: "only changed" has to recompute after EVERY flag (not just gating ones,
+    // "only changed" has to recompute after EVERY flag (not just gating ones,
     // which is all a plain re-render used to care about) — the row set depends on
     // this flag's own value now, not only on what it gates.
     if (GATING_FLAGS.has(key) || expertOnlyChanged) renderExpert();
@@ -1890,7 +1890,7 @@ async function commitValue(key, value) {
   try { await invoke("set_ui_value", { key, value }); } catch (err) { errToast(err); }
   applyValues();
   await refreshTiles(key);
-  // 67: fires once on release, not per drag frame — same "no flash mid-drag" reason
+  // Fires once on release, not per drag frame — same "no flash mid-drag" reason
   // previewValue() never calls this, safe to rebuild the (possibly filtered) list here.
   if (expertOnlyChanged) renderExpert();
 }
@@ -1998,7 +1998,7 @@ function selectRow(key) {
       num.classList.remove("hidden");
       unit.classList.remove("hidden");
       num.focus();
-      // 67: no re-render here even under "only changed" — it would rebuild the row
+      // No re-render here even under "only changed" — it would rebuild the row
       // (a fresh, unfocused num) right out from under the focus() above, right as
       // the user is about to type into it. The number field's own "change" below
       // covers the filter once a value is actually committed.
@@ -2160,7 +2160,7 @@ let expertOnlyChanged = false; // 67: hide every row still at its default
 // class rather than :checked (:has() is avoided project-wide, see main.css:733).
 const syncOnlyChangedChip = () =>
   $("expert-only-changed-chip")?.classList.toggle("active", expertOnlyChanged);
-// 67: does this row differ from its shipped default? Actions and the colour palette
+// Does this row differ from its shipped default? Actions and the colour palette
 // have no single "default value" to diff against, so they are excluded up in
 // renderExpert() instead of handled here.
 function isRowChanged(kind, key) {
@@ -2204,7 +2204,7 @@ function paletteRow() {
     inputs.push(c);
     grid.appendChild(c);
   }
-  // 99: only show it while a hue actually differs from DEFAULT_COLORS -- same rule
+  // Only show it while a hue actually differs from DEFAULT_COLORS -- same rule
   // as every other row's rowResetBtn(), the palette just has no single key to diff.
   const changed = cur.some((c, i) => (HEX_RE.test(c) ? c : DEFAULT_COLORS[i + 1]) !== DEFAULT_COLORS[i + 1]);
   if (changed) {
@@ -2375,7 +2375,7 @@ function renderExpert() {
   if (expertTab >= EXPERT_TABS.length) expertTab = 0;
   const q = expertQuery.trim().toLowerCase();
   const searching = q.length > 0;
-  // 67: like searching, "only changed" scans every tab at once — a per-tab filter
+  // Like searching, "only changed" scans every tab at once — a per-tab filter
   // would defeat the point of a diff view across the whole expert menu.
   const globalView = searching || expertOnlyChanged;
   // Tab bar lives in the fixed header (stays visible while the rows scroll); it is
@@ -2435,7 +2435,7 @@ function renderExpert() {
         head.classList.add("collapsible");
         head.addEventListener("click", () => toggleExpertGroup(group.title, sec));
       }
-      // 71: per-category reset — only worth showing when there is something in this
+      // Per-category reset — only worth showing when there is something in this
       // group to reset. Reuses the same isRowChanged() diff as 66/67.
       const right = document.createElement("span");
       right.className = "expert-group-title-right";
@@ -2507,7 +2507,7 @@ function renderExpert() {
   box.scrollTop = keepScroll;
 }
 
-// 71: which of this group's own rows currently differ from their default — reuses
+// Which of this group's own rows currently differ from their default — reuses
 // the same gate + isRowChanged() checks renderExpert()'s keep() applies, just
 // standalone so the reset button can both decide whether to show itself and know
 // exactly what to touch.
@@ -2521,13 +2521,13 @@ function changedKeysInGroup(group) {
       if (gateOpen(EXPERT_DEFS[kind]?.[k]?.gate) && isRowChanged(kind, k)) out[kind].push(k);
     }
   }
-  // 31: closes the one category the per-kind loop above cannot see — the colour
+  // Closes the one category the per-kind loop above cannot see — the colour
   // palette has no single key, just PALETTE_LEN live hues to diff against defaults.
   if (group.palette) out.palette = COLORS.slice(1).some((c, i) => c !== DEFAULT_COLORS[i + 1]);
   return out;
 }
 
-// 71: reset only what THIS category owns, straight through the same per-key
+// Reset only what THIS category owns, straight through the same per-key
 // set_ui_flag/set_ui_value/set_ui_text commands a manual edit would use — the
 // backend's own side effects (screensaver exclusion, tray, clipboard watcher, …)
 // are already keyed on the setting being touched, so resetting an unrelated
@@ -2608,7 +2608,7 @@ function activeView() {
 }
 const gridKeyOf = (v) => `${v.cols}x${v.rows}`;
 const layoutOf = (v) => v.layouts?.[gridKeyOf(v)] || {};
-// 51: every OTHER view currently holding this prompt — a client-side scan, no
+// Every OTHER view currently holding this prompt — a client-side scan, no
 // round trip, since every view's layout is already loaded in `settings`.
 const viewsContaining = (id, exceptViewId) =>
   settings.views.filter((v) => v.id !== exceptViewId && Object.prototype.hasOwnProperty.call(layoutOf(v), id));
@@ -2848,7 +2848,7 @@ async function renderGrid(skipFetch = false) {
   }
   gridEl.innerHTML = "";
   gridEl.appendChild(frag);
-  // 1: first run, nothing anywhere yet — a plain grid explains nothing on its own.
+  // First run, nothing anywhere yet — a plain grid explains nothing on its own.
   $("grid-empty").classList.toggle("hidden", prompts.length > 0);
 
   pruneVideoCache();
@@ -3327,7 +3327,7 @@ async function confirmViewModal() {
 
 // P50: a new, empty view with the same name/color/grid size as the source — its
 // tile placements are not copied, since a prompt cannot yet sit in two views at
-// once (see WORK.md item 51).
+// once.
 async function duplicateView(v) {
   try {
     settings = await invoke("add_view", { name: `${v.name} (${t("duplicateSuffix")})`, color: v.color || "" });
@@ -3362,7 +3362,7 @@ function chainText() {
   return chainSel.map((id) => chainTexts.get(id) ?? "").join(CHAIN_SEP);
 }
 
-// 32: `commitId` is the prompt just newly picked into the chain (if it rotates) —
+// `commitId` is the prompt just newly picked into the chain (if it rotates) —
 // its pointer only advances once this actual clipboard write succeeds, never from
 // the pick alone (a pick that never reaches the clipboard must burn nothing).
 function pushChainClipboard(commitId) {
@@ -3403,7 +3403,7 @@ async function toggleChainPick(p) {
     pushChainClipboard();
     return;
   }
-  // 32: rotating prompt — peek the entry a copy would use (never consumes), resolve
+  // Rotating prompt — peek the entry a copy would use (never consumes), resolve
   // {#{variables}#} on THAT text, right when the button is picked into the chain.
   let rawText = p.text || p.name || "";
   let peeked = false; // only a successful peek may be followed by a commit below —
@@ -3549,7 +3549,7 @@ function wireTooltips() {
     if (x + r.width + PAD > innerWidth) x = cx - OFF - r.width;
     if (y + r.height + PAD > innerHeight) y = cy - OFF - r.height;
     const z = uiZoom(); // fixed popup lives inside the zoomed body
-    // 137: the flip above only guards the edge it checked — near a corner, with a
+    // The flip above only guards the edge it checked — near a corner, with a
     // wide tooltip (expert tooltipWidth), the flipped side can itself run off the
     // FAR edge. Clamp both bounds, same as placePopover does for every other popup.
     tipEl.style.left = `${Math.max(PAD, Math.min(x, innerWidth - r.width - PAD)) / z}px`;
@@ -3806,7 +3806,7 @@ const clipNote = (s) => {
   return max > 0 && s.length > max ? `${s.slice(0, max)}…` : s;
 };
 
-// 32: client-side cache of each rotating prompt's "next entry" state (index/pos/
+// Client-side cache of each rotating prompt's "next entry" state (index/pos/
 // total/text), kept in sync by the backend's rotation-changed event — fired by every
 // copy path in every window after the pointer actually moves. Populated lazily the
 // first time a tile for that id renders (primeRotateState), so a fresh render never
@@ -3814,7 +3814,7 @@ const clipNote = (s) => {
 const rotateState = new Map(); // id -> { index, pos, total, text }
 let ROTATE_SHORT_MAX = 60; // tooltip preview length, independent of the notes cap (87: expert-tunable)
 
-// 33: `pos` (not `index + 1`) — in random mode `index` is the absolute entry that
+// `pos` (not `index + 1`) — in random mode `index` is the absolute entry that
 // will be drawn next (jumps around), while `pos` is the 1-based draw number within
 // the current shuffle cycle, counting up and restarting at the next reshuffle. In
 // order mode the two coincide (the backend already returns pos = index + 1 there).
@@ -3829,7 +3829,7 @@ function applyRotateState(tile, id) {
   if (badge) badge.textContent = rotateBadgeLabel(id);
   const s = rotateState.get(id);
   if (s && flag("tilePreview")) {
-    // 87: 0 = show the whole entry, same convention as notesTipLen/clipNote.
+    // 0 = show the whole entry, same convention as notesTipLen/clipNote.
     const short = ROTATE_SHORT_MAX > 0 && s.text.length > ROTATE_SHORT_MAX
       ? `${s.text.slice(0, ROTATE_SHORT_MAX)}…` : s.text;
     tile.dataset.tipRotate = t("tileTipRotate").replace("{text}", short);
@@ -3863,10 +3863,10 @@ function buildTile(p) {
   tile.className = "tile";
   tile.dataset.id = p.id;
   if (gridSelected.has(p.id)) tile.classList.add("grid-selected");
-  // 24: a tag filter dims what does not match instead of hiding it — the cell
+  // A tag filter dims what does not match instead of hiding it — the cell
   // stays occupied, so drag/reorder/grid geometry never has to treat it as empty.
   if (gridTags.size && !tagMatches(p, gridTags)) tile.classList.add("tile-dimmed");
-  // 11: bulk-selection checkbox. Its own pointerdown/click stop propagation so a
+  // Bulk-selection checkbox. Its own pointerdown/click stop propagation so a
   // press here can never arm the tile's reorder drag or start a copy.
   const selBtn = document.createElement("button");
   selBtn.type = "button";
@@ -3884,7 +3884,7 @@ function buildTile(p) {
   if (flag("tilePreview")) {
     tile.dataset.tipName = p.name;
     if (preview && preview !== p.name) tile.dataset.tipBody = preview;
-    // 6: two prompts of wildly different length look identical on the tile itself —
+    // Two prompts of wildly different length look identical on the tile itself —
     // the same char/~token readout the editor already shows, reused here so there is
     // only one formula for "how long is this" in the whole app.
     if (p.text) {
@@ -3976,10 +3976,10 @@ function buildTile(p) {
     tile.appendChild(badge);
   }
 
-  // 32: rotating prompt — "next entry" position pill, bottom-left (a rotating
+  // Rotating prompt — "next entry" position pill, bottom-left (a rotating
   // prompt is always text-only, so that corner never competes with a media
   // caption/control bar). Text fills in from the cache once primed below.
-  // 47: rotateBadge is a sub-toggle of rotatingPrompts (gating rule: nothing
+  // rotateBadge is a sub-toggle of rotatingPrompts (gating rule: nothing
   // dependent stays visible/active with its parent off) — flag() alone ignores
   // the parent, gateOpen() walks the declared chain.
   const rotateUiOn = flag("rotateBadge") && gateOpen(FLAG_GATES.rotateBadge);
@@ -4027,7 +4027,7 @@ function buildTile(p) {
     tile.appendChild(err);
     if (missingFiles.has(p.id)) tile.classList.add("file-missing");
   }
-  // 47: gated the same as the badge element above — an unconditional peek here was
+  // Gated the same as the badge element above — an unconditional peek here was
   // firing one rotation_peek IPC call per rotating tile even with the badge (or its
   // whole parent feature) switched off.
   if ((p.variants || []).length && rotateUiOn) {
@@ -4076,7 +4076,7 @@ function pruneVideoCache() {
   }
 }
 
-// 132: library/journal thumbnails used to get a fresh <img> with a reassigned
+// Library/journal thumbnails used to get a fresh <img> with a reassigned
 // base64 src on EVERY render (search re-renders the whole row list on every
 // keystroke), forcing the browser to re-decode the same blob each time. One cache
 // per panel — library and journal can both stay mounted at once (see the video
@@ -4107,7 +4107,7 @@ document.addEventListener("visibilitychange", () => {
 });
 
 // ---- Missing-file watcher ----
-// 10: the ambient every-few-seconds refresh is a backend-pushed "missing-files"
+// The ambient every-few-seconds refresh is a backend-pushed "missing-files"
 // event now (listened for below), not this window's own timer - see
 // start_missing_files_poll in lib.rs. pollMissingFiles stays for the one-off
 // "recheck right now" calls (initial load, right after an edit).
@@ -4167,7 +4167,7 @@ function fileUri(path) {
   return p.startsWith("//") ? `file:${p}` : `file:///${p}`;
 }
 
-// 32: a rotating prompt's peeked "next entry" text, prefetched on arm (see
+// A rotating prompt's peeked "next entry" text, prefetched on arm (see
 // armDragOut) so dragOutText can stay synchronous — dataTransfer.setData only works
 // inside the dragstart handler itself, too late to await a peek there.
 const dragRotationPeek = new Map(); // prompt id -> peeked text
@@ -4205,7 +4205,7 @@ function armDragOut(el, e, getPrompt) {
     el.addEventListener("dragend", (ev) => {
       el.draggable = false;
       const p = getPrompt();
-      // 32: only an actually-accepted drop of a text we actually peeked may consume
+      // Only an actually-accepted drop of a text we actually peeked may consume
       // an entry — a cancelled drag (dropped nowhere, or on a target that refused
       // it) reports "none", and a peek that never resolved already fell back to
       // p.text in dragOutText above (committing then would advance whatever the
@@ -4325,7 +4325,7 @@ window.addEventListener("pointerup", async (e) => {
       // A prompt that still needs input ALWAYS routes through the dialog — the
       // double-click paste shortcut would otherwise fire on the 2nd click and paste
       // stale clipboard without ever asking. A click only copies, never pastes.
-      // 43: check the entry rotation is actually about to copy, not always entry 0.
+      // Check the entry rotation is actually about to copy, not always entry 0.
       if (p && dialogTokens(p, await peekRotatedText(p)).length) {
         await copyTextWithVars(p, el);
         return;
@@ -4392,7 +4392,7 @@ function styleCopyText(el, maxW, maxH, cap) {
   else fitText(el, maxW, maxH, cap);
 }
 
-// 125: named (not the pill/folder windows' shared COPIED_MS=900 -- this tile flash
+// Named (not the pill/folder windows' shared COPIED_MS=900 -- this tile flash
 // has always run shorter; unifying the value would be a behaviour change).
 const TILE_COPIED_MS = 350;
 // Flash + small "Copied!" bubble at the bottom of the tile.
@@ -4451,7 +4451,7 @@ function moveTileDom(id, col, row) {
 // state immediately, persistence runs in the background.
 async function placeTile(id, col, row) {
   const view = activeView();
-  // 51: off by default — placing a prompt here drops it from every other view it
+  // Off by default — placing a prompt here drops it from every other view it
   // sits in first, keeping the historical "one placement" guarantee. On, a prompt
   // can sit in several views at once (same object, same data, everywhere).
   if (!optFlag("multiViewPrompt")) {
@@ -4475,7 +4475,7 @@ async function placeTile(id, col, row) {
   if (!moveTileDom(id, col, row)) await renderGrid(true);
 }
 
-// 9: double-click an empty cell to create a prompt right there, instead of typing
+// Double-click an empty cell to create a prompt right there, instead of typing
 // below and dragging it over. `.cell` has no children while nothing occupies it
 // (renderGrid only ever appends a tile or a folder tile to a filled one).
 gridEl.addEventListener("dblclick", (e) => {
@@ -4688,7 +4688,7 @@ function openTileFolderPop(f, anchor) {
     btn.className = "folder-member-tile";
     btn.dataset.id = p.id;
     btn.title = p.name;
-    // 30: same content as a real grid tile (buildTile) — image/gif thumb, type
+    // Same content as a real grid tile (buildTile) — image/gif thumb, type
     // badge, tinted background — so a folder never shows less than the grid
     // underneath it. Interactive bits (select checkbox, tile menu, video player)
     // stay out: this button already has its own click/drag/context-menu handling.
@@ -4736,7 +4736,7 @@ function openTileFolderPop(f, anchor) {
   }
   tileFolderPop.appendChild(grid);
   placePopover(tileFolderPop, anchor.getBoundingClientRect());
-  // 30: cells now size themselves from tileFolderCols + the popover width (CSS
+  // Cells now size themselves from tileFolderCols + the popover width (CSS
   // grid + aspect-ratio), so the fit box is measured per tile instead of a
   // constant — 1px border + 4px padding each side, same auto-shrink as the grid.
   for (const btn of grid.children) {
@@ -4862,9 +4862,9 @@ function openCtx(id, x, y) {
   pinBtn.textContent = t(pinned ? "removeFloating" : "showFloating");
   // In the favorites view a prompt can't be hidden/removed — unstar it instead.
   ctxEl.querySelector('[data-act="hide"]').classList.toggle("hidden", favView);
-  // 51: nothing to place this prompt into besides the view it is already on.
+  // Nothing to place this prompt into besides the view it is already on.
   ctxEl.querySelector('[data-act="views"]').classList.toggle("hidden", !optFlag("multiViewPrompt") || settings.views.length < 2);
-  // 92: only visible when this prompt actually rotates and both auto gates are on —
+  // Only visible when this prompt actually rotates and both auto gates are on —
   // grey-and-disabled would still be a control the user cannot act on.
   const rmenuBtn = ctxEl.querySelector('[data-act="rotateAutoMenu"]');
   const rp = prompts.find((x) => x.id === id);
@@ -5108,7 +5108,7 @@ function modalSnapshot() {
     modal.fontSel.value, modal.sizeSel.value, modalState.color || "", modalState.image || "",
     !!modalState.showImage, modalState.filePath || "", modalState.iconPath || "", modal.fav.classList.contains("active"),
     modalState.tags || [], modal.notesText.value, modalState.hotkey || "", modalState.hotkeyPaste || "",
-    // 32: the entry list + mode are edited entirely in memory until Save.
+    // The entry list + mode are edited entirely in memory until Save.
     modalState.rotateEntries || [], modalState.rotateMode || "", !!modalState.rotateAuto,
     modalState.pdfPage || 0,
   ]);
@@ -5134,7 +5134,7 @@ const fillVars = (text, values) => text.replace(VAR_RE, (_, k) => values[k.trim(
 const hasEmptyVarToken = (text) =>
   [...String(text || "").matchAll(VAR_RE)].some((m) => !m[1].trim());
 
-// 14: a placeholder gets a visible accent wherever raw prompt text is previewed, so
+// A placeholder gets a visible accent wherever raw prompt text is previewed, so
 // "does this prompt ask for anything" no longer surprises you only at copy time. DOM
 // text nodes + a plain span, never innerHTML — a token is user-typed text.
 function fillVarHighlighted(el, text) {
@@ -5274,17 +5274,17 @@ function dynValue(name, now, ctx) {
 
 // The variable tokens of a prompt that are worth resolving at all (text prompts
 // only — an image/file prompt copies its media, not its text).
-// 32: `text` overrides which string is scanned (the rotated entry actually about
+// `text` overrides which string is scanned (the rotated entry actually about
 // to be copied) — every existing caller keeps checking p.text unchanged.
 const varTokens = (p, text) =>
   (flag("promptVars") && p && !p.copy_image && !p.file_path ? extractVars(text ?? p.text) : []);
 // The subset the user still has to fill in by hand — the only reason to open a dialog.
-// 43: an override text (the peeked rotating entry) must flow through the same as
+// An override text (the peeked rotating entry) must flow through the same as
 // varTokens takes one, or a placeholder living only in a later entry never gets
 // noticed at all -- checking p.text (entry 0) unconditionally.
 const dialogTokens = (p, text) => varTokens(p, text).filter((tok) => !isDynVar(parseVar(tok).name));
 
-// 43: the text a copy of `p` is actually about to use — the pointer's CURRENT entry
+// The text a copy of `p` is actually about to use — the pointer's CURRENT entry
 // for a rotating prompt, p.text otherwise. Read-only (never advances the pointer),
 // so it is safe to call ahead of a decision (dialogTokens) as well as the copy
 // itself. Every path that resolves p.text directly instead of this one silently
@@ -5623,7 +5623,7 @@ async function copyTextWithVars(p, el, paste = false) {
   };
   overlay.addEventListener("pointerdown", onSecond, true); // capture: before the dismiss
   const stopArming = setTimeout(() => overlay.removeEventListener("pointerdown", onSecond, true), val("dblClickMs"));
-  // 43: peek -> resolve -> copy -> commit, same order copyResolved uses -- this used
+  // Peek -> resolve -> copy -> commit, same order copyResolved uses -- this used
   // to always resolve p.text (entry 0) even once rotation had moved past it.
   const rotating = (p.variants || []).length > 0;
   const peek = rotating ? await invoke("rotation_peek", { id: p.id }).catch(() => null) : null;
@@ -5801,7 +5801,7 @@ async function onPromptHotkey(id, paste) {
 // in-window dialog if the small window cannot be opened at all.
 async function copyOutsideApp(p, paste) {
   if (copyOnCooldown(p.id)) return;
-  // 43: same peek -> resolve -> copy -> commit order as copyTextWithVars/copyResolved.
+  // Same peek -> resolve -> copy -> commit order as copyTextWithVars/copyResolved.
   const rotating = (p.variants || []).length > 0;
   const peek = rotating ? await invoke("rotation_peek", { id: p.id }).catch(() => null) : null;
   const rawText = peek ? peek.text : p.text;
@@ -5827,7 +5827,7 @@ function maybeCloseOnCopy() {
 function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", pdfPage = 0, iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", variants = [], rotateMode = "", rotateAuto = false, title, targetCell }) {
   modalState = {
     mode, id, color, image, showImage, copyImage, filePath, pdfPage, iconPath, tags: [...tags], hotkey, hotkeyPaste, targetCell,
-    // 32: the FULL entry list (entry 0 = what would otherwise be modal.text's value)
+    // The FULL entry list (entry 0 = what would otherwise be modal.text's value)
     // while rotation is active, empty while it is not.
     rotateEntries: variants.length ? [text, ...variants] : [],
     rotateMode,
@@ -6057,7 +6057,7 @@ async function commitPromptHotkeyDirect(id, accel) {
   return saved.hotkey;
 }
 
-// 92: tile-menu checkmark entry — same "write straight through with everything
+// Tile-menu checkmark entry — same "write straight through with everything
 // else unchanged" shape as commitPromptHotkeyDirect. Turning it off also ends a
 // session that happens to be running right now, instead of waiting for the next
 // paste to notice the prompt no longer qualifies.
@@ -6174,7 +6174,7 @@ function scheduleLenCounter() {
 // keystroke. The field itself stays live; only the list waits for a short pause in
 // typing. Short enough to feel immediate, long enough that a fast typist renders once.
 const SEARCH_DEBOUNCE_MS = 120;
-// 87: ms may be a getter, so a caller can stay live-tunable (library search reads
+// ms may be a getter, so a caller can stay live-tunable (library search reads
 // the searchDebounceMs expert value on every keystroke instead of a value baked
 // in when the debounced wrapper was created).
 function debounced(fn, ms = SEARCH_DEBOUNCE_MS) {
@@ -6484,7 +6484,7 @@ function syncMdUi(textVisible, rotating = false) {
   if (on) renderMdPreview(true);
 }
 
-// 31: word-level diff between two texts via a classic LCS backtrack — no
+// Word-level diff between two texts via a classic LCS backtrack — no
 // dependency, the whole thing is a couple dozen lines. O(n*m) on word count, so
 // a pathologically huge pasted text falls back to plain text (DIFF_WORD_CAP)
 // rather than freezing the editor while it opens the history panel.
@@ -6542,7 +6542,7 @@ async function loadHistory(id) {
   body.innerHTML = "";
   let list = [];
   try { list = await invoke("list_versions", { promptId: id }); } catch (_) {}
-  // 49: a slower response for a since-abandoned prompt must not land in the editor
+  // A slower response for a since-abandoned prompt must not land in the editor
   // after it has already moved on to a different one.
   if (modalState?.id !== id) return;
   if (!list.length) {
@@ -6553,7 +6553,7 @@ async function loadHistory(id) {
     return;
   }
   list.forEach((v, idx) => {
-    // 79: diff against whatever came right after this snapshot — the live editor
+    // Diff against whatever came right after this snapshot — the live editor
     // state for the newest row, the next-newer snapshot for every other one. Each
     // side is the FULL entry list (rotation variants included), not just entry 1.
     const olderEntries = versionEntries(v);
@@ -6590,7 +6590,7 @@ async function loadHistory(id) {
     restore.addEventListener("click", async () => {
       try {
         const p = await invoke("restore_version", { versionId: v.id });
-        // 114: the editor may have moved on to a different (or no) prompt while this
+        // The editor may have moved on to a different (or no) prompt while this
         // invoke was in flight — never write a stale restore into the wrong modal.
         if (modalState?.id !== id) return;
         if (p) {
@@ -6616,7 +6616,7 @@ async function loadHistory(id) {
     head.append(expand, restore);
     const full = document.createElement("div");
     full.className = "hist-full hidden";
-    // 125: building this (word-diffing every entry) is expensive at long prompts /
+    // Building this (word-diffing every entry) is expensive at long prompts /
     // many rotation entries; each row starts collapsed, so defer it to first expand
     // and cache the result -- most rows are never opened at all.
     let fullBuilt = false;
@@ -6732,7 +6732,7 @@ function numRow(labelKey, key, min, max, onSet, extraClass, after) {
   i.type = "number"; i.min = min; i.max = max; i.className = "modal-input"; i.value = String(val(key));
   const def = EXPERT_VALUES[key]?.def ?? min;
   const commit = async (raw) => {
-    // 46: Number(raw) || def treated a typed 0 as falsy and silently fell back to
+    // Number(raw) || def treated a typed 0 as falsy and silently fell back to
     // the default -- a GFS retention tier (min 0 = "none") could never be set to 0.
     const n = Number(raw);
     const v = raw === "" || !Number.isFinite(n) ? def : Math.max(min, Math.min(max, n));
@@ -6781,7 +6781,7 @@ async function renderStatsPanel(body) {
   const sw = document.createElement("label"); sw.className = "field switch-field";
   const swl = document.createElement("span"); swl.textContent = t("statsEnable");
   const swi = document.createElement("input"); swi.type = "checkbox"; swi.className = "switch"; swi.checked = on;
-  // 45: root, not body — body was reassigned to the INNER panel just above, and
+  // Root, not body — body was reassigned to the INNER panel just above, and
   // re-rendering with it would build a new stats-panel-body inside the previous
   // one instead of replacing it, nesting one deeper on every toggle.
   swi.addEventListener("change", async () => { await saveBackupSetting("flag", "usageStats", swi.checked); renderStatsPanel(root); });
@@ -6825,9 +6825,9 @@ async function renderStatsPanel(body) {
     card(t("statPerDay"), s.history_on ? nf1(s.copies30 / 30) : "—"),
   );
   body.appendChild(cards);
-  // 58: last 14 days as a small bar chart — copies7/copies30 above are just two flat
+  // Last 14 days as a small bar chart — copies7/copies30 above are just two flat
   // totals, this fills the gap between them without a day/week toggle (deliberately
-  // scoped down from "day or week" to daily only, see WORK.md).
+  // scoped down from "day or week" to daily only).
   if (s.history_on && s.daily && s.daily.length) {
     body.appendChild(statSection(t("statDaily")));
     const chart = document.createElement("div");
@@ -7235,7 +7235,7 @@ async function startOcrInstall(cap) {
     else errToast(e);
     return;
   }
-  // 125: arm the poller (marks the row busy) BEFORE repainting, or the render still
+  // Arm the poller (marks the row busy) BEFORE repainting, or the render still
   // reads ocrInstallTimers[cap.name] as empty and shows an enabled Download button --
   // a second click then starts a second UAC-elevated install.
   pollOcrInstall(cap.name);
@@ -7246,7 +7246,7 @@ async function startOcrInstall(cap) {
 // until it stops being null.
 function pollOcrInstall(name) {
   if (ocrInstallTimers[name]) return;
-  // 125: setTimeout re-armed after each result, not setInterval -- the callback
+  // setTimeout re-armed after each result, not setInterval -- the callback
   // awaits an invoke, and a reply slower than the 3s tick would otherwise overlap
   // itself (two ocr_install_result calls, or two clearInterval/repaint races).
   const tick = async () => {
@@ -7443,7 +7443,7 @@ async function renderBackupPanel(body) {
   right.appendChild(slot);
   const tiers = document.createElement("div");
   tiers.className = "backup-tier-grid" + (gfsOn ? "" : " is-parked");
-  // 99: re-renders like every other row in this panel, so a tier's reset icon
+  // Re-renders like every other row in this panel, so a tier's reset icon
   // appears/disappears live instead of only after some unrelated change.
   const onTier = (key) => async (v) => { await saveBackupSetting("value", key, v); renderBackupPanel(body); };
   const rerenderPanel = () => renderBackupPanel(body);
@@ -7628,7 +7628,7 @@ async function renderBackupPanel(body) {
   wireClearButtons(body); // clear-X on the number fields
 }
 async function restoreBackup(name) {
-  // 70: both checked (the default) = the old full-file "all" restore; only one
+  // Both checked (the default) = the old full-file "all" restore; only one
   // checked = the new selective merge; the dialog itself refuses zero checked.
   const ok = await confirmDialog({
     title: t("backupRestore"), message: t("backupRestoreConfirm"), confirmLabel: t("backupRestore"),
@@ -7745,10 +7745,10 @@ function syncModalImageUi(mode) {
   const textVisible = (mode === "edit" || mode === "create") && !copyImage && !filePath;
   // Full-height dialog only when editing a text prompt (max textarea space).
   modal.root.classList.toggle("tall", textVisible);
-  // 32: only a text prompt, and only while the feature is on, ever offers rotation.
+  // Only a text prompt, and only while the feature is on, ever offers rotation.
   modal.rotateToggleRow.classList.toggle("hidden", !textVisible || !flag("rotatingPrompts"));
   renderRotateUi();
-  // 50: rotationUiOn(), not rotationActive() — with the feature off but the prompt
+  // rotationUiOn(), not rotationActive() — with the feature off but the prompt
   // still holding stored entries, the plain textarea is what must show (entry 0,
   // editable), or the editor is stuck showing a list with no way back to it (its
   // own toggle row is hidden too while the feature is off).
@@ -7769,7 +7769,7 @@ function syncModalImageUi(mode) {
   modal.notesBody.classList.add("hidden");
   modal.notesHead.setAttribute("aria-expanded", "false");
   modal.notes.classList.remove("open");
-  // 28: tags/hotkey/history share one "Advanced options" collapsible, which always
+  // Tags/hotkey/history share one "Advanced options" collapsible, which always
   // reopens collapsed. F20: the hotkey row exists for every prompt kind (a hotkey
   // copies whatever the prompt holds). F7/79: version history for every existing
   // prompt kind — a snapshot also captures name-only changes on an image/file/colour
@@ -7826,7 +7826,7 @@ function syncModalImageUi(mode) {
     $("modal-file-icon").innerHTML = isPdf ? ICON_PDF : ICON_FILE;
     modal.fileName.textContent = filePath.split(/[\\/]/).pop();
     modal.fileName.title = filePath;
-    // 83: shown 1-based (page 1, 2, ...) — pdfPage itself stays the 0-based index
+    // Shown 1-based (page 1, 2, ...) — pdfPage itself stays the 0-based index
     // pdf_preview expects, so the two never need converting anywhere else.
     modal.pdfPage.classList.toggle("hidden", !isPdf);
     if (isPdf) modal.pdfPage.value = String((modalState?.pdfPage || 0) + 1);
@@ -7840,7 +7840,7 @@ function syncModalImageUi(mode) {
 // otherwise be modal.text's own value) — kept separate from modal.text so the two
 // never fight over which one is "the" source of truth while the switch is on.
 const rotationActive = () => (modalState?.rotateEntries || []).length > 0;
-// 50: rotationActive() alone answers "does this prompt have stored entries" (used
+// rotationActive() alone answers "does this prompt have stored entries" (used
 // by confirmModal to decide what to preserve on save); this answers "is the rotate
 // list actually the thing shown right now" — false while the feature itself is off,
 // even with entries still stored. DISPLAY decisions (which surface to show/hide)
@@ -7850,7 +7850,7 @@ const rotationUiOn = () => rotationActive() && flag("rotatingPrompts");
 
 function renderRotateUi() {
   if (!modalState) return;
-  // 50: UI-gated, same reasoning as syncModalImageUi -- the list must stay hidden
+  // UI-gated, same reasoning as syncModalImageUi -- the list must stay hidden
   // (in favour of the plain textarea) while the feature itself is off, even with
   // entries still stored on the prompt.
   const active = rotationUiOn();
@@ -7966,7 +7966,7 @@ async function withDialog(fn) {
 }
 
 const PDF_EXT = /\.pdf$/i;
-// 83: page defaults to the first (0). The backend clamps against the real page
+// Page defaults to the first (0). The backend clamps against the real page
 // count, so a stale number from a previously longer PDF at the same path still
 // renders something instead of nothing.
 async function loadFilePreview(path, page = 0) {
@@ -8081,7 +8081,7 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input,
       cbRow.appendChild(label);
     }
   }
-  // 125: resolve any stale dialog BEFORE syncOk(), not after -- its done() resets
+  // Resolve any stale dialog BEFORE syncOk(), not after -- its done() resets
   // ok.disabled = false unconditionally, which otherwise clobbered a fresh
   // checkbox dialog's correct disabled-with-nothing-checked state.
   confirmCleanup?.(false);
@@ -8150,9 +8150,9 @@ async function confirmModal() {
   if (!modalState || modalSaving) return;
   const name = modal.name.value.trim();
   if (!name) { modal.name.focus(); return; }
-  // 32: while rotating, the real text lives in rotateEntries, not modal.text.
-  // 50: rotationActive() (raw) — with the feature off but the prompt still holding
-  // stored entries, they must still be preserved on save (WORK.md 50), just sourced
+  // While rotating, the real text lives in rotateEntries, not modal.text.
+  // rotationActive() (raw) — with the feature off but the prompt still holding
+  // stored entries, they must still be preserved on save, just sourced
   // from wherever each one actually lives right now: entry 0 from the visible,
   // editable textarea (rotationUiOn() is false, so THAT is the surface the user just
   // edited), entries 1..n untouched from modalState (never shown, never editable
@@ -8164,7 +8164,7 @@ async function confirmModal() {
     : hasVariants
       ? [modal.text.value, ...modalState.rotateEntries.slice(1)]
       : [modal.text.value];
-  // 34: a {#{ }#} with no name inside never becomes a fillable variable — warn now,
+  // A {#{ }#} with no name inside never becomes a fillable variable — warn now,
   // while it is still one click away from being fixed, instead of after it is saved.
   if (rawTexts.some(hasEmptyVarToken)) {
     const proceed = await confirmDialog({
@@ -8175,7 +8175,7 @@ async function confirmModal() {
     });
     if (!proceed) { if (!rotating) modal.text.focus(); return; }
   }
-  // 32: "empty entries are dropped on save" applies to entry 1 too — the first
+  // "empty entries are dropped on save" applies to entry 1 too — the first
   // surviving non-blank entry becomes the prompt's own text.
   const rotateFilled = (rotating || hasVariants) ? rawTexts.map((s) => s.trim()).filter(Boolean) : [];
   const variants = rotateFilled.slice(1);
@@ -8198,7 +8198,7 @@ async function confirmModal() {
   const hotkey = modalState.hotkey || "";
   const hotkeyPaste = hotkey ? (modalState.hotkeyPaste || "") : "";
   const pdfPage = modalState.pdfPage || 0;
-  // 9: double-click on an empty cell opened this dialog for that exact spot — the
+  // Double-click on an empty cell opened this dialog for that exact spot — the
   // backend's own first-free-cell placement would otherwise ignore it.
   const targetCell = modalState.targetCell;
   // NOTE: Tauri expects camelCase keys for snake_case Rust args.
@@ -8223,7 +8223,7 @@ async function confirmModal() {
     } else {
       const text = copyImage || filePath ? name : ((rotating || hasVariants) ? (rotateFilled[0] || "") : modal.text.value);
       saved = await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode, rotateAuto });
-      // 94: Save can turn rotateAuto off (or drop it below two entries) while a
+      // Save can turn rotateAuto off (or drop it below two entries) while a
       // session for THIS prompt happens to be armed — end it now instead of
       // waiting for the next paste to notice, same as the tile-menu toggle.
       // A no-op on the backend if no session is running for this id.
@@ -8253,7 +8253,7 @@ async function confirmModal() {
   // after creating a prompt by hand — before closeModal() clears modalState.
   const wasCreate = modalState.mode === "create" || modalState.mode === "image-create" || modalState.mode === "file-create";
   const wasEdit = modalState.mode === "edit";
-  // 32: an edit can change entry count/text — drop the cached rotation state so the
+  // An edit can change entry count/text — drop the cached rotation state so the
   // grid re-render below primes it fresh instead of keeping a stale badge/tooltip
   // (primeRotateState only ever peeks once per id otherwise).
   if (saved) rotateState.delete(saved.id);
@@ -8262,7 +8262,7 @@ async function confirmModal() {
   if (saved && targetCell) await placeTile(saved.id, targetCell[0], targetCell[1]);
   pollMissingFiles(); // a replaced file clears the error immediately
   if (!libraryEl.classList.contains("hidden")) {
-    // 17: an edit MAY have just changed this prompt's "last edited" rank — the
+    // An edit MAY have just changed this prompt's "last edited" rank — the
     // library stayed open underneath the modal, so the usual refresh-on-open
     // (library-btn click) never fired for it.
     if (wasEdit && flag("promptHistory")) await refreshLastEdited();
@@ -8349,7 +8349,7 @@ const tagColor = (name) => settings.tag_colors?.[tagKey(name)] || "";
 const TAG_MAX_LEN = 60; // keep in sync with MAX_TAG_LEN in lib.rs
 
 // Every tag in the library, first-seen casing, sorted for a stable filter row.
-// 87: tagSort switches alphabetical (default) for usage-count order, ties broken
+// tagSort switches alphabetical (default) for usage-count order, ties broken
 // alphabetically either way.
 function allTags() {
   const seen = new Map();
@@ -8585,7 +8585,7 @@ function wireTagInput() {
 wireTagInput();
 
 // ---- Library: filter chips + manager ----
-// 135: the bar (and every chip's click listener) doesn't change while the user is
+// The bar (and every chip's click listener) doesn't change while the user is
 // just typing a search query — skip rebuilding it unless the tag set or the active
 // filter actually changed since the last render.
 let _lastTagFilterSig = null;
@@ -9088,7 +9088,7 @@ $("theme-edit-open")?.addEventListener("click", openThemeEditor);
 $("theme-modal-close")?.addEventListener("click", () => closeThemeEditor());
 $("theme-edit-cancel")?.addEventListener("click", () => closeThemeEditor());
 $("theme-edit-revert")?.addEventListener("click", revertThemeDraft);
-// 76: export the currently selected SAVED theme (an unsaved draft has no id to
+// Export the currently selected SAVED theme (an unsaved draft has no id to
 // look up on the backend, hence the button hides for one — see renderThemeEditor).
 $("theme-edit-export")?.addEventListener("click", async () => {
   if (!themeDraft?.id) return;
@@ -9210,7 +9210,7 @@ function thumbEl(p, cache) {
   if (!key) return thumbDot(p);
   const cached = cache.get(p.id);
   if (cached && cached.key === key) {
-    // 48: renderLibrary/renderJournal build a FRESH IntersectionObserver every
+    // renderLibrary/renderJournal build a FRESH IntersectionObserver every
     // render (disconnecting the old one) -- a cache hit must re-observe with the
     // current one, or a video that survives a re-render (e.g. the search field)
     // stops being paused/started by scroll after the first refresh.
@@ -9310,7 +9310,7 @@ function libSearchScore(p) {
 function computeLibSearchScore(p) {
   const raw = libQuery.trim().toLowerCase();
   if (!raw) return { score: 1, fuzzy: false, entryIndex: 0 };
-  // 32: entryIndex tags which entry a body-field match came from (0 = p.text, the
+  // entryIndex tags which entry a body-field match came from (0 = p.text, the
   // library row's default preview; 1+ = variants[entryIndex-1]) — a rotating
   // prompt is findable by ANY entry, and the row can then show the one that
   // actually matched instead of always entry 1 regardless of why it appeared.
@@ -9420,7 +9420,7 @@ function setLibColor(color) {
   setActiveFilter($("library-colors"), ".lib-color", "color", color);
 }
 
-// 17: "last edited" per prompt — from prompt_versions (a version row is only
+// "last edited" per prompt — from prompt_versions (a version row is only
 // ever written on a real name/text change, see update_prompt), refetched
 // whenever the library opens or an edit lands while it's already open. A
 // prompt absent from the map has no version row (history off, or never
@@ -9542,7 +9542,7 @@ function renderLibrary() {
   // renderGrid always skips ids listed in a folder's members.
   for (const f of foldersOfView(activeView().id)) for (const id of f.members || []) placed.add(id);
   libDisplayOrder = items.map((p) => p.id); // F8: range-select uses display order
-  // 125: batch through a fragment -- appending straight into the live list forced
+  // Batch through a fragment -- appending straight into the live list forced
   // a reflow per row on a large library.
   const frag = document.createDocumentFragment();
   for (const p of items) {
@@ -9562,7 +9562,7 @@ function renderLibrary() {
     const name = document.createElement("span");
     name.className = "lib-name";
     name.textContent = libLabel(p);
-    // 32: a search hit inside entry 2+ shows THAT entry (why the row matched at
+    // A search hit inside entry 2+ shows THAT entry (why the row matched at
     // all) instead of always entry 1, plus a small "n/total" tag naming it.
     const hitEntry = libQuery.trim() ? libSearchScore(p).entryIndex : 0;
     const hitVariant = hitEntry > 0 ? (p.variants || [])[hitEntry - 1] : null;
@@ -9725,7 +9725,7 @@ function updateBatchBar() {
     el.disabled = n === 0;
   });
 }
-// 28: same free-color palette as the editor (buildSwatches + openColorPop)
+// Same free-color palette as the editor (buildSwatches + openColorPop)
 // instead of "none" + presets only — no selection is ever marked here since a
 // batch can hold prompts of different colors.
 let batchColorDebounce = 0;
@@ -9765,7 +9765,7 @@ function toggleGridSelect(id) {
   document.body.classList.toggle("grid-selecting", now);
   applyGridSelectionDom();
   updateGridBatchBar();
-  // 26: the composer folds away only at the 0<->1 transition — refit tile text
+  // The composer folds away only at the 0<->1 transition — refit tile text
   // to the grid's new height then, not on every further checkbox click.
   if (was !== now) fitAllTiles();
 }
@@ -9792,7 +9792,7 @@ function clearGridSelection() {
   updateGridBatchBar();
   if (was) fitAllTiles(); // 26: composer reappeared — refit tile text to the new height
 }
-// 104: addView is all-or-nothing on the backend now — a full target view rejects
+// addView is all-or-nothing on the backend now — a full target view rejects
 // the whole batch with this one error string instead of silently dropping ids.
 function batchErrorToast(e) {
   toast(String(e).includes("view-full") ? t("gridFull") : String(e));
@@ -9821,7 +9821,7 @@ async function doGridMove(targetViewId) {
   const ids = [...gridSelected];
   if (!ids.length || !targetViewId) return;
   try {
-    // 13: one moveView call - both layouts change in the same backend settings
+    // One moveView call - both layouts change in the same backend settings
     // write, so a crash mid-call can no longer leave a tile placed in both views
     // (the old addView-then-removeView pair was two separate IPC round-trips).
     settings = await invoke("batch_prompts", { ids, action: "moveView", color: null, favorite: null, viewId: targetViewId, fromViewId: settings.active_view });
@@ -9879,7 +9879,7 @@ async function batchExport(format) {
 // failed or the user cancelled. The single copy entry point for every path that
 // does not run the dialog's own double-click handling (grid, library, journal).
 async function copyResolved(p) {
-  // 32: rotating prompt — peek the entry copy_prompt would use, resolve variables
+  // Rotating prompt — peek the entry copy_prompt would use, resolve variables
   // on THAT text (fixes {#{...}#} tokens, if any, in it), then commit only once the
   // copy actually reaches the clipboard, so a cancelled variable dialog never
   // burns an entry.
@@ -9999,7 +9999,7 @@ function journalRow(p, meta, onClick) {
   edit.addEventListener("pointerdown", (e) => e.stopPropagation());
   edit.addEventListener("click", (e) => { e.stopPropagation(); editPrompt(p.id); });
   row.appendChild(edit);
-  // 59: only the "recently copied" column carries a rowid — "most used" is a
+  // Only the "recently copied" column carries a rowid — "most used" is a
   // usage-count aggregate with no single copy_log row a delete could target.
   if (meta && meta.rowid != null) {
     const del = document.createElement("span");
@@ -10056,7 +10056,7 @@ async function loadJournal() {
   renderJournal();
 }
 
-// 105: same picking logic as the library's renderTagFilter() (tagMatches/tagFilterMode
+// Same picking logic as the library's renderTagFilter() (tagMatches/tagFilterMode
 // are already shared), just the compact chip-row markup the journal's other filters
 // use instead of the library's labelled bar with its own "manage tags" button.
 let _lastJournalTagFilterSig = null;
@@ -10188,7 +10188,7 @@ function renderJournal() {
     : null;
   body.append(
     column("recentlyCopied",
-      // 59: rowid rides along so journalRow() can offer a per-entry delete —
+      // Rowid rides along so journalRow() can offer a per-entry delete —
       // "most used" (below) has no single copy_log row to point at, so it stays
       // without one.
       recent.map(([p, ts, rowid]) => [p, { left: showTime ? fmtCopyTime(ts) : "", rowid }]),
@@ -10201,7 +10201,7 @@ function renderJournal() {
   );
 }
 
-// 97: in-app documentation. EN + DE only (ui/help.js) — every other language
+// In-app documentation. EN + DE only (ui/help.js) — every other language
 // falls back to English rather than showing untranslated placeholder text.
 let helpQuery = "";
 let helpTab = 0;
@@ -10448,7 +10448,7 @@ async function runExport(format) {
   }
 }
 
-// 88: shows what an import would do (new vs. skipped-as-duplicate) before it
+// Shows what an import would do (new vs. skipped-as-duplicate) before it
 // touches anything. Resolves the picked-file path if the user confirms, or
 // null if they canceled anywhere along the way (no file picked, no items,
 // or the preview itself dismissed).
@@ -10550,7 +10550,7 @@ async function runExportAll() {
 async function runImportAll() {
   const path = await withDialog(() => invoke("pick_backup_file")).catch(() => null);
   if (!path) return;
-  // 107: same two checkboxes as restoreBackup, both preselected -- the dialog
+  // Same two checkboxes as restoreBackup, both preselected -- the dialog
   // itself refuses zero checked.
   const ok = await confirmDialog({
     title: t("backupImport"), message: t("importAllConfirm"), confirmLabel: t("backupImport"),
@@ -10574,7 +10574,7 @@ async function runImportAll() {
       let msg = t("importAllDone").replace("{f}", res.name).replace("{n}", Number(res.count).toLocaleString(LANG));
       // F20: a hotkey the restore could not keep is named, never silently dropped.
       if (res.dropped_hotkeys) msg += "\n" + t("importHotkeysDropped").replace("{n}", Number(res.dropped_hotkeys).toLocaleString(LANG));
-      // 40: the file's own backup password is a foreign-machine DPAPI blob and was
+      // The file's own backup password is a foreign-machine DPAPI blob and was
       // discarded — say so, or a following export silently ships unprotected.
       if (res.backup_pw_dropped) msg += "\n" + t("importBackupPwKept");
       await infoDialog(t("backupImport"), msg);
@@ -10602,7 +10602,7 @@ async function runImportAll() {
 
 // Portable start with an installed copy's store present: offer to adopt it. Runs
 // after the window is up, so the dialog already has the theme and language.
-// 123: returns whether it actually showed a dialog — the first-run tour must not
+// Returns whether it actually showed a dialog — the first-run tour must not
 // open on top of (or right after burying) this more urgent prompt; it retries next
 // launch instead, since tourSeen was never written this time.
 async function offerTakeover() {
@@ -10641,7 +10641,7 @@ async function deleteData() {
   await reloadEverything(); // in place: a page reload repaints the whole window
 }
 
-// 85: expert opt (Standard-an, split so a user who only wants one of the two can
+// Expert opt (Standard-an, split so a user who only wants one of the two can
 // switch the other off). Take a safety backup before a destructive reset/delete.
 async function maybeBackupBeforeWipe(kind) {
   if (!flag(kind === "reset" ? "backupBeforeReset" : "backupBeforeDelete")) return;
@@ -10704,7 +10704,7 @@ function bind() {
     const on = modal.fav.classList.toggle("active");
     modal.fav.setAttribute("aria-pressed", String(on));
   });
-  // 32: rotating prompts.
+  // Rotating prompts.
   modal.rotateSwitch.addEventListener("change", async () => {
     if (modal.rotateSwitch.checked) {
       modalState.rotateEntries = [modal.text.value];
@@ -10740,7 +10740,7 @@ function bind() {
     if (varsUi) renderVarHelper();
     syncMdUi(true, rotating);
     if (!modal.rotateSwitch.checked) modal.text.focus();
-    // 67: this must hide/show the readout on the SAME tick as the toggle — the
+    // This must hide/show the readout on the SAME tick as the toggle — the
     // rAF-deferred scheduleLenCounter() left it visible for one frame, long enough
     // for a synchronous check right after the toggle to see it.
     updateLenCounter();
@@ -10856,7 +10856,7 @@ function bind() {
   modal.hotkeyAction.addEventListener("change", () => {
     if (modalState) modalState.hotkeyPaste = modal.hotkeyAction.value;
   });
-  // 28: tags/hotkey/history collapsible, combined into one "Advanced options".
+  // Tags/hotkey/history collapsible, combined into one "Advanced options".
   modal.advancedHead.addEventListener("click", () => {
     const open = !modal.advancedBody.classList.toggle("hidden");
     modal.advancedHead.setAttribute("aria-expanded", String(open));
@@ -10945,9 +10945,9 @@ function bind() {
     syncModalImageUi(modalState.mode);
   });
 
-  // 83: re-requests the preview at the chosen page and saves it into pdf_page —
+  // Re-requests the preview at the chosen page and saves it into pdf_page —
   // the field only ever shows for a PDF attachment (syncModalImageUi).
-  // 125: request token -- a fast second page change must not let the slower
+  // Request token -- a fast second page change must not let the slower
   // older reply land after the newer one and overwrite its already-fresher preview.
   let pdfPageReq = 0;
   modal.pdfPage.addEventListener("change", async () => {
@@ -10977,7 +10977,7 @@ function bind() {
   $("picker-btn").addEventListener("click", () => {
     invoke("open_picker").catch((err) => errToast(err));
   });
-  // 19: right-click reaches the picker's history without opening the overlay —
+  // Right-click reaches the picker's history without opening the overlay —
   // it lives in the backend (survives a restart), this popover just displays it.
   function renderPickHistoryPop(hex) {
     pickHistoryPop.innerHTML = "";
@@ -11019,7 +11019,7 @@ function bind() {
   listen("color-picked", async (e) => {
     const value = e.payload?.text || "";
     if (!value) return;
-    // 81: the picked notation is already on the clipboard (unchanged behaviour);
+    // The picked notation is already on the clipboard (unchanged behaviour);
     // these three chips let a click re-copy any of the OTHER notations too.
     const chips = ["hex", "rgb", "hsl"]
       .map((k) => e.payload?.[k])
@@ -11423,7 +11423,7 @@ function bind() {
   }
   function snipEditPushOp(op) {
     SE.ops.push(op);
-    // 125: SE.ops IS the render list -- never drop a rendered op. Once the undo
+    // SE.ops IS the render list -- never drop a rendered op. Once the undo
     // window is exceeded, advance the floor instead of shifting the oldest op out;
     // it stays drawn (snipEditRedrawBase still walks every op) but becomes
     // permanent, undo just can no longer walk back past it.
@@ -12240,7 +12240,7 @@ function bind() {
   // separate event from "snip-captured" so the normal screenshot flow above is
   // completely unaffected by OCR mode being armed.
   listen("ocr-captured", (e) => showOcrResult(e.payload));
-  // 122: background thread found one or more installed language packs that need
+  // Background thread found one or more installed language packs that need
   // updating (a version change, or Windows silently dropped one after a feature
   // update). Purely a notice -- the backend never auto-installs on its own, so a
   // toast the user ignores until it auto-hides is a complete no-op, not a missed
@@ -12258,7 +12258,7 @@ function bind() {
       Math.round(val("ocrLangNoticeMs")),
     );
   });
-  // 122: management dialog chrome.
+  // Management dialog chrome.
   $("ocr-langs-close-x").addEventListener("click", closeOcrLangsModal);
   $("ocr-langs-modal").addEventListener("pointerdown", (e) => { if (e.target === $("ocr-langs-modal")) closeOcrLangsModal(); });
   $("ocr-langs-recheck").addEventListener("click", () => loadOcrCaps(true));
@@ -12425,7 +12425,7 @@ function bind() {
       setLibSelectMode(false);
     }
   }, true);
-  // 11: grid batch toolbar wiring — same shape as the library's, its own state.
+  // Grid batch toolbar wiring — same shape as the library's, its own state.
   $("grid-batch-none").addEventListener("click", clearGridSelection);
   $("grid-batch-move").addEventListener("click", () => doGridMove($("grid-batch-view").value));
   $("grid-batch-delete").addEventListener("click", (e) => {
@@ -12442,7 +12442,7 @@ function bind() {
       clearGridSelection();
     }
   }, true);
-  // 2: "gone with one click" per spec — no confirm dialog, unlike a real delete
+  // "gone with one click" per spec — no confirm dialog, unlike a real delete
   // (these are throwaway onboarding content, not the user's own data).
   $("examples-dismiss").addEventListener("click", async () => {
     try { await invoke("dismiss_example_prompts"); } catch (err) { errToast(err); return; }
@@ -12500,7 +12500,7 @@ function bind() {
     if (n !== null) toast(t("clipPurgeBackupsDone").replace("{n}", String(n)));
   });
   listen("clip-inbox-changed", () => refreshClipInbox());
-  // 32: any window's copy of a rotating prompt lands here — refresh every tile of
+  // Any window's copy of a rotating prompt lands here — refresh every tile of
   // that id (usually one, but "prompt in multiple views" can place several).
   listen("rotation-changed", (e) => {
     const { id, index, pos, total, text } = e.payload || {};
@@ -12523,7 +12523,7 @@ function bind() {
   // Clicking the app logo opens the project's GitHub page (drag still moves the window).
   $("app-logo")?.addEventListener("click", () => invoke("open_repo").catch((e) => errToast(e)));
 
-  // 76: About dialog — version + project page link.
+  // About dialog — version + project page link.
   const aboutEl = $("about-modal");
   const closeAbout = () => aboutEl.classList.add("hidden");
   $("about-btn").addEventListener("click", () => aboutEl.classList.remove("hidden"));
@@ -12534,7 +12534,7 @@ function bind() {
     if (e.target === aboutEl) closeAbout();
   });
 
-  // 123: reopen the five-step tour (Help-menu style entry, always available
+  // Reopen the five-step tour (Help-menu style entry, always available
   // regardless of the firstRunTour toggle — that flag only gates the automatic
   // open). Step 5 writes live from here, see openTour()'s firstRun param.
   $("tour-open-btn").addEventListener("click", () => openTour({ firstRun: false }));
@@ -12544,7 +12544,7 @@ function bind() {
   const tourEl = $("tour-modal");
   tourEl.addEventListener("pointerdown", (e) => { if (e.target === tourEl) tourSkip(); });
 
-  // 97: in-app documentation.
+  // In-app documentation.
   const helpEl = $("help");
   $("help-open").addEventListener("click", openHelp);
   $("help-close").addEventListener("click", () => helpEl.classList.add("hidden"));
@@ -12672,7 +12672,7 @@ function bind() {
   };
   $("opt-ontop").addEventListener("change", (e) => setOnTop(e.target.checked));
   $("pin-top").addEventListener("click", () => setOnTop(!settings.always_on_top));
-  // 24: grid tag filter toolbar button.
+  // Grid tag filter toolbar button.
   $("grid-tag-btn").addEventListener("click", () => {
     if (!gridTagPop.classList.contains("hidden")) { closeGridTagPop(); return; }
     openGridTagPop();
@@ -12836,9 +12836,9 @@ function bind() {
     // F27: the folder tile toggles its own popover, so let its press through.
     if (!tileFolderPop.classList.contains("hidden") && !tileFolderPop.contains(e.target) &&
         !e.target.closest(".folder-tile")) closeTileFolderPop();
-    // 51: opened from the (already-closed) tile context menu, so nothing else needs excluding.
+    // Opened from the (already-closed) tile context menu, so nothing else needs excluding.
     if (!viewsPop.classList.contains("hidden") && !viewsPop.contains(e.target)) closeViewsPop();
-    // 24: the toolbar button toggles its own popover, so let its own press through.
+    // The toolbar button toggles its own popover, so let its own press through.
     if (!gridTagPop.classList.contains("hidden") && !gridTagPop.contains(e.target) &&
         !e.target.closest("#grid-tag-btn")) closeGridTagPop();
   });
@@ -12908,7 +12908,7 @@ function bind() {
     updateInfo = info;
     updateVersion.textContent = t("updateAvailableBtn").replace("{v}", info.version);
     updateVersion.classList.add("update-avail");
-    // 96: undo a previous "up to date" check's tooltip override, if any.
+    // Undo a previous "up to date" check's tooltip override, if any.
     updateVersion.dataset.i18nTitle = "openReleases";
     updateVersion.title = t("openReleases");
   };
@@ -13008,7 +13008,7 @@ function bind() {
       const info = await invoke("check_update");
       if (info.available) offerUpdate(info);          // status → "Update to X available"
       else {
-        // 96: the short form keeps this single-line at the same width the long
+        // The short form keeps this single-line at the same width the long
         // sentence used to wrap at; the full sentence survives as a tooltip.
         // dataset.i18nTitle (not just .title) keeps it correct across a later
         // language switch too, the same as every other data-i18n-title element.
@@ -13088,11 +13088,11 @@ function bind() {
   // P60: the automatic backup has no frontend call site of its own to toast
   // from — the backend says so once the snapshot is really on disk.
   listen("backup-done", () => toast(t("backupDone")));
-  // 113: save_prompts/save_trash used to fail silently to the user when both the DB
+  // save_prompts/save_trash used to fail silently to the user when both the DB
   // and the JSON fallback failed (disk full, permissions). One toast per event —
   // a stuck disk would otherwise spam this on every edit.
   listen("persist-failed", () => toast(t("persistFailed")));
-  // 10: pushed by the backend every few seconds instead of this window polling
+  // Pushed by the backend every few seconds instead of this window polling
   // missing_files on its own timer.
   listen("missing-files", (e) => applyMissingFiles(e.payload || []));
   // The standalone fill-in window answered (null = cancelled or closed).
@@ -13464,7 +13464,8 @@ EXPERT_ACTIONS["tour-open"] = () => openTour({ firstRun: false });
 // can fire this early, so its return value is the gate. A missing-WebView2 message
 // cannot race this at all: that one is native and shown, if ever, before the
 // WebView2 runtime — and therefore this whole JS module — exists (see
-// ensure_webview2 in lib.rs and the CLAUDE.md dialog rule), so there is nothing left
+// ensure_webview2 in lib.rs, the one allowed exception to routing every
+// user-facing dialog through the themed confirmDialog()), so there is nothing left
 // to check for it here by the time init() runs.
 async function maybeOpenFirstRunTour(urgentDialogShown) {
   if (urgentDialogShown) return; // retried next launch — tourSeen was never written
@@ -13487,7 +13488,7 @@ async function applySettingsCore() {
   applyTheme(await invoke("current_theme").catch(() => settings.theme));
 }
 
-// 2: three onboarding examples — variable, image, Markdown. Text comes from i18n.js
+// Three onboarding examples — variable, image, Markdown. Text comes from i18n.js
 // (LANG is already resolved by the time this runs, see applySettingsCore), so each
 // install sees them in its own language instead of freezing whatever the OS locale
 // was on first launch would have to.
@@ -13543,7 +13544,7 @@ async function init() {
     invoke("current_data_dir").then((d) => { currentDataDir = d || ""; }).catch(() => {});
     invoke("default_screenshot_dir").then((d) => { defaultScreenshotDir = d || ""; }).catch(() => {});
     invoke("default_sync_dir").then((d) => { defaultSyncDir = d || ""; }).catch(() => {});
-    // 121: OCR language list -- fetched once, cached, "Automatic" is always
+    // OCR language list -- fetched once, cached, "Automatic" is always
     // prepended separately (see EXPERT_DROPDOWNS.ocrLang above).
     invoke("ocr_languages").then((langs) => { ocrLangsCache = langs || []; }).catch(() => {});
     applyTileStyle();
@@ -13565,7 +13566,7 @@ async function init() {
       if (revealed) return;
       revealed = true;
       // Ask about adopting an installed store only once the themed window is up.
-      // 123: the first-run tour comes right after, but only if that offer (the one
+      // The first-run tour comes right after, but only if that offer (the one
       // other dialog that can fire this early) did not itself appear this launch.
       invoke("show_main_window").catch(() => {}).finally(async () => {
         const urgentDialogShown = await offerTakeover();

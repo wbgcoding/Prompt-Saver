@@ -55,7 +55,7 @@ let tileBusy = false;
 let loupeLive = false; // a real pixel has been painted at least once this session
 let cur = null; // picked point, in stitched-image physical pixels
 let curPicked = false; // true once `cur` reflects a real aim, not just the seed
-// 80: last 5 picked colours as #rrggbb, newest first. Owned by the BACKEND
+// Last 5 picked colours as #rrggbb, newest first. Owned by the BACKEND
 // (pick_color records what it really copied) and handed over with every session in
 // snip_background.pick_history — the page keeps no history state of its own, so a
 // hidden or reloaded overlay webview cannot lose it.
@@ -91,7 +91,7 @@ let i18nLoaded = false;
 // still-pending timer from a session that got replaced before it fired (the window
 // is reused across snips), instead of it firing snip_present into the next one.
 let revealTimer = 0;
-// 125: the overlay window is reused across snips, so a reply from a superseded
+// The overlay window is reused across snips, so a reply from a superseded
 // session (snip_background / snip_windows / pick_tile) must never land after a
 // newer session has already reset state -- same shape as folder.js's `seq` token.
 let sessionSeq = 0;
@@ -136,7 +136,7 @@ async function beginSession() {
     pickZoom = clampZoom(Number(b.pick_zoom) || 4);
     readZoom.textContent = `${pickZoom}×`;
     pickFmt = b.pick_format || "hex";
-    // 87: must stay odd — one cell has to be exactly the picked pixel.
+    // Must stay odd — one cell has to be exactly the picked pixel.
     loupeCells = 2 * Math.floor((Number(b.pick_cells) || 15) / 2) + 1;
     pickHistory = Array.isArray(b.pick_history) ? b.pick_history : [];
     renderHistory(); // 80: the picks made earlier in this app run
@@ -215,7 +215,7 @@ function toCss(ix, iy, iw, ih) {
   return { x: r.left + ix * sx, y: r.top + iy * sy, w: iw * sx, h: ih * sy };
 }
 
-// 59: msg lets a caller show its OWN failure reason (the color picker) instead of
+// msg lets a caller show its OWN failure reason (the color picker) instead of
 // always the window-capture wording, which made no sense for anything else.
 function showError(msg) {
   hint.textContent = msg ?? T.failed;
@@ -332,7 +332,7 @@ function pixelAt(x, y) {
 
 const hex2 = (n) => n.toString(16).toUpperCase().padStart(2, "0");
 const rgbToHex = (r, g, b) => `#${hex2(r)}${hex2(g)}${hex2(b)}`;
-// 80: the history arrives as #rrggbb; the swatch still needs the channels to render
+// The history arrives as #rrggbb; the swatch still needs the channels to render
 // the value in whatever notation the expert menu is set to.
 const hexToRgb = (s) => {
   const n = parseInt(String(s).replace("#", ""), 16) || 0;
@@ -512,7 +512,7 @@ function placeLoupe() {
   loupe.style.top = `${Math.max(6, ly)}px`;
 }
 
-// 80: render the last-5 strip. Rebuilt from scratch on every change — 5 buttons is
+// Render the last-5 strip. Rebuilt from scratch on every change — 5 buttons is
 // cheap, no need for incremental diffing.
 function renderHistory() {
   historyEl.innerHTML = "";
@@ -532,7 +532,7 @@ function renderHistory() {
     btn.addEventListener("mouseup", async (e) => {
       e.stopPropagation();
       try {
-        // 59: check the return value too — a resolved false (write rejected) must
+        // Check the return value too — a resolved false (write rejected) must
         // not flash "copied" any more than a thrown error would.
         const ok = await invoke("copy_text", { text: formatColor(pickFmt, r, g, b) });
         if (ok) {
@@ -664,7 +664,7 @@ window.addEventListener("mouseup", async (e) => {
     });
   } catch (err) {
     busy = false;
-    // 122: a bare "something failed" is exactly wrong for this one cause -- no
+    // A bare "something failed" is exactly wrong for this one cause -- no
     // OCR language installed at all. The overlay itself has no reach into the
     // main window's #ocr-langs-modal, so this stays a specific, honest message
     // rather than a generic retry hint; the overlay stays open either way.

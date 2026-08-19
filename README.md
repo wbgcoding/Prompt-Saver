@@ -158,6 +158,20 @@ npm run build              # portable exe + NSIS installer
 # -> src-tauri/target/release/bundle/nsis/Prompt Saver_<version>_x64-setup.exe
 ```
 
+### Running the tests
+
+```sh
+cargo test --lib                        # in src-tauri/
+node --check ui/main.js
+node tests/i18n_check.js
+node tests/terms_check.js
+python tests/source_hygiene.py          # no process traces in shipped source
+python tests/expert_menu_check.py
+python tests/tooltip_check.py
+python tests/layout/modal_scroll_test.py
+python tests/ui/smoke_test.py
+```
+
 ## Tech stack
 
 [Tauri 2](https://tauri.app) (Rust backend, WebView2 frontend) · vanilla HTML/CSS/JS, no bundler, no framework · SQLite store · `arboard` (clipboard), `rfd` (native dialogs), `pdfium-render` (PDF previews), `xcap` (screen capture), `winreg` (autostart), `sys-locale` (language detection), `windows` (on-device OCR, opt-in).

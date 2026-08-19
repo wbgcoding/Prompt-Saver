@@ -117,7 +117,7 @@ function render(data) {
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") { e.preventDefault(); answer(null); }
-  // 58: Enter inside a choice control (the collapsed button, or a focused item in
+  // Enter inside a choice control (the collapsed button, or a focused item in
   // the open list) must reach that control's OWN native activation (open the list,
   // or pick the focused item) instead of being hijacked into an immediate confirm
   // with whatever value was already selected before. A single-option choice has no
@@ -125,7 +125,7 @@ document.addEventListener("keydown", (e) => {
   // button's native Enter activation is then a no-op, so Enter must fall through to
   // confirm() there same as any other row, or it does nothing at all.
   else if (e.key === "Enter") {
-    // 114: Cancel already gets its own native Enter activation (-> answer(null)) --
+    // Cancel already gets its own native Enter activation (-> answer(null)) --
     // hijacking that into confirm() when Cancel has focus would confirm the form a
     // keyboard user just tried to dismiss.
     if (e.target === cancelEl) return;
@@ -148,7 +148,7 @@ window.addEventListener("blur", () => {
 document.body.addEventListener("mousedown", (e) => {
   if (!cardEl.contains(e.target)) answer(null);
 });
-// 58: a click elsewhere in the card (a different row, say) left any other open
+// A click elsewhere in the card (a different row, say) left any other open
 // choice list standing open — nothing ever closed one except picking an item or
 // clicking its own button again.
 cardEl.addEventListener("mousedown", (e) => {

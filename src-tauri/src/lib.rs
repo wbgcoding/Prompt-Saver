@@ -40,7 +40,7 @@ fn show_main(app: &AppHandle) {
     }
 }
 
-// 100: global-hotkey action — open the standalone quick-launcher (fuzzy search,
+// Global-hotkey action — open the standalone quick-launcher (fuzzy search,
 // instant copy) instead of raising the main window. Replaces any launcher already
 // open, so a second hotkey press never leaves two fighting over the same focus.
 fn summon_launcher(app: &AppHandle) {
@@ -485,7 +485,7 @@ impl VarPrompt {
     }
 }
 
-// 100: quick-launcher window (fuzzy search, instant copy).
+// Quick-launcher window (fuzzy search, instant copy).
 const LAUNCHER_WIN_LABEL: &str = "launcher";
 const LAUNCHER_WIN_W: f64 = 560.0; // logical px; keep in sync with .launcher-card in floating.css
 const LAUNCHER_WIN_H: f64 = 420.0;
@@ -1024,7 +1024,7 @@ fn fire_tray_copy(app: &AppHandle, id: &str) {
     let _ = app.emit_to("main", "prompt-tray-copy", id.to_string());
 }
 
-// 100: a result picked in the quick-launcher runs the very same activation the tray
+// A result picked in the quick-launcher runs the very same activation the tray
 // does (fire_tray_copy) -- placeholder dialog, cooldown, chains, everything already
 // tested for "a copy that started outside the grid" -- then the launcher itself closes.
 #[tauri::command]
@@ -1067,7 +1067,7 @@ struct Prompt {
     // Attached file: clicking puts the file itself on the clipboard.
     #[serde(default)]
     file_path: String,
-    // 83: which page of an attached PDF the preview shows (0-based). Ignored for
+    // Which page of an attached PDF the preview shows (0-based). Ignored for
     // any other attachment type. Clamped against the actual page count at render
     // time (pdf_preview), never here — the file can change independently of this
     // number (a replaced attachment, or a shorter PDF at the same path).
@@ -1104,13 +1104,13 @@ struct Prompt {
     // user was in), or "" = follow the global promptHotkeyPaste setting.
     #[serde(default)]
     hotkey_paste: String,
-    // 91: unix seconds set the moment a prompt moves into the trash table; unused
+    // Unix seconds set the moment a prompt moves into the trash table; unused
     // (0) for every prompt still in store.prompts. Drives both the trash list's
     // "deleted N days ago" and the retention sweep — never touched for anything
     // else, so it never appears in an export or a fresh add_prompt/update_prompt.
     #[serde(default)]
     trashed_at: u64,
-    // 32: "rotating prompts" — `text` is entry 1, `variants` holds entries 2..n, so
+    // "Rotating prompts" — `text` is entry 1, `variants` holds entries 2..n, so
     // every existing consumer (tile preview, search, export, dup-finder, tooltip,
     // Markdown sync) stays correct without a single change, and "rotation is on" is
     // exactly `!variants.is_empty()` — no separate bool that could drift from the data.
@@ -1119,7 +1119,7 @@ struct Prompt {
     // "" = in order, "random" = shuffled bag (see rotation_next).
     #[serde(default)]
     rotate_mode: String,
-    // 90: Auto-Wechsel — nach jedem Einfügen rückt die Zwischenablage auf den
+    // Auto-Wechsel — nach jedem Einfügen rückt die Zwischenablage auf den
     // nächsten Eintrag vor. Ohne variants bedeutungslos (wie rotate_mode).
     #[serde(default)]
     rotate_auto: bool,
@@ -1292,11 +1292,11 @@ struct Settings {
     // Expert string options (e.g. copy-feedback font). Missing key = default.
     #[serde(default)]
     ui_texts: HashMap<String, String>,
-    // 2: seeded once on a genuinely fresh install (empty library, never seeded
+    // Seeded once on a genuinely fresh install (empty library, never seeded
     // before) — never re-seeded just because the user later deletes everything.
     #[serde(default)]
     examples_seeded: bool,
-    // 2: ids of the seeded example prompts, so "remove examples" can find exactly
+    // Ids of the seeded example prompts, so "remove examples" can find exactly
     // those three (and only those) without guessing by name/content.
     #[serde(default)]
     example_prompt_ids: Vec<String>,
@@ -1327,12 +1327,12 @@ struct Settings {
     usage: HashMap<String, u32>,
     #[serde(default)]
     last_used: HashMap<String, u64>,
-    // 32: rotation pointer for "variants" prompts — kept out of Prompt itself (see
+    // Rotation pointer for "variants" prompts — kept out of Prompt itself (see
     // rotation_next) so every copy doesn't rewrite prompts.json / bump the version
     // history / touch the Markdown sync file. Index of the NEXT entry to serve.
     #[serde(default)]
     rotate_pos: HashMap<String, u32>,
-    // 32: shuffled remaining indices for "random" mode (the "bag" — drawn without
+    // Shuffled remaining indices for "random" mode (the "bag" — drawn without
     // repetition, reshuffled once empty). Absent/empty means "reshuffle on next use".
     #[serde(default)]
     rotate_bag: HashMap<String, Vec<u32>>,
@@ -1404,7 +1404,7 @@ impl Default for Settings {
             autostart: false,
             start_minimized: false,
             always_on_top: false,
-            // 100: a fresh install ships with the quick-launcher already bound, so the
+            // A fresh install ships with the quick-launcher already bound, so the
             // feature is discoverable without a trip to settings. An EXISTING install's
             // stored value (including a deliberately empty/off one) is untouched --
             // #[serde(default)] only ever fills in a value that was never written.
@@ -1645,7 +1645,7 @@ impl Settings {
     }
 }
 
-// 123: whether an install should be marked as having already seen the first-run
+// Whether an install should be marked as having already seen the first-run
 // tour, so it is never sprung on an existing user. Mirrors seed_example_prompts'
 // own freshness check exactly (real prompts already exist, OR the example-seeding
 // marker is set -- the latter still counts a store as non-fresh even if its
@@ -1659,7 +1659,7 @@ fn tour_should_be_marked_seen(has_prompts: bool, examples_seeded: bool) -> bool 
 // In-memory store, flushed to disk on mutations.
 struct Store {
     prompts: Vec<Prompt>,
-    // 91: prompts the user deleted, kept whole (media + version history untouched)
+    // Prompts the user deleted, kept whole (media + version history untouched)
     // until a real purge. Newest-deleted first, matching how every other list in
     // the app (recent copies, history) already orders "most recent on top".
     trash: Vec<Prompt>,
@@ -1842,7 +1842,7 @@ fn write_sealed_json<T: Serialize>(path: &PathBuf, data: &T) -> bool {
     false
 }
 
-// 36: never truncate an existing file in place — a crash or a cloud-sync client
+// Never truncate an existing file in place — a crash or a cloud-sync client
 // reading mid-write would otherwise see a valid frontmatter head with a truncated
 // body, and a later poll then imports that as truth. Temp-then-rename next to the
 // target, same pattern write_sealed_json already uses. The temp name deliberately
@@ -1979,13 +1979,13 @@ fn db_conn_init_schema(conn: &Connection) -> bool {
     {
         return false;
     }
-    // 32: first-ever schema migration in this app — `prompt_versions` predates
+    // First-ever schema migration in this app — `prompt_versions` predates
     // `variants`. `CREATE TABLE IF NOT EXISTS` above already gives a brand-new
     // install the column; an EXISTING data.db still has the old 5-column table.
     // Checked via PRAGMA table_info rather than blindly firing ALTER TABLE and
     // swallowing whatever comes back — that would also swallow a REAL failure
     // (locked/full/corrupt disk), silently leaving the column missing with no way
-    // to tell the difference from "already migrated" (Codex audit).
+    // to tell the difference from "already migrated".
     let has_variants_column = conn
         .prepare("SELECT 1 FROM pragma_table_info('prompt_versions') WHERE name = 'variants'")
         .and_then(|mut s| s.exists([]))
@@ -1993,7 +1993,7 @@ fn db_conn_init_schema(conn: &Connection) -> bool {
                            // badly wrong with the connection — do not also spam an
                            // ALTER TABLE into that same broken state.
     if !has_variants_column {
-        // 55: the whole point of checking has_variants_column first (rather than
+        // The whole point of checking has_variants_column first (rather than
         // firing the ALTER unconditionally and swallowing whatever comes back) was
         // to tell "already migrated" apart from a REAL failure -- discarding the
         // ALTER's own result here threw that away again. A real failure now fails
@@ -2039,7 +2039,7 @@ fn db_write_prompts(conn: &mut Connection, prompts: &[Prompt]) -> rusqlite::Resu
     tx.commit()
 }
 
-// 91: same schema and shape as db_write_prompts/db_load's prompt half, but its own
+// Same schema and shape as db_write_prompts/db_load's prompt half, but its own
 // table. A prompt "in the trash" simply isn't in `prompts` any more, so every
 // existing read of store.prompts (grid, library, tray, hotkeys, export, stats,
 // duplicate finder...) stays correct with zero changes — the alternative, a
@@ -2051,7 +2051,7 @@ fn db_write_trash(conn: &mut Connection, trash: &[Prompt]) -> rusqlite::Result<(
     tx.commit()
 }
 
-// 6: delete_prompt/restore_prompt move one row between these two tables. Writing
+// delete_prompt/restore_prompt move one row between these two tables. Writing
 // them as two independent transactions (the old db_write_prompts + db_write_trash
 // pair) left a window where the first commit could durably land while the second
 // failed, stranding the prompt in neither table. One transaction for both DELETE+
@@ -2180,7 +2180,7 @@ fn db_append_copy(conn: &Connection, entry: &CopyEntry, cap: usize, cutoff: Opti
     db_trim_copy(conn, cap, cutoff)
 }
 
-// 59: one journal row as shown/deletable in the UI — unlike CopyEntry (insert/trim/
+// One journal row as shown/deletable in the UI — unlike CopyEntry (insert/trim/
 // legacy-migration only), this carries the rowid a delete needs to target the exact
 // row, even in grouped mode where several rows share the same prompt id.
 #[derive(Serialize)]
@@ -2190,7 +2190,7 @@ struct JournalEntry {
     ts: u64,
 }
 
-// 58: copy counts for the last `days` UTC days, oldest first, zero-filled — a
+// Copy counts for the last `days` UTC days, oldest first, zero-filled — a
 // single GROUP BY query bucketed by day-since-epoch, merged against a dense day
 // range in Rust (cheaper than one query per day, and never skips an empty day).
 fn db_daily_copies(conn: &Connection, days: u32) -> Vec<DayCount> {
@@ -2241,7 +2241,7 @@ struct PromptVersion {
     ts: u64,
     name: String,
     text: String,
-    // 32: entries ARE content — a version snapshot without them would let a
+    // Entries ARE content — a version snapshot without them would let a
     // restore silently drop entries 2..n. JSON-encoded in its own DB column
     // (unlike the export formats, nothing here needs to stay human-editable).
     variants: Vec<String>,
@@ -2291,7 +2291,7 @@ fn db_list_versions(conn: &Connection, prompt_id: &str) -> Vec<PromptVersion> {
     }
     out
 }
-// 17: one prompt's last real content edit (name or text change — the only kind
+// One prompt's last real content edit (name or text change — the only kind
 // that gets a version row, see update_prompt) is the newest `ts` it has in
 // prompt_versions. Bundled for every prompt at once (one GROUP BY, not an N+1
 // query per prompt) — a prompt absent from the result has never had a version
@@ -2402,7 +2402,7 @@ fn save_trash(app: &AppHandle, store: &Store) -> bool {
     false
 }
 
-// 6: the atomic counterpart to save_prompts+save_trash for delete_prompt/
+// The atomic counterpart to save_prompts+save_trash for delete_prompt/
 // restore_prompt - see db_write_prompts_and_trash for why the two tables can no
 // longer be saved as two separate commits for a single move.
 fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
@@ -2420,7 +2420,7 @@ fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
     false
 }
 
-// 12: mirrors save_prompts' shape below - same DB-then-JSON-fallback order, same
+// Mirrors save_prompts' shape below - same DB-then-JSON-fallback order, same
 // choke point every settings mutation already funnels through. Returning bool
 // (instead of nothing) plus the same persist-failed event lets the existing
 // frontend listener cover all of this function's callers for free instead of
@@ -2543,7 +2543,7 @@ fn load_store(app: &AppHandle) -> Store {
                 settings = j_settings;
             }
         } else {
-            // 101: prompts.json/settings.json otherwise only exist as a save_prompts/
+            // prompts.json/settings.json otherwise only exist as a save_prompts/
             // save_settings fallback from a failed DB write earlier this session (they
             // are deleted the moment the DB accepts the data again) — their presence
             // here means the DB never received that change, so the file, not the DB,
@@ -2588,7 +2588,7 @@ fn load_store(app: &AppHandle) -> Store {
                 }
             }
         }
-        // 24: force a resave when the "ai" theme is about to be rewritten to
+        // Force a resave when the "ai" theme is about to be rewritten to
         // "neon" — otherwise the fix only lives in memory until some unrelated
         // setting change happens to persist it.
         let theme_ai_before =
@@ -2641,7 +2641,7 @@ fn load_store(app: &AppHandle) -> Store {
         let _ = db_trim_copy(&conn, cap, cutoff);
         migrate_prompts(&mut prompts);
         let mut store = Store { prompts, trash, settings, prompts_locked: decrypt_fails > 0 };
-        // 123: never let an existing install see the first-run tour -- a store
+        // Never let an existing install see the first-run tour -- a store
         // this is discovered for is, by definition, not the one that will ever
         // write the flag itself via the tour's own Finish/Skip.
         if tour_should_be_marked_seen(!store.prompts.is_empty(), store.settings.examples_seeded) {
@@ -3356,7 +3356,7 @@ fn folder_name_of(name: &str) -> Result<String, String> {
 // never survives a restart.
 struct FolderExpand(Mutex<HashMap<String, Rect>>);
 
-// 43: pill/folder windows dismissed "for now" (their own context menu, not the
+// Pill/folder windows dismissed "for now" (their own context menu, not the
 // permanent Remove/Dissolve). In memory only, like FolderExpand above — cleared
 // on restart, never written to settings.
 struct HiddenFloats(Mutex<std::collections::HashSet<String>>);
@@ -3549,7 +3549,7 @@ fn sync_float_windows(app: &AppHandle) {
         let store = lock(&state);
         let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
         let (mut want_pills, mut want_folders) = float_window_plan(&store.settings, &ids);
-        // 43: "hide for now" drops the id from the plan, which the stale-window
+        // "Hide for now" drops the id from the plan, which the stale-window
         // loop below then closes if it was already open — the same one filter
         // both closes it now and keeps it from reopening until the next launch.
         if let Some(hidden) = app.try_state::<HiddenFloats>() {
@@ -3890,7 +3890,7 @@ fn missing_files(state: State<Db>) -> Vec<String> {
         .collect()
 }
 
-// 10: main.js and every open floating.js pill window used to each run their own
+// main.js and every open floating.js pill window used to each run their own
 // 5-second missing_files poll - N pills meant N+1 redundant full-library stat
 // scans every cycle, all of which could block on the same slow or unreachable
 // network path. One backend-side timer runs the check once and pushes the
@@ -4169,7 +4169,7 @@ async fn add_prompt(
     Ok(prompt)
 }
 
-// 2: one example prompt as the frontend supplies it — name/text come from i18n.js
+// One example prompt as the frontend supplies it — name/text come from i18n.js
 // (resolved to whatever language the UI is actually showing), the image is the
 // one small embedded asset shared by all languages.
 #[derive(Deserialize)]
@@ -4229,7 +4229,7 @@ async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, examples: Ve
             created.push(prompt);
         }
         store.settings.examples_seeded = true;
-        // 38: a failed save must not hand the UI prompts that never reached disk —
+        // A failed save must not hand the UI prompts that never reached disk —
         // roll every in-memory change back (view placement included) so a restart
         // does not silently disagree with what was just shown. The two saves are
         // rolled back independently: if save_prompts already landed the new prompts,
@@ -4261,8 +4261,8 @@ async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, examples: Ve
     Ok(created)
 }
 
-// 2: "remove examples" — deletes exactly the ids seed_example_prompts recorded,
-// through the same batch-delete path (→ trash, per 91) a manual multi-select
+// "Remove examples" — deletes exactly the ids seed_example_prompts recorded,
+// through the same batch-delete path (→ trash) a manual multi-select
 // delete would use, so nothing about this is a special, less-safe deletion.
 #[tauri::command]
 async fn dismiss_example_prompts(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
@@ -4338,7 +4338,7 @@ async fn update_prompt(
         let found = store.prompts.iter_mut().find(|p| p.id == id);
         match found {
             Some(p) => {
-                // 7: full pre-edit snapshot so a failed save can roll the live entry
+                // Full pre-edit snapshot so a failed save can roll the live entry
                 // back instead of leaving the UI showing unsaved changes as if they
                 // had taken (they would silently revert on the next restart). Also
                 // doubles as the version-history snapshot source below.
@@ -4371,7 +4371,7 @@ async fn update_prompt(
                 if let Some(h) = hotkey { p.hotkey = h; }
                 if p.hotkey.is_empty() { p.hotkey_paste.clear(); } // no binding, no action
                 let clone = p.clone();
-                // 7: nothing reached disk (or the JSON fallback) - restore the pre-edit
+                // Nothing reached disk (or the JSON fallback) - restore the pre-edit
                 // snapshot instead of handing back an id the editor will believe is
                 // safely saved.
                 if !save_prompts(&app, &store) {
@@ -4384,7 +4384,7 @@ async fn update_prompt(
                 // edit is durably saved — inserting it before save_prompts (the old
                 // order) left a version row for an edit that never actually happened
                 // whenever the save then failed, and could push real history out past
-                // hist_cap for nothing. Entries ARE content (WORK.md 32), so editing
+                // hist_cap for nothing. Entries ARE content, so editing
                 // only entry 2 of a rotating prompt (name/text untouched) must still
                 // get a row or a restore could never bring that entry back. rotate_mode
                 // is deliberately excluded (order/random is a setting, not content).
@@ -4393,9 +4393,9 @@ async fn update_prompt(
                         let _ = db_add_version(&c, &id, now_secs(), &original.name, &original.text, &original.variants, hist_cap);
                     }
                 }
-                // 102: only sweep the old attachment once the new reference is durably
+                // Only sweep the old attachment once the new reference is durably
                 // saved -- otherwise a failed save leaves the DB pointing at a file the
-                // sweep just deleted, with no fallback (101) to recover it from.
+                // sweep just deleted, with no fallback to recover it from.
                 cleanup_orphan_files(&app, &store); // a replaced attachment orphans its old copy
                 let scale = float_scale_of(&store.settings, &id);
                 Some((clone, scale, rebind))
@@ -4435,7 +4435,7 @@ async fn list_versions(app: AppHandle, prompt_id: String) -> Result<Vec<PromptVe
     Ok(db_conn(&app).map(|c| db_list_versions(&c, &prompt_id)).unwrap_or_default())
 }
 
-// 17: the library's "last edited" sort mode. A prompt missing from the map has
+// The library's "last edited" sort mode. A prompt missing from the map has
 // never had a version row (see db_last_edited) — the frontend sorts those last.
 #[tauri::command]
 async fn last_edited_map(app: AppHandle) -> Result<std::collections::HashMap<String, u64>, String> {
@@ -4468,7 +4468,7 @@ async fn restore_version(app: AppHandle, state: State<'_, Db>, version_id: i64) 
             }
             p.name = name;
             p.text = text;
-            // 32: the restored list is our own history, but re-validate anyway (a
+            // The restored list is our own history, but re-validate anyway (a
             // version predating MAX_ROTATE_VARIANTS, however unlikely, must not
             // slip a too-long list past the same floor every other entry point has).
             p.variants = sanitize_variants(variants);
@@ -4507,7 +4507,7 @@ fn set_favorite(app: AppHandle, state: State<Db>, id: String, favorite: bool) ->
             Some(p) => {
                 let previous = p.favorite;
                 p.favorite = favorite;
-                // 38: a failed save must not leave the UI believing the star took —
+                // A failed save must not leave the UI believing the star took —
                 // roll the in-memory flag back so the next render shows the truth.
                 if save_prompts(&app, &store) {
                     true
@@ -4530,7 +4530,7 @@ fn set_favorite(app: AppHandle, state: State<Db>, id: String, favorite: bool) ->
 
 // Async: keeps the prompt-table rewrite off the UI thread.
 #[tauri::command]
-// 91: "delete" moves a prompt into the trash table instead of removing it — media
+// "Delete" moves a prompt into the trash table instead of removing it — media
 // files and version history stay exactly as they were, untouched until a real
 // purge (purge_prompt/empty_trash, or the retention sweep). Everything else here
 // (views, floating, folders, hotkeys, tray) is unchanged from the old hard-delete:
@@ -4560,7 +4560,7 @@ async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Resu
         store.settings.video_prefs.remove(&id);
         store.normalize_folders(); // F25: and out of whatever folder held it
         if let Some(pos) = moved {
-            // 6: prompts+trash now move in one transaction, so a failed write can no
+            // prompts+trash now move in one transaction, so a failed write can no
             // longer strand the prompt in neither table. Report success only once it
             // actually committed - on failure, undo the in-memory move (the trash
             // entry AND the settings housekeeping above) instead of reporting success
@@ -4612,7 +4612,7 @@ async fn batch_prompts(
     let mut store = lock(&state);
     match action.as_str() {
         "delete" => {
-            // 91: move to trash, same as the single-prompt delete_prompt command —
+            // Move to trash, same as the single-prompt delete_prompt command —
             // media files and version history stay untouched until a real purge.
             let original_settings = store.settings.clone();
             let mut moved: Vec<Prompt> = Vec::new();
@@ -4643,7 +4643,7 @@ async fn batch_prompts(
                     store.settings.video_prefs.remove(id);
                 }
                 store.normalize_folders(); // F25
-                // 6: same atomic prompts+trash write as delete_prompt/restore_prompt,
+                // Same atomic prompts+trash write as delete_prompt/restore_prompt,
                 // found while fixing those two — batch delete had the identical
                 // stranded-prompt risk. On failure, undo the batch move instead of
                 // reporting success for a save that never reached disk. The moved
@@ -4673,7 +4673,7 @@ async fn batch_prompts(
                     p.favorite = fav;
                 }
             }
-            // 38: a failed save must roll every touched prompt back, same pattern as
+            // A failed save must roll every touched prompt back, same pattern as
             // the "delete" branch above — otherwise the UI shows a batch-favorite that
             // silently reverts for some or all of the selection on the next launch.
             if !save_prompts(&app, &store) {
@@ -4709,10 +4709,10 @@ async fn batch_prompts(
         }
         "addView" | "removeView" => {
             let vid = view_id.unwrap_or_default();
-            // 105: a grid folder occupies a cell via `tile_folders`, deliberately
-            // outside `view.layouts` (see docs/INVARIANTS.md -> Grid folders) -- read
-            // it before `view` is borrowed mutably below, since both can't happen
-            // at once.
+            // A grid folder occupies a cell via `tile_folders`, deliberately outside
+            // `view.layouts` (it is not a layout entry, it is the folder's own `cell`
+            // field) -- read it before `view` is borrowed mutably below, since both
+            // can't happen at once.
             let folder_cells: std::collections::HashSet<(u32, u32)> = store
                 .settings
                 .tile_folders
@@ -4734,7 +4734,7 @@ async fn batch_prompts(
                 save_settings(&app, &store.settings);
             }
         }
-        // 13: doGridMove used to call addView then removeView as two separate
+        // doGridMove used to call addView then removeView as two separate
         // IPC round-trips (two separate save_settings) - a crash between them left
         // the prompt placed in both views. Both layouts now change in the SAME
         // in-memory settings before the single save_settings below, so a failure
@@ -4756,7 +4756,7 @@ async fn batch_prompts(
                 let (cols, rows) = (store.settings.views[to_idx].cols, store.settings.views[to_idx].rows);
                 let key = grid_key(cols, rows);
                 let layout = store.settings.views[to_idx].layouts.entry(key).or_default();
-                // 104: all-or-nothing - only drop the source placement once the
+                // All-or-nothing - only drop the source placement once the
                 // target has durably accepted every id.
                 if !place_ids_in_view(layout, &ids, cols, rows, &folder_cells) {
                     return Err("view-full".into());
@@ -4817,7 +4817,7 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
             view.layouts.entry(key).or_default().insert(p.id.clone(), cell);
         }
         store.prompts.push(p);
-        // 6: same atomic prompts+trash write as delete_prompt - on failure, undo the
+        // Same atomic prompts+trash write as delete_prompt - on failure, undo the
         // in-memory move (including the layout cell claimed above) instead of
         // reporting success for a restore that never reached disk.
         if !save_prompts_and_trash(&app, &store) {
@@ -4885,7 +4885,7 @@ fn empty_trash(app: AppHandle, state: State<Db>) -> Vec<Prompt> {
     store.trash.clone()
 }
 
-// 91: drop anything past the retention window (0/off by settings default, same
+// Drop anything past the retention window (0/off by settings default, same
 // "0 = forever" convention as historyDays). Runs once at startup, mirroring
 // prune_history's own startup sweep — never on a timer, so a long-idle app does
 // not surprise-purge something the user only just noticed in the trash.
@@ -5026,7 +5026,7 @@ fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool) -> Result<(
                 fs::copy(src.join(f), dir.join(f)).map_err(|e| e.to_string())?;
             }
         }
-        // 54: same gap as set_data_dir -- an adopted store must bring its backup
+        // Same gap as set_data_dir -- an adopted store must bring its backup
         // history along too, or the Backup panel shows 0 snapshots right after.
         let src_backups = src.join("backups");
         if src_backups.is_dir() {
@@ -5335,7 +5335,7 @@ async fn rename_tag(
     let new = valid_tag_name(&new)?;
     let (old_key, new_key) = (tag_key(&old), tag_key(&new));
     let mut store = lock(&state);
-    // 38: snapshot everything this command can touch before mutating, so a failed
+    // Snapshot everything this command can touch before mutating, so a failed
     // save can put it back exactly instead of reporting success for a rename that
     // never reached disk.
     let original_tags: Vec<(String, Vec<String>)> = store
@@ -5480,7 +5480,7 @@ fn remap_colors(app: AppHandle, state: State<Db>, pairs: Vec<(String, String)>) 
         return Ok(());
     }
     let mut store = lock(&state);
-    // 38: snapshot every color this can touch before mutating, so a failed save can
+    // Snapshot every color this can touch before mutating, so a failed save can
     // put it back exactly instead of reporting success for a remap that never
     // reached disk (a whole theme's tiles would then look remapped until restart).
     let original_prompt_colors: Vec<(String, String)> = store
@@ -5699,7 +5699,7 @@ fn set_view_group_member(
 fn normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], view_ids: &[String]) {
     let mut taken: Vec<String> = Vec::new();
     for folder in folders.iter_mut() {
-        // 37: a hand-edited/imported cell far outside any real grid (up to u32::MAX)
+        // A hand-edited/imported cell far outside any real grid (up to u32::MAX)
         // must not reach the collision loop below — saturating_add stops advancing
         // once it hits the cap, which would spin the loop forever with the store
         // mutex held (app dead on startup).
@@ -5718,7 +5718,7 @@ fn normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], 
     // which the renderer resolves to the first free cell anyway.
     let mut cells: Vec<(String, [u32; 2])> = Vec::new();
     for folder in folders.iter_mut() {
-        // 37: bounded even if every cell in a full grid is already taken — the clamp
+        // Bounded even if every cell in a full grid is already taken — the clamp
         // above keeps this from ever needing more than GRID_MAX steps in practice,
         // but the guard is what actually guarantees termination.
         for _ in 0..=GRID_MAX {
@@ -5913,7 +5913,7 @@ async fn get_state(state: State<'_, Db>) -> Result<AppState, String> {
     })
 }
 
-// 133: the quick launcher only ever reads id/name/text/color, on a surface that has
+// The quick launcher only ever reads id/name/text/color, on a surface that has
 // to be ready the instant its hotkey fires — get_state's full clone (every base64
 // image included) was exactly the wrong cost to pay there. The four fields are
 // small strings, so cloning just those (instead of the whole Prompt, image and all)
@@ -5964,7 +5964,7 @@ struct ViewCount {
     name: String,
     count: usize,
 }
-// 58: one day's copy count. `ts` is that day's UTC midnight (unix seconds) — the
+// One day's copy count. `ts` is that day's UTC midnight (unix seconds) — the
 // frontend already has locale-aware date formatting via Intl, no reason to
 // duplicate it (or pull in a date crate) on the Rust side for a label string.
 #[derive(Serialize)]
@@ -6164,7 +6164,7 @@ fn uf_find(parent: &mut [usize], mut x: usize) -> usize {
     x
 }
 
-// 14: true if some previously-ignored group contains BOTH ids - a pair only
+// True if some previously-ignored group contains BOTH ids - a pair only
 // counts as ignored when some single ignore_dups call covered them together,
 // not just because each independently belongs to some (possibly different)
 // ignored group.
@@ -6178,7 +6178,7 @@ fn dup_pair_is_ignored(groups: &[Vec<String>], a: &str, b: &str) -> bool {
 async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<DupGroup>, String> {
     use rayon::prelude::*;
     use std::collections::{HashMap as Map, HashSet as Set};
-    // 8: clone the (few) fields this scan needs and drop the lock before the O(n^2)
+    // Clone the (few) fields this scan needs and drop the lock before the O(n^2)
     // comparison below - this used to hold the store mutex for the whole scan,
     // blocking every other command (add/update/delete, all of which also need this
     // same mutex) for however long comparing a few hundred prompts took. The result
@@ -6194,7 +6194,7 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
         )
     };
     let thr = (threshold / 100.0).clamp(0.0, 1.0);
-    // 32: a rotating prompt is compared on entry 1 (p.text) only, deliberately —
+    // A rotating prompt is compared on entry 1 (p.text) only, deliberately —
     // two prompts that happen to share their FIRST entry but differ in the rest are
     // not "near duplicates" of each other, and comparing every entry pair would
     // turn this already-O(n^2) scan into O(n^2 * entries).
@@ -6310,7 +6310,7 @@ async fn ignore_dups(app: AppHandle, state: State<'_, Db>, ids: Vec<String>) -> 
 }
 
 // ---- F2 automatic backups & restore ----
-// 103: name + size/kind, so the expanded backup list can show a real per-prompt
+// Name + size/kind, so the expanded backup list can show a real per-prompt
 // row instead of one long comma string. `kind` reuses prompt_stat_type()'s
 // categories (text/image/video/pdf/file) -- one shared classifier, not a second.
 #[derive(Serialize, Deserialize)]
@@ -6403,7 +6403,7 @@ fn write_prompt_names(cache: &std::path::Path, items: &[BackupPrompt]) {
         let _ = fs::write(cache, enc_str(&json));
     }
 }
-// 103: an older build's cache is a plain Vec<String> — try the current shape first,
+// An older build's cache is a plain Vec<String> — try the current shape first,
 // fall back to strings-with-zero-chars. The bool says whether the fallback fired, so
 // the caller can upgrade the cache file once instead of re-writing it on every read.
 fn read_prompt_names_cache(cache: &std::path::Path) -> (Vec<BackupPrompt>, bool) {
@@ -6419,7 +6419,7 @@ fn read_prompt_names_cache(cache: &std::path::Path) -> (Vec<BackupPrompt>, bool)
     (items, true)
 }
 
-// 61: same cached-note treatment as `backup_prompt_count` — computed once (here, or
+// Same cached-note treatment as `backup_prompt_count` — computed once (here, or
 // at creation time in `do_backup`) and read straight back after.
 fn backup_prompt_names(folder: &std::path::Path) -> Vec<BackupPrompt> {
     let cache = folder.join(BACKUP_NAMES_FILE);
@@ -6720,7 +6720,7 @@ async fn list_backups(app: AppHandle) -> Result<Vec<BackupInfo>, String> {
     Ok(list_backups_impl(&app))
 }
 
-// 65: hands the user straight to the snapshot folder. The path is always the app's
+// Hands the user straight to the snapshot folder. The path is always the app's
 // own backups_dir() — never taken from the frontend — so there is nothing here for a
 // crafted argument to redirect; `explorer` gets exactly one argument, no shell involved.
 #[tauri::command]
@@ -6773,7 +6773,7 @@ fn stage_and_validate_backup(backup_db: &std::path::Path, dir: &std::path::Path)
     Ok(staged)
 }
 
-// 70: merge only the tables `scope` asks for from `staged` into the live `target`
+// Merge only the tables `scope` asks for from `staged` into the live `target`
 // database, inside one transaction — any failure leaves `target` untouched. "data"
 // mirrors exactly the tables delete_all_data already treats as data; "settings"
 // touches only the meta['settings'] row, never the meta['copy_log_migrated']
@@ -6926,7 +6926,7 @@ fn delete_custom_theme(app: AppHandle, state: State<Db>, id: String) -> Result<S
     Ok(settings)
 }
 
-// 76: name/base/vars only — never the internal id, so importing a theme on another
+// Name/base/vars only — never the internal id, so importing a theme on another
 // install always creates a fresh one instead of colliding with (or silently
 // overwriting) whatever already has that id there.
 #[derive(Serialize, Deserialize)]
@@ -6986,12 +6986,12 @@ fn copy_payload(p: &Prompt) -> &str {
     &p.text
 }
 
-// 32: absolute ceiling regardless of the expert value rotateMaxEntries (a UI-level
+// Absolute ceiling regardless of the expert value rotateMaxEntries (a UI-level
 // soft cap on how many the editor lets you ADD) — this is the hard backend floor
 // against a corrupted or hand-edited settings/import file.
 const MAX_ROTATE_VARIANTS: usize = 49; // + entry 0 (text) = 50 total, matching rotateMaxEntries' own max
 
-// 32: trims, drops empty entries and enforces the hard ceiling — "leere Einträge
+// Trims, drops empty entries and enforces the hard ceiling — "leere Einträge
 // werden beim Speichern verworfen" applies to add_prompt/update_prompt alike.
 fn sanitize_variants(list: Vec<String>) -> Vec<String> {
     list.into_iter()
@@ -7001,7 +7001,7 @@ fn sanitize_variants(list: Vec<String>) -> Vec<String> {
         .collect()
 }
 
-// 32: only "random" is ever stored as anything other than "" (order); a prompt
+// Only "random" is ever stored as anything other than "" (order); a prompt
 // with no variants has nothing to rotate, so its mode is meaningless — keeping it
 // empty avoids a stale mode surviving in storage past the point it can affect anything.
 fn sanitize_rotate_mode(mode: String, variants: &[String]) -> String {
@@ -7014,13 +7014,13 @@ fn sanitize_rotate_mode(mode: String, variants: &[String]) -> String {
     }
 }
 
-// 90: same reasoning as sanitize_rotate_mode — without variants, auto-advance
+// Same reasoning as sanitize_rotate_mode — without variants, auto-advance
 // has nothing to advance through, so it can never survive as a stored true.
 fn sanitize_rotate_auto(auto: bool, variants: &[String]) -> bool {
     auto && !variants.is_empty()
 }
 
-// 32: "text" is entry 0 (every non-rotating consumer stays correct unchanged),
+// "text" is entry 0 (every non-rotating consumer stays correct unchanged),
 // `variants` hold entries 1..n.
 fn rotation_total(p: &Prompt) -> usize {
     1 + p.variants.len()
@@ -7034,7 +7034,7 @@ fn rotation_entry_text(p: &Prompt, idx: usize) -> String {
     }
 }
 
-// 32: which entry the NEXT copy would use, without touching any state — so a tile's
+// Which entry the NEXT copy would use, without touching any state — so a tile's
 // "next: n/total" badge and the actual copy always agree, no matter how many times
 // this is called between two real copies. The global "rotatingPrompts" flag off, or
 // a prompt with no variants, always resolves to entry 0 — the list stays saved on
@@ -7043,7 +7043,7 @@ fn rotation_entry_text(p: &Prompt, idx: usize) -> String {
 // is never trusted blindly: `% total` keeps a stale `rotate_pos` in range, and any
 // bag containing an out-of-range index is treated as absent (discarded on the next
 // rotation_advance) instead of ever indexing past the end.
-// 33: alongside `idx` (the absolute entry position, used to resolve the text),
+// Alongside `idx` (the absolute entry position, used to resolve the text),
 // also returns `pos` — a 1-based "draw number within the current cycle", for a
 // badge that counts up 1..total and restarts, instead of random mode's `idx`
 // jumping to an arbitrary absolute position each time. Order mode's `idx` is
@@ -7070,7 +7070,7 @@ fn rotation_next(p: &Prompt, settings: &Settings) -> (usize, usize, String) {
     (idx, pos, rotation_entry_text(p, idx))
 }
 
-// 32: advances the pointer past the entry rotation_next() just reported — call ONLY
+// Advances the pointer past the entry rotation_next() just reported — call ONLY
 // once the copy that used it actually reached the clipboard, so a failed copy never
 // burns an entry. Random mode pops the bag's shown front and, once that empties it
 // (or the bag was stale/absent, per rotation_next's own validity check), reshuffles
@@ -7108,7 +7108,7 @@ fn rotation_advance(p: &Prompt, settings: &mut Settings) {
     }
 }
 
-// 32: drops both rotation entries once a prompt is gone for good — called from the
+// Drops both rotation entries once a prompt is gone for good — called from the
 // same places that already purge per-prompt state (`purge_ids`), not from the
 // soft "move to trash" step (a trashed-then-restored prompt keeps its position).
 fn rotation_forget(settings: &mut Settings, ids: &[String]) {
@@ -7164,7 +7164,7 @@ async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result
         match store.prompts.iter().find(|p| p.id == id) {
             Some(p) if p.copy_image && !p.image.is_empty() => CopyPayload::Image(p.image.clone()),
             Some(p) if !p.file_path.is_empty() => CopyPayload::File(p.file_path.clone()),
-            // 32: rotation_next() itself falls back to p.text when there is nothing
+            // rotation_next() itself falls back to p.text when there is nothing
             // to rotate, so a plain prompt goes through this exact same branch.
             Some(p) => CopyPayload::Text(rotation_next(p, &store.settings).2),
             None => CopyPayload::Missing,
@@ -7194,14 +7194,14 @@ async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result
     Ok(ok)
 }
 
-// 32: what rotation_peek() reports for a "next: n/total" badge or a copy path that
+// What rotation_peek() reports for a "next: n/total" badge or a copy path that
 // needs the resolved text itself (chaining, drag-out, hotkeys, tray, quick-launch)
 // BEFORE it goes through variable resolution — those all peek, resolve, copy_text,
 // then commit, so a cancelled variable dialog never burns an entry.
 #[derive(Serialize)]
 struct RotationPeek {
     index: usize,
-    // 33: 1-based "draw number within the current cycle" — see rotation_next.
+    // 1-based "draw number within the current cycle" — see rotation_next.
     pos: usize,
     total: usize,
     text: String,
@@ -7215,14 +7215,14 @@ fn rotation_peek(state: State<Db>, id: String) -> Option<RotationPeek> {
     Some(RotationPeek { index, pos, total: rotation_total(p), text })
 }
 
-// 32: every window's tile/pill/folder-member badge stays live off ONE event, fired
+// Every window's tile/pill/folder-member badge stays live off ONE event, fired
 // wherever the pointer actually moves (copy_prompt's own success path, this command)
 // — the same "backend decides, frontend just reflects" split as prompt-updated.
 #[derive(Serialize, Clone)]
 struct RotationChanged {
     id: String,
     index: usize,
-    // 33: 1-based "draw number within the current cycle" — see rotation_next.
+    // 1-based "draw number within the current cycle" — see rotation_next.
     pos: usize,
     total: usize,
     text: String,
@@ -7250,7 +7250,7 @@ fn rotation_commit(app: AppHandle, state: State<Db>, id: String) {
     }
 }
 
-// 90: may this prompt start an auto-session (advance on every paste, not just
+// May this prompt start an auto-session (advance on every paste, not just
 // on copy)? Image/file prompts have no rotation_next text path at all, so they
 // are excluded here rather than relying on callers to check separately.
 fn auto_eligible(p: &Prompt, s: &Settings) -> bool {
@@ -7262,7 +7262,7 @@ fn auto_eligible(p: &Prompt, s: &Settings) -> bool {
         && p.file_path.is_empty()
 }
 
-// 32: editor's "From the start" button — back to entry 1, same as a freshly
+// Editor's "From the start" button — back to entry 1, same as a freshly
 // created rotating prompt, without touching the entries themselves.
 #[tauri::command]
 fn rotation_reset(app: AppHandle, state: State<Db>, id: String) {
@@ -7303,7 +7303,7 @@ fn rotation_arm_session(app: AppHandle, state: State<Db>, id: String, resolved: 
     true
 }
 
-// 92: the tile menu / editor Auto toggle switching off while its session is the
+// The tile menu / editor Auto toggle switching off while its session is the
 // one running — end it immediately instead of waiting for the next paste/copy.
 // A no-op if `id` is not the active session (stale click, already ended itself).
 #[tauri::command]
@@ -7426,7 +7426,7 @@ async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String) -> Result
                 return Ok(()); // identical consecutive copy — don't add another row
             }
         }
-        // 11: an insert failure used to be swallowed here and still report success,
+        // An insert failure used to be swallowed here and still report success,
         // so the entry was silently missing from the journal with no trace anywhere.
         if let Err(e) = db_append_copy(&conn, &entry, cap, cutoff) {
             append_crash_log(&format!("copy history append failed: {e}"));
@@ -7462,7 +7462,7 @@ async fn recent_copies(app: AppHandle, limit: usize, grouped: bool) -> Vec<Journ
         .unwrap_or_default()
 }
 
-// 59: remove one journal entry by its exact row — never "all copies of this
+// Remove one journal entry by its exact row — never "all copies of this
 // prompt", so it behaves the same in grouped and ungrouped view.
 #[tauri::command]
 async fn delete_copy_entry(app: AppHandle, rowid: i64) -> bool {
@@ -7471,7 +7471,7 @@ async fn delete_copy_entry(app: AppHandle, rowid: i64) -> bool {
         .unwrap_or(false)
 }
 
-// 43: "hide for now" — a pill or folder id (both flat strings from different id
+// "Hide for now" — a pill or folder id (both flat strings from different id
 // spaces, never colliding), dismissed until the app restarts. NOT the permanent
 // unpin (toggle_floating/dissolve_float_folder) — the entry in settings.floating
 // / float_folders stays untouched, so it comes right back on the next launch.
@@ -7516,7 +7516,7 @@ async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: String) -> Re
         };
         match prompt {
             Some(p) => {
-                // 51: HiddenFloats is never cleared anywhere else — re-pinning a pill
+                // HiddenFloats is never cleared anywhere else — re-pinning a pill
                 // that was previously "hidden until restart" must take it out, or the
                 // next sync_float_windows (triggered by literally any other settings
                 // change) immediately closes it again.
@@ -7757,7 +7757,7 @@ async fn paste_into_previous(delay_ms: u64, enter: bool) -> Result<(), String> {
     }
 }
 
-// 91: tunable knobs for the auto-advance clipboard session (93 exposes these in the
+// Tunable knobs for the auto-advance clipboard session (the expert menu exposes these in the
 // expert menu; defaults here are what ships until a user overrides them there).
 #[cfg(windows)]
 #[derive(Clone, Copy)]
@@ -7781,9 +7781,9 @@ fn auto_cfg(settings: &Settings) -> AutoCfg {
     }
 }
 
-// 91: "did this WM_RENDERFORMAT answer a real Ctrl+V / right-click-Paste, or just a
+// "Did this WM_RENDERFORMAT answer a real Ctrl+V / right-click-Paste, or just a
 // clipboard-history spy / our own read?" Pure and table-tested (cargo test --lib) —
-// the Win32 plumbing around it is only provable on the VM (94).
+// the Win32 plumbing around it is only provable on a real VM run.
 #[cfg(windows)]
 fn counts_as_paste(now: u32, armed_at: u32, last_paste: u32, last_input: u32, self_read: bool, cfg: &AutoCfg) -> bool {
     if self_read {
@@ -7805,9 +7805,9 @@ fn counts_as_paste(now: u32, armed_at: u32, last_paste: u32, last_input: u32, se
 // (event-driven, no polling). New external TEXT is appended to the clip_inbox table;
 // our own copies and consecutive duplicates are skipped. Off by default; toggling it
 // registers/unregisters the listener with no leaked handle.
-// 91: the SAME window also carries the auto-advance delayed-rendering session (Strg+V
+// The SAME window also carries the auto-advance delayed-rendering session (Strg+V
 // AND right-click-Paste both end up requesting CF_UNICODETEXT, which is the one thing
-// Windows tells us about) — one window, one thread, per WORK.md's explicit ask.
+// Windows tells us about) — deliberately one window, one thread for the whole session.
 #[cfg(windows)]
 mod clipwatch {
     use super::{db_add_clip, db_conn, lock, now_secs, text_hash, Db};
@@ -7824,7 +7824,7 @@ mod clipwatch {
     static LAST_OWN: AtomicU64 = AtomicU64::new(0);
     static LAST_INSERTED: AtomicU64 = AtomicU64::new(0);
 
-    // 91: auto-advance session state. All ticks are GetTickCount() units (u32,
+    // Auto-advance session state. All ticks are GetTickCount() units (u32,
     // wraps every ~49.7 days — every comparison below uses wrapping_sub for that
     // reason). SELF_READ brackets our OWN clipboard_text()/on_clipboard_update()
     // reads so they can never be mistaken for a real paste. OWN_EMPTY brackets our
@@ -7900,7 +7900,7 @@ mod clipwatch {
         fn DestroyWindow(hwnd: isize) -> i32;
         fn RegisterClipboardFormatW(name: *const u16) -> u32;
         fn IsClipboardFormatAvailable(format: u32) -> i32;
-        // 91: delayed-rendering primitives.
+        // Delayed-rendering primitives.
         fn OpenClipboard(hwnd: isize) -> i32;
         fn CloseClipboard() -> i32;
         fn EmptyClipboard() -> i32;
@@ -7930,7 +7930,7 @@ mod clipwatch {
         unsafe { GetTickCount() }
     }
 
-    // 0 (GetLastInputInfo failing) reads as "ancient" rather than "just now" — the
+    // GetLastInputInfo failing (returning 0) reads as "ancient" rather than "just now" — the
     // input-recency gate in counts_as_paste must fail closed, not open, if Windows
     // ever can't answer.
     fn last_input_tick() -> u32 {
@@ -7954,7 +7954,7 @@ mod clipwatch {
     }
 
     fn on_clipboard_update() {
-        // 91: our own delayed-rendering promise is never inbox material, and reading
+        // Our own delayed-rendering promise is never inbox material, and reading
         // it here would itself trigger WM_RENDERFORMAT — without this the collector
         // would render its own promise on every update.
         if unsafe { GetClipboardOwner() } == WATCHER_HWND.load(Ordering::Acquire) {
@@ -8009,7 +8009,7 @@ mod clipwatch {
         let _ = app.emit("clip-inbox-changed", ());
     }
 
-    // 91: writes `text` as CF_UNICODETEXT into whatever clipboard bracket is
+    // Writes `text` as CF_UNICODETEXT into whatever clipboard bracket is
     // currently open (the caller decides who opened it). Ownership of the
     // GMEM_MOVEABLE block passes to Windows on success — never GlobalFree it.
     unsafe fn set_unicode_text(text: &str) {
@@ -8028,7 +8028,7 @@ mod clipwatch {
         SetClipboardData(CF_UNICODETEXT, hmem);
     }
 
-    // 92: drives the tile badge's is-auto class.
+    // Drives the tile badge's is-auto class.
     #[derive(serde::Serialize, Clone)]
     struct RotationAuto {
         id: String,
@@ -8041,7 +8041,7 @@ mod clipwatch {
         }
     }
 
-    // 91: (re-)claim ownership and promise CF_UNICODETEXT without delivering real
+    // (Re-)claim ownership and promise CF_UNICODETEXT without delivering real
     // data yet — used both for the very first arm (is_first) and every re-arm after
     // a render. Must run on the window thread (posted here, never called directly).
     fn open_and_promise(hwnd: isize, is_first: bool) {
@@ -8087,7 +8087,7 @@ mod clipwatch {
         }
     }
 
-    // 91: answers WM_RENDERFORMAT — the pasting app already has the clipboard open,
+    // Answers WM_RENDERFORMAT — the pasting app already has the clipboard open,
     // so this delivers directly (no Open/CloseClipboard) then judges, off the clock,
     // whether that render was a real paste and whether to keep tracking.
     fn handle_render_format() {
@@ -8163,7 +8163,7 @@ mod clipwatch {
         }
     }
 
-    // 91: WM_RENDERALLFORMATS — Windows asking us to render everything we still owe
+    // WM_RENDERALLFORMATS — Windows asking us to render everything we still owe
     // before the owner window (or the whole process) goes away. Unlike RENDERFORMAT
     // we must open the clipboard ourselves, and this never counts as a paste.
     fn handle_render_all(hwnd: isize) {
@@ -8181,7 +8181,7 @@ mod clipwatch {
         }
     }
 
-    // 91: WM_DESTROYCLIPBOARD — someone else just called EmptyClipboard. Our own
+    // WM_DESTROYCLIPBOARD — someone else just called EmptyClipboard. Our own
     // re-arm does that too, so OWN_EMPTY tells the two apart; only a real foreign
     // takeover ends the session here.
     fn handle_destroy_clipboard() {
@@ -8213,7 +8213,7 @@ mod clipwatch {
         emit_active(&session.id, false);
     }
 
-    // 91: called from the app's normal copy path (put_text) once a prompt has been
+    // Called from the app's normal copy path (put_text) once a prompt has been
     // judged auto-eligible. `resolved` is the frontend's once-per-copy placeholder
     // resolution (90/92); empty for a prompt with no placeholders, where every
     // render instead falls back to the raw rotation_next() text.
@@ -8249,7 +8249,7 @@ mod clipwatch {
         }
     }
 
-    // 92: the tile menu / editor toggle flips Auto off, or the prompt no longer
+    // The tile menu / editor toggle flips Auto off, or the prompt no longer
     // qualifies — end its session immediately if it is the one currently running.
     pub fn end_if(id: &str) {
         let matches = SESSION.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|s| s.id == id).unwrap_or(false);
@@ -8262,7 +8262,7 @@ mod clipwatch {
         }
     }
 
-    // 93: the global rotatingPrompts/rotateAuto feature switch flipped off — end
+    // The global rotatingPrompts/rotateAuto feature switch flipped off — end
     // whatever session happens to be running, regardless of its id.
     pub fn end_any() {
         let running = SESSION.lock().unwrap_or_else(|e| e.into_inner()).is_some();
@@ -9046,7 +9046,7 @@ struct MonitorCap {
 }
 struct SnipState(Mutex<Vec<MonitorCap>>);
 
-// 121: arms the NEXT capture_region call to run OCR instead of a normal screenshot
+// Arms the NEXT capture_region call to run OCR instead of a normal screenshot
 // save/copy. Single-shot by construction -- close_all_snip resets it the moment
 // any snip session actually ends (a successful capture, a cancel, or a window
 // click), so it can never leak into a later, unrelated screenshot.
@@ -9087,7 +9087,7 @@ fn close_all_snip(app: &AppHandle) {
     remove_snip_preview();
     SNIP_ACTIVE.store(false, Ordering::SeqCst);
     PICK_ACTIVE.store(false, Ordering::SeqCst);
-    // 121: every path that ends a snip session (capture, cancel, window click)
+    // Every path that ends a snip session (capture, cancel, window click)
     // funnels through here, so this is the one place that can guarantee OCR mode
     // never survives past the session it was armed for.
     if let Some(m) = app.try_state::<SnipModeState>() {
@@ -9104,7 +9104,7 @@ fn close_all_snip(app: &AppHandle) {
 fn set_app_windows_hidden(app: &AppHandle, hidden: bool) -> bool {
     let mut was_visible = false;
     for (label, win) in app.webview_windows() {
-        // 42: a folder window is always-on-top exactly like a pill, and every other
+        // A folder window is always-on-top exactly like a pill, and every other
         // caller that hides float- windows for a screenshot already pairs it with
         // folder- (2924, 4662, 4700, 8009) — missing it here left an open folder
         // sitting in the snip capture.
@@ -9160,7 +9160,7 @@ fn write_snip_preview(jpeg: &[u8]) -> Option<String> {
     Some(path.to_string_lossy().into_owned())
 }
 
-// 53: crash-mid-session leftovers in the OS temp dir are never cleaned by anything
+// Crash-mid-session leftovers in the OS temp dir are never cleaned by anything
 // else — the snip preview only ever deletes its own immediate predecessor (that
 // bookkeeping is in-memory only, lost on a crash or a plain restart), and
 // update.cmd deletes the installer + itself but never its own staging folder.
@@ -9239,9 +9239,9 @@ struct SnipBg {
     pick: bool,
     pick_zoom: u32,
     pick_format: String,
-    // 87: loupe grid size, expert-tunable (kept odd by the frontend).
+    // Loupe grid size, expert-tunable (kept odd by the frontend).
     pick_cells: u32,
-    // 80: the last picked colours as #rrggbb, newest first. Handed over with the
+    // The last picked colours as #rrggbb, newest first. Handed over with the
     // session so the overlay page never has to keep history state of its own.
     pick_history: Vec<String>,
 }
@@ -9579,7 +9579,7 @@ fn crop_rgb(img: &image::RgbaImage, x: u32, y: u32, w: u32, h: u32) -> Vec<u8> {
 struct ColorPick {
     text: String,
     hex: String,
-    // 81: all three notations, pre-formatted — so the toast can offer them as
+    // All three notations, pre-formatted — so the toast can offer them as
     // separate copy-this-format chips without duplicating format_color() in JS.
     rgb: String,
     hsl: String,
@@ -9659,7 +9659,7 @@ async fn pick_color(app: AppHandle, state: State<'_, SnipState>, x: i32, y: i32)
     Ok(text)
 }
 
-// 19: the popover behind #picker-btn's right-click — the persisted history,
+// The popover behind #picker-btn's right-click — the persisted history,
 // respecting a cap the user may have lowered since the last pick.
 #[tauri::command]
 fn pick_history(app: AppHandle) -> Vec<String> {
@@ -9778,7 +9778,7 @@ async fn begin_capture(
         SNIP_ACTIVE.store(true, Ordering::SeqCst);
     }
     PICK_ACTIVE.store(pick, Ordering::SeqCst);
-    // 87: loupe/quality/delay settings are read once here, in both capture modes,
+    // Loupe/quality/delay settings are read once here, in both capture modes,
     // while nothing else holds the store.
     let (cfg, hist_max, snip_q, snip_delay) = app
         .try_state::<Db>()
@@ -9810,7 +9810,7 @@ async fn begin_capture(
     if had_visible {
         tokio::time::sleep(std::time::Duration::from_millis(30)).await;
     }
-    // 87: an optional extra delay before the freeze, so an opened menu can be
+    // An optional extra delay before the freeze, so an opened menu can be
     // captured too. Screenshot path only — the colour picker needs the frozen
     // desktop as fast as possible.
     if !pick && snip_delay > 0 {
@@ -10043,7 +10043,7 @@ fn snip_cancel(app: AppHandle, state: State<SnipState>) {
     state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
 }
 
-// 121: arms (or disarms) OCR mode for the very next capture_region call, called by
+// Arms (or disarms) OCR mode for the very next capture_region call, called by
 // the frontend right before it opens the capture overlay for the "Screenshot" entry
 // of the OCR menu. close_all_snip is what guarantees this never stays armed past
 // that one session.
@@ -10187,7 +10187,7 @@ fn current_data_dir(app: AppHandle) -> String {
 // at another app's folder full of same-named files (settings.json / data.db).
 static LAST_OLD_DATA_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
-// 54: plain recursive copy — used to bring backups/ along on a data-dir move/adopt,
+// Plain recursive copy — used to bring backups/ along on a data-dir move/adopt,
 // which only ever copied the store files themselves (data.db/prompts.json/
 // settings.json), leaving the Backup panel showing 0 snapshots at the new location.
 fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
@@ -10246,7 +10246,7 @@ async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: String) -> Resu
                 fs::copy(&src, new.join(f)).map_err(|e| format!("copy store: {}", e))?;
             }
         }
-        // 54: bring local backup history along -- otherwise the Backup panel shows 0
+        // Bring local backup history along -- otherwise the Backup panel shows 0
         // snapshots at the new location, and the old (still full) backups/ folder,
         // now invisible from there, is exactly what the next cleanup dialog offers
         // to delete. Best-effort: the store copy above is the critical part and has
@@ -10385,7 +10385,7 @@ async fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Opt
     Ok(())
 }
 
-// 121: OCR settings live in the same expert-menu ui_values/ui_flags as everything
+// OCR settings live in the same expert-menu ui_values/ui_flags as everything
 // else. ocr_image/ocr_region/ocr_image_data receive them straight from the frontend
 // (the UI calls those directly and already knows the live values via val()/flag()),
 // but capture_region's OCR branch has no such call site of its own -- it reads them
@@ -10410,7 +10410,7 @@ fn ocr_settings_from(app: &AppHandle) -> (u32, bool, String, bool) {
         .unwrap_or((300, true, "auto".to_string(), true))
 }
 
-// 121: the OCR counterpart to finalize_capture, taken when set_snip_mode armed the
+// The OCR counterpart to finalize_capture, taken when set_snip_mode armed the
 // session. Recognition can fail (e.g. no language pack installed) -- unlike
 // finalize_capture, that failure runs BEFORE close_all_snip, so the overlay stays
 // open and the caller's showError() can offer a retry with the freeze still in
@@ -10953,7 +10953,7 @@ fn ocr_join_lines(lines: &[String]) -> String {
     out
 }
 
-// 122: strict allowlist check for a capability Name, BEFORE it is ever used to
+// Strict allowlist check for a capability Name, BEFORE it is ever used to
 // build a PowerShell/process argument (G10). Anchored on the whole string (not
 // a substring scan), so something like
 // "Language.OCR~~~de-DE~0.0.1.0; rm -rf" is rejected outright -- its trailing
@@ -11144,7 +11144,7 @@ async fn ocr_region(
     }
 }
 
-// 121: entry point (a) -- "Recognize text" in #snip-modal runs on the capture
+// Entry point (a) -- "Recognize text" in #snip-modal runs on the capture
 // already shown there, which at that point only ever exists as a data URL (it may
 // not have been saved to disk yet). Thin command taking the data URL directly,
 // same shape as copy_image_data (117/118) for the screenshot editor.
@@ -11166,7 +11166,7 @@ async fn ocr_image_data(data_url: String, upscale_under_px: u32, join_lines: boo
     }
 }
 
-// 122: list recognition-language capabilities. Usually no elevated rights are
+// List recognition-language capabilities. Usually no elevated rights are
 // needed (Microsoft's own docs agree), but some Windows builds throw
 // ERROR_ELEVATION_REQUIRED even for this read-only query -- see the HResult
 // check in ocr::fetch_capabilities, which surfaces that case as its own
@@ -11194,7 +11194,7 @@ async fn ocr_capabilities(state: State<'_, Db>, force: bool) -> Result<Vec<OcrCa
     }
 }
 
-// 122: kick off an elevated install for one language capability. Validates
+// Kick off an elevated install for one language capability. Validates
 // `name` BEFORE any string is built or a process is touched (G10): first the
 // anchored character-class check, then -- only if that already passed --
 // membership in the capability set ocr_capabilities() most recently actually
@@ -11220,7 +11220,7 @@ fn ocr_install_language(name: String) -> Result<(), String> {
     }
 }
 
-// 122: read (and, on a terminal result, clear) the result file the elevated
+// Read (and, on a terminal result, clear) the result file the elevated
 // installer writes for `name`. None while the install is still running or was
 // never started; Some(...) once it finished, one way or the other. A
 // successful result is the point where the capability + engine caches get
@@ -11240,7 +11240,7 @@ fn ocr_install_result(name: String) -> Option<OcrInstallResult> {
     }
 }
 
-// 122: "Abbrechen" on the background update notice -- defers the NEXT
+// "Abbrechen" on the background update notice -- defers the NEXT
 // automatic notice by ocrLangSnoozeH hours, so the user is not re-nagged on
 // every restart. Does not touch the check cadence itself (ocrLangCheckH); a
 // manual "Jetzt prüfen" (ocr_capabilities(force: true)) is unaffected by this.
@@ -11254,7 +11254,7 @@ fn ocr_lang_snooze(app: AppHandle, state: State<Db>) {
     save_settings(&app, &store.settings);
 }
 
-// 122: background watcher for "an installed language pack is now updatable".
+// Background watcher for "an installed language pack is now updatable".
 // Notification-ONLY -- it never calls ocr_install_language itself (elevation
 // always needs the frontend's confirmDialog explanation first, run in the
 // background or not). Because of that, "multiple due packages processed
@@ -11513,7 +11513,7 @@ mod ocr {
         }
     }
 
-    // 121: join_lines picks between the paragraph-joined text (ocr_join_lines) and
+    // join_lines picks between the paragraph-joined text (ocr_join_lines) and
     // the raw one-line-per-recognized-line text -- the ocrJoinLines expert setting.
     fn recognize(path: &Path, upscale_below_px: u32, join_lines: bool, lang: &str, auto_pick_lang: bool) -> Result<OcrResult, String> {
         ensure_com();
@@ -11671,8 +11671,8 @@ mod ocr {
 
     // Windows PowerShell 5.1 (not pwsh core) needs a byte-order mark to reliably
     // read a UTF-8 script file back as UTF-8 -- without it, non-ASCII bytes in a
-    // path can be misread under the system ANSI code page. See CLAUDE.md's
-    // ".ps1 -> ASCII or UTF-8 WITH BOM" convention.
+    // path can be misread under the system ANSI code page, hence writing every
+    // generated .ps1 script with a BOM rather than plain ASCII/UTF-8.
     fn write_ps1_with_bom(path: &Path, content: &str) -> std::io::Result<()> {
         let mut bytes = vec![0xEFu8, 0xBB, 0xBF];
         bytes.extend_from_slice(content.as_bytes());
@@ -11905,7 +11905,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     let is_tray = key == "trayRecent" || key == "trayFavs"; // F23
     let is_folders = key == "pillFolders"; // F25
     let is_sync_enable = key == "promptSync" && enabled; // Prompt-folders-as-Markdown
-    // 93: turning either gate off must not leave a session silently running.
+    // Turning either gate off must not leave a session silently running.
     let end_auto_session = !enabled && (key == "rotatingPrompts" || key == "rotateAuto");
     {
         let mut store = lock(&state);
@@ -12307,9 +12307,9 @@ fn csv_row(cells: &[&str]) -> String {
     cells.iter().map(|c| csv_cell(c)).collect::<Vec<_>>().join(";")
 }
 
-// 32: joins/splits a rotating prompt's entries for every text-based export format
+// Joins/splits a rotating prompt's entries for every text-based export format
 // (CSV cell, TXT body, Markdown-sync body) — ONE marker everywhere. NOT the bare
-// "---" WORK.md originally sketched: `to_txt`'s blocks are already joined on the
+// "---" a first design sketched: `to_txt`'s blocks are already joined on the
 // literal "\n\n---\n\n" (between DIFFERENT prompts), and `prompt_to_md`'s header is
 // bounded by bare "---" lines too, so a bare "---" inside one prompt's own body
 // would be ambiguous with either. An HTML-comment marker cannot collide with
@@ -12318,7 +12318,7 @@ fn csv_row(cells: &[&str]) -> String {
 const VARIANT_SEP: &str = "\n<!-- next -->\n";
 // Escaped form of the marker, used ONLY so an entry that happens to contain the
 // literal separator text survives the round trip instead of being silently
-// split into extra entries (Codex audit) — the inserted backslash means this
+// split into extra entries — the inserted backslash means this
 // string can never equal VARIANT_SEP itself, so .split(VARIANT_SEP) never
 // matches inside it.
 const VARIANT_SEP_ESCAPED: &str = "\n<!-- \\next -->\n";
@@ -12344,10 +12344,10 @@ fn split_variants(joined: &str) -> (String, Vec<String>) {
 // Export the prompt library only (incl. images/files) — never app settings,
 // views or grid layout, so importing elsewhere can't clobber the user's setup.
 fn to_csv(prompts: &[Prompt]) -> String {
-    // 83: pdfpage appended at the END, not inserted among the existing columns —
+    // pdfpage appended at the END, not inserted among the existing columns —
     // an older export re-imported here has no such column, and row.get() on a
     // short row already returns None (-> the same default 0), never shifting
-    // any OTHER column's fixed index. 32: rotatemode follows the identical
+    // any OTHER column's fixed index. rotatemode follows the identical
     // append-only precedent.
     let head = [
         "name", "text", "positions", "color", "font", "size", "file", "icon", "show", "copy",
@@ -12355,7 +12355,7 @@ fn to_csv(prompts: &[Prompt]) -> String {
     ];
     let mut rows = vec![csv_row(&head)];
     for p in prompts {
-        // 32: entries 2..n ride along INSIDE the text cell — the CSV writer quotes
+        // Entries 2..n ride along INSIDE the text cell — the CSV writer quotes
         // every cell (embedded newlines included), so the join marker needs no
         // escaping of its own.
         let text = join_variants(&p.text, &p.variants);
@@ -12386,7 +12386,7 @@ fn to_csv(prompts: &[Prompt]) -> String {
 
 fn to_txt(prompts: &[Prompt]) -> String {
     let blocks: Vec<String> = prompts.iter().map(|p| {
-        // 32: entries 2..n ride along inside the body itself, joined by the same
+        // Entries 2..n ride along inside the body itself, joined by the same
         // marker as CSV/Markdown-sync — never the bare "---" the blocks below are
         // themselves separated by.
         let mut block = format!("### {}\n{}", p.name, join_variants(&p.text, &p.variants));
@@ -12407,7 +12407,7 @@ fn to_txt(prompts: &[Prompt]) -> String {
         if !p.file_path.is_empty() {
             block.push_str(&format!("\n@file {}", p.file_path));
         }
-        // 83: only a PDF attachment reads this, and 0 (the first page) is by far
+        // Only a PDF attachment reads this, and 0 (the first page) is by far
         // the common case — skip the line entirely then, same as every other
         // optional field here.
         if p.pdf_page > 0 {
@@ -12431,7 +12431,7 @@ fn to_txt(prompts: &[Prompt]) -> String {
         if !p.image.is_empty() {
             block.push_str(&format!("\n@imagedata {}", p.image));
         }
-        // 32: order/random preference — sparse like every other optional field here
+        // Order/random preference — sparse like every other optional field here
         // (a plain prompt, the overwhelming majority, never gets an empty line).
         if !p.rotate_mode.is_empty() {
             block.push_str(&format!("\n@rotatemode {}", p.rotate_mode));
@@ -12680,7 +12680,7 @@ fn parse_txt(content: &str) -> ImportData {
             Some((t, c)) => (t.to_string(), c.trim().to_string()),
             None => (body, String::new()),
         };
-        // 32: entries 2..n still ride along inside `text` at this point — split
+        // Entries 2..n still ride along inside `text` at this point — split
         // them back out now that every trailing @key line is gone.
         let (text, variants) = split_variants(&text);
         data.prompts.push(ImportedPrompt {
@@ -12735,7 +12735,7 @@ fn parse_csv_data(content: &str) -> ImportData {
             if row.len() < 2 {
                 continue;
             }
-            // 32: entries 2..n ride along inside the text cell (column 1).
+            // Entries 2..n ride along inside the text cell (column 1).
             let (text, variants) = split_variants(&row[1]);
             data.prompts.push(ImportedPrompt {
                 name: row[0].trim().to_string(),
@@ -12784,7 +12784,7 @@ fn parse_import_file(path: &std::path::Path) -> Result<ImportData, String> {
     Ok(data)
 }
 
-// 88: what an import WOULD do, without touching the store — the file is picked
+// What an import WOULD do, without touching the store — the file is picked
 // here, and its path travels back so the confirm step (import_prompts) can
 // re-read the SAME file without a second file dialog.
 #[derive(Serialize)]
@@ -12853,7 +12853,7 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String) -> R
         for t in &tags {
             known.entry(tag_key(t)).or_insert_with(|| t.clone());
         }
-        // 32: the same soft-editor-limit / hard-backend-floor split every other
+        // The same soft-editor-limit / hard-backend-floor split every other
         // entry point into a rotating prompt already goes through.
         let variants = sanitize_variants(item.variants);
         let rotate_mode = sanitize_rotate_mode(item.rotate_mode, &variants);
@@ -12890,7 +12890,7 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String) -> R
         store.prompts.push(prompt);
         count += 1;
     }
-    // 38: a failed save must not report N prompts imported for a write that never
+    // A failed save must not report N prompts imported for a write that never
     // reached disk — an appended tail is trivial to roll back exactly.
     if !save_prompts(&app, &store) {
         store.prompts.truncate(before_len);
@@ -13063,7 +13063,7 @@ async fn set_backup_password(app: AppHandle, state: State<'_, Db>, password: Str
                 .ui_texts
                 .insert(BACKUP_PW_KEY.to_string(), enc_str(&password));
         }
-        // 38: a failed save must not report the new backup password as set — the
+        // A failed save must not report the new backup password as set — the
         // very next export would otherwise silently use the OLD (or no) password
         // while the UI believes it changed.
         if !save_settings(&app, &store.settings) {
@@ -13131,7 +13131,7 @@ struct ImportSummary {
     count: usize,
     // F20: prompt hotkeys the restore had to give up (unusable or already bound).
     dropped_hotkeys: usize,
-    // 40: the file carried its own (foreign-machine, undecryptable-here) backup
+    // The file carried its own (foreign-machine, undecryptable-here) backup
     // password, which was discarded in favour of this machine's own.
     backup_pw_dropped: bool,
 }
@@ -13144,7 +13144,7 @@ async fn pick_backup_file(app: AppHandle) -> Option<String> {
         .map(|p| p.display().to_string())
 }
 
-// 107: pure scope-branching core of import_all -- split out so it is unit-testable
+// Pure scope-branching core of import_all -- split out so it is unit-testable
 // without an AppHandle/State (the async command below owns the save/rollback/
 // AppHandle-dependent side of the contract). Returns (prompt count, dropped
 // hotkeys, whether the backup's own backup-password was dropped in favour of
@@ -13161,7 +13161,7 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
         migrate_prompts(&mut store.prompts);
         store.prompts_locked = false; // a full import supersedes any decrypt lock
     }
-    // 40: the imported backupPw is DPAPI-sealed on a DIFFERENT machine — it
+    // The imported backupPw is DPAPI-sealed on a DIFFERENT machine — it
     // decrypts to "" here, and a following export_all would then silently write
     // UNPROTECTED with the fixed key, with nothing telling the user their
     // password stopped applying. Keep THIS machine's own password across the
@@ -13203,7 +13203,7 @@ async fn import_all(
     state: State<'_, Db>,
     path: String,
     password: Option<String>,
-    // 107: "all" (default) | "data" | "settings" -- same three values and the same
+    // "all" (default) | "data" | "settings" -- same three values and the same
     // restore_selective-style "only touch/roll back what that scope owns" contract
     // as restore_backup, just applied to a file import instead of a stored snapshot.
     scope: String,
@@ -13228,7 +13228,7 @@ async fn import_all(
 
     let (settings, count, dropped_hotkeys, backup_pw_dropped) = {
         let mut store = lock(&state);
-        // 38: this wholesale-replaces prompts AND settings — a failed write must put
+        // This wholesale-replaces prompts AND settings — a failed write must put
         // the ENTIRE previous store back, not just leave the imported data sitting
         // unsaved in memory while the UI reports the import as done.
         let original_prompts = store.prompts.clone();
@@ -13670,7 +13670,7 @@ pub fn run() {
             // it is switched on.
             start_sync_poll(handle.clone());
 
-            // 10: one shared poll instead of every window running its own -
+            // One shared poll instead of every window running its own -
             // see start_missing_files_poll.
             start_missing_files_poll(handle.clone());
 
@@ -13982,7 +13982,7 @@ pub fn run() {
                             }
                         }
                     }
-                    // 87: expert-tunable check interval; the change takes effect from
+                    // Expert-tunable check interval; the change takes effect from
                     // this sleep onward, not mid-wait.
                     let hours = h2
                         .try_state::<Db>()
@@ -14001,7 +14001,7 @@ pub fn run() {
                 }
             });
 
-            // 122: OCR language-pack "updatable" watcher -- delayed, silent when
+            // OCR language-pack "updatable" watcher -- delayed, silent when
             // there is nothing to do, never runs at window build.
             #[cfg(windows)]
             spawn_ocr_lang_update_watcher(handle.clone());
@@ -14187,8 +14187,7 @@ pub fn run() {
 // through — so no individual command (add/update/delete/batch/import) needs to know
 // this feature exists.
 //
-// Deliberately simplified vs. the original full spec (see WORK.md's "Prompt-Ordner
-// als Markdown" item for the complete ambition):
+// Deliberately simplified vs. a fuller original ambition:
 //   - polling (SYNC_POLL_SECS) instead of a filesystem-watcher crate — no new
 //     dependency, and a few seconds of latency is fine for a background sync;
 //   - no per-view position sync — a prompt imported from a new file lands in the
@@ -14314,7 +14313,7 @@ fn sync_placement_for(p: &Prompt, settings: &Settings) -> SyncPlacement {
 
 fn prompt_to_md(p: &Prompt, placement: &SyncPlacement) -> String {
     let tags = p.tags.iter().map(|t| md_escape_line(t)).collect::<Vec<_>>().join(", ");
-    // 32: `variants` is informational only (a human glancing at the header sees the
+    // `variants` is informational only (a human glancing at the header sees the
     // entry count at a glance) — NEVER read back by apply_md_to_prompt, which always
     // re-derives the real list from the body's own VARIANT_SEP markers. The four
     // REQUIRED fields (name/color/tags/notes, md_is_ours()) are unchanged; `variants`
@@ -14424,7 +14423,7 @@ fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
     // The writer closes the body with a newline; keeping it out of the stored text is
     // what stops every round trip through the folder from adding another blank line.
     let body = body.strip_suffix('\n').unwrap_or(&body);
-    // 32: entries 2..n ride along inside the body, split back out here — the
+    // Entries 2..n ride along inside the body, split back out here — the
     // `variants:` header count above is never consulted, so a stale count left by a
     // hand-edit (added/removed an entry without touching the header) is harmless.
     // `rotate_mode` is deliberately NOT part of this sync (same partial-field
@@ -14550,8 +14549,7 @@ fn sync_resolve_cell(settings: &Settings, view_id: &str, prompt_id: &str, wanted
     if fits { Some(wanted) } else { first_free_cell_excluding(view, &folder_cells) }
 }
 
-// 56: mirrors the frontend's placeTile() (WORK.md 51/INVARIANTS.md "Prompt in
-// multiple views") — with multiViewPrompt off (default), a prompt lives in exactly
+// Mirrors the frontend's placeTile() — with multiViewPrompt off (default), a prompt lives in exactly
 // ONE view. Without stripping the others here, a machine re-importing a placement
 // that already matches (only the prompt's content changed elsewhere) left the
 // prompt duplicated across every view it was ever placed in on ANY machine. With
@@ -14634,7 +14632,7 @@ fn sync_join_tile_folder(settings: &mut Settings, prompt_id: &str, name: &str, c
         return false;
     }
     let color = valid_tag_color(color).unwrap_or_default();
-    // 52: match on (name, view_id) — a bare name match merges same-named folders
+    // Match on (name, view_id) — a bare name match merges same-named folders
     // from DIFFERENT views into whichever one the scan happens to find first.
     let exists = settings.tile_folders.iter().any(|f| f.name == name && f.view_id == view_id);
     let cell = if exists { cell } else { sync_resolve_cell(settings, view_id, prompt_id, cell).unwrap_or(cell) };
@@ -14704,7 +14702,7 @@ fn sync_join_float_folder(settings: &mut Settings, prompt_id: &str, name: &str) 
 fn sync_normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], view_ids: &[String]) {
     let mut taken: Vec<String> = Vec::new();
     for folder in folders.iter_mut() {
-        // 37: see normalize_tile_folders — an incoming sync file's `cell:` header is
+        // See normalize_tile_folders — an incoming sync file's `cell:` header is
         // exactly as untrusted as a hand-edited backup.
         folder.cell[0] = folder.cell[0].min(GRID_MAX);
         folder.cell[1] = folder.cell[1].min(GRID_MAX);
@@ -14853,7 +14851,7 @@ fn sync_lock_release(md_path: &Path) {
     let _ = fs::remove_file(sync_lock_path(md_path));
 }
 
-// 9: split from the old sync_write_all(app, store) so the per-prompt file I/O
+// Split from the old sync_write_all(app, store) so the per-prompt file I/O
 // below (a read to compare content, sometimes a write, once per eligible prompt)
 // can run on owned data instead of a &Store borrow - every call site already
 // holds the store mutex, and this loop's cost scales with the whole library on
@@ -14886,7 +14884,7 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
     sync_sweep_orphans(&dir, &wanted);
 }
 
-// 9: a queue rather than one independent spawn_blocking task per call - two rapid
+// A queue rather than one independent spawn_blocking task per call - two rapid
 // saves used to race as two unrelated tasks, and whichever finished LAST won even
 // if it started from the OLDER snapshot, silently reverting the newer save's files
 // (and letting the orphan sweep delete/recreate files based on that stale state).
@@ -15023,7 +15021,7 @@ fn sync_blank_prompt(id: String) -> Prompt {
 // The inbound half: files -> DB. Runs on a timer (see start_sync_poll) rather than
 // a filesystem watcher, see the module note above for why.
 //
-// 9: used to hold the store mutex for the entire fs::read_dir + per-file
+// Used to hold the store mutex for the entire fs::read_dir + per-file
 // fs::read_to_string scan below - every other command needing that mutex (which
 // is nearly all of them) blocked for as long as reading the user's sync folder
 // took, and a slow or unreachable path (network share, unmounted drive) could
@@ -15059,7 +15057,7 @@ fn sync_poll_once(app: &AppHandle) {
         if !sync_safe_id(&stem) {
             continue;
         }
-        // 9 (Codex round 2): acquire the file lock BEFORE reading, not after - the
+        // Acquire the file lock BEFORE reading, not after - the
         // lock is meant to protect the read from a concurrent writer, which it did
         // not while the read happened first and the lock was only taken afterward
         // for the (much cheaper) bookkeeping. This is unchanged from the original
@@ -15091,7 +15089,7 @@ fn sync_poll_once(app: &AppHandle) {
     let mut settings_changed = false;
     let mut placements_touched = false;
     for (stem, content, is_new) in candidates {
-        // 2: fields lives alongside content/name/etc — parse_frontmatter is cheap
+        // Fields lives alongside content/name/etc — parse_frontmatter is cheap
         // (string splitting) and apply_md_to_prompt already re-parses it itself, so
         // a second pass here isn't worth threading through that function's own
         // signature just to share one HashMap.
@@ -15177,7 +15175,7 @@ fn start_sync_poll(app: AppHandle) {
 mod tests {
     use super::*;
 
-    // 120: pure text-logic tests for ocr_join_lines -- no Windows API involved, so
+    // Pure text-logic tests for ocr_join_lines -- no Windows API involved, so
     // these run on any platform via plain `cargo test --lib`.
     #[test]
     fn ocr_join_lines_joins_a_wrapped_sentence() {
@@ -15225,7 +15223,7 @@ mod tests {
         assert_eq!(ocr_join_lines(&lines), "مرحبا بالعالم");
     }
 
-    // 122: capability-name allowlist -- the G10 gate everything in
+    // Capability-name allowlist -- the G10 gate everything in
     // ocr_install_language relies on. Valid, realistic tags pass; anything
     // malformed or injection-flavored is rejected outright.
     #[test]
@@ -15291,7 +15289,7 @@ mod tests {
         assert_eq!(ocr_tag_from_capability_name("not-a-capability-name"), None);
     }
 
-    // 122: PowerShell `Get-WindowsCapability | ConvertTo-Json` output parsing --
+    // PowerShell `Get-WindowsCapability | ConvertTo-Json` output parsing --
     // fixed sample strings standing in for the three shapes PowerShell actually
     // produces.
     #[test]
@@ -15360,7 +15358,7 @@ mod tests {
     // JSON null, and DownloadSize/InstallSize as a literal 0 rather than absent
     // -- none of which the original hand-authored fixtures above (a wrong guess
     // at the real shape, not tested against actual PowerShell output) exercised.
-    // A codex second-opinion review + a real VM capture both caught this; the
+    // A second-opinion review + a real VM capture both caught this; the
     // automated suite passed the whole time regardless. State 4 = Installed
     // (confirmed against a capability independently proven installed by using
     // it for real OCR), 0 = NotPresent.
@@ -15391,7 +15389,7 @@ mod tests {
         assert_eq!(caps[0].state, "NotPresent");
     }
 
-    // 122: "updatable?" decision -- table-driven per the spec's five cases.
+    // "Updatable?" decision -- table-driven per the spec's five cases.
     #[test]
     fn ocr_lang_needs_update_table() {
         let installed = |v: &str| Some(OcrCapSnapshot { version: v.to_string(), installed: true });
@@ -15473,7 +15471,7 @@ mod tests {
 
     #[test]
     fn stored_ai_theme_migrates_to_neon_not_system() {
-        // 24: "ai" was renamed to "neon" — a saved preference must land on the
+        // "ai" was renamed to "neon" — a saved preference must land on the
         // renamed theme, not fall through known_theme() to "system".
         let mut s = Settings::default();
         s.theme = "ai".into();
@@ -15489,7 +15487,7 @@ mod tests {
         assert_eq!(theme_base_of(&s, &s.theme), "neon");
     }
 
-    // 123: an existing install (real prompts, or the example-seeding marker set --
+    // An existing install (real prompts, or the example-seeding marker set --
     // even if those examples were later dismissed) must never see the first-run
     // tour; only a genuinely blank store should.
     #[test]
@@ -15877,7 +15875,7 @@ mod tests {
         assert_eq!(settings.views[0].layouts.get(&key).and_then(|m| m.get("p1")), Some(&[0, 0]));
     }
 
-    // 52: a folder name is only unique WITHIN its own view -- matching by name alone
+    // A folder name is only unique WITHIN its own view -- matching by name alone
     // merged two same-named folders from different views into whichever the scan
     // found first.
     #[test]
@@ -15986,7 +15984,7 @@ mod tests {
         sync_normalize_float_folders(&mut settings.float_folders, &ids);
     }
 
-    // The scenario docs/INVARIANTS.md calls out by name: a cloud provider gives no
+    // A scenario worth calling out by name: a cloud provider gives no
     // ordering/batching guarantee between two files it propagates to a second
     // machine. Instance A groups two prompts into a folder and writes both files;
     // instance B's poll only sees the first one, then the second "arrives" a cycle
@@ -16043,7 +16041,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    // The other half of docs/INVARIANTS.md's crash-simulation requirement: a file
+    // The other half of the crash-simulation requirement: a file
     // cut off mid-write (crash between lock acquire and the write completing)
     // never has a closing "---" at all. Must be skipped outright, never applied
     // partially - no half-updated name, no fabricated placement from whatever
@@ -16308,7 +16306,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    // 36: a sync file write must never be an in-place truncate — a reader (this
+    // A sync file write must never be an in-place truncate — a reader (this
     // machine's own next poll, or a cloud-sync client) must only ever see either the
     // old content or the new content, never a partial body.
     #[test]
@@ -16336,7 +16334,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    // 54: a data-dir move must bring backups/ along, nested subfolders included --
+    // A data-dir move must bring backups/ along, nested subfolders included --
     // otherwise the Backup panel shows 0 snapshots right after moving.
     #[test]
     fn copy_dir_all_copies_nested_files() {
@@ -16359,7 +16357,7 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
     }
 
-    // 56: with multiViewPrompt off (default), a synced placement must strip the
+    // With multiViewPrompt off (default), a synced placement must strip the
     // prompt from every OTHER view -- otherwise re-syncing an unrelated content
     // change duplicates it across every view it was ever placed in on any machine.
     #[test]
@@ -16405,8 +16403,8 @@ mod tests {
         f.set_times(std::fs::FileTimes::new().set_modified(old)).unwrap();
     }
 
-    // 53: a snip preview or an update stage dir surviving a crash/abnormal exit is
-    // never cleaned by anything else -- must be swept at the next startup. 2: but
+    // A snip preview or an update stage dir surviving a crash/abnormal exit is
+    // never cleaned by anything else -- must be swept at the next startup. But
     // NOT a fresh one -- "Allow multiple instances" lets a second launch run this
     // same sweep while a concurrently open instance still has its own snip preview
     // in active use, so only files older than STALE_TEMP_FILE_AGE are fair game.
@@ -16487,7 +16485,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    // 34: a fallback file that exists but cannot be decrypted/parsed (DPAPI from a
+    // A fallback file that exists but cannot be decrypted/parsed (DPAPI from a
     // different Windows account, truncated write) must never be silently treated as
     // "nothing here" — that used to erase the whole DB on the next load_store.
     #[test]
@@ -16520,7 +16518,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    // 103: a cache written by a build before BackupPrompt existed is a sealed
+    // A cache written by a build before BackupPrompt existed is a sealed
     // Vec<String> -- must read back as name-only items instead of an empty list,
     // and the caller must be told to re-write it (once), not on every read.
     #[test]
@@ -16766,7 +16764,7 @@ mod tests {
 
     #[test]
     fn prompts_and_trash_write_together_or_not_at_all() {
-        // 6: the whole point of the combined write - a failure partway through must
+        // The whole point of the combined write - a failure partway through must
         // roll back BOTH tables, not just the one it failed on (the old two-
         // transaction version could durably commit prompts and then fail on trash,
         // stranding a moved prompt in neither table).
@@ -17130,7 +17128,7 @@ mod tests {
 
     #[test]
     fn daily_copies_are_zero_filled_and_bucketed() {
-        // 58: a day with no copies must still appear (as 0), not be skipped —
+        // A day with no copies must still appear (as 0), not be skipped —
         // otherwise a gap in the chart would read as "the app broke that day"
         // instead of "nothing was copied".
         let conn = Connection::open_in_memory().unwrap();
@@ -17159,7 +17157,7 @@ mod tests {
 
     #[test]
     fn journal_rowid_deletes_exactly_one_entry() {
-        // 59: the rowid db_recent_copies() now returns has to target the exact row —
+        // The rowid db_recent_copies() now returns has to target the exact row —
         // never "every copy of this prompt", in either view mode.
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
@@ -17291,7 +17289,7 @@ mod tests {
             last_shown = Some(idx);
         }
         assert_eq!(first_cycle.len(), total, "the bag skipped an entry within one cycle");
-        // 33: the draw-number badge counts 1..total across one cycle, in order —
+        // The draw-number badge counts 1..total across one cycle, in order —
         // even though the entries themselves are shuffled.
         assert_eq!(positions, vec![1, 2, 3, 4, 5]);
         let (next_idx, next_pos, _) = rotation_next(&p, &settings);
@@ -17402,7 +17400,7 @@ mod tests {
 
     #[test]
     fn auto_session_order_matches_rotation_next() {
-        // 90: the auto flag must never change what rotation_next/rotation_advance
+        // The auto flag must never change what rotation_next/rotation_advance
         // themselves return — same order-mode and random-mode guarantee as the
         // plain copy path, just proven again with rotate_auto set.
         let mut p = sample_prompts().remove(0);
@@ -17562,7 +17560,7 @@ mod tests {
         }
     }
 
-    // 100: the shipped default must actually register, or every fresh install would
+    // The shipped default must actually register, or every fresh install would
     // silently lose its launcher hotkey the moment rearm_hotkeys() runs at startup
     // (an unparseable/blocked default gets cleared back to "", exactly like a bad
     // value a user typed in by hand -- see rearm_hotkeys' app_ok branch).
@@ -17797,8 +17795,8 @@ mod tests {
         assert!(p2.tags.is_empty());
     }
 
-    // 32: an entry that happens to contain the join marker itself must not be
-    // split into extra entries on round trip (Codex audit).
+    // An entry that happens to contain the join marker itself must not be
+    // split into extra entries on round trip.
     #[test]
     fn join_variants_survives_an_entry_containing_the_separator_verbatim() {
         let text = "a\n<!-- next -->\nb".to_string(); // looks like 2 entries, is 1
@@ -17809,7 +17807,7 @@ mod tests {
         assert_eq!(out_variants, variants);
     }
 
-    // 32: rotating-prompt entries round-trip through every export/storage format
+    // Rotating-prompt entries round-trip through every export/storage format
     // without loss. Each format gets its OWN test since each chose its own way to
     // embed the entries and could silently regress independently of the others.
     #[test]
@@ -17857,7 +17855,7 @@ mod tests {
 
     #[test]
     fn markdown_sync_survives_a_hand_edit_that_removes_every_entry() {
-        // The sync folder is the user's to hand-edit (INVARIANTS.md) — deleting
+        // The sync folder is the user's to hand-edit — deleting
         // every "<!-- next -->" marker must degrade to a plain prompt, never crash,
         // and never leave rotate_mode stranded on an empty list.
         let mut p = sample_prompts().remove(0);
@@ -18011,7 +18009,7 @@ mod tests {
         assert_eq!(data.prompts[0].notes, "@mention someone");
     }
 
-    // 76: an exported theme file never carries the internal id, so importing it on
+    // An exported theme file never carries the internal id, so importing it on
     // another install (or re-importing it on the same one) always creates a fresh
     // theme instead of silently colliding with -- or overwriting -- an existing one.
     #[test]
@@ -18247,7 +18245,7 @@ mod tests {
 
     #[test]
     fn place_ids_in_view_is_all_or_nothing_when_the_view_is_full() {
-        // 104: a batch that doesn't fully fit must place NOTHING, not a partial subset
+        // A batch that doesn't fully fit must place NOTHING, not a partial subset
         // -- a caller that already removed these ids from their source view relies on
         // this to know the move truly failed.
         let mut layout = HashMap::from([("a".to_string(), [0, 0])]);
@@ -18259,8 +18257,8 @@ mod tests {
 
     #[test]
     fn place_ids_in_view_counts_grid_folder_cells_as_occupied() {
-        // 105: a folder's cell lives outside `layout` (see docs/INVARIANTS.md -> Grid
-        // folders) -- without passing it as extra_occupied, addView could hand a
+        // A folder's cell lives outside `layout` (it is the folder's own `cell`
+        // field, not a layout entry) -- without passing it as extra_occupied, addView could hand a
         // prompt the same cell a folder already sits on.
         let mut layout: HashMap<String, [u32; 2]> = HashMap::new();
         let folder_cells = std::collections::HashSet::from([(0u32, 0u32)]);
@@ -18271,7 +18269,7 @@ mod tests {
 
     #[test]
     fn dup_pair_is_ignored_checks_shared_group_membership() {
-        // 14: groups replace pairs - "a" and "d" each belong to a DIFFERENT ignored
+        // Groups replace pairs - "a" and "d" each belong to a DIFFERENT ignored
         // group (from two separate ignore_dups calls); neither call ever put them
         // together, so they must NOT count as ignored even though both ids are
         // independently "in some ignored group somewhere".
@@ -18380,7 +18378,7 @@ mod tests {
         assert_eq!(folders[0].id, "f2");
     }
 
-    // 37: a hand-edited/imported cell at u32::MAX used to hang normalize_tile_folders
+    // A hand-edited/imported cell at u32::MAX used to hang normalize_tile_folders
     // forever (saturating_add never moves off the cap while the store mutex is held,
     // i.e. the app is dead on the next launch). Must terminate and clamp instead.
     #[test]

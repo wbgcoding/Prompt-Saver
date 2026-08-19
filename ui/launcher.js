@@ -1,4 +1,4 @@
-// 100: standalone quick-launcher, opened by the global hotkey. Fuzzy search over
+// Standalone quick-launcher, opened by the global hotkey. Fuzzy search over
 // every prompt, Enter/click copies. Picking a result only ever tells the backend
 // which id was chosen (launcher_select) — the backend runs the exact same
 // "copy from outside the grid" path the tray menu already uses (fire_tray_copy),
@@ -50,7 +50,7 @@ function select(id) {
 // Case-insensitive substring score: a name hit ranks far above a body hit, an
 // earlier match ranks above a later one. No dependency, no fuzzy typo-tolerance —
 // this is a quick filter, not the library's full search.
-// 125: p.lname/p.ltext are precomputed once in boot() -- re-lowercasing every
+// p.lname/p.ltext are precomputed once in boot() -- re-lowercasing every
 // item's name and (often much longer) body on every keystroke was the jank.
 function score(p, q) {
   const ni = p.lname.indexOf(q);
@@ -144,7 +144,7 @@ document.body.addEventListener("mousedown", (e) => {
 });
 
 async function boot() {
-  // 133: a lean command instead of get_state — this window has to be ready the
+  // A lean command instead of get_state — this window has to be ready the
   // instant its hotkey fires, and get_state clones every prompt's base64 image.
   const state = await invoke("launcher_items").catch(() => ({ prompts: [], language: "", usage: {}, last_used: {} }));
   applyFloatTheme(await invoke("current_theme").catch(() => null), await invoke("theme_vars").catch(() => ({})));

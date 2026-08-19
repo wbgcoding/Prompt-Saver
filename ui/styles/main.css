@@ -3463,7 +3463,7 @@ body.drag-over::after {
 /* 101: a two-column dropdown row is too narrow for label-beside-field -- a short
    label (copySize) fit, a long one (tagFilterMode) wrapped and looked different
    from its neighbour. Always stack here; the full-width row above keeps label
-   left of field per CLAUDE.md. */
+   left of field as the standard layout requires. */
 .expert-cols .expert-dropdown-row { flex-direction: column; align-items: stretch; }
 .expert-cols .expert-dropdown-row .expert-select,
 .expert-cols .expert-dropdown-row .expert-num {

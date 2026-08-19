@@ -49,7 +49,7 @@ let foldersOn = false; // F25 pill folders (default off)
 let pText = "", pFile = "";
 const dragOutHeld = (e) => dragOutOn && e[dragOutMod] === true;
 
-// 32: rotating prompt — "next entry" badge. Only ever one prompt per pill window,
+// Rotating prompt — "next entry" badge. Only ever one prompt per pill window,
 // so a single cached {index,total} (not a Map keyed by id, as the main grid needs)
 // is enough; kept live by the backend's rotation-changed event.
 let rotateBadgeOn = true; // Phase B default: on
@@ -64,7 +64,7 @@ const rotateBadgeEl = document.getElementById("rotate-badge");
 function renderRotateBadge() {
   const show = rotateBadgeOn && rotateVariants > 0 && !!rotateInfo;
   rotateBadgeEl.classList.toggle("hidden", !show);
-  // 33: pos (not index + 1) — in random mode index is the absolute entry that
+  // Pos (not index + 1) — in random mode index is the absolute entry that
   // will be drawn next (jumps around); pos is the 1-based draw number within
   // the current shuffle cycle, counting up and restarting on reshuffle.
   if (show) rotateBadgeEl.textContent = `${rotateInfo.pos}/${rotateInfo.total}`;
@@ -103,7 +103,7 @@ const RING_FRAC = 0.18; // ring thickness as a fraction of the shorter window si
 // through the control bar (or play-once ending) is respected.
 function ensureVideoPlaying() {
   if (userPaused) return;
-  // 125: a video that never started because videoAutoplay is off must stay
+  // A video that never started because videoAutoplay is off must stay
   // paused until the user starts it themselves -- once it HAS played, app-driven
   // pauses (drag, hidden window) keep auto-resuming regardless of the setting.
   if (!videoAutoplayOn && !videoEverPlayed) return;
@@ -212,7 +212,7 @@ async function applyTexts(s) {
 
 function applyPrefs(s) {
   applyVideoPrefs(videoEl, s.video_prefs && s.video_prefs[promptId]);
-  // 125: pills used media.js's hardcoded {volume:100, muted:true, looped:true} --
+  // Pills used media.js's hardcoded {volume:100, muted:true, looped:true} --
   // the expert videoVolume/videoMuted/videoLoop settings never reached them. Same
   // defaults main.js's applyValues() pushes for the grid tiles.
   setMediaDefaults({ volume: Number(s.ui_values?.videoVolume) || 100, muted: s.ui_flags?.videoMuted !== false, looped: s.ui_flags?.videoLoop !== false });
@@ -240,8 +240,8 @@ function applyPrefs(s) {
   apDblMs = Number.isFinite(adb) ? adb : DBL_CLICK_MS_DEFAULT;
   dragOutOn = s.ui_flags?.dragOut === true;
   dragOutMod = DRAG_OUT_MODS[s.ui_texts?.dragOutModifier] || "ctrlKey";
-  foldersOn = s.ui_flags?.pillFolders !== false; // 41: default ON, mirrors folders_on() in lib.rs
-  // 47: rotateBadge is a sub-toggle of rotatingPrompts — the parent off must freeze
+  foldersOn = s.ui_flags?.pillFolders !== false; // default ON, mirrors folders_on() in lib.rs
+  // rotateBadge is a sub-toggle of rotatingPrompts — the parent off must freeze
   // the whole feature, not just the badge (gating rule: nothing dependent stays
   // visible/active with its parent off).
   rotateBadgeOn = s.ui_flags?.rotateBadge !== false && s.ui_flags?.rotatingPrompts !== false;
@@ -300,8 +300,8 @@ let borderW = 0;
 // Apply name, color and media (stored still, gif or video) onto the pill.
 const videoEl = document.getElementById("video");
 const imgEl = document.getElementById("img");
-// 125: floating.html hardcodes the autoplay attribute (owned by another agent) --
-// strip it here, before any source is ever assigned, so flag("videoAutoplay")=off
+// floating.html hardcodes the autoplay attribute -- strip it here, before any
+// source is ever assigned, so flag("videoAutoplay")=off
 // is honoured the same way main.js's grid tiles honour it (explicit play() call
 // instead of the unreliable attribute).
 videoEl.removeAttribute("autoplay");
@@ -466,7 +466,7 @@ async function loadName() {
 }
 
 // ---- Missing-file watcher ----
-// 10: the ambient every-few-seconds refresh is a backend-pushed "missing-files"
+// The ambient every-few-seconds refresh is a backend-pushed "missing-files"
 // event now (listened for below), not this pill's own timer - one pushed check
 // covers every open pill instead of each running its own poll. pollFileMissing
 // stays for the one-off "recheck right now" call in applyPrompt above.
@@ -743,7 +743,7 @@ window.addEventListener("mouseup", async () => {
   } else if (cooldownMs && Date.now() - lastCopyTs < cooldownMs) {
     // Same pill copied moments ago — throttle to avoid accidental repeats.
   } else {
-    // 125: stamp BEFORE the await, not after -- a fast second click while
+    // Stamp BEFORE the await, not after -- a fast second click while
     // copy_prompt's IPC is still in flight must see the fresh timestamps right
     // away (both were 0 until the call resolved, so the double-click/cooldown
     // checks above missed it and a fast click issued a duplicate copy).
@@ -885,7 +885,7 @@ window.addEventListener("mouseup", () => { if (resizing) endResize(); });
 listen("prompt-updated", (e) => {
   if (e.payload && e.payload.id === promptId) applyPrompt(e.payload);
 });
-// 32: this pill's own rotation pointer moved (any window may have copied it). A
+// This pill's own rotation pointer moved (any window may have copied it). A
 // pushed event is always fresher than any in-flight peek — bump rotateReq so a
 // slow primeRotateBadge() peek from before this event can't overwrite it later.
 listen("rotation-changed", (e) => {
