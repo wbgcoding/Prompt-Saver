@@ -1989,7 +1989,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
    clashes with most of the 16 themes. Mouse clicks don't trigger :focus-visible. */
 .icon-btn:focus-visible, .ghost-btn:focus-visible, .primary-btn:focus-visible,
 .view-btn:focus-visible, .view-add-top:focus-visible, .fav-view-toggle:focus-visible,
-.lib-type:focus-visible, .head-toggle:focus-visible, .seg-btn:focus-visible,
+.lib-type:focus-visible, .head-toggle:focus-visible,
 .expert-tab:focus-visible, .tile:focus-visible, .switch:focus-visible,
 .win-btn:focus-visible, .swatch:focus-visible, .toolbar-item:focus-visible {
   outline: 2px solid var(--accent);

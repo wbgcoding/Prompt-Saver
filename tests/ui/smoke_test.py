@@ -3988,30 +3988,35 @@ PROBE = """
       await sleep(150);
     }
     await click('theme-modal-close');
-    // 112: proofread the longest translation (German, the longest being mostly
-    // de/ro) across the same views the 130% pass just covered -- clipped labels
-    // and overlapping boxes are exactly what layoutScan already catches, this
-    // just re-runs it against real long strings instead of a synthetic scale.
+    // 112: walk the same views the 130% pass just covered once per wordy language.
+    // Polish, Romanian and German write the longest labels of the eleven, and a
+    // clipped label or an overlapping box is exactly what layoutScan already
+    // catches -- this just points it at real long strings instead of a synthetic
+    // scale. German comes last on purpose: the OCR checks below find their expert
+    // rows by German label, so that is the language the page has to be left in.
     document.getElementById('settings-expert').classList.add('hidden');
     document.getElementById('settings-main').classList.remove('hidden');
     document.getElementById('settings').classList.remove('hidden');
     const langSel = document.getElementById('lang-select');
-    langSel.value = 'de';
-    langSel.dispatchEvent(new Event('change'));
-    await sleep(300);
-    if (document.documentElement.lang !== 'de') {
-      out.errors.push('lang-select change did not switch the active language (still ' + document.documentElement.lang + ')');
+    for (const lang of ['pl', 'ro', 'de']) {
+      langSel.value = lang;
+      langSel.dispatchEvent(new Event('change'));
+      await sleep(300);
+      if (document.documentElement.lang !== lang) {
+        out.errors.push('lang-select change did not switch the active language to ' + lang +
+          ' (still ' + document.documentElement.lang + ')');
+      }
+      layoutScan('main window in ' + lang);
+      mustReach('main window in ' + lang, '.win-btn, .composer > button');
+      await click('library-btn');
+      layoutScan('library in ' + lang);
+      await click('library-close');
+      layoutScan('settings in ' + lang);
+      mustReach('settings in ' + lang, '#settings-main button, #settings-main select');
+      await click('expert-open');
+      layoutScan('expert menu in ' + lang);
+      await click('expert-back');
     }
-    layoutScan('main window in German');
-    mustReach('main window in German', '.win-btn, .composer > button');
-    await click('library-btn');
-    layoutScan('library in German');
-    await click('library-close');
-    layoutScan('settings in German');
-    mustReach('settings in German', '#settings-main button, #settings-main select');
-    await click('expert-open');
-    layoutScan('expert menu in German');
-    await click('expert-back');
     // 117/118/119: screenshot editor -- window.__FIRE__ is the same hook every other
     // probe uses to exercise a backend-started flow (see tauri_stub.js), here firing
     // the snip-captured event finalize_capture would normally send.
