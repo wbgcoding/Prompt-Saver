@@ -182,6 +182,11 @@ ship on).
   moves 0.3 MB now, and takes 26 ms instead of 67 ms. A picture that is still on
   its way leaves the tile on its normal name-and-colour face and swaps itself in
   when it arrives, so nothing flickers.
+- Saving is far quicker in a large library. Renaming one prompt, dragging one tile
+  or changing one tag used to rewrite and re-encrypt every stored prompt; now only
+  the prompts that actually changed are written, and moving prompts around updates
+  nothing but their position. With 500 prompts, 60 of them carrying a screenshot,
+  a single rename takes 36 ms instead of 1900 ms.
 - Saving a prompt can no longer clear its image by accident: the editor only sends
   a picture along when you actually changed it, and the only thing that removes one
   is the remove button.

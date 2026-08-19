@@ -1666,12 +1666,29 @@ struct Store {
     settings: Settings,
     // Set when db_load found encrypted prompt rows it could NOT decrypt (e.g. DPAPI
     // failed after a profile move / password reset). While true, save_prompts refuses
-    // to rewrite the prompts table so a full DELETE+INSERT can never destroy the rows
-    // that are present-but-unreadable. The raw data.db is snapshotted aside on detect.
+    // to rewrite the prompts table so a rewrite can never destroy the rows that are
+    // present-but-unreadable (they are missing from the in-memory list, so a write
+    // would delete them as "gone"). The raw data.db is snapshotted aside on detect.
     prompts_locked: bool,
+    // What the prompts/trash tables already hold, so a save only re-seals the rows
+    // that really changed (see WrittenRows). It belongs to the prompt list and sits
+    // under the same lock rather than beside it — a second lock could be taken apart
+    // from this one, letting one window update the map for a list another window is
+    // still writing. A RefCell, not a Mutex: it is a detail of the write path, and
+    // every save_* takes a shared &Store.
+    written: std::cell::RefCell<WrittenRows>,
 }
 
 impl Store {
+    // Forget everything believed to be on disk, so the next save rewrites every row.
+    // Mandatory wherever the tables change without going through write_rows: a
+    // wholesale replacement of the prompt set, a swapped or restored data.db, a raw
+    // DELETE, a move to another data folder. Missing it anywhere leaves the process
+    // trusting hashes for content the disk no longer holds.
+    fn forget_written_rows(&self) {
+        self.written.borrow_mut().clear();
+    }
+
     // F25/F27: keep both folder lists valid against the CURRENT prompt list — one call
     // after every mutation that can remove a prompt. Idempotent.
     fn normalize_folders(&mut self) {
@@ -2020,23 +2037,123 @@ fn db_conn(app: &AppHandle) -> Option<Connection> {
     Some(conn)
 }
 
-// Replace-all write of one row set into one table, always inside the caller's own
-// transaction. `table` is always one of our own two hardcoded table names below,
-// never user input, so interpolating it into the SQL text is safe.
-fn write_rows(tx: &Transaction, table: &str, rows: &[Prompt]) -> rusqlite::Result<()> {
-    tx.execute(&format!("DELETE FROM {table}"), [])?;
-    let mut stmt = tx.prepare(&format!("INSERT INTO {table}(id, ord, data) VALUES(?1, ?2, ?3)"))?;
-    for (i, p) in rows.iter().enumerate() {
-        let data = enc_str(&serde_json::to_string(p).unwrap_or_default());
-        stmt.execute(params![p.id, i as i64, data])?;
-    }
-    Ok(())
+// What the prompts/trash tables are known to hold: "<table>\u{1}<id>" → a hash of
+// that row's PLAINTEXT json. Every row is sealed before it is stored and sealing
+// the same text twice gives different bytes, so a stored blob cannot be compared
+// against a new one directly — and decrypting the whole table to compare would
+// cost exactly what this map exists to save. An entry means "the row with this id
+// currently in that table decodes to content hashing to this value", which is what
+// lets a save skip re-sealing every untouched row.
+//
+// Anything that changes those tables from OUTSIDE write_rows — a restored or
+// swapped data.db, a raw DELETE, a move to a different data folder — must clear
+// the map (Store::forget_written_rows), or the next save trusts an entry that no
+// longer describes the disk and skips a row that really did need writing.
+type WrittenRows = HashMap<String, u64>;
+
+fn row_key(table: &str, id: &str) -> String {
+    // \u{1} cannot occur in a table name, so the two halves can never run together.
+    format!("{table}\u{1}{id}")
 }
 
-fn db_write_prompts(conn: &mut Connection, prompts: &[Prompt]) -> rusqlite::Result<()> {
+fn row_hash(json: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    json.hash(&mut h);
+    h.finish()
+}
+
+// Two prompts sharing one id can only ever be a bug in the caller's list: writing
+// it would silently collapse them into a single row (and, with the old replace-all
+// write, hit the PRIMARY KEY instead). Reject the whole write, exactly as before.
+fn duplicate_row_id_error(table: &str) -> rusqlite::Error {
+    rusqlite::Error::SqliteFailure(
+        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CONSTRAINT_PRIMARYKEY),
+        Some(format!("duplicate id in {table}")),
+    )
+}
+
+// Bring one table in line with `rows`, touching as little as possible: rows that
+// disappeared are deleted, rows whose content changed are re-sealed and rewritten,
+// and rows that merely moved get their `ord` corrected — reordering costs no
+// encryption at all. Always inside the caller's own transaction. `table` is always
+// one of our own two hardcoded table names below, never user input, so
+// interpolating it into the SQL text is safe.
+//
+// Returns the map entries describing the rows as they now stand. The caller adopts
+// them only after its COMMIT actually succeeded, so a rolled-back or failed write
+// never leaves the process believing a row reached the disk.
+fn write_rows(
+    tx: &Transaction,
+    table: &str,
+    rows: &[Prompt],
+    written: &WrittenRows,
+) -> rusqlite::Result<WrittenRows> {
+    let mut keep: std::collections::HashSet<&str> = std::collections::HashSet::with_capacity(rows.len());
+    for p in rows {
+        if !keep.insert(p.id.as_str()) {
+            return Err(duplicate_row_id_error(table));
+        }
+    }
+    // What the table holds right now — ids and positions only, nothing decrypted.
+    // Row PRESENCE is taken from here rather than from the map, so a row that is
+    // missing from the table is re-inserted even if the map still lists it.
+    let mut present: HashMap<String, i64> = HashMap::new();
+    {
+        let mut stmt = tx.prepare(&format!("SELECT id, ord FROM {table}"))?;
+        let mut q = stmt.query([])?;
+        while let Some(r) = q.next()? {
+            present.insert(r.get(0)?, r.get(1)?);
+        }
+    }
+    {
+        let mut del = tx.prepare(&format!("DELETE FROM {table} WHERE id = ?1"))?;
+        for id in present.keys() {
+            if !keep.contains(id.as_str()) {
+                del.execute(params![id])?;
+            }
+        }
+    }
+    let mut fresh = WrittenRows::with_capacity(rows.len());
+    let mut ins = tx.prepare(&format!("INSERT INTO {table}(id, ord, data) VALUES(?1, ?2, ?3)"))?;
+    let mut upd = tx.prepare(&format!("UPDATE {table} SET ord = ?2, data = ?3 WHERE id = ?1"))?;
+    let mut moved = tx.prepare(&format!("UPDATE {table} SET ord = ?2 WHERE id = ?1"))?;
+    for (i, p) in rows.iter().enumerate() {
+        let json = serde_json::to_string(p).unwrap_or_default();
+        let hash = row_hash(&json);
+        let key = row_key(table, &p.id);
+        let ord = i as i64;
+        match present.get(&p.id) {
+            Some(&cur_ord) if written.get(&key) == Some(&hash) => {
+                if cur_ord != ord {
+                    moved.execute(params![p.id, ord])?;
+                }
+            }
+            Some(_) => {
+                upd.execute(params![p.id, ord, enc_str(&json)])?;
+            }
+            None => {
+                ins.execute(params![p.id, ord, enc_str(&json)])?;
+            }
+        }
+        fresh.insert(key, hash);
+    }
+    Ok(fresh)
+}
+
+// Swap in one table's half of the map, after that table's write committed.
+fn adopt_written_rows(written: &mut WrittenRows, table: &str, fresh: WrittenRows) {
+    let prefix = row_key(table, "");
+    written.retain(|k, _| !k.starts_with(&prefix));
+    written.extend(fresh);
+}
+
+fn db_write_prompts(conn: &mut Connection, prompts: &[Prompt], written: &mut WrittenRows) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
-    write_rows(&tx, "prompts", prompts)?;
-    tx.commit()
+    let fresh = write_rows(&tx, "prompts", prompts, written)?;
+    tx.commit()?;
+    adopt_written_rows(written, "prompts", fresh);
+    Ok(())
 }
 
 // Same schema and shape as db_write_prompts/db_load's prompt half, but its own
@@ -2045,10 +2162,12 @@ fn db_write_prompts(conn: &mut Connection, prompts: &[Prompt]) -> rusqlite::Resu
 // duplicate finder...) stays correct with zero changes — the alternative, a
 // deleted_at flag on Prompt filtered everywhere, would have needed every one of
 // those call sites found and fixed, with real risk of missing one.
-fn db_write_trash(conn: &mut Connection, trash: &[Prompt]) -> rusqlite::Result<()> {
+fn db_write_trash(conn: &mut Connection, trash: &[Prompt], written: &mut WrittenRows) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
-    write_rows(&tx, "trash", trash)?;
-    tx.commit()
+    let fresh = write_rows(&tx, "trash", trash, written)?;
+    tx.commit()?;
+    adopt_written_rows(written, "trash", fresh);
+    Ok(())
 }
 
 // delete_prompt/restore_prompt move one row between these two tables. Writing
@@ -2056,19 +2175,39 @@ fn db_write_trash(conn: &mut Connection, trash: &[Prompt]) -> rusqlite::Result<(
 // pair) left a window where the first commit could durably land while the second
 // failed, stranding the prompt in neither table. One transaction for both DELETE+
 // INSERT pairs means either the whole move lands or neither half does.
-fn db_write_prompts_and_trash(conn: &mut Connection, prompts: &[Prompt], trash: &[Prompt]) -> rusqlite::Result<()> {
+fn db_write_prompts_and_trash(
+    conn: &mut Connection,
+    prompts: &[Prompt],
+    trash: &[Prompt],
+    written: &mut WrittenRows,
+) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
-    write_rows(&tx, "prompts", prompts)?;
-    write_rows(&tx, "trash", trash)?;
-    tx.commit()
+    let fresh_prompts = write_rows(&tx, "prompts", prompts, written)?;
+    let fresh_trash = write_rows(&tx, "trash", trash, written)?;
+    tx.commit()?;
+    adopt_written_rows(written, "prompts", fresh_prompts);
+    adopt_written_rows(written, "trash", fresh_trash);
+    Ok(())
 }
 
-fn db_load_trash(conn: &Connection) -> Vec<Prompt> {
+// `written` collects what the table was found to hold (see WrittenRows) so the
+// first save of the session already only writes what actually changed. Recorded
+// straight from the rows as they were read — never from a later, migrated or
+// replaced list, which would claim content for the disk that never reached it.
+fn db_load_trash(conn: &Connection, written: &mut WrittenRows) -> Vec<Prompt> {
     let mut trash = Vec::new();
     if let Ok(mut stmt) = conn.prepare("SELECT data FROM trash ORDER BY ord") {
         if let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) {
             for data in rows.flatten() {
                 if let Ok(p) = serde_json::from_str::<Prompt>(&dec_str(&data)) {
+                    // Same rule as db_load: an unsealed row stays out of the map so
+                    // the next write seals it instead of skipping it as unchanged.
+                    if data.starts_with(ENC_PREFIX) {
+                        written.insert(
+                            row_key("trash", &p.id),
+                            row_hash(&serde_json::to_string(&p).unwrap_or_default()),
+                        );
+                    }
                     trash.push(p);
                 }
             }
@@ -2090,7 +2229,7 @@ fn db_write_settings(conn: &Connection, settings: &Settings) -> rusqlite::Result
 // Returns (prompts, settings, any_plaintext, decrypt_failures). `decrypt_failures`
 // counts rows that WERE encrypted (ENC_PREFIX) but could not be decrypted/parsed —
 // the caller must then avoid any destructive rewrite of the prompts table.
-fn db_load(conn: &Connection) -> (Vec<Prompt>, Option<Settings>, bool, usize) {
+fn db_load(conn: &Connection, written: &mut WrittenRows) -> (Vec<Prompt>, Option<Settings>, bool, usize) {
     let mut prompts = Vec::new();
     let mut plaintext = false; // any legacy unencrypted row → re-save once to encrypt
     let mut failures = 0usize;
@@ -2102,7 +2241,18 @@ fn db_load(conn: &Connection) -> (Vec<Prompt>, Option<Settings>, bool, usize) {
                     plaintext = true;
                 }
                 match serde_json::from_str::<Prompt>(&dec_str(&data)) {
-                    Ok(p) => prompts.push(p),
+                    Ok(p) => {
+                        // A legacy plaintext row must be re-saved (sealed) even
+                        // though its content did not change, so it is deliberately
+                        // left out of the map and thus counts as changed.
+                        if encrypted {
+                            written.insert(
+                                row_key("prompts", &p.id),
+                                row_hash(&serde_json::to_string(&p).unwrap_or_default()),
+                            );
+                        }
+                        prompts.push(p);
+                    }
                     // An encrypted row that won't decrypt/parse is present-but-unreadable;
                     // a plaintext row that won't parse is genuinely corrupt (not a key issue).
                     Err(_) if encrypted => failures += 1,
@@ -2368,7 +2518,14 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
         return false;
     }
     if let Some(mut conn) = db_conn(app) {
-        if db_write_prompts(&mut conn, &store.prompts).is_ok() {
+        // The map is only advanced by a committed write, so a failure here leaves it
+        // describing exactly what the (rolled-back) table still holds — the JSON
+        // fallback below must not touch it either, or the row would count as saved.
+        let ok = {
+            let mut written = store.written.borrow_mut();
+            db_write_prompts(&mut conn, &store.prompts, &mut written).is_ok()
+        };
+        if ok {
             spawn_sync_write_all(app, store); // Prompt-folders-as-Markdown: no-op unless the feature is on
             return true;
         }
@@ -2393,7 +2550,8 @@ fn save_trash(app: &AppHandle, store: &Store) -> bool {
         return false;
     }
     if let Some(mut conn) = db_conn(app) {
-        if db_write_trash(&mut conn, &store.trash).is_ok() {
+        let mut written = store.written.borrow_mut();
+        if db_write_trash(&mut conn, &store.trash, &mut written).is_ok() {
             return true;
         }
     }
@@ -2410,7 +2568,11 @@ fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
         return false;
     }
     if let Some(mut conn) = db_conn(app) {
-        if db_write_prompts_and_trash(&mut conn, &store.prompts, &store.trash).is_ok() {
+        let ok = {
+            let mut written = store.written.borrow_mut();
+            db_write_prompts_and_trash(&mut conn, &store.prompts, &store.trash, &mut written).is_ok()
+        };
+        if ok {
             spawn_sync_write_all(app, store); // Prompt-folders-as-Markdown mirrors prompts, same as save_prompts
             return true;
         }
@@ -2490,8 +2652,11 @@ fn migrate_prompts(prompts: &mut [Prompt]) {
 fn load_store(app: &AppHandle) -> Store {
     let dir = data_dir(app);
     if let Some(mut conn) = db_conn(app) {
-        let (mut prompts, settings_opt, needs_mig, decrypt_fails) = db_load(&conn);
-        let trash = db_load_trash(&conn);
+        // Filled from the rows as they are read, so the first save of the session
+        // already only writes what changed (see WrittenRows).
+        let mut written = WrittenRows::new();
+        let (mut prompts, settings_opt, needs_mig, decrypt_fails) = db_load(&conn, &mut written);
+        let trash = db_load_trash(&conn, &mut written);
         // Some encrypted rows would not decrypt → preserve the raw DB and lock writes.
         if decrypt_fails > 0 {
             let db_path = dir.join("data.db");
@@ -2529,7 +2694,7 @@ fn load_store(app: &AppHandle) -> Store {
                 };
                 if !j_prompts.is_empty() || dir.join("settings.json").exists() {
                     let prompts_ok = db_conn(app)
-                        .map(|mut c2| db_write_prompts(&mut c2, &j_prompts).is_ok())
+                        .map(|mut c2| db_write_prompts(&mut c2, &j_prompts, &mut written).is_ok())
                         .unwrap_or(false);
                     let settings_ok = db_write_settings(&conn, &j_settings).is_ok();
                     // Once the data is safely in the DB, drop the legacy JSON files so
@@ -2559,7 +2724,7 @@ fn load_store(app: &AppHandle) -> Store {
                     match read_sealed_json::<Vec<Prompt>>(&pj) {
                         SealedRead::Loaded(fallback) => {
                             prompts = fallback;
-                            if db_write_prompts(&mut conn, &prompts).is_ok() {
+                            if db_write_prompts(&mut conn, &prompts, &mut written).is_ok() {
                                 let _ = fs::remove_file(&pj);
                             }
                         }
@@ -2640,7 +2805,13 @@ fn load_store(app: &AppHandle) -> Store {
         let (cap, cutoff) = history_cap_and_cutoff(&settings);
         let _ = db_trim_copy(&conn, cap, cutoff);
         migrate_prompts(&mut prompts);
-        let mut store = Store { prompts, trash, settings, prompts_locked: decrypt_fails > 0 };
+        let mut store = Store {
+            prompts,
+            trash,
+            settings,
+            prompts_locked: decrypt_fails > 0,
+            written: std::cell::RefCell::new(written),
+        };
         // Never let an existing install see the first-run tour -- a store
         // this is discovered for is, by definition, not the one that will ever
         // write the flag itself via the tour's own Finish/Skip.
@@ -2706,7 +2877,15 @@ fn load_store(app: &AppHandle) -> Store {
              writes locked to avoid saving an empty store over real data",
         );
     }
-    let mut store = Store { prompts, trash: Vec::new(), settings, prompts_locked: unreadable };
+    // No usable database was read here, so nothing is known to be on disk: the map
+    // starts empty and the next successful save writes every row.
+    let mut store = Store {
+        prompts,
+        trash: Vec::new(),
+        settings,
+        prompts_locked: unreadable,
+        written: std::cell::RefCell::new(WrittenRows::new()),
+    };
     if tour_should_be_marked_seen(!store.prompts.is_empty(), store.settings.examples_seeded) {
         store.settings.ui_flags.entry("tourSeen".to_string()).or_insert(true);
     }
@@ -4967,6 +5146,9 @@ async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Result<(), Str
             let _ = c.execute("DELETE FROM clip_inbox", []); // F21 inbox
             let _ = c.execute("DELETE FROM trash", []); // 91: trashed prompts
         }
+        // The trash DELETE above went straight to the table, and both saves emptied
+        // the tables anyway — nothing is on disk for the next write to skip.
+        store.forget_written_rows();
     }
     rearm_hotkeys(&app); // F20: no prompts left to keep accelerators bound
     rebuild_tray(&app); // F23: nothing left to offer in the tray either
@@ -5003,6 +5185,10 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
             store.settings.ui_texts.insert(BACKUP_PW_KEY.to_string(), pw);
         }
         store.prompts = prompts;
+        // The prompt rows themselves are untouched here, but the store around them
+        // is rebuilt from defaults — start the row bookkeeping from scratch rather
+        // than reasoning about what survived a factory reset.
+        store.forget_written_rows();
         save_settings(&app, &store.settings);
     }
     Ok(())
@@ -6951,6 +7137,10 @@ async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep
         }
         let _ = fs::remove_file(dir.join("data.db-wal"));
         let _ = fs::remove_file(dir.join("data.db-shm"));
+        // Every prompt row on disk now comes from the backup, not from anything this
+        // session wrote. The relaunch below rebuilds the store anyway, but a write
+        // slipping in before it must not trust a single one of the old hashes.
+        store.forget_written_rows();
     }
     app.restart();
 }
@@ -10368,6 +10558,10 @@ async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: String) -> Resu
             }
         }
     }
+    // From the next db_conn on, "the database" is a different file — either the
+    // store just copied across or one already living there. Neither is described by
+    // what the old folder's rows hashed to.
+    lock(&state).forget_written_rows();
     // Point future launches at the new folder (pointer lives in the canonical dir).
     fs::write(
         default_data_dir(&app).join("datapath"),
@@ -13267,6 +13461,10 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
         }
         migrate_prompts(&mut store.prompts);
         store.prompts_locked = false; // a full import supersedes any decrypt lock
+        // The whole set was replaced: an imported prompt that happens to reuse an
+        // id from the old set must be written, not skipped because a stale hash
+        // still claims that id is on disk.
+        store.forget_written_rows();
     }
     // The imported backupPw is DPAPI-sealed on a DIFFERENT machine — it
     // decrypts to "" here, and a following export_all would then silently write
@@ -13354,6 +13552,9 @@ async fn import_all(
         if !prompts_ok || !settings_ok {
             if !prompts_ok {
                 store.prompts = original_prompts;
+                // Put back a set the disk was never told about, so nothing may be
+                // skipped as "already written" on the next save either.
+                store.forget_written_rows();
             }
             if !settings_ok {
                 store.settings = original_settings;
@@ -16321,7 +16522,13 @@ mod tests {
         let mut settings = Settings::default();
         settings.ui_texts.insert("syncDir".into(), dir.to_string_lossy().into_owned());
         // sync_enabled() reads ui_flags, left empty here -> off by default.
-        let store = Store { prompts: vec![sync_test_prompt()], trash: Vec::new(), settings, prompts_locked: false };
+        let store = Store {
+            prompts: vec![sync_test_prompt()],
+            trash: Vec::new(),
+            settings,
+            prompts_locked: false,
+            written: Default::default(),
+        };
         // No AppHandle in a unit test, so exercise the same guard sync_write_all()
         // itself checks first — this is what keeps every non-sync-user's save_prompts
         // call free of any filesystem work.
@@ -16957,7 +17164,12 @@ mod tests {
             Prompt { id: "dup".into(), ..base.clone() },
             Prompt { id: "dup".into(), ..base },
         ];
-        assert!(db_write_prompts_and_trash(&mut conn, &good_prompts, &dup_trash).is_err());
+        let mut written = WrittenRows::new();
+        assert!(db_write_prompts_and_trash(&mut conn, &good_prompts, &dup_trash, &mut written).is_err());
+        assert!(
+            written.is_empty(),
+            "a write that never committed must not leave rows recorded as written"
+        );
         let ids = |table: &str| -> Vec<String> {
             conn.prepare(&format!("SELECT id FROM {table} ORDER BY id"))
                 .unwrap()
@@ -16971,6 +17183,187 @@ mod tests {
             "a failed write must not touch prompts either, even though the prompts half alone would have succeeded"
         );
         assert_eq!(ids("trash"), vec!["trashed-before".to_string()]);
+    }
+
+    // ---- diff writes: a save only re-seals the rows that really changed ----
+
+    fn row_test_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+             CREATE TABLE trash(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);",
+        )
+        .unwrap();
+        conn
+    }
+
+    // (id, ord, stored blob) in stored order — the blob byte-for-byte, which is how
+    // these tests tell a rewritten row from an untouched one.
+    fn stored_rows(conn: &Connection, table: &str) -> Vec<(String, i64, String)> {
+        conn.prepare(&format!("SELECT id, ord, data FROM {table} ORDER BY ord"))
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .unwrap()
+            .flatten()
+            .collect()
+    }
+
+    fn numbered_prompts(n: usize) -> Vec<Prompt> {
+        (0..n)
+            .map(|i| Prompt { name: format!("Name {i}"), ..test_prompt(&format!("id{i:03}")) })
+            .collect()
+    }
+
+    fn stored_prompt(blob: &str) -> Prompt {
+        serde_json::from_str(&dec_str(blob)).unwrap()
+    }
+
+    // Prompt carries no PartialEq/Debug (nothing in the app compares two of them),
+    // so whole-prompt comparisons in these tests go through its json.
+    fn as_json(p: &Prompt) -> String {
+        serde_json::to_string(p).unwrap()
+    }
+
+    // Comparing blobs only proves nothing was re-sealed because sealing is
+    // randomised: the same text sealed twice comes out as different bytes. Assert
+    // that rather than assume it — where sealing is unavailable the rows are stored
+    // as plain text and the comparison is weaker, so the check is skipped there.
+    fn sealing_is_randomised() -> bool {
+        enc_str("probe").starts_with(ENC_PREFIX)
+    }
+
+    #[test]
+    fn changing_one_prompt_rewrites_exactly_one_row() {
+        let mut conn = row_test_db();
+        let mut prompts = numbered_prompts(200);
+        let mut written = WrittenRows::new();
+        db_write_prompts(&mut conn, &prompts, &mut written).unwrap();
+        let before = stored_rows(&conn, "prompts");
+        if sealing_is_randomised() {
+            assert_ne!(
+                enc_str("probe"),
+                enc_str("probe"),
+                "sealing must be randomised, or comparing blobs proves nothing below"
+            );
+        }
+        prompts[42].name = "Renamed".into();
+        db_write_prompts(&mut conn, &prompts, &mut written).unwrap();
+        let after = stored_rows(&conn, "prompts");
+        assert_eq!(after.len(), before.len());
+        for (b, a) in before.iter().zip(after.iter()) {
+            assert_eq!(a.0, b.0, "order must not change");
+            assert_eq!(a.1, b.1, "positions must not change");
+            if a.0 == "id042" {
+                assert_ne!(a.2, b.2, "the edited prompt must actually be rewritten");
+            } else {
+                assert_eq!(a.2, b.2, "an untouched prompt must keep the exact bytes it had");
+            }
+        }
+        assert_eq!(stored_prompt(&after[42].2).name, "Renamed");
+    }
+
+    #[test]
+    fn reordering_prompts_moves_them_without_rewriting_any_content() {
+        let mut conn = row_test_db();
+        let mut prompts = numbered_prompts(20);
+        let mut written = WrittenRows::new();
+        db_write_prompts(&mut conn, &prompts, &mut written).unwrap();
+        let before: HashMap<String, String> =
+            stored_rows(&conn, "prompts").into_iter().map(|(id, _, data)| (id, data)).collect();
+        prompts.reverse();
+        db_write_prompts(&mut conn, &prompts, &mut written).unwrap();
+        let after = stored_rows(&conn, "prompts");
+        assert_eq!(
+            after.iter().map(|r| r.0.as_str()).collect::<Vec<_>>(),
+            prompts.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(),
+            "the stored order must follow the new list"
+        );
+        for (i, row) in after.iter().enumerate() {
+            assert_eq!(row.1, i as i64, "ord must be the row's new position");
+            assert_eq!(&row.2, before.get(&row.0).unwrap(), "a move must not re-seal the content");
+        }
+    }
+
+    #[test]
+    fn trashing_and_restoring_moves_exactly_one_row_between_the_tables() {
+        let mut conn = row_test_db();
+        let mut written = WrittenRows::new();
+        let prompts = numbered_prompts(3);
+        db_write_prompts_and_trash(&mut conn, &prompts, &[], &mut written).unwrap();
+        let before = stored_rows(&conn, "prompts");
+
+        let mut live = prompts.clone();
+        let trashed = live.remove(1);
+        db_write_prompts_and_trash(&mut conn, &live, std::slice::from_ref(&trashed), &mut written).unwrap();
+        let kept = stored_rows(&conn, "prompts");
+        assert_eq!(kept.iter().map(|r| r.0.as_str()).collect::<Vec<_>>(), vec!["id000", "id002"]);
+        assert_eq!(kept[0].2, before[0].2, "the prompt before the hole must not be rewritten");
+        assert_eq!(kept[1].1, 1, "the prompt after the hole must close the gap");
+        let bin = stored_rows(&conn, "trash");
+        assert_eq!(bin.len(), 1);
+        assert_eq!(as_json(&stored_prompt(&bin[0].2)), as_json(&trashed), "the trashed prompt must arrive whole");
+
+        db_write_prompts_and_trash(&mut conn, &prompts, &[], &mut written).unwrap();
+        let restored = stored_rows(&conn, "prompts");
+        assert_eq!(
+            restored.iter().map(|r| r.0.as_str()).collect::<Vec<_>>(),
+            vec!["id000", "id001", "id002"]
+        );
+        assert_eq!(
+            as_json(&stored_prompt(&restored[1].2)),
+            as_json(&prompts[1]),
+            "the restored prompt must come back whole"
+        );
+        assert!(stored_rows(&conn, "trash").is_empty(), "the trash row must be gone again");
+    }
+
+    #[test]
+    fn a_replaced_prompt_set_is_written_in_full_once_the_row_map_is_cleared() {
+        // The trap this guards: the map says "id X on disk holds this content", a
+        // restore/import then replaces the table behind the writer's back, and the
+        // in-memory prompt still hashes to what the map remembers — so without
+        // clearing, the row is skipped and the user's data never reaches the disk.
+        let mut conn = row_test_db();
+        let mut written = WrittenRows::new();
+        let mine = numbered_prompts(3);
+        db_write_prompts(&mut conn, &mine, &mut written).unwrap();
+
+        // What a restore does: put someone else's rows straight into the table.
+        let theirs: Vec<Prompt> = mine
+            .iter()
+            .map(|p| Prompt { name: format!("{} (from the backup)", p.name), ..p.clone() })
+            .collect();
+        conn.execute("DELETE FROM prompts", []).unwrap();
+        {
+            let mut ins = conn
+                .prepare("INSERT INTO prompts(id, ord, data) VALUES(?1, ?2, ?3)")
+                .unwrap();
+            for (i, p) in theirs.iter().enumerate() {
+                ins.execute(params![p.id, i as i64, enc_str(&serde_json::to_string(p).unwrap())]).unwrap();
+            }
+        }
+
+        // Stale map: every row still hashes to what it did before, so the write is
+        // skipped entirely and the table keeps the foreign content.
+        let mut stale = written.clone();
+        db_write_prompts(&mut conn, &mine, &mut stale).unwrap();
+        assert_eq!(
+            stored_rows(&conn, "prompts").iter().map(|r| stored_prompt(&r.2).name).collect::<Vec<_>>(),
+            theirs.iter().map(|p| p.name.clone()).collect::<Vec<_>>(),
+            "a stale map really does skip the write — which is why every wholesale replacement clears it"
+        );
+
+        // Cleared map (what Store::forget_written_rows does): the set on disk ends
+        // up exactly the set in memory.
+        written.clear();
+        db_write_prompts(&mut conn, &mine, &mut written).unwrap();
+        let stored: Vec<String> =
+            stored_rows(&conn, "prompts").iter().map(|r| as_json(&stored_prompt(&r.2))).collect();
+        assert_eq!(
+            stored,
+            mine.iter().map(as_json).collect::<Vec<_>>(),
+            "after a full replacement the stored set must match the new one exactly"
+        );
     }
 
     // ---- 70: selective backup restore ----
@@ -17076,6 +17469,7 @@ mod tests {
             trash: Vec::new(),
             settings: Settings::default(),
             prompts_locked: true, // must be cleared once data is actually replaced
+            written: Default::default(),
         };
         store.settings.ui_texts.insert("marker".into(), "LIVE".into());
         let mut backup_settings = Settings::default();
@@ -17104,6 +17498,7 @@ mod tests {
             trash: Vec::new(),
             settings: Settings::default(),
             prompts_locked: false,
+            written: Default::default(),
         };
         store.settings.ui_texts.insert("marker".into(), "LIVE".into());
         let mut backup_settings = Settings::default();
