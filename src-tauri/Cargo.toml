@@ -2,7 +2,7 @@
 name = "prompt-saver"
 version = "2.7.0"
 description = "Local offline prompt manager"
-authors = ["BG Coding"]
+authors = ["BGCoding"]
 edition = "2021"
 rust-version = "1.77"
 

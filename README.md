@@ -186,5 +186,5 @@ Third-party components and their licenses: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-
 
 ## Copyright
 
-© 2026 BG Coding. The source is published so anyone can see what the app does with
+© 2026 BGCoding. The source is published so anyone can see what the app does with
 their data — it is not released for reuse, redistribution or derivative works.
