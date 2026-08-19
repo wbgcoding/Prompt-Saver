@@ -4278,6 +4278,18 @@ async fn dismiss_example_prompts(app: AppHandle, state: State<'_, Db>) -> Result
         .map(|_| ())
 }
 
+// A save request carries the image only when the user actually touched it: no field
+// means "leave the stored picture alone", and the only way to clear one is the
+// editor's remove button, which sends an explicit empty string. Images no longer
+// ride along with every read of the prompt list, so a save must never be able to
+// mistake "not loaded here" for "the user deleted it".
+fn merge_image(stored: &str, incoming: Option<String>) -> String {
+    match incoming {
+        Some(img) => img,
+        None => stored.to_string(),
+    }
+}
+
 // Async: same reason as add_prompt — the SQLite write stays off the UI thread.
 #[tauri::command]
 async fn update_prompt(
@@ -4287,6 +4299,10 @@ async fn update_prompt(
     name: String,
     text: String,
     color: String,
+    // Absent = keep whatever is stored. The editor only sends this field when the
+    // user actually changed the picture, so an image that never finished loading
+    // can no longer come back as an empty string and erase the stored one; an
+    // explicit `Some("")` is the "remove image" click and nothing else.
     image: Option<String>,
     show_image: Option<bool>,
     copy_image: Option<bool>,
@@ -4349,7 +4365,7 @@ async fn update_prompt(
                 p.variants = variants;
                 p.rotate_mode = rotate_mode;
                 if let Some(auto) = rotate_auto { p.rotate_auto = sanitize_rotate_auto(auto, &p.variants); }
-                if let Some(img) = image { p.image = img; }
+                p.image = merge_image(&p.image, image);
                 if let Some(si) = show_image { p.show_image = si; }
                 if let Some(ci) = copy_image { p.copy_image = ci; }
                 if let Some(fp) = file_path { p.file_path = fp; }
@@ -4830,7 +4846,7 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
             return Err("save-failed".into());
         }
         save_settings(&app, &store.settings);
-        (AppState { prompts: store.prompts.clone(), settings: store.settings.clone() }, true)
+        (AppState { prompts: slim_prompts(&store.prompts), settings: store.settings.clone() }, true)
     };
     if restored {
         rearm_hotkeys(&app); // F20: the restored prompt's own hotkey, if any, is free again to re-claim
@@ -5895,29 +5911,120 @@ fn get_settings(state: State<Db>) -> Settings {
     lock(&state).settings.clone()
 }
 
+// What the window needs from a prompt to draw it: every field of `Prompt` except
+// the image itself. A stored image is a PNG data URL of up to ~400 KB, and sending
+// all of them again on every grid rebuild was the single most expensive thing the
+// app did. `has_image` tells the tile an image exists, `image_rev` changes whenever
+// the stored image does — so a copy already cached in the window knows when it went
+// stale. The bytes themselves come from `prompt_image`, one prompt at a time.
+#[derive(Serialize)]
+struct SlimPrompt {
+    id: String,
+    name: String,
+    text: String,
+    color: String,
+    has_image: bool,
+    image_rev: u64,
+    show_image: bool,
+    copy_image: bool,
+    file_path: String,
+    pdf_page: u32,
+    icon_path: String,
+    caption: String,
+    caption_size: u32,
+    font: String,
+    font_size: u32,
+    favorite: bool,
+    tags: Vec<String>,
+    notes: String,
+    hotkey: String,
+    hotkey_paste: String,
+    trashed_at: u64,
+    variants: Vec<String>,
+    rotate_mode: String,
+    rotate_auto: bool,
+}
+
+impl From<&Prompt> for SlimPrompt {
+    fn from(p: &Prompt) -> Self {
+        // Destructured rather than read field by field on purpose: a field added to
+        // `Prompt` later breaks this line until someone decides whether the window
+        // needs it, instead of silently never arriving there.
+        let Prompt {
+            id, name, text, color, image, show_image, copy_image, file_path, pdf_page,
+            icon_path, caption, caption_size, font, font_size, favorite, tags, notes,
+            hotkey, hotkey_paste, trashed_at, variants, rotate_mode, rotate_auto,
+        } = p;
+        SlimPrompt {
+            id: id.clone(),
+            name: name.clone(),
+            text: text.clone(),
+            color: color.clone(),
+            has_image: !image.is_empty(),
+            // 0 for "no image" keeps the empty case from hashing to some arbitrary
+            // non-zero number that a cache could mistake for real content.
+            image_rev: if image.is_empty() { 0 } else { text_hash(image) },
+            show_image: *show_image,
+            copy_image: *copy_image,
+            file_path: file_path.clone(),
+            pdf_page: *pdf_page,
+            icon_path: icon_path.clone(),
+            caption: caption.clone(),
+            caption_size: *caption_size,
+            font: font.clone(),
+            font_size: *font_size,
+            favorite: *favorite,
+            tags: tags.clone(),
+            notes: notes.clone(),
+            hotkey: hotkey.clone(),
+            hotkey_paste: hotkey_paste.clone(),
+            trashed_at: *trashed_at,
+            variants: variants.clone(),
+            rotate_mode: rotate_mode.clone(),
+            rotate_auto: *rotate_auto,
+        }
+    }
+}
+
+fn slim_prompts(prompts: &[Prompt]) -> Vec<SlimPrompt> {
+    prompts.iter().map(SlimPrompt::from).collect()
+}
+
 // Prompts + settings in one IPC roundtrip (renderGrid hot path).
 #[derive(Serialize)]
 struct AppState {
-    prompts: Vec<Prompt>,
+    prompts: Vec<SlimPrompt>,
     settings: Settings,
 }
 
-// Async: cloning every prompt (incl. large base64 images) must not run on the
-// UI thread — a big library would otherwise stall the window on each render.
+// Async: cloning every prompt must not run on the UI thread — a big library would
+// otherwise stall the window on each render.
 #[tauri::command]
 async fn get_state(state: State<'_, Db>) -> Result<AppState, String> {
     let store = lock(&state);
     Ok(AppState {
-        prompts: store.prompts.clone(),
+        prompts: slim_prompts(&store.prompts),
         settings: store.settings.clone(),
     })
 }
 
-// The quick launcher only ever reads id/name/text/color, on a surface that has
-// to be ready the instant its hotkey fires — get_state's full clone (every base64
-// image included) was exactly the wrong cost to pay there. The four fields are
-// small strings, so cloning just those (instead of the whole Prompt, image and all)
-// is the actual saving.
+// One prompt's stored image, on demand. Empty string = it has none (or the id is
+// gone), which the window treats the same way — nothing to draw.
+#[tauri::command]
+async fn prompt_image(state: State<'_, Db>, id: String) -> Result<String, String> {
+    let store = lock(&state);
+    Ok(store
+        .prompts
+        .iter()
+        .find(|p| p.id == id)
+        .map(|p| p.image.clone())
+        .unwrap_or_default())
+}
+
+// The quick launcher only ever reads id/name/text/color, on a surface that has to
+// be ready the instant its hotkey fires — cloning a whole prompt each (tags, notes,
+// entries and all) was exactly the wrong cost to pay there. The four fields are
+// small strings, so cloning just those is the actual saving.
 #[derive(Serialize)]
 struct LauncherItem {
     id: String,
@@ -14061,6 +14168,7 @@ pub fn run() {
             delete_tile_folder,
             get_settings,
             get_state,
+            prompt_image,
             launcher_items,
             current_theme,
             theme_vars,
@@ -15174,6 +15282,70 @@ fn start_sync_poll(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- The prompt list the window gets, and what a save may do to an image ----
+
+    const TEST_PNG: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==";
+
+    fn prompt_with_image() -> Prompt {
+        serde_json::from_str(&format!(
+            r#"{{"id":"p1","name":"Screenshot","text":"body","image":"{TEST_PNG}","show_image":true}}"#
+        ))
+        .expect("prompt fixture")
+    }
+
+    // The whole point of the slim list: the picture stays in the process.
+    #[test]
+    fn slim_prompt_carries_no_image_bytes() {
+        let json = serde_json::to_string(&SlimPrompt::from(&prompt_with_image())).unwrap();
+        assert!(!json.contains("iVBORw0KGgo"), "image bytes leaked into the state payload: {json}");
+        assert!(!json.contains("\"image\":"), "the state payload still has an image field: {json}");
+        assert!(json.contains("\"has_image\":true"));
+    }
+
+    #[test]
+    fn slim_prompt_image_rev_is_stable_and_changes_with_the_image() {
+        let p = prompt_with_image();
+        let rev = SlimPrompt::from(&p).image_rev;
+        assert_ne!(rev, 0);
+        assert_eq!(SlimPrompt::from(&p).image_rev, rev, "same image must hash the same");
+        let mut other = p.clone();
+        other.image = "data:image/png;base64,QQ==".into();
+        assert_ne!(SlimPrompt::from(&other).image_rev, rev);
+    }
+
+    #[test]
+    fn slim_prompt_without_an_image_reports_no_revision() {
+        let mut p = prompt_with_image();
+        p.image.clear();
+        let slim = SlimPrompt::from(&p);
+        assert!(!slim.has_image);
+        assert_eq!(slim.image_rev, 0);
+    }
+
+    // A rename must not cost the user their picture: the editor sends no image
+    // field at all unless it changed, and that has to mean "keep what is stored".
+    #[test]
+    fn update_without_an_image_field_keeps_the_stored_image() {
+        let mut p = prompt_with_image();
+        p.name = "Renamed".into(); // the only thing this save touches
+        p.image = merge_image(&p.image, None);
+        assert_eq!(p.image, TEST_PNG, "a save that sent no image erased the stored one");
+    }
+
+    #[test]
+    fn only_an_explicit_empty_image_clears_it() {
+        let mut p = prompt_with_image();
+        p.image = merge_image(&p.image, Some(String::new()));
+        assert!(p.image.is_empty(), "the remove-image click must still clear the picture");
+    }
+
+    #[test]
+    fn a_new_image_replaces_the_stored_one() {
+        let mut p = prompt_with_image();
+        p.image = merge_image(&p.image, Some("data:image/png;base64,QQ==".into()));
+        assert_eq!(p.image, "data:image/png;base64,QQ==");
+    }
 
     // Pure text-logic tests for ocr_join_lines -- no Windows API involved, so
     // these run on any platform via plain `cargo test --lib`.

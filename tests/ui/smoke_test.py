@@ -884,6 +884,44 @@ PROBE = """
     await click('chain-btn');
     await click('clip-btn');
     await click('clip-close');
+    // 141: get_state carries has_image + image_rev, never the bytes. A tile fetches
+    // the picture it needs through prompt_image and then keeps it, so the many
+    // re-renders the walk above already caused must have cost exactly ONE call.
+    {
+      const state = await window.__TAURI__.core.invoke('get_state');
+      const leaked = (state.prompts || []).filter(p => 'image' in p).map(p => p.id);
+      if (leaked.length) {
+        out.errors.push('get_state ships image bytes again for ' + leaked.join(', '));
+      }
+      const withImg = (state.prompts || []).find(p => p.has_image);
+      if (!withImg) {
+        out.errors.push('no fixture prompt has has_image, so the image path went untested');
+      } else {
+        const shot = () => {
+          const el = [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === withImg.id);
+          return el && el.querySelector('img.tile-img');
+        };
+        for (let i = 0; i < 40 && !shot(); i++) await sleep(100);
+        const img = shot();
+        if (!img) {
+          out.errors.push('the image tile never got its picture from prompt_image');
+        } else if (img.getAttribute('src') !== window.__STUB_IMAGE__) {
+          out.errors.push('the image tile is showing something other than the fetched image');
+        }
+        const calls = window.__PROMPT_IMAGE_CALLS__;
+        if (calls !== 1) {
+          out.errors.push('prompt_image ran ' + calls + ' times for one image, expected 1');
+        }
+        // Draw the same tiles once more: the second render has to come out of the
+        // cache, not off another round trip.
+        await click('library-btn');
+        await click('library-close');
+        if (window.__PROMPT_IMAGE_CALLS__ !== calls) {
+          out.errors.push('re-rendering an image prompt fetched it again');
+        }
+        if (!shot()) out.errors.push('the image tile lost its picture on a re-render');
+      }
+    }
     // F17: the note rides in the tile tooltip as its own dimmed section, and only
     // for a prompt that actually has one.
     const byId = (id) => [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === id);

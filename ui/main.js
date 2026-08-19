@@ -3858,6 +3858,95 @@ function primeRotateState(id) {
   }).catch(() => {});
 }
 
+// ---- Stored images, fetched one prompt at a time ----
+// get_state hands the window `has_image` + `image_rev` instead of the picture: a
+// stored image is a base64 PNG of up to a few hundred KB, and sending every one of
+// them through IPC on each render was by far the most expensive thing the app did.
+// A surface that wants to draw one asks here; until the bytes arrive the tile keeps
+// its plain name/colour face, so nothing ever flashes an empty frame.
+const imgCache = new Map(); // id -> data URL; insertion order = least recently used first
+const imgCacheRev = new Map(); // id -> the image_rev the cached data URL belongs to
+const imgPending = new Set(); // ids with a prompt_image call already in flight
+// Several screens' worth of image tiles: enough that scrolling the library or
+// hopping between views never refetches, low enough that the cache stays a few tens
+// of MB even when every entry is a full-size screenshot.
+const IMG_CACHE_MAX = 80;
+
+// True for both shapes a prompt arrives in — the slim one from get_state and the
+// full one from get_prompt/list_trash, which still carries its image inline.
+function hasImage(p) {
+  return !!p && (p.has_image === true || !!p.image);
+}
+
+// The prompt's stored image, or "" while it is still on its way (or absent).
+function imageOf(p) {
+  if (!p) return "";
+  if (p.image) return p.image; // a full prompt brought its own
+  if (!p.has_image) return ""; // nothing to ask for — never spend a call on it
+  const id = p.id;
+  const rev = p.image_rev || 0;
+  if (imgCache.has(id)) {
+    if (imgCacheRev.get(id) === rev) {
+      const data = imgCache.get(id);
+      imgCache.delete(id); // re-insert, so the eviction order stays oldest-access-first
+      imgCache.set(id, data);
+      return data;
+    }
+    imgCache.delete(id); // the picture changed under us
+    imgCacheRev.delete(id);
+  }
+  if (!imgPending.has(id)) {
+    imgPending.add(id);
+    invoke("prompt_image", { id })
+      .then((data) => {
+        imgPending.delete(id);
+        // An empty answer is cached too: without that, a prompt whose image went
+        // away between the two calls would be asked for again on every render.
+        imgCache.set(id, data || "");
+        imgCacheRev.set(id, rev);
+        while (imgCache.size > IMG_CACHE_MAX) {
+          const oldest = imgCache.keys().next().value;
+          imgCache.delete(oldest);
+          imgCacheRev.delete(oldest);
+        }
+        if (data) scheduleImagePaint();
+      })
+      .catch(() => { imgPending.delete(id); });
+  }
+  return "";
+}
+
+// Anything drawn while its picture was still loading tags itself with the id it is
+// waiting for, and only those elements are rebuilt when the bytes land. Re-rendering
+// the whole grid instead would tear down whatever else is going on at that moment —
+// a live colour preview, a half-finished drag — for a background arrival.
+const IMG_WAIT = "imgWait"; // dataset key: the prompt id this element is waiting for
+
+// One repaint for a whole batch of arrivals instead of one per image.
+let imagePaintQueued = false;
+function scheduleImagePaint() {
+  if (imagePaintQueued) return;
+  imagePaintQueued = true;
+  setTimeout(() => {
+    imagePaintQueued = false;
+    if (drag) return; // a drag owns the tiles it moves; its end re-renders anyway
+    for (const el of document.querySelectorAll(`[data-img-wait]`)) {
+      const p = prompts.find((x) => x.id === el.dataset[IMG_WAIT]);
+      if (!p || !imageOf(p)) continue;
+      if (el.classList.contains("tile")) {
+        el.replaceWith(buildTile(p));
+      } else {
+        // A library / copy-history row preview: its panel owns the element cache,
+        // so drop the placeholder entry before asking for a fresh thumbnail.
+        const cache = el.closest("#journal") ? journalThumbCache : libThumbCache;
+        cache.delete(p.id);
+        el.replaceWith(thumbEl(p, cache));
+      }
+    }
+    fitAllTiles();
+  }, 0);
+}
+
 function buildTile(p) {
   const tile = document.createElement("div");
   tile.className = "tile";
@@ -3900,12 +3989,19 @@ function buildTile(p) {
 
   // Media on the tile: stored still, or gif/video from the icon/file path.
   const kind = p.file_path ? mediaKind(p.file_path) : "";
-  const iconKind = !p.image && p.icon_path ? mediaKind(p.icon_path) : "";
+  // `has` (known from the prompt list) decides the LAYOUT, `stored` (the bytes,
+  // which may still be loading) decides whether the image can be drawn yet — so a
+  // tile waiting for its picture falls back to the name/colour face below instead
+  // of showing an empty frame or, worse, an unrelated icon-path preview.
+  const has = hasImage(p);
+  const stored = has ? imageOf(p) : "";
+  const iconKind = !has && p.icon_path ? mediaKind(p.icon_path) : "";
   const showPath = iconKind ? p.icon_path : p.file_path;
-  const showKind = p.image ? "" : iconKind || kind;
-  const pathVideo = p.show_image && !p.image && showKind === "video";
-  const pathGif = p.show_image && !p.image && showKind === "gif";
-  if (p.show_image && (p.image || pathVideo || pathGif)) {
+  const showKind = has ? "" : iconKind || kind;
+  const pathVideo = p.show_image && !has && showKind === "video";
+  const pathGif = p.show_image && !has && showKind === "gif";
+  if (has && !stored) tile.dataset[IMG_WAIT] = p.id; // redrawn once the bytes land
+  if (p.show_image && (stored || pathVideo || pathGif)) {
     tile.classList.add("has-image");
     // The chosen color tints the border area around the image.
     if (p.color) {
@@ -3932,7 +4028,7 @@ function buildTile(p) {
     } else {
       const img = document.createElement("img");
       img.className = "tile-img";
-      img.src = p.image || convertFileSrc(showPath);
+      img.src = stored || convertFileSrc(showPath);
       img.draggable = false;
       tile.appendChild(img);
     }
@@ -4621,9 +4717,10 @@ function buildFolderTile(f) {
     const face = document.createElement("span");
     face.className = "folder-mini-cell";
     if (p.color) face.style.background = p.color;
-    if (p.image) {
+    const faceImg = imageOf(p);
+    if (faceImg) {
       const img = document.createElement("img");
-      img.src = p.image;
+      img.src = faceImg;
       img.draggable = false;
       face.appendChild(img);
     } else {
@@ -4693,16 +4790,18 @@ function openTileFolderPop(f, anchor) {
     // underneath it. Interactive bits (select checkbox, tile menu, video player)
     // stay out: this button already has its own click/drag/context-menu handling.
     const kind = p.file_path ? mediaKind(p.file_path) : "";
-    const iconKind = !p.image && p.icon_path ? mediaKind(p.icon_path) : "";
+    const has = hasImage(p);
+    const stored = has ? imageOf(p) : "";
+    const iconKind = !has && p.icon_path ? mediaKind(p.icon_path) : "";
     const showPath = iconKind ? p.icon_path : p.file_path;
-    const showKind = p.image ? "" : iconKind || kind;
-    const showable = p.show_image && (p.image || showKind === "image" || showKind === "gif");
+    const showKind = has ? "" : iconKind || kind;
+    const showable = p.show_image && (stored || showKind === "image" || showKind === "gif");
     if (showable) {
       btn.classList.add("has-image");
       if (p.color) { btn.style.background = p.color; btn.style.borderColor = p.color; }
       const img = document.createElement("img");
       img.className = "tile-img";
-      img.src = p.image || convertFileSrc(showPath);
+      img.src = stored || convertFileSrc(showPath);
       img.draggable = false;
       btn.appendChild(img);
     } else if (p.color) {
@@ -5827,6 +5926,10 @@ function maybeCloseOnCopy() {
 function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", pdfPage = 0, iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", variants = [], rotateMode = "", rotateAuto = false, title, targetCell }) {
   modalState = {
     mode, id, color, image, showImage, copyImage, filePath, pdfPage, iconPath, tags: [...tags], hotkey, hotkeyPaste, targetCell,
+    // What the editor opened with. Save compares against it and only sends an
+    // image field when the user really changed the picture — a save must never be
+    // able to clear a stored image just by not having it to hand.
+    imageOpened: image,
     // The FULL entry list (entry 0 = what would otherwise be modal.text's value)
     // while rotation is active, empty while it is not.
     rotateEntries: variants.length ? [text, ...variants] : [],
@@ -6042,7 +6145,9 @@ async function commitPromptHotkeyDirect(id, accel) {
   if (accel) await invoke("check_hotkey", { hotkey: accel, id });
   const saved = await invoke("update_prompt", {
     id: p.id, name: p.name, text: p.text, color: p.color,
-    image: p.image, showImage: p.show_image, copyImage: p.copy_image,
+    // No image field: the prompt list no longer carries the bytes, and a missing
+    // field means "keep the stored picture" — exactly what this write wants.
+    showImage: p.show_image, copyImage: p.copy_image,
     filePath: p.file_path, pdfPage: p.pdf_page, iconPath: p.icon_path,
     caption: p.caption, captionSize: p.caption_size, font: p.font, fontSize: p.font_size,
     favorite: p.favorite, tags: p.tags, notes: p.notes,
@@ -6068,7 +6173,8 @@ async function toggleRotateAutoDirect(id) {
   try {
     const saved = await invoke("update_prompt", {
       id: p.id, name: p.name, text: p.text, color: p.color,
-      image: p.image, showImage: p.show_image, copyImage: p.copy_image,
+      // Same as commitPromptHotkeyDirect: no image field = keep the stored one.
+      showImage: p.show_image, copyImage: p.copy_image,
       filePath: p.file_path, pdfPage: p.pdf_page, iconPath: p.icon_path,
       caption: p.caption, captionSize: p.caption_size, font: p.font, fontSize: p.font_size,
       favorite: p.favorite, tags: p.tags, notes: p.notes,
@@ -6810,7 +6916,7 @@ async function renderStatsPanel(body) {
   cards.append(
     // — Inventory —
     card(t("statTotalPrompts"), nf(s.total_prompts)),
-    card(t("statWithMedia"), nf(prompts.filter((p) => p.image || p.file_path || p.copy_image).length)),
+    card(t("statWithMedia"), nf(prompts.filter((p) => hasImage(p) || p.file_path || p.copy_image).length)),
     card(t("statWithVars"), nf(prompts.filter((p) => extractVars(p.text || "").length > 0).length)),
     card(t("statViews"), nf((settings.views || []).length)),
     // — Content + intensity —
@@ -8222,7 +8328,11 @@ async function confirmModal() {
       saved = await invoke("add_prompt", { name, text: name, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants: [], rotateMode: "", rotateAuto: false });
     } else {
       const text = copyImage || filePath ? name : ((rotating || hasVariants) ? (rotateFilled[0] || "") : modal.text.value);
-      saved = await invoke("update_prompt", { id: modalState.id, name, text, color, image, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode, rotateAuto });
+      const args = { id: modalState.id, name, text, color, showImage, copyImage, filePath, pdfPage, iconPath, caption, captionSize, font, fontSize, favorite, tags, notes, hotkey, hotkeyPaste, variants, rotateMode, rotateAuto };
+      // The image field only travels when it actually changed — an untouched
+      // picture is left to the backend, and "" only ever means the remove button.
+      if (image !== (modalState.imageOpened || "")) args.image = image;
+      saved = await invoke("update_prompt", args);
       // Save can turn rotateAuto off (or drop it below two entries) while a
       // session for THIS prompt happens to be armed — end it now instead of
       // waiting for the next paste to notice, same as the tile-menu toggle.
@@ -9143,7 +9253,7 @@ function promptType(p) {
   const kind = p.file_path ? mediaKind(p.file_path) : p.icon_path ? mediaKind(p.icon_path) : "";
   if (kind === "video") return "video";
   if (kind === "image" || kind === "gif") return "image";
-  if (p.copy_image && p.image) return "image";
+  if (p.copy_image && hasImage(p)) return "image";
   if (p.file_path) return "file";
   return "text";
 }
@@ -9159,7 +9269,11 @@ function libLabel(p) {
 
 // Best preview source for a prompt's library thumbnail; "" = no image.
 function thumbSrc(p) {
-  if (p.image) return p.image;
+  const stored = imageOf(p);
+  if (stored) return stored;
+  // A stored image outranks any path preview — while it is still loading, show
+  // nothing rather than briefly swapping in the attachment's own thumbnail.
+  if (hasImage(p)) return "";
   const path = mediaKind(p.file_path) === "image" || mediaKind(p.file_path) === "gif"
     ? p.file_path
     : mediaKind(p.icon_path) === "image" || mediaKind(p.icon_path) === "gif"
@@ -9207,7 +9321,12 @@ function thumbEl(p, cache) {
   const vsrc = flag("libraryVideoPreview") ? videoSrc(p) : "";
   const src = vsrc ? "" : thumbSrc(p);
   const key = vsrc ? `v:${vsrc}` : src ? `i:${src}` : "";
-  if (!key) return thumbDot(p);
+  if (!key) {
+    const dot = thumbDot(p);
+    // A stored image still on its way: the dot stands in and swaps itself out.
+    if (!vsrc && hasImage(p)) dot.dataset[IMG_WAIT] = p.id;
+    return dot;
+  }
   const cached = cache.get(p.id);
   if (cached && cached.key === key) {
     // renderLibrary/renderJournal build a FRESH IntersectionObserver every

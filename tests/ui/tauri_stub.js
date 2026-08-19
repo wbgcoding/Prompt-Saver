@@ -110,7 +110,24 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   // actually has more than one entry (list_versions below gives it real snapshots).
   variants: i === 10 ? ["Example prompt body number 11, second entry.", "Example prompt body number 11, third entry."] : [],
   rotate_mode: "",
+  // One prompt carries a stored image — and carries it the way get_state really
+  // hands it over: the FACT plus a revision, never the base64 bytes. The picture
+  // itself is fetched per prompt through prompt_image below, so a fixture entry
+  // growing an `image` field again would be a regression, not a convenience.
+  has_image: i === 11,
+  image_rev: i === 11 ? 4242 : 0,
+  show_image: i === 11,
 }));
+
+// A valid 1x1 PNG — enough for an <img> to accept and for a probe to compare.
+const STUB_IMAGE = "data:image/png;base64," +
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+window.__STUB_IMAGE__ = STUB_IMAGE;
+// Where the bytes live in this fixture — id -> data URL, exactly like the backend
+// keeping them in the store and handing out one at a time.
+const STUB_IMAGES = new Map([["p11", STUB_IMAGE]]);
+// Counted so a probe can prove the window asks once per image and then reuses it.
+window.__PROMPT_IMAGE_CALLS__ = 0;
 
 const LAYOUT = {};
 PROMPTS.forEach((p, i) => { LAYOUT[p.id] = [i % 4, Math.floor(i / 4)]; });
@@ -204,6 +221,10 @@ const RESULTS = {
   set_ui_text: (a) => { SETTINGS.ui_texts[a.key] = a.value; return null; },
   get_settings: () => JSON.parse(JSON.stringify(SETTINGS)),
   get_state: () => ({ prompts: PROMPTS, settings: JSON.parse(JSON.stringify(SETTINGS)) }),
+  prompt_image: (a) => {
+    window.__PROMPT_IMAGE_CALLS__++;
+    return STUB_IMAGES.get(a && a.id) || "";
+  },
   launcher_items: () => ({
     prompts: PROMPTS.map((p) => ({ id: p.id, name: p.name, text: p.text, color: p.color || "" })),
     language: SETTINGS.language || "",
@@ -338,7 +359,11 @@ const RESULTS = {
       "- A bullet with `code` and a [link](https://example.invalid).",
     ].join("\n"),
   }),
-  get_prompt: (a) => PROMPTS.find((p) => p.id === (a && a.id)) || PROMPTS[0],
+  // The FULL prompt, image bytes included — the editor's one fetch when it opens.
+  get_prompt: (a) => {
+    const p = PROMPTS.find((x) => x.id === (a && a.id)) || PROMPTS[0];
+    return { ...p, image: STUB_IMAGES.get(p.id) || "" };
+  },
   // 91: trash — restore/purge mutate the shared TRASH/PROMPTS fixtures so the dialog
   // reflects real effects, the way batch_prompts already mirrors "color" onto PROMPTS.
   list_trash: () => JSON.parse(JSON.stringify(TRASH)),
@@ -390,13 +415,16 @@ const RESULTS = {
   add_prompt: (a) => {
     const prompt = {
       id: "new" + (PROMPTS.length + 1), name: a.name || "", text: a.text || "",
-      color: a.color || "", image: a.image || "", show_image: !!a.showImage,
+      // Like the backend: the bytes stay out of the prompt list, only the fact
+      // and a revision travel with it.
+      color: a.color || "", has_image: !!a.image, image_rev: a.image ? 1 : 0, show_image: !!a.showImage,
       copy_image: !!a.copyImage, file_path: a.filePath || "", icon_path: a.iconPath || "",
       caption: a.caption || "", caption_size: a.captionSize || 0, font: a.font || "",
       font_size: a.fontSize || 0, favorite: !!a.favorite, tags: a.tags || [],
       notes: a.notes || "", hotkey: a.hotkey || "", hotkey_paste: a.hotkeyPaste || "",
       variants: a.variants || [], rotate_mode: a.rotateMode || "",
     };
+    if (a.image) STUB_IMAGES.set(prompt.id, a.image);
     PROMPTS.push(prompt);
     const view = SETTINGS.views.find((v) => v.id === SETTINGS.active_view);
     if (view) {

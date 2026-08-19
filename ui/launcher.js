@@ -144,8 +144,8 @@ document.body.addEventListener("mousedown", (e) => {
 });
 
 async function boot() {
-  // A lean command instead of get_state — this window has to be ready the
-  // instant its hotkey fires, and get_state clones every prompt's base64 image.
+  // A lean command instead of get_state — this window has to be ready the instant
+  // its hotkey fires, and it needs four small fields, not a whole prompt each.
   const state = await invoke("launcher_items").catch(() => ({ prompts: [], language: "", usage: {}, last_used: {} }));
   applyFloatTheme(await invoke("current_theme").catch(() => null), await invoke("theme_vars").catch(() => ({})));
   listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));

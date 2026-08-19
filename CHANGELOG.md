@@ -175,6 +175,16 @@ ship on).
 
 ### Improved
 
+- A library full of images redraws far faster. The window no longer receives every
+  stored picture each time the grid is rebuilt — it is told which prompts have one
+  and asks for the ones it is about to show, keeping the last 80 in memory. With
+  500 prompts, 60 of them carrying a screenshot, one redraw moved 24 MB before and
+  moves 0.3 MB now, and takes 26 ms instead of 67 ms. A picture that is still on
+  its way leaves the tile on its normal name-and-colour face and swaps itself in
+  when it arrives, so nothing flickers.
+- Saving a prompt can no longer clear its image by accident: the editor only sends
+  a picture along when you actually changed it, and the only thing that removes one
+  is the remove button.
 - The color picker's magnifier now starts at 4× instead of 8×, so you see more of
   the area around the pixel you are aiming at; the wheel still changes it and the
   value you stop on is remembered.

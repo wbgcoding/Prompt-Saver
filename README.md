@@ -172,6 +172,12 @@ python tests/layout/modal_scroll_test.py
 python tests/ui/smoke_test.py
 ```
 
+A large library behaves differently from a handful of prompts. `python
+tests/gen_perf_corpus.py` writes `test-data/data.db` — 500 prompts, 60 of them
+carrying a full-size stored image — so the grid and the library can be measured
+against a realistic store instead of a demo one. `test-data/` is ignored by git;
+point the app's data folder at it, or copy the file next to the portable exe.
+
 ## Tech stack
 
 [Tauri 2](https://tauri.app) (Rust backend, WebView2 frontend) · vanilla HTML/CSS/JS, no bundler, no framework · SQLite store · `arboard` (clipboard), `rfd` (native dialogs), `pdfium-render` (PDF previews), `xcap` (screen capture), `winreg` (autostart), `sys-locale` (language detection), `windows` (on-device OCR, opt-in).
