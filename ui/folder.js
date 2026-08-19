@@ -418,6 +418,7 @@ window.addEventListener("mousedown", (e) => {
   // on the edge lands here.
   if (e.target.closest("#rz-catch")) {
     gripDrag = { x: e.screenX, y: e.screenY, scale: state.scale };
+    gripPainted = 0; // the first move of a new grab always draws
     document.body.classList.add("resizing");
     e.preventDefault();
     return;
@@ -431,6 +432,17 @@ window.addEventListener("mousedown", (e) => {
 // The backend clamps it (0.5-3.0), which is where the real limits live.
 let gripDrag = null;
 let gripSave = 0;
+let gripPainted = 0;
+// A mouse reports far more often than a screen refreshes, and every report used to
+// rebuild the whole icon — previews included. One repaint per frame is all the eye
+// can see, so the rest are skipped; the release below draws the final size.
+const GRIP_PAINT_MS = 16;
+
+function gripPaint() {
+  gripPainted = performance.now();
+  renderIcon();
+  markSelectedSize();
+}
 
 function gripResize(e) {
   if (!gripDrag) return;
@@ -442,8 +454,7 @@ function gripResize(e) {
   const next = Math.min(3, Math.max(0.5, gripDrag.scale + delta / FOLDER_BOX));
   if (Math.abs(next - state.scale) < 0.01) return;
   state.scale = next;
-  renderIcon(); // paint the new size immediately; the window follows below
-  markSelectedSize();
+  if (performance.now() - gripPainted >= GRIP_PAINT_MS) gripPaint();
   // One write per frame at most: dragging fires far more often than the window can
   // actually be resized, and every call is a round trip.
   if (gripSave) return;
@@ -458,7 +469,8 @@ function gripReleased() {
   gripDrag = null;
   document.body.classList.remove("resizing");
   if (gripSave) { cancelAnimationFrame(gripSave); gripSave = 0; }
-  // Final exact value, in case the last frame was skipped.
+  // Final exact value, in case the last frame was skipped — on screen and in the store.
+  gripPaint();
   invoke("set_float_folder_scale", { id: folderId, scale: state.scale }).catch(() => {});
 }
 

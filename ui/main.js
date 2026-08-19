@@ -178,6 +178,25 @@ const ICON_UP =
 const ICON_DOWN =
   '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>';
 
+// Icon markup handed out as ready-made nodes. Assigning the same SVG string to
+// innerHTML re-parses it every time, which a list of hundreds of rows pays for
+// once per icon per row; parsing each icon once and copying the result is the
+// same markup for a fraction of the work. Only worth it inside a long loop —
+// a one-off button is clearer with a plain innerHTML.
+const iconNodes = new Map();
+function putIcon(el, svg) {
+  let node = iconNodes.get(svg);
+  if (node === undefined) {
+    const box = document.createElement("span");
+    box.innerHTML = svg;
+    node = box.firstElementChild;
+    iconNodes.set(svg, node);
+  }
+  if (node) el.appendChild(node.cloneNode(true));
+  else el.innerHTML = svg; // not a single element — fall back to the plain path
+  return el;
+}
+
 let LANG = "en";
 // A language that was stored before it was retired has no option left, which would
 // leave the select blank; show what the app actually falls back to instead.
@@ -9721,7 +9740,7 @@ function renderLibrary() {
       const add = document.createElement("span");
       add.className = "icon-btn lib-add";
       add.title = t("addToLayout");
-      add.innerHTML = GRID_PLUS;
+      putIcon(add, GRID_PLUS);
       add.addEventListener("pointerdown", (e) => e.stopPropagation());
       add.addEventListener("click", async (e) => {
         e.stopPropagation();
@@ -9761,7 +9780,7 @@ function renderLibrary() {
     const edit = document.createElement("span");
     edit.className = "icon-btn lib-edit";
     edit.title = t("edit");
-    edit.innerHTML = ICON_EDIT;
+    putIcon(edit, ICON_EDIT);
     edit.addEventListener("pointerdown", (e) => e.stopPropagation());
     edit.addEventListener("click", (e) => { e.stopPropagation(); editPrompt(p.id); });
     row.appendChild(edit);
@@ -9770,7 +9789,7 @@ function renderLibrary() {
     const del = document.createElement("span");
     del.className = "icon-btn lib-delete";
     del.title = t("delete");
-    del.innerHTML = ICON_TRASH;
+    putIcon(del, ICON_TRASH);
     del.addEventListener("pointerdown", (e) => e.stopPropagation());
     del.addEventListener("click", async (e) => {
       e.stopPropagation();

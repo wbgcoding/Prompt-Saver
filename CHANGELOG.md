@@ -175,6 +175,15 @@ ship on).
 
 ### Improved
 
+- A long library list opens noticeably quicker. Each row draws three small icons,
+  and their markup was rebuilt from scratch for every single row; it is now prepared
+  once and copied per row. With 500 prompts the list is built in 45 ms instead of
+  71 ms, and the rows look exactly the same.
+- Resizing a floating folder by its edge is smoother. The folder was completely
+  redrawn — every member preview included — for each report the mouse sent, which
+  is several times per screen refresh. It now redraws at most once per frame while
+  you drag, and once more when you let go, so the size you release is always the
+  size you keep.
 - A library full of images redraws far faster. The window no longer receives every
   stored picture each time the grid is rebuilt — it is told which prompts have one
   and asks for the ones it is about to show, keeping the last 80 in memory. With

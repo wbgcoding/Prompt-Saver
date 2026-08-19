@@ -4689,9 +4689,30 @@ FOLDER_PROBE = """
       await sleep(60);
       const during = getComputedStyle(document.body).getPropertyValue('--folder-box').trim();
       if (during === before) errs.push('dragging the resize grip did not change the folder size (' + before + ')');
+      // A mouse fires far more often than the icon can usefully be redrawn, and a
+      // redraw rebuilds every preview face. A burst of moves inside one frame has to
+      // collapse into a single repaint — the icon is watched through the ring width,
+      // which only renderIcon ever writes.
+      let paints = 0;
+      const obs = new MutationObserver((recs) => { paints += recs.length; });
+      obs.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+      for (let i = 1; i <= 50; i++) {
+        window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, screenX: 148 + i * 2, screenY: 148 + i * 2 }));
+      }
+      await sleep(60);
+      obs.disconnect();
+      if (paints > 4) errs.push('50 resize moves repainted the folder ' + paints + ' times');
+      if (paints < 1) errs.push('50 resize moves never repainted the folder at all');
       window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }));
       await sleep(60);
-      if (!calls().includes('set_float_folder_scale')) errs.push('the resize never reached the backend');
+      // Skipping repaints is only allowed while the grab lasts: what stays on screen
+      // afterwards has to be the size that was stored, not the last one drawn.
+      const sent = (window.__SMOKE_ARGS__ || []).filter((c) => c[0] === 'set_float_folder_scale').pop();
+      const settled = getComputedStyle(document.body).getPropertyValue('--folder-box').trim();
+      if (!sent) errs.push('the resize never reached the backend');
+      else if (settled !== Math.round(96 * sent[1].scale) + 'px') {
+        errs.push('the released folder kept a stale size: ' + settled + ' for scale ' + sent[1].scale);
+      }
       if (!document.getElementById('pop').classList.contains('hidden')) {
         errs.push('resizing the folder opened it as well');
       }
