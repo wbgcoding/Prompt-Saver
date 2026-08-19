@@ -1885,6 +1885,49 @@ PROBE = """
         }
       }
     }
+    // Pinning a floating button from the tile menu must rename the entry right away.
+    // Nothing refetches the app state after that click, so a label built from a stale
+    // cache would keep offering "Show" for a prompt that is already pinned — and the
+    // next click would then do the opposite of what the entry says.
+    {
+      const openPin = () => {
+        const tile = gridTile('p0');
+        if (!tile) return null;
+        tile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+        return document.querySelector('#ctx [data-act="pin"]');
+      };
+      const pin = openPin();
+      await sleep(150);
+      if (!pin || pin.classList.contains('hidden')) {
+        out.errors.push('the floating-button action is missing from the tile menu');
+      } else if (pin.textContent.trim() !== 'Show floating button') {
+        out.errors.push('an unpinned prompt offers "' + pin.textContent.trim() + '" instead of pinning');
+      } else {
+        window.__SMOKE_CALLS__ = [];
+        pin.click();
+        await sleep(200);
+        const refetched = (window.__SMOKE_CALLS__ || []).some(c => c === 'get_state' || c === 'get_settings');
+        const pinned = openPin();
+        await sleep(150);
+        if (!pinned || pinned.textContent.trim() !== 'Remove floating button') {
+          out.errors.push('after pinning, the tile menu still offers "' +
+            (pinned ? pinned.textContent.trim() : 'nothing') + '"');
+        }
+        if (refetched) {
+          out.errors.push('pinning refetched the app state, so this check cannot prove the label came from the answer');
+        }
+        // Unpin again, so the rest of the run starts from the untouched fixture.
+        const back = document.querySelector('#ctx [data-act="pin"]');
+        if (back) { back.click(); await sleep(200); }
+        const off = openPin();
+        await sleep(150);
+        if (off && off.textContent.trim() !== 'Show floating button') {
+          out.errors.push('after unpinning, the tile menu still offers "' + off.textContent.trim() + '"');
+        }
+        document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        await sleep(100);
+      }
+    }
     // 24: grid tag filter — the header toolbar button opens a popover of tag chips;
     // picking one dims (never hides) tiles that do not match, so the grid geometry
     // and drag targets stay exactly as they were.

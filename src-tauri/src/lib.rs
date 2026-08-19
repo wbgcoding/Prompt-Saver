@@ -2996,21 +2996,31 @@ fn load_store(app: &AppHandle) -> Store {
         }
         return store;
     }
-    // Fallback: DB unavailable → read the JSON files directly. There is no second
-    // source to fall back to here, so an unreadable file must lock writes (like the
-    // decrypt_fails case above) rather than silently present/save an empty store.
+    // Fallback: DB unavailable → read the JSON files directly.
+    let mut store = load_store_from_json(&dir);
+    if tour_should_be_marked_seen(!store.prompts.is_empty(), store.settings.examples_seeded) {
+        store.settings.ui_flags.entry("tourSeen".to_string()).or_insert(true);
+    }
+    store.normalize_folders();
+    sweep_trash(app, &mut store); // 91: no-op here (fallback path never loads trash), kept for symmetry
+    store
+}
+
+// What a launch can still recover when the database cannot be opened at all.
+// Split out of load_store so the write-lock decision below can be exercised
+// without an AppHandle around it: everything here depends only on the folder.
+// There is no second source to fall back to on this path, so an unreadable file
+// must lock writes (like load_store's decrypt_fails case) rather than silently
+// present — and then save — an empty store.
+fn load_store_from_json(dir: &Path) -> Store {
     let mut unreadable = false;
-    let mut settings_missing = false;
     let mut settings = match read_sealed_json::<Settings>(&dir.join("settings.json")) {
         SealedRead::Loaded(s) => s,
         SealedRead::Unreadable => {
             unreadable = true;
             Settings::default()
         }
-        SealedRead::Missing => {
-            settings_missing = true;
-            Settings::default()
-        }
+        SealedRead::Missing => Settings::default(),
     };
     settings.migrate();
     load_pick_history(&settings); // 19: restore the colour-pick history mirror
@@ -3030,12 +3040,16 @@ fn load_store(app: &AppHandle) -> Store {
     migrate_prompts(&mut prompts);
     // A previous session already wrote data.db, so its rows still exist on disk —
     // db_conn just could not open it this time (e.g. a transient ALTER failure).
-    // With neither JSON fallback file present either, this launch has literally no
-    // way to see the real data; presenting an empty-but-unlocked store would let the
-    // very next save (or a stray auto-save) write that emptiness to prompts.json,
-    // which load_store's own "101" rule then trusts over the DB on the next launch —
-    // wiping it for good the moment data.db is reachable again.
-    if !unreadable && settings_missing && prompts_missing && dir.join("data.db").exists() {
+    // Without prompts.json either, this launch has literally no way to see the real
+    // prompts; presenting an empty-but-unlocked store would let the very next save
+    // (or a stray auto-save) write that emptiness over the table — and to
+    // prompts.json, which load_store's own "101" rule then trusts over the DB on the
+    // next launch, wiping it for good the moment data.db is reachable again.
+    // What settings.json happens to be doing is irrelevant here: it says nothing
+    // about the prompts, and a session whose settings write once fell back to the
+    // file leaves exactly that combination behind — settings.json present,
+    // prompts.json not.
+    if !unreadable && prompts_missing && dir.join("data.db").exists() {
         unreadable = true;
     }
     if unreadable {
@@ -3046,19 +3060,13 @@ fn load_store(app: &AppHandle) -> Store {
     }
     // No usable database was read here, so nothing is known to be on disk: the map
     // starts empty and the next successful save writes every row.
-    let mut store = Store {
+    Store {
         prompts,
         trash: Vec::new(),
         settings,
         prompts_locked: unreadable,
         written: std::cell::RefCell::new(WrittenRows::new()),
-    };
-    if tour_should_be_marked_seen(!store.prompts.is_empty(), store.settings.examples_seeded) {
-        store.settings.ui_flags.entry("tourSeen".to_string()).or_insert(true);
     }
-    store.normalize_folders();
-    sweep_trash(app, &mut store); // 91: no-op here (fallback path never loads trash), kept for symmetry
-    store
 }
 
 fn gen_id() -> String {
@@ -5390,10 +5398,20 @@ fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool) -> Result<(
     let dir = data_dir(&app);
     if adopt {
         let src = appdata_store_dir(&app, &dir).ok_or("no-source")?;
-        for f in STORE_FILES {
-            if src.join(f).exists() {
-                fs::copy(src.join(f), dir.join(f)).map_err(|e| e.to_string())?;
+        let mut landed = false;
+        if let Err(e) = copy_store_files(&src, &dir, &mut landed) {
+            // Whatever did arrive IS the store on disk now, while the one in memory
+            // (and the row bookkeeping behind it) still describes the empty one it
+            // replaced — so the next save would delete every adopted row as "gone".
+            // The source in %APPDATA% is untouched either way; reload from what
+            // actually landed before reporting the failure.
+            if landed {
+                let _ = fs::remove_file(dir.join("data.db-wal"));
+                let _ = fs::remove_file(dir.join("data.db-shm"));
+                let fresh = load_store(&app);
+                *lock(&state) = fresh;
             }
+            return Err(e);
         }
         // Same gap as set_data_dir -- an adopted store must bring its backup
         // history along too, or the Backup panel shows 0 snapshots right after.
@@ -7265,6 +7283,14 @@ fn stage_and_validate_backup(backup_db: &std::path::Path, dir: &std::path::Path)
     Ok(staged)
 }
 
+// The column names of one table, in the live database ("main") or in the attached
+// backup. Empty means the table is not there at all.
+fn table_columns(tx: &Transaction, schema: &str, table: &str) -> rusqlite::Result<Vec<String>> {
+    let mut stmt = tx.prepare("SELECT name FROM pragma_table_info(?1, ?2)")?;
+    let names = stmt.query_map(params![table, schema], |r| r.get::<_, String>(0))?;
+    names.collect()
+}
+
 // Merge only the tables `scope` asks for from `staged` into the live `target`
 // database, inside one transaction — any failure leaves `target` untouched. "data"
 // mirrors exactly the tables delete_all_data already treats as data; "settings"
@@ -7279,16 +7305,31 @@ fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: 
         let tx = conn.transaction()?;
         if scope == "data" {
             for table in ["prompts", "trash", "prompt_versions", "copy_log", "clip_inbox"] {
-                let exists: i64 = tx.query_row(
-                    "SELECT COUNT(*) FROM backup.sqlite_master WHERE type='table' AND name=?1",
-                    [table],
-                    |r| r.get(0),
-                )?;
-                if exists == 0 {
+                // A snapshot's table need not have the same columns as today's: one
+                // written before a column was added (prompt_versions and `variants`)
+                // simply has one fewer. `SELECT *` makes the column COUNT part of the
+                // deal and fails such a restore outright — taking every other table
+                // in the same transaction down with it. Copy the columns the two
+                // sides really share instead and let the rest take their defaults.
+                // The list is built from the LIVE table's own column names, so
+                // nothing read out of the backup file ends up in the SQL text.
+                let backup_cols = table_columns(&tx, "backup", table)?;
+                let shared: Vec<String> = table_columns(&tx, "main", table)?
+                    .into_iter()
+                    .filter(|c| backup_cols.iter().any(|b| b.eq_ignore_ascii_case(c)))
+                    .collect();
+                // Nothing in common — including the table missing from an older
+                // backup entirely (e.g. "trash", added in 91). Leave the live rows
+                // alone rather than emptying them for nothing.
+                if shared.is_empty() {
                     continue;
                 }
+                let cols = shared.join(", ");
                 tx.execute(&format!("DELETE FROM {table}"), [])?;
-                tx.execute(&format!("INSERT INTO {table} SELECT * FROM backup.{table}"), [])?;
+                tx.execute(
+                    &format!("INSERT INTO {table}({cols}) SELECT {cols} FROM backup.{table}"),
+                    [],
+                )?;
             }
         } else if scope == "settings" {
             tx.execute(
@@ -7992,14 +8033,18 @@ async fn hide_float_for_now(app: AppHandle, id: String) {
 // (sync commands run on the main thread, which WebView2 needs free).
 #[tauri::command]
 async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: String) -> Result<bool, String> {
-    // F25: a pill inside a folder has no window of its own, but it is still pinned —
-    // unpinning has to take it out of the folder as well.
-    let in_folder = {
+    // "Pinned" is what `settings.floating` says, never whether a window happens to be
+    // open right now: a pill inside a folder has no window of its own, and one that was
+    // dismissed with "hide until restart" is still pinned with its window already gone.
+    // Deciding from the window would re-open such a pill on a click the menu had just
+    // labelled "remove". The folder check is what takes a member out of its folder too.
+    let pinned = {
         let store = lock(&state);
-        folders_on(&store.settings)
-            && store.settings.float_folders.iter().any(|f| f.members.contains(&id))
+        store.settings.floating.contains_key(&id)
+            || (folders_on(&store.settings)
+                && store.settings.float_folders.iter().any(|f| f.members.contains(&id)))
     };
-    if app.get_webview_window(&flabel(&id)).is_some() || in_folder {
+    if pinned {
         {
             let mut store = lock(&state);
             store.settings.floating.remove(&id);
@@ -8422,6 +8467,7 @@ mod clipwatch {
     #[link(name = "kernel32")]
     extern "system" {
         fn GlobalAlloc(flags: u32, bytes: usize) -> isize;
+        fn GlobalFree(hmem: isize) -> isize;
         fn GlobalLock(hmem: isize) -> *mut core::ffi::c_void;
         fn GlobalUnlock(hmem: isize) -> i32;
         fn GetTickCount() -> u32;
@@ -8516,7 +8562,9 @@ mod clipwatch {
 
     // Writes `text` as CF_UNICODETEXT into whatever clipboard bracket is
     // currently open (the caller decides who opened it). Ownership of the
-    // GMEM_MOVEABLE block passes to Windows on success — never GlobalFree it.
+    // GMEM_MOVEABLE block passes to Windows only when SetClipboardData SUCCEEDS —
+    // on every other way out of here the block is still ours and has to be freed,
+    // or a rotating prompt on auto-advance leaks one per paste.
     unsafe fn set_unicode_text(text: &str) {
         let units = wide(text);
         let bytes = units.len() * std::mem::size_of::<u16>();
@@ -8526,11 +8574,14 @@ mod clipwatch {
         }
         let ptr = GlobalLock(hmem);
         if ptr.is_null() {
+            GlobalFree(hmem);
             return;
         }
         std::ptr::copy_nonoverlapping(units.as_ptr(), ptr as *mut u16, units.len());
         GlobalUnlock(hmem);
-        SetClipboardData(CF_UNICODETEXT, hmem);
+        if SetClipboardData(CF_UNICODETEXT, hmem) == 0 {
+            GlobalFree(hmem);
+        }
     }
 
     // Drives the tile badge's is-auto class.
@@ -10785,6 +10836,72 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result
     Ok(())
 }
 
+// Copy every file a store can consist of into another folder, stopping at the
+// first failure. `landed` is set as soon as ANY of them arrived: a half-copied
+// destination is no longer the store the caller has in memory, and a caller that
+// keeps using the old one would write it straight over the files that did arrive.
+fn copy_store_files(src: &Path, dst: &Path, landed: &mut bool) -> Result<(), String> {
+    for f in STORE_FILES {
+        let from = src.join(f);
+        if from.exists() {
+            fs::copy(&from, dst.join(f)).map_err(|e| e.to_string())?;
+            *landed = true;
+        }
+    }
+    Ok(())
+}
+
+// The disk half of a data-folder move, kept free of the AppHandle so the ORDER of
+// its steps can be tested: flush the live state into the folder being left, copy
+// the store across, point future launches at the new folder — and only once all of
+// that has landed, mark the old folder as the one delete_data_dir may clean. Every
+// step aborts the move, with that permission left unset: until the copy is
+// complete, the old folder can still be the only place the current data exists, so
+// offering to delete it would be offering to delete the data itself.
+// `flush` persists the live store into `current`; `rebind` is called once the file
+// the process will write to is a different one.
+fn move_store_dir(
+    current: &Path,
+    new: &Path,
+    pointer_dir: &Path,
+    flush: &mut dyn FnMut() -> Result<(), String>,
+    rebind: &mut dyn FnMut(),
+) -> Result<(), String> {
+    flush()?;
+    // Adopt an existing store in the target; otherwise copy ours across. Abort
+    // before writing the redirect pointer if the copy fails, so a launch can
+    // never be pointed at a truncated store.
+    // Every file the store can consist of, not just the database: a prompts.json or
+    // settings.json left behind by a failed DB write is the ONLY copy of that change,
+    // and delete_data_dir removes the old folder right after this.
+    if !new.join("data.db").exists() {
+        let mut landed = false;
+        copy_store_files(current, new, &mut landed).map_err(|e| format!("copy store: {}", e))?;
+        // Bring local backup history along -- otherwise the Backup panel shows 0
+        // snapshots at the new location, and the old (still full) backups/ folder,
+        // now invisible from there, is exactly what the next cleanup dialog offers
+        // to delete. Best-effort: the store copy above is the critical part and has
+        // already succeeded by this point.
+        let old_backups = current.join("backups");
+        // The new folder could itself be a descendant of old_backups (a user browsing
+        // into it and picking, say, its own backups/ subfolder) — copying a directory
+        // into its own descendant recurses into what it just created and never stops.
+        if old_backups.is_dir() && !new.starts_with(&old_backups) {
+            if let Err(e) = copy_dir_all(&old_backups, &new.join("backups")) {
+                append_crash_log(&format!("data dir move: could not copy backups/ ({e})"));
+            }
+        }
+    }
+    rebind();
+    // Point future launches at the new folder (pointer lives in the canonical dir).
+    fs::write(pointer_dir.join("datapath"), new.to_string_lossy().as_bytes())
+        .map_err(|e| e.to_string())?;
+    // Everything the move consists of has landed, so the folder we came from is now
+    // a redundant copy — and the only one delete_data_dir is allowed to clean.
+    *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(current.to_path_buf());
+    Ok(())
+}
+
 // Redirect the store to a new folder (applies on next launch). Adopts an existing
 // store in the target if present, otherwise copies the current one across. The old
 // data is left untouched; the caller may offer to delete it. Returns the old path.
@@ -10801,57 +10918,35 @@ async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: String) -> Resu
     if new == current {
         return Ok(old);
     }
-    // Remember which folder we are leaving — the only one delete_data_dir may clean.
-    *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(current.clone());
-    // Flush the live state to the current location first.
-    {
-        let store = lock(&state);
-        save_prompts(&app, &store);
-        save_settings(&app, &store.settings);
-    }
-    // Fold the WAL back into data.db so the single-file copy below is complete
-    // (recent copy_log appends can otherwise still live in data.db-wal).
-    if let Some(c) = db_conn(&app) {
-        let _ = c.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
-    }
-    // Adopt an existing store in the target; otherwise copy ours across. Abort
-    // before writing the redirect pointer if the copy fails, so a launch can
-    // never be pointed at a truncated store.
-    // Every file the store can consist of, not just the database: a prompts.json or
-    // settings.json left behind by a failed DB write is the ONLY copy of that change,
-    // and delete_data_dir removes the old folder right after this.
-    if !new.join("data.db").exists() {
-        for f in STORE_FILES {
-            let src = current.join(f);
-            if src.exists() {
-                fs::copy(&src, new.join(f)).map_err(|e| format!("copy store: {}", e))?;
+    // Flush the live state into the folder we are leaving, and treat a failure as a
+    // failure of the whole move: the copy below would otherwise carry a stale store
+    // to the new folder while the cleanup afterwards deletes the only place the
+    // newer state could have been recovered from.
+    let mut flush = || -> Result<(), String> {
+        {
+            let store = lock(&state);
+            // A locked store refuses prompt writes on purpose — rows it could not
+            // read are still in the file, and the copy below brings them along
+            // untouched. That is not a failed flush.
+            if !store.prompts_locked && !save_prompts(&app, &store) {
+                return Err("the prompts could not be saved to the folder being left".to_string());
+            }
+            if !save_settings(&app, &store.settings) {
+                return Err("the settings could not be saved to the folder being left".to_string());
             }
         }
-        // Bring local backup history along -- otherwise the Backup panel shows 0
-        // snapshots at the new location, and the old (still full) backups/ folder,
-        // now invisible from there, is exactly what the next cleanup dialog offers
-        // to delete. Best-effort: the store copy above is the critical part and has
-        // already succeeded by this point.
-        let old_backups = current.join("backups");
-        // The new folder could itself be a descendant of old_backups (a user browsing
-        // into it and picking, say, its own backups/ subfolder) — copying a directory
-        // into its own descendant recurses into what it just created and never stops.
-        if old_backups.is_dir() && !new.starts_with(&old_backups) {
-            if let Err(e) = copy_dir_all(&old_backups, &new.join("backups")) {
-                append_crash_log(&format!("data dir move: could not copy backups/ ({e})"));
-            }
+        // Fold the WAL back into data.db so the single-file copy is complete
+        // (recent copy_log appends can otherwise still live in data.db-wal).
+        if let Some(c) = db_conn(&app) {
+            let _ = c.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
         }
-    }
+        Ok(())
+    };
     // From the next db_conn on, "the database" is a different file — either the
     // store just copied across or one already living there. Neither is described by
     // what the old folder's rows hashed to.
-    lock(&state).forget_written_rows();
-    // Point future launches at the new folder (pointer lives in the canonical dir).
-    fs::write(
-        default_data_dir(&app).join("datapath"),
-        new.to_string_lossy().as_bytes(),
-    )
-    .map_err(|e| e.to_string())?;
+    let mut rebind = || lock(&state).forget_written_rows();
+    move_store_dir(&current, &new, &default_data_dir(&app), &mut flush, &mut rebind)?;
     Ok(old)
 }
 
@@ -18013,6 +18108,199 @@ mod tests {
         );
     }
 
+    // A settings write that once fell back to settings.json leaves that file behind
+    // while prompts.json — which nothing wrote — stays absent. If the database is
+    // then unopenable for one launch, the prompts are invisible but very much still
+    // on disk, so the store has to refuse prompt writes: the diff write takes row
+    // presence from the table and would delete every row the empty list does not
+    // mention. Whether settings.json happens to be lying there says nothing about
+    // that, which is exactly what this used to hinge on.
+    #[test]
+    fn a_missing_prompts_json_beside_a_database_locks_prompt_writes() {
+        let dir = std::env::temp_dir().join(format!("{}-test-fallback-lock", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // The real prompts live in the database this launch cannot open.
+        let db = dir.join("data.db");
+        let mine = numbered_prompts(3);
+        {
+            let mut conn = Connection::open(&db).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+                 CREATE TABLE trash(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);",
+            )
+            .unwrap();
+            db_write_prompts(&mut conn, &mine, &mut WrittenRows::new()).unwrap();
+        }
+        // Only settings.json is on disk, left by an earlier failed settings write.
+        let mut leftover = Settings::default();
+        leftover.ui_texts.insert("marker".into(), "FROM-FILE".into());
+        assert!(write_sealed_json(&dir.join("settings.json"), &leftover));
+        assert!(!dir.join("prompts.json").exists());
+
+        let store = load_store_from_json(&dir);
+        assert_eq!(
+            store.settings.ui_texts.get("marker").map(String::as_str),
+            Some("FROM-FILE"),
+            "the settings file is still the best source there is and must be read"
+        );
+        assert!(store.prompts.is_empty(), "there is nothing readable to load the prompts from");
+        assert!(
+            store.prompts_locked,
+            "an empty prompt list with a database behind it must never be saveable"
+        );
+
+        // What that lock stands in front of: the very write save_prompts would have
+        // done deletes every row it cannot see.
+        {
+            let mut conn = Connection::open(&db).unwrap();
+            db_write_prompts(&mut conn, &store.prompts, &mut store.written.borrow_mut()).unwrap();
+            assert!(
+                stored_rows(&conn, "prompts").is_empty(),
+                "saving the empty list really does wipe the table — the lock is the only thing preventing it"
+            );
+        }
+
+        // A genuinely fresh folder has no database behind it, so nothing is hidden
+        // and writes must stay open.
+        let fresh = std::env::temp_dir().join(format!("{}-test-fallback-fresh", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&fresh);
+        std::fs::create_dir_all(&fresh).unwrap();
+        assert!(
+            !load_store_from_json(&fresh).prompts_locked,
+            "a first launch with no data at all must be able to save"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&fresh);
+    }
+
+    // A data-folder move first writes the live state into the folder it is leaving,
+    // and the cleanup offered afterwards deletes exactly that folder. So a flush
+    // that could not write (a folder gone read-only, a permission change) has to
+    // abort the whole move: copying the now-stale files on and then authorising the
+    // deletion of the original is how the newest prompts would go for good.
+    #[test]
+    fn a_failed_flush_aborts_the_data_folder_move_and_authorises_no_cleanup() {
+        let root = std::env::temp_dir().join(format!("{}-test-datadir-move", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        let current = root.join("old");
+        let new = root.join("new");
+        let pointer = root.join("pointer");
+        for d in [&current, &new, &pointer] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        std::fs::write(current.join("data.db"), b"the real store").unwrap();
+        *LAST_OLD_DATA_DIR.lock().unwrap() = None;
+
+        let mut rebound = false;
+        {
+            let mut refuses = || -> Result<(), String> { Err("folder is read-only".to_string()) };
+            let mut rebind = || rebound = true;
+            let moved = move_store_dir(&current, &new, &pointer, &mut refuses, &mut rebind);
+            assert!(moved.is_err(), "a flush that could not persist the live state must fail the move");
+        }
+        assert!(!rebound, "the process must keep writing to the folder it never left");
+        assert!(!new.join("data.db").exists(), "nothing may be copied to the new folder");
+        assert!(
+            !pointer.join("datapath").exists(),
+            "future launches must still be pointed at the folder that holds the data"
+        );
+        assert!(
+            LAST_OLD_DATA_DIR.lock().unwrap().is_none(),
+            "the folder still holding the only copy must never be offered for deletion"
+        );
+
+        // The same move with a flush that works goes all the way through.
+        {
+            let mut works = || -> Result<(), String> { Ok(()) };
+            let mut rebind = || rebound = true;
+            move_store_dir(&current, &new, &pointer, &mut works, &mut rebind).unwrap();
+        }
+        assert!(rebound, "the live store must be told it is writing to a different file now");
+        assert!(new.join("data.db").exists(), "the store must arrive in the new folder");
+        assert_eq!(
+            std::fs::read_to_string(pointer.join("datapath")).unwrap(),
+            new.to_string_lossy(),
+            "the next launch must find the new folder"
+        );
+        assert_eq!(
+            *LAST_OLD_DATA_DIR.lock().unwrap(),
+            Some(current.clone()),
+            "only a completed move may authorise cleaning up the old folder"
+        );
+
+        *LAST_OLD_DATA_DIR.lock().unwrap() = None;
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // Adopting an installed store copies its files one by one. If the database
+    // arrives and a later file does not (a full disk, a locked file), the folder
+    // already holds the adopted store while the process still has the empty one it
+    // replaced — and saving that empty one deletes every row it never read. The
+    // copy therefore has to report that something landed, so the caller can reload
+    // from what is really there before it gives up.
+    #[test]
+    fn a_half_copied_takeover_reports_what_already_landed() {
+        let root = std::env::temp_dir().join(format!("{}-test-takeover-partial", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        let src = root.join("installed");
+        let dst = root.join("portable");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::create_dir_all(&dst).unwrap();
+
+        let mine = numbered_prompts(3);
+        let seed_db = |path: &std::path::Path| {
+            let mut conn = Connection::open(path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+                 CREATE TABLE trash(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);",
+            )
+            .unwrap();
+            db_write_prompts(&mut conn, &mine, &mut WrittenRows::new()).unwrap();
+        };
+        seed_db(&src.join("data.db"));
+        std::fs::write(src.join("settings.json"), b"sealed settings").unwrap();
+        // A folder where the second file wants to go: the copy fails there, after
+        // the database has already arrived.
+        std::fs::create_dir_all(dst.join("settings.json")).unwrap();
+
+        let mut landed = false;
+        assert!(
+            copy_store_files(&src, &dst, &mut landed).is_err(),
+            "a file that cannot be written must fail the adoption"
+        );
+        assert!(landed, "the database arrived before the failure and must be reported as such");
+
+        // The trap, with the store left as it was: the empty prompt list plus its
+        // (equally empty) row map deletes every adopted row on the next save.
+        {
+            let mut conn = Connection::open(dst.join("data.db")).unwrap();
+            db_write_prompts(&mut conn, &[], &mut WrittenRows::new()).unwrap();
+            assert!(
+                stored_rows(&conn, "prompts").is_empty(),
+                "carrying on with the old store really does wipe what was adopted"
+            );
+        }
+
+        // What reloading first gives instead: the same save keeps every row.
+        std::fs::copy(src.join("data.db"), dst.join("data.db")).unwrap();
+        let mut conn = Connection::open(dst.join("data.db")).unwrap();
+        let mut written = WrittenRows::new();
+        let (reloaded, _settings, _mig, fails) = db_load(&conn, &mut written);
+        assert_eq!(fails, 0, "the adopted rows must be readable");
+        db_write_prompts(&mut conn, &reloaded, &mut written).unwrap();
+        assert_eq!(
+            stored_rows(&conn, "prompts").iter().map(|r| r.0.clone()).collect::<Vec<_>>(),
+            mine.iter().map(|p| p.id.clone()).collect::<Vec<_>>(),
+            "a save after the reload must leave the adopted rows exactly where they are"
+        );
+
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     // ---- 70: selective backup restore ----
 
     // restore_selective opens real files via Connection::open (ATTACH DATABASE
@@ -18268,10 +18556,62 @@ mod tests {
         let _ = std::fs::remove_file(&staged);
     }
 
+    // Every release before 2.7.0 wrote prompt_versions without its `variants`
+    // column. Restoring only the data out of such a backup used to fail on the
+    // column count alone and roll the whole thing back — prompts, trash and all —
+    // leaving the user with a backup they could not get their prompts out of.
+    #[test]
+    fn restore_selective_accepts_a_backup_table_that_predates_a_column() {
+        let dir = std::env::temp_dir();
+        let target = dir.join(format!("{}-test-restore-oldcolumns-target.db", brand::SLUG));
+        let staged = dir.join(format!("{}-test-restore-oldcolumns-staged.db", brand::SLUG));
+        {
+            let conn = full_schema_db(&target, "target");
+            conn.execute_batch(
+                "INSERT INTO prompts VALUES('live', 0, '{}');
+                 INSERT INTO prompt_versions(prompt_id, ts, name, text, variants)
+                     VALUES('live', 1, 'Live', 'live text', 'a');",
+            )
+            .unwrap();
+        }
+        {
+            let _ = std::fs::remove_file(&staged);
+            let conn = Connection::open(&staged).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+                 CREATE TABLE trash(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
+                 CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
+                 CREATE TABLE prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL);
+                 CREATE TABLE clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);
+                 INSERT INTO prompts VALUES('backed-up', 0, '{}');
+                 INSERT INTO prompt_versions(prompt_id, ts, name, text) VALUES('backed-up', 7, 'Older', 'older text');",
+            )
+            .unwrap();
+        }
+
+        restore_selective(&target, &staged, "data").expect("a backup without the newer column must still restore");
+
+        let conn = Connection::open(&target).unwrap();
+        let prompt_id: String = conn.query_row("SELECT id FROM prompts", [], |r| r.get(0)).unwrap();
+        assert_eq!(prompt_id, "backed-up", "the prompts must come from the backup");
+        let (pid, name, text, variants): (String, String, String, String) = conn
+            .query_row("SELECT prompt_id, name, text, variants FROM prompt_versions", [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+            })
+            .unwrap();
+        assert_eq!((pid.as_str(), name.as_str(), text.as_str()), ("backed-up", "Older", "older text"));
+        assert_eq!(variants, "", "the column the backup never had must fall back to its default");
+
+        let _ = std::fs::remove_file(&target);
+        let _ = std::fs::remove_file(&staged);
+    }
+
     #[test]
     fn restore_selective_rolls_back_everything_if_one_table_fails() {
         // "prompts" comes first in the copy order and would succeed on its own;
-        // "trash" is made incompatible (extra column) so its INSERT fails — proving
+        // "trash" is made incompatible (its `data` column, which the live table
+        // requires and has no default for, is missing) so its INSERT fails — proving
         // the whole thing runs in ONE transaction, not one commit per table.
         let dir = std::env::temp_dir();
         let target = dir.join(format!("{}-test-restore-rollback-target.db", brand::SLUG));
@@ -18285,8 +18625,9 @@ mod tests {
             let conn = Connection::open(&staged).unwrap();
             conn.execute_batch(
                 "CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL);
-                 CREATE TABLE trash(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL, extra TEXT);
-                 INSERT INTO prompts VALUES('backed-up', 0, '{}');",
+                 CREATE TABLE trash(id TEXT PRIMARY KEY, ord INTEGER NOT NULL);
+                 INSERT INTO prompts VALUES('backed-up', 0, '{}');
+                 INSERT INTO trash VALUES('backed-up-trashed', 0);",
             )
             .unwrap();
         }

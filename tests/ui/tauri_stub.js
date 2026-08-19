@@ -639,6 +639,19 @@ const RESULTS = {
   rename_float_folder: () => null,
   folder_rename_request: () => null,
   float_folder_drop: () => false,
+  // Pin/unpin a floating button. Like the backend: "pinned" is the settings entry,
+  // the answer is the state the prompt was left in, and the position is only a
+  // placeholder here because no real pill window exists in the stub.
+  toggle_floating: (a) => {
+    const id = a && a.id;
+    if (!id) return false;
+    if (SETTINGS.floating[id]) {
+      delete SETTINGS.floating[id];
+      return false;
+    }
+    SETTINGS.floating[id] = { x: 0, y: 0 };
+    return true;
+  },
   // Screenshot overlay: no capture session, nothing to draw.
   snip_should_begin: () => false,
   snip_background: () => null,

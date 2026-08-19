@@ -7,6 +7,7 @@ import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults 
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
+import { fileUri } from "./floatShared.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen, emit } = window.__TAURI__.event;
@@ -4326,13 +4327,6 @@ const DRAG_OUT_MODS = { ctrl: "ctrlKey", alt: "altKey", shift: "shiftKey" };
 const dragOutMod = () => DRAG_OUT_MODS[txt("dragOutModifier")] || "ctrlKey";
 const dragOutWired = new WeakSet();
 
-// Windows path -> file URI, so a drop target that understands URIs (browsers, most
-// editors) gets a usable reference instead of a bare path string.
-function fileUri(path) {
-  const p = encodeURI(path.replace(/\\/g, "/")).replace(/\?/g, "%3F").replace(/#/g, "%23");
-  return p.startsWith("//") ? `file:${p}` : `file:///${p}`;
-}
-
 // A rotating prompt's peeked "next entry" text, prefetched on arm (see
 // armDragOut) so dragOutText can stay synchronous — dataTransfer.setData only works
 // inside the dragstart handler itself, too late to await a peek there.
@@ -5016,6 +5010,18 @@ async function dropIntoFolder(id, host, cell) {
   }
   if (!host.dataset.id) return;
   await newTileFolder(host.dataset.id, id, [Number(cell.dataset.col), Number(cell.dataset.row)]);
+}
+
+// `settings.floating` maps every pinned prompt to its pill position, and the backend
+// treats exactly that entry as "pinned". The grid only ever asks whether an entry
+// exists, so after a pin/unpin the cached copy is brought in line straight away from
+// what the backend reports — waiting for the next full state fetch would leave the
+// context menu offering the opposite of what a click actually does. The placeholder
+// position is replaced by the real one with that next fetch; it is never sent back.
+function cacheFloatingState(id, pinned) {
+  if (!settings.floating) settings.floating = {};
+  if (pinned) settings.floating[id] = settings.floating[id] || { x: 0, y: 0 };
+  else delete settings.floating[id];
 }
 
 // ---- Context menu ----
@@ -13008,7 +13014,11 @@ function bind() {
       invoke("set_layout", { layout }).catch((e) => errToast(e));
       await renderGrid(true);
     } else if (act === "pin") {
-      await invoke("toggle_floating", { id });
+      // The command answers with the state it actually left the prompt in — take that
+      // instead of assuming the click flipped the label that was just on screen.
+      await invoke("toggle_floating", { id })
+        .then((pinned) => cacheFloatingState(id, pinned))
+        .catch((e) => errToast(e));
     } else if (act === "rotateAutoMenu") {
       await toggleRotateAutoDirect(id);
     }

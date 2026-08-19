@@ -373,6 +373,31 @@ ship on).
 
 ### Fixed
 
+- **A start that could not open the database could cost every prompt.** If the
+  emergency copy of the prompts was missing at that moment — the state an
+  earlier failed save can leave behind — the app came up empty and the next
+  save wrote that emptiness over the real data. Such a start now refuses to
+  save prompts at all, so everything survives until the database can be read
+  again.
+- **Moving the data folder could lose the newest changes.** The current state
+  was written back to the old folder first, but a failed write (a folder gone
+  read-only, a changed permission) was ignored: the older files were carried
+  across, the move reported success, and the cleanup afterwards offered to
+  delete the only folder that still had the newer state. A failed write now
+  cancels the move, and the old folder is only offered for deletion once the
+  move has completely succeeded.
+- **Taking over an installed setup into the portable app could leave it
+  confused** when the copy failed halfway through (a full disk, a file in
+  use): the app carried on with the setup it had just replaced, and the next
+  save could delete the prompts that had already arrived. It now reloads what
+  really landed before reporting the problem.
+- **Restoring only the prompts from a backup made with version 2.6.3 or older
+  failed completely**, including the prompts that would have come back fine,
+  because such a backup's version history predates a column added in 2.7.0.
+  Those backups restore again, with the missing detail left empty. Restoring
+  a whole backup was never affected.
+- Copying with the automatic rotation running leaked a small amount of memory
+  each time Windows refused the clipboard.
 - **Opening the version history of a long prompt could freeze the window.**
   Every version's word-by-word comparison was computed up front even though
   the rows start collapsed; it is now done when you actually open a row.
@@ -666,6 +691,16 @@ ship on).
   Romanian — along with their installer translations. An installation still set
   to one of the removed languages falls back to English and shows "Automatic" in
   the language picker; nothing else about it changes.
+- **The floating-button entry in a tile's menu could name the wrong action.**
+  Right after pinning a prompt, opening the same menu again still offered "Show
+  floating button". And once a pill had been dismissed with "Hide until
+  restart", the menu correctly offered "Remove floating button" but the click
+  brought the button back instead of removing it. The entry now always names
+  what a click really does.
+- **Dragging a file-backed prompt out of a floating button or a floating folder**
+  handed the receiving app a broken path when the file name contained a `?` or a
+  `#` — most apps cut the path off at that character. Dragging from the main
+  window was already correct; all three now build the reference the same way.
 
 ### Changed
 

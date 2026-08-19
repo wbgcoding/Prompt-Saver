@@ -1,7 +1,7 @@
-// Shared across every always-on-top floating window (pill, folder, launcher, snip
-// overlay): constants and a helper that had drifted into near-duplicate copies
-// (125). Values are unchanged from what each window already used on its own --
-// this is drift prevention, not a behaviour change.
+// Shared by the always-on-top floating windows (pill, folder, launcher, snip
+// overlay) and, for the drag-out helper, by the main window too: constants and
+// helpers that had drifted into near-duplicate copies. Values are unchanged from
+// what each window already used on its own -- this is drift prevention.
 export const COPIED_MS = 900; // "copied!" tile/pill flash duration
 export const RING_MIN = 8;    // smallest resize-ring thickness (px)
 export const RING_MAX = 60;   // largest resize-ring thickness (px)
@@ -18,4 +18,14 @@ export function resolveLang(settingsLanguage, langs) {
     : navigator.language || "en"
   ).toLowerCase();
   return langs.find((c) => pref.startsWith(c)) || "en";
+}
+
+// Windows path -> file URI, so a drop target that understands URIs (browsers, most
+// editors) gets a usable reference instead of a bare path string. Every window that
+// can drag a file-backed prompt out shares this one implementation: `?` and `#` are
+// legal in a file name but survive encodeURI, and a receiver would read them as the
+// start of a query string or a fragment and truncate the path there.
+export function fileUri(path) {
+  const p = encodeURI(path.replace(/\\/g, "/")).replace(/\?/g, "%3F").replace(/#/g, "%23");
+  return p.startsWith("//") ? `file:${p}` : `file:///${p}`;
 }

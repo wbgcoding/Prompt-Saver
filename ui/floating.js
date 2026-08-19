@@ -7,7 +7,7 @@ import { mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./m
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
-import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang } from "./floatShared.js";
+import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang, fileUri } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -667,10 +667,7 @@ pill.addEventListener("dragstart", (e) => {
   if (!dragOutOn || !text) { e.preventDefault(); return; }
   e.dataTransfer.effectAllowed = "copy";
   e.dataTransfer.setData("text/plain", text);
-  if (pFile) {
-    const u = encodeURI(pFile.replace(/\\/g, "/"));
-    e.dataTransfer.setData("text/uri-list", u.startsWith("//") ? `file:${u}` : `file:///${u}`);
-  }
+  if (pFile) e.dataTransfer.setData("text/uri-list", fileUri(pFile));
   drag = null;
 });
 pill.addEventListener("dragend", () => { pill.draggable = false; });
