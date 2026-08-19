@@ -187,6 +187,16 @@ ship on).
   the prompts that actually changed are written, and moving prompts around updates
   nothing but their position. With 500 prompts, 60 of them carrying a screenshot,
   a single rename takes 36 ms instead of 1900 ms.
+- Copying no longer writes to the disk on every single copy. Which entry a rotating
+  prompt serves next, how often a prompt has been used and the date of its last use
+  were saved the instant any of them changed — with auto-advance switched on, that
+  meant a full save on every Ctrl+V. They are now collected and written once the
+  copying has been quiet for a second: 100 pastes in quick succession cost 100 disk
+  writes before and one or two now. Closing the app, logging off Windows, a backup,
+  an export, an import, a reset and moving the data folder all write immediately, so
+  nothing is left behind; only an outright kill of the program (task manager, a power
+  cut) can cost the last second of counters — never a prompt, never any text, and
+  never a setting you just changed.
 - Saving a prompt can no longer clear its image by accident: the editor only sends
   a picture along when you actually changed it, and the only thing that removes one
   is the remove button.

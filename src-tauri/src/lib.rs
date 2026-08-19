@@ -2588,6 +2588,16 @@ fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
 // frontend listener cover all of this function's callers for free instead of
 // the setting silently reverting, unexplained, on the next restart.
 fn save_settings(app: &AppHandle, settings: &Settings) -> bool {
+    let _writing = settings_write_lock();
+    // A full write covers whatever was collected: the counters live in this same
+    // block, so once it is on disk nothing is owed any more.
+    SETTINGS_DELAY.discard();
+    write_settings_now(app, settings)
+}
+
+// The write itself, without the "cancel a collected write" step — the collecting
+// path below calls this one so it does not clear its own mark twice.
+fn write_settings_now(app: &AppHandle, settings: &Settings) -> bool {
     if let Some(conn) = db_conn(app) {
         if db_write_settings(&conn, settings).is_ok() {
             return true;
@@ -2599,6 +2609,131 @@ fn save_settings(app: &AppHandle, settings: &Settings) -> bool {
         return false;
     }
     true
+}
+
+// ---- Counter writes are collected instead of going to disk one at a time ----
+//
+// save_settings re-encrypts and rewrites the WHOLE settings block (themes,
+// layouts, window geometry, every toggle) each time it is called. Rotation
+// pointers, usage counters and "last used" stamps move on every copy — and on a
+// rotating prompt with auto-advance, on every single paste — so they used to buy
+// one full settings write per Ctrl+V. They mark the block dirty instead, and the
+// shared timer thread writes it once the marking has been quiet for a moment.
+//
+// Only the DISK write waits. Every marking call site has already updated
+// store.settings under the store lock before it marks, so the next copy of that
+// prompt still serves the right entry no matter when the write lands.
+//
+// What this costs in the worst case: if the process is killed outright — task
+// manager, a power cut, a crash — up to one second of counter state is lost: a
+// rotation pointer that stays where it was, a use count one short, a "last used"
+// stamp from the previous copy. It can never cost a prompt, any text, or a
+// setting the user just changed. Everything the user edits still writes through
+// immediately, and every orderly exit, Windows session end, backup, export,
+// import, reset and data-folder move flushes what is owed before it goes on.
+const SETTINGS_QUIET_MS: u64 = 1000;
+// How often the timer thread looks at the mark. Finer than the quiet window so
+// the write lands just behind it rather than a whole window late; a round with
+// nothing owed is one uncontended mutex and no disk access at all.
+const SETTINGS_FLUSH_TICK_MS: u64 = 250;
+
+// Marked = a settings write is owed, at the instant the mark was set. Every
+// later mark within the quiet window pushes the write further out, so a burst of
+// copies collapses into one write rather than one per copy.
+struct SettingsDelay {
+    marked: Mutex<Option<std::time::Instant>>,
+    quiet: Mutex<Duration>,
+}
+
+impl SettingsDelay {
+    const fn new(quiet_ms: u64) -> Self {
+        SettingsDelay {
+            marked: Mutex::new(None),
+            quiet: Mutex::new(Duration::from_millis(quiet_ms)),
+        }
+    }
+
+    fn mark(&self) {
+        *self.marked.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
+    }
+
+    // Is anything owed at all? Cheap enough for the idle tick to ask every round.
+    fn owed(&self) -> bool {
+        self.marked.lock().unwrap_or_else(|e| e.into_inner()).is_some()
+    }
+
+    // The ONE place that decides whether a collected write happens, so the number
+    // of `true` answers is exactly the number of disk writes on this path.
+    // `force` skips the quiet window — an exit or a backup cannot wait it out.
+    fn take(&self, force: bool) -> bool {
+        let quiet = *self.quiet.lock().unwrap_or_else(|e| e.into_inner());
+        let mut marked = self.marked.lock().unwrap_or_else(|e| e.into_inner());
+        match *marked {
+            Some(at) if force || at.elapsed() >= quiet => {
+                *marked = None;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    // An immediate write of the same block has just happened — nothing left owed.
+    fn discard(&self) {
+        *self.marked.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+}
+
+static SETTINGS_DELAY: SettingsDelay = SettingsDelay::new(SETTINGS_QUIET_MS);
+
+// Serializes the writes themselves, so a collected write started on the timer
+// thread can never land on top of a newer immediate one. Lock order is always
+// the store lock first, this one second — nothing under this lock ever takes it.
+static SETTINGS_WRITE: Mutex<()> = Mutex::new(());
+
+fn settings_write_lock() -> std::sync::MutexGuard<'static, ()> {
+    SETTINGS_WRITE.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+// A counter/pointer change: already correct in memory, worth one disk write per
+// quiet second instead of one per copy. The caller must have updated
+// store.settings before calling this.
+fn save_settings_soon() {
+    SETTINGS_DELAY.mark();
+}
+
+// Write a collected change out now. `settings` is the live block, which the
+// caller already holds under the store lock.
+fn flush_settings(app: &AppHandle, settings: &Settings) {
+    let _writing = settings_write_lock();
+    if SETTINGS_DELAY.take(true) {
+        write_settings_now(app, settings);
+    }
+}
+
+// Same, for a caller that does not hold the store lock itself.
+fn flush_settings_now(app: &AppHandle) {
+    if !SETTINGS_DELAY.owed() {
+        return;
+    }
+    if let Some(state) = app.try_state::<Db>() {
+        let store = state.lock().unwrap_or_else(|e| e.into_inner());
+        flush_settings(app, &store.settings);
+    }
+}
+
+// One round of the timer thread's flush job.
+fn settings_flush_tick(app: &AppHandle) {
+    if !SETTINGS_DELAY.owed() {
+        return;
+    }
+    let Some(state) = app.try_state::<Db>() else {
+        return;
+    };
+    let store = state.lock().unwrap_or_else(|e| e.into_inner());
+    let _writing = settings_write_lock();
+    if SETTINGS_DELAY.take(false) {
+        write_settings_now(app, &store.settings);
+    }
 }
 
 // Pre-1.9 builds saved image prompts without copy_image but copied on click.
@@ -6903,6 +7038,8 @@ fn auto_backup_tick(app: &AppHandle) {
         .unwrap_or(24.0) as u64;
     let due = newest_backup_age(app).map_or(true, |age| age >= interval_h.saturating_mul(3600));
     if on && due {
+        // A snapshot copies data.db, so anything still collected has to be in it.
+        flush_settings(app, &store.settings);
         // P60: the manual "backup now" toast fires from the same command's own
         // success path in the frontend — the automatic one has no such call site,
         // so it needs its own signal here.
@@ -7059,6 +7196,8 @@ fn open_backups_folder(app: AppHandle) -> Result<(), String> {
 async fn create_backup(app: AppHandle, state: State<'_, Db>, keep: usize) -> Result<String, String> {
     let store = lock(&state); // no writes race with the VACUUM read
     let gfs = gfs_from_settings(&store.settings);
+    // The snapshot copies data.db — a collected counter write belongs in it.
+    flush_settings(&app, &store.settings);
     do_backup(&app, keep, gfs)
 }
 
@@ -7146,6 +7285,9 @@ async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep
     {
         let store = lock(&state);
         let gfs = gfs_from_settings(&store.settings);
+        // The safety snapshot is the fallback if the restore goes wrong — it must
+        // carry the collected counters too, not the state of a second ago.
+        flush_settings(&app, &store.settings);
         let _ = do_backup(&app, keep, gfs); // pre-restore safety snapshot
         let dir = data_dir(&app);
         let target = dir.join("data.db");
@@ -7512,7 +7654,9 @@ async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result
         if let Some(pos) = store.prompts.iter().position(|p| p.id == id) {
             let p = store.prompts[pos].clone();
             rotation_advance(&p, &mut store.settings);
-            save_settings(&app, &store.settings); // 32: the pointer survives a restart
+            // The pointer survives a restart. Collected rather than written per
+            // copy — it is already correct in memory for the next copy.
+            save_settings_soon();
             emit_rotation_changed(&app, &p, &store.settings);
         }
     }
@@ -7570,7 +7714,9 @@ fn rotation_commit(app: AppHandle, state: State<Db>, id: String) {
     if let Some(pos) = store.prompts.iter().position(|p| p.id == id) {
         let p = store.prompts[pos].clone();
         rotation_advance(&p, &mut store.settings);
-        save_settings(&app, &store.settings);
+        // The hottest settings write in the app — this runs on every paste of an
+        // auto-advancing prompt, so it is collected instead of hitting the disk.
+        save_settings_soon();
         emit_rotation_changed(&app, &p, &store.settings);
     }
 }
@@ -7614,7 +7760,7 @@ fn rotation_arm_session(app: AppHandle, state: State<Db>, id: String, resolved: 
     let (idx, _, raw) = rotation_next(&p, &store.settings);
     let text = resolved.get(idx).cloned().unwrap_or(raw);
     rotation_advance(&p, &mut store.settings);
-    save_settings(&app, &store.settings);
+    save_settings_soon(); // pointer only — collected, see SETTINGS_QUIET_MS
     emit_rotation_changed(&app, &p, &store.settings);
     drop(store);
     #[cfg(windows)]
@@ -7737,7 +7883,9 @@ async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String) -> Result
             store.settings.last_used.insert(id.clone(), ts);
         }
         let (cap, cutoff) = history_cap_and_cutoff(&store.settings);
-        save_settings(&app, &store.settings);
+        // Usage count + "last used" stamp only — collected, see SETTINGS_QUIET_MS.
+        // The history row itself still goes into its own table below, untouched.
+        save_settings_soon();
         (CopyEntry { id, ts }, cap, cutoff, dedup)
     };
     // The history itself lives in its own table — appended outside the lock so a
@@ -8449,7 +8597,8 @@ mod clipwatch {
                         let (idx, _, raw) = super::rotation_next(&p, &store.settings);
                         let next = session.resolved.get(idx).cloned().unwrap_or(raw);
                         super::rotation_advance(&p, &mut store.settings);
-                        super::save_settings(&app, &store.settings);
+                        // Once per paste: collected, never a disk write per Ctrl+V.
+                        super::save_settings_soon();
                         super::emit_rotation_changed(&app, &p, &store.settings);
                         session.text = next;
                         session.last_paste = now;
@@ -8700,6 +8849,71 @@ mod clipwatch {
             let _ = h.join();
         }
         *WATCHER_APP.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+}
+
+// ---- Windows session end (logoff, shutdown, restart) ----
+//
+// Windows tells a top-level window its session is ending and then takes the
+// process down: no window close, no app exit event, nothing else of ours runs
+// after it. The collected counter writes have to land right there. The clipboard
+// watcher's window cannot do it — that one is message-only, and Windows never
+// sends session messages to those — so the main window's own window procedure is
+// chained instead: this one answers the two session messages and hands every
+// other message straight on to the original.
+#[cfg(windows)]
+mod sessionend {
+    use std::sync::atomic::{AtomicIsize, Ordering};
+    use std::sync::Mutex;
+    use tauri::AppHandle;
+
+    const GWLP_WNDPROC: i32 = -4;
+    const WM_QUERYENDSESSION: u32 = 0x0011;
+    const WM_ENDSESSION: u32 = 0x0016;
+
+    type WndProc = unsafe extern "system" fn(isize, u32, usize, isize) -> isize;
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn SetWindowLongPtrW(hwnd: isize, index: i32, new: isize) -> isize;
+        fn CallWindowProcW(prev: isize, hwnd: isize, msg: u32, w: usize, l: isize) -> isize;
+    }
+
+    // The procedure we displaced; also the "already chained" marker.
+    static PREV_PROC: AtomicIsize = AtomicIsize::new(0);
+    static APP: Mutex<Option<AppHandle>> = Mutex::new(None);
+
+    unsafe extern "system" fn wndproc(hwnd: isize, msg: u32, w: usize, l: isize) -> isize {
+        if msg == WM_QUERYENDSESSION || msg == WM_ENDSESSION {
+            // A panic must not unwind across this extern "system" boundary (→ abort).
+            let _ = std::panic::catch_unwind(|| {
+                let app = APP.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                if let Some(app) = app {
+                    super::flush_settings_now(&app);
+                }
+            });
+        }
+        let prev = PREV_PROC.load(Ordering::Acquire);
+        if prev == 0 {
+            return 0;
+        }
+        // Everything else, including the session messages, is answered by the
+        // original procedure — this hook only ever adds the flush.
+        CallWindowProcW(prev, hwnd, msg, w, l)
+    }
+
+    // Chains onto the main window once; a second call is a no-op. Called from the
+    // thread that owns the window, so no message can be dispatched between the
+    // swap and PREV_PROC being published.
+    pub fn hook(app: &AppHandle, hwnd: isize) {
+        if hwnd == 0 || PREV_PROC.load(Ordering::Acquire) != 0 {
+            return;
+        }
+        *APP.lock().unwrap_or_else(|e| e.into_inner()) = Some(app.clone());
+        let ours = wndproc as WndProc as isize;
+        let prev = unsafe { SetWindowLongPtrW(hwnd, GWLP_WNDPROC, ours) };
+        // A failed swap returns 0 and leaves the original in place — nothing to undo.
+        PREV_PROC.store(prev, Ordering::Release);
     }
 }
 
@@ -13500,6 +13714,9 @@ fn stored_backup_password(store: &Store) -> Option<String> {
 async fn export_all(app: AppHandle, state: State<'_, Db>) -> Result<usize, String> {
     let (json, count, password) = {
         let store = lock(&state);
+        // The export itself takes the live block, so it is right either way — but
+        // an export is also the moment the store on disk should agree with it.
+        flush_settings(&app, &store.settings);
         let backup = Backup {
             prompts: store.prompts.clone(),
             settings: store.settings.clone(),
@@ -13610,6 +13827,10 @@ async fn import_all(
     // as restore_backup, just applied to a file import instead of a stored snapshot.
     scope: String,
 ) -> Result<ImportSummary, String> {
+    // An import replaces the store wholesale and rolls the whole thing back if a
+    // write fails, so the disk has to hold the exact state it is replacing first —
+    // otherwise a rollback lands on a store missing the last collected counters.
+    flush_settings_now(&app);
     let path = PathBuf::from(path);
     check_import_size(&path, MAX_IMPORT_BYTES)?;
     let raw = fs::read(&path).map_err(|e| e.to_string())?;
@@ -14347,6 +14568,12 @@ pub fn run() {
                 let _ = main.set_size(tauri::LogicalSize::new(geom.width, geom.height));
                 let _ = main.set_position(PhysicalPosition::new(geom.x, geom.y));
                 set_capture_exclusion(&main, capture_excl);
+                // Logging off or shutting down Windows ends the process without any
+                // of the app's own exit paths running — see mod sessionend.
+                #[cfg(windows)]
+                if let Ok(hwnd) = main.hwnd() {
+                    sessionend::hook(&handle, hwnd.0 as isize);
+                }
                 // P44: drop any pill/folder left fully off-screen, e.g. by an unplugged
                 // second monitor. Before sync_float_windows() below, which never even
                 // creates a window for something no longer in `floating`/`float_folders`.
@@ -14588,6 +14815,19 @@ pub fn run() {
                 );
             }
 
+            // Lands the collected rotation-pointer / usage-counter writes once
+            // the copying has been quiet for SETTINGS_QUIET_MS. A round with
+            // nothing owed costs one uncontended mutex.
+            {
+                let h = handle.clone();
+                scheduler::register_periodic(
+                    "settings-flush",
+                    Duration::from_millis(SETTINGS_FLUSH_TICK_MS),
+                    Duration::from_millis(SETTINGS_FLUSH_TICK_MS),
+                    move || settings_flush_tick(&h),
+                );
+            }
+
             // Sweep the temp dir again now and then, not only at launch — an
             // instance left running for days otherwise never collects the
             // leftovers a crashed sibling dropped after it started.
@@ -14773,10 +15013,13 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
-        .run(|_app, event| {
-            // The timer thread is normally parked for hours; tell it to leave
-            // rather than tearing the process down around a sleeping thread.
+        .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                // Backstop for every way out of the app: whatever counter state was
+                // still being collected goes to disk before the process does.
+                flush_settings_now(app);
+                // The timer thread is normally parked for hours; tell it to leave
+                // rather than tearing the process down around a sleeping thread.
                 scheduler::shutdown(Duration::from_millis(SCHEDULER_STOP_WAIT_MS));
             }
         });
@@ -18324,6 +18567,110 @@ mod tests {
         assert!(!settings.rotate_pos.contains_key("p1"));
         assert!(!settings.rotate_bag.contains_key("p1"));
         assert!(settings.rotate_pos.contains_key("p2"), "an unrelated prompt's pointer must survive");
+    }
+
+    // ---- Collected settings writes ----
+    //
+    // The disk is stood in for by a Settings clone the "writer" copies into, and
+    // SettingsDelay::take is the one place that decides whether a write happens —
+    // so counting its `true` answers counts disk writes exactly.
+
+    // One commit, exactly as rotation_commit does it: advance in memory, then mark.
+    fn commit(p: &Prompt, settings: &mut Settings, delay: &SettingsDelay) {
+        rotation_advance(p, settings);
+        delay.mark();
+    }
+
+    #[test]
+    fn a_burst_of_rotation_commits_costs_at_most_two_settings_writes() {
+        let mut p = sample_prompts().remove(0);
+        p.variants = vec!["b".into(), "c".into()]; // total = 3
+        let delay = SettingsDelay::new(50);
+        let mut settings = Settings::default();
+        let mut disk = Settings::default();
+        let mut writes = 0usize;
+        for _ in 0..100 {
+            commit(&p, &mut settings, &delay);
+            // The timer thread looking at the mark between two commits.
+            if delay.take(false) {
+                writes += 1;
+                disk = settings.clone();
+            }
+        }
+        assert!(writes <= 2, "100 rapid commits took {writes} disk writes, expected at most 2");
+        // Before the change this was 100. The in-memory pointer moved every time.
+        assert_eq!(
+            settings.rotate_pos.get(&p.id).copied(),
+            Some((100 % 3) as u32),
+            "the pointer must be right in memory after every single commit"
+        );
+        let _ = disk;
+    }
+
+    #[test]
+    fn a_collected_write_lands_once_the_marking_goes_quiet() {
+        let delay = SettingsDelay::new(20);
+        delay.mark();
+        assert!(!delay.take(false), "nothing may be written while marks are still arriving");
+        std::thread::sleep(Duration::from_millis(40));
+        assert!(delay.take(false), "a quiet window must land the collected write");
+        assert!(!delay.take(false), "and it must not be written twice");
+    }
+
+    #[test]
+    fn quitting_writes_a_collected_change_that_the_quiet_window_would_still_hold() {
+        // A window long enough that the timer thread would never fire during the test.
+        let delay = SettingsDelay::new(600_000);
+        delay.mark();
+        assert!(!delay.take(false), "the quiet window has not passed");
+        assert!(delay.take(true), "an exit must write whatever is owed, window or not");
+        assert!(!delay.take(true), "with nothing owed there is nothing to write");
+    }
+
+    #[test]
+    fn an_immediate_write_cancels_the_collected_one_instead_of_letting_it_land_later() {
+        let delay = SettingsDelay::new(0);
+        delay.mark();
+        // save_settings writes the whole block, counters included, and discards.
+        delay.discard();
+        assert!(!delay.take(true), "a full write leaves nothing owed behind it");
+    }
+
+    #[test]
+    fn the_pointer_read_back_after_a_quit_is_the_one_the_last_commit_left() {
+        let mut p = sample_prompts().remove(0);
+        p.variants = vec!["b".into(), "c".into(), "d".into()]; // total = 4
+        let delay = SettingsDelay::new(600_000);
+        let mut settings = Settings::default();
+        let mut disk = Settings::default();
+        for _ in 0..7 {
+            commit(&p, &mut settings, &delay);
+            if delay.take(false) {
+                disk = settings.clone();
+            }
+        }
+        // Nothing has landed yet — this is exactly the state a hard kill would leave.
+        assert_ne!(
+            disk.rotate_pos.get(&p.id).copied(),
+            settings.rotate_pos.get(&p.id).copied(),
+            "without the flush the disk is behind — that is what the quit has to fix"
+        );
+        // The quit.
+        if delay.take(true) {
+            disk = settings.clone();
+        }
+        // What the next launch loads.
+        let restarted = disk;
+        assert_eq!(
+            restarted.rotate_pos.get(&p.id).copied(),
+            settings.rotate_pos.get(&p.id).copied(),
+            "the restored pointer must be the last commit's, not an earlier one"
+        );
+        assert_eq!(
+            rotation_next(&p, &restarted).0,
+            rotation_next(&p, &settings).0,
+            "and the first copy after the restart must serve the same entry"
+        );
     }
 
     // ---- 91: trash ----
