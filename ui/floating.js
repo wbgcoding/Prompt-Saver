@@ -653,7 +653,7 @@ document.getElementById("menu-remove").addEventListener("click", () => {
 window.addEventListener("mousedown", (e) => {
   if (e.button !== 0) return;
   if (e.target.closest(".menu") || e.target.closest(".rz-catch")) return;
-  // F22: the modifier hands the press to the OS drag loop instead of moving the
+  // The modifier hands the press to the OS drag loop instead of moving the
   // window. A modifier-click that never moves still copies, like any other click.
   const out = dragOutHeld(e);
   pill.draggable = out;
@@ -672,7 +672,7 @@ pill.addEventListener("dragstart", (e) => {
 });
 pill.addEventListener("dragend", () => { pill.draggable = false; });
 
-// F25: ONE call per drag END — the pills are separate windows, so only the backend
+// ONE call per drag END — the pills are separate windows, so only the backend
 // can tell whether this drop landed on another one. Nothing is sent while dragging,
 // and a drag that ends nowhere near a pill simply gets `false`.
 const mergeAfterDrop = () => {
@@ -711,7 +711,7 @@ window.addEventListener("mousemove", async (e) => {
       Math.abs(e.screenY - drag.y) < DRAG_THRESHOLD) return;
   drag.moved = true;
   pill.classList.add("dragging");
-  // F25: the backend follows this window while the OS moves it and lights up
+  // The backend follows this window while the OS moves it and lights up
   // whatever letting go would merge into. Nothing is computed here — the pointer
   // belongs to the move loop from the next line on.
   if (foldersOn) invoke("float_drag_hint", { id: promptId, active: true }).catch(() => {});
@@ -734,7 +734,7 @@ window.addEventListener("mouseup", async () => {
   } else if (menuOpen) {
     closeMenu(); // a click on the pill closes the open menu
   } else if (apOn && lastPillTs && Date.now() - lastPillTs <= apDblMs) {
-    // F19: fast second click pastes the just-copied text into the last app.
+    // Fast second click pastes the just-copied text into the last app.
     lastPillTs = 0;
     invoke("paste_into_previous", { delayMs: apDelay, enter: apEnter }).catch(() => {});
   } else if (cooldownMs && Date.now() - lastCopyTs < cooldownMs) {
@@ -900,7 +900,7 @@ document.addEventListener("visibilitychange", () => {
   else ensureVideoPlaying();
 });
 
-// F25: another pill is being dragged over this one — show what letting go would do.
+// Another pill is being dragged over this one — show what letting go would do.
 // The window itself grows a little, so the pill visibly swells as the target instead
 // of only changing colour. It grows DOWN-RIGHT: moving the origin would fire a window
 // Moved event and the pill's stored position would creep with every hint. The exact

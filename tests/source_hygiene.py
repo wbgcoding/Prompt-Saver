@@ -19,6 +19,9 @@ TRACKED_GLOBS = [
 
 NUMBERED_COMMENT = re.compile(r"^\s*//\s*\d+:")
 NUMBERED_COMMENT_PAREN = re.compile(r"^\s*//\s*\d+\s*\(")
+# A work-item code buried in a comment anywhere, not just at the start -- e.g. a
+# section-divider comment like "// ---------- F25: folder commands ----------".
+WORK_ITEM_CODE = re.compile(r"\b[A-Z]\d+:")
 
 FORBIDDEN_WORDS = re.compile(
     r"\b(codex|claude|chatgpt|copilot|gemini|llm|prompt-engineer)\b",
@@ -79,6 +82,12 @@ def check_file(rel_path, text):
         if NUMBERED_COMMENT.match(line) or NUMBERED_COMMENT_PAREN.match(line):
             violations.append((lineno, "numbered work-item comment", line.strip()))
             continue
+        comment_at = line.find("//")
+        if comment_at != -1:
+            wm = WORK_ITEM_CODE.search(line, comment_at)
+            if wm:
+                violations.append((lineno, f"work-item code '{wm.group(0)}'", line.strip()))
+                continue
         m = FORBIDDEN_WORDS.search(line)
         if m:
             violations.append((lineno, f"AI-tool reference '{m.group(0)}'", line.strip()))

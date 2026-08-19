@@ -109,7 +109,7 @@ let libQuery = ""; // prompt library search text
 const libTypes = new Set();
 let libColor = "all"; // prompt library color filter
 let libFav = false; // prompt library "favorites only" filter
-const libTags = new Set(); // F1: selected tag filters, as lowercase tag keys
+const libTags = new Set(); // Selected tag filters, as lowercase tag keys
 const gridTags = new Set(); // 24: same idea, independent selection for the grid
 // F8 batch operations state.
 let libSelectMode = false;
@@ -151,8 +151,6 @@ window.addEventListener("contextmenu", (e) => e.preventDefault());
 
 const DOTS =
   '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM18 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/></svg>';
-const CROSS =
-  '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>';
 const GRID_PLUS =
   '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm12 0h2v3h3v2h-3v3h-2v-3h-3v-2h3v-3Z"/></svg>';
 const PLUS_ICON =
@@ -1246,7 +1244,7 @@ const EXPERT_VALUES = {
   viewBorder: { label: "valViewBorder", min: 1, max: 12, step: 1, def: 3, unit: "px", gate: "multiView" },
   // Floating-button opacity (%). Floored at 20% so the pill never vanishes.
   floatOpacity: { label: "valFloatOpacity", min: 20, max: 100, step: 5, def: 100, unit: "%", gate: "floating" },
-  // F25: how close two floating buttons must be on drop to merge, and how wide the
+  // How close two floating buttons must be on drop to merge, and how wide the
   // grid of an opened folder is. Both mirrored by the backend (merge_radius/folder_cols).
   pillMergeRadius: { label: "valPillMergeRadius", min: 20, max: 80, step: 1, def: 40, unit: "px", gate: "pillFolders" },
   folderGridCols: { label: "valFolderGridCols", min: 2, max: 5, step: 1, def: 3, unit: "", gate: "pillFolders" },
@@ -1458,20 +1456,20 @@ const EXPERT_DROPDOWNS = {
   // F18 fuzzy-search typo tolerance.
   fuzzyMaxTypos: enumDropdown("fuzzyMaxTypos", "valFuzzyTypos",
     [["auto", "optAuto"], ["1", "opt1"], ["2", "opt2"]], "auto", "fuzzySearch"),
-  // F1: how several selected tag filters combine.
+  // How several selected tag filters combine.
   tagFilterMode: enumDropdown("tagFilterMode", "valTagFilterMode",
     [["and", "optTagAnd"], ["or", "optTagOr"]], "and", "tags"),
-  // F12: how the self-filling date/time placeholders are written.
+  // How the self-filling date/time placeholders are written.
   dateStyle: enumDropdown("dateStyle", "valDateStyle", STYLE_OPTS, "short", "dynVars"),
   timeStyle: enumDropdown("timeStyle", "valTimeStyle", STYLE_OPTS, "short", "dynVars"),
-  // F22: which key turns a press into a drag-out instead of the plain drag.
+  // Which key turns a press into a drag-out instead of the plain drag.
   dragOutModifier: enumDropdown("dragOutModifier", "valDragOutModifier",
     [["ctrl", "keyCtrl"], ["alt", "keyAlt"], ["shift", "keyShift"]], "ctrl", "dragOut"),
   // Mode a NEW rotating prompt starts with (each prompt can still switch its
   // own mode afterward in the editor).
   rotateDefaultMode: enumDropdown("rotateDefaultMode", "valRotateDefaultMode",
     [["order", "optRotateOrder"], ["random", "optRotateRandom"]], "order", "rotatingPrompts"),
-  // F26: the notation the picked colour is copied in.
+  // The notation the picked colour is copied in.
   pickerFormat: enumDropdown("pickerFormat", "valPickerFormat",
     [["hex", "optFmtHex"], ["rgb", "optFmtRgb"], ["hsl", "optFmtHsl"]], "hex", "colorPicker"),
   // 117/118: which tool the screenshot editor opens with.
@@ -1555,9 +1553,9 @@ const EXPERT_TABS = [
     { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "closeOnCopy", "copyBubble", "copyFlash"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"], dropdowns: ["dragOutModifier"] },
     // Floating buttons and the two kinds of folder they can form.
     { title: "expGroupFolders", flags: ["floating", { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillMergeRadius", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
-    // F23: the quick-copy sections of the tray menu, each with its own entry count.
+    // The quick-copy sections of the tray menu, each with its own entry count.
     { title: "expGroupTray", flags: ["trayRecent", "trayFavs"], values: ["trayRecentN", "trayFavN"] },
-    // F21: the watcher that collects what you copy elsewhere.
+    // The watcher that collects what you copy elsewhere.
     { title: "expGroupClipboard", flags: ["clipWatcher"], values: ["clipMinChars", "clipInboxMax"] },
     // Prompt folders as Markdown (beta): mirrors text-only prompts as .md files.
     { title: "expGroupSync", flags: ["promptSync"], paths: ["syncDir"] },
@@ -1632,7 +1630,7 @@ function applyFlags() {
   for (const key of OPT_FLAG_KEYS) {
     document.body.classList.toggle(`flag-${key}`, optFlag(key));
   }
-  refreshCustomThemes(); // F3: the feature may have just been switched on or off
+  refreshCustomThemes(); // The feature may have just been switched on or off
   // uppercaseTiles/boldTileNames/monospaceTiles/italicTiles change .tile-name
   // metrics via CSS but are plain flags (no dedicated apply* path), so a cached fit
   // size from before the toggle would otherwise linger until fitCache's own 1000-entry eviction.
@@ -1642,7 +1640,7 @@ function applyFlags() {
   applyValues();
   // An open library must follow a flag flip (the tag row appears/disappears).
   if (prompts.length && !$("library")?.classList.contains("hidden")) renderLibrary();
-  refreshClipInbox(); // F21: reflect the watcher toggle + badge count
+  refreshClipInbox(); // Reflect the watcher toggle + badge count
 }
 
 // Apply every numeric tweak to its live target (CSS vars + JS constants).
@@ -1833,7 +1831,7 @@ function flagRow(key) {
   const span = document.createElement("span");
   span.textContent = t(flagLabelKey(key));
   row.append(span);
-  // Features that ship OFF get a small badge (P69: a sign, not text crowding the
+  // Features that ship OFF get a small badge (a sign, not text crowding the
   // label) so it's clear at a glance which settings are additions beyond the
   // standard configuration. Read from the shipped default, so a brand that turns
   // a feature off is labelled correctly too.
@@ -2305,7 +2303,7 @@ const EXPERT_ACTIONS = {};
 function i18nHit(key, q) {
   return (I18N[LANG][key] || "").toLowerCase().includes(q) || (I18N.en[key] || "").toLowerCase().includes(q);
 }
-// P68: expert-menu search also matches a setting's tooltip text, not just its
+// Expert-menu search also matches a setting's tooltip text, not just its
 // label — a setting is often findable only by a word that lives in the tip.
 function settingHit(settingKey, labelKey, q) {
   if (i18nHit(labelKey, q)) return true;
@@ -2859,7 +2857,7 @@ async function renderGrid(skipFetch = false) {
   if (favView && !favViewEnabled()) favView = false; // setting switched off underneath us
   if (favView) { renderFavGrid(); return; }
   const view = activeView();
-  // P53: a colored border around the grid itself (expert opt, default off) —
+  // A colored border around the grid itself (expert opt, default off) —
   // reuses the view's own color, kept current on every render so it never
   // shows a stale color after switching views.
   document.documentElement.style.setProperty("--active-view-color", view.color || "transparent");
@@ -2876,7 +2874,7 @@ async function renderGrid(skipFetch = false) {
   $("qg-cols").max = val("gridMax");
   $("qg-rows").max = val("gridMax");
 
-  // F27: a prompt inside a grid folder is drawn by that folder, not by itself.
+  // A prompt inside a grid folder is drawn by that folder, not by itself.
   const folders = foldersOfView(view.id);
   const inFolder = new Set(folders.flatMap((f) => f.members || []));
   const byCell = new Map();
@@ -3396,7 +3394,7 @@ async function confirmViewModal() {
   await renderGrid(true);
 }
 
-// P50: a new, empty view with the same name/color/grid size as the source — its
+// A new, empty view with the same name/color/grid size as the source — its
 // tile placements are not copied, since a prompt cannot yet sit in two views at
 // once.
 async function duplicateView(v) {
@@ -3558,7 +3556,7 @@ const CLEAR_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="
 // password prompt.
 const TAKEOVER_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7.5" ry="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4.5 5.5v13c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-13M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/></svg>';
 const LOCK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.6" fill="currentColor"/></svg>';
-// F25: a folder for the pill-folder rename dialog.
+// A folder for the pill-folder rename dialog.
 const FOLDER_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.2l2 2.4h8.8A1.5 1.5 0 0 1 21 8.9v9.6a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5Z"/></svg>';
 // Reveal toggle for password fields (backup settings + the restore prompt).
 const EYE_SVG ='<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
@@ -4053,7 +4051,7 @@ function buildTile(p) {
       const nf = (n) => n.toLocaleString(LANG);
       tile.dataset.tipLen = `${nf(chars)} ${t("lenChars")} · ~${nf(tokens)} ${t("lenTokens")}`;
     }
-    // F17: the private note rides along as its own dimmed section (opt-out flag).
+    // The private note rides along as its own dimmed section (opt-out flag).
     const note = notesOn() && flag("notesInTooltip") ? (p.notes || "").trim() : "";
     if (note) tile.dataset.tipNotes = clipNote(note);
   }
@@ -4179,7 +4177,7 @@ function buildTile(p) {
 
   tile.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 || e.target.closest(".tile-menu") || e.target.closest(".tile-select")) return;
-    // F22: with the modifier held the press becomes a drag-out; `out` keeps the
+    // With the modifier held the press becomes a drag-out; `out` keeps the
     // reorder machine out of it while a modifier-click still copies as before.
     const out = armDragOut(tile, e, () => prompts.find((x) => x.id === p.id));
     drag = { id: p.id, startX: e.clientX, startY: e.clientY, moved: false, el: tile, out };
@@ -4317,7 +4315,7 @@ function endDragVisuals() {
   setHoverCell(null);
 }
 
-// ---- F22: drag a prompt out into another app ----
+// ---- drag a prompt out into another app ----
 // The webview's own drag-drop handling only replaces the drop TARGET (that is how a
 // file dropped onto the window becomes a prompt); starting a drag is untouched, so a
 // plain HTML5 dragstart is all it takes to hand the prompt to the OS.
@@ -4438,7 +4436,7 @@ window.addEventListener("pointermove", (e) => {
   drag.ghost.style.transform =
     `translate(${e.clientX - drag.offX}px, ${e.clientY - drag.offY}px)`;
   setHoverCell(cellAt(e.clientX, e.clientY));
-  armFolderDrop(e); // F27: hovering the middle of a tile offers a folder
+  armFolderDrop(e); // Hovering the middle of a tile offers a folder
 });
 
 // Resume videos the drag paused (visibility pauses use the same marker).
@@ -4459,7 +4457,7 @@ window.addEventListener("pointerup", async (e) => {
   el.classList.remove("dragging");
   resumeDragVideos(el);
   endDragVisuals();
-  // F27: what an armed centre would swallow, decided before the arm is dropped.
+  // What an armed centre would swallow, decided before the arm is dropped.
   const armed = folderArm && folderArm.armed ? folderArm.el : null;
   disarmFolder();
 
@@ -4490,8 +4488,8 @@ window.addEventListener("pointerup", async (e) => {
         await copyTextWithVars(p, el);
         return;
       }
-      if (autoPasteDouble(id)) { await autoPasteNow(el); return; } // F19: 2nd fast click pastes
-      // P38: a click swallowed by the cooldown used to give no feedback at all —
+      if (autoPasteDouble(id)) { await autoPasteNow(el); return; } // 2nd fast click pastes
+      // A click swallowed by the cooldown used to give no feedback at all —
       // a quick shake says "that didn't do anything" instead of silence.
       if (copyOnCooldown(id)) {
         el.classList.add("cooldown-blocked");
@@ -4510,7 +4508,7 @@ window.addEventListener("pointerup", async (e) => {
   if (!cell) return;
   if (favView) { await placeFav(id, Number(cell.dataset.col), Number(cell.dataset.row)); return; }
   if (armed) { await dropIntoFolder(id, armed, cell); return; } // F27
-  // P8: only a genuine reorder of an already-placed tile gets an undo offer — a
+  // Only a genuine reorder of an already-placed tile gets an undo offer — a
   // brand-new placement (drag in from the library, double-click-create) has
   // nothing to move back FROM, so prevCell stays undefined and the toast is skipped.
   const prevCell = layoutOf(activeView())[id];
@@ -5326,7 +5324,7 @@ function fillVarHighlighted(el, text) {
   if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
 }
 
-// F13: a token is either a plain name or `name|opt,opt,…`. Options are trimmed and
+// A token is either a plain name or `name|opt,opt,…`. Options are trimmed and
 // empty ones dropped; a comma always starts the next option, so an option can never
 // contain one. A bar without a usable name or option list stays an ordinary
 // text variable — the whole token is then its name, so the placeholder still fills.
@@ -5339,7 +5337,7 @@ function parseVar(token) {
   return name && options.length ? { name, options } : { name: raw, options: [] };
 }
 
-// F12: reserved names that fill themselves in at copy time, no dialog. They win
+// Reserved names that fill themselves in at copy time, no dialog. They win
 // over a manual variable of the same name (documented in the editor's helper).
 const DYN_VARS = [
   "date", "time", "datetime", "weekday", "yesterday", "tomorrow",
@@ -5621,7 +5619,7 @@ function promptVarsDialog(vars) {
       const last = keepChoice ? remembered[name] : null;
       const usedLast = options.includes(last);
       control.value = usedLast ? last : options[0];
-      // P36: says outright that this pick came from last time, not just the checkbox
+      // Says outright that this pick came from last time, not just the checkbox
       // state (there is none for a choice variable — it remembers silently).
       if (usedLast) control.title = t("rememberedValueHint");
       // A single option is a fixed value: still shown, but nothing to choose.
@@ -5634,7 +5632,7 @@ function promptVarsDialog(vars) {
       control.type = "text";
       if (useRemember && name in remembered) {
         control.value = remembered[name];
-        control.title = t("rememberedValueHint"); // P36: says so, not just a checked box
+        control.title = t("rememberedValueHint"); // Says so, not just a checked box
       }
       label.append(span, control);
       if (useRemember) {
@@ -6213,7 +6211,7 @@ async function commitGlobalHotkey(accel) {
 // save step of its own — it writes straight through update_prompt with every OTHER
 // field taken from the prompt's own in-memory copy, unchanged. check_hotkey runs
 // first so a live OS conflict shows up immediately instead of only being caught by
-// update_prompt's own late rearm (see the "F20: the backend hands back what it
+// update_prompt's own late rearm (see the "the backend hands back what it
 // really stored" note at the editor's save path).
 async function commitPromptHotkeyDirect(id, accel) {
   const p = prompts.find((x) => x.id === id);
@@ -6323,7 +6321,7 @@ function renderHotkeysList() {
   }
 }
 
-// ---- F16: live length counter (chars / words / ~tokens) in the editor ----
+// ---- live length counter (chars / words / ~tokens) in the editor ----
 let lenRaf = 0;
 function updateLenCounter() {
   const el = $("modal-length");
@@ -7717,7 +7715,7 @@ async function renderBackupPanel(body) {
   pwControls.append(pwWrap, save, remove);
   pwRow.append(pwLabel, pwControls);
   set.appendChild(pwRow);
-  // P63: the consequence of forgetting it, spelled out where it's set — not just
+  // The consequence of forgetting it, spelled out where it's set — not just
   // in a toast after the fact, which is easy to miss.
   const pwWarn = document.createElement("p");
   pwWarn.className = "modal-hint backup-pw-hint";
@@ -7942,17 +7940,17 @@ function syncModalImageUi(mode) {
   if (varsUi) renderVarHelper(); // F12/F13 chips + insert row follow their flags
   syncMdUi(textVisible, rotating); // F14 preview toolbar + rendered pane
   updateLenCounter();
-  // F12/F13: the variable helper is a reference, so it reopens collapsed too.
+  // The variable helper is a reference, so it reopens collapsed too.
   modal.varsBody.classList.add("hidden");
   modal.varsHead.setAttribute("aria-expanded", "false");
   modal.textBar.classList.remove("open");
-  // F17: notes are available for every prompt kind; always reopen collapsed so the
+  // Notes are available for every prompt kind; always reopen collapsed so the
   // dialog looks the same each time and a long note never pushes Save off screen.
   modal.notesBody.classList.add("hidden");
   modal.notesHead.setAttribute("aria-expanded", "false");
   modal.notes.classList.remove("open");
   // Tags/hotkey/history share one "Advanced options" collapsible, which always
-  // reopens collapsed. F20: the hotkey row exists for every prompt kind (a hotkey
+  // reopens collapsed. The hotkey row exists for every prompt kind (a hotkey
   // copies whatever the prompt holds). F7/79: version history for every existing
   // prompt kind — a snapshot also captures name-only changes on an image/file/colour
   // prompt, so it stays reachable there too. The outer section itself hides only if
@@ -8432,10 +8430,10 @@ async function confirmModal() {
     modalSaving = false;
     modal.confirm.disabled = false;
   }
-  // F20: the backend hands back what it really stored. An empty hotkey where one
+  // The backend hands back what it really stored. An empty hotkey where one
   // was sent means the OS refused the combination between the check and the save.
   if (hotkey && saved && !saved.hotkey) toast(t("promptHotkeyFail"));
-  // P89: the same near-duplicate check the import path already runs, now also
+  // The same near-duplicate check the import path already runs, now also
   // after creating a prompt by hand — before closeModal() clears modalState.
   const wasCreate = modalState.mode === "create" || modalState.mode === "image-create" || modalState.mode === "file-create";
   const wasEdit = modalState.mode === "edit";
@@ -8648,7 +8646,7 @@ function renderTagChips() {
   renderTagQuickAdd();
 }
 
-// P25: the 3 most-used tags across the library, minus ones already on this
+// The 3 most-used tags across the library, minus ones already on this
 // prompt — click to add without typing.
 function renderTagQuickAdd() {
   const box = $("modal-tag-quickadd");
@@ -8793,7 +8791,7 @@ function renderTagFilter() {
   if (sig === _lastTagFilterSig) return;
   _lastTagFilterSig = sig;
   bar.innerHTML = "";
-  // P26: "Manage tags" stays reachable even before the first tag exists — the
+  // "Manage tags" stays reachable even before the first tag exists — the
   // bar used to disappear entirely with nothing to filter by, hiding the only
   // way to find out tags exist at all.
   if (names.length) {
@@ -8921,7 +8919,7 @@ function renderTagManager() {
 }
 
 $("tag-modal-close")?.addEventListener("click", closeTagManager);
-// P27: one click assigns the palette to every tag that has no color yet, in the
+// One click assigns the palette to every tag that has no color yet, in the
 // order the palette lists them — round-robin once past the end.
 $("tag-colorize")?.addEventListener("click", async () => {
   const palette = COLORS.slice(1);
@@ -8997,7 +8995,7 @@ function baseThemeColors(base) {
 // (it previews on the real window, so cancelling has to undo it).
 let themeDraft = null;
 let themeRestore = null;
-// D75: the draft as it looked the moment the editor opened, so "Revert changes"
+// The draft as it looked the moment the editor opened, so "Revert changes"
 // can undo everything done in THIS session without closing the editor — a
 // separate snapshot from themeRestore, which is the real window's pre-edit
 // theme (used only when the whole editor is cancelled).
@@ -9513,9 +9511,9 @@ function computeLibSearchScore(p) {
   (p.variants || []).forEach((v, i) => fields.push([(v || "").toLowerCase(), 1, i + 1]));
   // A tag is a deliberate label, so it ranks between the name and the body.
   if (tagsOn() && (p.tags || []).length) fields.push([p.tags.join(" ").toLowerCase(), 2, -1]);
-  // F17: a note is private context, so it matches but ranks below the prompt body.
+  // A note is private context, so it matches but ranks below the prompt body.
   if (notesOn() && p.notes) fields.push([p.notes.toLowerCase(), 0.5, -1]);
-  // P18: a "-word" term excludes any prompt whose searchable text contains it,
+  // A "-word" term excludes any prompt whose searchable text contains it,
   // checked across every field before anything else runs.
   const terms = raw.split(/\s+/).filter(Boolean);
   const isExclude = (t) => t.length > 1 && t[0] === "-";
@@ -9573,7 +9571,7 @@ function libMatches(p) {
   return libSearchScore(p).score > 0;
 }
 
-// F1: selected tag chips narrow the list, combined with search and the other
+// Selected tag chips narrow the list, combined with search and the other
 // filters. AND (default) needs every chip, OR any of them. 24: the grid's own
 // filter (gridTags) reuses this with its own Set instead of the library's.
 function tagMatches(p, tagSet = libTags) {
@@ -9732,11 +9730,11 @@ function renderLibrary() {
     return;
   }
   const placed = new Set(Object.keys(layoutOf(activeView())));
-  // F27: a folder member has no layout entry of its own (the folder draws it), so
+  // A folder member has no layout entry of its own (the folder draws it), so
   // without this it would show as addable — placing it would silently no-op since
   // renderGrid always skips ids listed in a folder's members.
   for (const f of foldersOfView(activeView().id)) for (const id of f.members || []) placed.add(id);
-  libDisplayOrder = items.map((p) => p.id); // F8: range-select uses display order
+  libDisplayOrder = items.map((p) => p.id); // Range-select uses display order
   // Batch through a fragment -- appending straight into the live list forced
   // a reflow per row on a large library.
   const frag = document.createDocumentFragment();
@@ -9744,10 +9742,10 @@ function renderLibrary() {
     const row = document.createElement("button");
     row.type = "button";
     row.className = "lib-item";
-    row.dataset.id = p.id; // F8: in-place selection toggle finds the row by id
-    // F18: dim rows that only matched via the typo-tolerant tier.
+    row.dataset.id = p.id; // In-place selection toggle finds the row by id
+    // Dim rows that only matched via the typo-tolerant tier.
     if (libQuery.trim() && libSearchScore(p).fuzzy) row.classList.add("lib-fuzzy");
-    // F8: selection state (the checkbox itself is a CSS ::before, shown while the
+    // Selection state (the checkbox itself is a CSS ::before, shown while the
     // list carries the .selecting class — so toggling select mode never re-renders).
     if (libSelectMode && libSelected.has(p.id)) row.classList.add("lib-selected");
     row.title = libSelectMode ? "" : t("copy");
@@ -10108,7 +10106,7 @@ function toastCopied(p) {
 async function libraryCopy(p) {
   // Prompts that still need input skip the double-click shortcut: they must reach
   // the dialog (copyResolved) so the variables get asked before copy + auto-paste.
-  if (!dialogTokens(p, await peekRotatedText(p)).length && autoPasteDouble(p.id)) { await autoPasteNow(null); return; } // F19: 2nd fast click pastes
+  if (!dialogTokens(p, await peekRotatedText(p)).length && autoPasteDouble(p.id)) { await autoPasteNow(null); return; } // 2nd fast click pastes
   if (copyOnCooldown(p.id)) return;
   if (!(await copyResolved(p))) return;
   recordCopy(p.id);
@@ -10186,7 +10184,7 @@ function journalRow(p, meta, onClick) {
   }
   row.append(thumbEl(p, journalThumbCache), body);
   row.addEventListener("click", onClick);
-  // P55: edit straight from the history — same icon/pattern as the library row.
+  // Edit straight from the history — same icon/pattern as the library row.
   const edit = document.createElement("span");
   edit.className = "icon-btn lib-edit";
   edit.title = t("edit");
@@ -10727,7 +10725,7 @@ async function runImport() {
     applyBars();
     await renderGrid(true); // re-render with the new tile style
     toast(t("imported").replace("{n}", count.toLocaleString(LANG)));
-    maybeDupImportToast(); // F6: flag near-duplicates the import may have introduced
+    maybeDupImportToast(); // Flag near-duplicates the import may have introduced
   } catch (err) {
     if (String(err) !== "canceled") toast(t("importFailed"));
   }
@@ -10767,7 +10765,7 @@ async function runImportAll() {
       const res = await invoke("import_all", { path, password, scope });
       await reloadEverything();
       let msg = t("importAllDone").replace("{f}", res.name).replace("{n}", Number(res.count).toLocaleString(LANG));
-      // F20: a hotkey the restore could not keep is named, never silently dropped.
+      // A hotkey the restore could not keep is named, never silently dropped.
       if (res.dropped_hotkeys) msg += "\n" + t("importHotkeysDropped").replace("{n}", Number(res.dropped_hotkeys).toLocaleString(LANG));
       // The file's own backup password is a foreign-machine DPAPI blob and was
       // discarded — say so, or a following export silently ships unprotected.
@@ -13032,7 +13030,7 @@ function bind() {
     // The group tab itself toggles the popover, so let its own click through.
     if (!viewGroupPop.classList.contains("hidden") && !viewGroupPop.contains(e.target) &&
         !e.target.closest(".view-group-btn")) closeViewGroupPop();
-    // F27: the folder tile toggles its own popover, so let its press through.
+    // The folder tile toggles its own popover, so let its press through.
     if (!tileFolderPop.classList.contains("hidden") && !tileFolderPop.contains(e.target) &&
         !e.target.closest(".folder-tile")) closeTileFolderPop();
     // Opened from the (already-closed) tile context menu, so nothing else needs excluding.
@@ -13269,22 +13267,22 @@ function bind() {
   listen("theme-changed", (e) => applyTheme(e.payload?.theme, e.payload?.vars));
   // "Edit prompt" chosen in a floating pill's right-click menu.
   listen("edit-prompt", (e) => editPrompt(String(e.payload)));
-  // F20: a prompt's global hotkey was pressed — run the same activation a tile does.
+  // A prompt's global hotkey was pressed — run the same activation a tile does.
   // Whether it also pastes is the hotkey's OWN setting, falling back to the global one.
   listen("prompt-hotkey", (e) => {
     const id = String(e.payload);
     const mode = prompts.find((p) => p.id === id)?.hotkey_paste || "";
     onPromptHotkey(id, mode ? mode === "paste" : flag("promptHotkeyPaste"));
   });
-  // F23: a quick-copy entry in the tray menu — same activation, never auto-paste.
+  // A quick-copy entry in the tray menu — same activation, never auto-paste.
   listen("prompt-tray-copy", (e) => onPromptHotkey(String(e.payload), false));
-  // P92: the very first close-to-tray — backend held the window open, we explain
+  // The very first close-to-tray — backend held the window open, we explain
   // the tray menu, then hide it ourselves once the hint is dismissed.
   listen("first-tray-hide", async () => {
     await infoDialog(t("trayHintTitle"), t("trayHintMsg"));
     try { await window.__TAURI__?.window?.getCurrentWindow?.()?.hide?.(); } catch { /* no-op */ }
   });
-  // P60: the automatic backup has no frontend call site of its own to toast
+  // The automatic backup has no frontend call site of its own to toast
   // from — the backend says so once the snapshot is really on disk.
   listen("backup-done", () => toast(t("backupDone")));
   // save_prompts/save_trash used to fail silently to the user when both the DB
@@ -13309,7 +13307,7 @@ function bind() {
     varsWindowPending = null;
     resolve?.(e.payload ?? null);
   });
-  // F25: "Rename" in a pill folder's menu. The folder window hosts no themed dialog,
+  // "Rename" in a pill folder's menu. The folder window hosts no themed dialog,
   // so the name is asked for here and written back from here.
   listen("folder-rename", async (e) => {
     const id = String(e.payload?.id || "");

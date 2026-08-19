@@ -305,7 +305,7 @@ function flash(id) {
 
 async function copyMember(id) {
   const now = Date.now();
-  // F19: a fast second click pastes the just-copied text into the last app.
+  // A fast second click pastes the just-copied text into the last app.
   if (apOn && lastClick[id] && now - lastClick[id] <= apDblMs) {
     lastClick[id] = 0;
     invoke("paste_into_previous", { delayMs: apDelay, enter: apEnter }).catch(() => {});
@@ -484,7 +484,7 @@ function iconReleased(e) {
 window.addEventListener("mouseout", (e) => iconReleased(e));
 
 window.addEventListener("mousemove", async (e) => {
-  // D3: the ring is otherwise invisible until it is grabbed — a thin accent edge on
+  // The ring is otherwise invisible until it is grabbed — a thin accent edge on
   // the icon says "resize starts here" while the pointer sits in the band. e.target can
   // be the window itself for a synthetic event with no real target under the pointer.
   iconEl.classList.toggle("rz-hover", !!e.target?.closest?.("#rz-catch"));
