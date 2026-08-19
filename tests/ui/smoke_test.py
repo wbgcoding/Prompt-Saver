@@ -8,7 +8,9 @@ Catches the class of defect that only shows when the app actually runs:
 
 It walks the library, the copy history, the tile menu and every expert tab, down
 to the smallest window the app itself allows, and once more with the appearance
-scales raised. Skips cleanly when no Chromium browser is installed.
+scales raised. Two extra boots cover the store-sealing warning in both
+directions, since it only ever appears during startup. Skips cleanly when no
+Chromium browser is installed.
 
 Run:  python tests/ui/smoke_test.py
 Exit: 0 = clean, 1 = problems found.
@@ -4900,6 +4902,114 @@ LAUNCHER_PROBE = """
 """
 
 
+# A DPAPI failure makes the backend write the store in plaintext instead of
+# refusing the save. That used to be reported in the error log and nowhere else.
+# The same page is booted twice — once with the backend reporting a sealed store,
+# once unsealed — and the run asserts BOTH directions: the warning appears when it
+# should, and leaves nothing behind (no leftover box, no empty gap in the settings
+# page) when it should not.
+SEAL_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const unsealed = window.__STORE_SEALED__ === false;
+  const which = unsealed ? 'unsealed: ' : 'sealed: ';
+  // Same reason the main probe keeps one: a quiet headless frame stops painting,
+  // and the startup dialogs hang off a nested requestAnimationFrame.
+  const beat = setInterval(() => {
+    document.documentElement.style.setProperty('--seal-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
+  const visible = (el) => !!el && !el.classList.contains('hidden');
+  try {
+    const cm = document.getElementById('confirm-modal');
+    // The portable take-over offer opens first on every launch (the stub always
+    // offers one). Dismiss it, then watch for whatever the app shows next.
+    for (let i = 0; i < 80 && !visible(cm); i++) await sleep(100);
+    if (!visible(cm)) {
+      errs.push(which + 'startup stalled before any dialog opened');
+    } else {
+      document.getElementById('confirm-cancel').click();
+      await sleep(300);
+    }
+    // The seal warning is the one-button variant (infoDialog), which is what tells
+    // it apart from the two-button take-over offer without reading any text.
+    let warned = false;
+    for (let i = 0; i < 60; i++) {
+      if (visible(cm) && !visible(document.getElementById('confirm-cancel'))) { warned = true; break; }
+      await sleep(50);
+    }
+    if (unsealed && !warned) errs.push(which + 'no warning was shown for an unencrypted store');
+    if (!unsealed && warned) errs.push(which + 'a warning was shown although the store is sealed');
+    if (warned) {
+      const title = document.getElementById('confirm-title').textContent.trim();
+      const msg = document.getElementById('confirm-msg').textContent.trim();
+      const icon = document.getElementById('confirm-icon');
+      if (!title) errs.push(which + 'the warning has no title');
+      if (/^storeUnsealed/.test(title) || /^storeUnsealed/.test(msg)) {
+        errs.push(which + 'the warning renders a raw i18n key: ' + title + ' / ' + msg);
+      }
+      // Two paragraphs: what happened, then what helps.
+      if (!msg.includes('\\n\\n')) errs.push(which + 'the warning does not say what helps');
+      if (!visible(icon) || !icon.querySelector('svg')) errs.push(which + 'the warning has no icon');
+      document.getElementById('confirm-ok').click();
+      await sleep(400);
+      // Once per session: it must not come straight back after being closed.
+      if (visible(cm)) errs.push(which + 'the warning reopened after it was closed');
+    }
+    // ---- the permanent record in the settings dialog ------------------------
+    document.getElementById('gear').click();
+    await sleep(200);
+    document.getElementById('expert-open').click();
+    await sleep(300);
+    const tabs = [...document.querySelectorAll('.expert-tab')];
+    if (!tabs.length) errs.push(which + 'the expert menu shows no tabs');
+    tabs[tabs.length - 1].click(); // the system tab, which holds the privacy group
+    await sleep(300);
+    const box = document.getElementById('expert-flags');
+    const notice = box.querySelector('.expert-notice[data-notice="storeUnsealed"]');
+    if (unsealed) {
+      if (!notice) {
+        errs.push(which + 'the privacy group carries no permanent warning row');
+      } else {
+        const text = notice.textContent.trim();
+        if (!text) errs.push(which + 'the warning row is empty');
+        if (/storeUnsealed/.test(text)) errs.push(which + 'the warning row renders a raw i18n key: ' + text);
+        notice.scrollIntoView({ block: 'nearest' });
+        const r = notice.getBoundingClientRect();
+        if (!r.width || !r.height) errs.push(which + 'the warning row takes up no space');
+        // It reports what the data is doing right now, so it must not be
+        // switchable off: no control of any kind inside it.
+        if (notice.querySelector('input, button, select')) {
+          errs.push(which + 'the warning row offers a control to silence it');
+        }
+      }
+    } else {
+      if (notice) errs.push(which + 'a warning row is shown although the store is sealed');
+      // And no hole where it would have gone: no container in the expert list
+      // that occupies vertical space while holding neither text nor children.
+      // Containers only — a lone <path> inside an icon is empty by nature.
+      for (const el of box.querySelectorAll('div, p, section, li, label, fieldset')) {
+        if (el.children.length || el.textContent.trim()) continue;
+        if (el.getBoundingClientRect().height > 4) {
+          errs.push(which + 'an empty box takes up space in the settings page: ' +
+            (el.className || el.tagName));
+          break;
+        }
+      }
+    }
+  } catch (e) { errs.push(which + 'probe: ' + e.message); }
+  clearInterval(beat);
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 def unescape(s):
     for a, b in (("&quot;", '"'), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
         s = s.replace(a, b)
@@ -4998,6 +5108,36 @@ def main():
             print(f"-- {name}")
             for e in errs:
                 print(f"   FAIL JS error: {e}")
+            failed += len(errs)
+            if not errs:
+                print("   ok")
+
+        # The store-sealing warning, both ways round. Its own boot each time: the
+        # dialog only ever opens during startup, so it cannot be reached by walking
+        # an already-running page. Wide enough that the settings dialog is not also
+        # fighting for room — the small-window layout is the main sweep's job.
+        for sealed in (False, True):
+            tag = "sealed" if sealed else "unsealed"
+            side = tmp / "ui" / f"seal-{tag}.html"
+            side.write_text(
+                (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+                .replace("<script",
+                         f'<script>window.__STORE_SEALED__ = {str(sealed).lower()};</script>\n'
+                         '<script src="tauri_stub.js"></script>\n<script', 1)
+                .replace("</body>", SEAL_PROBE + "</body>"),
+                encoding="utf-8")
+            proc = subprocess.run(
+                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+                 f"--user-data-dir={tmp / ('profile-seal-%s' % tag)}", "--allow-file-access-from-files",
+                 "--window-size=1000,780", "--virtual-time-budget=45000",
+                 "--dump-dom", side.as_uri()],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=180)
+            m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+            errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+            print(f"-- store sealing ({tag} store)")
+            for e in errs:
+                print(f"   FAIL: {e}")
             failed += len(errs)
             if not errs:
                 print("   ok")

@@ -9,6 +9,8 @@ Catches the mistakes that are invisible until a user opens the menu:
     absolute: nothing dependent may stay on screen while its parent is off,
   * a gate whose parent flag lives in a different group (it would render far away
     from the toggle it belongs to, or not at all).
+  * a notice that no group shows, or that also exists as a flag — a notice
+    reports a state and must never become something the user can switch off.
 
 Run:  python tests/expert_menu_check.py
 Exit: 0 = clean, 1 = problems found.
@@ -370,13 +372,13 @@ for line in i18n.splitlines():
 # A key listed in EXPERT_TIPS but without a tip<Key> string shows no tooltip at
 # all — withTip() drops it silently, so nothing on screen says the string is
 # missing. Listing a key is a promise to write the explanation.
+en = re.search(r"\n  en: \{(.*?)\n  [a-z]{2}: \{", i18n, re.S)
+en_keys = set(re.findall(r"^    ([A-Za-z0-9_]+):", en.group(1), re.M)) if en else set()
 tips = re.search(r"const EXPERT_TIPS = \[(.*?)\];", SRC, re.S)
 if not tips:
     problems.append("EXPERT_TIPS: list not found")
 else:
     tip_keys = re.findall(r'"([A-Za-z0-9_]+)"', tips.group(1))
-    en = re.search(r"\n  en: \{(.*?)\n  [a-z]{2}: \{", i18n, re.S)
-    en_keys = set(re.findall(r"^    ([A-Za-z0-9_]+):", en.group(1), re.M)) if en else set()
     known_settings = all_flags | values | selects | dropdowns | set(top_keys(paths_src))
     for key in tip_keys:
         want = "tip" + key[0].upper() + key[1:]
@@ -460,6 +462,38 @@ if 'rowResetBtn("selects", "backupIntervalH"' not in backup_panel_body:
 palette_body = block("function paletteRow(", "{", "}")
 if not re.search(r'if\s*\(\s*\w+\s*\)\s*\{[^}]*palette-reset', palette_body, re.S):
     problems.append("reset: paletteRow() shows its reset button even when unchanged")
+
+# ---- notices ------------------------------------------------------------------
+# A notice reports a state the app is in (the store being written unencrypted),
+# not a setting. It has no default, nothing to reset and — the point of the whole
+# construct — no switch: a warning that describes what is on disk right now cannot
+# be turned off, or the one user who needs it is the one who silenced it. So:
+# every id a group lists must be declared, every declared one must be placed, both
+# its strings must exist, and none of them may ever turn up as a flag.
+notices_src = block("const EXPERT_NOTICES", "{", "}")
+declared = set(top_keys(notices_src))
+placed = [k for m in re.finditer(r'notices:\s*\[([^\]]*)\]', tabs)
+          for k in re.findall(r'"([^"]+)"', m.group(1))]
+for key in sorted(declared - set(placed)):
+    problems.append(f"notices: '{key}' is declared but no group shows it")
+for key in placed:
+    if key not in declared:
+        problems.append(f"notices: a group lists '{key}', which is not in EXPERT_NOTICES")
+    if placed.count(key) > 1:
+        problems.append(f"notices: '{key}' is listed by more than one group")
+    if key in all_flags:
+        problems.append(f"notices: '{key}' also exists as a flag — a notice must not be switchable off")
+for key in sorted(declared):
+    m = re.search(r'\b' + re.escape(key) + r'\s*:\s*\{', notices_src)
+    entry = balanced(notices_src, m.end() - 1, "{", "}") if m else ""
+    if "when:" not in entry:
+        problems.append(f"notices: '{key}' has no when() — it would show unconditionally")
+    for field in ("title", "body"):
+        s = re.search(field + r':\s*"([^"]+)"', entry)
+        if not s:
+            problems.append(f"notices: '{key}' has no {field} string key")
+        elif s.group(1) not in en_keys:
+            problems.append(f"notices: '{key}' points at '{s.group(1)}', which has no string")
 
 for p in problems:
     print("FAIL", p)

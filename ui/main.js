@@ -172,6 +172,10 @@ const ICON_TRASH =
   '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13M10 11v6M14 11v6"/></svg>';
 const ICON_UNDO =
   '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M8 7 3 12l5 5M3 12h11a5 5 0 0 1 0 10h-4"/></svg>';
+// Same triangle the expert menu's own caution line uses, so a warning looks like a
+// warning wherever it appears.
+const ICON_WARN =
+  '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12 3 1 21h22L12 3Zm0 5.5 6.6 11H5.4L12 8.5ZM11 11h2v5h-2v-5Zm0 6.5h2v2h-2v-2Z"/></svg>';
 // Reorder a rotating prompt's entries (no drag & drop — YAGNI, and testable).
 const ICON_UP =
   '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 15l6-6 6 6"/></svg>';
@@ -1583,7 +1587,7 @@ const EXPERT_TABS = [
   { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
     { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "gridViewBorder", "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }, "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
-    { title: "expGroupPrivacy", flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
+    { title: "expGroupPrivacy", notices: ["storeUnsealed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
     { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances"], values: ["kbFocusFadeMs"], selects: ["updateCheckH"], paths: ["dataDir"] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"], values: ["tourStepMinH"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
@@ -2083,6 +2087,11 @@ let currentDataDir = "";
 let defaultScreenshotDir = "";
 let defaultSyncDir = "";
 let ocrLangsCache = []; // 121: [{tag, label}], fetched once at startup (init())
+// Whether the backend still manages to seal everything it writes. Read once at
+// startup and pushed by the "store-unsealed" event if it changes mid-session;
+// assumed true until the backend says otherwise, so a failed call never invents
+// a warning that is not real.
+let storeSealed = true;
 const EXPERT_PATHS = {
   screenshotDir: {
     label: "valScreenshotDir",
@@ -2328,6 +2337,43 @@ function toggleExpertGroup(title, sec, fill) {
   if (!collapsed) fill?.(); // custom panels fill on first open
 }
 
+// ---- Expert-menu notices -------------------------------------------------
+// A notice is not a setting: it reports a state the app is currently in, has
+// nothing to switch, and appears only while that state holds. Notices render at
+// the top of their group, above the settings, so the state is read before the
+// controls it affects.
+//
+// There is deliberately NO switch to hide the unsealed-store notice. Everything
+// else in the expert menu can be turned off; a warning that describes what is
+// actually on disk right now cannot, because a warning nobody can see is worth
+// nothing. This is the one exception to "every feature gets a toggle".
+const EXPERT_NOTICES = {
+  storeUnsealed: {
+    when: () => !storeSealed,
+    title: "storeUnsealedRow",
+    body: "storeUnsealedRowNote",
+  },
+};
+
+function noticeRow(id) {
+  const def = EXPERT_NOTICES[id];
+  const row = document.createElement("div");
+  row.className = "expert-notice";
+  row.dataset.notice = id;
+  row.setAttribute("role", "status");
+  const icon = document.createElement("span");
+  icon.className = "expert-notice-icon";
+  icon.innerHTML = ICON_WARN;
+  const text = document.createElement("div");
+  const head = document.createElement("strong");
+  head.textContent = t(def.title);
+  const body = document.createElement("span");
+  body.textContent = t(def.body);
+  text.append(head, body);
+  row.append(icon, text);
+  return row;
+}
+
 function actionRow(a) {
   const btn = document.createElement("button");
   btn.type = "button";
@@ -2477,6 +2523,11 @@ function renderExpert() {
       }
       head.appendChild(right);
       sec.appendChild(head);
+      // State first, settings after — and nothing at all while the state does not
+      // hold, so a healthy install sees no placeholder where a notice would go.
+      for (const id of group.notices || []) {
+        if (EXPERT_NOTICES[id]?.when()) sec.appendChild(noticeRow(id));
+      }
       const actionById = new Map(actions.map((a) => [a.id, a]));
       if (searching) {
         // Flat list while searching (grouping a match under a non-matching toggle
@@ -13230,6 +13281,15 @@ function bind() {
   // and the JSON fallback failed (disk full, permissions). One toast per event —
   // a stuck disk would otherwise spam this on every edit.
   listen("persist-failed", () => toast(t("persistFailed")));
+  // Sealing broke while the app was already running. The startup question is long
+  // over by then, so the backend pushes it instead of this window polling for it.
+  listen("store-unsealed", () => {
+    storeSealed = false;
+    warnStoreUnsealed();
+    // An expert menu that happens to be open must not keep claiming everything is
+    // fine until it is reopened.
+    if (!$("settings-expert").classList.contains("hidden")) renderExpert();
+  });
   // Pushed by the backend every few seconds instead of this window polling
   // missing_files on its own timer.
   listen("missing-files", (e) => applyMissingFiles(e.payload || []));
@@ -13596,6 +13656,23 @@ async function tourFinish() {
 
 EXPERT_ACTIONS["tour-open"] = () => openTour({ firstRun: false });
 
+// The store stopped being sealed — told once per session, because it is a state,
+// not an event stream: every following save fails the same way and a second dialog
+// would only be in the way. The permanent record lives in the settings dialog's
+// privacy group, which keeps saying so for as long as it is true; that is why this
+// one has nothing to dismiss forever and no switch to silence it.
+let storeUnsealedTold = false;
+async function warnStoreUnsealed() {
+  if (storeSealed || storeUnsealedTold) return false;
+  storeUnsealedTold = true;
+  await infoDialog(
+    t("storeUnsealedTitle"),
+    `${t("storeUnsealedMsg")}\n\n${t("storeUnsealedFix")}`,
+    ICON_WARN
+  );
+  return true;
+}
+
 // Called once, right after seedExamplesIfNeeded(), from init()'s reveal(). Never
 // opens on top of (or the same launch as) a more urgent dialog — offerTakeover()
 // (the portable/installed data-folder adoption offer) is the only OTHER dialog that
@@ -13680,6 +13757,9 @@ async function init() {
       $("about-version").textContent = t("versionInstalled").replace("{v}", appVersion);
     }).catch(() => {});
     invoke("current_data_dir").then((d) => { currentDataDir = d || ""; }).catch(() => {});
+    // Awaited, unlike the informational calls around it: the reveal below asks the
+    // user about it straight away, so it has to be known before the window appears.
+    storeSealed = (await invoke("store_sealed").catch(() => true)) !== false;
     invoke("default_screenshot_dir").then((d) => { defaultScreenshotDir = d || ""; }).catch(() => {});
     invoke("default_sync_dir").then((d) => { defaultSyncDir = d || ""; }).catch(() => {});
     // OCR language list -- fetched once, cached, "Automatic" is always
@@ -13708,7 +13788,10 @@ async function init() {
       // other dialog that can fire this early) did not itself appear this launch.
       invoke("show_main_window").catch(() => {}).finally(async () => {
         const urgentDialogShown = await offerTakeover();
-        await maybeOpenFirstRunTour(urgentDialogShown);
+        // Ahead of the tour: an unencrypted store is the more urgent of the two,
+        // and the tour is retried next launch (tourSeen is only written by it).
+        const sealWarned = await warnStoreUnsealed();
+        await maybeOpenFirstRunTour(urgentDialogShown || sealWarned);
       });
     };
     setTimeout(reveal, 1500);

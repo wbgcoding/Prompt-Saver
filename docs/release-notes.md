@@ -68,6 +68,7 @@ Requires the Microsoft WebView2 runtime (preinstalled on Windows 11 and current 
 - The favourites section of the tray menu is on out of the box.
 - The privacy switch that keeps the window out of screenshots is now called **Allow screenshots of Prompt Saver** and reads from your side. It ships off, so the window is still left out of screen captures — but if your screenshots come out empty, the switch that explains it is under privacy in the expert menu.
 - A backup is either whole or absent: a failed one leaves nothing behind.
+- **You are told when your data cannot be encrypted.** Windows seals the database with per-account encryption; on the rare machine where it refuses — almost always a damaged user profile — saving keeps working in readable form rather than losing anything, and you now hear about it: once at startup and permanently under privacy in the expert menu, with no switch to silence it. The next save that succeeds seals everything again by itself.
 - "Duplicate" on a prompt now opens the create dialog prefilled with everything from the original, instead of a silent copy — change something first, or cancel and leave nothing behind.
 
 ### Make it yours

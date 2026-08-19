@@ -1431,6 +1431,22 @@ body.library-front #modal.overlay { z-index: 67; }
   text-wrap: balance;
 }
 .expert-hint svg { flex: 0 0 auto; }
+/* A state a group is currently in, sitting above that group's settings. It exists
+   only while the state holds, so it never leaves a gap behind when it is gone. */
+.expert-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.expert-notice-icon { flex: 0 0 auto; display: flex; }
+.expert-notice strong { display: block; margin-bottom: 2px; font-size: 13px; }
+.expert-notice span { min-width: 0; }
 .noflag-fileAttach #file-btn { display: none; }
 .noflag-screenshot #snip-btn { display: none; }
 .noflag-colorPicker #picker-btn { display: none; }

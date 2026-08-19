@@ -1931,28 +1931,60 @@ mod store_crypt {
     pub fn unprotect(d: &[u8]) -> Option<Vec<u8>> { run(d, false) }
 }
 
+// Whether every write so far this run really went out sealed. Starts true and is
+// flipped exactly once, by the plaintext fallback in enc_str below. The window reads
+// it at startup through the `store_sealed` command and listens for `store-unsealed`
+// for the rest of the session, so a failure that happens while the app is already
+// open still reaches the user instead of only the log file.
+static STORE_SEALED: AtomicBool = AtomicBool::new(true);
+// Set once the app handle exists; None while the store is still being loaded, which
+// is fine — no window exists yet to receive an event, and the flag above already
+// carries the state for the startup question.
+//
+// A closure rather than the AppHandle itself, deliberately: `enc_str` is linked into
+// the unit-test binary, and a direct `handle.emit(...)` in its body pulls the whole
+// webview event path — and the WebView2 import that comes with it — into a binary
+// that has no webview beside it, which then fails to LOAD at all (every test
+// "fails" before one of them runs). Behind this indirection the emit lives in the
+// closure built in `run()`, which no test links.
+type SealNotifier = Arc<dyn Fn() + Send + Sync>;
+static SEAL_NOTIFY: Mutex<Option<SealNotifier>> = Mutex::new(None);
+
 // Encrypt a JSON string for storage (prefix + base64 ciphertext).
 //
 // A DPAPI failure falls back to plaintext rather than refusing the write: hard-failing
 // here would mean the user cannot save at all, trading a confidentiality problem for
 // guaranteed data loss. It must never be SILENT though — a broken Windows profile
 // would otherwise downgrade the whole store from sealed to readable with nothing to
-// show for it. Logged once per run (this runs per row; a full save would flood the log).
+// show for it. Logged and announced once per run (this runs per row; a full save
+// would otherwise flood both the log and the window).
 fn enc_str(plain: &str) -> String {
     #[cfg(windows)]
     {
         if let Some(ct) = store_crypt::protect(plain.as_bytes()) {
             return format!("{}{}", ENC_PREFIX, base64_encode(&ct));
         }
-        static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-        if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        if STORE_SEALED.swap(false, Ordering::Relaxed) {
             append_crash_log(
                 "DPAPI encryption unavailable - stored data is being written UNENCRYPTED. \
                  Check the Windows user profile; a repaired profile re-seals on the next save.",
             );
+            // Cloned out of the lock first: notifying under it would hold the mutex
+            // across a webview round trip for no reason.
+            let notify = SEAL_NOTIFY.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            if let Some(notify) = notify {
+                notify();
+            }
         }
     }
     plain.to_string()
+}
+
+// The state behind the startup warning: true while everything on disk is sealed,
+// false once a write really had to fall back to plaintext this run.
+#[tauri::command]
+fn store_sealed() -> bool {
+    STORE_SEALED.load(Ordering::Relaxed)
 }
 
 // Decrypt a stored value. Legacy (un-prefixed) values pass through for migration; an
@@ -14494,6 +14526,15 @@ pub fn run() {
         )
         .setup(|app| {
             let handle = app.handle().clone();
+            // Before load_store: a sealing failure during the very first read/resave
+            // should already be able to reach a window, once one exists.
+            {
+                let h = handle.clone();
+                *SEAL_NOTIFY.lock().unwrap_or_else(|e| e.into_inner()) =
+                    Some(Arc::new(move || {
+                        let _ = h.emit("store-unsealed", ());
+                    }));
+            }
             sweep_stale_temp_files(); // 53: crash/abnormal-exit leftovers from a previous run
             let store = load_store(&handle);
 
@@ -14998,6 +15039,7 @@ pub fn run() {
             default_sync_dir,
             pick_folder,
             current_data_dir,
+            store_sealed,
             set_data_dir,
             delete_data_dir,
             paste_into_previous,
@@ -17769,6 +17811,20 @@ mod tests {
     // as plain text and the comparison is weaker, so the check is skipped there.
     fn sealing_is_randomised() -> bool {
         enc_str("probe").starts_with(ENC_PREFIX)
+    }
+
+    // The whole point of the flag is that it describes the DISK, not an intention:
+    // whatever enc_str actually produced is what the window is told. Before this,
+    // a plaintext fallback was reported nowhere at all and the answer would have
+    // been a hardcoded "sealed" no matter what came back.
+    #[test]
+    fn store_sealed_reports_what_a_write_actually_did() {
+        let really_sealed = enc_str("probe").starts_with(ENC_PREFIX);
+        assert_eq!(
+            store_sealed(),
+            really_sealed,
+            "the reported state must match what enc_str wrote, in both directions"
+        );
     }
 
     #[test]

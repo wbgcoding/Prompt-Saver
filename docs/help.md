@@ -244,6 +244,17 @@ library/history/pin buttons, multiple views, and view groups.
 Excludes the window from screen capture (on by default), blurs tiles/media until
 hovered, hides tile names, dims unhovered tiles.
 
+Everything the database holds is sealed with Windows' own per-account
+encryption, so another account on the same PC cannot read it. Very rarely
+Windows refuses to do that — almost always a damaged user profile or account. In
+that case saving keeps working, but the data is written in readable form rather
+than being silently lost, and the app says so: once in a dialog at startup, and
+permanently as a red row at the top of this privacy group for as long as it is
+true. That row has no off switch on purpose — it describes what is on disk right
+now, not a tip. Repair the Windows profile (or sign in on a healthy account) and
+the next save that succeeds seals everything again by itself; nothing needs to be
+re-entered.
+
 ### System
 
 Update checks (never installs without asking), keyboard navigation, allowing
@@ -446,7 +457,16 @@ Statistik mit 14-Tage-Diagramm.
 **Werkzeugleiste** — welche Buttons Kopf- und Composer-Leiste zeigen.
 
 **Datenschutz** — Bildschirmaufnahme-Ausschluss (an), Weichzeichnen, Namen
-verbergen, Abdunkeln.
+verbergen, Abdunkeln. Alles in der Datenbank ist mit der kontogebundenen
+Windows-Verschlüsselung versiegelt; ein anderes Konto am selben PC kann es also
+nicht lesen. Sehr selten verweigert Windows das — fast immer wegen eines
+beschädigten Benutzerprofils oder Kontos. Dann wird weiter gespeichert, aber im
+Klartext statt still verloren, und die App sagt es: einmal als Hinweis beim
+Start und dauerhaft als rote Zeile oben in dieser Gruppe, solange es zutrifft.
+Diese Zeile hat bewusst keinen Schalter — sie beschreibt, was gerade auf der
+Festplatte liegt. Ist das Windows-Profil repariert, verschlüsselt der nächste
+erfolgreiche Speichervorgang wieder alles von selbst; nichts muss neu erfasst
+werden.
 
 **System** — Updates, Tastatur-Navigation, mehrere Instanzen, Datenordner.
 

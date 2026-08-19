@@ -635,6 +635,14 @@ ship on).
 - **The updater refuses to install an older version than the one you are
   running.** The download was already rejected unless its checksum matched;
   the version itself is now re-checked as well.
+- **You are now told when your data cannot be encrypted.** Windows seals the
+  database with per-account encryption; on the rare machine where it refuses
+  (a damaged user profile), the app keeps saving in readable form rather than
+  losing the data — but that used to be noted in the error log and nowhere the
+  user would see it. It now says so in a dialog at startup and keeps a
+  permanent warning row at the top of the privacy settings for as long as it
+  is true, with no switch to silence it. The next save that succeeds seals
+  everything again by itself.
 
 ### Removed
 
