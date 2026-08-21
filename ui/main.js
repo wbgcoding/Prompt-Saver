@@ -1083,6 +1083,9 @@ const FLAG_LABELS = {
   promptHotkeyPaste: "flagPromptHotkeyPaste",
   trayRecent: "flagTrayRecent",         // F23 "recently used" section in the tray menu
   colorPicker: "flagColorPicker",       // F26 pipette — pick a screen colour to the clipboard
+  // Windows Media.Ocr text recognition (screenshot / image file -> editable text).
+  // Ships ON; the button hides itself when Windows has no recognizer at all.
+  ocr: "flagOcr",
   customThemes: "flagCustomThemes",     // F3 theme editor + custom entries in the theme list
   tileFolders: "flagTileFolders",       // F27 drop a tile into another to make a grid folder
   tags: "flagTags",                     // F1 tags + library tag filter
@@ -1181,8 +1184,6 @@ const OPT_FLAG_LABELS = {
   // lib.rs): mirrors every text-only prompt as a .md file in a folder, editable by
   // hand or another tool.
   promptSync: "flagPromptSync",
-  // Windows Media.Ocr text recognition (screenshot / image file -> editable text).
-  ocr: "flagOcr",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
@@ -7309,6 +7310,7 @@ function closeOcrLangsModal() {
   // loop (and the DOM it repaints) needs to stop while nobody is looking.
   for (const id of Object.values(ocrInstallTimers)) clearTimeout(id);
   ocrInstallTimers = {};
+  if (ocrCapsElevTimer) { clearTimeout(ocrCapsElevTimer); ocrCapsElevTimer = null; }
 }
 async function loadOcrCaps(force) {
   const body = $("ocr-langs-body");
@@ -7332,12 +7334,63 @@ async function loadOcrCaps(force) {
       note.className = "hint";
       note.textContent = t("ocrLangsNeedElevation");
       body.appendChild(note);
+      // Without a list nothing can be installed either (the list IS the install
+      // allowlist), so this machine needs a way to run the query elevated.
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ghost-btn";
+      btn.textContent = t("ocrLangsElevateBtn");
+      btn.addEventListener("click", startElevatedCapsScan);
+      body.appendChild(btn);
     } else {
       errToast(e);
     }
     return;
   }
   renderOcrLangsBody();
+}
+// Runs the capability listing through the UAC prompt on machines that refuse it
+// to a normal user. Same shape as an install: explain first, launch, then poll
+// the result the elevated process writes.
+let ocrCapsElevTimer = null;
+async function startElevatedCapsScan() {
+  const ok = await confirmDialog({
+    title: t("ocrElevateTitle"),
+    message: t("ocrCapsElevateInfo"),
+    confirmLabel: t("ocrLangsElevateBtn"),
+    danger: false,
+  });
+  if (!ok) return;
+  const body = $("ocr-langs-body");
+  body.innerHTML = "";
+  const loading = document.createElement("div");
+  loading.className = "hint";
+  loading.textContent = t("ocrLangsScanning");
+  body.appendChild(loading);
+  try {
+    await invoke("ocr_capabilities_elevate");
+  } catch (e) {
+    loading.textContent = String(e) === "ocr-elevate-cancelled" ? t("ocrElevateCancelled") : String(e);
+    return;
+  }
+  // The elevated process runs on its own -- poll its result file, but give up
+  // after two minutes instead of polling forever behind a closed dialog.
+  let left = 60;
+  const tick = async () => {
+    ocrCapsElevTimer = null;
+    let res;
+    try { res = await invoke("ocr_capabilities_elevated_result"); }
+    catch (e) { loading.textContent = String(e); return; }
+    if (res == null) {
+      if (--left <= 0) { loading.textContent = t("ocrLangsNeedElevation"); return; }
+      ocrCapsElevTimer = setTimeout(tick, 2000);
+      return;
+    }
+    ocrCapsCache = res;
+    ocrCapsChecked = Math.floor(Date.now() / 1000);
+    renderOcrLangsBody();
+  };
+  ocrCapsElevTimer = setTimeout(tick, 2000);
 }
 function renderOcrLangsBody() {
   const body = $("ocr-langs-body");
@@ -12409,15 +12462,6 @@ function bind() {
     const r = $("ocr-btn").getBoundingClientRect();
     openMiniMenu([
       {
-        label: t("ocrMenuScreenshot"),
-        run: async () => {
-          // Arms the NEXT capture for OCR instead of a normal screenshot save; the
-          // backend resets this the moment the session ends (capture or cancel).
-          await invoke("set_snip_mode", { mode: "ocr" }).catch(() => {});
-          invoke("open_snip").catch((err) => errToast(err));
-        },
-      },
-      {
         label: t("ocrMenuFromFile"),
         run: async () => {
           const path = await withDialog(() => invoke("pick_file_path"));
@@ -12425,6 +12469,15 @@ function bind() {
           try {
             showOcrResult(await invoke("ocr_image", { path, ...ocrSettings() }));
           } catch (err) { ocrErrToast(err); }
+        },
+      },
+      {
+        label: t("ocrMenuScreenshot"),
+        run: async () => {
+          // Arms the NEXT capture for OCR instead of a normal screenshot save; the
+          // backend resets this the moment the session ends (capture or cancel).
+          await invoke("set_snip_mode", { mode: "ocr" }).catch(() => {});
+          invoke("open_snip").catch((err) => errToast(err));
         },
       },
     ], r.left, r.bottom + 4);

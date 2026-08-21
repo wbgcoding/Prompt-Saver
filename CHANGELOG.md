@@ -14,8 +14,8 @@ multi-select in the grid, a trash for deleted prompts, placing one prompt in
 several views at once, restoring a backup's data and settings separately,
 rotating prompts, a screenshot editor, offline text recognition (OCR), and a
 first-run introduction tour. Everything new is an expert-menu switch, most of
-it off until you turn it on (the screenshot editor and the introduction tour
-ship on).
+it off until you turn it on (text recognition, the screenshot editor and the
+introduction tour ship on).
 
 ### Added
 
@@ -144,10 +144,10 @@ ship on).
   holding **V** to peek at the unedited shot. Cancel leaves the original capture
   untouched; Apply re-copies the edited image and re-saves it to the screenshot
   folder if that setting is on.
-- **Text recognition (OCR)** (expert menu, off by default) — pull editable text
+- **Text recognition (OCR)** (expert menu, on by default) — pull editable text
   out of a screenshot or an image file, fully offline through Windows' own
-  recognizer. A composer button opens a small menu to grab a new screenshot or
-  pick a file; the screenshot dialog also gets a "Recognize text" button that
+  recognizer. A composer button opens a small menu to pick an image file or grab
+  a new screenshot; the screenshot dialog also gets a "Recognize text" button that
   works on the capture you already have. The result opens in an editable dialog
   with the detected language and character count, ready to copy or create as a
   new prompt. Small on-screen text is enlarged before recognition so it reads
@@ -157,9 +157,11 @@ ship on).
   "Manage languages" dialog lists everything Windows can recognize, installed or
   not, with the download size right on the button so nothing downloads blind;
   picking one walks through Windows' own installer, asking for administrator
-  rights exactly once and explaining why beforehand. Installed packs can also be
-  kept current automatically, with a quiet, cancelable notice when one needs an
-  update.
+  rights exactly once and explaining why beforehand. On systems where Windows
+  demands administrator rights even to list the packs, the dialog says so and
+  offers to run that listing elevated — it only lists, it installs nothing.
+  Installed packs can also be kept current automatically, with a quiet,
+  cancelable notice when one needs an update.
 - **Introduction tour** (expert menu, on by default) — a five-step walkthrough
   on first launch, opened right after the example prompts are seeded so step
   two already has a tile to point at: what the app is and that everything

@@ -4067,15 +4067,15 @@ PROBE = """
         }
       }
     }
-    // 121: OCR -- default-off feature (flag "ocr"). Gate check first (both entry
-    // points hidden while off), then enable it via the real expert-menu checkbox
-    // and exercise the composer menu plus the result dialog.
+    // OCR ships on (flag "ocr"). Gate check first (both entry points visible,
+    // and gone once the flag is switched off), then switch it back on via the
+    // real expert-menu checkbox and exercise the menu plus the result dialog.
     {
       const ocrBtn = document.getElementById('ocr-btn');
       const snipModalOcrBtn = document.getElementById('snip-modal-ocr');
       const hiddenNow = (el) => !el || getComputedStyle(el).display === 'none';
-      if (!hiddenNow(ocrBtn) || !hiddenNow(snipModalOcrBtn)) {
-        out.errors.push('OCR entry points are visible while the ocr flag is off');
+      if (hiddenNow(ocrBtn) || hiddenNow(snipModalOcrBtn)) {
+        out.errors.push('OCR entry points are hidden while the ocr flag is on');
       }
       const rowByLabel = (text) => {
         for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
@@ -4097,10 +4097,6 @@ PROBE = """
         await click('expert-back');
         await sleep(50);
       };
-      await toggleOcrFlag(true);
-      if (hiddenNow(ocrBtn) || hiddenNow(snipModalOcrBtn)) {
-        out.errors.push('OCR entry points stayed hidden after switching the flag on');
-      }
       if (!ocrBtn.title.trim() || /^[a-z]+[A-Z]/.test(ocrBtn.title)) {
         out.errors.push('OCR composer button has no real title (raw i18n key or empty)');
       }
@@ -4110,6 +4106,9 @@ PROBE = """
       const menuItems = menu ? [...menu.querySelectorAll('button[role=menuitem]')] : [];
       if (menuItems.length !== 2) {
         out.errors.push('OCR menu: expected 2 entries, found ' + menuItems.length);
+      } else if (menuItems[1].textContent.trim() !== 'Screenshot') {
+        // The screenshot entry belongs at the bottom of the menu.
+        out.errors.push('OCR menu: last entry is ' + JSON.stringify(menuItems[1].textContent.trim()) + ', expected the screenshot one');
       }
       document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
       await sleep(50);
@@ -4136,7 +4135,13 @@ PROBE = """
       }
       await toggleOcrFlag(false);
       if (!hiddenNow(ocrBtn) || !hiddenNow(snipModalOcrBtn)) {
-        out.errors.push('OCR entry points stayed visible after switching the flag back off');
+        out.errors.push('OCR entry points stayed visible after switching the flag off');
+      }
+      // Back to the shipped state -- later probes (the tour's step 5) read the
+      // live flags and would otherwise see a value this probe left behind.
+      await toggleOcrFlag(true);
+      if (hiddenNow(ocrBtn) || hiddenNow(snipModalOcrBtn)) {
+        out.errors.push('OCR entry points stayed hidden after switching the flag back on');
       }
     }
     // OCR language-pack management dialog: list renders, size sits inside the
@@ -4209,8 +4214,41 @@ PROBE = """
           if (!modal.classList.contains('hidden')) out.errors.push('OCR langs modal did not close');
         }
       }
+      // Windows refusing the read-only listing: an honest note plus a button that
+      // re-runs the very same query elevated -- without it no language can be
+      // added at all, because the list IS the install allowlist.
+      window.__OCR_CAPS_ELEV__ = true;
+      window.__OCR_CAPS_ELEV_DONE__ = false;
+      if (langsRow) {
+        langsRow.click();
+        await sleep(150);
+        const modal = document.getElementById('ocr-langs-modal');
+        const elevBtn = [...document.querySelectorAll('#ocr-langs-body .ghost-btn')][0];
+        if (!elevBtn || !elevBtn.textContent.trim()) {
+          out.errors.push('OCR langs modal: no elevation button when Windows refuses the listing');
+        } else {
+          layoutScan('OCR langs modal (needs elevation)');
+          elevBtn.click();
+          await sleep(100);
+          const okBtn = document.getElementById('confirm-ok');
+          if (!okBtn || okBtn.offsetParent === null) {
+            out.errors.push('OCR langs modal: elevation button did not explain itself first');
+          } else {
+            okBtn.click();
+            await sleep(3000); // the poller re-asks every 2 s
+            const rows2 = [...document.querySelectorAll('#ocr-langs-body .ocr-lang-row')];
+            if (rows2.length !== FAKE_CAPS.length) {
+              out.errors.push('OCR langs modal: elevated listing produced ' + rows2.length + ' rows, expected ' + FAKE_CAPS.length);
+            }
+          }
+        }
+        document.getElementById('ocr-langs-close-x').click();
+        await sleep(100);
+        if (modal && !modal.classList.contains('hidden')) out.errors.push('OCR langs modal did not close after the elevated listing');
+      }
+      window.__OCR_CAPS_ELEV__ = false;
       window.__OCR_CAPS_TEST__ = null;
-      await toggleOcrFlag(false);
+      await toggleOcrFlag(true); // leave the flag in its shipped state
     }
     // 123: first-run tour -- all five steps reachable, each with a heading and at
     // least one text line, no raw i18n key, no overflow, height barely moves
@@ -4246,7 +4284,7 @@ PROBE = """
           } else {
             const rows = [...document.querySelectorAll('.tour-opt-row')];
             if (rows.length !== 3) out.errors.push('Tour step 5: expected 3 option rows, found ' + rows.length);
-            const wantOn = { screenshot: true, colorPicker: true, ocr: false };
+            const wantOn = { screenshot: true, colorPicker: true, ocr: true };
             for (const row of rows) {
               const cb = row.querySelector('input.switch');
               const note = row.querySelector('.tour-opt-default').textContent.trim();
@@ -4255,8 +4293,8 @@ PROBE = """
               if (!desc || isRawKey(desc)) out.errors.push('Tour step 5: option description missing or raw key');
             }
             const boxes = rows.map((r) => r.querySelector('input.switch').checked);
-            if (JSON.stringify(boxes) !== JSON.stringify([true, true, false])) {
-              out.errors.push('Tour step 5: default switch states are ' + JSON.stringify(boxes) + ', expected [true,true,false] (shipsOn defaults)');
+            if (JSON.stringify(boxes) !== JSON.stringify([true, true, true])) {
+              out.errors.push('Tour step 5: default switch states are ' + JSON.stringify(boxes) + ', expected [true,true,true] (shipsOn defaults)');
             }
             // Flip every switch, then Restore defaults should bring them all back.
             for (const row of rows) {
@@ -4268,7 +4306,7 @@ PROBE = """
             document.querySelector('.tour-restore-btn').click();
             await sleep(50);
             const restored = [...document.querySelectorAll('.tour-opt-row')].map((r) => r.querySelector('input.switch').checked);
-            if (JSON.stringify(restored) !== JSON.stringify([true, true, false])) {
+            if (JSON.stringify(restored) !== JSON.stringify([true, true, true])) {
               out.errors.push('Tour step 5: Restore defaults left switches at ' + JSON.stringify(restored));
             }
           }

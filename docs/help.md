@@ -76,16 +76,18 @@ with undo/redo.
 
 ### Text recognition (OCR)
 
-Off by default. Once switched on, a button on the composer and in the screenshot
-dialog pulls the text out of a screenshot or an image file, entirely on this
-device via Windows' own text recognizer — nothing is uploaded or sent anywhere.
+On by default. A button on the composer and in the screenshot dialog pulls the
+text out of a screenshot or an image file, entirely on this device via Windows'
+own text recognizer — nothing is uploaded or sent anywhere. The composer button
+opens a small menu: from an image file, or from a screenshot you take right now.
 It needs a Windows language pack: the app offers to download one the first time
 it's needed, and installing it needs administrator rights (the usual Windows
 confirmation prompt appears). The language dropdown's "Manage languages…" entry
 opens a dialog listing what's installed and what's available, and lets you
 install or update from there; listing normally needs no special rights, but on
-some Windows systems it does too — the dialog says so plainly instead of coming
-up blank. Recognized text can auto-copy to the clipboard and auto-join wrapped
+some Windows systems it does too — the dialog says so plainly and offers to run
+the listing with administrator rights, instead of coming up blank. That step only
+lists the packs, it installs nothing. Recognized text can auto-copy to the clipboard and auto-join wrapped
 lines into full sentences, both adjustable, and the app can check in the
 background for language packs that need updating.
 
@@ -387,15 +389,18 @@ Editor: Zuschneiden, Stift, Marker, Linien, Pfeile, Rechtecke, Ellipsen, Text,
 nummerierte Schritte, Pixelieren und ein Spotlight, das alles außerhalb eines
 Bereichs abdunkelt — mit Rückgängig/Wiederholen.
 
-**Texterkennung (OCR)** — standardmäßig aus; liest per Knopf in der Leiste und
+**Texterkennung (OCR)** — standardmäßig an; liest per Knopf in der Leiste und
 im Screenshot-Dialog Text aus einem Screenshot oder einer Bilddatei, komplett
-offline über die eigene Texterkennung von Windows. Braucht ein
+offline über die eigene Texterkennung von Windows. Der Knopf in der Leiste öffnet
+ein kleines Menü: aus einer Bilddatei oder aus einem Screenshot. Braucht ein
 Windows-Sprachpaket — die App bietet den Download beim ersten Bedarf an, die
 Installation braucht Administratorrechte (übliche Windows-Bestätigung).
 „Sprachen verwalten…" im Sprachen-Dropdown listet Installiertes und
 Verfügbares und startet Installation/Update; das Auflisten selbst braucht
 normalerweise keine Sonderrechte, auf manchen Windows-Systemen aber doch — der
-Dialog sagt das dann offen statt leer zu bleiben. Erkannter Text kann
+Dialog sagt das dann offen und bietet an, die Abfrage mit Administratorrechten
+auszuführen, statt leer zu bleiben. Dabei wird nur aufgelistet, nichts
+installiert. Erkannter Text kann
 automatisch kopiert und umgebrochene Zeilen zu ganzen Sätzen zusammengefügt
 werden, beides einstellbar; eine Hintergrundprüfung meldet veraltete
 Sprachpakete.

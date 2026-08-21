@@ -273,7 +273,16 @@ const RESULTS = {
   // Read fresh on every call (unlike main.js's own `const { invoke } = ...`
   // capture at module load), so a probe can set it any time before triggering
   // the actual invoke call, no matter how long main.js has already been running.
-  ocr_capabilities: () => window.__OCR_CAPS_TEST__ || [],
+  ocr_capabilities: () => {
+    // A probe sets window.__OCR_CAPS_ELEV__ to play the Windows builds that
+    // refuse even the read-only listing to a normal user.
+    if (window.__OCR_CAPS_ELEV__) throw "ocr-caps-need-elevation";
+    return window.__OCR_CAPS_TEST__ || [];
+  },
+  // The elevated listing: launching it arms the result, the next poll hands the
+  // list over -- the same two-step the real backend does through the UAC prompt.
+  ocr_capabilities_elevate: () => { window.__OCR_CAPS_ELEV_DONE__ = true; return null; },
+  ocr_capabilities_elevated_result: () => (window.__OCR_CAPS_ELEV_DONE__ ? window.__OCR_CAPS_TEST__ || [] : null),
   default_screenshot_dir: () => "C:\\Pictures",
   default_sync_dir: () => "C:\\Data\\Prompts",
   // One snapshot carries its prompt count and names (61), one is from an older

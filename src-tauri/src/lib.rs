@@ -9852,16 +9852,15 @@ fn sweep_stale_temp_files() {
     let ocr_dir = dir.join(brand::TEMP_DIR);
     if let Ok(entries) = fs::read_dir(&ocr_dir) {
         let ocr_prefix = format!("{}-ocr-", brand::TEMP_PREFIX);
-        let ocr_install_prefix = format!("{}-ocr-install-", brand::TEMP_PREFIX);
         for e in entries.flatten() {
             let name = e.file_name().to_string_lossy().to_string();
-            let is_ocr_png = name.starts_with(&ocr_prefix) && name.ends_with(".png");
-            let is_ocr_install_json = name.starts_with(&ocr_install_prefix) && name.ends_with(".json");
-            // The elevated language-pack install script deletes itself in its own
-            // PowerShell `finally`, so this only ever catches one left behind by a
-            // hard kill mid-run.
-            let is_ocr_install_script = name.starts_with(&ocr_install_prefix) && name.ends_with(".ps1");
-            if (is_ocr_png || is_ocr_install_json || is_ocr_install_script) && is_stale(&e) {
+            let is_ours = name.starts_with(&ocr_prefix);
+            let is_ocr_png = is_ours && name.ends_with(".png");
+            // Result files of the two elevated PowerShell runs (installing a pack,
+            // listing the packs). Each script deletes itself in its own `finally`,
+            // so a .ps1 here is only ever one left behind by a hard kill mid-run.
+            let is_elevated_leftover = is_ours && (name.ends_with(".json") || name.ends_with(".ps1"));
+            if (is_ocr_png || is_elevated_leftover) && is_stale(&e) {
                 let _ = fs::remove_file(e.path());
             }
         }
@@ -11896,6 +11895,39 @@ async fn ocr_capabilities(state: State<'_, Db>, force: bool) -> Result<Vec<OcrCa
     }
 }
 
+// Windows on some machines refuses the read-only capability listing to a normal
+// user (ocr_capabilities then fails with "ocr-caps-need-elevation"). This runs
+// the very same listing through the UAC prompt instead. Only ever called from
+// the button the user presses in the language dialog -- the app never asks for
+// rights on its own. Returns once the elevated process was launched; the
+// frontend polls ocr_capabilities_elevated_result for the list.
+#[tauri::command]
+fn ocr_capabilities_elevate() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        ocr::elevate_capabilities()
+    }
+    #[cfg(not(windows))]
+    {
+        Err("ocr is only available on Windows".to_string())
+    }
+}
+
+// None while that elevated listing is still running (or was never started),
+// Some(list) once it wrote one. A failure inside the elevated process is
+// reported as an error, never as an empty list.
+#[tauri::command]
+fn ocr_capabilities_elevated_result() -> Result<Option<Vec<OcrCap>>, String> {
+    #[cfg(windows)]
+    {
+        ocr::elevated_capabilities_result()
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(None)
+    }
+}
+
 // Kick off an elevated install for one language capability. Validates
 // `name` BEFORE any string is built or a process is touched (G10): first the
 // anchored character-class check, then -- only if that already passed --
@@ -12343,7 +12375,15 @@ mod ocr {
         if output.trim() == "ELEVATION_REQUIRED" {
             return Err("ocr-caps-need-elevation".to_string());
         }
-        let raw = ocr_parse_capabilities_json(&output)?;
+        caps_from_json(&output)
+    }
+
+    // The PowerShell query's JSON -> the list the UI shows. Shared by the normal
+    // (unelevated) query and by the elevated one below, so both produce exactly
+    // the same list, localized the same way.
+    fn caps_from_json(output: &str) -> Result<Vec<OcrCap>, String> {
+        ensure_com();
+        let raw = ocr_parse_capabilities_json(output)?;
         let mut out = Vec::with_capacity(raw.len());
         for r in raw {
             let label = Language::CreateLanguage(&HSTRING::from(r.tag.as_str()))
@@ -12428,10 +12468,18 @@ mod ocr {
             result = ps_single_quote(&result_path.to_string_lossy()),
             script = ps_single_quote(&script_path.to_string_lossy()),
         );
+        run_elevated_script(&script_path, &script)
+    }
+
+    // Writes a generated .ps1 and starts it through the UAC prompt, returning as
+    // soon as the elevated process has been launched (or the launch was refused).
+    // Used by both elevated paths -- installing a language pack and, on machines
+    // that demand rights even for the read-only listing, the listing itself.
+    fn run_elevated_script(script_path: &Path, script: &str) -> Result<(), String> {
         if let Some(dir) = script_path.parent() {
             fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         }
-        write_ps1_with_bom(&script_path, &script).map_err(|e| e.to_string())?;
+        write_ps1_with_bom(script_path, script).map_err(|e| e.to_string())?;
 
         // Standard Win32 argv quoting (double quotes for a path that may
         // contain spaces) -- this is CreateProcess's own command-line
@@ -12455,7 +12503,7 @@ mod ocr {
             // The script's own `finally` only runs once PowerShell actually starts —
             // a launch failure (including a declined UAC prompt) never gets that far,
             // so the .ps1 would otherwise sit in the temp folder forever.
-            let _ = fs::remove_file(&script_path);
+            let _ = fs::remove_file(script_path);
             // SE_ERR_ACCESSDENIED (5) is what ShellExecuteW returns when the user
             // declines the UAC prompt; ERROR_CANCELLED (1223) shows up on some
             // Windows versions for the same outcome. Both are "no admin rights
@@ -12463,9 +12511,59 @@ mod ocr {
             if code == 5 || code == 1223 {
                 return Err("ocr-elevate-cancelled".to_string());
             }
-            return Err(format!("could not start the elevated installer (ShellExecuteW code {})", code));
+            return Err(format!("could not start the elevated process (ShellExecuteW code {})", code));
         }
         Ok(())
+    }
+
+    fn caps_result_path() -> PathBuf {
+        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-ocr-caps.json", brand::TEMP_PREFIX))
+    }
+    fn caps_script_path() -> PathBuf {
+        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-ocr-caps.ps1", brand::TEMP_PREFIX))
+    }
+
+    // The same query fetch_capabilities runs, but through an elevated PowerShell
+    // that writes its JSON to a temp file. Needed on machines where Windows
+    // refuses even the read-only listing to a normal user: without a list there
+    // is no install allowlist either, so no language could be added at all.
+    // Never starts by itself -- only when the user presses the button in the dialog.
+    pub(super) fn elevate_capabilities() -> Result<(), String> {
+        let result_path = caps_result_path();
+        let script_path = caps_script_path();
+        let _ = fs::remove_file(&result_path); // a stale list must never look fresh
+        let script = format!(
+            "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  Get-WindowsCapability -Online -Name \"Language.OCR*\" | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} catch {{\r\n  @{{ error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} finally {{\r\n  Remove-Item -LiteralPath {script} -Force -ErrorAction SilentlyContinue\r\n}}\r\n",
+            result = ps_single_quote(&result_path.to_string_lossy()),
+            script = ps_single_quote(&script_path.to_string_lossy()),
+        );
+        run_elevated_script(&script_path, &script)
+    }
+
+    // Reads (and clears) what the elevated listing wrote. Ok(None) = still
+    // running, or never started. A successful list also fills the cache the
+    // normal query fills, so the install allowlist keeps working unchanged.
+    pub(super) fn elevated_capabilities_result() -> Result<Option<Vec<OcrCap>>, String> {
+        let path = caps_result_path();
+        let text = match fs::read_to_string(&path) {
+            Ok(t) => t,
+            Err(_) => return Ok(None),
+        };
+        let _ = fs::remove_file(&path);
+        // Windows PowerShell's `Out-File -Encoding utf8` writes a byte-order mark.
+        let text = text.trim_start_matches('\u{feff}').trim().to_string();
+        if text.is_empty() {
+            return Err("the elevated listing returned nothing".to_string());
+        }
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
+            if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+                return Err(err.to_string());
+            }
+        }
+        let caps = caps_from_json(&text)?;
+        *cap_cache().lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(CapCache { fetched_at: std::time::Instant::now(), caps: caps.clone() });
+        Ok(Some(caps))
     }
 
     // Reads (and, once a terminal result is found, deletes) the result file
@@ -15169,6 +15267,8 @@ pub fn run() {
             ocr_region,
             ocr_image_data,
             ocr_capabilities,
+            ocr_capabilities_elevate,
+            ocr_capabilities_elevated_result,
             ocr_install_language,
             ocr_install_result,
             ocr_lang_snooze,
@@ -17550,6 +17650,7 @@ mod tests {
         let ocr_png = ocr_subdir.join(format!("{}-ocr-{}.png", brand::TEMP_PREFIX, pid));
         let ocr_json = ocr_subdir.join(format!("{}-ocr-install-{}.json", brand::TEMP_PREFIX, pid));
         let ocr_script = ocr_subdir.join(format!("{}-ocr-install-{}.ps1", brand::TEMP_PREFIX, pid));
+        let caps_json = ocr_subdir.join(format!("{}-ocr-caps.json", brand::TEMP_PREFIX));
         let fresh_ocr_png = ocr_subdir.join(format!("{}-ocr-{}-fresh.png", brand::TEMP_PREFIX, pid));
         let pdfium_cache = ocr_subdir.join(format!("pdfium-test-{}.dll", pid));
 
@@ -17565,6 +17666,7 @@ mod tests {
         fs::write(&ocr_png, b"png").unwrap();
         fs::write(&ocr_json, b"{}").unwrap();
         fs::write(&ocr_script, b"# elevated install").unwrap();
+        fs::write(&caps_json, b"[]").unwrap();
         fs::write(&fresh_ocr_png, b"png").unwrap();
         fs::write(&pdfium_cache, b"dll").unwrap();
         backdate(&snip, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
@@ -17573,6 +17675,7 @@ mod tests {
         backdate(&ocr_png, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
         backdate(&ocr_json, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
         backdate(&ocr_script, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
+        backdate(&caps_json, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
         backdate(&pdfium_cache, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
 
         sweep_stale_temp_files();
@@ -17583,6 +17686,7 @@ mod tests {
         assert!(!ocr_png.exists(), "a stale leftover OCR image must be swept");
         assert!(!ocr_json.exists(), "a stale leftover OCR install-result json must be swept");
         assert!(!ocr_script.exists(), "a stale leftover OCR elevation script must be swept");
+        assert!(!caps_json.exists(), "a stale leftover elevated capability listing must be swept");
         assert!(fresh_snip.exists(), "a snip preview still in active use must survive");
         assert!(fresh_ocr_png.exists(), "an OCR image still in active use must survive");
         assert!(unrelated_ext.exists(), "a differently-suffixed file must survive");
