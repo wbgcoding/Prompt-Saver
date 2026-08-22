@@ -132,7 +132,7 @@ body.pick { cursor: none; }
   overflow: hidden;
   font-variant-numeric: tabular-nums;
 }
-/* 80: last-5 picked colours — a stationary strip just above the hint, in the same
+/* Last-5 picked colours — a stationary strip just above the hint, in the same
    dark chrome as the loupe. Fixed position on purpose: the loupe follows the cursor,
    so swatches parked inside it can never be clicked. */
 .pick-history {

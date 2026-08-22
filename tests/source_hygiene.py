@@ -17,8 +17,8 @@ TRACKED_GLOBS = [
     "installer.nsi",
 ]
 
-NUMBERED_COMMENT = re.compile(r"^\s*//\s*\d+:")
-NUMBERED_COMMENT_PAREN = re.compile(r"^\s*//\s*\d+\s*\(")
+NUMBERED_COMMENT = re.compile(r"^\s*(?://|/\*)\s*\d+(\s*/\s*\d+)*:")
+NUMBERED_COMMENT_PAREN = re.compile(r"^\s*(?://|/\*)\s*\d+(\s*/\s*\d+)*\s*\(")
 # A work-item code buried in a comment anywhere, not just at the start -- e.g. a
 # section-divider comment like "// ---------- F25: folder commands ----------".
 WORK_ITEM_CODE = re.compile(r"\b[A-Z]\d+:")

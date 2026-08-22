@@ -526,7 +526,7 @@ body.menu-open .pill { flex: 0 0 auto; }
 }
 .folder-member.copied .member-ok { opacity: 1; }
 
-/* 32: rotating-prompt "next entry" badge — small dot in the corner, independent of
+/* Rotating-prompt "next entry" badge — small dot in the corner, independent of
    the pill/theme colour so it reads the same in every theme; shared by the pill
    (floating.html) and folder member tiles. A POSITIVE inset, not a negative
    "notification dot" offset: `html, body { overflow: hidden }` clips the pill

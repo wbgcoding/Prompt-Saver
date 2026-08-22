@@ -4457,10 +4457,10 @@ PROBE = """
         layoutScan('Composer with voice button');
       }
     }
-    // 123: first-run tour -- all five steps reachable, each with a heading and at
+    // First-run tour -- all five steps reachable, each with a heading and at
     // least one text line, no raw i18n key, no overflow, height barely moves
-    // between steps (tourStepMinH), step 5's three switches match shipsOn() and
-    // Restore defaults restores them, Skip/Finish both close the dialog.
+    // between steps (measured once per open), step 5's four switches match
+    // shipsOn() and Restore defaults restores them, Skip/Finish both close the dialog.
     {
       document.getElementById('settings').classList.remove('hidden');
       await sleep(50);
@@ -4490,8 +4490,8 @@ PROBE = """
             if (lines.length > 3) out.errors.push('Tour step ' + step + ': more than three text lines');
           } else {
             const rows = [...document.querySelectorAll('.tour-opt-row')];
-            if (rows.length !== 3) out.errors.push('Tour step 5: expected 3 option rows, found ' + rows.length);
-            const wantOn = { screenshot: true, colorPicker: true, ocr: true };
+            if (rows.length !== 4) out.errors.push('Tour step 5: expected 4 option rows, found ' + rows.length);
+            const wantOn = { screenshot: true, colorPicker: true, ocr: true, voice: true };
             for (const row of rows) {
               const cb = row.querySelector('input.switch');
               const note = row.querySelector('.tour-opt-default').textContent.trim();
@@ -4500,8 +4500,8 @@ PROBE = """
               if (!desc || isRawKey(desc)) out.errors.push('Tour step 5: option description missing or raw key');
             }
             const boxes = rows.map((r) => r.querySelector('input.switch').checked);
-            if (JSON.stringify(boxes) !== JSON.stringify([true, true, true])) {
-              out.errors.push('Tour step 5: default switch states are ' + JSON.stringify(boxes) + ', expected [true,true,true] (shipsOn defaults)');
+            if (JSON.stringify(boxes) !== JSON.stringify([true, true, true, true])) {
+              out.errors.push('Tour step 5: default switch states are ' + JSON.stringify(boxes) + ', expected [true,true,true,true] (shipsOn defaults)');
             }
             // Flip every switch, then Restore defaults should bring them all back.
             for (const row of rows) {
@@ -4513,7 +4513,7 @@ PROBE = """
             document.querySelector('.tour-restore-btn').click();
             await sleep(50);
             const restored = [...document.querySelectorAll('.tour-opt-row')].map((r) => r.querySelector('input.switch').checked);
-            if (JSON.stringify(restored) !== JSON.stringify([true, true, true])) {
+            if (JSON.stringify(restored) !== JSON.stringify([true, true, true, true])) {
               out.errors.push('Tour step 5: Restore defaults left switches at ' + JSON.stringify(restored));
             }
           }
@@ -4523,14 +4523,14 @@ PROBE = """
           if (step < 4) document.getElementById('tour-next').click();
           await sleep(150);
         }
-        // tourStepMinH's job is to stop a SHORT step from looking tiny next to a
-        // long one -- it floors every step to the same height. It is not meant to
-        // force a longer step's wrapped text to occupy zero extra room; one
+        // The measured min-height's job is to stop a SHORT step from looking tiny
+        // next to a long one -- it floors every step to the same height. It is not
+        // meant to force a longer step's wrapped text to occupy zero extra room; one
         // line-height of headroom absorbs that and
         // sub-pixel wrap jitter between runs, while still catching the case that
         // matters: the variable genuinely not wired up (a many-line gap).
         const spread = Math.max(...heights) - Math.min(...heights);
-        if (spread > 20) out.errors.push('Tour content area height varies by ' + spread + 'px across steps (tourStepMinH not holding): ' + JSON.stringify(heights));
+        if (spread > 20) out.errors.push('Tour content area height varies by ' + spread + 'px across steps (measured min-height not holding): ' + JSON.stringify(heights));
         const dots = [...document.querySelectorAll('.tour-dot')];
         if (dots.length !== 5) out.errors.push('Tour: expected 5 step dots, found ' + dots.length);
         // Back should be visible and clickable everywhere but step 0.

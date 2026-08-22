@@ -1067,7 +1067,7 @@ const FLAG_LABELS = {
   copyFlash: "flagCopyFlash",
   headerSeparators: "flagHeaderSeparators",
   cleanupFiles: "flagCleanupFiles",
-  // 32/33: a text prompt can hold a list of variants instead of one text; each
+  // A text prompt can hold a list of variants instead of one text; each
   // copy serves the next entry (in order, or shuffled without repeats). Default
   // on since 33 — shipped default off at 32's original release.
   rotatingPrompts: "flagRotatingPrompts",
@@ -1336,7 +1336,7 @@ const EXPERT_VALUES = {
   // Screenshot JPEG quality + a delay before the capture (lets a menu stay open in shot).
   snipQuality: { label: "valSnipQuality", min: 50, max: 100, step: 5, def: 80, unit: "%", gate: "screenshot" },
   snipDelayMs: { label: "valSnipDelayMs", min: 0, max: 5000, step: 100, def: 0, unit: "ms", gate: "screenshot" },
-  // 117/118: screenshot-editor drawing defaults.
+  // Screenshot-editor drawing defaults.
   snipPenPx: { label: "valSnipPenPx", min: 1, max: 40, step: 1, def: 6, unit: "px", gate: "snipEditor" },
   snipMarkerPx: { label: "valSnipMarkerPx", min: 4, max: 60, step: 2, def: 18, unit: "px", gate: "snipEditor" },
   snipTextPx: { label: "valSnipTextPx", min: 10, max: 96, step: 2, def: 24, unit: "px", gate: "snipEditor" },
@@ -1448,7 +1448,6 @@ const EXPERT_VALUES = {
   // (unevenly long) steps never visibly resizes the dialog. Deliberately NOT gated
   // on firstRunTour — the Help-menu reopen works regardless of that toggle, and the
   // sizing still applies then.
-  tourStepMinH: { label: "valTourStepMinH", min: 160, max: 420, step: 10, def: 240, unit: "px" },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -1509,7 +1508,7 @@ const EXPERT_DROPDOWNS = {
   // The notation the picked colour is copied in.
   pickerFormat: enumDropdown("pickerFormat", "valPickerFormat",
     [["hex", "optFmtHex"], ["rgb", "optFmtRgb"], ["hsl", "optFmtHsl"]], "hex", "colorPicker"),
-  // 117/118: which tool the screenshot editor opens with.
+  // Which tool the screenshot editor opens with.
   snipEditDefaultTool: enumDropdown("snipEditDefaultTool", "valSnipEditDefaultTool",
     [["crop", "snipToolCrop"], ["pen", "snipToolPen"], ["marker", "snipToolMarker"],
      ["arrow", "snipToolArrow"], ["text", "snipToolText"], ["step", "snipToolStep"]], "pen", "snipEditor"),
@@ -1644,7 +1643,7 @@ const EXPERT_TABS = [
     { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "gridViewBorder", "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }, "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
     { title: "expGroupPrivacy", notices: ["storeUnsealed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
     { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances"], values: ["kbFocusFadeMs"], selects: ["updateCheckH"], paths: ["dataDir"] },
-    { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"], values: ["tourStepMinH"],
+    { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
     { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport"], values: ["dupThreshold", "disarmMs"], selects: ["trashRetentionDays"],
       actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }] },
@@ -1752,7 +1751,6 @@ function applyValues() {
   root.setProperty("--modal-max-vh", `${val("modalMaxVh")}vh`);
   root.setProperty("--tag-pop-cols", String(Math.round(val("tagPopCols"))));
   root.setProperty("--journal-width", `${val("journalWidth")}px`);
-  root.setProperty("--tour-step-min-h", `${val("tourStepMinH")}px`);
   // Caps/lengths that were fixed constants, now expert-tunable.
   ROTATE_SHORT_MAX = Math.round(val("rotateTipLen"));
   MD_MAX_CHARS = Math.round(val("mdMaxChars"));
@@ -1800,7 +1798,7 @@ const EXPERT_TIPS = [
   "tileFolders", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols",
   "rotatingPrompts", "rotateDefaultMode", "rotateMaxEntries", "rotateBadge", "rotateTipLen",
   "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax",
-  "helpTips", "helpHighlight", "firstRunTour", "tourStepMinH",
+  "helpTips", "helpHighlight", "firstRunTour",
   // Tiles / copying
   "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "autoPasteEnter", "closeOnCopy",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
@@ -6774,7 +6772,7 @@ function diffWords(oldText, newText) {
   const a = tokenize(oldText);
   const b = tokenize(newText);
   const n = a.length, m = b.length;
-  // 87/125: cap on the PRODUCT n*m (the actual DP cost), not each side independently --
+  // Cap on the PRODUCT n*m (the actual DP cost), not each side independently --
   // a long old text diffed against a short new one (or vice versa) is cheap either way.
   if (n * m > DIFF_WORD_CAP * DIFF_WORD_CAP) return null;
   const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
@@ -8205,7 +8203,7 @@ async function renderBackupPanel(body) {
       const count = document.createElement("span"); count.className = "backup-count";
       count.textContent = b.prompts === null || b.prompts === undefined ? "—" : nf(b.prompts);
       count.title = t("backupPrompts");
-      // 61/103: names are read straight from the snapshot (DPAPI-sealed exactly like
+      // Names are read straight from the snapshot (DPAPI-sealed exactly like
       // the live library — a local snapshot is never password-protected, only the
       // separate manual export-to-file has that option), so there is nothing to ask
       // for here. An empty list just means an older backup made before this existed.
@@ -12833,7 +12831,7 @@ function bind() {
       snipModal.classList.remove("hidden");
       return;
     }
-    // 117/118: the editor sits between the capture and the result dialog.
+    // The editor sits between the capture and the result dialog.
     snipEditOpen(pendingSnip, {
       onApply: async (editedDataUrl) => {
         pendingSnip = editedDataUrl;
@@ -14094,7 +14092,7 @@ const TOUR_SVG_LIBRARY = `<svg viewBox="0 0 100 100" width="110" height="110" ar
 
 // The steps drawing + text (step 5, the settings table, is handled separately below).
 const TOUR_STEPS = [
-  { titleKey: "tourStep1Title", lineKeys: ["tourStep1Line1", "tourStep1Line2"], svg: TOUR_SVG_WELCOME },
+  { titleKey: "tourStep1Title", lineKeys: ["tourStep1Line1", "tourStep1Line2", "tourStep1Line3"], svg: TOUR_SVG_WELCOME },
   { titleKey: "tourStep2Title", lineKeys: ["tourStep2Line1", "tourStep2Line2", "tourStep2Line3"], svg: TOUR_SVG_USAGE },
   { titleKey: "tourStep3Title", lineKeys: ["tourStep3Line1", "tourStep3Line2", "tourStep3Line3"], svg: TOUR_SVG_TILES },
   { titleKey: "tourStep4Title", lineKeys: ["tourStep4Line1", "tourStep4Line2", "tourStep4Line3"], svg: TOUR_SVG_LIBRARY },
@@ -14108,6 +14106,7 @@ const TOUR_OPTIONS = [
   { key: "screenshot", labelKey: "flagScreenshot", descKey: "tourOptScreenshot" },
   { key: "colorPicker", labelKey: "flagColorPicker", descKey: "tourOptPicker" },
   { key: "ocr", labelKey: "flagOcr", descKey: "tourOptOcr" },
+  { key: "voice", labelKey: "flagVoice", descKey: "tourOptVoice" },
 ];
 
 let tourStep = 0;
@@ -14228,11 +14227,32 @@ function tourKeydown(e) {
   }
 }
 
+// The dialog must not visibly resize as the user pages through the five
+// steps, but a single fixed number (the old tourStepMinH expert setting) is
+// either too tall for the shortest step (an empty-looking box) or too short
+// for the tallest (a jump on Next). Measuring every step once, right after the
+// modal becomes visible (a hidden ancestor reports 0 for any height), and
+// keeping the tallest is the actual fix -- there is nothing left to tune by
+// hand, which is also why point 194 dropped the expert setting entirely.
+function tourMeasureMaxStepHeight() {
+  const body = $("tour-body");
+  let max = 0;
+  for (let i = 0; i < TOUR_STEP_COUNT; i++) {
+    const wrap = i < TOUR_STEPS.length ? renderTourDrawingStep(TOUR_STEPS[i]) : renderTourOptionsStep();
+    body.innerHTML = "";
+    body.appendChild(wrap);
+    max = Math.max(max, wrap.getBoundingClientRect().height);
+  }
+  return max;
+}
+
 async function openTour({ firstRun }) {
   tourFirstRun = firstRun;
   tourStep = 0;
   tourDraft = firstRun ? Object.fromEntries(TOUR_OPTIONS.map((o) => [o.key, shipsOn(o.key)])) : {};
   $("tour-modal").classList.remove("hidden");
+  const maxH = tourMeasureMaxStepHeight();
+  document.documentElement.style.setProperty("--tour-step-min-h", `${Math.ceil(maxH)}px`);
   renderTourStep();
   document.addEventListener("keydown", tourKeydown);
 }
