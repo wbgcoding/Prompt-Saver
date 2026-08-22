@@ -11573,6 +11573,67 @@ struct OcrLangUpdateDue {
     label: String,
 }
 
+// ---------------------------------------------------------------------------
+// Runde F (points 124-131): voice dictation via Windows.Media.SpeechRecognition.
+// Same COM-per-thread rule as mod ocr; see docs/INVARIANTS.md, section
+// "Spracheingabe", for the safety rules this module enforces (no logging of
+// recognized text, no audio on disk, exactly one session, fail-closed online
+// consent).
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Clone)]
+struct VoiceLang {
+    tag: String,
+    label: String,
+    installed: bool,
+}
+
+#[derive(Serialize, Clone)]
+struct VoiceSupport {
+    supported: bool,
+    engine: &'static str,
+    langs: Vec<VoiceLang>,
+    needs_online: bool,
+}
+
+// Payload for voice-partial / voice-text.
+#[derive(Serialize, Clone)]
+struct VoiceTextEvent {
+    id: u64,
+    text: String,
+}
+
+// Payload for voice-stopped.
+#[derive(Serialize, Clone)]
+struct VoiceStoppedEvent {
+    id: u64,
+    reason: String, // manual | silence | max | error | shutdown
+}
+
+// Payload for voice-error.
+#[derive(Serialize, Clone)]
+struct VoiceErrorEvent {
+    id: u64,
+    code: String,
+}
+
+// One session at a time -- a second voice_start while this holds Some(..) gets
+// voice-busy instead of opening a second recognizer. `ended` flips true exactly
+// once, inside the session's Completed handler, before voice-stopped is
+// emitted; every stop path (button, hotkey, shutdown, hard cap, silence) reads
+// it first so a session that already finished itself is never stopped twice
+// (0x80131509, measured 21.08. -- see WORK.md point 159).
+struct VoiceHandle {
+    id: u64,
+    stop: std::sync::mpsc::Sender<&'static str>,
+    #[allow(dead_code)] // read by a future "how long has this run" indicator; harmless to keep now
+    started: std::time::Instant,
+    #[allow(dead_code)]
+    lang: String,
+    ended: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+struct VoiceState(Mutex<Option<VoiceHandle>>);
+
 const MAX_OCR_IMAGE_BYTES: u64 = 200 * 1024 * 1024; // a single image, not a whole export (MAX_IMPORT_BYTES)
 const OCR_IMAGE_EXTS: [&str; 5] = ["png", "jpg", "jpeg", "bmp", "webp"];
 
@@ -12588,6 +12649,525 @@ mod ocr {
             engine_cache().lock().unwrap_or_else(|e| e.into_inner()).clear();
         }
         Some(OcrInstallResult { ok, error })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Runde F: voice dictation commands. Mirrors the ocr_* wrapper shape exactly --
+// a thin, never-cfg-gated `#[tauri::command]` whose BODY branches on
+// `#[cfg(windows)]`, calling into `mod voice` for the real Windows API work.
+// ---------------------------------------------------------------------------
+
+static VOICE_SESSION_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+#[tauri::command]
+async fn voice_support() -> VoiceSupport {
+    #[cfg(windows)]
+    {
+        tauri::async_runtime::spawn_blocking(voice::support).await.unwrap_or(VoiceSupport {
+            supported: false,
+            engine: "none",
+            langs: Vec::new(),
+            needs_online: false,
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        VoiceSupport { supported: false, engine: "none", langs: Vec::new(), needs_online: false }
+    }
+}
+
+#[tauri::command]
+async fn voice_languages() -> Result<Vec<VoiceLang>, String> {
+    #[cfg(windows)]
+    {
+        tauri::async_runtime::spawn_blocking(voice::languages).await.map_err(|e| e.to_string())?
+    }
+    #[cfg(not(windows))]
+    {
+        Err("voice is only available on Windows".to_string())
+    }
+}
+
+// `lang` is "auto" or an explicit BCP-47 tag; `auto_stop_sec` (0 = off) and
+// `max_sec` are the voiceAutoStopSec/voiceMaxMin expert settings, sent by the
+// frontend the same way ocr_image is sent its expert settings (121/122) rather
+// than the backend re-reading them from Db state on every call. `interim`
+// mirrors voiceInterim. Returns the new session id; the recognized text itself
+// only ever travels through the voice-partial/voice-text events, never through
+// this command's return value.
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+async fn voice_start(
+    app: AppHandle,
+    state: State<'_, Db>,
+    vstate: State<'_, VoiceState>,
+    lang: String,
+    auto_stop_sec: u32,
+    max_sec: u32,
+    interim: bool,
+) -> Result<u64, String> {
+    {
+        let guard = vstate.0.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(h) = guard.as_ref() {
+            if !h.ended.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err("voice-busy".to_string());
+            }
+        }
+    }
+    #[cfg(windows)]
+    {
+        let (online_ok, auto_pick) = {
+            let store = lock(&state);
+            (
+                store.settings.ui_flags.get("voiceOnlineOk").copied().unwrap_or(false),
+                store.settings.ui_flags.get("voiceAutoPickLang").copied().unwrap_or(true),
+            )
+        };
+        let (resolved_lang, needs_online) =
+            tauri::async_runtime::spawn_blocking(move || voice::prepare(lang, auto_pick)).await.map_err(|e| e.to_string())??;
+        // Never opens the microphone without consent -- checked BEFORE the session
+        // thread (and therefore Create()) ever starts. A later 0x80045509 from
+        // Windows itself (declined/reset at the OS level after voiceOnlineOk was
+        // already set) is still handled by the session -- see voice-privacy-off.
+        if needs_online && !online_ok {
+            return Err("voice-online-required".to_string());
+        }
+        let id = VOICE_SESSION_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let max_sec = max_sec.clamp(60, 1800); // voiceMaxMin: 1-30 min
+        let auto_stop_sec = auto_stop_sec.clamp(0, 30);
+        let (tx, rx) = std::sync::mpsc::channel::<&'static str>();
+        let ended = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let app2 = app.clone();
+        let ended2 = ended.clone();
+        let lang2 = resolved_lang.clone();
+        std::thread::Builder::new()
+            .name("voice-session".into())
+            .spawn(move || voice::start_session(app2, id, lang2, auto_stop_sec, max_sec, interim, ended2, rx))
+            .map_err(|e| e.to_string())?;
+        *vstate.0.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(VoiceHandle { id, stop: tx, started: std::time::Instant::now(), lang: resolved_lang, ended });
+        Ok(id)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app, state, lang, auto_stop_sec, max_sec, interim);
+        Err("voice is only available on Windows".to_string())
+    }
+}
+
+// Whether voice_stop should actually signal the session thread: never for a
+// session that already ended itself (silence/max/error) -- a second StopAsync
+// on an already-Completed session throws 0x80131509 (measured 21.08., WORK.md
+// point 159). Pure decision, kept separate from the State<> plumbing so it is
+// unit-testable like every other table/decision in this module.
+fn should_send_stop(target: Option<u64>, running_id: u64, already_ended: bool) -> bool {
+    (target.is_none() || target == Some(running_id)) && !already_ended
+}
+
+// Beendet sanft (StopAsync, damit der angefangene Satz noch kommt). `id` names
+// the session to stop; None stops whichever is running.
+#[tauri::command]
+fn voice_stop(vstate: State<'_, VoiceState>, id: Option<u64>) -> Result<(), String> {
+    let guard = vstate.0.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(h) = guard.as_ref() {
+        if should_send_stop(id, h.id, h.ended.load(std::sync::atomic::Ordering::SeqCst)) {
+            let _ = h.stop.send("manual");
+        }
+    }
+    Ok(())
+}
+
+// For the frontend to rebuild its button state after a window/page reload
+// while a session is (still) running.
+#[tauri::command]
+fn voice_state(vstate: State<'_, VoiceState>) -> Option<u64> {
+    vstate.0.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|h| {
+        if h.ended.load(std::sync::atomic::Ordering::SeqCst) {
+            None
+        } else {
+            Some(h.id)
+        }
+    })
+}
+
+// Entscheidung 7 (21.08.): only ever called from the voice-privacy-off dialog,
+// never on startup, never silently. Writes Windows' own online-speech consent
+// registry value AND the app's voiceOnlineOk flag in one step (one consent,
+// both switches) so the very next voice_start proceeds without a second
+// round-trip through this dialog.
+#[tauri::command]
+async fn voice_enable_online_speech(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        tauri::async_runtime::spawn_blocking(voice::enable_online_speech).await.map_err(|e| e.to_string())??;
+        let mut store = lock(&state);
+        store.settings.ui_flags.insert("voiceOnlineOk".to_string(), true);
+        save_settings(&app, &store.settings);
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app, state);
+        Err("voice is only available on Windows".to_string())
+    }
+}
+
+// Cancels whatever session is running, without waiting for it to actually
+// finish -- called on window close/hide and on app exit (never left running
+// behind a hidden window, per docs/INVARIANTS.md).
+fn voice_shutdown(app: &AppHandle) {
+    if let Some(vs) = app.try_state::<VoiceState>() {
+        let guard = vs.0.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(h) = guard.as_ref() {
+            if !h.ended.load(std::sync::atomic::Ordering::SeqCst) {
+                let _ = h.stop.send("shutdown");
+            }
+        }
+    }
+}
+
+// Windows.Media.SpeechRecognition binding. Same shape as mod ocr: COM init
+// confined to the thread that calls into WinRT, no unsafe outside RoInitialize.
+// Unlike OCR, the actual recognition session runs on ONE long-lived thread it
+// owns for its whole lifetime (started by voice_start, see start_session) --
+// never spawn_blocking, which would starve the tokio pool for a session that
+// can run for minutes.
+#[cfg(windows)]
+mod voice {
+    use super::{VoiceLang, VoiceStoppedEvent, VoiceSupport, VoiceTextEvent};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{mpsc, Arc, Mutex};
+    use std::time::{Duration, Instant};
+    use tauri::{AppHandle, Emitter};
+    use windows::core::HSTRING;
+    use windows::Foundation::TypedEventHandler;
+    use windows::Globalization::Language;
+    use windows::Media::SpeechRecognition::{
+        SpeechContinuousRecognitionCompletedEventArgs, SpeechContinuousRecognitionResultGeneratedEventArgs,
+        SpeechContinuousRecognitionSession, SpeechRecognitionHypothesisGeneratedEventArgs,
+        SpeechRecognitionScenario, SpeechRecognitionTopicConstraint, SpeechRecognizer,
+    };
+    use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
+
+    // Same rule as mod ocr::ensure_com -- COM once per thread, never on the UI
+    // thread.
+    fn ensure_com() {
+        thread_local! {
+            static DONE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+        }
+        DONE.with(|d| {
+            if !d.get() {
+                unsafe {
+                    let _ = RoInitialize(RO_INIT_MULTITHREADED);
+                }
+                d.set(true);
+            }
+        });
+    }
+
+    // HRESULTs measured 21.08. against a real machine (WORK.md, point 159).
+    const HRESULT_NO_LANGUAGE: i32 = 0x800455BCu32 as i32; // "The requested language is not supported"
+    const HRESULT_ACCESS_DENIED: i32 = 0x80070005u32 as i32; // no mic OR mic access denied -- one HRESULT covers both
+    const HRESULT_PRIVACY_OFF: i32 = 0x80045509u32 as i32; // "speech privacy policy was not accepted"
+
+    // Stable error key from a WinRT HRESULT -- never the raw code, never any
+    // recognized text (docs/INVARIANTS.md). Takes the raw code rather than a
+    // `windows::core::Error` so the mapping table itself is a plain, unit-testable
+    // function (see the "voice HRESULT mapping" tests).
+    pub(super) fn error_key_for_hresult(code: i32) -> &'static str {
+        match code {
+            HRESULT_NO_LANGUAGE => "voice-no-language",
+            HRESULT_ACCESS_DENIED => "voice-denied",
+            HRESULT_PRIVACY_OFF => "voice-privacy-off",
+            _ => "voice-failed",
+        }
+    }
+    fn error_key(e: &windows::core::Error) -> &'static str {
+        error_key_for_hresult(e.code().0)
+    }
+
+    // The Completed handler's end-reason table (WORK.md 125): TimeoutExceeded
+    // (7) is always "silence" -- Windows' own AutoStopSilenceTimeout fired.
+    // Success (0) means WE asked it to stop; `requested` is whatever the caller
+    // (voice_stop, the hard cap, or the own idle watchdog) set right before
+    // calling StopAsync, defaulting to "manual" when nothing was recorded (a
+    // plain externally-triggered stop). Anything else is a genuine error.
+    pub(super) fn stop_reason(status: i32, requested: Option<&'static str>) -> &'static str {
+        match status {
+            7 => "silence",
+            0 => requested.unwrap_or("manual"),
+            _ => "error",
+        }
+    }
+
+    // The idle/hard-cap watchdog's decision, extracted as a pure function so the
+    // timing rules (0 = auto-stop off, the hard cap always wins once reached) are
+    // unit-testable without a real session. `elapsed`/`idle` are both measured
+    // from the session's own clocks (see run_session's loop).
+    pub(super) fn should_stop(idle: Duration, elapsed: Duration, auto_stop_sec: u32, max_sec: u32) -> Option<&'static str> {
+        if elapsed >= Duration::from_secs(max_sec.max(1) as u64) {
+            return Some("max");
+        }
+        if auto_stop_sec > 0 && idle >= Duration::from_secs(auto_stop_sec as u64) {
+            return Some("silence");
+        }
+        None
+    }
+
+    // Installed recognition languages. Measured 21.08.: SupportedTopicLanguages
+    // (and SupportedGrammarLanguages) only ever list tags with an installed
+    // Language.Speech pack -- so unlike OCR's AvailableRecognizerLanguages there
+    // is no separate "installed" flag to compute, it is always true here.
+    pub(super) fn languages() -> Result<Vec<VoiceLang>, String> {
+        ensure_com();
+        let langs = SpeechRecognizer::SupportedTopicLanguages().map_err(|e| e.to_string())?;
+        let size = langs.Size().map_err(|e| e.to_string())?;
+        let mut out = Vec::with_capacity(size as usize);
+        for i in 0..size {
+            let lang = langs.GetAt(i).map_err(|e| e.to_string())?;
+            out.push(VoiceLang {
+                tag: lang.LanguageTag().map_err(|e| e.to_string())?.to_string(),
+                label: lang.DisplayName().map_err(|e| e.to_string())?.to_string(),
+                installed: true,
+            });
+        }
+        Ok(out)
+    }
+
+    // Whether Windows' own online-speech consent is already on -- exactly one
+    // REG_DWORD, no elevated rights to read or write (measured 21.08., WORK.md
+    // point 159's VM re-check). Missing key = not accepted, same as 0.
+    fn online_speech_accepted() -> bool {
+        winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
+            .open_subkey("Software\\Microsoft\\Speech_OneCore\\Settings\\OnlineSpeechPrivacy")
+            .and_then(|k| k.get_value::<u32, _>("HasAccepted"))
+            .map(|v| v == 1)
+            .unwrap_or(false)
+    }
+
+    pub(super) fn enable_online_speech() -> Result<(), String> {
+        let (key, _) = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
+            .create_subkey("Software\\Microsoft\\Speech_OneCore\\Settings\\OnlineSpeechPrivacy")
+            .map_err(|e| e.to_string())?;
+        key.set_value("HasAccepted", &1u32).map_err(|e| e.to_string())
+    }
+
+    // "auto" -> the system speech language IF a pack for it is installed,
+    // otherwise (or for an explicit tag whose pack is missing, when auto_pick is
+    // on) whatever recognition language IS installed -- same "use whatever is
+    // already there" fallback as OCR's create_auto_engine/resolve_engine. The
+    // actual decision is the plain, unit-testable pick_lang below; this only
+    // gathers the two WinRT-sourced inputs it needs.
+    pub(super) fn pick_lang(lang: &str, auto_pick: bool, installed: &[String], system_tag: Option<&str>) -> Result<String, String> {
+        if installed.is_empty() {
+            return Err("voice-no-language".to_string());
+        }
+        if lang != "auto" && !lang.trim().is_empty() {
+            if installed.iter().any(|t| t == lang) {
+                return Ok(lang.to_string());
+            }
+            if !auto_pick {
+                return Err("voice-no-language".to_string());
+            }
+        }
+        if let Some(tag) = system_tag {
+            if installed.iter().any(|t| t == tag) {
+                return Ok(tag.to_string());
+            }
+        }
+        Ok(installed[0].clone())
+    }
+
+    fn resolve_lang(lang: &str, auto_pick: bool) -> Result<String, String> {
+        let installed: Vec<String> = languages()?.into_iter().map(|v| v.tag).collect();
+        let system_tag = SpeechRecognizer::SystemSpeechLanguage().ok().and_then(|l| l.LanguageTag().ok()).map(|t| t.to_string());
+        pick_lang(lang, auto_pick, &installed, system_tag.as_deref())
+    }
+
+    // voice_support(): cheap "does Windows have a speech engine at all" probe --
+    // deliberately does not start a real session (Create() alone is enough to
+    // learn this; actually opening the mic waits for the user's first real
+    // voice_start, so the OS mic-access prompt never appears before that).
+    pub(super) fn support() -> VoiceSupport {
+        ensure_com();
+        let langs = languages().unwrap_or_default();
+        let supported = !langs.is_empty() && SpeechRecognizer::new().is_ok();
+        VoiceSupport { supported, engine: "winrt", langs, needs_online: !online_speech_accepted() }
+    }
+
+    // One spawn_blocking round trip for voice_start: resolves "auto"/an explicit
+    // tag to a real installed BCP-47 tag AND reports the current online-consent
+    // state together, so the command handler needs only one hop into COM.
+    pub(super) fn prepare(lang: String, auto_pick: bool) -> Result<(String, bool), String> {
+        ensure_com();
+        let resolved = resolve_lang(&lang, auto_pick)?;
+        Ok((resolved, !online_speech_accepted()))
+    }
+
+    // Runs on its own thread for the whole session lifetime. Never returns
+    // early on a recoverable error -- run_session already reports it via
+    // voice-error + voice-stopped before returning Err, this only guards
+    // against a failure happening BEFORE `ended` could be set by anything else
+    // (e.g. Create() itself failing, so Completed never fires at all).
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn start_session(
+        app: AppHandle,
+        id: u64,
+        lang: String,
+        auto_stop_sec: u32,
+        max_sec: u32,
+        interim: bool,
+        ended: Arc<AtomicBool>,
+        stop_rx: mpsc::Receiver<&'static str>,
+    ) {
+        ensure_com();
+        if let Err(key) = run_session(&app, id, &lang, auto_stop_sec, max_sec, interim, &ended, &stop_rx) {
+            if !ended.swap(true, Ordering::SeqCst) {
+                let _ = app.emit("voice-error", super::VoiceErrorEvent { id, code: key.to_string() });
+                let _ = app.emit("voice-stopped", VoiceStoppedEvent { id, reason: "error".to_string() });
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn run_session(
+        app: &AppHandle,
+        id: u64,
+        lang: &str,
+        auto_stop_sec: u32,
+        max_sec: u32,
+        interim: bool,
+        ended: &Arc<AtomicBool>,
+        stop_rx: &mpsc::Receiver<&'static str>,
+    ) -> Result<(), &'static str> {
+        let session_started = Instant::now();
+        let language = Language::CreateLanguage(&HSTRING::from(lang)).map_err(|e| error_key(&e))?;
+        let recognizer = SpeechRecognizer::Create(&language).map_err(|e| error_key(&e))?;
+        let constraint = SpeechRecognitionTopicConstraint::Create(SpeechRecognitionScenario::Dictation, &HSTRING::from("dictation"))
+            .map_err(|e| error_key(&e))?;
+        recognizer.Constraints().and_then(|c| c.Append(&constraint)).map_err(|e| error_key(&e))?;
+        recognizer.CompileConstraintsAsync().and_then(|a| a.get()).map_err(|e| error_key(&e))?;
+        let session = recognizer.ContinuousRecognitionSession().map_err(|e| error_key(&e))?;
+
+        // Windows' own AutoStopSilenceTimeout is set as the "Zusatzgurt" belt of
+        // the two intentionally redundant silence checks (WORK.md 125) -- the
+        // app's own idle watchdog below is the one that actually decides. When
+        // voiceAutoStop is off (auto_stop_sec == 0), point Windows' property at
+        // the hard cap instead, so it never fires earlier than max_sec on its own.
+        let watch_secs = if auto_stop_sec > 0 { auto_stop_sec } else { max_sec };
+        let _ = session.SetAutoStopSilenceTimeout(windows::Foundation::TimeSpan { Duration: watch_secs as i64 * 10_000_000 });
+
+        let last_activity = Arc::new(Mutex::new(Instant::now()));
+        // What voice_stop/the watchdog set right before calling StopAsync, so the
+        // Completed handler (status == Success) knows WHY it was asked to stop.
+        // A real Windows-detected silence timeout reports status == 7 on its own
+        // and never needs this.
+        let requested_reason: Arc<Mutex<Option<&'static str>>> = Arc::new(Mutex::new(None));
+
+        if interim {
+            let app2 = app.clone();
+            let last2 = last_activity.clone();
+            let _ = recognizer.HypothesisGenerated(&TypedEventHandler::new(
+                move |_sender: &Option<SpeechRecognizer>, args: &Option<SpeechRecognitionHypothesisGeneratedEventArgs>| {
+                    if let Some(args) = args {
+                        if let Ok(h) = args.Hypothesis() {
+                            if let Ok(text) = h.Text() {
+                                *last2.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+                                let _ = app2.emit("voice-partial", VoiceTextEvent { id, text: text.to_string() });
+                            }
+                        }
+                    }
+                    Ok(())
+                },
+            ));
+        }
+
+        let app_r = app.clone();
+        let last_r = last_activity.clone();
+        let _ = session.ResultGenerated(&TypedEventHandler::new(
+            move |_sender: &Option<SpeechContinuousRecognitionSession>, args: &Option<SpeechContinuousRecognitionResultGeneratedEventArgs>| {
+                *last_r.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+                if let Some(args) = args {
+                    if let Ok(result) = args.Result() {
+                        if let Ok(text) = result.Text() {
+                            let text = text.to_string();
+                            // Nothing recognized in this segment -> nothing to insert,
+                            // same "empty is not an error" rule as OCR's recognize().
+                            if !text.is_empty() {
+                                let _ = app_r.emit("voice-text", VoiceTextEvent { id, text });
+                            }
+                        }
+                    }
+                }
+                Ok(())
+            },
+        ));
+
+        let app_c = app.clone();
+        let ended_c = ended.clone();
+        let reason_c = requested_reason.clone();
+        let _ = session.Completed(&TypedEventHandler::new(
+            move |_sender: &Option<SpeechContinuousRecognitionSession>, args: &Option<SpeechContinuousRecognitionCompletedEventArgs>| {
+                // Fires exactly once per session; the swap makes a second call (should
+                // never happen, but WinRT event delivery guarantees are not a Rust
+                // guarantee) a no-op instead of a duplicated event.
+                if ended_c.swap(true, Ordering::SeqCst) {
+                    return Ok(());
+                }
+                // status.0 is out of range for the stop_reason table's two named
+                // cases (0/7) only on genuine failure -- map that to -1, which the
+                // table already resolves to "error".
+                let status = args.as_ref().and_then(|a| a.Status().ok()).map(|s| s.0).unwrap_or(-1);
+                let requested = reason_c.lock().unwrap_or_else(|e| e.into_inner()).take();
+                let reason = stop_reason(status, requested);
+                let _ = app_c.emit("voice-stopped", VoiceStoppedEvent { id, reason: reason.to_string() });
+                Ok(())
+            },
+        ));
+
+        session.StartAsync().and_then(|a| a.get()).map_err(|e| error_key(&e))?;
+
+        // A stop the thread itself decided on (hard cap / own idle watchdog) --
+        // fires StopAsync and then just waits for Completed to actually flip
+        // `ended`, same as a stop requested from outside.
+        let self_stop = |reason: &'static str| {
+            *requested_reason.lock().unwrap_or_else(|e| e.into_inner()) = Some(reason);
+            let _ = session.StopAsync();
+            while !ended.load(Ordering::SeqCst) {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        };
+        loop {
+            if ended.load(Ordering::SeqCst) {
+                break;
+            }
+            match stop_rx.recv_timeout(Duration::from_millis(250)) {
+                Ok(reason) => {
+                    self_stop(reason);
+                    break;
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    // "Stille" = die Maschine hat nichts erkannt, gemessen seit dem
+                    // letzten Hypothesis/Result -- maschinenunabhängig, siehe die
+                    // Begründung in WORK.md 125. should_stop also enforces the hard
+                    // cap (voiceMaxMin), which always wins once reached.
+                    let idle = last_activity.lock().unwrap_or_else(|e| e.into_inner()).elapsed();
+                    if let Some(reason) = should_stop(idle, session_started.elapsed(), auto_stop_sec, max_sec) {
+                        self_stop(reason);
+                        break;
+                    }
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    // The sending half was dropped without a message (should not
+                    // normally happen -- voice_shutdown always sends "shutdown" --
+                    // but treat it the same way rather than looping forever).
+                    self_stop("shutdown");
+                    break;
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -14773,6 +15353,7 @@ pub fn run() {
             app.manage(DragHint(Mutex::new((0, None)))); // F25 live merge highlight
             app.manage(VarPrompt::new()); // F12 standalone fill-in window
             app.manage(SyncWriteQueue(Mutex::new(SyncWriteState::default()))); // 9
+            app.manage(VoiceState(Mutex::new(None))); // Runde F, 125
 
             // F19 auto-paste: start tracking the last external foreground window.
             #[cfg(windows)]
@@ -14939,6 +15520,8 @@ pub fn run() {
                                 .unwrap_or(false);
                         if minimize {
                             api.prevent_close();
+                            // 125: a hidden window never keeps listening.
+                            voice_shutdown(&handle2);
                             // The very first time, explain that the tray menu
                             // still copies while hidden — JS shows it, then hides
                             // itself once dismissed. Every later close hides at once.
@@ -14967,6 +15550,7 @@ pub fn run() {
                             }
                             #[cfg(windows)]
                             clipwatch::stop(); // 91: flush a pending auto-session for real
+                            voice_shutdown(&handle2); // 125
                             handle2.exit(0);
                         }
                     }
@@ -14975,6 +15559,7 @@ pub fn run() {
                             let store = state.lock().unwrap_or_else(|e| e.into_inner());
                             save_settings(&handle2, &store.settings);
                         }
+                        voice_shutdown(&handle2); // 125
                     }
                     _ => {}
                 });
@@ -15008,6 +15593,7 @@ pub fn run() {
                         }
                         #[cfg(windows)]
                         clipwatch::stop(); // 91: flush a pending auto-session for real
+                        voice_shutdown(app); // 125
                         app.exit(0);
                     }
                     // A quick-copy entry. Unknown ids (section headers, leftovers
@@ -15272,7 +15858,13 @@ pub fn run() {
             ocr_install_language,
             ocr_install_result,
             ocr_lang_snooze,
-            set_snip_mode
+            set_snip_mode,
+            voice_support,
+            voice_languages,
+            voice_start,
+            voice_stop,
+            voice_state,
+            voice_enable_online_speech
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
@@ -16622,6 +17214,107 @@ mod tests {
     #[test]
     fn ocr_resize_target_upscales_a_small_crop_2x() {
         assert_eq!(ocr_resize_target(120, 80, 4200, 300), Some((240, 160)));
+    }
+
+    // ---- Runde F, point 125: voice dictation ----
+
+    #[cfg(windows)]
+    #[test]
+    fn voice_pick_lang_auto_without_any_installed_pack_fails() {
+        let err = voice::pick_lang("auto", true, &[], None).unwrap_err();
+        assert_eq!(err, "voice-no-language");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn voice_pick_lang_auto_prefers_the_installed_system_language() {
+        let installed = vec!["de-DE".to_string(), "en-US".to_string()];
+        assert_eq!(voice::pick_lang("auto", true, &installed, Some("en-US")).unwrap(), "en-US");
+        // System language has no pack installed -> falls back to whatever IS there.
+        assert_eq!(voice::pick_lang("auto", true, &installed, Some("fr-FR")).unwrap(), "de-DE");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn voice_pick_lang_unknown_tag_falls_back_when_auto_pick_is_on() {
+        let installed = vec!["de-DE".to_string()];
+        assert_eq!(voice::pick_lang("fr-FR", true, &installed, None).unwrap(), "de-DE");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn voice_pick_lang_unknown_tag_fails_when_auto_pick_is_off() {
+        let installed = vec!["de-DE".to_string()];
+        let err = voice::pick_lang("fr-FR", false, &installed, None).unwrap_err();
+        assert_eq!(err, "voice-no-language");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn voice_pick_lang_an_installed_explicit_tag_is_used_as_is() {
+        let installed = vec!["de-DE".to_string(), "en-US".to_string()];
+        assert_eq!(voice::pick_lang("en-US", false, &installed, None).unwrap(), "en-US");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn voice_hresult_table_maps_every_measured_code() {
+        assert_eq!(voice::error_key_for_hresult(0x800455BCu32 as i32), "voice-no-language");
+        assert_eq!(voice::error_key_for_hresult(0x80070005u32 as i32), "voice-denied");
+        assert_eq!(voice::error_key_for_hresult(0x80045509u32 as i32), "voice-privacy-off");
+        assert_eq!(voice::error_key_for_hresult(0x80004005u32 as i32), "voice-failed"); // any other HRESULT
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn voice_stop_reason_table() {
+        // Windows' own AutoStopSilenceTimeout -- always "silence", regardless of
+        // what (if anything) we had requested.
+        assert_eq!(voice::stop_reason(7, None), "silence");
+        assert_eq!(voice::stop_reason(7, Some("max")), "silence");
+        // Success (0): whatever we asked for, defaulting to "manual".
+        assert_eq!(voice::stop_reason(0, None), "manual");
+        assert_eq!(voice::stop_reason(0, Some("max")), "max");
+        assert_eq!(voice::stop_reason(0, Some("shutdown")), "shutdown");
+        // Anything else is a genuine failure.
+        assert_eq!(voice::stop_reason(1, None), "error");
+        assert_eq!(voice::stop_reason(-1, None), "error");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn voice_should_stop_silence_window_and_zero_means_off() {
+        use std::time::Duration;
+        // Idle past the silence window, well under the hard cap -> "silence".
+        assert_eq!(voice::should_stop(Duration::from_secs(6), Duration::from_secs(10), 5, 300), Some("silence"));
+        // Not idle long enough yet.
+        assert_eq!(voice::should_stop(Duration::from_secs(2), Duration::from_secs(10), 5, 300), None);
+        // auto_stop_sec == 0 -> the idle check never fires, no matter how idle.
+        assert_eq!(voice::should_stop(Duration::from_secs(999), Duration::from_secs(10), 0, 300), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn voice_should_stop_hard_cap_always_wins() {
+        use std::time::Duration;
+        // Elapsed has reached max_sec even though nothing was idle at all ->
+        // "max", not "silence" and not None.
+        assert_eq!(voice::should_stop(Duration::from_secs(0), Duration::from_secs(300), 5, 300), Some("max"));
+        // The cap wins even when voiceAutoStop (auto_stop_sec) is off.
+        assert_eq!(voice::should_stop(Duration::from_secs(0), Duration::from_secs(300), 0, 300), Some("max"));
+    }
+
+    #[test]
+    fn voice_should_send_stop_skips_a_session_that_already_ended_itself() {
+        assert!(!should_send_stop(None, 5, true));
+        assert!(!should_send_stop(Some(5), 5, true));
+    }
+
+    #[test]
+    fn voice_should_send_stop_targets_the_right_running_session() {
+        assert!(should_send_stop(None, 5, false));
+        assert!(should_send_stop(Some(5), 5, false));
+        assert!(!should_send_stop(Some(3), 5, false)); // a stale/foreign id never stops the live session
     }
 
     #[test]
