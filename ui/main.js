@@ -11,6 +11,9 @@ import { fileUri } from "./floatShared.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen, emit } = window.__TAURI__.event;
+// The screenshot editor's resize grip needs the main window's own resize-drag,
+// the same documented v2 API floating.js/folder.js already use for startDragging().
+const { getCurrentWindow, ResizeDirection } = window.__TAURI__.window;
 
 const $ = (id) => document.getElementById(id);
 const gridEl = $("grid");
@@ -26,6 +29,8 @@ const modal = {
   title: $("modal-title"),
   name: $("modal-name"),
   text: $("modal-text"),
+  voiceRow: $("modal-voice-row"),
+  voiceBtn: $("modal-voice-btn"),
   closeX: $("modal-close-x"),
   confirm: $("modal-confirm"),
   delete: $("modal-delete"),
@@ -169,8 +174,12 @@ const ICON_EDIT =
   '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 20h4L18.5 9.5a2 2 0 0 0-2.8-2.8L5 17.2V20Zm9.5-12.5 3 3"/></svg>';
 const ICON_TRASH =
   '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13M10 11v6M14 11v6"/></svg>';
+// The original path (M8 7 3 12l5 5M3 12h11a5 5 0 0 1 0 10h-4) was not
+// centered in its 24x24 viewBox (its true bounds sit low and to the left),
+// which read as an off-center glyph in the toast's centered icon badge even
+// though the badge itself centers correctly. Shifted to bound [4,20]x[4.5,19.5].
 const ICON_UNDO =
-  '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M8 7 3 12l5 5M3 12h11a5 5 0 0 1 0 10h-4"/></svg>';
+  '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M9 4.5 4 9.5l5 5M4 9.5h11a5 5 0 0 1 0 10h-4"/></svg>';
 // Same triangle the expert menu's own caution line uses, so a warning looks like a
 // warning wherever it appears.
 const ICON_WARN =
@@ -560,10 +569,17 @@ function toast(msg, action = null, tint = "", chips = null, duration = null) {
       chip.className = "toast-chip";
       chip.textContent = c.label;
       chip.classList.toggle("is-current", !!c.current); // the one on the clipboard
+      chip.setAttribute("aria-pressed", String(!!c.current));
       // Copies again without closing the toast — comparing/re-picking a different
-      // notation is the whole point, unlike the single-action button above.
+      // notation is the whole point, unlike the single-action button above. The
+      // clicked chip becomes "current" too: it is now what sits on the clipboard,
+      // and the row must show exactly one such chip at a time.
       chip.addEventListener("click", () => {
         c.onClick();
+        for (const other of row.children) {
+          other.classList.toggle("is-current", other === chip);
+          other.setAttribute("aria-pressed", String(other === chip));
+        }
         chip.classList.add("copied");
         setTimeout(() => chip.classList.remove("copied"), CHIP_COPIED_MS);
       });
@@ -1112,6 +1128,15 @@ const FLAG_LABELS = {
   // prompts are seeded. Off only stops the AUTOMATIC open — the Help-menu entry
   // that reopens the tour manually stays available either way.
   firstRunTour: "flagFirstRunTour",
+  // Voice dictation (Windows.Media.SpeechRecognition). Ships ON, like ocr; the
+  // button hides itself when Windows reports no speech engine at all.
+  voice: "flagVoice",
+  voiceInterim: "flagVoiceInterim",
+  voicePunct: "flagVoicePunct",
+  voiceAutoCaps: "flagVoiceAutoCaps",
+  voiceAutoStop: "flagVoiceAutoStop",
+  voiceAutoPickLang: "flagVoiceAutoPickLang",
+  voiceLangAutoUpdate: "flagVoiceLangAutoUpdate",
 };
 const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -1184,6 +1209,11 @@ const OPT_FLAG_LABELS = {
   // lib.rs): mirrors every text-only prompt as a .md file in a folder, editable by
   // hand or another tool.
   promptSync: "flagPromptSync",
+  // Voice dictation's two default-off options: sending audio to Microsoft's
+  // online recognizer needs its own consent (125), and a global hotkey (131)
+  // is a bigger commitment than the in-window button.
+  voiceOnlineOk: "flagVoiceOnlineOk",
+  voiceHotkey: "flagVoiceHotkey",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
@@ -1323,6 +1353,12 @@ const EXPERT_VALUES = {
   ocrLangCheckH: { label: "valOcrLangCheckH", min: 24, max: 720, step: 24, def: 168, unit: "h", gate: "ocrLangAutoUpdate" },
   ocrLangNoticeMs: { label: "valOcrLangNoticeMs", min: 2000, max: 20000, step: 500, def: 8000, unit: "ms", gate: "ocrLangAutoUpdate" },
   ocrLangSnoozeH: { label: "valOcrLangSnoozeH", min: 24, max: 720, step: 24, def: 168, unit: "h", gate: "ocrLangAutoUpdate" },
+  voiceAutoStopSec: { label: "valVoiceAutoStopSec", min: 1, max: 60, step: 1, def: 10, unit: "s", gate: "voiceAutoStop" },
+  voiceMaxMin: { label: "valVoiceMaxMin", min: 1, max: 60, step: 1, def: 10, unit: "min", gate: "voice" },
+  voiceLangCacheH: { label: "valVoiceLangCacheH", min: 1, max: 168, step: 1, def: 24, unit: "h", gate: "voice" },
+  voiceLangCheckH: { label: "valVoiceLangCheckH", min: 24, max: 720, step: 24, def: 168, unit: "h", gate: "voiceLangAutoUpdate" },
+  voiceLangNoticeMs: { label: "valVoiceLangNoticeMs", min: 2000, max: 20000, step: 500, def: 8000, unit: "ms", gate: "voiceLangAutoUpdate" },
+  voiceLangSnoozeH: { label: "valVoiceLangSnoozeH", min: 24, max: 720, step: 24, def: 168, unit: "h", gate: "voiceLangAutoUpdate" },
   // How long ocr_capabilities()'s own result is cached backend-side, so opening
   // the management dialog (or a manual "Check now") does not always wait on
   // PowerShell. Gated on "ocr" alone, not ocrLangAutoUpdate -- manual "Check now"
@@ -1494,6 +1530,25 @@ const EXPERT_DROPDOWNS = {
       try { await invoke("set_ui_text", { key: "ocrLang", value: v }); } catch (e) { errToast(e); }
     },
   },
+  // Same pattern as ocrLang just above: fetched once from voice_languages()
+  // at startup (voiceLangsCache), "Automatic" always first, a trailing entry
+  // opens the shared language-pack dialog (126) instead of ever being stored.
+  voiceLang: {
+    label: "valVoiceLang",
+    gate: "voice",
+    def: "auto",
+    options: () => [["auto", t("langAuto")], ...voiceLangsCache.map((l) => [l.tag, l.label]), ["__manage__", t("voiceLangsManage")]],
+    get: () => settings.ui_texts?.voiceLang || "auto",
+    set: async (v) => {
+      if (v === "__manage__") { openVoiceLangsModal(); return; }
+      settings.ui_texts = { ...(settings.ui_texts || {}), voiceLang: v };
+      try { await invoke("set_ui_text", { key: "voiceLang", value: v }); } catch (e) { errToast(e); }
+    },
+  },
+  voiceInsert: enumDropdown("voiceInsert", "valVoiceInsert",
+    [["caret", "voiceInsertCaret"], ["end", "voiceInsertEnd"]], "caret", "voice"),
+  voiceHotkeyTarget: enumDropdown("voiceHotkeyTarget", "valVoiceHotkeyTarget",
+    [["clipboard", "voiceHotkeyTargetClip"], ["paste", "voiceHotkeyTargetPaste"], ["input", "voiceHotkeyTargetInput"]], "clipboard", "voiceHotkey"),
   // Which edge the toast notifications rise from.
   toastPos: enumDropdown("toastPos", "valToastPos",
     [["bottom", "optToastBottom"], ["top", "optToastTop"]], "bottom"),
@@ -1542,9 +1597,9 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app. F26 (pipette) sits with the
     // screenshot tool: both are capture tools on the composer bar.
-    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax"], dropdowns: ["pickerFormat", "snipEditDefaultTool", "ocrLang", "rotateDefaultMode"], paths: ["screenshotDir"],
-      // Opens #ocr-langs-modal -- same gate as the rest of OCR.
-      actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }] },
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }, "voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax", "voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["pickerFormat", "snipEditDefaultTool", "ocrLang", "rotateDefaultMode", "voiceLang", "voiceInsert", "voiceHotkeyTarget"], paths: ["screenshotDir"],
+      // Opens #ocr-langs-modal / its voice equivalent -- same gate as the rest of each feature.
+      actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }, { id: "voice-langs-open", label: "voiceLangsManage", gate: "voice" }, { id: "voice-hotkey-set", label: "voiceHotkeySet", gate: "voiceHotkey" }] },
     // F12/F13 placeholders, from the grammar to where the app asks for them.
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
     // The editor: what it shows beside the text box. F14/F15 belong together — the
@@ -1631,6 +1686,9 @@ function applyFlags() {
   for (const key of OPT_FLAG_KEYS) {
     document.body.classList.toggle(`flag-${key}`, optFlag(key));
   }
+  // Not a setting -- a runtime fact from voice_support(). A Windows build
+  // with no speech engine at all must hide the button regardless of the flag.
+  document.body.classList.toggle("no-voice-engine", !voiceSupport.supported);
   refreshCustomThemes(); // The feature may have just been switched on or off
   // uppercaseTiles/boldTileNames/monospaceTiles/italicTiles change .tile-name
   // metrics via CSS but are plain flags (no dedicated apply* path), so a cached fit
@@ -1732,6 +1790,9 @@ const EXPERT_TIPS = [
   "snipEditUndoMax", "snipEditSnap", "snipTextPlate", "snipEditDefaultTool",
   "ocr", "ocrUpscaleUnderPx", "ocrLang",
   "ocrAutoPickLang", "ocrLangAutoUpdate", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "ocrLangCacheH",
+  "voice", "voiceInterim", "voicePunct", "voiceAutoCaps", "voiceAutoStop", "voiceAutoStopSec", "voiceMaxMin",
+  "voiceLangCacheH", "voiceLang", "voiceInsert", "voiceOnlineOk", "voiceAutoPickLang", "voiceLangAutoUpdate",
+  "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH", "voiceHotkey", "voiceHotkeyTarget",
   "trayRecent", "trayFavs", "trayRecentN", "trayFavN",
   "checkUpdateOnStart", "showUpdates", "updateCheckH", "importExport", "dimToolbar", "keyboardNav", "allowMultipleInstances",
   "headerSeparators", "floating",
@@ -1780,11 +1841,16 @@ function withTip(row, key) {
 // click back is reversible.
 // `after` lets a caller outside the main expert menu (the backup/statistics
 // panels, their own top-level window) redraw itself instead of renderExpert().
+// Always built (never null) and shown/hidden through a class, so a value that
+// changes without a full menu rebuild (a dragged slider, a flipped switch)
+// still gets its reset button live -- syncRowReset() below is what flips it.
 function rowResetBtn(kind, key, after) {
-  if (!isRowChanged(kind, key)) return null;
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "expert-row-reset";
+  btn.dataset.expertKind = kind;
+  btn.dataset.expertKey = key;
+  btn.classList.toggle("hidden", !isRowChanged(kind, key));
   const label = t("expertResetOne");
   btn.title = label;
   btn.setAttribute("aria-label", label);
@@ -1795,6 +1861,14 @@ function rowResetBtn(kind, key, after) {
     resetOneExpertValue(kind, key, after);
   });
   return btn;
+}
+// Re-checks one row's changed-from-default state and flips its already-built
+// reset button in place -- no menu rebuild, so scroll position/focus survive.
+// A no-op if that row isn't on screen right now (row list is filtered, or a
+// renderExpert() elsewhere already replaced it), which is fine either way.
+function syncRowReset(kind, key) {
+  const btn = document.querySelector(`.expert-row-reset[data-expert-kind="${kind}"][data-expert-key="${key}"]`);
+  if (btn) btn.classList.toggle("hidden", !isRowChanged(kind, key));
 }
 async function resetOneExpertValue(kind, key, after) {
   if (kind === "flags") {
@@ -1839,8 +1913,9 @@ function flagRow(key) {
   if (!shipsOn(key)) {
     const badge = document.createElement("span");
     badge.className = "default-off-badge";
-    badge.textContent = "●";
     badge.title = t("defaultOff");
+    badge.setAttribute("role", "img");
+    badge.setAttribute("aria-label", t("defaultOff"));
     row.append(badge);
   }
   const input = document.createElement("input");
@@ -1879,6 +1954,7 @@ function flagRow(key) {
     // which is all a plain re-render used to care about) — the row set depends on
     // this flag's own value now, not only on what it gates.
     if (GATING_FLAGS.has(key) || expertOnlyChanged) renderExpert();
+    else syncRowReset("flags", key); // 173: reset icon must not wait for an unrelated rebuild
     renderViews();
     // Only these flags change what a tile contains; the rest are body classes,
     // so a full grid rebuild (and its flash) is unnecessary.
@@ -1916,6 +1992,7 @@ async function commitValue(key, value) {
   // Fires once on release, not per drag frame — same "no flash mid-drag" reason
   // previewValue() never calls this, safe to rebuild the (possibly filtered) list here.
   if (expertOnlyChanged) renderExpert();
+  else syncRowReset("values", key); // 173: reset icon must not wait for an unrelated rebuild
 }
 
 function valueRow(key) {
@@ -2025,18 +2102,18 @@ function selectRow(key) {
       // (a fresh, unfocused num) right out from under the focus() above, right as
       // the user is about to type into it. The number field's own "change" below
       // covers the filter once a value is actually committed.
-      persist(Math.max(1, Number(num.value) || cfg.def));
+      persist(Math.max(1, Number(num.value) || cfg.def)).then(() => syncRowReset("selects", key));
     } else {
       num.classList.add("hidden");
       unit.classList.add("hidden");
-      persist(Number(sel.value));
+      persist(Number(sel.value)).then(() => syncRowReset("selects", key));
       if (expertOnlyChanged) renderExpert();
     }
   });
   num.addEventListener("change", () => {
     const v = Math.max(1, Math.min(3650, Number(num.value) || cfg.def));
     num.value = v;
-    persist(v);
+    persist(v).then(() => syncRowReset("selects", key));
     if (expertOnlyChanged) renderExpert();
   });
   row.append(head, sel, num, unit);
@@ -2075,6 +2152,7 @@ function dropdownRow(key) {
     // already reports back exactly what set() just wrote.
     sel.value = cfg.get();
     if (expertOnlyChanged) renderExpert(); // 67
+    else syncRowReset("dropdowns", key); // 173: reset icon must not wait for an unrelated rebuild
   });
   attachSelectPicker(sel); // themed popup instead of the native OS dropdown
   row.append(head, sel);
@@ -2087,6 +2165,10 @@ let currentDataDir = "";
 let defaultScreenshotDir = "";
 let defaultSyncDir = "";
 let ocrLangsCache = []; // 121: [{tag, label}], fetched once at startup (init())
+let voiceLangsCache = []; // [{tag, label}], fetched once at startup (init())
+// voice_support()'s answer, optimistic before it resolves (this app is
+// Windows-only, so an unsupported machine is the rare case, not the default).
+let voiceSupport = { supported: true, engine: "", langs: [], needs_online: false };
 // Whether the backend still manages to seal everything it writes. Read once at
 // startup and pushed by the "store-unsealed" event if it changes mid-session;
 // assumed true until the backend says otherwise, so a failed call never invents
@@ -6107,11 +6189,14 @@ function hotkeyOwner(accel, excludeId = null) {
   const key = accelKey(accel);
   if (!key) return null;
   if (accelKey(settings.hotkey) === key) return { app: true };
+  if (accelKey(settings.voice_hotkey) === key) return { voice: true };
   const p = prompts.find((x) => x.id !== excludeId && accelKey(x.hotkey) === key);
   return p ? { name: p.name } : null;
 }
 const hotkeyTakenMsg = (owner) =>
-  owner.app ? t("promptHotkeyTakenApp") : t("promptHotkeyTakenBy").replace("{name}", owner.name);
+  owner.app ? t("promptHotkeyTakenApp")
+    : owner.voice ? t("promptHotkeyTakenVoice")
+    : t("promptHotkeyTakenBy").replace("{name}", owner.name);
 
 // Global hotkeys have to be off while a field is capturing: Windows hands a
 // registered combination to the owning process, not to the focused window, so the
@@ -6205,6 +6290,15 @@ async function commitGlobalHotkey(accel) {
   settings.hotkey = accel;
   if (accel) toast(t("hotkeySet"));
   renderHotkeysList(); // a no-op while the popup is closed
+  return accel;
+}
+// 131's counterpart, same shape -- its own field, gated behind the voiceHotkey
+// expert flag, checked through the same set_voice_hotkey/check_hotkey backend
+// path (hotkeyOwner above already treats it as a real collision).
+async function commitVoiceHotkey(accel) {
+  await invoke("set_voice_hotkey", { hotkey: accel });
+  settings.voice_hotkey = accel;
+  if (accel) toast(t("hotkeySet"));
   return accel;
 }
 
@@ -6657,6 +6751,11 @@ function syncMdUi(textVisible, rotating = false) {
     const hide = rotating || (on && !mdEditing);
     field.classList.toggle("hidden", hide);
     modal.text.classList.toggle("hidden", hide);
+    // Tied to `rotating` alone, not the full `hide` -- the mic still dictates
+    // into modal.text's value while its rendered Markdown preview is what's on
+    // screen, and keeping the row's own visibility stable across THAT swap is
+    // what keeps the field from jumping vertically when it hands over.
+    modal.voiceRow.classList.toggle("hidden", rotating);
   }
   // Fill the pane whenever the feature is on, visible or not: the first paint must
   // never depend on the pane already being on screen, or switching to it shows a
@@ -7291,69 +7390,83 @@ async function emptyTrashAll() {
 }
 EXPERT_ACTIONS["trash-open"] = openTrash;
 
-// ---- 122: OCR language pack management (#ocr-langs-modal) ----
-// ocr_capabilities() lists every OCR-capable language Windows knows about
-// (installed AND not-installed) with size/version straight from Windows -- a
-// different list from ocrLangsCache above, which is only the WinRT-installed set
-// used to actually pick a recognition language.
-let ocrCapsCache = [];
-let ocrCapsChecked = 0; // unix seconds of the last successful ocr_capabilities() call, 0 = never
-let ocrInstallTimers = {}; // capability name -> setTimeout id, while its install is polled
-let ocrInstallErrors = {}; // capability name -> true (UAC declined) or the backend's own error string
-function openOcrLangsModal() {
+// ---- 122/126: OCR + voice language pack management, one shared dialog ----
+// #ocr-langs-modal serves both OCR and voice dictation language packs -- same
+// markup, same flow (Windows-reported capability list, elevated listing/install),
+// just pointed at a different set of Tauri commands and settings keys. `kind`
+// ("ocr" | "speech") selects which.
+// *_capabilities() lists every capability Windows knows about (installed AND
+// not) with size/version straight from Windows -- a different list from
+// ocrLangsCache/voiceLangsCache above, which are only the installed set actually
+// used to pick a recognition language.
+const LANG_CMDS = {
+  ocr: {
+    capabilities: "ocr_capabilities", elevate: "ocr_capabilities_elevate",
+    elevatedResult: "ocr_capabilities_elevated_result",
+    install: "ocr_install_language", installResult: "ocr_install_result",
+    languages: "ocr_languages",
+  },
+  speech: {
+    capabilities: "speech_capabilities", elevate: "speech_capabilities_elevate",
+    elevatedResult: "speech_capabilities_elevated_result",
+    install: "speech_install_language", installResult: "speech_install_result",
+    languages: "voice_languages",
+  },
+};
+// Per-kind dialog state, kept independent so switching which dialog is open
+// never loses the other's in-flight scan or install polls.
+const LANG_DIALOG = {
+  ocr: { cache: [], checked: 0, installTimers: {}, installErrors: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
+  speech: { cache: [], checked: 0, installTimers: {}, installErrors: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
+};
+let langDialogKind = "ocr"; // which kind #ocr-langs-modal currently displays
+function openLangsModal(kind) {
+  langDialogKind = kind;
+  $("ocr-langs-title").textContent = t(kind === "speech" ? "voiceLangsManage" : "ocrLangsManage");
+  $("ocr-langs-hint").textContent = t(kind === "speech" ? "voiceLangsHint" : "ocrLangsHint");
   $("ocr-langs-modal").classList.remove("hidden");
-  loadOcrCaps(false);
+  const st = LANG_DIALOG[kind];
+  // A scan started on a previous open (or from the elevation retry button)
+  // may still be running server-side -- resume polling it instead of the dialog
+  // silently doing nothing until the user re-elevates from scratch.
+  if (st.elevRunning) { renderLangsLoading(kind); pollElevatedCaps(kind); }
+  else loadLangCaps(kind, false);
 }
-function closeOcrLangsModal() {
+function closeLangsModal() {
   $("ocr-langs-modal").classList.add("hidden");
-  // Installs are OS processes and keep running regardless -- only the polling
-  // loop (and the DOM it repaints) needs to stop while nobody is looking.
-  for (const id of Object.values(ocrInstallTimers)) clearTimeout(id);
-  ocrInstallTimers = {};
-  if (ocrCapsElevTimer) { clearTimeout(ocrCapsElevTimer); ocrCapsElevTimer = null; }
+  const st = LANG_DIALOG[langDialogKind];
+  // Installs and an elevated scan are OS processes and keep running regardless
+  // -- only the polling loop (and the DOM it repaints) needs to stop while
+  // nobody is looking. elevRunning itself is left set (161) so reopening resumes.
+  for (const id of Object.values(st.installTimers)) clearTimeout(id);
+  st.installTimers = {};
+  if (st.elevTimer) { clearTimeout(st.elevTimer); st.elevTimer = null; }
 }
-async function loadOcrCaps(force) {
-  const body = $("ocr-langs-body");
-  if (!ocrCapsCache.length || force) {
-    body.innerHTML = "";
-    const loading = document.createElement("div");
-    loading.className = "hint";
-    loading.textContent = t("ocrLangsScanning");
-    body.appendChild(loading);
-  }
+async function loadLangCaps(kind, force) {
+  const st = LANG_DIALOG[kind];
+  if (!st.cache.length || force) renderLangsLoading(kind);
   try {
-    ocrCapsCache = await invoke("ocr_capabilities", { force: !!force });
-    ocrCapsChecked = Math.floor(Date.now() / 1000);
+    st.cache = await invoke(LANG_CMDS[kind].capabilities, { force: !!force });
+    st.checked = Math.floor(Date.now() / 1000);
   } catch (e) {
-    body.innerHTML = "";
     // Listing is supposed to need no elevated rights, but some Windows builds
     // require it even for this read-only query -- an honest inline reason
-    // beats a blank dialog plus a generic error toast.
-    if (String(e) === "ocr-caps-need-elevation") {
-      const note = document.createElement("div");
-      note.className = "hint";
-      note.textContent = t("ocrLangsNeedElevation");
-      body.appendChild(note);
-      // Without a list nothing can be installed either (the list IS the install
-      // allowlist), so this machine needs a way to run the query elevated.
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "ghost-btn";
-      btn.textContent = t("ocrLangsElevateBtn");
-      btn.addEventListener("click", startElevatedCapsScan);
-      body.appendChild(btn);
-    } else {
-      errToast(e);
-    }
+    // (plus a retry, 162) beats a blank dialog or a generic error toast. 177:
+    // ANY failure here comes back this same way now (backend no longer tries
+    // to classify by HResult/message text, which varies by machine/locale) --
+    // "code|raw text" so the raw PowerShell/DISM reason can still be shown.
+    const s = String(e);
+    if (s.startsWith("ocr-caps-need-elevation")) {
+      renderLangsRetry(kind, t("ocrLangsNeedElevation"), s.slice(s.indexOf("|") + 1));
+    } else errToast(e);
     return;
   }
-  renderOcrLangsBody();
+  renderLangsBody(kind);
 }
 // Runs the capability listing through the UAC prompt on machines that refuse it
 // to a normal user. Same shape as an install: explain first, launch, then poll
 // the result the elevated process writes.
-let ocrCapsElevTimer = null;
-async function startElevatedCapsScan() {
+async function startElevatedCapsScan(kind) {
   const ok = await confirmDialog({
     title: t("ocrElevateTitle"),
     message: t("ocrCapsElevateInfo"),
@@ -7361,46 +7474,96 @@ async function startElevatedCapsScan() {
     danger: false,
   });
   if (!ok) return;
+  const st = LANG_DIALOG[kind];
+  renderLangsLoading(kind);
+  try {
+    await invoke(LANG_CMDS[kind].elevate);
+  } catch (e) {
+    // A launch failure also gets the notice+retry pair, not a dead end.
+    renderLangsRetry(kind, String(e) === "ocr-elevate-cancelled" ? t("ocrElevateCancelled") : String(e));
+    return;
+  }
+  st.elevRunning = true;
+  st.elevLeft = 60;
+  pollElevatedCaps(kind);
+}
+// Polls the elevated process's result file a few seconds apart. Re-entrant: can
+// be called again after the dialog was closed and reopened (161) without losing
+// the two-minute budget already spent (elevLeft lives on LANG_DIALOG, not in a
+// closure local, so it survives that close/reopen).
+function pollElevatedCaps(kind) {
+  const st = LANG_DIALOG[kind];
+  const tick = async () => {
+    st.elevTimer = null;
+    let res;
+    try { res = await invoke(LANG_CMDS[kind].elevatedResult); }
+    catch (e) { st.elevRunning = false; renderLangsRetry(kind, String(e)); return; }
+    if (res == null) {
+      if (--st.elevLeft <= 0) { st.elevRunning = false; renderLangsRetry(kind, t("ocrLangsNeedElevation")); return; }
+      st.elevTimer = setTimeout(tick, 2000);
+      return;
+    }
+    st.elevRunning = false;
+    st.cache = res;
+    st.checked = Math.floor(Date.now() / 1000);
+    renderLangsBody(kind);
+  };
+  st.elevTimer = setTimeout(tick, 2000);
+}
+function renderLangsLoading(kind) {
+  if (langDialogKind !== kind) return;
   const body = $("ocr-langs-body");
   body.innerHTML = "";
   const loading = document.createElement("div");
   loading.className = "hint";
   loading.textContent = t("ocrLangsScanning");
   body.appendChild(loading);
-  try {
-    await invoke("ocr_capabilities_elevate");
-  } catch (e) {
-    loading.textContent = String(e) === "ocr-elevate-cancelled" ? t("ocrElevateCancelled") : String(e);
-    return;
-  }
-  // The elevated process runs on its own -- poll its result file, but give up
-  // after two minutes instead of polling forever behind a closed dialog.
-  let left = 60;
-  const tick = async () => {
-    ocrCapsElevTimer = null;
-    let res;
-    try { res = await invoke("ocr_capabilities_elevated_result"); }
-    catch (e) { loading.textContent = String(e); return; }
-    if (res == null) {
-      if (--left <= 0) { loading.textContent = t("ocrLangsNeedElevation"); return; }
-      ocrCapsElevTimer = setTimeout(tick, 2000);
-      return;
-    }
-    ocrCapsCache = res;
-    ocrCapsChecked = Math.floor(Date.now() / 1000);
-    renderOcrLangsBody();
-  };
-  ocrCapsElevTimer = setTimeout(tick, 2000);
 }
-function renderOcrLangsBody() {
+// Notice text and its retry button are always built together, in one
+// place -- a failure (launch or the two-minute poll timeout alike) can no
+// longer replace the body with text only and strand the user without a way
+// to try again. `details` (177) is the raw PowerShell/DISM text behind a
+// translated reason like `message` -- shown collapsed so it never crowds out
+// the actual instruction, but never silently dropped either.
+function renderLangsRetry(kind, message, details) {
+  if (langDialogKind !== kind) return;
   const body = $("ocr-langs-body");
   body.innerHTML = "";
-  for (const cap of ocrCapsCache) body.appendChild(ocrLangRow(cap));
-  $("ocr-langs-checked").textContent = ocrCapsChecked
-    ? t("ocrLangsLastChecked").replace("{t}", fmtCopyTime(ocrCapsChecked))
+  const note = document.createElement("div");
+  note.className = "hint";
+  note.textContent = message;
+  body.appendChild(note);
+  if (details && details.trim()) {
+    const disc = document.createElement("details");
+    disc.className = "lang-error-details";
+    const summary = document.createElement("summary");
+    summary.textContent = t("ocrLangsErrorDetails");
+    disc.appendChild(summary);
+    const pre = document.createElement("div");
+    pre.className = "lang-error-details-text";
+    pre.textContent = details.trim();
+    disc.appendChild(pre);
+    body.appendChild(disc);
+  }
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "ghost-btn";
+  btn.textContent = t("ocrLangsElevateBtn");
+  btn.addEventListener("click", () => startElevatedCapsScan(kind));
+  body.appendChild(btn);
+}
+function renderLangsBody(kind) {
+  if (langDialogKind !== kind) return; // a stale async result for a dialog that moved on
+  const st = LANG_DIALOG[kind];
+  const body = $("ocr-langs-body");
+  body.innerHTML = "";
+  for (const cap of st.cache) body.appendChild(langRow(kind, cap));
+  $("ocr-langs-checked").textContent = st.checked
+    ? t("ocrLangsLastChecked").replace("{t}", fmtCopyTime(st.checked))
     : t("ocrLangsNeverChecked");
 }
-function ocrLangRow(cap) {
+function langRow(kind, cap) {
+  const st = LANG_DIALOG[kind];
   const row = document.createElement("div");
   row.className = "clip-row ocr-lang-row";
   const head = document.createElement("span");
@@ -7423,7 +7586,7 @@ function ocrLangRow(cap) {
     actions.appendChild(check);
     return row;
   }
-  const note = ocrInstallErrors[cap.name];
+  const note = st.installErrors[cap.name];
   if (note) {
     const hint = document.createElement("span");
     hint.className = "ocr-lang-note";
@@ -7435,21 +7598,22 @@ function ocrLangRow(cap) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "ghost-btn";
-  const busy = !!ocrInstallTimers[cap.name];
+  const busy = !!st.installTimers[cap.name];
   btn.disabled = busy;
   // The size sits INSIDE the button label on purpose -- nobody should start a
   // download blind.
   btn.textContent = busy
     ? t("ocrLangsInstalling")
     : t("ocrLangsDownloadBtn").replace("{size}", cap.download_size == null ? "—" : fmtBytes(cap.download_size));
-  btn.addEventListener("click", () => startOcrInstall(cap));
+  btn.addEventListener("click", () => startLangInstall(kind, cap));
   actions.appendChild(btn);
   return row;
 }
 // Every path that can lead to an elevated install goes through here first:
 // explain the language, its size and that Windows will ask for admin rights
 // once, BEFORE that prompt ever appears. No exceptions.
-async function startOcrInstall(cap) {
+async function startLangInstall(kind, cap) {
+  const st = LANG_DIALOG[kind];
   const size = cap.download_size == null ? "—" : fmtBytes(cap.download_size);
   const ok = await confirmDialog({
     title: t("ocrElevateTitle"),
@@ -7458,57 +7622,286 @@ async function startOcrInstall(cap) {
     danger: false,
   });
   if (!ok) return;
-  delete ocrInstallErrors[cap.name];
+  delete st.installErrors[cap.name];
   try {
-    await invoke("ocr_install_language", { name: cap.name });
+    await invoke(LANG_CMDS[kind].install, { name: cap.name });
   } catch (e) {
     // A declined UAC prompt is not an error: a calm inline
     // note on the row, no error tone, the row stays "not installed".
-    if (String(e) === "ocr-elevate-cancelled") { ocrInstallErrors[cap.name] = true; renderOcrLangsBody(); }
+    if (String(e) === "ocr-elevate-cancelled") { st.installErrors[cap.name] = true; renderLangsBody(kind); }
     else errToast(e);
     return;
   }
   // Arm the poller (marks the row busy) BEFORE repainting, or the render still
-  // reads ocrInstallTimers[cap.name] as empty and shows an enabled Download button --
+  // reads installTimers[cap.name] as empty and shows an enabled Download button --
   // a second click then starts a second UAC-elevated install.
-  pollOcrInstall(cap.name);
-  renderOcrLangsBody();
+  pollLangInstall(kind, cap.name);
+  renderLangsBody(kind);
 }
-// ocr_install_language() only resolves once the elevated process has LAUNCHED,
+// *_install_language() only resolves once the elevated process has LAUNCHED,
 // not once it finished -- poll the result file ourselves, a few seconds apart,
 // until it stops being null.
-function pollOcrInstall(name) {
-  if (ocrInstallTimers[name]) return;
+function pollLangInstall(kind, name) {
+  const st = LANG_DIALOG[kind];
+  if (st.installTimers[name]) return;
   // setTimeout re-armed after each result, not setInterval -- the callback
   // awaits an invoke, and a reply slower than the 3s tick would otherwise overlap
-  // itself (two ocr_install_result calls, or two clearInterval/repaint races).
+  // itself (two install_result calls, or two clearInterval/repaint races).
   const tick = async () => {
     let res;
-    try { res = await invoke("ocr_install_result", { name }); } catch (_) { res = undefined; }
-    if (res == null) { ocrInstallTimers[name] = setTimeout(tick, 3000); return; } // still running (or a transient probe failure)
-    delete ocrInstallTimers[name];
+    try { res = await invoke(LANG_CMDS[kind].installResult, { name }); } catch (_) { res = undefined; }
+    if (res == null) { st.installTimers[name] = setTimeout(tick, 3000); return; } // still running (or a transient probe failure)
+    delete st.installTimers[name];
     if (res.ok) {
       // Clear both caches so the new pack is selectable immediately, no restart.
-      invoke("ocr_languages").then((langs) => { ocrLangsCache = langs || []; }).catch(() => {});
-      await loadOcrCaps(true); // force -- also drops the backend's own cache
+      invoke(LANG_CMDS[kind].languages).then((langs) => {
+        if (kind === "speech") voiceLangsCache = langs || []; else ocrLangsCache = langs || [];
+      }).catch(() => {});
+      await loadLangCaps(kind, true); // force -- also drops the backend's own cache
       return;
     }
     // A real failure (e.g. Windows Home / policy blocked) -- the reason belongs
     // in the row, never a silent failure.
-    ocrInstallErrors[name] = res.error || true;
-    renderOcrLangsBody();
+    st.installErrors[name] = res.error || true;
+    renderLangsBody(kind);
   };
-  ocrInstallTimers[name] = setTimeout(tick, 3000);
+  st.installTimers[name] = setTimeout(tick, 3000);
 }
+// Thin OCR-flavoured wrappers so every existing OCR call site keeps working
+// unchanged -- the generalization lives entirely behind `kind`.
+function openOcrLangsModal() { openLangsModal("ocr"); }
+function closeOcrLangsModal() { closeLangsModal(); }
+function loadOcrCaps(force) { return loadLangCaps("ocr", force); }
+function openVoiceLangsModal() { openLangsModal("speech"); }
 EXPERT_ACTIONS["ocr-langs-open"] = openOcrLangsModal;
-// "ocr-no-language" always has the same fix: open this dialog. Used at every
-// call site that would otherwise show that error as a bare errToast().
+EXPERT_ACTIONS["voice-langs-open"] = openVoiceLangsModal;
+// "ocr-no-language"/"voice-no-language" always have the same fix: open this
+// dialog. Used at every call site that would otherwise show them as a bare errToast().
 function ocrErrToast(err) {
   if (String(err) === "ocr-no-language") {
     toast(t("ocrNoLanguageMsg"), { label: t("ocrLangsManage"), onClick: openOcrLangsModal });
     return;
   }
   errToast(err);
+}
+
+// ---- Voice dictation session control ----
+let voiceSessionId = null;
+let voiceState = "idle"; // idle | arming | listening
+let voiceTargetEl = null;
+let voiceActiveBtn = null;
+let voiceInterim = null; // {start, len} inside voiceTargetEl.value, or null
+let voiceSuppressInput = false; // true while a programmatic .value write is in flight
+let voiceResolvedLang = ""; // BCP-47 tag voice_start actually recognized with, for command post-processing
+let voiceArmCancelled = false; // stopVoice() was called before voice_start's invoke() resolved
+
+// The two-letter code voice.js's command tables are keyed by, derived from
+// the BCP-47 tag voice_start resolved to -- NOT the UI's own display
+// language, which can easily differ from what is actually being recognized
+// (e.g. a German UI with only an English speech pack installed). Falls back
+// to the UI language before a session has resolved one at all (the hotkey
+// path's first partial can in rare cases race ahead of it).
+function voiceLangCode() {
+  return (voiceResolvedLang || LANG).slice(0, 2).toLowerCase();
+}
+function voiceButtonsAll() { return [$("voice-btn"), modal.voiceBtn].filter(Boolean); }
+function setVoiceBtnState(activeBtn, cls) {
+  for (const b of voiceButtonsAll()) {
+    b.classList.remove("is-arming", "is-listening");
+    b.setAttribute("aria-pressed", "false");
+    b.title = t("voiceBtnTitle");
+  }
+  if (!activeBtn || !cls) return;
+  activeBtn.classList.add(cls);
+  if (cls === "is-listening") {
+    activeBtn.setAttribute("aria-pressed", "true");
+    activeBtn.title = t("voiceStopTitle");
+  }
+}
+// The button stays in its "arming" in-between state (so a fast double-click
+// cannot start a second session) until the first backend event, of any kind,
+// proves the session is actually alive.
+function resolveVoiceArming() {
+  if (voiceState === "arming") {
+    voiceState = "listening";
+    setVoiceBtnState(voiceActiveBtn, "is-listening");
+  }
+}
+function endVoiceUi() {
+  voiceState = "idle";
+  voiceSessionId = null;
+  voiceTargetEl = null;
+  voiceInterim = null;
+  voiceResolvedLang = "";
+  setVoiceBtnState(null, null);
+  voiceActiveBtn = null;
+}
+async function startVoice(target, btn) {
+  if (voiceState !== "idle" || !target) return;
+  voiceState = "arming";
+  voiceTargetEl = target;
+  voiceActiveBtn = btn;
+  voiceInterim = null;
+  voiceArmCancelled = false;
+  setVoiceBtnState(btn, "is-arming");
+  let res;
+  try {
+    res = await invoke("voice_start", {
+      lang: txt("voiceLang") || "auto",
+      autoStopSec: flag("voiceAutoStop") ? Math.round(val("voiceAutoStopSec")) : 0,
+      maxSec: Math.round(val("voiceMaxMin")) * 60,
+      interim: flag("voiceInterim"),
+    });
+  } catch (e) {
+    endVoiceUi();
+    routeVoiceError(e);
+    return;
+  }
+  const { id, lang } = res;
+  // A cancel that happened while this call was in flight (voice_start's own
+  // spawn_blocking round trip is not instant) has to stop the session it
+  // just now learned the id of -- stopVoice() itself had nothing to send.
+  if (voiceArmCancelled) {
+    voiceArmCancelled = false;
+    invoke("voice_stop", { id }).catch(() => {});
+    // Only reset the UI if no backend event has already adopted this session
+    // (see voiceEventIsMine) -- if one has, its own listener owns the reset.
+    if (voiceSessionId === null && voiceState === "arming") endVoiceUi();
+    return;
+  }
+  if (voiceSessionId === null) voiceSessionId = id;
+  voiceResolvedLang = lang || voiceResolvedLang;
+}
+async function stopVoice() {
+  if (voiceState === "arming" && voiceSessionId === null) {
+    // Nothing to send yet -- voice_start hasn't resolved with an id. Mark the
+    // cancel and let startVoice() finish the job the moment it does.
+    voiceArmCancelled = true;
+    return;
+  }
+  if (!voiceSessionId) return;
+  try { await invoke("voice_stop", { id: voiceSessionId }); } catch (_) {}
+  // The UI resets from the voice-stopped event the backend always sends back,
+  // not here -- the button never claims "off" before the session (and its
+  // mic) has actually finished.
+}
+// True if an id-tagged backend event belongs to the session currently
+// starting or running. The session thread does not wait for voice_start's
+// own command handler to return before it can emit -- a fast failure or a
+// fast first word can arrive while voiceSessionId is still null. Only one
+// session is ever starting or running at a time (the backend refuses a
+// second voice_start with voice-busy), so the first such event during
+// "arming" safely adopts the id instead of being silently dropped.
+function voiceEventIsMine(id) {
+  if (voiceSessionId === null) {
+    if (voiceState !== "arming") return false; // stray event, nothing is starting
+    voiceSessionId = id;
+    return true;
+  }
+  return id === voiceSessionId;
+}
+function wireVoiceButton(btn, targetFn) {
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    if (voiceState !== "idle") { stopVoice(); return; }
+    startVoice(targetFn(), btn);
+  });
+}
+async function openVoiceOnlineConsent() {
+  const ok = await confirmDialog({
+    title: t("voiceOnlineTitle"),
+    message: t("voiceOnlineInfo"),
+    confirmLabel: t("voiceOnlineAllow"),
+    danger: false,
+  });
+  if (!ok) return;
+  try { await invoke("voice_enable_online_speech"); } catch (e) { errToast(e); return; }
+  settings.ui_flags = { ...(settings.ui_flags || {}), voiceOnlineOk: true };
+  applyFlags();
+}
+function routeVoiceError(err) {
+  const code = String(err);
+  // No error toast for this one -- the fix is always the same, so the first
+  // click just opens the dialog that offers it (the OCR button does the same).
+  if (code === "voice-no-language") { openVoiceLangsModal(); return; }
+  // voice-privacy-off is the same missing consent voice-online-required already
+  // guards against -- Windows' own registry value, so the same dialog fixes it.
+  if (code === "voice-online-required" || code === "voice-privacy-off") { openVoiceOnlineConsent(); return; }
+  if (code === "voice-denied") {
+    toast(t("voiceDeniedMsg"), { label: t("voiceOpenPrivacy"), onClick: () => invoke("open_privacy_mic").catch(() => {}) });
+    return;
+  }
+  const key = { "voice-busy": "voiceErrBusy", "voice-failed": "voiceErrFailed" }[code];
+  errToast(key ? t(key) : code);
+}
+// Joins a new recognized chunk onto whatever the target already holds: one
+// space, except right after a newline or an opening bracket, and never a
+// second space next to one already there.
+function voiceJoiner(before) {
+  if (!before) return "";
+  if (/[\n(]$/.test(before)) return "";
+  if (/\s$/.test(before)) return "";
+  return " ";
+}
+// interim: true for a live voice-partial update (replaced by the next update
+// or the final result), false for the committed voice-text result. The marker
+// (voiceInterim) is what makes a partial replaceable in place instead of
+// piling up duplicate text on every update; tracked per the target element,
+// discarded the moment the user types or moves the cursor themselves (see the
+// discard listeners below), at which point it just stays as plain text.
+function insertVoiceText(text, interim) {
+  const el = voiceTargetEl;
+  if (!el || el.classList.contains("hidden")) return; // its field disappeared mid-session
+  const value = el.value;
+  let start, replaceLen;
+  if (voiceInterim) {
+    start = voiceInterim.start;
+    replaceLen = voiceInterim.len;
+  } else {
+    const atEnd = txt("voiceInsert") === "end";
+    start = atEnd ? value.length : (el.selectionStart ?? value.length);
+    replaceLen = 0;
+  }
+  const joiner = voiceInterim ? "" : voiceJoiner(value.slice(0, start));
+  const newValue = value.slice(0, start) + joiner + text + value.slice(start + replaceLen);
+  const newStart = start + joiner.length;
+  voiceSuppressInput = true;
+  el.value = newValue;
+  el.selectionStart = el.selectionEnd = newStart + text.length;
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  voiceSuppressInput = false;
+  voiceInterim = interim ? { start: newStart, len: text.length } : null;
+}
+// The recognized text is still ours to lay claim to right up until the user
+// visibly acts on the field themselves -- then the interim span is just text.
+function voiceWatchDiscard(el) {
+  if (!el) return;
+  const discard = () => { if (voiceInterim && voiceTargetEl === el) voiceInterim = null; };
+  el.addEventListener("input", () => { if (!voiceSuppressInput) discard(); });
+  el.addEventListener("click", discard);
+  el.addEventListener("keydown", (e) => {
+    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(e.key)) discard();
+  });
+}
+// 131's global hotkey has no visible field to dictate into (the window is
+// never brought forward), so it targets this detached textarea instead --
+// never added to the DOM, but a real element, so it rides the exact same
+// insertVoiceText/voiceJoiner pipeline as the two visible buttons rather than
+// a second copy of it.
+const voiceHotkeyBuffer = document.createElement("textarea");
+async function deliverVoiceHotkeyText(text) {
+  if (!text.trim()) return;
+  const target = txt("voiceHotkeyTarget") || "clipboard";
+  if (target === "input") {
+    inputEl.value = inputEl.value ? `${inputEl.value}\n${text}` : text;
+    autoGrow(inputEl);
+    return;
+  }
+  // clipboard and paste both copy first -- paste then adds the same
+  // paste-into-previous-app step a prompt hotkey (F20) already uses.
+  try { await invoke("copy_text", { text }); } catch (e) { errToast(e); return; }
+  if (target === "paste") await autoPasteNow(null);
+  else toast(t("copied"));
 }
 
 // ---- F2 backups & restore ----
@@ -7987,6 +8380,7 @@ function syncModalImageUi(mode) {
   // own toggle row is hidden too while the feature is off).
   const rotating = textVisible && rotationUiOn();
   modal.text.classList.toggle("hidden", !textVisible || rotating);
+  modal.voiceRow.classList.toggle("hidden", !textVisible || rotating);
   const varsUi = textVisible && !rotating && flag("promptVars");
   modal.textBar.classList.toggle("hidden", !varsUi);
   modal.varsHint.classList.toggle("hidden", !varsUi);
@@ -8250,6 +8644,7 @@ async function startFileFromClipboard() {
   });
 }
 function closeModal() {
+  if (voiceState !== "idle" && voiceTargetEl === modal.text) stopVoice(); // its field is about to disappear
   closeColorPop();
   closeTagSuggest();
   closeTagPop();
@@ -8381,6 +8776,10 @@ function startCreate() {
 
 async function confirmModal() {
   if (!modalState || modalSaving) return;
+  // Saving ends a dictation session targeting this dialog's text field --
+  // one of the five stop paths, so the recognizer never keeps listening into a
+  // field that just closed.
+  if (voiceState !== "idle" && voiceTargetEl === modal.text) stopVoice();
   const name = modal.name.value.trim();
   if (!name) { modal.name.focus(); return; }
   // While rotating, the real text lives in rotateEntries, not modal.text.
@@ -10917,6 +11316,12 @@ function bind() {
   });
   inputEl.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); startCreate(); }
+    // Escape ends a dictation session targeting this field, instead of
+    // falling through to whatever the global Escape handler would otherwise do.
+    if (e.key === "Escape" && voiceState !== "idle" && voiceTargetEl === inputEl) {
+      e.stopPropagation();
+      stopVoice();
+    }
   });
   // Paste an image or file (Ctrl+V) to save it as a button; plain text pastes
   // normally. A broken/unreadable image is reported, never saved.
@@ -10980,6 +11385,7 @@ function bind() {
     // F14 on, the rendered pane still showing entry 1 sitting above the colours.
     const rotating = rotationActive();
     modal.text.classList.toggle("hidden", rotating);
+    modal.voiceRow.classList.toggle("hidden", rotating);
     const varsUi = !rotating && flag("promptVars");
     modal.textBar.classList.toggle("hidden", !varsUi);
     modal.varsHint.classList.toggle("hidden", !varsUi);
@@ -11024,6 +11430,12 @@ function bind() {
   modal.img.addEventListener("click", () => { if (modal.img.src) openLightbox(modal.img.src, false); });
   modal.video.addEventListener("click", () => { if (modal.video.src) openLightbox(modal.video.src, true); });
   modal.name.addEventListener("keydown", (e) => { if (e.key === "Enter") confirmModal(); });
+  modal.text.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && voiceState !== "idle" && voiceTargetEl === modal.text) {
+      e.stopPropagation();
+      stopVoice();
+    }
+  });
   modal.text.addEventListener("input", scheduleLenCounter); // F16 live length readout
   modal.text.addEventListener("input", scheduleMdPreview);  // F14 live preview (rAF-throttled)
   // F14 replace layout: the rendered pane IS the resting state, so it has to hand the
@@ -11299,7 +11711,7 @@ function bind() {
   document.addEventListener("keydown", (e) => {
     if (!flag("keyboardNav")) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.target.closest("input, textarea, [contenteditable]")) return;
+    if (e.target?.closest?.("input, textarea, [contenteditable]")) return;
     if (document.querySelector(".overlay:not(.hidden)")) return; // a dialog is open
     if (NAV[e.key]) { e.preventDefault(); moveKbFocus(...NAV[e.key]); }
     else if ((e.key === "Enter" || e.key === " ") && kbFocus) { e.preventDefault(); activateTile(kbFocus); }
@@ -11861,13 +12273,17 @@ function bind() {
     const row = document.createElement("div");
     row.className = "snip-edit-width-row";
     const presets = SNIP_WIDTH_PRESETS_OF(tool);
-    ["S", "M", "L"].forEach((lab, i) => {
+    // Three visibly different stroke weights read at a glance -- the S/M/L
+    // letters said nothing about WHICH was thicker without reading the tooltip.
+    const STROKE_ICON_W = [2.5, 5, 8];
+    ["snipEditWidthS", "snipEditWidthM", "snipEditWidthL"].forEach((lab, i) => {
       const px = presets[i];
       const b = document.createElement("button");
       b.type = "button";
       b.className = "snip-edit-width-btn" + (ts.width === px ? " sel" : "");
-      b.textContent = lab;
-      b.title = `${lab} (${px}px)`;
+      b.innerHTML = `<svg viewBox="0 0 20 12" width="20" height="12" aria-hidden="true"><line x1="2" y1="6" x2="18" y2="6" stroke="currentColor" stroke-width="${STROKE_ICON_W[i]}" stroke-linecap="round"/></svg>`;
+      b.title = `${t(lab)} (${px}px)`;
+      b.setAttribute("aria-label", `${t(lab)} (${px}px)`);
       b.addEventListener("click", () => { ts.width = px; snipEditRenderContext(); });
       row.appendChild(b);
     });
@@ -11883,15 +12299,50 @@ function bind() {
     wrap.appendChild(num);
     return wrap;
   }
-  function snipEditBuildColorField(tool, ts) {
-    const wrap = document.createElement("div");
-    wrap.className = "snip-edit-field";
+  // Single trigger button (current color) opens a popover holding the full
+  // palette + eyedropper, so the toolbar stays one row tall regardless of
+  // palette size (a full inline grid there used to force it multi-row).
+  const snipColorPop = document.createElement("div");
+  snipColorPop.className = "snip-color-pop hidden";
+  document.body.appendChild(snipColorPop);
+  function closeSnipColorPop() {
+    snipColorPop.classList.add("hidden");
+  }
+  function snipColorPopIsOpen() {
+    return !snipColorPop.classList.contains("hidden");
+  }
+  function openSnipColorPop(anchor, tool, ts) {
+    snipColorPop.innerHTML = "";
     const sw = document.createElement("div");
     sw.className = "swatches";
     buildSwatches(sw, ts.color,
-      (hex) => { ts.color = hex; snipEditRenderContext(); },
-      (anchor, cur) => openColorPop(anchor, cur, (hex) => { ts.color = hex; snipEditRenderContext(); }));
-    wrap.appendChild(sw);
+      (hex) => { ts.color = hex; snipEditRenderContext(); closeSnipColorPop(); },
+      (anchor2, cur) => openColorPop(anchor2, cur, (hex) => { ts.color = hex; snipEditRenderContext(); }));
+    snipColorPop.appendChild(sw);
+    snipColorPop.classList.remove("hidden");
+    placePopover(snipColorPop, anchor.getBoundingClientRect(), 6);
+  }
+  document.addEventListener("pointerdown", (e) => {
+    if (!snipColorPopIsOpen()) return;
+    if (snipColorPop.contains(e.target)) return;
+    if (!colorPop.classList.contains("hidden") && colorPop.contains(e.target)) return;
+    if (e.target.closest(".snip-edit-color-trigger")) return;
+    closeSnipColorPop();
+  });
+  function snipEditBuildColorField(tool, ts) {
+    const wrap = document.createElement("div");
+    wrap.className = "snip-edit-field";
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "snip-edit-color-trigger";
+    trigger.title = t("snipEditColorTip");
+    trigger.setAttribute("aria-label", t("snipEditColor"));
+    const chip = document.createElement("span");
+    chip.className = "snip-edit-color-chip" + (ts.color ? "" : " none");
+    if (ts.color) chip.style.background = ts.color;
+    trigger.appendChild(chip);
+    trigger.addEventListener("click", () => openSnipColorPop(trigger, tool, ts));
+    wrap.appendChild(trigger);
     const eye = document.createElement("button");
     eye.type = "button";
     eye.className = "icon-btn snip-edit-eyedrop" + (SE.eyedropArm === tool ? " active" : "");
@@ -11968,6 +12419,14 @@ function bind() {
   function snipEditBuildToolButtons() {
     snipEditToolsEl.innerHTML = "";
     for (const tdef of SNIP_TOOLS) {
+      // One divider, between the drawing tools (pen..step) and the image
+      // tools (pixelate/spotlight) -- same grouping the Snipping Tool uses.
+      if (tdef.id === "pixelate") {
+        const sep = document.createElement("span");
+        sep.className = "snip-edit-sep";
+        sep.setAttribute("aria-hidden", "true");
+        snipEditToolsEl.appendChild(sep);
+      }
       const b = document.createElement("button");
       b.type = "button";
       b.className = "icon-btn";
@@ -11991,6 +12450,7 @@ function bind() {
     if (SE.drag) return;
     snipEditFinishTextIfOpen();
     SE.eyedropArm = null;
+    closeSnipColorPop();
     SE.tool = tool;
     SE.lastNudged = null;
     snipEditClearLive();
@@ -12203,6 +12663,7 @@ function bind() {
     if (snipEdit.classList.contains("hidden")) return;
     if (e.key === "Escape") {
       e.preventDefault();
+      if (snipColorPopIsOpen()) { closeSnipColorPop(); return; }
       if (SE.eyedropArm) { SE.eyedropArm = null; snipEditRenderContext(); return; }
       if (SE.tool === "crop" && (SE.drag || SE.cropRect)) { snipEditCropDiscard(); return; }
       snipEditCancel();
@@ -12252,6 +12713,7 @@ function bind() {
       SE.eyedropArm = null;
       SE.showRaw = false;
       SE.drag = null;
+      closeSnipColorPop();
       SE.onApply = onApply;
       SE.onCancel = onCancel;
       SE.active = true;
@@ -12332,6 +12794,22 @@ function bind() {
   $("snip-edit-zoom-in").addEventListener("click", () => snipEditZoomBy(1.25));
   $("snip-edit-zoom-out").addEventListener("click", () => snipEditZoomBy(0.8));
   $("snip-edit-fit").addEventListener("click", snipEditFit);
+  $("snip-edit-saveas").addEventListener("click", async () => {
+    const dataUrl = snipEditExportDataUrl();
+    try {
+      const path = await invoke("save_screenshot_as", { dataUrl });
+      if (path) toast(t("snipEditSavedTo").replace("{path}", path));
+    } catch (e) { errToast(e); }
+  });
+  // SouthEast-only resize handle. The move side of the titlebar needs no JS
+  // at all -- data-tauri-drag-region alone drags the window (same as the main
+  // window's own header) -- but there is no HTML-attribute equivalent for
+  // resizing, so this is the one spot that calls into the window API directly.
+  $("snip-edit-resize-grip").addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    getCurrentWindow().startResizeDragging(ResizeDirection.SouthEast).catch(() => {});
+  });
 
   const snipModal = $("snip-modal");
   let pendingSnip = null;
@@ -12504,10 +12982,64 @@ function bind() {
       Math.round(val("ocrLangNoticeMs")),
     );
   });
+  // Same background-watcher notice, for voice language packs.
+  listen("voice-lang-update-due", (e) => {
+    const due = e.payload || [];
+    if (!due.length) return;
+    const msg = due.length === 1
+      ? t("ocrLangUpdateOne").replace("{lang}", due[0].label)
+      : t("ocrLangUpdateMany").replace("{n}", String(due.length));
+    toast(
+      msg,
+      { label: t("cancel"), onClick: () => invoke("voice_lang_snooze").catch(() => {}) },
+      "", null,
+      Math.round(val("voiceLangNoticeMs")),
+    );
+  });
+  // Voice dictation: the two buttons (composer, edit dialog) share one wiring
+  // helper and one event pipeline -- see the section above for all of it.
+  wireVoiceButton($("voice-btn"), () => inputEl);
+  wireVoiceButton(modal.voiceBtn, () => modal.text);
+  voiceWatchDiscard(inputEl);
+  voiceWatchDiscard(modal.text);
+  listen("voice-partial", (e) => {
+    const { id, text } = e.payload || {};
+    if (!voiceEventIsMine(id)) return;
+    resolveVoiceArming();
+    insertVoiceText(text || "", true);
+  });
+  listen("voice-text", (e) => {
+    const { id, text } = e.payload || {};
+    if (!voiceEventIsMine(id)) return;
+    resolveVoiceArming();
+    const processed = applyVoiceCommands(text || "", { punct: flag("voicePunct"), autoCaps: flag("voiceAutoCaps"), lang: voiceLangCode() });
+    insertVoiceText(processed, false);
+  });
+  listen("voice-stopped", (e) => {
+    const { id } = e.payload || {};
+    if (!voiceEventIsMine(id)) return;
+    const wasHotkey = voiceTargetEl === voiceHotkeyBuffer;
+    const finalText = wasHotkey ? voiceHotkeyBuffer.value : "";
+    endVoiceUi();
+    if (wasHotkey) deliverVoiceHotkeyText(finalText);
+  });
+  listen("voice-error", (e) => {
+    const { id, code } = e.payload || {};
+    if (!voiceEventIsMine(id)) return;
+    endVoiceUi();
+    routeVoiceError(code);
+  });
+  // The global hotkey toggled a session ON (a toggle OFF is handled entirely
+  // on the Rust side, no event needed for that direction).
+  listen("voice-hotkey-toggle", () => {
+    if (voiceState !== "idle") return;
+    voiceHotkeyBuffer.value = "";
+    startVoice(voiceHotkeyBuffer, null);
+  });
   // Management dialog chrome.
-  $("ocr-langs-close-x").addEventListener("click", closeOcrLangsModal);
-  $("ocr-langs-modal").addEventListener("pointerdown", (e) => { if (e.target === $("ocr-langs-modal")) closeOcrLangsModal(); });
-  $("ocr-langs-recheck").addEventListener("click", () => loadOcrCaps(true));
+  $("ocr-langs-close-x").addEventListener("click", closeLangsModal);
+  $("ocr-langs-modal").addEventListener("pointerdown", (e) => { if (e.target === $("ocr-langs-modal")) closeLangsModal(); });
+  $("ocr-langs-recheck").addEventListener("click", () => loadLangCaps(langDialogKind, true));
   $("ocr-modal-copy").addEventListener("click", () => {
     const text = $("ocr-result-text").value;
     invoke("copy_text", { text }).then(() => toast(t("copied"))).catch((err) => errToast(err));
@@ -12945,6 +13477,22 @@ function bind() {
     $("opt-hotkey").value = "";
   });
   $("hotkey-list-btn").addEventListener("click", openHotkeysModal);
+  bindHotkeyField($("opt-voice-hotkey"), {
+    current: () => settings.voice_hotkey,
+    onCommit: commitVoiceHotkey,
+  });
+  $("voice-hotkey-clear").addEventListener("click", async () => {
+    try { await commitVoiceHotkey(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
+    $("opt-voice-hotkey").value = "";
+  });
+  EXPERT_ACTIONS["voice-hotkey-set"] = () => {
+    showExpertPage(false);
+    settingsEl.classList.remove("hidden");
+    requestAnimationFrame(() => {
+      $("opt-voice-hotkey").scrollIntoView({ block: "center" });
+      $("opt-voice-hotkey").focus();
+    });
+  };
   $("hotkeys-modal-close").addEventListener("click", closeHotkeysModal);
   $("hotkeys-modal").addEventListener("pointerdown", (e) => {
     if (e.target === $("hotkeys-modal")) closeHotkeysModal();
@@ -13734,17 +14282,21 @@ async function warnStoreUnsealed() {
   return true;
 }
 
-// Called once, right after seedExamplesIfNeeded(), from init()'s reveal(). Never
-// opens on top of (or the same launch as) a more urgent dialog — offerTakeover()
-// (the portable/installed data-folder adoption offer) is the only OTHER dialog that
-// can fire this early, so its return value is the gate. A missing-WebView2 message
-// cannot race this at all: that one is native and shown, if ever, before the
-// WebView2 runtime — and therefore this whole JS module — exists (see
-// ensure_webview2 in lib.rs, the one allowed exception to routing every
+// Called once, right after seedExamplesIfNeeded(), from init()'s reveal(). Runs
+// AFTER offerTakeover() (the portable/installed data-folder adoption offer) so the
+// takeover question is always seen first, but is not suppressed by it any more: an
+// adopted store brings its own tourSeen along (settings.json is part of the copied
+// files), so a returning user still gets no tour, while a declined offer means a
+// genuinely new user, who should. The only dialog that still suppresses the tour
+// outright is the unencrypted-store warning (sealWarned) — more urgent, and safe to
+// retry next launch since tourSeen is only ever written by the tour itself. A
+// missing-WebView2 message cannot race this at all: that one is native and shown,
+// if ever, before the WebView2 runtime — and therefore this whole JS module —
+// exists (see ensure_webview2 in lib.rs, the one allowed exception to routing every
 // user-facing dialog through the themed confirmDialog()), so there is nothing left
 // to check for it here by the time init() runs.
-async function maybeOpenFirstRunTour(urgentDialogShown) {
-  if (urgentDialogShown) return; // retried next launch — tourSeen was never written
+async function maybeOpenFirstRunTour(sealWarned) {
+  if (sealWarned) return; // retried next launch — tourSeen was never written
   if (settings.ui_flags?.tourSeen) return;
   if (!flag("firstRunTour")) return;
   await openTour({ firstRun: true });
@@ -13777,9 +14329,11 @@ const EXAMPLES = [
 // The backend re-checks "library still empty AND never seeded before" itself, so
 // this is safe (and cheap) to call unconditionally on every launch — it is a no-op
 // the moment the library holds anything at all, examples included.
+// Returns the prompts it actually seeded (empty when the library already had
+// something, examples included — the backend decides, this only reports back).
 async function seedExamplesIfNeeded() {
   const examples = EXAMPLES.map((e) => ({ name: t(e.name), text: t(e.text), image: e.image }));
-  await invoke("seed_example_prompts", { examples }).catch(() => []);
+  return invoke("seed_example_prompts", { examples }).catch(() => []);
 }
 
 function updateExamplesBanner() {
@@ -13796,7 +14350,6 @@ function updateExamplesBanner() {
 async function applySettingsUi() {
   applyFlags();
   applyBars();
-  await seedExamplesIfNeeded();
   await renderGrid();
   syncSettingsControls();
 }
@@ -13826,6 +14379,10 @@ async function init() {
     // OCR language list -- fetched once, cached, "Automatic" is always
     // prepended separately (see EXPERT_DROPDOWNS.ocrLang above).
     invoke("ocr_languages").then((langs) => { ocrLangsCache = langs || []; }).catch(() => {});
+    invoke("voice_languages").then((langs) => { voiceLangsCache = langs || []; }).catch(() => {});
+    // Re-applies flags once this resolves so no-voice-engine reflects reality
+    // (the optimistic default above assumes support until this says otherwise).
+    invoke("voice_support").then((s) => { if (s) { voiceSupport = s; applyFlags(); } }).catch(() => {});
     applyTileStyle();
     autoGrow(inputEl);
     inputEl.focus();
@@ -13848,11 +14405,20 @@ async function init() {
       // The first-run tour comes right after, but only if that offer (the one
       // other dialog that can fire this early) did not itself appear this launch.
       invoke("show_main_window").catch(() => {}).finally(async () => {
-        const urgentDialogShown = await offerTakeover();
+        await offerTakeover();
+        // Seeded AFTER the takeover offer, not before: seeding earlier (e.g. from
+        // applySettingsUi()) would make the library non-empty and takeover_offer()
+        // would then never fire, hiding the adoption question behind the tour. Only
+        // re-render if something actually landed — the common case (a library that
+        // already has content) must not repaint the grid a second time on every
+        // launch, which would invalidate tile references a user could already be
+        // interacting with.
+        const seeded = await seedExamplesIfNeeded();
+        if (seeded && seeded.length) await renderGrid();
         // Ahead of the tour: an unencrypted store is the more urgent of the two,
         // and the tour is retried next launch (tourSeen is only written by it).
         const sealWarned = await warnStoreUnsealed();
-        await maybeOpenFirstRunTour(urgentDialogShown || sealWarned);
+        await maybeOpenFirstRunTour(sealWarned);
       });
     };
     setTimeout(reveal, 1500);
@@ -13877,6 +14443,7 @@ function syncSettingsControls() {
     $("opt-favview").checked = favViewEnabled();
     refreshFavViewUi();
     $("opt-hotkey").value = prettyAccel(settings.hotkey);
+    $("opt-voice-hotkey").value = prettyAccel(settings.voice_hotkey);
     $("pin-top").classList.toggle("active", settings.always_on_top === true);
     $("pin-top").setAttribute("aria-pressed", String(settings.always_on_top === true));
     $("opt-autoupdate").checked = settings.auto_update !== false;
@@ -13891,6 +14458,10 @@ function syncSettingsControls() {
 async function reloadEverything() {
   await applySettingsCore();
   await applySettingsUi(); // renderGrid() WITH the fetch: the prompts were replaced too
+  // A wipe (delete_all_data) leaves the library empty, so the backend reseeds the
+  // examples here; adopt/reset leave it non-empty, so this stays a no-op for them.
+  const seeded = await seedExamplesIfNeeded();
+  if (seeded && seeded.length) await renderGrid();
   wireClearButtons();
   fitCache.clear();
   fitAllTiles();

@@ -147,7 +147,7 @@ const SETTINGS = {
   theme: "dark", language: "en", floating: {}, float_scale: {}, video_prefs: {},
   window: null, minimize_to_tray: false, autostart: false, start_minimized: false,
   // F20: the app hotkey is set, so a prompt trying to claim it must be refused.
-  always_on_top: false, hotkey: "CommandOrControl+Shift+P", auto_update: true, skipped_versions: [],
+  always_on_top: false, hotkey: "CommandOrControl+Shift+P", voice_hotkey: "", auto_update: true, skipped_versions: [],
   // Tags, custom themes, view groups and private notes ship off; the stub turns them
   // on so the smoke run covers that UI too. The Markdown preview is deliberately NOT
   // listed — it ships on, and the run proves that.
@@ -155,7 +155,10 @@ const SETTINGS = {
   // window has something to draw.
   // F26 is on too, so the pipette shows in the composer bar and its gated expert
   // rows (notation, magnifier zoom) actually render.
-  ui_flags: { tags: true, customThemes: true, viewGroups: true, promptNotes: true, pillFolders: true, colorPicker: true },
+  // tourSeen: true -- this fixture models an existing, already-onboarded install
+  // (a non-empty library, real settings), so the first-run tour must not pop
+  // open under every later check the way it would for a genuinely fresh one.
+  ui_flags: { tags: true, customThemes: true, viewGroups: true, promptNotes: true, pillFolders: true, colorPicker: true, tourSeen: true },
   ui_values: {}, ui_texts: {}, dup_ignored: [],
   tag_colors: { work: "#3b82f6" },
   custom_themes: [{ id: "ct1", name: "Neon", base: "dark", vars: { accent: "#ff00aa" } }],
@@ -275,14 +278,40 @@ const RESULTS = {
   // the actual invoke call, no matter how long main.js has already been running.
   ocr_capabilities: () => {
     // A probe sets window.__OCR_CAPS_ELEV__ to play the Windows builds that
-    // refuse even the read-only listing to a normal user.
-    if (window.__OCR_CAPS_ELEV__) throw "ocr-caps-need-elevation";
+    // refuse even the read-only listing to a normal user. 177: the real
+    // backend error is "code|raw text", the raw half varying by machine.
+    if (window.__OCR_CAPS_ELEV__) throw "ocr-caps-need-elevation|Access to the path \"C:\\WINDOWS\\Logs\\DISM\" is denied.";
     return window.__OCR_CAPS_TEST__ || [];
   },
   // The elevated listing: launching it arms the result, the next poll hands the
   // list over -- the same two-step the real backend does through the UAC prompt.
   ocr_capabilities_elevate: () => { window.__OCR_CAPS_ELEV_DONE__ = true; return null; },
   ocr_capabilities_elevated_result: () => (window.__OCR_CAPS_ELEV_DONE__ ? window.__OCR_CAPS_TEST__ || [] : null),
+  // 127/130: a supported machine with two installed languages, one of them
+  // matching the ocrLangsCache-equivalent shape (voiceLangsCache).
+  voice_support: () => ({ supported: true, engine: "windows", langs: ["en-US", "de-DE"], needs_online: false }),
+  voice_languages: () => [{ tag: "en-US", label: "English (US)" }, { tag: "de-DE", label: "Deutsch (Deutschland)" }],
+  // Always hands back the same session id -- the probe fires voice-partial/
+  // voice-text/voice-stopped/voice-error itself via window.__FIRE__, there is
+  // no real recognizer here to drive them.
+  voice_start: () => ({ id: 1, lang: "en-US" }),
+  voice_stop: () => null,
+  voice_state: () => null,
+  voice_enable_online_speech: () => { SETTINGS.ui_flags = { ...SETTINGS.ui_flags, voiceOnlineOk: true }; return null; },
+  speech_capabilities: () => window.__OCR_CAPS_TEST__ || [],
+  speech_capabilities_elevate: () => { window.__OCR_CAPS_ELEV_DONE__ = true; return null; },
+  speech_capabilities_elevated_result: () => (window.__OCR_CAPS_ELEV_DONE__ ? window.__OCR_CAPS_TEST__ || [] : null),
+  speech_install_language: () => null,
+  speech_install_result: () => ({ ok: true }),
+  voice_lang_snooze: () => null,
+  open_privacy_mic: () => null,
+  set_voice_hotkey: (a) => {
+    const accel = String((a && a.hotkey) || "").toLowerCase();
+    if (/^(commandorcontrol|ctrl)\+[a-z]$/.test(accel)) throw new Error("hotkey-system");
+    if (accel === "commandorcontrol+alt+b") throw new Error("hotkey-conflict");
+    SETTINGS.voice_hotkey = a && a.hotkey ? a.hotkey : "";
+    return null;
+  },
   default_screenshot_dir: () => "C:\\Pictures",
   default_sync_dir: () => "C:\\Data\\Prompts",
   // One snapshot carries its prompt count and names (61), one is from an older
@@ -709,7 +738,7 @@ const noopWindow = {
   setSize: async () => {}, setPosition: async () => {},
   outerPosition: async () => ({ x: 0, y: 0 }),
   outerSize: async () => ({ width: innerWidth, height: innerHeight }),
-  startDragging: async () => {}, setIgnoreCursorEvents: async () => {},
+  startDragging: async () => {}, startResizeDragging: async () => {}, setIgnoreCursorEvents: async () => {},
   minimize: async () => {}, maximize: async () => {}, unmaximize: async () => {},
   isMaximized: async () => false, close: async () => {}, hide: async () => {},
   show: async () => {}, setFocus: async () => {},
@@ -741,7 +770,12 @@ window.__TAURI__ = {
     },
     emit: async () => {},
   },
-  window: { getCurrentWindow: () => noopWindow },
+  // 179: real Tauri v2 exports this alongside startResizeDragging() -- the
+  // screenshot editor's resize grip reads window.__TAURI__.window.ResizeDirection.
+  window: { getCurrentWindow: () => noopWindow, ResizeDirection: {
+    North: "North", NorthEast: "NorthEast", East: "East", SouthEast: "SouthEast",
+    South: "South", SouthWest: "SouthWest", West: "West", NorthWest: "NorthWest",
+  } },
   webviewWindow: { getCurrentWebviewWindow: () => noopWindow },
 };
 window.__TAURI__.invoke = window.__TAURI__.core.invoke;

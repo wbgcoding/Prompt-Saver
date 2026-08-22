@@ -162,6 +162,14 @@
         <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M8 9h8M8 12h8M8 15h5"/>
       </svg>
     </button>
+    <!-- 127: microphone, capsule + bracket + foot. Off by default (flagVoice) and
+         also hidden on a Windows build with no speech engine at all. -->
+    <button id="voice-btn" class="icon-btn composer-img-btn" aria-pressed="false" data-i18n-title="voiceBtnTitle" data-i18n-aria="voiceBtnTitle">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 2.5a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0v-6a3 3 0 0 0-3-3Z"/>
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6.5 11v.5a5.5 5.5 0 0 0 11 0V11M12 17v3.5M9 20.5h6"/>
+      </svg>
+    </button>
     <textarea id="input" class="input" rows="1" data-i18n-ph="promptPh" data-i18n-aria="promptPh"></textarea>
     <!-- 109: left of Save, directly under hide-top (same fixed width, both bars
          right-aligned) -->
@@ -292,6 +300,17 @@
             <button type="button" id="modal-rotate-auto" class="ghost-btn modal-rotate-auto" aria-pressed="false" data-i18n="rotateAuto" data-i18n-title="rotateAutoTip">Auto</button>
           </div>
         </div>
+      </div>
+      <!-- 127: same mic button/behaviour as the composer's, targeting this
+           textarea instead of the composer's -- one shared wireVoiceButton()
+           helper, not two implementations. -->
+      <div id="modal-voice-row" class="modal-voice-row">
+        <button type="button" id="modal-voice-btn" class="icon-btn" aria-pressed="false" data-i18n-title="voiceBtnTitle" data-i18n-aria="voiceBtnTitle">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 2.5a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0v-6a3 3 0 0 0-3-3Z"/>
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6.5 11v.5a5.5 5.5 0 0 0 11 0V11M12 17v3.5M9 20.5h6"/>
+          </svg>
+        </button>
       </div>
       <div id="modal-text-wrap" class="modal-text-wrap">
         <textarea id="modal-text" class="modal-input modal-text hidden" rows="6" data-i18n-ph="promptPh"></textarea>
@@ -812,6 +831,15 @@
           <button id="hotkey-list-btn" type="button" class="ghost-btn" data-i18n="hotkeysAllBtn">All hotkeys</button>
         </div>
       </div>
+      <!-- Voice dictation's own global hotkey (131) -- visible only with the
+           voiceHotkey expert flag on, same shape as the app hotkey row above. -->
+      <div id="voice-hotkey-row" class="field field-inline">
+        <span data-i18n="voiceHotkeyLabel">Dictation hotkey</span>
+        <div class="hotkey-row">
+          <input id="opt-voice-hotkey" class="modal-input" type="text" readonly data-i18n-ph="hotkeyPh" data-i18n-aria="voiceHotkeyLabel" />
+          <button id="voice-hotkey-clear" class="ghost-btn" data-i18n="hotkeyClear">Clear</button>
+        </div>
+      </div>
       <div id="impexp-field" class="field">
         <div class="export-row">
           <button id="import-btn" class="ghost-btn" data-i18n="import">Import prompts</button>
@@ -1049,14 +1077,14 @@
   <div id="ocr-langs-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal">
       <div class="modal-head">
-        <h2 class="modal-title" data-i18n="ocrLangsManage">Manage languages</h2>
+        <h2 id="ocr-langs-title" class="modal-title" data-i18n="ocrLangsManage">Manage languages</h2>
         <button id="ocr-langs-close-x" class="icon-btn" data-i18n-title="close" data-i18n-aria="close">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
             <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
           </svg>
         </button>
       </div>
-      <p class="modal-hint" data-i18n="ocrLangsHint">Windows downloads and installs each language pack itself, and will ask for administrator rights once.</p>
+      <p id="ocr-langs-hint" class="modal-hint" data-i18n="ocrLangsHint">Windows downloads and installs each language pack itself, and will ask for administrator rights once.</p>
       <div id="ocr-langs-body" class="clip-list"></div>
       <div class="ocr-langs-foot">
         <span id="ocr-langs-checked" class="modal-hint"></span>
@@ -1069,6 +1097,15 @@
        #snip-modal, when flagSnipEditor is on. Full-bleed overlay (no centered
        modal box): toolbar on top, canvas below, actions bottom-right. -->
   <div id="snip-edit" class="overlay snip-edit hidden" role="dialog" aria-modal="true" data-i18n-aria="snipEditTitle">
+    <!-- The overlay covers the whole frameless main window, so this is the
+         only titlebar it has -- data-tauri-drag-region alone moves the window,
+         no JS needed (same as the main window's own header). -->
+    <div class="snip-edit-titlebar" data-tauri-drag-region>
+      <span class="snip-edit-titlebar-label" data-i18n="snipEditTitle"></span>
+      <button id="snip-edit-close" class="icon-btn snip-edit-close" type="button" data-tauri-drag-region="false" data-i18n-title="close" data-i18n-aria="close">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>
+      </button>
+    </div>
     <div class="snip-edit-toolbar">
       <div id="snip-edit-tools" class="snip-edit-tools" role="toolbar" data-i18n-aria="snipEditToolsLabel"></div>
       <div id="snip-edit-context" class="snip-edit-context"></div>
@@ -1100,12 +1137,16 @@
     </div>
     <div class="snip-edit-actions">
       <button id="snip-edit-cancel" class="ghost-btn" type="button" data-i18n="cancel" data-i18n-title="snipEditCancelTip"></button>
+      <button id="snip-edit-saveas" class="ghost-btn" type="button" data-i18n="screenshotSaveAs" data-i18n-title="snipEditSaveAsTip"></button>
       <button id="snip-edit-copy" class="ghost-btn" type="button" data-i18n="copy" data-i18n-title="snipEditCopyTip"></button>
       <button id="snip-edit-apply" class="primary-btn" type="button" data-i18n="apply" data-i18n-title="snipEditApplyTip"></button>
     </div>
-    <button id="snip-edit-close" class="icon-btn snip-edit-close" type="button" data-i18n-title="close" data-i18n-aria="close">
-      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>
-    </button>
+    <!-- SouthEast-only, same as the app needs elsewhere -- a full 8-handle
+         resize rig is native-window territory the main window itself doesn't
+         have either; this overlay only needed SOME way to get bigger/smaller. -->
+    <div id="snip-edit-resize-grip" class="snip-edit-resize-grip" data-tauri-drag-region="false" data-i18n-title="snipEditResizeTip" data-i18n-aria="snipEditResizeTip">
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M15 15h-3v-2h1v-1h2v3ZM11 15H9v-2h2v2Zm4-4h-2V9h2v2ZM7 15H5v-2h2v2Zm8-4h-2V9h2v2Zm-4 0h-2V9h2v2Z"/></svg>
+    </div>
   </div>
 
   <!-- Generic confirm dialog (e.g. discard unsaved changes) -->
@@ -1163,6 +1204,7 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
+  <script src="voice.js"></script>
   <script type="module" src="main.js"></script>
 </body>
 </html>

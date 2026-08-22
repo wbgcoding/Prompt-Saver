@@ -1077,6 +1077,25 @@ body.grid-selecting .tile-type { opacity: 0; }
    header icons. */
 .composer-img-btn > svg { width: 22px; height: 22px; }
 .composer-img-btn > svg path, .composer-img-btn > svg circle { stroke-width: 2.3px; }
+/* Recording: filled accent colour plus a pulsing ring. The reduced-motion
+   media query further down turns every animation off, this one included. */
+#voice-btn.is-listening, #modal-voice-btn.is-listening {
+  color: var(--accent);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+  animation: voice-pulse 1.6s ease-out infinite;
+}
+/* Arming (clicked, waiting for the recognizer's first event): light up right
+   away with a soft static ring — dimming here read as "something broke"
+   instead of "starting up". is-listening's pulse takes over once the backend
+   confirms. */
+#voice-btn.is-arming, #modal-voice-btn.is-arming {
+  color: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+@keyframes voice-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+  100% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
 .input {
   flex: 1 1 140px;
   min-width: 0; /* a textarea's intrinsic min width would otherwise block shrinking */
@@ -1301,6 +1320,7 @@ body.library-front #modal.overlay { z-index: 67; }
 /* 33: "+ Entry" left, mode dropdown pinned to the right edge with "From the
    start" immediately left of it (and the "Next: n/total" readout left of that). */
 .modal-rotate-controls-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.modal-voice-row { display: flex; justify-content: flex-end; margin-bottom: 2px; }
 .modal-rotate-mode-group { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
 .modal-rotate-mode { flex: 0 0 auto; width: auto; }
 .modal-rotate-next { font-size: 12px; color: var(--muted); }
@@ -1454,6 +1474,15 @@ body.library-front #modal.overlay { z-index: 67; }
    so both entry points hide via noflag-ocr. */
 .noflag-ocr #ocr-btn,
 .noflag-ocr #snip-modal-ocr { display: none; }
+/* Voice ships on too, same noflag-<key> pattern; a Windows build with no
+   speech engine at all hides the button regardless of the flag's own value. */
+.noflag-voice #voice-btn,
+.noflag-voice #modal-voice-row,
+.no-voice-engine #voice-btn,
+.no-voice-engine #modal-voice-row { display: none; }
+/* Opt-in flag (default off): shown only once voiceHotkey is switched on, same
+   convention as every other flag-<key> gated row. */
+body:not(.flag-voiceHotkey) #voice-hotkey-row { display: none; }
 .noflag-quickGrid #quick-grid { display: none; }
 .flag-quickGridHoverOnly .header #quick-grid { opacity: 0; pointer-events: none; }
 .flag-quickGridHoverOnly .header:hover #quick-grid, .flag-quickGridHoverOnly .header:focus-within #quick-grid { opacity: 1; pointer-events: auto; }
@@ -1587,6 +1616,10 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); border: 3px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-corner { background: transparent; }
+/* Themed resize handle — WebView2 draws its own corner grip on every
+   `resize:` field (.modal-text, .modal-notes-text, …) and ignores theme
+   variables, so it stayed a bright white square in dark themes. */
+::-webkit-resizer { background-color: var(--surface); border: 1px solid var(--border); }
 
 /* Scroll bodies in the feature popups reach the modal's inner edges so the
    scrollbar sits flush at the right border, while the content keeps symmetric 20px
@@ -1714,6 +1747,34 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   flex-direction: column;
   background: var(--surface);
 }
+/* The overlay's own titlebar -- data-tauri-drag-region (set in the HTML)
+   does the actual window move, no JS involved, same as the main window's
+   header. This exists at all only because the overlay covers the whole
+   frameless main window while it is open, leaving nothing else to drag by. */
+.snip-edit-titlebar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.snip-edit-titlebar-label { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.snip-edit-resize-grip {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  cursor: nwse-resize;
+  z-index: 6;
+}
+.snip-edit-resize-grip:hover { color: var(--fg); }
 .snip-edit-toolbar {
   display: flex;
   align-items: center;
@@ -1730,32 +1791,49 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   display: flex;
   align-items: center;
   gap: 12px;
-  flex: 1 1 auto;
+  /* flex-basis 0, not auto: with several field groups (e.g. rect: width +
+     color + filled) this row's own natural content width is wide enough
+     that a plain "auto" basis made the OUTER .snip-edit-toolbar think it
+     had to wrap the undo/redo/zoom group onto a second toolbar line, even
+     though this row can shrink to fit just fine. A 0 basis tells the wrap
+     algorithm to size this item from the remaining space, not its content. */
+  flex: 1 1 0;
   min-width: 0;
-  flex-wrap: wrap;
+  /* Never wrap to a second line here either -- the same wide content used
+     to wrap internally three deep at a narrow window width. Scroll instead;
+     the row always stays exactly as tall as one line of controls. */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
   padding-inline: 12px;
   margin-inline: 4px;
   border-inline: 1px solid var(--border);
   min-height: 30px;
 }
+/* A slim bar instead of the app-wide default -- this row is short, a full
+   12px scrollbar would eat a third of its own height. */
+.snip-edit-context::-webkit-scrollbar { height: 6px; }
+.snip-edit-context::-webkit-scrollbar-thumb { border: 1px solid transparent; }
 .snip-edit-view { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
 .snip-edit-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
 .snip-edit-zoom-val { min-width: 42px; text-align: center; font-size: 12px; color: var(--muted); }
 .snip-edit-view .ghost-btn { padding: 4px 10px; font-size: 12px; }
 
 /* Contextual (tool-specific) controls: swatches, width presets, toggles, sliders. */
-.snip-edit-field { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.snip-edit-field { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
 .snip-edit-width-row { display: flex; align-items: center; gap: 4px; }
 .snip-edit-width-btn {
-  padding: 3px 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: transparent;
   color: var(--fg);
   cursor: pointer;
-  font-size: 11px;
-  line-height: 1.4;
 }
+.snip-edit-width-btn svg { display: block; }
 .snip-edit-width-btn:hover { border-color: var(--accent); }
 .snip-edit-width-btn.sel { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
 .snip-edit-num {
@@ -1766,11 +1844,53 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   background: var(--surface);
   color: var(--fg);
 }
-.snip-edit-context .swatches { grid-template-columns: repeat(auto-fit, 20px); max-width: none; margin: 0; gap: 6px; }
+/* Defensive net only: the palette itself now lives in .snip-color-pop (a
+   popover, not this row), so this selector should not normally match. If a
+   future change re-embeds a swatch grid here directly, keep it from
+   collapsing into one tall column when the toolbar is squeezed. */
+.snip-edit-context .swatches { grid-auto-flow: column; grid-template-columns: repeat(auto-fit, 20px); max-width: none; margin: 0; gap: 6px; }
 .snip-edit-context .swatch { width: 20px; height: 20px; }
+.snip-edit-color-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.snip-edit-color-trigger:hover { border-color: var(--accent); }
+.snip-edit-color-chip {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--surface-2);
+  position: relative;
+}
+.snip-edit-color-chip.none::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, transparent 45%, var(--danger) 45%, var(--danger) 55%, transparent 55%);
+}
+.snip-color-pop {
+  position: fixed;
+  z-index: 130;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.snip-color-pop .swatches { margin: 0; }
 .snip-edit-eyedrop { display: inline-flex; }
 .snip-edit-eyedrop.active { color: var(--accent); }
-.snip-edit-toggle { display: flex; align-items: center; gap: 4px; }
+.snip-edit-toggle { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 
 .snip-edit-canvas-wrap {
   position: relative;
@@ -1781,10 +1901,14 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   align-items: center;
   justify-content: center;
   background-color: var(--surface-2);
-  /* Neutral checkerboard hint so the image edge is visible once zoomed/panned past it. */
+  /* Neutral checkerboard hint so the image edge is visible once zoomed/panned past
+     it. Faded to 45% (180): at full --border strength this read as loud/busy in
+     the light themes, where --border sits much darker against --surface-2 than
+     it does in a dark theme. */
+  --snip-edit-checker: color-mix(in srgb, var(--border) 45%, transparent);
   background-image:
-    linear-gradient(45deg, var(--border) 25%, transparent 25%, transparent 75%, var(--border) 75%),
-    linear-gradient(45deg, var(--border) 25%, transparent 25%, transparent 75%, var(--border) 75%);
+    linear-gradient(45deg, var(--snip-edit-checker) 25%, transparent 25%, transparent 75%, var(--snip-edit-checker) 75%),
+    linear-gradient(45deg, var(--snip-edit-checker) 25%, transparent 25%, transparent 75%, var(--snip-edit-checker) 75%);
   background-size: 18px 18px;
   background-position: 0 0, 9px 9px;
   cursor: crosshair;
@@ -1800,7 +1924,11 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   background: var(--surface);
   color: var(--fg);
   padding: 2px 4px;
-  font-family: inherit;
+  /* Matches snipEditDrawTextOp's canvas font exactly (also "sans-serif",
+     not inherit) so the live input previews the same size/shape the exported
+     image will actually have -- inherit picked up the app's own UI font here,
+     which is not what gets drawn. */
+  font-family: sans-serif;
   min-width: 60px;
 }
 .snip-edit-measure {
@@ -1823,7 +1951,6 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   border-top: 1px solid var(--border);
   background: var(--surface-2);
 }
-.snip-edit-close { position: absolute; top: 8px; right: 8px; }
 .snip-edit-toolbar .icon-btn:disabled,
 .snip-edit-toolbar .icon-btn:disabled:hover { opacity: 0.35; cursor: default; background: transparent; color: var(--muted); }
 .snip-question span:last-child { color: var(--muted); font-size: 13px; }
@@ -2874,6 +3001,23 @@ input[type="password"]::-ms-clear { display: none; }
 .ocr-lang-note { color: var(--muted); font-size: 11px; align-self: center; }
 .ocr-langs-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
 .ocr-langs-foot .modal-hint { margin: 0; }
+/* 177: raw PowerShell/DISM text behind an elevation-needed notice -- collapsed
+   by default so it never crowds out the actual instruction above it. */
+.lang-error-details { margin-top: 6px; }
+.lang-error-details > summary { color: var(--muted); font-size: 11px; cursor: pointer; }
+.lang-error-details-text {
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm, 6px);
+  color: var(--muted);
+  font-size: 11px;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow-y: auto;
+}
 
 /* Prompt-variable fill dialog */
 .modal-text-bar { display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
@@ -3124,10 +3268,10 @@ body.drag-over::after {
 /* Clickable version/status label (left of the check button) → releases page, or the
    update dialog once an update is pending. */
 .update-version {
-  flex: 0 1 auto;
+  flex: 0 0 calc((100% - 20px) / 3); /* same column width as #about-btn/#update-btn beside it */
   background: none; border: none; padding: 0;
   color: var(--muted); font: inherit; font-size: 13px; font-weight: 600;
-  cursor: pointer; text-align: left; white-space: nowrap;
+  cursor: pointer; text-align: center; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
 }
 .update-version:hover { color: var(--fg); text-decoration: underline; }
@@ -3527,12 +3671,17 @@ body.drag-over::after {
 }
 .switch-field > span { font-size: 13px; color: var(--fg); min-width: 0; }
 .switch-field > span:first-child { flex: 1; }
-/* P69: a small dot instead of a "(Default off)" text suffix crowding the label. */
+/* P69: a small dot instead of a "(Default off)" text suffix crowding the label.
+   A real shape (not a "." glyph) so it sits geometrically centred on the
+   switch-field row -- a text character's ink sits above its own line box,
+   never truly centred by flex alignment alone. */
 .default-off-badge {
-  font-size: 8px;
-  line-height: 1;
-  color: var(--muted);
-  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  align-self: center;
+  flex: 0 0 auto;
 }
 /* Settings toggles laid out in two even columns (wider popup). Long labels wrap
    within their cell instead of being cut off; the switch stays pinned right. */

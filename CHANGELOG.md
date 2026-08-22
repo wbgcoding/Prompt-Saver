@@ -6,16 +6,16 @@ All notable changes to **Prompt Saver**. Download the latest version from the
 
 ## 2.7.0 (unreleased)
 
-Twenty-two new features: tags, custom themes, folders for view tabs and for
+Twenty-three new features: tags, custom themes, folders for view tabs and for
 floating buttons, self-filling and choice variables, a markdown preview with
 syntax colors, private notes, per-prompt hotkeys, drag-out into other apps, a
 tray quick-copy menu, a screen color picker, a standalone quick launcher,
 multi-select in the grid, a trash for deleted prompts, placing one prompt in
 several views at once, restoring a backup's data and settings separately,
-rotating prompts, a screenshot editor, offline text recognition (OCR), and a
-first-run introduction tour. Everything new is an expert-menu switch, most of
-it off until you turn it on (text recognition, the screenshot editor and the
-introduction tour ship on).
+rotating prompts, a screenshot editor, offline text recognition (OCR), offline
+voice dictation, and a first-run introduction tour. Everything new is an
+expert-menu switch, most of it off until you turn it on (text recognition,
+voice dictation, the screenshot editor and the introduction tour ship on).
 
 ### Added
 
@@ -162,6 +162,22 @@ introduction tour ship on).
   offers to run that listing elevated — it only lists, it installs nothing.
   Installed packs can also be kept current automatically, with a quiet,
   cancelable notice when one needs an update.
+- **Voice dictation** (expert menu, on by default) — a microphone button next
+  to the composer and in the editor turns speech into text through Windows'
+  own on-device recognizer, fully offline unless online recognition is
+  explicitly allowed. Text streams in as it's recognized; click the button
+  again, press Escape, or save/close the editor to stop. A spoken vocabulary
+  of punctuation and formatting commands ("comma", "new line", "new
+  paragraph", …) turns into real characters, capitalization follows
+  automatically after a sentence or paragraph break, and saying "literal"
+  before a word types it instead of triggering it as a command — all
+  tunable, and all localized to each of the 11 UI languages. Interim
+  results, auto-capitalization, a silence auto-stop and a hard time cap are
+  each their own switch; insertion position (cursor or end), the recognition
+  language and a global hotkey (delivering to the focused field, the
+  clipboard, or pasted directly) round it out. Missing a language pack opens
+  the same "Manage languages" dialog OCR uses, shared install and elevation
+  flow included.
 - **Introduction tour** (expert menu, on by default) — a five-step walkthrough
   on first launch, opened right after the example prompts are seeded so step
   two already has a tile to point at: what the app is and that everything

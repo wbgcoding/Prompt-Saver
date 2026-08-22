@@ -80,7 +80,17 @@ PROBE = """
   // Only the NEAREST ancestor that controls horizontal overflow decides — an outer
   // scroller cannot reveal what an inner overflow-x:hidden box already cut off.
   const inScroller = (el) => {
-    for (let p = el.parentElement; p; p = p.parentElement) {
+    // Every SVG element computes overflow-x: hidden by the UA stylesheet, whether
+    // or not its author ever clipped anything -- an icon <path> would otherwise
+    // always "find" that default on its own <svg> parent before ever reaching a
+    // real scroll container further up, permanently defeating this check for
+    // every icon button (178 uncovered this on the screenshot editor toolbar,
+    // whose icon buttons sit in a genuinely horizontally-scrollable row).
+    // SVG's own viewport clipping is a distinct rendering concept from a CSS
+    // overflow-driven scrollbar, so the walk starts above the whole SVG subtree.
+    let start = el;
+    while (start && start.namespaceURI === 'http://www.w3.org/2000/svg') start = start.parentElement;
+    for (let p = start ? start.parentElement : null; p; p = p.parentElement) {
       const ox = getComputedStyle(p).overflowX;
       if (ox === 'auto' || ox === 'scroll') return true;
       if (ox === 'hidden' || ox === 'clip') return false;
@@ -244,6 +254,17 @@ PROBE = """
     // by now regardless of the fixture's non-empty PROMPTS array.
     if (!(window.__SMOKE_CALLS__ || []).includes('seed_example_prompts')) {
       out.errors.push('seed_example_prompts was not called on startup');
+    }
+    // 182: the take-over question must be answered BEFORE seeding runs, or a fresh
+    // portable install could seed the examples first and hide a real store behind
+    // an already-non-empty library (takeover_offer bails out once prompts exist).
+    {
+      const calls = window.__SMOKE_CALLS__ || [];
+      const iTakeover = calls.indexOf('takeover_offer');
+      const iSeed = calls.indexOf('seed_example_prompts');
+      if (iTakeover === -1 || iSeed === -1 || iTakeover > iSeed) {
+        out.errors.push('takeover_offer must be called before seed_example_prompts, got order: ' + calls.join(','));
+      }
     }
     // The fixture library is never empty, so the banner must stay hidden — but the
     // dismiss button still has to exist and be wired correctly for when it isn't.
@@ -2744,6 +2765,15 @@ PROBE = """
       if (onRow && onRow.querySelector('.default-off-badge')) {
         out.errors.push('a default-ON flag row wrongly carries the badge');
       }
+      // 172: the badge must sit vertically centred on the same line as the toggle.
+      const toggle = offRow && offRow.querySelector('.switch');
+      if (badge && toggle) {
+        const bMid = badge.getBoundingClientRect().top + badge.getBoundingClientRect().height / 2;
+        const tMid = toggle.getBoundingClientRect().top + toggle.getBoundingClientRect().height / 2;
+        if (Math.abs(bMid - tMid) > 1.5) {
+          out.errors.push('default-off badge is not vertically centred with the switch (off by ' + Math.abs(bMid - tMid).toFixed(1) + 'px)');
+        }
+      }
     }
     // P68: the expert-menu search also matches a word that lives only in a
     // setting's tooltip, not its label.
@@ -2912,16 +2942,20 @@ PROBE = """
       if (!sw) {
         out.errors.push('could not find a flag row for the per-value reset test');
       } else {
-        if (row.querySelector('.expert-row-reset')) {
+        const shown = (r) => { const b = r && r.querySelector('.expert-row-reset'); return b && !b.classList.contains('hidden') ? b : null; };
+        if (shown(row)) {
           out.errors.push('per-value reset icon showed on an already-default row');
         }
         const before = sw.checked;
+        // 173: the icon must flip WITHOUT a menu rebuild -- checked on the SAME row
+        // node (no re-query) right after the plain toggle, before any reset click
+        // (a reset click itself still goes through resetOneExpertValue's own
+        // renderExpert(), which is a separate, already-working code path).
         sw.click();
         await sleep(150);
-        const rowNow = rowByLabel4('Always show grid lines');
-        const resetBtn = rowNow && rowNow.querySelector('.expert-row-reset');
+        const resetBtn = shown(row);
         if (!resetBtn) {
-          out.errors.push('per-value reset icon did not appear on a changed row');
+          out.errors.push('per-value reset icon did not appear live on a changed row (no rebuild)');
         } else {
           resetBtn.click();
           await sleep(200);
@@ -2930,7 +2964,7 @@ PROBE = """
           if (!swAfter || swAfter.checked !== before) {
             out.errors.push('per-value reset did not restore the row to its default');
           }
-          if (rowAfter && rowAfter.querySelector('.expert-row-reset')) {
+          if (shown(rowAfter)) {
             out.errors.push('per-value reset icon stayed visible after resetting');
           }
         }
@@ -3340,6 +3374,10 @@ PROBE = """
         if (!labels.includes('#1A2B3C') || !labels.includes('rgb(26,43,60)') || !labels.includes('hsl(210,40%,17%)')) {
           out.errors.push('the colour-pick toast chips show the wrong values: ' + labels.join('|'));
         }
+        const hexChipBefore = chips.find(c => c.textContent === '#1A2B3C');
+        if (!hexChipBefore.classList.contains('is-current')) {
+          out.errors.push('the colour-pick toast did not mark the initially-copied chip as current');
+        }
         const rgbChip = chips.find(c => c.textContent === 'rgb(26,43,60)');
         rgbChip.click();
         await sleep(120);
@@ -3350,6 +3388,13 @@ PROBE = """
         }
         if (!toastEl2.classList.contains('show')) {
           out.errors.push('clicking a colour-toast chip closed the toast (should stay open for more clicks)');
+        }
+        // 169: clicking a different chip must move the "current" mark onto it.
+        if (!rgbChip.classList.contains('is-current') || hexChipBefore.classList.contains('is-current')) {
+          out.errors.push('clicking rgb chip did not move is-current from hex to rgb');
+        }
+        if (rgbChip.getAttribute('aria-pressed') !== 'true' || hexChipBefore.getAttribute('aria-pressed') !== 'false') {
+          out.errors.push('chip aria-pressed did not follow the current pick');
         }
       }
       toastEl2.classList.remove('show'); // don't linger into later blocks
@@ -3568,7 +3613,10 @@ PROBE = """
         if (keepInput().value !== '15') out.errors.push('the retention value was lost while smart retention was on: ' + keepInput().value);
         // 99: a row that differs from its default (15 vs 10) gets a reset icon that
         // restores it and then disappears again -- reused from the main expert menu.
-        const keepReset = () => keepInput()?.closest('.backup-keep-row')?.querySelector('.expert-row-reset');
+        const keepReset = () => {
+          const b = keepInput()?.closest('.backup-keep-row')?.querySelector('.expert-row-reset');
+          return b && !b.classList.contains('hidden') ? b : null;
+        };
         if (!keepReset()) {
           out.errors.push('backupKeep at 15 (default 10) shows no reset button');
         } else {
@@ -3813,6 +3861,21 @@ PROBE = """
         if (window.innerWidth >= 740 && uaH > rowH + 1) {
           out.errors.push('update-actions is taller than settings-btn-row at ' + window.innerWidth + 'px: ' + Math.round(uaH) + ' vs ' + Math.round(rowH));
         }
+        // 174: the version label sits centred in its own column, same width as
+        // the About/Check-for-updates buttons beside it (only meaningful
+        // unwrapped -- at 740px+ the three sit on one row per the check above).
+        const aboutBtn = document.getElementById('about-btn');
+        if (window.innerWidth >= 740 && aboutBtn) {
+          const uvRect = uv.getBoundingClientRect();
+          const abRect = aboutBtn.getBoundingClientRect();
+          if (Math.abs(uvRect.width - abRect.width) > 2) {
+            out.errors.push('update-version column width does not match about-btn: ' + Math.round(uvRect.width) + ' vs ' + Math.round(abRect.width));
+          }
+          const cs = getComputedStyle(uv);
+          if (cs.textAlign !== 'center') {
+            out.errors.push('update-version is not centre-aligned: ' + cs.textAlign);
+          }
+        }
         uv.textContent = prevText;
       } else {
         out.errors.push('update-actions, settings-btn-row or update-version missing from the settings panel');
@@ -4032,6 +4095,12 @@ PROBE = """
         if (toolBtns.length !== 11) {
           out.errors.push('screenshot editor: expected 11 tool buttons, found ' + toolBtns.length);
         }
+        // 178: the toolbar must stay a couple of rows tall no matter which tool
+        // is active -- a full inline swatch grid used to collapse into one tall
+        // column here and blow the toolbar height up. This is the check that
+        // would have caught that bug; a generic layoutScan alone did not.
+        const seToolbar = document.querySelector('.snip-edit-toolbar');
+        const SE_TOOLBAR_CEIL = 96;
         for (const b of toolBtns) {
           b.click();
           await sleep(30);
@@ -4042,9 +4111,60 @@ PROBE = """
           if (pressedCount !== 1) {
             out.errors.push('screenshot editor: ' + pressedCount + ' tools show aria-pressed at once (expected exactly 1)');
           }
+          if (seToolbar) {
+            const h = seToolbar.getBoundingClientRect().height;
+            if (h > SE_TOOLBAR_CEIL) {
+              out.errors.push('screenshot editor toolbar is ' + Math.round(h) + 'px tall with the ' +
+                b.dataset.tool + ' tool active, over the ' + SE_TOOLBAR_CEIL + 'px ceiling');
+            }
+          }
         }
         const penBtn = toolBtns.find((b) => b.dataset.tool === 'pen');
         if (penBtn) { penBtn.click(); await sleep(30); }
+        // The pen tool has a color field: a single trigger button opening a
+        // popover, not an inline grid, is what keeps the toolbar row short.
+        const colorTrigger = document.querySelector('.snip-edit-color-trigger');
+        if (!colorTrigger) {
+          out.errors.push('screenshot editor: pen tool has no color trigger button');
+        } else {
+          colorTrigger.click();
+          await sleep(30);
+          const pop = document.querySelector('.snip-color-pop');
+          if (!pop || pop.classList.contains('hidden')) {
+            out.errors.push('screenshot editor: the color trigger did not open the palette popover');
+          } else {
+            if (seToolbar && seToolbar.getBoundingClientRect().height > SE_TOOLBAR_CEIL) {
+              out.errors.push('screenshot editor toolbar grew past ' + SE_TOOLBAR_CEIL + 'px with the color popover open');
+            }
+            const popSwatches = pop.querySelectorAll('.swatch');
+            if (popSwatches.length < 3) {
+              out.errors.push('screenshot editor: the color popover has only ' + popSwatches.length + ' swatches');
+            }
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+            await sleep(30);
+            if (!pop.classList.contains('hidden')) {
+              out.errors.push('screenshot editor: Escape did not close the color popover');
+            }
+            if (document.getElementById('snip-edit').classList.contains('hidden')) {
+              out.errors.push('screenshot editor: Escape closed the whole editor instead of just the color popover');
+            }
+            document.querySelector('.snip-edit-color-trigger').click();
+            await sleep(30);
+            const pick = [...document.querySelectorAll('.snip-color-pop .swatch')]
+              .find((s) => !s.classList.contains('none') && !s.classList.contains('custom'));
+            if (pick) {
+              pick.click();
+              await sleep(30);
+              const chip = document.querySelector('.snip-edit-color-chip');
+              if (!chip || !chip.style.background) {
+                out.errors.push('screenshot editor: picking a swatch did not color the trigger chip');
+              }
+              if (!document.querySelector('.snip-color-pop').classList.contains('hidden')) {
+                out.errors.push('screenshot editor: picking a swatch did not close the color popover');
+              }
+            }
+          }
+        }
         layoutScan('screenshot editor');
         const live = document.getElementById('snip-edit-live');
         const undoBtn = document.getElementById('snip-edit-undo');
@@ -4059,6 +4179,44 @@ PROBE = """
           undoBtn.click();
           await sleep(100);
           if (!undoBtn.disabled) out.errors.push('screenshot editor: undo stayed enabled after undoing the only stroke');
+        }
+        // 179: the overlay's own titlebar (move) and resize grip (resize) -- the
+        // overlay covers the whole frameless main window, so without these there
+        // is no way to move or resize it while it is open.
+        const titlebar = document.querySelector('.snip-edit-titlebar');
+        if (!titlebar || !onScreen(titlebar) || titlebar.getAttribute('data-tauri-drag-region') === null) {
+          out.errors.push('screenshot editor: titlebar is missing or not a drag region');
+        }
+        const closeInBar = titlebar && titlebar.querySelector('#snip-edit-close');
+        if (!closeInBar || closeInBar.getAttribute('data-tauri-drag-region') !== 'false') {
+          out.errors.push('screenshot editor: close button must opt out of the titlebar drag region');
+        }
+        const grip = document.getElementById('snip-edit-resize-grip');
+        if (!grip || !onScreen(grip) || !canHit(grip)) {
+          out.errors.push('screenshot editor: resize grip is missing, hidden, or not clickable');
+        } else {
+          // A stub-only check: it proves the handler runs against the same
+          // window.__TAURI__.window.ResizeDirection shape the real Tauri v2 API
+          // exposes, not that the real WebView2 window actually resizes -- that
+          // needs Ben's own hands, same as moving it (see WORK.md 179).
+          grip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1 }));
+          await sleep(30);
+        }
+        // 196: Save as reuses the same command the screenshot result dialog's own
+        // Save as button calls -- must not close the editor (Copy/Cancel/Apply do).
+        const saveAsBtn = document.getElementById('snip-edit-saveas');
+        if (!saveAsBtn || !onScreen(saveAsBtn) || !canHit(saveAsBtn)) {
+          out.errors.push('screenshot editor: Save as button is missing, hidden, or not clickable');
+        } else {
+          window.__SMOKE_CALLS__ = [];
+          saveAsBtn.click();
+          await sleep(150);
+          if (!(window.__SMOKE_CALLS__ || []).includes('save_screenshot_as')) {
+            out.errors.push('screenshot editor: Save as did not call save_screenshot_as');
+          }
+          if (document.getElementById('snip-edit').classList.contains('hidden')) {
+            out.errors.push('screenshot editor: Save as closed the editor');
+          }
         }
         document.getElementById('snip-edit-cancel').click();
         await sleep(200);
@@ -4227,6 +4385,11 @@ PROBE = """
         if (!elevBtn || !elevBtn.textContent.trim()) {
           out.errors.push('OCR langs modal: no elevation button when Windows refuses the listing');
         } else {
+          // 177: the raw backend reason rides along, shown collapsed.
+          const details = document.querySelector('#ocr-langs-body .lang-error-details-text');
+          if (!details || !details.textContent.includes('DISM')) {
+            out.errors.push('OCR langs modal: the raw elevation-error text is missing from the details disclosure');
+          }
           layoutScan('OCR langs modal (needs elevation)');
           elevBtn.click();
           await sleep(100);
@@ -4249,6 +4412,50 @@ PROBE = """
       window.__OCR_CAPS_ELEV__ = false;
       window.__OCR_CAPS_TEST__ = null;
       await toggleOcrFlag(true); // leave the flag in its shipped state
+    }
+    // 127: voice dictation -- button visible by default (ships on), a click
+    // arms it, the first event resolves the arming state, a voice-text event
+    // lands in the composer input, a second click plus the backend's own
+    // voice-stopped in reply ends the session and clears every visible state.
+    {
+      const voiceHiddenNow = (el) => !el || getComputedStyle(el).display === 'none';
+      const voiceBtn = document.getElementById('voice-btn');
+      if (!voiceBtn || voiceHiddenNow(voiceBtn)) {
+        out.errors.push('Voice button not visible even though voice ships on');
+      } else {
+        if (!voiceBtn.title.trim() || /^[a-z]+[A-Z]/.test(voiceBtn.title)) {
+          out.errors.push('Voice composer button has no real title (raw i18n key or empty)');
+        }
+        const voiceInput = document.getElementById('input');
+        voiceInput.value = '';
+        voiceBtn.click();
+        await sleep(50);
+        if (voiceBtn.getAttribute('aria-pressed') !== 'false') {
+          out.errors.push('Voice button aria-pressed should stay false while only arming');
+        }
+        // 170: arming lights the button up, it must not dim while waiting.
+        if (!voiceBtn.classList.contains('is-arming') || parseFloat(getComputedStyle(voiceBtn).opacity) < 1) {
+          out.errors.push('Voice button dims while arming instead of lighting up (opacity ' + getComputedStyle(voiceBtn).opacity + ')');
+        }
+        window.__FIRE__('voice-text', { id: 1, text: 'hello world' });
+        await sleep(50);
+        if (!voiceBtn.classList.contains('is-listening') || voiceBtn.getAttribute('aria-pressed') !== 'true') {
+          out.errors.push('Voice button did not switch to is-listening after the first event');
+        }
+        if (voiceInput.value.trim() !== 'hello world') {
+          out.errors.push('Voice text did not land in the composer input (' + JSON.stringify(voiceInput.value) + ')');
+        }
+        voiceBtn.click();
+        window.__FIRE__('voice-stopped', { id: 1, reason: 'manual' });
+        await sleep(50);
+        if (voiceBtn.classList.contains('is-listening') || voiceBtn.classList.contains('is-arming')) {
+          out.errors.push('Voice button state did not clear after voice-stopped');
+        }
+        if (voiceBtn.getAttribute('aria-pressed') !== 'false') {
+          out.errors.push('Voice button aria-pressed did not reset to false after stopping');
+        }
+        layoutScan('Composer with voice button');
+      }
     }
     // 123: first-run tour -- all five steps reachable, each with a heading and at
     // least one text line, no raw i18n key, no overflow, height barely moves

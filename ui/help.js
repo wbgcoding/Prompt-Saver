@@ -402,6 +402,19 @@ export const HELP_CONTENT = {
     },
     {
       section: "basics",
+      title: "Voice dictation",
+      whatItIs: "The microphone button turns speech into text, recognised entirely on-device.",
+      howTo: [
+        "Click the microphone icon next to the composer, or in a tile's editor.",
+        "Speak; the text appears as it is recognised.",
+        "Click the icon again, press Escape, or save/close to stop.",
+      ],
+      whatHappens:
+        "Recognition runs locally through Windows' own speech engine — nothing leaves the machine unless online recognition is explicitly allowed. Spoken punctuation words (\"comma\", \"new line\", …) turn into real punctuation; say \"literal\" before a word to type it instead of triggering it as a command. A missing language pack opens the language dialog directly, shared with text recognition (OCR). An optional global hotkey starts and stops a session without opening the window at all, delivering the text to the clipboard, pasted, or straight into the composer; the tray icon's tooltip shows \"recording\" for as long as it runs.",
+      settings: ["Voice dictation, punctuation commands, auto-capitalise, silence auto-stop, insert position, global hotkey — Expert menu → Features → Create prompts"],
+    },
+    {
+      section: "basics",
       title: "Colour picker & pick history",
       whatItIs: "The colour picker is a pipette that reads any on-screen pixel as hex, RGB, or HSL.",
       howTo: [
@@ -886,6 +899,19 @@ export const HELP_CONTENT = {
       whatHappens:
         "Die eigenen Fenster der App werden für den Moment der Aufnahme ausgeblendet, sodass sie nie im Bild landen. Das Ergebnis erreicht sofort die Zwischenablage; das Speichern als Kachel oder Datei ist ein separater, optionaler Schritt.",
       settings: ["Screenshot-Tool, Speicherort, Vorschaugröße — Experten-Menü → Funktionen → Prompts erstellen"],
+    },
+    {
+      section: "basics",
+      title: "Spracheingabe",
+      whatItIs: "Der Mikrofon-Button verwandelt Sprache in Text — die Erkennung läuft komplett auf dem Gerät.",
+      howTo: [
+        "Auf das Mikrofon-Icon neben der Eingabeleiste klicken, oder im Editor einer Kachel.",
+        "Sprechen; der Text erscheint, während er erkannt wird.",
+        "Erneut klicken, Escape drücken, oder speichern/schließen, um zu stoppen.",
+      ],
+      whatHappens:
+        "Die Erkennung läuft lokal über die eigene Spracherkennung von Windows — es verlässt nichts das Gerät, außer die Online-Erkennung wird ausdrücklich erlaubt. Gesprochene Satzzeichen-Wörter (\"Komma\", \"neue Zeile\", …) werden zu echten Satzzeichen; \"wörtlich\" vor einem Wort tippt es statt es als Befehl auszulösen. Ein fehlendes Sprachpaket öffnet direkt den Sprachpaket-Dialog, gemeinsam mit der Texterkennung (OCR). Ein optionaler globaler Kurzbefehl startet und stoppt eine Aufnahme, ohne das Fenster zu öffnen — der Text landet in der Zwischenablage, wird eingefügt, oder geht direkt in die Eingabeleiste; das Taskleisten-Symbol zeigt währenddessen \"Nimmt auf …\" im Tooltip.",
+      settings: ["Spracheingabe, Satzzeichen-Befehle, automatische Großschreibung, Stille-Auto-Stopp, Einfügeposition, globaler Hotkey — Experten-Menü → Funktionen → Prompts erstellen"],
     },
     {
       section: "basics",

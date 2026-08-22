@@ -66,6 +66,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **PDF & files** | Attach any file by path; a PDF's first page becomes the button's image |
 | **Screenshot tool** | Capture a region or a whole window — even protected ones like the Task Manager — then crop, draw, annotate or pixelate it in a built-in editor before it becomes a copy button |
 | **Text recognition (OCR)** | Pull text out of a screenshot or an image file with Windows' own on-device recognizer — fully offline, nothing uploaded. On by default; needs a Windows language pack, which the app offers to install for you (needs administrator rights — including for the listing itself, on systems where Windows demands them) |
+| **Voice dictation** | Speak into the composer or the editor with Windows' own on-device speech recognizer — fully offline, nothing uploaded unless you allow online recognition. Spoken punctuation and formatting commands, auto-capitalization and a global hotkey included. On by default; shares OCR's language-pack dialog |
 | **Color picker** | A pipette freezes the screen, magnifies the pixel under the cursor and copies it as hex, rgb or hsl |
 | **Markdown preview** | Render a prompt in the editor — headings, lists, quotes and syntax-colored code, toggled or side by side |
 | **Full-screen viewer** | Click any preview to open it full-screen: scroll to zoom up to 8×, drag to pan |

@@ -189,23 +189,49 @@ fn parse_accel(raw: &str) -> Option<Accel> {
     accel_error(raw).ok()
 }
 
-// Every accelerator that should be registered, in registration order. None marks
-// the app hotkey, Some(id) a prompt. Unusable accelerators and combinations an
-// earlier entry already claimed are skipped: the app hotkey wins, then the first
-// prompt in list order. `per_prompt` is the promptHotkeys feature toggle — off
-// leaves the stored accelerators alone and simply registers none of them.
-fn hotkey_plan(app_hotkey: &str, prompts: &[Prompt], per_prompt: bool) -> Vec<(Accel, Option<String>)> {
+// Which feature a registered accelerator belongs to. A plain `Option<String>`
+// (None = app hotkey) stopped being enough once a THIRD kind of global hotkey
+// (131, voice dictation) needed its own owner that is neither the app hotkey nor
+// a prompt -- a sentinel prompt id would silently pass as a real Prompt(id) in
+// rearm_hotkeys and the handler below, so a real enum replaces it everywhere.
+#[derive(Clone, PartialEq, Eq, Debug)]
+enum HotkeyOwner {
+    App,
+    Prompt(String),
+    Voice,
+}
+
+// Every accelerator that should be registered, in registration order. Unusable
+// accelerators and combinations an earlier entry already claimed are skipped: the
+// app hotkey wins, then voice dictation, then prompts in list order. `per_prompt`
+// is the promptHotkeys feature toggle -- off leaves the stored accelerators alone
+// and simply registers none of them. `voice_hotkey` is only ever Some when both
+// the `voice` and `voiceHotkey` flags are on (131) -- an already-resolved choice,
+// not re-checked here.
+fn hotkey_plan(
+    app_hotkey: &str,
+    voice_hotkey: Option<&str>,
+    prompts: &[Prompt],
+    per_prompt: bool,
+) -> Vec<(Accel, HotkeyOwner)> {
     let mut plan = Vec::new();
     let mut taken: std::collections::HashSet<Accel> = std::collections::HashSet::new();
     if let Some(sc) = parse_accel(app_hotkey) {
         taken.insert(sc);
-        plan.push((sc, None));
+        plan.push((sc, HotkeyOwner::App));
+    }
+    if let Some(vh) = voice_hotkey {
+        if let Some(sc) = parse_accel(vh) {
+            if taken.insert(sc) {
+                plan.push((sc, HotkeyOwner::Voice));
+            }
+        }
     }
     if per_prompt {
         for p in prompts {
             if let Some(sc) = parse_accel(&p.hotkey) {
                 if taken.insert(sc) {
-                    plan.push((sc, Some(p.id.clone())));
+                    plan.push((sc, HotkeyOwner::Prompt(p.id.clone())));
                 }
             }
         }
@@ -263,9 +289,9 @@ fn sanitize_hotkey_mode(raw: &str) -> String {
     }
 }
 
-// Which prompt each registered accelerator belongs to (None = the app hotkey).
-// Rebuilt by rearm_hotkeys, read by the global shortcut handler.
-struct HotkeyTargets(Mutex<Vec<(Accel, Option<String>)>>);
+// Which feature each registered accelerator belongs to. Rebuilt by
+// rearm_hotkeys, read by the global shortcut handler.
+struct HotkeyTargets(Mutex<Vec<(Accel, HotkeyOwner)>>);
 
 // The single owner of the registered shortcut set: drop everything, then register
 // the app hotkey plus one accelerator per prompt. A combination the OS refuses is
@@ -278,7 +304,7 @@ fn rearm_hotkeys(app: &AppHandle) -> bool {
     // A binding stored by an older version can be one the blocklist now refuses.
     // It is never registered again, so the stored string is cleared here — otherwise
     // the editor keeps showing a hotkey that does nothing.
-    let (plan, mut dropped, mut app_ok) = match app.try_state::<Db>() {
+    let (plan, mut dropped, mut app_ok, mut voice_ok) = match app.try_state::<Db>() {
         Some(state) => {
             let store = lock(&state);
             let per_prompt = store.settings.ui_flags.get("promptHotkeys") != Some(&false);
@@ -290,10 +316,20 @@ fn rearm_hotkeys(app: &AppHandle) -> bool {
                 .collect();
             let app_ok = store.settings.hotkey.trim().is_empty()
                 || parse_accel(&store.settings.hotkey).is_some();
+            // Registered only while BOTH the feature and its own opt-in flag are on --
+            // switching either off unregisters it without touching the stored string,
+            // the same way promptHotkeys already works for per_prompt above.
+            let voice_hotkey_on = store.settings.ui_flags.get("voice") != Some(&false)
+                && store.settings.ui_flags.get("voiceHotkey") == Some(&true);
+            let voice_hotkey = voice_hotkey_on.then_some(store.settings.voice_hotkey.as_str());
+            let voice_ok = !voice_hotkey_on
+                || store.settings.voice_hotkey.trim().is_empty()
+                || parse_accel(&store.settings.voice_hotkey).is_some();
             (
-                hotkey_plan(&store.settings.hotkey, &store.prompts, per_prompt),
+                hotkey_plan(&store.settings.hotkey, voice_hotkey, &store.prompts, per_prompt),
                 stale,
                 app_ok,
+                voice_ok,
             )
         }
         None => return true,
@@ -306,19 +342,23 @@ fn rearm_hotkeys(app: &AppHandle) -> bool {
             live.push((sc, owner));
         } else {
             match owner {
-                Some(id) => dropped.push(id),
-                None => app_ok = false,
+                HotkeyOwner::Prompt(id) => dropped.push(id),
+                HotkeyOwner::App => app_ok = false,
+                HotkeyOwner::Voice => voice_ok = false,
             }
         }
     }
     if let Some(targets) = app.try_state::<HotkeyTargets>() {
         *targets.0.lock().unwrap_or_else(|e| e.into_inner()) = live;
     }
-    if !app_ok || !dropped.is_empty() {
+    if !app_ok || !voice_ok || !dropped.is_empty() {
         if let Some(state) = app.try_state::<Db>() {
             let mut store = lock(&state);
             if !app_ok {
                 store.settings.hotkey = String::new();
+            }
+            if !voice_ok {
+                store.settings.voice_hotkey = String::new();
             }
             if !dropped.is_empty() {
                 for p in store.prompts.iter_mut() {
@@ -339,6 +379,26 @@ fn rearm_hotkeys(app: &AppHandle) -> bool {
 // only names the prompt that was triggered.
 fn fire_prompt_hotkey(app: &AppHandle, id: &str) {
     let _ = app.emit_to("main", "prompt-hotkey", id.to_string());
+}
+
+// One key press starts, the next stops -- same toggle logic as the button,
+// just without ever bringing the window forward. A running session is stopped
+// exactly the way voice_stop's own command body does (send "manual" on its
+// channel); starting one is left to the main window's own JS, which already
+// owns every setting lookup, the command-word post-processing (128) and where
+// the finished text goes -- the window stays fully capable of all of that while
+// hidden, the same way a prompt hotkey already copies without ever showing it.
+fn toggle_voice_from_hotkey(app: &AppHandle) {
+    if let Some(vstate) = app.try_state::<VoiceState>() {
+        let guard = vstate.0.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(h) = guard.as_ref() {
+            if !h.ended.load(std::sync::atomic::Ordering::SeqCst) {
+                let _ = h.stop.send("manual");
+                return;
+            }
+        }
+    }
+    let _ = app.emit_to("main", "voice-hotkey-toggle", ());
 }
 
 // While a hotkey field is capturing, every global hotkey has to be off. Windows
@@ -396,6 +456,7 @@ async fn check_hotkey(
     let taken = {
         let store = lock(&state);
         parse_accel(&store.settings.hotkey) == Some(sc)
+            || parse_accel(&store.settings.voice_hotkey) == Some(sc)
             || store
                 .prompts
                 .iter()
@@ -420,7 +481,8 @@ async fn set_hotkey(app: AppHandle, state: State<'_, Db>, hotkey: String) -> Res
         let sc = accel_error(&hk).map_err(|e| e.to_string())?;
         let taken = {
             let store = lock(&state);
-            store.prompts.iter().any(|p| parse_accel(&p.hotkey) == Some(sc))
+            parse_accel(&store.settings.voice_hotkey) == Some(sc)
+                || store.prompts.iter().any(|p| parse_accel(&p.hotkey) == Some(sc))
         };
         if taken {
             return Err(HK_TAKEN.to_string());
@@ -437,6 +499,44 @@ async fn set_hotkey(app: AppHandle, state: State<'_, Db>, hotkey: String) -> Res
     // One place owns the registered set, so the app hotkey is re-armed together
     // with every prompt accelerator instead of wiping them.
     if rearm_hotkeys(&app) {
+        Ok(())
+    } else {
+        Err(HK_CONFLICT.to_string())
+    }
+}
+
+// 131's counterpart to set_hotkey, same shape: validated before the write, the
+// app hotkey and every prompt binding checked as a collision, nothing new that
+// check_hotkey/rearm_hotkeys does not already do for the other two kinds.
+#[tauri::command]
+async fn set_voice_hotkey(app: AppHandle, state: State<'_, Db>, hotkey: String) -> Result<(), String> {
+    let hk = hotkey.trim().to_string();
+    if !hk.is_empty() {
+        let sc = accel_error(&hk).map_err(|e| e.to_string())?;
+        let taken = {
+            let store = lock(&state);
+            parse_accel(&store.settings.hotkey) == Some(sc)
+                || store.prompts.iter().any(|p| parse_accel(&p.hotkey) == Some(sc))
+        };
+        if taken {
+            return Err(HK_TAKEN.to_string());
+        }
+        if !accel_is_free(&app, sc) {
+            return Err(HK_CONFLICT.to_string());
+        }
+    }
+    {
+        let mut store = lock(&state);
+        store.settings.voice_hotkey = hk.clone();
+        save_settings(&app, &store.settings);
+    }
+    // rearm_hotkeys' own return value only reports the APP hotkey's fate; a
+    // refused voice hotkey is instead cleared from the store by rearm_hotkeys
+    // itself, so re-reading it here is what actually answers "did this one land".
+    rearm_hotkeys(&app);
+    if hk.is_empty() { return Ok(()); }
+    let store = lock(&state);
+    if store.settings.voice_hotkey == hk {
         Ok(())
     } else {
         Err(HK_CONFLICT.to_string())
@@ -1277,6 +1377,10 @@ struct Settings {
     // Global hotkey accelerator (e.g. "CommandOrControl+Shift+P"); empty = off.
     #[serde(default)]
     hotkey: String,
+    // Global voice-dictation hotkey (131); empty = off. Checked/cleaned through the
+    // exact same functions as `hotkey` above -- see HotkeyOwner.
+    #[serde(default)]
+    voice_hotkey: String,
     #[serde(default = "default_on")]
     auto_update: bool,
     // Update versions the user chose to skip — never offered again.
@@ -1409,6 +1513,9 @@ impl Default for Settings {
             // stored value (including a deliberately empty/off one) is untouched --
             // #[serde(default)] only ever fills in a value that was never written.
             hotkey: "CommandOrControl+Alt+P".to_string(),
+            // Unlike the app hotkey, voice dictation ships with NO global binding --
+            // a fresh install is not expected to start listening from a key combo.
+            voice_hotkey: String::new(),
             auto_update: true,
             skipped_versions: Vec::new(),
             ui_flags: HashMap::new(),
@@ -1530,6 +1637,41 @@ fn tray_labels(lang: &str) -> (&'static str, &'static str) {
         "tr" => ("Aç", "Çıkış"),
         "ro" => ("Deschide", "Ieșire"),
         _ => ("Open", "Quit"),
+    }
+}
+
+// Voice-hotkey feedback while the window may stay hidden: the tray tooltip
+// switches to a recording state for the length of a dictation session, then
+// back to the app name. Runs for every session regardless of what started it
+// (button or hotkey) -- harmless to set even while the window is visible.
+fn set_tray_recording(app: &AppHandle, recording: bool) {
+    let Some(tray) = app.tray_by_id("tray") else { return };
+    let text = if recording {
+        let lang = app
+            .try_state::<Db>()
+            .map(|state| lock(&state).settings.language.clone())
+            .unwrap_or_else(|| "auto".to_string());
+        tray_recording_label(resolve_lang(&lang)).to_string()
+    } else {
+        brand::DISPLAY_NAME.to_string()
+    };
+    let _ = tray.set_tooltip(Some(text));
+}
+
+// Tray tooltip text while a voice-dictation session is running.
+fn tray_recording_label(lang: &str) -> &'static str {
+    match lang {
+        "de" => "Nimmt auf …",
+        "es" => "Grabando…",
+        "it" => "Registrazione…",
+        "pt" => "A gravar…",
+        "pl" => "Nagrywanie…",
+        "zh" => "录音中…",
+        "ja" => "録音中…",
+        "nl" => "Opname…",
+        "tr" => "Kaydediliyor…",
+        "ro" => "Se înregistrează…",
+        _ => "Recording…",
     }
 }
 
@@ -5381,8 +5523,16 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
 // Remembers that the take-over question was answered, so it is asked exactly once.
 const TAKEOVER_ASKED: &str = "takeoverAsked";
 
-// Portable run, own store still empty, an installed store present elsewhere →
-// the UI offers to adopt it. Returns the folder to name in the dialog.
+// Whether the store has nothing an adoption offer would overwrite: no prompts at
+// all, or only the ones seed_example_prompts put there itself. Kept separate from
+// takeover_offer() (which needs an AppHandle) so the condition itself is testable.
+fn store_has_no_real_prompts(prompts: &[Prompt], example_prompt_ids: &[String]) -> bool {
+    prompts.iter().all(|p| example_prompt_ids.contains(&p.id))
+}
+
+// Portable run, own store still empty (or seeded-examples-only), an installed store
+// present elsewhere → the UI offers to adopt it. Returns the folder to name in the
+// dialog.
 #[tauri::command]
 fn takeover_offer(app: AppHandle, state: State<Db>) -> Option<String> {
     if !is_portable() {
@@ -5391,7 +5541,7 @@ fn takeover_offer(app: AppHandle, state: State<Db>) -> Option<String> {
     {
         let store = lock(&state);
         if store.settings.ui_flags.get(TAKEOVER_ASKED) == Some(&true)
-            || !store.prompts.is_empty()
+            || !store_has_no_real_prompts(&store.prompts, &store.settings.example_prompt_ids)
         {
             return None;
         }
@@ -9851,15 +10001,20 @@ fn sweep_stale_temp_files() {
     // version, in `sweep_stale_pdfium_dlls` -- never by age here.
     let ocr_dir = dir.join(brand::TEMP_DIR);
     if let Ok(entries) = fs::read_dir(&ocr_dir) {
+        // 126 gave voice dictation its own CapKind::Speech leftovers in this same
+        // folder ("-voice-..."), never added here -- an install/listing result,
+        // script or DISM log for a language pack sat forever regardless of age.
         let ocr_prefix = format!("{}-ocr-", brand::TEMP_PREFIX);
+        let voice_prefix = format!("{}-voice-", brand::TEMP_PREFIX);
         for e in entries.flatten() {
             let name = e.file_name().to_string_lossy().to_string();
-            let is_ours = name.starts_with(&ocr_prefix);
+            let is_ours = name.starts_with(&ocr_prefix) || name.starts_with(&voice_prefix);
             let is_ocr_png = is_ours && name.ends_with(".png");
             // Result files of the two elevated PowerShell runs (installing a pack,
-            // listing the packs). Each script deletes itself in its own `finally`,
-            // so a .ps1 here is only ever one left behind by a hard kill mid-run.
-            let is_elevated_leftover = is_ours && (name.ends_with(".json") || name.ends_with(".ps1"));
+            // listing the packs), and the DISM log/scratch redirect (177). Each
+            // script deletes itself in its own `finally`, so a .ps1 here is only
+            // ever one left behind by a hard kill mid-run.
+            let is_elevated_leftover = is_ours && (name.ends_with(".json") || name.ends_with(".ps1") || name.ends_with(".log"));
             if (is_ocr_png || is_elevated_leftover) && is_stale(&e) {
                 let _ = fs::remove_file(e.path());
             }
@@ -11596,6 +11751,16 @@ struct VoiceSupport {
     needs_online: bool,
 }
 
+// voice_start's success payload. `lang` is the tag actually resolved from
+// "auto"/the requested one -- the frontend needs it to run spoken-command
+// post-processing in the language that is really being recognized, which is
+// not necessarily the UI's own display language.
+#[derive(Serialize, Clone)]
+struct VoiceStartResult {
+    id: u64,
+    lang: String,
+}
+
 // Payload for voice-partial / voice-text.
 #[derive(Serialize, Clone)]
 struct VoiceTextEvent {
@@ -11720,24 +11885,28 @@ fn ocr_join_lines(lines: &[String]) -> String {
 // bytes do not match the required "~0.0.1.0" suffix once the injected part is
 // accounted for. The tag itself is further restricted to [A-Za-z0-9-], so a
 // name that passes this check can never contain a shell metacharacter.
-fn ocr_capability_name_is_well_formed(name: &str) -> bool {
-    const PREFIX: &str = "Language.OCR~~~";
+// `prefix` is "Language.OCR~~~" or "Language.Speech~~~" (CapKind::prefix(),
+// inside mod ocr) -- kept as a plain &str here rather than taking CapKind
+// itself, since these three functions run BEFORE the #[cfg(windows)] branch
+// in every caller below (mod ocr, where CapKind lives, is windows-only).
+fn ocr_capability_name_is_well_formed(prefix: &str, name: &str) -> bool {
     const SUFFIX: &str = "~0.0.1.0";
-    if name.len() < PREFIX.len() + SUFFIX.len() + 2 {
+    if name.len() < prefix.len() + SUFFIX.len() + 2 {
         return false; // too short to hold prefix + a 2-char tag + suffix
     }
-    if !name.starts_with(PREFIX) || !name.ends_with(SUFFIX) {
+    if !name.starts_with(prefix) || !name.ends_with(SUFFIX) {
         return false;
     }
-    let tag = &name[PREFIX.len()..name.len() - SUFFIX.len()];
+    let tag = &name[prefix.len()..name.len() - SUFFIX.len()];
     tag.len() >= 2 && tag.len() <= 12 && tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
-// Pulls "<tag>" out of "Language.OCR~~~<tag>~0.0.1.0". None for anything that
-// does not have that exact shape (callers only ever pass an already-validated
-// name, but this stays total rather than panicking).
-fn ocr_tag_from_capability_name(name: &str) -> Option<String> {
-    let rest = name.strip_prefix("Language.OCR~~~")?;
+// Pulls "<tag>" out of "Language.OCR~~~<tag>~0.0.1.0" (or the Speech
+// equivalent). None for anything that does not have that exact shape
+// (callers only ever pass an already-validated name, but this stays total
+// rather than panicking).
+fn ocr_tag_from_capability_name(prefix: &str, name: &str) -> Option<String> {
+    let rest = name.strip_prefix(prefix)?;
     let tag = rest.split('~').next()?;
     (!tag.is_empty()).then(|| tag.to_string())
 }
@@ -11771,7 +11940,7 @@ fn ocr_capability_state_from_value(v: &serde_json::Value) -> String {
     }
 }
 
-fn ocr_parse_capabilities_json(json: &str) -> Result<Vec<OcrCapRaw>, String> {
+fn ocr_parse_capabilities_json(prefix: &str, json: &str) -> Result<Vec<OcrCapRaw>, String> {
     let trimmed = json.trim();
     if trimmed.is_empty() {
         return Ok(Vec::new());
@@ -11789,7 +11958,7 @@ fn ocr_parse_capabilities_json(json: &str) -> Result<Vec<OcrCapRaw>, String> {
         if name.is_empty() {
             continue;
         }
-        let tag = ocr_tag_from_capability_name(&name).unwrap_or_default();
+        let tag = ocr_tag_from_capability_name(prefix, &name).unwrap_or_default();
         let state = item.get("State").map(ocr_capability_state_from_value).unwrap_or_default();
         let version = item.get("Version").and_then(|v| v.as_str()).unwrap_or_default().to_string();
         // Real Windows output showed 0 used as a "not reported" placeholder, not a
@@ -12012,7 +12181,7 @@ async fn ocr_capabilities_elevated_result() -> Result<Option<Vec<OcrCap>>, Strin
 // instead (no blocking, no wait-dialog without a cancel option).
 #[tauri::command]
 fn ocr_install_language(name: String) -> Result<(), String> {
-    if !ocr_capability_name_is_well_formed(&name) {
+    if !ocr_capability_name_is_well_formed("Language.OCR~~~", &name) {
         return Err("invalid OCR capability name".to_string());
     }
     #[cfg(windows)]
@@ -12035,7 +12204,7 @@ fn ocr_install_language(name: String) -> Result<(), String> {
 // invalidated -- see the comment in mod ocr::install_result for why here.
 #[tauri::command]
 fn ocr_install_result(name: String) -> Option<OcrInstallResult> {
-    if !ocr_capability_name_is_well_formed(&name) {
+    if !ocr_capability_name_is_well_formed("Language.OCR~~~", &name) {
         return None;
     }
     #[cfg(windows)]
@@ -12111,7 +12280,7 @@ async fn speech_capabilities_elevated_result() -> Result<Option<Vec<OcrCap>>, St
 
 #[tauri::command]
 fn speech_install_language(name: String) -> Result<(), String> {
-    if !ocr_capability_name_is_well_formed(&name) {
+    if !ocr_capability_name_is_well_formed("Language.Speech~~~", &name) {
         return Err("invalid speech capability name".to_string());
     }
     #[cfg(windows)]
@@ -12129,7 +12298,7 @@ fn speech_install_language(name: String) -> Result<(), String> {
 
 #[tauri::command]
 fn speech_install_result(name: String) -> Option<OcrInstallResult> {
-    if !ocr_capability_name_is_well_formed(&name) {
+    if !ocr_capability_name_is_well_formed("Language.Speech~~~", &name) {
         return None;
     }
     #[cfg(windows)]
@@ -12511,6 +12680,16 @@ mod ocr {
                 CapKind::Speech => "Language.Speech*",
             }
         }
+        // The capability Name prefix Windows reports for this kind -- 176: three
+        // functions used to hardcode the OCR one regardless of kind, so no speech
+        // language pack could ever pass validation, get its tag extracted, or be
+        // told apart from another one by its (empty, shared) install-result file.
+        pub(super) fn prefix(self) -> &'static str {
+            match self {
+                CapKind::Ocr => "Language.OCR~~~",
+                CapKind::Speech => "Language.Speech~~~",
+            }
+        }
         // Temp-file name segment AND the ui_flags/ui_values/ui_texts setting-key
         // prefix -- "voice", not "speech", to match the expert-menu keys (126's
         // table: voiceLangCacheH, voiceLangAutoUpdate, ...).
@@ -12576,30 +12755,41 @@ mod ocr {
     // this app keeping its own name table.
     fn fetch_capabilities(kind: CapKind) -> Result<Vec<OcrCap>, String> {
         ensure_com();
+        let _ = fs::create_dir_all(dism_temp_dir());
         // The spec (and Microsoft's own docs) says listing needs no elevated rights,
-        // but on at least some Windows builds `Get-WindowsCapability -Online` throws
-        // COMException HResult -2147024156 (Win32 ERROR_ELEVATION_REQUIRED, 740) even
-        // for a read-only query -- confirmed by testing unprivileged on a real
-        // machine. Catch exactly that HResult (locale-independent, unlike parsing the
-        // exception's message text) and surface it as its own error rather than a
-        // raw PowerShell failure blob, so the UI can show an honest, specific reason
-        // instead of a broken/empty list.
-        let output = run_powershell_command(&format!(
-            r#"try {{ Get-WindowsCapability -Online -Name "{filter}" | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json }} catch {{ if ($_.Exception.HResult -eq -2147024156) {{ Write-Output "ELEVATION_REQUIRED" }} else {{ throw }} }}"#,
+        // and with the log-path redirect above that mostly holds -- but some
+        // Windows builds/policies still refuse the read-only query outright for a
+        // reason that varies by machine (confirmed: one throws over the DISM log
+        // path, another over a flat "elevated rights required", neither sharing an
+        // HResult). There is exactly one remedy either way -- the elevated path
+        // below -- so ANY failure here maps to the same code, never a raw,
+        // locale-specific PowerShell blob left for the UI to guess at. The raw
+        // text still rides along (second field, "|"-joined) for the details
+        // disclosure and the crash log.
+        let script = format!(
+            r#"Get-WindowsCapability -Online -Name "{filter}" {logargs} | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json"#,
             filter = kind.filter(),
-        ))?;
-        if output.trim() == "ELEVATION_REQUIRED" {
-            return Err("ocr-caps-need-elevation".to_string());
-        }
-        caps_from_json(&output)
+            logargs = dism_log_args(kind),
+        );
+        run_powershell_command(&script).and_then(|output| caps_from_json(kind, &output)).map_err(|raw| {
+            super::append_crash_log(&format!("ocr caps listing failed ({}): {}", kind.slug(), raw));
+            caps_elevation_error(&raw)
+        })
+    }
+    // The stable code the frontend matches on, plus the raw PowerShell/DISM text
+    // as a second "|"-joined field for the details disclosure -- split out as its
+    // own pure function so the wire format itself is unit-tested, not just typed
+    // inline and trusted.
+    pub(super) fn caps_elevation_error(raw: &str) -> String {
+        format!("ocr-caps-need-elevation|{raw}")
     }
 
     // The PowerShell query's JSON -> the list the UI shows. Shared by the normal
     // (unelevated) query and by the elevated one below, so both produce exactly
     // the same list, localized the same way.
-    fn caps_from_json(output: &str) -> Result<Vec<OcrCap>, String> {
+    fn caps_from_json(kind: CapKind, output: &str) -> Result<Vec<OcrCap>, String> {
         ensure_com();
-        let raw = ocr_parse_capabilities_json(output)?;
+        let raw = ocr_parse_capabilities_json(kind.prefix(), output)?;
         let mut out = Vec::with_capacity(raw.len());
         for r in raw {
             let label = Language::CreateLanguage(&HSTRING::from(r.tag.as_str()))
@@ -12620,9 +12810,15 @@ mod ocr {
     }
 
     // Runs a PowerShell command with no visible window and returns its stdout.
+    // The explicit working directory (177) is ours, always writable, never
+    // whatever the process happened to inherit -- DISM's "could not set the
+    // current directory" half of the log-path error had nothing to do with the
+    // actual query, so there is no reason to hand it a directory it might not
+    // be able to write to either.
     fn run_powershell_command(script: &str) -> Result<String, String> {
         let out = std::process::Command::new("powershell.exe")
             .args(["-NoProfile", "-NonInteractive", "-Command", script])
+            .current_dir(dism_temp_dir())
             .creation_flags(super::CREATE_NO_WINDOW)
             .output()
             .map_err(|e| e.to_string())?;
@@ -12670,7 +12866,7 @@ mod ocr {
     // one-liner inside a Win32 argument string, which is judged the safer
     // "equivalent" the spec allows.
     pub(super) fn install_language(kind: CapKind, name: &str) -> Result<(), String> {
-        let tag = ocr_tag_from_capability_name(name).unwrap_or_default();
+        let tag = ocr_tag_from_capability_name(kind.prefix(), name).unwrap_or_default();
         let result_path = install_result_path(kind, &tag);
         let script_path = install_script_path(kind, &tag);
         let _ = fs::remove_file(&result_path); // a stale result must never look fresh
@@ -12679,8 +12875,9 @@ mod ocr {
         // otherwise every install attempt (success, failure, or a declined UAC
         // prompt) left its .ps1 behind in the temp folder forever.
         let script = format!(
-            "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  Add-WindowsCapability -Online -Name {name}\r\n  @{{ ok = $true }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} catch {{\r\n  @{{ ok = $false; error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} finally {{\r\n  Remove-Item -LiteralPath {script} -Force -ErrorAction SilentlyContinue\r\n}}\r\n",
+            "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  Add-WindowsCapability -Online -Name {name} {logargs}\r\n  @{{ ok = $true }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} catch {{\r\n  @{{ ok = $false; error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} finally {{\r\n  Remove-Item -LiteralPath {script} -Force -ErrorAction SilentlyContinue\r\n}}\r\n",
             name = ps_single_quote(name),
+            logargs = dism_log_args(kind),
             result = ps_single_quote(&result_path.to_string_lossy()),
             script = ps_single_quote(&script_path.to_string_lossy()),
         );
@@ -12732,6 +12929,25 @@ mod ocr {
         Ok(())
     }
 
+    // DISM unconditionally writes a log to %WINDIR%\Logs\DISM at startup,
+    // before it does anything else -- unwritable there without admin rights, so
+    // an unprivileged Get-/Add-WindowsCapability call fails before the actual
+    // query even runs, misread as "needs elevation" when it is really just a
+    // log-path problem. Redirecting both -LogPath and -ScratchDirectory into
+    // our own always-writable temp folder sidesteps it entirely.
+    fn dism_temp_dir() -> PathBuf {
+        std::env::temp_dir().join(brand::TEMP_DIR)
+    }
+    pub(super) fn dism_log_args(kind: CapKind) -> String {
+        let dir = dism_temp_dir();
+        let log = dir.join(format!("{}-{}-dism.log", brand::TEMP_PREFIX, kind.slug()));
+        format!(
+            "-LogPath {} -ScratchDirectory {}",
+            ps_single_quote(&log.to_string_lossy()),
+            ps_single_quote(&dir.to_string_lossy()),
+        )
+    }
+
     // The process id keeps two windows (allowMultipleInstances) from
     // overwriting each other's script/result file for the SAME kind.
     pub(super) fn caps_result_path(kind: CapKind) -> PathBuf {
@@ -12761,8 +12977,9 @@ mod ocr {
         let _ = fs::remove_file(&result_path); // a stale list must never look fresh
         let _ = fs::remove_file(&tmp_path);
         let script = format!(
-            "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  try {{\r\n    Get-WindowsCapability -Online -Name \"{filter}\" | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json | Out-File -Encoding utf8 {tmp}\r\n  }} catch {{\r\n    @{{ error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {tmp}\r\n  }}\r\n  Move-Item -LiteralPath {tmp} -Destination {result} -Force\r\n}} finally {{\r\n  Remove-Item -LiteralPath {script} -Force -ErrorAction SilentlyContinue\r\n}}\r\n",
+            "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  try {{\r\n    Get-WindowsCapability -Online -Name \"{filter}\" {logargs} | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json | Out-File -Encoding utf8 {tmp}\r\n  }} catch {{\r\n    @{{ error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {tmp}\r\n  }}\r\n  Move-Item -LiteralPath {tmp} -Destination {result} -Force\r\n}} finally {{\r\n  Remove-Item -LiteralPath {script} -Force -ErrorAction SilentlyContinue\r\n}}\r\n",
             filter = kind.filter(),
+            logargs = dism_log_args(kind),
             tmp = ps_single_quote(&tmp_path.to_string_lossy()),
             result = ps_single_quote(&result_path.to_string_lossy()),
             script = ps_single_quote(&script_path.to_string_lossy()),
@@ -12797,7 +13014,7 @@ mod ocr {
         } else {
             return Ok(None); // not valid JSON (yet) -- leave it for the next poll
         }
-        let caps = match caps_from_json(&text) {
+        let caps = match caps_from_json(kind, &text) {
             Ok(c) => c,
             Err(e) => {
                 let _ = fs::remove_file(&path);
@@ -12815,7 +13032,7 @@ mod ocr {
     // keeps a later poll from re-triggering the cache invalidation below on
     // every subsequent call.
     pub(super) fn install_result(kind: CapKind, name: &str) -> Option<OcrInstallResult> {
-        let tag = ocr_tag_from_capability_name(name).unwrap_or_default();
+        let tag = ocr_tag_from_capability_name(kind.prefix(), name).unwrap_or_default();
         let path = install_result_path(kind, &tag);
         let text = fs::read_to_string(&path).ok()?;
         let value: serde_json::Value = serde_json::from_str(text.trim()).ok()?;
@@ -12846,6 +13063,10 @@ mod ocr {
 // ---------------------------------------------------------------------------
 
 static VOICE_SESSION_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+// How long self_stop waits for WinRT's own Completed callback after
+// StopAsync() before giving up and reporting the end itself, so a stuck
+// callback never holds the session thread -- and the microphone -- open.
+const VOICE_SELF_STOP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 #[tauri::command]
 async fn voice_support() -> VoiceSupport {
@@ -12893,7 +13114,7 @@ async fn voice_start(
     auto_stop_sec: u32,
     max_sec: u32,
     interim: bool,
-) -> Result<u64, String> {
+) -> Result<VoiceStartResult, String> {
     {
         let guard = vstate.0.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(h) = guard.as_ref() {
@@ -12921,20 +13142,27 @@ async fn voice_start(
             return Err("voice-online-required".to_string());
         }
         let id = VOICE_SESSION_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let max_sec = max_sec.clamp(60, 1800); // voiceMaxMin: 1-30 min
-        let auto_stop_sec = auto_stop_sec.clamp(0, 30);
+        let (max_sec, auto_stop_sec) = voice::clamp_durations(max_sec, auto_stop_sec); // voiceMaxMin: 1-60 min
         let (tx, rx) = std::sync::mpsc::channel::<&'static str>();
         let ended = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let app2 = app.clone();
         let ended2 = ended.clone();
         let lang2 = resolved_lang.clone();
-        std::thread::Builder::new()
+        // Set before the session thread starts, not after spawning it -- a
+        // fast failure inside the thread can otherwise race its own
+        // set_tray_recording(false) ahead of this one and leave the tray
+        // tooltip stuck on "recording".
+        set_tray_recording(&app, true);
+        if let Err(e) = std::thread::Builder::new()
             .name("voice-session".into())
             .spawn(move || voice::start_session(app2, id, lang2, auto_stop_sec, max_sec, interim, ended2, rx))
-            .map_err(|e| e.to_string())?;
+        {
+            set_tray_recording(&app, false);
+            return Err(e.to_string());
+        }
         *vstate.0.lock().unwrap_or_else(|e| e.into_inner()) =
-            Some(VoiceHandle { id, stop: tx, started: std::time::Instant::now(), lang: resolved_lang, ended });
-        Ok(id)
+            Some(VoiceHandle { id, stop: tx, started: std::time::Instant::now(), lang: resolved_lang.clone(), ended });
+        Ok(VoiceStartResult { id, lang: resolved_lang })
     }
     #[cfg(not(windows))]
     {
@@ -12998,6 +13226,35 @@ async fn voice_enable_online_speech(app: AppHandle, state: State<'_, Db>) -> Res
         let _ = (app, state);
         Err("voice is only available on Windows".to_string())
     }
+}
+
+// Opens Windows' own microphone privacy page, offered from the voice-denied
+// dialog -- the app cannot grant mic access itself, only point at the one
+// place that can. Same ShellExecuteW call the elevated installer scripts use,
+// just with the plain "open" verb: a settings URI needs no admin rights.
+#[tauri::command]
+fn open_privacy_mic() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use windows::core::{HSTRING, PCWSTR};
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::Shell::ShellExecuteW;
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        let code = unsafe {
+            ShellExecuteW(
+                HWND::default(),
+                &HSTRING::from("open"),
+                &HSTRING::from("ms-settings:privacy-microphone"),
+                PCWSTR::null(),
+                PCWSTR::null(),
+                SW_SHOWNORMAL,
+            )
+        };
+        if (code.0 as isize) <= 32 { return Err("open-failed".to_string()); }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    Err("voice is only available on Windows".to_string())
 }
 
 // Cancels whatever session is running, without waiting for it to actually
@@ -13100,6 +13357,14 @@ mod voice {
             return Some("silence");
         }
         None
+    }
+
+    // The frontend's own slider caps (voiceMaxMin/voiceAutoStopSec, ui/main.js
+    // EXPERT_VALUES) are UI convenience only -- these are the real limits, so a
+    // stale/tampered/future caller cannot bypass them. Extracted as a pure
+    // function so the bounds themselves are unit-tested, not just trusted.
+    pub(super) fn clamp_durations(max_sec: u32, auto_stop_sec: u32) -> (u32, u32) {
+        (max_sec.clamp(60, 3600), auto_stop_sec.clamp(0, 60))
     }
 
     // Installed recognition languages. Measured 21.08.: SupportedTopicLanguages
@@ -13213,6 +13478,7 @@ mod voice {
             if !ended.swap(true, Ordering::SeqCst) {
                 let _ = app.emit("voice-error", super::VoiceErrorEvent { id, code: key.to_string() });
                 let _ = app.emit("voice-stopped", VoiceStoppedEvent { id, reason: "error".to_string() });
+                super::set_tray_recording(&app, false);
             }
         }
     }
@@ -13309,6 +13575,7 @@ mod voice {
                 let requested = reason_c.lock().unwrap_or_else(|e| e.into_inner()).take();
                 let reason = stop_reason(status, requested);
                 let _ = app_c.emit("voice-stopped", VoiceStoppedEvent { id, reason: reason.to_string() });
+                super::set_tray_recording(&app_c, false);
                 Ok(())
             },
         ));
@@ -13321,7 +13588,19 @@ mod voice {
         let self_stop = |reason: &'static str| {
             *requested_reason.lock().unwrap_or_else(|e| e.into_inner()) = Some(reason);
             let _ = session.StopAsync();
+            // Normally Completed fires within a beat and flips `ended` itself.
+            // If it never does (a stuck driver, WinRT not delivering the
+            // event), do not hold this thread -- and the microphone -- open
+            // forever; report the same end after a bounded wait instead. The
+            // swap keeps this a no-op if Completed fires in the same instant.
+            let deadline = Instant::now() + super::VOICE_SELF_STOP_TIMEOUT;
             while !ended.load(Ordering::SeqCst) {
+                if Instant::now() >= deadline {
+                    if !ended.swap(true, Ordering::SeqCst) {
+                        let _ = app.emit("voice-stopped", VoiceStoppedEvent { id, reason: reason.to_string() });
+                    }
+                    break;
+                }
                 std::thread::sleep(Duration::from_millis(50));
             }
         };
@@ -15505,7 +15784,8 @@ pub fn run() {
                         list.iter().find(|(sc, _)| sc == shortcut).map(|(_, o)| o.clone())
                     });
                     match owner {
-                        Some(Some(id)) => fire_prompt_hotkey(app, &id),
+                        Some(HotkeyOwner::Prompt(id)) => fire_prompt_hotkey(app, &id),
+                        Some(HotkeyOwner::Voice) => toggle_voice_from_hotkey(app),
                         _ => summon_launcher(app), // the app hotkey (or an unknown leftover)
                     }
                 })
@@ -16061,7 +16341,9 @@ pub fn run() {
             speech_capabilities_elevated_result,
             speech_install_language,
             speech_install_result,
-            voice_lang_snooze
+            voice_lang_snooze,
+            open_privacy_mic,
+            set_voice_hotkey
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
@@ -17106,6 +17388,32 @@ mod tests {
         assert_ne!(SlimPrompt::from(&other).image_rev, rev);
     }
 
+    // ---- Takeover offer must not be hidden by the onboarding examples (182) ----
+
+    fn prompt_named(id: &str) -> Prompt {
+        serde_json::from_str(&format!(r#"{{"id":"{id}","name":"n","text":"t"}}"#))
+            .expect("prompt fixture")
+    }
+
+    #[test]
+    fn takeover_treats_seeded_examples_only_as_empty() {
+        let examples = vec!["e1".to_string(), "e2".to_string()];
+        let prompts = vec![prompt_named("e1"), prompt_named("e2")];
+        assert!(store_has_no_real_prompts(&prompts, &examples), "example-only store must count as empty");
+    }
+
+    #[test]
+    fn takeover_sees_a_real_prompt_even_alongside_examples() {
+        let examples = vec!["e1".to_string()];
+        let prompts = vec![prompt_named("e1"), prompt_named("own")];
+        assert!(!store_has_no_real_prompts(&prompts, &examples), "a non-example prompt must block the offer");
+    }
+
+    #[test]
+    fn takeover_empty_store_counts_as_empty() {
+        assert!(store_has_no_real_prompts(&[], &[]));
+    }
+
     #[test]
     fn slim_prompt_without_an_image_reports_no_revision() {
         let mut p = prompt_with_image();
@@ -17187,6 +17495,9 @@ mod tests {
         assert_eq!(ocr_join_lines(&lines), "مرحبا بالعالم");
     }
 
+    const OCR_PREFIX: &str = "Language.OCR~~~";
+    const SPEECH_PREFIX: &str = "Language.Speech~~~";
+
     // Capability-name allowlist -- the G10 gate everything in
     // ocr_install_language relies on. Valid, realistic tags pass; anything
     // malformed or injection-flavored is rejected outright.
@@ -17198,13 +17509,30 @@ mod tests {
             "Language.OCR~~~ja-JP~0.0.1.0",
             "Language.OCR~~~zh-Hans-CN~0.0.1.0",
         ] {
-            assert!(ocr_capability_name_is_well_formed(name), "expected {name} to be accepted");
+            assert!(ocr_capability_name_is_well_formed(OCR_PREFIX, name), "expected {name} to be accepted");
         }
+    }
+
+    // The whole point of this fix -- a real speech capability name (the
+    // exact shape voice_install_language actually gets called with) used to be
+    // rejected outright because the check hardcoded the OCR prefix regardless
+    // of kind, so no speech language pack could ever be installed.
+    #[test]
+    fn ocr_capability_name_accepts_speech_names_with_the_speech_prefix() {
+        assert!(ocr_capability_name_is_well_formed(SPEECH_PREFIX, "Language.Speech~~~de-DE~0.0.1.0"));
+    }
+
+    // No cross-wiring between the two: an OCR-shaped name must not pass under
+    // the speech prefix and vice versa.
+    #[test]
+    fn ocr_capability_name_rejects_the_other_kinds_prefix() {
+        assert!(!ocr_capability_name_is_well_formed(SPEECH_PREFIX, "Language.OCR~~~de-DE~0.0.1.0"));
+        assert!(!ocr_capability_name_is_well_formed(OCR_PREFIX, "Language.Speech~~~de-DE~0.0.1.0"));
     }
 
     #[test]
     fn ocr_capability_name_rejects_the_spec_example_payload() {
-        assert!(!ocr_capability_name_is_well_formed("Language.OCR~~~de-DE~0.0.1.0; rm -rf"));
+        assert!(!ocr_capability_name_is_well_formed(OCR_PREFIX, "Language.OCR~~~de-DE~0.0.1.0; rm -rf"));
     }
 
     #[test]
@@ -17215,42 +17543,50 @@ mod tests {
             "Language.OCR~~~de-DE~0.0.1.0|whoami",
             "Language.OCR~~~de-DE~0.0.1.0\nwhoami",
         ] {
-            assert!(!ocr_capability_name_is_well_formed(name), "expected {name} to be rejected");
+            assert!(!ocr_capability_name_is_well_formed(OCR_PREFIX, name), "expected {name} to be rejected");
         }
     }
 
     #[test]
     fn ocr_capability_name_rejects_empty_string() {
-        assert!(!ocr_capability_name_is_well_formed(""));
+        assert!(!ocr_capability_name_is_well_formed(OCR_PREFIX, ""));
     }
 
     #[test]
     fn ocr_capability_name_rejects_missing_prefix() {
-        assert!(!ocr_capability_name_is_well_formed("de-DE~0.0.1.0"));
+        assert!(!ocr_capability_name_is_well_formed(OCR_PREFIX, "de-DE~0.0.1.0"));
     }
 
     #[test]
     fn ocr_capability_name_rejects_wrong_trailing_version() {
-        assert!(!ocr_capability_name_is_well_formed("Language.OCR~~~de-DE~1.0.0.0"));
+        assert!(!ocr_capability_name_is_well_formed(OCR_PREFIX, "Language.OCR~~~de-DE~1.0.0.0"));
     }
 
     #[test]
     fn ocr_capability_name_rejects_a_tag_over_12_chars() {
-        assert!(!ocr_capability_name_is_well_formed("Language.OCR~~~thirteenchars~0.0.1.0"));
+        assert!(!ocr_capability_name_is_well_formed(OCR_PREFIX, "Language.OCR~~~thirteenchars~0.0.1.0"));
     }
 
     #[test]
     fn ocr_capability_name_rejects_tag_chars_outside_the_allowed_class() {
-        assert!(!ocr_capability_name_is_well_formed("Language.OCR~~~de_DE~0.0.1.0"));
-        assert!(!ocr_capability_name_is_well_formed("Language.OCR~~~de DE~0.0.1.0"));
+        assert!(!ocr_capability_name_is_well_formed(OCR_PREFIX, "Language.OCR~~~de_DE~0.0.1.0"));
+        assert!(!ocr_capability_name_is_well_formed(OCR_PREFIX, "Language.OCR~~~de DE~0.0.1.0"));
     }
 
     // Same allowlist string, as a tag extractor: pulls the tag back out of an
     // already-valid name.
     #[test]
     fn ocr_tag_from_capability_name_extracts_the_tag() {
-        assert_eq!(ocr_tag_from_capability_name("Language.OCR~~~de-DE~0.0.1.0"), Some("de-DE".to_string()));
-        assert_eq!(ocr_tag_from_capability_name("not-a-capability-name"), None);
+        assert_eq!(ocr_tag_from_capability_name(OCR_PREFIX, "Language.OCR~~~de-DE~0.0.1.0"), Some("de-DE".to_string()));
+        assert_eq!(ocr_tag_from_capability_name(OCR_PREFIX, "not-a-capability-name"), None);
+    }
+
+    // The same extraction under the speech prefix -- this used to always
+    // return None for a real speech name (empty tag -> every speech install's
+    // result/script file collided under the same "-voice-install-.json" path).
+    #[test]
+    fn ocr_tag_from_capability_name_extracts_the_tag_for_speech() {
+        assert_eq!(ocr_tag_from_capability_name(SPEECH_PREFIX, "Language.Speech~~~de-DE~0.0.1.0"), Some("de-DE".to_string()));
     }
 
     // PowerShell `Get-WindowsCapability | ConvertTo-Json` output parsing --
@@ -17265,7 +17601,7 @@ mod tests {
             "DownloadSize": 12345678,
             "InstallSize": 23456789
         }"#;
-        let caps = ocr_parse_capabilities_json(json).unwrap();
+        let caps = ocr_parse_capabilities_json(OCR_PREFIX, json).unwrap();
         assert_eq!(caps.len(), 1);
         assert_eq!(caps[0].name, "Language.OCR~~~de-DE~0.0.1.0");
         assert_eq!(caps[0].tag, "de-DE");
@@ -17293,7 +17629,7 @@ mod tests {
                 "InstallSize": 8888888
             }
         ]"#;
-        let caps = ocr_parse_capabilities_json(json).unwrap();
+        let caps = ocr_parse_capabilities_json(OCR_PREFIX, json).unwrap();
         assert_eq!(caps.len(), 2);
         assert_eq!(caps[0].tag, "de-DE");
         assert_eq!(caps[0].state, "NotPresent");
@@ -17312,7 +17648,7 @@ mod tests {
             "DownloadSize": null,
             "InstallSize": null
         }"#;
-        let caps = ocr_parse_capabilities_json(json).unwrap();
+        let caps = ocr_parse_capabilities_json(OCR_PREFIX, json).unwrap();
         assert_eq!(caps.len(), 1);
         assert_eq!(caps[0].download_size, None);
         assert_eq!(caps[0].install_size, None);
@@ -17333,7 +17669,7 @@ mod tests {
             { "Name": "Language.OCR~~~fr-FR~0.0.1.0", "State": 0, "Version": null, "DownloadSize": 0, "InstallSize": 0 },
             { "Name": "Language.OCR~~~ar-SA~0.0.1.0", "State": 4, "Version": null, "DownloadSize": 0, "InstallSize": 1053812 }
         ]"#;
-        let caps = ocr_parse_capabilities_json(json).unwrap();
+        let caps = ocr_parse_capabilities_json(OCR_PREFIX, json).unwrap();
         assert_eq!(caps.len(), 3);
         assert_eq!(caps[0].state, "Installed");
         assert_eq!(caps[0].version, "");
@@ -17349,8 +17685,20 @@ mod tests {
     #[test]
     fn ocr_parse_capabilities_json_unknown_numeric_state_is_not_present() {
         let json = r#"{ "Name": "Language.OCR~~~de-DE~0.0.1.0", "State": 2, "Version": null, "DownloadSize": 0, "InstallSize": 0 }"#;
-        let caps = ocr_parse_capabilities_json(json).unwrap();
+        let caps = ocr_parse_capabilities_json(OCR_PREFIX, json).unwrap();
         assert_eq!(caps[0].state, "NotPresent");
+    }
+
+    // Parsed under the speech prefix, a real speech capability entry gets
+    // its tag too -- this used to come out empty for every single row (the
+    // shared parser hardcoded the OCR prefix), which is why "manage languages"
+    // showed a blank/garbage label for every speech language even before an
+    // install was ever attempted.
+    #[test]
+    fn ocr_parse_capabilities_json_extracts_the_tag_for_speech_entries() {
+        let json = r#"{ "Name": "Language.Speech~~~de-DE~0.0.1.0", "State": "Installed", "Version": "0.0.1.0", "DownloadSize": null, "InstallSize": null }"#;
+        let caps = ocr_parse_capabilities_json(SPEECH_PREFIX, json).unwrap();
+        assert_eq!(caps[0].tag, "de-DE");
     }
 
     // "Updatable?" decision -- table-driven per the spec's five cases.
@@ -17501,6 +17849,16 @@ mod tests {
         assert_eq!(voice::should_stop(Duration::from_secs(0), Duration::from_secs(300), 0, 300), Some("max"));
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn voice_clamp_durations_enforces_the_real_1_to_60_min_range() {
+        // The UI slider only goes to 60 min/60 sec, but the backend is the
+        // real limit -- a value above the slider's own max must still be cut down.
+        assert_eq!(voice::clamp_durations(3600, 60), (3600, 60)); // exactly at the new ceiling
+        assert_eq!(voice::clamp_durations(7200, 999), (3600, 60)); // above it -> clamped
+        assert_eq!(voice::clamp_durations(0, 0), (60, 0)); // below the floor -> min 60s/1min
+    }
+
     #[test]
     fn voice_should_send_stop_skips_a_session_that_already_ended_itself() {
         assert!(!should_send_stop(None, 5, true));
@@ -17542,6 +17900,32 @@ mod tests {
     #[test]
     fn ocr_and_speech_elevated_result_paths_never_collide() {
         assert_ne!(ocr::caps_result_path(ocr::CapKind::Ocr), ocr::caps_result_path(ocr::CapKind::Speech)); // 164/126
+    }
+
+    // DISM writing its unconditional startup log to %WINDIR%\Logs\DISM
+    // (unwritable without admin rights) was the actual cause of "jetzt
+    // prüfen" failing for Ben -- redirected into our own always-writable temp
+    // folder instead, single-quoted like every other embedded path in this file.
+    #[cfg(windows)]
+    #[test]
+    fn dism_log_args_redirects_into_our_own_writable_temp_dir() {
+        let ocr = ocr::dism_log_args(ocr::CapKind::Ocr);
+        let voice = ocr::dism_log_args(ocr::CapKind::Speech);
+        assert!(ocr.contains("-LogPath '") && ocr.contains("-ScratchDirectory '"), "{ocr}");
+        assert!(ocr.contains("-ocr-dism.log"), "{ocr}");
+        assert!(voice.contains("-voice-dism.log"), "{voice}");
+        assert_ne!(ocr, voice, "each kind must log to its own file, not share one");
+    }
+
+    // 177 part 3: whatever the real failure was (log path, a flat "needs
+    // elevation", anything else), the frontend always gets the SAME stable
+    // code -- with the original text still attached, not silently dropped.
+    #[cfg(windows)]
+    #[test]
+    fn caps_elevation_error_keeps_the_stable_code_and_the_raw_text() {
+        let wrapped = ocr::caps_elevation_error("Der Zugriff auf den Pfad wurde verweigert.");
+        assert!(wrapped.starts_with("ocr-caps-need-elevation|"));
+        assert!(wrapped.ends_with("Der Zugriff auf den Pfad wurde verweigert."));
     }
 
     #[test]
@@ -20295,7 +20679,7 @@ mod tests {
         let mut blocked = sample_prompts();
         blocked[0].hotkey = "Ctrl+V".into();
         blocked[1].hotkey = "Alt+Tab".into();
-        assert!(hotkey_plan("Ctrl+S", &blocked, true).is_empty());
+        assert!(hotkey_plan("Ctrl+S", None, &blocked, true).is_empty());
         // …and an import drops it instead of keeping a binding that does nothing.
         assert_eq!(drop_colliding_hotkeys("", &mut blocked), 2);
         assert!(blocked.iter().all(|p| p.hotkey.is_empty()));
@@ -20316,34 +20700,59 @@ mod tests {
         let mut prompts = sample_prompts();
         prompts[1].hotkey = "CommandOrControl+Shift+2".into();
         // The app hotkey wins over a prompt that wants the same combination.
-        let plan = hotkey_plan("ctrl+shift+1", &prompts, true);
+        let plan = hotkey_plan("ctrl+shift+1", None, &prompts, true);
         assert_eq!(plan.len(), 2);
-        assert_eq!(plan[0].1, None);
-        assert_eq!(plan[1].1.as_deref(), Some("p2"));
+        assert_eq!(plan[0].1, HotkeyOwner::App);
+        assert_eq!(plan[1].1, HotkeyOwner::Prompt("p2".into()));
 
         // Between two prompts the first one in list order keeps it.
         prompts[1].hotkey = "ctrl+shift+1".into();
-        let plan = hotkey_plan("", &prompts, true);
+        let plan = hotkey_plan("", None, &prompts, true);
         assert_eq!(plan.len(), 1);
-        assert_eq!(plan[0].1.as_deref(), Some("p1"));
+        assert_eq!(plan[0].1, HotkeyOwner::Prompt("p1".into()));
 
         // Feature toggled off: nothing but the app hotkey is registered, and the
         // stored accelerators stay untouched.
-        let plan = hotkey_plan("Alt+Q", &prompts, false);
+        let plan = hotkey_plan("Alt+Q", None, &prompts, false);
         assert_eq!(plan.len(), 1);
-        assert_eq!(plan[0].1, None);
+        assert_eq!(plan[0].1, HotkeyOwner::App);
         assert_eq!(prompts[0].hotkey, "CommandOrControl+Shift+1");
+    }
+
+    // A third owner, distinct from both the app hotkey and any prompt --
+    // every combination lands on the right one, and it follows the exact same
+    // precedence/collision rules (app first, then voice, then prompts).
+    #[test]
+    fn hotkey_plan_gives_voice_its_own_owner() {
+        let mut prompts = sample_prompts();
+        prompts[0].hotkey = "ctrl+shift+7".into();
+        let plan = hotkey_plan("ctrl+shift+1", Some("ctrl+shift+9"), &prompts, true);
+        assert_eq!(plan[0].1, HotkeyOwner::App);
+        assert!(plan.iter().any(|(_, o)| *o == HotkeyOwner::Voice));
+        assert!(plan.iter().any(|(_, o)| *o == HotkeyOwner::Prompt("p1".into())));
+
+        // The app hotkey wins a collision with the voice hotkey, same as with a prompt.
+        let plan = hotkey_plan("ctrl+shift+1", Some("ctrl+shift+1"), &prompts, true);
+        assert!(!plan.iter().any(|(_, o)| *o == HotkeyOwner::Voice));
+
+        // Switched off (the caller passes None): nothing voice-owned is registered.
+        let plan = hotkey_plan("ctrl+shift+1", None, &prompts, true);
+        assert!(!plan.iter().any(|(_, o)| *o == HotkeyOwner::Voice));
+
+        // A combination the blocklist refuses is dropped just like anywhere else.
+        let plan = hotkey_plan("", Some("Ctrl+C"), &prompts, true);
+        assert!(!plan.iter().any(|(_, o)| *o == HotkeyOwner::Voice));
     }
 
     #[test]
     fn a_deleted_prompt_gives_its_accelerator_back() {
         let mut prompts = sample_prompts();
         prompts[1].hotkey = "Ctrl+Shift+2".into();
-        assert_eq!(hotkey_plan("", &prompts, true).len(), 2);
+        assert_eq!(hotkey_plan("", None, &prompts, true).len(), 2);
         prompts.retain(|p| p.id != "p1");
-        let plan = hotkey_plan("", &prompts, true);
+        let plan = hotkey_plan("", None, &prompts, true);
         assert_eq!(plan.len(), 1);
-        assert_eq!(plan[0].1.as_deref(), Some("p2"));
+        assert_eq!(plan[0].1, HotkeyOwner::Prompt("p2".into()));
     }
 
     #[test]

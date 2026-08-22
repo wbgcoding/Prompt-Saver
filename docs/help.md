@@ -91,6 +91,38 @@ lists the packs, it installs nothing. Recognized text can auto-copy to the clipb
 lines into full sentences, both adjustable, and the app can check in the
 background for language packs that need updating.
 
+### Voice dictation
+
+On by default. A microphone button on the composer and in the edit dialog turns
+speech into text using Windows' own on-device recognizer — nothing is uploaded
+unless online recognition is explicitly allowed (off by default; a one-time
+dialog asks the first time it's actually needed). Click to start: the button
+turns the accent colour and pulses while listening, and its title switches from
+"Dictate" to "Stop dictating" — a second click, Escape in the field, saving the
+prompt, or closing the window all end the session the same way. Text lands at
+the cursor (or always at the end, an expert setting) and can stop itself after
+a few seconds of silence.
+
+Spoken punctuation and simple commands are turned into real characters unless
+Windows already placed them itself: "comma", "period", "question mark",
+"exclamation mark", "colon", "semicolon", "hyphen", "dash", "slash", "quote",
+"open paren"/"close paren" and "percent" for punctuation, "new line", "new
+paragraph" and "tab" for layout, each glued to the word before it with no
+extra space. Saying "literal" dictates the very next word as-is, instead of
+matching it as a command — useful for actually saying "comma" out loud. The
+word right after a period, question mark, exclamation mark or paragraph break
+is capitalized automatically. **The exact word matters**: only these specific
+command words (in the app's own language) are recognized — anything else is
+just dictated as plain text.
+
+Like OCR, it needs a Windows language pack: the language dropdown's "Manage
+languages…" entry opens the very same dialog OCR uses, and offers a download
+automatically if the chosen language has none installed yet. A global hotkey
+(off by default, in the expert menu) can start or stop a session from
+anywhere without bringing the window forward — the finished text goes to the
+clipboard, is pasted into whatever app was active, or lands in the composer,
+whichever the setting picks.
+
 ### Colour picker & pick history
 
 A pipette that freezes the screen, magnifies the pixel under the cursor, and copies
