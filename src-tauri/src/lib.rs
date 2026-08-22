@@ -11574,11 +11574,11 @@ struct OcrLangUpdateDue {
 }
 
 // ---------------------------------------------------------------------------
-// Runde F (points 124-131): voice dictation via Windows.Media.SpeechRecognition.
-// Same COM-per-thread rule as mod ocr; see docs/INVARIANTS.md, section
-// "Spracheingabe", for the safety rules this module enforces (no logging of
-// recognized text, no audio on disk, exactly one session, fail-closed online
-// consent).
+// Voice dictation via Windows.Media.SpeechRecognition. Same COM-per-thread
+// rule as mod ocr. Safety rules this module enforces: recognized text is
+// never logged on any path, no audio is ever written to disk, only one
+// session runs at a time, and recognition fails closed rather than sending
+// audio anywhere without the user's own consent.
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Clone)]
@@ -11621,8 +11621,8 @@ struct VoiceErrorEvent {
 // voice-busy instead of opening a second recognizer. `ended` flips true exactly
 // once, inside the session's Completed handler, before voice-stopped is
 // emitted; every stop path (button, hotkey, shutdown, hard cap, silence) reads
-// it first so a session that already finished itself is never stopped twice
-// (0x80131509, measured 21.08. -- see WORK.md point 159).
+// it first so a session that already finished itself is never stopped twice --
+// a second StopAsync on an already-Completed session throws (0x80131509).
 struct VoiceHandle {
     id: u64,
     stop: std::sync::mpsc::Sender<&'static str>,
@@ -11823,23 +11823,34 @@ fn ocr_lang_needs_update(previous: Option<&OcrCapSnapshot>, current_state: &str,
     }
 }
 
-const OCR_LANG_VERSIONS_KEY: &str = "ocrLangVersions";
-const OCR_LANG_NEXT_CHECK_KEY: &str = "ocrLangNextCheck";
+// Shared by OCR and voice language-pack bookkeeping -- "ocrLangVersions"/
+// "ocrLangNextCheck" for CapKind::Ocr (unchanged keys, existing settings
+// survive), "voiceLangVersions"/"voiceLangNextCheck" for CapKind::Speech.
+#[cfg(windows)]
+fn lang_versions_key(kind: ocr::CapKind) -> String {
+    format!("{}LangVersions", kind.slug())
+}
+#[cfg(windows)]
+fn lang_next_check_key(kind: ocr::CapKind) -> String {
+    format!("{}LangNextCheck", kind.slug())
+}
 
 // Cross-restart bookkeeping for the "updatable?" decision -- a JSON blob
 // (tag -> OcrCapSnapshot) tucked into the existing free-form ui_texts map
 // rather than a new Settings field, per point 122.
-fn ocr_lang_load_snapshots(settings: &Settings) -> HashMap<String, OcrCapSnapshot> {
+#[cfg(windows)]
+fn lang_load_snapshots(settings: &Settings, kind: ocr::CapKind) -> HashMap<String, OcrCapSnapshot> {
     settings
         .ui_texts
-        .get(OCR_LANG_VERSIONS_KEY)
+        .get(&lang_versions_key(kind))
         .and_then(|s| serde_json::from_str(s).ok())
         .unwrap_or_default()
 }
 
-fn ocr_lang_save_snapshots(settings: &mut Settings, snapshots: &HashMap<String, OcrCapSnapshot>) {
+#[cfg(windows)]
+fn lang_save_snapshots(settings: &mut Settings, kind: ocr::CapKind, snapshots: &HashMap<String, OcrCapSnapshot>) {
     if let Ok(json) = serde_json::to_string(snapshots) {
-        settings.ui_texts.insert(OCR_LANG_VERSIONS_KEY.to_string(), json);
+        settings.ui_texts.insert(lang_versions_key(kind), json);
     }
 }
 
@@ -11945,7 +11956,7 @@ async fn ocr_capabilities(state: State<'_, Db>, force: bool) -> Result<Vec<OcrCa
     .clamp(1.0, 168.0);
     #[cfg(windows)]
     {
-        tauri::async_runtime::spawn_blocking(move || ocr::capabilities(force, cache_hours))
+        tauri::async_runtime::spawn_blocking(move || ocr::capabilities(ocr::CapKind::Ocr, force, cache_hours))
             .await
             .map_err(|e| e.to_string())?
     }
@@ -11966,7 +11977,7 @@ async fn ocr_capabilities(state: State<'_, Db>, force: bool) -> Result<Vec<OcrCa
 fn ocr_capabilities_elevate() -> Result<(), String> {
     #[cfg(windows)]
     {
-        ocr::elevate_capabilities()
+        ocr::elevate_capabilities(ocr::CapKind::Ocr)
     }
     #[cfg(not(windows))]
     {
@@ -11976,12 +11987,14 @@ fn ocr_capabilities_elevate() -> Result<(), String> {
 
 // None while that elevated listing is still running (or was never started),
 // Some(list) once it wrote one. A failure inside the elevated process is
-// reported as an error, never as an empty list.
+// reported as an error, never as an empty list. Async + spawn_blocking: this
+// reads a file and, on success, calls into COM (caps_from_json's Language
+// lookups) via ensure_com, which must never run on the UI thread.
 #[tauri::command]
-fn ocr_capabilities_elevated_result() -> Result<Option<Vec<OcrCap>>, String> {
+async fn ocr_capabilities_elevated_result() -> Result<Option<Vec<OcrCap>>, String> {
     #[cfg(windows)]
     {
-        ocr::elevated_capabilities_result()
+        tauri::async_runtime::spawn_blocking(|| ocr::elevated_capabilities_result(ocr::CapKind::Ocr)).await.map_err(|e| e.to_string())?
     }
     #[cfg(not(windows))]
     {
@@ -12004,10 +12017,10 @@ fn ocr_install_language(name: String) -> Result<(), String> {
     }
     #[cfg(windows)]
     {
-        if !ocr::is_known_capability(&name) {
+        if !ocr::is_known_capability(ocr::CapKind::Ocr, &name) {
             return Err("unknown OCR capability name".to_string());
         }
-        ocr::install_language(&name)
+        ocr::install_language(ocr::CapKind::Ocr, &name)
     }
     #[cfg(not(windows))]
     {
@@ -12027,7 +12040,7 @@ fn ocr_install_result(name: String) -> Option<OcrInstallResult> {
     }
     #[cfg(windows)]
     {
-        ocr::install_result(&name)
+        ocr::install_result(ocr::CapKind::Ocr, &name)
     }
     #[cfg(not(windows))]
     {
@@ -12041,12 +12054,114 @@ fn ocr_install_result(name: String) -> Option<OcrInstallResult> {
 // manual "Jetzt prüfen" (ocr_capabilities(force: true)) is unaffected by this.
 #[tauri::command]
 fn ocr_lang_snooze(app: AppHandle, state: State<Db>) {
-    let mut store = lock(&state);
-    let hours = store.settings.ui_values.get("ocrLangSnoozeH").copied().unwrap_or(168.0).clamp(24.0, 720.0);
+    #[cfg(windows)]
+    lang_snooze(&app, &state, ocr::CapKind::Ocr, "ocrLangSnoozeH");
+    #[cfg(not(windows))]
+    let _ = (app, state);
+}
+
+// Speech (voice dictation) language packs -- thin wrappers around the exact
+// same Get-WindowsCapability/Add-WindowsCapability machinery OCR uses (mod
+// ocr), just with CapKind::Speech. ocrAutoCopy/ocrJoinLines have no
+// counterpart here on purpose: that is OCR-specific post-processing of a
+// recognition result, not something dictated text needs.
+#[tauri::command]
+async fn speech_capabilities(state: State<'_, Db>, force: bool) -> Result<Vec<OcrCap>, String> {
+    let cache_hours = {
+        let store = lock(&state);
+        store.settings.ui_values.get("voiceLangCacheH").copied().unwrap_or(24.0)
+    }
+    .clamp(1.0, 168.0);
+    #[cfg(windows)]
+    {
+        tauri::async_runtime::spawn_blocking(move || ocr::capabilities(ocr::CapKind::Speech, force, cache_hours))
+            .await
+            .map_err(|e| e.to_string())?
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (force, cache_hours);
+        Err("voice is only available on Windows".to_string())
+    }
+}
+
+#[tauri::command]
+fn speech_capabilities_elevate() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        ocr::elevate_capabilities(ocr::CapKind::Speech)
+    }
+    #[cfg(not(windows))]
+    {
+        Err("voice is only available on Windows".to_string())
+    }
+}
+
+#[tauri::command]
+async fn speech_capabilities_elevated_result() -> Result<Option<Vec<OcrCap>>, String> {
+    #[cfg(windows)]
+    {
+        tauri::async_runtime::spawn_blocking(|| ocr::elevated_capabilities_result(ocr::CapKind::Speech)).await.map_err(|e| e.to_string())?
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(None)
+    }
+}
+
+#[tauri::command]
+fn speech_install_language(name: String) -> Result<(), String> {
+    if !ocr_capability_name_is_well_formed(&name) {
+        return Err("invalid speech capability name".to_string());
+    }
+    #[cfg(windows)]
+    {
+        if !ocr::is_known_capability(ocr::CapKind::Speech, &name) {
+            return Err("unknown speech capability name".to_string());
+        }
+        ocr::install_language(ocr::CapKind::Speech, &name)
+    }
+    #[cfg(not(windows))]
+    {
+        Err("voice is only available on Windows".to_string())
+    }
+}
+
+#[tauri::command]
+fn speech_install_result(name: String) -> Option<OcrInstallResult> {
+    if !ocr_capability_name_is_well_formed(&name) {
+        return None;
+    }
+    #[cfg(windows)]
+    {
+        ocr::install_result(ocr::CapKind::Speech, &name)
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
+#[tauri::command]
+fn voice_lang_snooze(app: AppHandle, state: State<Db>) {
+    #[cfg(windows)]
+    lang_snooze(&app, &state, ocr::CapKind::Speech, "voiceLangSnoozeH");
+    #[cfg(not(windows))]
+    let _ = (app, state);
+}
+
+// Shared by ocr_lang_snooze/voice_lang_snooze: defer the NEXT automatic notice
+// by `snooze_setting_key` hours (24-720, default 168), so the user is not
+// re-nagged on every restart. Does not touch the check cadence itself; a
+// manual "Jetzt prüfen" (force: true) is unaffected by this.
+#[cfg(windows)]
+fn lang_snooze(app: &AppHandle, state: &State<Db>, kind: ocr::CapKind, snooze_setting_key: &str) {
+    let mut store = lock(state);
+    let hours = store.settings.ui_values.get(snooze_setting_key).copied().unwrap_or(168.0).clamp(24.0, 720.0);
     let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let next = now + (hours * 3600.0) as u64;
-    store.settings.ui_texts.insert(OCR_LANG_NEXT_CHECK_KEY.to_string(), next.to_string());
-    save_settings(&app, &store.settings);
+    store.settings.ui_texts.insert(lang_next_check_key(kind), next.to_string());
+    save_settings(app, &store.settings);
 }
 
 // Well after launch -- the first round must never compete with window build.
@@ -12054,50 +12169,53 @@ fn ocr_lang_snooze(app: AppHandle, state: State<Db>) {
 const OCR_LANG_FIRST_DELAY_SECS: u64 = 30;
 
 #[cfg(windows)]
-fn ocr_lang_check_interval(app: &AppHandle) -> Duration {
+fn lang_check_interval(app: &AppHandle, kind: ocr::CapKind) -> Duration {
+    let key = format!("{}LangCheckH", kind.slug());
     let hours = app
         .try_state::<Db>()
-        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("ocrLangCheckH").copied().unwrap_or(168.0))
+        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get(&key).copied().unwrap_or(168.0))
         .unwrap_or(168.0)
         .clamp(24.0, 720.0);
     Duration::from_secs((hours * 3600.0) as u64)
 }
 
-// Background watcher for "an installed language pack is now updatable".
-// Notification-ONLY -- it never calls ocr_install_language itself (elevation
-// always needs the frontend's confirmDialog explanation first, run in the
-// background or not). Because of that, "multiple due packages processed
-// sequentially, never in parallel" is automatically satisfied: one round only
-// ever lists what is due in one event, it does not install anything.
+// Background watcher for "an installed language pack is now updatable" -- one
+// registration per kind on the SAME shared scheduler thread (126: "ein Thread,
+// der beide Listen prüft" -- registering a second named job satisfies that,
+// the same way auto-backup/update-check/temp-sweep already share the thread).
+// Notification-ONLY -- it never installs anything itself (elevation always
+// needs the frontend's confirmDialog explanation first). Because of that,
+// "multiple due packages processed sequentially, never in parallel" is
+// automatically satisfied: one round only ever lists what is due in one event.
 #[cfg(windows)]
-fn start_ocr_lang_update_watcher(app: AppHandle) {
-    scheduler::register_periodic(
-        "ocr-lang-check",
-        Duration::from_secs(OCR_LANG_FIRST_DELAY_SECS),
-        ocr_lang_check_interval(&app),
-        move || {
-            ocr_lang_update_tick(&app);
-            scheduler::retime("ocr-lang-check", ocr_lang_check_interval(&app));
-        },
-    );
+fn start_lang_update_watcher(app: AppHandle, kind: ocr::CapKind) {
+    let job_name = format!("{}-lang-check", kind.slug());
+    let name_for_job = job_name.clone();
+    scheduler::register_periodic(&job_name, Duration::from_secs(OCR_LANG_FIRST_DELAY_SECS), lang_check_interval(&app, kind), move || {
+        lang_update_tick(&app, kind);
+        scheduler::retime(&name_for_job, lang_check_interval(&app, kind));
+    });
 }
 
 // One round of the watcher. The persisted next-due time is what really decides
 // whether anything happens, so a restart neither skips nor duplicates a check.
 #[cfg(windows)]
-fn ocr_lang_update_tick(app: &AppHandle) {
+fn lang_update_tick(app: &AppHandle, kind: ocr::CapKind) {
+    let cache_key = format!("{}LangCacheH", kind.slug());
+    let auto_update_key = format!("{}LangAutoUpdate", kind.slug());
+    let check_key = format!("{}LangCheckH", kind.slug());
     let snapshot = app.try_state::<Db>().map(|s| {
         let store = s.lock().unwrap_or_else(|e| e.into_inner());
         (
-            store.settings.ui_flags.get("ocrLangAutoUpdate").copied().unwrap_or(true),
-            store.settings.ui_values.get("ocrLangCacheH").copied().unwrap_or(24.0).clamp(1.0, 168.0),
+            store.settings.ui_flags.get(&auto_update_key).copied().unwrap_or(true),
+            store.settings.ui_values.get(&cache_key).copied().unwrap_or(24.0).clamp(1.0, 168.0),
             store
                 .settings
                 .ui_texts
-                .get(OCR_LANG_NEXT_CHECK_KEY)
+                .get(&lang_next_check_key(kind))
                 .and_then(|s| s.parse::<u64>().ok())
                 .unwrap_or(0),
-            ocr_lang_load_snapshots(&store.settings),
+            lang_load_snapshots(&store.settings, kind),
         )
     });
     let Some((auto_update, cache_hours, next_check, snapshots)) = snapshot else { return };
@@ -12105,7 +12223,7 @@ fn ocr_lang_update_tick(app: &AppHandle) {
     if !auto_update || now < next_check {
         return;
     }
-    let Ok(caps) = ocr::capabilities(false, cache_hours) else { return };
+    let Ok(caps) = ocr::capabilities(kind, false, cache_hours) else { return };
     let mut due = Vec::new();
     let mut new_snapshots = snapshots.clone();
     for cap in &caps {
@@ -12129,23 +12247,17 @@ fn ocr_lang_update_tick(app: &AppHandle) {
         }
     }
     if !due.is_empty() {
-        let _ = app.emit("ocr-lang-update-due", &due);
+        let _ = app.emit(kind.update_due_event(), &due);
     }
     if let Some(s) = app.try_state::<Db>() {
         let mut store = s.lock().unwrap_or_else(|e| e.into_inner());
-        ocr_lang_save_snapshots(&mut store.settings, &new_snapshots);
+        lang_save_snapshots(&mut store.settings, kind, &new_snapshots);
         // Persist the next-due time so a user who dismisses the notice any way
-        // other than "Abbrechen" (ocr_lang_snooze) is not re-nagged on every app
+        // other than "Abbrechen" (lang_snooze) is not re-nagged on every app
         // start -- the in-process wait cadence alone resets on every launch.
-        let check_hours = store
-            .settings
-            .ui_values
-            .get("ocrLangCheckH")
-            .copied()
-            .unwrap_or(168.0)
-            .clamp(24.0, 720.0);
+        let check_hours = store.settings.ui_values.get(&check_key).copied().unwrap_or(168.0).clamp(24.0, 720.0);
         let next = now + (check_hours * 3600.0) as u64;
-        store.settings.ui_texts.insert(OCR_LANG_NEXT_CHECK_KEY.to_string(), next.to_string());
+        store.settings.ui_texts.insert(lang_next_check_key(kind), next.to_string());
         save_settings(app, &store.settings);
     }
 }
@@ -12380,21 +12492,63 @@ mod ocr {
 
     // ---- 122: OCR language-pack management ----
 
+    // Which language-pack family a capabilities/install call is about. Both
+    // families share the exact same Get-WindowsCapability/Add-WindowsCapability
+    // machinery below (126) -- OCR and voice dictation each want their own
+    // Windows "Language.*" feature, nothing else differs. The module keeps its
+    // original name (OCR was here first); voice dictation reuses it wholesale
+    // rather than duplicating a COM-interfacing module tree, per 126 ("nichts
+    // davon wird kopiert").
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    pub(super) enum CapKind {
+        Ocr,
+        Speech,
+    }
+    impl CapKind {
+        fn filter(self) -> &'static str {
+            match self {
+                CapKind::Ocr => "Language.OCR*",
+                CapKind::Speech => "Language.Speech*",
+            }
+        }
+        // Temp-file name segment AND the ui_flags/ui_values/ui_texts setting-key
+        // prefix -- "voice", not "speech", to match the expert-menu keys (126's
+        // table: voiceLangCacheH, voiceLangAutoUpdate, ...).
+        pub(super) fn slug(self) -> &'static str {
+            match self {
+                CapKind::Ocr => "ocr",
+                CapKind::Speech => "voice",
+            }
+        }
+        pub(super) fn update_due_event(self) -> &'static str {
+            match self {
+                CapKind::Ocr => "ocr-lang-update-due",
+                CapKind::Speech => "voice-lang-update-due",
+            }
+        }
+    }
+
     struct CapCache {
         fetched_at: std::time::Instant,
         caps: Vec<OcrCap>,
     }
-    fn cap_cache() -> &'static Mutex<Option<CapCache>> {
-        static CACHE: OnceLock<Mutex<Option<CapCache>>> = OnceLock::new();
-        CACHE.get_or_init(|| Mutex::new(None))
+    // One cache per kind -- installing/refreshing OCR packages must never
+    // invalidate a freshly-fetched voice list or vice versa (126).
+    fn cap_cache(kind: CapKind) -> &'static Mutex<Option<CapCache>> {
+        static OCR: OnceLock<Mutex<Option<CapCache>>> = OnceLock::new();
+        static SPEECH: OnceLock<Mutex<Option<CapCache>>> = OnceLock::new();
+        match kind {
+            CapKind::Ocr => OCR.get_or_init(|| Mutex::new(None)),
+            CapKind::Speech => SPEECH.get_or_init(|| Mutex::new(None)),
+        }
     }
 
     // The set most recently returned by `capabilities()` doubles as the
     // install allowlist (see install_language) -- a name that was never
     // actually enumerated is rejected even if it happens to match the naming
     // regex.
-    pub(super) fn is_known_capability(name: &str) -> bool {
-        cap_cache()
+    pub(super) fn is_known_capability(kind: CapKind, name: &str) -> bool {
+        cap_cache(kind)
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .as_ref()
@@ -12402,16 +12556,16 @@ mod ocr {
             .unwrap_or(false)
     }
 
-    pub(super) fn capabilities(force: bool, cache_hours: f64) -> Result<Vec<OcrCap>, String> {
+    pub(super) fn capabilities(kind: CapKind, force: bool, cache_hours: f64) -> Result<Vec<OcrCap>, String> {
         if !force {
-            if let Some(c) = cap_cache().lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            if let Some(c) = cap_cache(kind).lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
                 if c.fetched_at.elapsed() < std::time::Duration::from_secs_f64(cache_hours * 3600.0) {
                     return Ok(c.caps.clone());
                 }
             }
         }
-        let caps = fetch_capabilities()?;
-        *cap_cache().lock().unwrap_or_else(|e| e.into_inner()) =
+        let caps = fetch_capabilities(kind)?;
+        *cap_cache(kind).lock().unwrap_or_else(|e| e.into_inner()) =
             Some(CapCache { fetched_at: std::time::Instant::now(), caps: caps.clone() });
         Ok(caps)
     }
@@ -12420,7 +12574,7 @@ mod ocr {
     // each capability's localized display name via the same WinRT Language
     // lookup the recognizer itself uses -- so this list is localized without
     // this app keeping its own name table.
-    fn fetch_capabilities() -> Result<Vec<OcrCap>, String> {
+    fn fetch_capabilities(kind: CapKind) -> Result<Vec<OcrCap>, String> {
         ensure_com();
         // The spec (and Microsoft's own docs) says listing needs no elevated rights,
         // but on at least some Windows builds `Get-WindowsCapability -Online` throws
@@ -12430,9 +12584,10 @@ mod ocr {
         // exception's message text) and surface it as its own error rather than a
         // raw PowerShell failure blob, so the UI can show an honest, specific reason
         // instead of a broken/empty list.
-        let output = run_powershell_command(
-            r#"try { Get-WindowsCapability -Online -Name "Language.OCR*" | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json } catch { if ($_.Exception.HResult -eq -2147024156) { Write-Output "ELEVATION_REQUIRED" } else { throw } }"#,
-        )?;
+        let output = run_powershell_command(&format!(
+            r#"try {{ Get-WindowsCapability -Online -Name "{filter}" | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json }} catch {{ if ($_.Exception.HResult -eq -2147024156) {{ Write-Output "ELEVATION_REQUIRED" }} else {{ throw }} }}"#,
+            filter = kind.filter(),
+        ))?;
         if output.trim() == "ELEVATION_REQUIRED" {
             return Err("ocr-caps-need-elevation".to_string());
         }
@@ -12497,11 +12652,11 @@ mod ocr {
         fs::write(path, bytes)
     }
 
-    fn install_result_path(tag: &str) -> PathBuf {
-        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-ocr-install-{}.json", brand::TEMP_PREFIX, tag))
+    fn install_result_path(kind: CapKind, tag: &str) -> PathBuf {
+        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-install-{}.json", brand::TEMP_PREFIX, kind.slug(), tag))
     }
-    fn install_script_path(tag: &str) -> PathBuf {
-        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-ocr-install-{}.ps1", brand::TEMP_PREFIX, tag))
+    fn install_script_path(kind: CapKind, tag: &str) -> PathBuf {
+        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-install-{}.ps1", brand::TEMP_PREFIX, kind.slug(), tag))
     }
 
     // Launches an elevated PowerShell that runs Add-WindowsCapability and writes
@@ -12514,10 +12669,10 @@ mod ocr {
     // nested-quoting hazard of building a `try{...}catch{...}` PowerShell
     // one-liner inside a Win32 argument string, which is judged the safer
     // "equivalent" the spec allows.
-    pub(super) fn install_language(name: &str) -> Result<(), String> {
+    pub(super) fn install_language(kind: CapKind, name: &str) -> Result<(), String> {
         let tag = ocr_tag_from_capability_name(name).unwrap_or_default();
-        let result_path = install_result_path(&tag);
-        let script_path = install_script_path(&tag);
+        let result_path = install_result_path(kind, &tag);
+        let script_path = install_script_path(kind, &tag);
         let _ = fs::remove_file(&result_path); // a stale result must never look fresh
 
         // finally: the script deletes itself once it is done, elevated or not —
@@ -12577,11 +12732,16 @@ mod ocr {
         Ok(())
     }
 
-    fn caps_result_path() -> PathBuf {
-        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-ocr-caps.json", brand::TEMP_PREFIX))
+    // The process id keeps two windows (allowMultipleInstances) from
+    // overwriting each other's script/result file for the SAME kind.
+    pub(super) fn caps_result_path(kind: CapKind) -> PathBuf {
+        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-caps-{}.json", brand::TEMP_PREFIX, kind.slug(), std::process::id()))
     }
-    fn caps_script_path() -> PathBuf {
-        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-ocr-caps.ps1", brand::TEMP_PREFIX))
+    fn caps_tmp_path(kind: CapKind) -> PathBuf {
+        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-caps-{}.json.tmp", brand::TEMP_PREFIX, kind.slug(), std::process::id()))
+    }
+    fn caps_script_path(kind: CapKind) -> PathBuf {
+        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-caps-{}.ps1", brand::TEMP_PREFIX, kind.slug(), std::process::id()))
     }
 
     // The same query fetch_capabilities runs, but through an elevated PowerShell
@@ -12589,40 +12749,63 @@ mod ocr {
     // refuses even the read-only listing to a normal user: without a list there
     // is no install allowlist either, so no language could be added at all.
     // Never starts by itself -- only when the user presses the button in the dialog.
-    pub(super) fn elevate_capabilities() -> Result<(), String> {
-        let result_path = caps_result_path();
-        let script_path = caps_script_path();
+    //
+    // PowerShell writes to a `.tmp` sibling first and Move-Item -Force's it onto
+    // the real result path in one step, so a poll landing mid-write either finds
+    // no file yet (not renamed) or the complete one (post-rename) -- never a
+    // half-written JSON blob.
+    pub(super) fn elevate_capabilities(kind: CapKind) -> Result<(), String> {
+        let result_path = caps_result_path(kind);
+        let tmp_path = caps_tmp_path(kind);
+        let script_path = caps_script_path(kind);
         let _ = fs::remove_file(&result_path); // a stale list must never look fresh
+        let _ = fs::remove_file(&tmp_path);
         let script = format!(
-            "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  Get-WindowsCapability -Online -Name \"Language.OCR*\" | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} catch {{\r\n  @{{ error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {result}\r\n}} finally {{\r\n  Remove-Item -LiteralPath {script} -Force -ErrorAction SilentlyContinue\r\n}}\r\n",
+            "$ErrorActionPreference = 'Stop'\r\ntry {{\r\n  try {{\r\n    Get-WindowsCapability -Online -Name \"{filter}\" | Select-Object Name, State, Version, DownloadSize, InstallSize | ConvertTo-Json | Out-File -Encoding utf8 {tmp}\r\n  }} catch {{\r\n    @{{ error = $_.Exception.Message }} | ConvertTo-Json | Out-File -Encoding utf8 {tmp}\r\n  }}\r\n  Move-Item -LiteralPath {tmp} -Destination {result} -Force\r\n}} finally {{\r\n  Remove-Item -LiteralPath {script} -Force -ErrorAction SilentlyContinue\r\n}}\r\n",
+            filter = kind.filter(),
+            tmp = ps_single_quote(&tmp_path.to_string_lossy()),
             result = ps_single_quote(&result_path.to_string_lossy()),
             script = ps_single_quote(&script_path.to_string_lossy()),
         );
         run_elevated_script(&script_path, &script)
     }
 
-    // Reads (and clears) what the elevated listing wrote. Ok(None) = still
-    // running, or never started. A successful list also fills the cache the
-    // normal query fills, so the install allowlist keeps working unchanged.
-    pub(super) fn elevated_capabilities_result() -> Result<Option<Vec<OcrCap>>, String> {
-        let path = caps_result_path();
+    // Reads what the elevated listing wrote. Ok(None) = still running, or never
+    // started. A successful list also fills the cache the normal query fills,
+    // so the install allowlist keeps working unchanged.
+    //
+    // Deletes the file ONLY on a definite terminal outcome (a parseable error,
+    // or a parseable list) -- never on a read that came back empty or
+    // unparseable, which is treated as "not ready yet" instead of discarding a
+    // result that might still be mid-write. Mirrors install_result's shape.
+    pub(super) fn elevated_capabilities_result(kind: CapKind) -> Result<Option<Vec<OcrCap>>, String> {
+        let path = caps_result_path(kind);
         let text = match fs::read_to_string(&path) {
             Ok(t) => t,
             Err(_) => return Ok(None),
         };
-        let _ = fs::remove_file(&path);
         // Windows PowerShell's `Out-File -Encoding utf8` writes a byte-order mark.
         let text = text.trim_start_matches('\u{feff}').trim().to_string();
         if text.is_empty() {
-            return Err("the elevated listing returned nothing".to_string());
+            return Ok(None);
         }
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
             if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+                let _ = fs::remove_file(&path);
                 return Err(err.to_string());
             }
+        } else {
+            return Ok(None); // not valid JSON (yet) -- leave it for the next poll
         }
-        let caps = caps_from_json(&text)?;
-        *cap_cache().lock().unwrap_or_else(|e| e.into_inner()) =
+        let caps = match caps_from_json(&text) {
+            Ok(c) => c,
+            Err(e) => {
+                let _ = fs::remove_file(&path);
+                return Err(e);
+            }
+        };
+        let _ = fs::remove_file(&path);
+        *cap_cache(kind).lock().unwrap_or_else(|e| e.into_inner()) =
             Some(CapCache { fetched_at: std::time::Instant::now(), caps: caps.clone() });
         Ok(Some(caps))
     }
@@ -12631,9 +12814,9 @@ mod ocr {
     // install_language's elevated process writes. Deleting on a terminal read
     // keeps a later poll from re-triggering the cache invalidation below on
     // every subsequent call.
-    pub(super) fn install_result(name: &str) -> Option<OcrInstallResult> {
+    pub(super) fn install_result(kind: CapKind, name: &str) -> Option<OcrInstallResult> {
         let tag = ocr_tag_from_capability_name(name).unwrap_or_default();
-        let path = install_result_path(&tag);
+        let path = install_result_path(kind, &tag);
         let text = fs::read_to_string(&path).ok()?;
         let value: serde_json::Value = serde_json::from_str(text.trim()).ok()?;
         let ok = value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
@@ -12645,8 +12828,12 @@ mod ocr {
             // it is the point where the backend already has fresh proof the
             // install finished, rather than waiting on the frontend to notice
             // state == "Installed" via a second ocr_capabilities() round trip.
-            *cap_cache().lock().unwrap_or_else(|e| e.into_inner()) = None;
-            engine_cache().lock().unwrap_or_else(|e| e.into_inner()).clear();
+            *cap_cache(kind).lock().unwrap_or_else(|e| e.into_inner()) = None;
+            // The recognition engine cache is OCR-only (mod voice has no such
+            // cache -- a new voice session always resolves its language fresh).
+            if kind == CapKind::Ocr {
+                engine_cache().lock().unwrap_or_else(|e| e.into_inner()).clear();
+            }
         }
         Some(OcrInstallResult { ok, error })
     }
@@ -12758,9 +12945,9 @@ async fn voice_start(
 
 // Whether voice_stop should actually signal the session thread: never for a
 // session that already ended itself (silence/max/error) -- a second StopAsync
-// on an already-Completed session throws 0x80131509 (measured 21.08., WORK.md
-// point 159). Pure decision, kept separate from the State<> plumbing so it is
-// unit-testable like every other table/decision in this module.
+// on an already-Completed session throws (0x80131509). Pure decision, kept
+// separate from the State<> plumbing so it is unit-testable like every other
+// table/decision in this module.
 fn should_send_stop(target: Option<u64>, running_id: u64, already_ended: bool) -> bool {
     (target.is_none() || target == Some(running_id)) && !already_ended
 }
@@ -12814,8 +13001,8 @@ async fn voice_enable_online_speech(app: AppHandle, state: State<'_, Db>) -> Res
 }
 
 // Cancels whatever session is running, without waiting for it to actually
-// finish -- called on window close/hide and on app exit (never left running
-// behind a hidden window, per docs/INVARIANTS.md).
+// finish -- called on window close/hide and on app exit. A hidden window
+// never keeps listening.
 fn voice_shutdown(app: &AppHandle) {
     if let Some(vs) = app.try_state::<VoiceState>() {
         let guard = vs.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -12866,15 +13053,15 @@ mod voice {
         });
     }
 
-    // HRESULTs measured 21.08. against a real machine (WORK.md, point 159).
+    // HRESULTs measured against a real machine with a working microphone.
     const HRESULT_NO_LANGUAGE: i32 = 0x800455BCu32 as i32; // "The requested language is not supported"
     const HRESULT_ACCESS_DENIED: i32 = 0x80070005u32 as i32; // no mic OR mic access denied -- one HRESULT covers both
     const HRESULT_PRIVACY_OFF: i32 = 0x80045509u32 as i32; // "speech privacy policy was not accepted"
 
     // Stable error key from a WinRT HRESULT -- never the raw code, never any
-    // recognized text (docs/INVARIANTS.md). Takes the raw code rather than a
-    // `windows::core::Error` so the mapping table itself is a plain, unit-testable
-    // function (see the "voice HRESULT mapping" tests).
+    // recognized text. Takes the raw code rather than a `windows::core::Error`
+    // so the mapping table itself is a plain, unit-testable function (see the
+    // "voice HRESULT mapping" tests).
     pub(super) fn error_key_for_hresult(code: i32) -> &'static str {
         match code {
             HRESULT_NO_LANGUAGE => "voice-no-language",
@@ -12887,8 +13074,8 @@ mod voice {
         error_key_for_hresult(e.code().0)
     }
 
-    // The Completed handler's end-reason table (WORK.md 125): TimeoutExceeded
-    // (7) is always "silence" -- Windows' own AutoStopSilenceTimeout fired.
+    // The Completed handler's end-reason table: TimeoutExceeded (7) is always
+    // "silence" -- Windows' own AutoStopSilenceTimeout fired.
     // Success (0) means WE asked it to stop; `requested` is whatever the caller
     // (voice_stop, the hard cap, or the own idle watchdog) set right before
     // calling StopAsync, defaulting to "manual" when nothing was recorded (a
@@ -12936,8 +13123,8 @@ mod voice {
     }
 
     // Whether Windows' own online-speech consent is already on -- exactly one
-    // REG_DWORD, no elevated rights to read or write (measured 21.08., WORK.md
-    // point 159's VM re-check). Missing key = not accepted, same as 0.
+    // REG_DWORD, no elevated rights needed to read or write it. Missing key =
+    // not accepted, same as 0.
     fn online_speech_accepted() -> bool {
         winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
             .open_subkey("Software\\Microsoft\\Speech_OneCore\\Settings\\OnlineSpeechPrivacy")
@@ -13050,9 +13237,9 @@ mod voice {
         recognizer.CompileConstraintsAsync().and_then(|a| a.get()).map_err(|e| error_key(&e))?;
         let session = recognizer.ContinuousRecognitionSession().map_err(|e| error_key(&e))?;
 
-        // Windows' own AutoStopSilenceTimeout is set as the "Zusatzgurt" belt of
-        // the two intentionally redundant silence checks (WORK.md 125) -- the
-        // app's own idle watchdog below is the one that actually decides. When
+        // Windows' own AutoStopSilenceTimeout is the belt of two intentionally
+        // redundant silence checks -- the app's own idle watchdog below is the
+        // one that actually decides. When
         // voiceAutoStop is off (auto_stop_sec == 0), point Windows' property at
         // the hard cap instead, so it never fires earlier than max_sec on its own.
         let watch_secs = if auto_stop_sec > 0 { auto_stop_sec } else { max_sec };
@@ -13148,10 +13335,11 @@ mod voice {
                     break;
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
-                    // "Stille" = die Maschine hat nichts erkannt, gemessen seit dem
-                    // letzten Hypothesis/Result -- maschinenunabhängig, siehe die
-                    // Begründung in WORK.md 125. should_stop also enforces the hard
-                    // cap (voiceMaxMin), which always wins once reached.
+                    // Idle means the engine has recognized nothing since the last
+                    // Hypothesis/Result, measured independently of the engine's
+                    // own timeout so the behavior does not depend on Windows
+                    // honoring AutoStopSilenceTimeout. should_stop also enforces
+                    // the hard cap (voiceMaxMin), which always wins once reached.
                     let idle = last_activity.lock().unwrap_or_else(|e| e.into_inner()).elapsed();
                     if let Some(reason) = should_stop(idle, session_started.elapsed(), auto_stop_sec, max_sec) {
                         self_stop(reason);
@@ -15520,7 +15708,7 @@ pub fn run() {
                                 .unwrap_or(false);
                         if minimize {
                             api.prevent_close();
-                            // 125: a hidden window never keeps listening.
+                            // A hidden window never keeps listening.
                             voice_shutdown(&handle2);
                             // The very first time, explain that the tray menu
                             // still copies while hidden — JS shows it, then hides
@@ -15687,7 +15875,10 @@ pub fn run() {
             // OCR language-pack "updatable" watcher -- delayed, silent when
             // there is nothing to do, never runs at window build.
             #[cfg(windows)]
-            start_ocr_lang_update_watcher(handle.clone());
+            {
+                start_lang_update_watcher(handle.clone(), ocr::CapKind::Ocr);
+                start_lang_update_watcher(handle.clone(), ocr::CapKind::Speech); // 126
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -15864,7 +16055,13 @@ pub fn run() {
             voice_start,
             voice_stop,
             voice_state,
-            voice_enable_online_speech
+            voice_enable_online_speech,
+            speech_capabilities,
+            speech_capabilities_elevate,
+            speech_capabilities_elevated_result,
+            speech_install_language,
+            speech_install_result,
+            voice_lang_snooze
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
@@ -17308,6 +17505,43 @@ mod tests {
     fn voice_should_send_stop_skips_a_session_that_already_ended_itself() {
         assert!(!should_send_stop(None, 5, true));
         assert!(!should_send_stop(Some(5), 5, true));
+    }
+
+    // ---- Runde F, point 126: kind-generalized language-pack elevation (fixes 160/164) ----
+
+    #[cfg(windows)]
+    #[test]
+    fn ocr_elevated_capabilities_result_survives_a_truncated_read() {
+        let path = ocr::caps_result_path(ocr::CapKind::Ocr);
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        std::fs::write(&path, b"{\"Name\":\"Language.OC").unwrap(); // deliberately truncated JSON
+        let result = ocr::elevated_capabilities_result(ocr::CapKind::Ocr);
+        assert!(matches!(result, Ok(None)));
+        assert!(path.exists(), "a truncated/unparseable read must leave the file for the next poll, not discard it (160)");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn ocr_elevated_capabilities_result_deletes_on_a_complete_error_payload() {
+        let path = ocr::caps_result_path(ocr::CapKind::Speech);
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        std::fs::write(&path, br#"{"error":"boom"}"#).unwrap();
+        match ocr::elevated_capabilities_result(ocr::CapKind::Speech) {
+            Err(e) => assert_eq!(e, "boom"),
+            Ok(_) => panic!("expected an error"),
+        }
+        assert!(!path.exists(), "a terminal (error) result must be cleared, not left for a duplicate re-read");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn ocr_and_speech_elevated_result_paths_never_collide() {
+        assert_ne!(ocr::caps_result_path(ocr::CapKind::Ocr), ocr::caps_result_path(ocr::CapKind::Speech)); // 164/126
     }
 
     #[test]

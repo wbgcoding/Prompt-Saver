@@ -12426,7 +12426,7 @@ function bind() {
     if (e.target === snipModal) closeSnipModal();
   });
 
-  // ---- 121: OCR (text recognition, off by default -- flag "ocr") ----
+  // ---- 121: OCR (text recognition, on by default -- flag "ocr") ----
   const ocrModal = $("ocr-modal");
   const ocrSettings = () => ({
     upscaleUnderPx: Math.round(val("ocrUpscaleUnderPx")),
