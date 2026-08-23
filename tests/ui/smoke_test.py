@@ -4542,10 +4542,30 @@ PROBE = """
         if (!document.getElementById('tour-back').classList.contains('hidden')) {
           out.errors.push('Tour: Back is visible on step 0');
         }
-        // Skip closes and must not touch the option flags (tourFirstRun is false here).
-        document.getElementById('tour-skip').click();
+        // Background click asks first (point 193) -- Continue leaves the tour open.
+        const confirmModal = document.getElementById('confirm-modal');
+        tourEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
         await sleep(80);
-        if (!tourEl.classList.contains('hidden')) out.errors.push('Tour did not close on Skip');
+        if (confirmModal.classList.contains('hidden')) out.errors.push('Tour: background click did not open the skip-confirm dialog');
+        if (tourEl.classList.contains('hidden')) out.errors.push('Tour: background click closed the tour before confirming');
+        document.getElementById('confirm-cancel').click();
+        await sleep(80);
+        if (!confirmModal.classList.contains('hidden')) out.errors.push('Tour: Continue did not close the skip-confirm dialog');
+        if (tourEl.classList.contains('hidden')) out.errors.push('Tour: Continue on the skip-confirm dialog closed the tour');
+        // Escape follows the same path, and must not also fall through to tourKeydown's
+        // own Escape handling while the confirm dialog sits on top of the tour. This is
+        // also the block's one and only close -- a second open/close cycle in the same
+        // probe run has been observed to stall the headless browser's virtual clock, so
+        // the top-right Skip button (which stays deliberately direct, no confirmation)
+        // is covered by inspection instead of a second live cycle here.
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await sleep(80);
+        if (confirmModal.classList.contains('hidden')) out.errors.push('Tour: Escape did not open the skip-confirm dialog');
+        document.getElementById('confirm-ok').click();
+        await sleep(80);
+        if (!confirmModal.classList.contains('hidden')) out.errors.push('Tour: confirming skip did not close the skip-confirm dialog');
+        if (!tourEl.classList.contains('hidden')) out.errors.push('Tour: confirming skip did not close the tour');
+        if (!window.__SMOKE_CALLS__.includes('set_ui_flag')) out.errors.push('Tour: confirming skip did not write tourSeen');
       }
       document.getElementById('settings').classList.add('hidden');
       await sleep(50);

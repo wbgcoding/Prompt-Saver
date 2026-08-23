@@ -13318,7 +13318,7 @@ function bind() {
   $("tour-back").addEventListener("click", () => tourGoto(tourStep - 1));
   $("tour-next").addEventListener("click", () => (tourStep === TOUR_LAST_STEP ? tourFinish() : tourGoto(tourStep + 1)));
   const tourEl = $("tour-modal");
-  tourEl.addEventListener("pointerdown", (e) => { if (e.target === tourEl) tourSkip(); });
+  tourEl.addEventListener("pointerdown", (e) => { if (e.target === tourEl) tourAskSkip(); });
 
   // In-app documentation.
   const helpEl = $("help");
@@ -14216,7 +14216,10 @@ function tourGoto(i) {
 }
 
 function tourKeydown(e) {
-  if (e.key === "Escape") { e.preventDefault(); tourSkip(); return; }
+  // A confirmation dialog on top (tourAskSkip) owns every key while it is open --
+  // otherwise Escape would close both it and the tour underneath on one press.
+  if (!$("confirm-modal").classList.contains("hidden")) return;
+  if (e.key === "Escape") { e.preventDefault(); tourAskSkip(); return; }
   if (e.key === "ArrowLeft") { e.preventDefault(); tourGoto(tourStep - 1); return; }
   if (e.key === "ArrowRight") { e.preventDefault(); tourGoto(tourStep + 1); return; }
   if (e.key === "Enter" && !e.target.closest("button")) {
@@ -14265,6 +14268,20 @@ function closeTour() {
 async function tourSkip() {
   closeTour();
   await saveUiState("tourSeen", true); // Skip writes nothing else
+}
+
+// Escape and a stray background click are easy to trigger by accident, so both
+// route here instead of skipping straight away; the top-right Skip button is a
+// deliberate action and stays direct.
+async function tourAskSkip() {
+  const ok = await confirmDialog({
+    title: t("tourSkipConfirmTitle"),
+    message: t("tourSkipConfirmMsg"),
+    confirmLabel: t("tourSkipConfirmOk"),
+    cancelLabel: t("tourNext"),
+    danger: false,
+  });
+  if (ok) await tourSkip();
 }
 
 // Only the switches that differ from the shipped default get written — an
