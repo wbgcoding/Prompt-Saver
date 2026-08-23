@@ -1624,7 +1624,7 @@ const EXPERT_TABS = [
   { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
     { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "gridViewBorder", "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }, "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
-    { title: "expGroupPrivacy", notices: ["storeUnsealed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
+    { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
     { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances"], values: ["kbFocusFadeMs"], selects: ["updateCheckH"], paths: ["dataDir"] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
@@ -2157,6 +2157,16 @@ let voiceSupport = { supported: true, engine: "", langs: [], needs_online: false
 // assumed true until the backend says otherwise, so a failed call never invents
 // a warning that is not real.
 let storeSealed = true;
+// Whether the settings row on disk was present but unreadable at the last load
+// (query error, decrypt failure, corrupt JSON) -- unlike storeSealed this never
+// changes mid-session on its own, only through reset/import, both of which
+// already reload the whole window, so refreshSettingsLocked() is called from
+// there instead of a push event. Assumed false until the backend says otherwise.
+let settingsLocked = false;
+async function refreshSettingsLocked() {
+  settingsLocked = (await invoke("settings_locked").catch(() => false)) === true;
+  if (!$("settings-expert").classList.contains("hidden")) renderExpert();
+}
 const EXPERT_PATHS = {
   screenshotDir: {
     label: "valScreenshotDir",
@@ -2417,6 +2427,11 @@ const EXPERT_NOTICES = {
     when: () => !storeSealed,
     title: "storeUnsealedRow",
     body: "storeUnsealedRowNote",
+  },
+  settingsLocked: {
+    when: () => settingsLocked,
+    title: "settingsLockedRow",
+    body: "settingsLockedRowNote",
   },
 };
 
@@ -7663,16 +7678,32 @@ async function startLangInstall(kind, cap) {
 // *_install_language() only resolves once the elevated process has LAUNCHED,
 // not once it finished -- poll the result file ourselves, a few seconds apart,
 // until it stops being null.
+// A result file that never becomes readable (permanently corrupt, or wiped
+// from under the install) used to look exactly like "still running" forever --
+// polled every 3s with no way out. ~10 minutes is generous for even a large,
+// slow-connection language pack, so hitting this is always a real stuck state.
+const MAX_LANG_INSTALL_POLLS = 200;
 function pollLangInstall(kind, name) {
   const st = LANG_DIALOG[kind];
   if (st.installTimers[name]) return;
+  let attempts = 0;
   // setTimeout re-armed after each result, not setInterval -- the callback
   // awaits an invoke, and a reply slower than the 3s tick would otherwise overlap
   // itself (two install_result calls, or two clearInterval/repaint races).
   const tick = async () => {
+    attempts++;
     let res;
     try { res = await invoke(LANG_CMDS[kind].installResult, { name }); } catch (_) { res = undefined; }
-    if (res == null) { st.installTimers[name] = setTimeout(tick, 3000); return; } // still running (or a transient probe failure)
+    if (res == null) {
+      if (attempts >= MAX_LANG_INSTALL_POLLS) {
+        delete st.installTimers[name];
+        st.installErrors[name] = t("ocrInstallResultTimeout");
+        renderLangsBody(kind);
+        return;
+      }
+      st.installTimers[name] = setTimeout(tick, 3000); // still running (or a transient probe failure)
+      return;
+    }
     delete st.installTimers[name];
     if (res.ok) {
       // Clear both caches so the new pack is selectable immediately, no restart.
@@ -7683,8 +7714,10 @@ function pollLangInstall(kind, name) {
       return;
     }
     // A real failure (e.g. Windows Home / policy blocked) -- the reason belongs
-    // in the row, never a silent failure.
-    st.installErrors[name] = res.error || true;
+    // in the row, never a silent failure. The backend's own internal keys are
+    // translated here; anything else is a raw Windows exception message, shown
+    // exactly as Windows worded it since there is no way to pre-translate that.
+    st.installErrors[name] = res.error === "install-result-unreadable" ? t("ocrInstallResultUnreadable") : (res.error || true);
     renderLangsBody(kind);
   };
   st.installTimers[name] = setTimeout(tick, 3000);
@@ -14475,6 +14508,7 @@ async function init() {
     // Awaited, unlike the informational calls around it: the reveal below asks the
     // user about it straight away, so it has to be known before the window appears.
     storeSealed = (await invoke("store_sealed").catch(() => true)) !== false;
+    refreshSettingsLocked();
     invoke("default_screenshot_dir").then((d) => { defaultScreenshotDir = d || ""; }).catch(() => {});
     invoke("default_sync_dir").then((d) => { defaultSyncDir = d || ""; }).catch(() => {});
     // OCR language list -- fetched once, cached, "Automatic" is always
@@ -14557,6 +14591,7 @@ function syncSettingsControls() {
 // flags, views, prompts, controls). Reloading the page would do the same but repaints
 // the whole window, which reads as a flicker.
 async function reloadEverything() {
+  await refreshSettingsLocked(); // reset_settings/import_all may have just cleared the lock
   await applySettingsCore();
   await applySettingsUi(); // renderGrid() WITH the fetch: the prompts were replaced too
   // A wipe (delete_all_data) leaves the library empty, so the backend reseeds the

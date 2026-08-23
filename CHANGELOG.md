@@ -684,6 +684,17 @@ voice dictation, the screenshot editor and the introduction tour ship on).
   chain, instead of either staying picked or unpicking cleanly.
 - A failed automatic backup used to fail completely silently; it is now logged
   and shown as a toast, the same way a successful one already was.
+- Dictation could silently record without ever delivering text, or never
+  report that it had stopped, if one of its Windows event hookups failed to
+  register — that failure now ends the session with a proper error instead.
+- If Windows itself refused a dictation stop request, the app could still show
+  "stopped" while the microphone kept recording; it now reports the truth in
+  that case.
+- A language-pack install whose status file became permanently unreadable
+  used to poll forever with no way to give up; it now stops after a generous
+  wait and tells you.
+- A failed language-pack update notification could go unnoticed for a whole
+  check interval instead of retrying on the next scheduled check.
 
 ### Security
 
@@ -723,6 +734,16 @@ voice dictation, the screenshot editor and the introduction tour ship on).
   counting the ones it definitely cleaned.
 - Two dictation sessions started in quick succession could both begin
   recording; the first one then had no way to be stopped from the app.
+- **You are now told when your saved settings cannot be read back.** The same
+  protection the database already had for prompts now covers settings too: an
+  unreadable or corrupted settings entry is never silently replaced with
+  defaults on the next save. A permanent warning row appears in the privacy
+  settings for as long as it is true, with no switch to silence it, and a
+  factory reset or restoring a backup's settings clears it.
+- **A hung background task (a stuck language-pack check, for example) could
+  delay every other periodic task behind it** — settings saves, automatic
+  backups, the update check — for as long as it stayed stuck. Each now runs on
+  its own thread, so one stuck task can no longer hold up the others.
 
 ### Removed
 

@@ -2129,6 +2129,22 @@ fn store_sealed() -> bool {
     STORE_SEALED.load(Ordering::Relaxed)
 }
 
+// Set at load_store() when the settings row was PRESENT but could not be read back
+// or parsed (query error, decrypt failure, corrupt JSON) -- as opposed to genuinely
+// absent, which is just a fresh install and never sets this. While true,
+// write_settings_now refuses to rewrite the row: the in-memory settings are already
+// Settings::default() at that point, and writing them would permanently overwrite
+// whatever is actually sitting in the corrupt row with defaults. Mirrors
+// Store.prompts_locked, but process-global rather than a Store field because
+// save_settings/write_settings_now are the one choke point every settings mutation
+// already funnels through, without a &Store to read a field from.
+static SETTINGS_LOCKED: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+fn settings_locked() -> bool {
+    SETTINGS_LOCKED.load(Ordering::Relaxed)
+}
+
 // Decrypt a stored value. Legacy (un-prefixed) values pass through for migration; an
 // undecryptable prefixed value (e.g. another Windows account) yields "" so the row is
 // skipped rather than fed garbage to the JSON parser.
@@ -2429,7 +2445,7 @@ fn db_write_settings(conn: &Connection, settings: &Settings) -> rusqlite::Result
 // every one of them means the true prompt count is NOT known to be what this
 // function returned, so the caller must avoid any destructive rewrite of the
 // prompts table rather than treat a partial result as the whole truth.
-fn db_load(conn: &Connection, written: &mut WrittenRows) -> (Vec<Prompt>, Option<Settings>, bool, usize) {
+fn db_load(conn: &Connection, written: &mut WrittenRows) -> (Vec<Prompt>, Option<Settings>, bool, usize, bool) {
     let mut prompts = Vec::new();
     let mut plaintext = false; // any legacy unencrypted row → re-save once to encrypt
     let mut failures = 0usize;
@@ -2470,16 +2486,31 @@ fn db_load(conn: &Connection, written: &mut WrittenRows) -> (Vec<Prompt>, Option
         },
         Err(_) => failures += 1,
     }
-    let raw = conn
-        .query_row("SELECT value FROM meta WHERE key='settings'", [], |r| {
-            r.get::<_, String>(0)
-        })
-        .ok();
+    // A genuinely absent row (fresh install, nothing saved yet) must never count as
+    // a failure -- only a row that IS there but could not be read back or parsed is
+    // "unreadable" in the sense that locks writes (see settings_locked below).
+    let mut settings_unreadable = false;
+    let raw = match conn.query_row("SELECT value FROM meta WHERE key='settings'", [], |r| {
+        r.get::<_, String>(0)
+    }) {
+        Ok(v) => Some(v),
+        Err(rusqlite::Error::QueryReturnedNoRows) => None,
+        Err(_) => {
+            settings_unreadable = true;
+            None
+        }
+    };
     if raw.as_deref().is_some_and(|v| !v.starts_with(ENC_PREFIX)) {
         plaintext = true;
     }
-    let settings = raw.and_then(|s| serde_json::from_str::<Settings>(&dec_str(&s)).ok());
-    (prompts, settings, plaintext, failures)
+    let settings = raw.and_then(|s| match serde_json::from_str::<Settings>(&dec_str(&s)) {
+        Ok(s) => Some(s),
+        Err(_) => {
+            settings_unreadable = true;
+            None
+        }
+    });
+    (prompts, settings, plaintext, failures, settings_unreadable)
 }
 
 // Peeks the "allowMultipleInstances" flag before the Tauri builder exists. The
@@ -2812,6 +2843,12 @@ fn save_settings(app: &AppHandle, settings: &Settings) -> bool {
 // The write itself, without the "cancel a collected write" step — the collecting
 // path below calls this one so it does not clear its own mark twice.
 fn write_settings_now(app: &AppHandle, settings: &Settings) -> bool {
+    // Safety valve: the row on disk is present but unreadable, so the in-memory
+    // Settings is a default, not what is actually stored. Rewriting now would
+    // permanently destroy the real (corrupt but recoverable-by-hand) row.
+    if SETTINGS_LOCKED.load(Ordering::Relaxed) {
+        return false;
+    }
     if let Some(conn) = db_conn(app) {
         if db_write_settings(&conn, settings).is_ok() {
             return true;
@@ -3004,27 +3041,34 @@ fn load_store(app: &AppHandle) -> Store {
         // Filled from the rows as they are read, so the first save of the session
         // already only writes what changed (see WrittenRows).
         let mut written = WrittenRows::new();
-        let (mut prompts, settings_opt, needs_mig, prompt_fails) = db_load(&conn, &mut written);
+        let (mut prompts, settings_opt, needs_mig, prompt_fails, settings_unreadable) =
+            db_load(&conn, &mut written);
         let (trash, trash_fails) = db_load_trash(&conn, &mut written);
         let decrypt_fails = prompt_fails + trash_fails;
-        // Some row (prompts or trash) could not be read back or decrypted →
-        // preserve the raw DB and lock writes to both tables (see prompts_locked
-        // below, which gates db_write_trash the same way as db_write_prompts).
-        if decrypt_fails > 0 {
+        // Some row (prompts, trash, or settings) could not be read back or decrypted →
+        // preserve the raw DB and lock writes to whatever was affected (see
+        // prompts_locked/SETTINGS_LOCKED below, which gate their respective writes
+        // the same way).
+        if decrypt_fails > 0 || settings_unreadable {
             let db_path = dir.join("data.db");
             let bak = dir.join("data.db.locked.bak");
             if !bak.exists() {
                 let _ = fs::copy(&db_path, &bak);
             }
             append_crash_log(&format!(
-                "{} row(s) failed to load reliably (query error, unreadable row, or decrypt failure); \
+                "{} row(s) failed to load reliably (query error, unreadable row, or decrypt failure){}; \
                  writes locked, raw DB copied to data.db.locked.bak",
-                decrypt_fails
+                decrypt_fails,
+                if settings_unreadable { " (settings row included)" } else { "" }
             ));
         }
+        SETTINGS_LOCKED.store(settings_unreadable, Ordering::Relaxed);
         let mut settings = settings_opt.clone().unwrap_or_default();
         // Empty DB but legacy JSON present → import it once, then own the data.
-        if prompts.is_empty() && settings_opt.is_none() {
+        // A corrupt-but-present settings row must never be mistaken for "nothing
+        // here yet" -- that would silently paper over the SETTINGS_LOCKED case set
+        // above with whatever an unrelated legacy JSON file happens to contain.
+        if prompts.is_empty() && settings_opt.is_none() && !settings_unreadable {
             let j_settings_r: SealedRead<Settings> = read_sealed_json(&dir.join("settings.json"));
             let j_prompts_r: SealedRead<Vec<Prompt>> = read_sealed_json(&dir.join("prompts.json"));
             // An unreadable legacy file (wrong Windows account, corruption) must never be
@@ -5582,6 +5626,7 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
         // every password-protected backup permanently unreadable.
         let backup_pw = store.settings.ui_texts.remove(BACKUP_PW_KEY);
         store.settings = Settings::default();
+        SETTINGS_LOCKED.store(false, Ordering::Relaxed); // explicit reset overrides the corrupt-row lock
         store.settings.migrate();
         load_pick_history(&store.settings); // 19: reset clears the mirror too
         if let Some(pw) = backup_pw {
@@ -12584,8 +12629,14 @@ fn lang_update_tick(app: &AppHandle, kind: ocr::CapKind) {
             );
         }
     }
-    if !due.is_empty() {
-        let _ = app.emit(kind.update_due_event(), &due);
+    if !due.is_empty() && app.emit(kind.update_due_event(), &due).is_err() {
+        // Delivery failed -- leave the snapshot AND the next-check time exactly
+        // as they were, so the next scheduled tick redoes this same comparison
+        // and retries the emit. Persisting either here would make the notice
+        // look already handled (a since-updated snapshot no longer compares as
+        // "needs update") even though nothing was ever actually shown to the
+        // user, suppressing it for up to a full check interval.
+        return;
     }
     if let Some(s) = app.try_state::<Db>() {
         let mut store = s.lock().unwrap_or_else(|e| e.into_inner());
@@ -12643,10 +12694,13 @@ mod ocr {
         }
         DONE.with(|d| {
             if !d.get() {
-                unsafe {
-                    let _ = RoInitialize(RO_INIT_MULTITHREADED);
+                // Only remember success. A genuine failure here (rare -- e.g. out of
+                // memory) must not be recorded as done, or a later call on this same
+                // thread would never retry COM init again and every WinRT call after
+                // it would keep failing for a reason nothing here ever surfaces.
+                if unsafe { RoInitialize(RO_INIT_MULTITHREADED) }.is_ok() {
+                    d.set(true);
                 }
-                d.set(true);
             }
         });
     }
@@ -13240,7 +13294,23 @@ mod ocr {
     pub(super) fn install_result(kind: CapKind, name: &str) -> Option<OcrInstallResult> {
         let tag = ocr_tag_from_capability_name(kind.prefix(), name).unwrap_or_default();
         let path = install_result_path(kind, &tag);
-        let text = fs::read_to_string(&path).ok()?;
+        let text = match fs::read_to_string(&path) {
+            Ok(t) => t,
+            // Not there yet -- the elevated process has not written it (or
+            // finished the UAC prompt) -- genuinely still pending.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+            // The file IS there but cannot be read (permissions, a sharing
+            // violation, a disk error) -- unlike "not found", this will never
+            // resolve itself on the next poll, so it must not look like "still
+            // running" forever. Left on disk for inspection rather than deleted,
+            // since a locked/inaccessible file could not be removed either.
+            Err(_) => return Some(OcrInstallResult { ok: false, error: Some("install-result-unreadable".to_string()) }),
+        };
+        // Content that fails to parse stays "pending" rather than terminal --
+        // Out-File's write is not guaranteed atomic, so a poll can legitimately
+        // catch the file mid-write; the next poll a few seconds later normally
+        // sees the finished JSON. A permanently corrupt file is caught by the
+        // frontend's own poll cutoff instead of being declared a failure here.
         let value: serde_json::Value = serde_json::from_str(text.trim()).ok()?;
         let ok = value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
         let error = value.get("error").and_then(|v| v.as_str()).map(|s| s.to_string());
@@ -13530,10 +13600,13 @@ mod voice {
         }
         DONE.with(|d| {
             if !d.get() {
-                unsafe {
-                    let _ = RoInitialize(RO_INIT_MULTITHREADED);
+                // Only remember success. A genuine failure here (rare -- e.g. out of
+                // memory) must not be recorded as done, or a later call on this same
+                // thread would never retry COM init again and every WinRT call after
+                // it would keep failing for a reason nothing here ever surfaces.
+                if unsafe { RoInitialize(RO_INIT_MULTITHREADED) }.is_ok() {
+                    d.set(true);
                 }
-                d.set(true);
             }
         });
     }
@@ -13671,7 +13744,18 @@ mod voice {
     // voice_start, so the OS mic-access prompt never appears before that).
     pub(super) fn support() -> VoiceSupport {
         ensure_com();
-        let langs = languages().unwrap_or_default();
+        let langs = match languages() {
+            Ok(v) => v,
+            Err(e) => {
+                // A real WinRT/registry failure, not just "no language pack
+                // installed" -- both collapse to the same supported=false below
+                // (voice genuinely cannot work either way from here), but only
+                // this one is a bug worth a trace instead of an ordinary, expected
+                // state that needs none.
+                super::append_crash_log(&format!("voice_support: language enumeration failed: {e}"));
+                Vec::new()
+            }
+        };
         let supported = !langs.is_empty() && SpeechRecognizer::new().is_ok();
         VoiceSupport { supported, engine: "winrt", langs, needs_online: !online_speech_accepted() }
     }
@@ -13749,64 +13833,81 @@ mod voice {
         if interim {
             let app2 = app.clone();
             let last2 = last_activity.clone();
-            let _ = recognizer.HypothesisGenerated(&TypedEventHandler::new(
-                move |_sender: &Option<SpeechRecognizer>, args: &Option<SpeechRecognitionHypothesisGeneratedEventArgs>| {
+            // An error here means partial-result delivery never gets wired up --
+            // recording would silently start anyway with nothing ever reaching the
+            // window, so this must fail the session up front like every other WinRT
+            // setup call in this function, not be swallowed.
+            recognizer
+                .HypothesisGenerated(&TypedEventHandler::new(
+                    move |_sender: &Option<SpeechRecognizer>, args: &Option<SpeechRecognitionHypothesisGeneratedEventArgs>| {
+                        if let Some(args) = args {
+                            if let Ok(h) = args.Hypothesis() {
+                                if let Ok(text) = h.Text() {
+                                    *last2.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+                                    let _ = app2.emit("voice-partial", VoiceTextEvent { id, text: text.to_string() });
+                                }
+                            }
+                        }
+                        Ok(())
+                    },
+                ))
+                .map_err(|e| error_key(&e))?;
+        }
+
+        let app_r = app.clone();
+        let last_r = last_activity.clone();
+        // Same reasoning as HypothesisGenerated above: a session that starts anyway
+        // with this unregistered would record indefinitely and never deliver a
+        // single word of text.
+        session
+            .ResultGenerated(&TypedEventHandler::new(
+                move |_sender: &Option<SpeechContinuousRecognitionSession>, args: &Option<SpeechContinuousRecognitionResultGeneratedEventArgs>| {
+                    *last_r.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
                     if let Some(args) = args {
-                        if let Ok(h) = args.Hypothesis() {
-                            if let Ok(text) = h.Text() {
-                                *last2.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
-                                let _ = app2.emit("voice-partial", VoiceTextEvent { id, text: text.to_string() });
+                        if let Ok(result) = args.Result() {
+                            if let Ok(text) = result.Text() {
+                                let text = text.to_string();
+                                // Nothing recognized in this segment -> nothing to insert,
+                                // same "empty is not an error" rule as OCR's recognize().
+                                if !text.is_empty() {
+                                    let _ = app_r.emit("voice-text", VoiceTextEvent { id, text });
+                                }
                             }
                         }
                     }
                     Ok(())
                 },
-            ));
-        }
-
-        let app_r = app.clone();
-        let last_r = last_activity.clone();
-        let _ = session.ResultGenerated(&TypedEventHandler::new(
-            move |_sender: &Option<SpeechContinuousRecognitionSession>, args: &Option<SpeechContinuousRecognitionResultGeneratedEventArgs>| {
-                *last_r.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
-                if let Some(args) = args {
-                    if let Ok(result) = args.Result() {
-                        if let Ok(text) = result.Text() {
-                            let text = text.to_string();
-                            // Nothing recognized in this segment -> nothing to insert,
-                            // same "empty is not an error" rule as OCR's recognize().
-                            if !text.is_empty() {
-                                let _ = app_r.emit("voice-text", VoiceTextEvent { id, text });
-                            }
-                        }
-                    }
-                }
-                Ok(())
-            },
-        ));
+            ))
+            .map_err(|e| error_key(&e))?;
 
         let app_c = app.clone();
         let ended_c = ended.clone();
         let reason_c = requested_reason.clone();
-        let _ = session.Completed(&TypedEventHandler::new(
-            move |_sender: &Option<SpeechContinuousRecognitionSession>, args: &Option<SpeechContinuousRecognitionCompletedEventArgs>| {
-                // Fires exactly once per session; the swap makes a second call (should
-                // never happen, but WinRT event delivery guarantees are not a Rust
-                // guarantee) a no-op instead of a duplicated event.
-                if ended_c.swap(true, Ordering::SeqCst) {
-                    return Ok(());
-                }
-                // status.0 is out of range for the stop_reason table's two named
-                // cases (0/7) only on genuine failure -- map that to -1, which the
-                // table already resolves to "error".
-                let status = args.as_ref().and_then(|a| a.Status().ok()).map(|s| s.0).unwrap_or(-1);
-                let requested = reason_c.lock().unwrap_or_else(|e| e.into_inner()).take();
-                let reason = stop_reason(status, requested);
-                let _ = app_c.emit("voice-stopped", VoiceStoppedEvent { id, reason: reason.to_string() });
-                super::set_tray_recording(&app_c, false);
-                Ok(())
-            },
-        ));
+        // The most important of the three registrations to catch: if this one alone
+        // fails to register, a session that otherwise starts fine will run to
+        // completion (or be stopped) and never tell the window it did -- "recording"
+        // stays true, the microphone icon never clears, forever.
+        session
+            .Completed(&TypedEventHandler::new(
+                move |_sender: &Option<SpeechContinuousRecognitionSession>, args: &Option<SpeechContinuousRecognitionCompletedEventArgs>| {
+                    // Fires exactly once per session; the swap makes a second call (should
+                    // never happen, but WinRT event delivery guarantees are not a Rust
+                    // guarantee) a no-op instead of a duplicated event.
+                    if ended_c.swap(true, Ordering::SeqCst) {
+                        return Ok(());
+                    }
+                    // status.0 is out of range for the stop_reason table's two named
+                    // cases (0/7) only on genuine failure -- map that to -1, which the
+                    // table already resolves to "error".
+                    let status = args.as_ref().and_then(|a| a.Status().ok()).map(|s| s.0).unwrap_or(-1);
+                    let requested = reason_c.lock().unwrap_or_else(|e| e.into_inner()).take();
+                    let reason = stop_reason(status, requested);
+                    let _ = app_c.emit("voice-stopped", VoiceStoppedEvent { id, reason: reason.to_string() });
+                    super::set_tray_recording(&app_c, false);
+                    Ok(())
+                },
+            ))
+            .map_err(|e| error_key(&e))?;
 
         session.StartAsync().and_then(|a| a.get()).map_err(|e| error_key(&e))?;
 
@@ -13815,7 +13916,19 @@ mod voice {
         // `ended`, same as a stop requested from outside.
         let self_stop = |reason: &'static str| {
             *requested_reason.lock().unwrap_or_else(|e| e.into_inner()) = Some(reason);
-            let _ = session.StopAsync();
+            if session.StopAsync().is_err() {
+                // Windows refused the stop request ITSELF (not merely "already
+                // stopped" -- a session that ended on its own already set `ended`
+                // via Completed, which this check catches). Completed will almost
+                // certainly never fire now, so waiting the usual timeout would only
+                // delay reporting a stop that never really happened -- the mic stays
+                // open the whole time. Report the truth immediately instead of the
+                // caller's intended (and now false) reason.
+                if !ended.swap(true, Ordering::SeqCst) {
+                    let _ = app.emit("voice-stopped", VoiceStoppedEvent { id, reason: "error".to_string() });
+                }
+                return;
+            }
             // Normally Completed fires within a beat and flips `ended` itself.
             // If it never does (a stuck driver, WinRT not delivering the
             // event), do not hold this thread -- and the microphone -- open
@@ -15316,6 +15429,7 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
     if want_settings {
         let local_backup_pw = store.settings.ui_texts.get(BACKUP_PW_KEY).cloned();
         store.settings = backup.settings;
+        SETTINGS_LOCKED.store(false, Ordering::Relaxed); // a full settings import supersedes any corrupt-row lock
         // migrate() fills defaults and guarantees at least one view — without it a
         // hand-edited backup with "views": [] makes active_view_mut index [0] panic
         // on the next mutation (and poisons the Db mutex).
@@ -15737,89 +15851,59 @@ fn install_webview2_runtime() -> bool {
         .unwrap_or(false)
 }
 
-// ---- One timer thread for every periodic background job ----
+// ---- One dedicated thread per periodic background job ----
 //
-// Each recurring chore used to own a thread that spent its entire life inside
-// `sleep(interval)`: a stack per chore, an independent wake-up per chore, and no
-// way to end any of them other than letting the process die on top of them.
-// They share one thread now. It keeps its jobs sorted by due time, sleeps exactly
-// until the earliest one, and is woken early through its channel whenever a job is
-// added, re-timed, removed, or the app is shutting down.
+// Each recurring chore (settings flush, auto-backup, update check, a
+// language-pack watcher, ...) gets its own thread that spends its idle time
+// inside `recv_timeout` on a private control channel — woken early only by its
+// own re-time/stop message, never by another job's. A chore that hangs (a
+// stuck PowerShell capability query, a slow disk) therefore blocks only itself;
+// every other chore keeps firing on its own schedule regardless.
 //
 // Only genuinely periodic work belongs here — the `loop { sleep(fixed); work(); }`
 // shape, with nothing else feeding it. Event-driven threads stay where they are:
 // the clipboard watcher runs a Win32 message pump and has to own its thread, and
 // the tray rebuild is a one-shot debounce that fires per burst, not on a cadence.
 //
-// Registering is a `register_periodic(name, first_delay, interval, job)` call from
-// anywhere; the first one starts the thread. A job that reads its own interval out
-// of the settings calls `retime(name, interval)` at the end of each run, so a
-// changed setting takes effect from the next wait onward.
+// Registering is a `register_periodic(name, first_delay, interval, job)` call
+// from anywhere; it spawns the job's thread. A job that reads its own interval
+// out of the settings calls `retime(name, interval)` at the end of each run, so
+// a changed setting takes effect from the next wait onward — the new interval
+// still counts from the job's last run, exactly as before this was split across
+// threads.
 mod scheduler {
+    use std::collections::HashMap;
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender, TryRecvError};
+    use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
     use std::sync::{Arc, Mutex, OnceLock};
     use std::time::{Duration, Instant};
 
     type Job = Box<dyn Fn() + Send + 'static>;
 
-    // Nothing due: park on the channel instead of spinning. Any message still
-    // wakes the thread instantly, so the length only bounds a pointless wake-up.
-    const IDLE_WAIT: Duration = Duration::from_secs(3600);
-    // A zero interval would turn the loop into a busy-wait.
+    // A zero interval would turn a job's loop into a busy-wait.
     const MIN_INTERVAL: Duration = Duration::from_millis(1);
 
-    enum Msg {
-        Add {
-            name: String,
-            first_delay: Duration,
-            interval: Duration,
-            job: Job,
-        },
-        Retime {
-            name: String,
-            interval: Duration,
-        },
-        Remove(String),
+    enum JobMsg {
+        Retime(Duration),
         Stop,
     }
 
-    struct Entry {
-        name: String,
-        interval: Duration,
-        last_run: Instant,
-        due: Instant,
-        seq: u64,
-        job: Job,
+    struct JobHandle {
+        tx: Sender<JobMsg>,
+        stopped: Arc<AtomicBool>,
     }
 
     pub struct Scheduler {
-        // A Mutex rather than a bare Sender so the type is Sync on every
-        // supported toolchain — it is never held across the job itself.
-        tx: Mutex<Sender<Msg>>,
-        stopped: Arc<AtomicBool>,
+        jobs: Mutex<HashMap<String, JobHandle>>,
     }
 
     impl Scheduler {
         pub fn start() -> Scheduler {
-            let (tx, rx) = channel();
-            let stopped = Arc::new(AtomicBool::new(false));
-            let flag = stopped.clone();
-            let spawned = std::thread::Builder::new()
-                .name("periodic-jobs".into())
-                .spawn(move || run_loop(rx, flag));
-            if spawned.is_err() {
-                // No thread means nothing to wait for at shutdown.
-                stopped.store(true, Ordering::Release);
-            }
-            Scheduler { tx: Mutex::new(tx), stopped }
+            Scheduler { jobs: Mutex::new(HashMap::new()) }
         }
 
-        fn send(&self, msg: Msg) {
-            let _ = self.tx.lock().unwrap_or_else(|e| e.into_inner()).send(msg);
-        }
-
-        // Registering a name twice replaces the earlier job rather than doubling it.
+        // Registering a name twice stops the earlier job's thread and replaces
+        // it rather than running two copies of it.
         pub fn register_periodic(
             &self,
             name: &str,
@@ -15827,111 +15911,90 @@ mod scheduler {
             interval: Duration,
             job: impl Fn() + Send + 'static,
         ) {
-            self.send(Msg::Add {
-                name: name.to_string(),
-                first_delay,
-                interval,
-                job: Box::new(job),
-            });
+            let interval = interval.max(MIN_INTERVAL);
+            let (tx, rx) = channel();
+            let stopped = Arc::new(AtomicBool::new(false));
+            let flag = stopped.clone();
+            let spawned = std::thread::Builder::new()
+                .name(format!("job-{name}"))
+                .spawn(move || job_loop(rx, first_delay, interval, Box::new(job), flag));
+            if spawned.is_err() {
+                // No thread means nothing to wait for at shutdown.
+                stopped.store(true, Ordering::Release);
+                return;
+            }
+            let mut jobs = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(old) = jobs.insert(name.to_string(), JobHandle { tx, stopped }) {
+                let _ = old.tx.send(JobMsg::Stop);
+            }
         }
 
         // The new interval counts from the job's last run, so a shortened one can
         // make it due immediately instead of serving out the old wait first.
         pub fn retime(&self, name: &str, interval: Duration) {
-            self.send(Msg::Retime { name: name.to_string(), interval });
+            let interval = interval.max(MIN_INTERVAL);
+            let jobs = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(h) = jobs.get(name) {
+                let _ = h.tx.send(JobMsg::Retime(interval));
+            }
         }
 
         #[allow(dead_code)]
         pub fn remove(&self, name: &str) {
-            self.send(Msg::Remove(name.to_string()));
+            let mut jobs = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(h) = jobs.remove(name) {
+                let _ = h.tx.send(JobMsg::Stop);
+            }
         }
 
-        // Wakes the thread out of its wait and waits a bounded time for it to
-        // finish. False means a job was still running when the deadline passed;
-        // the caller carries on rather than holding the app open for it.
+        // Wakes every job thread out of its wait and waits a bounded time for
+        // all of them to finish. False means at least one job was still running
+        // when the deadline passed; the caller carries on rather than holding
+        // the app open for it.
         pub fn shutdown(&self, wait: Duration) -> bool {
-            self.send(Msg::Stop);
+            let jobs = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
+            for h in jobs.values() {
+                let _ = h.tx.send(JobMsg::Stop);
+            }
             let deadline = Instant::now() + wait;
-            while !self.stopped.load(Ordering::Acquire) {
+            loop {
+                if jobs.values().all(|h| h.stopped.load(Ordering::Acquire)) {
+                    return true;
+                }
                 if Instant::now() >= deadline {
                     return false;
                 }
                 std::thread::sleep(Duration::from_millis(2));
             }
-            true
         }
     }
 
-    fn sort_jobs(jobs: &mut [Entry]) {
-        // The sequence number keeps two jobs due at the same instant in
-        // registration order, so firing order is never left to chance.
-        jobs.sort_by_key(|e| (e.due, e.seq));
-    }
-
-    fn apply(msg: Msg, jobs: &mut Vec<Entry>, seq: &mut u64) {
-        match msg {
-            Msg::Add { name, first_delay, interval, job } => {
-                jobs.retain(|e| e.name != name);
-                let now = Instant::now();
-                *seq += 1;
-                jobs.push(Entry {
-                    name,
-                    interval: interval.max(MIN_INTERVAL),
-                    last_run: now,
-                    due: now + first_delay,
-                    seq: *seq,
-                    job,
-                });
-            }
-            Msg::Retime { name, interval } => {
-                let interval = interval.max(MIN_INTERVAL);
-                if let Some(e) = jobs.iter_mut().find(|e| e.name == name) {
-                    e.interval = interval;
-                    e.due = e.last_run + interval;
+    // One job's entire life: wait until due (or a re-time/stop arrives early),
+    // run it, wait again. Nothing here ever touches another job's state.
+    fn job_loop(
+        rx: Receiver<JobMsg>,
+        first_delay: Duration,
+        mut interval: Duration,
+        job: Job,
+        stopped: Arc<AtomicBool>,
+    ) {
+        let mut last_run = Instant::now();
+        let mut due = last_run + first_delay;
+        loop {
+            let wait = due.saturating_duration_since(Instant::now());
+            match rx.recv_timeout(wait) {
+                Ok(JobMsg::Stop) | Err(RecvTimeoutError::Disconnected) => break,
+                Ok(JobMsg::Retime(new_interval)) => {
+                    interval = new_interval;
+                    due = last_run + interval;
+                    continue;
                 }
+                Err(RecvTimeoutError::Timeout) => {}
             }
-            Msg::Remove(name) => jobs.retain(|e| e.name != name),
-            Msg::Stop => {}
-        }
-        sort_jobs(jobs);
-    }
-
-    fn run_loop(rx: Receiver<Msg>, stopped: Arc<AtomicBool>) {
-        let mut jobs: Vec<Entry> = Vec::new();
-        let mut seq = 0u64;
-        'outer: loop {
-            // Everything already queued is applied before the wait is computed, so
-            // a stop request never sits behind an overdue job.
-            loop {
-                match rx.try_recv() {
-                    Ok(Msg::Stop) | Err(TryRecvError::Disconnected) => break 'outer,
-                    Ok(msg) => apply(msg, &mut jobs, &mut seq),
-                    Err(TryRecvError::Empty) => break,
-                }
-            }
-            let wait = jobs
-                .first()
-                .map_or(IDLE_WAIT, |e| e.due.saturating_duration_since(Instant::now()));
-            if wait > Duration::ZERO {
-                match rx.recv_timeout(wait) {
-                    Ok(Msg::Stop) | Err(RecvTimeoutError::Disconnected) => break 'outer,
-                    Ok(msg) => {
-                        apply(msg, &mut jobs, &mut seq);
-                        continue;
-                    }
-                    Err(RecvTimeoutError::Timeout) => {}
-                }
-            }
-            // Exactly one job per round — the earliest due one. A job that re-times
-            // itself or another therefore always sees a fully ordered list again
-            // before anything else runs.
-            if jobs.first().is_some_and(|e| e.due <= Instant::now()) {
-                (jobs[0].job)();
-                let now = Instant::now();
-                let e = &mut jobs[0];
-                e.last_run = now;
-                e.due = now + e.interval;
-                sort_jobs(&mut jobs);
+            if due <= Instant::now() {
+                job();
+                last_run = Instant::now();
+                due = last_run + interval;
             }
         }
         stopped.store(true, Ordering::Release);
@@ -16544,6 +16607,7 @@ pub fn run() {
             pick_folder,
             current_data_dir,
             store_sealed,
+            settings_locked,
             set_data_dir,
             delete_data_dir,
             paste_into_previous,
@@ -19641,6 +19705,63 @@ mod tests {
         );
     }
 
+    // A genuinely fresh install (no settings row at all yet) must never be flagged
+    // as unreadable -- only a row that IS there but cannot be read back correctly.
+    #[test]
+    fn db_load_does_not_flag_a_settings_row_that_was_never_written() {
+        let conn = row_test_db();
+        conn.execute_batch("CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);").unwrap();
+        let (_prompts, settings, _plain, _fails, settings_unreadable) = db_load(&conn, &mut WrittenRows::new());
+        assert!(settings.is_none(), "no row means no settings to return");
+        assert!(!settings_unreadable, "no row means first run, not corruption");
+    }
+
+    // A settings row that IS present but will not decrypt/parse must be flagged --
+    // this is the case that has to lock writes so a rewrite can never overwrite the
+    // real (corrupt but present) row with Settings::default().
+    #[test]
+    fn db_load_flags_a_settings_row_that_will_not_parse() {
+        let conn = row_test_db();
+        conn.execute_batch(
+            "CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+             INSERT INTO meta VALUES('settings', 'not valid json and not an enc: blob either');",
+        )
+        .unwrap();
+        let (_prompts, settings, _plain, _fails, settings_unreadable) = db_load(&conn, &mut WrittenRows::new());
+        assert!(settings.is_none(), "an unparsable row must not be handed back as real settings");
+        assert!(settings_unreadable, "a present-but-corrupt row must be flagged");
+    }
+
+    // A properly sealed, well-formed row must never be flagged, whatever its content.
+    #[test]
+    fn db_load_does_not_flag_a_readable_settings_row() {
+        let conn = row_test_db();
+        conn.execute_batch("CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);").unwrap();
+        let s = Settings { theme: "ocean".into(), ..Default::default() };
+        conn.execute(
+            "INSERT INTO meta(key, value) VALUES('settings', ?1)",
+            params![enc_str(&serde_json::to_string(&s).unwrap())],
+        )
+        .unwrap();
+        let (_prompts, settings, _plain, _fails, settings_unreadable) = db_load(&conn, &mut WrittenRows::new());
+        assert_eq!(settings.map(|s| s.theme), Some("ocean".to_string()));
+        assert!(!settings_unreadable, "a readable row must not be flagged");
+    }
+
+    // The command the window polls at startup must report exactly what the flag
+    // holds -- this is the read side of the same lock write_settings_now checks
+    // before ever touching disk (untestable here directly: it needs a real
+    // AppHandle, which no unit test in this file constructs).
+    #[test]
+    fn settings_locked_command_reports_the_flag() {
+        let before = SETTINGS_LOCKED.load(Ordering::Relaxed);
+        SETTINGS_LOCKED.store(true, Ordering::Relaxed);
+        assert!(settings_locked());
+        SETTINGS_LOCKED.store(false, Ordering::Relaxed);
+        assert!(!settings_locked());
+        SETTINGS_LOCKED.store(before, Ordering::Relaxed);
+    }
+
     #[test]
     fn changing_one_prompt_rewrites_exactly_one_row() {
         let mut conn = row_test_db();
@@ -19955,7 +20076,7 @@ mod tests {
         std::fs::copy(src.join("data.db"), dst.join("data.db")).unwrap();
         let mut conn = Connection::open(dst.join("data.db")).unwrap();
         let mut written = WrittenRows::new();
-        let (reloaded, _settings, _mig, fails) = db_load(&conn, &mut written);
+        let (reloaded, _settings, _mig, fails, _settings_unreadable) = db_load(&conn, &mut written);
         assert_eq!(fails, 0, "the adopted rows must be readable");
         db_write_prompts(&mut conn, &reloaded, &mut written).unwrap();
         assert_eq!(
@@ -22834,15 +22955,17 @@ mod tests {
         }
     }
 
-    // The whole point of the shared thread: four idle chores used to mean four
-    // parked threads. Both shapes are built here and counted for real.
+    // Each registered job gets its own dedicated thread on purpose (a hung job
+    // must not block any other job's timer) — so four chores now cost exactly
+    // four threads, same as four hand-rolled `loop { sleep(); work(); }` threads
+    // would. This proves the Scheduler is not secretly sharing one thread again.
     //
     // The census sees every thread in the process, the test harness's own
     // included, so each attempt brackets its measurement with a baseline reading
     // and only accepts a round where the baseline did not move underneath it.
     #[cfg(windows)]
     #[test]
-    fn four_idle_chores_cost_one_thread_instead_of_four() {
+    fn four_chores_cost_four_dedicated_threads() {
         use thread_census::live_threads;
         const CHORES: usize = 4;
 
@@ -22850,49 +22973,26 @@ mod tests {
         for _ in 0..40 {
             let before = live_threads();
 
-            // The old shape: one thread per chore, each parked in a sleep.
-            let stop = Arc::new(AtomicBool::new(false));
-            let parked: Vec<_> = (0..CHORES)
-                .map(|_| {
-                    let stop = stop.clone();
-                    std::thread::spawn(move || {
-                        while !stop.load(Ordering::SeqCst) {
-                            std::thread::sleep(Duration::from_millis(2));
-                        }
-                    })
-                })
-                .collect();
-            wait_until(|| live_threads() >= before + CHORES, Duration::from_secs(5));
-            let one_each = live_threads();
-            stop.store(true, Ordering::SeqCst);
-            for h in parked {
-                let _ = h.join();
-            }
-            wait_until(|| live_threads() <= before, Duration::from_secs(5));
-
-            // The new shape: the same four chores on one shared timer thread.
-            let mid = live_threads();
             let s = Scheduler::start();
             for name in ["one", "two", "three", "four"] {
                 s.register_periodic(name, NEVER_AGAIN, NEVER_AGAIN, || {});
             }
-            wait_until(|| live_threads() > mid, Duration::from_secs(5));
-            let shared = live_threads();
+            wait_until(|| live_threads() >= before + CHORES, Duration::from_secs(5));
+            let with_jobs = live_threads();
             s.shutdown(Duration::from_millis(500));
-            wait_until(|| live_threads() <= mid, Duration::from_secs(5));
+            wait_until(|| live_threads() <= before, Duration::from_secs(5));
             let after = live_threads();
 
-            if before == mid && mid == after {
-                measured = Some((before, one_each, shared));
+            if before == after {
+                measured = Some((before, with_jobs));
                 break;
             }
         }
 
-        let (idle, one_each, shared) =
+        let (idle, with_jobs) =
             measured.expect("the process never stayed quiet long enough to count its threads");
-        println!("idle threads: {idle} baseline, {one_each} with a thread per chore, {shared} with the shared timer thread");
-        assert_eq!(one_each - idle, CHORES, "the old shape should cost one thread per chore");
-        assert_eq!(shared - idle, 1, "the shared timer thread should cost exactly one, whatever it holds");
+        println!("idle threads: {idle} baseline, {with_jobs} with four registered chores");
+        assert_eq!(with_jobs - idle, CHORES, "each chore should own its own thread");
     }
 
     #[test]

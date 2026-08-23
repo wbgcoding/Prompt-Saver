@@ -300,6 +300,14 @@ now, not a tip. Repair the Windows profile (or sign in on a healthy account) and
 the next save that succeeds seals everything again by itself; nothing needs to be
 re-entered.
 
+Separately, if the saved settings themselves turn out to be unreadable or
+corrupted on disk (extremely rare), the app shows defaults instead of guessing
+and refuses to save any settings change until this is resolved — the original,
+possibly-recoverable data is never overwritten. A backup of the raw database is
+made automatically, and a permanent warning row (also with no off switch)
+appears in this same privacy group for as long as it is true. A factory reset
+or restoring a backup's settings both clear it.
+
 ### System
 
 Update checks (never installs without asking), keyboard navigation, allowing
@@ -530,6 +538,16 @@ Diese Zeile hat bewusst keinen Schalter — sie beschreibt, was gerade auf der
 Festplatte liegt. Ist das Windows-Profil repariert, verschlüsselt der nächste
 erfolgreiche Speichervorgang wieder alles von selbst; nichts muss neu erfasst
 werden.
+
+Getrennt davon: Sollten die gespeicherten Einstellungen selbst auf der
+Festplatte unlesbar oder beschädigt sein (sehr selten), zeigt die App
+Standardwerte an, statt zu raten, und verweigert jede Einstellungsänderung, bis
+das behoben ist — die ursprünglichen, möglicherweise noch rettbaren Daten
+werden nie überschrieben. Es wird automatisch eine Sicherung der rohen
+Datenbank angelegt, und eine dauerhafte Warnzeile (ebenfalls ohne Schalter)
+erscheint in derselben Datenschutz-Gruppe, solange es zutrifft. Ein Werksreset
+oder das Wiederherstellen der Einstellungen aus einem Backup löschen sie
+beide.
 
 **System** — Updates, Tastatur-Navigation, mehrere Instanzen, Datenordner.
 
