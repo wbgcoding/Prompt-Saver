@@ -23,6 +23,19 @@ export const HELP_CONTENT = {
     },
     {
       section: "basics",
+      title: "Introduction tour",
+      whatItIs: "A five-step walkthrough of the basics, shown once automatically right after the example tiles are created.",
+      howTo: [
+        "First launch — opens on its own, right after the example prompts are seeded.",
+        "Later — reopen it from the settings dialog, or the expert menu's \"Reopen introduction\" action.",
+        "←/→ or the dots move between steps, Enter continues, Escape or \"Skip\" leaves any time — both ask to confirm first.",
+      ],
+      whatHappens:
+        "The last step offers to switch on the screenshot editor, colour picker, or text recognition right there, showing each one's shipped default; nothing is written until the tour is actually finished, and only the switches actually changed. A first-launch data-folder or WebView2 prompt always takes priority — the tour just waits for its turn.",
+      settings: ["Open automatically on first launch — Expert menu → System & data → Help"],
+    },
+    {
+      section: "basics",
       title: "Creating tiles",
       whatItIs: "Beyond plain text, a tile can carry an attached file, a screenshot, or a picked screen colour.",
       howTo: [
@@ -402,6 +415,32 @@ export const HELP_CONTENT = {
     },
     {
       section: "basics",
+      title: "Screenshot editor",
+      whatItIs: "Opens right after a capture, before the shot is saved — crop, mark up, and annotate it before it becomes a tile.",
+      howTo: [
+        "Take a screenshot; the editor opens automatically over the capture.",
+        "Pick a tool from the toolbar: crop, pen, marker, line, arrow, rectangle, ellipse, text, step number, pixelate, or spotlight.",
+        "Undo/redo steps back through edits; save when done.",
+      ],
+      whatHappens:
+        "Every edit is one step in an undo/redo list capped by its own setting; pixelate always samples the original screenshot, never an already-edited layer, so blurring a spot never smears earlier marks. Snap-to-edges lines shapes up with the image border and with each other; a text label can get its own background plate for readability over busy backgrounds. Switching the editor off (below) skips straight to the confirmation dialog instead.",
+      settings: ["Screenshot editor, default tool, snap-to-edges, text-label background, pen/marker/text size, pixelate block size, spotlight dimming, undo limit — Expert menu → Features → Create prompts"],
+    },
+    {
+      section: "basics",
+      title: "Text recognition (OCR)",
+      whatItIs: "Pulls text out of a screenshot or an image file using Windows' own on-device recognizer — fully offline, nothing leaves the machine.",
+      howTo: [
+        "From the composer — the OCR button offers a screenshot or an existing image file.",
+        "From a screenshot already taken — the snip dialog's \"Recognize text\" button.",
+        "Review the result, then copy it or insert it directly.",
+      ],
+      whatHappens:
+        "Recognition runs entirely on the device through Windows' own engine. The result dialog can auto-copy the text and join broken lines back into paragraphs, both switchable. A missing language pack opens the same dialog voice dictation uses — see \"Language packs\" below.",
+      settings: ["Text recognition, auto-copy the result, join lines, upscale small images, recognition language — Expert menu → Features → Create prompts"],
+    },
+    {
+      section: "basics",
       title: "Voice dictation",
       whatItIs: "The microphone button turns speech into text, recognised entirely on-device.",
       howTo: [
@@ -412,6 +451,19 @@ export const HELP_CONTENT = {
       whatHappens:
         "Recognition runs locally through Windows' own speech engine — nothing leaves the machine unless online recognition is explicitly allowed. Spoken punctuation words (\"comma\", \"new line\", …) turn into real punctuation; say \"literal\" before a word to type it instead of triggering it as a command. A missing language pack opens the language dialog directly, shared with text recognition (OCR). An optional global hotkey starts and stops a session without opening the window at all, delivering the text to the clipboard, pasted, or straight into the composer; the tray icon's tooltip shows \"recording\" for as long as it runs.",
       settings: ["Voice dictation, punctuation commands, auto-capitalise, silence auto-stop, insert position, global hotkey — Expert menu → Features → Create prompts"],
+    },
+    {
+      section: "basics",
+      title: "Language packs",
+      whatItIs: "Text recognition and voice dictation share Windows' own language packs and the same install dialog.",
+      howTo: [
+        "Pick a language from the recognition-language dropdown; a missing pack opens the install dialog automatically.",
+        "Installing a pack needs administrator rights — Windows asks for them once, through its own confirmation prompt.",
+        "\"Manage languages…\" at the bottom of the language dropdown reopens the same dialog any time.",
+      ],
+      whatHappens:
+        "On some Windows builds even listing what is installed needs administrator rights; if so, a button re-runs that check through the same elevation prompt. A background watcher notices when an installed pack's version changed or a Windows update silently removed it, and flags it without asking to reinstall right away — dismiss it for a while with \"remind me later\", or turn the watcher off entirely.",
+      settings: ["Auto-pick the recognition language, background watcher for missing/changed packs — Expert menu → Features → Create prompts (one pair under Text recognition, one under Voice dictation)"],
     },
     {
       section: "basics",
@@ -519,6 +571,19 @@ export const HELP_CONTENT = {
       whatHappens:
         "Drei Beispielkacheln — eine E-Mail mit Platzhaltern, ein Bild und eine Markdown-Vorlage — sind beim ersten Start bereits da; ein Button über dem Raster entfernt sie mit einem Klick, sobald sie nicht mehr gebraucht werden.",
       settings: [],
+    },
+    {
+      section: "basics",
+      title: "Einführung",
+      whatItIs: "Eine Einführung in fünf Schritten, die direkt nach dem Erstellen der Beispiel-Kacheln einmal automatisch angezeigt wird.",
+      howTo: [
+        "Beim ersten Start — öffnet sich direkt nach dem Anlegen der Beispiel-Prompts automatisch.",
+        "Später — über den Einstellungsdialog oder die Aktion „Einführung erneut öffnen“ im Experten-Menü erneut öffnen.",
+        "←/→ oder die Punkte wechseln zwischen den Schritten, Enter fährt fort, Escape oder „Überspringen“ beendet die Einführung jederzeit — beides erst nach Bestätigung.",
+      ],
+      whatHappens:
+        "Im letzten Schritt lassen sich der Screenshot-Editor, die Farbauswahl oder die Texterkennung direkt aktivieren; dabei wird jeweils die ausgelieferte Standardeinstellung angezeigt. Gespeichert wird erst, wenn die Einführung tatsächlich abgeschlossen ist, und nur für Schalter, die wirklich geändert wurden. Ein beim ersten Start erscheinender Hinweis zum Datenordner oder zu WebView2 hat immer Vorrang — die Einführung wartet einfach, bis sie an der Reihe ist.",
+      settings: ["Beim ersten Start automatisch öffnen — Experten-Menü → System & Daten → Hilfe"],
     },
     {
       section: "basics",
@@ -902,6 +967,32 @@ export const HELP_CONTENT = {
     },
     {
       section: "basics",
+      title: "Screenshot-Editor",
+      whatItIs: "Öffnet sich direkt nach einer Aufnahme, bevor der Screenshot gespeichert wird — zum Zuschneiden, Markieren und Beschriften, bevor daraus eine Kachel wird.",
+      howTo: [
+        "Einen Screenshot aufnehmen; der Editor öffnet sich automatisch über der Aufnahme.",
+        "Ein Werkzeug aus der Symbolleiste wählen: Zuschneiden, Stift, Marker, Linie, Pfeil, Rechteck, Ellipse, Text, Schrittnummer, Verpixeln oder Spotlight.",
+        "Mit Rückgängig/Wiederholen schrittweise durch die Bearbeitungen gehen; anschließend speichern.",
+      ],
+      whatHappens:
+        "Jede Bearbeitung ist ein Schritt in einer Rückgängig/Wiederholen-Liste, deren Höchstzahl separat einstellbar ist. Beim Verpixeln wird immer der ursprüngliche Screenshot verwendet, nie eine bereits bearbeitete Ebene; dadurch werden frühere Markierungen beim Unkenntlichmachen einer Stelle nicht verschmiert. Das Einrasten an Kanten richtet Formen am Bildrand und aneinander aus. Textbeschriftungen können für bessere Lesbarkeit auf unruhigem Hintergrund eine eigene Hintergrundfläche erhalten. Ist der Editor unten deaktiviert, erscheint stattdessen direkt der Bestätigungsdialog.",
+      settings: ["Screenshot-Editor, Standardwerkzeug, Einrasten an Kanten, Hintergrund für Textbeschriftungen, Stift-/Marker-/Textgröße, Pixelblockgröße, Spotlight-Abdunklung, Rückgängig-Limit — Experten-Menü → Funktionen → Prompts erstellen"],
+    },
+    {
+      section: "basics",
+      title: "Texterkennung (OCR)",
+      whatItIs: "Liest mit der geräteeigenen Erkennung von Windows Text aus einem Screenshot oder einer Bilddatei — vollständig offline, nichts verlässt das Gerät.",
+      howTo: [
+        "Über die Eingabeleiste — der OCR-Button bietet einen Screenshot oder eine vorhandene Bilddatei an.",
+        "Bei einem bereits aufgenommenen Screenshot — über den Button „Text erkennen“ im Aufnahme-Dialog.",
+        "Das Ergebnis prüfen und anschließend kopieren oder direkt einfügen.",
+      ],
+      whatHappens:
+        "Die Erkennung läuft vollständig auf dem Gerät über die eigene Erkennungs-Engine von Windows. Der Ergebnisdialog kann den Text automatisch kopieren und getrennte Zeilen wieder zu Absätzen verbinden; beides lässt sich separat ein- und ausschalten. Fehlt ein Sprachpaket, öffnet sich derselbe Dialog wie bei der Spracheingabe — siehe „Sprachpakete“ unten.",
+      settings: ["Texterkennung, Ergebnis automatisch kopieren, Zeilen verbinden, kleine Bilder hochskalieren, Erkennungssprache — Experten-Menü → Funktionen → Prompts erstellen"],
+    },
+    {
+      section: "basics",
       title: "Spracheingabe",
       whatItIs: "Der Mikrofon-Button verwandelt Sprache in Text — die Erkennung läuft komplett auf dem Gerät.",
       howTo: [
@@ -912,6 +1003,19 @@ export const HELP_CONTENT = {
       whatHappens:
         "Die Erkennung läuft lokal über die eigene Spracherkennung von Windows — es verlässt nichts das Gerät, außer die Online-Erkennung wird ausdrücklich erlaubt. Gesprochene Satzzeichen-Wörter (\"Komma\", \"neue Zeile\", …) werden zu echten Satzzeichen; \"wörtlich\" vor einem Wort tippt es statt es als Befehl auszulösen. Ein fehlendes Sprachpaket öffnet direkt den Sprachpaket-Dialog, gemeinsam mit der Texterkennung (OCR). Ein optionaler globaler Kurzbefehl startet und stoppt eine Aufnahme, ohne das Fenster zu öffnen — der Text landet in der Zwischenablage, wird eingefügt, oder geht direkt in die Eingabeleiste; das Taskleisten-Symbol zeigt währenddessen \"Nimmt auf …\" im Tooltip.",
       settings: ["Spracheingabe, Satzzeichen-Befehle, automatische Großschreibung, Stille-Auto-Stopp, Einfügeposition, globaler Hotkey — Experten-Menü → Funktionen → Prompts erstellen"],
+    },
+    {
+      section: "basics",
+      title: "Sprachpakete",
+      whatItIs: "Texterkennung und Spracheingabe verwenden dieselben Windows-Sprachpakete und denselben Installationsdialog.",
+      howTo: [
+        "Eine Sprache im Dropdown für die Erkennungssprache auswählen; fehlt das Paket, öffnet sich der Installationsdialog automatisch.",
+        "Zum Installieren eines Pakets sind Administratorrechte erforderlich — Windows fragt einmal über den eigenen Bestätigungsdialog danach.",
+        "„Sprachen verwalten…“ am unteren Rand des Sprach-Dropdowns öffnet denselben Dialog jederzeit erneut.",
+      ],
+      whatHappens:
+        "Bei manchen Windows-Versionen sind selbst zum Auflisten der installierten Pakete Administratorrechte erforderlich. In diesem Fall führt ein Button die Prüfung über dieselbe Administratorabfrage erneut aus. Eine Hintergrundüberwachung erkennt, wenn sich die Version eines installierten Pakets geändert hat oder ein Windows-Update es unbemerkt entfernt hat, und kennzeichnet es, ohne sofort zur Neuinstallation aufzufordern. Mit „Später erinnern“ lässt sich der Hinweis vorübergehend ausblenden; die Überwachung kann auch vollständig deaktiviert werden.",
+      settings: ["Erkennungssprache automatisch wählen, Hintergrundüberwachung für fehlende/geänderte Pakete — Experten-Menü → Funktionen → Prompts erstellen (ein Paar unter Texterkennung, eines unter Spracheingabe)"],
     },
     {
       section: "basics",

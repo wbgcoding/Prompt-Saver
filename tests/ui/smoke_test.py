@@ -360,6 +360,7 @@ PROBE = """
         if (tabs.length < 2) out.errors.push('the help menu shows too few section tabs (' + tabs.length + ')');
         let totalGroups = 0;
         let sawTip = false;
+        const seenTitles = new Set();
         for (let i = 0; i < tabs.length; i++) {
           document.querySelectorAll('#help-tabs-bar .expert-tab')[i].click();
           await sleep(120);
@@ -371,6 +372,14 @@ PROBE = """
           const empties = here.filter(g => !g.querySelector('.help-overview').textContent.trim());
           if (empties.length) out.errors.push(empties.length + ' help category has an empty overview (tab ' + i + ')');
           if (document.querySelector('#help-body .help-tip')) sawTip = true;
+          for (const g of here) {
+            const t = g.querySelector('.help-group-title-text');
+            if (t) seenTitles.add(t.textContent.trim());
+          }
+        }
+        // 186: the four new help sections actually render, each on its own tab pass.
+        for (const title of ['Introduction tour', 'Screenshot editor', 'Text recognition (OCR)', 'Language packs']) {
+          if (!seenTitles.has(title)) out.errors.push('186: help category "' + title + '" never rendered');
         }
         if (totalGroups < 15) {
           out.errors.push('the help menu shows too few categories across all tabs (' + totalGroups + ')');
