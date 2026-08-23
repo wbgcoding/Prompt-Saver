@@ -53,21 +53,20 @@ check("zh command matches without spaces", zh("你好句号世界"), "你好.世
 check("zh literal escape word", zh("说字面量句号完"), "说句号完");
 check("zh trailing literal word is not swallowed", zh("说完字面量"), "说完字面量");
 
-// "point" is a deliberate English synonym for "period" (documented in
-// WORK.md) -- ordinary sentences that happen to contain the word "point" as
-// plain English are a known, accepted trade-off of the feature (the same one
-// every spoken-punctuation dictation tool has), not a bug; the literal escape
-// word is the documented way around it. Asserted here so a future change to
+// "point" used to be a synonym for "period", but it is also completely
+// ordinary English ("the point is ...") and got silently swallowed into a
+// full stop mid-sentence -- removed per Ben's decision. "period" stays, it is
+// unambiguous in a dictation context. Asserted here so a future change to
 // this trade-off is a deliberate edit to this test, not a silent regression.
-check("english 'point' is a punctuation command, not just a word", applyVoiceCommands("the point is clear", { punct: true, autoCaps: false, lang: "en" }), "the. is clear");
+check("english 'point' is plain text, not a punctuation command", applyVoiceCommands("the point is clear", { punct: true, autoCaps: false, lang: "en" }), "the point is clear");
+check("english 'period' still is a punctuation command", applyVoiceCommands("the end period", { punct: true, autoCaps: false, lang: "en" }), "the end.");
 
 // Per-language command-key parity: every language must define the same
 // concepts (punctuation + function words + the literal escape word) as DE --
 // same parity discipline as tests/i18n_check.js, just for this file's own
 // recognition tables instead of ui/i18n.js.
-// Compared by VALUE set, not key count -- a language may use a synonym or
-// two (English has both "period" and "point"), it just has to cover every
-// mark/function DE covers.
+// Compared by VALUE set, not key count -- a language may use more than one
+// word for the same mark, it just has to cover every mark/function DE covers.
 const LANGS = ["en", "de", "es", "it", "pt", "pl", "zh", "ja", "nl", "tr", "ro"];
 const dePunctValues = new Set(Object.values(VOICE_PUNCT.de));
 const deFuncValues = new Set(Object.values(VOICE_FUNCS.de));

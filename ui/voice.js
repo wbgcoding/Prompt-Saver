@@ -9,7 +9,7 @@
 // makes it directly testable from Node without affecting the window build.
 
 const VOICE_PUNCT = {
-  en: { "period": ".", "point": ".", "comma": ",", "question mark": "?", "exclamation mark": "!", "exclamation point": "!", "colon": ":", "semicolon": ";", "hyphen": "-", "dash": "–", "slash": "/", "quote": "\"", "open paren": "(", "close paren": ")", "percent": "%" },
+  en: { "period": ".", "comma": ",", "question mark": "?", "exclamation mark": "!", "exclamation point": "!", "colon": ":", "semicolon": ";", "hyphen": "-", "dash": "–", "slash": "/", "quote": "\"", "open paren": "(", "close paren": ")", "percent": "%" },
   de: { "punkt": ".", "komma": ",", "fragezeichen": "?", "ausrufezeichen": "!", "doppelpunkt": ":", "semikolon": ";", "bindestrich": "-", "gedankenstrich": "–", "schrägstrich": "/", "anführungszeichen": "\"", "klammer auf": "(", "klammer zu": ")", "prozent": "%" },
   es: { "punto": ".", "coma": ",", "signo de interrogación": "?", "signo de exclamación": "!", "dos puntos": ":", "punto y coma": ";", "guion": "-", "raya": "–", "barra": "/", "comillas": "\"", "abrir paréntesis": "(", "cerrar paréntesis": ")", "por ciento": "%" },
   it: { "punto": ".", "virgola": ",", "punto interrogativo": "?", "punto esclamativo": "!", "due punti": ":", "punto e virgola": ";", "trattino": "-", "trattino lungo": "–", "barra": "/", "virgolette": "\"", "aperta parentesi": "(", "chiusa parentesi": ")", "per cento": "%" },
