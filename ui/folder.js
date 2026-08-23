@@ -31,10 +31,14 @@ const memberMenu = document.getElementById("member-menu");
 
 // Keep FOLDER_BOX in sync with the backend constant of the same name.
 const FOLDER_BOX = 96; // collapsed icon (square) at scale 1
-const TILE = 72; // one member tile in the open grid
-const GAP = 8; // gap between tiles
-const PAD = 10; // padding inside the popover
-const POP_GAP = 6; // gap between icon and popover
+const TILE_DEFAULT = 72; // one member tile in the open grid
+const GAP_DEFAULT = 8; // gap between tiles
+const PAD_DEFAULT = 10; // padding inside the popover
+const POP_GAP_DEFAULT = 6; // gap between icon and popover
+let TILE = TILE_DEFAULT;
+let GAP = GAP_DEFAULT;
+let PAD = PAD_DEFAULT;
+let POP_GAP = POP_GAP_DEFAULT;
 const PREVIEW_MAX = 4; // mini previews on the closed folder (2x2)
 let DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT; // 87: expert-tunable
 const MENU_W = 230; // matches .menu in floating.css
@@ -390,6 +394,14 @@ function applyPrefs(s) {
   const speed = Number(s.ui_values?.animSpeed);
   animMs = s.ui_flags?.animations === false ? 0 : Number.isFinite(speed) ? Math.max(0, speed) : 150;
   document.documentElement.style.setProperty("--transition", `${animMs}ms cubic-bezier(0.4, 0, 0.2, 1)`);
+  const ts = Number(s.ui_values?.pillFolderTileSize);
+  TILE = Number.isFinite(ts) ? ts : TILE_DEFAULT;
+  const tg = Number(s.ui_values?.pillFolderTileGap);
+  GAP = Number.isFinite(tg) ? tg : GAP_DEFAULT;
+  const pp = Number(s.ui_values?.pillFolderPad);
+  PAD = Number.isFinite(pp) ? pp : PAD_DEFAULT;
+  const pg = Number(s.ui_values?.pillFolderPopGap);
+  POP_GAP = Number.isFinite(pg) ? pg : POP_GAP_DEFAULT;
   const op = Number(s.ui_values?.floatOpacity);
   iconEl.style.opacity = Number.isFinite(op) ? `${Math.max(0.2, op / 100)}` : "";
   markSelectedSize();

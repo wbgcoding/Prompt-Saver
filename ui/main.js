@@ -1284,6 +1284,20 @@ const EXPERT_VALUES = {
   tileFolderZone: { label: "valTileFolderZone", min: 30, max: 80, step: 5, def: 55, unit: "%", gate: "tileFolders" },
   tileFolderHoverMs: { label: "valTileFolderHoverMs", min: 100, max: 800, step: 50, def: 300, unit: "ms", gate: "tileFolders" },
   tileFolderCols: { label: "valTileFolderCols", min: 2, max: 5, step: 1, def: 3, unit: "", gate: "tileFolders" },
+  // Floating pill appearance -- font, minimum text-pill width, media-pill border,
+  // resize-ring thickness and the gap to its own context menu.
+  pillFontSize: { label: "valPillFontSize", min: 14, max: 40, step: 1, def: 26, unit: "px", gate: "floating" },
+  pillTextMinW: { label: "valPillTextMinW", min: 100, max: 400, step: 10, def: 200, unit: "px", gate: "floating" },
+  pillBorderW: { label: "valPillBorderW", min: 0, max: 12, step: 1, def: 5, unit: "px", gate: "floating" },
+  pillRingFrac: { label: "valPillRingFrac", min: 5, max: 40, step: 1, def: 18, unit: "%", gate: "floating" },
+  pillMenuGap: { label: "valPillMenuGap", min: 0, max: 20, step: 1, def: 6, unit: "px", gate: "floating" },
+  // Pill folders: how much a pill grows for the merge-target hint, and the open
+  // folder popover's own tile size / gap / padding.
+  pillMergeGrow: { label: "valPillMergeGrow", min: 0, max: 50, step: 1, def: 12, unit: "%", gate: "pillFolders" },
+  pillFolderTileSize: { label: "valPillFolderTileSize", min: 48, max: 120, step: 4, def: 72, unit: "px", gate: "pillFolders" },
+  pillFolderTileGap: { label: "valPillFolderTileGap", min: 0, max: 24, step: 1, def: 8, unit: "px", gate: "pillFolders" },
+  pillFolderPad: { label: "valPillFolderPad", min: 0, max: 24, step: 1, def: 10, unit: "px", gate: "pillFolders" },
+  pillFolderPopGap: { label: "valPillFolderPopGap", min: 0, max: 20, step: 1, def: 6, unit: "px", gate: "pillFolders" },
   // Custom tile tooltip max width (it wraps + grows taller instead of widening).
   tooltipWidth: { label: "valTooltipWidth", min: 180, max: 640, step: 10, def: 340, unit: "px", gate: "tilePreview" },
   // How long the pointer must rest on an element before its tooltip appears, so a
@@ -1607,7 +1621,7 @@ const EXPERT_TABS = [
     // Everything that happens between a click and the clipboard.
     { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "closeOnCopy", "copyBubble", "copyFlash"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"], dropdowns: ["dragOutModifier"] },
     // Floating buttons and the two kinds of folder they can form.
-    { title: "expGroupFolders", flags: ["floating", { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillMergeRadius", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
+    { title: "expGroupFolders", flags: ["floating", { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap", "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
     // The quick-copy sections of the tray menu, each with its own entry count.
     { title: "expGroupTray", flags: ["trayRecent", "trayFavs"], values: ["trayRecentN", "trayFavN"] },
     // The watcher that collects what you copy elsewhere.
@@ -1794,7 +1808,9 @@ const EXPERT_TIPS = [
   "trayRecent", "trayFavs", "trayRecentN", "trayFavN",
   "checkUpdateOnStart", "showUpdates", "updateCheckH", "importExport", "dimToolbar", "keyboardNav", "allowMultipleInstances",
   "headerSeparators", "floating",
-  "pillFolders", "pillMergeRadius", "folderGridCols",
+  "pillFolders", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap",
+  "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap",
+  "folderGridCols",
   "tileFolders", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols",
   "rotatingPrompts", "rotateDefaultMode", "rotateMaxEntries", "rotateBadge", "rotateTipLen",
   "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax",

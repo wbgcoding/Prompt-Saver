@@ -92,11 +92,16 @@ const SCALE_MIN = 0.3;
 const SCALE_MAX = 8;
 const PILL_H = 80;
 const PILL_IMG = 400;
-const PILL_FONT_DEFAULT = 26; // text pill font size at scale 1
-const PILL_TEXT_MIN_W = 200; // smallest text-pill width; grows with the label
-const PILL_BORDER = 5; // colored frame width around media pills
+const PILL_FONT_SIZE_DEFAULT = 26; // text pill font size at scale 1
+const PILL_TEXT_MIN_W_DEFAULT = 200; // smallest text-pill width; grows with the label
+const PILL_BORDER_W_DEFAULT = 5; // colored frame width around media pills
 const SIZE_EPSILON = 2; // px tolerance ending the self-healing resize loop
-const RING_FRAC = 0.18; // ring thickness as a fraction of the shorter window side
+const PILL_RING_FRAC_DEFAULT = 0.18; // ring thickness as a fraction of the shorter window side
+// pillTextFontBase, not pillFontSize -- that name is already the function below.
+let pillTextFontBase = PILL_FONT_SIZE_DEFAULT;
+let pillTextMinW = PILL_TEXT_MIN_W_DEFAULT;
+let pillBorderW = PILL_BORDER_W_DEFAULT;
+let pillRingFrac = PILL_RING_FRAC_DEFAULT;
 
 // Resizes and visibility flips can leave the looping video paused — make
 // sure a visible video is always playing again afterwards. Only a pause made
@@ -116,7 +121,7 @@ function ensureVideoPlaying() {
 // the label instead (capped, then ellipsis kicks in).
 function pillFontSize(effScale = scale) {
   // pSize/tileSize: 0 = inherit, 1 = auto-fit (treated as default here).
-  const base = pSize > 1 ? pSize : tileSize > 1 ? tileSize : PILL_FONT_DEFAULT;
+  const base = pSize > 1 ? pSize : tileSize > 1 ? tileSize : pillTextFontBase;
   return Math.round(base * effScale);
 }
 
@@ -150,7 +155,7 @@ function pillBox() {
   // floor while only the text changes. Floored to a pill ratio so it never rounds
   // into a circle. (At scale 1 this is exactly the old 200 min / 60 padding.)
   const padX = Math.round(30 * scale);
-  const minW = Math.round(PILL_TEXT_MIN_W * scale);
+  const minW = Math.round(pillTextMinW * scale);
   const w = Math.max(minW, label.scrollWidth + 2 * padX, Math.round(h * RATIO));
   return { w, h };
 }
@@ -253,6 +258,18 @@ function applyPrefs(s) {
   document.getElementById("feedback").style.fontFamily = FONTS[copyFont] || "";
   const op = Number(s.ui_values?.floatOpacity);
   pill.style.opacity = Number.isFinite(op) ? `${Math.max(0.2, op / 100)}` : "";
+  const pfs = Number(s.ui_values?.pillFontSize);
+  pillTextFontBase = Number.isFinite(pfs) ? pfs : PILL_FONT_SIZE_DEFAULT;
+  const ptmw = Number(s.ui_values?.pillTextMinW);
+  pillTextMinW = Number.isFinite(ptmw) ? ptmw : PILL_TEXT_MIN_W_DEFAULT;
+  const pbw = Number(s.ui_values?.pillBorderW);
+  pillBorderW = Number.isFinite(pbw) ? pbw : PILL_BORDER_W_DEFAULT;
+  const prf = Number(s.ui_values?.pillRingFrac);
+  pillRingFrac = Number.isFinite(prf) ? prf / 100 : PILL_RING_FRAC_DEFAULT;
+  const pmg = Number(s.ui_values?.pillMenuGap);
+  MENU_GAP = Number.isFinite(pmg) ? pmg : MENU_GAP_DEFAULT;
+  const pmgw = Number(s.ui_values?.pillMergeGrow);
+  MERGE_GROW = Number.isFinite(pmgw) ? 1 + pmgw / 100 : MERGE_GROW_DEFAULT;
   applyFont();
   markSelectedSize();
   applyPillSize();
@@ -277,7 +294,7 @@ function enforcePillSize() {
 // sits right at the (rounded) edge — thin on a small pill, a comfortable ring on a
 // big one — while the inner area stays free for dragging/copying.
 function updateResizeRing() {
-  const ring = Math.max(RING_MIN, Math.min(RING_MAX, Math.round(Math.min(window.innerWidth, window.innerHeight) * RING_FRAC)));
+  const ring = Math.max(RING_MIN, Math.min(RING_MAX, Math.round(Math.min(window.innerWidth, window.innerHeight) * pillRingFrac)));
   resizeEl.style.setProperty("--rz", `${ring}px`);
 }
 
@@ -405,8 +422,8 @@ function applyPrompt(p) {
     pill.classList.add("has-image");
     pill.style.background = "transparent";
     // The chosen color frames the media; the window hugs the media box.
-    borderW = p.color ? PILL_BORDER : 0;
-    pill.style.border = p.color ? `${PILL_BORDER}px solid ${p.color}` : "none";
+    borderW = p.color ? pillBorderW : 0;
+    pill.style.border = p.color ? `${pillBorderW}px solid ${p.color}` : "none";
     const onRatio = (ratio) => {
       imgRatio = ratio || 1;
       applyPillSize(); // resize the window to the media's aspect ratio
@@ -503,7 +520,8 @@ function lockPillBox(w, h) {
   pill.style.height = `${h}px`;
 }
 
-const MENU_GAP = 6;
+const MENU_GAP_DEFAULT = 6;
+let MENU_GAP = MENU_GAP_DEFAULT;
 let menuState = null; // { px, py, side } — pill screen pos + chosen side
 
 // With the menu open the window grows past the pill, so pin the resize grips to
@@ -908,7 +926,8 @@ document.addEventListener("visibilitychange", () => {
 // shifted either.
 let mergeHint = false;
 let mergeHintBox = null;
-const MERGE_GROW = 1.12;
+const MERGE_GROW_DEFAULT = 1.12;
+let MERGE_GROW = MERGE_GROW_DEFAULT;
 listen("merge-hint", async (e) => {
   const on = e.payload === true;
   pill.classList.toggle("merge-hint", on);
