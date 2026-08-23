@@ -186,10 +186,14 @@ voice dictation, the screenshot editor and the introduction tour ship on).
   (screenshot, color picker, OCR) with the shipped default shown next to
   each and a one-click reset back to it — nothing is written until you
   finish, and only the switches you actually changed. Step-by-step dots,
-  ←/→ and Enter to navigate, Esc or "Skip" to leave any time. Reopen it later
-  from the settings dialog or the expert menu; a data-folder or WebView2
-  prompt on first launch always wins, and the tour just waits for the next
-  one.
+  ←/→ and Enter to navigate, Esc or "Skip" to leave any time — either asks to
+  confirm first. Reopen it later from the settings dialog or the expert menu;
+  a data-folder or WebView2 prompt on first launch always wins, and the tour
+  just waits for the next one.
+- **Start a chain directly from a tile** — hovering a text prompt now shows a
+  small chain icon next to its selection checkbox; clicking it starts a chain
+  with that tile as the first entry, skipping the header button. Switchable
+  off on its own in the expert menu (on by default).
 
 ### Improved
 

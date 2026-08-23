@@ -916,8 +916,38 @@ PROBE = """
     document.body.click(); // dismiss the context menu
     await click('fav-view-btn');
     await click('fav-view-btn');
-    await click('chain-btn');
-    await click('chain-btn');
+    // 199: a per-tile chain-start button next to the selection checkbox.
+    {
+      const textTile = [...document.querySelectorAll('#grid .tile')].find(
+        (el) => el.querySelector('.tile-chain-start')
+      );
+      const imgTile = document.querySelector('#grid .tile[data-id="p9"]'); // fixture: file_path set, not a text prompt
+      if (!textTile) {
+        out.errors.push('199: no tile shows the chain-start button');
+      } else if (imgTile && imgTile.querySelector('.tile-chain-start')) {
+        out.errors.push('199: an image tile shows a chain-start button');
+      } else {
+        textTile.querySelector('.tile-chain-start').click();
+        await sleep(150);
+        if (!document.body.classList.contains('chain-mode')) {
+          out.errors.push('199: clicking a tile chain-start button did not enter chain mode');
+        }
+        if (!textTile.classList.contains('chain-picked')) {
+          out.errors.push('199: the starting tile was not marked picked');
+        }
+        const badge = textTile.querySelector('.tile-chain-badge');
+        if (!badge || badge.textContent.trim() !== '1') {
+          out.errors.push('199: the starting tile has no "1" chain badge');
+        }
+        const otherStart = [...document.querySelectorAll('.tile-chain-start')]
+          .find((el) => getComputedStyle(el).pointerEvents !== 'none');
+        if (otherStart) {
+          out.errors.push('199: a chain-start button stayed clickable while a chain is running');
+        }
+        await click('chain-btn'); // leave chain mode again
+        await sleep(150);
+      }
+    }
     await click('clip-btn');
     await click('clip-close');
     // 141: get_state carries has_image + image_rev, never the bytes. A tile fetches

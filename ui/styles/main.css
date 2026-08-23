@@ -854,6 +854,31 @@ body.grid-selecting .tile-type { opacity: 0; }
 }
 .tile.grid-selected { outline: 2px solid var(--accent); outline-offset: -2px; }
 
+/* A second small button right of the selection checkbox starts a chain
+   with this tile as entry 1 — same corner, same box, one gap over. */
+.tile-chain-start {
+  position: absolute;
+  top: 6px;
+  left: 28px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity var(--transition);
+}
+.tile:hover .tile-chain-start { opacity: 1; }
+/* Any chain already running takes over the corner with its order badge --
+   the start button never competes with it, on ANY tile, not just the picked one. */
+body.chain-mode .tile-chain-start { opacity: 0; pointer-events: none; }
+
 /* ---- F27 grid folders ----
    A folder is a cell like any other: the four newest members as a 2x2 face, the name
    under it and the member count in the corner. Everything is drawn INSIDE the tile —

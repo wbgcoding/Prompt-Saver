@@ -158,7 +158,10 @@ fast too often pauses the session with a toast instead of looping.
 
 ### Copying
 
-- Chaining — click several tiles in a row, they combine into one clipboard copy
+- Chaining — click several tiles in a row, they combine into one clipboard copy.
+  Hovering a text tile also shows a small chain icon next to its selection
+  checkbox that starts a chain with that tile as the first entry directly —
+  switchable off on its own in the expert menu.
 - Per-tile hotkeys — copy a specific tile from anywhere, without opening the app
 - Drag-out — hold the modifier key and drag a tile onto another window to paste
   directly, no clipboard round-trip. An expert switch swaps the two gestures, so a
@@ -455,7 +458,8 @@ Sitzung abgefragt, dieselben Werte gelten für jeden Eintrag. Fünf
 Experteneinstellungen regeln Zeitlimit und Erkennungsfenster; zu schnelles,
 zu häufiges Einfügen pausiert die Sitzung mit einem Hinweis statt zu wiederholen.
 
-**Kopieren** — Verketten, Hotkeys pro Kachel, Herausziehen (mit oder, per Schalter,
+**Kopieren** — Verketten (auch direkt über ein Kettensymbol an der Kachel,
+einzeln abschaltbar), Hotkeys pro Kachel, Herausziehen (mit oder, per Schalter,
 ohne Modifikatortaste), automatisches Einfügen.
 
 **Hotkeys** — ein globaler Hotkey öffnet den Schnellstarter (Standard

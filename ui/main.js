@@ -1023,6 +1023,7 @@ const FLAG_LABELS = {
   journalUsedSort: "flagJournalUsedSort",
   confirmClearHistory: "flagConfirmClearHistory",
   chainLock: "flagChainLock",
+  chainQuickStart: "flagChainQuickStart",
   favorites: "flagFavorites",
   keyboardNav: "flagKeyboardNav",
   varDefaults: "flagVarDefaults",
@@ -1586,7 +1587,7 @@ const EXPERT_TABS = [
     // highlighter only ever paints inside the preview.
     { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
-    { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "closeOnCopy", "copyBubble", "copyFlash"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"], dropdowns: ["dragOutModifier"] },
+    { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "closeOnCopy", "copyBubble", "copyFlash"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"], dropdowns: ["dragOutModifier"] },
     // Floating buttons and the two kinds of folder they can form.
     { title: "expGroupFolders", flags: ["floating", { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap", "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
     // The quick-copy sections of the tray menu, each with its own entry count.
@@ -1783,7 +1784,7 @@ const EXPERT_TIPS = [
   "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax",
   "helpTips", "helpHighlight", "firstRunTour",
   // Tiles / copying
-  "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "autoPasteEnter", "closeOnCopy",
+  "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "autoPasteEnter", "closeOnCopy",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
   "tooltipDelay", "tooltipTimeout", "iconTooltips",
   // Appearance
@@ -3559,6 +3560,17 @@ async function toggleChainPick(p) {
   pushChainClipboard(peeked ? p.id : null);
 }
 
+// The tile's own chain-start button — a second entry point into the SAME
+// mechanism a click on #chain-btn followed by a first tile pick already
+// uses, not a parallel one. chainLock stays untouched: starting from a tile
+// behaves like a normal, unlatched start.
+async function startChainWith(p) {
+  if (!flag("chainPrompts") || !flag("chainQuickStart")) return;
+  if (chainMode || !isTextPrompt(p)) return; // button is hidden either way -- belt and braces
+  setChainMode(true);
+  await toggleChainPick(p);
+}
+
 function setChainMode(on) {
   if (on && !flag("chainPrompts")) return;
   chainMode = on;
@@ -4098,6 +4110,21 @@ function buildTile(p) {
   selBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
   selBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleGridSelect(p.id); });
   tile.appendChild(selBtn);
+  // A second small button right of the checkbox starts a chain with THIS
+  // tile as entry 1 — only text prompts can ever be a chain link, so image/
+  // file/video tiles never show it (a symbol there would be a false promise).
+  if (isTextPrompt(p)) {
+    const chainBtn = document.createElement("button");
+    chainBtn.type = "button";
+    chainBtn.className = "tile-chain-start";
+    chainBtn.title = t("startChainHere");
+    chainBtn.setAttribute("aria-label", t("startChainHere"));
+    chainBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">'
+      + '<path transform="rotate(-45 12 12)" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h1.6M14.4 12H16"/></svg>';
+    chainBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    chainBtn.addEventListener("click", (e) => { e.stopPropagation(); startChainWith(p); });
+    tile.appendChild(chainBtn);
+  }
   const raw = p.file_path || p.text || "";
   const preview = PREVIEW_MAX <= 0 ? "" : raw.length > PREVIEW_MAX ? `${raw.slice(0, PREVIEW_MAX)}…` : raw;
   // Themed hover tooltip (rendered by wireTooltips' shared popup, not the native
