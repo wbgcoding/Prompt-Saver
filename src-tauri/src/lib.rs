@@ -9376,15 +9376,14 @@ fn purge_clip_inbox_from_backups_impl(dir: &std::path::Path) -> (usize, usize) {
                 )
                 .unwrap_or(0);
             if has_table > 0 {
-                match conn.execute("DELETE FROM clip_inbox", []) {
-                    Ok(n) => {
-                        inspected = true;
-                        removed = n as i64;
-                        if removed > 0 {
-                            let _ = conn.execute("VACUUM", []);
-                        }
+                // Err here means "could not confirm the rows are actually gone" --
+                // inspected stays false, counted as a failure below.
+                if let Ok(n) = conn.execute("DELETE FROM clip_inbox", []) {
+                    inspected = true;
+                    removed = n as i64;
+                    if removed > 0 {
+                        let _ = conn.execute("VACUUM", []);
                     }
-                    Err(_) => {} // could not confirm the rows are actually gone
                 }
             } else {
                 inspected = true; // genuinely nothing to remove, not a failure
