@@ -673,6 +673,17 @@ voice dictation, the screenshot editor and the introduction tour ship on).
   you switched away before the restore finished loading.
 - Changing a PDF's active page did not count as an unsaved change, so closing
   the editor right after skipped the usual "discard changes?" prompt.
+- A pill unpinning itself (its own "Remove" button) left the tile's context
+  menu unaware: it kept offering "Remove floating button" for a prompt that no
+  longer had one, and clicking it brought the pill back instead.
+- Copying a prompt from a floating pill, the folder window or the tray did not
+  update the library's "most used"/"recently used" sort in the main window —
+  it stayed frozen at whatever it last saw until the next full reload.
+- A fast double click on the same rotating prompt while picking a chain could
+  leave the tile visibly selected with its text silently missing from the
+  chain, instead of either staying picked or unpicking cleanly.
+- A failed automatic backup used to fail completely silently; it is now logged
+  and shown as a toast, the same way a successful one already was.
 
 ### Security
 
@@ -695,6 +706,23 @@ voice dictation, the screenshot editor and the introduction tour ship on).
   files by path — with the database and its settings files excluded by name.
   Backup snapshots and exported `.psb` files hold the same data and were not on
   that list; they are now. Nothing about attachments changes.
+- **The script behind an elevated language-pack install is now protected
+  against being swapped out from under it.** It briefly lived at a predictable
+  path in the temp folder before the elevated process read it back; another
+  program running as you could in theory have replaced it in that window and
+  had its own code run with the permission you were about to grant.
+- **Restoring a backup no longer proceeds if its own undo point could not be
+  written.** It used to overwrite your live data even when that safety
+  snapshot silently failed, leaving nothing to fall back to.
+- **"Delete all data", clearing the copy history, and clearing or dismissing
+  clipboard-inbox entries now tell you when something could not actually be
+  removed**, instead of always reporting success while the data stayed on
+  disk.
+- **The emergency "purge from all backups" button (clipboard inbox) now
+  reports snapshots it could not confirm were scrubbed**, instead of only
+  counting the ones it definitely cleaned.
+- Two dictation sessions started in quick succession could both begin
+  recording; the first one then had no way to be stopped from the app.
 
 ### Removed
 
