@@ -2368,26 +2368,48 @@ fn db_write_prompts_and_trash(
 // first save of the session already only writes what actually changed. Recorded
 // straight from the rows as they were read — never from a later, migrated or
 // replaced list, which would claim content for the disk that never reached it.
-fn db_load_trash(conn: &Connection, written: &mut WrittenRows) -> Vec<Prompt> {
+//
+// Second return value is a failure count, same convention as db_load: a row
+// that could not be read back, or an encrypted row that would not decrypt or
+// parse, is present-but-unaccounted-for, not simply absent — the caller must
+// fold it into the same write-lock decision as db_load's own failures, or a
+// trash mutation could permanently erase whatever this omitted.
+fn db_load_trash(conn: &Connection, written: &mut WrittenRows) -> (Vec<Prompt>, usize) {
     let mut trash = Vec::new();
-    if let Ok(mut stmt) = conn.prepare("SELECT data FROM trash ORDER BY ord") {
-        if let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) {
-            for data in rows.flatten() {
-                if let Ok(p) = serde_json::from_str::<Prompt>(&dec_str(&data)) {
-                    // Same rule as db_load: an unsealed row stays out of the map so
-                    // the next write seals it instead of skipping it as unchanged.
-                    if data.starts_with(ENC_PREFIX) {
-                        written.insert(
-                            row_key("trash", &p.id),
-                            row_hash(&serde_json::to_string(&p).unwrap_or_default()),
-                        );
+    let mut failures = 0usize;
+    match conn.prepare("SELECT data FROM trash ORDER BY ord") {
+        Ok(mut stmt) => match stmt.query_map([], |r| r.get::<_, String>(0)) {
+            Ok(rows) => {
+                for row in rows {
+                    match row {
+                        Ok(data) => {
+                            let encrypted = data.starts_with(ENC_PREFIX);
+                            match serde_json::from_str::<Prompt>(&dec_str(&data)) {
+                                Ok(p) => {
+                                    // Same rule as db_load: an unsealed row stays out of
+                                    // the map so the next write seals it instead of
+                                    // skipping it as unchanged.
+                                    if encrypted {
+                                        written.insert(
+                                            row_key("trash", &p.id),
+                                            row_hash(&serde_json::to_string(&p).unwrap_or_default()),
+                                        );
+                                    }
+                                    trash.push(p);
+                                }
+                                Err(_) if encrypted => failures += 1,
+                                Err(_) => {}
+                            }
+                        }
+                        Err(_) => failures += 1,
                     }
-                    trash.push(p);
                 }
             }
-        }
+            Err(_) => failures += 1,
+        },
+        Err(_) => failures += 1,
     }
-    trash
+    (trash, failures)
 }
 
 fn db_write_settings(conn: &Connection, settings: &Settings) -> rusqlite::Result<()> {
@@ -2400,40 +2422,53 @@ fn db_write_settings(conn: &Connection, settings: &Settings) -> rusqlite::Result
     Ok(())
 }
 
-// Returns (prompts, settings, any_plaintext, decrypt_failures). `decrypt_failures`
-// counts rows that WERE encrypted (ENC_PREFIX) but could not be decrypted/parsed —
-// the caller must then avoid any destructive rewrite of the prompts table.
+// Returns (prompts, settings, any_plaintext, load_failures). `load_failures`
+// counts rows that are present-but-unaccounted-for: an encrypted row that
+// would not decrypt/parse, a row the SQLite driver could not read back at all,
+// or the SELECT itself failing to prepare/run (corrupt table, locked file) —
+// every one of them means the true prompt count is NOT known to be what this
+// function returned, so the caller must avoid any destructive rewrite of the
+// prompts table rather than treat a partial result as the whole truth.
 fn db_load(conn: &Connection, written: &mut WrittenRows) -> (Vec<Prompt>, Option<Settings>, bool, usize) {
     let mut prompts = Vec::new();
     let mut plaintext = false; // any legacy unencrypted row → re-save once to encrypt
     let mut failures = 0usize;
-    if let Ok(mut stmt) = conn.prepare("SELECT data FROM prompts ORDER BY ord") {
-        if let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) {
-            for data in rows.flatten() {
-                let encrypted = data.starts_with(ENC_PREFIX);
-                if !encrypted {
-                    plaintext = true;
-                }
-                match serde_json::from_str::<Prompt>(&dec_str(&data)) {
-                    Ok(p) => {
-                        // A legacy plaintext row must be re-saved (sealed) even
-                        // though its content did not change, so it is deliberately
-                        // left out of the map and thus counts as changed.
-                        if encrypted {
-                            written.insert(
-                                row_key("prompts", &p.id),
-                                row_hash(&serde_json::to_string(&p).unwrap_or_default()),
-                            );
+    match conn.prepare("SELECT data FROM prompts ORDER BY ord") {
+        Ok(mut stmt) => match stmt.query_map([], |r| r.get::<_, String>(0)) {
+            Ok(rows) => {
+                for row in rows {
+                    match row {
+                        Ok(data) => {
+                            let encrypted = data.starts_with(ENC_PREFIX);
+                            if !encrypted {
+                                plaintext = true;
+                            }
+                            match serde_json::from_str::<Prompt>(&dec_str(&data)) {
+                                Ok(p) => {
+                                    // A legacy plaintext row must be re-saved (sealed) even
+                                    // though its content did not change, so it is deliberately
+                                    // left out of the map and thus counts as changed.
+                                    if encrypted {
+                                        written.insert(
+                                            row_key("prompts", &p.id),
+                                            row_hash(&serde_json::to_string(&p).unwrap_or_default()),
+                                        );
+                                    }
+                                    prompts.push(p);
+                                }
+                                // An encrypted row that won't decrypt/parse is present-but-unreadable;
+                                // a plaintext row that won't parse is genuinely corrupt (not a key issue).
+                                Err(_) if encrypted => failures += 1,
+                                Err(_) => {}
+                            }
                         }
-                        prompts.push(p);
+                        Err(_) => failures += 1,
                     }
-                    // An encrypted row that won't decrypt/parse is present-but-unreadable;
-                    // a plaintext row that won't parse is genuinely corrupt (not a key issue).
-                    Err(_) if encrypted => failures += 1,
-                    Err(_) => {}
                 }
             }
-        }
+            Err(_) => failures += 1,
+        },
+        Err(_) => failures += 1,
     }
     let raw = conn
         .query_row("SELECT value FROM meta WHERE key='settings'", [], |r| {
@@ -2643,7 +2678,12 @@ fn db_get_version(conn: &Connection, id: i64) -> Option<(String, String, String,
     .ok()
 }
 fn db_delete_versions(conn: &Connection, prompt_id: &str) {
-    let _ = conn.execute("DELETE FROM prompt_versions WHERE prompt_id = ?1", params![prompt_id]);
+    // Called from a PERMANENT purge -- the prompt is meant to be entirely gone,
+    // so a failure here silently leaving its text behind in prompt_versions is
+    // a privacy gap, not just clutter.
+    if let Err(e) = conn.execute("DELETE FROM prompt_versions WHERE prompt_id = ?1", params![prompt_id]) {
+        append_crash_log(&format!("could not delete version history for purged prompt {prompt_id}: {e}"));
+    }
 }
 
 // ---- F21 clipboard watcher ----
@@ -2964,9 +3004,12 @@ fn load_store(app: &AppHandle) -> Store {
         // Filled from the rows as they are read, so the first save of the session
         // already only writes what changed (see WrittenRows).
         let mut written = WrittenRows::new();
-        let (mut prompts, settings_opt, needs_mig, decrypt_fails) = db_load(&conn, &mut written);
-        let trash = db_load_trash(&conn, &mut written);
-        // Some encrypted rows would not decrypt → preserve the raw DB and lock writes.
+        let (mut prompts, settings_opt, needs_mig, prompt_fails) = db_load(&conn, &mut written);
+        let (trash, trash_fails) = db_load_trash(&conn, &mut written);
+        let decrypt_fails = prompt_fails + trash_fails;
+        // Some row (prompts or trash) could not be read back or decrypted →
+        // preserve the raw DB and lock writes to both tables (see prompts_locked
+        // below, which gates db_write_trash the same way as db_write_prompts).
         if decrypt_fails > 0 {
             let db_path = dir.join("data.db");
             let bak = dir.join("data.db.locked.bak");
@@ -2974,7 +3017,8 @@ fn load_store(app: &AppHandle) -> Store {
                 let _ = fs::copy(&db_path, &bak);
             }
             append_crash_log(&format!(
-                "{} prompt row(s) failed to decrypt; prompt writes locked, raw DB copied to data.db.locked.bak",
+                "{} row(s) failed to load reliably (query error, unreadable row, or decrypt failure); \
+                 writes locked, raw DB copied to data.db.locked.bak",
                 decrypt_fails
             ));
         }
@@ -4907,8 +4951,17 @@ async fn update_prompt(
                 // get a row or a restore could never bring that entry back. rotate_mode
                 // is deliberately excluded (order/random is a setting, not content).
                 if hist_on && (original.name != clone.name || original.text != clone.text || original.variants != clone.variants) {
-                    if let Some(c) = db_conn(&app) {
-                        let _ = db_add_version(&c, &id, now_secs(), &original.name, &original.text, &original.variants, hist_cap);
+                    match db_conn(&app) {
+                        // A failure here loses one version snapshot, not the edit itself
+                        // (which is already durably saved above) — not worth failing the
+                        // whole edit over, but silent would mean a restore point just
+                        // vanishes with no trace of why.
+                        Some(c) => {
+                            if let Err(e) = db_add_version(&c, &id, now_secs(), &original.name, &original.text, &original.variants, hist_cap) {
+                                append_crash_log(&format!("version history insert failed for prompt {id}: {e}"));
+                            }
+                        }
+                        None => append_crash_log(&format!("version history insert skipped for prompt {id}: no DB connection")),
                     }
                 }
                 // Only sweep the old attachment once the new reference is durably
@@ -5368,7 +5421,7 @@ fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) {
     let before = store.trash.clone();
     store.trash.retain(|p| !idset.contains(p.id.as_str()));
 
-    // 39/102: a failed trash save means the purged prompt is still coming back on
+    // A failed trash save means the purged prompt is still coming back on
     // the next restart (trash has no JSON fallback the way save_prompts does) — its
     // rotation position and version history must come back with it, not vanish
     // permanently for a purge that never actually persisted. Same guard shape as
@@ -5456,21 +5509,42 @@ async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Result<(), Str
             let _ = win.close();
         }
     }
+    let mut incomplete = false;
     {
         let mut store = lock(&state);
         store.prompts.clear();
         store.trash.clear(); // 91: a data wipe must not leave trashed prompts behind
         store.prompts_locked = false; // explicit wipe overrides the decrypt-failure lock
         store.normalize_folders(); // No prompts left, so no folder survives
-        save_prompts(&app, &store);
-        save_trash(&app, &store);
+        if !save_prompts(&app, &store) {
+            incomplete = true;
+        }
+        if !save_trash(&app, &store) {
+            incomplete = true;
+        }
         save_settings(&app, &store.settings);
-        // Data-only wipe: keep every setting, drop the derived data tables.
-        if let Some(c) = db_conn(&app) {
-            let _ = c.execute("DELETE FROM prompt_versions", []); // F7 history
-            let _ = c.execute("DELETE FROM copy_log", []); // copy history
-            let _ = c.execute("DELETE FROM clip_inbox", []); // F21 inbox
-            let _ = c.execute("DELETE FROM trash", []); // 91: trashed prompts
+        // Data-only wipe: keep every setting, drop the derived data tables. Each
+        // failure is logged and reported — the command used to always answer
+        // Ok(()) here, so a locked file or a mid-wipe I/O error could leave
+        // private rows on disk while the user was told everything was gone.
+        match db_conn(&app) {
+            Some(c) => {
+                for (sql, table) in [
+                    ("DELETE FROM prompt_versions", "prompt_versions"), // F7 history
+                    ("DELETE FROM copy_log", "copy_log"),               // copy history
+                    ("DELETE FROM clip_inbox", "clip_inbox"),           // F21 inbox
+                    ("DELETE FROM trash", "trash"),                     // 91: trashed prompts
+                ] {
+                    if let Err(e) = c.execute(sql, []) {
+                        incomplete = true;
+                        append_crash_log(&format!("delete_all_data: could not clear {table}: {e}"));
+                    }
+                }
+            }
+            None => {
+                incomplete = true;
+                append_crash_log("delete_all_data: no DB connection, auxiliary tables not cleared");
+            }
         }
         // The trash DELETE above went straight to the table, and both saves emptied
         // the tables anyway — nothing is on disk for the next write to skip.
@@ -5478,6 +5552,9 @@ async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Result<(), Str
     }
     rearm_hotkeys(&app); // No prompts left to keep accelerators bound
     rebuild_tray(&app); // Nothing left to offer in the tray either
+    if incomplete {
+        return Err("delete-incomplete".into());
+    }
     Ok(())
 }
 
@@ -6972,7 +7049,7 @@ struct BackupInfo {
     // made (exact, and free to read back); a backup from an older build has no note
     // yet, so its count is read out of the snapshot itself once.
     prompts: Option<usize>,
-    // 61/103: the prompt names themselves, same "written once, cheap to read back
+    // The prompt names themselves, same "written once, cheap to read back
     // after" treatment as `prompts` above. The snapshot beside it has every row
     // DPAPI-sealed, so this cache is sealed the same way — plaintext here would hand
     // anyone copying the data folder to another Windows account the full list of
@@ -7254,8 +7331,17 @@ fn auto_backup_tick(app: &AppHandle) {
         // The manual "backup now" toast fires from the same command's own
         // success path in the frontend — the automatic one has no such call site,
         // so it needs its own signal here.
-        if do_backup(app, keep, gfs_from_settings(&store.settings)).is_ok() {
-            let _ = app.emit_to("main", "backup-done", ());
+        match do_backup(app, keep, gfs_from_settings(&store.settings)) {
+            Ok(_) => {
+                let _ = app.emit_to("main", "backup-done", ());
+            }
+            // Silent here would mean automatic protection can stay broken (disk
+            // full, permissions, a locked folder) indefinitely with nothing ever
+            // telling the user -- log it and let the settings/backup screen show it.
+            Err(e) => {
+                append_crash_log(&format!("automatic backup failed: {e}"));
+                let _ = app.emit_to("main", "backup-failed", e);
+            }
         }
     }
 }
@@ -7328,9 +7414,17 @@ fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<Str
     let tmp = folder.join("data.db.tmp");
     let dest = folder.join(BACKUP_DB_GZ);
     let _ = fs::remove_file(&tmp);
-    {
+    // Same rule as the packed-copy failure below: a folder was already claimed
+    // above, so any failure between here and a real snapshot existing must
+    // remove it again -- otherwise the list reads folders and offers a restore
+    // from one that was never actually written.
+    if let Err(e) = (|| -> Result<(), String> {
         let conn = Connection::open(&src).map_err(|e| e.to_string())?;
         conn.execute("VACUUM INTO ?1", params![tmp.to_string_lossy()]).map_err(|e| e.to_string())?;
+        Ok(())
+    })() {
+        let _ = fs::remove_dir_all(&folder);
+        return Err(e);
     }
     // Compress the vacuumed copy, then drop the raw one — never leave both behind.
     let packed = gzip_to(&tmp, &dest);
@@ -7522,7 +7616,11 @@ async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep
         // The safety snapshot is the fallback if the restore goes wrong — it must
         // carry the collected counters too, not the state of a second ago.
         flush_settings(&app, &store.settings);
-        let _ = do_backup(&app, keep, gfs); // pre-restore safety snapshot
+        // A restore that proceeds without its own undo point is one-way — if the
+        // snapshot itself could not be written (disk full, permissions, locked
+        // file), stop here rather than overwrite the live database with nothing
+        // to fall back to.
+        do_backup(&app, keep, gfs).map_err(|e| format!("safety-snapshot-failed: {e}"))?;
         let dir = data_dir(&app);
         let target = dir.join("data.db");
         let staged = stage_and_validate_backup(&backup_db, &dir)?;
@@ -7819,7 +7917,7 @@ fn rotation_forget(settings: &mut Settings, ids: &[String]) {
     }
 }
 
-// 90/91: the single place that decides whether a text copy goes to the clipboard
+// The single place that decides whether a text copy goes to the clipboard
 // normally or opens an auto-advance session (Windows only — delayed rendering is a
 // Win32 mechanism, see mod clipwatch). `id` is None for a text copy that never
 // carries rotation state (e.g. a resolved placeholder fill copied ad hoc).
@@ -7875,11 +7973,11 @@ async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result
     let ok = match payload {
         CopyPayload::Image(img) => copy_image_to_clipboard(&img),
         CopyPayload::File(path) => set_clipboard_file(&path),
-        // 90/91: put_text is the one place that decides plain copy vs. auto-session.
+        // Put_text is the one place that decides plain copy vs. auto-session.
         CopyPayload::Text(text) => put_text(&state, Some(&id), &text),
         CopyPayload::Missing => false,
     };
-    // 32/44: only a successful TEXT copy may consume a rotation entry — a failed copy
+    // Only a successful TEXT copy may consume a rotation entry — a failed copy
     // must leave the pointer exactly where it was, and an Image/File payload never
     // showed any entry at all (the copy_image/file_path branches above short-circuit
     // before rotation_next ever runs) so it must not silently advance it either.
@@ -7976,7 +8074,7 @@ fn rotation_reset(app: AppHandle, state: State<Db>, id: String) {
     save_settings(&app, &store.settings);
 }
 
-// 90/91/92: the placeholder round's entry point. The frontend resolves every
+// The placeholder round's entry point. The frontend resolves every
 // entry's placeholders ONCE (union of variables across all of them, one dialog)
 // and hands back `resolved` in absolute entry order; this arms entry
 // rotation_next() currently points at and advances the pointer — replacing what
@@ -8153,10 +8251,17 @@ async fn clear_copy_history(app: AppHandle, state: State<'_, Db>) -> Result<(), 
         store.settings.last_used.clear();
         save_settings(&app, &store.settings);
     }
-    if let Some(conn) = db_conn(&app) {
-        let _ = conn.execute("DELETE FROM copy_log", []);
-    }
+    // A "clear" the user asked for is a privacy action -- a DB error here must
+    // not be reported as success while the log rows are still on disk.
+    let cleared = match db_conn(&app) {
+        Some(conn) => conn.execute("DELETE FROM copy_log", []).is_ok(),
+        None => false,
+    };
     rebuild_tray(&app); // A wiped history empties the "recently used" section
+    if !cleared {
+        append_crash_log("clear_copy_history: copy_log could not be cleared");
+        return Err("delete-incomplete".into());
+    }
     Ok(())
 }
 
@@ -8912,7 +9017,7 @@ mod clipwatch {
         }
     }
 
-    // 91/92: force-end the session for `id` (the tile's Auto switch flipped off, or
+    // Force-end the session for `id` (the tile's Auto switch flipped off, or
     // the prompt was deleted/edited out of eligibility) without waiting for a paste.
     // Delivers the last armed text as real data — never leaves a dangling promise.
     fn handle_app_end() {
@@ -9179,15 +9284,21 @@ async fn clip_inbox_list(app: AppHandle) -> Result<Vec<ClipItem>, String> {
 }
 #[tauri::command]
 async fn clip_inbox_dismiss(app: AppHandle, id: i64) -> Result<(), String> {
-    if let Some(c) = db_conn(&app) {
-        let _ = c.execute("DELETE FROM clip_inbox WHERE id = ?1", params![id]);
+    // Privacy-sensitive rows: a swallowed failure here used to always answer
+    // Ok(()) while the entry stayed on disk.
+    let ok = db_conn(&app).is_some_and(|c| c.execute("DELETE FROM clip_inbox WHERE id = ?1", params![id]).is_ok());
+    if !ok {
+        append_crash_log(&format!("clip_inbox_dismiss: row {id} could not be removed"));
+        return Err("delete-incomplete".into());
     }
     Ok(())
 }
 #[tauri::command]
 async fn clip_inbox_clear(app: AppHandle) -> Result<(), String> {
-    if let Some(c) = db_conn(&app) {
-        let _ = c.execute("DELETE FROM clip_inbox", []);
+    let ok = db_conn(&app).is_some_and(|c| c.execute("DELETE FROM clip_inbox", []).is_ok());
+    if !ok {
+        append_crash_log("clip_inbox_clear: clip_inbox could not be cleared");
+        return Err("delete-incomplete".into());
     }
     Ok(())
 }
@@ -9200,12 +9311,17 @@ async fn clip_inbox_clear(app: AppHandle) -> Result<(), String> {
 // pages until something else reuses that space). Returns how many snapshots had
 // something to remove, for the confirmation toast.
 #[tauri::command]
-async fn purge_clip_inbox_from_backups(app: AppHandle) -> Result<usize, String> {
+// Returns (purged, failed). This is an emergency privacy wipe — a snapshot this
+// could not even open, or a scrub that could not be confirmed written back, must
+// never be folded into "nothing to purge here"; the caller has to be able to
+// tell the user which backups may still hold what they just tried to erase.
+async fn purge_clip_inbox_from_backups(app: AppHandle) -> Result<(usize, usize), String> {
     Ok(purge_clip_inbox_from_backups_impl(&backups_dir(&app)))
 }
 
-fn purge_clip_inbox_from_backups_impl(dir: &std::path::Path) -> usize {
+fn purge_clip_inbox_from_backups_impl(dir: &std::path::Path) -> (usize, usize) {
     let mut purged = 0usize;
+    let mut failed = 0usize;
     for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
         let folder = entry.path();
         if !folder.is_dir() {
@@ -9215,14 +9331,21 @@ fn purge_clip_inbox_from_backups_impl(dir: &std::path::Path) -> usize {
         let is_gz = db.extension().is_some_and(|e| e == "gz");
         let staged_tmp = folder.join("purge.tmp");
         let staged = if is_gz {
-            if gunzip_to(&db, &staged_tmp).is_err() {
-                continue;
+            match gunzip_to(&db, &staged_tmp) {
+                Ok(()) => staged_tmp.clone(),
+                // Could not even look inside -- must count as a failure, not as
+                // "nothing to purge", since it might hold exactly what this is
+                // meant to scrub.
+                Err(_) => {
+                    failed += 1;
+                    continue;
+                }
             }
-            staged_tmp.clone()
         } else {
             db.clone()
         };
         let mut removed = 0i64;
+        let mut inspected = false;
         if let Ok(conn) = Connection::open(&staged) {
             let has_table: i64 = conn
                 .query_row(
@@ -9232,23 +9355,37 @@ fn purge_clip_inbox_from_backups_impl(dir: &std::path::Path) -> usize {
                 )
                 .unwrap_or(0);
             if has_table > 0 {
-                removed = conn.execute("DELETE FROM clip_inbox", []).unwrap_or(0) as i64;
-                if removed > 0 {
-                    let _ = conn.execute("VACUUM", []);
+                match conn.execute("DELETE FROM clip_inbox", []) {
+                    Ok(n) => {
+                        inspected = true;
+                        removed = n as i64;
+                        if removed > 0 {
+                            let _ = conn.execute("VACUUM", []);
+                        }
+                    }
+                    Err(_) => {} // could not confirm the rows are actually gone
                 }
+            } else {
+                inspected = true; // genuinely nothing to remove, not a failure
             }
         }
-        if removed > 0 {
+        if !inspected {
+            failed += 1;
+        } else if removed > 0 {
             let repacked = if is_gz { gzip_to(&staged, &db) } else { Ok(()) };
             if repacked.is_ok() {
                 purged += 1;
+            } else {
+                // Scrubbed in the decompressed copy, but it never made it back
+                // into the actual backup file -- the original rows are untouched.
+                failed += 1;
             }
         }
         if is_gz {
             let _ = fs::remove_file(&staged_tmp);
         }
     }
-    purged
+    (purged, failed)
 }
 
 // Set a floating window's position AND size together (logical px). Used by the
@@ -10252,7 +10389,7 @@ fn rgb_to_hex(r: u8, g: u8, b: u8) -> String {
     format!("#{:02X}{:02X}{:02X}", r, g, b)
 }
 
-// 80/19: the last picked colours, newest first. Recorded here rather than in the
+// The last picked colours, newest first. Recorded here rather than in the
 // overlay page, because this is the side that knows what actually reached the
 // clipboard — a hidden or reloaded webview cannot lose the list. Kept in memory
 // for the running session, mirrored into `ui_texts["pickHistory"]` (comma-joined
@@ -10436,7 +10573,7 @@ async fn pick_color(app: AppHandle, state: State<'_, SnipState>, x: i32, y: i32)
     if arboard::Clipboard::new().and_then(|mut c| c.set_text(text.clone())).is_err() {
         return Err("clipboard write failed".to_string());
     }
-    // 80/19: only once the value really is on the clipboard, then mirror the
+    // Only once the value really is on the clipboard, then mirror the
     // in-memory list into settings so it survives a restart.
     if let Some(db) = app.try_state::<Db>() {
         let mut store = db.lock().unwrap_or_else(|e| e.into_inner());
@@ -10950,7 +11087,7 @@ async fn delete_screenshot_file(state: State<'_, Db>, path: String) -> Result<bo
     Ok(in_allowed && fs::remove_file(p).is_ok())
 }
 
-// 117/118: screenshot editor "Copy" / re-apply-to-clipboard after "Apply" — the
+// Screenshot editor "Copy" / re-apply-to-clipboard after "Apply" — the
 // edited image never goes through finalize_capture, so it needs its own thin
 // path onto the existing copy_image_to_clipboard helper.
 #[tauri::command]
@@ -11797,7 +11934,9 @@ struct VoiceHandle {
     lang: String,
     ended: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
-struct VoiceState(Mutex<Option<VoiceHandle>>);
+// Second field: claimed while a voice_start call is between its busy check and
+// the real VoiceHandle landing in the first field -- see voice_start for why.
+struct VoiceState(Mutex<Option<VoiceHandle>>, std::sync::atomic::AtomicBool);
 
 const MAX_OCR_IMAGE_BYTES: u64 = 200 * 1024 * 1024; // a single image, not a whole export (MAX_IMPORT_BYTES)
 const OCR_IMAGE_EXTS: [&str; 5] = ["png", "jpg", "jpeg", "bmp", "webp"];
@@ -12035,7 +12174,7 @@ async fn ocr_languages() -> Result<Vec<OcrLang>, String> {
     }
 }
 
-// 121/122: upscale_under_px/join_lines/lang/auto_pick_lang are the
+// Upscale_under_px/join_lines/lang/auto_pick_lang are the
 // ocrUpscaleUnderPx/ocrJoinLines/ocrLang/ocrAutoPickLang expert settings, sent by
 // the frontend on every call (it already holds the live values via val()/flag()/
 // txt()) instead of the backend hardcoding or re-reading them from Db state.
@@ -12092,6 +12231,16 @@ async fn ocr_region(
 // same shape as copy_image_data (117/118) for the screenshot editor.
 #[tauri::command]
 async fn ocr_image_data(data_url: String, upscale_under_px: u32, join_lines: bool, lang: String, auto_pick_lang: bool) -> Result<OcrResult, String> {
+    // Same ceiling as the file-based path (check_import_size) -- this one
+    // arrives straight over IPC with no on-disk size to check ahead of time,
+    // so nothing bounded the encoded + decoded + RGBA buffers below before now.
+    if data_url.len() as u64 > MAX_OCR_IMAGE_BYTES {
+        return Err(format!(
+            "file is too large ({} MB); the limit is {} MB",
+            data_url.len() as u64 / (1024 * 1024),
+            MAX_OCR_IMAGE_BYTES / (1024 * 1024)
+        ));
+    }
     let bytes = data_url_bytes(&data_url);
     let img = decode_image_mem(&bytes).ok_or("could not decode image")?.to_rgba8();
     let upscale_under_px = upscale_under_px.clamp(100, 800);
@@ -12842,10 +12991,42 @@ mod ocr {
     // read a UTF-8 script file back as UTF-8 -- without it, non-ASCII bytes in a
     // path can be misread under the system ANSI code page, hence writing every
     // generated .ps1 script with a BOM rather than plain ASCII/UTF-8.
-    fn write_ps1_with_bom(path: &Path, content: &str) -> std::io::Result<()> {
+    //
+    // This script is about to run elevated, so how it gets to disk matters: a
+    // predictable path in a shared temp folder is otherwise a same-user process's
+    // opening to plant its own script before ours lands, or to overwrite ours
+    // between this write and the runas prompt being answered. `create_new`
+    // refuses to touch a file that is already there (retried a few times after
+    // clearing it, rather than silently opening whatever an attacker left), and
+    // the returned handle keeps write access denied to everyone else for as
+    // long as the caller holds it -- see run_elevated_script.
+    fn write_ps1_with_bom(path: &Path, content: &str) -> std::io::Result<std::fs::File> {
+        use std::io::Write;
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_SHARE_READ: u32 = 0x0000_0001;
         let mut bytes = vec![0xEFu8, 0xBB, 0xBF];
         bytes.extend_from_slice(content.as_bytes());
-        fs::write(path, bytes)
+        let mut last_err = None;
+        for _ in 0..3 {
+            match fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .share_mode(FILE_SHARE_READ)
+                .open(path)
+            {
+                Ok(mut f) => {
+                    f.write_all(&bytes)?;
+                    f.flush()?;
+                    return Ok(f);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    let _ = fs::remove_file(path);
+                    last_err = Some(e);
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Err(last_err.unwrap_or_else(|| std::io::Error::new(std::io::ErrorKind::AlreadyExists, "temp script path is contested")))
     }
 
     fn install_result_path(kind: CapKind, tag: &str) -> PathBuf {
@@ -12892,7 +13073,11 @@ mod ocr {
         if let Some(dir) = script_path.parent() {
             fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         }
-        write_ps1_with_bom(script_path, script).map_err(|e| e.to_string())?;
+        // Kept open (write access denied to everyone else) across the whole
+        // ShellExecuteW call below -- including the time the UAC prompt sits on
+        // screen waiting for the user -- so nothing can swap this script's
+        // content out from under it before the elevated PowerShell reads it.
+        let lock = write_ps1_with_bom(script_path, script).map_err(|e| e.to_string())?;
 
         // Standard Win32 argv quoting (double quotes for a path that may
         // contain spaces) -- this is CreateProcess's own command-line
@@ -12911,6 +13096,7 @@ mod ocr {
                 SW_SHOWNORMAL,
             )
         };
+        drop(lock);
         let code = code.0 as isize;
         if code <= 32 {
             // The script's own `finally` only runs once PowerShell actually starts —
@@ -13122,6 +13308,17 @@ async fn voice_start(
                 return Err("voice-busy".to_string());
             }
         }
+        // Claim the slot HERE, still holding the same lock the check above just
+        // read -- voice::prepare() below is an await point, and two concurrent
+        // voice_start calls could otherwise both pass the check (nothing yet
+        // recorded either had started), both spawn a session thread, and the
+        // second's handle would silently overwrite the first's, orphaning a
+        // live microphone session voice_stop can never reach again. Cleared on
+        // every early return below, and once more (redundantly, harmlessly)
+        // right after the real handle replaces it on success.
+        if vstate.1.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            return Err("voice-busy".to_string());
+        }
     }
     #[cfg(windows)]
     {
@@ -13132,13 +13329,21 @@ async fn voice_start(
                 store.settings.ui_flags.get("voiceAutoPickLang").copied().unwrap_or(true),
             )
         };
-        let (resolved_lang, needs_online) =
-            tauri::async_runtime::spawn_blocking(move || voice::prepare(lang, auto_pick)).await.map_err(|e| e.to_string())??;
+        let prepared =
+            tauri::async_runtime::spawn_blocking(move || voice::prepare(lang, auto_pick)).await.map_err(|e| e.to_string());
+        let (resolved_lang, needs_online) = match prepared.and_then(|r| r) {
+            Ok(v) => v,
+            Err(e) => {
+                vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
+                return Err(e);
+            }
+        };
         // Never opens the microphone without consent -- checked BEFORE the session
         // thread (and therefore Create()) ever starts. A later 0x80045509 from
         // Windows itself (declined/reset at the OS level after voiceOnlineOk was
         // already set) is still handled by the session -- see voice-privacy-off.
         if needs_online && !online_ok {
+            vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
             return Err("voice-online-required".to_string());
         }
         let id = VOICE_SESSION_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -13158,14 +13363,17 @@ async fn voice_start(
             .spawn(move || voice::start_session(app2, id, lang2, auto_stop_sec, max_sec, interim, ended2, rx))
         {
             set_tray_recording(&app, false);
+            vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
             return Err(e.to_string());
         }
         *vstate.0.lock().unwrap_or_else(|e| e.into_inner()) =
             Some(VoiceHandle { id, stop: tx, started: std::time::Instant::now(), lang: resolved_lang.clone(), ended });
+        vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
         Ok(VoiceStartResult { id, lang: resolved_lang })
     }
     #[cfg(not(windows))]
     {
+        vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
         let _ = (app, state, lang, auto_stop_sec, max_sec, interim);
         Err("voice is only available on Windows".to_string())
     }
@@ -15821,7 +16029,7 @@ pub fn run() {
             app.manage(DragHint(Mutex::new((0, None)))); // F25 live merge highlight
             app.manage(VarPrompt::new()); // F12 standalone fill-in window
             app.manage(SyncWriteQueue(Mutex::new(SyncWriteState::default()))); // 9
-            app.manage(VoiceState(Mutex::new(None))); // Runde F, 125
+            app.manage(VoiceState(Mutex::new(None), std::sync::atomic::AtomicBool::new(false))); // Runde F, 125
 
             // F19 auto-paste: start tracking the last external foreground window.
             #[cfg(windows)]
@@ -19939,8 +20147,16 @@ mod tests {
         gzip_to(&raw_c, &folder_c.join("data.db.gz")).unwrap();
         let _ = std::fs::remove_file(&raw_c);
 
-        let purged = purge_clip_inbox_from_backups_impl(&dir);
+        // D: a snapshot claiming to be gzipped that is not — gunzip must fail on
+        // it, and that must be counted as a failure (it might hold clip_inbox
+        // rows this run could never even look at), never silently skipped.
+        let folder_d = dir.join("20260104-000000");
+        std::fs::create_dir_all(&folder_d).unwrap();
+        std::fs::write(folder_d.join("data.db.gz"), b"not actually gzip data").unwrap();
+
+        let (purged, failed) = purge_clip_inbox_from_backups_impl(&dir);
         assert_eq!(purged, 2, "only A and B actually had clip_inbox rows to remove");
+        assert_eq!(failed, 1, "D could not be opened and must be reported, not silently treated as clean");
 
         let unpacked_a = dir.join("check_a.db");
         gunzip_to(&folder_a.join("data.db.gz"), &unpacked_a).unwrap();

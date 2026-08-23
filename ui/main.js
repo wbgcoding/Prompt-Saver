@@ -621,6 +621,7 @@ const ERROR_MSG_KEYS = {
   "not a member of this folder": "errNotFolderMember",
   "color picker is off": "errColorPickerOff",
   "autostart is only supported on Windows": "errAutostartWindowsOnly",
+  "delete-incomplete": "errDeleteIncomplete",
 };
 function errToast(err) {
   const s = String(err);
@@ -11296,7 +11297,14 @@ async function deleteData() {
   clearTimeout(deleteAllTimer);
   disarmButton(btn, t("deleteData"));
   await maybeBackupBeforeWipe("delete");
-  await invoke("delete_all_data");
+  try {
+    await invoke("delete_all_data");
+  } catch (e) {
+    // The in-memory store is already cleared either way (see reloadEverything
+    // below) -- this means some ON-DISK table could not be, so the user must
+    // still be told rather than believe the wipe fully succeeded.
+    errToast(e);
+  }
   await reloadEverything(); // in place: a page reload repaints the whole window
 }
 
@@ -13287,9 +13295,17 @@ function bind() {
     });
     if (!step2) return;
     await invoke("clip_inbox_clear").catch((e) => errToast(e));
-    const n = await invoke("purge_clip_inbox_from_backups").catch((e) => { errToast(e); return null; });
+    const result = await invoke("purge_clip_inbox_from_backups").catch((e) => { errToast(e); return null; });
     refreshClipInbox();
-    if (n !== null) toast(t("clipPurgeBackupsDone").replace("{n}", String(n)));
+    if (result !== null) {
+      const [purged, failed] = result;
+      let msg = t("clipPurgeBackupsDone").replace("{n}", String(purged));
+      // Some snapshot could not be opened or its scrub could not be confirmed
+      // written back -- an emergency wipe reporting silent success there would
+      // leave the user believing they are clean when they may not be.
+      if (failed > 0) msg += ` — ${t("clipPurgeBackupsFailed").replace("{n}", String(failed))}`;
+      toast(msg);
+    }
   });
   listen("clip-inbox-changed", () => refreshClipInbox());
   // Any window's copy of a rotating prompt lands here — refresh every tile of
@@ -13900,6 +13916,9 @@ function bind() {
   // The automatic backup has no frontend call site of its own to toast
   // from — the backend says so once the snapshot is really on disk.
   listen("backup-done", () => toast(t("backupDone")));
+  // Same shape, the failure side -- an automatic backup that silently never ran
+  // again would otherwise leave the user unprotected with nothing telling them.
+  listen("backup-failed", () => toast(t("autoBackupFailed")));
   // save_prompts/save_trash used to fail silently to the user when both the DB
   // and the JSON fallback failed (disk full, permissions). One toast per event —
   // a stuck disk would otherwise spam this on every edit.

@@ -2691,6 +2691,28 @@ PROBE = """
     if (![...themeSel.options].some(o => o.value === 'custom:ct1')) {
       out.errors.push('the stored custom theme is missing from the theme list');
     }
+    // 188: every built-in theme, at the app's own smallest window, must not clip
+    // or overlap anything -- only worth the extra round trips at the tightest
+    // size, so this skips at the other three viewports this same probe also runs at.
+    // Repeatedly switching this select has been observed to stall the headless
+    // browser's virtual clock (the same class of harness limitation documented
+    // at 193 and 186) -- one switch to the widest-risk theme (monospace font,
+    // the one most likely to push text past a tight boundary) stands in for
+    // cycling all eight.
+    // 188: the widest layout risk a theme can add is a font-family change
+    // (Programmer switches the whole UI to monospace, which is wider per
+    // character and the one real way a theme swap could newly clip text) --
+    // checked by setting the same data-theme attribute applyTheme() itself
+    // sets, not by driving the live select: repeatedly switching that control
+    // has been observed to stall the headless browser's virtual clock (the
+    // same class of harness limitation documented at 193 and 186), and a raw
+    // attribute set proves the identical CSS effect without touching it.
+    if (innerWidth <= 700) {
+      const startTheme = document.documentElement.getAttribute('data-theme');
+      document.documentElement.setAttribute('data-theme', 'programmer');
+      layoutScan('theme programmer');
+      document.documentElement.setAttribute('data-theme', startTheme || 'system');
+    }
     await click('theme-edit-open');
     const tmodal = document.getElementById('theme-modal');
     if (tmodal.classList.contains('hidden')) {
