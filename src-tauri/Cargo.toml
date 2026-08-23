@@ -69,6 +69,13 @@ windows = { version = "0.58", features = [
   # WINTRUST_DATA struct itself, not just the WinTrust function bindings.
   "Win32_Security_WinTrust", "Win32_Security_Cryptography",
 ] }
+# Screen recording (point 191): Windows Graphics Capture + its own Media
+# Foundation H.264/MP4 encoder, vetted against a real desktop before use.
+# Pulls its own newer `windows` crate release transitively (0.62 alongside the
+# 0.58 pinned above) -- confirmed to build side by side, and its API surface
+# never crosses into our OCR/voice code, so the two versions never need to
+# interoperate.
+windows-capture = "2.0.1"
 
 # Small release binary, but tuned for much faster builds:
 # thin LTO + parallel codegen cut compile time a lot for a few KB more size.
