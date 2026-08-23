@@ -16,11 +16,12 @@ a button above the grid removes them with one click once they're no longer neede
 ### Introduction tour
 
 A five-step walkthrough shown once on first launch, right after the sample tiles
-appear. The last step offers to switch on the screenshot editor, colour picker, or
-OCR right there — skipping the tour writes nothing. Reopen it anytime from Settings
-("Introduction") or the expert menu; reopened this way, a switch on that last step
-takes effect immediately instead of waiting for a Finish click. The step frame's
-minimum height is adjustable in the expert menu, for very small screens.
+appear. The last step offers to switch on the screenshot editor, colour picker,
+OCR or voice dictation right there — nothing is written until the tour actually
+finishes. Escape or "Skip" asks to confirm first instead of closing right away.
+Reopen it anytime from Settings ("Introduction") or the expert menu; reopened
+this way, a switch on that last step takes effect immediately instead of
+waiting for a Finish click.
 
 ### Creating tiles
 
@@ -80,16 +81,9 @@ On by default. A button on the composer and in the screenshot dialog pulls the
 text out of a screenshot or an image file, entirely on this device via Windows'
 own text recognizer — nothing is uploaded or sent anywhere. The composer button
 opens a small menu: from an image file, or from a screenshot you take right now.
-It needs a Windows language pack: the app offers to download one the first time
-it's needed, and installing it needs administrator rights (the usual Windows
-confirmation prompt appears). The language dropdown's "Manage languages…" entry
-opens a dialog listing what's installed and what's available, and lets you
-install or update from there; listing normally needs no special rights, but on
-some Windows systems it does too — the dialog says so plainly and offers to run
-the listing with administrator rights, instead of coming up blank. That step only
-lists the packs, it installs nothing. Recognized text can auto-copy to the clipboard and auto-join wrapped
-lines into full sentences, both adjustable, and the app can check in the
-background for language packs that need updating.
+It needs a Windows language pack — see "Language packs" below for how that
+install works. Recognized text can auto-copy to the clipboard and auto-join
+wrapped lines into full sentences, both adjustable.
 
 ### Voice dictation
 
@@ -115,13 +109,27 @@ is capitalized automatically. **The exact word matters**: only these specific
 command words (in the app's own language) are recognized — anything else is
 just dictated as plain text.
 
-Like OCR, it needs a Windows language pack: the language dropdown's "Manage
-languages…" entry opens the very same dialog OCR uses, and offers a download
-automatically if the chosen language has none installed yet. A global hotkey
-(off by default, in the expert menu) can start or stop a session from
-anywhere without bringing the window forward — the finished text goes to the
-clipboard, is pasted into whatever app was active, or lands in the composer,
-whichever the setting picks.
+Like OCR, it needs a Windows language pack — see "Language packs" below, same
+dialog either way. A global hotkey (off by default, in the expert menu) can
+start or stop a session from anywhere without bringing the window forward —
+the finished text goes to the clipboard, is pasted into whatever app was
+active, or lands in the composer, whichever the setting picks.
+
+### Language packs
+
+Text recognition and voice dictation both use Windows' own language packs and
+share one install dialog. The recognition-language dropdown offers a download
+the first time a chosen language has no pack installed; installing needs
+administrator rights, and Windows asks for them once through its own
+confirmation prompt. The dropdown's "Manage languages…" entry reopens that
+same dialog any time, listing what's installed and what's available — on most
+systems listing needs no special rights, but on some Windows builds it does
+too, and the dialog offers to run the listing itself with administrator
+rights instead of coming up blank; that step only lists packs, it installs
+nothing. A background check flags a pack whose version changed or that a
+Windows update silently removed, without asking to reinstall right away —
+"remind me later" dismisses it for a while, or the background check can be
+switched off entirely.
 
 ### Colour picker & pick history
 
@@ -399,11 +407,12 @@ Drei Beispielkacheln (E-Mail mit Platzhaltern, Bild, Markdown-Vorlage) sind beim
 ersten Start bereits da — ein Button über dem Raster entfernt sie mit einem Klick.
 
 **Einführungstour** — fünf Schritte beim ersten Start, direkt nach den
-Beispielkacheln; der letzte Schritt bietet an, Screenshot-Editor, Farbpipette
-oder OCR gleich einzuschalten. Überspringen schreibt nichts. Jederzeit erneut
-aufrufbar über die Einstellungen („Einführung") oder das Experten-Menü — dort
-wirkt ein Schalter auf dem letzten Schritt sofort statt erst bei „Fertig". Die
-Mindesthöhe des Schritt-Rahmens ist im Experten-Menü einstellbar.
+Beispielkacheln; der letzte Schritt bietet an, Screenshot-Editor, Farbpipette,
+OCR oder Spracheingabe gleich einzuschalten — geschrieben wird erst, wenn die
+Tour tatsächlich beendet ist. Escape oder „Überspringen" fragt zuerst nach, statt
+sofort zu schließen. Jederzeit erneut aufrufbar über die Einstellungen
+(„Einführung") oder das Experten-Menü — dort wirkt ein Schalter auf dem letzten
+Schritt sofort statt erst bei „Fertig".
 
 **Kacheln anlegen** — Dateianhang, Screenshot-Werkzeug, Farbpipette (aus),
 Ziehen & Ablegen.
@@ -427,18 +436,31 @@ Bereichs abdunkelt — mit Rückgängig/Wiederholen.
 **Texterkennung (OCR)** — standardmäßig an; liest per Knopf in der Leiste und
 im Screenshot-Dialog Text aus einem Screenshot oder einer Bilddatei, komplett
 offline über die eigene Texterkennung von Windows. Der Knopf in der Leiste öffnet
-ein kleines Menü: aus einer Bilddatei oder aus einem Screenshot. Braucht ein
-Windows-Sprachpaket — die App bietet den Download beim ersten Bedarf an, die
-Installation braucht Administratorrechte (übliche Windows-Bestätigung).
-„Sprachen verwalten…" im Sprachen-Dropdown listet Installiertes und
-Verfügbares und startet Installation/Update; das Auflisten selbst braucht
-normalerweise keine Sonderrechte, auf manchen Windows-Systemen aber doch — der
-Dialog sagt das dann offen und bietet an, die Abfrage mit Administratorrechten
-auszuführen, statt leer zu bleiben. Dabei wird nur aufgelistet, nichts
-installiert. Erkannter Text kann
-automatisch kopiert und umgebrochene Zeilen zu ganzen Sätzen zusammengefügt
-werden, beides einstellbar; eine Hintergrundprüfung meldet veraltete
-Sprachpakete.
+ein kleines Menü: aus einer Bilddatei oder aus einem Screenshot. Erkannter Text
+kann automatisch kopiert und umgebrochene Zeilen zu ganzen Sätzen zusammengefügt
+werden, beides einstellbar. Braucht ein Windows-Sprachpaket — siehe
+„Sprachpakete" unten.
+
+**Spracheingabe** — standardmäßig an; der Mikrofon-Knopf neben der Eingabeleiste
+und im Kachel-Editor verwandelt Sprache in Text, komplett auf dem Gerät über die
+eigene Spracherkennung von Windows. Gesprochene Satzzeichen-Wörter („Komma",
+„neue Zeile" …) werden zu echten Zeichen; „wörtlich" vor einem Wort tippt es
+statt es als Befehl zu erkennen. Ein optionaler globaler Kurzbefehl startet und
+stoppt eine Aufnahme, ohne das Fenster zu öffnen. Braucht ebenfalls ein
+Windows-Sprachpaket — derselbe Dialog wie bei OCR.
+
+**Sprachpakete** — Texterkennung und Spracheingabe teilen sich Windows' eigene
+Sprachpakete und denselben Installationsdialog. Die App bietet den Download beim
+ersten Bedarf an; die Installation braucht Administratorrechte (übliche
+Windows-Bestätigung). „Sprachen verwalten…" im Sprachen-Dropdown listet
+Installiertes und Verfügbares und startet Installation/Update erneut; das
+Auflisten selbst braucht normalerweise keine Sonderrechte, auf manchen
+Windows-Systemen aber doch — der Dialog sagt das dann offen und bietet an, die
+Abfrage mit Administratorrechten auszuführen, statt leer zu bleiben. Dabei wird
+nur aufgelistet, nichts installiert. Eine Hintergrundprüfung meldet ein Paket,
+dessen Version sich geändert hat oder das ein Windows-Update entfernt hat, ohne
+gleich zur Neuinstallation aufzufordern — „später erinnern" blendet den Hinweis
+vorübergehend aus, oder die Prüfung lässt sich ganz abschalten.
 
 **Farbpipette & Auswahlverlauf** — Pixel als Hex/RGB/HSL kopieren; die letzten
 Auswahlen überstehen einen Neustart. Standardmäßig aus.

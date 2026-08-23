@@ -64,7 +64,8 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Images, GIFs & videos** | Save a picture from the clipboard or a file and paste it anywhere with one click |
 | **Video player** | Looping previews on tiles *and* floating buttons, with scrubber, loop and volume — remembered per prompt |
 | **PDF & files** | Attach any file by path; a PDF's first page becomes the button's image |
-| **Screenshot tool** | Capture a region or a whole window — even protected ones like the Task Manager — then crop, draw, annotate or pixelate it in a built-in editor before it becomes a copy button |
+| **Screenshot tool** | Capture a region or a whole window — even protected ones like the Task Manager |
+| **Screenshot editor** | Opens right after a capture: crop, pen, marker, line, arrow, rectangle, ellipse, text, step numbers, pixelate and spotlight, with undo/redo and edge snapping, before it becomes a copy button |
 | **Text recognition (OCR)** | Pull text out of a screenshot or an image file with Windows' own on-device recognizer — fully offline, nothing uploaded. On by default; needs a Windows language pack, which the app offers to install for you (needs administrator rights — including for the listing itself, on systems where Windows demands them) |
 | **Voice dictation** | Speak into the composer or the editor with Windows' own on-device speech recognizer — fully offline, nothing uploaded unless you allow online recognition. Spoken punctuation and formatting commands, auto-capitalization and a global hotkey included. On by default; shares OCR's language-pack dialog |
 | **Color picker** | A pipette freezes the screen, magnifies the pixel under the cursor and copies it as hex, rgb or hsl |
@@ -100,7 +101,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 |---|---|
 | **Expert menu** | Six tabs with an on/off switch for every feature and a parameter for everything adjustable. Settings that are not self-explanatory carry a tooltip |
 | **Runs in the background** | Optional minimize-to-tray, autostart at login, global hotkey |
-| **Guided first run** | A short walkthrough on first launch covering the basics, with a step to turn on the screenshot editor, color picker or OCR right there; reopen it anytime from Settings |
+| **Guided first run** | A short walkthrough on first launch covering the basics, with a step to turn on the screenshot editor, color picker, OCR or voice dictation right there; reopen it anytime from Settings |
 | **Auto updates** | Checks for a new version on start (switchable off) with one-click install, verified against a published checksum |
 | **100 % local** | A single local database, sealed with Windows' own per-account encryption so no other account on the PC can read it. On the rare machine where Windows refuses to encrypt (a damaged user profile), saving keeps working in readable form rather than losing the data — and the app says so on startup and permanently in the privacy settings, until the next successful save seals it again. No account, no telemetry, no network traffic except the update check |
 | **Small** | ~8 MB installer (Rust / Tauri), using the Windows WebView2 runtime |
@@ -166,6 +167,7 @@ cargo test --lib                        # in src-tauri/
 node --check ui/main.js
 node tests/i18n_check.js
 node tests/terms_check.js
+node tests/voice_check.js
 python tests/source_hygiene.py          # no process traces in shipped source
 python tests/expert_menu_check.py
 python tests/tooltip_check.py
