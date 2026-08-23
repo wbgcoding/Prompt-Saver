@@ -897,6 +897,19 @@ PROBE = """
         }
       }
     }
+    // 198: the journal header now matches the library's -- a count in the head,
+    // and the tag row sits BELOW the filter row instead of squeezed into it.
+    {
+      const jCount = document.getElementById('journal-count');
+      if (!jCount || !jCount.textContent.trim()) {
+        out.errors.push('198: the journal header is missing its entry count');
+      }
+      const filtersBox = document.querySelector('#journal-search .journal-filters').getBoundingClientRect();
+      const tagsBox = document.getElementById('journal-tags').getBoundingClientRect();
+      if (tagsBox.top < filtersBox.bottom) {
+        out.errors.push('198: the journal tag row overlaps the filter row instead of sitting below it');
+      }
+    }
     await click('journal-close');
     const tile = document.querySelector('#grid .tile');
     if (tile) { tile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })); await sleep(150); }

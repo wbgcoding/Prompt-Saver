@@ -659,6 +659,7 @@
     <div class="modal">
       <div class="modal-head">
         <h2 class="modal-title" data-i18n="journal">Copy history</h2>
+        <span id="journal-count" class="modal-count"></span>
         <div class="modal-head-actions">
           <button id="journal-clear" type="button" class="head-toggle head-clear" data-i18n="clearHistory">Clear history</button>
           <button id="journal-close" class="icon-btn" data-i18n-aria="close">
@@ -680,8 +681,8 @@
             <button id="journal-fav" type="button" class="lib-type lib-fav-chip" data-i18n-title="favoritesOnly" data-i18n-aria="favoritesOnly">★</button>
           </div>
           <div id="journal-colors" class="lib-colors" data-i18n-title="filterColor"></div>
-          <div id="journal-tags" class="lib-tags hidden"></div>
         </div>
+        <div id="journal-tags" class="lib-tagbar hidden"></div>
       </div>
       <div id="journal-body" class="journal-body"></div>
     </div>

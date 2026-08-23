@@ -9223,10 +9223,18 @@ function renderTagFilter() {
   const sig = names.join("") + "" + [...libTags].sort().join("");
   if (sig === _lastTagFilterSig) return;
   _lastTagFilterSig = sig;
+  renderTagBar(bar, libTags, renderLibrary);
+}
+
+// Shared markup for both filter bars (library's #library-tagbar and the copy
+// history's #journal-tags, point 198) -- label + chips + "manage tags" button.
+// Only the container, the active set and what to re-render differ per caller.
+// "Manage tags" stays reachable even before the first tag exists -- the bar
+// used to disappear entirely with nothing to filter by, hiding the only way
+// to find out tags exist at all.
+function renderTagBar(bar, activeSet, rerender) {
   bar.innerHTML = "";
-  // "Manage tags" stays reachable even before the first tag exists — the
-  // bar used to disappear entirely with nothing to filter by, hiding the only
-  // way to find out tags exist at all.
+  const names = allTags();
   if (names.length) {
     // A bare row of chips reads as decoration; the label is what makes it a filter.
     const label = document.createElement("span");
@@ -9236,22 +9244,22 @@ function renderTagFilter() {
     for (const name of names) {
       const chip = tagChipEl(name, "button");
       chip.classList.add("tag-filter");
-      const on = libTags.has(tagKey(name));
+      const on = activeSet.has(tagKey(name));
       chip.classList.toggle("active", on);
       chip.setAttribute("aria-pressed", String(on));
       chip.addEventListener("click", () => {
         const key = tagKey(name);
-        if (libTags.has(key)) libTags.delete(key); else libTags.add(key);
-        renderLibrary();
+        if (activeSet.has(key)) activeSet.delete(key); else activeSet.add(key);
+        rerender();
       });
       bar.appendChild(chip);
     }
-    if (libTags.size) {
+    if (activeSet.size) {
       const clear = document.createElement("button");
       clear.type = "button";
       clear.className = "tag-action";
       clear.textContent = t("tagClearFilter");
-      clear.addEventListener("click", () => { libTags.clear(); renderLibrary(); });
+      clear.addEventListener("click", () => { activeSet.clear(); rerender(); });
       bar.appendChild(clear);
     }
   }
@@ -10682,9 +10690,8 @@ async function loadJournal() {
   renderJournal();
 }
 
-// Same picking logic as the library's renderTagFilter() (tagMatches/tagFilterMode
-// are already shared), just the compact chip-row markup the journal's other filters
-// use instead of the library's labelled bar with its own "manage tags" button.
+// Same bar as the library's (renderTagBar, point 198) -- only the extra
+// journalTagFilter toggle and the hidden-until-enabled state are journal-only.
 let _lastJournalTagFilterSig = null;
 function renderJournalTagFilter() {
   const bar = $("journal-tags");
@@ -10699,24 +10706,13 @@ function renderJournalTagFilter() {
   const names = allTags();
   const live = new Set(names.map(tagKey));
   for (const key of [...journalTags]) if (!live.has(key)) journalTags.delete(key);
-  bar.classList.toggle("hidden", !names.length);
+  // Same as the library's own bar: "manage tags" stays reachable even with
+  // zero tags, so this no longer hides on an empty tag set (point 198).
+  bar.classList.remove("hidden");
   const sig = names.join("") + "" + [...journalTags].sort().join("");
   if (sig === _lastJournalTagFilterSig) return;
   _lastJournalTagFilterSig = sig;
-  bar.innerHTML = "";
-  for (const name of names) {
-    const chip = tagChipEl(name, "button");
-    chip.classList.add("tag-filter");
-    const on = journalTags.has(tagKey(name));
-    chip.classList.toggle("active", on);
-    chip.setAttribute("aria-pressed", String(on));
-    chip.addEventListener("click", () => {
-      const key = tagKey(name);
-      if (journalTags.has(key)) journalTags.delete(key); else journalTags.add(key);
-      renderJournal();
-    });
-    bar.appendChild(chip);
-  }
+  renderTagBar(bar, journalTags, renderJournal);
 }
 
 // Render from the cached log. Filters run client-side, so typing in the search
@@ -10734,6 +10730,16 @@ function renderJournal() {
     .map((e) => [byId.get(e.id), e.ts, e.rowid])
     .filter(([p]) => p && journalMatches(p));
   if (journalRecentRev) recent = recent.slice().reverse();
+  // How hard the filters are biting, in the header where the filters are —
+  // same wording/element as the library, counted against entries with a
+  // still-existing prompt (a log row for a deleted prompt is not "all").
+  const jcount = $("journal-count");
+  if (jcount) {
+    const all = journalLog.filter((e) => byId.get(e.id)).length;
+    jcount.textContent = recent.length === all
+      ? String(all)
+      : t("libraryCount").replace("{n}", recent.length).replace("{v}", all);
+  }
   // Most used: copy count + last-used timestamp, busiest first (or least-first).
   const lastUsed = settings.last_used || {};
   const used = Object.entries(settings.usage || {})
