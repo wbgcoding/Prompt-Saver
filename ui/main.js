@@ -8,6 +8,7 @@ import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT,
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
 import { fileUri } from "./floatShared.js";
+import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen, emit } = window.__TAURI__.event;
@@ -684,43 +685,9 @@ function renderNumPop() {
 // existing `/ z` call sites stay no-ops instead of being ripped out everywhere.
 const uiZoom = () => 1;
 
-// ---- ONE placement rule for every popover, dropdown and context menu ----
-// Below the anchor when it fits, above it when it does not, and always clamped into
-// the window on both axes — a popover that opens past an edge is unreachable, and
-// that was the same defect in the theme editor, the value pickers and the colour
-// row. Call it AFTER the content is built: the size has to be measurable.
-let POP_PAD = 6; // 87: expert-tunable
-function placePopover(el, rect, gap = 4) {
-  el.classList.remove("hidden"); // a hidden element has no box to measure
-  el.style.maxHeight = "";
-  el.classList.remove("pop-clamped");
-  const w = el.offsetWidth;
-  const h = el.offsetHeight;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const below = vh - rect.bottom - gap - POP_PAD;
-  const above = rect.top - gap - POP_PAD;
-  let top;
-  let room;
-  if (h <= below || below >= above) { top = rect.bottom + gap; room = below; }
-  else { top = rect.top - gap - Math.min(h, above); room = above; }
-  // Too tall for either side: keep it inside and let it scroll rather than cut it.
-  // Everything below reasons about the height it will ACTUALLY have — clamping with
-  // the unshrunk height would drag a tall popover to the top of the window and over
-  // the very thing it belongs to.
-  let shown = h;
-  if (h > room) {
-    shown = Math.max(80, Math.min(room, vh - 2 * POP_PAD));
-    el.style.maxHeight = `${shown}px`;
-    el.classList.add("pop-clamped");
-    if (top < POP_PAD) top = POP_PAD;
-  }
-  el.style.left = `${Math.max(POP_PAD, Math.min(rect.left, vw - w - POP_PAD))}px`;
-  el.style.top = `${Math.max(POP_PAD, Math.min(top, vh - shown - POP_PAD))}px`;
-}
-// Cursor-anchored variant (context menus): the click point is the anchor.
-const placePopoverAt = (el, x, y) =>
-  placePopover(el, { left: x, right: x, top: y, bottom: y });
+// placePopover/placePopoverAt now live in ui/popover.js -- the one placement
+// rule for every popover, dropdown and context menu in THIS window. See that
+// file for why floating.js/folder.js and media.js's volume popup stay separate.
 
 function openNumPop(input, apply) {
   popInput = input;
@@ -1773,7 +1740,7 @@ function applyValues() {
   HISTORY_PREVIEW_LEN = Math.round(val("historyPreviewLen"));
   DRAG_THRESHOLD = val("dragThreshold");
   INPUT_MAX = Math.round(val("composerMaxH"));
-  POP_PAD = Math.round(val("popoverPad"));
+  setPopoverPad(Math.round(val("popoverPad")));
   DISARM_MS = Math.round(val("disarmMs"));
   document.body.classList.toggle("toast-top", settings.ui_texts?.toastPos === "top");
   BUBBLE_MS = val("bubbleMs");
