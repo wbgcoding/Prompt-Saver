@@ -8204,7 +8204,11 @@ async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String) -> Result
         if !store.prompts.iter().any(|p| p.id == id) {
             return Ok(());
         }
-        *store.settings.usage.entry(id.clone()).or_insert(0) += 1;
+        let usage = {
+            let slot = store.settings.usage.entry(id.clone()).or_insert(0);
+            *slot += 1;
+            *slot
+        };
         // Timestamp storage is a privacy toggle (default on).
         let ts = if store.settings.ui_flags.get("historyTimestamps") == Some(&false) {
             0
@@ -8218,6 +8222,16 @@ async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String) -> Result
         // Usage count + "last used" stamp only — collected, see SETTINGS_QUIET_MS.
         // The history row itself still goes into its own table below, untouched.
         save_settings_soon();
+        // The main window's own settings.usage/last_used mirror is only ever
+        // refreshed by a handful of explicit refetches (opening the journal,
+        // "copy again") -- a copy recorded from a floating pill, the folder
+        // window or the tray left it stale everywhere else, so "most used" /
+        // "recently used" library sort silently froze at whatever it read last.
+        let _ = app.emit_to(
+            "main",
+            "usage-changed",
+            serde_json::json!({ "id": id, "usage": usage, "lastUsed": if ts > 0 { Some(ts) } else { None } }),
+        );
         (CopyEntry { id, ts }, cap, cutoff, dedup)
     };
     // The history itself lives in its own table — appended outside the lock so a
@@ -8324,6 +8338,12 @@ async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: String) -> Re
         }
         close_floating_window(&app, &id);
         sync_float_windows(&app); // a folder left with one member dissolves
+        // The main window keeps its own settings.floating mirror for the tile
+        // context menu's pin/unpin label (see cacheFloatingState in main.js) --
+        // notify_float_settings deliberately excludes it, so a pill unpinning
+        // ITSELF here would otherwise leave that mirror stale until the next
+        // full get_state, showing "Remove" on a tile that has no pill anymore.
+        let _ = app.emit_to("main", "floating-pin-changed", serde_json::json!({ "id": id, "pinned": false }));
         Ok(false)
     } else {
         let prompt = {
@@ -8340,6 +8360,7 @@ async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: String) -> Re
                     hs.0.lock().unwrap_or_else(|e| e.into_inner()).remove(&id);
                 }
                 open_floating(&app, &p);
+                let _ = app.emit_to("main", "floating-pin-changed", serde_json::json!({ "id": id, "pinned": true }));
                 Ok(true)
             }
             None => Ok(false),

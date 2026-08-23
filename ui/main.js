@@ -3528,37 +3528,50 @@ function refreshChainUi() {
   }
 }
 
+// A rotating/variable prompt's pick goes through an await (peek, var fill)
+// between reading chainSel and mutating it -- without this, a fast double
+// click on the same tile passes the "already selected?" check twice, both
+// branches push, and the tile that DID get de-picked on the next click still
+// matches indexOf on the leftover duplicate, so it stays visibly picked with
+// its text silently gone. One in-flight pick/unpick per id at a time.
+const chainPicking = new Set();
 async function toggleChainPick(p) {
   if (!isTextPrompt(p)) return; // only text buttons chain
-  const i = chainSel.indexOf(p.id);
-  if (i >= 0) {
-    chainSel.splice(i, 1); // deselect → the rest renumber
-    chainTexts.delete(p.id);
+  if (chainPicking.has(p.id)) return;
+  chainPicking.add(p.id);
+  try {
+    const i = chainSel.indexOf(p.id);
+    if (i >= 0) {
+      chainSel.splice(i, 1); // deselect → the rest renumber
+      chainTexts.delete(p.id);
+      refreshChainUi();
+      pushChainClipboard();
+      return;
+    }
+    // Rotating prompt — peek the entry a copy would use (never consumes), resolve
+    // {#{variables}#} on THAT text, right when the button is picked into the chain.
+    let rawText = p.text || p.name || "";
+    let peeked = false; // only a successful peek may be followed by a commit below —
+                         // a failed peek already fell back to p.text (a stale/wrong
+                         // entry to consume) and committing anyway would advance
+                         // whatever the pointer's REAL position actually is.
+    if ((p.variants || []).length) {
+      const peek = await invoke("rotation_peek", { id: p.id }).catch(() => null);
+      if (peek) { rawText = peek.text; peeked = true; }
+    }
+    let text = rawText;
+    if (varTokens(p, rawText).length) {
+      const filled = await resolveVars(rawText);
+      if (filled === null) return; // cancelled → leave it unselected
+      text = filled;
+    }
+    chainSel.push(p.id);
+    chainTexts.set(p.id, text);
     refreshChainUi();
-    pushChainClipboard();
-    return;
+    pushChainClipboard(peeked ? p.id : null);
+  } finally {
+    chainPicking.delete(p.id);
   }
-  // Rotating prompt — peek the entry a copy would use (never consumes), resolve
-  // {#{variables}#} on THAT text, right when the button is picked into the chain.
-  let rawText = p.text || p.name || "";
-  let peeked = false; // only a successful peek may be followed by a commit below —
-                       // a failed peek already fell back to p.text (a stale/wrong
-                       // entry to consume) and committing anyway would advance
-                       // whatever the pointer's REAL position actually is.
-  if ((p.variants || []).length) {
-    const peek = await invoke("rotation_peek", { id: p.id }).catch(() => null);
-    if (peek) { rawText = peek.text; peeked = true; }
-  }
-  let text = rawText;
-  if (varTokens(p, rawText).length) {
-    const filled = await resolveVars(rawText);
-    if (filled === null) return; // cancelled → leave it unselected
-    text = filled;
-  }
-  chainSel.push(p.id);
-  chainTexts.set(p.id, text);
-  refreshChainUi();
-  pushChainClipboard(peeked ? p.id : null);
 }
 
 // The tile's own chain-start button — a second entry point into the SAME
@@ -13919,6 +13932,22 @@ function bind() {
   // Same shape, the failure side -- an automatic backup that silently never ran
   // again would otherwise leave the user unprotected with nothing telling them.
   listen("backup-failed", () => toast(t("autoBackupFailed")));
+  // A pill can unpin ITSELF (its own "Remove" action) without this window ever
+  // being told -- the tile context menu's pin/unpin label then kept reading a
+  // stale settings.floating and could re-open a pill the label said to remove.
+  listen("floating-pin-changed", (e) => cacheFloatingState(e.payload.id, e.payload.pinned));
+  // A copy recorded from a pill, the folder window or the tray never touched
+  // this window's own settings.usage/last_used mirror -- "most used"/"recently
+  // used" library sort silently froze at whatever it read at the last full
+  // get_state. Only worth a re-render while the library is actually open.
+  listen("usage-changed", (e) => {
+    if (!settings.usage) settings.usage = {};
+    if (!settings.last_used) settings.last_used = {};
+    settings.usage[e.payload.id] = e.payload.usage;
+    if (e.payload.lastUsed) settings.last_used[e.payload.id] = e.payload.lastUsed;
+    else delete settings.last_used[e.payload.id];
+    if (!libraryEl.classList.contains("hidden")) renderLibrary();
+  });
   // save_prompts/save_trash used to fail silently to the user when both the DB
   // and the JSON fallback failed (disk full, permissions). One toast per event —
   // a stuck disk would otherwise spam this on every edit.
