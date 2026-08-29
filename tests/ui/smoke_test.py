@@ -4567,6 +4567,21 @@ PROBE = """
         if (voiceBtn.getAttribute('aria-pressed') !== 'false') {
           out.errors.push('Voice button aria-pressed did not reset to false after stopping');
         }
+        // 171: a second dictation round, with nothing else touching the field
+        // in between, must continue from where the first one left off rather
+        // than jumping back to the front -- Ben reproduced this landing at the
+        // start roughly every third time.
+        voiceBtn.click();
+        await sleep(50);
+        const selStartBeforeSecond = voiceInput.selectionStart;
+        window.__FIRE__('voice-text', { id: 1, text: 'second round' });
+        await sleep(50);
+        voiceBtn.click();
+        window.__FIRE__('voice-stopped', { id: 1, reason: 'manual' });
+        await sleep(50);
+        if (!voiceInput.value.trim().endsWith('second round')) {
+          out.errors.push('Second dictation landed at the front instead of the caret (selectionStart read before it was ' + selStartBeforeSecond + ', value is now ' + JSON.stringify(voiceInput.value) + ')');
+        }
         layoutScan('Composer with voice button');
       }
     }
