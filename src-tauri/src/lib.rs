@@ -18196,8 +18196,9 @@ mod tests {
 
     // DISM writing its unconditional startup log to %WINDIR%\Logs\DISM
     // (unwritable without admin rights) was the actual cause of "jetzt
-    // prüfen" failing for Ben -- redirected into our own always-writable temp
-    // folder instead, single-quoted like every other embedded path in this file.
+    // prüfen" failing on a standard account -- redirected into our own
+    // always-writable temp folder instead, single-quoted like every other
+    // embedded path in this file.
     #[cfg(windows)]
     #[test]
     fn dism_log_args_redirects_into_our_own_writable_temp_dir() {
