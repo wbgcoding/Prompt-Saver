@@ -2101,16 +2101,23 @@ static SEAL_NOTIFY: Mutex<Option<SealNotifier>> = Mutex::new(None);
 // show for it. Logged and announced once per run (this runs per row; a full save
 // would otherwise flood both the log and the window).
 // Test-only escape hatch: forces the plaintext fallback below without needing a
-// real DPAPI failure, which nothing in a unit test can induce. Compiled only into
-// the test binary, so release behaviour is exactly what it was before this existed.
+// real DPAPI failure, which nothing in a unit test can induce. Thread-local, not a
+// shared global: cargo test runs each test on its own thread, and a process-wide
+// flag here would force EVERY other concurrently running test's enc_str calls into
+// the fallback branch too, not just the one deliberately overriding it -- stealing
+// STORE_SEALED's one-shot true-to-false transition out from under it. Compiled only
+// into the test binary, so release behaviour is exactly what it was before this
+// existed.
 #[cfg(test)]
-static FORCE_PLAINTEXT_FALLBACK: AtomicBool = AtomicBool::new(false);
+thread_local! {
+    static FORCE_PLAINTEXT_FALLBACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
 
 fn enc_str(plain: &str) -> String {
     #[cfg(windows)]
     {
         #[cfg(test)]
-        let dpapi_ok = !FORCE_PLAINTEXT_FALLBACK.load(Ordering::Relaxed);
+        let dpapi_ok = !FORCE_PLAINTEXT_FALLBACK.with(|f| f.get());
         #[cfg(not(test))]
         let dpapi_ok = true;
         if dpapi_ok {
@@ -19101,9 +19108,14 @@ mod tests {
             "C:/Users/x/AppData/Roaming/Prompt-Saver/data.db.locked.bak",
             "C:/Users/x/AppData/Roaming/Prompt-Saver/data.db.tmp",
             "C:/Users/x/AppData/Roaming/Prompt-Saver/settings.json",
+            // The atomic-write fallback: write_sealed_json's `path.with_extension("tmp")`
+            // replaces the extension, so this is "settings.tmp", never "settings.json.tmp".
+            "C:/Users/x/AppData/Roaming/Prompt-Saver/settings.tmp",
             "C:/Users/x/AppData/Roaming/Prompt-Saver/prompts.json",
+            "C:/Users/x/AppData/Roaming/Prompt-Saver/prompts.tmp",
             "C:/Users/x/AppData/Roaming/Prompt-Saver/backups/2026-08-19.psb",
             "C:/Users/x/AppData/Roaming/Prompt-Saver/backups/subdir/2026-08-19.psb",
+            "C:/Users/x/AppData/Roaming/Prompt-Saver/error.log",
         ] {
             assert!(
                 patterns.iter().any(|p| covers(p, path)),
@@ -19721,9 +19733,10 @@ mod tests {
     }
 
     // Serializes every test that reads or mutates the process-global sealing state
-    // (STORE_SEALED, FORCE_PLAINTEXT_FALLBACK, SEAL_NOTIFY) -- cargo test runs tests
-    // on separate threads by default, and these are the only globals any test
-    // deliberately flips.
+    // (STORE_SEALED, SEAL_NOTIFY) against each other -- cargo test runs tests on
+    // separate threads by default, and these are the only globals any test
+    // deliberately flips. FORCE_PLAINTEXT_FALLBACK is thread-local (see enc_str)
+    // precisely so it needs no lock to stay isolated from unrelated tests.
     static SEAL_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     // A row written through the real store writer must never carry its plaintext
@@ -19751,13 +19764,16 @@ mod tests {
     // single save floods many rows through it -- not once per row.
     // Restores the process-global sealing state on drop -- including on a panic
     // partway through the test -- so one failed assertion here can never leave
-    // FORCE_PLAINTEXT_FALLBACK stuck on for every other test that runs after it.
+    // state stuck for every other test that runs after it. FORCE_PLAINTEXT_FALLBACK
+    // is thread-local, but cargo test pools and reuses OS threads across tests, so
+    // a later test landing on this same thread would still inherit a stale `true`
+    // without this reset.
     struct SealOverrideGuard {
         prior_sealed: bool,
     }
     impl Drop for SealOverrideGuard {
         fn drop(&mut self) {
-            FORCE_PLAINTEXT_FALLBACK.store(false, Ordering::Relaxed);
+            FORCE_PLAINTEXT_FALLBACK.with(|f| f.set(false));
             STORE_SEALED.store(self.prior_sealed, Ordering::Relaxed);
             *SEAL_NOTIFY.lock().unwrap_or_else(|e| e.into_inner()) = None;
         }
@@ -19766,13 +19782,18 @@ mod tests {
     #[test]
     fn a_flood_of_unsealed_writes_flips_the_flag_and_notifies_exactly_once() {
         let _guard = SEAL_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let prior_sealed = STORE_SEALED.swap(true, Ordering::Relaxed);
-        FORCE_PLAINTEXT_FALLBACK.store(true, Ordering::Relaxed);
-        let _restore = SealOverrideGuard { prior_sealed };
+        // Install the counter BEFORE either flag flips. Flipping FORCE first left a
+        // window where an unrelated, unguarded test's own enc_str call could catch
+        // this test's one true-to-false transition while SEAL_NOTIFY was still the
+        // previous (cleared) value -- the flag still ended up unsealed, but nothing
+        // was there to count it, so the assertion below saw zero calls.
         let calls = Arc::new(AtomicU64::new(0));
         let counter = calls.clone();
         *SEAL_NOTIFY.lock().unwrap_or_else(|e| e.into_inner()) =
             Some(Arc::new(move || { counter.fetch_add(1, Ordering::Relaxed); }));
+        let prior_sealed = STORE_SEALED.swap(true, Ordering::Relaxed);
+        FORCE_PLAINTEXT_FALLBACK.with(|f| f.set(true));
+        let _restore = SealOverrideGuard { prior_sealed };
 
         let mut conn = row_test_db();
         let prompts = numbered_prompts(50);
@@ -22923,8 +22944,11 @@ mod tests {
         let log: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
         let s = Scheduler::start();
         // Deliberately registered out of order — the due time decides, not the
-        // order they arrived in.
-        for (name, delay_ms) in [("third", 90u64), ("first", 30), ("second", 60)] {
+        // order they arrived in. Each job owns its own thread, so nothing bounds
+        // how far apart two due times must be to survive real OS scheduling
+        // jitter under load; wide gaps keep this a scheduling-order test rather
+        // than a thread-wakeup-latency test.
+        for (name, delay_ms) in [("third", 450u64), ("first", 150), ("second", 300)] {
             let log = log.clone();
             s.register_periodic(name, Duration::from_millis(delay_ms), NEVER_AGAIN, move || {
                 log.lock().unwrap_or_else(|e| e.into_inner()).push(name);
@@ -23080,10 +23104,13 @@ mod tests {
         // Let it actually reach the long wait before asking it to leave.
         std::thread::sleep(Duration::from_millis(20));
         let started = Instant::now();
-        let stopped = s.shutdown(Duration::from_millis(100));
+        // Generous relative to the 2ms poll interval: this only proves shutdown
+        // does not hang forever, not a tight production latency bound, so it must
+        // not flake when many other tests are contending for CPU at the same time.
+        let stopped = s.shutdown(Duration::from_millis(500));
         let took = started.elapsed();
         assert!(stopped, "the timer thread was still running after {took:?}");
-        assert!(took < Duration::from_millis(100), "shutdown took {took:?}");
+        assert!(took < Duration::from_millis(500), "shutdown took {took:?}");
     }
 }
 
