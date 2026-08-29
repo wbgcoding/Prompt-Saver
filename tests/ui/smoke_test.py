@@ -62,6 +62,10 @@ PROBE = """
   const out = { errors: [], overflow: [], tabs: [], rawKeys: [], layout: [] };
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const click = async (id) => { const e = document.getElementById(id); if (e) { e.click(); await sleep(200); } };
+  // A name or body that looks like markup must render as literal text everywhere
+  // it shows up (grid tile, library row), never as a real element.
+  const XSS_NAME = 'Injected <img src=x onerror=alert(1)> name';
+  const XSS_TEXT = 'body <script>alert(2)<' + '/script> tail';
 
   // ---- layout guards -------------------------------------------------------
   // Everything below answers one question: on a small window, can the user still
@@ -685,12 +689,47 @@ PROBE = """
           }
         }
       }
+      // A name or body that looks like markup must render as literal text, never
+      // as a real element -- the one place a raw HTML string could ever reach the
+      // page (the Markdown preview) escapes up front; every other renderer here
+      // uses textContent, so this proves the tile path stays that way too.
+      const xssCell = document.querySelector('#grid .cell[data-col="2"][data-row="0"]');
+      if (!xssCell || xssCell.firstElementChild) {
+        out.errors.push('expected a third empty cell on "work" for the injected-markup check');
+      } else {
+        xssCell.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+        await sleep(200);
+        document.getElementById('modal-name').value = XSS_NAME;
+        document.getElementById('modal-text').value = XSS_TEXT;
+        document.getElementById('modal-confirm').click();
+        await sleep(250);
+        const xssTile = document.querySelector('#grid .cell[data-col="2"][data-row="0"] .tile');
+        if (!xssTile) {
+          out.errors.push('the injected-markup prompt was not placed on the grid');
+        } else {
+          const tileName = xssTile.querySelector('.tile-name');
+          if (!tileName || tileName.textContent !== XSS_NAME) {
+            out.errors.push('the grid tile does not show injected markup as literal text');
+          } else if (tileName.querySelector('img') || tileName.querySelector('script')) {
+            out.errors.push('the grid tile turned injected markup into a real element');
+          }
+        }
+      }
       const homeTab = document.querySelector('.view-btn[data-view-id="home"]');
       if (homeTab) { homeTab.click(); await sleep(200); }
     }
     await click('library-btn');
     layoutScan('library');
     mustReach('library', '#library .modal-head-actions > button');
+    {
+      const xssRow = [...document.querySelectorAll('#library-list .lib-item')]
+        .find((r) => (r.querySelector('.lib-name') || {}).textContent === XSS_NAME);
+      if (!xssRow) {
+        out.errors.push('the injected-markup prompt is missing from the library list');
+      } else if (xssRow.querySelector('.lib-name img') || xssRow.querySelector('.lib-name script')) {
+        out.errors.push('the library row turned injected markup into a real element');
+      }
+    }
     // 17: "last edited" sort — from the last_edited_map fixture (p3 newest, then
     // p1, then p9; everything else — including the favorited p0/p5/p10, which
     // float to the top independently of this sort — has no version row and
@@ -5440,10 +5479,12 @@ def main():
                  # (two more expert-menu round trips) pushed past that too, then to 95s
                  # once 91/51/70's regressions (trash dialog, multi-view popover, three
                  # restore-scope round trips) added their own expert-menu detours, then
-                 # to 110s once 90-94's six new expert rows pushed past that too.
+                 # to 110s once 90-94's six new expert rows pushed past that too, then
+                 # to 120s once the injected-markup grid/library check added its own
+                 # create-and-verify round trip.
                  # The window has to hold the iframe plus Chrome's own frame.
                  f"--window-size={max(w + 30, 520)},{h + 140}",
-                 "--virtual-time-budget=110000", "--dump-dom",
+                 "--virtual-time-budget=120000", "--dump-dom",
                  wrapper.as_uri()],
                 # The dumped DOM carries all 20 languages; without an explicit
                 # codec Windows decodes it as cp1252 and the reader thread dies,
