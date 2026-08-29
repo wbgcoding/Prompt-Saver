@@ -4,3 +4,4 @@
 # even when nothing about the brand changed.
 src-tauri/src/brand.rs text eol=lf
 ui/brand.js text eol=lf
+graphify-out/graph.json merge=graphify

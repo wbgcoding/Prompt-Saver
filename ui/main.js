@@ -1427,10 +1427,6 @@ const EXPERT_VALUES = {
   rotateAutoCooldownMs: { label: "valRotateAutoCooldownMs", min: 0, max: 2000, step: 50, def: 250, unit: "ms", gate: "rotateAuto" },
   rotateAutoInputMs: { label: "valRotateAutoInputMs", min: 500, max: 10000, step: 250, def: 3000, unit: "ms", gate: "rotateAuto" },
   rotateAutoRearmMax: { label: "valRotateAutoRearmMax", min: 0, max: 50, step: 1, def: 12, unit: "", gate: "rotateAuto" },
-  // Minimum height of the tour's content area so switching between its five
-  // (unevenly long) steps never visibly resizes the dialog. Deliberately NOT gated
-  // on firstRunTour — the Help-menu reopen works regardless of that toggle, and the
-  // sizing still applies then.
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -8009,6 +8005,13 @@ function closeBackups() {
 // Remembered UI state (which panel sections are expanded). Kept in ui_flags so it
 // survives a restart; the key is not in OPT_FLAG_LABELS, so it never shows up as an
 // expert toggle and applyFlags() ignores it.
+// The write failure is swallowed on purpose, everywhere this is called (including
+// tourSeen): every key here is a one-off memory of what the user already saw or
+// last had open, never data they typed. Losing a write just means the panel
+// starts collapsed again, or the tour reopens once more, next launch -- an error
+// toast at that exact moment (right as a tour finishes, or a panel closes) would
+// be more disruptive than the failure it reports, for something that quietly
+// self-corrects on its own.
 async function saveUiState(key, on) {
   settings.ui_flags = { ...(settings.ui_flags || {}), [key]: on };
   await invoke("set_ui_flag", { key, enabled: on }).catch(() => {});
@@ -12727,26 +12730,9 @@ function bind() {
   snipEditTextInput.addEventListener("blur", () => { if (SE.textEdit) snipEditCommitTextInput(); });
 
   // ---- keyboard: tool shortcuts, undo/redo, Enter/Esc, nudge, pan, before/after ----
-  // aria-modal alone only tells assistive tech this is a dialog -- it does not
-  // stop a sighted keyboard user from Tab-ing into the grid/toolbar sitting
-  // hidden underneath (the overlay covers them visually, not in the DOM). This
-  // is the actual trap: cycle Tab/Shift+Tab between the overlay's own first and
-  // last focusable elements instead of letting the browser's default run.
-  function snipEditTabFocusables() {
-    return [...snipEdit.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"]), select, textarea, a[href]')]
-      .filter((el) => !el.disabled && el.offsetParent !== null);
-  }
-  function snipEditTrapTab(e) {
-    const list = snipEditTabFocusables();
-    if (!list.length) return;
-    const first = list[0], last = list[list.length - 1];
-    if (!snipEdit.contains(document.activeElement)) { e.preventDefault(); first.focus(); return; }
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-  }
   function snipEditKeydown(e) {
     if (snipEdit.classList.contains("hidden")) return;
-    if (e.key === "Tab") { snipEditTrapTab(e); return; }
+    if (e.key === "Tab") { trapTabWithin(snipEdit, e); return; }
     if (e.key === "Escape") {
       e.preventDefault();
       if (snipColorPopIsOpen()) { closeSnipColorPop(); return; }
@@ -14330,10 +14316,26 @@ function tourGoto(i) {
   renderTourStep();
 }
 
+// Keyboard focus trap shared by every modal overlay with aria-modal="true"
+// (screenshot editor, first-run tour): keeps Tab/Shift+Tab cycling within
+// the container instead of escaping to the page behind it. Declared at top
+// level so both bind()'s screenshot-editor code and the tour code below can
+// call it without a second implementation.
+function trapTabWithin(container, e) {
+  const list = [...container.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"]), select, textarea, a[href]')]
+    .filter((el) => !el.disabled && el.offsetParent !== null);
+  if (!list.length) return;
+  const first = list[0], last = list[list.length - 1];
+  if (!container.contains(document.activeElement)) { e.preventDefault(); first.focus(); return; }
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+}
+
 function tourKeydown(e) {
   // A confirmation dialog on top (tourAskSkip) owns every key while it is open --
   // otherwise Escape would close both it and the tour underneath on one press.
   if (!$("confirm-modal").classList.contains("hidden")) return;
+  if (e.key === "Tab") { trapTabWithin($("tour-modal"), e); return; }
   if (e.key === "Escape") { e.preventDefault(); tourAskSkip(); return; }
   if (e.key === "ArrowLeft") { e.preventDefault(); tourGoto(tourStep - 1); return; }
   if (e.key === "ArrowRight") { e.preventDefault(); tourGoto(tourStep + 1); return; }

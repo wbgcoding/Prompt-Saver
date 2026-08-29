@@ -4769,12 +4769,56 @@ PROBE = """
         if (!document.getElementById('tour-back').classList.contains('hidden')) {
           out.errors.push('Tour: Back is visible on step 0');
         }
+        // Dot navigation must support a direct jump (not just sequential Next/Back),
+        // and the last step's button swaps to a distinct, translated Finish label
+        // instead of reusing Next (point 185, track 4).
+        dots[4].click();
+        await sleep(80);
+        if (document.getElementById('tour-back').classList.contains('hidden')) {
+          out.errors.push('Tour: Back is hidden after jumping straight to the last step via its dot');
+        }
+        const finishLabel = document.getElementById('tour-next').textContent.trim();
+        const backLabel = document.getElementById('tour-back').textContent.trim();
+        if (!finishLabel || isRawKey(finishLabel) || finishLabel === backLabel) {
+          out.errors.push('Tour: last-step button does not show a distinct Finish label (' + finishLabel + ')');
+        }
+        dots[0].click();
+        await sleep(80);
+        // Keyboard focus trap (point 185, track 3): Tab from the last focusable
+        // control must wrap to the first, and Shift+Tab from the first must wrap
+        // to the last -- the same trapTabWithin() helper the screenshot editor
+        // uses (point 181), reused here instead of a second implementation.
+        {
+          const focusables = [...tourEl.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"]), select, textarea, a[href]')]
+            .filter((el) => !el.disabled && el.offsetParent !== null);
+          if (focusables.length > 1) {
+            const first = focusables[0], last = focusables[focusables.length - 1];
+            last.focus();
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+            if (document.activeElement !== first) {
+              out.errors.push('Tour: Tab from the last control did not wrap to the first');
+            }
+            first.focus();
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+            if (document.activeElement !== last) {
+              out.errors.push('Tour: Shift+Tab from the first control did not wrap to the last');
+            }
+          }
+        }
         // Background click asks first (point 193) -- Continue leaves the tour open.
         const confirmModal = document.getElementById('confirm-modal');
         tourEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
         await sleep(80);
         if (confirmModal.classList.contains('hidden')) out.errors.push('Tour: background click did not open the skip-confirm dialog');
         if (tourEl.classList.contains('hidden')) out.errors.push('Tour: background click closed the tour before confirming');
+        // .click() bypasses hit-testing, so it would pass even if the confirm
+        // dialog rendered visually BEHIND the tour -- check the actual stacking
+        // order (point 185, track 5) so a real mouse click would land on it too.
+        const tourZ = parseInt(getComputedStyle(tourEl).zIndex, 10) || 0;
+        const confirmZ = parseInt(getComputedStyle(confirmModal).zIndex, 10) || 0;
+        if (confirmZ <= tourZ) {
+          out.errors.push('Tour: skip-confirm dialog z-index (' + confirmZ + ') does not sit above the tour (' + tourZ + ')');
+        }
         document.getElementById('confirm-cancel').click();
         await sleep(80);
         if (!confirmModal.classList.contains('hidden')) out.errors.push('Tour: Continue did not close the skip-confirm dialog');
