@@ -7602,19 +7602,28 @@ function renderLangsBody(kind) {
 function langRow(kind, cap) {
   const st = LANG_DIALOG[kind];
   const row = document.createElement("div");
-  row.className = "clip-row ocr-lang-row";
-  const head = document.createElement("span");
-  head.className = "clip-time";
-  head.textContent = `${cap.label} · ${cap.tag} · ${cap.version || "—"}`;
+  row.className = "clip-row ocr-lang-row lang-row";
+  const main = document.createElement("div");
+  main.className = "lang-row-main";
+  const name = document.createElement("div");
+  name.className = "lang-row-name";
+  name.textContent = cap.label;
+  const sub = document.createElement("div");
+  sub.className = "lang-row-sub";
+  sub.textContent = `${cap.tag} · ${cap.version || "—"}`;
+  main.append(name, sub);
   const installed = cap.state === "Installed";
-  const meta = document.createElement("div");
-  meta.className = "clip-preview";
   const size = installed ? cap.install_size : cap.download_size;
+  const sizeEl = document.createElement("div");
+  sizeEl.className = "lang-row-size";
   // Windows does not always report a size -- never guess one, show the dash instead.
-  meta.textContent = `${installed ? t("ocrLangsInstalled") : cap.state} · ${size == null ? "—" : fmtBytes(size)}`;
+  sizeEl.textContent = size == null ? "—" : fmtBytes(size);
+  const chip = document.createElement("span");
+  chip.className = installed ? "lang-row-chip installed" : "lang-row-chip";
+  chip.textContent = installed ? t("ocrLangsInstalled") : cap.state;
   const actions = document.createElement("div");
   actions.className = "clip-actions";
-  row.append(head, meta, actions);
+  row.append(main, sizeEl, chip, actions);
   if (installed) {
     const check = document.createElement("span");
     check.className = "ocr-lang-check";

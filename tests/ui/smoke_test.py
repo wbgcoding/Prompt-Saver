@@ -4565,6 +4565,25 @@ PROBE = """
           if (rows.length !== FAKE_CAPS.length) {
             out.errors.push('OCR langs modal: expected ' + FAKE_CAPS.length + ' rows, found ' + rows.length);
           }
+          // 237: the language name is the most prominent thing in the row, size
+          // is its own right-aligned column (MB or a dash, never a guess), state
+          // reads as a chip instead of being buried in a shared meta line.
+          rows.forEach((row, i) => {
+            const cap = FAKE_CAPS[i];
+            const nameEl = row.querySelector('.lang-row-name');
+            if (!nameEl || nameEl.textContent !== cap.label) {
+              out.errors.push('OCR langs modal: row ' + i + ' name is not "' + cap.label + '"');
+            }
+            const sizeEl = row.querySelector('.lang-row-size');
+            const expectSize = (cap.state === 'Installed' ? cap.install_size : cap.download_size) == null ? '—' : 'MB';
+            if (!sizeEl || !sizeEl.textContent.includes(expectSize)) {
+              out.errors.push('OCR langs modal: row ' + i + ' size column does not show "' + expectSize + '"');
+            }
+            const chip = row.querySelector('.lang-row-chip');
+            if (!chip || !chip.textContent.trim()) {
+              out.errors.push('OCR langs modal: row ' + i + ' has no state chip');
+            }
+          });
           const buttons = [...document.querySelectorAll('#ocr-langs-body .ghost-btn')];
           if (buttons.length !== 2) {
             out.errors.push('OCR langs modal: expected 2 download buttons, found ' + buttons.length);

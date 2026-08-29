@@ -12893,7 +12893,7 @@ mod ocr {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
     use windows::Win32::UI::Shell::ShellExecuteW;
-    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
 
     // A very small crop is upscaled 2x before recognition -- the actual trick that
     // makes small on-screen text (button labels, tooltips) recognizable. An image
@@ -13375,7 +13375,7 @@ mod ocr {
         // contain spaces) -- this is CreateProcess's own command-line
         // convention, not PowerShell's, since it is powershell.exe's argv.
         let params = format!(
-            "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{}\"",
+            "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{}\"",
             script_path.display()
         );
         let code = unsafe {
@@ -13385,7 +13385,7 @@ mod ocr {
                 &HSTRING::from("powershell.exe"),
                 &HSTRING::from(params),
                 PCWSTR::null(),
-                SW_SHOWNORMAL,
+                SW_HIDE,
             )
         };
         drop(lock);

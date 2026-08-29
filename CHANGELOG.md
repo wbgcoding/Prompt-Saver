@@ -774,6 +774,11 @@ voice dictation, the screenshot editor and the introduction tour ship on).
   handed the receiving app a broken path when the file name contained a `?` or a
   `#` — most apps cut the path off at that character. Dragging from the main
   window was already correct; all three now build the reference the same way.
+- **Installing a language pack briefly flashed a PowerShell console.** The
+  elevated install now runs fully hidden; only the admin-rights prompt itself
+  still appears. The language pack dialog also got a clearer row layout: the
+  language name is now the most prominent thing in its row, with the size in
+  its own column and the state shown as a small chip.
 
 ### Changed
 

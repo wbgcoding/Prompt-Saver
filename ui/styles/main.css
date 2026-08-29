@@ -3019,8 +3019,19 @@ input[type="password"]::-ms-clear { display: none; }
 .clip-actions .ghost-btn { padding: 3px 10px; font-size: 12px; }
 
 /* OCR language pack management dialog (#ocr-langs-modal) -- rows reuse the
-   .clip-row/.clip-list list chrome above, these three add just the checkmark,
-   the disabled-while-installing button and the declined/failed inline note. */
+   .clip-row/.clip-list list chrome above, laid out as a horizontal strip: the
+   name is the most prominent thing in the row, tag/version sit under it as
+   secondary text, the size is its own right-aligned column, state is a chip. */
+.lang-row { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 10px; }
+.lang-row-main { flex: 1 1 160px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lang-row-name { font-size: 14px; font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lang-row-sub { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lang-row-size { flex: 0 0 auto; min-width: 56px; text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lang-row-chip {
+  flex: 0 0 auto; padding: 2px 9px; border: 1px solid var(--border); border-radius: 10px;
+  font-size: 11px; color: var(--muted); white-space: nowrap;
+}
+.lang-row-chip.installed { border-color: var(--accent); color: var(--accent); }
 .ocr-lang-row .ghost-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .ocr-lang-check { color: var(--accent); font-weight: 700; align-self: center; }
 .ocr-lang-note { color: var(--muted); font-size: 11px; align-self: center; }
