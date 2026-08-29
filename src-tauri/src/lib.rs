@@ -11024,7 +11024,7 @@ fn snip_windows(state: State<SnipState>, index: usize) -> Vec<SnipWindow> {
 }
 
 // Overlay preview JPEG quality (encoded at native resolution — pixel-sharp) is the
-// expert-tunable snipQuality value now (87), read as snip_q in begin_capture.
+// expert-tunable snipQuality value now (default 80), read as snip_q in begin_capture.
 // The colour picker shows the frozen desktop as the reference for the colour it is
 // about to copy, so its background must not carry JPEG's subsampled chroma: below
 // quality 90 the encoder halves the colour resolution, which is exactly the "washed

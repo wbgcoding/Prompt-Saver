@@ -12727,8 +12727,26 @@ function bind() {
   snipEditTextInput.addEventListener("blur", () => { if (SE.textEdit) snipEditCommitTextInput(); });
 
   // ---- keyboard: tool shortcuts, undo/redo, Enter/Esc, nudge, pan, before/after ----
+  // aria-modal alone only tells assistive tech this is a dialog -- it does not
+  // stop a sighted keyboard user from Tab-ing into the grid/toolbar sitting
+  // hidden underneath (the overlay covers them visually, not in the DOM). This
+  // is the actual trap: cycle Tab/Shift+Tab between the overlay's own first and
+  // last focusable elements instead of letting the browser's default run.
+  function snipEditTabFocusables() {
+    return [...snipEdit.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"]), select, textarea, a[href]')]
+      .filter((el) => !el.disabled && el.offsetParent !== null);
+  }
+  function snipEditTrapTab(e) {
+    const list = snipEditTabFocusables();
+    if (!list.length) return;
+    const first = list[0], last = list[list.length - 1];
+    if (!snipEdit.contains(document.activeElement)) { e.preventDefault(); first.focus(); return; }
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
   function snipEditKeydown(e) {
     if (snipEdit.classList.contains("hidden")) return;
+    if (e.key === "Tab") { snipEditTrapTab(e); return; }
     if (e.key === "Escape") {
       e.preventDefault();
       if (snipColorPopIsOpen()) { closeSnipColorPop(); return; }

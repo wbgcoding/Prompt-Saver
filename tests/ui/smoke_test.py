@@ -4331,12 +4331,111 @@ PROBE = """
             out.errors.push('screenshot editor: Save as closed the editor');
           }
         }
+        // 181: Tab/Shift+Tab must wrap inside the overlay instead of running the
+        // browser default, which would reach the grid/toolbar hidden underneath
+        // (aria-modal is only a hint for assistive tech, not an actual trap).
+        {
+          const overlay = document.getElementById('snip-edit');
+          const focusables = [...overlay.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"]), select, textarea, a[href]')]
+            .filter((el) => !el.disabled && el.offsetParent !== null);
+          if (focusables.length > 1) {
+            const first = focusables[0], last = focusables[focusables.length - 1];
+            last.focus();
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+            if (document.activeElement !== first) {
+              out.errors.push('screenshot editor: Tab from the last control did not wrap to the first');
+            }
+            first.focus();
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+            if (document.activeElement !== last) {
+              out.errors.push('screenshot editor: Shift+Tab from the first control did not wrap to the last');
+            }
+          }
+        }
         document.getElementById('snip-edit-cancel').click();
         await sleep(200);
         if (!document.getElementById('snip-edit').classList.contains('hidden')) {
           out.errors.push('screenshot editor did not close on Cancel');
         }
       }
+      // 181: a properly sized capture (not the 1x1 fixture above) to check the
+      // text tool near the right edge -- an unstyled <input> does not shrink to
+      // fit inside the stage, so placing it purely from the click point can push
+      // it past the visible canvas area. Bigger than any tested viewport so
+      // snipEditFit() always shrinks it to fill the wrap -- the stage's right
+      // edge then lands at (or past) the wrap's own right edge at every size,
+      // instead of leaving slack that would hide an overflowing input.
+      const bigCanvas = document.createElement('canvas');
+      bigCanvas.width = 1600; bigCanvas.height = 900;
+      bigCanvas.getContext('2d').fillRect(0, 0, 1600, 900);
+      window.__FIRE__('snip-captured', { data_url: bigCanvas.toDataURL('image/png'), path: '', name: 'big.png' });
+      await sleep(300);
+      if (!document.getElementById('snip-edit').classList.contains('hidden')) {
+        const textBtn = document.querySelector('#snip-edit-tools button[data-tool="text"]');
+        const wrap = document.getElementById('snip-edit-canvas-wrap');
+        const liveCv = document.getElementById('snip-edit-live');
+        textBtn.click();
+        await sleep(30);
+        const sr = liveCv.getBoundingClientRect();
+        const rightEdge = { clientX: sr.left + sr.width - 3, clientY: sr.top + sr.height / 2 };
+        liveCv.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, ...rightEdge }));
+        await sleep(50);
+        const ti = document.getElementById('snip-edit-text-input');
+        if (ti.classList.contains('hidden')) {
+          out.errors.push('screenshot editor: text tool did not open the input near the right edge');
+        } else {
+          const wr = wrap.getBoundingClientRect();
+          const tr = ti.getBoundingClientRect();
+          if (tr.right > wr.right + 1) {
+            out.errors.push('screenshot editor: text input near the right edge overflows the canvas area by ' +
+              Math.round(tr.right - wr.right) + 'px');
+          }
+        }
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await sleep(30);
+        document.getElementById('snip-edit-cancel').click();
+        await sleep(200);
+      }
+    }
+    // 181 track 10: all seven built-in themes, and the toolbar in languages
+    // with markedly longer tool labels than English. Sets data-theme directly
+    // rather than driving the settings theme picker (a separate custom widget,
+    // already covered by its own tests) -- this is only about the editor
+    // rendering sanely once a theme is active, not about picking one.
+    {
+      const TINY_PNG2 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      const priorTheme = document.documentElement.getAttribute('data-theme');
+      const BUILTIN_THEMES = ['light', 'dark', 'programmer', 'neon', 'cyberpunk', 'mono', 'ocean'];
+      for (const theme of BUILTIN_THEMES) {
+        document.documentElement.setAttribute('data-theme', theme);
+        window.__FIRE__('snip-captured', { data_url: TINY_PNG2, path: '', name: 'test.png' });
+        await sleep(150);
+        layoutScan('screenshot editor in theme ' + theme);
+        document.getElementById('snip-edit-cancel').click();
+        await sleep(100);
+      }
+      if (priorTheme) document.documentElement.setAttribute('data-theme', priorTheme);
+      else document.documentElement.removeAttribute('data-theme');
+      // The page is left in German after the earlier lang loop (later OCR
+      // checks depend on that) -- covers EN/PL/RO/JA here, restores de after.
+      const langSel2 = document.getElementById('lang-select');
+      for (const lang of ['en', 'pl', 'ro', 'ja']) {
+        langSel2.value = lang;
+        langSel2.dispatchEvent(new Event('change'));
+        await sleep(150);
+        window.__FIRE__('snip-captured', { data_url: TINY_PNG2, path: '', name: 'test.png' });
+        await sleep(150);
+        const toolBtns2 = [...document.querySelectorAll('#snip-edit-tools button[data-tool]')];
+        if (toolBtns2.length !== 11) {
+          out.errors.push('screenshot editor in ' + lang + ': expected 11 tool buttons, found ' + toolBtns2.length);
+        }
+        layoutScan('screenshot editor in ' + lang);
+        document.getElementById('snip-edit-cancel').click();
+        await sleep(100);
+      }
+      langSel2.value = 'de';
+      langSel2.dispatchEvent(new Event('change'));
+      await sleep(150);
     }
     // OCR ships on (flag "ocr"). Gate check first (both entry points visible,
     // and gone once the flag is switched off), then switch it back on via the
