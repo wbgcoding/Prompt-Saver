@@ -1066,6 +1066,10 @@ const FLAG_LABELS = {
   // Sub-toggle of promptHotkeys, default on -- moved from
   // OPT_FLAG_LABELS; no CSS class keys on this flag, so the move is risk-free.
   promptHotkeyPaste: "flagPromptHotkeyPaste",
+  // A custom, rounded/themed tray context menu instead of the native Win32
+  // popup. Off falls back to the plain OS menu -- the escape hatch if the
+  // custom window ever misbehaves on some setup.
+  trayCustomMenu: "flagTrayCustomMenu",
   trayRecent: "flagTrayRecent",         // F23 "recently used" section in the tray menu
   colorPicker: "flagColorPicker",       // F26 pipette — pick a screen colour to the clipboard
   // Windows Media.Ocr text recognition (screenshot / image file -> editable text).
@@ -1588,7 +1592,7 @@ const EXPERT_TABS = [
     // Floating buttons and the two kinds of folder they can form.
     { title: "expGroupFolders", flags: ["floating", { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap", "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
     // The quick-copy sections of the tray menu, each with its own entry count.
-    { title: "expGroupTray", flags: ["trayRecent", "trayFavs"], values: ["trayRecentN", "trayFavN"] },
+    { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs"], values: ["trayRecentN", "trayFavN"] },
     // The watcher that collects what you copy elsewhere.
     { title: "expGroupClipboard", flags: ["clipWatcher"], values: ["clipMinChars", "clipInboxMax"] },
     // Prompt folders as Markdown (beta): mirrors text-only prompts as .md files.
@@ -1770,7 +1774,7 @@ const EXPERT_TIPS = [
   "voice", "voiceInterim", "voicePunct", "voiceAutoCaps", "voiceAutoStop", "voiceAutoStopSec", "voiceMaxMin",
   "voiceLangCacheH", "voiceLang", "voiceInsert", "voiceOnlineOk", "voiceAutoPickLang", "voiceLangAutoUpdate",
   "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH", "voiceHotkey", "voiceHotkeyTarget",
-  "trayRecent", "trayFavs", "trayRecentN", "trayFavN",
+  "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN",
   "checkUpdateOnStart", "showUpdates", "updateCheckH", "importExport", "dimToolbar", "keyboardNav", "allowMultipleInstances",
   "headerSeparators", "floating",
   "pillFolders", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap",

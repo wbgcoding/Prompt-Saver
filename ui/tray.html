@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title></title>
+  <link rel="stylesheet" href="styles/floating.css" />
+</head>
+<body class="tray-menu-body">
+  <!-- The tray icon's right-click menu, redrawn as a themed frameless window
+       instead of the native Win32 popup (which cannot be rounded or restyled).
+       All content and activation come from the backend (tray_window_plan /
+       tray_window_activate) -- this file only draws rows and handles keyboard,
+       mouse and focus; it never decides what an entry copies. -->
+  <div id="card" class="tray-menu-card"></div>
+
+  <script type="module" src="tray.js"></script>
+</body>
+</html>

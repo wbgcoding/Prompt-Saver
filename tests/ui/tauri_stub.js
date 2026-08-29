@@ -239,6 +239,25 @@ const RESULTS = {
   // P100: the probe reads this back instead of a real backend hand-off to main.js.
   launcher_select: (a) => { window.__LAUNCHER_SELECTED__ = a && a.id; return null; },
   launcher_close: () => { window.__LAUNCHER_CLOSED__ = true; return null; },
+  // The custom tray window's own content -- a small fixed fixture covering all
+  // four entry kinds and a custom tile color is enough to exercise rendering
+  // and keyboard/mouse handling; the real section/ordering logic is Rust-side
+  // and already covered by its own unit tests (tray_plan and friends).
+  tray_window_plan: () => ({
+    sections: [
+      { title: "Favorites", entries: [
+        { id: "tray-copy-p1", label: "First prompt", kind: "text", color: "" },
+        { id: "tray-copy-p2", label: "Image prompt", kind: "image", color: "#ff00aa" },
+      ] },
+      { title: "Recent", entries: [
+        { id: "tray-copy-p3", label: "File prompt", kind: "file", color: "" },
+      ] },
+    ],
+    showLabel: "Open Prompt Saver",
+    quitLabel: "Quit",
+  }),
+  tray_window_activate: (a) => { window.__TRAY_ACTIVATED__ = a && a.id; return null; },
+  tray_window_close: () => { window.__TRAY_CLOSED__ = true; return null; },
   set_theme: () => "dark",
   // Saving hands back the settings blob with the edited theme in place.
   save_custom_theme: (a) => {

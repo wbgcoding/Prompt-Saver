@@ -5485,6 +5485,57 @@ LAUNCHER_PROBE = """
 """
 
 
+# The custom Windows-11-style tray menu (point 236): rendering, keyboard nav and
+# activation. The Rust-side content (favorites/recent selection, ordering, caps)
+# has its own unit tests -- this only proves the window draws what it is given
+# and responds to the keyboard the same way the launcher and vars windows do.
+TRAY_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  try {
+    await sleep(300);
+    const rows = () => [...document.querySelectorAll('#card .tray-menu-row')];
+    if (rows().length !== 5) errs.push('expected 5 rows (3 entries + show + quit), found ' + rows().length);
+    const heads = [...document.querySelectorAll('#card .tray-menu-head')];
+    if (heads.length !== 2) errs.push('expected 2 section headers, found ' + heads.length);
+    const seps = [...document.querySelectorAll('#card .tray-menu-sep')];
+    if (seps.length !== 2) errs.push('expected 2 separators (one per section), found ' + seps.length);
+    if (!rows()[0].classList.contains('active')) errs.push('the first row is not highlighted on open');
+    // Every entry row (not show/quit) carries a colored icon chip, and the one
+    // entry with its own tile color must use it instead of the kind's tint.
+    const icons = rows().slice(0, 3).map((r) => r.querySelector('.tray-menu-icon'));
+    if (icons.some((i) => !i)) errs.push('an entry row has no icon chip');
+    else if (!/255,\\s*0,\\s*170/.test(icons[1].style.background)) {
+      errs.push('the entry with a custom color did not use it: ' + icons[1].style.background);
+    }
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    await sleep(30);
+    if (!rows()[1].classList.contains('active')) errs.push('ArrowDown did not move the highlight to row 1');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    await sleep(30);
+    if (!rows()[0].classList.contains('active')) errs.push('ArrowUp did not move the highlight back to row 0');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await sleep(30);
+    if (window.__TRAY_ACTIVATED__ !== 'tray-copy-p1') {
+      errs.push('Enter did not activate the highlighted row: ' + window.__TRAY_ACTIVATED__);
+    }
+    // Same "one action ever" guard the launcher and vars windows use: a stray
+    // Escape after a real activation must never ALSO fire tray_window_close.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await sleep(30);
+    if (window.__TRAY_CLOSED__) errs.push('closing fired even though an activation already had');
+  } catch (e) { errs.push('probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # A DPAPI failure makes the backend write the store in plaintext instead of
 # refusing the save. That used to be reported in the error log and nowhere else.
 # The same page is booted twice — once with the backend reporting a sealed store,
@@ -5674,7 +5725,8 @@ def main():
                 ("snip.html", (1280, 800), PICK_PROBE, 20000),
                 ("folder.html", (520, 420), FOLDER_PROBE, 15000),
                 ("vars.html", (340, 250), VARS_PROBE, 15000),
-                ("launcher.html", (560, 420), LAUNCHER_PROBE, 15000)):
+                ("launcher.html", (560, 420), LAUNCHER_PROBE, 15000),
+                ("tray.html", (240, 360), TRAY_PROBE, 15000)):
             side = tmp / "ui" / name
             side.write_text(
                 side.read_text(encoding="utf-8")

@@ -1053,19 +1053,40 @@ fn push_tray_section(
     }
 }
 
+// The custom Windows-11-style tray window replaces the native right-click
+// popup. Ships on (a rounder, themed look was the whole point of building it);
+// switching it off is the escape hatch back to the plain OS menu if the
+// custom window ever misbehaves.
+const TRAY_CUSTOM_MENU_KEY: &str = "trayCustomMenu";
+
+fn tray_custom_menu_on(settings: &Settings) -> bool {
+    settings.ui_flags.get(TRAY_CUSTOM_MENU_KEY) != Some(&false)
+}
+
 // Build the tray menu from the current store and install it. The store lock is
 // dropped before the first menu call — building a menu while holding it is the
 // classic deadlock shape here.
 fn apply_tray_menu(app: &AppHandle) {
-    let (lang, plan) = match app.try_state::<Db>() {
+    let (lang, plan, custom) = match app.try_state::<Db>() {
         Some(state) => {
             let store = lock(&state);
             let cfg = tray_cfg(&store.settings);
             let plan = tray_plan(&store.prompts, &store.settings.last_used, &cfg);
-            (resolve_lang(&store.settings.language), plan)
+            (resolve_lang(&store.settings.language), plan, tray_custom_menu_on(&store.settings))
         }
         None => return,
     };
+    if custom {
+        // The custom window builds its own content live from tray_window_plan()
+        // on every right-click, so there is nothing to precompute here — just
+        // make sure no native popup is left attached to fight it for the
+        // right-click. Detaching also skips every rebuild this function would
+        // otherwise do while the toggle stays on.
+        if let Some(tray) = app.tray_by_id("tray") {
+            let _ = tray.set_menu::<Menu<tauri::Wry>>(None);
+        }
+        return;
+    }
     TRAY_EXTRAS.store(!plan.is_empty(), Ordering::SeqCst);
     let (open_label, quit_label) = tray_labels(lang);
     let (recent_title, favs_title) = tray_section_labels(lang);
@@ -1122,6 +1143,184 @@ fn rebuild_tray(app: &AppHandle) {
 // the tray in the foreground, so there is no text field to paste into.
 fn fire_tray_copy(app: &AppHandle, id: &str) {
     let _ = app.emit_to("main", "prompt-tray-copy", id.to_string());
+}
+
+// One place for what a tray menu id DOES, shared by the native popup's
+// on_menu_event and the custom tray window's tray_window_activate command --
+// the two menus must never drift into behaving differently for the same id.
+fn handle_tray_menu_id(app: &AppHandle, id: &str) {
+    match id {
+        "show" => show_main(app),
+        "quit" => {
+            if let Some(state) = app.try_state::<Db>() {
+                let store = state.lock().unwrap_or_else(|e| e.into_inner());
+                save_settings(app, &store.settings);
+            }
+            #[cfg(windows)]
+            clipwatch::stop(); // 91: flush a pending auto-session for real
+            voice_shutdown(app); // 125
+            app.exit(0);
+        }
+        other => {
+            if let Some(id) = tray_copy_target(other) {
+                fire_tray_copy(app, id);
+            }
+        }
+    }
+}
+
+// ---------- Custom Windows-11-style tray window ----------
+// The native TrackPopupMenu cannot be rounded or restyled -- that is a shell/XAML
+// look, not something Win32 menus support. apply_tray_menu() detaches the native
+// menu entirely while trayCustomMenu is on (see there), and this window takes
+// over the right-click instead, drawing its OWN content from the plan below.
+
+const TRAY_WIN_LABEL: &str = "tray-menu";
+const TRAY_WIN_W: f64 = 240.0; // logical px; keep in sync with .tray-menu-card in floating.css
+const TRAY_WIN_ROW_H: f64 = 30.0;
+const TRAY_WIN_HEAD_H: f64 = 22.0;
+const TRAY_WIN_SEP_H: f64 = 9.0; // 1px line + 4px margin top/bottom, one per section
+const TRAY_WIN_CHROME: f64 = 20.0; // card padding, independent of row count
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct TrayWinEntry {
+    id: String,
+    label: String,
+    kind: String,
+    color: String,
+}
+
+#[derive(Serialize, Clone)]
+struct TrayWinSection {
+    title: String,
+    entries: Vec<TrayWinEntry>,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct TrayWinPlan {
+    sections: Vec<TrayWinSection>,
+    show_label: String,
+    quit_label: String,
+}
+
+fn tray_kind_str(kind: TrayKind) -> &'static str {
+    match kind {
+        TrayKind::Text => "text",
+        TrayKind::Image => "image",
+        TrayKind::Media => "media",
+        TrayKind::File => "file",
+    }
+}
+
+// Same content, same order as the native menu (tray_plan/tray_labels) -- this is
+// a restyle, not a second menu with its own rules. Built fresh on every open, so
+// (unlike the native HMENU) there is no separate rebuild-on-change path to keep
+// in sync.
+fn build_tray_win_plan(app: &AppHandle) -> TrayWinPlan {
+    let state: State<Db> = match app.try_state::<Db>() {
+        Some(s) => s,
+        None => {
+            return TrayWinPlan { sections: Vec::new(), show_label: String::new(), quit_label: String::new() };
+        }
+    };
+    let store = lock(&state);
+    let cfg = tray_cfg(&store.settings);
+    let plan = tray_plan(&store.prompts, &store.settings.last_used, &cfg);
+    let lang = resolve_lang(&store.settings.language);
+    let (open_label, quit_label) = tray_labels(lang);
+    let (recent_title, favs_title) = tray_section_labels(lang);
+    let sections = plan
+        .into_iter()
+        .map(|(section, entries)| TrayWinSection {
+            title: match section {
+                TraySection::Favorites => favs_title,
+                TraySection::Recent => recent_title,
+            }
+            .to_string(),
+            entries: entries
+                .into_iter()
+                .map(|e| TrayWinEntry { id: e.id, label: e.label, kind: tray_kind_str(e.kind).to_string(), color: e.color })
+                .collect(),
+        })
+        .collect();
+    TrayWinPlan { sections, show_label: open_label.to_string(), quit_label: quit_label.to_string() }
+}
+
+// Pure, so the row/header/separator arithmetic stays testable without an app
+// handle -- mirrors tray_plan's own reasoning for why it takes plain data.
+fn tray_window_logical_height(plan: &TrayWinPlan) -> f64 {
+    let mut logical_h = TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H; // show + quit always present
+    for s in &plan.sections {
+        logical_h += TRAY_WIN_HEAD_H + s.entries.len() as f64 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H;
+    }
+    logical_h
+}
+
+fn tray_window_rect(app: &AppHandle, plan: &TrayWinPlan) -> Rect {
+    let (work, dpi, cursor) = work_and_dpi_at_cursor(app);
+    let w = TRAY_WIN_W * dpi;
+    let h = tray_window_logical_height(plan) * dpi;
+    let (x, y) = clamp_to_work(work, w, h, cursor.x, cursor.y);
+    Rect { x, y, w, h }
+}
+
+// Opens at the cursor, clamped into that monitor's work area -- same helper every
+// other cursor-anchored popup (launcher, var prompt) already uses. Replaces an
+// already-open one instead of stacking a second, matching those windows too.
+fn open_tray_window(app: &AppHandle) {
+    if let Some(win) = app.get_webview_window(TRAY_WIN_LABEL) {
+        let _ = win.close();
+    }
+    let excluded = {
+        let state: State<Db> = app.state();
+        let store = lock(&state);
+        capture_excluded(&store.settings)
+    };
+    let plan = build_tray_win_plan(app);
+    let rect = tray_window_rect(app, &plan);
+    let win = match WebviewWindowBuilder::new(app, TRAY_WIN_LABEL, WebviewUrl::App("tray.html".into()))
+        .title(brand::DISPLAY_NAME)
+        .inner_size(TRAY_WIN_W, TRAY_WIN_W) // placeholder: set_bounds_phys owns the real box
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .shadow(false)
+        .focused(true)
+        .visible(false) // sized in physical pixels first, so nothing flashes at the wrong size
+        .build()
+    {
+        Ok(w) => w,
+        Err(_) => return,
+    };
+    let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
+    set_capture_exclusion(&win, excluded);
+    set_bounds_phys(&win, rect);
+    let _ = win.show();
+    let _ = win.set_focus();
+}
+
+#[tauri::command]
+fn tray_window_plan(app: AppHandle) -> TrayWinPlan {
+    build_tray_win_plan(&app)
+}
+
+#[tauri::command]
+fn tray_window_activate(app: AppHandle, id: String) {
+    handle_tray_menu_id(&app, &id);
+    if let Some(win) = app.get_webview_window(TRAY_WIN_LABEL) {
+        let _ = win.close();
+    }
+}
+
+#[tauri::command]
+fn tray_window_close(app: AppHandle) {
+    if let Some(win) = app.get_webview_window(TRAY_WIN_LABEL) {
+        let _ = win.close();
+    }
 }
 
 // A result picked in the quick-launcher runs the very same activation the tray
@@ -14172,7 +14371,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     let is_capture = key == ALLOW_SCREENSHOT_KEY;
     let is_clip = key == "clipWatcher"; // F21
     let is_hotkeys = key == "promptHotkeys"; // F20
-    let is_tray = key == "trayRecent" || key == "trayFavs"; // F23
+    let is_tray = key == "trayRecent" || key == "trayFavs" || key == TRAY_CUSTOM_MENU_KEY; // F23
     let is_folders = key == "pillFolders"; // F25
     let is_sync_enable = key == "promptSync" && enabled; // Prompt-folders-as-Markdown
     // Turning either gate off must not leave a session silently running.
@@ -16362,26 +16561,7 @@ pub fn run() {
                 .tooltip(brand::DISPLAY_NAME)
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "show" => show_main(app),
-                    "quit" => {
-                        if let Some(state) = app.try_state::<Db>() {
-                            let store = state.lock().unwrap_or_else(|e| e.into_inner());
-                            save_settings(app, &store.settings);
-                        }
-                        #[cfg(windows)]
-                        clipwatch::stop(); // 91: flush a pending auto-session for real
-                        voice_shutdown(app); // 125
-                        app.exit(0);
-                    }
-                    // A quick-copy entry. Unknown ids (section headers, leftovers
-                    // from an older menu) fall through without a lookup.
-                    other => {
-                        if let Some(id) = tray_copy_target(other) {
-                            fire_tray_copy(app, id);
-                        }
-                    }
-                })
+                .on_menu_event(|app, event| handle_tray_menu_id(app, event.id.as_ref()))
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click {
                         button: MouseButton::Left,
@@ -16390,6 +16570,23 @@ pub fn run() {
                     } = event
                     {
                         show_main(tray.app_handle());
+                    } else if let TrayIconEvent::Click {
+                        button: MouseButton::Right,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        // The native popup only shows up here when trayCustomMenu is
+                        // off (apply_tray_menu detaches its menu entirely while it is
+                        // on) -- otherwise this window would appear right next to it.
+                        let app = tray.app_handle();
+                        let custom = app
+                            .try_state::<Db>()
+                            .map(|s| tray_custom_menu_on(&lock(&s).settings))
+                            .unwrap_or(false);
+                        if custom {
+                            open_tray_window(app);
+                        }
                     }
                 });
             if let Some(icon) = app.default_window_icon() {
@@ -16536,6 +16733,9 @@ pub fn run() {
             import_custom_theme,
             launcher_select,
             launcher_close,
+            tray_window_plan,
+            tray_window_activate,
+            tray_window_close,
             copy_prompt,
             rotation_peek,
             rotation_commit,
@@ -22332,6 +22532,63 @@ mod tests {
         let plan = tray_plan(&[starred], &HashMap::new(), &tray_all_on(5, 5));
         assert_eq!(plan[0].1[0].kind, TrayKind::File);
         assert_eq!(plan[0].1[0].color, "#123456");
+    }
+
+    #[test]
+    fn tray_custom_menu_defaults_on_and_the_flag_turns_it_off() {
+        let mut settings = Settings::default();
+        assert!(tray_custom_menu_on(&settings), "ships on until a user turns it off");
+        settings.ui_flags.insert(TRAY_CUSTOM_MENU_KEY.to_string(), false);
+        assert!(!tray_custom_menu_on(&settings));
+        settings.ui_flags.insert(TRAY_CUSTOM_MENU_KEY.to_string(), true);
+        assert!(tray_custom_menu_on(&settings), "explicitly re-enabling it must also work");
+    }
+
+    #[test]
+    fn tray_kind_str_round_trips_every_kind_to_a_distinct_lowercase_word() {
+        let all = [
+            (TrayKind::Text, "text"),
+            (TrayKind::Image, "image"),
+            (TrayKind::Media, "media"),
+            (TrayKind::File, "file"),
+        ];
+        for (kind, word) in all {
+            assert_eq!(tray_kind_str(kind), word);
+        }
+    }
+
+    #[test]
+    fn tray_window_height_accounts_for_every_row_header_and_separator() {
+        let entry = |id: &str| TrayWinEntry { id: id.into(), label: id.into(), kind: "text".into(), color: String::new() };
+        // No sections at all: just the two terminal rows, plus the card's own padding.
+        let empty = TrayWinPlan { sections: Vec::new(), show_label: "Show".into(), quit_label: "Quit".into() };
+        assert_eq!(tray_window_logical_height(&empty), TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H);
+
+        // One section, two entries: its own header, both rows, and the one separator
+        // that always follows a section (matching push_tray_section's native shape).
+        let one_section = TrayWinPlan {
+            sections: vec![TrayWinSection { title: "Favorites".into(), entries: vec![entry("a"), entry("b")] }],
+            show_label: "Show".into(),
+            quit_label: "Quit".into(),
+        };
+        let want_one = TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H + TRAY_WIN_HEAD_H + 2.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H;
+        assert_eq!(tray_window_logical_height(&one_section), want_one);
+
+        // Two sections must each add their own header, rows and separator -- never
+        // shared, since the native menu (push_tray_section) never shares one either.
+        let two_sections = TrayWinPlan {
+            sections: vec![
+                TrayWinSection { title: "Favorites".into(), entries: vec![entry("a")] },
+                TrayWinSection { title: "Recent".into(), entries: vec![entry("b"), entry("c"), entry("d")] },
+            ],
+            show_label: "Show".into(),
+            quit_label: "Quit".into(),
+        };
+        let want_two = TRAY_WIN_CHROME
+            + 2.0 * TRAY_WIN_ROW_H // show + quit
+            + (TRAY_WIN_HEAD_H + 1.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H) // 1-entry section
+            + (TRAY_WIN_HEAD_H + 3.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H); // 3-entry section
+        assert_eq!(tray_window_logical_height(&two_sections), want_two);
     }
 
     #[test]

@@ -247,7 +247,10 @@ the same way — a tile belongs to only one grid folder at a time.
 ### Tray
 
 The system tray icon's right-click menu offers a "recently copied" and a
-"favourites" section for quick access without opening the main window.
+"favourites" section for quick access without opening the main window. It draws
+as a rounded, themed window matching the rest of the app rather than the plain
+Windows popup; the expert menu can switch back to the plain system menu if the
+custom one ever misbehaves on your setup.
 
 ### Standalone: Quick launcher
 
@@ -501,7 +504,9 @@ belegt jede Zeile direkt um, ohne den jeweiligen Editor zu öffnen.
 **Schwebende Buttons & Ordner** — Pillen-Ordner und Raster-Ordner (beide aus);
 eine Kachel gehört immer nur zu einem Raster-Ordner gleichzeitig.
 
-**Taskleistenmenü** — Zuletzt kopiert, Favoriten.
+**Taskleistenmenü** — Zuletzt kopiert, Favoriten. Erscheint als abgerundetes,
+zum Thema passendes Fenster statt des einfachen Windows-Menüs; im Expertenmenü
+lässt sich bei Bedarf auf das einfache Systemmenü zurückschalten.
 
 **Zwischenablage-Überwachung** — aus, protokolliert bei Bedarf alles Kopierte im
 System.

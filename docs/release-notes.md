@@ -45,7 +45,7 @@ Requires the Microsoft WebView2 runtime (preinstalled on Windows 11 and current 
 ### Copy from anywhere
 
 - **Per-prompt hotkeys** — give a prompt its own global key combination that copies it from any app, even with Prompt Saver in the tray, and optionally pastes it straight away.
-- **Tray quick menu** — the tray menu can list your recent and favorite prompts; one click copies without opening the window.
+- **Tray quick menu** — the tray menu can list your recent and favorite prompts; one click copies without opening the window. It draws as a rounded, themed window in the Windows 11 style instead of the plain system popup; an expert-menu switch falls back to the plain menu.
 - **Drag-out** — hold Ctrl and drag a tile, library row or floating button into another app to drop its text there.
 - **Floating-button folders** — drag one floating button onto another and they merge into a folder showing up to four previews and a count. Click to open it in place, drag a member out to free it, and it dissolves when one is left.
 

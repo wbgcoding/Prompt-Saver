@@ -61,7 +61,9 @@ voice dictation, the screenshot editor and the introduction tour ship on).
   switch swaps the two gestures so a plain drag leaves the app and the key moves
   the tile instead.
 - **Tray quick menu** — the tray icon's menu can list your recently used and
-  your favorite prompts; clicking one copies it without opening the window.
+  your favorite prompts; clicking one copies it without opening the window. It
+  draws as a rounded, themed window in the Windows 11 style instead of the
+  plain system popup; an expert-menu switch falls back to the plain menu.
 - **Floating-button folders** — drag one floating button onto another and they
   merge into a folder button showing up to four mini previews and a count. Click
   it and it opens in place into a small grid; drag a member out to free it
