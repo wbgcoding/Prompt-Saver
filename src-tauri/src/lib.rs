@@ -2100,11 +2100,23 @@ static SEAL_NOTIFY: Mutex<Option<SealNotifier>> = Mutex::new(None);
 // would otherwise downgrade the whole store from sealed to readable with nothing to
 // show for it. Logged and announced once per run (this runs per row; a full save
 // would otherwise flood both the log and the window).
+// Test-only escape hatch: forces the plaintext fallback below without needing a
+// real DPAPI failure, which nothing in a unit test can induce. Compiled only into
+// the test binary, so release behaviour is exactly what it was before this existed.
+#[cfg(test)]
+static FORCE_PLAINTEXT_FALLBACK: AtomicBool = AtomicBool::new(false);
+
 fn enc_str(plain: &str) -> String {
     #[cfg(windows)]
     {
-        if let Some(ct) = store_crypt::protect(plain.as_bytes()) {
-            return format!("{}{}", ENC_PREFIX, base64_encode(&ct));
+        #[cfg(test)]
+        let dpapi_ok = !FORCE_PLAINTEXT_FALLBACK.load(Ordering::Relaxed);
+        #[cfg(not(test))]
+        let dpapi_ok = true;
+        if dpapi_ok {
+            if let Some(ct) = store_crypt::protect(plain.as_bytes()) {
+                return format!("{}{}", ENC_PREFIX, base64_encode(&ct));
+            }
         }
         if STORE_SEALED.swap(false, Ordering::Relaxed) {
             append_crash_log(
@@ -19112,6 +19124,7 @@ mod tests {
     // and private notes, so they must reach disk sealed, not as readable JSON.
     #[test]
     fn store_json_fallback_is_written_sealed() {
+        let _guard = SEAL_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("ps-sealed-{}", std::process::id()));
         let _ = fs::create_dir_all(&dir);
         let path = dir.join("prompts.json");
@@ -19698,12 +19711,76 @@ mod tests {
     // been a hardcoded "sealed" no matter what came back.
     #[test]
     fn store_sealed_reports_what_a_write_actually_did() {
+        let _guard = SEAL_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let really_sealed = enc_str("probe").starts_with(ENC_PREFIX);
         assert_eq!(
             store_sealed(),
             really_sealed,
             "the reported state must match what enc_str wrote, in both directions"
         );
+    }
+
+    // Serializes every test that reads or mutates the process-global sealing state
+    // (STORE_SEALED, FORCE_PLAINTEXT_FALLBACK, SEAL_NOTIFY) -- cargo test runs tests
+    // on separate threads by default, and these are the only globals any test
+    // deliberately flips.
+    static SEAL_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    // A row written through the real store writer must never carry its plaintext
+    // content on disk -- proves the writer path, not just enc_str in isolation
+    // (already covered by the plain round-trip test above it).
+    #[test]
+    fn a_sealed_write_never_puts_the_plaintext_marker_on_disk() {
+        let _guard = SEAL_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        if !sealing_is_randomised() {
+            return; // DPAPI unavailable on this machine -- nothing to prove here
+        }
+        let mut conn = row_test_db();
+        const MARKER: &str = "PLAINTEXT-MARKER-206-must-never-reach-disk";
+        let mut prompts = numbered_prompts(1);
+        prompts[0].text = MARKER.into();
+        let mut written = WrittenRows::new();
+        db_write_prompts(&mut conn, &prompts, &mut written).unwrap();
+        let rows = stored_rows(&conn, "prompts");
+        let blob = &rows[0].2;
+        assert!(blob.starts_with(ENC_PREFIX), "a sealed write must carry the enc prefix");
+        assert!(!blob.contains(MARKER), "the plaintext marker must never appear in the stored bytes: {blob}");
+    }
+
+    // The fallback must flip the flag and notify exactly once, even when a
+    // single save floods many rows through it -- not once per row.
+    // Restores the process-global sealing state on drop -- including on a panic
+    // partway through the test -- so one failed assertion here can never leave
+    // FORCE_PLAINTEXT_FALLBACK stuck on for every other test that runs after it.
+    struct SealOverrideGuard {
+        prior_sealed: bool,
+    }
+    impl Drop for SealOverrideGuard {
+        fn drop(&mut self) {
+            FORCE_PLAINTEXT_FALLBACK.store(false, Ordering::Relaxed);
+            STORE_SEALED.store(self.prior_sealed, Ordering::Relaxed);
+            *SEAL_NOTIFY.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        }
+    }
+
+    #[test]
+    fn a_flood_of_unsealed_writes_flips_the_flag_and_notifies_exactly_once() {
+        let _guard = SEAL_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let prior_sealed = STORE_SEALED.swap(true, Ordering::Relaxed);
+        FORCE_PLAINTEXT_FALLBACK.store(true, Ordering::Relaxed);
+        let _restore = SealOverrideGuard { prior_sealed };
+        let calls = Arc::new(AtomicU64::new(0));
+        let counter = calls.clone();
+        *SEAL_NOTIFY.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(Arc::new(move || { counter.fetch_add(1, Ordering::Relaxed); }));
+
+        let mut conn = row_test_db();
+        let prompts = numbered_prompts(50);
+        let mut written = WrittenRows::new();
+        db_write_prompts(&mut conn, &prompts, &mut written).unwrap();
+
+        assert!(!store_sealed(), "the flag must report unsealed once the fallback ran");
+        assert_eq!(calls.load(Ordering::Relaxed), 1, "the notify must fire exactly once, not once per row");
     }
 
     // A genuinely fresh install (no settings row at all yet) must never be flagged
