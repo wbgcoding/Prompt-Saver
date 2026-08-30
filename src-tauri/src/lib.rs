@@ -2231,6 +2231,13 @@ fn title_case(w: &str) -> String {
 // plaintext if DPAPI is unavailable so data is never lost; legacy plaintext rows are
 // re-encrypted on the next save (see load_store).
 const ENC_PREFIX: &str = "enc:v1:";
+// A NUL byte can never occur in text a user actually typed or pasted, so it is
+// safe as an escape marker: the plaintext-fallback path below prepends it only
+// when the plaintext itself happens to start with ENC_PREFIX (or, recursively,
+// with this marker), so dec_str can tell "real ciphertext" from "plaintext that
+// coincidentally looks like the marker" instead of misreading the latter as
+// corrupt ciphertext and erasing it to "".
+const PLAINTEXT_ESCAPE: &str = "\u{0}";
 
 #[cfg(windows)]
 mod store_crypt {
@@ -2337,6 +2344,9 @@ fn enc_str(plain: &str) -> String {
             }
         }
     }
+    if plain.starts_with(ENC_PREFIX) || plain.starts_with(PLAINTEXT_ESCAPE) {
+        return format!("{PLAINTEXT_ESCAPE}{plain}");
+    }
     plain.to_string()
 }
 
@@ -2367,6 +2377,9 @@ fn settings_locked() -> bool {
 // undecryptable prefixed value (e.g. another Windows account) yields "" so the row is
 // skipped rather than fed garbage to the JSON parser.
 fn dec_str(stored: &str) -> String {
+    if let Some(rest) = stored.strip_prefix(PLAINTEXT_ESCAPE) {
+        return rest.to_string();
+    }
     #[cfg(windows)]
     if let Some(b64) = stored.strip_prefix(ENC_PREFIX) {
         let ct = base64_decode(b64);
@@ -2515,9 +2528,19 @@ fn write_rows(
         }
     }
     {
+        // A row missing from `keep` is only deleted if THIS process already knew
+        // about it (present in `written`, its own last-synced view of the table).
+        // With `allowMultipleInstances`, another process can commit a brand-new
+        // row between this process's own load and this save; that row is present
+        // in the DB but never made it into this process's in-memory list or its
+        // `written` map. Deleting on absence-from-`keep` alone would treat that
+        // foreign row as "removed by the user" and destroy it, even though this
+        // process never showed it to anyone. Requiring prior knowledge keeps a
+        // real, user-initiated deletion working (the row was loaded, so it is in
+        // `written`) while no longer erasing another instance's unseen work.
         let mut del = tx.prepare(&format!("DELETE FROM {table} WHERE id = ?1"))?;
         for id in present.keys() {
-            if !keep.contains(id.as_str()) {
+            if !keep.contains(id.as_str()) && written.contains_key(&row_key(table, id)) {
                 del.execute(params![id])?;
             }
         }
@@ -7648,6 +7671,16 @@ fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<Str
     if !src.exists() {
         return Err("no-store".into());
     }
+    // restore_backup refuses to inflate a snapshot past MAX_INFLATED (a defense
+    // against a hostile crafted .gz, not a real-world size). Without this check a
+    // store that has genuinely grown past that ceiling would still back up
+    // successfully today and only reveal that it can never be restored the day it
+    // is actually needed. Checked on the uncompressed size (gzip only shrinks it).
+    if let Ok(meta) = fs::metadata(&src) {
+        if too_large_to_restore(meta.len()) {
+            return Err("store-too-large-for-backup".into());
+        }
+    }
     // Two snapshots inside the same second — two quick manual backups, or the hour a
     // DST fallback repeats — must not share a folder: create_dir_all would reuse the
     // existing one and the earlier snapshot would be silently overwritten. create_dir
@@ -7792,11 +7825,24 @@ fn stage_and_validate_backup(backup_db: &std::path::Path, dir: &std::path::Path)
         let _ = fs::remove_file(&staged);
         return Err(e);
     }
-    if let Err(e) = Connection::open(&staged)
-        .and_then(|c| c.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0)))
-    {
+    // A readable SQLite file is not necessarily one of THIS app's backups -- any
+    // valid-but-unrelated .db (empty, wrong schema, a stray file the user picked)
+    // would pass a bare "can I query it" check and, for scope "all", be renamed
+    // straight onto the live data.db. db_conn_init_schema's CREATE TABLE IF NOT
+    // EXISTS would then quietly recreate the missing tables empty on next launch --
+    // a restore that "succeeds" into an empty library. Requiring the two tables
+    // every real backup has always had (prompts, meta) catches that before the
+    // live database is ever touched.
+    let has_expected_schema = Connection::open(&staged).is_ok_and(|c| {
+        c.query_row(
+            "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN ('prompts', 'meta')",
+            [],
+            |r| r.get::<_, i64>(0),
+        ) == Ok(2)
+    });
+    if !has_expected_schema {
         let _ = fs::remove_file(&staged);
-        return Err(format!("backup is not a readable database: {}", e));
+        return Err("backup-schema-mismatch".to_string());
     }
     Ok(staged)
 }
@@ -15424,6 +15470,12 @@ fn deflate(raw: &[u8]) -> Result<Vec<u8>, String> {
 // deflate expands until the process is killed. Far above any real library.
 const MAX_INFLATED: u64 = 512 * 1024 * 1024;
 
+// Pure predicate, kept apart from do_backup's own AppHandle/filesystem side
+// effects so the size threshold itself is directly unit-testable.
+fn too_large_to_restore(len: u64) -> bool {
+    len > MAX_INFLATED
+}
+
 // Decompress at most MAX_INFLATED bytes, refusing anything larger instead of growing
 // the buffer until the allocator gives up.
 fn inflate_capped<R: std::io::Read>(reader: R) -> Result<Vec<u8>, String> {
@@ -16113,15 +16165,25 @@ mod scheduler {
 
     pub struct Scheduler {
         jobs: Mutex<HashMap<String, JobHandle>>,
+        // Handles displaced by a same-name re-registration (see register_periodic).
+        // shutdown() keeps waiting on these too, or a re-registered job's
+        // still-finishing predecessor thread (e.g. mid disk-write) could be cut
+        // off by process exit once its map entry is gone.
+        retired: Mutex<Vec<JobHandle>>,
     }
 
     impl Scheduler {
         pub fn start() -> Scheduler {
-            Scheduler { jobs: Mutex::new(HashMap::new()) }
+            Scheduler { jobs: Mutex::new(HashMap::new()), retired: Mutex::new(Vec::new()) }
         }
 
         // Registering a name twice stops the earlier job's thread and replaces
-        // it rather than running two copies of it.
+        // it rather than running two copies of it. The old handle is stopped
+        // and evicted from `jobs` BEFORE the new thread is even spawned, and the
+        // new thread is additionally told to wait for that old thread's `stopped`
+        // flag before running its own job() for the first time -- closing the
+        // window where a slow-to-notice predecessor (mid `job()` when re-
+        // registered) and the new job could otherwise run concurrently.
         pub fn register_periodic(
             &self,
             name: &str,
@@ -16130,21 +16192,29 @@ mod scheduler {
             job: impl Fn() + Send + 'static,
         ) {
             let interval = interval.max(MIN_INTERVAL);
+            let mut jobs = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
+            let old = jobs.remove(name);
+            let predecessor = old.as_ref().map(|h| {
+                let _ = h.tx.send(JobMsg::Stop);
+                h.stopped.clone()
+            });
+            if let Some(old) = old {
+                let mut retired = self.retired.lock().unwrap_or_else(|e| e.into_inner());
+                retired.retain(|h| !h.stopped.load(Ordering::Acquire)); // self-cleaning
+                retired.push(old);
+            }
             let (tx, rx) = channel();
             let stopped = Arc::new(AtomicBool::new(false));
             let flag = stopped.clone();
             let spawned = std::thread::Builder::new()
                 .name(format!("job-{name}"))
-                .spawn(move || job_loop(rx, first_delay, interval, Box::new(job), flag));
+                .spawn(move || job_loop(rx, first_delay, interval, Box::new(job), flag, predecessor));
             if spawned.is_err() {
                 // No thread means nothing to wait for at shutdown.
                 stopped.store(true, Ordering::Release);
                 return;
             }
-            let mut jobs = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
-            if let Some(old) = jobs.insert(name.to_string(), JobHandle { tx, stopped }) {
-                let _ = old.tx.send(JobMsg::Stop);
-            }
+            jobs.insert(name.to_string(), JobHandle { tx, stopped });
         }
 
         // The new interval counts from the job's last run, so a shortened one can
@@ -16168,15 +16238,22 @@ mod scheduler {
         // Wakes every job thread out of its wait and waits a bounded time for
         // all of them to finish. False means at least one job was still running
         // when the deadline passed; the caller carries on rather than holding
-        // the app open for it.
+        // the app open for it. The `stopped` flags are cloned out and the locks
+        // dropped before the wait loop -- holding `jobs` for the whole wait would
+        // block any concurrent retime()/register_periodic() call (e.g. from a job
+        // thread's own last run) until the deadline, for no reason at shutdown.
         pub fn shutdown(&self, wait: Duration) -> bool {
-            let jobs = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
-            for h in jobs.values() {
-                let _ = h.tx.send(JobMsg::Stop);
-            }
+            let flags: Vec<Arc<AtomicBool>> = {
+                let jobs = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
+                for h in jobs.values() {
+                    let _ = h.tx.send(JobMsg::Stop);
+                }
+                let retired = self.retired.lock().unwrap_or_else(|e| e.into_inner());
+                jobs.values().map(|h| h.stopped.clone()).chain(retired.iter().map(|h| h.stopped.clone())).collect()
+            };
             let deadline = Instant::now() + wait;
             loop {
-                if jobs.values().all(|h| h.stopped.load(Ordering::Acquire)) {
+                if flags.iter().all(|f| f.load(Ordering::Acquire)) {
                     return true;
                 }
                 if Instant::now() >= deadline {
@@ -16189,13 +16266,30 @@ mod scheduler {
 
     // One job's entire life: wait until due (or a re-time/stop arrives early),
     // run it, wait again. Nothing here ever touches another job's state.
+    // `predecessor`, when set, is the `stopped` flag of the job this one just
+    // replaced under the same name -- waited out before the first run so the
+    // two never execute job() at the same time (see register_periodic).
     fn job_loop(
         rx: Receiver<JobMsg>,
         first_delay: Duration,
         mut interval: Duration,
         job: Job,
         stopped: Arc<AtomicBool>,
+        predecessor: Option<Arc<AtomicBool>>,
     ) {
+        if let Some(pred) = predecessor {
+            while !pred.load(Ordering::Acquire) {
+                // A Stop for THIS job while still waiting on its predecessor means
+                // it was itself immediately superseded; nothing to run, just exit.
+                match rx.recv_timeout(Duration::from_millis(5)) {
+                    Ok(JobMsg::Stop) | Err(RecvTimeoutError::Disconnected) => {
+                        stopped.store(true, Ordering::Release);
+                        return;
+                    }
+                    _ => {}
+                }
+            }
+        }
         let mut last_run = Instant::now();
         let mut due = last_run + first_delay;
         loop {
@@ -16210,7 +16304,13 @@ mod scheduler {
                 Err(RecvTimeoutError::Timeout) => {}
             }
             if due <= Instant::now() {
-                job();
+                // A panicking job must not silently stop the whole schedule (and
+                // must not skip the `stopped` update below, which shutdown()'s
+                // wait loop depends on) -- one bad run is logged and the job
+                // keeps its cadence instead of the thread quietly dying.
+                if std::panic::catch_unwind(std::panic::AssertUnwindSafe(&job)).is_err() {
+                    super::append_crash_log("scheduled job panicked; it will still run again on its normal interval");
+                }
                 last_run = Instant::now();
                 due = last_run + interval;
             }
@@ -20004,6 +20104,58 @@ mod tests {
         assert_eq!(calls.load(Ordering::Relaxed), 1, "the notify must fire exactly once, not once per row");
     }
 
+    // A plaintext-fallback value whose own text happens to start with the literal
+    // marker ENC_PREFIX ("enc:v1:") must still round-trip intact, not be misread
+    // as corrupt ciphertext and erased to "".
+    #[test]
+    fn plaintext_fallback_of_text_starting_with_enc_prefix_round_trips() {
+        let _guard = SEAL_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let prior_sealed = STORE_SEALED.swap(true, Ordering::Relaxed);
+        FORCE_PLAINTEXT_FALLBACK.with(|f| f.set(true));
+        let _restore = SealOverrideGuard { prior_sealed };
+
+        let text = "enc:v1:this looks like ciphertext but is not";
+        let stored = enc_str(text);
+        assert_ne!(stored, text, "the collision must be escaped, not written raw");
+        assert_eq!(dec_str(&stored), text, "the original text must come back unchanged");
+    }
+
+    // A backup that could never be restored (past MAX_INFLATED) must be refused at
+    // creation time, not silently produced and only discovered useless on the day
+    // it is actually needed.
+    #[test]
+    fn a_store_past_the_restore_ceiling_refuses_to_back_up() {
+        assert!(!too_large_to_restore(MAX_INFLATED), "exactly at the ceiling must still be backable up");
+        assert!(too_large_to_restore(MAX_INFLATED + 1), "one byte past the ceiling must refuse a backup nobody could ever restore");
+    }
+
+    // allowMultipleInstances lets two full processes share one data directory.
+    // write_rows must not delete a row this process never learned about (added by
+    // another instance after this process's own load) just because that row is
+    // absent from this process's in-memory list.
+    #[test]
+    fn write_rows_preserves_a_row_unknown_to_this_process() {
+        let mut conn = row_test_db();
+        // "Process A" loads and writes its initial two prompts.
+        let mut written_a = WrittenRows::new();
+        let initial = numbered_prompts(2);
+        db_write_prompts(&mut conn, &initial, &mut written_a).unwrap();
+
+        // "Process B" independently adds a third prompt, never seen by A.
+        let foreign = Prompt { name: "Foreign".into(), ..test_prompt("foreign") };
+        let mut written_b = WrittenRows::new();
+        let mut b_prompts = initial.clone();
+        b_prompts.push(foreign.clone());
+        db_write_prompts(&mut conn, &b_prompts, &mut written_b).unwrap();
+
+        // A now saves again with its own (still two-item) list, unaware of B's row.
+        db_write_prompts(&mut conn, &initial, &mut written_a).unwrap();
+
+        let ids: Vec<String> = stored_rows(&conn, "prompts").into_iter().map(|(id, _, _)| id).collect();
+        assert!(ids.contains(&"foreign".to_string()), "another instance's unseen row must survive: {ids:?}");
+        assert_eq!(ids.len(), 3, "A's save must not touch B's row at all: {ids:?}");
+    }
+
     // A genuinely fresh install (no settings row at all yet) must never be flagged
     // as unreadable -- only a row that IS there but cannot be read back correctly.
     #[test]
@@ -20198,10 +20350,13 @@ mod tests {
     // A settings write that once fell back to settings.json leaves that file behind
     // while prompts.json — which nothing wrote — stays absent. If the database is
     // then unopenable for one launch, the prompts are invisible but very much still
-    // on disk, so the store has to refuse prompt writes: the diff write takes row
-    // presence from the table and would delete every row the empty list does not
-    // mention. Whether settings.json happens to be lying there says nothing about
-    // that, which is exactly what this used to hinge on.
+    // on disk, so the store has to refuse prompt writes regardless: write_rows itself
+    // now only deletes a row it can prove it once knew about (see the
+    // allowMultipleInstances fix), so an empty `written` map on its own no longer
+    // wipes the table — but a partially-known list (some rows genuinely loaded, one
+    // instance's own explicit delete mixed in) still relies entirely on the lock,
+    // which is why it stays unconditional here. Whether settings.json happens to be
+    // lying there says nothing about that, which is exactly what this used to hinge on.
     #[test]
     fn a_missing_prompts_json_beside_a_database_locks_prompt_writes() {
         let dir = std::env::temp_dir().join(format!("{}-test-fallback-lock", brand::SLUG));
@@ -20238,14 +20393,17 @@ mod tests {
             "an empty prompt list with a database behind it must never be saveable"
         );
 
-        // What that lock stands in front of: the very write save_prompts would have
-        // done deletes every row it cannot see.
+        // Even bypassing the lock, write_rows' own "only delete a row I can prove I
+        // knew about" guard now protects this exact case too: `store.written` is
+        // empty (this Store never read the table), so nothing gets deleted. The
+        // lock remains the real, necessary defense for a partially-known list.
         {
             let mut conn = Connection::open(&db).unwrap();
             db_write_prompts(&mut conn, &store.prompts, &mut store.written.borrow_mut()).unwrap();
-            assert!(
-                stored_rows(&conn, "prompts").is_empty(),
-                "saving the empty list really does wipe the table — the lock is the only thing preventing it"
+            assert_eq!(
+                stored_rows(&conn, "prompts").len(),
+                3,
+                "write_rows must not delete rows it never learned about, even with the lock bypassed"
             );
         }
 
@@ -20325,9 +20483,11 @@ mod tests {
     // Adopting an installed store copies its files one by one. If the database
     // arrives and a later file does not (a full disk, a locked file), the folder
     // already holds the adopted store while the process still has the empty one it
-    // replaced — and saving that empty one deletes every row it never read. The
-    // copy therefore has to report that something landed, so the caller can reload
-    // from what is really there before it gives up.
+    // replaced. write_rows' "only delete a row I can prove I knew about" guard (the
+    // allowMultipleInstances fix) now keeps a save with an empty `written` map from
+    // wiping those adopted rows either way — but the copy still has to report that
+    // something landed, so the caller reloads from what is really there instead of
+    // silently carrying on with a stale, now-wrong in-memory empty list.
     #[test]
     fn a_half_copied_takeover_reports_what_already_landed() {
         let root = std::env::temp_dir().join(format!("{}-test-takeover-partial", brand::SLUG));
@@ -20360,14 +20520,17 @@ mod tests {
         );
         assert!(landed, "the database arrived before the failure and must be reported as such");
 
-        // The trap, with the store left as it was: the empty prompt list plus its
-        // (equally empty) row map deletes every adopted row on the next save.
+        // With the store left as it was: the empty prompt list plus its (equally
+        // empty) row map used to delete every adopted row on the next save. Now
+        // write_rows itself refuses -- it has no record of ever having seen these
+        // rows, so it leaves them alone.
         {
             let mut conn = Connection::open(dst.join("data.db")).unwrap();
             db_write_prompts(&mut conn, &[], &mut WrittenRows::new()).unwrap();
-            assert!(
-                stored_rows(&conn, "prompts").is_empty(),
-                "carrying on with the old store really does wipe what was adopted"
+            assert_eq!(
+                stored_rows(&conn, "prompts").len(),
+                3,
+                "an empty written map must not be read as license to delete unseen rows"
             );
         }
 
@@ -20408,6 +20571,31 @@ mod tests {
         .unwrap();
         let _ = tag; // only distinguishes the caller's temp filename, not the schema
         conn
+    }
+
+    // A readable-but-foreign SQLite file (empty, wrong schema, a stray .db the user
+    // picked) must never pass as a restorable backup -- for scope "all" it would be
+    // renamed straight onto the live data.db.
+    #[test]
+    fn stage_and_validate_backup_accepts_a_real_backup_and_rejects_a_foreign_db() {
+        let root = std::env::temp_dir().join(format!("{}-test-stage-validate", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+
+        let real = root.join("real.db");
+        full_schema_db(&real, "real");
+        let staged = stage_and_validate_backup(&real, &root).expect("a real backup must be accepted");
+        assert!(staged.exists());
+        let _ = std::fs::remove_file(&staged);
+
+        let foreign = root.join("foreign.db");
+        let _ = std::fs::remove_file(&foreign);
+        Connection::open(&foreign).unwrap().execute_batch("CREATE TABLE unrelated(x INTEGER);").unwrap();
+        let err = stage_and_validate_backup(&foreign, &root).unwrap_err();
+        assert_eq!(err, "backup-schema-mismatch");
+        assert!(!staged.exists(), "a rejected file must not be left staged behind");
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

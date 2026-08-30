@@ -70,6 +70,10 @@ let dragOutOn = false, dragOutMod = "ctrlKey";
 // Rotating prompt — "next entry" badge per member, kept live by the backend's
 // rotation-changed event (any window's copy can move another member's pointer).
 const rotateInfo = new Map(); // member id -> { index, pos, total }
+// Per-id request generation: a rotation-changed push can land while that id's
+// initial rotation_peek is still in flight. Without this, the peek's reply
+// arrives after and overwrites the fresher pushed position with stale data.
+const rotateReqs = new Map(); // member id -> latest request number
 let rotateBadgeOn = true; // Phase B default: on
 
 // Pos (not index + 1) — in random mode index is the absolute entry that will
@@ -82,8 +86,10 @@ function rotateBadgeLabel(id) {
 
 function primeMemberRotate(id) {
   if (rotateInfo.has(id)) return;
+  const req = (rotateReqs.get(id) || 0) + 1;
+  rotateReqs.set(id, req);
   invoke("rotation_peek", { id }).then((r) => {
-    if (!r) return;
+    if (!r || rotateReqs.get(id) !== req) return;
     rotateInfo.set(id, { index: r.index, pos: r.pos, total: r.total });
     const el = gridEl.querySelector(`.folder-member[data-id="${CSS.escape(id)}"] .rotate-badge`);
     if (el) el.textContent = rotateBadgeLabel(id);
@@ -688,7 +694,13 @@ listen("language-changed", () => applySettings().catch(() => {}));
 // applySettings() alone never reaches state.cols (folderGridCols) -- that only
 // arrives through loadState()'s own float_folder_state call, so a changed grid
 // column count never reached an already-open folder window without it too.
-listen("settings-changed", () => { applySettings().catch(() => {}); loadState(); });
+// applySettings must land BEFORE loadState's own reflow/resize: reflow() sizes
+// the window from TILE/GAP/PAD, which only applySettings (via applyPrefs)
+// updates. Firing both in parallel let loadState's window-size math race ahead
+// of a still-pending settings fetch and resize the window for the OLD tile
+// size while renderGrid (from the settings landing moments later) drew tiles
+// at the NEW size -- clipped or oversized members until something else reflowed.
+listen("settings-changed", () => { applySettings().catch(() => {}).then(() => loadState()); });
 listen("prompt-updated", (e) => {
   if (e.payload && state.members.some((p) => p.id === e.payload.id)) {
     // An edit can change entry count/text — drop the cached rotation state so
@@ -701,6 +713,10 @@ listen("prompt-updated", (e) => {
 listen("rotation-changed", (e) => {
   const { id, index, pos, total } = e.payload || {};
   if (!id || !state.members.some((p) => p.id === id)) return;
+  // This push is newer than anything primeMemberRotate could have in flight for
+  // this id -- invalidate it, so a slower peek reply landing after this cannot
+  // overwrite the position with stale data.
+  rotateReqs.set(id, (rotateReqs.get(id) || 0) + 1);
   rotateInfo.set(id, { index, pos, total });
   const el = gridEl.querySelector(`.folder-member[data-id="${CSS.escape(id)}"] .rotate-badge`);
   if (el) el.textContent = rotateBadgeLabel(id);

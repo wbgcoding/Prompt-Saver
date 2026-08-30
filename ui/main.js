@@ -105,6 +105,12 @@ let prompts = [];
 let settings = { theme: "system", views: [], active_view: "" };
 
 let modalState = null;
+// Bumped by openModal/closeModal. An async pick/preview started for one editor
+// session (pickReplacementMedia, replaceFile) captures this before its awaits and
+// checks it again after -- `modalState` alone is not enough, since closing and
+// opening a DIFFERENT prompt leaves modalState just as truthy, letting a slow
+// reply from the old prompt land in the new one's editor.
+let modalSession = 0;
 let modalInitial = ""; // snapshot of the open modal's content (unsaved-change guard)
 let modalSaving = false; // 103: re-entry guard, a double-click/double-Enter must not fire two saves
 let ctxId = null;
@@ -617,6 +623,8 @@ const ERROR_MSG_KEYS = {
   "downloaded file is not a valid installer": "errUpdaterInvalidInstaller",
   "update hash mismatch — download rejected": "errUpdaterHashMismatch",
   "backup expands to more than 512 MB": "errBackupTooLarge",
+  "store-too-large-for-backup": "errStoreTooLargeForBackup",
+  "backup-schema-mismatch": "errBackupSchemaMismatch",
   "not in a folder": "errNotInFolder",
   "not a member of this folder": "errNotFolderMember",
   "color picker is off": "errColorPickerOff",
@@ -6118,6 +6126,7 @@ function maybeCloseOnCopy() {
 }
 
 function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", pdfPage = 0, iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", variants = [], rotateMode = "", rotateAuto = false, title, targetCell }) {
+  modalSession++;
   modalState = {
     mode, id, color, image, showImage, copyImage, filePath, pdfPage, iconPath, tags: [...tags], hotkey, hotkeyPaste, targetCell,
     // What the editor opened with. Save compares against it and only sends an
@@ -8503,9 +8512,12 @@ function syncModalImageUi(mode) {
     } else {
       // Prefer the re-encoded preview; fall back to the raw file, and if even
       // that fails to decode, ask the backend for a data URL once.
+      const session = modalSession;
       modal.img.onerror = () => {
         modal.img.onerror = null;
-        loadFilePreview(previewPath, modalState?.pdfPage || 0).then((d) => { if (d) modal.img.src = d; });
+        loadFilePreview(previewPath, modalState?.pdfPage || 0).then((d) => {
+          if (d && session === modalSession) modal.img.src = d;
+        });
       };
       modal.img.src = image || convertFileSrc(previewPath);
       modal.video.removeAttribute("src");
@@ -8835,6 +8847,17 @@ async function confirmDiscardIfDirty() {
     confirmLabel: t("discardConfirm"),
     cancelLabel: t("keepEditing"),
   });
+}
+
+// Same guard as the X button/backdrop/Escape, for an action (drag-drop) that can
+// fire with no editor open at all -- confirmDiscardIfDirty relies on modalState
+// being set, so it is only asked when the modal is actually visible.
+function confirmDiscardOrProceed(run) {
+  if (modal.root.classList.contains("hidden")) {
+    run();
+    return;
+  }
+  confirmDiscardIfDirty().then((ok) => { if (ok) run(); });
 }
 
 function startCreate() {
@@ -11434,7 +11457,7 @@ function bind() {
   saveBtn.addEventListener("click", startCreate);
 
   modal.confirm.addEventListener("click", confirmModal);
-  modal.closeX.addEventListener("click", closeModal);
+  modal.closeX.addEventListener("click", () => confirmDiscardIfDirty().then((ok) => { if (ok) closeModal(); }));
   modal.fav.addEventListener("click", () => {
     const on = modal.fav.classList.toggle("active");
     modal.fav.setAttribute("aria-pressed", String(on));
@@ -11635,8 +11658,9 @@ function bind() {
   // gif/video become the icon path (shown, never copied). An image keeps the
   // prompt's copy behaviour; a gif/video icon switches copying back to text.
   async function pickReplacementMedia() {
+    const session = modalSession;
     const path = await withDialog(() => invoke("pick_file_path"));
-    if (!path || !modalState) return false;
+    if (!path || !modalState || session !== modalSession) return false;
     const kind = mediaKind(path);
     if (!kind) {
       toast(t("unsupportedFile"));
@@ -11644,7 +11668,7 @@ function bind() {
     }
     if (kind === "image") {
       const data = await loadFilePreview(path);
-      if (!data || !modalState) return false;
+      if (!data || !modalState || session !== modalSession) return false;
       modalState.image = data;
       modalState.iconPath = "";
     } else {
@@ -11674,13 +11698,14 @@ function bind() {
   // stills/gifs/videos switch to the media layout, anything else to plain file.
   modal.replaceFile.addEventListener("click", async () => {
     if (!modalState) return;
+    const session = modalSession;
     const path = await withDialog(() => invoke("pick_file_path"));
-    if (!path || !modalState) return;
+    if (!path || !modalState || session !== modalSession) return;
     modalState.filePath = path;
     modalState.pdfPage = 0; // 83: a different file starts back at its own first page
     const kind = mediaKind(path);
     const data = await loadFilePreview(path);
-    if (!modalState) return;
+    if (!modalState || session !== modalSession) return;
     modalState.image = data;
     modalState.copyImage = false; // the file itself is what gets copied
     modalState.showImage = !!kind;
@@ -11694,11 +11719,12 @@ function bind() {
   let pdfPageReq = 0;
   modal.pdfPage.addEventListener("change", async () => {
     if (!modalState) return;
+    const session = modalSession;
     const page = Math.max(0, (Number(modal.pdfPage.value) || 1) - 1);
     modalState.pdfPage = page;
     const req = ++pdfPageReq;
     const data = await loadFilePreview(modalState.filePath, page);
-    if (req !== pdfPageReq || !modalState) return;
+    if (req !== pdfPageReq || !modalState || session !== modalSession) return;
     if (data) { modalState.image = data; modal.img.src = data; }
   });
 
@@ -12207,6 +12233,14 @@ function bind() {
     if (op.point) { op.point.x += dx; op.point.y += dy; }
     if (op.rect) { op.rect.x += dx; op.rect.y += dy; }
     snipEditRedrawBase();
+    // The crop tool's own live overlay (handles + dim) is drawn from SE.cropRect,
+    // not from the committed op -- without this, nudging a just-committed crop
+    // moves what gets exported while the on-screen handles stay put, so Apply/
+    // Copy would silently produce an image cropped from a region never shown.
+    if (op.tool === "crop" && op.rect) {
+      SE.cropRect = { ...op.rect };
+      snipEditDrawCropOverlayLive();
+    }
   }
 
   // ---- crop: a rect operation, only applied to pixels at export time ----
@@ -12299,7 +12333,13 @@ function bind() {
   function snipEditCropDiscard() {
     SE.drag = null;
     SE.cropRect = null;
+    const before = SE.ops.length;
     SE.ops = SE.ops.filter((o) => o.tool !== "crop");
+    // Same floor adjustment as snipEditPushUniqueOp -- removing an entry shifts
+    // every later index down by one; without this the undo/redo boundary and
+    // button state can drift out of sync with the actual op list.
+    SE.floor = Math.max(0, SE.floor - (before - SE.ops.length));
+    snipEditUpdateUndoRedoButtons();
     snipEditClearLive();
     snipEditRedrawBase();
   }
@@ -14113,7 +14153,11 @@ function setupDragDrop() {
     if (kind === "drop") {
       document.body.classList.remove("drag-over");
       const path = e.payload?.paths?.[0];
-      if (path) openFileCreate(path).catch((err) => errToast(err));
+      if (!path) return;
+      // A drop replaces whatever the editor is showing with a brand-new create
+      // dialog -- if it is already open with unsaved changes, ask first, same as
+      // the X button/backdrop/Escape.
+      confirmDiscardOrProceed(() => openFileCreate(path).catch((err) => errToast(err)));
     }
   }).catch?.(() => {});
   // Text dropped from another app (no file paths) — native handler ignores it.
@@ -14123,10 +14167,12 @@ function setupDragDrop() {
     const text = e.dataTransfer?.getData("text");
     if (text && !(e.dataTransfer.files && e.dataTransfer.files.length)) {
       e.preventDefault();
-      inputEl.value = text;
-      autoGrow(inputEl);
-      saveBtn.disabled = !text.trim();
-      startCreate();
+      confirmDiscardOrProceed(() => {
+        inputEl.value = text;
+        autoGrow(inputEl);
+        saveBtn.disabled = !text.trim();
+        startCreate();
+      });
     }
   });
 }
