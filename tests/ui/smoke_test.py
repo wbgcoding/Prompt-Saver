@@ -340,6 +340,32 @@ PROBE = """
       }
       document.getElementById('settings').classList.add('hidden');
     }
+    // 230: closing the settings panel through its own close button returns
+    // keyboard focus to whatever had it before the panel opened (settingsOpener,
+    // set in the gear buttons own click handler) instead of dropping it to
+    // document.body.
+    {
+      const gearBtn = document.getElementById('gear');
+      gearBtn.focus();
+      gearBtn.click();
+      await sleep(120);
+      if (document.getElementById('settings').classList.contains('hidden')) {
+        out.errors.push('230: the settings panel did not open from the gear button');
+      } else {
+        // Move focus away from the gear button first (as it would move once the
+        // user interacts with anything inside the open panel) -- .click() alone
+        // never moves focus, so without this the gear button would trivially
+        // still be focused regardless of whether hideSettings() restores it.
+        const closeBtn = document.getElementById('settings-close');
+        closeBtn.focus();
+        closeBtn.click();
+        await sleep(120);
+        if (document.activeElement !== gearBtn) {
+          const got = document.activeElement && (document.activeElement.id || document.activeElement.tagName);
+          out.errors.push('230: closing settings did not return focus to the gear button, landed on ' + got);
+        }
+      }
+    }
     // 97/21: in-app documentation — every tab reaches the page, none is empty,
     // search narrows the list, a tip callout shows up somewhere.
     {
@@ -1906,16 +1932,58 @@ PROBE = """
               if (rows().length !== 1) out.errors.push('purging left ' + rows().length + ' rows instead of 1');
             }
           }
+          // 230: .click() alone does not move keyboard focus the way a real
+          // pointer click does -- focus explicitly so confirmDialog captures a
+          // real opener to test its focus-restore behaviour against below.
+          document.getElementById('trash-clear').focus();
           await click('trash-clear');
           await sleep(150);
           const cm2 = document.getElementById('confirm-modal');
           if (cm2.classList.contains('hidden')) {
             out.errors.push('emptying the trash skipped the confirm dialog');
           } else {
+            const clearBtnBeforeConfirm = document.getElementById('trash-clear');
             await click('confirm-ok');
             await sleep(200);
             if (!trashBody.textContent.includes('Trash is empty')) {
               out.errors.push('emptying the trash left the dialog without the empty-state message');
+            }
+            // 230: confirmDialog restores focus to whatever opened it (here, the
+            // "Clear all" button that called emptyTrashAll -> confirmDialog)
+            // instead of dropping it to document.body once the dialog resolves.
+            if (document.activeElement !== clearBtnBeforeConfirm) {
+              const got = document.activeElement && (document.activeElement.id || document.activeElement.tagName);
+              out.errors.push('230: confirming the empty-trash dialog did not return focus to the button that opened it, landed on ' + got);
+            }
+          }
+        }
+        // 230: the trash modal is one of the ~20 dialogs newly covered by the
+        // global Tab-trap dispatcher this round (it had no trap of its own before).
+        // Tab pressed on the LAST focusable element must wrap back to the FIRST
+        // instead of leaving focus stuck (the previous, untrapped behaviour) or
+        // escaping into the dimmed page behind the dialog.
+        {
+          // The Tab-trap dispatcher traps whatever overlay is topmost, in a fixed
+          // cascade -- an earlier, unrelated test (28: the free-color swatch) left
+          // the colour-pop popover open (typing a hex never closes it) and it sits
+          // ahead of the trash modal in that cascade, which would otherwise trap
+          // Tab there instead. Clean test-owned leftover state before asserting.
+          document.querySelectorAll('.color-pop:not(.hidden)').forEach((el) => el.classList.add('hidden'));
+          const trashCloseBtn = document.getElementById('trash-close');
+          const trashClearBtn = document.getElementById('trash-clear');
+          if (trashModal.classList.contains('hidden') || !trashCloseBtn || !trashClearBtn) {
+            out.errors.push('230: the trash modal is not in a state to test the Tab trap');
+          } else {
+            trashCloseBtn.focus();
+            if (document.activeElement !== trashCloseBtn) {
+              out.errors.push('230: could not focus the trash modal close button to test the Tab trap');
+            } else {
+              trashCloseBtn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+              if (document.activeElement !== trashClearBtn) {
+                const ae = document.activeElement;
+                const got = ae ? (ae.outerHTML || '').slice(0, 200) : String(ae);
+                out.errors.push('230: Tab from the last focusable element in the trash modal did not wrap to the first, landed on ' + got);
+              }
             }
           }
         }
@@ -3472,6 +3540,112 @@ PROBE = """
       }
       await click('library-close');
     }
+    // 230: rotateReqs guards a stale rotation_peek reply from stomping a NEWER
+    // rotation-changed push that arrived while the peek was still in flight.
+    // Create a brand-new rotating prompt so its FIRST-EVER peek is still
+    // unresolved (primeRotateState only ever peeks once per id), gate that peek
+    // open, deliver a newer push for the same id, THEN resolve the stale peek
+    // with older data -- the tile must keep the pushed state, not fall back to
+    // the late reply.
+    {
+      const freeCellRace = [...document.querySelectorAll('#grid .cell')].find(c => !c.firstElementChild);
+      if (!freeCellRace) {
+        out.errors.push('230: no free grid cell to test the stale rotation-peek race with');
+      } else {
+        freeCellRace.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+        await sleep(200);
+        document.getElementById('modal-advanced-head').click();
+        await sleep(150);
+        document.getElementById('modal-name').value = 'Rotate Race';
+        document.getElementById('modal-text').value = 'Race entry one';
+        const rotSwitchRace = document.getElementById('modal-rotate-switch');
+        rotSwitchRace.checked = true;
+        rotSwitchRace.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(120);
+        document.getElementById('modal-rotate-add').click();
+        await sleep(80);
+        const raceRows = document.querySelectorAll('.rotate-entry-row');
+        if (raceRows.length !== 2) {
+          out.errors.push('230: setting up the stale-peek race prompt did not add a second entry row');
+        } else {
+          const ta2r = raceRows[1].querySelector('.rotate-entry-input');
+          ta2r.value = 'Race entry two';
+          ta2r.dispatchEvent(new Event('input', { bubbles: true }));
+          // Gate the NEXT rotation_peek call so it stays pending until this probe
+          // resolves it -- the fresh tile about to render fires exactly one (its
+          // first-ever primeRotateState peek, right after renderGrid() below).
+          window.__ROTATION_PEEK_GATE__ = [];
+          document.getElementById('modal-confirm').click();
+          await sleep(250);
+          const raceTile = [...document.querySelectorAll('#grid .tile-name')]
+            .find(n => n.textContent === 'Rotate Race')?.closest('.tile');
+          if (!raceTile) {
+            out.errors.push('230: the stale-peek race prompt has no grid tile');
+          } else {
+            const raceId = raceTile.dataset.id;
+            const gate = window.__ROTATION_PEEK_GATE__ || [];
+            if (gate.length !== 1) {
+              out.errors.push('230: expected exactly 1 gated rotation_peek call for the new tile, got ' + gate.length);
+            } else {
+              // A newer push -- as if another window already copied this prompt
+              // and advanced it -- lands WHILE the initial peek is still pending.
+              window.__FIRE__('rotation-changed', { id: raceId, index: 1, pos: 2, total: 2, text: 'Pushed entry two' });
+              await sleep(50);
+              // THEN the stale peek finally answers, with OLDER data -- the
+              // rotateReqs generation guard must drop this reply, not let it
+              // overwrite the fresher pushed state above.
+              gate[0].resolve({ index: 0, pos: 1, total: 2, text: 'Stale entry one' });
+              await sleep(80);
+              const badgeRace = raceTile.querySelector('.tile-rotate-badge');
+              if (!badgeRace || badgeRace.textContent !== '2/2') {
+                out.errors.push('230: a stale rotation_peek reply overwrote the newer rotation-changed badge: got "' +
+                  (badgeRace && badgeRace.textContent) + '" instead of "2/2"');
+              }
+              const tip = raceTile.dataset.tipRotate || '';
+              if (!tip.includes('Pushed entry two')) {
+                out.errors.push('230: a stale rotation_peek reply overwrote the newer rotation-changed tooltip');
+              }
+              if (tip.includes('Stale entry one')) {
+                out.errors.push('230: the tile tooltip shows the stale peek text instead of the pushed rotation-changed text');
+              }
+            }
+          }
+        }
+        window.__ROTATION_PEEK_GATE__ = null;
+      }
+    }
+    // 230: per-row icon-only actions (library add/favorite/edit/delete, journal
+    // edit/delete) are keyboard-activatable -- makeKeyboardActivatable wires
+    // Enter/Space to the same click the element already handles.
+    {
+      await click('library-btn');
+      const favSpan = document.querySelector('#library-list .lib-item .lib-fav');
+      if (!favSpan) {
+        out.errors.push('230: no favorite-star action found in the library to test keyboard activation');
+      } else {
+        // Favorites float to the top on toggle (renderLibrary re-sorts), so the
+        // row must be re-found by its stable id afterward, not by list position.
+        const rowId = favSpan.closest('.lib-item').dataset.id;
+        const wasActive = favSpan.classList.contains('active');
+        window.__SMOKE_CALLS__ = [];
+        favSpan.focus();
+        if (document.activeElement !== favSpan) {
+          out.errors.push('230: the library favorite-star action is not focusable');
+        } else {
+          favSpan.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+          await sleep(200);
+          if (!(window.__SMOKE_CALLS__ || []).includes('set_favorite')) {
+            out.errors.push('230: pressing Enter on the library favorite-star action did not call set_favorite');
+          }
+          const rowAfter = document.querySelector('.lib-item[data-id="' + CSS.escape(rowId) + '"]');
+          const favSpan2 = rowAfter && rowAfter.querySelector('.lib-fav');
+          if (!favSpan2 || favSpan2.classList.contains('active') === wasActive) {
+            out.errors.push('230: pressing Enter on the library favorite-star action did not toggle its state');
+          }
+        }
+      }
+      await click('library-close');
+    }
     // 81: colour-pick toast shows all three notations as separate copy chips.
     {
       window.__SMOKE_ARGS__ = window.__SMOKE_ARGS__ || [];
@@ -4582,6 +4756,18 @@ PROBE = """
             const chip = row.querySelector('.lang-row-chip');
             if (!chip || !chip.textContent.trim()) {
               out.errors.push('OCR langs modal: row ' + i + ' has no state chip');
+            } else if (cap.state !== 'Installed') {
+              // 230: a not-yet-installed row used to show the raw Rust-internal
+              // state string ("NotPresent") verbatim instead of a translated one.
+              // main.js is a module script (its own scope, t() unreachable from
+              // here) and this suite runs under whichever UI language the test
+              // machine resolves to (not necessarily English), so this cannot
+              // compare against one hardcoded translated string -- it checks the
+              // one language-independent property the bug actually broke: the
+              // chip must not be the raw backend enum value verbatim.
+              if (chip.textContent === cap.state) {
+                out.errors.push('OCR langs modal: row ' + i + ' chip shows the raw backend state "' + cap.state + '" instead of a translated string');
+              }
             }
           });
           const buttons = [...document.querySelectorAll('#ocr-langs-body .ghost-btn')];
@@ -4602,6 +4788,63 @@ PROBE = """
           await sleep(100);
           if (!modal.classList.contains('hidden')) out.errors.push('OCR langs modal did not close');
         }
+      }
+      // 230: a second click on a language install button during the gap between
+      // confirming the elevate dialog and the busy flag being set must not start
+      // a second concurrent elevated install -- installPending[name] is now set
+      // synchronously right after the confirm resolves, before invoke() ever
+      // starts. The gate holds the elevated install() call itself pending (the
+      // real one blocks for as long as the user takes on the UAC prompt, easily
+      // seconds), so a genuinely separate click landing during that whole window
+      // must find an already-disabled button, not just a narrow instant after
+      // the confirm.
+      if (langsRow) {
+        langsRow.click();
+        await sleep(150);
+        const rows3 = [...document.querySelectorAll('#ocr-langs-body .ocr-lang-row')];
+        const notInstalledRow = rows3.find((r) => !r.querySelector('.lang-row-chip.installed'));
+        const installBtn = notInstalledRow && notInstalledRow.querySelector('.ghost-btn');
+        const rowLabel = notInstalledRow && notInstalledRow.querySelector('.lang-row-name')?.textContent;
+        if (!installBtn) {
+          out.errors.push('230: no install button on a not-installed row for the double-click test');
+        } else {
+          window.__SMOKE_CALLS__ = [];
+          window.__OCR_INSTALL_GATE__ = [];
+          installBtn.click();
+          await sleep(100);
+          const okBtn2 = document.getElementById('confirm-ok');
+          if (!okBtn2 || okBtn2.offsetParent === null) {
+            out.errors.push('230: the elevate confirm dialog did not open on clicking install');
+          } else {
+            okBtn2.click();
+            await sleep(50);
+            if ((window.__OCR_INSTALL_GATE__ || []).length !== 1) {
+              out.errors.push('230: expected exactly 1 gated ocr_install_language call, got ' + (window.__OCR_INSTALL_GATE__ || []).length);
+            }
+            const rebuiltRow = [...document.querySelectorAll('#ocr-langs-body .ocr-lang-row')]
+              .find((r) => r.querySelector('.lang-row-name')?.textContent === rowLabel);
+            const rebuiltBtn = rebuiltRow && rebuiltRow.querySelector('.ghost-btn');
+            if (!rebuiltBtn || !rebuiltBtn.disabled) {
+              out.errors.push('230: the install button did not disable itself while the elevated install call is still pending');
+            }
+            // A no-op on a disabled button -- proves the guard rather than just
+            // documenting it, matching a real second click while Windows still
+            // has not answered the first elevated install.
+            rebuiltBtn && rebuiltBtn.click();
+            await sleep(50);
+            // Let the gated install call finally resolve so the dialog does not
+            // leave a stuck poller behind for later probes.
+            for (const g of window.__OCR_INSTALL_GATE__ || []) g.resolve(null);
+            await sleep(50);
+            const installCalls = (window.__SMOKE_CALLS__ || []).filter((c) => c === 'ocr_install_language');
+            if (installCalls.length !== 1) {
+              out.errors.push('230: expected exactly 1 ocr_install_language call after a rapid second click, got ' + installCalls.length);
+            }
+          }
+        }
+        window.__OCR_INSTALL_GATE__ = null;
+        document.getElementById('ocr-langs-close-x').click();
+        await sleep(100);
       }
       // Windows refusing the read-only listing: an honest note plus a button that
       // re-runs the very same query elevated -- without it no language can be

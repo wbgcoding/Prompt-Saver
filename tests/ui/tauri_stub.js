@@ -306,6 +306,21 @@ const RESULTS = {
   // list over -- the same two-step the real backend does through the UAC prompt.
   ocr_capabilities_elevate: () => { window.__OCR_CAPS_ELEV_DONE__ = true; return null; },
   ocr_capabilities_elevated_result: () => (window.__OCR_CAPS_ELEV_DONE__ ? window.__OCR_CAPS_TEST__ || [] : null),
+  // 230: same shape as the speech_install_* pair below -- the elevated launch
+  // itself resolves right away, the result poller (3s ticks) is what a probe
+  // would wait out separately.
+  // 230: opt-in gate for the double-click race test -- when a probe sets
+  // window.__OCR_INSTALL_GATE__ to an array, this call parks its resolver
+  // there instead of answering immediately, simulating the real elevated
+  // install() call, which stays pending for as long as the user takes to
+  // answer the UAC prompt. Unset (the default) resolves immediately.
+  ocr_install_language: () => {
+    if (Array.isArray(window.__OCR_INSTALL_GATE__)) {
+      return new Promise((resolve) => { window.__OCR_INSTALL_GATE__.push({ resolve }); });
+    }
+    return null;
+  },
+  ocr_install_result: () => ({ ok: true }),
   // 127/130: a supported machine with two installed languages, one of them
   // matching the ocrLangsCache-equivalent shape (voiceLangsCache).
   voice_support: () => ({ supported: true, engine: "windows", langs: ["en-US", "de-DE"], needs_online: false }),
@@ -622,6 +637,14 @@ const RESULTS = {
     return true;
   },
   rotation_peek: (a) => {
+    // 230: opt-in gate for the stale-peek-reply race test -- when a probe sets
+    // window.__ROTATION_PEEK_GATE__ to an array, this call parks its resolver
+    // there instead of answering immediately, so the probe can deliver a newer
+    // rotation-changed push first and resolve the stale peek after. Unset (the
+    // default) behaves exactly as before for every other test.
+    if (Array.isArray(window.__ROTATION_PEEK_GATE__)) {
+      return new Promise((resolve) => { window.__ROTATION_PEEK_GATE__.push({ resolve }); });
+    }
     const p = PROMPTS.find((x) => x.id === (a && a.id));
     if (!p) return null;
     const total = 1 + (p.variants || []).length;

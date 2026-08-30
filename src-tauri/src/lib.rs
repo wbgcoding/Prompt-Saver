@@ -22067,6 +22067,42 @@ mod tests {
         assert_eq!(data.prompts[0].notes, "@mention someone");
     }
 
+    // export_prompts is a #[tauri::command] async fn (AppHandle + State<'_, Db>)
+    // whose unrecognized-format arm returns before ever touching either -- but the
+    // command itself still cannot be invoked directly in a unit test without
+    // Tauri's mock runtime, which this project does not depend on, and the match
+    // is not factored into a function of its own. This asserts against the actual
+    // committed source instead of a re-typed copy of the logic: the fallback arm
+    // must keep returning the stable code the frontend keys off, never a raw
+    // string interpolated from the caller-supplied format (that reached the user
+    // unlocalized for anything but "csv"/"txt" before this fix). Scoped to the
+    // function's own body (not the whole file) so this cannot false-positive on
+    // an unrelated comment elsewhere that happens to mention the old shape.
+    #[test]
+    fn export_prompts_unsupported_format_uses_a_stable_error_code() {
+        let src = include_str!("lib.rs");
+        let start = src
+            .find("async fn export_prompts(")
+            .expect("export_prompts exists in lib.rs");
+        let end = start
+            + src[start..]
+                .find("\n// Minimal CSV reader")
+                .expect("export_prompts is followed by the parse_csv section comment");
+        let body = &src[start..end];
+        let needle = "_ => return Err(\"unsupported-export-format\".to_string()),";
+        assert!(
+            body.contains(needle),
+            "export_prompts' unsupported-format arm no longer returns the stable \"unsupported-export-format\" code verbatim"
+        );
+        // Narrower than "no format!( anywhere in the function" -- export_prompts
+        // legitimately uses format!() to build the save-file name. Only the
+        // error-building shape (a format! fed straight into Err(..)) is the bug.
+        assert!(
+            !body.contains("Err(format!("),
+            "export_prompts must never build its error via string interpolation again (it must stay the stable, non-localized-text-free code)"
+        );
+    }
+
     // An exported theme file never carries the internal id, so importing it on
     // another install (or re-importing it on the same one) always creates a fresh
     // theme instead of silently colliding with -- or overwriting -- an existing one.
