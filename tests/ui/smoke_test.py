@@ -31,7 +31,7 @@ HERE = Path(__file__).parent
 # tauri.conf.json instead of drifting away from it.
 _WIN = json.loads((REPO / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8"))["app"]["windows"][0]
 MIN_W, MIN_H = _WIN["minWidth"], _WIN["minHeight"]
-SIZES = [(1280, 800), (620, 500), (MIN_W + 60, MIN_H + 40), (MIN_W, MIN_H)]
+SIZES = [(1280, 800), (1366, 768), (900, 650), (620, 500), (MIN_W + 60, MIN_H + 40), (MIN_W, MIN_H)]
 
 # Headless Chrome refuses to make its window narrower than ~500px, so the page is
 # loaded in an iframe of the exact size instead; the wrapper republishes the probe
@@ -5734,6 +5734,60 @@ def main():
                     print(f"   FAIL {kind}: {it}")
                 failed += len(items)
             if not (r["errors"] or r["overflow"] or r["rawKeys"] or r.get("layout")):
+                print("   ok")
+
+        # 221: a pass in the longest-running UI language (Italian — averages ~42
+        # chars/string across all 1231 keys, the longest of the 11 by total
+        # character count) at the two tightest window sizes, where a long
+        # translation is most likely to overflow, overlap or push a button
+        # out of reach. Same page/probe as the English sweep above, only with
+        # SETTINGS.language overridden before main.js ever runs.
+        it_page = tmp / "ui" / "index-it.html"
+        it_page.write_text(
+            html.replace(
+                '<script src="tauri_stub.js"></script>',
+                '<script src="tauri_stub.js"></script>\n<script>SETTINGS.language = "it";</script>',
+                1,
+            ),
+            encoding="utf-8",
+        )
+        for w, h in (SIZES[-1], SIZES[-2]):
+            size_tag = f"it-{w}x{h}"
+            wrapper = tmp / f"wrap-{size_tag}.html"
+            wrapper.write_text(WRAPPER.replace("ui/index.html", "ui/index-it.html") % (w, h), encoding="utf-8")
+            proc = subprocess.run(
+                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+                 f"--user-data-dir={tmp / ('profile-%s' % size_tag)}", "--allow-file-access-from-files",
+                 f"--window-size={max(w + 30, 520)},{h + 140}",
+                 "--virtual-time-budget=120000", "--dump-dom",
+                 wrapper.as_uri()],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=240)
+            m = re.search(r'<pre id="SMOKE">(\{.*?\})</pre>', proc.stdout, re.S)
+            if not m:
+                print(f"FAIL it {w}x{h}: the UI produced no probe result")
+                failed += 1
+                continue
+            r = json.loads(unescape(m.group(1)))
+            print(f"-- it {w}x{h} — expert tabs: {', '.join(r['tabs']) or 'none'}")
+            # Only the language-agnostic categories: overflow/layout/untranslated
+            # are exactly what 221 asks for (truncated text, overlaps,
+            # unreachable buttons). The probe's own "errors" array also carries
+            # its behavioral assertions (exact English button labels, toast
+            # text, dialog titles), which are EXPECTED to read differently in
+            # Italian and are not a layout bug -- checked once already by the
+            # English sweep above, so re-checking them here would only be noise.
+            for kind, items in (("overflow", sorted(set(r["overflow"]))),
+                                ("layout", r.get("layout", [])),
+                                ("untranslated", sorted(set(r["rawKeys"])))):
+                for it_ in items:
+                    print(f"   FAIL {kind}: {it_}")
+                failed += len(items)
+            uncaught = [e for e in r["errors"] if e.startswith("error: ") or e.startswith("rejection: ")]
+            for e in uncaught:
+                print(f"   FAIL JS error: {e}")
+            failed += len(uncaught)
+            if not (uncaught or r["overflow"] or r["rawKeys"] or r.get("layout")):
                 print("   ok")
 
         # Each secondary window carries the only coverage its own UI can get — the
