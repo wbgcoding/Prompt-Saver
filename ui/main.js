@@ -7740,11 +7740,9 @@ function pollLangInstall(kind, name) {
   };
   st.installTimers[name] = setTimeout(tick, 3000);
 }
-// Thin OCR-flavoured wrappers so every existing OCR call site keeps working
+// Thin OCR-flavoured wrapper so the expert-action entry below keeps working
 // unchanged -- the generalization lives entirely behind `kind`.
 function openOcrLangsModal() { openLangsModal("ocr"); }
-function closeOcrLangsModal() { closeLangsModal(); }
-function loadOcrCaps(force) { return loadLangCaps("ocr", force); }
 function openVoiceLangsModal() { openLangsModal("speech"); }
 EXPERT_ACTIONS["ocr-langs-open"] = openOcrLangsModal;
 EXPERT_ACTIONS["voice-langs-open"] = openVoiceLangsModal;
