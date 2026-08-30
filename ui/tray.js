@@ -174,7 +174,15 @@ document.addEventListener("keydown", (e) => {
 const OPENED_AT = Date.now();
 const BLUR_GRACE_MS = 400;
 window.addEventListener("blur", () => {
-  if (Date.now() - OPENED_AT > BLUR_GRACE_MS) close();
+  const left = BLUR_GRACE_MS - (Date.now() - OPENED_AT);
+  if (left <= 0) close();
+  // A blur landing inside the hand-off window itself (the backend showing the
+  // window, then taking focus) is not real activity to ignore forever -- if the
+  // user genuinely clicks another app in that same instant, discarding the blur
+  // outright left this always-on-top menu stranded on screen with nothing left
+  // to close it. Defer instead: close once the grace window actually ends,
+  // unless this window is focused again before then.
+  else setTimeout(() => { if (!document.hasFocus()) close(); }, left);
 });
 document.body.addEventListener("mousedown", (e) => {
   if (!cardEl.contains(e.target)) close();

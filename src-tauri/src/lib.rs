@@ -1278,10 +1278,23 @@ fn tray_window_logical_height(plan: &TrayWinPlan) -> f64 {
     logical_h
 }
 
+// clamp_to_work only ever repositions -- it cannot shrink a window taller than
+// the work area, so at the supported 10-favorites/10-recents limits (both
+// sections on by default) the uncapped content could reach ~742 logical px and
+// overhang the bottom of a small or heavily-scaled display, with the card's own
+// (former) "overflow: hidden" then making the lower rows -- Quit included --
+// impossible to reach. Capped to the work area with an 8px margin so it never
+// sits flush against the taskbar/screen edge; floating.css makes the card
+// scroll internally once its content no longer fits the capped height. Split
+// out from tray_window_rect so the cap math is testable without an AppHandle.
+fn tray_window_capped_height(plan: &TrayWinPlan, work_h: f64, dpi: f64) -> f64 {
+    (tray_window_logical_height(plan) * dpi).min((work_h - 8.0 * dpi).max(TRAY_WIN_ROW_H * dpi))
+}
+
 fn tray_window_rect(app: &AppHandle, plan: &TrayWinPlan) -> Rect {
     let (work, dpi, cursor) = work_and_dpi_at_cursor(app);
     let w = TRAY_WIN_W * dpi;
-    let h = tray_window_logical_height(plan) * dpi;
+    let h = tray_window_capped_height(plan, work.h, dpi);
     let (x, y) = clamp_to_work(work, w, h, cursor.x, cursor.y);
     Rect { x, y, w, h }
 }
@@ -4899,9 +4912,32 @@ fn sweep_orphan_files(app: &AppHandle, referenced: &std::collections::HashSet<St
     // Compare case-insensitively with normalized separators (Windows) so a still
     // referenced file is never mistaken for an orphan and deleted.
     let norm = |s: &str| s.replace('/', "\\").to_lowercase();
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_file() && !referenced.contains(&norm(&path.to_string_lossy())) {
+            candidates.push(path);
+        }
+    }
+    if candidates.is_empty() {
+        return;
+    }
+    // `referenced` is a snapshot from before the lock was released -- store_attached_file
+    // (which copies a NEW attachment into this same folder) always runs while the lock is
+    // held, so another window's add/update can land a fresh file here while this sweep is
+    // still walking the directory. Re-check every candidate against the store's CURRENT
+    // state right before deleting it: one more cheap in-memory HashSet build (no filesystem
+    // work under the lock, so the whole point of splitting this sweep out still holds),
+    // closing the window that could otherwise delete a file another window just copied in.
+    let live = match app.try_state::<Db>() {
+        Some(state) => {
+            let store = lock(&state);
+            orphan_referenced_set(&store)
+        }
+        None => return,
+    };
+    for path in candidates {
+        if !live.contains(&norm(&path.to_string_lossy())) {
             let _ = fs::remove_file(&path);
         }
     }
@@ -7730,6 +7766,27 @@ fn gzip_to(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> 
     })
 }
 
+// VACUUM src into tmp, then reject the result if it is past the ceiling
+// restore_backup could ever inflate. Pure path-based core of do_backup's own
+// size gate, split out so it is unit-testable without an AppHandle (mirrors
+// apply_import's own split from import_all for the identical reason). VACUUM
+// INTO folds in every committed row, data.db-wal included, so tmp's size is the
+// true figure restore_backup would have to inflate -- checking src (data.db)
+// alone, as do_backup's early exit still does for a cheap fast path, under-
+// reports whenever a meaningful amount of committed data sits in an
+// uncheckpointed WAL file.
+fn vacuum_and_check_size(src: &std::path::Path, tmp: &std::path::Path) -> Result<(), String> {
+    let conn = Connection::open(src).map_err(|e| e.to_string())?;
+    conn.execute("VACUUM INTO ?1", params![tmp.to_string_lossy()]).map_err(|e| e.to_string())?;
+    if let Ok(meta) = fs::metadata(tmp) {
+        if too_large_to_restore(meta.len()) {
+            let _ = fs::remove_file(tmp);
+            return Err("store-too-large-for-backup".into());
+        }
+    }
+    Ok(())
+}
+
 fn gunzip_to(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
     use flate2::read::GzDecoder;
     let packed = fs::read(src).map_err(|e| e.to_string())?;
@@ -7749,6 +7806,9 @@ fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<Str
     // store that has genuinely grown past that ceiling would still back up
     // successfully today and only reveal that it can never be restored the day it
     // is actually needed. Checked on the uncompressed size (gzip only shrinks it).
+    // Cheap early exit only -- data.db alone can under-report real content sitting
+    // in an uncheckpointed data.db-wal, so this never replaces the post-VACUUM
+    // check below, which is what actually gates the backup.
     if let Ok(meta) = fs::metadata(&src) {
         if too_large_to_restore(meta.len()) {
             return Err("store-too-large-for-backup".into());
@@ -7787,11 +7847,7 @@ fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<Str
     // above, so any failure between here and a real snapshot existing must
     // remove it again -- otherwise the list reads folders and offers a restore
     // from one that was never actually written.
-    if let Err(e) = (|| -> Result<(), String> {
-        let conn = Connection::open(&src).map_err(|e| e.to_string())?;
-        conn.execute("VACUUM INTO ?1", params![tmp.to_string_lossy()]).map_err(|e| e.to_string())?;
-        Ok(())
-    })() {
+    if let Err(e) = vacuum_and_check_size(&src, &tmp) {
         let _ = fs::remove_dir_all(&folder);
         return Err(e);
     }
@@ -7904,14 +7960,25 @@ fn stage_and_validate_backup(backup_db: &std::path::Path, dir: &std::path::Path)
     // straight onto the live data.db. db_conn_init_schema's CREATE TABLE IF NOT
     // EXISTS would then quietly recreate the missing tables empty on next launch --
     // a restore that "succeeds" into an empty library. Requiring the two tables
-    // every real backup has always had (prompts, meta) catches that before the
-    // live database is ever touched.
+    // every real backup has always had (prompts, meta) -- with the exact columns
+    // every read/write against them assumes -- plus a quick SQLite integrity pass,
+    // catches that (and a partly corrupted file) before the live database is ever
+    // touched. Column names, not just table names: a table that merely happens to
+    // be called "prompts" (the stray-file case above) but has some other shape
+    // would otherwise still pass and fail confusingly later, mid-restore.
     let has_expected_schema = Connection::open(&staged).is_ok_and(|c| {
-        c.query_row(
-            "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN ('prompts', 'meta')",
-            [],
-            |r| r.get::<_, i64>(0),
-        ) == Ok(2)
+        let has_columns = |table: &str, cols: &[&str]| {
+            cols.iter().all(|col| {
+                c.query_row(
+                    "SELECT count(*) FROM pragma_table_info(?1) WHERE name = ?2",
+                    params![table, col],
+                    |r| r.get::<_, i64>(0),
+                ) == Ok(1)
+            })
+        };
+        has_columns("prompts", &["id", "ord", "data"])
+            && has_columns("meta", &["key", "value"])
+            && c.query_row("PRAGMA quick_check", [], |r| r.get::<_, String>(0)).as_deref() == Ok("ok")
     });
     if !has_expected_schema {
         let _ = fs::remove_file(&staged);
@@ -12703,16 +12770,26 @@ async fn ocr_capabilities(state: State<'_, Db>, force: bool) -> Result<Vec<OcrCa
 // the button the user presses in the language dialog -- the app never asks for
 // rights on its own. Returns once the elevated process was launched; the
 // frontend polls ocr_capabilities_elevated_result for the list.
-// async (215): ShellExecuteW's "runas" verb blocks the calling thread until the
-// user actually answers the UAC prompt, not just until the process starts --
-// a plain fn here would tie up a dispatch-thread worker for however long that
-// takes (walking away leaves it blocked indefinitely). Its sibling
-// ocr_capabilities_elevated_result is already async for the same reason.
+// async + spawn_blocking (215/238): ShellExecuteW's "runas" verb blocks the
+// calling thread until the user actually answers the UAC prompt, not just
+// until the process starts (walking away leaves it blocked indefinitely).
+// spawn_blocking moves that wait onto the dedicated blocking-thread pool
+// instead of the tokio runtime's small async-worker set -- an earlier version
+// of this fn was async but called the blocking Win32 call directly, which
+// only relocated the stall onto a scarcer thread and could starve every other
+// async command in the app for as long as the prompt sat open. Its sibling
+// ocr_capabilities_elevated_result already used spawn_blocking correctly.
 #[tauri::command]
 async fn ocr_capabilities_elevate() -> Result<(), String> {
     #[cfg(windows)]
     {
-        ocr::elevate_capabilities(ocr::CapKind::Ocr)
+        // spawn_blocking: ShellExecuteW("runas") sits blocked until the user answers
+        // the UAC prompt, which can take as long as they like. Calling it directly in
+        // this async fn (as before) would tie up a tokio worker thread for that whole
+        // wait -- unlike a plain (non-async) command, which Tauri already dispatches
+        // via its own blocking pool, an async fn runs straight on the runtime's small
+        // worker set, and blocking one starves every other async command sharing it.
+        tauri::async_runtime::spawn_blocking(|| ocr::elevate_capabilities(ocr::CapKind::Ocr)).await.map_err(|e| e.to_string())?
     }
     #[cfg(not(windows))]
     {
@@ -12756,7 +12833,8 @@ async fn ocr_install_language(name: String) -> Result<(), String> {
         if !ocr::is_known_capability(ocr::CapKind::Ocr, &name) {
             return Err("unknown OCR capability name".to_string());
         }
-        ocr::install_language(ocr::CapKind::Ocr, &name)
+        // spawn_blocking: same UAC-wait reasoning as ocr_capabilities_elevate.
+        tauri::async_runtime::spawn_blocking(move || ocr::install_language(ocr::CapKind::Ocr, &name)).await.map_err(|e| e.to_string())?
     }
     #[cfg(not(windows))]
     {
@@ -12826,7 +12904,8 @@ async fn speech_capabilities(state: State<'_, Db>, force: bool) -> Result<Vec<Oc
 async fn speech_capabilities_elevate() -> Result<(), String> {
     #[cfg(windows)]
     {
-        ocr::elevate_capabilities(ocr::CapKind::Speech)
+        // spawn_blocking: same UAC-wait reasoning as ocr_capabilities_elevate.
+        tauri::async_runtime::spawn_blocking(|| ocr::elevate_capabilities(ocr::CapKind::Speech)).await.map_err(|e| e.to_string())?
     }
     #[cfg(not(windows))]
     {
@@ -12857,7 +12936,8 @@ async fn speech_install_language(name: String) -> Result<(), String> {
         if !ocr::is_known_capability(ocr::CapKind::Speech, &name) {
             return Err("unknown speech capability name".to_string());
         }
-        ocr::install_language(ocr::CapKind::Speech, &name)
+        // spawn_blocking: same UAC-wait reasoning as ocr_capabilities_elevate.
+        tauri::async_runtime::spawn_blocking(move || ocr::install_language(ocr::CapKind::Speech, &name)).await.map_err(|e| e.to_string())?
     }
     #[cfg(not(windows))]
     {
@@ -15775,10 +15855,16 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
         }
         migrate_prompts(&mut store.prompts);
         store.prompts_locked = false; // a full import supersedes any decrypt lock
-        // The whole set was replaced: an imported prompt that happens to reuse an
-        // id from the old set must be written, not skipped because a stale hash
-        // still claims that id is on disk.
-        store.forget_written_rows();
+        // Deliberately NOT forget_written_rows() here: write_rows matches an
+        // imported row against the disk by (id, content hash), never by trusting
+        // `written` alone, so a reused id with different content is still
+        // rewritten correctly. But write_rows ALSO only deletes a row that has
+        // disappeared from the new set when THIS process already knew about it
+        // (present in `written`) -- clearing the map here would silently make
+        // every pre-import prompt un-deletable, since a wholesale replacement
+        // with a smaller set would leave every old row orphaned on disk, back
+        // after the next restart. The prompts this process already loaded are
+        // exactly the ones `written` must keep so their removal still lands.
     }
     // The imported backupPw is DPAPI-sealed on a DIFFERENT machine — it
     // decrypts to "" here, and a following export_all would then silently write
@@ -20220,6 +20306,34 @@ mod tests {
         assert!(too_large_to_restore(MAX_INFLATED + 1), "one byte past the ceiling must refuse a backup nobody could ever restore");
     }
 
+    // The test above only proves the pure ceiling function itself; it never proves
+    // do_backup's real production path (vacuum_and_check_size) actually runs VACUUM
+    // INTO the destination it then measures. MAX_INFLATED is 512 MB -- deliberately
+    // far past any real store, and deliberately too large to manufacture in a fast
+    // unit test, so the reject path itself stays unexercised here; this proves the
+    // wiring on the path that IS practical to run for real: a normal-sized source
+    // actually gets vacuumed into `tmp`, not silently skipped or pointed at `src`.
+    #[test]
+    fn vacuum_and_check_size_writes_a_real_vacuumed_copy_at_tmp() {
+        let dir = std::env::temp_dir().join(format!("{}-test-vacuum-size", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("data.db");
+        let tmp = dir.join("data.db.tmp");
+        {
+            let conn = Connection::open(&src).unwrap();
+            conn.execute_batch("CREATE TABLE prompts(id TEXT PRIMARY KEY, ord INTEGER NOT NULL, data TEXT NOT NULL); INSERT INTO prompts VALUES('a', 0, 'x');").unwrap();
+        }
+        assert!(!tmp.exists());
+        let result = vacuum_and_check_size(&src, &tmp);
+        assert!(result.is_ok(), "a normal-sized store must not be rejected: {result:?}");
+        assert!(tmp.exists(), "VACUUM INTO must have actually written the destination file");
+        let conn = Connection::open(&tmp).unwrap();
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM prompts", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1, "the vacuumed copy must contain the real data, not an empty placeholder");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     // allowMultipleInstances lets two full processes share one data directory.
     // write_rows must not delete a row this process never learned about (added by
     // another instance after this process's own load) just because that row is
@@ -20823,6 +20937,45 @@ mod tests {
             !store.settings.ui_texts.contains_key(BACKUP_PW_KEY),
             "the foreign backup password must not survive — this machine had none to restore"
         );
+    }
+
+    // A full "data" import must actually delete the prompts it replaces ON DISK,
+    // not just in the in-memory list apply_import mutates directly. The two tests
+    // above only ever check store.prompts, which is always correct (apply_import
+    // assigns it outright) regardless of this bug — it takes a real write_rows
+    // round-trip through a DB to see whether the OLD rows a smaller import leaves
+    // behind actually get deleted, or silently survive to reappear after restart.
+    #[test]
+    fn import_all_data_scope_deletes_the_prompts_it_replaces_from_disk() {
+        let mut conn = row_test_db();
+        let mut written = WrittenRows::new();
+        // "This process" genuinely loaded two prompts before the import — the exact
+        // condition write_rows' delete guard requires to treat their disappearance
+        // as a real, user-initiated removal rather than another instance's unseen work.
+        let original = numbered_prompts(2);
+        db_write_prompts(&mut conn, &original, &mut written).unwrap();
+        assert_eq!(stored_rows(&conn, "prompts").len(), 2);
+
+        let mut store = Store {
+            prompts: original,
+            trash: Vec::new(),
+            settings: Settings::default(),
+            prompts_locked: false,
+            written: std::cell::RefCell::new(written),
+        };
+        // A one-prompt backup, with an id neither original prompt had.
+        let backup = Backup { prompts: vec![test_prompt("imported-only")], settings: Settings::default() };
+        apply_import(&mut store, backup, true, false);
+        assert_eq!(store.prompts.len(), 1, "the in-memory list is always replaced outright");
+
+        // The save import_all performs right after apply_import, using the SAME
+        // store.written apply_import just (did not) clear.
+        let mut written = store.written.into_inner();
+        db_write_prompts(&mut conn, &store.prompts, &mut written).unwrap();
+
+        let rows = stored_rows(&conn, "prompts");
+        assert_eq!(rows.len(), 1, "the two replaced prompts must actually be deleted from disk, not just from memory");
+        assert_eq!(rows[0].0, "imported-only");
     }
 
     #[test]
@@ -22904,6 +23057,32 @@ mod tests {
             + (TRAY_WIN_HEAD_H + 1.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H) // 1-entry section
             + (TRAY_WIN_HEAD_H + 3.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H); // 3-entry section
         assert_eq!(tray_window_logical_height(&two_sections), want_two);
+    }
+
+    #[test]
+    fn tray_window_capped_height_never_exceeds_the_work_area() {
+        let entry = |id: &str| TrayWinEntry { id: id.into(), label: id.into(), kind: "text".into(), color: String::new() };
+        // Max entries in both sections (the supported ceiling) -- uncapped this is
+        // ~742 logical px, comfortably past a 1366x768 @150% work area.
+        let full = TrayWinPlan {
+            sections: vec![
+                TrayWinSection { title: "Favorites".into(), entries: (0..10).map(|i| entry(&i.to_string())).collect() },
+                TrayWinSection { title: "Recent".into(), entries: (0..10).map(|i| entry(&i.to_string())).collect() },
+            ],
+            show_label: "Show".into(),
+            quit_label: "Quit".into(),
+        };
+        let dpi = 1.5;
+        let uncapped = tray_window_logical_height(&full) * dpi;
+        let small_work_h = 680.0 * dpi; // a real reported 1366x768@150% work-area height
+        let h = tray_window_capped_height(&full, small_work_h, dpi);
+        assert!(uncapped > small_work_h, "the fixture must actually be taller than the work area, or this test proves nothing");
+        assert!(h <= small_work_h, "the window must never be sized past the work area it opens in: got {h}, work area {small_work_h}");
+        assert!(h > 0.0, "must still leave a usable window, not collapse to nothing");
+
+        // A tall enough monitor must not clip content that would otherwise fit.
+        let roomy = tray_window_capped_height(&full, 2000.0, dpi);
+        assert_eq!(roomy, uncapped, "plenty of room must not shrink the window below its real content height");
     }
 
     #[test]

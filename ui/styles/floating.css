@@ -769,7 +769,12 @@ body.tray-menu-body {
   background: var(--menu-bg);
   color: var(--menu-fg);
   box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
-  overflow: hidden; /* the backend sizes the window to fit exactly; this is a safety net, not a scroll area */
+  /* The backend sizes the window to fit exactly, but caps that height to the
+     monitor's work area (tray_window_rect) -- at the favorites/recents entry
+     limits the uncapped content can still be taller than a small or heavily
+     scaled display, so this must actually scroll rather than just hide the rest. */
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .tray-menu-head {
   flex: 0 0 22px;

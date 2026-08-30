@@ -658,7 +658,7 @@ const ERROR_MSG_KEYS = {
   "color picker is off": "errColorPickerOff",
   "autostart is only supported on Windows": "errAutostartWindowsOnly",
   "delete-incomplete": "errDeleteIncomplete",
-  "unsupported-export-format": "exportFailed",
+  "unsupported-export-format": "exportUnsupportedFormat",
 };
 function errToast(err) {
   const s = String(err);
@@ -7729,8 +7729,13 @@ async function startLangInstall(kind, cap) {
     delete st.installPending[cap.name];
     // A declined UAC prompt is not an error: a calm inline
     // note on the row, no error tone, the row stays "not installed".
-    if (String(e) === "ocr-elevate-cancelled") { st.installErrors[cap.name] = true; renderLangsBody(kind); }
+    if (String(e) === "ocr-elevate-cancelled") st.installErrors[cap.name] = true;
     else errToast(e);
+    // Every branch above just deleted installPending -- the row rendered disabled
+    // ("Installing...") right before the await must be repainted regardless of
+    // which branch ran, or the button stays stuck disabled until the dialog is
+    // closed and reopened.
+    renderLangsBody(kind);
     return;
   }
   delete st.installPending[cap.name];
@@ -13866,7 +13871,12 @@ function bind() {
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Tab" || e.ctrlKey) return; // Ctrl+Tab is the view-switcher above
     if (!snipEdit.classList.contains("hidden")) return;
-    if (!$("tour-modal").classList.contains("hidden")) return;
+    // tourKeydown owns Tab while the tour is the topmost thing on screen, but it
+    // bows out the moment a confirm dialog (tourAskSkip) opens on top of it -- and
+    // that dialog's own trap below is never reached if this bails unconditionally
+    // just because the tour is still open underneath. Only defer to the tour when
+    // nothing is layered above it.
+    if (!$("tour-modal").classList.contains("hidden") && $("confirm-modal").classList.contains("hidden")) return;
     if (!toolbarMenu.classList.contains("hidden")) { trapTabWithin(toolbarMenu, e); return; }
     if (!miniMenu.classList.contains("hidden")) { trapTabWithin(miniMenu, e); return; }
     if (!viewGroupPop.classList.contains("hidden")) { trapTabWithin(viewGroupPop, e); return; }
