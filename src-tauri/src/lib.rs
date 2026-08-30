@@ -38,6 +38,10 @@ use tauri::{
 };
 
 // Bring the main window back from the tray — always at the saved size/position.
+// Routed through resolve_geometry() (the same validation the startup path
+// uses) instead of trusting the saved geometry raw -- a monitor unplugged
+// while the app sat minimized in the tray must not be able to restore the
+// window off every remaining screen.
 fn show_main(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         if let Some(state) = app.try_state::<Db>() {
@@ -46,10 +50,9 @@ fn show_main(app: &AppHandle) {
                 .unwrap_or_else(|e| e.into_inner())
                 .settings
                 .window;
-            if let Some(g) = geom {
-                let _ = win.set_size(tauri::LogicalSize::new(g.width, g.height));
-                let _ = win.set_position(PhysicalPosition::new(g.x, g.y));
-            }
+            let g = resolve_geometry(&win, geom);
+            let _ = win.set_size(tauri::LogicalSize::new(g.width, g.height));
+            let _ = win.set_position(PhysicalPosition::new(g.x, g.y));
         }
         let _ = win.show();
         let _ = win.unminimize();
@@ -4881,7 +4884,7 @@ fn store_attached_file(app: &AppHandle, path: &str) -> String {
 // cleanupFiles flag (default on); only ever touches files inside our own store
 // folder, so a user's originals elsewhere are never affected.
 //
-// 215: split into a cheap in-memory step (the referenced-file set, computed
+// Split into a cheap in-memory step (the referenced-file set, computed
 // while the store lock is held) and this slow filesystem sweep (run AFTER the
 // lock is released). The combined version used to run the whole fs::read_dir +
 // remove_file scan while still holding the store mutex, freezing every other
@@ -4908,7 +4911,7 @@ fn orphan_cleanup_enabled(store: &Store) -> bool {
     store.settings.ui_flags.get("cleanupFiles").copied().unwrap_or(true)
 }
 
-// 91: a trashed prompt still owns its files until it is actually purged —
+// A trashed prompt still owns its files until it is actually purged —
 // leaving trash out of this scan would let an UNRELATED cleanup pass
 // (triggered by some other prompt's add/delete) sweep away a file a trashed
 // prompt still needs to be restorable.
@@ -5293,7 +5296,7 @@ async fn update_prompt(
                 // Only sweep the old attachment once the new reference is durably
                 // saved -- otherwise a failed save leaves the DB pointing at a file the
                 // sweep just deleted, with no fallback to recover it from.
-                // 215: only the cheap in-memory part runs while the lock is held; the
+                // Only the cheap in-memory part runs while the lock is held; the
                 // actual filesystem sweep happens below, once the lock is released.
                 let orphan_scan = orphan_cleanup_enabled(&store).then(|| orphan_referenced_set(&store));
                 let scale = float_scale_of(&store.settings, &id);
@@ -5306,7 +5309,7 @@ async fn update_prompt(
         Some((p, s, r, o)) => (Some(p), s, r, o),
         None => (None, 1.0, false, None),
     };
-    // 215: the actual filesystem sweep, deferred until the store lock (dropped
+    // The actual filesystem sweep, deferred until the store lock (dropped
     // when the block above ended) is no longer held.
     if let Some(referenced) = orphan_scan {
         sweep_orphan_files(&app, &referenced);
@@ -5750,7 +5753,7 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
 // are gone for good. This is the old hard-delete's own cleanup logic, just moved
 // here instead of running at every "delete" click.
 //
-// 215: returns the orphan-file set to sweep instead of sweeping itself, so the
+// Returns the orphan-file set to sweep instead of sweeping itself, so the
 // caller can drop the store lock first — a big attachments folder used to stay
 // locked out from every other window for the whole fs scan.
 fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) -> Option<std::collections::HashSet<String>> {
@@ -15060,7 +15063,7 @@ async fn export_prompts(app: AppHandle, state: State<'_, Db>, format: String, id
         let content = match format.as_str() {
             "csv" => to_csv(&selected),
             "txt" => to_txt(&selected),
-            _ => return Err(format!("Unsupported format: {}", format)),
+            _ => return Err("unsupported-export-format".to_string()),
         };
         (content, selected.len())
     };

@@ -111,6 +111,10 @@ let modalState = null;
 // opening a DIFFERENT prompt leaves modalState just as truthy, letting a slow
 // reply from the old prompt land in the new one's editor.
 let modalSession = 0;
+// Whatever had keyboard focus right before the editor opened, so closing
+// it returns focus there instead of dropping it to document.body -- without
+// this a keyboard user's next Tab press restarts from the top of the page.
+let modalOpener = null;
 let modalInitial = ""; // snapshot of the open modal's content (unsaved-change guard)
 let modalSaving = false; // 103: re-entry guard, a double-click/double-Enter must not fire two saves
 let ctxId = null;
@@ -145,6 +149,10 @@ let expertResetTimer = null;
 let versionLabel = ""; // "Version 1.6.0", shown as the clickable releases link
 let appVersion = ""; // raw "1.6.0", for the About dialog
 
+// Whatever had focus right before the settings/expert panel opened, so
+// closing it returns focus there (same reasoning as modalOpener above).
+let settingsOpener = null;
+
 // Hide the settings modal and reset the Updates status line back to the version
 // number — unless a real update is pending (the "update available" state stays).
 // So a transient "already newest version" message doesn't linger after reopening.
@@ -152,6 +160,8 @@ function hideSettings() {
   settingsEl.classList.add("hidden");
   const uv = $("update-version");
   if (uv && versionLabel && !uv.classList.contains("update-avail")) uv.textContent = versionLabel;
+  settingsOpener?.focus?.();
+  settingsOpener = null;
 }
 
 // Surface unexpected errors as a toast instead of failing silently.
@@ -213,6 +223,24 @@ function putIcon(el, svg) {
   }
   if (node) el.appendChild(node.cloneNode(true));
   else el.innerHTML = svg; // not a single element — fall back to the plain path
+  return el;
+}
+
+// A per-row action icon has to be a <span>, not a real <button> — it sits
+// nested inside the row's own <button> (library/journal rows), and HTML
+// forbids nesting one button in another. This is the keyboard half a real
+// button would give for free: joins the tab order and turns Enter/Space into
+// the same click the element already handles. Call once, right after wiring
+// the element's own "click" listener.
+function makeKeyboardActivatable(el) {
+  el.tabIndex = 0;
+  el.setAttribute("role", "button");
+  el.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    e.stopPropagation();
+    el.click();
+  });
   return el;
 }
 
@@ -630,6 +658,7 @@ const ERROR_MSG_KEYS = {
   "color picker is off": "errColorPickerOff",
   "autostart is only supported on Windows": "errAutostartWindowsOnly",
   "delete-incomplete": "errDeleteIncomplete",
+  "unsupported-export-format": "exportFailed",
 };
 function errToast(err) {
   const s = String(err);
@@ -6135,6 +6164,7 @@ function maybeCloseOnCopy() {
 
 function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", pdfPage = 0, iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", variants = [], rotateMode = "", rotateAuto = false, title, targetCell }) {
   modalSession++;
+  modalOpener = document.activeElement;
   modalState = {
     mode, id, color, image, showImage, copyImage, filePath, pdfPage, iconPath, tags: [...tags], hotkey, hotkeyPaste, targetCell,
     // What the editor opened with. Save compares against it and only sends an
@@ -7637,7 +7667,7 @@ function langRow(kind, cap) {
   sizeEl.textContent = size == null ? "—" : fmtBytes(size);
   const chip = document.createElement("span");
   chip.className = installed ? "lang-row-chip installed" : "lang-row-chip";
-  chip.textContent = installed ? t("ocrLangsInstalled") : cap.state;
+  chip.textContent = installed ? t("ocrLangsInstalled") : t("ocrLangsNotInstalled");
   const actions = document.createElement("div");
   actions.className = "clip-actions";
   row.append(main, sizeEl, chip, actions);
@@ -8750,6 +8780,11 @@ function closeModal() {
   modal.video.removeAttribute("src"); // stop a playing preview
   modalState = null;
   modalInitial = "";
+  // A tile the editor was opened from can be gone by the time it closes (the
+  // prompt got deleted mid-edit, or a re-render replaced the DOM node) --
+  // focusing a detached element is a harmless no-op, never an error.
+  modalOpener?.focus?.();
+  modalOpener = null;
 }
 
 // Themed yes/no dialog. Resolves true on confirm, false on cancel / dismiss.
@@ -8762,6 +8797,9 @@ let confirmCleanup = null;
 // no existing `if (!ok) return` caller needs to change). At least one must stay
 // checked, or the confirm button offers nothing to actually do.
 function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input, checkboxes, danger = true, oneButton = false }) {
+  // Restored once this dialog resolves, so a keyboard user's next Tab
+  // continues from where they were instead of restarting from the page top.
+  const opener = document.activeElement;
   const root = $("confirm-modal");
   $("confirm-title").textContent = title;
   $("confirm-msg").textContent = message;
@@ -8823,6 +8861,7 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input,
       field.removeEventListener("keydown", onKey);
       eye.removeEventListener("click", onEye);
       confirmCleanup = null;
+      opener?.focus?.();
       resolve(val);
     };
     const finish = (okPressed) => done(input ? (okPressed ? field.value : null) : okPressed);
@@ -10377,6 +10416,7 @@ function renderLibrary() {
         await placeTile(p.id, free[0], free[1]);
         renderLibrary();
       });
+      makeKeyboardActivatable(add);
       row.appendChild(add);
     }
     // Star (middle): mark/unmark this prompt as a favorite (feature-gated).
@@ -10398,6 +10438,7 @@ function renderLibrary() {
         renderLibrary();
         if (favView) renderGrid(true); // favorites grid updates live underneath
       });
+      makeKeyboardActivatable(fav);
       row.appendChild(fav);
     }
     // Edit icon (rightmost): opens the edit dialog without copying.
@@ -10407,6 +10448,7 @@ function renderLibrary() {
     putIcon(edit, ICON_EDIT);
     edit.addEventListener("pointerdown", (e) => e.stopPropagation());
     edit.addEventListener("click", (e) => { e.stopPropagation(); editPrompt(p.id); });
+    makeKeyboardActivatable(edit);
     row.appendChild(edit);
 
     // Delete (far right): the only destructive action in the row, so it asks first.
@@ -10433,6 +10475,7 @@ function renderLibrary() {
       renderLibrary();
       await renderGrid(); // the tile (or its folder) is gone from the grid as well
     });
+    makeKeyboardActivatable(del);
     row.appendChild(del);
 
     // Click copies the prompt (or toggles selection in batch mode).
@@ -10760,6 +10803,7 @@ function journalRow(p, meta, onClick) {
   edit.innerHTML = ICON_EDIT;
   edit.addEventListener("pointerdown", (e) => e.stopPropagation());
   edit.addEventListener("click", (e) => { e.stopPropagation(); editPrompt(p.id); });
+  makeKeyboardActivatable(edit);
   row.appendChild(edit);
   // Only the "recently copied" column carries a rowid — "most used" is a
   // usage-count aggregate with no single copy_log row a delete could target.
@@ -10781,6 +10825,7 @@ function journalRow(p, meta, onClick) {
       try { await invoke("delete_copy_entry", { rowid: meta.rowid }); } catch (err) { errToast(err); return; }
       await loadJournal(); // refetch — the entry (and only it) disappears
     });
+    makeKeyboardActivatable(del);
     row.appendChild(del);
   }
   return row;
@@ -13216,6 +13261,7 @@ function bind() {
   });
 
   $("gear").addEventListener("click", () => {
+    settingsOpener = document.activeElement;
     showExpertPage(false); // always open on the main page
     settingsEl.classList.remove("hidden");
   });
@@ -13637,6 +13683,7 @@ function bind() {
     $("opt-voice-hotkey").value = "";
   });
   EXPERT_ACTIONS["voice-hotkey-set"] = () => {
+    settingsOpener = document.activeElement;
     showExpertPage(false);
     settingsEl.classList.remove("hidden");
     requestAnimationFrame(() => {
@@ -13808,6 +13855,44 @@ function bind() {
     e.preventDefault();
     e.stopPropagation();
     openToolbarMenu(e.clientX, e.clientY);
+  });
+  // Keeps Tab from leaking past whichever overlay is currently topmost,
+  // into the (visually dimmed) page behind it. Mirrors the Escape dispatcher's
+  // own "what's on top wins" cascade below one for one, reusing the same
+  // container references, so a new overlay only needs adding in one place to
+  // stay consistent between the two. snipEdit and the first-run tour own their
+  // own Tab handling already (trapTabWithin call sites in snipEditKeydown/
+  // tourKeydown) and are skipped here to avoid trapping twice.
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab" || e.ctrlKey) return; // Ctrl+Tab is the view-switcher above
+    if (!snipEdit.classList.contains("hidden")) return;
+    if (!$("tour-modal").classList.contains("hidden")) return;
+    if (!toolbarMenu.classList.contains("hidden")) { trapTabWithin(toolbarMenu, e); return; }
+    if (!miniMenu.classList.contains("hidden")) { trapTabWithin(miniMenu, e); return; }
+    if (!viewGroupPop.classList.contains("hidden")) { trapTabWithin(viewGroupPop, e); return; }
+    if (!tileFolderPop.classList.contains("hidden")) { trapTabWithin(tileFolderPop, e); return; }
+    if (!viewsPop.classList.contains("hidden")) { trapTabWithin(viewsPop, e); return; }
+    if (!gridTagPop.classList.contains("hidden")) { trapTabWithin(gridTagPop, e); return; }
+    if (!$("lightbox").classList.contains("hidden")) { trapTabWithin($("lightbox"), e); return; }
+    if (!$("confirm-modal").classList.contains("hidden")) { trapTabWithin($("confirm-modal"), e); return; }
+    if (!colorPop.classList.contains("hidden")) { trapTabWithin(colorPop, e); return; }
+    if (!tagPop.classList.contains("hidden")) { trapTabWithin(tagPop, e); return; }
+    if (!$("tag-modal").classList.contains("hidden")) { trapTabWithin($("tag-modal"), e); return; }
+    if (!ctxEl.classList.contains("hidden")) { trapTabWithin(ctxEl, e); return; }
+    if (!$("update-modal").classList.contains("hidden")) { trapTabWithin($("update-modal"), e); return; }
+    if (!$("about-modal").classList.contains("hidden")) { trapTabWithin($("about-modal"), e); return; }
+    if (!$("snip-modal").classList.contains("hidden")) { trapTabWithin($("snip-modal"), e); return; }
+    if (!viewModal.root.classList.contains("hidden")) { trapTabWithin(viewModal.root, e); return; }
+    if (!modal.root.classList.contains("hidden")) { trapTabWithin(modal.root, e); return; }
+    if (!$("clip-modal").classList.contains("hidden")) { trapTabWithin($("clip-modal"), e); return; }
+    if (!$("dupes-modal").classList.contains("hidden")) { trapTabWithin($("dupes-modal"), e); return; }
+    if (!$("trash-modal").classList.contains("hidden")) { trapTabWithin($("trash-modal"), e); return; }
+    if (document.body.classList.contains("library-front") && !libraryEl.classList.contains("hidden")) { trapTabWithin(libraryEl, e); return; }
+    if (!$("backup-modal").classList.contains("hidden")) { trapTabWithin($("backup-modal"), e); return; }
+    if (!journalEl.classList.contains("hidden")) { trapTabWithin(journalEl, e); return; }
+    if (!libraryEl.classList.contains("hidden")) { trapTabWithin(libraryEl, e); return; }
+    if (!helpEl.classList.contains("hidden")) { trapTabWithin(helpEl, e); return; }
+    if (!settingsEl.classList.contains("hidden")) { trapTabWithin(settingsEl, e); return; }
   });
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
