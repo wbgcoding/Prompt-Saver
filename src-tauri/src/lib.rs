@@ -1,6 +1,23 @@
 // Application backend (Tauri v2). Local SQLite storage, clipboard, import/export,
 // multiple views, frameless floating quick-copy windows. No network, 100% offline.
 
+// clippy::pedantic and clippy::nursery were run once (213) as a deliberately
+// stricter pass, not adopted as standing lints. Together they raised ~1080
+// warnings, almost all pure style noise for this codebase specifically: heavy
+// Win32 FFI and image-processing code makes hundreds of `as` casts
+// (cast_possible_truncation/sign_loss/wrap/lossless) intentional and already
+// domain-bounded; most Tauri #[tauri::command] handlers correctly take their
+// serde-deserialized arguments by value (needless_pass_by_value); and the rest
+// (redundant_closure_for_method_calls, use_self, uninlined_format_args, ...) is
+// cosmetic with no behavioural difference. Turning all of that on would mean a
+// ~1000-site rewrite of an already-shipping file for zero bug-fixing value and
+// real regression risk. One genuinely worth a look, clippy::float_cmp, was
+// checked at its two real hits (rgb_to_hsl) and is a documented false positive
+// there, not a bug. clippy::significant_drop_tightening (62 hits: a lock held
+// longer than the critical section needs) is the one category with real
+// contention/freeze relevance -- point 215 samples the worst offenders as part
+// of its own blocking-call audit rather than as a lint sweep.
+
 pub mod brand;
 
 use image::imageops::FilterType;
@@ -10779,6 +10796,11 @@ fn load_pick_history(settings: &Settings) {
 
 // RGB -> HSL as rounded integers (degrees, percent, percent). Grey has no hue, so
 // it reports 0°/0%; the hue wraps so 360° is always written as 0°.
+// clippy::float_cmp (pedantic): every `==` below compares a value straight out of
+// f64::max/min against one of its own unmodified inputs -- max()/min() return one
+// of their arguments bit-for-bit, no arithmetic happens in between, so this is
+// exact identity, not the "drifted after computation" case the lint warns about.
+#[allow(clippy::float_cmp)]
 fn rgb_to_hsl(r: u8, g: u8, b: u8) -> (u32, u32, u32) {
     let (rf, gf, bf) = (r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0);
     let max = rf.max(gf).max(bf);
