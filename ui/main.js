@@ -3994,6 +3994,12 @@ const clipNote = (s) => {
 // first time a tile for that id renders (primeRotateState), so a fresh render never
 // has to await anything itself; the badge/tooltip just stay blank for one frame.
 const rotateState = new Map(); // id -> { index, pos, total, text }
+// Per-id request generation: a rotation-changed push (another window's copy)
+// can land while this id's initial rotation_peek is still in flight. Without
+// this, the peek's reply arrives after and overwrites the fresher pushed
+// position with stale data (same shape as floating.js's rotateReq / folder.js's
+// rotateReqs).
+const rotateReqs = new Map(); // id -> latest request number
 let ROTATE_SHORT_MAX = 60; // tooltip preview length, independent of the notes cap (87: expert-tunable)
 
 // `pos` (not `index + 1`) — in random mode `index` is the absolute entry that
@@ -4033,8 +4039,10 @@ function applyAutoBadge(tile, id) {
 
 function primeRotateState(id) {
   if (rotateState.has(id)) return;
+  const req = (rotateReqs.get(id) || 0) + 1;
+  rotateReqs.set(id, req);
   invoke("rotation_peek", { id }).then((r) => {
-    if (!r) return;
+    if (!r || rotateReqs.get(id) !== req) return;
     rotateState.set(id, r);
     document.querySelectorAll(`.tile[data-id="${CSS.escape(id)}"]`).forEach((tile) => applyRotateState(tile, id));
   }).catch(() => {});
@@ -7462,8 +7470,8 @@ const LANG_CMDS = {
 // Per-kind dialog state, kept independent so switching which dialog is open
 // never loses the other's in-flight scan or install polls.
 const LANG_DIALOG = {
-  ocr: { cache: [], checked: 0, installTimers: {}, installErrors: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
-  speech: { cache: [], checked: 0, installTimers: {}, installErrors: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
+  ocr: { cache: [], checked: 0, installTimers: {}, installPending: {}, installErrors: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
+  speech: { cache: [], checked: 0, installTimers: {}, installPending: {}, installErrors: {}, elevTimer: null, elevRunning: false, elevLeft: 60 },
 };
 let langDialogKind = "ocr"; // which kind #ocr-langs-modal currently displays
 function openLangsModal(kind) {
@@ -7653,7 +7661,7 @@ function langRow(kind, cap) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "ghost-btn";
-  const busy = !!st.installTimers[cap.name];
+  const busy = !!st.installTimers[cap.name] || !!st.installPending[cap.name];
   btn.disabled = busy;
   // The size sits INSIDE the button label on purpose -- nobody should start a
   // download blind.
@@ -7678,15 +7686,24 @@ async function startLangInstall(kind, cap) {
   });
   if (!ok) return;
   delete st.installErrors[cap.name];
+  // Marks the row busy for the WHOLE gap, including the elevated install()
+  // call itself (which blocks until the user answers the UAC prompt) -- set
+  // synchronously, before any await, so a second click on the still-enabled
+  // button can't start a second concurrent elevated install for the same
+  // language while the first one is still waiting on Windows.
+  st.installPending[cap.name] = true;
+  renderLangsBody(kind);
   try {
     await invoke(LANG_CMDS[kind].install, { name: cap.name });
   } catch (e) {
+    delete st.installPending[cap.name];
     // A declined UAC prompt is not an error: a calm inline
     // note on the row, no error tone, the row stays "not installed".
     if (String(e) === "ocr-elevate-cancelled") { st.installErrors[cap.name] = true; renderLangsBody(kind); }
     else errToast(e);
     return;
   }
+  delete st.installPending[cap.name];
   // Arm the poller (marks the row busy) BEFORE repainting, or the render still
   // reads installTimers[cap.name] as empty and shows an enabled Download button --
   // a second click then starts a second UAC-elevated install.
@@ -13414,6 +13431,9 @@ function bind() {
   listen("rotation-changed", (e) => {
     const { id, index, pos, total, text } = e.payload || {};
     if (!id) return;
+    // Invalidates any in-flight primeRotateState peek for this id, so its reply
+    // can no longer overwrite the fresher position this push just delivered.
+    rotateReqs.set(id, (rotateReqs.get(id) || 0) + 1);
     rotateState.set(id, { index, pos, total, text });
     document.querySelectorAll(`.tile[data-id="${CSS.escape(id)}"]`).forEach((tile) => applyRotateState(tile, id));
   });
