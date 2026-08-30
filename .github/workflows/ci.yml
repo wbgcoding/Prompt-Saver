@@ -69,3 +69,6 @@ jobs:
 
       - name: Modal layout
         run: python tests/layout/modal_scroll_test.py
+
+      - name: Hot-path timing (1000 prompts)
+        run: python tests/perf_hot_paths.py
