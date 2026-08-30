@@ -4713,8 +4713,14 @@ async fn pdf_preview(app: AppHandle, path: String, page: Option<u32>) -> Option<
 // invokable for a one-off "I just fixed/replaced a file, recheck now" refresh
 // (main.js after an edit, floating.js whenever a pill's prompt data reloads) -
 // the AMBIENT every-few-seconds refresh is start_missing_files_poll below.
+// async + spawn_blocking (215): the lock was already released before stat'ing
+// (below) so it never blocked other DB ops, but Path::exists() on a slow or
+// unreachable network path is a genuinely blocking syscall -- with a plain fn,
+// every 5s poll (and the direct-invoke refresh) still tied up an IPC dispatch
+// worker for however long that stat took. spawn_blocking moves it to a thread
+// meant for exactly this instead.
 #[tauri::command]
-fn missing_files(state: State<Db>) -> Vec<String> {
+async fn missing_files(state: State<'_, Db>) -> Result<Vec<String>, String> {
     // Snapshot ids + paths under the lock, then stat OUTSIDE it: a slow or dead
     // drive must never block other DB operations behind this polled command.
     let entries: Vec<(String, String, String)> = {
@@ -4724,12 +4730,16 @@ fn missing_files(state: State<Db>) -> Vec<String> {
             .map(|p| (p.id.clone(), p.file_path.clone(), p.icon_path.clone()))
             .collect()
     };
-    let gone = |path: &str| !path.is_empty() && !std::path::Path::new(path).exists();
-    entries
-        .into_iter()
-        .filter(|(_, fp, ip)| gone(fp) || gone(ip))
-        .map(|(id, _, _)| id)
-        .collect()
+    tauri::async_runtime::spawn_blocking(move || {
+        let gone = |path: &str| !path.is_empty() && !std::path::Path::new(path).exists();
+        entries
+            .into_iter()
+            .filter(|(_, fp, ip)| gone(fp) || gone(ip))
+            .map(|(id, _, _)| id)
+            .collect()
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 // main.js and every open floating.js pill window used to each run their own
@@ -4742,7 +4752,8 @@ fn start_missing_files_poll(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         loop {
             if let Some(state) = app.try_state::<Db>() {
-                let _ = app.emit("missing-files", missing_files(state));
+                let ids = missing_files(state).await.unwrap_or_default();
+                let _ = app.emit("missing-files", ids);
             }
             tokio::time::sleep(std::time::Duration::from_secs(MISSING_FILES_POLL_SECS)).await;
         }
@@ -4869,35 +4880,48 @@ fn store_attached_file(app: &AppHandle, path: &str) -> String {
 // Remove copies in <data>/files that no prompt references any more. Gated by the
 // cleanupFiles flag (default on); only ever touches files inside our own store
 // folder, so a user's originals elsewhere are never affected.
-fn cleanup_orphan_files(app: &AppHandle, store: &Store) {
-    if !store.settings.ui_flags.get("cleanupFiles").copied().unwrap_or(true) {
-        return;
-    }
+//
+// 215: split into a cheap in-memory step (the referenced-file set, computed
+// while the store lock is held) and this slow filesystem sweep (run AFTER the
+// lock is released). The combined version used to run the whole fs::read_dir +
+// remove_file scan while still holding the store mutex, freezing every other
+// window's command on a large attachments folder. Callers: build the set with
+// `orphan_cleanup_enabled` + `orphan_referenced_set` inside their locked block,
+// then call this once the lock is dropped.
+fn sweep_orphan_files(app: &AppHandle, referenced: &std::collections::HashSet<String>) {
     let entries = match fs::read_dir(data_dir(app).join("files")) {
         Ok(e) => e,
         Err(_) => return, // no store folder yet -> nothing to clean
     };
     // Compare case-insensitively with normalized separators (Windows) so a still
-    // referenced file is never mistaken for an orphan and deleted. 91: a trashed
-    // prompt still owns its files until it is actually purged — leaving trash out
-    // of this scan would let an UNRELATED cleanup pass (triggered by some other
-    // prompt's add/delete) sweep away a file a trashed prompt still needs to be
-    // restorable.
+    // referenced file is never mistaken for an orphan and deleted.
     let norm = |s: &str| s.replace('/', "\\").to_lowercase();
-    let referenced: std::collections::HashSet<String> = store
-        .prompts
-        .iter()
-        .chain(store.trash.iter())
-        .flat_map(|p| [p.file_path.clone(), p.icon_path.clone()])
-        .filter(|s| !s.is_empty())
-        .map(|s| norm(&s))
-        .collect();
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_file() && !referenced.contains(&norm(&path.to_string_lossy())) {
             let _ = fs::remove_file(&path);
         }
     }
+}
+
+fn orphan_cleanup_enabled(store: &Store) -> bool {
+    store.settings.ui_flags.get("cleanupFiles").copied().unwrap_or(true)
+}
+
+// 91: a trashed prompt still owns its files until it is actually purged —
+// leaving trash out of this scan would let an UNRELATED cleanup pass
+// (triggered by some other prompt's add/delete) sweep away a file a trashed
+// prompt still needs to be restorable.
+fn orphan_referenced_set(store: &Store) -> std::collections::HashSet<String> {
+    let norm = |s: &str| s.replace('/', "\\").to_lowercase();
+    store
+        .prompts
+        .iter()
+        .chain(store.trash.iter())
+        .flat_map(|p| [p.file_path.clone(), p.icon_path.clone()])
+        .filter(|s| !s.is_empty())
+        .map(|s| norm(&s))
+        .collect()
 }
 
 // Async: persisting all prompts (base64 images) to SQLite must not block the UI
@@ -5269,17 +5293,24 @@ async fn update_prompt(
                 // Only sweep the old attachment once the new reference is durably
                 // saved -- otherwise a failed save leaves the DB pointing at a file the
                 // sweep just deleted, with no fallback to recover it from.
-                cleanup_orphan_files(&app, &store); // a replaced attachment orphans its old copy
+                // 215: only the cheap in-memory part runs while the lock is held; the
+                // actual filesystem sweep happens below, once the lock is released.
+                let orphan_scan = orphan_cleanup_enabled(&store).then(|| orphan_referenced_set(&store));
                 let scale = float_scale_of(&store.settings, &id);
-                Some((clone, scale, rebind))
+                Some((clone, scale, rebind, orphan_scan))
             }
             None => None,
         }
     };
-    let (updated, scale, rebind) = match updated {
-        Some((p, s, r)) => (Some(p), s, r),
-        None => (None, 1.0, false),
+    let (updated, scale, rebind, orphan_scan) = match updated {
+        Some((p, s, r, o)) => (Some(p), s, r, o),
+        None => (None, 1.0, false, None),
     };
+    // 215: the actual filesystem sweep, deferred until the store lock (dropped
+    // when the block above ended) is no longer held.
+    if let Some(referenced) = orphan_scan {
+        sweep_orphan_files(&app, &referenced);
+    }
     // Re-arm outside the lock, then hand back what is actually stored — the re-arm
     // clears an accelerator the OS refused.
     let updated = match updated {
@@ -5718,7 +5749,11 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
 // Permanent delete: the trash entry, its media files and its whole version history
 // are gone for good. This is the old hard-delete's own cleanup logic, just moved
 // here instead of running at every "delete" click.
-fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) {
+//
+// 215: returns the orphan-file set to sweep instead of sweeping itself, so the
+// caller can drop the store lock first — a big attachments folder used to stay
+// locked out from every other window for the whole fs scan.
+fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) -> Option<std::collections::HashSet<String>> {
     let idset: std::collections::HashSet<&str> = ids.iter().map(|s| s.as_str()).collect();
     let before = store.trash.clone();
     store.trash.retain(|p| !idset.contains(p.id.as_str()));
@@ -5727,9 +5762,9 @@ fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) {
     // the next restart (trash has no JSON fallback the way save_prompts does) — its
     // rotation position and version history must come back with it, not vanish
     // permanently for a purge that never actually persisted. Same guard shape as
-    // the 102 fix on cleanup_orphan_files just below.
+    // the 102 fix on the orphan sweep just below.
     if save_trash(app, store) {
-        cleanup_orphan_files(app, store);
+        let orphan_scan = orphan_cleanup_enabled(store).then(|| orphan_referenced_set(store));
         rotation_forget(&mut store.settings, ids); // 32: no orphaned pointer/bag left behind
         save_settings(app, &store.settings);
         if let Some(c) = db_conn(app) {
@@ -5737,28 +5772,42 @@ fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) {
                 db_delete_versions(&c, id);
             }
         }
+        orphan_scan
     } else {
         // A failed save already means the disk-side trash still has these rows and
         // they will reappear on restart — restore the in-memory copy to match now,
         // so this session's trash view (and any callers returning store.trash) does
         // not show them as gone in the meantime.
         store.trash = before;
+        None
     }
 }
 
 #[tauri::command]
 fn purge_prompt(app: AppHandle, state: State<Db>, id: String) -> Vec<Prompt> {
-    let mut store = lock(&state);
-    purge_ids(&app, &mut store, std::slice::from_ref(&id));
-    store.trash.clone()
+    let (trash, orphan_scan) = {
+        let mut store = lock(&state);
+        let orphan_scan = purge_ids(&app, &mut store, std::slice::from_ref(&id));
+        (store.trash.clone(), orphan_scan)
+    };
+    if let Some(referenced) = orphan_scan {
+        sweep_orphan_files(&app, &referenced);
+    }
+    trash
 }
 
 #[tauri::command]
 fn empty_trash(app: AppHandle, state: State<Db>) -> Vec<Prompt> {
-    let mut store = lock(&state);
-    let ids: Vec<String> = store.trash.iter().map(|p| p.id.clone()).collect();
-    purge_ids(&app, &mut store, &ids);
-    store.trash.clone()
+    let (trash, orphan_scan) = {
+        let mut store = lock(&state);
+        let ids: Vec<String> = store.trash.iter().map(|p| p.id.clone()).collect();
+        let orphan_scan = purge_ids(&app, &mut store, &ids);
+        (store.trash.clone(), orphan_scan)
+    };
+    if let Some(referenced) = orphan_scan {
+        sweep_orphan_files(&app, &referenced);
+    }
+    trash
 }
 
 // Drop anything past the retention window (0/off by settings default, same
@@ -5791,7 +5840,11 @@ fn sweep_trash(app: &AppHandle, store: &mut Store) {
     };
     let stale = stale_trash_ids(&store.trash, max_age, now_secs());
     if !stale.is_empty() {
-        purge_ids(app, store, &stale);
+        // Startup-only, before the store is behind its mutex — nothing else can
+        // be waiting on the lock yet, so sweeping inline here is fine.
+        if let Some(referenced) = purge_ids(app, store, &stale) {
+            sweep_orphan_files(app, &referenced);
+        }
     }
 }
 
@@ -8064,8 +8117,12 @@ struct ThemeExport {
     vars: HashMap<String, String>,
 }
 
+// async like every other file-picker command (pick_file_path, pick_folder,
+// pick_backup_file) -- the native save/open dialog can sit open for as long as
+// the user takes, and a plain fn would block the dispatch thread (and every
+// OTHER command waiting on it) for the whole time instead of just this one.
 #[tauri::command]
-fn export_custom_theme(app: AppHandle, state: State<Db>, id: String) -> Result<(), String> {
+async fn export_custom_theme(app: AppHandle, state: State<'_, Db>, id: String) -> Result<(), String> {
     let theme = {
         let store = lock(&state);
         store
@@ -8091,8 +8148,9 @@ fn export_custom_theme(app: AppHandle, state: State<Db>, id: String) -> Result<(
 // Reuses save_custom_theme's own validation (name/base/vars) so an imported file
 // is never trusted more than a value typed into the editor by hand — a malformed
 // or hand-edited JSON file gets the exact same rejection a bad manual entry would.
+// async: same reasoning as export_custom_theme above.
 #[tauri::command]
-fn import_custom_theme(app: AppHandle, state: State<Db>) -> Result<Settings, String> {
+async fn import_custom_theme(app: AppHandle, state: State<'_, Db>) -> Result<Settings, String> {
     let file = file_dialog(&app).add_filter("JSON", &["json"]).pick_file();
     let Some(path) = file else {
         return Err("canceled".to_string());
@@ -12642,8 +12700,13 @@ async fn ocr_capabilities(state: State<'_, Db>, force: bool) -> Result<Vec<OcrCa
 // the button the user presses in the language dialog -- the app never asks for
 // rights on its own. Returns once the elevated process was launched; the
 // frontend polls ocr_capabilities_elevated_result for the list.
+// async (215): ShellExecuteW's "runas" verb blocks the calling thread until the
+// user actually answers the UAC prompt, not just until the process starts --
+// a plain fn here would tie up a dispatch-thread worker for however long that
+// takes (walking away leaves it blocked indefinitely). Its sibling
+// ocr_capabilities_elevated_result is already async for the same reason.
 #[tauri::command]
-fn ocr_capabilities_elevate() -> Result<(), String> {
+async fn ocr_capabilities_elevate() -> Result<(), String> {
     #[cfg(windows)]
     {
         ocr::elevate_capabilities(ocr::CapKind::Ocr)
@@ -12679,8 +12742,9 @@ async fn ocr_capabilities_elevated_result() -> Result<Option<Vec<OcrCap>>, Strin
 // launch was rejected); it never waits for Add-WindowsCapability to finish --
 // the frontend polls ocr_install_result / ocr_capabilities(force: true)
 // instead (no blocking, no wait-dialog without a cancel option).
+// async (215): same ShellExecuteW/UAC blocking reason as ocr_capabilities_elevate.
 #[tauri::command]
-fn ocr_install_language(name: String) -> Result<(), String> {
+async fn ocr_install_language(name: String) -> Result<(), String> {
     if !ocr_capability_name_is_well_formed("Language.OCR~~~", &name) {
         return Err("invalid OCR capability name".to_string());
     }
@@ -12754,8 +12818,9 @@ async fn speech_capabilities(state: State<'_, Db>, force: bool) -> Result<Vec<Oc
     }
 }
 
+// async (215): same ShellExecuteW/UAC blocking reason as ocr_capabilities_elevate.
 #[tauri::command]
-fn speech_capabilities_elevate() -> Result<(), String> {
+async fn speech_capabilities_elevate() -> Result<(), String> {
     #[cfg(windows)]
     {
         ocr::elevate_capabilities(ocr::CapKind::Speech)
@@ -12778,8 +12843,9 @@ async fn speech_capabilities_elevated_result() -> Result<Option<Vec<OcrCap>>, St
     }
 }
 
+// async (215): same ShellExecuteW/UAC blocking reason as ocr_install_language.
 #[tauri::command]
-fn speech_install_language(name: String) -> Result<(), String> {
+async fn speech_install_language(name: String) -> Result<(), String> {
     if !ocr_capability_name_is_well_formed("Language.Speech~~~", &name) {
         return Err("invalid speech capability name".to_string());
     }
