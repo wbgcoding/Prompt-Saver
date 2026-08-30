@@ -47,15 +47,25 @@ jobs:
         run: cargo test --lib
         working-directory: src-tauri
 
+      - name: Rust lints
+        run: cargo clippy --all-targets -- -D warnings
+        working-directory: src-tauri
+
       - name: Frontend syntax
         run: |
           Get-ChildItem ui -Filter *.js | ForEach-Object { node --check $_.FullName }
+
+      - name: Source hygiene
+        run: python tests/source_hygiene.py
 
       - name: Translation key parity
         run: node tests/i18n_check.js
 
       - name: Fork vocabulary
         run: node tests/terms_check.js
+
+      - name: Voice vocabulary
+        run: node tests/voice_check.js
 
       - name: Expert menu
         run: python tests/expert_menu_check.py

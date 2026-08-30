@@ -394,6 +394,19 @@ voice dictation, the screenshot editor and the introduction tour ship on).
   on a chore that was parked for the next few hours. The temp-file cleanup runs
   every few hours now instead of only at startup, so an instance left running
   for days keeps tidying up after itself.
+- **Keyboard navigation reaches every dialog and popover now** — Tab no
+  longer leaks past whichever one is open into the dimmed page behind it, and
+  closing the prompt editor, a confirmation dialog or the settings panel
+  returns keyboard focus to whatever you had focused before you opened it.
+- Six previously mouse-only row icons — favorite, edit, delete and
+  add-to-layout, in both the library and the copy history — are now reachable
+  and operable by keyboard.
+- Eight error messages (failed save, import, export, dictation, update
+  download or turning on the color picker) now say what you can do about it,
+  not just that it failed.
+- A handful of low-contrast colors (muted text in three themes, the dark
+  theme's red) were nudged to meet accessibility contrast guidelines; nothing
+  else about those themes changed.
 
 ### Fixed
 
@@ -697,6 +710,16 @@ voice dictation, the screenshot editor and the introduction tour ship on).
   wait and tells you.
 - A failed language-pack update notification could go unnoticed for a whole
   check interval instead of retrying on the next scheduled check.
+- Restoring the main window from the tray could reappear off-screen or
+  straddling a monitor that had since been unplugged or rearranged; it now
+  gets the same on-screen check the app already applies at startup.
+- The language-pack manager could show a raw internal status word instead of
+  translated text for a language that was not yet installed.
+- A second click on a language pack's Install button while the elevated
+  install was still starting could launch a second concurrent install for the
+  same language.
+- A rotating prompt's preview, fetched right as its rotation state changed
+  elsewhere, could briefly land after and silently override the newer state.
 
 ### Security
 
