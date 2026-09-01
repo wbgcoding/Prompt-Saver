@@ -2469,9 +2469,9 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   z-index: 140;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   width: 216px;
-  padding: 12px;
+  padding: 10px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -3838,7 +3838,6 @@ body.drag-over::after {
    SIZED to fit — .cp-sv shrinks with the window and the whole popover stays well
    inside even the app's smallest one. */
 .color-pop.pop-clamped { overflow: visible; max-height: none !important; }
-.color-pop { gap: 8px; padding: 10px; }
 /* The picker's right-click history — same chrome as the other small popovers. */
 .pick-history-pop {
   position: fixed;

@@ -7,7 +7,7 @@ import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults 
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
-import { fileUri } from "./floatShared.js";
+import { DRAG_OUT_MODS, fileUri, resolveLang } from "./floatShared.js";
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
@@ -253,10 +253,7 @@ function setLangSelect() {
   sel.value = settings.language || "auto";
   if (!sel.value) sel.value = "auto";
 }
-function resolveLang(pref) {
-  const p = (pref && pref !== "auto" ? pref : (navigator.language || "en")).toLowerCase();
-  return LANGS.find((code) => p.startsWith(code)) || "en";
-}
+const pickLang = (pref) => resolveLang(pref, LANGS);
 // {app} stands for the product name in every translation, so no string spells it.
 // Filling it here means callers never have to pass it.
 const t = (key) =>
@@ -1874,7 +1871,7 @@ function rowResetBtn(kind, key, after) {
   const label = t("expertResetOne");
   btn.title = label;
   btn.setAttribute("aria-label", label);
-  btn.innerHTML = ICON_UNDO;
+  putIcon(btn, ICON_UNDO);
   btn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1959,10 +1956,12 @@ function flagRow(key) {
       await invoke("set_ui_flag", { key, enabled });
     } catch (err) {
       // The backend refused to switch the feature on (today: prompt sync, whose
-      // safety backup failed). It left the flag off, so the switch has to follow —
+      // safety backup or first folder write failed). It left the flag off, so the switch has to follow —
       // a checkbox that shows a state the store does not have is worse than the error.
       const msg = String(err);
-      toast(msg.startsWith("sync-backup-failed") ? t("syncBackupFailed") : msg);
+      if (msg.startsWith("sync-backup-failed")) toast(t("syncBackupFailed"));
+      else if (msg.startsWith("sync-write-failed")) toast(t("syncWriteFailed"));
+      else toast(msg);
       settings.ui_flags = { ...(settings.ui_flags || {}), [key]: !enabled };
       input.checked = !enabled;
     }
@@ -2480,7 +2479,7 @@ function noticeRow(id) {
   row.setAttribute("role", "status");
   const icon = document.createElement("span");
   icon.className = "expert-notice-icon";
-  icon.innerHTML = ICON_WARN;
+  putIcon(icon, ICON_WARN);
   const text = document.createElement("div");
   const head = document.createElement("strong");
   head.textContent = t(def.title);
@@ -2631,7 +2630,7 @@ function renderExpert() {
         resetBtn.className = "expert-group-reset";
         resetBtn.title = t("expertResetGroupBtn");
         resetBtn.setAttribute("aria-label", t("expertResetGroupBtn"));
-        resetBtn.innerHTML = ICON_UNDO;
+        putIcon(resetBtn, ICON_UNDO);
         resetBtn.addEventListener("click", (e) => {
           e.stopPropagation(); // must not also toggle the collapse
           resetExpertGroup(group, changedHere, changedCount);
@@ -4486,7 +4485,6 @@ function endDragVisuals() {
 // plain HTML5 dragstart is all it takes to hand the prompt to the OS.
 // A modifier is required everywhere because every drag source already owns its plain
 // drag — tiles reorder, library rows get placed on the grid, the pill moves its window.
-const DRAG_OUT_MODS = { ctrl: "ctrlKey", alt: "altKey", shift: "shiftKey" };
 const dragOutMod = () => DRAG_OUT_MODS[txt("dragOutModifier")] || "ctrlKey";
 const dragOutWired = new WeakSet();
 
@@ -5621,6 +5619,12 @@ const varTokens = (p, text) =>
 // varTokens takes one, or a placeholder living only in a later entry never gets
 // noticed at all -- checking p.text (entry 0) unconditionally.
 const dialogTokens = (p, text) => varTokens(p, text).filter((tok) => !isDynVar(parseVar(tok).name));
+// True while any entry of a rotating prompt still carries a placeholder. An
+// auto-advance session renders the following entries itself, from their raw text —
+// so a prompt in this state must not open one, or the second paste would deliver
+// the placeholder rather than what it stands for.
+const anyEntryHasVars = (p) =>
+  [p.text, ...(p.variants || [])].some((entry) => varTokens(p, entry).length > 0);
 
 // The text a copy of `p` is actually about to use — the pointer's CURRENT entry
 // for a rotating prompt, p.text otherwise. Read-only (never advances the pointer),
@@ -8666,7 +8670,7 @@ function renderRotateEntries() {
     up.className = "icon-btn rotate-entry-move";
     up.title = t("rotateMoveUp");
     up.setAttribute("aria-label", t("rotateMoveUp"));
-    up.innerHTML = ICON_UP;
+    putIcon(up, ICON_UP);
     up.disabled = i === 0;
     up.addEventListener("click", () => { [list[i - 1], list[i]] = [list[i], list[i - 1]]; renderRotateEntries(); renderRotateAutoBtn(); });
     const down = document.createElement("button");
@@ -8674,7 +8678,7 @@ function renderRotateEntries() {
     down.className = "icon-btn rotate-entry-move";
     down.title = t("rotateMoveDown");
     down.setAttribute("aria-label", t("rotateMoveDown"));
-    down.innerHTML = ICON_DOWN;
+    putIcon(down, ICON_DOWN);
     down.disabled = i === list.length - 1;
     down.addEventListener("click", () => { [list[i + 1], list[i]] = [list[i], list[i + 1]]; renderRotateEntries(); renderRotateAutoBtn(); });
     const del = document.createElement("button");
@@ -8682,7 +8686,7 @@ function renderRotateEntries() {
     del.className = "icon-btn rotate-entry-del";
     del.title = t("delete");
     del.setAttribute("aria-label", t("delete"));
-    del.innerHTML = ICON_TRASH;
+    putIcon(del, ICON_TRASH);
     del.disabled = list.length <= 1;
     del.addEventListener("click", () => { list.splice(i, 1); renderRotateEntries(); renderRotateAutoBtn(); });
     btns.append(up, down, del);
@@ -9539,12 +9543,9 @@ $("tag-colorize")?.addEventListener("click", async () => {
   if (!palette.length) return;
   const uncolored = allTags().filter((n) => !tagColor(n));
   if (!uncolored.length) return;
-  let i = 0;
-  for (const name of uncolored) {
-    try { settings = await invoke("set_tag_color", { name, color: palette[i % palette.length] }); }
-    catch (err) { errToast(err); return; }
-    i++;
-  }
+  const entries = uncolored.map((name, i) => ({ name, color: palette[i % palette.length] }));
+  try { settings = await invoke("set_tag_colors", { entries }); }
+  catch (err) { errToast(err); return; }
   renderTagManager();
   renderLibrary();
   await renderGrid();
@@ -10698,7 +10699,12 @@ async function copyResolved(p) {
     const rawText = peek ? peek.text : p.text;
     const text = varTokens(p, rawText).length ? await resolveVars(rawText) : rawText;
     if (text === null || text === false) return false;
-    const ok = await invoke("copy_text", { text }).catch(() => false);
+    // Handing the id over is what lets the backend open an auto-advance session for
+    // an eligible prompt — without it this path copied plain text and the Auto
+    // switch did nothing at all here, while the floating buttons (which copy through
+    // copy_prompt) honoured it.
+    const armId = p.rotate_auto && !anyEntryHasVars(p) ? p.id : undefined;
+    const ok = await invoke("copy_text", { text, id: armId }).catch(() => false);
     // A failed peek already fell back to p.text above — committing anyway would
     // advance whatever the pointer's REAL position is, not the entry we actually
     // just copied. Only a successful peek may be followed by a commit.
@@ -10805,7 +10811,7 @@ function journalRow(p, meta, onClick) {
   const edit = document.createElement("span");
   edit.className = "icon-btn lib-edit";
   edit.title = t("edit");
-  edit.innerHTML = ICON_EDIT;
+  putIcon(edit, ICON_EDIT);
   edit.addEventListener("pointerdown", (e) => e.stopPropagation());
   edit.addEventListener("click", (e) => { e.stopPropagation(); editPrompt(p.id); });
   makeKeyboardActivatable(edit);
@@ -10817,7 +10823,7 @@ function journalRow(p, meta, onClick) {
     del.className = "icon-btn journal-delete";
     del.title = t("delete");
     del.setAttribute("aria-label", t("delete"));
-    del.innerHTML = ICON_TRASH;
+    putIcon(del, ICON_TRASH);
     del.addEventListener("pointerdown", (e) => e.stopPropagation());
     del.addEventListener("click", async (e) => {
       e.stopPropagation();
@@ -11322,7 +11328,7 @@ async function runImport() {
     if (count == null) return;
     await renderGrid(); // refreshes prompts AND settings
     // Imported preferences apply on the spot — no restart needed.
-    LANG = resolveLang(settings.language);
+    LANG = pickLang(settings.language);
     applyI18n();
     fillSizeSelects();
     fillFontSelects();
@@ -13725,7 +13731,7 @@ function bind() {
   // no restart, no reload.
   $("lang-select").addEventListener("change", async (e) => {
     await invoke("set_language", { lang: e.target.value });
-    LANG = resolveLang(e.target.value);
+    LANG = pickLang(e.target.value);
     applyI18n();
     // Re-fill the JS-built selects, then restore their current values.
     fillSizeSelects();
@@ -14635,7 +14641,7 @@ async function maybeOpenFirstRunTour(sealWarned) {
 async function applySettingsCore() {
   settings = await invoke("get_settings");
   loadPalette();
-  LANG = resolveLang(settings.language);
+  LANG = pickLang(settings.language);
   applyI18n();
   fillSizeSelects();
   fillFontSelects();

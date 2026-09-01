@@ -2203,12 +2203,19 @@ fn read_sealed_json<T: for<'de> Deserialize<'de>>(path: &PathBuf) -> SealedRead<
 }
 
 // Every import reads a file the user picked — which may have come from someone else —
-// fully into memory before parsing. Check the size FIRST so a wrong pick (a disk image,
-// a video) fails with a clear message instead of exhausting memory. Mirrors the cap the
-// decompression path already applies via `inflate_capped`.
+// fully into memory before parsing, so a wrong pick (a disk image, a video) has to fail
+// with a clear message instead of exhausting memory. Mirrors the cap the decompression
+// path already applies via `inflate_capped`.
 const MAX_IMPORT_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_THEME_BYTES: u64 = 4 * 1024 * 1024; // a theme is a handful of colour values
 
+fn size_error(max: u64) -> String {
+    format!("file is too large; the limit is {} MB", max / (1024 * 1024))
+}
+
+// For the one case that cannot read the bytes itself: the image handed to Windows'
+// text recognizer is opened by Windows, so measuring it up front is the only check
+// available — and a plausible reject message is worth more there than none.
 fn check_import_size(path: &std::path::Path, max: u64) -> Result<(), String> {
     let len = fs::metadata(path).map_err(|e| e.to_string())?.len();
     if len > max {
@@ -2219,6 +2226,30 @@ fn check_import_size(path: &std::path::Path, max: u64) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+// One open, one read, one decision. Measuring the file and then reading it means
+// two separate opens: the file can grow — or be swapped for a different one —
+// in between, and the limit then describes a file that is no longer the one being
+// read. Reading one byte past the limit is what makes "too large" provable from
+// the bytes actually in hand.
+fn read_file_capped(path: &std::path::Path, max: u64) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let file = fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut buf = Vec::new();
+    file.take(max + 1).read_to_end(&mut buf).map_err(|e| e.to_string())?;
+    if buf.len() as u64 > max {
+        return Err(size_error(max));
+    }
+    Ok(buf)
+}
+
+// The text counterpart, for the Markdown sync folder: the files there belong to the
+// user and nothing stops one of them from being enormous, while the folder is
+// rescanned on a timer. Anything past the limit is skipped rather than read into
+// memory on every single cycle.
+fn read_text_capped(path: &std::path::Path, max: u64) -> Option<String> {
+    String::from_utf8(read_file_capped(path, max).ok()?).ok()
 }
 
 // Atomic write: temp file then rename, so a crash never truncates data. Returns
@@ -2442,6 +2473,7 @@ fn db_conn_init_schema(conn: &Connection) -> bool {
              CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
              CREATE TABLE IF NOT EXISTS copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
              CREATE INDEX IF NOT EXISTS idx_copy_log_ts ON copy_log(ts);
+             CREATE INDEX IF NOT EXISTS idx_copy_log_id ON copy_log(id);
              CREATE TABLE IF NOT EXISTS prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '');
              CREATE INDEX IF NOT EXISTS idx_pv_prompt ON prompt_versions(prompt_id);
              CREATE TABLE IF NOT EXISTS clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);",
@@ -2881,7 +2913,13 @@ fn db_daily_copies(conn: &Connection, days: u32) -> Vec<DayCount> {
 // recent copy); otherwise every event. Capped so the UI never renders millions.
 fn db_recent_copies(conn: &Connection, limit: usize, grouped: bool) -> Vec<JournalEntry> {
     let sql = if grouped {
-        "SELECT MAX(rowid), id, MAX(ts) FROM copy_log GROUP BY id ORDER BY MAX(rowid) DESC LIMIT ?1"
+        // The whole newest row per prompt, not MAX(rowid) beside an independently
+        // computed MAX(ts): two aggregates are evaluated separately, so the row id
+        // the delete button targets could belong to a different copy than the
+        // timestamp shown next to it.
+        "SELECT rowid, id, ts FROM copy_log
+         WHERE rowid IN (SELECT MAX(rowid) FROM copy_log GROUP BY id)
+         ORDER BY rowid DESC LIMIT ?1"
     } else {
         "SELECT rowid, id, ts FROM copy_log ORDER BY rowid DESC LIMIT ?1"
     };
@@ -5806,10 +5844,19 @@ fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) -> Option<std::
         let orphan_scan = orphan_cleanup_enabled(store).then(|| orphan_referenced_set(store));
         rotation_forget(&mut store.settings, ids); // 32: no orphaned pointer/bag left behind
         save_settings(app, &store.settings);
-        if let Some(c) = db_conn(app) {
-            for id in ids {
-                db_delete_versions(&c, id);
+        // save_trash above only returns true through a working connection, so
+        // losing it between the two calls is a narrow window — but a purge that
+        // leaves the prompt's text sitting in prompt_versions must never pass
+        // unrecorded.
+        match db_conn(app) {
+            Some(c) => {
+                for id in ids {
+                    db_delete_versions(&c, id);
+                }
             }
+            None => append_crash_log(
+                "purge: no database connection, version history of the purged prompts was left in place",
+            ),
         }
         orphan_scan
     } else {
@@ -6418,6 +6465,40 @@ async fn delete_tag(app: AppHandle, state: State<'_, Db>, name: String) -> Resul
         }
         return Err("save-failed".into());
     }
+    Ok(store.settings.clone())
+}
+
+#[derive(Deserialize)]
+struct TagColor {
+    name: String,
+    color: String,
+}
+
+// Every name and colour is validated before anything is stored, so one bad entry
+// rejects the whole call instead of leaving half the tags coloured.
+fn apply_tag_colors(settings: &mut Settings, entries: Vec<TagColor>) -> Result<(), String> {
+    let checked: Vec<(String, String)> = entries
+        .into_iter()
+        .map(|e| Ok((tag_key(&valid_tag_name(&e.name)?), valid_tag_color(&e.color)?)))
+        .collect::<Result<_, String>>()?;
+    for (key, color) in checked {
+        if color.is_empty() {
+            settings.tag_colors.remove(&key);
+        } else {
+            settings.tag_colors.insert(key, color);
+        }
+    }
+    Ok(())
+}
+
+// "Colour every tag at once" — one lock and one settings write for the whole set.
+// Doing it tag by tag through set_tag_color meant a full immediate write per tag,
+// which on a large library is that many disk writes back to back.
+#[tauri::command]
+fn set_tag_colors(app: AppHandle, state: State<Db>, entries: Vec<TagColor>) -> Result<Settings, String> {
+    let mut store = lock(&state);
+    apply_tag_colors(&mut store.settings, entries)?;
+    save_settings(&app, &store.settings);
     Ok(store.settings.clone())
 }
 
@@ -7304,7 +7385,10 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
             store.settings.usage.clone(),
         )
     };
-    let thr = (threshold / 100.0).clamp(0.0, 1.0);
+    // Floor, not just a 0..1 clamp: at a threshold of 0 every pair passes and the
+    // edge list below becomes the full n^2 triangle. The setting itself never goes
+    // below 70 %, so this only bounds what a malformed call could ask for.
+    let thr = (threshold / 100.0).clamp(0.5, 1.0);
     // A rotating prompt is compared on entry 1 (p.text) only, deliberately —
     // two prompts that happen to share their FIRST entry but differ in the rest are
     // not "near duplicates" of each other, and comparing every entry pair would
@@ -8001,6 +8085,16 @@ fn table_columns(tx: &Transaction, schema: &str, table: &str) -> rusqlite::Resul
 // touches only the meta['settings'] row, never the meta['copy_log_migrated']
 // migration marker. A table missing from an older backup (e.g. "trash", added in
 // 91) is skipped rather than failing the whole restore — its live rows stay put.
+// The three scopes a restore or an import may run in. Both commands parse the
+// string through here so an unrecognised value can never mean "everything" to one
+// of them and "nothing, but report success" to the other.
+fn valid_scope(scope: &str) -> Result<&str, String> {
+    match scope {
+        "all" | "data" | "settings" => Ok(scope),
+        _ => Err(format!("unknown scope {scope:?}, expected all, data or settings")),
+    }
+}
+
 fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: &str) -> Result<(), String> {
     let mut conn = Connection::open(target).map_err(|e| e.to_string())?;
     conn.execute("ATTACH DATABASE ?1 AS backup", [staged.to_string_lossy().to_string()])
@@ -8056,6 +8150,7 @@ async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep
     if !valid_backup_name(&name) {
         return Err("bad-name".into());
     }
+    valid_scope(&scope)?;
     let Some(backup_db) = backup_db_file(&backups_dir(&app).join(&name)) else {
         return Err("missing".into());
     };
@@ -8225,8 +8320,8 @@ async fn import_custom_theme(app: AppHandle, state: State<'_, Db>) -> Result<Set
     let Some(path) = file else {
         return Err("canceled".to_string());
     };
-    check_import_size(&path, MAX_THEME_BYTES)?;
-    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let content = String::from_utf8(read_file_capped(&path, MAX_THEME_BYTES)?)
+        .map_err(|_| "invalid theme file".to_string())?;
     let parsed: ThemeExport = serde_json::from_str(&content).map_err(|_| "invalid theme file".to_string())?;
     save_custom_theme(app, state, String::new(), parsed.name, parsed.base, parsed.vars)
 }
@@ -12674,36 +12769,6 @@ async fn ocr_image(path: String, upscale_under_px: u32, join_lines: bool, lang: 
     }
 }
 
-// One parameter per OCR option the caller can set for this single recognition.
-#[allow(clippy::too_many_arguments)]
-#[tauri::command]
-async fn ocr_region(
-    state: State<'_, SnipState>,
-    index: usize,
-    x: i32,
-    y: i32,
-    width: u32,
-    height: u32,
-    upscale_under_px: u32,
-    join_lines: bool,
-    lang: String,
-    auto_pick_lang: bool,
-) -> Result<OcrResult, String> {
-    let crop = crop_frozen(&state, index, x, y, width, height).ok_or("empty region")?;
-    let upscale_under_px = upscale_under_px.clamp(100, 800);
-    #[cfg(windows)]
-    {
-        tauri::async_runtime::spawn_blocking(move || ocr::recognize_crop(crop, upscale_under_px, join_lines, &lang, auto_pick_lang))
-            .await
-            .map_err(|e| e.to_string())?
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = (crop, upscale_under_px, join_lines, lang, auto_pick_lang);
-        Err("ocr is only available on Windows".to_string())
-    }
-}
-
 // Entry point (a) -- "Recognize text" in #snip-modal runs on the capture
 // already shown there, which at that point only ever exists as a data URL (it may
 // not have been saved to disk yet). Thin command taking the data URL directly,
@@ -13538,11 +13603,45 @@ mod ocr {
         Err(last_err.unwrap_or_else(|| std::io::Error::new(std::io::ErrorKind::AlreadyExists, "temp script path is contested")))
     }
 
-    fn install_result_path(kind: CapKind, tag: &str) -> PathBuf {
-        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-install-{}.json", brand::TEMP_PREFIX, kind.slug(), tag))
+    // Every elevated round trip gets its own unguessable file names. The temp
+    // folder is writable by anything running as this user, so a name derived only
+    // from the language tag or the process id could be created in advance: a
+    // planted result file makes the app report an install that never happened, and
+    // a planted (or swapped) script file is a way to get whatever the user just
+    // approved at the UAC prompt. The nonce is remembered for exactly as long as
+    // the request is in flight, so the poll below still finds its own file.
+    fn request_nonce() -> String {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        (0..24).map(|_| char::from(b"abcdefghijklmnopqrstuvwxyz0123456789"[rng.gen_range(0..36)])).collect()
     }
-    fn install_script_path(kind: CapKind, tag: &str) -> PathBuf {
-        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-install-{}.ps1", brand::TEMP_PREFIX, kind.slug(), tag))
+    fn pending_nonces() -> &'static Mutex<std::collections::HashMap<String, String>> {
+        static PENDING: OnceLock<Mutex<std::collections::HashMap<String, String>>> = OnceLock::new();
+        PENDING.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+    }
+    fn nonce_key(kind: CapKind, tag: &str) -> String {
+        format!("{}-{}", kind.slug(), tag)
+    }
+    pub(super) fn start_request(kind: CapKind, tag: &str) -> String {
+        let nonce = request_nonce();
+        pending_nonces()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(nonce_key(kind, tag), nonce.clone());
+        nonce
+    }
+    fn pending_nonce(kind: CapKind, tag: &str) -> Option<String> {
+        pending_nonces().lock().unwrap_or_else(|e| e.into_inner()).get(&nonce_key(kind, tag)).cloned()
+    }
+    fn finish_request(kind: CapKind, tag: &str) {
+        pending_nonces().lock().unwrap_or_else(|e| e.into_inner()).remove(&nonce_key(kind, tag));
+    }
+
+    fn install_result_path(kind: CapKind, nonce: &str) -> PathBuf {
+        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-install-{}.json", brand::TEMP_PREFIX, kind.slug(), nonce))
+    }
+    fn install_script_path(kind: CapKind, nonce: &str) -> PathBuf {
+        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-install-{}.ps1", brand::TEMP_PREFIX, kind.slug(), nonce))
     }
 
     // Launches an elevated PowerShell that runs Add-WindowsCapability and writes
@@ -13557,8 +13656,9 @@ mod ocr {
     // "equivalent" the spec allows.
     pub(super) fn install_language(kind: CapKind, name: &str) -> Result<(), String> {
         let tag = ocr_tag_from_capability_name(kind.prefix(), name).unwrap_or_default();
-        let result_path = install_result_path(kind, &tag);
-        let script_path = install_script_path(kind, &tag);
+        let nonce = start_request(kind, &tag);
+        let result_path = install_result_path(kind, &nonce);
+        let script_path = install_script_path(kind, &nonce);
         let _ = fs::remove_file(&result_path); // a stale result must never look fresh
 
         // finally: the script deletes itself once it is done, elevated or not —
@@ -13571,7 +13671,9 @@ mod ocr {
             result = ps_single_quote(&result_path.to_string_lossy()),
             script = ps_single_quote(&script_path.to_string_lossy()),
         );
-        run_elevated_script(&script_path, &script)
+        // A launch that never happened has nothing to poll for — drop the nonce
+        // again so a later result file under that name cannot be believed.
+        run_elevated_script(&script_path, &script).inspect_err(|_| finish_request(kind, &tag))
     }
 
     // Writes a generated .ps1 and starts it through the UAC prompt, returning as
@@ -13643,16 +13745,18 @@ mod ocr {
         )
     }
 
-    // The process id keeps two windows (allowMultipleInstances) from
-    // overwriting each other's script/result file for the SAME kind.
-    pub(super) fn caps_result_path(kind: CapKind) -> PathBuf {
-        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-caps-{}.json", brand::TEMP_PREFIX, kind.slug(), std::process::id()))
+    // The nonce also keeps two windows (allowMultipleInstances) from overwriting
+    // each other's script/result file for the SAME kind — it is per request, so it
+    // separates them at least as well as the process id it replaced.
+    pub(super) const CAPS_TAG: &str = "caps";
+    pub(super) fn caps_result_path(kind: CapKind, nonce: &str) -> PathBuf {
+        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-caps-{}.json", brand::TEMP_PREFIX, kind.slug(), nonce))
     }
-    fn caps_tmp_path(kind: CapKind) -> PathBuf {
-        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-caps-{}.json.tmp", brand::TEMP_PREFIX, kind.slug(), std::process::id()))
+    fn caps_tmp_path(kind: CapKind, nonce: &str) -> PathBuf {
+        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-caps-{}.json.tmp", brand::TEMP_PREFIX, kind.slug(), nonce))
     }
-    fn caps_script_path(kind: CapKind) -> PathBuf {
-        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-caps-{}.ps1", brand::TEMP_PREFIX, kind.slug(), std::process::id()))
+    fn caps_script_path(kind: CapKind, nonce: &str) -> PathBuf {
+        std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-{}-caps-{}.ps1", brand::TEMP_PREFIX, kind.slug(), nonce))
     }
 
     // The same query fetch_capabilities runs, but through an elevated PowerShell
@@ -13666,9 +13770,10 @@ mod ocr {
     // no file yet (not renamed) or the complete one (post-rename) -- never a
     // half-written JSON blob.
     pub(super) fn elevate_capabilities(kind: CapKind) -> Result<(), String> {
-        let result_path = caps_result_path(kind);
-        let tmp_path = caps_tmp_path(kind);
-        let script_path = caps_script_path(kind);
+        let nonce = start_request(kind, CAPS_TAG);
+        let result_path = caps_result_path(kind, &nonce);
+        let tmp_path = caps_tmp_path(kind, &nonce);
+        let script_path = caps_script_path(kind, &nonce);
         let _ = fs::remove_file(&result_path); // a stale list must never look fresh
         let _ = fs::remove_file(&tmp_path);
         let script = format!(
@@ -13679,7 +13784,7 @@ mod ocr {
             result = ps_single_quote(&result_path.to_string_lossy()),
             script = ps_single_quote(&script_path.to_string_lossy()),
         );
-        run_elevated_script(&script_path, &script)
+        run_elevated_script(&script_path, &script).inspect_err(|_| finish_request(kind, CAPS_TAG))
     }
 
     // Reads what the elevated listing wrote. Ok(None) = still running, or never
@@ -13691,7 +13796,9 @@ mod ocr {
     // unparseable, which is treated as "not ready yet" instead of discarding a
     // result that might still be mid-write. Mirrors install_result's shape.
     pub(super) fn elevated_capabilities_result(kind: CapKind) -> Result<Option<Vec<OcrCap>>, String> {
-        let path = caps_result_path(kind);
+        // No nonce means no elevated listing of ours is in flight.
+        let Some(nonce) = pending_nonce(kind, CAPS_TAG) else { return Ok(None) };
+        let path = caps_result_path(kind, &nonce);
         let text = match fs::read_to_string(&path) {
             Ok(t) => t,
             Err(_) => return Ok(None),
@@ -13704,6 +13811,7 @@ mod ocr {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
             if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
                 let _ = fs::remove_file(&path);
+                finish_request(kind, CAPS_TAG);
                 return Err(err.to_string());
             }
         } else {
@@ -13713,10 +13821,12 @@ mod ocr {
             Ok(c) => c,
             Err(e) => {
                 let _ = fs::remove_file(&path);
+                finish_request(kind, CAPS_TAG);
                 return Err(e);
             }
         };
         let _ = fs::remove_file(&path);
+        finish_request(kind, CAPS_TAG);
         *cap_cache(kind).lock().unwrap_or_else(|e| e.into_inner()) =
             Some(CapCache { fetched_at: std::time::Instant::now(), caps: caps.clone() });
         Ok(Some(caps))
@@ -13728,7 +13838,10 @@ mod ocr {
     // every subsequent call.
     pub(super) fn install_result(kind: CapKind, name: &str) -> Option<OcrInstallResult> {
         let tag = ocr_tag_from_capability_name(kind.prefix(), name).unwrap_or_default();
-        let path = install_result_path(kind, &tag);
+        // No nonce means no install of this pack is in flight — whatever happens to
+        // sit in the temp folder was not written for us.
+        let nonce = pending_nonce(kind, &tag)?;
+        let path = install_result_path(kind, &nonce);
         let text = match fs::read_to_string(&path) {
             Ok(t) => t,
             // Not there yet -- the elevated process has not written it (or
@@ -13739,7 +13852,10 @@ mod ocr {
             // resolve itself on the next poll, so it must not look like "still
             // running" forever. Left on disk for inspection rather than deleted,
             // since a locked/inaccessible file could not be removed either.
-            Err(_) => return Some(OcrInstallResult { ok: false, error: Some("install-result-unreadable".to_string()) }),
+            Err(_) => {
+                finish_request(kind, &tag);
+                return Some(OcrInstallResult { ok: false, error: Some("install-result-unreadable".to_string()) });
+            }
         };
         // Content that fails to parse stays "pending" rather than terminal --
         // Out-File's write is not guaranteed atomic, so a poll can legitimately
@@ -13750,6 +13866,7 @@ mod ocr {
         let ok = value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
         let error = value.get("error").and_then(|v| v.as_str()).map(|s| s.to_string());
         let _ = fs::remove_file(&path);
+        finish_request(kind, &tag);
         if ok {
             // Installation is done -- both caches must reflect it immediately, no
             // restart needed (122). This command is the natural place to do that:
@@ -13924,19 +14041,6 @@ fn voice_stop(vstate: State<'_, VoiceState>, id: Option<u64>) -> Result<(), Stri
         }
     }
     Ok(())
-}
-
-// For the frontend to rebuild its button state after a window/page reload
-// while a session is (still) running.
-#[tauri::command]
-fn voice_state(vstate: State<'_, VoiceState>) -> Option<u64> {
-    vstate.0.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|h| {
-        if h.ended.load(std::sync::atomic::Ordering::SeqCst) {
-            None
-        } else {
-            Some(h.id)
-        }
-    })
 }
 
 // Entscheidung 7 (21.08.): only ever called from the voice-privacy-off dialog,
@@ -14613,8 +14717,14 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
             // Synchronous and immediate on purpose (unlike spawn_sync_write_all
             // below) - this is a one-time, user-initiated activation, not a hot
             // save path, and the point is the folder really exists before this
-            // command returns "on".
-            sync_write_all_impl(&app, &store.prompts, &store.settings);
+            // command returns "on". If it does not, the activation failed and has
+            // to say so rather than leave a switch on over an empty folder.
+            let failed = sync_write_all_impl(&app, &store.prompts, &store.settings);
+            if failed > 0 {
+                store.settings.ui_flags.insert("promptSync".to_string(), false);
+                save_settings(&app, &store.settings);
+                return Err(format!("sync-write-failed: {failed}"));
+            }
         }
     }
     // Capture exclusion applies live to every open window. Never hold the store
@@ -14694,7 +14804,9 @@ fn set_ui_text(app: AppHandle, state: State<Db>, key: String, value: String) {
         // in the PREVIOUS folder are deliberately left alone; that folder is the
         // user's own, and this app never deletes outside the folder it syncs to.
         if is_sync_dir && sync_enabled(&store.settings) {
-            sync_write_all_impl(&app, &store.prompts, &store.settings);
+            // Unlike the activation above this command has no error channel back to
+            // the window; sync_write_all_impl has already logged whatever failed.
+            let _ = sync_write_all_impl(&app, &store.prompts, &store.settings);
         }
     }
     notify_float_settings(&app);
@@ -15457,8 +15569,8 @@ fn import_sig(name: &str, text: &str, file: &str, image: &str, copy: bool) -> St
 }
 
 fn parse_import_file(path: &std::path::Path) -> Result<ImportData, String> {
-    check_import_size(path, MAX_IMPORT_BYTES)?;
-    let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
+    let content = String::from_utf8(read_file_capped(path, MAX_IMPORT_BYTES)?)
+        .map_err(|_| "the file is not valid UTF-8 text".to_string())?;
     let is_csv = path
         .extension()
         .map(|e| e.to_string_lossy().to_lowercase() == "csv")
@@ -15917,10 +16029,10 @@ async fn import_all(
     // An import replaces the store wholesale and rolls the whole thing back if a
     // write fails, so the disk has to hold the exact state it is replacing first —
     // otherwise a rollback lands on a store missing the last collected counters.
+    valid_scope(&scope)?;
     flush_settings_now(&app);
     let path = PathBuf::from(path);
-    check_import_size(&path, MAX_IMPORT_BYTES)?;
-    let raw = fs::read(&path).map_err(|e| e.to_string())?;
+    let raw = read_file_capped(&path, MAX_IMPORT_BYTES)?;
     // Try the caller-supplied password first, else the one stored for this machine.
     let pw = password.filter(|p| !p.is_empty()).or_else(|| {
         let store = lock(&state);
@@ -16984,6 +17096,7 @@ pub fn run() {
             rename_tag,
             delete_tag,
             set_tag_color,
+            set_tag_colors,
             add_view,
             rename_view,
             set_view_color,
@@ -17109,7 +17222,6 @@ pub fn run() {
             paste_into_previous,
             ocr_languages,
             ocr_image,
-            ocr_region,
             ocr_image_data,
             ocr_capabilities,
             ocr_capabilities_elevate,
@@ -17122,7 +17234,6 @@ pub fn run() {
             voice_languages,
             voice_start,
             voice_stop,
-            voice_state,
             voice_enable_online_speech,
             speech_capabilities,
             speech_capabilities_elevate,
@@ -17202,6 +17313,12 @@ fn sync_eligible(p: &Prompt) -> bool {
 
 // Refused rather than escaped: the id is also how the inbound half finds the prompt
 // again, so a rewritten name would silently orphan the file.
+// A prompt written out as Markdown is text a person typed; 8 MB is far past any
+// real one and still small enough that re-reading the folder on a timer costs
+// nothing. A bigger file in the sync folder is simply not one of ours and is
+// skipped instead of being pulled into memory every cycle.
+const MAX_SYNC_MD_BYTES: u64 = 8 * 1024 * 1024;
+
 fn sync_safe_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 64
@@ -17828,15 +17945,21 @@ fn sync_lock_release(md_path: &Path) {
 // every single save. spawn_sync_write_all below clones what it needs and runs
 // this on a blocking task after the lock is dropped; the one genuinely
 // synchronous caller (activating the feature) calls this directly.
-fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings) {
+// Returns how many files could not be written. A sync folder that silently stays
+// empty is the worst outcome this feature has: the user sees the switch on, the
+// files never appear, and nothing anywhere says why. Every failure is logged, and
+// the count lets the one caller the user is actually waiting on say so out loud.
+fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings) -> usize {
     if !sync_enabled(settings) {
-        return;
+        return 0;
     }
     let dir = sync_dir_path(app, settings);
-    if fs::create_dir_all(&dir).is_err() {
-        return;
+    if let Err(e) = fs::create_dir_all(&dir) {
+        append_crash_log(&format!("prompt-sync: the sync folder could not be created: {e}"));
+        return prompts.iter().filter(|p| sync_eligible(p)).count().max(1);
     }
     sync_write_agents_md(&dir);
+    let mut failed = 0usize;
     let mut wanted: std::collections::HashSet<String> = std::collections::HashSet::new();
     for p in prompts {
         if !sync_eligible(p) {
@@ -17846,12 +17969,17 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
         let path = dir.join(&filename);
         let content = prompt_to_md(p, &sync_placement_for(p, settings));
         if fs::read_to_string(&path).unwrap_or_default() != content && sync_lock_acquire(&path) {
-            write_file_atomic(&path, &content);
+            let ok = write_file_atomic(&path, &content);
             sync_lock_release(&path);
+            if !ok {
+                failed += 1;
+                append_crash_log(&format!("prompt-sync: writing {filename} failed"));
+            }
         }
         wanted.insert(filename);
     }
     sync_sweep_orphans(&dir, &wanted);
+    failed
 }
 
 // A queue rather than one independent spawn_blocking task per call - two rapid
@@ -17928,7 +18056,9 @@ fn spawn_sync_write_all(app: &AppHandle, store: &Store) {
             if let Some((prompts, settings)) = job {
                 let app2 = app.clone();
                 let _ = tauri::async_runtime::spawn_blocking(move || {
-                    sync_write_all_impl(&app2, &prompts, &settings);
+                    // Background flush: no one is waiting on it, so a failure goes
+                    // to the crash log inside and the next save tries again.
+                    let _ = sync_write_all_impl(&app2, &prompts, &settings);
                 })
                 .await;
             }
@@ -17950,8 +18080,7 @@ fn sync_sweep_orphans(dir: &Path, wanted: &std::collections::HashSet<String>) {
             continue;
         }
         let path = e.path();
-        let ours = fs::read_to_string(&path)
-            .ok()
+        let ours = read_text_capped(&path, MAX_SYNC_MD_BYTES)
             .and_then(|c| parse_frontmatter(&c))
             .is_some_and(|(fields, _)| md_is_ours(&fields));
         if ours {
@@ -18035,9 +18164,9 @@ fn sync_poll_once(app: &AppHandle) {
         if !sync_lock_acquire(&path) {
             continue; // someone else is mid-write; retry next cycle
         }
-        let content = fs::read_to_string(&path);
+        let content = read_text_capped(&path, MAX_SYNC_MD_BYTES);
         sync_lock_release(&path);
-        let Ok(content) = content else { continue };
+        let Some(content) = content else { continue };
         if let Some(idx) = snapshot.iter().position(|p| p.id == stem) {
             let placement = sync_placement_for(&snapshot[idx], &settings_snapshot);
             if prompt_to_md(&snapshot[idx], &placement) == content {
@@ -18658,21 +18787,23 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn ocr_elevated_capabilities_result_survives_a_truncated_read() {
-        let path = ocr::caps_result_path(ocr::CapKind::Ocr);
+        let nonce = ocr::start_request(ocr::CapKind::Ocr, ocr::CAPS_TAG);
+        let path = ocr::caps_result_path(ocr::CapKind::Ocr, &nonce);
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
         std::fs::write(&path, b"{\"Name\":\"Language.OC").unwrap(); // deliberately truncated JSON
         let result = ocr::elevated_capabilities_result(ocr::CapKind::Ocr);
         assert!(matches!(result, Ok(None)));
-        assert!(path.exists(), "a truncated/unparseable read must leave the file for the next poll, not discard it (160)");
+        assert!(path.exists(), "a truncated/unparseable read must leave the file for the next poll, not discard it");
         let _ = std::fs::remove_file(&path);
     }
 
     #[cfg(windows)]
     #[test]
     fn ocr_elevated_capabilities_result_deletes_on_a_complete_error_payload() {
-        let path = ocr::caps_result_path(ocr::CapKind::Speech);
+        let nonce = ocr::start_request(ocr::CapKind::Speech, ocr::CAPS_TAG);
+        let path = ocr::caps_result_path(ocr::CapKind::Speech, &nonce);
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
@@ -18687,7 +18818,38 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn ocr_and_speech_elevated_result_paths_never_collide() {
-        assert_ne!(ocr::caps_result_path(ocr::CapKind::Ocr), ocr::caps_result_path(ocr::CapKind::Speech)); // 164/126
+        let a = ocr::start_request(ocr::CapKind::Ocr, ocr::CAPS_TAG);
+        let b = ocr::start_request(ocr::CapKind::Speech, ocr::CAPS_TAG);
+        assert_ne!(
+            ocr::caps_result_path(ocr::CapKind::Ocr, &a),
+            ocr::caps_result_path(ocr::CapKind::Speech, &b)
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn an_elevated_result_is_only_believed_while_a_request_is_in_flight() {
+        // The temp folder is writable by anything running as this user. With the
+        // file name derived from the language tag (or the process id) another
+        // process could drop a finished-looking result in ahead of time and the
+        // app would report a language pack installed that was never installed.
+        // Two nonces in a row must differ, and a file under a name nobody asked
+        // for must be ignored outright.
+        let first = ocr::start_request(ocr::CapKind::Ocr, ocr::CAPS_TAG);
+        let second = ocr::start_request(ocr::CapKind::Ocr, ocr::CAPS_TAG);
+        assert_ne!(first, second, "every elevated request needs its own name");
+        assert!(first.len() >= 16, "too short to be unguessable: {first}");
+
+        let planted = ocr::caps_result_path(ocr::CapKind::Ocr, "planted-by-someone-else");
+        if let Some(dir) = planted.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        std::fs::write(&planted, br#"{"error":"forged"}"#).unwrap();
+        // `second` is the pending nonce and no file exists under it, so this is
+        // "still running" — the planted file must not be read at all.
+        assert!(matches!(ocr::elevated_capabilities_result(ocr::CapKind::Ocr), Ok(None)));
+        assert!(planted.exists(), "a file the app never asked for must be left untouched");
+        let _ = std::fs::remove_file(&planted);
     }
 
     // DISM writing its unconditional startup log to %WINDIR%\Logs\DISM
@@ -21238,6 +21400,34 @@ mod tests {
     }
 
     #[test]
+    fn grouped_journal_row_id_and_timestamp_come_from_the_same_copy() {
+        // A clock that went backwards (or timestamps switched off mid-run) makes
+        // the newest row by rowid NOT the newest by ts. Picking both with separate
+        // aggregates then paired the newest row id with an older row's time, so the
+        // delete button and the date shown belonged to different copies.
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
+             CREATE INDEX idx_copy_log_ts ON copy_log(ts);",
+        )
+        .unwrap();
+        db_append_copy(&conn, &CopyEntry { id: "p1".into(), ts: 900 }, 100, None).unwrap();
+        db_append_copy(&conn, &CopyEntry { id: "p1".into(), ts: 100 }, 100, None).unwrap();
+
+        let grouped = db_recent_copies(&conn, 10, true);
+        assert_eq!(grouped.len(), 1, "one row per prompt");
+        let row = &grouped[0];
+        let real_ts: i64 = conn
+            .query_row("SELECT ts FROM copy_log WHERE rowid = ?1", params![row.rowid], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            row.ts as i64, real_ts,
+            "the timestamp shown must be the one on the row the delete button targets"
+        );
+        assert_eq!(row.ts, 100, "the newest row by id is the second copy, ts 100");
+    }
+
+    #[test]
     fn journal_rowid_deletes_exactly_one_entry() {
         // The rowid db_recent_copies() now returns has to target the exact row —
         // never "every copy of this prompt", in either view mode.
@@ -21441,6 +21631,58 @@ mod tests {
         assert!(!sanitize_rotate_auto(true, &none));
         assert!(sanitize_rotate_auto(true, &some));
         assert!(!sanitize_rotate_auto(false, &some));
+    }
+
+    #[test]
+    fn an_unknown_restore_scope_is_refused_rather_than_guessed() {
+        for ok in ["all", "data", "settings"] {
+            assert_eq!(valid_scope(ok).unwrap(), ok);
+        }
+        // Left to their own reading, restore_backup treated an unknown scope as
+        // "change nothing and report success" while import_all treated it as
+        // "restore everything" — opposite answers to the same input.
+        for bad in ["", "ALL", "prompts", "data ", "everything"] {
+            assert!(valid_scope(bad).is_err(), "{bad:?} must not be accepted");
+        }
+    }
+
+    #[test]
+    fn a_capped_read_decides_from_the_bytes_it_actually_read() {
+        let p = std::env::temp_dir().join("capped_read_test.bin");
+        fs::write(&p, vec![b'x'; 64]).unwrap();
+
+        // Exactly at the limit is still a valid file, and the caller gets all of it.
+        assert_eq!(read_file_capped(&p, 64).unwrap().len(), 64);
+        // One byte of headroom less and it is refused -- the extra byte the reader
+        // takes is what proves the file is over, without a second look at the disk.
+        assert!(read_file_capped(&p, 63).is_err());
+        assert_eq!(read_text_capped(&p, 64).unwrap().len(), 64);
+        assert!(read_text_capped(&p, 63).is_none());
+
+        let _ = fs::remove_file(&p);
+    }
+
+    #[test]
+    fn colouring_every_tag_at_once_is_all_or_nothing() {
+        let entry = |name: &str, color: &str| TagColor { name: name.into(), color: color.into() };
+        let mut settings = Settings::default();
+        settings.tag_colors.insert("kept".into(), "#111111".into());
+
+        apply_tag_colors(&mut settings, vec![entry("Work", "#ff0000"), entry("Home", "#00ff00")]).unwrap();
+        assert_eq!(settings.tag_colors.get("work"), Some(&"#ff0000".to_string()));
+        assert_eq!(settings.tag_colors.get("home"), Some(&"#00ff00".to_string()));
+
+        // A single bad colour rejects the whole batch — nothing before it in the
+        // list may already have been written.
+        let before = settings.tag_colors.clone();
+        let err = apply_tag_colors(&mut settings, vec![entry("Fresh", "#0000ff"), entry("Bad", "red")]);
+        assert!(err.is_err());
+        assert_eq!(settings.tag_colors, before, "a rejected batch must change nothing");
+
+        // An empty colour clears one, exactly like the single-tag command.
+        apply_tag_colors(&mut settings, vec![entry("Work", "")]).unwrap();
+        assert!(!settings.tag_colors.contains_key("work"));
+        assert_eq!(settings.tag_colors.get("kept"), Some(&"#111111".to_string()));
     }
 
     #[test]

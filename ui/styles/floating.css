@@ -466,8 +466,7 @@ body.menu-open .pill { flex: 0 0 auto; }
 /* Popover — the member grid or the folder menu. The window is already the right size
    when this appears, so only the content fades and scales in (animSpeed). */
 .folder-pop,
-.folder-menu,
-.member-menu {
+.folder-menu {
   position: absolute;
   opacity: 0;
   transform: scale(0.92);
@@ -475,7 +474,9 @@ body.menu-open .pill { flex: 0 0 auto; }
 }
 .folder-pop.shown,
 .folder-menu.shown { opacity: 1; transform: none; }
-.member-menu { opacity: 1; transform: none; transition: none; }
+/* The member menu opens and closes through .hidden alone — it never gets .shown,
+   so it stays out of the fade above instead of being animated back to full. */
+.member-menu { position: absolute; }
 .folder-body[data-side="below"] .folder-pop,
 .folder-body[data-side="below"] .folder-menu { transform-origin: top center; }
 .folder-body[data-side="above"] .folder-pop,

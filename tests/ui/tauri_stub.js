@@ -110,6 +110,10 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   // actually has more than one entry (list_versions below gives it real snapshots).
   variants: i === 10 ? ["Example prompt body number 11, second entry.", "Example prompt body number 11, third entry."] : [],
   rotate_mode: "",
+  // That same prompt has Auto switched on, so a probe can check that copying it
+  // hands the prompt id to copy_text — the thing the backend needs to open an
+  // auto-advance session at all.
+  rotate_auto: i === 10,
   // One prompt carries a stored image — and carries it the way get_state really
   // hands it over: the FACT plus a revision, never the base64 bytes. The picture
   // itself is fetched per prompt through prompt_image below, so a fixture entry
@@ -330,7 +334,6 @@ const RESULTS = {
   // no real recognizer here to drive them.
   voice_start: () => ({ id: 1, lang: "en-US" }),
   voice_stop: () => null,
-  voice_state: () => null,
   voice_enable_online_speech: () => { SETTINGS.ui_flags = { ...SETTINGS.ui_flags, voiceOnlineOk: true }; return null; },
   speech_capabilities: () => window.__OCR_CAPS_TEST__ || [],
   speech_capabilities_elevate: () => { window.__OCR_CAPS_ELEV_DONE__ = true; return null; },
@@ -622,6 +625,14 @@ const RESULTS = {
     else delete SETTINGS.tag_colors[key];
     return clone();
   },
+  set_tag_colors: (a) => {
+    for (const e of (a && a.entries) || []) {
+      const key = String(e.name || "").toLowerCase();
+      if (e.color) SETTINGS.tag_colors[key] = e.color;
+      else delete SETTINGS.tag_colors[key];
+    }
+    return clone();
+  },
   // The copy commands report success; the UI skips everything that follows a copy
   // (feedback, history, auto-paste) when they come back falsy.
   // 32: order-mode only (random's shuffle-bag is covered by the 5 Rust unit tests,
@@ -662,7 +673,13 @@ const RESULTS = {
     return null;
   },
   // The resolved text is kept so the probe can assert what the placeholders became.
-  copy_text: (a) => { window.__LAST_COPY__ = a && a.text; return true; },
+  copy_text: (a) => {
+    window.__LAST_COPY__ = a && a.text;
+    // The id decides whether the backend opens an auto-advance session, so a probe
+    // has to be able to see whether this path handed one over.
+    window.__LAST_COPY_ID__ = a && a.id;
+    return true;
+  },
   clipboard_text: () => "CLIPTEXT",
   // Always offer the portable take-over so the dialog is exercised on every run.
   takeover_offer: () => "C:\\Users\\Example\\AppData\\Roaming\\Example-Store",

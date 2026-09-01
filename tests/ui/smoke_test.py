@@ -1248,6 +1248,29 @@ PROBE = """
       await click('vars-close');
       await sleep(200);
     }
+    // Copying a rotating prompt with Auto on has to hand its id to copy_text —
+    // that id is the only thing that lets the backend open an auto-advance
+    // session, and without it the Auto switch had no effect in this window at all.
+    window.__LAST_COPY__ = undefined;
+    window.__LAST_COPY_ID__ = undefined;
+    if (!await clickTile('p10')) {
+      out.errors.push('the rotating prompt is missing from the grid');
+    } else if (window.__LAST_COPY_ID__ !== 'p10') {
+      out.errors.push('copying the Auto rotating prompt passed no id: ' + window.__LAST_COPY_ID__);
+    }
+    // A prompt whose entries carry placeholders must NOT arm one: the session
+    // renders later entries from their raw text, so the next paste would deliver
+    // the placeholder instead of the answer.
+    window.__LAST_COPY_ID__ = undefined;
+    if (await clickTile('p1')) {
+      const texts = document.querySelectorAll('#vars-fields input[type=text]');
+      for (const f of texts) f.value = 'x';
+      await click('vars-ok');
+      await sleep(250);
+      if (window.__LAST_COPY_ID__ !== undefined) {
+        out.errors.push('a placeholder prompt armed an auto-advance session: ' + window.__LAST_COPY_ID__);
+      }
+    }
     // The editor helper offers the reserved names as chips and writes a token.
     const editTile = [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === 'p0');
     if (editTile) {
