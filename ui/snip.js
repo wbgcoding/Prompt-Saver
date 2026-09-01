@@ -24,7 +24,7 @@ const swatch = document.getElementById("pick-swatch");
 const readMain = document.getElementById("pick-main");
 const readAlt = document.getElementById("pick-alt");
 const readZoom = document.getElementById("pick-zoom");
-const historyEl = document.getElementById("pick-history"); // 80: last-5 picked colours
+const historyEl = document.getElementById("pick-history"); // last-5 picked colours
 
 const MIN_REGION = 5; // CSS px; below this a drag counts as a click
 const WIN_RADIUS = 8; // rounded corners when highlighting a window
@@ -34,7 +34,7 @@ let busy = false;
 let windows = []; // stitched-image physical px, topmost first
 let FULL_W = 1, FULL_H = 1; // full stitched dimensions (display image may be smaller)
 
-// ---- F26 colour picker state ----
+// ---- Colour picker state ----
 // Same overlay, second mode: no selection, a loupe on the cursor instead.
 let loupeCells = 15; // odd, so one cell is exactly the picked pixel (87: expert-tunable)
 const ZOOM_MIN = 4, ZOOM_MAX = 16; // same range as the loupeZoom expert slider
@@ -139,7 +139,7 @@ async function beginSession() {
     // Must stay odd — one cell has to be exactly the picked pixel.
     loupeCells = 2 * Math.floor((Number(b.pick_cells) || 15) / 2) + 1;
     pickHistory = Array.isArray(b.pick_history) ? b.pick_history : [];
-    renderHistory(); // 80: the picks made earlier in this app run
+    renderHistory(); // the picks made earlier in this app run
     document.body.classList.add("pick");
     hint.textContent = T.pick;
     noDim();
@@ -264,7 +264,7 @@ function noDim() {
 }
 fullDim();
 
-// ---- F26 colour picker ----
+// ---- Colour picker ----
 
 // Raw command results arrive as an ArrayBuffer; accept the other shapes too rather
 // than leaving the picker mysteriously dead if the transport ever changes.
@@ -565,7 +565,7 @@ async function pickHere() {
     } catch { /* keep the last known strip rather than clearing it on a read hiccup */ }
   } catch {
     pickBusy = false;
-    showError(T.pickFailed); // 59: a color-pick failure, not a window-capture one
+    showError(T.pickFailed); // a color-pick failure, not a window-capture one
   }
 }
 

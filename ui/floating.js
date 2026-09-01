@@ -3,7 +3,7 @@
 // i18n is loaded lazily (dynamic import) so the pill window opens fast.
 import { FONTS, fitText } from "./fonts.js";
 import { mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./media.js";
-// F3 custom themes: shared with the folder window (floattheme.js).
+// Custom themes: shared with the folder window (floattheme.js).
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
@@ -33,26 +33,26 @@ let copySize = 0; // expert copy-text size (0 = auto-fit to the pill)
 let copyFont = ""; // expert copy-text font key ("" = pill font)
 let pFont = ""; // per-prompt overrides ("" / 0 = follow settings)
 let cooldownMs = COOLDOWN_MS_DEFAULT; // re-copy throttle for this pill (expert value)
-let videoControlsOn = true; // 125: gates the hover media bar, mirrors flag("videoControls") in main.js
-let videoAutoplayOn = true; // 125: gates the initial auto-start, mirrors flag("videoAutoplay") in main.js
+let videoControlsOn = true; // gates the hover media bar, mirrors flag("videoControls") in main.js
+let videoAutoplayOn = true; // gates the initial auto-start, mirrors flag("videoAutoplay") in main.js
 let lastCopyTs = 0;
-// F19 auto-paste on this pill (autoPaste itself defaults on; the rest default off;
+// Auto-paste on this pill (autoPaste itself defaults on; the rest default off;
 // a fast second click pastes).
 let apOn = false, apEnter = false, apDelay = AUTO_PASTE_DELAY_MS_DEFAULT, apDblMs = DBL_CLICK_MS_DEFAULT, lastPillTs = 0;
 let pSize = 0;
 let pCaptionSize = 0; // per-prompt caption size (0 = default, 1 = auto)
 let menuOpen = false;
-// F22 drag-out (default off): the modifier separates "drag the prompt into another
+// Drag-out (default off): the modifier separates "drag the prompt into another
 // app" from the plain drag, which moves this window.
 let dragOutOn = false, dragOutMod = "ctrlKey";
-let foldersOn = false; // F25 pill folders (default off)
+let foldersOn = false; // pill folders (default off)
 let pText = "", pFile = "";
 const dragOutHeld = (e) => dragOutOn && e[dragOutMod] === true;
 
 // Rotating prompt — "next entry" badge. Only ever one prompt per pill window,
 // so a single cached {index,total} (not a Map keyed by id, as the main grid needs)
 // is enough; kept live by the backend's rotation-changed event.
-let rotateBadgeOn = true; // Phase B default: on
+let rotateBadgeOn = true; // mirrors flag("rotateBadge"), which ships on
 let rotateVariants = 0;
 let rotateInfo = null; // { index, pos, total } once known
 let rotateReq = 0; // bumped on every primeRotateBadge call, so an in-flight peek
@@ -73,7 +73,7 @@ function renderRotateBadge() {
 function primeRotateBadge() {
   rotateInfo = null;
   const req = ++rotateReq;
-  if (!rotateVariants || !rotateBadgeOn) { renderRotateBadge(); return; } // 47: no peek while off
+  if (!rotateVariants || !rotateBadgeOn) { renderRotateBadge(); return; } // no peek while off
   invoke("rotation_peek", { id: promptId }).then((r) => {
     if (!r || req !== rotateReq) return;
     rotateInfo = { index: r.index, pos: r.pos, total: r.total };
@@ -305,7 +305,7 @@ window.addEventListener("resize", () => {
 });
 updateResizeRing();
 
-let DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT; // 87: expert-tunable
+let DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT; // expert-tunable
 let drag = null; // {x, y, moved}
 let copiedTimer = null;
 
@@ -384,7 +384,7 @@ setInterval(() => {
     return;
   }
   if (videoEl.paused) {
-    ensureVideoPlaying(); // 125: respects videoAutoplay for a not-yet-started video
+    ensureVideoPlaying(); // respects videoAutoplay for a not-yet-started video
     return;
   }
   if (videoEl.currentTime === lastVideoTime && !videoEl.seeking) {
@@ -434,7 +434,7 @@ function applyPrompt(p) {
       const src = convertFileSrc(showPath);
       if (videoEl.getAttribute("src") !== src) {
         videoEl.src = src; // only a changed source reloads the video
-        videoEverPlayed = false; // 125: a new source must re-honour videoAutoplay
+        videoEverPlayed = false; // a new source must re-honour videoAutoplay
         videoEl.onloadedmetadata = () =>
           onRatio(videoEl.videoWidth / videoEl.videoHeight);
       } else if (videoEl.videoWidth) {

@@ -8,7 +8,7 @@
   --menu-fg: #1f2430;
   --menu-line: rgba(0, 0, 0, 0.08);
   --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-  /* Folder outline used as a mask for the merge preview (F25). */
+  /* Folder outline used as a mask for the merge preview. */
   --folder-glyph: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M10.6 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8.2l-1.2-2Z'/></svg>");
 }
 :root[data-theme="dark"] {
@@ -305,7 +305,7 @@ body.menu-open .pill { flex: 0 0 auto; }
 .pill.has-image ~ .resize .rz-catch,
 .pill.has-image ~ .resize .rz-hole { border-radius: 10px; }
 
-/* ---- F25 pill folders (folder.html) ----
+/* ---- Pill folders (folder.html) ----
    The window IS the folder icon while the folder is closed; opening it only grows the
    SAME window, and the icon is then moved to the offset the backend reports. Every
    size scales with --folder-box, so one stylesheet covers every folder size. */
@@ -335,7 +335,7 @@ body.menu-open .pill { flex: 0 0 auto; }
   transition: none;
 }
 
-/* F25 merge preview — this pill or folder is what the dragged pill would be dropped
+/* Merge preview — this pill or folder is what the dragged pill would be dropped
    into. The WINDOW grows a little (floating.js), so the pill really does swell; the
    ring and the folder watermark are drawn inside that grown box. Everything here is a
    transition, never a keyframe loop, so it follows the animation-speed setting and
@@ -424,7 +424,7 @@ body.menu-open .pill { flex: 0 0 auto; }
   background: var(--pill-bg);
   color: var(--pill-fg);
   font-weight: 700;
-  /* No carrier surface behind the folder any more (item 145) — each tile gets its
+  /* No carrier surface behind the folder any more — each tile gets its
      own soft glow + hairline contour so it stays visible on light backgrounds. */
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
@@ -440,7 +440,7 @@ body.menu-open .pill { flex: 0 0 auto; }
   pointer-events: none;
 }
 .face-text {
-  padding: 0 2%; /* 30: less margin eaten by padding, more room for the fitted text */
+  padding: 0 2%; /* less margin eaten by padding, more room for the fitted text */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

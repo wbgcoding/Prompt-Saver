@@ -1080,7 +1080,7 @@ export const I18N = {
     tipPillFolderTileGap: "Gap between the member tiles in an opened folder's grid.",
     tipPillFolderPad: "Padding inside an opened folder's popover, around the grid.",
     tipPillFolderPopGap: "Gap between a folder's icon and its opened popover.",
-    // F26 colour picker (pipette): clipboard only, never a prompt.
+    // Colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "Pick a color from the screen (right-click: recent colors)",
     pickHint: "Click to copy the color · scroll or +/- to zoom · arrow keys move one pixel · Esc to cancel",
     pickFailed: "Couldn't copy the color. Try picking again.",
@@ -2319,7 +2319,7 @@ export const I18N = {
     tipPillFolderTileGap: "Abstand zwischen den Mitglieds-Kacheln im Raster eines geöffneten Ordners.",
     tipPillFolderPad: "Innenabstand im Popover eines geöffneten Ordners, rund um das Raster.",
     tipPillFolderPopGap: "Abstand zwischen dem Ordner-Symbol und seinem geöffneten Popover.",
-    // F26 colour picker (pipette): clipboard only, never a prompt.
+    // Colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "Farbe vom Bildschirm aufnehmen (Rechtsklick: letzte Farben)",
     pickHint: "Klicken kopiert die Farbe · Scrollen oder +/- zoomt · Pfeiltasten bewegen ein Pixel · Esc zum Abbrechen",
     pickFailed: "Farbe konnte nicht kopiert werden. Bitte erneut versuchen.",
@@ -3558,7 +3558,7 @@ export const I18N = {
     tipPillFolderTileGap: "Separación entre los mosaicos de la cuadrícula de una carpeta abierta.",
     tipPillFolderPad: "Margen interior del desplegable de una carpeta abierta alrededor de la cuadrícula.",
     tipPillFolderPopGap: "Separación entre el icono de una carpeta y su desplegable abierto.",
-    // F26 colour picker (pipette): clipboard only, never a prompt.
+    // Colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "Capturar un color de la pantalla (clic derecho: colores recientes)",
     pickHint: "Haz clic para copiar el color · la rueda o +/- hace zoom · las flechas mueven un píxel · Esc para cancelar",
     pickFailed: "No se pudo copiar el color. Inténtalo de nuevo.",
@@ -4797,7 +4797,7 @@ export const I18N = {
     tipPillFolderTileGap: "Distanza tra i riquadri nella griglia di una cartella aperta.",
     tipPillFolderPad: "Spaziatura interna al popup di una cartella aperta attorno alla griglia.",
     tipPillFolderPopGap: "Distanza tra l'icona di una cartella e il relativo popup aperto.",
-    // F26 colour picker (pipette): clipboard only, never a prompt.
+    // Colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "Preleva un colore dallo schermo (clic destro: colori recenti)",
     pickHint: "Fai clic per copiare il colore · la rotellina o +/- ingrandisce · le frecce spostano di un pixel · Esc per annullare",
     pickFailed: "Impossibile copiare il colore. Riprova.",
@@ -6036,7 +6036,7 @@ export const I18N = {
     tipPillFolderTileGap: "Espaço entre os blocos na grelha de uma pasta aberta.",
     tipPillFolderPad: "Margem interna do popover de uma pasta aberta à volta da grelha.",
     tipPillFolderPopGap: "Espaço entre o ícone de uma pasta e o respetivo popover aberto.",
-    // F26 colour picker (pipette): clipboard only, never a prompt.
+    // Colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "Capturar uma cor da tela (clique direito: cores recentes)",
     pickHint: "Clique para copiar a cor · a roda ou +/- amplia · as setas movem um pixel · Esc para cancelar",
     pickFailed: "Não foi possível copiar a cor. Tenta novamente.",
@@ -7275,7 +7275,7 @@ export const I18N = {
     tipPillFolderTileGap: "Odstęp między kafelkami w siatce otwartego folderu.",
     tipPillFolderPad: "Margines wewnątrz okna otwartego folderu wokół siatki.",
     tipPillFolderPopGap: "Odstęp między ikoną folderu a jego otwartym oknem.",
-    // F26 colour picker (pipette): clipboard only, never a prompt.
+    // Colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "Pobierz kolor z ekranu (kliknięcie prawym przyciskiem: ostatnie kolory)",
     pickHint: "Kliknij, aby skopiować kolor · kółko lub +/- przybliża · strzałki przesuwają o jeden piksel · Esc anuluje",
     pickFailed: "Nie udało się skopiować koloru. Spróbuj ponownie.",
@@ -8514,7 +8514,7 @@ export const I18N = {
     tipPillFolderTileGap: "打开的文件夹网格中各成员方块之间的间距。",
     tipPillFolderPad: "打开的文件夹弹窗内，网格周围的内边距。",
     tipPillFolderPopGap: "文件夹图标与其打开的弹窗之间的间距。",
-    // F26 colour picker (pipette): clipboard only, never a prompt.
+    // Colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "从屏幕上拾取颜色（右键：最近的颜色）",
     pickHint: "点击复制颜色 · 滚轮或 +/- 缩放 · 方向键移动一个像素 · Esc 取消",
     pickFailed: "无法复制颜色，请重试。",
@@ -9753,7 +9753,7 @@ export const I18N = {
     tipPillFolderTileGap: "開いたフォルダーのグリッドにある項目同士の間隔です。",
     tipPillFolderPad: "開いたフォルダーのポップアップ内で、グリッドの周囲に設ける余白です。",
     tipPillFolderPopGap: "フォルダーのアイコンと開いたポップアップの間隔です。",
-    // F26 colour picker (pipette): clipboard only, never a prompt.
+    // Colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "画面から色を取得（右クリック：最近の色）",
     pickHint: "クリックで色をコピー · ホイールまたは +/- で拡大縮小 · 矢印キーで1ピクセル移動 · Esc でキャンセル",
     pickFailed: "色をコピーできませんでした。もう一度お試しください。",
@@ -10992,7 +10992,7 @@ export const I18N = {
     tipPillFolderTileGap: "Afstand tussen de tegels in het raster van een geopende map.",
     tipPillFolderPad: "Binnenruimte rond het raster in het venster van een geopende map.",
     tipPillFolderPopGap: "Afstand tussen het pictogram van een map en het geopende venster.",
-    // F26 colour picker (pipette): clipboard only, never a prompt.
+    // Colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "Een kleur van het scherm prikken (rechtsklik: recente kleuren)",
     pickHint: "Klik om de kleur te kopiëren · scrollen of +/- zoomt · pijltoetsen verplaatsen één pixel · Esc annuleert",
     pickFailed: "Kleur kopiëren is mislukt. Probeer het opnieuw.",
@@ -12231,7 +12231,7 @@ export const I18N = {
     tipPillFolderTileGap: "Açık bir klasörün ızgarasındaki üye kutucukları arasındaki boşluktur.",
     tipPillFolderPad: "Açık bir klasörün açılır penceresinde ızgaranın çevresindeki iç boşluktur.",
     tipPillFolderPopGap: "Klasör simgesi ile açık açılır penceresi arasındaki boşluktur.",
-    // F26 colour picker (pipette): clipboard only, never a prompt.
+    // Colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "Ekrandan renk seç (sağ tık: son renkler)",
     pickHint: "Rengi kopyalamak için tıklayın · tekerlek veya +/- yakınlaştırır · ok tuşları bir piksel kaydırır · İptal için Esc",
     pickFailed: "Renk kopyalanamadı. Lütfen tekrar deneyin.",
@@ -13470,7 +13470,7 @@ export const I18N = {
     tipPillFolderTileGap: "Spațiul dintre dalele din grila unui folder deschis.",
     tipPillFolderPad: "Spațiul interior al ferestrei unui folder deschis, în jurul grilei.",
     tipPillFolderPopGap: "Spațiul dintre pictograma unui folder și fereastra sa deschisă.",
-    // F26 colour picker (pipette): clipboard only, never a prompt.
+    // Colour picker (pipette): clipboard only, never a prompt.
     pickerTitle: "Preia o culoare de pe ecran (clic dreapta: culori recente)",
     pickHint: "Clic pentru a copia culoarea · rotița sau +/- mărește · săgețile mută cu un pixel · Esc anulează",
     pickFailed: "Culoarea nu a putut fi copiată. Încearcă din nou.",

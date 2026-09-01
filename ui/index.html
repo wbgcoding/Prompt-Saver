@@ -16,7 +16,7 @@
       <nav id="views" class="views hidden"></nav>
     </div>
     <div class="header-actions">
-      <!-- 24: grid tag filter (feature-gated via body.flag-tags), right of the view
+      <!-- Grid tag filter (feature-gated via body.flag-tags), right of the view
            tabs and left of the grid-size control -->
       <button id="grid-tag-btn" class="icon-btn grid-tag-btn" data-i18n-title="gridTagFilter" data-i18n-aria="gridTagFilter">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -42,7 +42,7 @@
           <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 2M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4"/>
         </svg>
       </button>
-      <!-- F21 clipboard inbox (shown only while the watcher is on and non-empty) -->
+      <!-- Clipboard inbox (shown only while the watcher is on and non-empty) -->
       <button id="clip-btn" class="icon-btn clip-inbox-btn hidden" data-i18n-title="clipInbox" data-i18n-aria="clipInbox">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
           <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 4h6a1 1 0 0 1 1 1v1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h1V5a1 1 0 0 1 1-1Zm0 2v1h6V6M9 4h6"/>
@@ -71,7 +71,7 @@
           <path fill="currentColor" d="M19.14 12.94a7.49 7.49 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.3 7.3 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.6 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.49 7.49 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.42.32.66.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.24.1.52.02.66-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"/>
         </svg>
       </button>
-      <!-- 109: left of Minimize, so it sits directly above hide-bottom (left of Save,
+      <!-- Left of Minimize, so it sits directly above hide-bottom (left of Save,
            same fixed width) once both bars right-align on the same window edge. -->
       <button id="hide-top" class="icon-btn bar-toggle" data-i18n-title="hideBar" data-i18n-aria="hideBar">
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
@@ -116,7 +116,7 @@
   </button>
 
   <section class="grid-wrap">
-    <!-- 11: bulk toolbar, visible only once at least one tile is checked -->
+    <!-- Bulk toolbar, visible only once at least one tile is checked -->
     <div id="grid-batch-bar" class="lib-batch-bar grid-batch-bar hidden">
       <span id="grid-batch-count" class="lib-batch-count"></span>
       <button id="grid-batch-none" type="button" class="ghost-btn" data-i18n="selectNone">None</button>
@@ -126,7 +126,7 @@
       <button id="grid-batch-move" type="button" class="ghost-btn" data-i18n="batchMove">Move</button>
       <button id="grid-batch-delete" type="button" class="ghost-btn danger-btn" data-i18n="delete">Delete</button>
     </div>
-    <!-- 2: shown only while the three seeded onboarding examples are still around -->
+    <!-- Shown only while the three seeded onboarding examples are still around -->
     <div id="examples-banner" class="examples-banner hidden">
       <span data-i18n="examplesBannerText">These are example prompts to get you started.</span>
       <button id="examples-dismiss" type="button" class="ghost-btn" data-i18n="examplesDismiss">Remove examples</button>
@@ -142,7 +142,7 @@
         <circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/>
       </svg>
     </button>
-    <!-- F26: pipette — round squeeze bulb on a straight tube ending in a point. -->
+    <!-- Pipette — round squeeze bulb on a straight tube ending in a point. -->
     <button id="picker-btn" class="icon-btn composer-img-btn" data-i18n-title="pickerTitle" data-i18n-aria="pickerTitle">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
         <circle cx="17.6" cy="6.4" r="3.9" fill="none" stroke="currentColor" stroke-width="2"/>
@@ -154,7 +154,7 @@
         <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21.2 11.2l-8.4 8.4a5.5 5.5 0 0 1-7.8-7.8l8.4-8.4a3.7 3.7 0 0 1 5.2 5.2l-8.4 8.4a1.9 1.9 0 0 1-2.6-2.6l7.7-7.7"/>
       </svg>
     </button>
-    <!-- 121: OCR -- corner brackets around three text lines. Opens a small menu
+    <!-- OCR -- corner brackets around three text lines. Opens a small menu
          (screenshot / image file); off by default (flagOcr), hidden until on. -->
     <button id="ocr-btn" class="icon-btn composer-img-btn" data-i18n-title="ocrBtnTitle" data-i18n-aria="ocrBtnTitle">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -162,7 +162,7 @@
         <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M8 9h8M8 12h8M8 15h5"/>
       </svg>
     </button>
-    <!-- 127: microphone, capsule + bracket + foot. Off by default (flagVoice) and
+    <!-- Microphone, capsule + bracket + foot. Off by default (flagVoice) and
          also hidden on a Windows build with no speech engine at all. -->
     <button id="voice-btn" class="icon-btn composer-img-btn" aria-pressed="false" data-i18n-title="voiceBtnTitle" data-i18n-aria="voiceBtnTitle">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -171,7 +171,7 @@
       </svg>
     </button>
     <textarea id="input" class="input" rows="1" data-i18n-ph="promptPh" data-i18n-aria="promptPh"></textarea>
-    <!-- 109: left of Save, directly under hide-top (same fixed width, both bars
+    <!-- Left of Save, directly under hide-top (same fixed width, both bars
          right-aligned) -->
     <button id="hide-bottom" class="icon-btn bar-toggle" data-i18n-title="hideBar" data-i18n-aria="hideBar">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
@@ -205,7 +205,7 @@
         </button>
         <button type="button" id="modal-fav" class="modal-fav-star" aria-pressed="false" data-i18n-title="favoriteToggle" data-i18n-aria="favoriteToggle">★</button>
       </div>
-      <!-- P32: font/size sit right under the name — kept, not dropped, just moved
+      <!-- Font/size sit right under the name — kept, not dropped, just moved
            up from the bottom so the row-level settings live together. -->
       <div id="modal-style-row" class="two-col">
         <label class="field">
@@ -244,13 +244,13 @@
       <div id="modal-file-wrap" class="modal-file-wrap hidden">
         <span id="modal-file-icon" class="modal-file-icon" aria-hidden="true"></span>
         <span id="modal-file-name" class="modal-file-name"></span>
-        <!-- 83: only shown for a PDF attachment; the preview re-requests that page. -->
+        <!-- Only shown for a PDF attachment; the preview re-requests that page. -->
         <input type="number" id="modal-pdf-page" class="modal-input pdf-page-input hidden" min="1"
                data-i18n-title="tipPdfPage" data-i18n-aria="tipPdfPage" />
         <button type="button" id="modal-replace-file" class="ghost-btn" data-i18n="replaceImage">Replace</button>
       </div>
       <p id="modal-file-hint" class="modal-hint hidden" data-i18n="fileHint">Only the file path is saved.</p>
-      <!-- F12/F13 variable helper. Collapsed by default: it is a reference, not part
+      <!-- Variable helper. Collapsed by default: it is a reference, not part
            of writing a prompt, and open it would push the textarea down every time.
            Each hint sits directly under the control it explains. -->
       <div id="modal-text-bar" class="modal-collapse modal-text-bar hidden">
@@ -274,14 +274,14 @@
           <p id="modal-vars-dyn-hint" class="modal-hint hidden" data-i18n="varsDynHint"></p>
         </div>
       </div>
-      <!-- F14 Markdown preview: with the feature on the prompt is ALWAYS shown
+      <!-- Markdown preview: with the feature on the prompt is ALWAYS shown
            rendered — either in place of the textarea (click the pane to type) or
            beside it. Their wrapper is display:contents until the split layout is
            picked, so the editor's existing flex rules keep applying unchanged. -->
-      <!-- 32: only for a text prompt while the expert flag is on; converts the plain
+      <!-- Only for a text prompt while the expert flag is on; converts the plain
            textarea above into a list of variants one copy at a time serves through.
-           The on/off switch lives under Advanced options (#modal-rotate-toggle-row,
-           33); the entry list stays inline here since it IS the editing surface
+           The on/off switch lives under Advanced options (#modal-rotate-toggle-row);
+           the entry list stays inline here since it IS the editing surface
            while rotation is active, not a rarely-touched setting. -->
       <div id="modal-rotate-list" class="modal-rotate-list hidden">
         <div id="modal-rotate-entries" class="modal-rotate-entries"></div>
@@ -294,14 +294,14 @@
               <option value="order" data-i18n="optRotateOrder">In order</option>
               <option value="random" data-i18n="optRotateRandom">Random</option>
             </select>
-            <!-- 90-94: auto-advance on every real paste, not just on copy. Disabled
+            <!-- Auto-advance on every real paste, not just on copy. Disabled
                  (with a reason in the tooltip) for image/file prompts and single-entry
                  prompts — never a silent no-op button. -->
             <button type="button" id="modal-rotate-auto" class="ghost-btn modal-rotate-auto" aria-pressed="false" data-i18n="rotateAuto" data-i18n-title="rotateAutoTip">Auto</button>
           </div>
         </div>
       </div>
-      <!-- 127: same mic button/behaviour as the composer's, targeting this
+      <!-- Same mic button/behaviour as the composer's, targeting this
            textarea instead of the composer's -- one shared wireVoiceButton()
            helper, not two implementations. -->
       <div id="modal-voice-row" class="modal-voice-row">
@@ -322,7 +322,7 @@
       <!-- Live length readout (chars / words / ~tokens), expert-tunable -->
       <div id="modal-length" class="modal-length hidden" aria-hidden="true"></div>
       <div id="color-row" class="swatches"></div>
-      <!-- F17 private notes (collapsed by default; context for the user, never copied) -->
+      <!-- Private notes (collapsed by default; context for the user, never copied) -->
       <div id="modal-notes" class="modal-collapse">
         <button type="button" id="modal-notes-head" class="modal-collapse-head" aria-expanded="false">
           <span data-i18n="notesTitle">Notes</span>
@@ -335,7 +335,7 @@
           <p class="modal-hint modal-notes-hint" data-i18n="notesHint">Never copied — only shown here.</p>
         </div>
       </div>
-      <!-- 28: F1 tags, F20 hotkey and F7 version history, combined under one
+      <!-- Tags, hotkey and version history, combined under one
            "Advanced options" toggle (collapsed by default) instead of three. -->
       <div id="modal-advanced" class="modal-collapse">
         <button type="button" id="modal-advanced-head" class="modal-collapse-head" aria-expanded="false">
@@ -348,7 +348,7 @@
           </span>
         </button>
         <div id="modal-advanced-body" class="modal-collapse-body hidden">
-          <!-- 32/33: only for a text prompt while the expert flag is on; converts the
+          <!-- Only for a text prompt while the expert flag is on; converts the
                plain textarea above into a list of variants one copy at a time serves
                through. The entry list itself (#modal-rotate-list) stays inline in the
                main body — only this on/off switch is tucked away here. -->
@@ -356,7 +356,7 @@
             <span data-i18n="rotateToggle">Rotating texts</span>
             <input type="checkbox" id="modal-rotate-switch" class="switch" />
           </label>
-          <!-- F1 tags: assigned chips + type-ahead input (feature-gated via body.flag-tags) -->
+          <!-- Tags: assigned chips + type-ahead input (feature-gated via body.flag-tags) -->
           <div id="modal-tags" class="modal-tags modal-advanced-sub">
             <span class="modal-tags-label" data-i18n="tagsLabel">Tags</span>
             <div id="modal-tag-chips" class="tag-chips"></div>
@@ -374,7 +374,7 @@
             </span>
             <div id="modal-tag-quickadd" class="tag-quickadd hidden"></div>
           </div>
-          <!-- F20 per-prompt hotkey (copies this prompt anywhere) -->
+          <!-- Per-prompt hotkey (copies this prompt anywhere) -->
           <div id="modal-hotkey" class="modal-advanced-sub">
             <span class="modal-advanced-sub-label" data-i18n="promptHotkeyTitle">Hotkey</span>
             <div class="hotkey-row">
@@ -394,7 +394,7 @@
             </label>
             <p class="modal-hint" data-i18n="promptHotkeyHint">Copies this prompt from any app.</p>
           </div>
-          <!-- F7 version history (edit mode + text prompts only) -->
+          <!-- Version history (edit mode + text prompts only) -->
           <div id="modal-history" class="modal-advanced-sub hidden">
             <span class="modal-advanced-sub-label" data-i18n="historyTitle">Version history</span>
             <div id="modal-history-body" class="modal-advanced-history-body"></div>
@@ -427,7 +427,7 @@
     </div>
   </div>
 
-  <!-- F21 clipboard inbox -->
+  <!-- Clipboard inbox -->
   <div id="clip-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal">
       <div class="modal-head">
@@ -455,7 +455,7 @@
     </div>
   </div>
 
-  <!-- F6 duplicate finder -->
+  <!-- Duplicate finder -->
   <div id="dupes-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal">
       <div class="modal-head">
@@ -473,7 +473,7 @@
     </div>
   </div>
 
-  <!-- 91: trash — everything delete_prompt/batch_prompts("delete") moved out of the grid -->
+  <!-- Trash — everything delete_prompt/batch_prompts("delete") moved out of the grid -->
   <div id="trash-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal">
       <div class="modal-head">
@@ -546,11 +546,11 @@
           </div>
           <div id="library-colors" class="lib-colors" data-i18n-title="filterColor"></div>
         </div>
-        <!-- F1 tag filter chips + manager button (feature-gated via body.flag-tags) -->
+        <!-- Tag filter chips + manager button (feature-gated via body.flag-tags) -->
         <div id="library-tagbar" class="lib-tagbar"></div>
       </div>
       <div id="library-list" class="library-list"></div>
-      <!-- F8 batch action bar (visible only in selection mode) -->
+      <!-- Batch action bar (visible only in selection mode) -->
       <div id="lib-batch-bar" class="lib-batch-bar hidden">
         <span id="lib-batch-count" class="lib-batch-count"></span>
         <button id="lib-batch-all" type="button" class="ghost-btn" data-i18n="selectAll">All</button>
@@ -570,8 +570,8 @@
     </div>
   </div>
 
-  <!-- F1 tag manager: rename / recolor / delete, opened from the library filter row -->
-  <!-- 88: what an import would actually do, before it touches anything -->
+  <!-- Tag manager: rename / recolor / delete, opened from the library filter row -->
+  <!-- What an import would actually do, before it touches anything -->
   <div id="import-preview-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal modal-narrow">
       <div class="modal-titlebar">
@@ -609,7 +609,7 @@
     </div>
   </div>
 
-  <!-- F3 theme editor: inherit a built-in theme and override single colours -->
+  <!-- Theme editor: inherit a built-in theme and override single colours -->
   <div id="theme-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal modal-narrow">
       <div class="modal-head">
@@ -688,7 +688,7 @@
     </div>
   </div>
 
-  <!-- 97: in-app documentation (EN/DE only, see ui/help.js) -->
+  <!-- In-app documentation (EN/DE only, see ui/help.js) -->
   <div id="help" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal">
       <div class="modal-head">
@@ -935,7 +935,7 @@
     </div>
   </div>
 
-  <!-- Item 1: every hotkey (global + per-prompt) in one place, each row live-rebindable -->
+  <!-- Every hotkey (global + per-prompt) in one place, each row live-rebindable -->
   <div id="hotkeys-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal">
       <div class="modal-head">
@@ -996,7 +996,7 @@
     </div>
   </div>
 
-  <!-- 123: first-run tour — five fixed steps, one shared frame, JS swaps the body. -->
+  <!-- First-run tour — five fixed steps, one shared frame, JS swaps the body. -->
   <div id="tour-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal tour-modal-box">
       <div class="modal-head tour-head">
@@ -1037,7 +1037,7 @@
           <span data-i18n="screenshotToFolder">Save screenshots to the Screenshots folder</span>
           <input id="snip-save-folder" type="checkbox" class="switch" />
         </label>
-        <!-- 121: OCR -- runs on the capture already shown above; off by default
+        <!-- OCR -- runs on the capture already shown above; off by default
              (flagOcr), hidden until on. -->
         <button id="snip-modal-ocr" class="ghost-btn" data-i18n="snipModalOcr" data-i18n-title="snipModalOcr"></button>
         <button id="snip-modal-saveas" class="ghost-btn" data-i18n="screenshotSaveAs">Save as…</button>
@@ -1046,7 +1046,7 @@
     </div>
   </div>
 
-  <!-- 121: OCR result -- editable text, recognized language + character count,
+  <!-- OCR result -- editable text, recognized language + character count,
        copy / create-as-prompt / close. Off by default (flagOcr). -->
   <div id="ocr-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal">
@@ -1069,7 +1069,7 @@
     </div>
   </div>
 
-  <!-- 122: OCR language pack management -- every OCR-capable Windows language
+  <!-- OCR language pack management -- every OCR-capable Windows language
        (installed + available, from ocr_capabilities()), each row a checkmark or a
        "Download (size)" button; the size sits inside the button so nobody
        downloads blind. Opened from the ocrLang dropdown's trailing "Manage
@@ -1094,7 +1094,7 @@
     </div>
   </div>
 
-  <!-- 117/118/119: screenshot editor -- opens right after a capture, before
+  <!-- Screenshot editor -- opens right after a capture, before
        #snip-modal, when flagSnipEditor is on. Full-bleed overlay (no centered
        modal box): toolbar on top, canvas below, actions bottom-right. -->
   <div id="snip-edit" class="overlay snip-edit hidden" role="dialog" aria-modal="true" data-i18n-aria="snipEditTitle">
@@ -1177,11 +1177,11 @@
     <button data-act="edit" role="menuitem" data-i18n="edit">Edit</button>
     <button data-act="duplicate" role="menuitem" data-i18n="duplicate">Duplicate</button>
     <button data-act="hide" role="menuitem" data-i18n="hideInView">Hide in this view</button>
-    <!-- 51: hidden unless multiViewPrompt is on and there is another view to place this into. -->
+    <!-- Hidden unless multiViewPrompt is on and there is another view to place this into. -->
     <button data-act="views" role="menuitem" data-i18n="alsoShowIn">Also show in…</button>
     <!-- Label set in openCtx() -- it names the action ("Show"/"Remove"), not a state-less "Toggle". -->
     <button data-act="pin" role="menuitem"></button>
-    <!-- 90-94: only shown when this prompt actually rotates AND both auto gates are
+    <!-- Only shown when this prompt actually rotates AND both auto gates are
          on (openCtx toggles .hidden) — never a greyed-out entry for a case where it
          cannot do anything. -->
     <button data-act="rotateAutoMenu" role="menuitemcheckbox" class="hidden">

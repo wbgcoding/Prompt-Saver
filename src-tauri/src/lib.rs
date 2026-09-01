@@ -15,8 +15,8 @@
 // checked at its two real hits (rgb_to_hsl) and is a documented false positive
 // there, not a bug. clippy::significant_drop_tightening (62 hits: a lock held
 // longer than the critical section needs) is the one category with real
-// contention/freeze relevance -- point 215 samples the worst offenders as part
-// of its own blocking-call audit rather than as a lint sweep.
+// contention/freeze relevance -- the worst offenders are sampled by the
+// blocking-call audit rather than by a lint sweep.
 
 pub mod brand;
 
@@ -96,7 +96,7 @@ fn summon_launcher(app: &AppHandle) {
     let _ = win.set_focus();
 }
 
-// ---------- Global shortcuts: the app hotkey + one per prompt (F20) ----------
+// ---------- Global shortcuts: the app hotkey + one per prompt ----------
 
 type Accel = tauri_plugin_global_shortcut::Shortcut;
 use tauri_plugin_global_shortcut::{Code, Modifiers};
@@ -1177,8 +1177,8 @@ fn handle_tray_menu_id(app: &AppHandle, id: &str) {
                 save_settings(app, &store.settings);
             }
             #[cfg(windows)]
-            clipwatch::stop(); // 91: flush a pending auto-session for real
-            voice_shutdown(app); // 125
+            clipwatch::stop(); // flush a pending auto-session for real
+            voice_shutdown(app);
             app.exit(0);
         }
         other => {
@@ -1596,7 +1596,7 @@ struct Settings {
     window: Option<WindowGeom>,
     #[serde(default)]
     minimize_to_tray: bool,
-    // One-time hint (P92): explains that the tray menu still copies while hidden.
+    // One-time hint: explains that the tray menu still copies while hidden.
     #[serde(default)]
     seen_tray_hint: bool,
     #[serde(default)]
@@ -1636,7 +1636,7 @@ struct Settings {
     // those three (and only those) without guessing by name/content.
     #[serde(default)]
     example_prompt_ids: Vec<String>,
-    // F6/14: each entry is one group of prompt ids the user dismissed together as
+    // Each entry is one group of prompt ids the user dismissed together as
     // "not a duplicate" - never re-suggested as a group. Was Vec<[String; 2]> (one
     // entry per PAIR): ignoring an N-member group wrote N*(N-1)/2 entries, 79800 for
     // a 400-item group. A JSON array of strings deserializes into a Vec<String> the
@@ -1792,7 +1792,7 @@ const MAX_GROUP_NAME: usize = 60;
 const FLOAT_W: f64 = 360.0;
 const FLOAT_H: f64 = 80.0; // flat pill shape, clearly wider than tall
 const FLOAT_IMG: f64 = 400.0; // square box for image pills: S 300 / M 400 / L 560
-// F25 pill folders.
+// Pill folders.
 const MAX_FLOAT_FOLDERS: usize = 100;
 const MAX_FOLDER_NAME: usize = 40;
 const FOLDER_BOX: f64 = 96.0; // collapsed folder icon (square, logical px at scale 1)
@@ -2934,7 +2934,7 @@ fn db_recent_copies(conn: &Connection, limit: usize, grouped: bool) -> Vec<Journ
     out
 }
 
-// ---- F7 prompt version history ----
+// ---- Prompt version history ----
 // Snapshots of a prompt's previous name/text, encrypted like the prompt rows. The
 // table lives in data.db (not the settings blob) so history never bloats settings.
 #[derive(Serialize)]
@@ -3029,7 +3029,7 @@ fn db_delete_versions(conn: &Connection, prompt_id: &str) {
     }
 }
 
-// ---- F21 clipboard watcher ----
+// ---- Clipboard watcher ----
 #[derive(Serialize)]
 struct ClipItem {
     id: i64,
@@ -3468,7 +3468,7 @@ fn load_store(app: &AppHandle) -> Store {
         let theme_ai_before =
             settings.theme == "ai" || settings.custom_themes.iter().any(|c| c.base == "ai");
         settings.migrate();
-        load_pick_history(&settings); // 19: restore the colour-pick history mirror
+        load_pick_history(&settings); // restore the colour-pick history mirror
         // One-time: move any legacy in-blob copy history into the copy_log table.
         // Gated on a persistent `meta` marker (written in the same transaction as
         // the rows) so a failed post-migration resave can never re-import and
@@ -3528,7 +3528,7 @@ fn load_store(app: &AppHandle) -> Store {
             store.settings.ui_flags.entry("tourSeen".to_string()).or_insert(true);
         }
         store.normalize_folders(); // Drop members whose prompt is gone
-        sweep_trash(app, &mut store); // 91: drop anything past the retention window
+        sweep_trash(app, &mut store); // drop anything past the retention window
         if needs_mig || migrated_log {
             // One-time: re-encrypt legacy plaintext rows / drop the migrated log from the blob.
             save_prompts(app, &store);
@@ -3544,7 +3544,7 @@ fn load_store(app: &AppHandle) -> Store {
         store.settings.ui_flags.entry("tourSeen".to_string()).or_insert(true);
     }
     store.normalize_folders();
-    sweep_trash(app, &mut store); // 91: no-op here (fallback path never loads trash), kept for symmetry
+    sweep_trash(app, &mut store); // no-op here (fallback path never loads trash), kept for symmetry
     store
 }
 
@@ -3565,7 +3565,7 @@ fn load_store_from_json(dir: &Path) -> Store {
         SealedRead::Missing => Settings::default(),
     };
     settings.migrate();
-    load_pick_history(&settings); // 19: restore the colour-pick history mirror
+    load_pick_history(&settings); // restore the colour-pick history mirror
     prune_history(&mut settings);
     let mut prompts_missing = false;
     let mut prompts = match read_sealed_json::<Vec<Prompt>>(&dir.join("prompts.json")) {
@@ -5103,7 +5103,7 @@ async fn add_prompt(
         save_settings(&app, &store.settings);
         prompt
     };
-    rebuild_tray(&app); // F23
+    rebuild_tray(&app);
     // Arm the new accelerator. The re-arm drops one the OS refuses, so the
     // caller is handed the stored state, not the state before arming.
     if !prompt.hotkey.is_empty() {
@@ -5345,7 +5345,7 @@ async fn update_prompt(
                     }
                     return Err("save-failed".into());
                 }
-                // F7/32 (35b): snapshot the PRE-edit name/text/variants only once the
+                // Snapshot the PRE-edit name/text/variants only once the
                 // edit is durably saved — inserting it before save_prompts (the old
                 // order) left a version row for an edit that never actually happened
                 // whenever the save then failed, and could push real history out past
@@ -5474,7 +5474,7 @@ async fn restore_version(app: AppHandle, state: State<'_, Db>, version_id: i64) 
     };
     if let Some(p) = &restored {
         let _ = app.emit("prompt-updated", p.clone());
-        rebuild_tray(&app); // F23
+        rebuild_tray(&app);
     }
     Ok(restored)
 }
@@ -5562,13 +5562,13 @@ async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Resu
     };
     if changed {
         rearm_hotkeys(&app); // A deleted prompt gives its accelerator back
-        rebuild_tray(&app); // F23
+        rebuild_tray(&app);
         sync_float_windows(&app); // A folder left with one member dissolves
     }
     Ok(changed)
 }
 
-// F8 batch operations: apply one action to many prompts in a SINGLE store pass
+// Batch operations: apply one action to many prompts in a SINGLE store pass
 // (no per-item save loop, so 100+ selected prompts never stall the UI). Returns the
 // fresh state so the caller re-renders once. Actions: delete / favorite / color /
 // addView / removeView.
@@ -5626,7 +5626,7 @@ async fn batch_prompts(
                     store.settings.float_scale.remove(id);
                     store.settings.video_prefs.remove(id);
                 }
-                store.normalize_folders(); // F25
+                store.normalize_folders();
                 // Same atomic prompts+trash write as delete_prompt/restore_prompt,
                 // found while fixing those two — batch delete had the identical
                 // stranded-prompt risk. On failure, undo the batch move instead of
@@ -5769,7 +5769,7 @@ async fn batch_prompts(
     Ok(settings)
 }
 
-// ---------- 91: trash ----------
+// ---------- Trash ----------
 
 #[tauri::command]
 fn list_trash(state: State<Db>) -> Vec<Prompt> {
@@ -5818,7 +5818,7 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
     };
     if restored {
         rearm_hotkeys(&app); // The restored prompt's own hotkey, if any, is free again to re-claim
-        rebuild_tray(&app); // F23
+        rebuild_tray(&app);
     }
     Ok(app_state)
 }
@@ -5842,7 +5842,7 @@ fn purge_ids(app: &AppHandle, store: &mut Store, ids: &[String]) -> Option<std::
     // the 102 fix on the orphan sweep just below.
     if save_trash(app, store) {
         let orphan_scan = orphan_cleanup_enabled(store).then(|| orphan_referenced_set(store));
-        rotation_forget(&mut store.settings, ids); // 32: no orphaned pointer/bag left behind
+        rotation_forget(&mut store.settings, ids); // no orphaned pointer/bag left behind
         save_settings(app, &store.settings);
         // save_trash above only returns true through a working connection, so
         // losing it between the two calls is a narrow window — but a purge that
@@ -5942,7 +5942,7 @@ async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Result<(), Str
     let labels: Vec<String> = app
         .webview_windows()
         .keys()
-        .filter(|l| l.starts_with("float-") || l.starts_with("folder-")) // F25
+        .filter(|l| l.starts_with("float-") || l.starts_with("folder-"))
         .cloned()
         .collect();
     for label in labels {
@@ -5954,7 +5954,7 @@ async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Result<(), Str
     {
         let mut store = lock(&state);
         store.prompts.clear();
-        store.trash.clear(); // 91: a data wipe must not leave trashed prompts behind
+        store.trash.clear(); // a data wipe must not leave trashed prompts behind
         store.prompts_locked = false; // explicit wipe overrides the decrypt-failure lock
         store.normalize_folders(); // No prompts left, so no folder survives
         if !save_prompts(&app, &store) {
@@ -5971,10 +5971,10 @@ async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Result<(), Str
         match db_conn(&app) {
             Some(c) => {
                 for (sql, table) in [
-                    ("DELETE FROM prompt_versions", "prompt_versions"), // F7 history
+                    ("DELETE FROM prompt_versions", "prompt_versions"), // version history
                     ("DELETE FROM copy_log", "copy_log"),               // copy history
-                    ("DELETE FROM clip_inbox", "clip_inbox"),           // F21 inbox
-                    ("DELETE FROM trash", "trash"),                     // 91: trashed prompts
+                    ("DELETE FROM clip_inbox", "clip_inbox"),           // clipboard inbox
+                    ("DELETE FROM trash", "trash"),                     // trashed prompts
                 ] {
                     if let Err(e) = c.execute(sql, []) {
                         incomplete = true;
@@ -6007,7 +6007,7 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
     let labels: Vec<String> = app
         .webview_windows()
         .keys()
-        .filter(|l| l.starts_with("float-") || l.starts_with("folder-")) // F25
+        .filter(|l| l.starts_with("float-") || l.starts_with("folder-"))
         .cloned()
         .collect();
     for label in labels {
@@ -6025,7 +6025,7 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
         store.settings = Settings::default();
         SETTINGS_LOCKED.store(false, Ordering::Relaxed); // explicit reset overrides the corrupt-row lock
         store.settings.migrate();
-        load_pick_history(&store.settings); // 19: reset clears the mirror too
+        load_pick_history(&store.settings); // reset clears the mirror too
         if let Some(pw) = backup_pw {
             store.settings.ui_texts.insert(BACKUP_PW_KEY.to_string(), pw);
         }
@@ -6224,7 +6224,7 @@ fn set_view_grid(app: AppHandle, state: State<Db>, id: String, cols: u32, rows: 
     store.settings.clone()
 }
 
-// ---------- Tag commands (F1) ----------
+// ---------- Tag commands ----------
 
 const MAX_TAG_LEN: usize = 60;
 const MAX_TAGS_PER_PROMPT: usize = 50;
@@ -6279,7 +6279,7 @@ fn sanitize_tags(input: Vec<String>, known: &HashMap<String, String>) -> Result<
     Ok(out)
 }
 
-// ---------- Private notes (F17) ----------
+// ---------- Private notes ----------
 
 // Generous ceiling: notes are a scratchpad, not a second prompt body. Rejecting
 // instead of truncating keeps the user's text from being silently cut in half.
@@ -6674,7 +6674,7 @@ fn set_active_view(app: AppHandle, state: State<Db>, id: String) -> Settings {
     store.settings.clone()
 }
 
-// ---------- View group commands (F9) ----------
+// ---------- View group commands ----------
 
 fn valid_group_name(name: &str) -> Result<String, String> {
     let name = name.trim();
@@ -6784,7 +6784,7 @@ fn set_view_group_member(
     Ok(store.settings.clone())
 }
 
-// ---------- Tile folder commands (F27) ----------
+// ---------- Tile folder commands ----------
 
 // Bring the grid folders back to their invariants: only real prompts and real views,
 // no prompt in two folders (the first folder listing it wins), no two folders on the
@@ -7144,7 +7144,7 @@ async fn launcher_items(state: State<'_, Db>) -> Result<LauncherState, String> {
     })
 }
 
-// ---- F11 usage statistics ----
+// ---- Usage statistics ----
 #[derive(Serialize)]
 struct StatBar {
     id: String,
@@ -7181,7 +7181,7 @@ struct UsageStats {
     top: Vec<StatBar>,
     never_used: Vec<StatBar>,
     per_view: Vec<ViewCount>,
-    daily: Vec<DayCount>, // 58: last 14 UTC days, oldest first, zero-filled
+    daily: Vec<DayCount>, // last 14 UTC days, oldest first, zero-filled
     history_on: bool,
 }
 
@@ -7315,7 +7315,7 @@ async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Resu
     })
 }
 
-// ---- F6 duplicate finder ----
+// ---- Duplicate finder ----
 #[derive(Serialize)]
 struct DupMember {
     id: String,
@@ -7479,7 +7479,7 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
     Ok(out)
 }
 
-// F6/14: mark this whole group of prompt ids as "not duplicates" (of each other).
+// Mark this whole group of prompt ids as "not duplicates" (of each other).
 // One entry for the whole group instead of every pairwise combination - see the
 // dup_ignored field comment for why.
 #[tauri::command]
@@ -7504,7 +7504,7 @@ async fn ignore_dups(app: AppHandle, state: State<'_, Db>, ids: Vec<String>) -> 
     Ok(())
 }
 
-// ---- F2 automatic backups & restore ----
+// ---- Automatic backups & restore ----
 // Name + size/kind, so the expanded backup list can show a real per-prompt
 // row instead of one long comma string. `kind` reuses prompt_stat_type()'s
 // categories (text/image/video/pdf/file) -- one shared classifier, not a second.
@@ -8083,8 +8083,9 @@ fn table_columns(tx: &Transaction, schema: &str, table: &str) -> rusqlite::Resul
 // database, inside one transaction — any failure leaves `target` untouched. "data"
 // mirrors exactly the tables delete_all_data already treats as data; "settings"
 // touches only the meta['settings'] row, never the meta['copy_log_migrated']
-// migration marker. A table missing from an older backup (e.g. "trash", added in
-// 91) is skipped rather than failing the whole restore — its live rows stay put.
+// migration marker. A table missing from an older backup (e.g. "trash", which
+// arrived later) is skipped rather than failing the whole restore — its live
+// rows stay put.
 // The three scopes a restore or an import may run in. Both commands parse the
 // string through here so an unrecognised value can never mean "everything" to one
 // of them and "nothing, but report success" to the other.
@@ -8676,7 +8677,7 @@ async fn copy_text(state: State<'_, Db>, text: String, id: Option<String>) -> Re
     Ok(put_text(&state, id.as_deref(), &text))
 }
 
-// F12 `{#{clipboard}#}`: the clipboard's current text for the placeholder resolver.
+// `{#{clipboard}#}`: the clipboard's current text for the placeholder resolver.
 // Empty when the clipboard holds no text at all (an image or file payload).
 #[tauri::command]
 async fn clipboard_text() -> String {
@@ -9044,7 +9045,7 @@ fn set_capture_exclusion(win: &tauri::WebviewWindow, excluded: bool) {
 #[cfg(not(windows))]
 fn set_capture_exclusion(_win: &tauri::WebviewWindow, _excluded: bool) {}
 
-// ---- F19 auto-paste: track the last EXTERNAL foreground window so a copied prompt
+// ---- Auto-paste: track the last EXTERNAL foreground window so a copied prompt
 // can be pasted straight into it. A WinEvent hook records every foreground change;
 // WINEVENT_SKIPOWNPROCESS drops our own windows, so the stored handle is always the
 // app the user was working in (covers grid tiles, library rows AND the no-activate
@@ -9187,7 +9188,7 @@ fn counts_as_paste(now: u32, armed_at: u32, last_paste: u32, last_input: u32, se
     true
 }
 
-// ---- F21 clipboard watcher: a message-only window with AddClipboardFormatListener
+// ---- Clipboard watcher: a message-only window with AddClipboardFormatListener
 // (event-driven, no polling). New external TEXT is appended to the clip_inbox table;
 // our own copies and consecutive duplicates are skipped. Off by default; toggling it
 // registers/unregisters the listener with no leaked handle.
@@ -12367,7 +12368,7 @@ fn set_ui_zoom(app: AppHandle, factor: f64) -> Result<(), String> {
 //
 // Text recognition from an image file or a snip-tool crop, using Windows' own
 // built-in recognizer -- no bundled third-party OCR library, no network.
-// Backend only: point 121 (a later pass) wires this into the UI.
+// Backend only -- the buttons that call it live in the frontend.
 //
 // `ocr_join_lines` is pure text logic (no Windows API), so it is covered by
 // plain `cargo test --lib` on any platform. Everything else lives behind
@@ -12385,7 +12386,7 @@ struct OcrResult {
     lang: String,
 }
 
-// ---------- 122: OCR language packs, managed from inside the app ----------
+// ---------- OCR language packs, managed from inside the app ----------
 //
 // `OcrCap` mirrors one row of `Get-WindowsCapability -Online -Name
 // "Language.OCR*"`. Size/version are exactly what Windows reports -- a size
@@ -12431,7 +12432,7 @@ struct OcrInstallResult {
     error: Option<String>,
 }
 
-// Payload for the "ocr-lang-update-due" event (background watcher, point 5).
+// Payload for the "ocr-lang-update-due" event (background watcher).
 #[derive(Serialize, Clone)]
 struct OcrLangUpdateDue {
     name: String,
@@ -12592,7 +12593,7 @@ fn ocr_join_lines(lines: &[String]) -> String {
 }
 
 // Strict allowlist check for a capability Name, BEFORE it is ever used to
-// build a PowerShell/process argument (G10). Anchored on the whole string (not
+// build a PowerShell/process argument. Anchored on the whole string (not
 // a substring scan), so something like
 // "Language.OCR~~~de-DE~0.0.1.0; rm -rf" is rejected outright -- its trailing
 // bytes do not match the required "~0.0.1.0" suffix once the injected part is
@@ -12719,7 +12720,7 @@ fn lang_next_check_key(kind: ocr::CapKind) -> String {
 
 // Cross-restart bookkeeping for the "updatable?" decision -- a JSON blob
 // (tag -> OcrCapSnapshot) tucked into the existing free-form ui_texts map
-// rather than a new Settings field, per point 122.
+// rather than a new Settings field.
 #[cfg(windows)]
 fn lang_load_snapshots(settings: &Settings, kind: ocr::CapKind) -> HashMap<String, OcrCapSnapshot> {
     settings
@@ -12880,7 +12881,7 @@ async fn ocr_capabilities_elevated_result() -> Result<Option<Vec<OcrCap>>, Strin
 }
 
 // Kick off an elevated install for one language capability. Validates
-// `name` BEFORE any string is built or a process is touched (G10): first the
+// `name` BEFORE any string is built or a process is touched: first the
 // anchored character-class check, then -- only if that already passed --
 // membership in the capability set ocr_capabilities() most recently actually
 // enumerated. Returns as soon as the elevated process has been launched (or
@@ -13382,7 +13383,7 @@ mod ocr {
         recognize(&path, upscale_below_px, join_lines, lang, auto_pick_lang)
     }
 
-    // ---- 122: OCR language-pack management ----
+    // ---- OCR language-pack management ----
 
     // Which language-pack family a capabilities/install call is about. Both
     // families share the exact same Get-WindowsCapability/Add-WindowsCapability
@@ -13885,7 +13886,7 @@ mod ocr {
 }
 
 // ---------------------------------------------------------------------------
-// Runde F: voice dictation commands. Mirrors the ocr_* wrapper shape exactly --
+// Voice dictation commands. Mirrors the ocr_* wrapper shape exactly --
 // a thin, never-cfg-gated `#[tauri::command]` whose BODY branches on
 // `#[cfg(windows)]`, calling into `mod voice` for the real Windows API work.
 // ---------------------------------------------------------------------------
@@ -14043,7 +14044,7 @@ fn voice_stop(vstate: State<'_, VoiceState>, id: Option<u64>) -> Result<(), Stri
     Ok(())
 }
 
-// Entscheidung 7 (21.08.): only ever called from the voice-privacy-off dialog,
+// Only ever called from the voice-privacy-off dialog,
 // never on startup, never silently. Writes Windows' own online-speech consent
 // registry value AND the app's voiceOnlineOk flag in one step (one consent,
 // both switches) so the very next voice_start proceeds without a second
@@ -14690,10 +14691,10 @@ async fn check_update(state: State<'_, Db>) -> Result<UpdateInfo, String> {
 #[tauri::command]
 fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> Result<(), String> {
     let is_capture = key == ALLOW_SCREENSHOT_KEY;
-    let is_clip = key == "clipWatcher"; // F21
-    let is_hotkeys = key == "promptHotkeys"; // F20
-    let is_tray = key == "trayRecent" || key == "trayFavs" || key == TRAY_CUSTOM_MENU_KEY; // F23
-    let is_folders = key == "pillFolders"; // F25
+    let is_clip = key == "clipWatcher";
+    let is_hotkeys = key == "promptHotkeys";
+    let is_tray = key == "trayRecent" || key == "trayFavs" || key == TRAY_CUSTOM_MENU_KEY;
+    let is_folders = key == "pillFolders";
     let is_sync_enable = key == "promptSync" && enabled; // Prompt-folders-as-Markdown
     // Turning either gate off must not leave a session silently running.
     let end_auto_session = !enabled && (key == "rotatingPrompts" || key == "rotateAuto");
@@ -14736,7 +14737,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
             set_capture_exclusion(&win, !enabled);
         }
     }
-    // F21/91: the window itself now always runs (started at boot) since 91's
+    // The window itself now always runs (started at boot) since 91's
     // auto-advance session needs it independently of this toggle; on/off just
     // changes what on_clipboard_update does with each event, checked live.
     let _ = is_clip;
@@ -14768,8 +14769,8 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
 // Set an expert numeric value (CSS var / behaviour tweak).
 #[tauri::command]
 fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
-    let is_tray = key == "trayRecentN" || key == "trayFavN"; // F23
-    let is_folder_grid = key == "folderGridCols"; // F25
+    let is_tray = key == "trayRecentN" || key == "trayFavN";
+    let is_folder_grid = key == "folderGridCols";
     {
         let mut store = lock(&state);
         store.settings.ui_values.insert(key, value);
@@ -14981,7 +14982,7 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
             save_settings(&app, &store.settings);
         }
         #[cfg(windows)]
-        clipwatch::stop(); // 91: lets DestroyWindow flush a pending auto-session for real
+        clipwatch::stop(); // lets DestroyWindow flush a pending auto-session for real
         app.exit(0);
     });
     Ok(())
@@ -15639,7 +15640,7 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String) -> R
         .map(|p| import_sig(&p.name, &p.text, &p.file_path, &p.image, p.copy_image))
         .collect();
     let mut count = 0usize;
-    let before_len = store.prompts.len(); // 38: everything imported is appended after this
+    let before_len = store.prompts.len(); // everything imported is appended after this
     // Grows while importing so tags introduced by the file itself also settle on one casing.
     let mut known = canonical_tags(&store.prompts);
     for item in data.prompts {
@@ -15697,7 +15698,7 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String) -> R
     let settings = store.settings.clone();
     drop(store);
     push_theme(&app, &settings);
-    rebuild_tray(&app); // F23
+    rebuild_tray(&app);
     Ok(count)
 }
 
@@ -15708,7 +15709,7 @@ struct Backup {
     settings: Settings,
 }
 
-// ---------- Encrypted single-file backups (S7) ----------
+// ---------- Encrypted single-file backups ----------
 // Format: b"PSB1" | mode(1) | [salt(16) for a password mode] | nonce(12) | AES-256-GCM.
 // Modes 0/2 = fixed key (portable: any install restores it), 1/3 = user password
 // (Argon2id(password + pepper, salt)); 2/3 additionally deflate the JSON before
@@ -15997,7 +15998,7 @@ fn apply_import(store: &mut Store, backup: Backup, want_data: bool, want_setting
         if let Some(pw) = local_backup_pw {
             store.settings.ui_texts.insert(BACKUP_PW_KEY.to_string(), pw);
         }
-        load_pick_history(&store.settings); // 19: restore brings its own history mirror
+        load_pick_history(&store.settings); // restore brings its own history mirror
     }
     // A colliding or unusable accelerator must not fail the restore — drop
     // it and let the summary say so. Runs regardless of scope: an imported
@@ -16667,7 +16668,7 @@ pub fn run() {
         }));
     }
     builder
-        // The app hotkey summons the window + quick-launcher; a prompt hotkey (F20)
+        // The app hotkey summons the window + quick-launcher; a prompt hotkey
         // copies that prompt wherever the user is.
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -16700,7 +16701,7 @@ pub fn run() {
                         let _ = h.emit("store-unsealed", ());
                     }));
             }
-            sweep_stale_temp_files(); // 53: crash/abnormal-exit leftovers from a previous run
+            sweep_stale_temp_files(); // crash/abnormal-exit leftovers from a previous run
             let store = load_store(&handle);
 
             let saved_geom = store.settings.window;
@@ -16712,20 +16713,20 @@ pub fn run() {
             app.manage(Mutex::new(store));
             app.manage(SnipState(Mutex::new(Vec::new())));
             app.manage(SnipPreview(Arc::new(Mutex::new(None))));
-            app.manage(SnipModeState(Mutex::new(SnipMode::Capture))); // 121
-            app.manage(HotkeyTargets(Mutex::new(Vec::new()))); // F20
-            app.manage(FolderExpand(Mutex::new(HashMap::new()))); // F25
-            app.manage(HiddenFloats(Mutex::new(std::collections::HashSet::new()))); // 43
-            app.manage(DragHint(Mutex::new((0, None)))); // F25 live merge highlight
-            app.manage(VarPrompt::new()); // F12 standalone fill-in window
-            app.manage(SyncWriteQueue(Mutex::new(SyncWriteState::default()))); // 9
-            app.manage(VoiceState(Mutex::new(None), std::sync::atomic::AtomicBool::new(false))); // Runde F, 125
+            app.manage(SnipModeState(Mutex::new(SnipMode::Capture)));
+            app.manage(HotkeyTargets(Mutex::new(Vec::new())));
+            app.manage(FolderExpand(Mutex::new(HashMap::new())));
+            app.manage(HiddenFloats(Mutex::new(std::collections::HashSet::new())));
+            app.manage(DragHint(Mutex::new((0, None)))); // live merge highlight
+            app.manage(VarPrompt::new()); // standalone fill-in window
+            app.manage(SyncWriteQueue(Mutex::new(SyncWriteState::default())));
+            app.manage(VoiceState(Mutex::new(None), std::sync::atomic::AtomicBool::new(false))); // live dictation session
 
-            // F19 auto-paste: start tracking the last external foreground window.
+            // Auto-paste: start tracking the last external foreground window.
             #[cfg(windows)]
             autopaste::install_hook();
 
-            // F21/91: the message-only window is harmless to run unconditionally (same
+            // The message-only window is harmless to run unconditionally (same
             // reasoning as the sync poll below) — on_clipboard_update itself checks the
             // clipWatcher opt-in on every event, and 91's auto-advance session needs this
             // window regardless of that flag.
@@ -16756,7 +16757,7 @@ pub fn run() {
                 );
             }
 
-            // Re-arm the app hotkey plus every prompt accelerator (F20). Each
+            // Re-arm the app hotkey plus every prompt accelerator. Each
             // registration is a round trip to the main thread, so this runs on a
             // worker — the first paint never waits for it, however many prompts
             // carry a hotkey.
@@ -16915,8 +16916,8 @@ pub fn run() {
                                 save_settings(&handle2, &store.settings);
                             }
                             #[cfg(windows)]
-                            clipwatch::stop(); // 91: flush a pending auto-session for real
-                            voice_shutdown(&handle2); // 125
+                            clipwatch::stop(); // flush a pending auto-session for real
+                            voice_shutdown(&handle2);
                             handle2.exit(0);
                         }
                     }
@@ -16925,7 +16926,7 @@ pub fn run() {
                             let store = state.lock().unwrap_or_else(|e| e.into_inner());
                             save_settings(&handle2, &store.settings);
                         }
-                        voice_shutdown(&handle2); // 125
+                        voice_shutdown(&handle2);
                     }
                     _ => {}
                 });
@@ -17053,7 +17054,7 @@ pub fn run() {
             #[cfg(windows)]
             {
                 start_lang_update_watcher(handle.clone(), ocr::CapKind::Ocr);
-                start_lang_update_watcher(handle.clone(), ocr::CapKind::Speech); // 126
+                start_lang_update_watcher(handle.clone(), ocr::CapKind::Speech);
             }
             Ok(())
         })
@@ -17331,7 +17332,7 @@ fn md_escape_line(s: &str) -> String {
     s.replace(['\n', '\r'], " ")
 }
 
-// Item 2: what a prompt's synced .md file's placement header lines should say —
+// What a prompt's synced .md file's placement header lines should say —
 // derived from Settings (view.layouts / tile_folders / float_folders), never
 // stored on Prompt itself. An empty field means "not applicable".
 #[derive(Default)]
@@ -17345,7 +17346,7 @@ struct SyncPlacement {
 }
 
 // A grid-folder member has no view.layouts entry of its own — save_tile_folder
-// drops it the moment it joins (F27) — so its view/grid/cell describe the
+// drops it the moment it joins — so its view/grid/cell describe the
 // FOLDER's own placement instead. Every member's file ends up saying the same
 // (redundant, but self-consistent and self-healing: sync_write_all_impl rewrites
 // EVERY member's file the moment the folder moves, since prompt_to_md's output
@@ -17526,7 +17527,7 @@ fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
     Some(p)
 }
 
-// Item 2 (Phase B): the incoming half of the six placement fields. Unlike
+// The incoming half of the six placement fields. Unlike
 // apply_md_to_prompt (Prompt fields), these land on Settings — a view/folder is
 // found by NAME (an id is meaningless across machines) and created here if this
 // machine has never seen it. Every part below is independently best-effort, same
@@ -17747,7 +17748,7 @@ fn sync_join_tile_folder(settings: &mut Settings, prompt_id: &str, name: &str, c
 // Same for pill folders, but only ever joins a prompt that is ALREADY a floating
 // pill on this machine (has a `floating` entry) — a folder can group pills, but
 // conjuring a brand-new OS pill window out of a background sync poll is exactly
-// the kind of machine-specific side effect item 2 deliberately keeps out of scope
+// the kind of machine-specific side effect the sync deliberately keeps out of scope
 // (position/monitor layout differ per machine, and so does whether the feature is
 // even in use here).
 fn sync_join_float_folder(settings: &mut Settings, prompt_id: &str, name: &str) -> bool {
@@ -18415,7 +18416,7 @@ mod tests {
     const OCR_PREFIX: &str = "Language.OCR~~~";
     const SPEECH_PREFIX: &str = "Language.Speech~~~";
 
-    // Capability-name allowlist -- the G10 gate everything in
+    // Capability-name allowlist -- the gate everything in
     // ocr_install_language relies on. Valid, realistic tags pass; anything
     // malformed or injection-flavored is rejected outright.
     #[test]
@@ -18678,7 +18679,7 @@ mod tests {
         assert_eq!(ocr_resize_target(120, 80, 4200, 300), Some((240, 160)));
     }
 
-    // ---- Runde F, point 125: voice dictation ----
+    // ---- Voice dictation ----
 
     #[cfg(windows)]
     #[test]
@@ -18782,7 +18783,7 @@ mod tests {
         assert!(!should_send_stop(Some(5), 5, true));
     }
 
-    // ---- Runde F, point 126: kind-generalized language-pack elevation (fixes 160/164) ----
+    // ---- Kind-generalized language-pack elevation ----
 
     #[cfg(windows)]
     #[test]
@@ -18938,7 +18939,7 @@ mod tests {
         assert!(!tour_should_be_marked_seen(false, false));
     }
 
-    // ---- 80: colour-picker history ----
+    // ---- Colour-picker history ----
 
     #[test]
     fn record_pick_keeps_five_newest_and_skips_a_repeat() {
@@ -19383,7 +19384,7 @@ mod tests {
         assert!(general.is_empty());
     }
 
-    // ---- Item 2 Phase C: multi-instance crash simulation ----
+    // ---- Multi-instance crash simulation ----
     //
     // sync_poll_once itself needs a live AppHandle (Tauri window/state), which this
     // test module has no harness for - every existing sync test works the same
@@ -20918,7 +20919,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
-    // ---- 70: selective backup restore ----
+    // ---- Selective backup restore ----
 
     // restore_selective opens real files via Connection::open (ATTACH DATABASE
     // needs a path, an in-memory DB can't be attached across connections), so these
@@ -21033,7 +21034,7 @@ mod tests {
         let _ = std::fs::remove_file(&staged);
     }
 
-    // ---- 107: import_all scope ----
+    // ---- import_all scope ----
 
     fn test_prompt(id: &str) -> Prompt {
         serde_json::from_str(&format!(r#"{{"id":"{id}","name":"N","text":"T"}}"#)).unwrap()
@@ -21516,7 +21517,7 @@ mod tests {
         ]
     }
 
-    // ---- 32: rotating prompts ----
+    // ---- Rotating prompts ----
     // "Kopierfehler ⇒ kein Commit" is not tested here: it is a one-line structural
     // guarantee in copy_prompt (`if ok { rotation_advance(...) }`), not a property
     // of rotation_advance itself, which has no notion of clipboard success.
@@ -21891,7 +21892,7 @@ mod tests {
         );
     }
 
-    // ---- 91: trash ----
+    // ---- Trash ----
 
     #[test]
     fn stale_trash_ids_respects_the_retention_window() {
@@ -21923,7 +21924,7 @@ mod tests {
         assert_eq!(trash_retention_secs(&settings), Some(7 * 86_400));
     }
 
-    // ---- F20 per-prompt hotkeys ----
+    // ---- Per-prompt hotkeys ----
 
     #[test]
     fn accelerators_are_validated_before_they_reach_the_os() {
@@ -22120,7 +22121,7 @@ mod tests {
         assert_eq!(sanitize_hotkey("ctrl+shift+1", "", &others).unwrap(), "ctrl+shift+1");
     }
 
-    // A prompt stored before F20 has no hotkey field at all — it must load with an
+    // A prompt stored before per-prompt hotkeys existed has no hotkey field at all — it must load with an
     // empty binding instead of failing the whole row.
     #[test]
     fn a_prompt_without_a_hotkey_field_still_loads() {
@@ -22543,7 +22544,7 @@ mod tests {
         assert!(sanitize_notes(&"x".repeat(MAX_NOTES_LEN + 1)).is_err());
     }
 
-    // F17, the whole point of the feature: a note must never reach the clipboard —
+    // The whole point of private notes: a note must never reach the clipboard —
     // not through a single copy, and not through a chained multi-prompt copy.
     #[test]
     fn notes_never_reach_the_copied_payload() {
@@ -22991,7 +22992,7 @@ mod tests {
         assert_eq!(clamp_font_size(99), 40);
     }
 
-    // ---- F23 tray quick menu ----
+    // ---- Tray quick menu ----
 
     #[test]
     fn importing_duplicate_prompt_ids_gives_each_one_its_own() {
@@ -23393,7 +23394,7 @@ mod tests {
         }
     }
 
-    // ---- F25 pill folders ----
+    // ---- Pill folders ----
 
     // A pill 200x80 at (x, y). Physical pixels, like every folder computation.
     fn pill_at(x: f64, y: f64) -> Rect {
@@ -23753,7 +23754,7 @@ mod tests {
         assert_eq!(s.float_folders[0].pos.x, 0);
     }
 
-    // ---- F26 colour picker ----
+    // ---- Colour picker ----
 
     #[test]
     fn hex_is_uppercase_and_padded() {

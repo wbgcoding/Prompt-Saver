@@ -1,4 +1,4 @@
-// F25 pill folder window. The collapsed icon shows up to four member previews plus a
+// Pill folder window. The collapsed icon shows up to four member previews plus a
 // count; clicking it grows THIS window into a grid of the member pills. There is only
 // ever one window per folder — expanding resizes it, so z-order and focus stay as
 // simple as a single pill's. All geometry (side, edge flipping, DPI) is decided in the
@@ -40,7 +40,7 @@ let GAP = GAP_DEFAULT;
 let PAD = PAD_DEFAULT;
 let POP_GAP = POP_GAP_DEFAULT;
 const PREVIEW_MAX = 4; // mini previews on the closed folder (2x2)
-let DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT; // 87: expert-tunable
+let DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT; // expert-tunable
 const MENU_W = 230; // matches .menu in floating.css
 
 let state = { id: folderId, name: "", scale: 1, cols: 3, members: [] };
@@ -63,7 +63,7 @@ let apOn = false, apEnter = false, apDelay = AUTO_PASTE_DELAY_MS_DEFAULT, apDblM
 const lastCopy = {};
 const lastClick = {};
 let animMs = 150;
-// F22 drag-out: the modifier hands a member to the OS instead of pulling it out of
+// Drag-out: the modifier hands a member to the OS instead of pulling it out of
 // the folder, so the two gestures never fight over the same drag.
 let dragOutOn = false, dragOutMod = "ctrlKey";
 
@@ -74,7 +74,7 @@ const rotateInfo = new Map(); // member id -> { index, pos, total }
 // initial rotation_peek is still in flight. Without this, the peek's reply
 // arrives after and overwrites the fresher pushed position with stale data.
 const rotateReqs = new Map(); // member id -> latest request number
-let rotateBadgeOn = true; // Phase B default: on
+let rotateBadgeOn = true; // mirrors flag("rotateBadge"), which ships on
 
 // Pos (not index + 1) — in random mode index is the absolute entry that will
 // be drawn next (jumps around); pos is the 1-based draw number within the current
@@ -626,7 +626,7 @@ window.addEventListener("mouseup", async (e) => {
   const drag = memberDrag;
   memberDrag = null;
   drag.el.classList.remove("dragging");
-  if (drag.out) return; // the OS drag owns this gesture (F22)
+  if (drag.out) return; // the OS drag owns this gesture
   if (!drag.moved) {
     copyMember(drag.id);
     return;

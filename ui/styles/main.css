@@ -27,7 +27,7 @@
      and its action buttons stay reachable at raised appearance scales. Identity at
      the default 100%. */
   --full-modal-h: calc((100vh - 24px) / var(--modal-zoom, 1));
-  /* F15 code-token colours for the Markdown preview. These defaults suit the light
+  /* Code-token colours for the Markdown preview. These defaults suit the light
      themes; every theme whose surface would swallow them overrides them below. */
   --hl-cmt: #6a737d;
   --hl-str: #0a7d33;
@@ -269,7 +269,7 @@ body.noflag-showJournal #journal-btn { display: none; }
   color: #fff;
   box-shadow: none;
 }
-/* P53: the grid itself outlined in the active view's color (expert opt, off
+/* The grid itself outlined in the active view's color (expert opt, off
    by default) — a view with no color set just gets no border, via the same
    --active-view-color the tab already carries per-button. */
 .flag-gridViewBorder #grid {
@@ -286,7 +286,7 @@ body.noflag-showJournal #journal-btn { display: none; }
 .view-add-top > svg { width: 17px; height: 17px; }
 .view-add-top:hover { color: var(--accent); }
 
-/* ---- View groups (F9): one folder tab per group + its member popover ---- */
+/* ---- View groups: one folder tab per group + its member popover ---- */
 .view-group-btn { display: inline-flex; align-items: center; gap: 6px; }
 /* Name of the active view inside the group, so a collapsed folder still says
    which page is on screen. */
@@ -541,7 +541,7 @@ body.win-maximized .win-ico-restore { display: inline; }
   width: 100%;
   height: auto;
   flex: 1 1 auto;
-  min-height: 0; /* 26: share space with the batch bar/banner instead of
+  min-height: 0; /* share space with the batch bar/banner instead of
                     claiming 100% of .grid-wrap and clipping under them */
   /* grid-template set inline by JS: repeat(cols, 1fr) / repeat(rows, 1fr) */
 }
@@ -608,7 +608,7 @@ body.drag-active .cell.drag-over {
 .tile:active:not(.media-hover) { --tile-press: 0.97; }
 /* No press-scale while dragging, keeps the text steady. */
 .tile.dragging { opacity: 0.25; cursor: grabbing; z-index: 5; transform: none !important; }
-/* F22: an armed drag-out source. The OS draws the drag image itself, so the cursor
+/* An armed drag-out source. The OS draws the drag image itself, so the cursor
    is the only hint needed — and a cursor keyword carries no colour to clash with a theme. */
 .tile[draggable="true"], .lib-item[draggable="true"] { cursor: copy; }
 
@@ -639,7 +639,7 @@ body.drag-active .cell.drag-over {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 16%, var(--surface));
 }
-/* P38: a click the copy cooldown swallowed — a "no" shake, not silence. */
+/* A click the copy cooldown swallowed — a "no" shake, not silence. */
 @keyframes tile-cooldown-shake {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-3px); }
@@ -812,7 +812,7 @@ body.drag-active .cell.drag-over {
   line-height: 1.5;
   pointer-events: none;
 }
-/* 90-94: accent while an auto-advance session is running for this tile. */
+/* Accent while an auto-advance session is running for this tile. */
 .tile-rotate-badge.is-auto {
   background: var(--accent);
   color: var(--accent-fg);
@@ -879,11 +879,11 @@ body.grid-selecting .tile-type { opacity: 0; }
    the start button never competes with it, on ANY tile, not just the picked one. */
 body.chain-mode .tile-chain-start { opacity: 0; pointer-events: none; }
 
-/* ---- F27 grid folders ----
+/* ---- Grid folders ----
    A folder is a cell like any other: the four newest members as a 2x2 face, the name
    under it and the member count in the corner. Everything is drawn INSIDE the tile —
    the grid clips its cells, so nothing may reach past the edge. */
-/* ---- F27 grid folder tile ----
+/* ---- Grid folder tile ----
    Reads like a folder on a desktop: a big preview of what is inside, a small label
    under it. The preview does the identifying, so it gets the room; the name is a
    caption at a fixed size and never grows — it used to carry .tile-name, which the
@@ -1319,7 +1319,7 @@ body.library-front #modal.overlay { z-index: 67; }
 .modal-text::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 .modal-text::-webkit-scrollbar-track { background: transparent; }
 
-/* ---- 32/33: rotating prompts (editor) ---- */
+/* ---- Rotating prompts (editor) ---- */
 .modal-rotate-toggle { padding: 6px 0; }
 /* No own margin-bottom: the .modal flex column already puts a 12px gap after
    this row (33: an extra margin on top of that read as "a big gap" before the
@@ -1350,7 +1350,7 @@ body.library-front #modal.overlay { z-index: 67; }
 .modal-rotate-mode { flex: 0 0 auto; width: auto; }
 .modal-rotate-next { font-size: 12px; color: var(--muted); }
 
-/* ---- F14 Markdown preview / F15 syntax colours ---- */
+/* ---- Markdown preview / syntax colours ---- */
 /* The wrapper is invisible to layout, so every flex rule the editor already had keeps
    applying to the textarea unchanged. */
 .modal-text-wrap { display: contents; }
@@ -1718,7 +1718,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
    than static metadata like the length readout next to it. */
 .tile-tip-rotate { margin-top: 5px; font-size: 11px; color: var(--accent); }
 .tile-tip-hint { margin-top: 7px; font-size: 11px; color: var(--muted); }
-/* F17 private note: its own dimmed section under the preview, separated by a rule
+/* Private note: its own dimmed section under the preview, separated by a rule
    so it never reads as part of the prompt text. */
 .tile-tip-notes {
   margin-top: 7px; padding-top: 6px;
@@ -1761,7 +1761,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .snip-question { margin: 0; text-align: center; line-height: 1.5; }
 .snip-question span { display: block; }
 
-/* ---- 117/118: screenshot editor -- full-bleed overlay, no centered modal box.
+/* ---- Screenshot editor -- full-bleed overlay, no centered modal box.
    Sits above #snip-modal (which it replaces on the way in) and everything else;
    every color comes off the shared theme tokens so it re-skins with all 8 themes. */
 #snip-edit.overlay {
@@ -2055,8 +2055,8 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .expert-row-reset:hover { color: var(--accent); }
 /* In-app documentation. .help-group reuses .expert-group's own collapse
    mechanic (unscoped rules, see above) — only the body typography is new here.
-   Section chips became a fixed tab bar (#help-tabs-bar, .expert-tabs reused —
-   21), so only one section renders at a time and needs no jump nav or divider. */
+   Section chips became a fixed tab bar (#help-tabs-bar, .expert-tabs reused),
+   so only one section renders at a time and needs no jump nav or divider. */
 /* padding-right: 0 on the dialog, restored on every child EXCEPT the scroll body —
    that puts the topic list's scrollbar flush against the window edge instead of
    floating 20px inside it, while the text column still ends where the head, the
@@ -2626,7 +2626,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   font-size: 11px;
   line-height: 1.4;
 }
-/* F16 live length readout: dimmed line right under the editor textarea. */
+/* Live length readout: dimmed line right under the editor textarea. */
 .modal-length {
   margin: -4px 2px 0;
   text-align: right;
@@ -2682,7 +2682,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .clear-btn.show { opacity: 0.55; pointer-events: auto; }
 .clear-btn.show:hover { opacity: 1; color: var(--fg); background: var(--surface-2); }
 
-/* F7 collapsible version history (shared collapse styling). */
+/* Collapsible version history (shared collapse styling). */
 .modal-collapse { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .modal-collapse-head {
   width: 100%;
@@ -2700,7 +2700,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
    Save row away, and the 120px floor stops the cap from collapsing to a sliver on
    a very short window (the dialog scrolls there instead). */
 .modal-collapse-body { max-height: min(240px, max(120px, 34vh)); overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
-/* F20: the collapsed hotkey row still shows the bound combination, so the binding
+/* The collapsed hotkey row still shows the bound combination, so the binding
    is readable without opening the row. */
 .modal-collapse-side { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .modal-collapse-badge {
@@ -2740,7 +2740,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .hist-entry-num { flex: 0 0 auto; min-width: 14px; color: var(--muted); font-size: 11px; font-weight: 600; }
 .hist-name-change { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--border); font-size: 12px; }
 .hist-name-label { color: var(--muted); }
-/* P31: word-diff against whatever this version turned into next — no themed
+/* Word-diff against whatever this version turned into next — no themed
    "success" colour exists yet, so added text gets a fixed, theme-independent
    green rather than inventing a 16-theme variable for one spot. */
 .diff-add { background: rgba(34, 197, 94, 0.22); border-radius: 3px; }
@@ -2753,7 +2753,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .expert-custom .stat-section { margin-top: 6px; }
 .expert-custom .stat-cards { margin-top: 2px; }
 
-/* F11 usage statistics dashboard. */
+/* Usage statistics dashboard. */
 .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
 /* Fixed column counts inside the backups dialog so both grids come out as full
    rows (diagnostics 8 = 2x4, statistics 12 = 3x4) instead of a ragged last row.
@@ -2809,7 +2809,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 @media (max-width: 720px) { .stat-overview-split { grid-template-columns: minmax(0, 1fr); } }
 .stat-view-count { color: var(--muted); font-variant-numeric: tabular-nums; }
 
-/* F6 duplicate finder. */
+/* Duplicate finder. */
 .dupes-body { max-height: 70vh; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 12px; }
 /* Backups dialog: wider than a plain popup — it holds the backup settings, the
    diagnostics cards, the restore list and the usage statistics — and it scrolls
@@ -2854,7 +2854,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .dup-keep { align-self: flex-start; padding: 3px 10px; font-size: 12px; }
 .dup-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
 
-/* F2 backups & restore. */
+/* Backups & restore. */
 /* Date/time diagnostic card: date over time, no comma, a touch larger for legibility. */
 /* Diagnostics cards: the date is the value of the card, so it reads as large as any
    other number, and none of these texts may wrap — a broken date is unreadable. */
@@ -2998,7 +2998,7 @@ input[type="password"]::-ms-clear { display: none; }
   font-variant-numeric: tabular-nums;
 }
 
-/* F21 clipboard inbox. */
+/* Clipboard inbox. */
 .clip-inbox-btn { position: relative; }
 .clip-badge {
   position: absolute; top: -2px; right: -2px;
@@ -3062,7 +3062,7 @@ input[type="password"]::-ms-clear { display: none; }
 /* A choice variable renders the same themed select as the expert dropdowns. */
 .vars-select { width: 100%; }
 
-/* F12/F13 editor helper: reserved-name chips + the name/options insert row. */
+/* Variable helper in the editor: reserved-name chips + the name/options insert row. */
 .vars-chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .vars-chip {
   padding: 1px 8px;
@@ -3275,7 +3275,7 @@ body.drag-over::after {
   border-color: var(--accent);
   color: var(--accent-fg);
 }
-/* 90-94: the rotate-mode row's Auto toggle. */
+/* The rotate-mode row's Auto toggle. */
 .modal-rotate-auto.active {
   background: var(--accent);
   border-color: var(--accent);
@@ -3356,10 +3356,10 @@ body.drag-over::after {
   transition: border-color var(--transition);
 }
 .lib-item:hover { border-color: var(--accent); }
-/* F18: rows that only matched via the fuzzy tier read dimmer than exact hits. */
+/* Rows that only matched via the fuzzy tier read dimmer than exact hits. */
 .lib-item.lib-fuzzy { opacity: 0.6; }
 .lib-item.lib-fuzzy:hover { opacity: 1; }
-/* F8 batch selection: checkbox + selected state + action bar. */
+/* Batch selection: checkbox + selected state + action bar. */
 .noflag-batchOps #library-select-btn { display: none; }
 /* Selection checkbox is a pure-CSS ::before shown only while the list is in select
    mode — toggling the mode is a single class change, never a re-render. */
@@ -3484,7 +3484,7 @@ body.drag-over::after {
 .head-toggle.head-clear { color: var(--danger); }
 .head-toggle.head-clear:hover { border-color: var(--danger); }
 .noflag-libraryCloseToggle #library-close-toggle { display: none; }
-/* F10 library sort dropdown. */
+/* Library sort dropdown. */
 .head-sort { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .lib-sort {
   padding: 5px 8px;
@@ -3615,7 +3615,7 @@ body.drag-over::after {
 .hotkey-row .modal-input { flex: 1; min-width: 0; cursor: pointer; }
 .hotkey-row .ghost-btn { flex: 0 0 auto; }
 
-/* Item 1: "All hotkeys" popup — global row pinned first, then every prompt with
+/* "All hotkeys" popup — global row pinned first, then every prompt with
    one, each row its own live hotkey-recording field (see bindHotkeyField). */
 #hotkeys-modal .modal { width: min(460px, 92vw); display: flex; flex-direction: column; gap: 10px; }
 .hotkeys-list { display: flex; flex-direction: column; gap: 4px; max-height: 400px; overflow-y: auto; min-height: 0; }
@@ -3708,7 +3708,7 @@ body.drag-over::after {
 }
 .switch-field > span { font-size: 13px; color: var(--fg); min-width: 0; }
 .switch-field > span:first-child { flex: 1; }
-/* P69: a small dot instead of a "(Default off)" text suffix crowding the label.
+/* A small dot instead of a "(Default off)" text suffix crowding the label.
    A real shape (not a "." glyph) so it sits geometrically centred on the
    switch-field row -- a text character's ink sits above its own line box,
    never truly centred by flex alignment alone. */
@@ -3943,7 +3943,7 @@ body.toast-top .toast.show { transform: translateX(-50%) translateY(0); }
   color: var(--accent-fg);
 }
 .toast-ico svg { display: block; }
-/* F26: the copy confirmation carries the colour that was just picked, so the value
+/* The copy confirmation carries the colour that was just picked, so the value
    and the colour itself arrive together. The glyph flips to the readable ink. */
 .toast.tinted .toast-ico { background: var(--toast-tint); color: var(--toast-ink); }
 .toast-msg { font-size: 13px; font-weight: 600; line-height: 1.3; }
@@ -4039,9 +4039,9 @@ body.toast-top .toast.show { transform: translateX(-50%) translateY(0); }
 /* Default-on feature: switched off, the tag UI is gone, the stored tags stay. */
 body.noflag-tags #modal-tags,
 body.noflag-tags .lib-tagbar { display: none; }
-/* F17 private notes: the editor row only exists while the feature is on. */
+/* Private notes: the editor row only exists while the feature is on. */
 body:not(.flag-promptNotes) #modal-notes { display: none; }
-/* P35: a private note reads like a different kind of field, not a second
+/* A private note reads like a different kind of field, not a second
    prompt box — every .modal-input (including the prompt text) already uses
    --surface-2, so the note gets the page's own --surface instead: a quieter,
    recessed fill that still keeps the same border and shape. */
@@ -4061,7 +4061,7 @@ body:not(.flag-promptNotes) #modal-notes { display: none; }
 #modal-hotkey, #modal-history { display: flex; flex-direction: column; gap: 4px; }
 .modal-advanced-history-body { display: flex; flex-direction: column; gap: 4px; }
 .tag-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
-/* P25: the 3 most-used tags, offered right in the editor so adding a common one
+/* The 3 most-used tags, offered right in the editor so adding a common one
    is one click instead of typing it out. */
 .tag-quickadd { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; width: 100%; }
 .tag-quickadd-label { color: var(--muted); font-size: 11.5px; }
@@ -4241,7 +4241,7 @@ button.tag-chip:hover { border-color: var(--accent); }
 .import-preview-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .import-preview-badge { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
 
-/* ---- F3 custom themes ---- */
+/* ---- Custom themes ---- */
 /* The editor button sits right of the theme dropdown, which gives up the width. */
 .theme-row { display: flex; align-items: center; gap: 6px; }
 .theme-row .modal-input { flex: 1 1 auto; min-width: 0; }

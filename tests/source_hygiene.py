@@ -33,6 +33,9 @@ COMMENT_SYNTAX = {
 
 # "// 51:", "// 90-94:", "// 123.3:" -- a plan item wearing a colon.
 NUMBERED_COMMENT = re.compile(r"^\s*\d+(?:\s*[-,/.]\s*\d+)*\s*[:)]")
+# "// 43" -- the bare item number, with nothing else in the comment at all. A
+# comment that says only a number tells a reader nothing either way.
+BARE_NUMBER_COMMENT = re.compile(r"^\s*\d+(?:\s*[-,/]\s*\d+)*\s*$")
 # The same thing spelled out, in either language the plans were written in.
 WORK_ITEM_WORD = re.compile(
     r"\b(?:points?|items?|punkte?|entscheidung|runde|round|phase)\s+(?:\d+|[A-Z]\b)",
@@ -150,7 +153,7 @@ def check_file(rel_path, text):
             continue
         body = comment.lstrip(" \t*-")
         found = None
-        if NUMBERED_COMMENT.match(body):
+        if NUMBERED_COMMENT.match(body) or BARE_NUMBER_COMMENT.match(body):
             found = "numbered work-item comment"
         elif WORK_ITEM_CODE.search(comment):
             found = "work-item code '%s'" % WORK_ITEM_CODE.search(comment).group(0)
