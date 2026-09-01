@@ -7208,6 +7208,25 @@ fn prompt_stat_type(p: &Prompt) -> &'static str {
 // Aggregate everything in Rust so a 1000-prompt library returns one compact struct.
 #[tauri::command]
 async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Result<UsageStats, String> {
+    // The copy journal lives in SQLite and owes nothing to the in-memory store,
+    // so it is read BEFORE the store is locked. Opening the database and running
+    // three queries while holding that lock made every copy and every save wait
+    // for the statistics dialog to finish opening.
+    let now = now_secs();
+    let cutoff30 = now.saturating_sub(30 * 86400);
+    let (copies7, copies30, daily) = db_conn(&app)
+        .map(|c| {
+            let c7 = c
+                .query_row("SELECT COUNT(*) FROM copy_log WHERE ts >= ?1", params![now.saturating_sub(7 * 86400) as i64], |r| r.get::<_, i64>(0))
+                .unwrap_or(0) as u64;
+            let c30 = c
+                .query_row("SELECT COUNT(*) FROM copy_log WHERE ts >= ?1", params![cutoff30 as i64], |r| r.get::<_, i64>(0))
+                .unwrap_or(0) as u64;
+            let daily = db_daily_copies(&c, 14);
+            (c7, c30, daily)
+        })
+        .unwrap_or((0, 0, Vec::new()));
+
     let store = lock(&state);
     let usage = &store.settings.usage;
     let last_used = &store.settings.last_used;
@@ -7261,8 +7280,6 @@ async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Resu
         .take(top_n)
         .map(|p| StatBar { id: p.id.clone(), name: name_of(p), count: usage.get(&p.id).copied().unwrap_or(0) })
         .collect();
-    let now = now_secs();
-    let cutoff30 = now.saturating_sub(30 * 86400);
     let mut never_used: Vec<StatBar> = store
         .prompts
         .iter()
@@ -7281,18 +7298,6 @@ async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Resu
             ViewCount { name: v.name.clone(), count }
         })
         .collect();
-    let (copies7, copies30, daily) = db_conn(&app)
-        .map(|c| {
-            let c7 = c
-                .query_row("SELECT COUNT(*) FROM copy_log WHERE ts >= ?1", params![now.saturating_sub(7 * 86400) as i64], |r| r.get::<_, i64>(0))
-                .unwrap_or(0) as u64;
-            let c30 = c
-                .query_row("SELECT COUNT(*) FROM copy_log WHERE ts >= ?1", params![cutoff30 as i64], |r| r.get::<_, i64>(0))
-                .unwrap_or(0) as u64;
-            let daily = db_daily_copies(&c, 14);
-            (c7, c30, daily)
-        })
-        .unwrap_or((0, 0, Vec::new()));
     let history_on = store.settings.ui_flags.get("copyHistory") != Some(&false);
     Ok(UsageStats {
         total_prompts,
@@ -14698,34 +14703,45 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     let is_sync_enable = key == "promptSync" && enabled; // Prompt-folders-as-Markdown
     // Turning either gate off must not leave a session silently running.
     let end_auto_session = !enabled && (key == "rotatingPrompts" || key == "rotateAuto");
-    {
+    // The activation work below (a full backup, then one file per prompt) takes
+    // as long as the library is large. It runs on a SNAPSHOT taken under a short
+    // lock rather than with the lock held, the way spawn_sync_write_all already
+    // does — otherwise every copy, every save and every other window waits for
+    // the whole thing to finish.
+    let snapshot = {
         let mut store = lock(&state);
         store.settings.ui_flags.insert(key, enabled);
         save_settings(&app, &store.settings);
-        if is_sync_enable {
-            // Safety net before the very first sync run ever touches this library —
-            // same shape a manual backup would take, so a bad first sync is always
-            // recoverable. Without it there is nothing to fall back on, so a failure
-            // here ABORTS the activation instead of syncing unprotected.
-            let keep = store.settings.ui_values.get("backupKeep").copied().unwrap_or(10.0).max(1.0) as usize;
-            let gfs = gfs_from_settings(&store.settings);
-            if let Err(e) = do_backup(&app, keep, gfs) {
-                append_crash_log(&format!("prompt-sync activation backup failed: {e}"));
-                store.settings.ui_flags.insert("promptSync".to_string(), false);
-                save_settings(&app, &store.settings);
-                return Err(format!("sync-backup-failed: {e}"));
-            }
-            // Synchronous and immediate on purpose (unlike spawn_sync_write_all
-            // below) - this is a one-time, user-initiated activation, not a hot
-            // save path, and the point is the folder really exists before this
-            // command returns "on". If it does not, the activation failed and has
-            // to say so rather than leave a switch on over an empty folder.
-            let failed = sync_write_all_impl(&app, &store.prompts, &store.settings);
-            if failed > 0 {
-                store.settings.ui_flags.insert("promptSync".to_string(), false);
-                save_settings(&app, &store.settings);
-                return Err(format!("sync-write-failed: {failed}"));
-            }
+        is_sync_enable.then(|| (store.prompts.clone(), store.settings.clone()))
+    };
+    if let Some((prompts, settings)) = snapshot {
+        // Switching the feature back off has to happen under its own lock, and
+        // must not clobber whatever else was written in the meantime.
+        let abort = |app: &AppHandle, state: &State<Db>| {
+            let mut store = lock(state);
+            store.settings.ui_flags.insert("promptSync".to_string(), false);
+            save_settings(app, &store.settings);
+        };
+        // Safety net before the very first sync run ever touches this library —
+        // same shape a manual backup would take, so a bad first sync is always
+        // recoverable. Without it there is nothing to fall back on, so a failure
+        // here ABORTS the activation instead of syncing unprotected.
+        let keep = settings.ui_values.get("backupKeep").copied().unwrap_or(10.0).max(1.0) as usize;
+        let gfs = gfs_from_settings(&settings);
+        if let Err(e) = do_backup(&app, keep, gfs) {
+            append_crash_log(&format!("prompt-sync activation backup failed: {e}"));
+            abort(&app, &state);
+            return Err(format!("sync-backup-failed: {e}"));
+        }
+        // Synchronous and immediate on purpose (unlike spawn_sync_write_all
+        // below) - this is a one-time, user-initiated activation, not a hot
+        // save path, and the point is the folder really exists before this
+        // command returns "on". If it does not, the activation failed and has
+        // to say so rather than leave a switch on over an empty folder.
+        let failed = sync_write_all_impl(&app, &prompts, &settings);
+        if failed > 0 {
+            abort(&app, &state);
+            return Err(format!("sync-write-failed: {failed}"));
         }
     }
     // Capture exclusion applies live to every open window. Never hold the store

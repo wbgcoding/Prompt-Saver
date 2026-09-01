@@ -169,10 +169,12 @@ node tests/i18n_check.js
 node tests/terms_check.js
 node tests/voice_check.js
 python tests/source_hygiene.py          # no process traces in shipped source
+python tests/flag_polarity.py           # no feature gate that can never fire
 python tests/expert_menu_check.py
 python tests/tooltip_check.py
 python tests/layout/modal_scroll_test.py
 python tests/ui/smoke_test.py
+python tests/perf_hot_paths.py          # times four hot paths against 1000 prompts
 ```
 
 A large library behaves differently from a handful of prompts. `python

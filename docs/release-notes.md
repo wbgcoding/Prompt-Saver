@@ -1,15 +1,15 @@
 ## Prompt Saver 2.7.0
 
-Twenty-two new features: tags, custom themes, folders for view tabs and for
+Twenty-three new features: tags, custom themes, folders for view tabs and for
 floating buttons, self-filling and choice variables, a markdown preview with
 syntax colors, a standalone quick launcher, multi-select in the grid, a trash
 for deleted prompts, placing one prompt in several views at once, restoring a
 backup's data and settings separately, rotating prompts, private notes,
 per-prompt hotkeys, drag-out into other apps, a tray quick-copy menu, a screen
-color picker, a screenshot editor, offline text recognition (OCR) and a
-first-run introduction tour. Everything new is an expert-menu switch, most of
-it off until you turn it on (the screenshot editor and the introduction tour
-ship on).
+color picker, a screenshot editor, offline text recognition (OCR), offline
+voice dictation and a first-run introduction tour. Everything new is an
+expert-menu switch, most of it off until you turn it on (text recognition,
+voice dictation, the screenshot editor and the introduction tour ship on).
 
 ### Downloads
 
@@ -52,7 +52,8 @@ Requires the Microsoft WebView2 runtime (preinstalled on Windows 11 and current 
 ### Capture and read
 
 - **Screenshot editor** — every capture opens for editing before it reaches a tile, the clipboard or a folder: crop, pen, marker, a highlighter-style blend, line, arrow, rectangle, ellipse, text, a self-numbering step marker, pixelation and a spotlight that dims everything outside a chosen area. Full undo/redo, an eyedropper, live width×height while dragging, snapping to the image edges and center. Cancel keeps the original untouched; Apply re-copies the edited image. Ships on.
-- **Text recognition (OCR)** — pull editable text out of a screenshot or an image file, fully offline through Windows' own recognizer. A composer button grabs a new screenshot or a file; the screenshot dialog also gets a "Recognize text" button for the capture you already have. The result opens ready to copy or save as a new prompt, with small text enlarged first so it reads reliably. Missing a language pack? A "Manage languages" dialog lists everything Windows can recognize with the download size shown up front, walks through Windows' own installer, and can keep installed packs current automatically. Expert menu, off by default.
+- **Text recognition (OCR)** — pull editable text out of a screenshot or an image file, fully offline through Windows' own recognizer. A composer button grabs a new screenshot or a file; the screenshot dialog also gets a "Recognize text" button for the capture you already have. The result opens ready to copy or save as a new prompt, with small text enlarged first so it reads reliably. Missing a language pack? A "Manage languages" dialog lists everything Windows can recognize with the download size shown up front, walks through Windows' own installer, and can keep installed packs current automatically. Ships on; the button hides itself if Windows has no recognizer at all.
+- **Voice dictation** — a microphone button beside the composer and in the editor turns speech into text through Windows' own on-device recognizer, offline unless you explicitly allow online recognition. Spoken punctuation and commands ("comma", "new line", "delete that") are applied as you talk, in the app language, and a global hotkey dictates straight into whichever field is waiting. Language packs are managed from the same dialog as OCR's. Ships on; the button hides itself if Windows has no speech engine at all.
 
 ### Also in this release
 

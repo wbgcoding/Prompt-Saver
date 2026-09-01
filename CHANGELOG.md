@@ -407,6 +407,12 @@ voice dictation, the screenshot editor and the introduction tour ship on).
 - A handful of low-contrast colors (muted text in three themes, the dark
   theme's red) were nudged to meet accessibility contrast guidelines; nothing
   else about those themes changed.
+- Opening the statistics dialog and switching prompt syncing on no longer make
+  the rest of the app wait: both now do their reading and writing without
+  holding everything else up.
+- Importing a file, a theme or a synced Markdown file reads it under a size
+  limit in one pass, so an unexpectedly huge file is refused instead of being
+  pulled into memory whole.
 
 ### Fixed
 
@@ -720,6 +726,19 @@ voice dictation, the screenshot editor and the introduction tour ship on).
   same language.
 - A rotating prompt's preview, fetched right as its rotation state changed
   elsewhere, could briefly land after and silently override the newer state.
+- **A rotating prompt's "advance on paste" only worked from the floating
+  buttons and folder windows.** Copying the same prompt from the grid, the
+  library, the copy history, a hotkey or the tray never started the waiting
+  session, so the entry never moved on. It now does, everywhere. Entries that
+  contain placeholders are the one exception and still advance on copy.
+- **Switching prompt syncing on could report success over an empty folder.** A
+  folder that could not be created or written to left the switch on and nothing
+  in it; the failure is now reported and the switch goes back off.
+- Coloring every tag at once wrote the settings file once per tag. It is one
+  write now, and a single invalid color rejects the whole batch instead of
+  leaving half the tags colored.
+- The copy history could show a copy's time taken from a different copy of the
+  same prompt when the list was grouped.
 
 ### Security
 
