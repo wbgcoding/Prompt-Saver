@@ -295,6 +295,8 @@ const RESULTS = {
   // app. The seal probe sets window.__STORE_SEALED__ = false before boot; read
   // fresh on every call for the same reason ocr_capabilities is.
   store_sealed: () => window.__STORE_SEALED__ !== false,
+  // Same fresh-read idea as store_sealed, for the write-fail probe below.
+  settings_write_failed: () => window.__SETTINGS_WRITE_FAILED__ === true,
   // 122: a probe sets window.__OCR_CAPS_TEST__ before opening #ocr-langs-modal.
   // Read fresh on every call (unlike main.js's own `const { invoke } = ...`
   // capture at module load), so a probe can set it any time before triggering

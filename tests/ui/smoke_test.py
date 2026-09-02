@@ -6096,6 +6096,108 @@ SEAL_PROBE = """
 """
 
 
+# 276: same idea as SEAL_PROBE just above, for the settings-write-failure notice.
+# A failed disk write is backend-only, so the probe cannot trigger a real one --
+# it only proves the two states the window itself can show: the startup dialog
+# and the permanent settings-page row, driven by the settings_write_failed()
+# poll the stub answers from window.__SETTINGS_WRITE_FAILED__.
+WRITE_FAIL_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const failed = window.__SETTINGS_WRITE_FAILED__ === true;
+  const which = failed ? 'failed: ' : 'ok: ';
+  const beat = setInterval(() => {
+    document.documentElement.style.setProperty('--wf-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
+  const visible = (el) => !!el && !el.classList.contains('hidden');
+  try {
+    const cm = document.getElementById('confirm-modal');
+    // The portable take-over offer opens first on every launch (the stub always
+    // offers one). Dismiss it, then watch for whatever the app shows next.
+    for (let i = 0; i < 80 && !visible(cm); i++) await sleep(100);
+    if (!visible(cm)) {
+      errs.push(which + 'startup stalled before any dialog opened');
+    } else {
+      document.getElementById('confirm-cancel').click();
+      await sleep(300);
+    }
+    // The write-failed dialog is the one-button variant (infoDialog), same tell
+    // apart from the two-button take-over offer as the seal warning uses.
+    let warned = false;
+    for (let i = 0; i < 60; i++) {
+      if (visible(cm) && !visible(document.getElementById('confirm-cancel'))) { warned = true; break; }
+      await sleep(50);
+    }
+    if (failed && !warned) errs.push(which + 'no dialog was shown for a failed settings write');
+    if (!failed && warned) errs.push(which + 'a dialog was shown although the write succeeded');
+    if (warned) {
+      const title = document.getElementById('confirm-title').textContent.trim();
+      const msg = document.getElementById('confirm-msg').textContent.trim();
+      const icon = document.getElementById('confirm-icon');
+      if (!title) errs.push(which + 'the dialog has no title');
+      if (/^settingsWriteFailed/.test(title) || /^settingsWriteFailed/.test(msg)) {
+        errs.push(which + 'the dialog renders a raw i18n key: ' + title + ' / ' + msg);
+      }
+      if (!visible(icon) || !icon.querySelector('svg')) errs.push(which + 'the dialog has no icon');
+      document.getElementById('confirm-ok').click();
+      await sleep(400);
+      // Once per session: it must not come straight back after being closed.
+      if (visible(cm)) errs.push(which + 'the dialog reopened after it was closed');
+    }
+    // ---- the permanent record in the settings dialog ------------------------
+    document.getElementById('gear').click();
+    await sleep(200);
+    document.getElementById('expert-open').click();
+    await sleep(300);
+    const tabs = [...document.querySelectorAll('.expert-tab')];
+    if (!tabs.length) errs.push(which + 'the expert menu shows no tabs');
+    tabs[tabs.length - 1].click(); // the system tab, which holds the privacy group
+    await sleep(300);
+    const box = document.getElementById('expert-flags');
+    const notice = box.querySelector('.expert-notice[data-notice="settingsWriteFailed"]');
+    if (failed) {
+      if (!notice) {
+        errs.push(which + 'the privacy group carries no permanent warning row');
+      } else {
+        const text = notice.textContent.trim();
+        if (!text) errs.push(which + 'the warning row is empty');
+        if (/settingsWriteFailed/.test(text)) errs.push(which + 'the warning row renders a raw i18n key: ' + text);
+        notice.scrollIntoView({ block: 'nearest' });
+        const r = notice.getBoundingClientRect();
+        if (!r.width || !r.height) errs.push(which + 'the warning row takes up no space');
+        // It reports what the disk is doing right now, so it must not be
+        // switchable off: no control of any kind inside it.
+        if (notice.querySelector('input, button, select')) {
+          errs.push(which + 'the warning row offers a control to silence it');
+        }
+      }
+    } else {
+      if (notice) errs.push(which + 'a warning row is shown although the write succeeded');
+      // And no hole where it would have gone: no container in the expert list
+      // that occupies vertical space while holding neither text nor children.
+      for (const el of box.querySelectorAll('div, p, section, li, label, fieldset')) {
+        if (el.children.length || el.textContent.trim()) continue;
+        if (el.getBoundingClientRect().height > 4) {
+          errs.push(which + 'an empty box takes up space in the settings page: ' +
+            (el.className || el.tagName));
+          break;
+        }
+      }
+    }
+  } catch (e) { errs.push(which + 'probe: ' + e.message); }
+  clearInterval(beat);
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 def unescape(s):
     for a, b in (("&quot;", '"'), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
         s = s.replace(a, b)
@@ -6281,6 +6383,35 @@ def main():
             m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
             errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
             print(f"-- store sealing ({tag} store)")
+            for e in errs:
+                print(f"   FAIL: {e}")
+            failed += len(errs)
+            if not errs:
+                print("   ok")
+
+        # 276: the settings-write-failure notice, both ways round -- same reasoning
+        # as the store-sealing pair above (its own boot, since the startup dialog
+        # only ever opens during startup).
+        for wfailed in (True, False):
+            tag = "failed" if wfailed else "ok"
+            side = tmp / "ui" / f"writefail-{tag}.html"
+            side.write_text(
+                (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+                .replace("<script",
+                         f'<script>window.__SETTINGS_WRITE_FAILED__ = {str(wfailed).lower()};</script>\n'
+                         '<script src="tauri_stub.js"></script>\n<script', 1)
+                .replace("</body>", WRITE_FAIL_PROBE + "</body>"),
+                encoding="utf-8")
+            proc = subprocess.run(
+                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+                 f"--user-data-dir={tmp / ('profile-writefail-%s' % tag)}", "--allow-file-access-from-files",
+                 "--window-size=1000,780", "--virtual-time-budget=45000",
+                 "--dump-dom", side.as_uri()],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=180)
+            m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+            errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+            print(f"-- settings write ({tag})")
             for e in errs:
                 print(f"   FAIL: {e}")
             failed += len(errs)

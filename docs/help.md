@@ -311,6 +311,12 @@ made automatically, and a permanent warning row (also with no off switch)
 appears in this same privacy group for as long as it is true. A factory reset
 or restoring a backup's settings both clear it.
 
+If a settings save itself cannot be written to disk (data folder full, no
+write permission), changes stay active for the rest of the session but are
+lost on restart. The app says so the same way: once in a dialog, and as a
+permanent row in this privacy group for as long as the last save is still
+failing — it clears itself the moment a save reaches disk again.
+
 ### System
 
 Update checks (never installs without asking), keyboard navigation, allowing
@@ -555,6 +561,13 @@ Datenbank angelegt, und eine dauerhafte Warnzeile (ebenfalls ohne Schalter)
 erscheint in derselben Datenschutz-Gruppe, solange es zutrifft. Ein Werksreset
 oder das Wiederherstellen der Einstellungen aus einem Backup löschen sie
 beide.
+
+Kann ein Einstellungs-Speichervorgang selbst nicht auf die Festplatte
+geschrieben werden (Datenordner voll, keine Schreibrechte), bleiben Änderungen
+für den Rest der Sitzung aktiv, gehen aber beim Neustart verloren. Die App
+sagt das genauso: einmal als Hinweis, und als dauerhafte Zeile in dieser
+Datenschutz-Gruppe, solange der letzte Speichervorgang fehlschlägt — sie
+verschwindet von selbst, sobald wieder erfolgreich gespeichert wird.
 
 **System** — Updates, Tastatur-Navigation, mehrere Instanzen, Datenordner.
 

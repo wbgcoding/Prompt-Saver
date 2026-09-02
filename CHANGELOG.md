@@ -796,6 +796,11 @@ voice dictation, the screenshot editor and the introduction tour ship on).
   reject an oversized image up front, the same protection OCR already had.
 - Confirming a CSV/TXT import now refuses if the file changed after the
   preview was shown, instead of importing something you never actually saw.
+- **You are now told when a settings change could not be saved to disk**
+  (a full data folder, missing write permission). The change still applies for
+  the rest of the session, but a dialog says it will be lost on restart, and a
+  permanent warning row stays in the privacy settings for as long as the next
+  save keeps failing — clearing itself the moment one succeeds again.
 
 ### Removed
 

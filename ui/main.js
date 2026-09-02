@@ -1658,7 +1658,7 @@ const EXPERT_TABS = [
   { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
     { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "gridViewBorder", "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }, "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
-    { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
+    { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
     { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances"], values: ["kbFocusFadeMs"], selects: ["updateCheckH"], paths: ["dataDir"] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
@@ -2203,6 +2203,10 @@ async function refreshSettingsLocked() {
   settingsLocked = (await invoke("settings_locked").catch(() => false)) === true;
   if (!$("settings-expert").classList.contains("hidden")) renderExpert();
 }
+// Whether the LAST settings write actually reached disk -- like storeSealed
+// (not settingsLocked) this can flip at any time mid-session, so the live
+// state comes from the existing "persist-failed" event rather than a poll.
+let settingsWriteFailed = false;
 const EXPERT_PATHS = {
   screenshotDir: {
     label: "valScreenshotDir",
@@ -2468,6 +2472,11 @@ const EXPERT_NOTICES = {
     when: () => settingsLocked,
     title: "settingsLockedRow",
     body: "settingsLockedRowNote",
+  },
+  settingsWriteFailed: {
+    when: () => settingsWriteFailed,
+    title: "settingsWriteFailedRow",
+    body: "settingsWriteFailedRowNote",
   },
 };
 
@@ -14212,8 +14221,28 @@ function bind() {
   });
   // save_prompts/save_trash used to fail silently to the user when both the DB
   // and the JSON fallback failed (disk full, permissions). One toast per event —
-  // a stuck disk would otherwise spam this on every edit.
-  listen("persist-failed", () => toast(t("persistFailed")));
+  // a stuck disk would otherwise spam this on every edit. A failed SETTINGS
+  // write gets the sticky treatment instead of the toast: it is a state, not a
+  // one-off event -- every setting changed for the rest of this session keeps
+  // failing the same way and is lost on restart, so it stays visible in the
+  // privacy group (like storeUnsealed) rather than something a missed toast
+  // could hide.
+  listen("persist-failed", (e) => {
+    if (e.payload === "settings") {
+      settingsWriteFailed = true;
+      warnSettingsWriteFailed();
+      if (!$("settings-expert").classList.contains("hidden")) renderExpert();
+    } else {
+      toast(t("persistFailed"));
+    }
+  });
+  // The disk problem that caused the above went away and a later settings write
+  // reached it again -- the notice does not need to survive that, so it comes
+  // straight back down (the dialog itself still stays told-once for the session).
+  listen("settings-write-recovered", () => {
+    settingsWriteFailed = false;
+    if (!$("settings-expert").classList.contains("hidden")) renderExpert();
+  });
   // Sealing broke while the app was already running. The startup question is long
   // over by then, so the backend pushes it instead of this window polling for it.
   listen("store-unsealed", () => {
@@ -14667,6 +14696,17 @@ async function warnStoreUnsealed() {
   return true;
 }
 
+// Same "told once, state lives on in the privacy group" shape as
+// warnStoreUnsealed above -- a stuck disk fails the same way on every
+// following write, so a second dialog would only be in the way.
+let settingsWriteFailedTold = false;
+async function warnSettingsWriteFailed() {
+  if (!settingsWriteFailed || settingsWriteFailedTold) return false;
+  settingsWriteFailedTold = true;
+  await infoDialog(t("settingsWriteFailedTitle"), t("settingsWriteFailedMsg"), ICON_WARN);
+  return true;
+}
+
 // Called once, right after seedExamplesIfNeeded(), from init()'s reveal(). Runs
 // AFTER offerTakeover() (the portable/installed data-folder adoption offer) so the
 // takeover question is always seen first, but is not suppressed by it any more: an
@@ -14760,6 +14800,16 @@ async function init() {
     // user about it straight away, so it has to be known before the window appears.
     storeSealed = (await invoke("store_sealed").catch(() => true)) !== false;
     refreshSettingsLocked();
+    // Not awaited: only a write that failed before this window was even listening
+    // (an early migration write, say) could already be true here -- everything
+    // after boot arrives live through the "persist-failed" event instead. The
+    // dialog itself is NOT opened from here -- it has to wait its turn in
+    // reveal()'s chain below, same as warnStoreUnsealed, or it races the
+    // takeover offer for the shared confirm-modal element.
+    invoke("settings_write_failed").then((v) => {
+      settingsWriteFailed = v === true;
+      if (!$("settings-expert").classList.contains("hidden")) renderExpert();
+    }).catch(() => {});
     invoke("default_screenshot_dir").then((d) => { defaultScreenshotDir = d || ""; }).catch(() => {});
     invoke("default_sync_dir").then((d) => { defaultSyncDir = d || ""; }).catch(() => {});
     // OCR language list -- fetched once, cached, "Automatic" is always
@@ -14804,6 +14854,7 @@ async function init() {
         // Ahead of the tour: an unencrypted store is the more urgent of the two,
         // and the tour is retried next launch (tourSeen is only written by it).
         const sealWarned = await warnStoreUnsealed();
+        await warnSettingsWriteFailed();
         await maybeOpenFirstRunTour(sealWarned);
       });
     };

@@ -2436,6 +2436,22 @@ fn settings_locked() -> bool {
     SETTINGS_LOCKED.load(Ordering::Relaxed)
 }
 
+// Whether the LAST settings write actually reached disk. Flips true the moment
+// write_settings_now exhausts both the database and the JSON fallback, and back
+// to false the moment a write succeeds again -- so it always reflects "is the
+// in-memory state ahead of what is on disk right now", not a sticky one-shot
+// like STORE_SEALED. The window reads it at startup (nothing to report from a
+// clean run) and gets the live flips through the existing "persist-failed"
+// event, which write_settings_now already emits with the "settings" payload --
+// no separate notifier plumbing needed here, unlike enc_str's SEAL_NOTIFY: this
+// function already takes an AppHandle directly, so it can just emit.
+static SETTINGS_WRITE_FAILED: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+fn settings_write_failed() -> bool {
+    SETTINGS_WRITE_FAILED.load(Ordering::Relaxed)
+}
+
 // Decrypt a stored value. Legacy (un-prefixed) values pass through for migration; an
 // undecryptable prefixed value (e.g. another Windows account) yields "" so the row is
 // skipped rather than fed garbage to the JSON parser.
@@ -3162,13 +3178,24 @@ fn write_settings_now(app: &AppHandle, settings: &Settings) -> bool {
     }
     if let Some(conn) = db_conn(app) {
         if db_write_settings(&conn, settings).is_ok() {
+            // Only announced on the actual true -> false transition (swap, not a
+            // plain store) -- every ordinary successful write also passes through
+            // here and must not spam the window with a recovery event it never
+            // regressed from.
+            if SETTINGS_WRITE_FAILED.swap(false, Ordering::Relaxed) {
+                let _ = app.emit("settings-write-recovered", ());
+            }
             return true;
         }
     }
     if !write_sealed_json(&data_dir(app).join("settings.json"), settings) {
         append_crash_log("persist failed: settings could not be written to the database or the JSON fallback");
+        SETTINGS_WRITE_FAILED.store(true, Ordering::Relaxed);
         let _ = app.emit("persist-failed", "settings");
         return false;
+    }
+    if SETTINGS_WRITE_FAILED.swap(false, Ordering::Relaxed) {
+        let _ = app.emit("settings-write-recovered", ());
     }
     true
 }
@@ -17320,6 +17347,7 @@ pub fn run() {
             current_data_dir,
             store_sealed,
             settings_locked,
+            settings_write_failed,
             set_data_dir,
             delete_data_dir,
             paste_into_previous,
@@ -20708,6 +20736,20 @@ mod tests {
         SETTINGS_LOCKED.store(false, Ordering::Relaxed);
         assert!(!settings_locked());
         SETTINGS_LOCKED.store(before, Ordering::Relaxed);
+    }
+
+    // Same shape as settings_locked_command_reports_the_flag above -- the actual
+    // flip lives in write_settings_now, which needs a real AppHandle no unit test
+    // here constructs, so this proves the read side: whatever the flag holds is
+    // exactly what the window's startup poll gets back, in both directions.
+    #[test]
+    fn settings_write_failed_command_reports_the_flag() {
+        let before = SETTINGS_WRITE_FAILED.load(Ordering::Relaxed);
+        SETTINGS_WRITE_FAILED.store(true, Ordering::Relaxed);
+        assert!(settings_write_failed());
+        SETTINGS_WRITE_FAILED.store(false, Ordering::Relaxed);
+        assert!(!settings_write_failed());
+        SETTINGS_WRITE_FAILED.store(before, Ordering::Relaxed);
     }
 
     #[test]
