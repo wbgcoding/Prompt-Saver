@@ -790,6 +790,8 @@ voice dictation, the screenshot editor and the introduction tour ship on).
   its own thread, so one stuck task can no longer hold up the others.
 - **Dictation started right after a previous one no longer picks up the
   earlier session's last sentence or gets stuck on listening.**
+- Update check, update download, PDF previews and clipboard-image reads no
+  longer occupy the app's async runtime while they run.
 
 ### Removed
 

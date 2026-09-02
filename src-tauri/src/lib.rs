@@ -4597,15 +4597,22 @@ fn scale_and_encode(img: image::DynamicImage) -> String {
 }
 
 // Async: dialogs and clipboard reads run off the main thread — the window
-// stays responsive and the pickers open without a noticeable delay.
+// stays responsive and the pickers open without a noticeable delay; the read
+// and image conversion below run on a blocking worker so they never occupy
+// the async runtime.
 #[tauri::command]
 async fn get_clipboard_image() -> Option<String> {
-    let mut cb = arboard::Clipboard::new().ok()?;
-    let data = cb.get_image().ok()?;
-    let bytes: Vec<u8> = data.bytes.into_owned();
-    let img = image::RgbaImage::from_raw(data.width as u32, data.height as u32, bytes)?;
-    let result = scale_and_encode(image::DynamicImage::ImageRgba8(img));
-    if result.is_empty() { None } else { Some(result) }
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut cb = arboard::Clipboard::new().ok()?;
+        let data = cb.get_image().ok()?;
+        let bytes: Vec<u8> = data.bytes.into_owned();
+        let img = image::RgbaImage::from_raw(data.width as u32, data.height as u32, bytes)?;
+        let result = scale_and_encode(image::DynamicImage::ImageRgba8(img));
+        if result.is_empty() { None } else { Some(result) }
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 // ---------- File clipboard (CF_HDROP) ----------
@@ -4739,27 +4746,35 @@ fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
 // plain file attachment without a preview. `page` is clamped against the
 // actual page count here, not by the caller — the stored number and the file can
 // disagree (a shorter PDF re-attached at the same path), and clamping is what
-// keeps that case showing the last page instead of nothing at all.
+// keeps that case showing the last page instead of nothing at all. Loading and
+// rendering run on a blocking worker so they never occupy the async runtime;
+// pdfium's own types are not `Send` and are created and dropped entirely
+// inside the closure, so only the `PathBuf` and `page` cross the boundary.
 #[tauri::command]
 async fn pdf_preview(app: AppHandle, path: String, page: Option<u32>) -> Option<String> {
     use pdfium_render::prelude::*;
     let lib = pdfium_lib_path(&app)?;
-    let bindings = Pdfium::bind_to_library(lib).ok()?;
-    let pdfium = Pdfium::new(bindings);
-    let document = pdfium.load_pdf_from_file(&path, None).ok()?;
-    let pages = document.pages();
-    let count = pages.len();
-    if count == 0 {
-        return None;
-    }
-    let index = page.unwrap_or(0).min(count as u32 - 1);
-    let page = pages.get(index as u16).ok()?;
-    let config = PdfRenderConfig::new()
-        .set_target_width(1000)
-        .set_maximum_height(1400);
-    let image = page.render_with_config(&config).ok()?.as_image();
-    let result = scale_and_encode(image);
-    if result.is_empty() { None } else { Some(result) }
+    tauri::async_runtime::spawn_blocking(move || {
+        let bindings = Pdfium::bind_to_library(lib).ok()?;
+        let pdfium = Pdfium::new(bindings);
+        let document = pdfium.load_pdf_from_file(&path, None).ok()?;
+        let pages = document.pages();
+        let count = pages.len();
+        if count == 0 {
+            return None;
+        }
+        let index = page.unwrap_or(0).min(count as u32 - 1);
+        let page = pages.get(index as u16).ok()?;
+        let config = PdfRenderConfig::new()
+            .set_target_width(1000)
+            .set_maximum_height(1400);
+        let image = page.render_with_config(&config).ok()?.as_image();
+        let result = scale_and_encode(image);
+        if result.is_empty() { None } else { Some(result) }
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 // IDs of prompts whose attached file OR media icon is gone. Still directly
@@ -14679,9 +14694,13 @@ fn app_version() -> String {
     APP_VERSION.to_string()
 }
 
+// Async: the release-info fetch runs on a blocking worker so it never
+// occupies the async runtime; the settings-lock read stays after the await
+// since it is short and purely in-memory.
 #[tauri::command]
 async fn check_update(state: State<'_, Db>) -> Result<UpdateInfo, String> {
-    match fetch_latest() {
+    let latest = tauri::async_runtime::spawn_blocking(fetch_latest).await.map_err(|e| e.to_string())?;
+    match latest {
         Some((version, url, notes)) => {
             let available = version_newer(&version, APP_VERSION);
             let skipped = available && lock(&state).settings.skipped_versions.contains(&version);
@@ -14922,6 +14941,30 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
     if !update_url_is_newer_release(&url) {
         return Err("this release is not newer than the installed version".to_string());
     }
+    // Download, verify and stage the installer on a blocking worker so none of
+    // it occupies the async runtime; only `url` (an owned String) moves in.
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> { install_update_blocking(url) })
+        .await
+        .map_err(|e| e.to_string())??;
+
+    // Exit slightly delayed so this command's reply still reaches the UI.
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(800));
+        if let Some(state) = app.try_state::<Db>() {
+            let store = state.lock().unwrap_or_else(|e| e.into_inner());
+            save_settings(&app, &store.settings);
+        }
+        #[cfg(windows)]
+        clipwatch::stop(); // lets DestroyWindow flush a pending auto-session for real
+        app.exit(0);
+    });
+    Ok(())
+}
+
+// The blocking body of `install_update` above, split out so it can run inside
+// `spawn_blocking` without an `AppHandle` (not needed here) crossing the
+// boundary.
+fn install_update_blocking(url: String) -> Result<(), String> {
     let resp = ureq::get(&url)
         .set("User-Agent", brand::USER_AGENT)
         .timeout(std::time::Duration::from_secs(300))
@@ -14996,18 +15039,6 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
     cmd.spawn().map_err(|e| format!("start installer: {}", e))?;
-
-    // Exit slightly delayed so this command's reply still reaches the UI.
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(800));
-        if let Some(state) = app.try_state::<Db>() {
-            let store = state.lock().unwrap_or_else(|e| e.into_inner());
-            save_settings(&app, &store.settings);
-        }
-        #[cfg(windows)]
-        clipwatch::stop(); // lets DestroyWindow flush a pending auto-session for real
-        app.exit(0);
-    });
     Ok(())
 }
 
