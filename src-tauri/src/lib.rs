@@ -11622,6 +11622,13 @@ fn data_url_bytes(data_url: &str) -> Vec<u8> {
 // user enabled folder-saving after the shot was taken). Returns the path.
 #[tauri::command]
 async fn save_screenshot_now(state: State<'_, Db>, data_url: String) -> Result<Option<String>, String> {
+    if !data_url_within_limit(&data_url, MAX_IMAGE_DATA_URL_BYTES) {
+        return Err(format!(
+            "image is too large ({} MB); the limit is {} MB",
+            data_url.len() as u64 / (1024 * 1024),
+            MAX_IMAGE_DATA_URL_BYTES / (1024 * 1024)
+        ));
+    }
     let bytes = data_url_bytes(&data_url);
     if bytes.is_empty() {
         return Ok(None);
@@ -11635,6 +11642,13 @@ async fn save_screenshot_now(state: State<'_, Db>, data_url: String) -> Result<O
 // path, or None if the user cancelled.
 #[tauri::command]
 async fn save_screenshot_as(app: AppHandle, data_url: String) -> Result<Option<String>, String> {
+    if !data_url_within_limit(&data_url, MAX_IMAGE_DATA_URL_BYTES) {
+        return Err(format!(
+            "image is too large ({} MB); the limit is {} MB",
+            data_url.len() as u64 / (1024 * 1024),
+            MAX_IMAGE_DATA_URL_BYTES / (1024 * 1024)
+        ));
+    }
     let bytes = data_url_bytes(&data_url);
     if bytes.is_empty() {
         return Err("empty image".to_string());
@@ -11687,6 +11701,9 @@ async fn delete_screenshot_file(state: State<'_, Db>, path: String) -> Result<bo
 // path onto the existing copy_image_to_clipboard helper.
 #[tauri::command]
 fn copy_image_data(data_url: String) -> bool {
+    if !data_url_within_limit(&data_url, MAX_IMAGE_DATA_URL_BYTES) {
+        return false;
+    }
     copy_image_to_clipboard(&data_url)
 }
 
@@ -12538,7 +12555,16 @@ struct VoiceHandle {
 struct VoiceState(Mutex<Option<VoiceHandle>>, std::sync::atomic::AtomicBool);
 
 const MAX_OCR_IMAGE_BYTES: u64 = 200 * 1024 * 1024; // a single image, not a whole export (MAX_IMPORT_BYTES)
+// Encoded length of a data URL handed over IPC; a 4K PNG from the screenshot
+// editor is ~40 MB, so this only stops runaway input.
+const MAX_IMAGE_DATA_URL_BYTES: u64 = 200 * 1024 * 1024;
 const OCR_IMAGE_EXTS: [&str; 5] = ["png", "jpg", "jpeg", "bmp", "webp"];
+
+// Shared oversized-input guard for a data URL decoded straight from IPC —
+// each caller supplies its own ceiling (OCR keeps its own MAX_OCR_IMAGE_BYTES).
+fn data_url_within_limit(data_url: &str, limit: u64) -> bool {
+    data_url.len() as u64 <= limit
+}
 
 // Pure decision for mod ocr's resize_for_ocr: shrink an oversized image down to
 // max_dim, enlarge a very small one 2x, or leave it alone. Kept outside
@@ -12803,7 +12829,7 @@ async fn ocr_image_data(data_url: String, upscale_under_px: u32, join_lines: boo
     // Same ceiling as the file-based path (check_import_size) -- this one
     // arrives straight over IPC with no on-disk size to check ahead of time,
     // so nothing bounded the encoded + decoded + RGBA buffers below before now.
-    if data_url.len() as u64 > MAX_OCR_IMAGE_BYTES {
+    if !data_url_within_limit(&data_url, MAX_OCR_IMAGE_BYTES) {
         return Err(format!(
             "file is too large ({} MB); the limit is {} MB",
             data_url.len() as u64 / (1024 * 1024),
@@ -18947,6 +18973,14 @@ mod tests {
     fn voice_text_event_serialises_with_its_token() {
         let json = serde_json::to_string(&VoiceTextEvent { id: 1, token: 42, text: "hi".into() }).unwrap();
         assert!(json.contains("\"token\":42"));
+    }
+
+    #[test]
+    fn data_url_within_limit_rejects_one_byte_over_and_accepts_exactly_at() {
+        let at_limit = "x".repeat(10);
+        let one_over = "x".repeat(11);
+        assert!(data_url_within_limit(&at_limit, 10));
+        assert!(!data_url_within_limit(&one_over, 10));
     }
 
     #[test]
