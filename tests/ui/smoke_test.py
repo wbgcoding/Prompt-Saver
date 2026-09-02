@@ -1018,8 +1018,56 @@ PROBE = """
         if (otherStart) {
           out.errors.push('199: a chain-start button stayed clickable while a chain is running');
         }
-        await click('chain-btn'); // leave chain mode again
+        // chainLock ships on, so a single click latches rather than exits (off ->
+        // on -> latched -> off) -- cycle until it is actually gone, not just once.
+        for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
         await sleep(150);
+      }
+    }
+    // 275: every badge a tile can show AT ONCE must not visually overlap --
+    // select checkbox, chain-start (or chain-badge once picked), rotate badge
+    // and the actions menu. Not favorite/hotkey -- neither renders as a tile
+    // badge in this app (only in the library row and the editor), so there
+    // is nothing there that could ever overlap. Select/chain-start/the menu
+    // button only reveal on :hover, which page script cannot trigger in a
+    // real browser (CSS :hover tracks actual pointer state, not synthetic
+    // events) -- forcing their opacity measures the exact geometry a real
+    // hover would produce, without pretending hover itself was tested.
+    {
+      // Belt and braces: a probe upstream is only ever supposed to leave chain
+      // mode off, but a state-leak there must not silently invalidate this one.
+      for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
+      const rotTile = document.querySelector('#grid .tile[data-id="p10"]'); // fixture: has variants + no file/copy_image
+      const checkOverlap = (label, selectors) => {
+        const els = selectors.map((sel) => rotTile.querySelector(sel)).filter(Boolean);
+        const restore = els.map((el) => [el, el.style.opacity]);
+        els.forEach((el) => { el.style.opacity = "1"; });
+        for (let i = 0; i < els.length; i++) {
+          for (let j = i + 1; j < els.length; j++) {
+            const a = els[i].getBoundingClientRect();
+            const b = els[j].getBoundingClientRect();
+            const ix = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+            const iy = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+            if (ix * iy > 4) {
+              out.errors.push('275: ' + label + ' badges overlap at ' + window.innerWidth + 'px: ' +
+                els[i].className + ' / ' + els[j].className);
+            }
+          }
+        }
+        restore.forEach(([el, val]) => { el.style.opacity = val; });
+      };
+      if (!rotTile) {
+        out.errors.push('275: fixture tile p10 (rotating, chain-capable) missing from the grid');
+      } else {
+        checkOverlap('idle', ['.tile-select', '.tile-chain-start', '.tile-rotate-badge', '.tile-menu']);
+        const startBtn = rotTile.querySelector('.tile-chain-start');
+        if (startBtn) {
+          startBtn.click();
+          await sleep(150);
+          checkOverlap('picked mid-chain', ['.tile-chain-badge', '.tile-rotate-badge', '.tile-menu']);
+          for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
+          await sleep(100);
+        }
       }
     }
     await click('clip-btn');
@@ -4281,6 +4329,42 @@ PROBE = """
           }
         }
         saveBtn.textContent = prev;
+      }
+    }
+    // 275: about-btn/update-btn/update-version share a fixed one-third-width
+    // column each -- the longest translation in each of the 11 languages must
+    // not overflow its own box, at the two smallest viewports the suite runs.
+    if (window.innerWidth <= 740) {
+      const aboutBtn = document.getElementById('about-btn');
+      const updateBtn = document.getElementById('update-btn');
+      const updateVersion = document.getElementById('update-version');
+      if (!aboutBtn || !updateBtn || !updateVersion) {
+        out.errors.push('about-btn, update-btn or update-version missing at ' + window.innerWidth + 'px');
+      } else {
+        const fits = (el) => el.scrollHeight <= el.clientHeight + 1 && el.scrollWidth <= el.clientWidth + 1;
+        const prevAbout = aboutBtn.textContent;
+        for (const word of ['About', 'Über', 'Acerca de', 'Informazioni', 'Sobre', 'O programie', '关于', 'バージョン情報', 'Over', 'Hakkında', 'Despre']) {
+          aboutBtn.textContent = word;
+          if (!fits(aboutBtn)) out.errors.push('about-btn overflows with "' + word + '" at ' + window.innerWidth + 'px');
+        }
+        aboutBtn.textContent = prevAbout;
+        const prevUpdate = updateBtn.textContent;
+        for (const word of ['Check for updates', 'Update suchen', 'Buscar actualizaciones', 'Cerca aggiornamenti',
+          'Verificar atualizações', 'Sprawdź aktualizacje', '检查更新', 'アップデートを確認', 'Controleren op updates',
+          'Güncellemeleri denetle', 'Caută actualizări']) {
+          updateBtn.textContent = word;
+          if (!fits(updateBtn)) out.errors.push('update-btn overflows with "' + word + '" at ' + window.innerWidth + 'px');
+        }
+        updateBtn.textContent = prevUpdate;
+        const prevVersion = updateVersion.textContent;
+        for (const word of ['Version 2.7.0', 'Version 2.7.0', 'Versión 2.7.0', 'Versione 2.7.0', 'Versão 2.7.0',
+          'Wersja 2.7.0', '版本 2.7.0', 'バージョン 2.7.0', 'Versie 2.7.0', 'Sürüm 2.7.0', 'Versiunea 2.7.0']) {
+          updateVersion.textContent = word;
+          if (updateVersion.scrollHeight > updateVersion.clientHeight + 1) {
+            out.errors.push('update-version wraps to a second line with "' + word + '" at ' + window.innerWidth + 'px');
+          }
+        }
+        updateVersion.textContent = prevVersion;
       }
     }
     // The changelog popup renders the release Markdown instead of dumping it, and
