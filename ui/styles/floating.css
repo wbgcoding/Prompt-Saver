@@ -272,7 +272,7 @@ body.menu-open .pill { flex: 0 0 auto; }
 }
 .size-row button.sel {
   background: var(--pill-bg);
-  color: #fff;
+  color: var(--pill-fg);
 }
 /* X in the top row closing the menu. */
 .size-row .menu-close {
