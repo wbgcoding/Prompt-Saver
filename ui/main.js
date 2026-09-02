@@ -329,6 +329,7 @@ function applyThemeVars(vars) {
   const style = document.documentElement.style;
   for (const key of THEME_VARS) style.removeProperty(`--${key}`);
   style.removeProperty("--shadow");
+  style.removeProperty("--select-chevron");
   for (const [key, value] of Object.entries(vars || {})) {
     if (THEME_VARS.includes(key) && HEX_RE.test(value)) style.setProperty(`--${key}`, value);
   }
@@ -337,6 +338,13 @@ function applyThemeVars(vars) {
   const accent = vars?.accent;
   if (HEX_RE.test(accent || "")) {
     style.setProperty("--shadow", `0 8px 28px color-mix(in srgb, ${accent} 32%, transparent)`);
+  }
+  // Same reasoning as --shadow above: a data-URI SVG cannot hold a var(), so a
+  // custom theme's own muted colour needs its own baked copy of the chevron
+  // or every select keeps showing the base theme's arrow colour.
+  const muted = vars?.muted;
+  if (HEX_RE.test(muted || "")) {
+    style.setProperty("--select-chevron", selectChevronVar(muted));
   }
 }
 
@@ -363,6 +371,13 @@ const DEFAULT_COLORS = [
 let COLORS = [...DEFAULT_COLORS];
 const PALETTE_LEN = DEFAULT_COLORS.length - 1; // editable hues (index 0 is "none")
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+// Same data-URI SVG every built-in theme bakes its own copy of in main.css
+// (each with that theme's --muted colour already substituted for the stroke,
+// since a data URI cannot hold a var()) -- this is the one JS-side copy, used
+// only to derive --select-chevron for a custom theme's runtime override.
+// Keep in sync with the CSS copy if the SVG itself ever changes.
+const selectChevronVar = (hex) =>
+  `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23${hex.slice(1)}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`;
 
 // Load the custom palette from settings (ui_texts.palette = JSON hex array), or
 // fall back to defaults. Invalid/partial data is ignored so colors never break.

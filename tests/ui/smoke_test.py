@@ -2891,6 +2891,30 @@ PROBE = """
       layoutScan('theme programmer');
       document.documentElement.setAttribute('data-theme', startTheme || 'system');
     }
+    // 277: each built-in theme bakes its own --select-chevron (a data-URI SVG
+    // cannot hold a var(), so the stroke colour is substituted per theme
+    // instead). Checked here, right after the settings dialog is shown, so
+    // #lang-select is a real visible <select> and not one buried inside an
+    // already-closed modal elsewhere in this probe.
+    {
+      const priorTheme2 = document.documentElement.getAttribute('data-theme');
+      const BUILTIN_THEMES2 = ['light', 'dark', 'programmer', 'neon', 'cyberpunk', 'mono', 'ocean'];
+      const chevronByTheme = {};
+      for (const theme of BUILTIN_THEMES2) {
+        document.documentElement.setAttribute('data-theme', theme);
+        chevronByTheme[theme] = getComputedStyle(document.getElementById('lang-select')).backgroundImage;
+      }
+      if (priorTheme2) document.documentElement.setAttribute('data-theme', priorTheme2);
+      else document.documentElement.removeAttribute('data-theme');
+      const vals = Object.values(chevronByTheme);
+      for (const [theme, v] of Object.entries(chevronByTheme)) {
+        if (!v || v === 'none') out.errors.push('select chevron in theme ' + theme + ': no background-image at all');
+        if (/888888/.test(v)) out.errors.push('select chevron in theme ' + theme + ': still the hardcoded grey');
+      }
+      if (new Set(vals).size !== BUILTIN_THEMES2.length) {
+        out.errors.push('select chevron: expected ' + BUILTIN_THEMES2.length + ' distinct colours across built-in themes, got ' + new Set(vals).size);
+      }
+    }
     await click('theme-edit-open');
     const tmodal = document.getElementById('theme-modal');
     if (tmodal.classList.contains('hidden')) {
@@ -2932,6 +2956,27 @@ PROBE = """
         }
         if (getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() === '#123456') {
           out.errors.push('reverting did not undo the live preview');
+        }
+      }
+      // 277: a custom theme's own --muted must re-derive the select chevron too,
+      // not just apply directly like the other colour tokens (a data-URI SVG
+      // cannot hold a var(), so this is its own derivation path). Re-queries the
+      // rows fresh -- the earlier revert rebuilt them, so `rows` above is stale.
+      {
+        const freshRows = [...document.querySelectorAll('#theme-edit-vars .theme-var-row')];
+        const mutedHex = freshRows[5] && freshRows[5].querySelector('.theme-hex');
+        if (!mutedHex) {
+          out.errors.push('the muted colour row is missing');
+        } else {
+          mutedHex.value = '#334455';
+          mutedHex.dispatchEvent(new Event('input', { bubbles: true }));
+          await sleep(120);
+          const chevron = getComputedStyle(document.documentElement).getPropertyValue('--select-chevron');
+          if (!/334455/i.test(chevron)) {
+            out.errors.push('a custom theme muted colour does not re-derive the select chevron: ' + chevron);
+          }
+          await click('theme-edit-revert');
+          await sleep(120);
         }
       }
       // 76: switch to the stored theme (ct1) so it has a real id — the editor

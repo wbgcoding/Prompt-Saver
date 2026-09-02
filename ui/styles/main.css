@@ -35,6 +35,11 @@
   --hl-kw: #8250df;
   --hl-fn: #0550ae;
   --hl-font-px: 13px;
+  /* Select chevron: a data-URI SVG cannot hold a var(), so every theme bakes its
+     own copy with that theme's --muted colour already baked in as the stroke.
+     Template mirrored for a custom theme's runtime override in main.js
+     (selectChevronVar) — keep both in sync if the SVG ever changes. */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666d7a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
 :root[data-theme="dark"] {
   --bg: #1b1b1d;
@@ -52,6 +57,7 @@
   --hl-num: #ffa657;
   --hl-kw: #ff7b72;
   --hl-fn: #79c0ff;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
 /* Programmer: terminal look — near-black panels, console green, monospace UI. */
 :root[data-theme="programmer"] {
@@ -70,6 +76,7 @@
   --hl-num: #79c0ff;
   --hl-kw: #ff7b72;
   --hl-fn: #d2a8ff;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
 :root[data-theme="programmer"] body {
   font-family: Consolas, "Cascadia Mono", monospace;
@@ -91,6 +98,7 @@
   --hl-num: #fbbf24;
   --hl-kw: #f0abfc;
   --hl-fn: #93c5fd;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a78bda' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
 /* Ocean: airy sky blues, calm sea accent. */
 :root[data-theme="ocean"] {
@@ -104,6 +112,7 @@
   --accent-fg: #ffffff;
   --danger: #dc2626;
   --shadow: 0 8px 24px rgba(2, 132, 199, 0.15);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235e6d82' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
 /* Cyberpunk: neon pink on a night-city black. */
 :root[data-theme="cyberpunk"] {
@@ -122,6 +131,7 @@
   --hl-num: #fbbf24;
   --hl-kw: #ff5d9e;
   --hl-fn: #a5b4fc;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238383a4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
 /* Black & White: clean monochrome, zero distraction. */
 :root[data-theme="mono"] {
@@ -141,6 +151,7 @@
   --hl-num: #5e5e5e;
   --hl-kw: #111111;
   --hl-fn: #6d6d6d;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236c6c6c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
 
 * { box-sizing: border-box; }
@@ -2548,7 +2559,10 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   padding: 10px 12px;
   font: inherit;
   color: var(--fg);
-  background: var(--surface-2);
+  /* background-color, not the background shorthand: the shorthand resets
+     background-image to none, which clobbers a select's --select-chevron
+     (class beats the plain `select` tag selector on specificity). */
+  background-color: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 8px;
   outline: none;
@@ -3202,7 +3216,7 @@ select,
   appearance: none; -webkit-appearance: none;
   padding-right: 30px;
   cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-image: var(--select-chevron);
   background-repeat: no-repeat;
   background-position: right 9px center;
   background-size: 14px;
@@ -3490,7 +3504,7 @@ body.drag-over::after {
   padding: 5px 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--surface-2);
+  background-color: var(--surface-2);
   color: var(--fg);
   font: inherit;
   font-size: 12px;
