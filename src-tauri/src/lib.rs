@@ -15651,9 +15651,11 @@ fn import_sig(name: &str, text: &str, file: &str, image: &str, copy: bool) -> St
     format!("{name}\u{1}{text}\u{1}{file}\u{1}{image}\u{1}{copy}")
 }
 
-fn parse_import_file(path: &std::path::Path) -> Result<ImportData, String> {
-    let content = String::from_utf8(read_file_capped(path, MAX_IMPORT_BYTES)?)
-        .map_err(|_| "the file is not valid UTF-8 text".to_string())?;
+// Parse already-read file bytes (the caller reads once, hashes those same
+// bytes for the changed-since-preview check, and parses them here — never a
+// second read of the file).
+fn parse_import_bytes(bytes: &[u8], path: &std::path::Path) -> Result<ImportData, String> {
+    let content = String::from_utf8(bytes.to_vec()).map_err(|_| "the file is not valid UTF-8 text".to_string())?;
     let is_csv = path
         .extension()
         .map(|e| e.to_string_lossy().to_lowercase() == "csv")
@@ -15665,9 +15667,17 @@ fn parse_import_file(path: &std::path::Path) -> Result<ImportData, String> {
     Ok(data)
 }
 
+fn import_file_hash(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(bytes))
+}
+
 // What an import WOULD do, without touching the store — the file is picked
 // here, and its path travels back so the confirm step (import_prompts) can
-// re-read the SAME file without a second file dialog.
+// re-read the SAME file without a second file dialog. `hash` lets the confirm
+// step detect the file changing underneath the preview (someone editing or
+// replacing it in that window) instead of silently importing something the
+// user never saw.
 #[derive(Serialize)]
 struct ImportPreviewItem {
     name: String,
@@ -15676,6 +15686,7 @@ struct ImportPreviewItem {
 #[derive(Serialize)]
 struct ImportPreview {
     path: String,
+    hash: String,
     items: Vec<ImportPreviewItem>,
 }
 #[tauri::command]
@@ -15686,7 +15697,9 @@ async fn preview_import(app: AppHandle, state: State<'_, Db>) -> Result<ImportPr
     let Some(path) = file else {
         return Err("canceled".to_string());
     };
-    let data = parse_import_file(&path)?;
+    let bytes = read_file_capped(&path, MAX_IMPORT_BYTES)?;
+    let hash = import_file_hash(&bytes);
+    let data = parse_import_bytes(&bytes, &path)?;
     let store = lock(&state);
     let mut seen: std::collections::HashSet<String> = store
         .prompts
@@ -15701,15 +15714,22 @@ async fn preview_import(app: AppHandle, state: State<'_, Db>) -> Result<ImportPr
             ImportPreviewItem { name: item.name, duplicate: dup }
         })
         .collect();
-    Ok(ImportPreview { path: path.to_string_lossy().to_string(), items })
+    Ok(ImportPreview { path: path.to_string_lossy().to_string(), hash, items })
 }
 
 // Async: parsing + persisting an import stays off the UI thread. `path` comes
 // from a prior preview_import call — never a fresh file dialog here, so
-// confirming a preview can never silently import a DIFFERENT file.
+// confirming a preview can never silently import a DIFFERENT file. `hash` is
+// that same preview's digest of the file it showed; a mismatch here means the
+// file changed after the preview was shown, and the import is refused rather
+// than importing content the user never actually saw.
 #[tauri::command]
-async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String) -> Result<usize, String> {
-    let data = parse_import_file(std::path::Path::new(&path))?;
+async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String, hash: String) -> Result<usize, String> {
+    let bytes = read_file_capped(std::path::Path::new(&path), MAX_IMPORT_BYTES)?;
+    if import_file_hash(&bytes) != hash {
+        return Err("import-changed".to_string());
+    }
+    let data = parse_import_bytes(&bytes, std::path::Path::new(&path))?;
 
     // Prompts-only import: never touch app settings, views or layout, even if an
     // older export file still carries those blocks (they are parsed but ignored).
@@ -18981,6 +19001,19 @@ mod tests {
         let one_over = "x".repeat(11);
         assert!(data_url_within_limit(&at_limit, 10));
         assert!(!data_url_within_limit(&one_over, 10));
+    }
+
+    // import_prompts refuses a file that changed since preview_import hashed
+    // it (the real gate is a one-line `!=` compare in import_prompts itself,
+    // which needs a live AppHandle to exercise directly — this proves the
+    // hash it compares against actually distinguishes an edited file from
+    // the original and is stable for an unchanged one).
+    #[test]
+    fn import_file_hash_changes_with_the_file_content() {
+        let original = import_file_hash(b"name,text\r\nA,B\r\n");
+        let edited = import_file_hash(b"name,text\r\nA,C\r\n");
+        assert_ne!(original, edited);
+        assert_eq!(original, import_file_hash(b"name,text\r\nA,B\r\n"));
     }
 
     #[test]

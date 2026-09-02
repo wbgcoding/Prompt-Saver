@@ -11366,15 +11366,17 @@ async function runImportPreview() {
     $("import-preview-cancel").addEventListener("click", onCancel);
     $("import-preview-close").addEventListener("click", onCancel);
   });
-  return confirmed ? preview.path : null;
+  return confirmed ? { path: preview.path, hash: preview.hash } : null;
 }
 async function runImport() {
-  const path = await runImportPreview();
-  if (!path) return;
+  const picked = await runImportPreview();
+  if (!picked) return;
   try {
     // No withDialog here — import_prompts re-reads the already-picked file, it
     // never opens a native dialog itself (that guard is preview_import's job).
-    const count = await invoke("import_prompts", { path });
+    // hash is preview_import's digest of that same file -- import_prompts
+    // refuses if the file changed underneath the preview.
+    const count = await invoke("import_prompts", { path: picked.path, hash: picked.hash });
     if (count == null) return;
     await renderGrid(); // refreshes prompts AND settings
     // Imported preferences apply on the spot — no restart needed.
@@ -11400,7 +11402,8 @@ async function runImport() {
     toast(t("imported").replace("{n}", count.toLocaleString(LANG)));
     maybeDupImportToast(); // Flag near-duplicates the import may have introduced
   } catch (err) {
-    if (String(err) !== "canceled") toast(t("importFailed"));
+    if (String(err) === "import-changed") toast(t("importChanged"));
+    else if (String(err) !== "canceled") toast(t("importFailed"));
   }
 }
 

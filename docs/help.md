@@ -341,7 +341,9 @@ again. A rotating tile is only compared on its first entry.
 Plain CSV/TXT export for the text alone, or a full backup file with everything —
 tiles, views, layouts, colours, styles, and language. A CSV/TXT import shows a
 preview first — every incoming item's name and whether it would land as a
-duplicate — before anything is written; a full backup restores directly.
+duplicate — before anything is written; a full backup restores directly. If
+the file changes after the preview is shown, confirming the import is refused
+rather than importing something different from what was previewed.
 
 ### Markdown folder sync (beta)
 
@@ -569,7 +571,9 @@ aus. Eine wechselnde Kachel wird nur nach ihrem ersten Eintrag verglichen.
 
 **Import & Export** — CSV/TXT nur für den reinen Text, volle Sicherung für
 alles. Ein CSV/TXT-Import zeigt vorher eine Vorschau mit Name und
-Duplikat-Kennzeichnung; eine volle Sicherung stellt direkt wieder her.
+Duplikat-Kennzeichnung; eine volle Sicherung stellt direkt wieder her. Ändert
+sich die Datei nach der Vorschau, wird der Import verweigert statt etwas
+anderes zu importieren als angezeigt.
 
 **Markdown-Ordner-Sync (Beta)** — spiegelt jede Text-Kachel als lesbare
 `.md`-Datei in einem gewählten Ordner, inklusive Ansicht, Rasterzelle und

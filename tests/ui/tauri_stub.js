@@ -362,12 +362,20 @@ const RESULTS = {
   // 88: two new prompts, one duplicate of something already in the library.
   preview_import: () => ({
     path: "C:\\fake\\import.csv",
+    hash: "deadbeef",
     items: [
       { name: "New A", duplicate: false },
       { name: "Old B", duplicate: true },
       { name: "New C", duplicate: false },
     ],
   }),
+  // 273: the real command rejects a confirm that never sends the preview's
+  // hash back -- the stub does the same so a frontend regression that drops
+  // the argument fails loudly instead of silently importing.
+  import_prompts: (a) => {
+    if (!a || !a.hash) throw new Error("import_prompts stub called without hash");
+    return 2; // New A + New C from the preview fixture above
+  },
   list_backups: () => [
     { name: "2026-07-25_18-30-00", size: 812345, prompts: 12, items: [
       { name: "Draft reply", chars: 214, kind: "text" },

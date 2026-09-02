@@ -794,6 +794,8 @@ voice dictation, the screenshot editor and the introduction tour ship on).
   longer occupy the app's async runtime while they run.
 - Copying an edited screenshot to the clipboard and saving one to disk now
   reject an oversized image up front, the same protection OCR already had.
+- Confirming a CSV/TXT import now refuses if the file changed after the
+  preview was shown, instead of importing something you never actually saw.
 
 ### Removed
 
