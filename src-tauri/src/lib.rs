@@ -513,7 +513,7 @@ async fn set_hotkey(app: AppHandle, state: State<'_, Db>, hotkey: String) -> Res
     }
     {
         let mut store = lock(&state);
-        store.settings.hotkey = hk.clone();
+        store.settings.hotkey = hk;
         save_settings(&app, &store.settings);
     }
     // One place owns the registered set, so the app hotkey is re-armed together
@@ -547,7 +547,7 @@ async fn set_voice_hotkey(app: AppHandle, state: State<'_, Db>, hotkey: String) 
     }
     {
         let mut store = lock(&state);
-        store.settings.voice_hotkey = hk.clone();
+        store.settings.voice_hotkey.clone_from(&hk);
         save_settings(&app, &store.settings);
     }
     // rearm_hotkeys' own return value only reports the APP hotkey's fate; a
@@ -698,17 +698,16 @@ async fn open_var_window(
 
     // A window closed by anything other than an answer (app quit, Esc racing the
     // command) must still release the copy waiting on it.
-    let app2 = app.clone();
     win.on_window_event(move |event| {
         if matches!(event, WindowEvent::Destroyed) {
-            if let Some(p) = app2.try_state::<VarPrompt>() {
+            if let Some(p) = app.try_state::<VarPrompt>() {
                 // Only cancel the request this window was built for. A newer one has
                 // a newer generation and belongs to the window that replaced this.
                 let mut slot = p.lock();
                 if slot.as_ref().is_some_and(|(g, _)| *g == gen) {
                     slot.take();
                     drop(slot);
-                    let _ = app2.emit_to("main", "vars-filled", Option::<String>::None);
+                    let _ = app.emit_to("main", "vars-filled", Option::<String>::None);
                 }
             }
         }
@@ -5679,7 +5678,7 @@ async fn batch_prompts(
                 .collect();
             for p in store.prompts.iter_mut() {
                 if idset.contains(p.id.as_str()) {
-                    p.color = c.clone();
+                    p.color.clone_from(&c);
                 }
             }
             if !save_prompts(&app, &store) {
@@ -6537,7 +6536,7 @@ fn add_view(app: AppHandle, state: State<Db>, name: String, color: String) -> Re
         layouts: HashMap::new(),
         color: color.trim().to_string(),
     };
-    store.settings.active_view = view.id.clone();
+    store.settings.active_view.clone_from(&view.id);
     store.settings.views.push(view);
     save_settings(&app, &store.settings);
     Ok(store.settings.clone())
@@ -6654,7 +6653,8 @@ fn delete_view(app: AppHandle, state: State<Db>, id: String) -> Result<Settings,
     }
     store.settings.views.retain(|v| v.id != id);
     if store.settings.active_view == id {
-        store.settings.active_view = store.settings.views[0].id.clone();
+        let first_id = store.settings.views[0].id.clone();
+        store.settings.active_view.clone_from(&first_id);
     }
     // The deleted view must not linger in a group, and a group that just lost its
     // last member dissolves instead of becoming an empty folder tab.
@@ -6937,7 +6937,7 @@ fn take_out_of_tile_folder(
         if free {
             // Whoever sits there moves on: the grid never stacks two prompts.
             layout.retain(|_, c| *c != cell);
-            layout.insert(id.clone(), cell);
+            layout.insert(id, cell);
         }
     }
     let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
@@ -7559,7 +7559,7 @@ fn backup_prompt_count(folder: &std::path::Path) -> Option<usize> {
     let path = if db.extension().map(|e| e == "gz").unwrap_or(false) {
         tmp = folder.join("count.tmp");
         gunzip_to(&db, &tmp).ok()?;
-        tmp.clone()
+        tmp
     } else {
         db
     };
@@ -7637,7 +7637,7 @@ fn backup_prompt_names(folder: &std::path::Path) -> Vec<BackupPrompt> {
         if gunzip_to(&db, &tmp).is_err() {
             return Vec::new();
         }
-        tmp.clone()
+        tmp
     } else {
         db
     };
@@ -10093,7 +10093,7 @@ async fn float_drag_hint(app: AppHandle, state: State<'_, Db>, id: String, activ
     if !on {
         return Ok(());
     }
-    let handle = app.clone();
+    let handle = app;
     tauri::async_runtime::spawn(async move {
         for _ in 0..HINT_MAX_TICKS {
             tokio::time::sleep(std::time::Duration::from_millis(HINT_TICK_MS)).await;
@@ -10186,7 +10186,7 @@ async fn float_folder_drop(app: AppHandle, state: State<'_, Db>, id: String) -> 
             None => match store.settings.float_folders.iter_mut().find(|f| f.id == key) {
                 Some(folder) => {
                     if !folder.members.iter().any(|m| m == &id) {
-                        folder.members.push(id.clone());
+                        folder.members.push(id);
                     }
                 }
                 None => return Ok(false),
@@ -10358,7 +10358,7 @@ fn rename_float_folder(app: AppHandle, state: State<Db>, id: String, name: Strin
     {
         let mut store = lock(&state);
         match store.settings.float_folders.iter_mut().find(|f| f.id == id) {
-            Some(folder) => folder.name = name.clone(),
+            Some(folder) => folder.name.clone_from(&name),
             None => return Err("unknown folder".to_string()),
         }
         save_settings(&app, &store.settings);
@@ -10508,7 +10508,7 @@ async fn remove_folder_member(
         store
             .settings
             .floating
-            .insert(id.clone(), Pos { x: nx.round() as i32, y: ny.round() as i32 });
+            .insert(id, Pos { x: nx.round() as i32, y: ny.round() as i32 });
         let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
         normalize_float_folders(&mut store.settings.float_folders, &ids);
         save_settings(&app, &store.settings);
@@ -15200,56 +15200,58 @@ fn to_csv(prompts: &[Prompt]) -> String {
 }
 
 fn to_txt(prompts: &[Prompt]) -> String {
+    use std::fmt::Write;
     let blocks: Vec<String> = prompts.iter().map(|p| {
         // Entries 2..n ride along inside the body itself, joined by the same
         // marker as CSV/Markdown-sync — never the bare "---" the blocks below are
         // themselves separated by.
         let mut block = format!("### {}\n{}", p.name, join_variants(&p.text, &p.variants));
         if !p.color.is_empty() {
-            block.push_str(&format!("\n@color {}", p.color));
+            let _ = write!(block, "\n@color {}", p.color);
         }
         if !p.notes.is_empty() {
-            block.push_str(&format!("\n@notes {}", notes_escape(&p.notes)));
+            let _ = write!(block, "\n@notes {}", notes_escape(&p.notes));
         }
         if !p.tags.is_empty() {
-            block.push_str(&format!("\n@tags {}", p.tags.join(",")));
+            let _ = write!(block, "\n@tags {}", p.tags.join(","));
         }
         // Per-tile style: "@style <font-key|-> <size>" ("-" = default font).
         if !p.font.is_empty() || p.font_size > 0 {
             let font = if p.font.is_empty() { "-" } else { &p.font };
-            block.push_str(&format!("\n@style {} {}", font, p.font_size));
+            let _ = write!(block, "\n@style {} {}", font, p.font_size);
         }
         if !p.file_path.is_empty() {
-            block.push_str(&format!("\n@file {}", p.file_path));
+            let _ = write!(block, "\n@file {}", p.file_path);
         }
         // Only a PDF attachment reads this, and 0 (the first page) is by far
         // the common case — skip the line entirely then, same as every other
         // optional field here.
         if p.pdf_page > 0 {
-            block.push_str(&format!("\n@pdfpage {}", p.pdf_page));
+            let _ = write!(block, "\n@pdfpage {}", p.pdf_page);
         }
         if !p.icon_path.is_empty() {
-            block.push_str(&format!("\n@icon {}", p.icon_path));
+            let _ = write!(block, "\n@icon {}", p.icon_path);
         }
         if !p.caption.is_empty() {
-            block.push_str(&format!("\n@caption {}", p.caption));
+            let _ = write!(block, "\n@caption {}", p.caption);
         }
         if p.caption_size > 0 {
-            block.push_str(&format!("\n@capsize {}", p.caption_size));
+            let _ = write!(block, "\n@capsize {}", p.caption_size);
         }
         if p.show_image || p.copy_image {
-            block.push_str(&format!(
+            let _ = write!(
+                block,
                 "\n@flags {} {}",
                 p.show_image as u8, p.copy_image as u8
-            ));
+            );
         }
         if !p.image.is_empty() {
-            block.push_str(&format!("\n@imagedata {}", p.image));
+            let _ = write!(block, "\n@imagedata {}", p.image);
         }
         // Order/random preference — sparse like every other optional field here
         // (a plain prompt, the overwhelming majority, never gets an empty line).
         if !p.rotate_mode.is_empty() {
-            block.push_str(&format!("\n@rotatemode {}", p.rotate_mode));
+            let _ = write!(block, "\n@rotatemode {}", p.rotate_mode);
         }
         block
     }).collect();
@@ -17070,7 +17072,7 @@ pub fn run() {
             #[cfg(windows)]
             {
                 start_lang_update_watcher(handle.clone(), ocr::CapKind::Ocr);
-                start_lang_update_watcher(handle.clone(), ocr::CapKind::Speech);
+                start_lang_update_watcher(handle, ocr::CapKind::Speech);
             }
             Ok(())
         })
@@ -17491,10 +17493,10 @@ fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
     }
     let mut p = base.clone();
     if let Some(v) = fields.get("name") {
-        p.name = v.clone();
+        p.name.clone_from(v);
     }
     if let Some(v) = fields.get("color") {
-        p.color = v.clone();
+        p.color.clone_from(v);
     }
     if let Some(v) = fields.get("tags") {
         let mut seen = std::collections::HashSet::new();
@@ -17505,17 +17507,17 @@ fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
             .collect();
     }
     if let Some(v) = fields.get("notes") {
-        p.notes = v.clone();
+        p.notes.clone_from(v);
     }
     // Media by reference. Absent field = an older or hand-written file that does not
     // describe media at all — leave whatever the prompt already has. Present but
     // empty = "this button carries no file", which really does clear it. `image`
     // (embedded binary) is deliberately not in this list; nothing here can express it.
     if let Some(v) = fields.get("file") {
-        p.file_path = v.clone();
+        p.file_path.clone_from(v);
     }
     if let Some(v) = fields.get("icon") {
-        p.icon_path = v.clone();
+        p.icon_path.clone_from(v);
     }
     if let Some(v) = fields.get("pdf_page") {
         // A garbled page number is ignored rather than reset to 0: page 0 is a valid
