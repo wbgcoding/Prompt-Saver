@@ -33,6 +33,13 @@ COMMENT_SYNTAX = {
 
 # "// 51:", "// 90-94:", "// 123.3:" -- a plan item wearing a colon.
 NUMBERED_COMMENT = re.compile(r"^\s*\d+(?:\s*[-,/.]\s*\d+)*\s*[:)]")
+# "… call (88) …", "async (215): …", "(90/92)", "122 review fix:", "34: catch it"
+# -- the same item reference, but buried mid-sentence instead of at the start.
+INLINE_ITEM_REF = re.compile(
+    r"(?<!\w)\(\s*\d{2,3}(?:\s*/\s*\d{2,3})*\s*[):]"  # (88)  (215):  (90/92) -- not O(64)
+    r"|(?<![\w.,%–/-])\b\d{2,3}:\s+[a-zA-Z]"      # 34: catch  101: load_store
+    r"|\b\d{2,3}\s+review\b"                      # 122 review fix
+)
 # "// 43" -- the bare item number, with nothing else in the comment at all. A
 # comment that says only a number tells a reader nothing either way.
 BARE_NUMBER_COMMENT = re.compile(r"^\s*\d+(?:\s*[-,/]\s*\d+)*\s*$")
@@ -89,6 +96,23 @@ EXCEPTIONS = [
         "file": "ui/main.js",
         "when": lambda line: "P3" in line and "cubic" in line.lower(),
         "reason": "An easing control point, not a work-item code.",
+    },
+    {
+        "file": "src-tauri/src/lib.rs",
+        "when": lambda line: 'b"PSB1"' in line,
+        "reason": "A byte-format spec (mode(1) | salt(16) | nonce(12)) -- the "
+                  "parenthesised numbers are field widths, not work-item refs.",
+    },
+    {
+        "file": "ui/main.js",
+        "when": lambda line: "Word-diff cap" in line,
+        "reason": "'(500: minimum where …)' documents a threshold value, not "
+                  "a work-item reference.",
+    },
+    {
+        "file": "ui/main.js",
+        "when": lambda line: "Snap legacy sizes" in line,
+        "reason": "'(13/15/18/22)' lists legacy pixel sizes, not work items.",
     },
 ]
 
@@ -155,6 +179,8 @@ def check_file(rel_path, text):
         found = None
         if NUMBERED_COMMENT.match(body) or BARE_NUMBER_COMMENT.match(body):
             found = "numbered work-item comment"
+        elif INLINE_ITEM_REF.search(comment):
+            found = "work-item reference '%s'" % INLINE_ITEM_REF.search(comment).group(0)
         elif WORK_ITEM_CODE.search(comment):
             found = "work-item code '%s'" % WORK_ITEM_CODE.search(comment).group(0)
         elif WORK_ITEM_WORD.search(comment):

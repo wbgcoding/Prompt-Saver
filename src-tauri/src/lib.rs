@@ -1,7 +1,7 @@
 // Application backend (Tauri v2). Local SQLite storage, clipboard, import/export,
 // multiple views, frameless floating quick-copy windows. No network, 100% offline.
 
-// clippy::pedantic and clippy::nursery were run once (213) as a deliberately
+// clippy::pedantic and clippy::nursery were run once as a deliberately
 // stricter pass, not adopted as standing lints. Together they raised ~1080
 // warnings, almost all pure style noise for this codebase specifically: heavy
 // Win32 FFI and image-processing code makes hundreds of `as` casts
@@ -226,7 +226,7 @@ enum HotkeyOwner {
 // app hotkey wins, then voice dictation, then prompts in list order. `per_prompt`
 // is the promptHotkeys feature toggle -- off leaves the stored accelerators alone
 // and simply registers none of them. `voice_hotkey` is only ever Some when both
-// the `voice` and `voiceHotkey` flags are on (131) -- an already-resolved choice,
+// the `voice` and `voiceHotkey` flags are on -- an already-resolved choice,
 // not re-checked here.
 fn hotkey_plan(
     app_hotkey: &str,
@@ -405,7 +405,7 @@ fn fire_prompt_hotkey(app: &AppHandle, id: &str) {
 // just without ever bringing the window forward. A running session is stopped
 // exactly the way voice_stop's own command body does (send "manual" on its
 // channel); starting one is left to the main window's own JS, which already
-// owns every setting lookup, the command-word post-processing (128) and where
+// owns every setting lookup, the command-word post-processing and where
 // the finished text goes -- the window stays fully capable of all of that while
 // hidden, the same way a prompt hotkey already copies without ever showing it.
 fn toggle_voice_from_hotkey(app: &AppHandle) {
@@ -1608,7 +1608,7 @@ struct Settings {
     // Global hotkey accelerator (e.g. "CommandOrControl+Shift+P"); empty = off.
     #[serde(default)]
     hotkey: String,
-    // Global voice-dictation hotkey (131); empty = off. Checked/cleaned through the
+    // Global voice-dictation hotkey; empty = off. Checked/cleaned through the
     // exact same functions as `hotkey` above -- see HotkeyOwner.
     #[serde(default)]
     voice_hotkey: String,
@@ -2183,7 +2183,7 @@ fn data_dir(app: &AppHandle) -> PathBuf {
 // "Missing" (nothing there yet, safe to treat as empty) and "unreadable" (a file IS
 // there but DPAPI/JSON decoding failed — wrong Windows account, corruption) are
 // different situations: a caller that folds both into a bare default silently
-// replaces real, still-present data with an empty one (34).
+// replaces real, still-present data with an empty one.
 enum SealedRead<T> {
     Missing,
     Unreadable,
@@ -3062,7 +3062,7 @@ fn db_list_clips(conn: &Connection) -> Vec<ClipItem> {
 }
 
 // Returns whether the prompts made it to durable storage (DB or JSON fallback) —
-// callers that follow a save with a destructive step (102: deleting an orphaned
+// callers that follow a save with a destructive step (deleting an orphaned
 // attachment file) must skip that step when this is false, or the deletion can
 // outlive the very change that made the file orphaned.
 fn save_prompts(app: &AppHandle, store: &Store) -> bool {
@@ -3086,7 +3086,7 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
             return true;
         }
     }
-    // Last resort: JSON fallback. 101: load_store() reads this back and retries the
+    // Last resort: JSON fallback. load_store() reads this back and retries the
     // DB write on next launch, so a fallback here is not itself data loss. If even
     // this fails (disk full / permission), the change really is lost — leave a
     // diagnosable trace instead of failing silently.
@@ -4736,7 +4736,7 @@ fn pdfium_lib_path(app: &AppHandle) -> Option<PathBuf> {
 
 // Render one page of a PDF to a preview image (data URL). Returns None if pdfium
 // is unavailable or the file cannot be read — the caller then keeps the PDF as a
-// plain file attachment without a preview. `page` (83) is clamped against the
+// plain file attachment without a preview. `page` is clamped against the
 // actual page count here, not by the caller — the stored number and the file can
 // disagree (a shorter PDF re-attached at the same path), and clamping is what
 // keeps that case showing the last page instead of nothing at all.
@@ -4766,7 +4766,7 @@ async fn pdf_preview(app: AppHandle, path: String, page: Option<u32>) -> Option<
 // invokable for a one-off "I just fixed/replaced a file, recheck now" refresh
 // (main.js after an edit, floating.js whenever a pill's prompt data reloads) -
 // the AMBIENT every-few-seconds refresh is start_missing_files_poll below.
-// async + spawn_blocking (215): the lock was already released before stat'ing
+// async + spawn_blocking: the lock was already released before stat'ing
 // (below) so it never blocked other DB ops, but Path::exists() on a slow or
 // unreachable network path is a genuinely blocking syscall -- with a plain fn,
 // every 5s poll (and the direct-invoke refresh) still tied up an IPC dispatch
@@ -4862,8 +4862,8 @@ fn first_free_cell_excluding(view: &View, extra: &[[u32; 2]]) -> Option<[u32; 2]
 }
 
 // Places every id from `ids` that isn't already in `layout` into a free cell,
-// counting `extra_occupied` (105: e.g. a grid folder's own cell, which lives
-// outside `layout`) as taken too. All-or-nothing (104): if there isn't room for
+// counting `extra_occupied` (e.g. a grid folder's own cell, which lives
+// outside `layout`) as taken too. All-or-nothing: if there isn't room for
 // every id, nothing is placed and `layout` is left exactly as it was, so a caller
 // that already removed these ids from somewhere else can react to the failure
 // instead of stranding them.
@@ -6792,7 +6792,7 @@ fn set_view_group_member(
 // renderer because its cell is cleared to the origin only if free), and no folder
 // left with fewer than two members — that one dissolves and its prompts become tiles
 // again. Runs on load and after every mutation. Idempotent.
-// `view_ids` rather than `&[View]` (135): every caller only ever needs to check
+// `view_ids` rather than `&[View]`: every caller only ever needs to check
 // membership, so passing ids instead of whole views spares a clone of every view's
 // layout maps at each call site.
 fn normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], view_ids: &[String]) {
@@ -8501,7 +8501,7 @@ fn put_text(_state: &State<Db>, _id: Option<&str>, text: &str) -> bool {
 
 // The most-called command in the app (every tile/pill/hotkey copy goes through it),
 // so it clones only the ONE field the chosen branch actually needs — not the whole
-// Prompt (134), which on an image prompt meant cloning that base64 blob on every
+// Prompt, which on an image prompt meant cloning that base64 blob on every
 // text-branch check too.
 enum CopyPayload {
     Image(String),
@@ -8673,7 +8673,7 @@ fn rotation_end_auto(id: String) {
 }
 
 // Put arbitrary text on the clipboard — used after filling prompt placeholders,
-// chains, drag-out, hotkeys, tray and quick-launch. `id` (90/91) is the source
+// chains, drag-out, hotkeys, tray and quick-launch. `id` is the source
 // prompt when there is one, so an auto-eligible prompt still opens its session
 // even when the actual copy went through variable resolution first — a plain
 // copy_prompt call for it would have double-resolved the placeholders.
@@ -9228,7 +9228,7 @@ mod clipwatch {
 
     struct AutoSession {
         id: String,
-        // Frontend-resolved text per absolute entry index (90/92); empty = no
+        // Frontend-resolved text per absolute entry index; empty = no
         // placeholder round happened, fall back to the raw rotation_next() text.
         resolved: Vec<String>,
         text: String,
@@ -9379,7 +9379,7 @@ mod clipwatch {
             }
         }
         // Text only — image/file clipboard payloads are ignored. Bracketed with
-        // SELF_READ (91) in case ownership changed between the guard above and here.
+        // SELF_READ in case ownership changed between the guard above and here.
         SELF_READ.store(true, Ordering::Release);
         let read = arboard::Clipboard::new().and_then(|mut c| c.get_text());
         SELF_READ.store(false, Ordering::Release);
@@ -9614,7 +9614,7 @@ mod clipwatch {
 
     // Called from the app's normal copy path (put_text) once a prompt has been
     // judged auto-eligible. `resolved` is the frontend's once-per-copy placeholder
-    // resolution (90/92); empty for a prompt with no placeholders, where every
+    // resolution; empty for a prompt with no placeholders, where every
     // render instead falls back to the raw rotation_next() text.
     pub fn arm(id: &str, text: &str, resolved: Vec<String>) {
         note_own(text);
@@ -10723,7 +10723,7 @@ fn sweep_stale_temp_files() {
             let is_ours = name.starts_with(&ocr_prefix) || name.starts_with(&voice_prefix);
             let is_ocr_png = is_ours && name.ends_with(".png");
             // Result files of the two elevated PowerShell runs (installing a pack,
-            // listing the packs), and the DISM log/scratch redirect (177). Each
+            // listing the packs), and the DISM log/scratch redirect. Each
             // script deletes itself in its own `finally`, so a .ps1 here is only
             // ever one left behind by a hard kill mid-run.
             let is_elevated_leftover = is_ours && (name.ends_with(".json") || name.ends_with(".ps1") || name.ends_with(".log"));
@@ -12074,7 +12074,7 @@ fn capture_is_blank(img: &image::RgbaImage) -> bool {
 }
 
 // Crop the frozen capture (physical pixels) and finalize -- as a saved screenshot,
-// or (121) run it through OCR instead when the mode was armed via set_snip_mode.
+// or run it through OCR instead when the mode was armed via set_snip_mode.
 // One parameter per capture option the snip toolbar can set at once.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
@@ -12198,10 +12198,10 @@ async fn capture_window(
     snip_mode: State<'_, SnipModeState>,
     id: u32,
 ) -> Result<(), String> {
-    // 122 review fix: every one of this function's four capture paths used to call
-    // finalize_capture() unconditionally, so clicking a WINDOW while OCR mode was
-    // armed (set_snip_mode) silently produced a normal screenshot instead of running
-    // OCR -- capture_region already branched on this, capture_window never did.
+    // Every one of this function's four capture paths must branch on the armed
+    // OCR mode (set_snip_mode) before calling finalize_capture() unconditionally --
+    // otherwise clicking a WINDOW while OCR mode is armed silently produces a
+    // normal screenshot instead of running OCR.
     let ocr_armed = *snip_mode.0.lock().unwrap_or_else(|e| e.into_inner()) == SnipMode::Ocr;
     // Source app name for the button label (best-effort; empty for unknown windows).
     let app_name = xcap::Window::all()
@@ -12334,9 +12334,8 @@ fn zoom_min_size(factor: f64, cap: (u32, u32)) -> (u32, u32) {
 // Scale the whole main-window UI with the browser's native zoom (like Ctrl +/-).
 // Native zoom keeps event coordinates and getBoundingClientRect in one coordinate
 // space, so — unlike a CSS `zoom` on <body> — it never desyncs popup positioning
-// or grid hit-testing. Clamped to the slider's 75–300% range (16: this used to
-// say 50% and clamp to 0.5 - the slider (ui/main.js EXPERT_TABS uiScale) has
-// always had a 75% floor, this just never matched it).
+// or grid hit-testing. Clamped to the slider's 75–300% range (the slider,
+// ui/main.js EXPERT_TABS uiScale, has always had a 75% floor).
 #[tauri::command]
 fn set_ui_zoom(app: AppHandle, factor: f64) -> Result<(), String> {
     let f = factor.clamp(0.75, 3.0);
@@ -12778,7 +12777,7 @@ async fn ocr_image(path: String, upscale_under_px: u32, join_lines: bool, lang: 
 // Entry point (a) -- "Recognize text" in #snip-modal runs on the capture
 // already shown there, which at that point only ever exists as a data URL (it may
 // not have been saved to disk yet). Thin command taking the data URL directly,
-// same shape as copy_image_data (117/118) for the screenshot editor.
+// same shape as copy_image_data for the screenshot editor.
 #[tauri::command]
 async fn ocr_image_data(data_url: String, upscale_under_px: u32, join_lines: bool, lang: String, auto_pick_lang: bool) -> Result<OcrResult, String> {
     // Same ceiling as the file-based path (check_import_size) -- this one
@@ -12841,7 +12840,7 @@ async fn ocr_capabilities(state: State<'_, Db>, force: bool) -> Result<Vec<OcrCa
 // the button the user presses in the language dialog -- the app never asks for
 // rights on its own. Returns once the elevated process was launched; the
 // frontend polls ocr_capabilities_elevated_result for the list.
-// async + spawn_blocking (215/238): ShellExecuteW's "runas" verb blocks the
+// async + spawn_blocking: ShellExecuteW's "runas" verb blocks the
 // calling thread until the user actually answers the UAC prompt, not just
 // until the process starts (walking away leaves it blocked indefinitely).
 // spawn_blocking moves that wait onto the dedicated blocking-thread pool
@@ -12893,7 +12892,7 @@ async fn ocr_capabilities_elevated_result() -> Result<Option<Vec<OcrCap>>, Strin
 // launch was rejected); it never waits for Add-WindowsCapability to finish --
 // the frontend polls ocr_install_result / ocr_capabilities(force: true)
 // instead (no blocking, no wait-dialog without a cancel option).
-// async (215): same ShellExecuteW/UAC blocking reason as ocr_capabilities_elevate.
+// async: same ShellExecuteW/UAC blocking reason as ocr_capabilities_elevate.
 #[tauri::command]
 async fn ocr_install_language(name: String) -> Result<(), String> {
     if !ocr_capability_name_is_well_formed("Language.OCR~~~", &name) {
@@ -12970,7 +12969,7 @@ async fn speech_capabilities(state: State<'_, Db>, force: bool) -> Result<Vec<Oc
     }
 }
 
-// async (215): same ShellExecuteW/UAC blocking reason as ocr_capabilities_elevate.
+// async: same ShellExecuteW/UAC blocking reason as ocr_capabilities_elevate.
 #[tauri::command]
 async fn speech_capabilities_elevate() -> Result<(), String> {
     #[cfg(windows)]
@@ -12996,7 +12995,7 @@ async fn speech_capabilities_elevated_result() -> Result<Option<Vec<OcrCap>>, St
     }
 }
 
-// async (215): same ShellExecuteW/UAC blocking reason as ocr_install_language.
+// async: same ShellExecuteW/UAC blocking reason as ocr_install_language.
 #[tauri::command]
 async fn speech_install_language(name: String) -> Result<(), String> {
     if !ocr_capability_name_is_well_formed("Language.Speech~~~", &name) {
@@ -13069,9 +13068,9 @@ fn lang_check_interval(app: &AppHandle, kind: ocr::CapKind) -> Duration {
 }
 
 // Background watcher for "an installed language pack is now updatable" -- one
-// registration per kind on the SAME shared scheduler thread (126: "ein Thread,
-// der beide Listen prüft" -- registering a second named job satisfies that,
-// the same way auto-backup/update-check/temp-sweep already share the thread).
+// registration per kind on the SAME shared scheduler thread -- one thread checks
+// both lists, registering a second named job satisfies that, the same way
+// auto-backup/update-check/temp-sweep already share the thread.
 // Notification-ONLY -- it never installs anything itself (elevation always
 // needs the frontend's confirmDialog explanation first). Because of that,
 // "multiple due packages processed sequentially, never in parallel" is
@@ -13186,9 +13185,9 @@ mod ocr {
     // A very small crop is upscaled 2x before recognition -- the actual trick that
     // makes small on-screen text (button labels, tooltips) recognizable. An image
     // can only ever be too big (downscaled to MaxImageDimension) or too small
-    // (upscaled here), never both. 121: the threshold used to be a fixed constant
-    // here; it is now the ocrUpscaleUnderPx expert setting, threaded down as a
-    // parameter (100-800, default 300 -- see EXPERT_VALUES in main.js).
+    // (upscaled here), never both. The threshold is the ocrUpscaleUnderPx expert
+    // setting, threaded down as a parameter (100-800, default 300 -- see
+    // EXPERT_VALUES in main.js).
 
     // COM must be initialized once per thread that calls into WinRT, and never on
     // the UI thread. Every OCR call runs inside spawn_blocking; those pool threads
@@ -13392,7 +13391,7 @@ mod ocr {
 
     // Which language-pack family a capabilities/install call is about. Both
     // families share the exact same Get-WindowsCapability/Add-WindowsCapability
-    // machinery below (126) -- OCR and voice dictation each want their own
+    // machinery below -- OCR and voice dictation each want their own
     // Windows "Language.*" feature, nothing else differs. The module keeps its
     // original name (OCR was here first); voice dictation reuses it wholesale
     // rather than duplicating a COM-interfacing module tree, per 126 ("nichts
@@ -13409,10 +13408,11 @@ mod ocr {
                 CapKind::Speech => "Language.Speech*",
             }
         }
-        // The capability Name prefix Windows reports for this kind -- 176: three
-        // functions used to hardcode the OCR one regardless of kind, so no speech
-        // language pack could ever pass validation, get its tag extracted, or be
-        // told apart from another one by its (empty, shared) install-result file.
+        // The capability Name prefix Windows reports for this kind. Three functions
+        // (validation, tag extraction, install-result file naming) depend on this
+        // varying by kind -- hardcoding the OCR prefix regardless of kind would
+        // make every speech language pack fail validation, lose its tag, and share
+        // an install-result file with the OCR one.
         pub(super) fn prefix(self) -> &'static str {
             match self {
                 CapKind::Ocr => "Language.OCR~~~",
@@ -13441,7 +13441,7 @@ mod ocr {
         caps: Vec<OcrCap>,
     }
     // One cache per kind -- installing/refreshing OCR packages must never
-    // invalidate a freshly-fetched voice list or vice versa (126).
+    // invalidate a freshly-fetched voice list or vice versa.
     fn cap_cache(kind: CapKind) -> &'static Mutex<Option<CapCache>> {
         static OCR: OnceLock<Mutex<Option<CapCache>>> = OnceLock::new();
         static SPEECH: OnceLock<Mutex<Option<CapCache>>> = OnceLock::new();
@@ -13539,7 +13539,7 @@ mod ocr {
     }
 
     // Runs a PowerShell command with no visible window and returns its stdout.
-    // The explicit working directory (177) is ours, always writable, never
+    // The explicit working directory is ours, always writable, never
     // whatever the process happened to inherit -- DISM's "could not set the
     // current directory" half of the log-path error had nothing to do with the
     // actual query, so there is no reason to hand it a directory it might not
@@ -13875,7 +13875,7 @@ mod ocr {
         finish_request(kind, &tag);
         if ok {
             // Installation is done -- both caches must reflect it immediately, no
-            // restart needed (122). This command is the natural place to do that:
+            // restart needed. This command is the natural place to do that:
             // it is the point where the backend already has fresh proof the
             // install finished, rather than waiting on the frontend to notice
             // state == "Installed" via a second ocr_capabilities() round trip.
@@ -13933,7 +13933,7 @@ async fn voice_languages() -> Result<Vec<VoiceLang>, String> {
 
 // `lang` is "auto" or an explicit BCP-47 tag; `auto_stop_sec` (0 = off) and
 // `max_sec` are the voiceAutoStopSec/voiceMaxMin expert settings, sent by the
-// frontend the same way ocr_image is sent its expert settings (121/122) rather
+// frontend the same way ocr_image is sent its expert settings, rather
 // than the backend re-reading them from Db state on every call. `interim`
 // mirrors voiceInterim. Returns the new session id; the recognized text itself
 // only ever travels through the voice-partial/voice-text events, never through
@@ -14933,8 +14933,7 @@ async fn install_update(app: AppHandle, url: String) -> Result<(), String> {
     // Sanity-check the download is actually a Windows executable (PE "MZ" header)
     // before we ever run it — a corruption/wrong-format guard, not authentication
     // on its own. The real integrity check is the SHA-256 verification directly
-    // below (16: this comment used to describe that check as still-TODO, but it
-    // was already implemented and fail-closed right underneath it).
+    // below.
     if bytes.len() < 2 || &bytes[0..2] != b"MZ" {
         return Err("downloaded file is not a valid installer".to_string());
     }
@@ -15641,7 +15640,7 @@ async fn preview_import(app: AppHandle, state: State<'_, Db>) -> Result<ImportPr
 }
 
 // Async: parsing + persisting an import stays off the UI thread. `path` comes
-// from a prior preview_import call (88) — never a fresh file dialog here, so
+// from a prior preview_import call — never a fresh file dialog here, so
 // confirming a preview can never silently import a DIFFERENT file.
 #[tauri::command]
 async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String) -> Result<usize, String> {
@@ -18324,7 +18323,7 @@ mod tests {
         assert_ne!(SlimPrompt::from(&other).image_rev, rev);
     }
 
-    // ---- Takeover offer must not be hidden by the onboarding examples (182) ----
+    // ---- Takeover offer must not be hidden by the onboarding examples ----
 
     fn prompt_named(id: &str) -> Prompt {
         serde_json::from_str(&format!(r#"{{"id":"{id}","name":"n","text":"t"}}"#))
@@ -18415,7 +18414,7 @@ mod tests {
 
     // A hyphen is not sentence-ending punctuation, so a hyphen-wrapped word is
     // space-joined the same as any other mid-sentence wrap -- there is no special
-    // dehyphenation, matching the spec (120): one rule, no script-specific cases.
+    // dehyphenation: one rule, no script-specific cases.
     #[test]
     fn ocr_join_lines_hyphenated_wrap_gets_a_plain_space_join() {
         let lines = vec!["This is a hyphen-".to_string(), "ated example.".to_string()];
@@ -21706,7 +21705,7 @@ mod tests {
 
     #[test]
     fn auto_eligible_rejects_placeholders_images_and_files() {
-        // "placeholders" (variable text) are explicitly ALLOWED (90) — this test
+        // "placeholders" (variable text) are explicitly ALLOWED — this test
         // instead covers every gate auto_eligible actually enforces.
         let mut p = sample_prompts().remove(0);
         p.variants = vec!["b".into(), "c".into()];

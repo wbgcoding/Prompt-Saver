@@ -890,7 +890,7 @@ body.chain-mode .tile-chain-start { opacity: 0; pointer-events: none; }
    tile auto-fitter scales to prompt size, and a two-word folder name then filled the
    whole cell. */
 /* The tile itself is not a card — a folder is just its preview + label floating on
-   the grid, same as the pill/grid-folder windows (145). Only .folder-mini reads as
+   the grid, same as the pill/grid-folder windows. Only .folder-mini reads as
    "the folder"; the cell it sits in stays visually part of the grid background. */
 .folder-tile {
   flex-direction: column;
@@ -1322,7 +1322,7 @@ body.library-front #modal.overlay { z-index: 67; }
 /* ---- Rotating prompts (editor) ---- */
 .modal-rotate-toggle { padding: 6px 0; }
 /* No own margin-bottom: the .modal flex column already puts a 12px gap after
-   this row (33: an extra margin on top of that read as "a big gap" before the
+   this row -- an extra margin on top of that read as "a big gap" before the
    colour swatches). */
 .modal-rotate-list { display: flex; flex-direction: column; gap: 6px; }
 .modal-rotate-entries { display: flex; flex-direction: column; gap: 6px; }
@@ -1927,7 +1927,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   justify-content: center;
   background-color: var(--surface-2);
   /* Neutral checkerboard hint so the image edge is visible once zoomed/panned past
-     it. Faded to 45% (180): at full --border strength this read as loud/busy in
+     it. Faded to 45%: at full --border strength this read as loud/busy in
      the light themes, where --border sits much darker against --surface-2 than
      it does in a dark theme. */
   --snip-edit-checker: color-mix(in srgb, var(--border) 45%, transparent);

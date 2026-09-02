@@ -86,7 +86,7 @@ const modal = {
 };
 
 let DRAG_THRESHOLD = DRAG_THRESHOLD_DEFAULT; // expert-tunable
-let INPUT_MAX = 160; // keep in sync with .input max-height (87: expert-tunable via composerMaxH)
+let INPUT_MAX = 160; // keep in sync with .input max-height, expert-tunable via composerMaxH
 // Grid-dimension and view-count limits are expert values: val("gridMax") /
 // val("maxViews"). The backend keeps a hard ceiling of 100 for both.
 let PREVIEW_MAX = 600; // tooltip preview length (expert-tunable)
@@ -95,7 +95,7 @@ let TOAST_MS = 1400; // toast lifetime for plain messages (expert-tunable)
 const SIZE_MIN = 10; // text size range, steps of 2 (keep in sync with backend)
 const SIZE_MAX = 40;
 const SIZE_STEP = 2;
-let DISARM_MS = 3000; // confirm-button auto-disarm delay (87: expert-tunable)
+let DISARM_MS = 3000; // confirm-button auto-disarm delay, expert-tunable
 
 const clampGrid = (n, fallback) =>
   Math.min(val("gridMax"), Math.max(1, Math.round(Number(n) || fallback)));
@@ -1217,7 +1217,7 @@ const OPT_FLAG_LABELS = {
   // hand or another tool.
   promptSync: "flagPromptSync",
   // Voice dictation's two default-off options: sending audio to Microsoft's
-  // online recognizer needs its own consent (125), and a global hotkey (131)
+  // online recognizer needs its own consent, and a global hotkey
   // is a bigger commitment than the in-window button.
   voiceOnlineOk: "flagVoiceOnlineOk",
   voiceHotkey: "flagVoiceHotkey",
@@ -1427,7 +1427,7 @@ const EXPERT_VALUES = {
   kbFocusFadeMs: { label: "valKbFocusFade", min: 500, max: 10000, step: 500, def: 2000, unit: "ms", gate: "keyboardNav" },
   // Tag chip text size (editor, library filter row, manager).
   tagChipPx: { label: "valTagChipPx", min: 10, max: 20, step: 1, def: 12, unit: "px", gate: "tags" },
-  // Column count for the grid tag-filter popover (81).
+  // Column count for the grid tag-filter popover.
   tagPopCols: { label: "valTagPopCols", min: 1, max: 3, step: 1, def: 2, unit: "", gate: "tags" },
   // How many custom themes may be stored (keeps the settings blob bounded).
   customThemeMax: { label: "valCustomThemeMax", min: 1, max: 20, step: 1, def: 8, unit: "", gate: "customThemes" },
@@ -1548,7 +1548,7 @@ const EXPERT_DROPDOWNS = {
   },
   // Same pattern as ocrLang just above: fetched once from voice_languages()
   // at startup (voiceLangsCache), "Automatic" always first, a trailing entry
-  // opens the shared language-pack dialog (126) instead of ever being stored.
+  // opens the shared language-pack dialog instead of ever being stored.
   voiceLang: {
     label: "valVoiceLang",
     gate: "voice",
@@ -2164,9 +2164,9 @@ function dropdownRow(key) {
   sel.value = cfg.get();
   sel.addEventListener("change", async () => {
     await cfg.set(sel.value);
-    // A setter may decline the picked value instead of persisting it (122:
+    // A setter may decline the picked value instead of persisting it --
     // ocrLang's "Manage languages..." entry opens a dialog and leaves the actual
-    // language untouched) -- resync so the select never keeps showing a choice
+    // language untouched -- resync so the select never keeps showing a choice
     // that never took effect. A no-op for every other dropdown, whose get()
     // already reports back exactly what set() just wrote.
     sel.value = cfg.get();
@@ -2315,7 +2315,7 @@ function isRowChanged(kind, key) {
   if (kind === "paths") {
     // Only a path with a "reset to default" button (screenshotDir, syncDir) has a
     // default to diff against — dataDir is always "current", never changed from
-    // anything. 83: a stored value equal to the (computed) default is unchanged —
+    // anything. A stored value equal to the (computed) default is unchanged —
     // picking exactly the default folder must not mark the row as changed.
     const cfg = EXPERT_PATHS[key];
     if (!cfg.onReset || !cfg.def) return false;
@@ -3200,7 +3200,7 @@ function closeViewGroupPop() {
 }
 
 // Shared by openViewGroupPop() and renderViewsPop(): both build a checkbox + optional
-// colour dot + name row for a view — a new column here only needs adding once (127).
+// colour dot + name row for a view — a new column here only needs adding once.
 function viewRowBase(v, on) {
   const row = document.createElement("button");
   row.type = "button";
@@ -4028,7 +4028,7 @@ const rotateState = new Map(); // id -> { index, pos, total, text }
 // position with stale data (same shape as floating.js's rotateReq / folder.js's
 // rotateReqs).
 const rotateReqs = new Map(); // id -> latest request number
-let ROTATE_SHORT_MAX = 60; // tooltip preview length, independent of the notes cap (87: expert-tunable)
+let ROTATE_SHORT_MAX = 60; // tooltip preview length, independent of the notes cap, expert-tunable
 
 // `pos` (not `index + 1`) — in random mode `index` is the absolute entry that
 // will be drawn next (jumps around), while `pos` is the 1-based draw number within
@@ -5466,7 +5466,7 @@ function extractVars(text) {
 const fillVars = (text, values) => text.replace(VAR_RE, (_, k) => values[k.trim()] ?? "");
 // A fence whose body is only whitespace ({#{ }#}) never becomes a real variable —
 // extractVars() silently drops it — so it would sit in the copied text unfilled and
-// unexplained. 34: catch it before save instead of leaving it a silent trap.
+// unexplained. Caught before save instead of left a silent trap.
 const hasEmptyVarToken = (text) =>
   [...String(text || "").matchAll(VAR_RE)].some((m) => !m[1].trim());
 
@@ -6553,7 +6553,7 @@ function debounced(fn, ms = SEARCH_DEBOUNCE_MS) {
 // transform below only ever slices that escaped string, so nothing a user types can
 // come out as markup. A link keeps its label as plain styled text and never becomes
 // an <a>, which is why no href/src exists for a click to follow.
-let MD_MAX_CHARS = 100000; // past this the preview is cut, so split-mode typing stays smooth (87: expert-tunable)
+let MD_MAX_CHARS = 100000; // past this the preview is cut, so split-mode typing stays smooth, expert-tunable
 // A single huge fence is rendered plain: an unterminated block comment makes the
 // lazy scan quadratic, and nobody reads 20k characters of colour anyway.
 let HL_MAX_CHARS = 20000; // expert-tunable
@@ -6820,7 +6820,7 @@ function scheduleMdPreview() {
 }
 
 // Bring toolbar, textarea and preview in line with the flags and the picked layout.
-// `rotating` (33): the variants list IS the editing surface then, so neither the
+// When `rotating`, the variants list IS the editing surface, so neither the
 // textarea nor the rendered pane may stay in flow. Both used to survive it — the
 // clear-X wrapper as an empty 120px box (the gap above the colour row) and, with
 // on, the preview still rendering entry 1, which read as a stray field.
@@ -7090,7 +7090,7 @@ function collapsibleHead(labelText, contentEl, stateKey) {
 // Label + bounded number field, as used by the backup and statistics panels.
 // Clearing the field means "back to the default" — it is committed on blur, so
 // an empty field mid-typing is left alone.
-// `after` (99): redraws the caller's own panel once a reset restores the default,
+// `after` redraws the caller's own panel once a reset restores the default,
 // same job renderExpert() does for the main expert menu's rows.
 function numRow(labelKey, key, min, max, onSet, extraClass, after) {
   const l = document.createElement("label");
@@ -7120,7 +7120,7 @@ function numRow(labelKey, key, min, max, onSet, extraClass, after) {
   return l;
 }
 
-// Shared with the backup list's per-prompt type chip (103) -- one classifier's
+// Shared with the backup list's per-prompt type chip -- one classifier's
 // worth of i18n keys, not two.
 const PROMPT_TYPE_LABELS = { text: "statTypeText", image: "filterImage", video: "filterVideo", pdf: "filterPdf", file: "filterFile" };
 
@@ -7525,7 +7525,7 @@ function closeLangsModal() {
   const st = LANG_DIALOG[langDialogKind];
   // Installs and an elevated scan are OS processes and keep running regardless
   // -- only the polling loop (and the DOM it repaints) needs to stop while
-  // nobody is looking. elevRunning itself is left set (161) so reopening resumes.
+  // nobody is looking. elevRunning itself is left set so reopening resumes.
   for (const id of Object.values(st.installTimers)) clearTimeout(id);
   st.installTimers = {};
   if (st.elevTimer) { clearTimeout(st.elevTimer); st.elevTimer = null; }
@@ -7576,7 +7576,7 @@ async function startElevatedCapsScan(kind) {
   pollElevatedCaps(kind);
 }
 // Polls the elevated process's result file a few seconds apart. Re-entrant: can
-// be called again after the dialog was closed and reopened (161) without losing
+// be called again after the dialog was closed and reopened without losing
 // the two-minute budget already spent (elevLeft lives on LANG_DIALOG, not in a
 // closure local, so it survives that close/reopen).
 function pollElevatedCaps(kind) {
@@ -7610,7 +7610,7 @@ function renderLangsLoading(kind) {
 // Notice text and its retry button are always built together, in one
 // place -- a failure (launch or the two-minute poll timeout alike) can no
 // longer replace the body with text only and strand the user without a way
-// to try again. `details` (177) is the raw PowerShell/DISM text behind a
+// to try again. `details` is the raw PowerShell/DISM text behind a
 // translated reason like `message` -- shown collapsed so it never crowds out
 // the actual instruction, but never silently dropped either.
 function renderLangsRetry(kind, message, details) {
@@ -8175,7 +8175,7 @@ async function renderBackupPanel(body) {
     iv.append(ivl, ivRight); left.appendChild(iv);
   }
 
-  // Right column — retention. 25: a plain number field replaces the three preset
+  // Right column — retention. A plain number field replaces the three preset
   // buttons; "Smart retention" is a switch above it that turns the field grey
   // (backend ignores backupKeep while it is on) and activates the tiers below.
   const gfsOn = optFlag("backupGfs");
@@ -8627,7 +8627,7 @@ function renderRotateUi() {
   renderRotateAutoBtn();
 }
 
-// Mirrors the backend's auto_eligible (90) minus the two feature gates —
+// Mirrors the backend's auto_eligible minus the two feature gates —
 // rotatingPrompts already gates this whole row (rotationUiOn), and rotateAuto
 // (the feature switch, 93) is checked here so the button disables live if it
 // gets flipped off with the editor open.
@@ -10000,7 +10000,7 @@ function thumbDot(p) {
 
 // Shared row preview for library + journal: a looping muted inline video for
 // video prompts, an image for image/gif/stored-image prompts, else a color dot.
-// `cache` (132) reuses the element across re-renders of the SAME panel instead of
+// `cache` reuses the element across re-renders of the SAME panel instead of
 // re-decoding the same base64 blob on every keystroke — appending an already-
 // mounted node just reparents it, so an id whose thumb type stays the same never
 // gets a fresh <img>/<video>.
@@ -10186,7 +10186,7 @@ function libMatches(p) {
 }
 
 // Selected tag chips narrow the list, combined with search and the other
-// filters. AND (default) needs every chip, OR any of them. 24: the grid's own
+// filters. AND (default) needs every chip, OR any of them. The grid's own
 // filter (gridTags) reuses this with its own Set instead of the library's.
 function tagMatches(p, tagSet = libTags) {
   if (!tagsOn() || !tagSet.size) return true;
@@ -10249,7 +10249,7 @@ function sortLibraryItems(items) {
   const mode = libSortMode();
   const q = libQuery.trim();
   const nameOf = (p) => libLabel(p).toLowerCase();
-  // One Collator for the whole sort instead of one per pairwise comparison (135) —
+  // One Collator for the whole sort instead of one per pairwise comparison —
   // localeCompare(str, locale) builds a fresh one internally on every call.
   const collator = new Intl.Collator(LANG);
   const byName = (a, b) => collator.compare(nameOf(a), nameOf(b));
@@ -11925,7 +11925,7 @@ function bind() {
   // ==== 117/118: screenshot editor ====
   // Opens right after a capture, before #snip-modal. Pure frontend: it receives a
   // data URL and hands back an edited one; everything downstream of #snip-modal is
-  // untouched. Every knob below reads live from the expert menu (119).
+  // untouched. Every knob below reads live from the expert menu.
   const SNIP_EDIT_PEN_PX = () => val("snipPenPx");
   const SNIP_EDIT_MARKER_PX = () => val("snipMarkerPx");
   const SNIP_EDIT_TEXT_PX = () => val("snipTextPx");
@@ -14637,7 +14637,7 @@ async function maybeOpenFirstRunTour(sealWarned) {
 // ---- Init ----
 // Re-read settings from the backend and apply the global, order-sensitive parts
 // (palette, language, sizing, theme). Shared by init() and reloadEverything() so a
-// new global settings value only needs adding here, not in both places (127).
+// new global settings value only needs adding here, not in both places.
 async function applySettingsCore() {
   settings = await invoke("get_settings");
   loadPalette();

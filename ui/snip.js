@@ -36,7 +36,7 @@ let FULL_W = 1, FULL_H = 1; // full stitched dimensions (display image may be sm
 
 // ---- Colour picker state ----
 // Same overlay, second mode: no selection, a loupe on the cursor instead.
-let loupeCells = 15; // odd, so one cell is exactly the picked pixel (87: expert-tunable)
+let loupeCells = 15; // odd, so one cell is exactly the picked pixel, expert-tunable
 const ZOOM_MIN = 4, ZOOM_MAX = 16; // same range as the loupeZoom expert slider
 // The frozen desktop is sampled through ONE cached patch around the cursor, not as a
 // whole. Handing the overlay the entire desktop meant a ~58 MB transfer on a
