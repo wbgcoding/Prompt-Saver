@@ -73,6 +73,9 @@ jobs:
       - name: Tooltip coverage
         run: python tests/tooltip_check.py
 
+      - name: Flag polarity
+        run: python tests/flag_polarity.py
+
       # Both drive a headless browser; the runner image ships Chrome.
       - name: UI smoke test
         run: python tests/ui/smoke_test.py
