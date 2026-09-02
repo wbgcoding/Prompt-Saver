@@ -788,6 +788,8 @@ voice dictation, the screenshot editor and the introduction tour ship on).
   delay every other periodic task behind it** — settings saves, automatic
   backups, the update check — for as long as it stayed stuck. Each now runs on
   its own thread, so one stuck task can no longer hold up the others.
+- **Dictation started right after a previous one no longer picks up the
+  earlier session's last sentence or gets stuck on listening.**
 
 ### Removed
 

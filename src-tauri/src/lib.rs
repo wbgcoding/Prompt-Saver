@@ -12481,6 +12481,7 @@ struct VoiceStartResult {
 #[derive(Serialize, Clone)]
 struct VoiceTextEvent {
     id: u64,
+    token: u64,
     text: String,
 }
 
@@ -12488,6 +12489,7 @@ struct VoiceTextEvent {
 #[derive(Serialize, Clone)]
 struct VoiceStoppedEvent {
     id: u64,
+    token: u64,
     reason: String, // manual | silence | max | error | shutdown
 }
 
@@ -12495,6 +12497,7 @@ struct VoiceStoppedEvent {
 #[derive(Serialize, Clone)]
 struct VoiceErrorEvent {
     id: u64,
+    token: u64,
     code: String,
 }
 
@@ -12506,6 +12509,8 @@ struct VoiceErrorEvent {
 // a second StopAsync on an already-Completed session throws (0x80131509).
 struct VoiceHandle {
     id: u64,
+    #[allow(dead_code)] // carried alongside id for a future cross-check; the frontend already does this matching itself
+    token: u64,
     stop: std::sync::mpsc::Sender<&'static str>,
     #[allow(dead_code)] // read by a future "how long has this run" indicator; harmless to keep now
     started: std::time::Instant,
@@ -13948,6 +13953,7 @@ async fn voice_start(
     auto_stop_sec: u32,
     max_sec: u32,
     interim: bool,
+    token: u64,
 ) -> Result<VoiceStartResult, String> {
     {
         let guard = vstate.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -14008,21 +14014,21 @@ async fn voice_start(
         set_tray_recording(&app, true);
         if let Err(e) = std::thread::Builder::new()
             .name("voice-session".into())
-            .spawn(move || voice::start_session(app2, id, lang2, auto_stop_sec, max_sec, interim, ended2, rx))
+            .spawn(move || voice::start_session(app2, id, token, lang2, auto_stop_sec, max_sec, interim, ended2, rx))
         {
             set_tray_recording(&app, false);
             vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
             return Err(e.to_string());
         }
         *vstate.0.lock().unwrap_or_else(|e| e.into_inner()) =
-            Some(VoiceHandle { id, stop: tx, started: std::time::Instant::now(), lang: resolved_lang.clone(), ended });
+            Some(VoiceHandle { id, token, stop: tx, started: std::time::Instant::now(), lang: resolved_lang.clone(), ended });
         vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
         Ok(VoiceStartResult { id, lang: resolved_lang })
     }
     #[cfg(not(windows))]
     {
         vstate.1.store(false, std::sync::atomic::Ordering::SeqCst);
-        let _ = (app, state, lang, auto_stop_sec, max_sec, interim);
+        let _ = (app, state, lang, auto_stop_sec, max_sec, interim, token);
         Err("voice is only available on Windows".to_string())
     }
 }
@@ -14323,6 +14329,7 @@ mod voice {
     pub(super) fn start_session(
         app: AppHandle,
         id: u64,
+        token: u64,
         lang: String,
         auto_stop_sec: u32,
         max_sec: u32,
@@ -14331,10 +14338,10 @@ mod voice {
         stop_rx: mpsc::Receiver<&'static str>,
     ) {
         ensure_com();
-        if let Err(key) = run_session(&app, id, &lang, auto_stop_sec, max_sec, interim, &ended, &stop_rx) {
+        if let Err(key) = run_session(&app, id, token, &lang, auto_stop_sec, max_sec, interim, &ended, &stop_rx) {
             if !ended.swap(true, Ordering::SeqCst) {
-                let _ = app.emit("voice-error", super::VoiceErrorEvent { id, code: key.to_string() });
-                let _ = app.emit("voice-stopped", VoiceStoppedEvent { id, reason: "error".to_string() });
+                let _ = app.emit("voice-error", super::VoiceErrorEvent { id, token, code: key.to_string() });
+                let _ = app.emit("voice-stopped", VoiceStoppedEvent { id, token, reason: "error".to_string() });
                 super::set_tray_recording(&app, false);
             }
         }
@@ -14344,6 +14351,7 @@ mod voice {
     fn run_session(
         app: &AppHandle,
         id: u64,
+        token: u64,
         lang: &str,
         auto_stop_sec: u32,
         max_sec: u32,
@@ -14389,7 +14397,7 @@ mod voice {
                             if let Ok(h) = args.Hypothesis() {
                                 if let Ok(text) = h.Text() {
                                     *last2.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
-                                    let _ = app2.emit("voice-partial", VoiceTextEvent { id, text: text.to_string() });
+                                    let _ = app2.emit("voice-partial", VoiceTextEvent { id, token, text: text.to_string() });
                                 }
                             }
                         }
@@ -14415,7 +14423,7 @@ mod voice {
                                 // Nothing recognized in this segment -> nothing to insert,
                                 // same "empty is not an error" rule as OCR's recognize().
                                 if !text.is_empty() {
-                                    let _ = app_r.emit("voice-text", VoiceTextEvent { id, text });
+                                    let _ = app_r.emit("voice-text", VoiceTextEvent { id, token, text });
                                 }
                             }
                         }
@@ -14447,7 +14455,7 @@ mod voice {
                     let status = args.as_ref().and_then(|a| a.Status().ok()).map(|s| s.0).unwrap_or(-1);
                     let requested = reason_c.lock().unwrap_or_else(|e| e.into_inner()).take();
                     let reason = stop_reason(status, requested);
-                    let _ = app_c.emit("voice-stopped", VoiceStoppedEvent { id, reason: reason.to_string() });
+                    let _ = app_c.emit("voice-stopped", VoiceStoppedEvent { id, token, reason: reason.to_string() });
                     super::set_tray_recording(&app_c, false);
                     Ok(())
                 },
@@ -14470,7 +14478,7 @@ mod voice {
                 // open the whole time. Report the truth immediately instead of the
                 // caller's intended (and now false) reason.
                 if !ended.swap(true, Ordering::SeqCst) {
-                    let _ = app.emit("voice-stopped", VoiceStoppedEvent { id, reason: "error".to_string() });
+                    let _ = app.emit("voice-stopped", VoiceStoppedEvent { id, token, reason: "error".to_string() });
                 }
                 return;
             }
@@ -14483,7 +14491,7 @@ mod voice {
             while !ended.load(Ordering::SeqCst) {
                 if Instant::now() >= deadline {
                     if !ended.swap(true, Ordering::SeqCst) {
-                        let _ = app.emit("voice-stopped", VoiceStoppedEvent { id, reason: reason.to_string() });
+                        let _ = app.emit("voice-stopped", VoiceStoppedEvent { id, token, reason: reason.to_string() });
                     }
                     break;
                 }
@@ -18902,6 +18910,12 @@ mod tests {
         assert!(should_send_stop(None, 5, false));
         assert!(should_send_stop(Some(5), 5, false));
         assert!(!should_send_stop(Some(3), 5, false)); // a stale/foreign id never stops the live session
+    }
+
+    #[test]
+    fn voice_text_event_serialises_with_its_token() {
+        let json = serde_json::to_string(&VoiceTextEvent { id: 1, token: 42, text: "hi".into() }).unwrap();
+        assert!(json.contains("\"token\":42"));
     }
 
     #[test]

@@ -7814,6 +7814,7 @@ function ocrErrToast(err) {
 
 // ---- Voice dictation session control ----
 let voiceSessionId = null;
+let voiceToken = 0; // frontend-chosen, sent to voice_start and echoed on every event -- the only identity events are matched on
 let voiceState = "idle"; // idle | arming | listening
 let voiceTargetEl = null;
 let voiceActiveBtn = null;
@@ -7821,6 +7822,13 @@ let voiceInterim = null; // {start, len} inside voiceTargetEl.value, or null
 let voiceSuppressInput = false; // true while a programmatic .value write is in flight
 let voiceResolvedLang = ""; // BCP-47 tag voice_start actually recognized with, for command post-processing
 let voiceArmCancelled = false; // stopVoice() was called before voice_start's invoke() resolved
+// The just-ended session's target, for one late-arriving voice-text that WinRT's
+// unordered ResultGenerated/Completed handlers let land after voice-stopped
+// already fired -- delivered instead of dropped, but only within the grace
+// window and only to ITS OWN target, never adopted by whatever session (if any)
+// has started in the meantime. Not an expert setting -- internal timing.
+let voicePrev = null; // {token, el, caret, lang, hotkey, endedAt} | null
+const VOICE_LATE_GRACE_MS = 3000;
 
 // The two-letter code voice.js's command tables are keyed by, derived from
 // the BCP-47 tag voice_start resolved to -- NOT the UI's own display
@@ -7855,6 +7863,16 @@ function resolveVoiceArming() {
   }
 }
 function endVoiceUi() {
+  if (voiceTargetEl) {
+    voicePrev = {
+      token: voiceToken,
+      el: voiceTargetEl,
+      caret: voiceTargetEl.selectionEnd ?? null,
+      lang: voiceResolvedLang,
+      hotkey: voiceTargetEl === voiceHotkeyBuffer,
+      endedAt: Date.now(),
+    };
+  }
   voiceState = "idle";
   voiceSessionId = null;
   voiceTargetEl = null;
@@ -7870,6 +7888,7 @@ async function startVoice(target, btn) {
   voiceActiveBtn = btn;
   voiceInterim = null;
   voiceArmCancelled = false;
+  voiceToken = (voiceToken % 1e9) + 1;
   setVoiceBtnState(btn, "is-arming");
   let res;
   try {
@@ -7878,6 +7897,7 @@ async function startVoice(target, btn) {
       autoStopSec: flag("voiceAutoStop") ? Math.round(val("voiceAutoStopSec")) : 0,
       maxSec: Math.round(val("voiceMaxMin")) * 60,
       interim: flag("voiceInterim"),
+      token: voiceToken,
     });
   } catch (e) {
     endVoiceUi();
@@ -7912,20 +7932,40 @@ async function stopVoice() {
   // not here -- the button never claims "off" before the session (and its
   // mic) has actually finished.
 }
-// True if an id-tagged backend event belongs to the session currently
-// starting or running. The session thread does not wait for voice_start's
-// own command handler to return before it can emit -- a fast failure or a
-// fast first word can arrive while voiceSessionId is still null. Only one
-// session is ever starting or running at a time (the backend refuses a
-// second voice_start with voice-busy), so the first such event during
-// "arming" safely adopts the id instead of being silently dropped.
-function voiceEventIsMine(id) {
-  if (voiceSessionId === null) {
-    if (voiceState !== "arming") return false; // stray event, nothing is starting
-    voiceSessionId = id;
-    return true;
-  }
-  return id === voiceSessionId;
+// True if a token-tagged backend event belongs to the session currently
+// starting or running. voiceToken is chosen by the frontend and sent to
+// voice_start itself, so it is known before any event can possibly arrive --
+// unlike the backend-assigned id, it is never adopted from an event. The two
+// WinRT handlers (ResultGenerated, Completed) are not ordered against each
+// other, so a session that already reported voice-stopped can still deliver
+// one more voice-text after that -- its token no longer matches here and it
+// falls to deliverLateVoiceText instead of being silently misattributed to
+// whatever session (if any) is now starting.
+function voiceEventIsMine(payload) {
+  return voiceState !== "idle" && !!payload && payload.token === voiceToken;
+}
+// A late voice-text for the session endVoiceUi just closed out (see voicePrev)
+// -- delivered to ITS OWN target within VOICE_LATE_GRACE_MS instead of being
+// dropped, and never touches voiceState/voiceSessionId/the buttons, since
+// there is no live session left for this to belong to.
+function deliverLateVoiceText(payload) {
+  const prev = voicePrev;
+  if (!prev || !payload || payload.token !== prev.token) return;
+  if (Date.now() - prev.endedAt >= VOICE_LATE_GRACE_MS) return;
+  voicePrev = null;
+  const text = payload.text || "";
+  if (!text) return;
+  const processed = applyVoiceCommands(text, {
+    punct: flag("voicePunct"),
+    autoCaps: flag("voiceAutoCaps"),
+    lang: (prev.lang || LANG).slice(0, 2).toLowerCase(),
+  });
+  if (prev.hotkey) { deliverVoiceHotkeyText(processed); return; }
+  const el = prev.el;
+  if (!el || el.classList.contains("hidden")) return;
+  const atEnd = txt("voiceInsert") === "end";
+  const at = atEnd ? el.value.length : (prev.caret ?? el.value.length);
+  insertLateVoiceText(el, processed, at);
 }
 function wireVoiceButton(btn, targetFn) {
   if (!btn) return;
@@ -7998,6 +8038,16 @@ function insertVoiceText(text, interim) {
   el.dispatchEvent(new Event("input", { bubbles: true }));
   voiceSuppressInput = false;
   voiceInterim = interim ? { start: newStart, len: text.length } : null;
+}
+// Sibling of insertVoiceText for deliverLateVoiceText's one-shot delivery --
+// deliberately does not touch voiceInterim/voiceSuppressInput, since there is
+// no live session left for the discard-tracking those belong to.
+function insertLateVoiceText(el, text, at) {
+  const value = el.value;
+  const joiner = voiceJoiner(value.slice(0, at));
+  el.value = value.slice(0, at) + joiner + text + value.slice(at);
+  el.selectionStart = el.selectionEnd = at + joiner.length + text.length;
+  el.dispatchEvent(new Event("input", { bubbles: true }));
 }
 // The recognized text is still ours to lay claim to right up until the user
 // visibly acts on the field themselves -- then the interim span is just text.
@@ -13199,31 +13249,31 @@ function bind() {
   voiceWatchDiscard(inputEl);
   voiceWatchDiscard(modal.text);
   listen("voice-partial", (e) => {
-    const { id, text } = e.payload || {};
-    if (!voiceEventIsMine(id)) return;
+    const payload = e.payload || {};
+    if (!voiceEventIsMine(payload)) return; // a late partial is ignored, not delivered
     resolveVoiceArming();
-    insertVoiceText(text || "", true);
+    insertVoiceText(payload.text || "", true);
   });
   listen("voice-text", (e) => {
-    const { id, text } = e.payload || {};
-    if (!voiceEventIsMine(id)) return;
+    const payload = e.payload || {};
+    if (!voiceEventIsMine(payload)) { deliverLateVoiceText(payload); return; }
     resolveVoiceArming();
-    const processed = applyVoiceCommands(text || "", { punct: flag("voicePunct"), autoCaps: flag("voiceAutoCaps"), lang: voiceLangCode() });
+    const processed = applyVoiceCommands(payload.text || "", { punct: flag("voicePunct"), autoCaps: flag("voiceAutoCaps"), lang: voiceLangCode() });
     insertVoiceText(processed, false);
   });
   listen("voice-stopped", (e) => {
-    const { id } = e.payload || {};
-    if (!voiceEventIsMine(id)) return;
+    const payload = e.payload || {};
+    if (!voiceEventIsMine(payload)) return;
     const wasHotkey = voiceTargetEl === voiceHotkeyBuffer;
     const finalText = wasHotkey ? voiceHotkeyBuffer.value : "";
     endVoiceUi();
     if (wasHotkey) deliverVoiceHotkeyText(finalText);
   });
   listen("voice-error", (e) => {
-    const { id, code } = e.payload || {};
-    if (!voiceEventIsMine(id)) return;
+    const payload = e.payload || {};
+    if (!voiceEventIsMine(payload)) return;
     endVoiceUi();
-    routeVoiceError(code);
+    routeVoiceError(payload.code);
   });
   // The global hotkey toggled a session ON (a toggle OFF is handled entirely
   // on the Rust side, no event needed for that direction).

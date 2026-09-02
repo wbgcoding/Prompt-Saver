@@ -4910,6 +4910,8 @@ PROBE = """
       window.__OCR_CAPS_TEST__ = null;
       await toggleOcrFlag(true); // leave the flag in its shipped state
     }
+    document.getElementById('settings').classList.add('hidden');
+    await sleep(150);
     // 127: voice dictation -- button visible by default (ships on), a click
     // arms it, the first event resolves the arming state, a voice-text event
     // lands in the composer input, a second click plus the backend's own
@@ -4934,7 +4936,7 @@ PROBE = """
         if (!voiceBtn.classList.contains('is-arming') || parseFloat(getComputedStyle(voiceBtn).opacity) < 1) {
           out.errors.push('Voice button dims while arming instead of lighting up (opacity ' + getComputedStyle(voiceBtn).opacity + ')');
         }
-        window.__FIRE__('voice-text', { id: 1, text: 'hello world' });
+        window.__FIRE__('voice-text', { id: 1, token: 1, text: 'hello world' });
         await sleep(50);
         if (!voiceBtn.classList.contains('is-listening') || voiceBtn.getAttribute('aria-pressed') !== 'true') {
           out.errors.push('Voice button did not switch to is-listening after the first event');
@@ -4943,7 +4945,7 @@ PROBE = """
           out.errors.push('Voice text did not land in the composer input (' + JSON.stringify(voiceInput.value) + ')');
         }
         voiceBtn.click();
-        window.__FIRE__('voice-stopped', { id: 1, reason: 'manual' });
+        window.__FIRE__('voice-stopped', { id: 1, token: 1, reason: 'manual' });
         await sleep(50);
         if (voiceBtn.classList.contains('is-listening') || voiceBtn.classList.contains('is-arming')) {
           out.errors.push('Voice button state did not clear after voice-stopped');
@@ -4958,15 +4960,96 @@ PROBE = """
         voiceBtn.click();
         await sleep(50);
         const selStartBeforeSecond = voiceInput.selectionStart;
-        window.__FIRE__('voice-text', { id: 1, text: 'second round' });
+        window.__FIRE__('voice-text', { id: 1, token: 2, text: 'second round' });
         await sleep(50);
         voiceBtn.click();
-        window.__FIRE__('voice-stopped', { id: 1, reason: 'manual' });
+        window.__FIRE__('voice-stopped', { id: 1, token: 2, reason: 'manual' });
         await sleep(50);
         if (!voiceInput.value.trim().endsWith('second round')) {
           out.errors.push('Second dictation landed at the front instead of the caret (selectionStart read before it was ' + selStartBeforeSecond + ', value is now ' + JSON.stringify(voiceInput.value) + ')');
         }
         layoutScan('Composer with voice button');
+      }
+    }
+    // 171: a late voice-text can still arrive after its own session already
+    // reported voice-stopped (the WinRT ResultGenerated/Completed handlers are
+    // not ordered against each other) -- it must be delivered to that session's
+    // own target instead of being dropped or, worse, picked up by whatever
+    // session starts next. Uses the edit dialog's field as target 2 so the two
+    // sessions have genuinely different targets, matching the real "clicked a
+    // different field and started dictating again" scenario.
+    {
+      const voiceInput = document.getElementById('input');
+      const voiceBtn = document.getElementById('voice-btn');
+      voiceInput.value = '';
+      voiceBtn.click(); // session token 3
+      await sleep(50);
+      window.__FIRE__('voice-stopped', { id: 1, token: 3, reason: 'manual' });
+      await sleep(50);
+      const tile = document.querySelector('#grid .tile');
+      let modalVoiceBtn = null, modalText = null;
+      if (tile) {
+        tile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+        await sleep(200);
+        const edit = document.querySelector('#ctx [data-act="edit"]');
+        if (edit) { edit.click(); await sleep(400); }
+      }
+      if (!tile || document.getElementById('modal').classList.contains('hidden')) {
+        out.errors.push('could not open the editor for the late-voice-text probe');
+      } else {
+        modalVoiceBtn = document.getElementById('modal-voice-btn');
+        modalText = document.getElementById('modal-text');
+        // With Markdown preview on (switched on earlier in this run) a prompt
+        // opens rendered by default -- swap to the raw textarea, same click the
+        // user would make, before dictating into it.
+        const mdPreviewEl = document.getElementById('modal-md-preview');
+        if (modalText.classList.contains('hidden') && mdPreviewEl && !mdPreviewEl.classList.contains('hidden')) {
+          mdPreviewEl.click();
+          await sleep(100);
+        }
+        modalText.value = '';
+        modalVoiceBtn.click(); // session token 4
+        await sleep(50);
+        // The late text for the FIRST (already-stopped) session arrives while the
+        // second is still arming -- must land in the first target, not the second.
+        window.__FIRE__('voice-text', { id: 1, token: 3, text: 'LATE' });
+        await sleep(50);
+        if (!voiceInput.value.trim().endsWith('LATE')) {
+          out.errors.push('Late voice-text for an already-stopped session was not delivered to its own target');
+        }
+        if (modalText.value.includes('LATE')) {
+          out.errors.push('Late voice-text for a stopped session leaked into the new session target');
+        }
+        window.__FIRE__('voice-text', { id: 2, token: 4, text: 'real' });
+        await sleep(50);
+        modalVoiceBtn.click();
+        window.__FIRE__('voice-stopped', { id: 2, token: 4, reason: 'manual' });
+        await sleep(50);
+        if (!modalText.value.trim().endsWith('real')) {
+          out.errors.push('Second session text did not land in its own target (' + JSON.stringify(modalText.value) + ')');
+        }
+        if (modalVoiceBtn.classList.contains('is-listening') || modalVoiceBtn.classList.contains('is-arming')) {
+          out.errors.push('Voice button did not return to idle after the second session stopped');
+        }
+        // Grace window (3s) has passed -- a further late event for the long-gone
+        // first session must now be dropped entirely, not appended anywhere.
+        await sleep(3100);
+        window.__FIRE__('voice-text', { id: 1, token: 3, text: 'TOO-LATE' });
+        await sleep(50);
+        if (voiceInput.value.includes('TOO-LATE') || modalText.value.includes('TOO-LATE')) {
+          out.errors.push('A voice-text arriving after the late-delivery grace window was not dropped');
+        }
+        document.getElementById('modal-close-x').click();
+        await sleep(80);
+        // The editor's own content changed (the voice text above), so closing it
+        // opens the shared unsaved-changes confirm dialog -- discard, same as a
+        // real user closing without saving, so it does not linger open into the
+        // Tour block right after this one and corrupt its dialog-stack checks.
+        const closeConfirm = document.getElementById('confirm-modal');
+        if (closeConfirm && !closeConfirm.classList.contains('hidden')) {
+          document.getElementById('confirm-ok').click();
+          await sleep(80);
+        }
       }
     }
     // First-run tour -- all five steps reachable, each with a heading and at
@@ -5975,10 +6058,12 @@ def main():
                  # restore-scope round trips) added their own expert-menu detours, then
                  # to 110s once 90-94's six new expert rows pushed past that too, then
                  # to 120s once the injected-markup grid/library check added its own
-                 # create-and-verify round trip.
+                 # create-and-verify round trip, then to 126s once 171's late-voice-text
+                 # probe added its own editor round trip plus the 3s late-delivery grace
+                 # window it has to sit through.
                  # The window has to hold the iframe plus Chrome's own frame.
                  f"--window-size={max(w + 30, 520)},{h + 140}",
-                 "--virtual-time-budget=120000", "--dump-dom",
+                 "--virtual-time-budget=126000", "--dump-dom",
                  wrapper.as_uri()],
                 # The dumped DOM carries all 20 languages; without an explicit
                 # codec Windows decodes it as cp1252 and the reader thread dies,
@@ -6025,7 +6110,7 @@ def main():
                 [browser, "--headless=new", "--disable-gpu", "--no-first-run",
                  f"--user-data-dir={tmp / ('profile-%s' % size_tag)}", "--allow-file-access-from-files",
                  f"--window-size={max(w + 30, 520)},{h + 140}",
-                 "--virtual-time-budget=120000", "--dump-dom",
+                 "--virtual-time-budget=126000", "--dump-dom",
                  wrapper.as_uri()],
                 capture_output=True, text=True, encoding="utf-8", errors="replace",
                 timeout=240)
