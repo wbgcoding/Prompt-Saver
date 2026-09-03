@@ -68,6 +68,10 @@ windows = { version = "0.58", features = [
   # before it is ever run. Win32_Security_Cryptography is needed for the
   # WINTRUST_DATA struct itself, not just the WinTrust function bindings.
   "Win32_Security_WinTrust", "Win32_Security_Cryptography",
+  # 191: local-time recording filenames (GetLocalTime) -- kept on the pinned
+  # 0.58 windows crate rather than pulled from windows-capture's own 0.62, so
+  # this one call does not cross the version boundary noted below.
+  "Win32_System_SystemInformation",
 ] }
 # Screen recording (point 191): Windows Graphics Capture + its own Media
 # Foundation H.264/MP4 encoder, vetted against a real desktop before use.

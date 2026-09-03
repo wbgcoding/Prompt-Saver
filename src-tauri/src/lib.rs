@@ -14609,6 +14609,539 @@ mod voice {
     }
 }
 
+// ---------- Screen recording (point 191: recording engine core) ----------
+//
+// Windows Graphics Capture (via the windows-capture crate) plus its own Media
+// Foundation H.264 encoder. This point only builds the engine and its five
+// commands -- no target picker, no control bar, no audio, no UI; those follow
+// in 238 (picker + bar), 239 (audio) and 240/241 (quality, formats, integration).
+//
+// Two research passes already paid for this design: a throwaway example
+// proved start/pause/resume/stop on real hardware, and three traps were found
+// and are worked around here:
+// - CaptureControl::stop() posts WM_QUIT to the capture thread and skips
+//   on_closed(), so the encoder must be finalised BEFORE stop() is called,
+//   never inside on_closed().
+// - CaptureControl::halt_handle() is the same flag stop() sets, not a pause --
+//   pause is tracked with our own clock instead.
+// - send_frame(&Frame) times video from WGC's own per-frame timestamp, which
+//   keeps advancing during a pause and bakes a frozen-frame gap into the
+//   output. send_frame_buffer(bytes, own_timestamp) with a clock that stops
+//   advancing while paused avoids that.
+//
+// Everything below that has no Windows-specific type is kept outside the
+// #[cfg(windows)] module so it stays unit-testable on any platform.
+
+// The recording state machine: pure functions of the current phase, so the
+// allowed transitions are testable without a capture session.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum RecPhase {
+    Idle,
+    Recording,
+    Paused,
+}
+fn rec_can_start(phase: RecPhase) -> bool {
+    phase == RecPhase::Idle
+}
+fn rec_can_pause(phase: RecPhase) -> bool {
+    phase == RecPhase::Recording
+}
+fn rec_can_resume(phase: RecPhase) -> bool {
+    phase == RecPhase::Paused
+}
+fn rec_can_finish(phase: RecPhase) -> bool {
+    // stop and cancel are reachable from the same two phases.
+    matches!(phase, RecPhase::Recording | RecPhase::Paused)
+}
+
+// The "active recording time" a pause must not advance, in 100ns ticks (the
+// same unit VideoEncoder::send_frame_buffer expects). Kept as a pure function
+// of its inputs so the pause-freezes-time behaviour is testable without a
+// real clock.
+fn rec_clock_ticks(accumulated_ticks: i64, active_segment_elapsed_ticks: Option<i64>) -> i64 {
+    accumulated_ticks.saturating_add(active_segment_elapsed_ticks.unwrap_or(0))
+}
+
+// rec-YYYY-MM-DD_HHMMSS.mp4, built from already-split components so the
+// formatting is testable without touching the system clock.
+fn rec_filename(year: i32, month: u32, day: u32, hour: u32, minute: u32, second: u32) -> String {
+    format!("rec-{year:04}-{month:02}-{day:02}_{hour:02}{minute:02}{second:02}.mp4")
+}
+
+// Instant-based wrapper around rec_clock_ticks: accumulates active time across
+// pauses and converts to 100ns ticks.
+pub(crate) struct RecordClock {
+    paused: std::sync::atomic::AtomicBool,
+    accumulated_ticks: std::sync::atomic::AtomicI64,
+    segment_start: Mutex<Option<std::time::Instant>>,
+}
+impl RecordClock {
+    fn new() -> Self {
+        Self {
+            paused: std::sync::atomic::AtomicBool::new(false),
+            accumulated_ticks: std::sync::atomic::AtomicI64::new(0),
+            segment_start: Mutex::new(Some(std::time::Instant::now())),
+        }
+    }
+    fn is_paused(&self) -> bool {
+        self.paused.load(std::sync::atomic::Ordering::SeqCst)
+    }
+    fn now_ticks(&self) -> i64 {
+        let elapsed = self
+            .segment_start
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .map(|t0| (t0.elapsed().as_nanos() / 100) as i64);
+        rec_clock_ticks(self.accumulated_ticks.load(std::sync::atomic::Ordering::SeqCst), elapsed)
+    }
+    fn pause(&self) {
+        if self.paused.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            return; // already paused
+        }
+        let mut seg = self.segment_start.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(t0) = seg.take() {
+            let add = (t0.elapsed().as_nanos() / 100) as i64;
+            self.accumulated_ticks.fetch_add(add, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+    fn resume(&self) {
+        if !self.paused.swap(false, std::sync::atomic::Ordering::SeqCst) {
+            return; // was not paused
+        }
+        *self.segment_start.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
+    }
+}
+
+// Pure byte-shuffle: copies `height` rows of `width * 4` BGRA bytes from a
+// possibly padded, top-down source (row spacing `stride`) into a tightly
+// packed, bottom-up destination -- what VideoEncoder::send_frame_buffer's own
+// docs say it expects. Independent of any capture-frame type so it is
+// unit-testable without a GPU or a Windows build.
+fn flip_rows_bottom_up(raw: &[u8], width: usize, height: usize, stride: usize) -> Vec<u8> {
+    let row_bytes = width * 4;
+    let mut out = vec![0u8; row_bytes * height];
+    for y in 0..height {
+        let src = y * stride;
+        if src + row_bytes > raw.len() {
+            break; // defensive -- a malformed frame must not panic the capture thread
+        }
+        let dst_row = height - 1 - y;
+        let dst = dst_row * row_bytes;
+        out[dst..dst + row_bytes].copy_from_slice(&raw[src..src + row_bytes]);
+    }
+    out
+}
+
+const REC_QUEUE_CAP: usize = 4; // bounded frame queue, point 191 step 4
+
+struct RecFrameItem {
+    bytes: Vec<u8>,
+    ts: i64,
+}
+
+// Shared between the WGC capture callback (producer) and the encoder feeder
+// thread (consumer). windows-capture's own internal channel from our callback
+// to its transcode thread is unbounded and un-instrumentable, so a slow
+// encoder must be caught here instead: a full queue drops the OLDEST frame
+// rather than blocking the capture callback (and with it the desktop
+// compositor). Dropped frames are counted and logged, never silent.
+pub(crate) struct RecFeederShared {
+    queue: Mutex<std::collections::VecDeque<RecFrameItem>>,
+    cv: std::sync::Condvar,
+    dropped: std::sync::atomic::AtomicU64,
+    stopping: std::sync::atomic::AtomicBool,
+}
+impl RecFeederShared {
+    fn new() -> Self {
+        Self {
+            queue: Mutex::new(std::collections::VecDeque::new()),
+            cv: std::sync::Condvar::new(),
+            dropped: std::sync::atomic::AtomicU64::new(0),
+            stopping: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+    fn push(&self, item: RecFrameItem) {
+        let mut q = self.queue.lock().unwrap_or_else(|e| e.into_inner());
+        if q.len() >= REC_QUEUE_CAP {
+            q.pop_front();
+            self.dropped.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        q.push_back(item);
+        drop(q);
+        self.cv.notify_one();
+    }
+    fn pop_or_stop(&self) -> Option<RecFrameItem> {
+        let mut q = self.queue.lock().unwrap_or_else(|e| e.into_inner());
+        loop {
+            if let Some(item) = q.pop_front() {
+                return Some(item);
+            }
+            if self.stopping.load(std::sync::atomic::Ordering::Relaxed) {
+                return None;
+            }
+            q = self.cv.wait(q).unwrap_or_else(|e| e.into_inner());
+        }
+    }
+    fn request_stop(&self) {
+        self.stopping.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.cv.notify_all();
+    }
+}
+
+#[cfg(windows)]
+struct RecordingState(Mutex<Option<recording::RecSession>>);
+#[cfg(not(windows))]
+struct RecordingState(Mutex<Option<()>>);
+
+#[derive(serde::Serialize, Clone)]
+struct RecordingStoppedPayload {
+    path: String,
+    dropped_frames: u64,
+}
+
+#[cfg(windows)]
+mod recording {
+    use super::{
+        append_crash_log, flip_rows_bottom_up, rec_filename, RecFeederShared, RecFrameItem, RecPhase, RecordClock,
+    };
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::Ordering;
+    use std::sync::Arc;
+    use std::thread;
+    use windows::Win32::System::SystemInformation::GetLocalTime;
+    use windows_capture::capture::{CaptureControl, Context, GraphicsCaptureApiHandler};
+    use windows_capture::encoder::{
+        AudioSettingsBuilder, ContainerSettingsBuilder, VideoEncoder, VideoSettingsBuilder, VideoSettingsSubType,
+    };
+    use windows_capture::frame::Frame;
+    use windows_capture::graphics_capture_api::InternalCaptureControl;
+    use windows_capture::monitor::Monitor;
+    use windows_capture::settings::{
+        ColorFormat, CursorCaptureSettings, DirtyRegionSettings, DrawBorderSettings,
+        MinimumUpdateIntervalSettings, SecondaryWindowSettings, Settings,
+    };
+    use windows_capture::window::Window;
+
+    pub type RecError = Box<dyn std::error::Error + Send + Sync>;
+
+    // Target selected for recording. Point 238 adds the real picker; for now
+    // the caller identifies a monitor by its raw HMONITOR (0 = primary) or a
+    // window by its raw HWND, matching how the snip overlay already does.
+    #[derive(Clone, Copy)]
+    pub enum RecTarget {
+        Monitor(isize),
+        Window(isize),
+    }
+
+    pub(crate) struct RecHandler {
+        clock: Arc<RecordClock>,
+        shared: Arc<RecFeederShared>,
+    }
+    impl GraphicsCaptureApiHandler for RecHandler {
+        type Flags = (Arc<RecordClock>, Arc<RecFeederShared>);
+        type Error = RecError;
+
+        fn new(ctx: Context<Self::Flags>) -> Result<Self, Self::Error> {
+            let (clock, shared) = ctx.flags;
+            Ok(Self { clock, shared })
+        }
+
+        fn on_frame_arrived(
+            &mut self,
+            frame: &mut Frame,
+            _capture_control: InternalCaptureControl,
+        ) -> Result<(), Self::Error> {
+            if self.clock.is_paused() {
+                return Ok(());
+            }
+            let ts = self.clock.now_ticks();
+            let mut fb = frame.buffer()?;
+            let (width, height, stride) = (fb.width() as usize, fb.height() as usize, fb.row_pitch() as usize);
+            let bytes = flip_rows_bottom_up(fb.as_raw_buffer(), width, height, stride);
+            self.shared.push(RecFrameItem { bytes, ts });
+            Ok(())
+        }
+    }
+
+    fn build_encoder(width: u32, height: u32, path: &Path) -> Result<VideoEncoder, RecError> {
+        // VideoSettingsBuilder defaults to HEVC -- the app always ships MP4/H.264,
+        // so the sub type is set explicitly rather than trusting the default.
+        let encoder = VideoEncoder::new(
+            VideoSettingsBuilder::new(width, height).sub_type(VideoSettingsSubType::H264).frame_rate(30),
+            AudioSettingsBuilder::default().disabled(true),
+            ContainerSettingsBuilder::default(),
+            path,
+        )?;
+        Ok(encoder)
+    }
+
+    fn feeder_loop(shared: Arc<RecFeederShared>, mut encoder: VideoEncoder) {
+        while let Some(item) = shared.pop_or_stop() {
+            if let Err(e) = encoder.send_frame_buffer(&item.bytes, item.ts) {
+                append_crash_log(&format!("recording: send_frame_buffer failed: {e}"));
+                break;
+            }
+        }
+        if let Err(e) = encoder.finish() {
+            append_crash_log(&format!("recording: encoder finish failed: {e}"));
+        }
+    }
+
+    pub struct RecSession {
+        control: CaptureControl<RecHandler, RecError>,
+        clock: Arc<RecordClock>,
+        shared: Arc<RecFeederShared>,
+        feeder: Option<thread::JoinHandle<()>>,
+        pub output_path: PathBuf,
+        pub phase: RecPhase,
+    }
+
+    fn resolve_target_size(target: RecTarget) -> Result<(u32, u32), String> {
+        match target {
+            RecTarget::Monitor(0) => {
+                let m = Monitor::primary().map_err(|e| e.to_string())?;
+                Ok((m.width().map_err(|e| e.to_string())?, m.height().map_err(|e| e.to_string())?))
+            }
+            RecTarget::Monitor(h) => {
+                let m = Monitor::from_raw_hmonitor(h as *mut std::ffi::c_void);
+                Ok((m.width().map_err(|e| e.to_string())?, m.height().map_err(|e| e.to_string())?))
+            }
+            RecTarget::Window(h) => {
+                let w = Window::from_raw_hwnd(h as *mut std::ffi::c_void);
+                if !w.is_valid() {
+                    return Err("window is no longer valid".to_string());
+                }
+                let width = w.width().map_err(|e| e.to_string())?;
+                let height = w.height().map_err(|e| e.to_string())?;
+                if width <= 0 || height <= 0 {
+                    return Err("window has no visible size".to_string());
+                }
+                Ok((width as u32, height as u32))
+            }
+        }
+    }
+
+    pub fn start(target: RecTarget, output_path: PathBuf) -> Result<RecSession, String> {
+        let (width, height) = resolve_target_size(target)?;
+        let encoder = build_encoder(width, height, &output_path).map_err(|e| e.to_string())?;
+        let clock = Arc::new(RecordClock::new());
+        let shared = Arc::new(RecFeederShared::new());
+        let feeder = {
+            let shared2 = shared.clone();
+            thread::Builder::new()
+                .name("rec-feeder".into())
+                .spawn(move || feeder_loop(shared2, encoder))
+                .map_err(|e| e.to_string())?
+        };
+
+        let cursor = CursorCaptureSettings::Default;
+        let flags = (clock.clone(), shared.clone());
+        let control = match target {
+            RecTarget::Monitor(0) => {
+                let m = Monitor::primary().map_err(|e| e.to_string())?;
+                let settings = Settings::new(
+                    m, cursor, DrawBorderSettings::Default, SecondaryWindowSettings::Default,
+                    MinimumUpdateIntervalSettings::Default, DirtyRegionSettings::Default, ColorFormat::Bgra8, flags,
+                );
+                RecHandler::start_free_threaded(settings).map_err(|e| e.to_string())?
+            }
+            RecTarget::Monitor(h) => {
+                let m = Monitor::from_raw_hmonitor(h as *mut std::ffi::c_void);
+                let settings = Settings::new(
+                    m, cursor, DrawBorderSettings::Default, SecondaryWindowSettings::Default,
+                    MinimumUpdateIntervalSettings::Default, DirtyRegionSettings::Default, ColorFormat::Bgra8, flags,
+                );
+                RecHandler::start_free_threaded(settings).map_err(|e| e.to_string())?
+            }
+            RecTarget::Window(h) => {
+                let w = Window::from_raw_hwnd(h as *mut std::ffi::c_void);
+                let settings = Settings::new(
+                    w, cursor, DrawBorderSettings::Default, SecondaryWindowSettings::Default,
+                    MinimumUpdateIntervalSettings::Default, DirtyRegionSettings::Default, ColorFormat::Bgra8, flags,
+                );
+                RecHandler::start_free_threaded(settings).map_err(|e| e.to_string())?
+            }
+        };
+
+        Ok(RecSession { control, clock, shared, feeder: Some(feeder), output_path, phase: RecPhase::Recording })
+    }
+
+    pub fn pause(session: &RecSession) {
+        session.clock.pause();
+    }
+    pub fn resume(session: &RecSession) {
+        session.clock.resume();
+    }
+
+    // Shared tail of stop/cancel: drain the queue and finalise the encoder,
+    // THEN tear down the capture thread -- Trap 1. Finalising after stop()
+    // finalises against a WM_QUIT'd capture pipeline and produces an MP4 with
+    // no closed moov atom (unplayable).
+    fn finish_and_stop(mut session: RecSession) -> Result<u64, String> {
+        session.shared.request_stop();
+        if let Some(feeder) = session.feeder.take() {
+            let _ = feeder.join();
+        }
+        let dropped = session.shared.dropped.load(Ordering::Relaxed);
+        session.control.stop().map_err(|e| e.to_string())?;
+        Ok(dropped)
+    }
+
+    pub fn stop(session: RecSession) -> Result<(PathBuf, u64), String> {
+        let path = session.output_path.clone();
+        let dropped = finish_and_stop(session)?;
+        Ok((path, dropped))
+    }
+
+    // The output file exists the instant VideoEncoder::new() runs (it opens the
+    // file eagerly), so a clean cancel still finalises it -- via the same
+    // finish_and_stop tail, to keep exactly one shutdown sequence -- and then
+    // deletes it, leaving no file behind.
+    pub fn cancel(session: RecSession) -> Result<(), String> {
+        let path = session.output_path.clone();
+        finish_and_stop(session)?;
+        let _ = std::fs::remove_file(&path);
+        Ok(())
+    }
+
+    pub fn new_output_path(recordings_dir: &Path) -> Result<PathBuf, String> {
+        std::fs::create_dir_all(recordings_dir).map_err(|e| e.to_string())?;
+        let st = unsafe { GetLocalTime() };
+        let name = rec_filename(
+            st.wYear as i32, st.wMonth as u32, st.wDay as u32, st.wHour as u32, st.wMinute as u32, st.wSecond as u32,
+        );
+        Ok(recordings_dir.join(name))
+    }
+}
+
+#[cfg(windows)]
+#[tauri::command]
+async fn start_recording(
+    app: AppHandle,
+    rstate: State<'_, RecordingState>,
+    target_kind: String,
+    target_id: i64,
+) -> Result<(), String> {
+    {
+        let guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
+        let phase = guard.as_ref().map(|s| s.phase).unwrap_or(RecPhase::Idle);
+        if !rec_can_start(phase) {
+            return Err("recording-busy".to_string());
+        }
+    }
+    let target = match target_kind.as_str() {
+        "monitor" => recording::RecTarget::Monitor(target_id as isize),
+        "window" => recording::RecTarget::Window(target_id as isize),
+        _ => return Err("invalid recording target".to_string()),
+    };
+    let dir = data_dir(&app).join("recordings");
+    let session = tauri::async_runtime::spawn_blocking(move || {
+        let out_path = recording::new_output_path(&dir)?;
+        recording::start(target, out_path)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    *rstate.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(session);
+    Ok(())
+}
+#[cfg(not(windows))]
+#[tauri::command]
+async fn start_recording(
+    app: AppHandle,
+    rstate: State<'_, RecordingState>,
+    target_kind: String,
+    target_id: i64,
+) -> Result<(), String> {
+    let _ = (app, rstate, target_kind, target_id);
+    Err("recording is only available on Windows".to_string())
+}
+
+#[cfg(windows)]
+#[tauri::command]
+fn pause_recording(rstate: State<'_, RecordingState>) -> Result<(), String> {
+    let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
+    let session = guard.as_mut().ok_or_else(|| "no active recording".to_string())?;
+    if !rec_can_pause(session.phase) {
+        return Err("not recording".to_string());
+    }
+    recording::pause(session);
+    session.phase = RecPhase::Paused;
+    Ok(())
+}
+#[cfg(not(windows))]
+#[tauri::command]
+fn pause_recording(rstate: State<'_, RecordingState>) -> Result<(), String> {
+    let _ = rstate;
+    Err("recording is only available on Windows".to_string())
+}
+
+#[cfg(windows)]
+#[tauri::command]
+fn resume_recording(rstate: State<'_, RecordingState>) -> Result<(), String> {
+    let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
+    let session = guard.as_mut().ok_or_else(|| "no active recording".to_string())?;
+    if !rec_can_resume(session.phase) {
+        return Err("not paused".to_string());
+    }
+    recording::resume(session);
+    session.phase = RecPhase::Recording;
+    Ok(())
+}
+#[cfg(not(windows))]
+#[tauri::command]
+fn resume_recording(rstate: State<'_, RecordingState>) -> Result<(), String> {
+    let _ = rstate;
+    Err("recording is only available on Windows".to_string())
+}
+
+#[cfg(windows)]
+#[tauri::command]
+async fn stop_recording(rstate: State<'_, RecordingState>) -> Result<RecordingStoppedPayload, String> {
+    let session = {
+        let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
+        let s = guard.take().ok_or_else(|| "no active recording".to_string())?;
+        if !rec_can_finish(s.phase) {
+            *guard = Some(s);
+            return Err("nothing to stop".to_string());
+        }
+        s
+    };
+    let (path, dropped) = tauri::async_runtime::spawn_blocking(move || recording::stop(session))
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(RecordingStoppedPayload { path: path.to_string_lossy().to_string(), dropped_frames: dropped })
+}
+#[cfg(not(windows))]
+#[tauri::command]
+async fn stop_recording(rstate: State<'_, RecordingState>) -> Result<RecordingStoppedPayload, String> {
+    let _ = rstate;
+    Err("recording is only available on Windows".to_string())
+}
+
+#[cfg(windows)]
+#[tauri::command]
+async fn cancel_recording(rstate: State<'_, RecordingState>) -> Result<(), String> {
+    let session = {
+        let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
+        let s = guard.take().ok_or_else(|| "no active recording".to_string())?;
+        if !rec_can_finish(s.phase) {
+            *guard = Some(s);
+            return Err("nothing to cancel".to_string());
+        }
+        s
+    };
+    tauri::async_runtime::spawn_blocking(move || recording::cancel(session))
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(())
+}
+#[cfg(not(windows))]
+#[tauri::command]
+async fn cancel_recording(rstate: State<'_, RecordingState>) -> Result<(), String> {
+    let _ = rstate;
+    Err("recording is only available on Windows".to_string())
+}
+
 // ---------- Updates (GitHub releases) ----------
 
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -16859,6 +17392,7 @@ pub fn run() {
             app.manage(VarPrompt::new()); // standalone fill-in window
             app.manage(SyncWriteQueue(Mutex::new(SyncWriteState::default())));
             app.manage(VoiceState(Mutex::new(None), std::sync::atomic::AtomicBool::new(false))); // live dictation session
+            app.manage(RecordingState(Mutex::new(None))); // live screen-recording session
 
             // Auto-paste: start tracking the last external foreground window.
             #[cfg(windows)]
@@ -17382,7 +17916,12 @@ pub fn run() {
             speech_install_result,
             voice_lang_snooze,
             open_privacy_mic,
-            set_voice_hotkey
+            set_voice_hotkey,
+            start_recording,
+            pause_recording,
+            resume_recording,
+            stop_recording,
+            cancel_recording
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
@@ -18426,6 +18965,80 @@ fn start_sync_poll(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- Recording (point 191): state machine + clock + filename, no hardware needed ----
+
+    #[test]
+    fn rec_phase_allows_the_documented_transitions_only() {
+        assert!(rec_can_start(RecPhase::Idle));
+        assert!(!rec_can_start(RecPhase::Recording));
+        assert!(!rec_can_start(RecPhase::Paused));
+
+        assert!(rec_can_pause(RecPhase::Recording));
+        assert!(!rec_can_pause(RecPhase::Idle));
+        assert!(!rec_can_pause(RecPhase::Paused));
+
+        assert!(rec_can_resume(RecPhase::Paused));
+        assert!(!rec_can_resume(RecPhase::Recording));
+        assert!(!rec_can_resume(RecPhase::Idle));
+
+        assert!(rec_can_finish(RecPhase::Recording));
+        assert!(rec_can_finish(RecPhase::Paused));
+        assert!(!rec_can_finish(RecPhase::Idle));
+    }
+
+    #[test]
+    fn rec_clock_freezes_during_a_pause_and_resumes_from_where_it_left_off() {
+        assert_eq!(rec_clock_ticks(0, Some(50_000)), 50_000);
+        // paused: no active segment, only the frozen accumulated value counts.
+        assert_eq!(rec_clock_ticks(50_000, None), 50_000);
+        // resumed: accumulated carries over, the fresh segment adds on top.
+        assert_eq!(rec_clock_ticks(50_000, Some(10_000)), 60_000);
+    }
+
+    #[test]
+    fn record_clock_pause_freezes_wall_time_progress() {
+        let clock = RecordClock::new();
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        clock.pause();
+        let frozen = clock.now_ticks();
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        assert_eq!(clock.now_ticks(), frozen, "ticks must not advance while paused");
+        clock.resume();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        assert!(clock.now_ticks() > frozen, "ticks must advance again after resume");
+    }
+
+    #[test]
+    fn rec_filename_matches_the_spec_pattern() {
+        assert_eq!(rec_filename(2026, 9, 3, 8, 5, 9), "rec-2026-09-03_080509.mp4");
+        assert_eq!(rec_filename(2026, 12, 31, 23, 59, 0), "rec-2026-12-31_235900.mp4");
+    }
+
+    #[test]
+    fn rec_feeder_queue_drops_oldest_when_full_and_counts_it() {
+        let shared = RecFeederShared::new();
+        for i in 0..(REC_QUEUE_CAP as i64 + 2) {
+            shared.push(RecFrameItem { bytes: vec![], ts: i });
+        }
+        assert_eq!(shared.dropped.load(std::sync::atomic::Ordering::Relaxed), 2);
+        // the two oldest (ts 0, 1) were dropped -- what remains starts at ts 2.
+        let first = shared.pop_or_stop().expect("queue should still have items");
+        assert_eq!(first.ts, 2);
+    }
+
+    #[test]
+    fn flip_rows_bottom_up_reverses_row_order_and_strips_padding() {
+        // 2x2 BGRA, stride padded by 4 extra bytes per row.
+        let row0 = [1u8, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0];
+        let row1 = [9u8, 10, 11, 12, 13, 14, 15, 16, 0, 0, 0, 0];
+        let mut raw = Vec::new();
+        raw.extend_from_slice(&row0);
+        raw.extend_from_slice(&row1);
+        let out = flip_rows_bottom_up(&raw, 2, 2, 12);
+        // bottom-up: row1's 8 pixel bytes first, then row0's, no padding.
+        assert_eq!(out, vec![9, 10, 11, 12, 13, 14, 15, 16, 1, 2, 3, 4, 5, 6, 7, 8]);
+    }
 
     // ---- The prompt list the window gets, and what a save may do to an image ----
 
