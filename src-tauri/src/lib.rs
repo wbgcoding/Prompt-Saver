@@ -775,6 +775,7 @@ struct TrayCfg {
     recent_n: usize,
     favs: bool,
     fav_n: usize,
+    label_max: usize,
 }
 
 fn tray_cfg(settings: &Settings) -> TrayCfg {
@@ -786,7 +787,15 @@ fn tray_cfg(settings: &Settings) -> TrayCfg {
         recent_n: count("trayRecentN", 5.0),
         favs: settings.ui_flags.get("trayFavs") != Some(&false), // on by default
         fav_n: count("trayFavN", 10.0),
+        label_max: tray_label_max(settings),
     }
+}
+
+// Expert-tunable cap for tray_label, clamped the same way every other
+// ui_values-backed expert row is: an absent/out-of-range stored value falls
+// back to the shipped default rather than reaching tray_label unclamped.
+fn tray_label_max(settings: &Settings) -> usize {
+    settings.ui_values.get("trayLabelMax").copied().unwrap_or(TRAY_LABEL_MAX as f64).clamp(20.0, 80.0) as usize
 }
 
 // Menu text for a prompt. Control characters (a pasted newline lands in the name)
@@ -794,15 +803,15 @@ fn tray_cfg(settings: &Settings) -> TrayCfg {
 // mnemonic, and the cut counts CHARACTERS — a byte cut would split a multi-byte
 // name in the middle of a character. An over-long name is cut back to the last word
 // break in the tail rather than mid-word, so the entry still reads as words.
-fn tray_label(name: &str) -> String {
+fn tray_label(name: &str, max: usize) -> String {
     let flat: String = name.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
     let mut text = flat.split_whitespace().collect::<Vec<_>>().join(" ");
-    if text.chars().count() > TRAY_LABEL_MAX {
-        let mut cut: String = text.chars().take(TRAY_LABEL_MAX - 1).collect();
+    if text.chars().count() > max {
+        let mut cut: String = text.chars().take(max - 1).collect();
         if let Some(space) = cut.rfind(' ') {
             // Only when the break is near the end — otherwise a single long word
             // would shrink the label to almost nothing.
-            if cut[..space].chars().count() >= TRAY_LABEL_MAX - TRAY_LABEL_WORD_BACK {
+            if cut[..space].chars().count() >= max.saturating_sub(TRAY_LABEL_WORD_BACK) {
                 cut.truncate(space);
             }
         }
@@ -881,7 +890,7 @@ fn tray_plan(
 ) -> Vec<(TraySection, Vec<TrayEntry>)> {
     let entry = |p: &Prompt| TrayEntry {
         id: tray_item_id(&p.id),
-        label: tray_label(&p.name),
+        label: tray_label(&p.name, cfg.label_max),
         kind: tray_kind(p),
         color: p.color.clone(),
     };
@@ -14865,7 +14874,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
 // Set an expert numeric value (CSS var / behaviour tweak).
 #[tauri::command]
 fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
-    let is_tray = key == "trayRecentN" || key == "trayFavN";
+    let is_tray = key == "trayRecentN" || key == "trayFavN" || key == "trayLabelMax";
     let is_folder_grid = key == "folderGridCols";
     {
         let mut store = lock(&state);
@@ -17413,6 +17422,12 @@ pub fn run() {
 // interval — but this has NOT had the multi-instance crash-simulation stress test
 // the original spec calls for as a "done" gate. Treat it as a beta feature.
 const SYNC_POLL_SECS: u64 = 4;
+
+// Expert-tunable poll interval, clamped the same way as tray_label_max: an
+// absent or out-of-range stored value falls back to the shipped default.
+fn sync_poll_secs(settings: &Settings) -> u64 {
+    settings.ui_values.get("syncPollSecs").copied().unwrap_or(SYNC_POLL_SECS as f64).clamp(2.0, 30.0) as u64
+}
 const SYNC_LOCK_STALE_SECS: u64 = 15;
 
 fn sync_enabled(settings: &Settings) -> bool {
@@ -18395,7 +18410,14 @@ fn sync_poll_once(app: &AppHandle) {
 fn start_sync_poll(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         loop {
-            tokio::time::sleep(std::time::Duration::from_secs(SYNC_POLL_SECS)).await;
+            // Read fresh each round (not once at spawn time) so a changed
+            // syncPollSecs expert value takes effect on the very next wait,
+            // no scheduler restart needed.
+            let secs = app
+                .try_state::<Db>()
+                .map(|s| sync_poll_secs(&lock(&s).settings))
+                .unwrap_or(SYNC_POLL_SECS);
+            tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
             sync_poll_once(&app);
         }
     });
@@ -23248,7 +23270,7 @@ mod tests {
     }
 
     fn tray_all_on(recent_n: usize, fav_n: usize) -> TrayCfg {
-        TrayCfg { recent: true, recent_n, favs: true, fav_n }
+        TrayCfg { recent: true, recent_n, favs: true, fav_n, label_max: TRAY_LABEL_MAX }
     }
 
     // The entries of one section of the plan, or an empty list if it is not drawn.
@@ -23530,29 +23552,62 @@ mod tests {
     fn tray_labels_are_cut_by_character_not_by_byte() {
         // Every char is 3 bytes: a byte cut would split one and panic.
         let cjk = "字".repeat(80);
-        let cut = tray_label(&cjk);
+        let cut = tray_label(&cjk, TRAY_LABEL_MAX);
         assert_eq!(cut.chars().count(), TRAY_LABEL_MAX);
         assert!(cut.ends_with('…'));
         for name in ["Привет мир ".repeat(20), "नमस्ते दुनिया ".repeat(20), "🙂🙃".repeat(60)] {
-            let out = tray_label(&name);
+            let out = tray_label(&name, TRAY_LABEL_MAX);
             assert!(out.chars().count() <= TRAY_LABEL_MAX, "{out:?} is too long");
             assert!(!out.is_empty());
         }
         // Short names pass through untouched.
-        assert_eq!(tray_label("Mail"), "Mail");
+        assert_eq!(tray_label("Mail", TRAY_LABEL_MAX), "Mail");
         // Control characters collapse into single spaces, the name never spans lines.
-        assert_eq!(tray_label("a\nb\tc\u{7}d"), "a b c d");
+        assert_eq!(tray_label("a\nb\tc\u{7}d", TRAY_LABEL_MAX), "a b c d");
         // A Win32 menu reads a lone & as a mnemonic marker.
-        assert_eq!(tray_label("R&D"), "R&&D");
+        assert_eq!(tray_label("R&D", TRAY_LABEL_MAX), "R&&D");
         // A nameless prompt still gets something clickable.
-        assert!(!tray_label("   ").is_empty());
+        assert!(!tray_label("   ", TRAY_LABEL_MAX).is_empty());
         // An over-long name is cut back to the last word break near the cap, so the
         // entry ends on a whole word instead of mid-word.
-        let cut = tray_label("Summarise this article into five concise bullet points");
+        let cut = tray_label("Summarise this article into five concise bullet points", TRAY_LABEL_MAX);
         assert_eq!(cut, "Summarise this article into five…");
         // A single very long word has no usable break and is still cut hard.
-        let word = tray_label(&"x".repeat(60));
+        let word = tray_label(&"x".repeat(60), TRAY_LABEL_MAX);
         assert_eq!(word.chars().count(), TRAY_LABEL_MAX);
+    }
+
+    #[test]
+    fn tray_label_respects_a_custom_max() {
+        // A single long word has no word break to back up to, so it is cut to
+        // exactly whatever max is passed in -- not the TRAY_LABEL_MAX const.
+        let word = "x".repeat(60);
+        assert_eq!(tray_label(&word, 20).chars().count(), 20);
+        assert_eq!(tray_label(&word, 80).chars().count(), 60); // fits under 80, untouched
+    }
+
+    #[test]
+    fn tray_label_max_clamps_the_stored_expert_value() {
+        let mut s = Settings::default();
+        assert_eq!(tray_label_max(&s), TRAY_LABEL_MAX); // absent -> shipped default
+        s.ui_values.insert("trayLabelMax".into(), 5.0);
+        assert_eq!(tray_label_max(&s), 20); // below floor -> clamped up
+        s.ui_values.insert("trayLabelMax".into(), 500.0);
+        assert_eq!(tray_label_max(&s), 80); // above ceiling -> clamped down
+        s.ui_values.insert("trayLabelMax".into(), 60.0);
+        assert_eq!(tray_label_max(&s), 60); // in range -> passed through
+    }
+
+    #[test]
+    fn sync_poll_secs_clamps_the_stored_expert_value() {
+        let mut s = Settings::default();
+        assert_eq!(sync_poll_secs(&s), SYNC_POLL_SECS); // absent -> shipped default
+        s.ui_values.insert("syncPollSecs".into(), 0.0);
+        assert_eq!(sync_poll_secs(&s), 2); // below floor -> clamped up
+        s.ui_values.insert("syncPollSecs".into(), 100.0);
+        assert_eq!(sync_poll_secs(&s), 30); // above ceiling -> clamped down
+        s.ui_values.insert("syncPollSecs".into(), 10.0);
+        assert_eq!(sync_poll_secs(&s), 10); // in range -> passed through
     }
 
     #[test]

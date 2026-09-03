@@ -1451,6 +1451,13 @@ const EXPERT_VALUES = {
   // How many entries each tray quick-copy section lists.
   trayRecentN: { label: "valTrayRecentN", min: 1, max: 10, step: 1, def: 5, unit: "", gate: "trayRecent" },
   trayFavN: { label: "valTrayFavN", min: 1, max: 10, step: 1, def: 10, unit: "", gate: "trayFavs" },
+  // Character cap for a tray menu entry's name before it is cut with an ellipsis.
+  // Shared by both sections, so it gates on trayRecent (the first/default one) --
+  // no OR-gate exists, and gating a shared row on either lone sub-flag is an
+  // approximation either way.
+  trayLabelMax: { label: "valTrayLabelMax", min: 20, max: 80, step: 5, def: 40, unit: "", gate: "trayRecent" },
+  // How often the Markdown-sync folder is re-scanned for outside edits.
+  syncPollSecs: { label: "valSyncPollSecs", min: 2, max: 30, step: 1, def: 4, unit: "s", gate: "promptSync" },
   // Code text size inside the Markdown preview.
   hlFontPx: { label: "valHlFontPx", min: 10, max: 18, step: 1, def: 13, unit: "px", gate: "codeHighlight" },
   // Markdown preview + syntax-highlight size caps, past which they fall back to plain text.
@@ -1641,11 +1648,11 @@ const EXPERT_TABS = [
     // Floating buttons and the two kinds of folder they can form.
     { title: "expGroupFolders", flags: ["floating", { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap", "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
     // The quick-copy sections of the tray menu, each with its own entry count.
-    { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs"], values: ["trayRecentN", "trayFavN"] },
+    { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs"], values: ["trayRecentN", "trayFavN", "trayLabelMax"] },
     // The watcher that collects what you copy elsewhere.
     { title: "expGroupClipboard", flags: ["clipWatcher"], values: ["clipMinChars", "clipInboxMax"] },
     // Prompt folders as Markdown (beta): mirrors text-only prompts as .md files.
-    { title: "expGroupSync", flags: ["promptSync"], paths: ["syncDir"] },
+    { title: "expGroupSync", flags: ["promptSync"], values: ["syncPollSecs"], paths: ["syncDir"] },
   ] },
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
@@ -1823,7 +1830,7 @@ const EXPERT_TIPS = [
   "voice", "voiceInterim", "voicePunct", "voiceAutoCaps", "voiceAutoStop", "voiceAutoStopSec", "voiceMaxMin",
   "voiceLangCacheH", "voiceLang", "voiceInsert", "voiceOnlineOk", "voiceAutoPickLang", "voiceLangAutoUpdate",
   "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH", "voiceHotkey", "voiceHotkeyTarget",
-  "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN",
+  "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "trayLabelMax",
   "checkUpdateOnStart", "showUpdates", "updateCheckH", "importExport", "dimToolbar", "keyboardNav", "allowMultipleInstances",
   "headerSeparators", "floating",
   "pillFolders", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap",
@@ -1848,7 +1855,7 @@ const EXPERT_TIPS = [
   "dedupCopyLog", "cleanupFiles", "blurTilesUntilHover",
   // Tools / data
   "dupFinder", "clipWatcher", "backupGfs", "backupBeforeReset", "backupBeforeDelete", "disarmMs",
-  "usageStats", "promptSync", "syncDir",
+  "usageStats", "promptSync", "syncDir", "syncPollSecs",
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "kbFocusFadeMs", "snipPreviewVh",
   "historyPerPrompt", "dupThreshold", "clipMinChars", "clipInboxMax", "historyMax",

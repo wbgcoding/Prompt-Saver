@@ -27,7 +27,7 @@ voice dictation, the screenshot editor and the introduction tour ship on).
   everywhere at once, with a usage count per tag. Tags travel with TXT and CSV
   exports. The copy history gets its own tag filter alongside its type and
   color filters, same picking logic as the library's.
-- **Custom themes** — build your own theme on top of any of the 16 built-in
+- **Custom themes** — build your own theme on top of any of the 7 built-in
   ones: a palette button beside the theme dropdown opens an editor with a color
   input per themable value, grouped by background, surfaces, text and accent,
   with a live preview while you edit. Saved themes appear in the dropdown under
@@ -63,7 +63,8 @@ voice dictation, the screenshot editor and the introduction tour ship on).
 - **Tray quick menu** — the tray icon's menu can list your recently used and
   your favorite prompts; clicking one copies it without opening the window. It
   draws as a rounded, themed window in the Windows 11 style instead of the
-  plain system popup; an expert-menu switch falls back to the plain menu.
+  plain system popup; an expert-menu switch falls back to the plain menu. How
+  many characters a prompt name may use before it is cut off is also tunable.
 - **Floating-button folders** — drag one floating button onto another and they
   merge into a folder button showing up to four mini previews and a count. Click
   it and it opens in place into a small grid; drag a member out to free it
@@ -111,7 +112,8 @@ voice dictation, the screenshot editor and the introduction tour ship on).
 - **Markdown folder sync** (expert menu, off by default, beta) — mirrors every
   prompt as its own readable `.md` file in a folder you pick: a short header
   with name, color, tags and notes, then the text. Edit a file by hand or with
-  another tool and the change comes back a few seconds later. The header also
+  another tool and the change comes back a few seconds later (the poll interval
+  is tunable in the expert menu). The header also
   carries where the prompt sits — view, grid cell, grid folder and pill folder —
   so a second machine reading the same folder reproduces the arrangement,
   creating a view or folder it does not know yet by name. An attached file, icon

@@ -250,7 +250,8 @@ The system tray icon's right-click menu offers a "recently copied" and a
 "favourites" section for quick access without opening the main window. It draws
 as a rounded, themed window matching the rest of the app rather than the plain
 Windows popup; the expert menu can switch back to the plain system menu if the
-custom one ever misbehaves on your setup.
+custom one ever misbehaves on your setup. The expert menu also caps how long a
+prompt name may get before it is cut off with an ellipsis in that menu.
 
 ### Standalone: Quick launcher
 
@@ -262,7 +263,7 @@ the main window forward.
 
 ### Appearance & themes
 
-Eight built-in themes: system, light, dark, Programmer, Neon Violet, Ocean,
+Seven built-in themes: system/light, dark, Programmer, Neon Violet, Ocean,
 Cyberpunk, and Black & White. The theme editor adjusts any theme's colours and
 saves the result as a custom theme.
 
@@ -363,6 +364,8 @@ that folder can read the content, so a synced or shared folder should be avoided
 for anything sensitive. A tile with an attached file, image, or PDF syncs as a
 reference: the header carries the path and the PDF page, never the file itself. A
 screenshot pasted straight into a tile has no path and stays in the database only.
+The expert menu controls how often the sync folder is re-checked for files
+edited outside the app.
 
 ### The expert menu
 
@@ -514,7 +517,8 @@ eine Kachel gehört immer nur zu einem Raster-Ordner gleichzeitig.
 
 **Taskleistenmenü** — Zuletzt kopiert, Favoriten. Erscheint als abgerundetes,
 zum Thema passendes Fenster statt des einfachen Windows-Menüs; im Expertenmenü
-lässt sich bei Bedarf auf das einfache Systemmenü zurückschalten.
+lässt sich bei Bedarf auf das einfache Systemmenü zurückschalten. Dort auch
+einstellbar: die maximale Länge eines Eintragsnamens.
 
 **Zwischenablage-Überwachung** — aus, protokolliert bei Bedarf alles Kopierte im
 System.
@@ -527,7 +531,7 @@ System.
 
 **Skalierung & Zoom** — UI-, Dialog-, Editor- und Icon-Größe getrennt einstellbar.
 
-**Aussehen & Themes** — acht mitgelieferte Themes, optionaler Theme-Editor.
+**Aussehen & Themes** — sieben mitgelieferte Themes, optionaler Theme-Editor.
 
 **Bibliothek & Suche** — unscharfe Suche, intelligente Sortierung, Filter.
 
@@ -596,7 +600,8 @@ keinen Pfad und bleibt nur in der Datenbank. Eine in einer eingehenden Datei
 genannte Ansicht oder ein Ordner, den es auf diesem Rechner noch nicht gibt,
 wird automatisch angelegt, per Namensabgleich. **Die Dateien sind Klartext** —
 anders als die Datenbank, also kein synchronisierter oder geteilter Ordner für
-Sensibles.
+Sensibles. Im Expertenmenü lässt sich einstellen, wie oft der Sync-Ordner auf
+außerhalb der App bearbeitete Dateien geprüft wird.
 
 **Das Experten-Menü** — jede Funktion hat einen Schalter mit ihren Parametern
 direkt darunter. Die Suche durchsucht alle Tabs auf einmal; ausgeschaltete
