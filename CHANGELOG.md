@@ -667,6 +667,9 @@ voice dictation, the screenshot editor and the introduction tour ship on).
 - **The floating pill's and pill folder's "Edit prompt" button showed no text
   at all** until the window's language finished loading, a brief blank button
   on every open.
+- The selected size in a floating pill's size picker always showed white text,
+  even on themes where that made it hard to read; it now follows the theme's
+  own text colour like the rest of the menu.
 - **Placing a prompt on the grid could silently do nothing** for a prompt that
   was already a member of a grid folder — the library's "add to layout" icon
   still offered it, since a folder member has no layout entry of its own.
