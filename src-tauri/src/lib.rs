@@ -9101,6 +9101,182 @@ fn set_capture_exclusion(win: &tauri::WebviewWindow, excluded: bool) {
 #[cfg(not(windows))]
 fn set_capture_exclusion(_win: &tauri::WebviewWindow, _excluded: bool) {}
 
+// ---- Recording control bar: a small always-on-top window with its own
+// WDA_EXCLUDEFROMCAPTURE (unconditional -- unlike the privacy setting the pill
+// windows use, the bar must NEVER appear in the recording, full stop), pinned
+// top-centre of the recorded monitor or to the top-right corner of the
+// recorded window, following it while it moves. ----
+
+#[cfg(windows)]
+fn monitor_bounds(hmonitor: isize) -> Option<(i32, i32, i32, i32)> {
+    #[repr(C)]
+    struct RectI { left: i32, top: i32, right: i32, bottom: i32 }
+    #[repr(C)]
+    struct MonitorInfoW { size: u32, monitor: RectI, work: RectI, flags: u32 }
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetMonitorInfoW(hmonitor: isize, info: *mut MonitorInfoW) -> i32;
+    }
+    let mut info = MonitorInfoW {
+        size: std::mem::size_of::<MonitorInfoW>() as u32,
+        monitor: RectI { left: 0, top: 0, right: 0, bottom: 0 },
+        work: RectI { left: 0, top: 0, right: 0, bottom: 0 },
+        flags: 0,
+    };
+    if unsafe { GetMonitorInfoW(hmonitor, &mut info) } == 0 {
+        return None;
+    }
+    Some((info.monitor.left, info.monitor.top, info.monitor.right, info.monitor.bottom))
+}
+
+#[cfg(windows)]
+fn primary_hmonitor() -> isize {
+    #[link(name = "user32")]
+    extern "system" {
+        fn MonitorFromWindow(hwnd: isize, flags: u32) -> isize;
+    }
+    const MONITOR_DEFAULTTOPRIMARY: u32 = 1;
+    unsafe { MonitorFromWindow(0, MONITOR_DEFAULTTOPRIMARY) }
+}
+
+#[cfg(windows)]
+fn external_window_rect(hwnd: isize) -> Option<(i32, i32, i32, i32)> {
+    #[repr(C)]
+    struct RectW { left: i32, top: i32, right: i32, bottom: i32 }
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetWindowRect(hwnd: isize, r: *mut RectW) -> i32;
+        fn IsWindow(hwnd: isize) -> i32;
+    }
+    if unsafe { IsWindow(hwnd) } == 0 {
+        return None;
+    }
+    let mut r = RectW { left: 0, top: 0, right: 0, bottom: 0 };
+    if unsafe { GetWindowRect(hwnd, &mut r) } == 0 {
+        return None;
+    }
+    Some((r.left, r.top, r.right, r.bottom))
+}
+
+#[cfg(windows)]
+fn position_rec_bar(win: &tauri::WebviewWindow, target_kind: &str, hwnd_or_monitor: isize) {
+    let size = win.outer_size().unwrap_or(PhysicalSize::new(320, 56));
+    if target_kind == "window" {
+        if let Some((left, top, right, _bottom)) = external_window_rect(hwnd_or_monitor) {
+            let x = (right - size.width as i32 - 12).max(left);
+            let y = top + 12;
+            let _ = win.set_position(PhysicalPosition::new(x, y));
+            return;
+        }
+    }
+    let hmon = if hwnd_or_monitor == 0 { primary_hmonitor() } else { hwnd_or_monitor };
+    if let Some((left, top, right, _bottom)) = monitor_bounds(hmon) {
+        let x = left + (right - left) / 2 - size.width as i32 / 2;
+        let y = top + 16;
+        let _ = win.set_position(PhysicalPosition::new(x, y));
+    }
+}
+
+// Re-asserts the bar's position every 200ms while a window target moves or
+// resizes, stopping itself once the bar is hidden/closed or the recorded
+// window itself is gone -- Tauri has no "external window moved" event, so this
+// is a poll loop, same shape as the scheduler module's periodic jobs.
+#[cfg(windows)]
+fn spawn_rec_bar_follow(app: AppHandle, hwnd: isize) {
+    let _ = std::thread::Builder::new().name("rec-bar-follow".into()).spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let Some(win) = app.get_webview_window("rec-bar") else { break };
+        if !win.is_visible().unwrap_or(false) {
+            break;
+        }
+        if position_rec_bar_or_stop(&win, hwnd) {
+            break;
+        }
+    });
+}
+#[cfg(windows)]
+fn position_rec_bar_or_stop(win: &tauri::WebviewWindow, hwnd: isize) -> bool {
+    if external_window_rect(hwnd).is_none() {
+        return true; // recorded window closed -- stop following, 241 owns the user-facing edge case
+    }
+    position_rec_bar(win, "window", hwnd);
+    false
+}
+
+#[tauri::command]
+fn show_rec_bar(app: AppHandle, target_kind: String, id: i64) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let label = "rec-bar";
+        let win = match app.get_webview_window(label) {
+            Some(w) => w,
+            None => WebviewWindowBuilder::new(&app, label, WebviewUrl::App("recbar.html".into()))
+                .title("")
+                .decorations(false)
+                .transparent(true)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .resizable(false)
+                .shadow(false)
+                .inner_size(320.0, 56.0)
+                .visible(false)
+                .build()
+                .map_err(|e| e.to_string())?,
+        };
+        let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
+        // Unconditional -- not gated by the privacy screenshot-exclusion setting.
+        // The bar must never appear in the recording no matter what.
+        set_capture_exclusion(&win, true);
+        position_rec_bar(&win, &target_kind, id as isize);
+        let _ = win.show();
+        if target_kind == "window" {
+            spawn_rec_bar_follow(app.clone(), id as isize);
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app, target_kind, id);
+        Err("recording is only available on Windows".to_string())
+    }
+}
+
+#[tauri::command]
+fn hide_rec_bar(app: AppHandle) {
+    if let Some(w) = app.get_webview_window("rec-bar") {
+        let _ = w.hide();
+    }
+}
+
+#[derive(serde::Serialize)]
+struct RecordingStatus {
+    paused: bool,
+    elapsed_ms: i64,
+    bytes: u64,
+}
+
+// Read-only status for the control bar's live timer + file-size readout;
+// polled from the frontend rather than pushed, so a bar that briefly misses a
+// tick self-corrects on the next one instead of drifting.
+#[cfg(windows)]
+#[tauri::command]
+fn recording_status(rstate: State<'_, RecordingState>) -> Option<RecordingStatus> {
+    let guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
+    let session = guard.as_ref()?;
+    let bytes = std::fs::metadata(&session.output_path).map(|m| m.len()).unwrap_or(0);
+    Some(RecordingStatus {
+        paused: session.phase == RecPhase::Paused,
+        elapsed_ms: recording::elapsed_ms(session),
+        bytes,
+    })
+}
+#[cfg(not(windows))]
+#[tauri::command]
+fn recording_status(rstate: State<'_, RecordingState>) -> Option<RecordingStatus> {
+    let _ = rstate;
+    None
+}
+
 // ---- Auto-paste: track the last EXTERNAL foreground window so a copied prompt
 // can be pasted straight into it. A WinEvent hook records every foreground change;
 // WINEVENT_SKIPOWNPROCESS drops our own windows, so the stored handle is always the
@@ -10811,6 +10987,16 @@ struct SnipBg {
     // The last picked colours as #rrggbb, newest first. Handed over with the
     // session so the overlay page never has to keep history state of its own.
     pick_history: Vec<String>,
+    // Run the overlay as a recording-target picker instead: same window
+    // hover/drag-region mechanics as a screenshot, but a click/drag resolves a
+    // recording target instead of capturing an image.
+    record: bool,
+    // Stitched-canvas origin in true virtual-desktop physical pixels. The
+    // overlay's own coordinates are canvas-relative (see SnipWindow); the
+    // recorder needs true absolute coordinates to resolve which monitor a
+    // region belongs to.
+    origin_x: i32,
+    origin_y: i32,
 }
 
 #[derive(Serialize, Clone)]
@@ -11306,7 +11492,7 @@ async fn open_snip(
     state: State<'_, SnipState>,
     preview: State<'_, SnipPreview>,
 ) -> Result<(), String> {
-    begin_capture(app, state, preview, false).await
+    begin_capture(app, state, preview, false, false).await
 }
 
 // The very same freeze + overlay, opened in colour-pick mode. Reusing the
@@ -11326,7 +11512,20 @@ async fn open_picker(
     if !on {
         return Err("color picker is off".to_string());
     }
-    begin_capture(app, state, preview, true).await
+    begin_capture(app, state, preview, true, false).await
+}
+
+// The same overlay, opened as a recording-target picker: a click on a
+// window or a dragged region resolves the recording target instead of
+// capturing an image. No on/off check here -- the screenRecord feature toggle
+// already gates whether the composer button that calls this even shows.
+#[tauri::command]
+async fn open_recorder(
+    app: AppHandle,
+    state: State<'_, SnipState>,
+    preview: State<'_, SnipPreview>,
+) -> Result<(), String> {
+    begin_capture(app, state, preview, false, true).await
 }
 
 async fn begin_capture(
@@ -11334,6 +11533,7 @@ async fn begin_capture(
     state: State<'_, SnipState>,
     preview: State<'_, SnipPreview>,
     pick: bool,
+    record: bool,
 ) -> Result<(), String> {
     // Atomically claim the session. If one is already active and its overlay still
     // exists, surface that instead of starting a second. (Stale flag with no
@@ -11426,6 +11626,9 @@ async fn begin_capture(
                 } else {
                     Vec::new()
                 },
+                record,
+                origin_x: min_x,
+                origin_y: min_y,
             }
         });
         *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(bg);
@@ -11613,6 +11816,74 @@ async fn snip_background(preview: State<'_, SnipPreview>, index: usize) -> Resul
 fn snip_cancel(app: AppHandle, state: State<SnipState>) {
     close_all_snip(&app);
     state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
+}
+
+// The recording overlay's window-click / region-drag resolved to a target:
+// close the overlay (same cleanup as a real screenshot) and hand the
+// target to the main window, which runs the countdown and opens the control
+// bar. `x`/`y`/`width`/`height` are stitched-canvas-relative for "window"
+// (unused there) and absolute virtual-desktop physical pixels for "region"
+// (the caller adds SnipBg's origin_x/origin_y before calling this).
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+fn recorder_target_picked(
+    app: AppHandle,
+    state: State<SnipState>,
+    kind: String,
+    id: u32,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+) -> Result<(), String> {
+    let payload = match kind.as_str() {
+        "window" => serde_json::json!({ "kind": "window", "id": id }),
+        "monitor" => {
+            let (monitor, ..) = resolve_region_monitor(x, y, 1, 1)?;
+            serde_json::json!({ "kind": "monitor", "monitor": monitor })
+        }
+        "region" => {
+            if width == 0 || height == 0 {
+                return Err("region has no size".to_string());
+            }
+            let (monitor, rx, ry) = resolve_region_monitor(x, y, width, height)?;
+            serde_json::json!({ "kind": "region", "monitor": monitor, "x": rx, "y": ry, "width": width, "height": height })
+        }
+        _ => return Err("invalid recording target".to_string()),
+    };
+    close_all_snip(&app);
+    state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    let _ = app.emit("recorder-target-picked", payload);
+    Ok(())
+}
+
+// Which monitor a region belongs to (its HMONITOR, per Win32 convention), and
+// the region's origin relative to that monitor's own top-left -- what
+// RecTarget::Region needs, since WGC captures a whole monitor and the crop
+// happens in software. Same raw-extern style as set_capture_exclusion /
+// window_is_protected, rather than pulling in more `windows` crate features
+// for two calls used nowhere else.
+#[cfg(windows)]
+fn resolve_region_monitor(x: i32, y: i32, w: u32, h: u32) -> Result<(i64, i32, i32), String> {
+    #[repr(C)]
+    struct RectI { left: i32, top: i32, right: i32, bottom: i32 }
+    #[link(name = "user32")]
+    extern "system" {
+        fn MonitorFromRect(rect: *const RectI, flags: u32) -> isize;
+    }
+    const MONITOR_DEFAULTTONEAREST: u32 = 2;
+
+    let rect = RectI { left: x, top: y, right: x + w as i32, bottom: y + h as i32 };
+    let hmon = unsafe { MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST) };
+    if hmon == 0 {
+        return Err("could not resolve a monitor for this region".to_string());
+    }
+    let (left, top, ..) = monitor_bounds(hmon).ok_or_else(|| "could not read monitor bounds".to_string())?;
+    Ok((hmon as i64, x - left, y - top))
+}
+#[cfg(not(windows))]
+fn resolve_region_monitor(x: i32, y: i32, _w: u32, _h: u32) -> Result<(i64, i32, i32), String> {
+    Ok((0, x, y))
 }
 
 // Arms (or disarms) OCR mode for the very next capture_region call, called by
@@ -14609,12 +14880,13 @@ mod voice {
     }
 }
 
-// ---------- Screen recording (point 191: recording engine core) ----------
+// ---------- Screen recording: recording engine core ----------
 //
 // Windows Graphics Capture (via the windows-capture crate) plus its own Media
-// Foundation H.264 encoder. This point only builds the engine and its five
-// commands -- no target picker, no control bar, no audio, no UI; those follow
-// in 238 (picker + bar), 239 (audio) and 240/241 (quality, formats, integration).
+// Foundation H.264 encoder. The target picker and control bar live further
+// down (see "Run the overlay as a recording-target picker" and "Recording
+// control bar" above); audio capture, quality/format options and further
+// polish are still to come.
 //
 // Two research passes already paid for this design: a throwaway example
 // proved start/pause/resume/stop on real hardware, and three traps were found
@@ -14712,27 +14984,47 @@ impl RecordClock {
     }
 }
 
-// Pure byte-shuffle: copies `height` rows of `width * 4` BGRA bytes from a
-// possibly padded, top-down source (row spacing `stride`) into a tightly
-// packed, bottom-up destination -- what VideoEncoder::send_frame_buffer's own
-// docs say it expects. Independent of any capture-frame type so it is
-// unit-testable without a GPU or a Windows build.
-fn flip_rows_bottom_up(raw: &[u8], width: usize, height: usize, stride: usize) -> Vec<u8> {
-    let row_bytes = width * 4;
-    let mut out = vec![0u8; row_bytes * height];
-    for y in 0..height {
-        let src = y * stride;
-        if src + row_bytes > raw.len() {
-            break; // defensive -- a malformed frame must not panic the capture thread
+// Pure byte-shuffle: crops to (crop_x, crop_y, crop_w, crop_h) within a
+// possibly padded, top-down source (row spacing `stride`), copying into a
+// tightly packed, bottom-up destination -- what VideoEncoder::send_frame_buffer's
+// own docs say it expects. A full-frame flip (238's monitor/window targets) is
+// just this with the crop set to the whole frame; region recording (238's third
+// target kind) uses a real sub-rectangle, since WGC itself has no region capture
+// source and always delivers the whole monitor. Independent of any capture-frame
+// type so it is unit-testable without a GPU or a Windows build.
+#[allow(clippy::too_many_arguments)]
+fn crop_and_flip_rows_bottom_up(
+    raw: &[u8],
+    src_width: usize,
+    src_height: usize,
+    stride: usize,
+    crop_x: usize,
+    crop_y: usize,
+    crop_w: usize,
+    crop_h: usize,
+) -> Vec<u8> {
+    let row_bytes = crop_w * 4;
+    let mut out = vec![0u8; row_bytes * crop_h];
+    if crop_x + crop_w > src_width {
+        return out; // defensive -- a stale/out-of-range crop must not panic the capture thread
+    }
+    for row in 0..crop_h {
+        let sy = crop_y + row;
+        if sy >= src_height {
+            break;
         }
-        let dst_row = height - 1 - y;
+        let src = sy * stride + crop_x * 4;
+        if src + row_bytes > raw.len() {
+            break;
+        }
+        let dst_row = crop_h - 1 - row;
         let dst = dst_row * row_bytes;
         out[dst..dst + row_bytes].copy_from_slice(&raw[src..src + row_bytes]);
     }
     out
 }
 
-const REC_QUEUE_CAP: usize = 4; // bounded frame queue, point 191 step 4
+const REC_QUEUE_CAP: usize = 4; // bounded frame queue -- drop-oldest once the feeder falls behind
 
 struct RecFrameItem {
     bytes: Vec<u8>,
@@ -14802,7 +15094,8 @@ struct RecordingStoppedPayload {
 #[cfg(windows)]
 mod recording {
     use super::{
-        append_crash_log, flip_rows_bottom_up, rec_filename, RecFeederShared, RecFrameItem, RecPhase, RecordClock,
+        append_crash_log, crop_and_flip_rows_bottom_up, rec_filename, RecFeederShared, RecFrameItem, RecPhase,
+        RecordClock,
     };
     use std::path::{Path, PathBuf};
     use std::sync::atomic::Ordering;
@@ -14824,26 +15117,63 @@ mod recording {
 
     pub type RecError = Box<dyn std::error::Error + Send + Sync>;
 
-    // Target selected for recording. Point 238 adds the real picker; for now
-    // the caller identifies a monitor by its raw HMONITOR (0 = primary) or a
-    // window by its raw HWND, matching how the snip overlay already does.
+    // Target selected for recording, identified the same way the snip overlay
+    // already identifies windows/monitors (raw HMONITOR/HWND). Region is the
+    // third target kind (238, Ben 29.08.): WGC has no region capture source, so
+    // the whole `monitor` is captured and cropped to (x, y, w, h) -- relative to
+    // that monitor's own top-left -- in the encoder pipeline instead.
     #[derive(Clone, Copy)]
     pub enum RecTarget {
         Monitor(isize),
         Window(isize),
+        Region { monitor: isize, x: i32, y: i32, w: u32, h: u32 },
+    }
+
+    // What RecTarget actually captures from WGC's point of view: either kind
+    // needs its own Settings::new call (different item types), but Region shares
+    // the Monitor path -- only the crop differs.
+    enum CaptureItem {
+        Monitor(Monitor),
+        Window(Window),
+    }
+
+    fn resolve_capture_item(target: RecTarget) -> Result<CaptureItem, String> {
+        match target {
+            RecTarget::Monitor(0) => Ok(CaptureItem::Monitor(Monitor::primary().map_err(|e| e.to_string())?)),
+            RecTarget::Monitor(h) | RecTarget::Region { monitor: h, .. } => {
+                Ok(CaptureItem::Monitor(Monitor::from_raw_hmonitor(h as *mut std::ffi::c_void)))
+            }
+            RecTarget::Window(h) => {
+                let w = Window::from_raw_hwnd(h as *mut std::ffi::c_void);
+                if !w.is_valid() {
+                    return Err("window is no longer valid".to_string());
+                }
+                Ok(CaptureItem::Window(w))
+            }
+        }
+    }
+
+    // The crop rectangle to apply to each captured frame, or None to keep the
+    // whole frame (Monitor/Window targets).
+    fn resolve_crop(target: RecTarget) -> Option<(u32, u32, u32, u32)> {
+        match target {
+            RecTarget::Region { x, y, w, h, .. } => Some((x.max(0) as u32, y.max(0) as u32, w, h)),
+            _ => None,
+        }
     }
 
     pub(crate) struct RecHandler {
         clock: Arc<RecordClock>,
         shared: Arc<RecFeederShared>,
+        crop: Option<(u32, u32, u32, u32)>,
     }
     impl GraphicsCaptureApiHandler for RecHandler {
-        type Flags = (Arc<RecordClock>, Arc<RecFeederShared>);
+        type Flags = (Arc<RecordClock>, Arc<RecFeederShared>, Option<(u32, u32, u32, u32)>);
         type Error = RecError;
 
         fn new(ctx: Context<Self::Flags>) -> Result<Self, Self::Error> {
-            let (clock, shared) = ctx.flags;
-            Ok(Self { clock, shared })
+            let (clock, shared, crop) = ctx.flags;
+            Ok(Self { clock, shared, crop })
         }
 
         fn on_frame_arrived(
@@ -14857,7 +15187,11 @@ mod recording {
             let ts = self.clock.now_ticks();
             let mut fb = frame.buffer()?;
             let (width, height, stride) = (fb.width() as usize, fb.height() as usize, fb.row_pitch() as usize);
-            let bytes = flip_rows_bottom_up(fb.as_raw_buffer(), width, height, stride);
+            let (cx, cy, cw, ch) = self.crop.unwrap_or((0, 0, width as u32, height as u32));
+            let bytes = crop_and_flip_rows_bottom_up(
+                fb.as_raw_buffer(), width, height, stride,
+                cx as usize, cy as usize, cw as usize, ch as usize,
+            );
             self.shared.push(RecFrameItem { bytes, ts });
             Ok(())
         }
@@ -14897,20 +15231,17 @@ mod recording {
     }
 
     fn resolve_target_size(target: RecTarget) -> Result<(u32, u32), String> {
-        match target {
-            RecTarget::Monitor(0) => {
-                let m = Monitor::primary().map_err(|e| e.to_string())?;
+        if let RecTarget::Region { w, h, .. } = target {
+            if w == 0 || h == 0 {
+                return Err("region has no size".to_string());
+            }
+            return Ok((w, h));
+        }
+        match resolve_capture_item(target)? {
+            CaptureItem::Monitor(m) => {
                 Ok((m.width().map_err(|e| e.to_string())?, m.height().map_err(|e| e.to_string())?))
             }
-            RecTarget::Monitor(h) => {
-                let m = Monitor::from_raw_hmonitor(h as *mut std::ffi::c_void);
-                Ok((m.width().map_err(|e| e.to_string())?, m.height().map_err(|e| e.to_string())?))
-            }
-            RecTarget::Window(h) => {
-                let w = Window::from_raw_hwnd(h as *mut std::ffi::c_void);
-                if !w.is_valid() {
-                    return Err("window is no longer valid".to_string());
-                }
+            CaptureItem::Window(w) => {
                 let width = w.width().map_err(|e| e.to_string())?;
                 let height = w.height().map_err(|e| e.to_string())?;
                 if width <= 0 || height <= 0 {
@@ -14921,7 +15252,9 @@ mod recording {
         }
     }
 
-    pub fn start(target: RecTarget, output_path: PathBuf) -> Result<RecSession, String> {
+    // show_cursor: the mouse-cursor toggle (ships ON) -- windows-capture's
+    // own capture setting, never a manually drawn cursor.
+    pub fn start(target: RecTarget, output_path: PathBuf, show_cursor: bool) -> Result<RecSession, String> {
         let (width, height) = resolve_target_size(target)?;
         let encoder = build_encoder(width, height, &output_path).map_err(|e| e.to_string())?;
         let clock = Arc::new(RecordClock::new());
@@ -14934,27 +15267,18 @@ mod recording {
                 .map_err(|e| e.to_string())?
         };
 
-        let cursor = CursorCaptureSettings::Default;
-        let flags = (clock.clone(), shared.clone());
-        let control = match target {
-            RecTarget::Monitor(0) => {
-                let m = Monitor::primary().map_err(|e| e.to_string())?;
+        let cursor = if show_cursor { CursorCaptureSettings::WithCursor } else { CursorCaptureSettings::WithoutCursor };
+        let crop = resolve_crop(target);
+        let flags = (clock.clone(), shared.clone(), crop);
+        let control = match resolve_capture_item(target)? {
+            CaptureItem::Monitor(m) => {
                 let settings = Settings::new(
                     m, cursor, DrawBorderSettings::Default, SecondaryWindowSettings::Default,
                     MinimumUpdateIntervalSettings::Default, DirtyRegionSettings::Default, ColorFormat::Bgra8, flags,
                 );
                 RecHandler::start_free_threaded(settings).map_err(|e| e.to_string())?
             }
-            RecTarget::Monitor(h) => {
-                let m = Monitor::from_raw_hmonitor(h as *mut std::ffi::c_void);
-                let settings = Settings::new(
-                    m, cursor, DrawBorderSettings::Default, SecondaryWindowSettings::Default,
-                    MinimumUpdateIntervalSettings::Default, DirtyRegionSettings::Default, ColorFormat::Bgra8, flags,
-                );
-                RecHandler::start_free_threaded(settings).map_err(|e| e.to_string())?
-            }
-            RecTarget::Window(h) => {
-                let w = Window::from_raw_hwnd(h as *mut std::ffi::c_void);
+            CaptureItem::Window(w) => {
                 let settings = Settings::new(
                     w, cursor, DrawBorderSettings::Default, SecondaryWindowSettings::Default,
                     MinimumUpdateIntervalSettings::Default, DirtyRegionSettings::Default, ColorFormat::Bgra8, flags,
@@ -14971,6 +15295,14 @@ mod recording {
     }
     pub fn resume(session: &RecSession) {
         session.clock.resume();
+    }
+
+    // Active-recording-time elapsed so far, in whole milliseconds -- for the
+    // control bar's live timer. The clock's own unit is 100ns ticks (what
+    // send_frame_buffer wants), so this is display-only, never fed back into
+    // the encoder.
+    pub fn elapsed_ms(session: &RecSession) -> i64 {
+        session.clock.now_ticks() / 10_000
     }
 
     // Shared tail of stop/cancel: drain the queue and finalise the encoder,
@@ -15015,12 +15347,18 @@ mod recording {
 }
 
 #[cfg(windows)]
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn start_recording(
     app: AppHandle,
     rstate: State<'_, RecordingState>,
+    db: State<'_, Db>,
     target_kind: String,
     target_id: i64,
+    region_x: i32,
+    region_y: i32,
+    region_w: u32,
+    region_h: u32,
 ) -> Result<(), String> {
     {
         let guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -15032,12 +15370,17 @@ async fn start_recording(
     let target = match target_kind.as_str() {
         "monitor" => recording::RecTarget::Monitor(target_id as isize),
         "window" => recording::RecTarget::Window(target_id as isize),
+        "region" => recording::RecTarget::Region {
+            monitor: target_id as isize, x: region_x, y: region_y, w: region_w, h: region_h,
+        },
         _ => return Err("invalid recording target".to_string()),
     };
+    // recCursor ships ON -- only an explicit false switches it off.
+    let show_cursor = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_flags.get("recCursor") != Some(&false);
     let dir = data_dir(&app).join("recordings");
     let session = tauri::async_runtime::spawn_blocking(move || {
         let out_path = recording::new_output_path(&dir)?;
-        recording::start(target, out_path)
+        recording::start(target, out_path, show_cursor)
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -15045,14 +15388,20 @@ async fn start_recording(
     Ok(())
 }
 #[cfg(not(windows))]
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn start_recording(
     app: AppHandle,
     rstate: State<'_, RecordingState>,
+    db: State<'_, Db>,
     target_kind: String,
     target_id: i64,
+    region_x: i32,
+    region_y: i32,
+    region_w: u32,
+    region_h: u32,
 ) -> Result<(), String> {
-    let _ = (app, rstate, target_kind, target_id);
+    let _ = (app, rstate, db, target_kind, target_id, region_x, region_y, region_w, region_h);
     Err("recording is only available on Windows".to_string())
 }
 
@@ -17852,6 +18201,8 @@ pub fn run() {
             skip_version,
             open_snip,
             open_picker,
+            open_recorder,
+            recorder_target_picked,
             pick_tile,
             pick_color,
             pick_history,
@@ -17921,7 +18272,10 @@ pub fn run() {
             pause_recording,
             resume_recording,
             stop_recording,
-            cancel_recording
+            cancel_recording,
+            show_rec_bar,
+            hide_rec_bar,
+            recording_status
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
@@ -18966,7 +19320,7 @@ fn start_sync_poll(app: AppHandle) {
 mod tests {
     use super::*;
 
-    // ---- Recording (point 191): state machine + clock + filename, no hardware needed ----
+    // ---- Recording: state machine + clock + filename, no hardware needed ----
 
     #[test]
     fn rec_phase_allows_the_documented_transitions_only() {
@@ -19028,16 +19382,40 @@ mod tests {
     }
 
     #[test]
-    fn flip_rows_bottom_up_reverses_row_order_and_strips_padding() {
+    fn crop_and_flip_rows_bottom_up_full_frame_reverses_row_order_and_strips_padding() {
         // 2x2 BGRA, stride padded by 4 extra bytes per row.
         let row0 = [1u8, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0];
         let row1 = [9u8, 10, 11, 12, 13, 14, 15, 16, 0, 0, 0, 0];
         let mut raw = Vec::new();
         raw.extend_from_slice(&row0);
         raw.extend_from_slice(&row1);
-        let out = flip_rows_bottom_up(&raw, 2, 2, 12);
+        let out = crop_and_flip_rows_bottom_up(&raw, 2, 2, 12, 0, 0, 2, 2);
         // bottom-up: row1's 8 pixel bytes first, then row0's, no padding.
         assert_eq!(out, vec![9, 10, 11, 12, 13, 14, 15, 16, 1, 2, 3, 4, 5, 6, 7, 8]);
+    }
+
+    #[test]
+    fn crop_and_flip_rows_bottom_up_region_takes_only_the_requested_sub_rectangle() {
+        // 3x2 BGRA source, no padding (stride == row bytes). Crop to the right
+        // 1x2 column, like a region recording's software crop would.
+        let px = |n: u8| [n, n, n, 255u8];
+        let mut raw = Vec::new();
+        for row in 0..2u8 {
+            for col in 0..3u8 {
+                raw.extend_from_slice(&px(row * 3 + col));
+            }
+        }
+        let out = crop_and_flip_rows_bottom_up(&raw, 3, 2, 12, 2, 0, 1, 2);
+        // column 2 of row 0 is pixel value 2, of row 1 is pixel value 5;
+        // bottom-up means row 1's pixel comes first.
+        assert_eq!(out, vec![5, 5, 5, 255, 2, 2, 2, 255]);
+    }
+
+    #[test]
+    fn crop_and_flip_rows_bottom_up_rejects_an_out_of_range_crop_without_panicking() {
+        let raw = vec![0u8; 16]; // 2x2, no padding
+        let out = crop_and_flip_rows_bottom_up(&raw, 2, 2, 8, 1, 1, 5, 5);
+        assert!(out.iter().all(|&b| b == 0));
     }
 
     // ---- The prompt list the window gets, and what a save may do to an image ----
@@ -24741,6 +25119,7 @@ mod tests {
             src: "x".into(), is_file: true, width: 4, height: 2,
             pick: true, pick_zoom: 12, pick_format: "rgb".into(), pick_cells: 21,
             pick_history: vec!["#FF0000".into()],
+            record: false, origin_x: 0, origin_y: 0,
         };
         let j = serde_json::to_value(&bg).unwrap();
         assert_eq!(j["pick"], serde_json::json!(true));

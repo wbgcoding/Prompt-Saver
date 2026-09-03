@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title></title>
+  <link rel="stylesheet" href="styles/floating.css" />
+  <link rel="stylesheet" href="styles/recbar.css" />
+</head>
+<body>
+  <div id="bar" class="rec-bar">
+    <span id="dot" class="rec-dot"></span>
+    <span id="time" class="rec-time">00:00</span>
+    <span id="size" class="rec-size"></span>
+    <span id="audio-sys" class="rec-audio hidden"></span>
+    <span id="audio-mic" class="rec-audio hidden"></span>
+
+    <button id="pause-btn" class="rec-btn" type="button" data-i18n-title="recBarPause" data-i18n-aria="recBarPause">
+      <svg id="pause-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+        <path fill="currentColor" d="M8 5h3v14H8V5Zm5 0h3v14h-3V5Z"/>
+      </svg>
+      <svg id="resume-icon" class="hidden" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+        <path fill="currentColor" d="M8 5v14l11-7L8 5Z"/>
+      </svg>
+    </button>
+    <button id="stop-btn" class="rec-btn" type="button" data-i18n-title="recBarStop" data-i18n-aria="recBarStop">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+        <rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/>
+      </svg>
+    </button>
+    <button id="cancel-btn" class="rec-btn rec-btn-danger" type="button" data-i18n-title="recBarCancel" data-i18n-aria="recBarCancel">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+      </svg>
+    </button>
+  </div>
+
+  <script type="module" src="recbar.js"></script>
+</body>
+</html>

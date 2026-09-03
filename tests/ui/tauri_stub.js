@@ -240,6 +240,14 @@ const RESULTS = {
   }),
   current_theme: () => "dark",
   theme_vars: () => ({ accent: "#ff00aa" }),
+  // Recording control bar's poll target -- a fixed fixture so the probe can
+  // assert the timer/size labels render from it.
+  recording_status: () => ({ paused: false, elapsed_ms: 65000, bytes: 2500000 }),
+  pause_recording: () => { window.__REC_PAUSED__ = true; return null; },
+  resume_recording: () => { window.__REC_PAUSED__ = false; return null; },
+  stop_recording: () => { window.__REC_STOPPED__ = true; return null; },
+  cancel_recording: () => { window.__REC_CANCELLED__ = true; return null; },
+  hide_rec_bar: () => { window.__REC_BAR_HIDDEN__ = true; return null; },
   // P100: the probe reads this back instead of a real backend hand-off to main.js.
   launcher_select: (a) => { window.__LAUNCHER_SELECTED__ = a && a.id; return null; },
   launcher_close: () => { window.__LAUNCHER_CLOSED__ = true; return null; },

@@ -47,6 +47,11 @@ const ZOOM_MIN = 4, ZOOM_MAX = 16; // same range as the loupeZoom expert slider
 const TILE = 192;       // patch edge in physical px (backend caps this at 512)
 const TILE_MARGIN = 48; // refetch once the cursor comes this close to the patch edge
 let pickMode = false;
+// ---- Recording-target picker state ----
+// Same window-hover/drag-region mechanics as a screenshot; only the release
+// handler differs (resolves a recording target instead of capturing an image).
+let recordMode = false;
+let originX = 0, originY = 0; // stitched-canvas origin, true virtual-desktop physical px
 let pickZoom = 4;      // magnification (expert: loupeZoom)
 let pickFmt = "hex";   // output notation (expert: pickerFormat)
 let pickBusy = false;
@@ -71,6 +76,7 @@ const SEED = {
     pick: "Click to copy the color · scroll or +/- to zoom · arrow keys move one pixel · Esc to cancel",
     pickFailed: "Couldn't copy the color. Try picking again.",
     ocrNoLang: "No OCR language is installed. Open Manage languages in the expert menu, then try again.",
+    recHint: "Drag a region · click a window to record · Esc to cancel",
   },
   de: {
     hint: "Bereich ziehen · Fenster anklicken · Esc zum Abbrechen",
@@ -78,6 +84,7 @@ const SEED = {
     pick: "Klicken kopiert die Farbe · Scrollen oder +/- zoomt · Pfeiltasten bewegen ein Pixel · Esc zum Abbrechen",
     pickFailed: "Farbe konnte nicht kopiert werden. Bitte erneut versuchen.",
     ocrNoLang: "Es ist keine OCR-Sprache installiert. Öffne Sprachen verwalten im Expertenmenü und versuche es erneut.",
+    recHint: "Bereich ziehen · Fenster zum Aufnehmen anklicken · Esc zum Abbrechen",
   },
 };
 const T = { ...((navigator.language || "en").toLowerCase().startsWith("de") ? SEED.de : SEED.en) };
@@ -105,6 +112,7 @@ function resetSession() {
   hint.classList.remove("hidden", "error");
   hint.textContent = T.hint;
   pickMode = false;
+  recordMode = false;
   pickBusy = false;
   tile = null;
   tileBusy = false;
@@ -129,6 +137,12 @@ async function beginSession() {
   if (!b) { invoke("snip_cancel").catch(() => {}); return; }
   FULL_W = b.width || 1;
   FULL_H = b.height || 1;
+  originX = b.origin_x || 0;
+  originY = b.origin_y || 0;
+  // Recording-target picker: same hover/drag chrome as a screenshot,
+  // only the release handler differs.
+  recordMode = !!b.record;
+  if (recordMode) hint.textContent = T.recHint;
   // Colour-pick mode: no selection chrome at all, and the frozen desktop is sampled
   // through a cached patch around the cursor (see `tile`).
   pickMode = !!b.pick;
@@ -185,7 +199,8 @@ async function beginSession() {
       T.pick = d.pickHint ?? I18N.en.pickHint ?? T.pick;
       T.pickFailed = d.pickFailed ?? I18N.en.pickFailed ?? T.pickFailed;
       T.ocrNoLang = d.snipOcrNoLang ?? I18N.en.snipOcrNoLang ?? T.ocrNoLang;
-      if (!hint.classList.contains("error")) hint.textContent = pickMode ? T.pick : T.hint;
+      T.recHint = d.recPickHint ?? I18N.en.recPickHint ?? T.recHint;
+      if (!hint.classList.contains("error")) hint.textContent = pickMode ? T.pick : recordMode ? T.recHint : T.hint;
     })
     .catch(() => {});
 }
@@ -620,6 +635,44 @@ window.addEventListener("mousedown", (e) => {
 });
 
 window.addEventListener("mouseup", async (e) => {
+  if (recordMode) {
+    if (e.button !== 0 || !start || busy) return;
+    const s = start;
+    start = null;
+    const x = Math.min(s.x, e.clientX);
+    const y = Math.min(s.y, e.clientY);
+    const w = Math.abs(e.clientX - s.x);
+    const h = Math.abs(e.clientY - s.y);
+    busy = true;
+    try {
+      // A click (no real drag): a window under it records that window, empty
+      // desktop/taskbar records that whole monitor -- same semantics as the
+      // screenshot overlay's own click-vs-drag rule.
+      if (w < MIN_REGION || h < MIN_REGION) {
+        const win = windowAt(s.x, s.y);
+        if (win) {
+          await invoke("recorder_target_picked", { kind: "window", id: win.id, x: 0, y: 0, width: 0, height: 0 });
+        } else {
+          const p = toImg(s.x, s.y);
+          await invoke("recorder_target_picked", {
+            kind: "monitor", id: 0,
+            x: Math.round(p.x + originX), y: Math.round(p.y + originY), width: 1, height: 1,
+          });
+        }
+      } else {
+        const a = toImg(x, y), b = toImg(x + w, y + h);
+        await invoke("recorder_target_picked", {
+          kind: "region", id: 0,
+          x: Math.round(a.x + originX), y: Math.round(a.y + originY),
+          width: Math.round(b.x - a.x), height: Math.round(b.y - a.y),
+        });
+      }
+    } catch (err) {
+      busy = false;
+      showError(String(err));
+    }
+    return;
+  }
   if (pickMode) {
     if (e.button !== 0) return;
     // `cur` already tracks the pointer; only seed it if the mouse never moved. A

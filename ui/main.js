@@ -1159,6 +1159,11 @@ const FLAG_LABELS = {
   voiceAutoStop: "flagVoiceAutoStop",
   voiceAutoPickLang: "flagVoiceAutoPickLang",
   voiceLangAutoUpdate: "flagVoiceLangAutoUpdate",
+  // Screen recording. Ships ON, like ocr/voice.
+  screenRecord: "flagScreenRecord",
+  // Sub-toggle of screenRecord: whether the mouse pointer appears in the
+  // recording. Ships ON.
+  recCursor: "flagRecCursor",
 };
 const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -1382,6 +1387,8 @@ const EXPERT_VALUES = {
   // A crop smaller than this (either side) is upscaled 2x before recognition --
   // the trick that makes small on-screen text readable to the OCR engine.
   ocrUpscaleUnderPx: { label: "valOcrUpscaleUnderPx", min: 100, max: 800, step: 50, def: 300, unit: "px", gate: "ocr" },
+  // Delay between picking a recording target and the capture actually starting -- 0 disables it.
+  recCountdownS: { label: "valRecCountdownS", min: 0, max: 10, step: 1, def: 3, unit: "s", gate: "screenRecord" },
   // How often the background thread checks installed language packs for an
   // update, how long the "update available" toast stays before it counts as a
   // silent no-op, and how long a click on its Cancel button postpones the next
@@ -1635,7 +1642,7 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app. The pipette sits with the
     // screenshot tool: both are capture tools on the composer bar.
-    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }, "voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax", "voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["pickerFormat", "snipEditDefaultTool", "ocrLang", "rotateDefaultMode", "voiceLang", "voiceInsert", "voiceHotkeyTarget"], paths: ["screenshotDir"],
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "screenRecord", { key: "recCursor", gate: "screenRecord" }, "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }, "voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax", "recCountdownS", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax", "voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["pickerFormat", "snipEditDefaultTool", "ocrLang", "rotateDefaultMode", "voiceLang", "voiceInsert", "voiceHotkeyTarget"], paths: ["screenshotDir"],
       // Opens #ocr-langs-modal / its voice equivalent -- same gate as the rest of each feature.
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }, { id: "voice-langs-open", label: "voiceLangsManage", gate: "voice" }, { id: "voice-hotkey-set", label: "voiceHotkeySet", gate: "voiceHotkey" }] },
     // Placeholders, from the grammar to where the app asks for them.
@@ -1822,6 +1829,7 @@ const EXPERT_TIPS = [
   "promptNotes", "notesInTooltip", "notesTipLen",
   "mdPreview", "mdMaxChars", "codeHighlight", "codeAutoDetect", "hlFontPx", "hlMaxChars",
   "colorPicker", "pickerFormat", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx",
+  "screenRecord", "recCursor", "recCountdownS",
   "snipQuality", "snipDelayMs",
   "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim",
   "snipEditUndoMax", "snipEditSnap", "snipTextPlate", "snipEditDefaultTool",
@@ -11899,6 +11907,47 @@ function bind() {
   // is a clipboard value only — no prompt is created and nothing enters the history.
   $("picker-btn").addEventListener("click", () => {
     invoke("open_picker").catch((err) => errToast(err));
+  });
+
+  // Screen recording: the same frozen-desktop overlay, in record-target
+  // mode. The backend resolves the click/drag into a window, monitor or region
+  // and notifies us with "recorder-target-picked"; a short countdown (0 = none)
+  // then the actual capture starts.
+  $("record-btn").addEventListener("click", () => {
+    invoke("open_recorder").catch((err) => errToast(err));
+  });
+  let recCountdownTimer = 0;
+  function cancelRecCountdown() {
+    clearTimeout(recCountdownTimer);
+    recCountdownTimer = 0;
+  }
+  listen("recorder-target-picked", async (e) => {
+    const p = e.payload || {};
+    const kind = p.kind;
+    let targetId = 0, regionX = 0, regionY = 0, regionW = 0, regionH = 0;
+    if (kind === "window") targetId = p.id;
+    else if (kind === "monitor") targetId = p.monitor;
+    else if (kind === "region") {
+      targetId = p.monitor;
+      regionX = p.x; regionY = p.y; regionW = p.width; regionH = p.height;
+    } else return;
+
+    const startNow = async () => {
+      try {
+        await invoke("start_recording", { targetKind: kind, targetId, regionX, regionY, regionW, regionH });
+        await invoke("show_rec_bar", { targetKind: kind, id: targetId });
+      } catch (err) { errToast(err); }
+    };
+    cancelRecCountdown();
+    let n = Math.round(val("recCountdownS"));
+    if (n <= 0) { await startNow(); return; }
+    const tick = () => {
+      toast(t("recCountdownToast").replace("{n}", n));
+      n -= 1;
+      if (n < 0) { recCountdownTimer = 0; startNow(); return; }
+      recCountdownTimer = setTimeout(tick, 1000);
+    };
+    tick();
   });
   // Right-click reaches the picker's history without opening the overlay —
   // it lives in the backend (survives a restart), this popover just displays it.

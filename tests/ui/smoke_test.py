@@ -6033,6 +6033,37 @@ TRAY_PROBE = """
 """
 
 
+RECBAR_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  try {
+    await sleep(300);
+    const timeEl = document.getElementById('time');
+    if (timeEl.textContent !== '01:05') errs.push('time did not render from recording_status: ' + timeEl.textContent);
+    const sizeEl = document.getElementById('size');
+    if (!/MB/.test(sizeEl.textContent)) errs.push('size did not render: ' + sizeEl.textContent);
+    document.getElementById('pause-btn').click();
+    await sleep(30);
+    if (!window.__REC_PAUSED__) errs.push('pause button did not call pause_recording');
+    document.getElementById('pause-btn').click();
+    await sleep(30);
+    if (window.__REC_PAUSED__ !== false) errs.push('pause button did not call resume_recording on the second click');
+    document.getElementById('stop-btn').click();
+    await sleep(30);
+    if (!window.__REC_STOPPED__) errs.push('stop button did not call stop_recording');
+    if (!window.__REC_BAR_HIDDEN__) errs.push('stop did not hide the bar afterwards');
+  } catch (e) { errs.push('probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # A DPAPI failure makes the backend write the store in plaintext instead of
 # refusing the save. That used to be reported in the error log and nowhere else.
 # The same page is booted twice — once with the backend reporting a sealed store,
@@ -6381,7 +6412,8 @@ def main():
                 ("folder.html", (520, 420), FOLDER_PROBE, 15000),
                 ("vars.html", (340, 250), VARS_PROBE, 15000),
                 ("launcher.html", (560, 420), LAUNCHER_PROBE, 15000),
-                ("tray.html", (240, 360), TRAY_PROBE, 15000)):
+                ("tray.html", (240, 360), TRAY_PROBE, 15000),
+                ("recbar.html", (320, 56), RECBAR_PROBE, 15000)):
             side = tmp / "ui" / name
             side.write_text(
                 side.read_text(encoding="utf-8")
