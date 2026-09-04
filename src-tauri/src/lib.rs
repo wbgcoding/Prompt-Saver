@@ -9250,8 +9250,12 @@ fn spawn_rec_bar_follow(app: AppHandle, hwnd: isize) {
     });
 }
 
+// Async on purpose: a synchronous command runs on the main thread, and building
+// a webview window from there never returns -- the window gets created, but
+// every step after build() (capture exclusion, positioning, show) is skipped,
+// leaving an invisible bar and a recording with no way to stop it.
 #[tauri::command]
-fn show_rec_bar(app: AppHandle, target_kind: String, id: i64) -> Result<(), String> {
+async fn show_rec_bar(app: AppHandle, target_kind: String, id: i64) -> Result<(), String> {
     #[cfg(windows)]
     {
         let label = "rec-bar";
