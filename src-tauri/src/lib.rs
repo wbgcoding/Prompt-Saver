@@ -9220,9 +9220,20 @@ fn position_rec_bar(win: &tauri::WebviewWindow, target_kind: &str, hwnd_or_monit
 // window itself is gone -- Tauri has no "external window moved" event, so this
 // is a poll loop, same shape as the scheduler module's periodic jobs.
 #[cfg(windows)]
+// Bumped on every spawn_rec_bar_follow call so an old follow thread notices
+// it has been superseded (a hide+show within one 200ms poll tick spawns a
+// new thread for a new hwnd before the old one has seen the bar hidden) and
+// exits immediately instead of fighting the new thread over positioning or
+// auto-stopping the wrong (new) session when its own stale hwnd closes.
+static REC_BAR_FOLLOW_GEN: AtomicU64 = AtomicU64::new(0);
+
 fn spawn_rec_bar_follow(app: AppHandle, hwnd: isize) {
+    let my_gen = REC_BAR_FOLLOW_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     let _ = std::thread::Builder::new().name("rec-bar-follow".into()).spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_millis(200));
+        if REC_BAR_FOLLOW_GEN.load(Ordering::SeqCst) != my_gen {
+            break;
+        }
         let Some(win) = app.get_webview_window("rec-bar") else { break };
         if !win.is_visible().unwrap_or(false) {
             break;
@@ -15367,8 +15378,17 @@ mod audio {
     use windows::Win32::Media::Audio::{
         eCapture, eConsole, EDataFlow, IAudioCaptureClient, IAudioClient, IMMDevice, IMMDeviceCollection,
         IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_BUFFERFLAGS_SILENT, AUDCLNT_SHAREMODE_SHARED,
-        AUDCLNT_STREAMFLAGS_LOOPBACK, DEVICE_STATE_ACTIVE,
+        AUDCLNT_STREAMFLAGS_LOOPBACK, DEVICE_STATE_ACTIVE, WAVEFORMATEXTENSIBLE,
     };
+
+    // WAVE_FORMAT_IEEE_FLOAT / WAVE_FORMAT_EXTENSIBLE (mmreg.h) and the
+    // KSDATAFORMAT_SUBTYPE_IEEE_FLOAT GUID (ksmedia.h) -- like
+    // AUDCLNT_E_DEVICE_INVALIDATED below, not exposed by the windows crate's
+    // enabled features, so defined directly from their documented values.
+    const WAVE_FORMAT_IEEE_FLOAT: u16 = 3;
+    const WAVE_FORMAT_EXTENSIBLE: u16 = 0xFFFE;
+    const KSDATAFORMAT_SUBTYPE_IEEE_FLOAT: windows::core::GUID =
+        windows::core::GUID::from_u128(0x00000003_0000_0010_8000_00AA00389B71);
     use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
     use windows::core::HRESULT;
 
@@ -15452,6 +15472,18 @@ mod audio {
                     let in_channels = (*wave_format).nChannels as u32;
                     let in_rate = (*wave_format).nSamplesPerSec;
                     let in_bits = (*wave_format).wBitsPerSample;
+                    // GetMixFormat's shared-mode result is WAVEFORMATEXTENSIBLE in
+                    // virtually every real case; a 32-bit-per-sample stream is not
+                    // always IEEE float -- some audio drivers report 32-bit
+                    // *integer* PCM, which decoded as float would be full-scale
+                    // noise. wFormatTag == WAVE_FORMAT_EXTENSIBLE means the real
+                    // sample type is in Format.SubFormat, not the outer tag.
+                    let in_is_float = if (*wave_format).wFormatTag == WAVE_FORMAT_EXTENSIBLE {
+                        let ext = wave_format as *const WAVEFORMATEXTENSIBLE;
+                        std::ptr::addr_of!((*ext).SubFormat).read_unaligned() == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT
+                    } else {
+                        (*wave_format).wFormatTag == WAVE_FORMAT_IEEE_FLOAT
+                    };
                     let stream_flags = if loopback { AUDCLNT_STREAMFLAGS_LOOPBACK } else { 0 };
                     client.Initialize(AUDCLNT_SHAREMODE_SHARED, stream_flags, 2_000_000, 0, wave_format, None)?;
                     let capture_client: IAudioCaptureClient = client.GetService()?;
@@ -15468,8 +15500,13 @@ mod audio {
                                 let n = (num_frames * in_channels) as usize;
                                 let floats: Vec<f32> = if is_silent {
                                     vec![0.0; n]
-                                } else if in_bits == 32 {
+                                } else if in_bits == 32 && in_is_float {
                                     std::slice::from_raw_parts(data_ptr as *const f32, n).to_vec()
+                                } else if in_bits == 32 {
+                                    std::slice::from_raw_parts(data_ptr as *const i32, n)
+                                        .iter()
+                                        .map(|&s| s as f32 / i32::MAX as f32)
+                                        .collect()
                                 } else if in_bits == 16 {
                                     std::slice::from_raw_parts(data_ptr as *const i16, n)
                                         .iter()
@@ -15878,6 +15915,8 @@ mod recording {
                     }
                     if let Err(e) = encoder.send_audio_buffer(&bytes, 0) {
                         append_crash_log(&format!("recording: send_audio_buffer failed: {e}"));
+                        shared.set_encode_error(e.to_string());
+                        shared.request_stop();
                     }
                 }
             }
@@ -15909,6 +15948,12 @@ mod recording {
         // only in the feeder thread's closure) so recording_status can report
         // a mic-specific loss toast without guessing which queue is which.
         pub mic_queue: Option<Arc<AudioQueueShared>>,
+        // Every active audio queue (system and/or mic) -- cleared on resume so
+        // audio captured live during a pause (the WASAPI threads never stop
+        // pushing; only the feeder's drain is gated on the pause state) does
+        // not bleed into the post-resume track out of sync with video, which
+        // freezes at the pause instant and resumes exactly where it left off.
+        audio_queues: Vec<Arc<AudioQueueShared>>,
         pub audio_system: bool,
         pub audio_mic: bool,
         pub output_path: PathBuf,
@@ -16008,6 +16053,7 @@ mod recording {
 
         Ok(RecSession {
             control, clock, shared, feeder: Some(feeder), audio_stop, audio_threads, mic_queue,
+            audio_queues,
             audio_system: audio.system, audio_mic: audio.mic,
             output_path, phase: RecPhase::Recording,
         })
@@ -16018,6 +16064,12 @@ mod recording {
     }
     pub fn resume(session: &RecSession) {
         session.clock.resume();
+        // Discard whatever the WASAPI threads pushed while paused -- see the
+        // audio_queues field doc for why stale paused-duration audio must
+        // never reach the encoder.
+        for q in &session.audio_queues {
+            q.clear();
+        }
     }
 
     // Active-recording-time elapsed so far, in whole milliseconds -- for the
@@ -16049,8 +16101,19 @@ mod recording {
             let _ = feeder.join();
         }
         let dropped = session.shared.dropped.load(Ordering::Relaxed);
-        let encode_error = session.shared.peek_encode_error();
-        session.control.stop().map_err(|e| e.to_string())?;
+        let mut encode_error = session.shared.peek_encode_error();
+        // The encoder is already finalised at this point (finish() ran inside
+        // the feeder thread's own tail above), so a failure here is only the
+        // WGC capture handle itself refusing to stop cleanly -- it does not
+        // undo the file already written. Surface it like any other non-fatal
+        // encode error instead of discarding the whole result: propagating it
+        // as a hard Err would drop the session out of RecordingState with no
+        // "recording-captured" event ever emitted, stranding a finished
+        // recording with no reachable result dialog.
+        if let Err(e) = session.control.stop() {
+            append_crash_log(&format!("recording: capture control stop failed: {e}"));
+            encode_error = encode_error.or_else(|| Some(e.to_string()));
+        }
         Ok((dropped, encode_error))
     }
 

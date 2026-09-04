@@ -2312,11 +2312,18 @@ let micDevicesCache = []; // [{id, name}], fetched once at startup (init())
 // on app start, only lazily the first time a control that needs it renders --
 // here, the first time the recQuality/recFormat expert rows are built).
 // null = not checked yet.
-let ffmpegAvailable = null;
+let ffmpegAvailable = null; // null = unknown/unchecked, true/false = confirmed present/absent
+let ffmpegChecking = false; // separate in-flight guard -- a slow probe must not render as "confirmed missing"
 function ensureFfmpegStatusChecked() {
-  if (ffmpegAvailable !== null) return;
-  ffmpegAvailable = false; // guards against a second check while this one is in flight
-  invoke("ffmpeg_status").then((p) => { ffmpegAvailable = !!p; renderExpert(); }).catch(() => { ffmpegAvailable = false; });
+  if (ffmpegAvailable !== null || ffmpegChecking) return;
+  ffmpegChecking = true;
+  invoke("ffmpeg_status")
+    .then((p) => { ffmpegAvailable = !!p; })
+    // A failed probe (not "ffmpeg missing", the call itself erroring) leaves
+    // this null rather than latching false, so the next render retries
+    // instead of claiming "missing" for the rest of the session.
+    .catch(() => { ffmpegAvailable = null; })
+    .finally(() => { ffmpegChecking = false; renderExpert(); });
 }
 let voiceLangsCache = []; // [{tag, label}], fetched once at startup (init())
 // voice_support()'s answer, optimistic before it resolves (this app is
@@ -12104,6 +12111,16 @@ function bind() {
       secs = Math.floor((e.payload?.ms || 0) / 1000);
       showConverting();
     });
+    const myOff = recProgressOff;
+    if (gen !== recGen) {
+      // The modal was closed/discarded/attached while this await was in
+      // flight -- do not start a conversion nobody will see, and do not race
+      // whatever that close already did with this recording's file (discard
+      // deletes it by the same path convert_recording would then also touch).
+      myOff();
+      if (recProgressOff === myOff) recProgressOff = null;
+      return;
+    }
     try {
       const outPath = await invoke("convert_recording", { srcPath: rawPath, format, lossless });
       if (gen !== recGen) return;
@@ -12126,7 +12143,11 @@ function bind() {
       recPreview.classList.remove("hidden");
       recPreview.src = convertFileSrc(rawPath);
     } finally {
-      if (recProgressOff) { recProgressOff(); recProgressOff = null; }
+      // Unlisten this call's own listener, never whatever the global variable
+      // currently points at -- a superseded (older) call's finally must not
+      // tear down a newer, still-active openRecModal call's own listener.
+      myOff();
+      if (recProgressOff === myOff) recProgressOff = null;
     }
   }
   listen("recording-captured", (e) => {
@@ -12146,20 +12167,24 @@ function bind() {
     closeRecModal();
     if (path) await invoke("discard_recording_file", { path }).catch(() => {});
   });
+  let recSaveAsBusy = false;
   $("rec-modal-saveas").addEventListener("click", async () => {
-    if (!pendingRecPath) return;
-    await invoke("save_recording_as", { srcPath: pendingRecPath }).catch((err) => errToast(err));
+    if (!pendingRecPath || recSaveAsBusy) return;
+    recSaveAsBusy = true;
+    try {
+      await invoke("save_recording_as", { srcPath: pendingRecPath }).catch((err) => errToast(err));
+    } finally {
+      recSaveAsBusy = false;
+    }
   });
   $("rec-modal-yes").addEventListener("click", () => {
     const path = pendingRecPath;
     // Reuses the exact same path a picked/dropped video file already takes --
     // media.js's video detection and the editor's video preview need nothing new.
-    recGen += 1;
-    if (recProgressOff) { recProgressOff(); recProgressOff = null; }
-    recModal.classList.add("hidden");
-    recPreview.classList.add("hidden");
-    recPreview.removeAttribute("src");
-    pendingRecPath = "";
+    // closeRecModal() also cancels any conversion still in flight -- without
+    // that, a click here while converting attaches the raw mp4 path just
+    // before the backend deletes it out from under the newly opened editor.
+    closeRecModal();
     if (path) openFileCreate(path);
   });
 
@@ -14245,6 +14270,7 @@ function bind() {
     if (!$("update-modal").classList.contains("hidden")) { trapTabWithin($("update-modal"), e); return; }
     if (!$("about-modal").classList.contains("hidden")) { trapTabWithin($("about-modal"), e); return; }
     if (!$("snip-modal").classList.contains("hidden")) { trapTabWithin($("snip-modal"), e); return; }
+    if (!$("rec-modal").classList.contains("hidden")) { trapTabWithin($("rec-modal"), e); return; }
     if (!viewModal.root.classList.contains("hidden")) { trapTabWithin(viewModal.root, e); return; }
     if (!modal.root.classList.contains("hidden")) { trapTabWithin(modal.root, e); return; }
     if (!$("clip-modal").classList.contains("hidden")) { trapTabWithin($("clip-modal"), e); return; }
@@ -14278,6 +14304,7 @@ function bind() {
     else if (!$("update-modal").classList.contains("hidden")) $("update-modal").classList.add("hidden");
     else if (!$("about-modal").classList.contains("hidden")) $("about-modal").classList.add("hidden");
     else if (!$("snip-modal").classList.contains("hidden")) $("snip-modal").classList.add("hidden");
+    else if (!$("rec-modal").classList.contains("hidden")) closeRecModal();
     else if (!viewModal.root.classList.contains("hidden")) closeViewModal();
     else if (!modal.root.classList.contains("hidden")) confirmDiscardIfDirty().then((ok) => { if (ok) closeModal(); });
     else if (!$("clip-modal").classList.contains("hidden")) $("clip-modal").classList.add("hidden");
