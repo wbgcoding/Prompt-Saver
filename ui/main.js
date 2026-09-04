@@ -1164,6 +1164,9 @@ const FLAG_LABELS = {
   // Sub-toggle of screenRecord: whether the mouse pointer appears in the
   // recording. Ships ON.
   recCursor: "flagRecCursor",
+  // Sub-toggle of screenRecord: system audio (WASAPI loopback) into the
+  // recording's audio track. Ships ON.
+  recAudioSystem: "flagRecAudioSystem",
 };
 const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -1241,6 +1244,10 @@ const OPT_FLAG_LABELS = {
   // is a bigger commitment than the in-window button.
   voiceOnlineOk: "flagVoiceOnlineOk",
   voiceHotkey: "flagVoiceHotkey",
+  // Sub-toggle of screenRecord: microphone capture mixed into the recording's
+  // audio track. Ships off -- opting into mic capture is a bigger commitment
+  // than system audio, which is on by default.
+  recAudioMic: "flagRecAudioMic",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
@@ -1389,6 +1396,11 @@ const EXPERT_VALUES = {
   ocrUpscaleUnderPx: { label: "valOcrUpscaleUnderPx", min: 100, max: 800, step: 50, def: 300, unit: "px", gate: "ocr" },
   // Delay between picking a recording target and the capture actually starting -- 0 disables it.
   recCountdownS: { label: "valRecCountdownS", min: 0, max: 10, step: 1, def: 3, unit: "s", gate: "screenRecord" },
+  recAudioKbps: { label: "valRecAudioKbps", min: 64, max: 320, step: 32, def: 192, unit: "kbps", gate: "screenRecord" },
+  // Native H.264 bitrate. Has no effect once recQuality is "lossless" -- that
+  // step is produced by a separate ffmpeg CRF-0 re-encode after the recording
+  // stops, not by this slider (see the recQuality/recBitrateKbps tooltips).
+  recBitrateKbps: { label: "valRecBitrateKbps", min: 1000, max: 50000, step: 500, def: 12000, unit: "kbps", gate: "screenRecord" },
   // How often the background thread checks installed language packs for an
   // update, how long the "update available" toast stays before it counts as a
   // silent no-op, and how long a click on its Cancel button postpones the next
@@ -1529,6 +1541,10 @@ function enumDropdown(key, labelKey, opts, def, gate) {
   };
 }
 
+// recQuality's own suggested recBitrateKbps default, applied when the step is
+// picked (see recQuality's set() below); documented in docs/help.md.
+const REC_QUALITY_BITRATE = { small: 4000, high: 12000 };
+
 // Dropdowns like the settings' text-size / font selects. copySize lives in
 // ui_values (0 = auto-fit to the button), copyFont in ui_texts ("" = default).
 const EXPERT_DROPDOWNS = {
@@ -1575,6 +1591,49 @@ const EXPERT_DROPDOWNS = {
       try { await invoke("set_ui_text", { key: "ocrLang", value: v }); } catch (e) { errToast(e); }
     },
   },
+  // Which microphone to capture for recAudioMic. Options are fetched once
+  // from list_mic_devices() at startup (micDevicesCache, near the recording
+  // wiring below); empty string = the system default capture device.
+  recMicDevice: {
+    label: "valRecMicDevice",
+    gate: "recAudioMic",
+    def: "",
+    options: () => [["", t("langAuto")], ...micDevicesCache.map((d) => [d.id, d.name])],
+    get: () => settings.ui_texts?.recMicDevice || "",
+    set: async (v) => {
+      settings.ui_texts = { ...(settings.ui_texts || {}), recMicDevice: v };
+      try { await invoke("set_ui_text", { key: "recMicDevice", value: v }); } catch (e) { errToast(e); }
+    },
+  },
+  // Three quality steps, default "high". Picking a step re-suggests the
+  // matching recBitrateKbps default (REC_QUALITY_BITRATE) so the two controls
+  // stay in sync without forcing a second manual edit -- the slider still
+  // accepts any later override. "Lossless" leaves the slider's value alone
+  // since it has no effect on that step (a separate ffmpeg CRF-0 pass produces
+  // it after the recording stops).
+  recQuality: {
+    label: "valRecQuality",
+    gate: "screenRecord",
+    def: "high",
+    options: () => [
+      ["small", t("optRecQualitySmall")], ["high", t("optRecQualityHigh")], ["lossless", t("optRecQualityLossless")],
+    ],
+    get: () => settings.ui_texts?.recQuality || "high",
+    set: async (v) => {
+      settings.ui_texts = { ...(settings.ui_texts || {}), recQuality: v };
+      try { await invoke("set_ui_text", { key: "recQuality", value: v }); } catch (e) { errToast(e); }
+      if (REC_QUALITY_BITRATE[v] != null) {
+        settings.ui_values = { ...(settings.ui_values || {}), recBitrateKbps: REC_QUALITY_BITRATE[v] };
+        try { await invoke("set_ui_value", { key: "recBitrateKbps", value: REC_QUALITY_BITRATE[v] }); } catch (e) { errToast(e); }
+      }
+      applyValues();
+    },
+  },
+  // MP4 is always what the recorder itself writes; webm/gif are produced by
+  // an ffmpeg conversion pass once the recording stops (see convert_recording
+  // on the backend and the post-capture menu that calls it).
+  recFormat: enumDropdown("recFormat", "valRecFormat",
+    [["mp4", "optRecFormatMp4"], ["webm", "optRecFormatWebm"], ["gif", "optRecFormatGif"]], "mp4", "screenRecord"),
   // Same pattern as ocrLang just above: fetched once from voice_languages()
   // at startup (voiceLangsCache), "Automatic" always first, a trailing entry
   // opens the shared language-pack dialog instead of ever being stored.
@@ -1642,7 +1701,7 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app. The pipette sits with the
     // screenshot tool: both are capture tools on the composer bar.
-    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "screenRecord", { key: "recCursor", gate: "screenRecord" }, "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }, "voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax", "recCountdownS", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax", "voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["pickerFormat", "snipEditDefaultTool", "ocrLang", "rotateDefaultMode", "voiceLang", "voiceInsert", "voiceHotkeyTarget"], paths: ["screenshotDir"],
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }, "voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax", "recCountdownS", "recAudioKbps", "recBitrateKbps", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax", "voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["pickerFormat", "snipEditDefaultTool", "ocrLang", "recMicDevice", "recQuality", "recFormat", "rotateDefaultMode", "voiceLang", "voiceInsert", "voiceHotkeyTarget"], paths: ["screenshotDir"],
       // Opens #ocr-langs-modal / its voice equivalent -- same gate as the rest of each feature.
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }, { id: "voice-langs-open", label: "voiceLangsManage", gate: "voice" }, { id: "voice-hotkey-set", label: "voiceHotkeySet", gate: "voiceHotkey" }] },
     // Placeholders, from the grammar to where the app asks for them.
@@ -1688,7 +1747,8 @@ const EXPERT_TABS = [
     // Toolbar button visibility (mirrors the header right-click tool list).
     { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "gridViewBorder", "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }, "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
     { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
-    { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances"], values: ["kbFocusFadeMs"], selects: ["updateCheckH"], paths: ["dataDir"] },
+    { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances"], values: ["kbFocusFadeMs"], selects: ["updateCheckH"], paths: ["dataDir"],
+      actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
     { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport"], values: ["dupThreshold", "disarmMs"], selects: ["trashRetentionDays"],
@@ -1829,7 +1889,8 @@ const EXPERT_TIPS = [
   "promptNotes", "notesInTooltip", "notesTipLen",
   "mdPreview", "mdMaxChars", "codeHighlight", "codeAutoDetect", "hlFontPx", "hlMaxChars",
   "colorPicker", "pickerFormat", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx",
-  "screenRecord", "recCursor", "recCountdownS",
+  "screenRecord", "recCursor", "recCountdownS", "recAudioSystem", "recAudioMic", "recAudioKbps", "recMicDevice",
+  "recQuality", "recBitrateKbps", "recFormat",
   "snipQuality", "snipDelayMs",
   "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim",
   "snipEditUndoMax", "snipEditSnap", "snipTextPlate", "snipEditDefaultTool",
@@ -2205,7 +2266,39 @@ function dropdownRow(key) {
   });
   attachSelectPicker(sel); // themed popup instead of the native OS dropdown
   row.append(head, sel);
+  if (key === "recQuality" || key === "recFormat") row.appendChild(recFfmpegHintEl(key, sel));
   return row;
+}
+
+// The reason line under recQuality/recFormat: the GIF format's fixed 30s cap
+// (always shown, ffmpeg or not) and, when ffmpeg is missing, why the picked
+// step/format cannot actually be produced plus an inline offer to fetch it --
+// on the control itself, not only in the help (240's explicit requirement).
+function recFfmpegHintEl(key, sel) {
+  const hint = document.createElement("div");
+  hint.className = "expert-row-hint";
+  const update = () => {
+    ensureFfmpegStatusChecked();
+    const v = sel.value;
+    const needsFfmpeg = key === "recQuality" ? v === "lossless" : v !== "mp4";
+    const parts = [];
+    if (key === "recFormat" && v === "gif") parts.push(t("recFormatGifHint"));
+    if (key === "recQuality" && v === "lossless") parts.push(t("recQualityLosslessHint"));
+    if (needsFfmpeg && ffmpegAvailable === false) parts.push(t("recFfmpegMissingHint"));
+    hint.classList.toggle("hidden", parts.length === 0);
+    hint.replaceChildren(document.createTextNode(parts.join(" ")));
+    if (needsFfmpeg && ffmpegAvailable === false) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ghost-btn expert-row-hint-btn";
+      btn.textContent = t("ffmpegOfferConfirm");
+      btn.addEventListener("click", () => EXPERT_ACTIONS["ffmpeg-download"]?.(btn));
+      hint.appendChild(btn);
+    }
+  };
+  update();
+  sel.addEventListener("change", update);
+  return hint;
 }
 
 // Folder-path options (expert): current path + a Change (folder picker) and,
@@ -2214,6 +2307,17 @@ let currentDataDir = "";
 let defaultScreenshotDir = "";
 let defaultSyncDir = "";
 let ocrLangsCache = []; // [{tag, label}], fetched once at startup (init())
+let micDevicesCache = []; // [{id, name}], fetched once at startup (init())
+// Whether ffmpeg was found (see ffmpeg_status's own doc comment: never probed
+// on app start, only lazily the first time a control that needs it renders --
+// here, the first time the recQuality/recFormat expert rows are built).
+// null = not checked yet.
+let ffmpegAvailable = null;
+function ensureFfmpegStatusChecked() {
+  if (ffmpegAvailable !== null) return;
+  ffmpegAvailable = false; // guards against a second check while this one is in flight
+  invoke("ffmpeg_status").then((p) => { ffmpegAvailable = !!p; renderExpert(); }).catch(() => { ffmpegAvailable = false; });
+}
 let voiceLangsCache = []; // [{tag, label}], fetched once at startup (init())
 // voice_support()'s answer, optimistic before it resolves (this app is
 // Windows-only, so an unsupported machine is the rare case, not the default).
@@ -2534,7 +2638,10 @@ function actionRow(a) {
   btn.type = "button";
   btn.className = "ghost-btn expert-action";
   btn.textContent = t(a.label);
-  btn.addEventListener("click", () => EXPERT_ACTIONS[a.id]?.());
+  // Passing the button itself lets a long-running action (ffmpeg-download) show
+  // progress in its own label and repurpose a second click as cancel — every
+  // existing handler ignores the extra argument.
+  btn.addEventListener("click", () => EXPERT_ACTIONS[a.id]?.(btn));
   return btn;
 }
 
@@ -11949,6 +12056,113 @@ function bind() {
     };
     tick();
   });
+
+  // ---- Recording result: mirrors the #snip-modal flow above, plus an
+  // optional conversion step (recFormat/recQuality != the raw mp4 capture).
+  // "recording-captured" is emitted by stop_recording (and by the auto-stop
+  // path when the recorded window itself closes) -- the rec-bar is its own
+  // window, so this is how the main window learns a file is ready.
+  const recModal = $("rec-modal");
+  const recPreview = $("rec-preview");
+  const recStatus = $("rec-modal-status");
+  let pendingRecPath = "";
+  let recGen = 0; // invalidated on every close/discard so a late progress tick or a
+                   // finished conversion from a superseded recording is ignored
+  let recProgressOff = null;
+  function closeRecModal() {
+    recGen += 1;
+    invoke("cancel_recording_convert").catch(() => {});
+    if (recProgressOff) { recProgressOff(); recProgressOff = null; }
+    recModal.classList.add("hidden");
+    recPreview.classList.add("hidden");
+    recPreview.removeAttribute("src");
+    recStatus.classList.remove("rec-status-cancellable");
+    recStatus.onclick = null;
+    pendingRecPath = "";
+  }
+  async function openRecModal(rawPath) {
+    pendingRecPath = rawPath;
+    recGen += 1;
+    const gen = recGen;
+    recModal.classList.remove("hidden");
+    const format = settings.ui_texts?.recFormat || "mp4";
+    const lossless = (settings.ui_texts?.recQuality || "high") === "lossless";
+    if (format === "mp4" && !lossless) {
+      recPreview.classList.remove("hidden");
+      recPreview.src = convertFileSrc(rawPath);
+      recStatus.textContent = "";
+      return;
+    }
+    recPreview.classList.add("hidden");
+    let secs = 0;
+    const showConverting = () => { recStatus.textContent = t("recConverting").replace("{s}", String(secs)); };
+    showConverting();
+    recStatus.classList.add("rec-status-cancellable");
+    recStatus.onclick = () => { if (gen === recGen) invoke("cancel_recording_convert").catch(() => {}); };
+    recProgressOff = await listen("recording-convert-progress", (e) => {
+      if (gen !== recGen) return;
+      secs = Math.floor((e.payload?.ms || 0) / 1000);
+      showConverting();
+    });
+    try {
+      const outPath = await invoke("convert_recording", { srcPath: rawPath, format, lossless });
+      if (gen !== recGen) return;
+      pendingRecPath = outPath;
+      recStatus.classList.remove("rec-status-cancellable");
+      recStatus.onclick = null;
+      recStatus.textContent = "";
+      recPreview.classList.remove("hidden");
+      recPreview.src = convertFileSrc(outPath);
+    } catch (err) {
+      if (gen !== recGen) return;
+      recStatus.classList.remove("rec-status-cancellable");
+      recStatus.onclick = null;
+      // Cancelled by the user's own click above, ffmpeg missing, or ffmpeg
+      // genuinely failed on this input -- either way the untouched raw
+      // recording is still there to fall back to.
+      recStatus.textContent = String(err).includes("ffmpeg-missing")
+        ? `${t("recFfmpegMissingHint")} ${t("recConvertFailedKeepRaw")}`
+        : t("recConvertFailedKeepRaw");
+      recPreview.classList.remove("hidden");
+      recPreview.src = convertFileSrc(rawPath);
+    } finally {
+      if (recProgressOff) { recProgressOff(); recProgressOff = null; }
+    }
+  }
+  listen("recording-captured", (e) => {
+    const path = e.payload?.path || "";
+    // An encoder write failure (disk full, etc.) already stopped the feeder
+    // itself before this event fired -- whatever got captured up to that
+    // point is still a valid, playable file, just cut short unexpectedly.
+    if (e.payload?.encode_error) toast(t("recEncodeError"));
+    if (path) openRecModal(path);
+  });
+  $("rec-modal-close").addEventListener("click", closeRecModal);
+  recModal.addEventListener("pointerdown", (e) => {
+    if (e.target === recModal) closeRecModal();
+  });
+  $("rec-modal-discard").addEventListener("click", async () => {
+    const path = pendingRecPath;
+    closeRecModal();
+    if (path) await invoke("discard_recording_file", { path }).catch(() => {});
+  });
+  $("rec-modal-saveas").addEventListener("click", async () => {
+    if (!pendingRecPath) return;
+    await invoke("save_recording_as", { srcPath: pendingRecPath }).catch((err) => errToast(err));
+  });
+  $("rec-modal-yes").addEventListener("click", () => {
+    const path = pendingRecPath;
+    // Reuses the exact same path a picked/dropped video file already takes --
+    // media.js's video detection and the editor's video preview need nothing new.
+    recGen += 1;
+    if (recProgressOff) { recProgressOff(); recProgressOff = null; }
+    recModal.classList.add("hidden");
+    recPreview.classList.add("hidden");
+    recPreview.removeAttribute("src");
+    pendingRecPath = "";
+    if (path) openFileCreate(path);
+  });
+
   // Right-click reaches the picker's history without opening the overlay —
   // it lives in the backend (survives a restart), this popover just displays it.
   function renderPickHistoryPop(hex) {
@@ -14250,6 +14464,59 @@ function bind() {
     });
   });
 
+  // ---------- ffmpeg ----------
+  // Fetched on demand only — never on app start, never in the background.
+  // Discovery (next to the exe → data folder → PATH) runs entirely on the Rust
+  // side and touches no network; this only ever runs when the user explicitly
+  // clicks the expert menu's action. Any future video feature that shells out
+  // to ffmpeg should call the same three commands (ffmpeg_status /
+  // download_ffmpeg / cancel_ffmpeg_download) from wherever it first needs
+  // ffmpeg and finds it missing.
+  let ffmpegBusy = false;
+  EXPERT_ACTIONS["ffmpeg-download"] = async (btn) => {
+    if (ffmpegBusy) {
+      invoke("cancel_ffmpeg_download").catch(() => {});
+      return;
+    }
+    const found = await invoke("ffmpeg_status").catch(() => null);
+    ffmpegAvailable = !!found;
+    if (found) {
+      await infoDialog(t("ffmpegFoundTitle"), t("ffmpegFoundMsg").replace("{path}", found));
+      renderExpert();
+      return;
+    }
+    const ok = await confirmDialog({
+      title: t("ffmpegOfferTitle"),
+      message: t("ffmpegOfferMsg"),
+      confirmLabel: t("ffmpegOfferConfirm"),
+      cancelLabel: t("cancel"),
+      danger: false,
+    });
+    if (!ok) return;
+    ffmpegBusy = true;
+    const label = btn.textContent;
+    const origTitle = btn.title;
+    btn.title = t("ffmpegCancelHint");
+    const unlisten = await listen("ffmpeg-download-progress", (e) => {
+      const { downloaded, total } = e.payload || {};
+      const pct = total ? Math.min(100, Math.round((downloaded / total) * 100)) : 0;
+      btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct));
+    });
+    try {
+      await invoke("download_ffmpeg");
+      ffmpegAvailable = true;
+      toast(t("ffmpegDownloadDone"));
+      renderExpert();
+    } catch (err) {
+      if (String(err) !== "cancelled") errToast(err);
+    } finally {
+      unlisten();
+      ffmpegBusy = false;
+      btn.textContent = label;
+      btn.title = origTitle || "";
+    }
+  };
+
   listen("theme-changed", (e) => applyTheme(e.payload?.theme, e.payload?.vars));
   // "Edit prompt" chosen in a floating pill's right-click menu.
   listen("edit-prompt", (e) => editPrompt(String(e.payload)));
@@ -14886,6 +15153,9 @@ async function init() {
     // OCR language list -- fetched once, cached, "Automatic" is always
     // prepended separately (see EXPERT_DROPDOWNS.ocrLang above).
     invoke("ocr_languages").then((langs) => { ocrLangsCache = langs || []; }).catch(() => {});
+    // Microphone list for recMicDevice -- fetched once, cached, "Automatic"
+    // (system default) is always prepended separately (see EXPERT_DROPDOWNS.recMicDevice above).
+    invoke("list_mic_devices").then((devs) => { micDevicesCache = devs || []; }).catch(() => {});
     invoke("voice_languages").then((langs) => { voiceLangsCache = langs || []; }).catch(() => {});
     // Re-applies flags once this resolves so no-voice-engine reflects reality
     // (the optimistic default above assumes support until this says otherwise).

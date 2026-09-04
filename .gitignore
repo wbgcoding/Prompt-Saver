@@ -9,6 +9,10 @@ src-tauri/gen/schemas/
 pdfium.dll
 pdfium-LICENSE
 
+# ffmpeg: downloaded separately, see "Building from source" in the README
+ffmpeg.exe
+ffmpeg-LICENSE
+
 # Editor / OS / logs
 .vscode/
 .idea/

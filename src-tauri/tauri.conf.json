@@ -31,6 +31,7 @@
     "active": true,
     "publisher": "BGCoding",
     "targets": ["nsis"],
+    "resources": ["ffmpeg.exe"],
     "windows": {
       "webviewInstallMode": { "type": "embedBootstrapper" },
       "nsis": {

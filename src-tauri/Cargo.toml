@@ -50,6 +50,9 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 # pdfium library dynamically at runtime (the DLL is embedded in the exe and
 # unpacked on first use — see pdfium_lib_path in lib.rs).
 pdfium-render = "0.8"
+# Extract ffmpeg.exe from its downloaded release zip (point 246). Deflate only --
+# gyan.dev's archive needs no other compression method.
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
@@ -72,6 +75,10 @@ windows = { version = "0.58", features = [
   # 0.58 windows crate rather than pulled from windows-capture's own 0.62, so
   # this one call does not cross the version boundary noted below.
   "Win32_System_SystemInformation",
+  # WASAPI loopback (system audio) + microphone capture for recordings.
+  "Win32_Media_Audio", "Win32_Media_Audio_Endpoints", "Win32_Media_KernelStreaming",
+  "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant",
+  "Win32_System_Threading", "Win32_Devices_FunctionDiscovery", "Win32_UI_Shell_PropertiesSystem",
 ] }
 # Screen recording (point 191): Windows Graphics Capture + its own Media
 # Foundation H.264/MP4 encoder, vetted against a real desktop before use.

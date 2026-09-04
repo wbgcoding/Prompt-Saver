@@ -1,4 +1,4 @@
-/* Recording control bar (238): small always-on-top strip, WDA_EXCLUDEFROMCAPTURE
+/* Recording control bar: small always-on-top strip, WDA_EXCLUDEFROMCAPTURE
    on the Rust side so it can never show up in the recording it controls. */
 
 .rec-bar {
@@ -36,9 +36,12 @@
 .rec-audio {
   width: 16px;
   height: 16px;
-  opacity: 0.55;
+  opacity: 0.35; /* off: present but visually muted, see recbar.js's applyAudio() */
 }
 .rec-audio.hidden { display: none; }
+.rec-audio.on { opacity: 0.85; }
+.rec-audio.lost { opacity: 1; color: var(--danger); }
+
 
 .rec-btn {
   -webkit-app-region: no-drag;

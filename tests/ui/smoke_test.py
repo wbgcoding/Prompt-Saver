@@ -4763,6 +4763,158 @@ PROBE = """
       langSel2.dispatchEvent(new Event('change'));
       await sleep(150);
     }
+    // 241: the recording result dialog (#rec-modal) -- mirrors #snip-modal's own
+    // probes above, plus the conversion step that only the recording flow has.
+    {
+      const langSel3 = document.getElementById('lang-select');
+      langSel3.value = 'en';
+      langSel3.dispatchEvent(new Event('change'));
+      await sleep(100);
+      const recModal = document.getElementById('rec-modal');
+      const recPreview = document.getElementById('rec-preview');
+      const recStatus = document.getElementById('rec-modal-status');
+      // Drive the real recFormat control (expert menu) rather than poking
+      // internal state -- found structurally (an <option value="webm">) so it
+      // works whatever tab/group it currently renders in or whatever language
+      // is active.
+      await click('expert-open');
+      const findDropdown = (optionValue) => {
+        for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+          tb.click();
+          const hit = [...document.querySelectorAll('select.expert-select')]
+            .find((s) => [...s.options].some((o) => o.value === optionValue));
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const recFormatSel = findDropdown('webm');
+      if (!recFormatSel) {
+        out.errors.push('rec-modal: could not find the recFormat expert dropdown');
+      } else {
+        recFormatSel.value = 'webm';
+        recFormatSel.dispatchEvent(new Event('change'));
+      }
+      await sleep(50);
+      await click('expert-back');
+      await sleep(50);
+
+      // Conversion path (recFormat != mp4): opens straight into a "Converting"
+      // status instead of a preview, updates from a progress event, then shows
+      // the converted file once convert_recording resolves.
+      window.__FIRE__('recording-captured', { path: 'C:/fake/raw.mp4' });
+      await sleep(30);
+      if (recModal.classList.contains('hidden')) {
+        out.errors.push('rec-modal: did not open on recording-captured');
+      }
+      if (recPreview.classList.contains('hidden') === false) {
+        out.errors.push('rec-modal: preview must stay hidden while converting');
+      }
+      if (!/Converting/.test(recStatus.textContent)) {
+        out.errors.push('rec-modal: status did not show the converting message, got ' + JSON.stringify(recStatus.textContent));
+      }
+      window.__FIRE__('recording-convert-progress', { ms: 3200 });
+      await sleep(30);
+      if (!recStatus.textContent.includes('3s')) {
+        out.errors.push('rec-modal: converting status did not update from a progress event, got ' + JSON.stringify(recStatus.textContent));
+      }
+      await sleep(150); // let the stubbed convert_recording resolve (80ms)
+      if (recPreview.classList.contains('hidden')) {
+        out.errors.push('rec-modal: preview did not appear once conversion finished');
+      }
+      if (!recPreview.src.includes('.webm')) {
+        out.errors.push('rec-modal: preview src does not point at the converted file, got ' + JSON.stringify(recPreview.src));
+      }
+      if (recStatus.textContent.trim() !== '') {
+        out.errors.push('rec-modal: converting status must clear once done, got ' + JSON.stringify(recStatus.textContent));
+      }
+      document.getElementById('rec-modal-close').click();
+      await sleep(30);
+      if (!recModal.classList.contains('hidden')) {
+        out.errors.push('rec-modal: close button did not hide the dialog');
+      }
+
+      // ffmpeg missing: the specific error convert_recording can return before
+      // ever starting a process -- must name ffmpeg, not a generic failure, and
+      // must still leave the raw file choosable (never dead-ends the dialog).
+      window.__FIRE__('recording-captured', { path: 'C:/fake/needs-ffmpeg-MISSING.mp4' });
+      await sleep(150);
+      if (!/ffmpeg/i.test(recStatus.textContent)) {
+        out.errors.push('rec-modal: a missing-ffmpeg failure must say so, got ' + JSON.stringify(recStatus.textContent));
+      }
+      if (recPreview.classList.contains('hidden')) {
+        out.errors.push('rec-modal: a failed conversion must fall back to previewing the raw recording');
+      }
+      document.getElementById('rec-modal-close').click();
+      await sleep(30);
+
+      // Reset recFormat back to mp4 -- everything below is the no-conversion path.
+      if (recFormatSel) {
+        await click('expert-open');
+        recFormatSel.value = 'mp4';
+        recFormatSel.dispatchEvent(new Event('change'));
+        await sleep(30);
+        await click('expert-back');
+        await sleep(30);
+      }
+
+      // No-conversion path: opens straight into a playable preview.
+      window.__FIRE__('recording-captured', { path: 'C:/fake/raw2.mp4' });
+      await sleep(30);
+      if (recModal.classList.contains('hidden') || recPreview.classList.contains('hidden')) {
+        out.errors.push('rec-modal: the no-conversion path must show the preview immediately');
+      }
+
+      // Discard removes the file and closes the dialog.
+      window.__SMOKE_CALLS__ = [];
+      document.getElementById('rec-modal-discard').click();
+      await sleep(30);
+      if (!window.__SMOKE_CALLS__.includes('discard_recording_file')) {
+        out.errors.push('rec-modal: Discard did not call discard_recording_file');
+      }
+      if (!recModal.classList.contains('hidden')) {
+        out.errors.push('rec-modal: Discard did not close the dialog');
+      }
+
+      // Save as copies out without closing the dialog (same contract as the
+      // screenshot editor's own Save as).
+      window.__FIRE__('recording-captured', { path: 'C:/fake/raw3.mp4' });
+      await sleep(30);
+      window.__SMOKE_CALLS__ = [];
+      document.getElementById('rec-modal-saveas').click();
+      await sleep(30);
+      if (!window.__SMOKE_CALLS__.includes('save_recording_as')) {
+        out.errors.push('rec-modal: Save as did not call save_recording_as');
+      }
+      if (recModal.classList.contains('hidden')) {
+        out.errors.push('rec-modal: Save as must not close the dialog');
+      }
+      document.getElementById('rec-modal-close').click();
+      await sleep(30);
+
+      // Attach reuses the normal file-attach flow (openFileCreate) -- the main
+      // edit modal must open with the recording as its video preview, and
+      // #rec-modal itself must close first.
+      window.__FIRE__('recording-captured', { path: 'C:/fake/raw4.mp4' });
+      await sleep(30);
+      document.getElementById('rec-modal-yes').click();
+      await sleep(50);
+      if (!recModal.classList.contains('hidden')) {
+        out.errors.push('rec-modal: Attach did not close the recording dialog');
+      }
+      const editModal = document.getElementById('modal');
+      const editVideo = document.getElementById('modal-video');
+      if (editModal.classList.contains('hidden')) {
+        out.errors.push('rec-modal: Attach did not open the edit modal');
+      } else if (editVideo.classList.contains('hidden') || !editVideo.src) {
+        out.errors.push('rec-modal: Attach did not show the recording as a video preview');
+      }
+      document.getElementById('modal-close-x').click();
+      await sleep(30);
+
+      langSel3.value = 'de';
+      langSel3.dispatchEvent(new Event('change'));
+      await sleep(100);
+    }
     // OCR ships on (flag "ocr"). Gate check first (both entry points visible,
     // and gone once the flag is switched off), then switch it back on via the
     // real expert-menu checkbox and exercise the menu plus the result dialog.
@@ -6322,10 +6474,11 @@ def main():
                  # to 120s once the injected-markup grid/library check added its own
                  # create-and-verify round trip, then to 126s once 171's late-voice-text
                  # probe added its own editor round trip plus the 3s late-delivery grace
-                 # window it has to sit through.
+                 # window it has to sit through, then to 132s once the recording
+                 # result dialog's probe added its own four expert-menu round trips.
                  # The window has to hold the iframe plus Chrome's own frame.
                  f"--window-size={max(w + 30, 520)},{h + 140}",
-                 "--virtual-time-budget=126000", "--dump-dom",
+                 "--virtual-time-budget=132000", "--dump-dom",
                  wrapper.as_uri()],
                 # The dumped DOM carries all 20 languages; without an explicit
                 # codec Windows decodes it as cp1252 and the reader thread dies,

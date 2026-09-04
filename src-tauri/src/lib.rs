@@ -5035,6 +5035,44 @@ fn orphan_cleanup_enabled(store: &Store) -> bool {
     store.settings.ui_flags.get("cleanupFiles").copied().unwrap_or(true)
 }
 
+// Recordings sit in <data>/recordings from the moment WGC finishes writing
+// until the post-capture menu decides attach/save/discard -- attach then
+// either copies the file into <data>/files (storeFiles on, covered by
+// sweep_orphan_files above) or leaves file_path pointing straight at this
+// folder (storeFiles off). Either way a recording the user never decided on
+// (app closed with the post-capture menu still open, or before it ever
+// showed) would sit here forever with nothing else to clean it up. Age-gated
+// like sweep_stale_temp_files, not an immediate sweep like sweep_orphan_files
+// above -- a recording still open in that very menu is legitimately
+// unreferenced by any prompt yet, so only files older than STALE_TEMP_FILE_AGE
+// are fair game. Runs once at startup, the same "crash/abnormal-exit
+// leftovers" spot sweep_stale_temp_files already runs from.
+fn sweep_stale_recordings(app: &AppHandle, referenced: &std::collections::HashSet<String>) {
+    sweep_stale_recordings_in(&data_dir(app).join("recordings"), referenced);
+}
+
+// Split out from sweep_stale_recordings so the actual sweep logic is testable
+// against a plain tempdir -- no AppHandle needed, same split as
+// convert_recording/convert_recording_blocking above.
+fn sweep_stale_recordings_in(dir: &Path, referenced: &std::collections::HashSet<String>) {
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    let norm = |s: &str| s.replace('/', "\\").to_lowercase();
+    for e in entries.flatten() {
+        let path = e.path();
+        if !path.is_file() || referenced.contains(&norm(&path.to_string_lossy())) {
+            continue;
+        }
+        let stale = e
+            .metadata()
+            .and_then(|m| m.modified())
+            .and_then(|t| SystemTime::now().duration_since(t).map_err(std::io::Error::other))
+            .is_ok_and(|age| age >= STALE_TEMP_FILE_AGE);
+        if stale {
+            let _ = fs::remove_file(&path);
+        }
+    }
+}
+
 // A trashed prompt still owns its files until it is actually purged —
 // leaving trash out of this scan would let an UNRELATED cleanup pass
 // (triggered by some other prompt's add/delete) sweep away a file a trashed
@@ -9189,18 +9227,16 @@ fn spawn_rec_bar_follow(app: AppHandle, hwnd: isize) {
         if !win.is_visible().unwrap_or(false) {
             break;
         }
-        if position_rec_bar_or_stop(&win, hwnd) {
+        if external_window_rect(hwnd).is_none() {
+            // The recorded window itself closed mid-recording: the capture source
+            // is gone, so auto-stop (keeping the file so far) rather than leaving
+            // a dead session running and the bar stuck at its last position.
+            let _ = stop_recording_now(&app);
+            let _ = win.hide();
             break;
         }
+        position_rec_bar(&win, "window", hwnd);
     });
-}
-#[cfg(windows)]
-fn position_rec_bar_or_stop(win: &tauri::WebviewWindow, hwnd: isize) -> bool {
-    if external_window_rect(hwnd).is_none() {
-        return true; // recorded window closed -- stop following, 241 owns the user-facing edge case
-    }
-    position_rec_bar(win, "window", hwnd);
-    false
 }
 
 #[tauri::command]
@@ -9253,6 +9289,18 @@ struct RecordingStatus {
     paused: bool,
     elapsed_ms: i64,
     bytes: u64,
+    audio_system: bool,
+    audio_mic: bool,
+    // true once the mic capture thread hit AUDCLNT_E_DEVICE_INVALIDATED
+    // (unplugged mid-recording) -- the recording itself keeps running with
+    // silence in place of the mic track; the control bar surfaces this once
+    // as a warning state on the mic indicator the first time it flips true.
+    mic_lost: bool,
+    // Set once an unrecoverable encoder write failure happened (e.g. disk
+    // full) -- the feeder has already stopped itself at this point, so the
+    // control bar's own poll uses this to stop the session properly instead
+    // of leaving it looking like it is still recording.
+    encode_error: Option<String>,
 }
 
 // Read-only status for the control bar's live timer + file-size readout;
@@ -9268,6 +9316,10 @@ fn recording_status(rstate: State<'_, RecordingState>) -> Option<RecordingStatus
         paused: session.phase == RecPhase::Paused,
         elapsed_ms: recording::elapsed_ms(session),
         bytes,
+        audio_system: session.audio_system,
+        audio_mic: session.audio_mic,
+        mic_lost: session.mic_queue.as_ref().map(|q| q.is_lost()).unwrap_or(false),
+        encode_error: recording::encode_error(session),
     })
 }
 #[cfg(not(windows))]
@@ -9275,6 +9327,26 @@ fn recording_status(rstate: State<'_, RecordingState>) -> Option<RecordingStatus
 fn recording_status(rstate: State<'_, RecordingState>) -> Option<RecordingStatus> {
     let _ = rstate;
     None
+}
+
+#[derive(serde::Serialize)]
+struct MicDeviceInfo {
+    id: String,
+    name: String,
+}
+
+// Backs the recMicDevice expert dropdown. Best-effort (see
+// audio::list_mic_devices): a broken audio stack yields an empty list, and
+// the frontend falls back to "system default" rather than showing an error.
+#[cfg(windows)]
+#[tauri::command]
+fn list_mic_devices() -> Vec<MicDeviceInfo> {
+    recording::list_mic_devices().into_iter().map(|d| MicDeviceInfo { id: d.id, name: d.name }).collect()
+}
+#[cfg(not(windows))]
+#[tauri::command]
+fn list_mic_devices() -> Vec<MicDeviceInfo> {
+    Vec::new()
 }
 
 // ---- Auto-paste: track the last EXTERNAL foreground window so a copied prompt
@@ -15024,6 +15096,413 @@ fn crop_and_flip_rows_bottom_up(
     out
 }
 
+// Re-anchors a top-down BGRA frame of its own live (width, height) into a
+// fixed (target_w, target_h) top-down canvas, top-left corner: cropped if the
+// live frame is larger, black-padded if smaller. Used only for the case a
+// Window recording target is resized mid-capture (see RecHandler::on_frame_arrived) --
+// independent of the capture-frame type so it stays unit-testable.
+fn letterbox_frame_top_down(
+    raw: &[u8], width: usize, height: usize, stride: usize, target_w: usize, target_h: usize,
+) -> (Vec<u8>, usize) {
+    let dst_stride = target_w * 4;
+    let mut out = vec![0u8; dst_stride * target_h];
+    let copy_w = width.min(target_w);
+    let copy_h = height.min(target_h);
+    for row in 0..copy_h {
+        let src = row * stride;
+        let dst = row * dst_stride;
+        if src + copy_w * 4 > raw.len() {
+            break; // defensive -- a stale row_pitch must not panic the capture thread
+        }
+        out[dst..dst + copy_w * 4].copy_from_slice(&raw[src..src + copy_w * 4]);
+    }
+    (out, dst_stride)
+}
+
+// ---------- Screen recording: audio (loopback + microphone) ----------
+//
+// windows-capture's own VideoEncoder already accepts an AAC audio track
+// (AudioSettingsBuilder, send_audio_buffer) -- no custom Media Foundation
+// sink writer needed. What it does NOT do is capture the audio itself: that
+// is plain WASAPI (system loopback on the default render endpoint, the
+// microphone on the default -- or a chosen -- capture endpoint), converted to
+// this fixed target format before it reaches the encoder. Recording always
+// asks the encoder for exactly this format, so only the CAPTURE side ever
+// has to adapt to a device's own native format.
+const REC_AUDIO_SAMPLE_RATE: u32 = 48_000;
+const REC_AUDIO_CHANNELS: u32 = 2;
+
+// f32 sample in [-1.0, 1.0] (WASAPI's shared-mode mix format is virtually
+// always IEEE float) -> i16 PCM, hard-clipped rather than wrapped.
+fn audio_f32_to_i16(sample: f32) -> i16 {
+    (sample.clamp(-1.0, 1.0) * i16::MAX as f32).round() as i16
+}
+
+// Down/up-mixes an interleaved f32 buffer from `in_channels` to `out_channels`
+// (mono -> stereo duplicates the one channel; N>2 -> stereo keeps the first
+// two and drops the rest -- good enough for a screen-recording voice/system
+// track, not a mixing console) and resamples to `out_rate` with linear
+// interpolation (adequate for speech/system audio at these sample rates; a
+// polyphase resampler would be overkill for this use case). Returns
+// interleaved i16 PCM at `out_channels`/`out_rate`.
+fn audio_convert_to_target(
+    samples: &[f32],
+    in_channels: u32,
+    in_rate: u32,
+    out_channels: u32,
+    out_rate: u32,
+) -> Vec<i16> {
+    if in_channels == 0 || out_channels == 0 || in_rate == 0 {
+        return Vec::new();
+    }
+    let in_frames = samples.len() / in_channels as usize;
+    // Channel-adapt first, in f32, one row per output channel.
+    let mut adapted = vec![0f32; in_frames * out_channels as usize];
+    for frame in 0..in_frames {
+        for oc in 0..out_channels as usize {
+            let ic = if in_channels == 1 { 0 } else { oc.min(in_channels as usize - 1) };
+            adapted[frame * out_channels as usize + oc] = samples[frame * in_channels as usize + ic];
+        }
+    }
+    if in_rate == out_rate {
+        return adapted.into_iter().map(audio_f32_to_i16).collect();
+    }
+    // Linear-interpolation resample, per output channel.
+    let out_frames = ((in_frames as u64) * out_rate as u64 / in_rate as u64) as usize;
+    let mut out = vec![0i16; out_frames * out_channels as usize];
+    for frame in 0..out_frames {
+        let src_pos = frame as f64 * in_rate as f64 / out_rate as f64;
+        let i0 = src_pos.floor() as usize;
+        let frac = (src_pos - i0 as f64) as f32;
+        let i1 = (i0 + 1).min(in_frames.saturating_sub(1));
+        let i0 = i0.min(in_frames.saturating_sub(1));
+        for oc in 0..out_channels as usize {
+            let a = adapted[i0 * out_channels as usize + oc];
+            let b = adapted[i1 * out_channels as usize + oc];
+            out[frame * out_channels as usize + oc] = audio_f32_to_i16(a + (b - a) * frac);
+        }
+    }
+    out
+}
+
+// Sums two equal-length interleaved i16 buffers (both sources active), with
+// saturating (hard-clip) addition rather than wraparound -- clipping on loud
+// combined peaks is far less objectionable than digital wraparound noise.
+fn audio_mix_i16(a: &[i16], b: &[i16]) -> Vec<i16> {
+    a.iter().zip(b.iter()).map(|(&x, &y)| x.saturating_add(y)).collect()
+}
+
+// Minimal MP4 box walker, used only to measure each track's own declared
+// duration for the audio/video drift check below -- no new dependency, no
+// Media Foundation reader needed (the file's own box tree already carries
+// the answer, same "trust the output file's own numbers" approach 191 used
+// for its pause-gap proof).
+#[cfg(test)]
+fn mp4_child_boxes(data: &[u8]) -> Vec<(String, std::ops::Range<usize>)> {
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i + 8 <= data.len() {
+        let size32 = u32::from_be_bytes(data[i..i + 4].try_into().unwrap()) as u64;
+        let typ = String::from_utf8_lossy(&data[i + 4..i + 8]).into_owned();
+        let (header_len, box_size) = if size32 == 1 {
+            if i + 16 > data.len() {
+                break;
+            }
+            (16usize, u64::from_be_bytes(data[i + 8..i + 16].try_into().unwrap()))
+        } else if size32 == 0 {
+            (8usize, (data.len() - i) as u64)
+        } else {
+            (8usize, size32)
+        };
+        if box_size < header_len as u64 {
+            break;
+        }
+        let end = i + box_size as usize;
+        if end > data.len() || end <= i {
+            break;
+        }
+        out.push((typ, (i + header_len)..end));
+        i = end;
+    }
+    out
+}
+
+// Descends `path` (e.g. ["moov", "trak"]), fanning out at every level that
+// has more than one match (there are two "trak" boxes once audio is on) --
+// so this returns every leaf box matching the full path, in file order.
+#[cfg(test)]
+#[allow(clippy::single_range_in_vec_init)] // a Vec<Range> search scope, not an index list
+fn mp4_find_path(data: &[u8], path: &[&str]) -> Vec<std::ops::Range<usize>> {
+    let mut current = vec![0..data.len()];
+    for name in path {
+        let mut next = Vec::new();
+        for range in &current {
+            for (typ, r) in mp4_child_boxes(&data[range.clone()]) {
+                if typ == *name {
+                    next.push((range.start + r.start)..(range.start + r.end));
+                }
+            }
+        }
+        current = next;
+    }
+    current
+}
+
+// One track's own declared duration in seconds, from its mdhd box
+// (moov/trak/mdia/mdhd) -- version 0 uses 32-bit fields, version 1 uses
+// 64-bit creation/modification/duration with a still-32-bit timescale.
+// Handler-type fourCC per track (moov/trak/mdia/hdlr), e.g. "vide"/"soun" --
+// verifies which declared duration in mp4_track_durations_secs actually
+// belongs to which stream, rather than assuming trak order.
+#[cfg(test)]
+fn mp4_track_handler_types(data: &[u8]) -> Vec<String> {
+    let mut out = Vec::new();
+    for trak in mp4_find_path(data, &["moov", "trak"]) {
+        let trak_bytes = &data[trak.clone()];
+        let Some(hdlr) = mp4_find_path(trak_bytes, &["mdia", "hdlr"]).into_iter().next() else { continue };
+        let b = &trak_bytes[hdlr];
+        if b.len() >= 12 {
+            out.push(String::from_utf8_lossy(&b[8..12]).into_owned());
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+fn mp4_track_durations_secs(data: &[u8]) -> Vec<f64> {
+    let mut out = Vec::new();
+    for trak in mp4_find_path(data, &["moov", "trak"]) {
+        let trak_bytes = &data[trak.clone()];
+        let Some(mdhd) = mp4_find_path(trak_bytes, &["mdia", "mdhd"]).into_iter().next() else { continue };
+        let b = &trak_bytes[mdhd];
+        if b.is_empty() {
+            continue;
+        }
+        let version = b[0];
+        let (timescale, duration) = if version == 0 && b.len() >= 20 {
+            let timescale = u32::from_be_bytes(b[12..16].try_into().unwrap()) as u64;
+            let duration = u32::from_be_bytes(b[16..20].try_into().unwrap()) as u64;
+            (timescale, duration)
+        } else if version == 1 && b.len() >= 32 {
+            let timescale = u32::from_be_bytes(b[20..24].try_into().unwrap()) as u64;
+            let duration = u64::from_be_bytes(b[24..32].try_into().unwrap());
+            (timescale, duration)
+        } else {
+            continue;
+        };
+        if timescale > 0 {
+            out.push(duration as f64 / timescale as f64);
+        }
+    }
+    out
+}
+
+// Producer (a WASAPI capture thread) / consumer (the recording feeder's fixed-
+// cadence audio tick) queue of already-converted interleaved i16 PCM at the
+// fixed target format above. Capped well above one tick's worth so a capture
+// thread that briefly gets ahead does not grow without bound; the cap is
+// generous (2s) since audio packets arrive in small, frequent bursts, unlike
+// video frames.
+pub(crate) struct AudioQueueShared {
+    samples: Mutex<std::collections::VecDeque<i16>>,
+    lost: std::sync::atomic::AtomicBool,
+}
+impl AudioQueueShared {
+    fn new() -> Self {
+        Self { samples: Mutex::new(std::collections::VecDeque::new()), lost: std::sync::atomic::AtomicBool::new(false) }
+    }
+    fn push(&self, chunk: &[i16]) {
+        let cap = (REC_AUDIO_SAMPLE_RATE * REC_AUDIO_CHANNELS * 2) as usize; // ~2s
+        let mut q = self.samples.lock().unwrap_or_else(|e| e.into_inner());
+        q.extend(chunk.iter().copied());
+        while q.len() > cap {
+            q.pop_front();
+        }
+    }
+    // Drains exactly `n` samples, zero-padding (silence) if fewer are
+    // available -- the tick must never block or shrink to keep the encoder's
+    // own monotonic audio clock in step with real wall-clock time.
+    fn drain(&self, n: usize) -> Vec<i16> {
+        let mut q = self.samples.lock().unwrap_or_else(|e| e.into_inner());
+        let mut out = Vec::with_capacity(n);
+        for _ in 0..n {
+            out.push(q.pop_front().unwrap_or(0));
+        }
+        out
+    }
+    fn mark_lost(&self) {
+        self.lost.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    pub(crate) fn is_lost(&self) -> bool {
+        self.lost.load(std::sync::atomic::Ordering::Relaxed)
+    }
+    // Discards whatever is currently queued -- used once, the moment the
+    // first video frame arrives, to throw away audio captured during WGC's
+    // own startup latency (real, measured: a few hundred ms before the first
+    // frame shows up). Without this, audio ticking (which starts as soon as
+    // the feeder thread exists, well before any video) would establish an
+    // audio "time zero" earlier than video's own "time zero" (the first
+    // frame's own timestamp, per send_frame_buffer's self-normalization) --
+    // measured as an audio track running ~0.3s longer than the video track
+    // in every real recording before this fix.
+    fn clear(&self) {
+        self.samples.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    }
+}
+
+#[cfg(windows)]
+mod audio {
+    // WASAPI capture only: no knowledge of the video encoder or the feeder
+    // thread. Each capture thread owns exactly one endpoint (system loopback
+    // on the default render device, or the microphone on the default -- or a
+    // chosen -- capture device), converts every packet to the fixed target
+    // format and pushes it onto a shared queue. A device that disappears
+    // mid-recording (AUDCLNT_E_DEVICE_INVALIDATED) ends only that thread and
+    // marks the queue "lost" -- the recording itself, and the other audio
+    // source if any, are unaffected.
+    use super::{audio_convert_to_target, AudioQueueShared, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+    use std::thread;
+    use windows::Win32::Media::Audio::{
+        eCapture, eConsole, EDataFlow, IAudioCaptureClient, IAudioClient, IMMDevice, IMMDeviceCollection,
+        IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_BUFFERFLAGS_SILENT, AUDCLNT_SHAREMODE_SHARED,
+        AUDCLNT_STREAMFLAGS_LOOPBACK, DEVICE_STATE_ACTIVE,
+    };
+    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
+    use windows::core::HRESULT;
+
+    // AUDCLNT_E_DEVICE_INVALIDATED, from mmreg/audioclient.h -- not exposed as
+    // a named constant by the windows crate's Win32_Media_Audio feature.
+    const AUDCLNT_E_DEVICE_INVALIDATED: HRESULT = HRESULT(0x88890004u32 as i32);
+
+    pub struct MicDevice {
+        pub id: String,
+        pub name: String,
+    }
+
+    // Enumerates active capture (microphone) endpoints for the settings
+    // dropdown. Best-effort: any failure just yields an empty list, so a
+    // broken audio stack degrades to "use the default device" rather than
+    // failing the whole settings dialog.
+    pub fn list_mic_devices() -> Vec<MicDevice> {
+        let mut out = Vec::new();
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+            let Ok(enumerator) = CoCreateInstance::<_, IMMDeviceEnumerator>(&MMDeviceEnumerator, None, CLSCTX_ALL) else {
+                return out;
+            };
+            let Ok(collection): windows::core::Result<IMMDeviceCollection> =
+                enumerator.EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE)
+            else {
+                return out;
+            };
+            let Ok(count) = collection.GetCount() else { return out };
+            for i in 0..count {
+                let Ok(device) = collection.Item(i) else { continue };
+                let Ok(id) = device.GetId() else { continue };
+                let id = id.to_string().unwrap_or_default();
+                let name = device_friendly_name(&device).unwrap_or_else(|| id.clone());
+                out.push(MicDevice { id, name });
+            }
+        }
+        out
+    }
+
+    unsafe fn device_friendly_name(device: &IMMDevice) -> Option<String> {
+        use windows::Win32::Devices::FunctionDiscovery::PKEY_Device_FriendlyName;
+        let store = device.OpenPropertyStore(windows::Win32::System::Com::STGM_READ).ok()?;
+        let value = store.GetValue(&PKEY_Device_FriendlyName).ok()?;
+        let s = windows::Win32::System::Com::StructuredStorage::PropVariantToStringAlloc(&value).ok()?;
+        Some(s.to_string().unwrap_or_default())
+    }
+
+    fn open_endpoint(flow: EDataFlow, device_id: &str) -> windows::core::Result<IMMDevice> {
+        unsafe {
+            let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
+            if device_id.is_empty() {
+                enumerator.GetDefaultAudioEndpoint(flow, eConsole)
+            } else {
+                let id = windows::core::HSTRING::from(device_id);
+                enumerator.GetDevice(&id)
+            }
+        }
+    }
+
+    // One capture thread. `loopback` selects system-audio capture on a render
+    // endpoint vs. plain capture on a capture endpoint; `device_id` picks a
+    // specific microphone (empty = the system default). Runs until `stop` is
+    // set or the device is invalidated.
+    pub fn spawn_capture(
+        label: &'static str,
+        flow: EDataFlow,
+        loopback: bool,
+        device_id: String,
+        queue: Arc<AudioQueueShared>,
+        stop: Arc<AtomicBool>,
+    ) -> thread::JoinHandle<()> {
+        thread::Builder::new()
+            .name(format!("rec-audio-{label}"))
+            .spawn(move || unsafe {
+                let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+                let result = (|| -> windows::core::Result<()> {
+                    let device = open_endpoint(flow, &device_id)?;
+                    let client: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
+                    let wave_format = client.GetMixFormat()?;
+                    let in_channels = (*wave_format).nChannels as u32;
+                    let in_rate = (*wave_format).nSamplesPerSec;
+                    let in_bits = (*wave_format).wBitsPerSample;
+                    let stream_flags = if loopback { AUDCLNT_STREAMFLAGS_LOOPBACK } else { 0 };
+                    client.Initialize(AUDCLNT_SHAREMODE_SHARED, stream_flags, 2_000_000, 0, wave_format, None)?;
+                    let capture_client: IAudioCaptureClient = client.GetService()?;
+                    client.Start()?;
+                    while !stop.load(Ordering::Relaxed) {
+                        let mut packet_len = capture_client.GetNextPacketSize()?;
+                        while packet_len != 0 {
+                            let mut data_ptr = std::ptr::null_mut();
+                            let mut num_frames = 0u32;
+                            let mut flags = 0u32;
+                            capture_client.GetBuffer(&mut data_ptr, &mut num_frames, &mut flags, None, None)?;
+                            if !data_ptr.is_null() && num_frames > 0 {
+                                let is_silent = flags & AUDCLNT_BUFFERFLAGS_SILENT.0 as u32 != 0;
+                                let n = (num_frames * in_channels) as usize;
+                                let floats: Vec<f32> = if is_silent {
+                                    vec![0.0; n]
+                                } else if in_bits == 32 {
+                                    std::slice::from_raw_parts(data_ptr as *const f32, n).to_vec()
+                                } else if in_bits == 16 {
+                                    std::slice::from_raw_parts(data_ptr as *const i16, n)
+                                        .iter()
+                                        .map(|&s| s as f32 / i16::MAX as f32)
+                                        .collect()
+                                } else {
+                                    vec![0.0; n] // unsupported native format -- silence rather than garbage
+                                };
+                                let pcm = audio_convert_to_target(
+                                    &floats, in_channels, in_rate, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE,
+                                );
+                                queue.push(&pcm);
+                            }
+                            capture_client.ReleaseBuffer(num_frames)?;
+                            packet_len = capture_client.GetNextPacketSize()?;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    client.Stop()?;
+                    Ok(())
+                })();
+                if let Err(e) = result {
+                    if e.code() == AUDCLNT_E_DEVICE_INVALIDATED {
+                        queue.mark_lost();
+                    } else {
+                        super::append_crash_log(&format!("recording audio ({label}): {e}"));
+                    }
+                }
+            })
+            .expect("spawn rec-audio thread")
+    }
+}
+
 const REC_QUEUE_CAP: usize = 4; // bounded frame queue -- drop-oldest once the feeder falls behind
 
 struct RecFrameItem {
@@ -15042,6 +15521,11 @@ pub(crate) struct RecFeederShared {
     cv: std::sync::Condvar,
     dropped: std::sync::atomic::AtomicU64,
     stopping: std::sync::atomic::AtomicBool,
+    // First unrecoverable encoder write failure (e.g. disk full), if any --
+    // surfaced to the user rather than left as a silently truncated recording.
+    // Only the first is kept: a failing encoder tends to fail identically on
+    // every following frame, and one message is all the user needs.
+    encode_error: Mutex<Option<String>>,
 }
 impl RecFeederShared {
     fn new() -> Self {
@@ -15050,7 +15534,20 @@ impl RecFeederShared {
             cv: std::sync::Condvar::new(),
             dropped: std::sync::atomic::AtomicU64::new(0),
             stopping: std::sync::atomic::AtomicBool::new(false),
+            encode_error: Mutex::new(None),
         }
+    }
+    fn set_encode_error(&self, msg: String) {
+        let mut e = self.encode_error.lock().unwrap_or_else(|e| e.into_inner());
+        if e.is_none() {
+            *e = Some(msg);
+        }
+    }
+    // Non-consuming: the live status poll (recording_status) and the final
+    // stop payload both need to read this, and the live poll must not eat it
+    // before the stop payload gets a turn.
+    fn peek_encode_error(&self) -> Option<String> {
+        self.encode_error.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
     fn push(&self, item: RecFrameItem) {
         let mut q = self.queue.lock().unwrap_or_else(|e| e.into_inner());
@@ -15074,9 +15571,26 @@ impl RecFeederShared {
             q = self.cv.wait(q).unwrap_or_else(|e| e.into_inner());
         }
     }
+    // Non-blocking pop, used by the audio-tick feeder loop: video frames are
+    // drained whenever available between ticks, never waited on (the audio
+    // tick's own pacing must not stall behind an empty video queue).
+    fn try_pop(&self) -> Option<RecFrameItem> {
+        let mut q = self.queue.lock().unwrap_or_else(|e| e.into_inner());
+        q.pop_front()
+    }
     fn request_stop(&self) {
         self.stopping.store(true, std::sync::atomic::Ordering::Relaxed);
         self.cv.notify_all();
+    }
+    // Lets the capture callback stop pushing NEW frames the instant a stop
+    // was requested, symmetric with how the audio capture threads stop
+    // producing once audio_stop fires -- without this, video kept accepting
+    // frames for as long as WGC stayed alive (control.stop() only runs after
+    // the encoder is finalised, see Trap 1 below), while audio had already
+    // gone silent, so the video track ended up measurably longer than the
+    // audio track at the end of every recording.
+    fn is_stopping(&self) -> bool {
+        self.stopping.load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 
@@ -15089,18 +15603,22 @@ struct RecordingState(Mutex<Option<()>>);
 struct RecordingStoppedPayload {
     path: String,
     dropped_frames: u64,
+    encode_error: Option<String>,
 }
 
 #[cfg(windows)]
 mod recording {
     use super::{
-        append_crash_log, crop_and_flip_rows_bottom_up, rec_filename, RecFeederShared, RecFrameItem, RecPhase,
-        RecordClock,
+        append_crash_log, audio_mix_i16, crop_and_flip_rows_bottom_up, letterbox_frame_top_down, rec_filename,
+        AudioQueueShared,
+        RecFeederShared, RecFrameItem, RecPhase, RecordClock, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE,
     };
     use std::path::{Path, PathBuf};
-    use std::sync::atomic::Ordering;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
     use std::thread;
+    use std::time::{Duration, Instant};
+    use windows::Win32::Media::Audio::{eCapture, eRender};
     use windows::Win32::System::SystemInformation::GetLocalTime;
     use windows_capture::capture::{CaptureControl, Context, GraphicsCaptureApiHandler};
     use windows_capture::encoder::{
@@ -15166,14 +15684,22 @@ mod recording {
         clock: Arc<RecordClock>,
         shared: Arc<RecFeederShared>,
         crop: Option<(u32, u32, u32, u32)>,
+        // The encoder's fixed output size, chosen once from the target at
+        // start(). A Window target can be resized live by the user while WGC
+        // keeps delivering frames at the window's current size -- without this,
+        // a resize mid-recording changes the byte-buffer size on the very next
+        // frame and send_frame_buffer rejects it, silently ending capture.
+        // Monitor/Region targets never change size mid-capture, so this only
+        // ever bites Window.
+        enc_size: (u32, u32),
     }
     impl GraphicsCaptureApiHandler for RecHandler {
-        type Flags = (Arc<RecordClock>, Arc<RecFeederShared>, Option<(u32, u32, u32, u32)>);
+        type Flags = (Arc<RecordClock>, Arc<RecFeederShared>, Option<(u32, u32, u32, u32)>, (u32, u32));
         type Error = RecError;
 
         fn new(ctx: Context<Self::Flags>) -> Result<Self, Self::Error> {
-            let (clock, shared, crop) = ctx.flags;
-            Ok(Self { clock, shared, crop })
+            let (clock, shared, crop, enc_size) = ctx.flags;
+            Ok(Self { clock, shared, crop, enc_size })
         }
 
         fn on_frame_arrived(
@@ -15181,43 +15707,194 @@ mod recording {
             frame: &mut Frame,
             _capture_control: InternalCaptureControl,
         ) -> Result<(), Self::Error> {
-            if self.clock.is_paused() {
+            if self.clock.is_paused() || self.shared.is_stopping() {
                 return Ok(());
             }
             let ts = self.clock.now_ticks();
             let mut fb = frame.buffer()?;
             let (width, height, stride) = (fb.width() as usize, fb.height() as usize, fb.row_pitch() as usize);
-            let (cx, cy, cw, ch) = self.crop.unwrap_or((0, 0, width as u32, height as u32));
-            let bytes = crop_and_flip_rows_bottom_up(
-                fb.as_raw_buffer(), width, height, stride,
-                cx as usize, cy as usize, cw as usize, ch as usize,
-            );
+            let bytes = if self.crop.is_none() && (width as u32, height as u32) != self.enc_size {
+                // Live resize: re-anchor the frame into the encoder's original,
+                // fixed canvas (cropped if the window grew, black-padded if it
+                // shrank) instead of passing through the now-mismatched size.
+                let (ew, eh) = (self.enc_size.0 as usize, self.enc_size.1 as usize);
+                let (padded, padded_stride) = letterbox_frame_top_down(fb.as_raw_buffer(), width, height, stride, ew, eh);
+                crop_and_flip_rows_bottom_up(&padded, ew, eh, padded_stride, 0, 0, ew, eh)
+            } else {
+                let (cx, cy, cw, ch) = self.crop.unwrap_or((0, 0, width as u32, height as u32));
+                crop_and_flip_rows_bottom_up(
+                    fb.as_raw_buffer(), width, height, stride,
+                    cx as usize, cy as usize, cw as usize, ch as usize,
+                )
+            };
             self.shared.push(RecFrameItem { bytes, ts });
             Ok(())
         }
     }
 
-    fn build_encoder(width: u32, height: u32, path: &Path) -> Result<VideoEncoder, RecError> {
+    // audio_kbps: None disables the encoder's audio track entirely (no active
+    // source); Some(kbps) enables it at the fixed target format (48kHz/stereo/
+    // 16-bit AAC), matching what audio_convert_to_target and the feeder's
+    // audio tick already produce.
+    fn build_encoder(
+        width: u32, height: u32, path: &Path, audio_kbps: Option<u32>, video_kbps: u32,
+    ) -> Result<VideoEncoder, RecError> {
         // VideoSettingsBuilder defaults to HEVC -- the app always ships MP4/H.264,
         // so the sub type is set explicitly rather than trusting the default.
+        let audio_settings = match audio_kbps {
+            Some(kbps) => AudioSettingsBuilder::default()
+                .bitrate(kbps.saturating_mul(1000))
+                .channel_count(REC_AUDIO_CHANNELS)
+                .sample_rate(REC_AUDIO_SAMPLE_RATE)
+                .disabled(false),
+            None => AudioSettingsBuilder::default().disabled(true),
+        };
         let encoder = VideoEncoder::new(
-            VideoSettingsBuilder::new(width, height).sub_type(VideoSettingsSubType::H264).frame_rate(30),
-            AudioSettingsBuilder::default().disabled(true),
+            VideoSettingsBuilder::new(width, height)
+                .sub_type(VideoSettingsSubType::H264)
+                .frame_rate(30)
+                .bitrate(video_kbps.saturating_mul(1000)),
+            audio_settings,
             ContainerSettingsBuilder::default(),
             path,
         )?;
         Ok(encoder)
     }
 
+    // Config for the two optional audio sources. Neither active ->
+    // start() takes the exact original video-only path (build_encoder(...,
+    // None), plain feeder_loop) with zero behaviour change from 191/238.
+    #[derive(Clone)]
+    pub struct AudioConfig {
+        pub system: bool,
+        pub mic: bool,
+        pub mic_device_id: String,
+        pub kbps: u32,
+    }
+
     fn feeder_loop(shared: Arc<RecFeederShared>, mut encoder: VideoEncoder) {
         while let Some(item) = shared.pop_or_stop() {
             if let Err(e) = encoder.send_frame_buffer(&item.bytes, item.ts) {
                 append_crash_log(&format!("recording: send_frame_buffer failed: {e}"));
+                shared.set_encode_error(e.to_string());
+                shared.request_stop(); // further frames would just fail the same way
                 break;
             }
         }
         if let Err(e) = encoder.finish() {
             append_crash_log(&format!("recording: encoder finish failed: {e}"));
+            shared.set_encode_error(e.to_string());
+        }
+    }
+
+    // Audio-enabled variant: a fixed 20ms tick drains the active audio
+    // queue(s) (mixing when both system+mic are on) and feeds the encoder's
+    // audio track, gated by the same RecordClock pause state the video path
+    // already uses -- so pausing needs no extra sync. Video frames are
+    // drained non-blockingly between ticks rather than waited on, since the
+    // tick's own pacing is what keeps the encoder's internal audio clock in
+    // step with real wall-clock time (its clock is derived purely from
+    // cumulative samples sent, see send_audio_buffer's docs).
+    //
+    // Ticking does not start until the FIRST video frame has arrived: WGC
+    // takes a real, measured few hundred ms after the capture session starts
+    // before its first frame shows up, and video's own "time zero" is that
+    // first frame's timestamp (send_frame_buffer self-normalizes on its
+    // first call). Ticking from the feeder thread's own start instead would
+    // give audio a head start no video content covers, so every real
+    // recording measured the audio track running ~0.3s longer than the
+    // video track. Once the first frame lands, anything already captured
+    // into the audio queues (from that same startup gap) is discarded so the
+    // first real tick's content matches what the video's own zero covers.
+    fn feeder_loop_with_audio(
+        shared: Arc<RecFeederShared>,
+        mut encoder: VideoEncoder,
+        clock: Arc<RecordClock>,
+        queues: Vec<Arc<AudioQueueShared>>,
+    ) {
+        const TICK: Duration = Duration::from_millis(20);
+        let samples_per_tick = (REC_AUDIO_SAMPLE_RATE as usize / 50) * REC_AUDIO_CHANNELS as usize; // 20ms
+        let mut next_tick = Instant::now() + TICK;
+        let mut video_started = false;
+        // WGC only calls on_frame_arrived when the captured surface actually
+        // changes -- during a static/idle screen it can go over a second
+        // with no new frame at all. Measured on real hardware: the video
+        // track's own declared duration (last frame's PTS minus the first
+        // frame's) then falls up to ~1s behind real elapsed time, which both
+        // truncates the visible recording and blows the audio/video sync
+        // budget. Fix: hold and resend the last frame with a fresh timestamp
+        // once per tick whenever nothing new has arrived, so video's own PTS
+        // never trails real time by more than one tick.
+        let mut last_frame: Option<Vec<u8>> = None;
+        let mut last_frame_at: Option<Instant> = None;
+        loop {
+            while let Some(item) = shared.try_pop() {
+                if !video_started {
+                    video_started = true;
+                    for q in &queues {
+                        q.clear();
+                    }
+                }
+                if let Err(e) = encoder.send_frame_buffer(&item.bytes, item.ts) {
+                    append_crash_log(&format!("recording: send_frame_buffer failed: {e}"));
+                    shared.set_encode_error(e.to_string());
+                    shared.request_stop(); // further frames would just fail the same way
+                }
+                last_frame = Some(item.bytes);
+                last_frame_at = Some(Instant::now());
+            }
+            if shared.stopping.load(Ordering::Relaxed) {
+                break;
+            }
+            let now = Instant::now();
+            if now < next_tick {
+                thread::sleep(next_tick - now);
+            }
+            next_tick += TICK;
+            if video_started && !clock.is_paused() {
+                if let (Some(bytes), Some(at)) = (&last_frame, last_frame_at) {
+                    if at.elapsed() >= TICK {
+                        let ts = clock.now_ticks();
+                        if let Err(e) = encoder.send_frame_buffer(bytes, ts) {
+                            append_crash_log(&format!("recording: send_frame_buffer (hold) failed: {e}"));
+                            shared.set_encode_error(e.to_string());
+                            shared.request_stop();
+                        }
+                        last_frame_at = Some(Instant::now());
+                    }
+                }
+                let mut mixed: Option<Vec<i16>> = None;
+                for q in &queues {
+                    let chunk = q.drain(samples_per_tick);
+                    mixed = Some(match mixed {
+                        None => chunk,
+                        Some(m) => audio_mix_i16(&m, &chunk),
+                    });
+                }
+                if let Some(m) = mixed {
+                    let mut bytes = Vec::with_capacity(m.len() * 2);
+                    for s in &m {
+                        bytes.extend_from_slice(&s.to_le_bytes());
+                    }
+                    if let Err(e) = encoder.send_audio_buffer(&bytes, 0) {
+                        append_crash_log(&format!("recording: send_audio_buffer failed: {e}"));
+                    }
+                }
+            }
+        }
+        // Final flush: keep waiting (pop_or_stop, not try_pop) for whatever
+        // was still in flight when the capture callback saw the stop signal,
+        // same tail behaviour as the plain feeder_loop above.
+        while let Some(item) = shared.pop_or_stop() {
+            if let Err(e) = encoder.send_frame_buffer(&item.bytes, item.ts) {
+                append_crash_log(&format!("recording: send_frame_buffer failed: {e}"));
+                shared.set_encode_error(e.to_string());
+                break;
+            }
+        }
+        if let Err(e) = encoder.finish() {
+            append_crash_log(&format!("recording: encoder finish failed: {e}"));
+            shared.set_encode_error(e.to_string());
         }
     }
 
@@ -15226,6 +15903,14 @@ mod recording {
         clock: Arc<RecordClock>,
         shared: Arc<RecFeederShared>,
         feeder: Option<thread::JoinHandle<()>>,
+        audio_stop: Option<Arc<AtomicBool>>,
+        audio_threads: Vec<thread::JoinHandle<()>>,
+        // Tracked separately from the feeder's own mixing queues (which live
+        // only in the feeder thread's closure) so recording_status can report
+        // a mic-specific loss toast without guessing which queue is which.
+        pub mic_queue: Option<Arc<AudioQueueShared>>,
+        pub audio_system: bool,
+        pub audio_mic: bool,
         pub output_path: PathBuf,
         pub phase: RecPhase,
     }
@@ -15253,13 +15938,47 @@ mod recording {
     }
 
     // show_cursor: the mouse-cursor toggle (ships ON) -- windows-capture's
-    // own capture setting, never a manually drawn cursor.
-    pub fn start(target: RecTarget, output_path: PathBuf, show_cursor: bool) -> Result<RecSession, String> {
+    // own capture setting, never a manually drawn cursor. audio: neither
+    // source active takes the exact original video-only path unchanged.
+    pub fn start(
+        target: RecTarget, output_path: PathBuf, show_cursor: bool, audio: AudioConfig, video_kbps: u32,
+    ) -> Result<RecSession, String> {
         let (width, height) = resolve_target_size(target)?;
-        let encoder = build_encoder(width, height, &output_path).map_err(|e| e.to_string())?;
+        let audio_active = audio.system || audio.mic;
+        let encoder = build_encoder(width, height, &output_path, audio_active.then_some(audio.kbps), video_kbps)
+            .map_err(|e| e.to_string())?;
         let clock = Arc::new(RecordClock::new());
         let shared = Arc::new(RecFeederShared::new());
-        let feeder = {
+
+        let mut audio_queues: Vec<Arc<AudioQueueShared>> = Vec::new();
+        let mut audio_threads = Vec::new();
+        let mut mic_queue: Option<Arc<AudioQueueShared>> = None;
+        let audio_stop = if audio_active { Some(Arc::new(AtomicBool::new(false))) } else { None };
+        if audio.system {
+            let q = Arc::new(AudioQueueShared::new());
+            audio_threads.push(super::audio::spawn_capture(
+                "system", eRender, true, String::new(), q.clone(), audio_stop.clone().unwrap(),
+            ));
+            audio_queues.push(q);
+        }
+        if audio.mic {
+            let q = Arc::new(AudioQueueShared::new());
+            audio_threads.push(super::audio::spawn_capture(
+                "mic", eCapture, false, audio.mic_device_id.clone(), q.clone(), audio_stop.clone().unwrap(),
+            ));
+            audio_queues.push(q.clone());
+            mic_queue = Some(q);
+        }
+
+        let feeder = if audio_active {
+            let shared2 = shared.clone();
+            let clock2 = clock.clone();
+            let queues2 = audio_queues.clone();
+            thread::Builder::new()
+                .name("rec-feeder".into())
+                .spawn(move || feeder_loop_with_audio(shared2, encoder, clock2, queues2))
+                .map_err(|e| e.to_string())?
+        } else {
             let shared2 = shared.clone();
             thread::Builder::new()
                 .name("rec-feeder".into())
@@ -15269,7 +15988,7 @@ mod recording {
 
         let cursor = if show_cursor { CursorCaptureSettings::WithCursor } else { CursorCaptureSettings::WithoutCursor };
         let crop = resolve_crop(target);
-        let flags = (clock.clone(), shared.clone(), crop);
+        let flags = (clock.clone(), shared.clone(), crop, (width, height));
         let control = match resolve_capture_item(target)? {
             CaptureItem::Monitor(m) => {
                 let settings = Settings::new(
@@ -15287,7 +16006,11 @@ mod recording {
             }
         };
 
-        Ok(RecSession { control, clock, shared, feeder: Some(feeder), output_path, phase: RecPhase::Recording })
+        Ok(RecSession {
+            control, clock, shared, feeder: Some(feeder), audio_stop, audio_threads, mic_queue,
+            audio_system: audio.system, audio_mic: audio.mic,
+            output_path, phase: RecPhase::Recording,
+        })
     }
 
     pub fn pause(session: &RecSession) {
@@ -15309,20 +16032,40 @@ mod recording {
     // THEN tear down the capture thread -- Trap 1. Finalising after stop()
     // finalises against a WM_QUIT'd capture pipeline and produces an MP4 with
     // no closed moov atom (unplayable).
-    fn finish_and_stop(mut session: RecSession) -> Result<u64, String> {
+    fn finish_and_stop(mut session: RecSession) -> Result<(u64, Option<String>), String> {
+        // Both sides stop PRODUCING new content at essentially the same
+        // instant -- audio_stop cuts the WASAPI capture threads, is_stopping
+        // (checked in on_frame_arrived) cuts new video frames -- before
+        // either side is joined/drained, so neither track keeps growing
+        // while the other has already gone silent.
+        if let Some(stop) = &session.audio_stop {
+            stop.store(true, Ordering::Relaxed);
+        }
         session.shared.request_stop();
+        for t in session.audio_threads.drain(..) {
+            let _ = t.join();
+        }
         if let Some(feeder) = session.feeder.take() {
             let _ = feeder.join();
         }
         let dropped = session.shared.dropped.load(Ordering::Relaxed);
+        let encode_error = session.shared.peek_encode_error();
         session.control.stop().map_err(|e| e.to_string())?;
-        Ok(dropped)
+        Ok((dropped, encode_error))
     }
 
-    pub fn stop(session: RecSession) -> Result<(PathBuf, u64), String> {
+    pub fn stop(session: RecSession) -> Result<(PathBuf, u64, Option<String>), String> {
         let path = session.output_path.clone();
-        let dropped = finish_and_stop(session)?;
-        Ok((path, dropped))
+        let (dropped, encode_error) = finish_and_stop(session)?;
+        Ok((path, dropped, encode_error))
+    }
+
+    // Live-poll accessor for the control bar: lets it notice an unrecoverable
+    // encoder failure (e.g. disk full) WHILE still nominally "recording" and
+    // stop itself, instead of the bar sitting there looking like it is still
+    // capturing while every frame silently fails in the background.
+    pub fn encode_error(session: &RecSession) -> Option<String> {
+        session.shared.peek_encode_error()
     }
 
     // The output file exists the instant VideoEncoder::new() runs (it opens the
@@ -15334,6 +16077,10 @@ mod recording {
         finish_and_stop(session)?;
         let _ = std::fs::remove_file(&path);
         Ok(())
+    }
+
+    pub fn list_mic_devices() -> Vec<super::audio::MicDevice> {
+        super::audio::list_mic_devices()
     }
 
     pub fn new_output_path(recordings_dir: &Path) -> Result<PathBuf, String> {
@@ -15376,11 +16123,27 @@ async fn start_recording(
         _ => return Err("invalid recording target".to_string()),
     };
     // recCursor ships ON -- only an explicit false switches it off.
+    // recAudioSystem ships ON, recAudioMic ships OFF -- 239's audio defaults.
+    let audio = {
+        let g = db.lock().unwrap_or_else(|e| e.into_inner());
+        recording::AudioConfig {
+            system: g.settings.ui_flags.get("recAudioSystem") != Some(&false),
+            mic: g.settings.ui_flags.get("recAudioMic") == Some(&true),
+            mic_device_id: g.settings.ui_texts.get("recMicDevice").cloned().unwrap_or_default(),
+            kbps: g.settings.ui_values.get("recAudioKbps").copied().unwrap_or(192.0).clamp(64.0, 320.0) as u32,
+        }
+    };
     let show_cursor = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_flags.get("recCursor") != Some(&false);
+    // The quality step (small/high/lossless) only picks the slider's own default in
+    // the UI -- the native H.264 encoder always takes this bitrate as-is. "Lossless"
+    // is produced afterward by convert_recording's CRF-0 re-encode, so this value's
+    // exact size barely matters on that step (see the recQuality tooltip).
+    let video_kbps =
+        db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recBitrateKbps").copied().unwrap_or(12000.0).clamp(1000.0, 50000.0) as u32;
     let dir = data_dir(&app).join("recordings");
     let session = tauri::async_runtime::spawn_blocking(move || {
         let out_path = recording::new_output_path(&dir)?;
-        recording::start(target, out_path, show_cursor)
+        recording::start(target, out_path, show_cursor, audio, video_kbps)
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -15443,9 +16206,16 @@ fn resume_recording(rstate: State<'_, RecordingState>) -> Result<(), String> {
     Err("recording is only available on Windows".to_string())
 }
 
+// Shared by the Stop-button command below and the auto-stop path (the
+// rec-bar's follow thread, when the recorded window itself closes mid-
+// recording): keep the file instead of leaving a dead session running
+// against a capture source that is already gone.
+// Plain blocking call, not async -- the follow thread is already its own
+// dedicated OS thread, so there is no tokio worker to protect here; the
+// actual command below still off-loads through spawn_blocking for that.
 #[cfg(windows)]
-#[tauri::command]
-async fn stop_recording(rstate: State<'_, RecordingState>) -> Result<RecordingStoppedPayload, String> {
+fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayload, String> {
+    let rstate = app.state::<RecordingState>();
     let session = {
         let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
         let s = guard.take().ok_or_else(|| "no active recording".to_string())?;
@@ -15455,15 +16225,27 @@ async fn stop_recording(rstate: State<'_, RecordingState>) -> Result<RecordingSt
         }
         s
     };
-    let (path, dropped) = tauri::async_runtime::spawn_blocking(move || recording::stop(session))
+    let (path, dropped, encode_error) = recording::stop(session)?;
+    let payload = RecordingStoppedPayload { path: path.to_string_lossy().to_string(), dropped_frames: dropped, encode_error };
+    // Mirrors the screenshot flow's "snip-captured": the recording bar is its
+    // own window, so the main window learns the recording is ready to attach
+    // through this event rather than a direct call across windows.
+    let _ = app.emit("recording-captured", payload.clone());
+    Ok(payload)
+}
+
+#[cfg(windows)]
+#[tauri::command]
+async fn stop_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<RecordingStoppedPayload, String> {
+    let _ = &rstate; // accessed via the AppHandle inside stop_recording_now, shared with the auto-stop path
+    tauri::async_runtime::spawn_blocking(move || stop_recording_now(&app))
         .await
-        .map_err(|e| e.to_string())??;
-    Ok(RecordingStoppedPayload { path: path.to_string_lossy().to_string(), dropped_frames: dropped })
+        .map_err(|e| e.to_string())?
 }
 #[cfg(not(windows))]
 #[tauri::command]
-async fn stop_recording(rstate: State<'_, RecordingState>) -> Result<RecordingStoppedPayload, String> {
-    let _ = rstate;
+async fn stop_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<RecordingStoppedPayload, String> {
+    let _ = (app, rstate);
     Err("recording is only available on Windows".to_string())
 }
 
@@ -15984,6 +16766,422 @@ fn install_update_blocking(url: String) -> Result<(), String> {
     }
     cmd.spawn().map_err(|e| format!("start installer: {}", e))?;
     Ok(())
+}
+
+// ---------- ffmpeg: fetched on demand for video export/conversion ----------
+//
+// ffmpeg is used as a separate, independently-invoked subprocess -- never linked
+// into this binary -- so it carries its own licence rather than this app's. The
+// pinned build (gyan.dev's "essentials" release) is GPLv3: MP4/H.264 output is
+// a hard requirement, and only the GPL build includes libx264 -- the LGPL
+// alternative has no H.264 encoder at all. GPL redistribution as a separate
+// subprocess only requires shipping the licence text and a source pointer (see
+// THIRD-PARTY-NOTICES.md) -- the same pattern OBS Studio uses -- and does not
+// affect the licensing of this app's own code.
+const FFMPEG_URL: &str =
+    "https://github.com/GyanD/codexffmpeg/releases/download/9.0.1/ffmpeg-9.0.1-essentials_build.zip";
+const FFMPEG_SHA256: &str = "fec81ae03971d9dd4be3ebe02e263bd2ec1d789483f931bdba5f5715e65da2e9";
+const FFMPEG_ZIP_ENTRY: &str = "ffmpeg-9.0.1-essentials_build/bin/ffmpeg.exe";
+// The zip itself is ~106 MB (it also carries ffplay.exe/ffprobe.exe, which are
+// never extracted); capped generously above that so a legitimate download is
+// never mistaken for a truncation attempt.
+const FFMPEG_ZIP_MAX_BYTES: u64 = 160 * 1024 * 1024;
+
+// Set by `cancel_ffmpeg_download`, polled between chunks in the download loop --
+// a cancelled or failed download simply leaves nothing behind, so no resumable
+// retry is needed.
+static FFMPEG_DOWNLOAD_CANCEL: AtomicBool = AtomicBool::new(false);
+
+fn hex_decode(s: &str) -> Option<Vec<u8>> {
+    if s.len() % 2 != 0 || !s.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok()).collect()
+}
+
+// The two hashes here are both public/pinned, not secrets -- this is not a
+// timing-attack-relevant comparison -- but the spec asks for a constant-time
+// compare, so this never short-circuits on the first differing byte.
+fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+// Discovery order: next to the exe, then the app's data folder, then PATH --
+// first hit wins. Never touches the network; that only
+// ever happens in `download_ffmpeg`, and only after explicit user consent.
+// The installer's bundled copy lands next to the exe, so an installed build
+// never reaches this function's "not found" case at all.
+fn ffmpeg_search_path(app: &AppHandle) -> Option<PathBuf> {
+    let name = "ffmpeg.exe";
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let p = dir.join(name);
+            if p.is_file() {
+                return Some(p);
+            }
+        }
+    }
+    let p = data_dir(app).join(name);
+    if p.is_file() {
+        return Some(p);
+    }
+    std::env::var_os("PATH").and_then(|paths| {
+        std::env::split_paths(&paths).map(|dir| dir.join(name)).find(|p| p.is_file())
+    })
+}
+
+// Reports where ffmpeg was found (if anywhere) so the frontend knows whether to
+// offer the download at all -- never called on app start, only when a feature
+// that needs ffmpeg is actually reached for.
+#[tauri::command]
+async fn ffmpeg_status(app: AppHandle) -> Option<String> {
+    ffmpeg_search_path(&app).map(|p| p.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn cancel_ffmpeg_download() {
+    FFMPEG_DOWNLOAD_CANCEL.store(true, Ordering::SeqCst);
+}
+
+// Where a downloaded ffmpeg.exe is written: beside the exe when that folder is
+// writable (the portable case), otherwise the app's data folder. Never PATH,
+// never a system directory, never elevated.
+fn ffmpeg_install_dir(app: &AppHandle) -> PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let probe = dir.join(format!(".wtest-{}", std::process::id()));
+            if fs::write(&probe, b"").is_ok() {
+                let _ = fs::remove_file(&probe);
+                return dir.to_path_buf();
+            }
+        }
+    }
+    data_dir(app)
+}
+
+// Download, verify, extract and stage ffmpeg.exe. The caller (frontend) must
+// already have gotten explicit consent through
+// `confirmDialog()` before invoking this -- this command is a plain mechanism
+// with no consent check of its own, so the UI layer stays the one place that
+// decides when it may run. Progress is reported via the
+// "ffmpeg-download-progress" event ({downloaded, total}); a cancellation or any
+// failure leaves nothing behind (nothing is written until the hash is verified).
+#[tauri::command]
+async fn download_ffmpeg(app: AppHandle) -> Result<String, String> {
+    FFMPEG_DOWNLOAD_CANCEL.store(false, Ordering::SeqCst);
+    tauri::async_runtime::spawn_blocking(move || download_ffmpeg_blocking(&app))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+// Sanity-check this is actually a zip (local file header "PK\x03\x04") before
+// trusting it further -- a corruption/wrong-format guard, not authentication on
+// its own -- then verify the pinned SHA-256, constant-time compared. A mismatch
+// (truncated body, tampered mirror, wrong asset) is rejected and nothing is ever
+// written -- this mirrors the updater's own fail-closed rule
+// (install_update_blocking). Split out from the download itself, and taking the
+// expected hash as a parameter, so a wrong-hash rejection is provable in a unit
+// test without a live download (see `ffmpeg_wrong_hash_is_rejected` below).
+fn verify_ffmpeg_zip_against(bytes: &[u8], want_hex: &str) -> Result<(), String> {
+    if bytes.len() < 4 || &bytes[0..2] != b"PK" {
+        return Err("downloaded file is not a valid archive".to_string());
+    }
+    use sha2::{Digest, Sha256};
+    let got = Sha256::digest(bytes);
+    let want = hex_decode(want_hex).ok_or_else(|| "bad pinned hash".to_string())?;
+    if !ct_eq(got.as_slice(), &want) {
+        return Err("ffmpeg download hash mismatch -- rejected".to_string());
+    }
+    Ok(())
+}
+
+fn verify_ffmpeg_zip(bytes: &[u8]) -> Result<(), String> {
+    verify_ffmpeg_zip_against(bytes, FFMPEG_SHA256)
+}
+
+fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String> {
+    let resp = ureq::get(FFMPEG_URL)
+        .set("User-Agent", brand::USER_AGENT)
+        .timeout(std::time::Duration::from_secs(300))
+        .call()
+        .map_err(|e| format!("download: {}", e))?;
+    let total: u64 = resp.header("Content-Length").and_then(|s| s.parse().ok()).unwrap_or(0);
+    let mut bytes = Vec::new();
+    use std::io::Read;
+    let mut reader = resp.into_reader();
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        if FFMPEG_DOWNLOAD_CANCEL.load(Ordering::SeqCst) {
+            return Err("cancelled".to_string());
+        }
+        let n = reader.read(&mut buf).map_err(|e| format!("read: {}", e))?;
+        if n == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&buf[..n]);
+        if bytes.len() as u64 > FFMPEG_ZIP_MAX_BYTES {
+            return Err("download too large / truncated".to_string());
+        }
+        let _ = app.emit(
+            "ffmpeg-download-progress",
+            serde_json::json!({ "downloaded": bytes.len() as u64, "total": total }),
+        );
+    }
+    if FFMPEG_DOWNLOAD_CANCEL.load(Ordering::SeqCst) {
+        return Err("cancelled".to_string());
+    }
+    verify_ffmpeg_zip(&bytes)?;
+    let exe_bytes = {
+        let mut archive =
+            zip::ZipArchive::new(std::io::Cursor::new(&bytes)).map_err(|e| format!("zip: {}", e))?;
+        let mut entry = archive
+            .by_name(FFMPEG_ZIP_ENTRY)
+            .map_err(|_| "ffmpeg.exe not found inside the downloaded archive".to_string())?;
+        let mut out = Vec::with_capacity(entry.size() as usize);
+        entry.read_to_end(&mut out).map_err(|e| format!("extract: {}", e))?;
+        out
+    };
+    if exe_bytes.len() < 2 || &exe_bytes[0..2] != b"MZ" {
+        return Err("extracted file is not a valid executable".to_string());
+    }
+    let dir = ffmpeg_install_dir(app);
+    fs::create_dir_all(&dir).map_err(|e| format!("target dir: {}", e))?;
+    let final_path = dir.join("ffmpeg.exe");
+    // Stage under a unique temp name in the SAME directory, then rename into
+    // place -- an interrupted write never leaves a half-written ffmpeg.exe at
+    // the real name, and a same-directory rename is atomic on NTFS.
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let staged = dir.join(format!(".ffmpeg-{}-{}.tmp", std::process::id(), stamp));
+    fs::write(&staged, &exe_bytes).map_err(|e| format!("write: {}", e))?;
+    fs::rename(&staged, &final_path).map_err(|e| {
+        let _ = fs::remove_file(&staged);
+        format!("install: {}", e)
+    })?;
+    Ok(final_path.to_string_lossy().to_string())
+}
+
+// ---------- Video conversion (ffmpeg) ----------
+//
+// MP4/H.264 is always what the native recorder writes; a different target
+// format, or the lossless quality step, is produced by this separate pass
+// afterward, never inside the recorder itself -- runs in the background with
+// a cancelable progress indicator. The source MP4 is only ever deleted once
+// the new file is confirmed on disk, so a failed or cancelled run always
+// leaves the original recording intact.
+
+static REC_CONVERT_CANCEL: AtomicBool = AtomicBool::new(false);
+
+#[derive(serde::Serialize, Clone)]
+struct ConvertProgressPayload {
+    ms: u32,
+}
+
+#[tauri::command]
+fn cancel_recording_convert() {
+    REC_CONVERT_CANCEL.store(true, Ordering::SeqCst);
+}
+
+// `format`: "mp4" | "webm" | "gif". `lossless` only means anything for "mp4"
+// (a CRF-0 re-encode of the same source, the lossless quality step's actual
+// effect) -- "webm"/"gif" always use their own fixed settings below.
+// Progress arrives as "recording-convert-progress" ({ms}: encoded output
+// time so far) -- the frontend already knows the recording's total duration
+// from its own capture timer, so it turns this into a percentage rather than
+// the backend guessing at one.
+#[tauri::command]
+async fn convert_recording(app: AppHandle, src_path: String, format: String, lossless: bool) -> Result<String, String> {
+    if !matches!(format.as_str(), "mp4" | "webm" | "gif") {
+        return Err("unsupported format".to_string());
+    }
+    let src = PathBuf::from(&src_path);
+    if !src.is_file() {
+        return Err("source file not found".to_string());
+    }
+    let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
+    REC_CONVERT_CANCEL.store(false, Ordering::SeqCst);
+    tauri::async_runtime::spawn_blocking(move || {
+        convert_recording_blocking(&ffmpeg, &src, &format, lossless, |ms| {
+            let _ = app.emit("recording-convert-progress", ConvertProgressPayload { ms });
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// A request to "convert" mp4 -> mp4 without the lossless step would just
+// overwrite the source with an identical copy -- there is nothing to do, so
+// it is rejected as a caller mistake rather than run through ffmpeg. The
+// lossless step is the one exception: its whole point IS an mp4 -> mp4
+// re-encode, so same-extension alone cannot be the guard.
+fn convert_is_noop(same_extension: bool, format: &str, lossless: bool) -> bool {
+    same_extension && !(format == "mp4" && lossless)
+}
+
+// `on_progress` is a plain closure rather than an `AppHandle` -- the only thing
+// this function does with progress is report it, so it takes no dependency on
+// Tauri's runtime at all and can be exercised in a unit test against a real
+// ffmpeg binary, with no app instance needed.
+fn convert_recording_blocking(
+    ffmpeg: &Path, src: &Path, format: &str, lossless: bool, mut on_progress: impl FnMut(u32),
+) -> Result<String, String> {
+    use std::os::windows::process::CommandExt;
+    let same_extension = src.extension().is_some_and(|e| e.eq_ignore_ascii_case(format));
+    if convert_is_noop(same_extension, format, lossless) {
+        return Err("nothing to convert".to_string());
+    }
+    // The real, final name -- for mp4 + lossless this is the SAME path as
+    // `src` (the whole point of that step is replacing it in place). ffmpeg
+    // is never pointed at it directly though: it writes a uniquely-named
+    // staged file in the same directory first (same pattern as the ffmpeg
+    // download's own install step above), so a source that is also the
+    // destination is never read and written by the same process at once, and
+    // a conversion that fails or is cancelled never leaves a half-written
+    // file at either name.
+    let dst = src.with_extension(format);
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let staged = src.with_file_name(format!(".convert-{}-{}.{}", std::process::id(), stamp, format));
+    let mut cmd = std::process::Command::new(ffmpeg);
+    cmd.args(["-y", "-hide_banner", "-i"]).arg(src).args(["-progress", "pipe:1", "-nostats"]);
+    match format {
+        "mp4" => {
+            cmd.args(["-c:v", "libx264"]);
+            if lossless {
+                cmd.args(["-crf", "0", "-preset", "veryfast"]);
+            } else {
+                cmd.args(["-crf", "18", "-preset", "medium"]);
+            }
+            cmd.args(["-c:a", "aac", "-b:a", "192k"]);
+        }
+        "webm" => {
+            cmd.args(["-c:v", "libvpx-vp9", "-crf", "30", "-b:v", "0", "-c:a", "libopus"]);
+        }
+        "gif" => {
+            // Capped at 30s, palette-quantised, no audio -- a straight per-frame
+            // GIF encode is both huge and visibly banded without this.
+            cmd.args([
+                "-t", "30", "-an", "-vf",
+                "fps=15,scale=iw:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer",
+            ]);
+        }
+        _ => unreachable!(),
+    }
+    cmd.arg(&staged);
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.stdin(std::process::Stdio::null());
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+    let mut child = cmd.spawn().map_err(|e| format!("could not start ffmpeg: {e}"))?;
+
+    // ffmpeg's normal log on stderr is drained on its own thread so it can
+    // never block the stdout progress reader below via a full OS pipe buffer
+    // -- only its text is kept (tailed below), for the error message on a
+    // failure.
+    let stderr_thread = child.stderr.take().map(|mut pipe| {
+        std::thread::spawn(move || {
+            use std::io::Read;
+            let mut buf = Vec::new();
+            let _ = pipe.read_to_end(&mut buf);
+            String::from_utf8_lossy(&buf).into_owned()
+        })
+    });
+
+    // stdout carries `-progress pipe:1`'s machine-readable "key=value" lines,
+    // one flush per line -- unlike the carriage-return-redrawn stats ffmpeg
+    // would otherwise print to stderr -- polled between reads so a cancel
+    // takes effect within one progress tick instead of waiting for the whole
+    // conversion to finish. `out_time_ms` is ffmpeg's own field name for a
+    // value that is actually in MICROSECONDS, hence the /1000 below.
+    if let Some(stdout) = child.stdout.take() {
+        use std::io::BufRead;
+        let reader = std::io::BufReader::new(stdout);
+        for line in reader.lines() {
+            if REC_CONVERT_CANCEL.load(Ordering::SeqCst) {
+                let _ = child.kill();
+                break;
+            }
+            let Ok(line) = line else { break };
+            if let Some(us) = line.strip_prefix("out_time_ms=").and_then(|v| v.trim().parse::<i64>().ok()) {
+                on_progress((us / 1000).max(0) as u32);
+            }
+        }
+    }
+
+    let status = child.wait().map_err(|e| format!("ffmpeg wait failed: {e}"))?;
+    let stderr_text = stderr_thread.and_then(|t| t.join().ok()).unwrap_or_default();
+
+    if REC_CONVERT_CANCEL.load(Ordering::SeqCst) {
+        let _ = fs::remove_file(&staged);
+        return Err("cancelled".to_string());
+    }
+    if !status.success() {
+        let _ = fs::remove_file(&staged);
+        let tail: String = stderr_text.chars().rev().take(1200).collect::<Vec<_>>().into_iter().rev().collect();
+        append_crash_log(&format!("recording convert failed ({format}): {tail}"));
+        return Err(if tail.trim().is_empty() {
+            "ffmpeg conversion failed".to_string()
+        } else {
+            format!("ffmpeg conversion failed: {}", tail.trim())
+        });
+    }
+    // Only now, with the converted file confirmed complete on disk, does the
+    // real name get touched at all: rename the staged file into place (this
+    // is also what replaces `src` in-place for the mp4 + lossless case, since
+    // `dst == src` there), then remove the old source if it is a genuinely
+    // different file from what now sits at `dst`.
+    if !staged.is_file() {
+        return Err("ffmpeg reported success but wrote no output".to_string());
+    }
+    fs::rename(&staged, &dst).map_err(|e| {
+        let _ = fs::remove_file(&staged);
+        format!("could not finalise the converted file: {e}")
+    })?;
+    if dst != src {
+        let _ = fs::remove_file(src);
+    }
+    Ok(dst.to_string_lossy().to_string())
+}
+
+// Post-capture "Save as..." for a recording -- the file already sits in the
+// recordings folder (raw or converted), this just copies it wherever the
+// user picks, same shape as save_screenshot_as but from a real file instead
+// of a data URL.
+#[tauri::command]
+async fn save_recording_as(app: AppHandle, src_path: String) -> Result<Option<String>, String> {
+    let src = PathBuf::from(&src_path);
+    if !src.is_file() {
+        return Err("recording file not found".to_string());
+    }
+    let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("mp4").to_string();
+    let name = src.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| format!("Recording.{ext}"));
+    match file_dialog(&app).add_filter(ext.to_uppercase(), &[ext.as_str()]).set_file_name(&name).save_file() {
+        Some(p) => {
+            fs::copy(&src, &p).map_err(|e| e.to_string())?;
+            Ok(Some(p.to_string_lossy().to_string()))
+        }
+        None => Ok(None),
+    }
+}
+
+// Discard a not-yet-attached recording. Scoped to the app's own recordings
+// folder (never an arbitrary webview-supplied path), same defense-in-depth
+// pattern as delete_screenshot_file.
+#[tauri::command]
+fn discard_recording_file(app: AppHandle, path: String) -> bool {
+    let p = PathBuf::from(&path);
+    let Some(parent) = p.parent().and_then(|d| d.canonicalize().ok()) else { return false };
+    let allowed = data_dir(&app).join("recordings");
+    let Ok(allowed) = allowed.canonicalize() else { return false };
+    if parent != allowed || !p.is_file() {
+        return false;
+    }
+    fs::remove_file(&p).is_ok()
 }
 
 // Called by the frontend once the first render + text fit is complete.
@@ -17723,6 +18921,7 @@ pub fn run() {
             }
             sweep_stale_temp_files(); // crash/abnormal-exit leftovers from a previous run
             let store = load_store(&handle);
+            sweep_stale_recordings(&handle, &orphan_referenced_set(&store)); // ditto, for undecided recordings
 
             let saved_geom = store.settings.window;
             let autostart = store.settings.autostart;
@@ -18182,6 +19381,9 @@ pub fn run() {
             app_version,
             check_update,
             install_update,
+            ffmpeg_status,
+            download_ffmpeg,
+            cancel_ffmpeg_download,
             set_auto_update,
             set_hotkey,
             check_hotkey,
@@ -18273,9 +19475,14 @@ pub fn run() {
             resume_recording,
             stop_recording,
             cancel_recording,
+            convert_recording,
+            cancel_recording_convert,
+            save_recording_as,
+            discard_recording_file,
             show_rec_bar,
             hide_rec_bar,
-            recording_status
+            recording_status,
+            list_mic_devices
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
@@ -19320,6 +20527,197 @@ fn start_sync_poll(app: AppHandle) {
 mod tests {
     use super::*;
 
+    // ---- ffmpeg: zip-signature + pinned-hash verification, no network needed ----
+
+    fn ffmpeg_test_zip() -> Vec<u8> {
+        let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let options =
+            zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        writer.start_file("hello.txt", options).unwrap();
+        use std::io::Write;
+        writer.write_all(b"not a real ffmpeg build, just a test fixture").unwrap();
+        writer.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn ffmpeg_wrong_hash_is_rejected() {
+        let zip_bytes = ffmpeg_test_zip();
+        // Any hash that is not this blob's real SHA-256 must be rejected -- the
+        // "point the pinned constant at a wrong hash" proof the spec asks for.
+        let wrong_hash = "0".repeat(64);
+        let err = verify_ffmpeg_zip_against(&zip_bytes, &wrong_hash).unwrap_err();
+        assert!(err.contains("hash mismatch"), "{err}");
+    }
+
+    #[test]
+    fn ffmpeg_matching_hash_is_accepted() {
+        let zip_bytes = ffmpeg_test_zip();
+        use sha2::{Digest, Sha256};
+        let real_hash = format!("{:x}", Sha256::digest(&zip_bytes));
+        assert!(verify_ffmpeg_zip_against(&zip_bytes, &real_hash).is_ok());
+    }
+
+    #[test]
+    fn ffmpeg_non_zip_bytes_are_rejected_before_the_hash_check() {
+        let err = verify_ffmpeg_zip_against(b"not a zip file at all", FFMPEG_SHA256).unwrap_err();
+        assert!(err.contains("not a valid archive"), "{err}");
+    }
+
+    #[test]
+    fn ffmpeg_search_path_never_touches_path_or_a_system_directory() {
+        // Discovery only ever looks beside the exe, in the app's own data folder,
+        // and in PATH -- confirming the constants/logic never reference a system
+        // directory or attempt to modify PATH is a static-shape check, not a
+        // runtime one (there is no writable AppHandle in this pure unit test).
+        assert_eq!(FFMPEG_ZIP_ENTRY, "ffmpeg-9.0.1-essentials_build/bin/ffmpeg.exe");
+        assert!(FFMPEG_URL.starts_with("https://github.com/GyanD/codexffmpeg/releases/download/"));
+        assert_eq!(FFMPEG_SHA256.len(), 64);
+    }
+
+    #[test]
+    fn hex_decode_round_trips_the_pinned_hash() {
+        let decoded = hex_decode(FFMPEG_SHA256).expect("pinned hash must be valid hex");
+        assert_eq!(decoded.len(), 32); // SHA-256 is 32 bytes
+    }
+
+    #[test]
+    fn ct_eq_matches_plain_equality_without_short_circuiting() {
+        assert!(ct_eq(b"abcdef", b"abcdef"));
+        assert!(!ct_eq(b"abcdef", b"abcdeg"));
+        assert!(!ct_eq(b"abc", b"abcd")); // different lengths never match
+    }
+
+    // ---- Recording conversion: pure guard logic, no ffmpeg/hardware needed ----
+
+    #[test]
+    fn convert_is_noop_rejects_a_plain_mp4_to_mp4_request() {
+        assert!(convert_is_noop(true, "mp4", false));
+    }
+
+    #[test]
+    fn convert_is_noop_allows_the_lossless_mp4_reencode_despite_the_same_extension() {
+        // This is the one case where "same extension" must NOT short-circuit
+        // the conversion -- lossless re-encodes mp4 in place on purpose.
+        assert!(!convert_is_noop(true, "mp4", true));
+    }
+
+    #[test]
+    fn convert_is_noop_allows_a_genuine_format_change() {
+        assert!(!convert_is_noop(false, "webm", false));
+        assert!(!convert_is_noop(false, "gif", false));
+    }
+
+    // ---- Recording conversion: real ffmpeg, no capture hardware needed ----
+    //
+    // These exercise the actual subprocess, against the local build's own
+    // ffmpeg.exe (gitignored, downloaded the same way `download_ffmpeg` does
+    // -- see the README's "Building from source" section). A clean checkout
+    // without it present skips these rather than failing.
+
+    fn test_ffmpeg() -> Option<PathBuf> {
+        let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("ffmpeg.exe");
+        p.is_file().then_some(p)
+    }
+
+    // A tiny synthetic clip, generated entirely by ffmpeg's own test-pattern
+    // source -- no real recording needed to exercise the conversion path.
+    fn make_test_mp4(ffmpeg: &Path, dir: &Path, name: &str, seconds: u32, size: &str) -> PathBuf {
+        use std::os::windows::process::CommandExt;
+        let out = dir.join(name);
+        let status = std::process::Command::new(ffmpeg)
+            .args(["-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i"])
+            .arg(format!("testsrc=duration={seconds}:size={size}:rate=15"))
+            .args(["-c:v", "libx264", "-pix_fmt", "yuv420p"])
+            .arg(&out)
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()
+            .expect("could not run ffmpeg to build the test fixture");
+        assert!(status.success(), "ffmpeg failed to build the test fixture clip");
+        out
+    }
+
+    #[test]
+    fn convert_recording_real_ffmpeg_produces_a_playable_webm_and_removes_the_source() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-convtest-webm-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x64");
+        let out = convert_recording_blocking(&ffmpeg, &src, "webm", false, |_| {}).expect("conversion should succeed");
+        let out = PathBuf::from(out);
+        assert!(out.is_file(), "converted file missing");
+        assert_eq!(out.extension().unwrap(), "webm");
+        // WebM is a Matroska/EBML container -- its files start with this fixed
+        // 4-byte magic regardless of codec, which is enough to prove ffmpeg
+        // actually produced a real container rather than an empty/garbage file.
+        let bytes = fs::read(&out).unwrap();
+        assert_eq!(&bytes[0..4], &[0x1A, 0x45, 0xDF, 0xA3]);
+        assert!(!src.is_file(), "source must be removed once the conversion succeeded");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn convert_recording_real_ffmpeg_gif_has_gif_magic_and_removes_the_source() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-convtest-gif-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x64");
+        let out = convert_recording_blocking(&ffmpeg, &src, "gif", false, |_| {}).expect("conversion should succeed");
+        let bytes = fs::read(&out).unwrap();
+        assert_eq!(&bytes[0..3], b"GIF");
+        assert!(!src.is_file());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn convert_recording_real_ffmpeg_lossless_replaces_the_source_in_place() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-convtest-lossless-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x64");
+        let before = fs::read(&src).unwrap();
+        let out = convert_recording_blocking(&ffmpeg, &src, "mp4", true, |_| {}).expect("conversion should succeed");
+        assert_eq!(PathBuf::from(&out), src, "lossless mp4 must replace the source path, not a new one");
+        assert!(src.is_file());
+        let after = fs::read(&src).unwrap();
+        assert_ne!(before, after, "a CRF-0 re-encode should actually rewrite the file, not leave it untouched");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn convert_recording_real_ffmpeg_cancel_leaves_the_source_untouched() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-convtest-cancel-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        // Long enough that the cancel flag is set well before ffmpeg finishes.
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 8, "960x720");
+        REC_CONVERT_CANCEL.store(false, Ordering::SeqCst);
+        std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_millis(150));
+            REC_CONVERT_CANCEL.store(true, Ordering::SeqCst);
+        });
+        let result = convert_recording_blocking(&ffmpeg, &src, "webm", false, |_| {});
+        assert_eq!(result, Err("cancelled".to_string()));
+        assert!(src.is_file(), "a cancelled conversion must never remove the source");
+        assert!(!dir.join("src.webm").exists(), "a cancelled conversion must leave no destination file");
+        REC_CONVERT_CANCEL.store(false, Ordering::SeqCst);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn convert_recording_real_ffmpeg_failure_leaves_the_source_untouched() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-convtest-fail-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        // Not a real video -- ffmpeg exits non-zero, exercising the failure path.
+        let src = dir.join("src.mp4");
+        fs::write(&src, b"this is not a video file").unwrap();
+        let result = convert_recording_blocking(&ffmpeg, &src, "webm", false, |_| {});
+        assert!(result.is_err());
+        assert!(src.is_file(), "a failed conversion must never remove the source");
+        assert!(!dir.join("src.webm").exists(), "a failed conversion must leave no destination file");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     // ---- Recording: state machine + clock + filename, no hardware needed ----
 
     #[test]
@@ -19382,6 +20780,273 @@ mod tests {
     }
 
     #[test]
+    fn rec_feeder_encode_error_latches_the_first_message_and_peek_does_not_consume() {
+        let shared = RecFeederShared::new();
+        assert_eq!(shared.peek_encode_error(), None);
+        shared.set_encode_error("disk full".to_string());
+        shared.set_encode_error("a later, different failure".to_string());
+        // First failure wins -- a failing encoder tends to repeat the same
+        // error on every subsequent frame, so only the first is kept.
+        assert_eq!(shared.peek_encode_error(), Some("disk full".to_string()));
+        // Peeking twice must return the same thing (the live status poll and
+        // the final stop payload both read it independently).
+        assert_eq!(shared.peek_encode_error(), Some("disk full".to_string()));
+    }
+
+    // ---- Audio mixing/resampling + the WASAPI-producer queue, no hardware needed ----
+
+    #[test]
+    fn audio_f32_to_i16_clamps_and_scales() {
+        assert_eq!(audio_f32_to_i16(0.0), 0);
+        assert_eq!(audio_f32_to_i16(1.0), i16::MAX);
+        assert_eq!(audio_f32_to_i16(-1.0), -i16::MAX);
+        assert_eq!(audio_f32_to_i16(2.0), i16::MAX); // over-range clips, never wraps
+        assert_eq!(audio_f32_to_i16(-2.0), -i16::MAX);
+    }
+
+    #[test]
+    fn audio_convert_to_target_passthrough_when_format_already_matches() {
+        let samples = [0.5f32, -0.5, 0.25, -0.25];
+        let out = audio_convert_to_target(&samples, 2, 48_000, 2, 48_000);
+        assert_eq!(out.len(), samples.len());
+        assert_eq!(out[0], audio_f32_to_i16(0.5));
+    }
+
+    #[test]
+    fn audio_convert_to_target_mono_to_stereo_duplicates_the_one_channel() {
+        let samples = [1.0f32, -1.0]; // 2 mono frames
+        let out = audio_convert_to_target(&samples, 1, 48_000, 2, 48_000);
+        assert_eq!(out, vec![i16::MAX, i16::MAX, -i16::MAX, -i16::MAX]);
+    }
+
+    #[test]
+    fn audio_convert_to_target_resamples_to_the_requested_rate() {
+        // 4 stereo frames at 48kHz downsampled to 24kHz -> half as many frames.
+        let samples: Vec<f32> = (0..8).map(|i| i as f32 / 10.0).collect();
+        let out = audio_convert_to_target(&samples, 2, 48_000, 2, 24_000);
+        assert_eq!(out.len(), 4); // 2 frames * 2 channels
+    }
+
+    #[test]
+    fn audio_convert_to_target_empty_input_never_panics() {
+        assert!(audio_convert_to_target(&[], 2, 48_000, 2, 48_000).is_empty());
+        assert!(audio_convert_to_target(&[0.1, 0.2], 0, 48_000, 2, 48_000).is_empty());
+    }
+
+    #[test]
+    fn audio_mix_i16_sums_and_hard_clips_instead_of_wrapping() {
+        assert_eq!(audio_mix_i16(&[100, -100], &[200, -200]), vec![300, -300]);
+        assert_eq!(audio_mix_i16(&[i16::MAX, i16::MIN], &[100, -100]), vec![i16::MAX, i16::MIN]);
+    }
+
+    #[test]
+    fn audio_queue_drain_zero_pads_on_underrun_and_never_blocks() {
+        let q = AudioQueueShared::new();
+        q.push(&[1, 2, 3]);
+        let out = q.drain(5);
+        assert_eq!(out, vec![1, 2, 3, 0, 0]);
+        // fully drained -- a second pull is pure silence.
+        assert_eq!(q.drain(2), vec![0, 0]);
+    }
+
+    #[test]
+    fn audio_queue_push_caps_at_two_seconds_and_drops_the_oldest() {
+        let q = AudioQueueShared::new();
+        let cap = (REC_AUDIO_SAMPLE_RATE * REC_AUDIO_CHANNELS * 2) as usize;
+        q.push(&vec![7i16; cap]);
+        q.push(&[9, 9]); // pushes the queue 2 samples over cap
+        let out = q.drain(cap);
+        // the two oldest 7s were evicted; the tail is the freshly pushed 9s.
+        assert_eq!(&out[out.len() - 2..], &[9, 9]);
+        assert_eq!(out.len(), cap);
+    }
+
+    fn mp4_box(typ: &[u8; 4], body: &[u8]) -> Vec<u8> {
+        let mut out = ((8 + body.len()) as u32).to_be_bytes().to_vec();
+        out.extend_from_slice(typ);
+        out.extend_from_slice(body);
+        out
+    }
+    fn mp4_mdhd_v0(timescale: u32, duration: u32) -> Vec<u8> {
+        let mut body = vec![0u8, 0, 0, 0]; // version 0, flags
+        body.extend_from_slice(&0u32.to_be_bytes()); // creation
+        body.extend_from_slice(&0u32.to_be_bytes()); // modification
+        body.extend_from_slice(&timescale.to_be_bytes());
+        body.extend_from_slice(&duration.to_be_bytes());
+        mp4_box(b"mdhd", &body)
+    }
+
+    #[test]
+    fn mp4_track_durations_secs_reads_two_tracks_from_a_synthetic_container() {
+        let video_mdia = mp4_box(b"mdia", &mp4_mdhd_v0(30_000, 300_000)); // 10.0s @ 30000
+        let audio_mdia = mp4_box(b"mdia", &mp4_mdhd_v0(48_000, 480_500)); // 10.0104...s
+        let video_trak = mp4_box(b"trak", &video_mdia);
+        let audio_trak = mp4_box(b"trak", &audio_mdia);
+        let mut moov_body = video_trak;
+        moov_body.extend_from_slice(&audio_trak);
+        let moov = mp4_box(b"moov", &moov_body);
+        // ftyp ahead of moov, like a real file, to prove top-level scanning
+        // does not get confused by an earlier unrelated box.
+        let mut file = mp4_box(b"ftyp", b"isom");
+        file.extend_from_slice(&moov);
+
+        let durations = mp4_track_durations_secs(&file);
+        assert_eq!(durations.len(), 2);
+        assert!((durations[0] - 10.0).abs() < 1e-9);
+        assert!((durations[1] - 480_500.0 / 48_000.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn mp4_track_durations_secs_empty_on_garbage_input() {
+        assert!(mp4_track_durations_secs(&[]).is_empty());
+        assert!(mp4_track_durations_secs(&[0u8; 4]).is_empty()); // too short for even a box header
+        assert!(mp4_track_durations_secs(&[1, 2, 3, 4, 5, 6, 7, 8]).is_empty()); // no moov at all
+    }
+
+    #[test]
+    fn audio_queue_lost_flag_starts_false_and_latches_true() {
+        let q = AudioQueueShared::new();
+        assert!(!q.is_lost());
+        q.mark_lost();
+        assert!(q.is_lost());
+    }
+
+    // Real hardware, not run by a plain `cargo test --lib` (needs a live
+    // display + default playback device): `cargo test --lib -- --ignored
+    // rec_audio_real_recording_produces_a_video_and_an_audio_track`. Proves
+    // the whole path end to end -- WASAPI capture, the feeder's audio tick,
+    // send_audio_buffer -- without needing a Media Foundation reader: an MP4
+    // with N tracks has exactly N "trak" box markers, so one video + one
+    // system-audio track means exactly two.
+    #[test]
+    #[cfg(windows)]
+    #[ignore]
+    fn rec_audio_real_recording_produces_a_video_and_an_audio_track() {
+        let dir = std::env::temp_dir().join(format!("ps-audio-probe-{}", std::process::id()));
+        let out = recording::new_output_path(&dir).expect("output path");
+        let audio = recording::AudioConfig {
+            system: true, mic: false, mic_device_id: String::new(), kbps: 192,
+        };
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000).expect("start");
+        std::thread::sleep(std::time::Duration::from_secs(4));
+        let (path, _dropped, _encode_error) = recording::stop(session).expect("stop");
+        let bytes = std::fs::read(&path).expect("read output file");
+        assert!(bytes.len() > 10_000, "output suspiciously small: {} bytes", bytes.len());
+        let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
+        let durations = mp4_track_durations_secs(&bytes);
+        let handlers = mp4_track_handler_types(&bytes);
+        println!("track durations (s): {durations:?} handlers: {handlers:?}");
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(track_count, 2, "expected 1 video + 1 audio track box, found {track_count}");
+        assert_eq!(durations.len(), 2, "expected a declared duration for each track");
+    }
+
+    // Same proof, mic-only: `cargo test --lib -- --ignored rec_audio_real_recording_mic_only`.
+    #[test]
+    #[cfg(windows)]
+    #[ignore]
+    fn rec_audio_real_recording_mic_only() {
+        let dir = std::env::temp_dir().join(format!("ps-audio-probe-mic-{}", std::process::id()));
+        let out = recording::new_output_path(&dir).expect("output path");
+        let audio = recording::AudioConfig {
+            system: false, mic: true, mic_device_id: String::new(), kbps: 192,
+        };
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000).expect("start");
+        std::thread::sleep(std::time::Duration::from_secs(4));
+        let (path, _dropped, _encode_error) = recording::stop(session).expect("stop");
+        let bytes = std::fs::read(&path).expect("read output file");
+        assert!(bytes.len() > 10_000, "output suspiciously small: {} bytes", bytes.len());
+        let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(track_count, 2, "expected 1 video + 1 audio track box, found {track_count}");
+    }
+
+    // Both sources mixed into the one audio track: `cargo test --lib --
+    // --ignored rec_audio_real_recording_both_sources`.
+    #[test]
+    #[cfg(windows)]
+    #[ignore]
+    fn rec_audio_real_recording_both_sources() {
+        let dir = std::env::temp_dir().join(format!("ps-audio-probe-both-{}", std::process::id()));
+        let out = recording::new_output_path(&dir).expect("output path");
+        let audio = recording::AudioConfig {
+            system: true, mic: true, mic_device_id: String::new(), kbps: 192,
+        };
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000).expect("start");
+        std::thread::sleep(std::time::Duration::from_secs(4));
+        let (path, _dropped, _encode_error) = recording::stop(session).expect("stop");
+        let bytes = std::fs::read(&path).expect("read output file");
+        assert!(bytes.len() > 10_000, "output suspiciously small: {} bytes", bytes.len());
+        let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(track_count, 2, "expected 1 video + 1 mixed-audio track box, found {track_count}");
+    }
+
+    // The spec's actual acceptance number (WORK-IMPL.md 239): "drift under
+    // 50ms over 10 minutes, clocked from WASAPI timestamps... measure it
+    // over a real 10-minute recording, do not assume it." Runs for a real
+    // ~10 real minutes -- not part of any normal or CI run.
+    // `cargo test --lib -- --ignored --exact tests::rec_audio_real_10min_drift --nocapture`.
+    #[test]
+    #[cfg(windows)]
+    #[ignore]
+    fn rec_audio_real_10min_drift() {
+        let dir = std::env::temp_dir().join(format!("ps-audio-drift-{}", std::process::id()));
+        let out = recording::new_output_path(&dir).expect("output path");
+        let audio = recording::AudioConfig {
+            system: true, mic: false, mic_device_id: String::new(), kbps: 192,
+        };
+        let wall_start = std::time::Instant::now();
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000).expect("start");
+        std::thread::sleep(std::time::Duration::from_secs(600));
+        let (path, _dropped, _encode_error) = recording::stop(session).expect("stop");
+        let wall_elapsed = wall_start.elapsed().as_secs_f64();
+        let bytes = std::fs::read(&path).expect("read output file");
+        let durations = mp4_track_durations_secs(&bytes);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(durations.len(), 2, "expected a video and an audio track, got {durations:?}");
+        let (video_s, audio_s) = (durations[0], durations[1]);
+        let av_drift_ms = ((video_s - audio_s).abs() * 1000.0).round();
+        let audio_vs_wall_ms = ((audio_s - wall_elapsed).abs() * 1000.0).round();
+        println!(
+            "10-minute drift: wall={wall_elapsed:.3}s video={video_s:.3}s audio={audio_s:.3}s \
+             video-vs-audio={av_drift_ms}ms audio-vs-wall={audio_vs_wall_ms}ms"
+        );
+        assert!(av_drift_ms < 50.0, "video/audio drift {av_drift_ms}ms exceeds the 50ms/10min budget");
+    }
+
+    // Neither source active: the plain (audio-free) feeder path is exactly
+    // 191/238's original code, unchanged. Still 2 "trak" boxes though -- a
+    // real-hardware run of this test is what surfaced that windows-capture's
+    // MediaStreamSource is built with both a video AND an audio descriptor
+    // regardless of AudioSettingsBuilder::disabled (see encoder.rs's
+    // VideoEncoder::new): "disabled" only makes send_audio_buffer refuse to
+    // be called, which our audio-off feeder_loop never does anyway -- so the
+    // container always declares an audio track, just an empty/silent one
+    // when no audio is enabled. Harmless (players ignore an empty track) and
+    // pre-existing since 191, not something to "fix" here; this test exists
+    // to pin the fact down so a future change that assumes "1 track = no
+    // audio enabled" does not get surprised by it again.
+    // `cargo test --lib -- --ignored rec_audio_real_recording_no_audio`.
+    #[test]
+    #[cfg(windows)]
+    #[ignore]
+    fn rec_audio_real_recording_no_audio() {
+        let dir = std::env::temp_dir().join(format!("ps-audio-probe-none-{}", std::process::id()));
+        let out = recording::new_output_path(&dir).expect("output path");
+        let audio = recording::AudioConfig {
+            system: false, mic: false, mic_device_id: String::new(), kbps: 192,
+        };
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000).expect("start");
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let (path, _dropped, _encode_error) = recording::stop(session).expect("stop");
+        let bytes = std::fs::read(&path).expect("read output file");
+        let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(track_count, 2, "expected 1 video + 1 empty audio track box, found {track_count}");
+    }
+
+    #[test]
     fn crop_and_flip_rows_bottom_up_full_frame_reverses_row_order_and_strips_padding() {
         // 2x2 BGRA, stride padded by 4 extra bytes per row.
         let row0 = [1u8, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0];
@@ -19409,6 +21074,30 @@ mod tests {
         // column 2 of row 0 is pixel value 2, of row 1 is pixel value 5;
         // bottom-up means row 1's pixel comes first.
         assert_eq!(out, vec![5, 5, 5, 255, 2, 2, 2, 255]);
+    }
+
+    #[test]
+    fn letterbox_frame_top_down_pads_a_smaller_live_frame_with_black() {
+        // 1x1 live frame, black-padded up to the encoder's fixed 2x2 canvas.
+        let raw = vec![9u8, 8, 7, 255];
+        let (out, stride) = letterbox_frame_top_down(&raw, 1, 1, 4, 2, 2);
+        assert_eq!(stride, 8);
+        // top-left pixel is the source, the other three are black/transparent.
+        assert_eq!(out, vec![9, 8, 7, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn letterbox_frame_top_down_crops_a_larger_live_frame() {
+        // 2x2 live frame, cropped down to the encoder's fixed 1x1 canvas --
+        // only the top-left source pixel should survive.
+        let px = |n: u8| [n, n, n, 255u8];
+        let mut raw = Vec::new();
+        for n in 0..4u8 {
+            raw.extend_from_slice(&px(n));
+        }
+        let (out, stride) = letterbox_frame_top_down(&raw, 2, 2, 8, 1, 1);
+        assert_eq!(stride, 4);
+        assert_eq!(out, vec![0, 0, 0, 255]);
     }
 
     #[test]
@@ -21137,6 +22826,36 @@ mod tests {
         let _ = fs::remove_file(&pdfium_cache);
         let _ = fs::remove_file(&unrelated_ext);
         let _ = fs::remove_file(&unrelated_file);
+    }
+
+    // A recording nobody decided on (attach/save/discard) yet, old enough that
+    // it can only be a crash/abnormal-exit leftover, is swept; one still fresh
+    // (the post-capture menu could genuinely still be open) and one a prompt
+    // already references (storeFiles off, so file_path points straight into
+    // this folder) both survive.
+    #[test]
+    fn sweep_stale_recordings_removes_only_old_unreferenced_files() {
+        let dir = std::env::temp_dir().join(format!("ps-test-rec-sweep-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let abandoned = dir.join("2026-09-04_09-00-00.mp4");
+        let fresh = dir.join("2026-09-04_09-30-00.mp4");
+        let referenced = dir.join("2026-09-04_08-00-00.mp4");
+        fs::write(&abandoned, b"video").unwrap();
+        fs::write(&fresh, b"video").unwrap();
+        fs::write(&referenced, b"video").unwrap();
+        backdate(&abandoned, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
+        backdate(&referenced, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
+
+        let mut wanted = std::collections::HashSet::new();
+        wanted.insert(referenced.to_string_lossy().replace('/', "\\").to_lowercase());
+        sweep_stale_recordings_in(&dir, &wanted);
+
+        assert!(!abandoned.exists(), "an old, unreferenced recording must be swept");
+        assert!(fresh.exists(), "a fresh recording (menu possibly still open) must survive");
+        assert!(referenced.exists(), "a recording a prompt still references must survive however old");
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

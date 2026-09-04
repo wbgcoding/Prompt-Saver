@@ -6,16 +6,17 @@ All notable changes to **Prompt Saver**. Download the latest version from the
 
 ## 2.7.0 (unreleased)
 
-Twenty-three new features: tags, custom themes, folders for view tabs and for
+Twenty-four new features: tags, custom themes, folders for view tabs and for
 floating buttons, self-filling and choice variables, a markdown preview with
 syntax colors, private notes, per-prompt hotkeys, drag-out into other apps, a
 tray quick-copy menu, a screen color picker, a standalone quick launcher,
 multi-select in the grid, a trash for deleted prompts, placing one prompt in
 several views at once, restoring a backup's data and settings separately,
 rotating prompts, a screenshot editor, offline text recognition (OCR), offline
-voice dictation, and a first-run introduction tour. Everything new is an
-expert-menu switch, most of it off until you turn it on (text recognition,
-voice dictation, the screenshot editor and the introduction tour ship on).
+voice dictation, screen recording, and a first-run introduction tour.
+Everything new is an expert-menu switch, most of it off until you turn it on
+(text recognition, voice dictation, the screenshot editor and the
+introduction tour ship on).
 
 ### Added
 
@@ -198,6 +199,22 @@ voice dictation, the screenshot editor and the introduction tour ship on).
   small chain icon next to its selection checkbox; clicking it starts a chain
   with that tile as the first entry, skipping the header button. Switchable
   off on its own in the expert menu (on by default).
+- **Screen recording** — a record button next to the screenshot button opens the
+  same picker overlay: click a window, drag a region, or click empty desktop
+  for the whole screen. An optional countdown precedes capture, and a small
+  floating control bar (elapsed time, live file size, Pause/Resume, Stop,
+  Discard) follows a moved window and is itself never part of the recording.
+  System audio (on by default) and microphone audio (off by default, with a
+  device picker) each record as their own track; unplugging the microphone
+  mid-recording keeps picture and system audio going and just marks that
+  track as lost. Stopping opens the same attach/save-as/discard dialog a
+  screenshot uses. MP4 (H.264) is what gets written while recording; three
+  quality steps (Small/High/Lossless) and an optional WebM or GIF format
+  convert it afterward through ffmpeg (offered as an inline download when
+  missing) — a failed or canceled conversion always falls back to the
+  untouched original recording, and a write error (for example a full disk)
+  stops the recording cleanly and keeps whatever was captured so far. If the
+  recorded window closes on its own, the recording stops automatically.
 
 ### Improved
 

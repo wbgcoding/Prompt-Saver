@@ -248,6 +248,20 @@ const RESULTS = {
   stop_recording: () => { window.__REC_STOPPED__ = true; return null; },
   cancel_recording: () => { window.__REC_CANCELLED__ = true; return null; },
   hide_rec_bar: () => { window.__REC_BAR_HIDDEN__ = true; return null; },
+  // Post-capture menu (241): a real ffmpeg run takes visible time, so this
+  // resolves on a short timeout instead of immediately -- the probe fires a
+  // recording-convert-progress event and checks the interim "Converting..."
+  // state before it resolves. A source path containing "MISSING" simulates
+  // ffmpeg not being installed (the one real error convert_recording can
+  // return before ever starting a process).
+  convert_recording: (a) => {
+    if (a && a.srcPath && a.srcPath.includes("MISSING")) throw new Error("ffmpeg-missing");
+    const dst = a.srcPath.replace(/\.[a-z0-9]+$/i, "." + a.format);
+    return new Promise((resolve) => setTimeout(() => resolve(dst), 80));
+  },
+  cancel_recording_convert: () => null,
+  save_recording_as: (a) => { window.__REC_SAVED_AS__ = a.srcPath; return "C:/fake/saved.mp4"; },
+  discard_recording_file: (a) => { window.__REC_DISCARDED__ = a.path; return true; },
   // P100: the probe reads this back instead of a real backend hand-off to main.js.
   launcher_select: (a) => { window.__LAUNCHER_SELECTED__ = a && a.id; return null; },
   launcher_close: () => { window.__LAUNCHER_CLOSED__ = true; return null; },
@@ -839,6 +853,10 @@ window.__TAURI__ = {
       const fn = RESULTS[cmd];
       return fn ? fn(args) : null;
     },
+    // Real Tauri turns a filesystem path into a loadable "asset://..." URL --
+    // the stub just needs SOMETHING stable so a <video>/<img> src assignment
+    // does not throw when a probe exercises a real-file preview path.
+    convertFileSrc: (path) => `asset://localhost/${encodeURIComponent(path)}`,
   },
   event: {
     listen: async (event, fn) => {

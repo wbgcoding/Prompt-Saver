@@ -1772,6 +1772,9 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 /* Two-line question under the preview. */
 .snip-question { margin: 0; text-align: center; line-height: 1.5; }
 .snip-question span { display: block; }
+/* #rec-modal-status while an ffmpeg conversion is running -- the whole line is
+   the cancel button (no separate control needed for one action). */
+.rec-status-cancellable { cursor: pointer; }
 
 /* ---- Screenshot editor -- full-bleed overlay, no centered modal box.
    Sits above #snip-modal (which it replaces on the way in) and everything else;
@@ -3237,6 +3240,10 @@ select,
 /* The unit next to a free-entry retention/interval field — the preset options show
    theirs on the option text ("7d"), so the number alone would look unit-less. */
 .expert-num-unit { flex: 0 0 auto; color: var(--muted); font-size: 13px; }
+/* Inline reason line under recQuality/recFormat -- always its own full-width row,
+   never squeezed beside the dropdown (flex-basis: 100% + the row's own flex-wrap). */
+.expert-row-hint { flex: 1 1 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--muted); }
+.expert-row-hint-btn { flex: 0 0 auto; }
 .path-out { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.75; font-size: 12px; }
 /* align-items: the reset icon has a fixed 22px height, so without this it hangs at
    the top edge of the taller Change button instead of sitting level with it. */

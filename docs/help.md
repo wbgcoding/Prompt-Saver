@@ -75,6 +75,60 @@ ellipses, text labels, numbered step markers, a pixelate tool for blurring out
 sensitive details, and a spotlight that dims everything outside a chosen area —
 with undo/redo.
 
+### Screen recording
+
+Records a window, a monitor, or a dragged region as a video, via the record
+button next to the screenshot tool. MP4 (H.264) is always what gets written
+while recording; three quality steps trade file size for detail before you
+start:
+
+- **Small** — a compact bitrate (4000 kbps by default), for quick clips.
+- **High** (the default) — a higher bitrate (12000 kbps by default), for a
+  sharper picture.
+- **Lossless** — recorded at the same native bitrate as your current step,
+  then automatically re-encoded losslessly once the recording stops. This can
+  run into several gigabytes for longer recordings.
+
+A bitrate slider next to the quality step lets you fine-tune small/high
+further; picking a step resets the slider to that step's own default, and the
+slider is then free to adjust. The slider has no effect on the lossless step,
+since what actually makes that step lossless is the re-encode afterward, not
+the recording bitrate.
+
+A format setting picks what the finished file ends up as: MP4 needs nothing
+further, WebM and GIF are produced by converting the MP4 afterward. A GIF is
+capped at 30 seconds and carries no audio. Converting to anything other than
+MP4, or to lossless MP4, needs ffmpeg — a separate, GPL-licensed tool the app
+does not ship with its portable build. If it is missing, the format and
+quality controls say so directly and offer to fetch it (a one-time download,
+only ever with your consent); an installed build already carries it and never
+needs to download anything. A failed or cancelled conversion always leaves
+the original MP4 recording untouched.
+
+Clicking the record button opens the same frozen-desktop overlay a screenshot
+uses: click a window, drag a region, or click empty desktop for the whole
+screen. An optional countdown toast then counts down before capture actually
+starts (3 seconds by default, adjustable in the expert menu, 0 turns it off).
+A small floating control bar then follows the recording — a red dot, elapsed
+time, live file size, Pause/Resume, Stop and a discard (cancel) button. It
+follows a moved recorded window and is itself excluded from the recording no
+matter what, even if the recording happens to include the monitor the bar
+sits on.
+
+System audio (on by default) and microphone audio (off by default, pick a
+device in the expert menu) each record as their own track when enabled. If
+the microphone is unplugged mid-recording, the picture and system audio keep
+going — the control bar's microphone icon switches to a "lost" state instead
+of stopping anything.
+
+Stopping leads into the same attach/save-as/discard dialog a screenshot uses.
+If the chosen format or quality step needs converting the MP4 first, the
+dialog shows a short "Converting…" status instead of a preview (click it to
+cancel); a conversion failure or cancellation always falls back to the
+untouched original recording rather than losing it. If the window being
+recorded closes on its own, the recording stops automatically and keeps
+whatever was captured up to that point.
+
 ### Text recognition (OCR)
 
 On by default. A button on the composer and in the screenshot dialog pulls the
@@ -389,11 +443,15 @@ one-time migration.
 
 ### Updates & security
 
-On by default, and the only network traffic the app makes on its own — the one
-exception is a first-run download of the Microsoft WebView2 installer if that
-runtime is missing. A downloaded update is verified against a published checksum
-before it runs; a missing or mismatching checksum blocks the install instead of
-running an unverified file.
+On by default, and — together with a first-run download of the Microsoft
+WebView2 installer if that runtime is missing — one of the only two kinds of
+network traffic the app makes on its own. A downloaded update is verified
+against a published checksum before it runs; a missing or mismatching checksum
+blocks the install instead of running an unverified file. The third and last
+kind is ffmpeg, used for video export/conversion: an installed build ships it
+and never touches the network for it, while a portable build offers a one-time
+download only when a video feature actually needs it and only with your
+explicit consent — never automatically, never in the background.
 
 ### Common questions
 
@@ -454,6 +512,40 @@ Task-Manager) direkt zu einer neuen Kachel. Davor öffnet sich standardmäßig e
 Editor: Zuschneiden, Stift, Marker, Linien, Pfeile, Rechtecke, Ellipsen, Text,
 nummerierte Schritte, Pixelieren und ein Spotlight, das alles außerhalb eines
 Bereichs abdunkelt — mit Rückgängig/Wiederholen.
+
+**Bildschirmaufnahme** — nimmt ein Fenster, einen Monitor oder einen gezogenen
+Bereich als Video auf, über den Aufnahme-Knopf neben dem Screenshot-Werkzeug.
+Aufgenommen wird immer MP4 (H.264); drei Qualitätsstufen wählen davor die
+Bitrate: Klein (4000 kbps), Hoch (12000 kbps, Standard) und Verlustfrei — dabei
+wird mit der aktuellen Bitrate aufgenommen und die Aufnahme danach automatisch
+verlustfrei neu kodiert, was bei längeren Aufnahmen mehrere Gigabyte groß
+werden kann. Ein Bitratenregler neben der Qualitätsstufe passt Klein/Hoch
+weiter an; er hat auf der Stufe Verlustfrei keine Wirkung. Ein Format-Feld
+bestimmt die fertige Datei: MP4 braucht nichts weiter, WebM und GIF entstehen
+durch Umwandeln der MP4-Datei danach — GIF ist auf 30 Sekunden begrenzt und
+ohne Ton. Für alles außer MP4 sowie für Verlustfrei wird ffmpeg gebraucht, ein
+separates, GPL-lizenziertes Werkzeug; fehlt es, sagen Format- und
+Qualitätsauswahl das direkt und bieten den Download an (einmalig, nur mit
+Zustimmung) — eine installierte Version bringt es bereits mit. Eine
+fehlgeschlagene oder abgebrochene Umwandlung lässt die ursprüngliche
+MP4-Aufnahme immer unangetastet. Ein Klick auf den Aufnahme-Knopf öffnet
+dieselbe Bildschirm-Übersicht wie ein Screenshot: Fenster anklicken, Bereich
+ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm. Ein
+Countdown zählt danach herunter, bevor die Aufnahme wirklich startet
+(3 Sekunden Standard, im Expertenmenü einstellbar, `0` schaltet ihn ab). Eine
+kleine Bedienleiste begleitet die Aufnahme (roter Punkt, Laufzeit,
+Dateigröße, Pause/Fortsetzen, Stopp, Verwerfen), folgt einem verschobenen
+Aufnahmefenster und ist selbst niemals im Video zu sehen. Systemton (Standard
+an) und Mikrofon (Standard aus, Gerät wählbar im Expertenmenü) werden je als
+eigene Spur aufgenommen; zieht man das Mikrofon während der Aufnahme ab,
+laufen Bild und Systemton weiter, das Mikrofon-Symbol zeigt nur „verloren".
+Stopp führt in denselben Anheften/Speichern/Verwerfen-Dialog wie ein
+Screenshot; braucht das gewählte Format oder die Qualitätsstufe eine
+Umwandlung, zeigt der Dialog zuerst „Wird konvertiert…" (anklicken zum
+Abbrechen) statt einer Vorschau — eine fehlgeschlagene oder abgebrochene
+Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück.
+Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme
+automatisch und behält, was bis dahin aufgenommen wurde.
 
 **Texterkennung (OCR)** — standardmäßig an; liest per Knopf in der Leiste und
 im Screenshot-Dialog Text aus einem Screenshot oder einer Bilddatei, komplett

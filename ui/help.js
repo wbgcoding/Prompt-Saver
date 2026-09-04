@@ -428,6 +428,20 @@ export const HELP_CONTENT = {
     },
     {
       section: "basics",
+      title: "Screen recording",
+      whatItIs: "Records a window, a monitor, or a dragged region as a video, next to the screenshot tool.",
+      howTo: [
+        "Click the record button; pick a window, drag a region, or click empty desktop for the whole screen — same overlay as the screenshot tool.",
+        "An optional countdown toast counts down before capture actually starts.",
+        "A small floating control bar shows elapsed time and file size, and offers Pause/Resume, Stop and Discard.",
+        "Stopping opens the same attach/save-as/discard dialog a screenshot uses.",
+      ],
+      whatHappens:
+        "MP4 (H.264) is always what gets written while recording; three quality steps (Small/High/Lossless) trade file size for detail, and a format setting can turn the result into WebM or GIF afterward. Anything other than plain MP4, or the Lossless step, needs ffmpeg (a separate download, offered inline when missing) — a failed or cancelled conversion always falls back to the untouched original recording. System audio (on by default) and microphone audio (off by default) each record as their own track; unplugging the microphone mid-recording keeps picture and system audio going and just marks that track as lost. The control bar follows a moved recorded window and is itself never part of the recording. If the recorded window closes on its own, the recording stops automatically and keeps what was captured so far.",
+      settings: ["Screen recording, cursor, countdown, audio sources and device, bitrate, quality, format — Expert menu → Features → Create prompts"],
+    },
+    {
+      section: "basics",
       title: "Text recognition (OCR)",
       whatItIs: "Pulls text out of a screenshot or an image file using Windows' own on-device recognizer — fully offline, nothing leaves the machine.",
       howTo: [
@@ -542,7 +556,7 @@ export const HELP_CONTENT = {
         "Accept an offered update to download and install it with one click.",
       ],
       whatHappens:
-        "The update check is the only network traffic the app makes on its own; the one exception is a first-run download of the Microsoft WebView2 installer if that runtime is missing. A downloaded update is verified against a published checksum before it runs — a missing or mismatching checksum blocks the install instead of running an unverified file.",
+        "The update check, together with a first-run download of the Microsoft WebView2 installer if that runtime is missing, is one of the only two kinds of network traffic the app makes on its own. A downloaded update is verified against a published checksum before it runs — a missing or mismatching checksum blocks the install instead of running an unverified file. The third and last kind is ffmpeg, used for video export/conversion: an installed build ships it and never touches the network for it, while a portable build offers a one-time download only when a video feature actually needs it and only with your explicit consent — never automatically, never in the background.",
       settings: ["Update checks — Expert menu → System & data → System"],
     },
     {
@@ -980,6 +994,20 @@ export const HELP_CONTENT = {
     },
     {
       section: "basics",
+      title: "Bildschirmaufnahme",
+      whatItIs: "Nimmt ein Fenster, einen Monitor oder einen gezogenen Bereich als Video auf, neben dem Screenshot-Werkzeug.",
+      howTo: [
+        "Auf den Aufnahme-Knopf klicken; ein Fenster anklicken, einen Bereich ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm — dieselbe Übersicht wie beim Screenshot-Werkzeug.",
+        "Ein Countdown zählt optional herunter, bevor die Aufnahme wirklich startet.",
+        "Eine kleine Bedienleiste zeigt Laufzeit und Dateigröße und bietet Pause/Fortsetzen, Stopp und Verwerfen.",
+        "Stopp öffnet denselben Anheften/Speichern/Verwerfen-Dialog wie ein Screenshot.",
+      ],
+      whatHappens:
+        "Aufgenommen wird immer MP4 (H.264); drei Qualitätsstufen (Klein/Hoch/Verlustfrei) tauschen Dateigröße gegen Bildschärfe, ein Format-Feld kann das Ergebnis danach in WebM oder GIF umwandeln. Alles außer reinem MP4 sowie die Stufe Verlustfrei braucht ffmpeg (ein separater Download, direkt angeboten, wenn es fehlt) — eine fehlgeschlagene oder abgebrochene Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück. Systemton (Standard an) und Mikrofon (Standard aus) werden je als eigene Spur aufgenommen; zieht man das Mikrofon während der Aufnahme ab, laufen Bild und Systemton weiter, nur diese Spur gilt als verloren. Die Bedienleiste folgt einem verschobenen Aufnahmefenster und ist selbst nie Teil der Aufnahme. Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme automatisch und behält, was bis dahin aufgenommen wurde.",
+      settings: ["Bildschirmaufnahme, Mauszeiger, Countdown, Tonquellen und -gerät, Bitrate, Qualität, Format — Experten-Menü → Funktionen → Prompts erstellen"],
+    },
+    {
+      section: "basics",
       title: "Texterkennung (OCR)",
       whatItIs: "Liest mit der geräteeigenen Erkennung von Windows Text aus einem Screenshot oder einer Bilddatei — vollständig offline, nichts verlässt das Gerät.",
       howTo: [
@@ -1094,7 +1122,7 @@ export const HELP_CONTENT = {
         "Ein angebotenes Update annehmen, um es mit einem Klick herunterzuladen und zu installieren.",
       ],
       whatHappens:
-        "Die Update-Prüfung ist der einzige Netzwerkverkehr, den die App von sich aus macht; die einzige Ausnahme ist ein Download des Microsoft-WebView2-Installers beim ersten Start, falls diese Laufzeit fehlt. Ein heruntergeladenes Update wird vor der Ausführung anhand einer veröffentlichten Prüfsumme verifiziert — eine fehlende oder falsche Prüfsumme blockiert die Installation, statt eine unbestätigte Datei auszuführen.",
+        "Die Update-Prüfung ist zusammen mit einem Download des Microsoft-WebView2-Installers beim ersten Start, falls diese Laufzeit fehlt, eine von nur zwei Arten von Netzwerkverkehr, den die App von sich aus macht. Ein heruntergeladenes Update wird vor der Ausführung anhand einer veröffentlichten Prüfsumme verifiziert — eine fehlende oder falsche Prüfsumme blockiert die Installation, statt eine unbestätigte Datei auszuführen. Die dritte und letzte Art ist ffmpeg, für Videoexport/-konvertierung: Eine installierte Version bringt es mit und greift dafür nie auf das Netzwerk zu, eine portable Version bietet einen einmaligen Download nur an, wenn eine Videofunktion es tatsächlich braucht, und nur mit ausdrücklicher Zustimmung — nie automatisch, nie im Hintergrund.",
       settings: ["Update-Checks — Experten-Menü → System & Daten → System"],
     },
     {

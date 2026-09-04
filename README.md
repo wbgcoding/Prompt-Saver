@@ -65,6 +65,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Video player** | Looping previews on tiles *and* floating buttons, with scrubber, loop and volume — remembered per prompt |
 | **PDF & files** | Attach any file by path; a PDF's first page becomes the button's image |
 | **Screenshot tool** | Capture a region or a whole window — even protected ones like the Task Manager |
+| **Screen recording** | Record a window, a dragged region or the whole screen to MP4, with system/microphone audio, a small floating control bar, and an optional WebM/GIF conversion afterward |
 | **Screenshot editor** | Opens right after a capture: crop, pen, marker, line, arrow, rectangle, ellipse, text, step numbers, pixelate and spotlight, with undo/redo and edge snapping, before it becomes a copy button |
 | **Text recognition (OCR)** | Pull text out of a screenshot or an image file with Windows' own on-device recognizer — fully offline, nothing uploaded. On by default; needs a Windows language pack, which the app offers to install for you (needs administrator rights — including for the listing itself, on systems where Windows demands them) |
 | **Voice dictation** | Speak into the composer or the editor with Windows' own on-device speech recognizer — fully offline, nothing uploaded unless you allow online recognition. Spoken punctuation and formatting commands, auto-capitalization and a global hotkey included. On by default; shares OCR's language-pack dialog |
@@ -103,7 +104,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Runs in the background** | Optional minimize-to-tray, autostart at login, global hotkey |
 | **Guided first run** | A short walkthrough on first launch covering the basics, with a step to turn on the screenshot editor, color picker, OCR or voice dictation right there; reopen it anytime from Settings |
 | **Auto updates** | Checks for a new version on start (switchable off) with one-click install, verified against a published checksum |
-| **100 % local** | A single local database, sealed with Windows' own per-account encryption so no other account on the PC can read it. On the rare machine where Windows refuses to encrypt (a damaged user profile), saving keeps working in readable form rather than losing the data — and the app says so on startup and permanently in the privacy settings, until the next successful save seals it again. No account, no telemetry, no network traffic except the update check |
+| **100 % local** | A single local database, sealed with Windows' own per-account encryption so no other account on the PC can read it. On the rare machine where Windows refuses to encrypt (a damaged user profile), saving keeps working in readable form rather than losing the data — and the app says so on startup and permanently in the privacy settings, until the next successful save seals it again. No account, no telemetry, no network traffic except the update check and, only if video export needs ffmpeg and it isn't already present, a one-time optional download you explicitly approve |
 | **Small** | ~8 MB installer (Rust / Tauri), using the Windows WebView2 runtime |
 
 ## Download
@@ -129,6 +130,7 @@ Full version history: [CHANGELOG.md](CHANGELOG.md)
 | Edit / hide / pin / delete | Right-click a tile (or hover **⋮**); deleting asks twice |
 | All prompts | List icon in the header: search, edit and place every prompt |
 | Screenshot | Camera icon: drag a region or click a window to save it as a copy button |
+| Screen recording | Record icon next to the camera: pick a window, region or the whole screen, then Stop to attach, save or discard |
 | Floating button | "Toggle floating button" in the tile menu; right-click the pill for options |
 | Views | Tabs next to the title: **+** adds one; right-click a tab to rename, resize, recolor or delete |
 | Settings | Gear icon: theme, language, fonts, sizes, autostart, hotkey, import/export, updates, reset |
@@ -142,6 +144,14 @@ Requirements: [Node.js](https://nodejs.org), [Rust](https://rustup.rs) (MSVC too
 PDF previews are rendered by PDFium, which is compiled into the exe. Download
 `pdfium.dll` (x64) from [pdfium-binaries](https://github.com/bblanchon/pdfium-binaries/releases)
 and put it in `src-tauri/` before building — the build fails without it.
+
+Video export/conversion shells out to ffmpeg, which the installer ships as a
+plain file rather than compiling in. Download the gyan.dev "essentials" build
+(currently pinned to release
+[9.0.1](https://github.com/GyanD/codexffmpeg/releases/tag/9.0.1)), extract
+`ffmpeg.exe` from the zip's `bin/` folder and put it in `src-tauri/` before
+building — the installer bundle step fails without it (the portable exe still
+builds fine; it offers to download ffmpeg itself on first need instead).
 
 ```bat
 build.bat
@@ -185,7 +195,7 @@ point the app's data folder at it, or copy the file next to the portable exe.
 
 ## Tech stack
 
-[Tauri 2](https://tauri.app) (Rust backend, WebView2 frontend) · vanilla HTML/CSS/JS, no bundler, no framework · SQLite store · `arboard` (clipboard), `rfd` (native dialogs), `pdfium-render` (PDF previews), `xcap` (screen capture), `winreg` (autostart), `sys-locale` (language detection), `windows` (on-device OCR).
+[Tauri 2](https://tauri.app) (Rust backend, WebView2 frontend) · vanilla HTML/CSS/JS, no bundler, no framework · SQLite store · `arboard` (clipboard), `rfd` (native dialogs), `pdfium-render` (PDF previews), `xcap` (screenshots), `windows-capture` (screen recording), `winreg` (autostart), `sys-locale` (language detection), `windows` (on-device OCR, WASAPI audio), `zip` (ffmpeg download extraction).
 
 Third-party components and their licenses: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
 
