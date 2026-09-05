@@ -283,6 +283,12 @@ PROBE = """
       if (!window.__SMOKE_CALLS__.includes('dismiss_example_prompts')) {
         out.errors.push('the "remove examples" button does not call dismiss_example_prompts');
       }
+      // 421: no seeded example ids left after dismiss, so the next render must not
+      // spend an extra round trip on the live pending count -- it already knows to
+      // stay hidden.
+      if (window.__SMOKE_CALLS__.includes('example_prompts_pending')) {
+        out.errors.push('421: the examples banner fetched the pending count with no examples seeded');
+      }
     }
     // 20: help is opened from a button INSIDE settings, so settings stays open
     // behind it — both used to share the same base z-index, so help rendered

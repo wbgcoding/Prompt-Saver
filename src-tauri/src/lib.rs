@@ -1911,6 +1911,14 @@ struct Settings {
     // those three (and only those) without guessing by name/content.
     #[serde(default)]
     example_prompt_ids: Vec<String>,
+    // Content fingerprint of each seeded example at the moment it was created
+    // (example_seed_fingerprint). "Remove examples" only deletes an id whose
+    // current fingerprint still matches — one the user has since edited is now
+    // theirs and is left alone. An id with no entry here (old installs seeded
+    // before this field existed) is treated as unchanged, matching the
+    // previous unconditional-delete behaviour.
+    #[serde(default)]
+    example_prompt_seeds: HashMap<String, u64>,
     // Each entry is one group of prompt ids the user dismissed together as
     // "not a duplicate" - never re-suggested as a group. Was Vec<[String; 2]> (one
     // entry per PAIR): ignoring an N-member group wrote N*(N-1)/2 entries, 79800 for
@@ -2042,6 +2050,7 @@ impl Default for Settings {
             ui_texts: HashMap::new(),
             examples_seeded: false,
             example_prompt_ids: Vec::new(),
+            example_prompt_seeds: HashMap::new(),
             dup_ignored: Vec::new(),
             tag_colors: HashMap::new(),
             custom_themes: Vec::new(),
@@ -3419,6 +3428,15 @@ fn text_hash(s: &str) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     s.hash(&mut h);
     h.finish()
+}
+
+// Fingerprint of a seeded example prompt's editable content, so "remove examples"
+// can tell whether the user has since made one their own. Mirrors SlimPrompt's own
+// image_rev (0 for no image, otherwise a hash of the image bytes) rather than a
+// separate stored field.
+fn example_seed_fingerprint(name: &str, text: &str, image: &str) -> u64 {
+    let image_rev = if image.is_empty() { 0 } else { text_hash(image) };
+    text_hash(&format!("{name}\u{0}{text}\u{0}{image_rev}"))
 }
 fn db_add_clip(conn: &Connection, ts: u64, text: &str, cap: usize) -> rusqlite::Result<()> {
     conn.execute("INSERT INTO clip_inbox(ts, text) VALUES(?1, ?2)", params![ts as i64, enc_str(text)])?;
@@ -5809,6 +5827,10 @@ async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, examples: Ve
             }
             view.members.push(prompt.id.clone());
             store.settings.example_prompt_ids.push(prompt.id.clone());
+            store.settings.example_prompt_seeds.insert(
+                prompt.id.clone(),
+                example_seed_fingerprint(&prompt.name, &prompt.text, &prompt.image),
+            );
             store.prompts.push(prompt.clone());
             created.push(prompt);
         }
@@ -5830,6 +5852,7 @@ async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, examples: Ve
             }
             if !settings_ok {
                 store.settings.example_prompt_ids.retain(|id| !ids.contains(id));
+                store.settings.example_prompt_seeds.retain(|id, _| !ids.contains(id));
                 store.settings.examples_seeded = false;
                 let view = store.settings.active_view_mut();
                 let key = grid_key(view.cols, view.rows);
@@ -5846,21 +5869,54 @@ async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, examples: Ve
     Ok(created)
 }
 
-// "Remove examples" — deletes exactly the ids seed_example_prompts recorded,
-// through the same batch-delete path (→ trash) a manual multi-select
-// delete would use, so nothing about this is a special, less-safe deletion.
+// Of `ids` (normally settings.example_prompt_ids), which are still unedited: no
+// entry in `seeds` (old install, seeded before this field existed) counts as
+// unchanged, same as an id whose prompt is already gone some other way. Shared by
+// dismiss_example_prompts and example_prompts_pending so the two can never disagree.
+fn examples_still_pristine<'a>(
+    ids: impl IntoIterator<Item = &'a String>,
+    seeds: &HashMap<String, u64>,
+    prompts: &[Prompt],
+) -> Vec<String> {
+    ids.into_iter()
+        .filter(|id| match seeds.get(*id) {
+            None => true,
+            Some(&seed) => prompts
+                .iter()
+                .find(|p| &p.id == *id)
+                .map(|p| example_seed_fingerprint(&p.name, &p.text, &p.image) == seed)
+                .unwrap_or(true),
+        })
+        .cloned()
+        .collect()
+}
+
+// "Remove examples" — deletes exactly the ids seed_example_prompts recorded and
+// still not edited by the user, through the same batch-delete path (→ trash) a
+// manual multi-select delete would use, so nothing about this is a special,
+// less-safe deletion.
 #[tauri::command]
 async fn dismiss_example_prompts(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
-    let ids = {
+    let ids_to_delete = {
         let mut store = lock(&state);
-        std::mem::take(&mut store.settings.example_prompt_ids)
+        let ids = std::mem::take(&mut store.settings.example_prompt_ids);
+        let seeds = std::mem::take(&mut store.settings.example_prompt_seeds);
+        examples_still_pristine(&ids, &seeds, &store.prompts)
     };
-    if ids.is_empty() {
+    if ids_to_delete.is_empty() {
         return Ok(());
     }
-    batch_prompts(app, state, ids, "delete".to_string(), None, None, None, None)
+    batch_prompts(app, state, ids_to_delete, "delete".to_string(), None, None, None, None)
         .await
         .map(|_| ())
+}
+
+// Count for the "Remove examples (n)" button label: how many seeded examples would
+// actually be deleted right now, same rule dismiss_example_prompts itself applies.
+#[tauri::command]
+fn example_prompts_pending(state: State<Db>) -> usize {
+    let store = lock(&state);
+    examples_still_pristine(&store.settings.example_prompt_ids, &store.settings.example_prompt_seeds, &store.prompts).len()
 }
 
 // A save request carries the image only when the user actually touched it: no field
@@ -21545,6 +21601,7 @@ pub fn run() {
             add_prompt,
             seed_example_prompts,
             dismiss_example_prompts,
+            example_prompts_pending,
             update_prompt,
             set_favorite,
             delete_prompt,
@@ -22952,6 +23009,7 @@ mod tests {
 
     #[test]
     fn convert_recording_real_ffmpeg_produces_a_playable_webm_and_removes_the_source() {
+        let _guard = REC_CONVERT_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let Some(ffmpeg) = test_ffmpeg() else { return };
         let dir = std::env::temp_dir().join(format!("ps-convtest-webm-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
@@ -27154,6 +27212,35 @@ mod tests {
 
     fn test_prompt(id: &str) -> Prompt {
         serde_json::from_str(&format!(r#"{{"id":"{id}","name":"N","text":"T"}}"#)).unwrap()
+    }
+
+    #[test]
+    fn dismiss_example_prompts_keeps_only_the_ones_the_user_never_touched() {
+        let mut a = test_prompt("a");
+        let mut b = test_prompt("b");
+        let c = test_prompt("c");
+        let mut seeds = HashMap::new();
+        for p in [&mut a, &mut b] {
+            seeds.insert(p.id.clone(), example_seed_fingerprint(&p.name, &p.text, &p.image));
+        }
+        seeds.insert(c.id.clone(), example_seed_fingerprint(&c.name, &c.text, &c.image));
+        b.text = "the user's own rewrite".to_string(); // edited after seeding
+        let ids = vec![a.id.clone(), b.id.clone(), c.id.clone()];
+        let prompts = vec![a, b, c];
+
+        let pristine = examples_still_pristine(&ids, &seeds, &prompts);
+
+        assert_eq!(pristine, vec!["a".to_string(), "c".to_string()], "the edited one must be excluded, order preserved");
+    }
+
+    #[test]
+    fn dismiss_example_prompts_treats_a_missing_seed_as_unchanged() {
+        // Pre-421 installs have example_prompt_ids but no example_prompt_seeds entry
+        // for them -- must still be eligible for removal, matching old behaviour.
+        let p = test_prompt("legacy");
+        let ids = vec![p.id.clone()];
+        let pristine = examples_still_pristine(&ids, &HashMap::new(), &[p]);
+        assert_eq!(pristine, vec!["legacy".to_string()]);
     }
 
     #[test]

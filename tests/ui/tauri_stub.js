@@ -164,6 +164,7 @@ const SETTINGS = {
   // open under every later check the way it would for a genuinely fresh one.
   ui_flags: { tags: true, customThemes: true, viewGroups: true, promptNotes: true, pillFolders: true, colorPicker: true, tourSeen: true },
   ui_values: {}, ui_texts: {}, dup_ignored: [],
+  example_prompt_ids: [], example_prompt_seeds: {},
   tag_colors: { work: "#3b82f6" },
   custom_themes: [{ id: "ct1", name: "Neon", base: "dark", vars: { accent: "#ff00aa" } }],
   tile_font: "system", tile_size: 0,
@@ -221,6 +222,18 @@ function firstFreeCell(view, extra) {
     }
   }
   return { layout, cell: null };
+}
+
+// Mirrors the backend's examples_still_pristine: an id with no seed on record
+// (or whose prompt already vanished) counts as unchanged; a seed present and no
+// longer matching the prompt's current name+text means the user made it their own.
+function examplePristineIds() {
+  return SETTINGS.example_prompt_ids.filter((id) => {
+    const seed = SETTINGS.example_prompt_seeds[id];
+    if (seed === undefined) return true;
+    const p = PROMPTS.find((x) => x.id === id);
+    return !p || seed === p.name + " " + p.text;
+  });
 }
 
 const RESULTS = {
@@ -462,7 +475,12 @@ const RESULTS = {
   // triggers (matches the backend's own "already has prompts" guard) — the mock
   // just needs to exist so the call is tracked, not error out.
   seed_example_prompts: () => [],
-  dismiss_example_prompts: () => null,
+  example_prompts_pending: () => examplePristineIds().length,
+  dismiss_example_prompts: () => {
+    SETTINGS.example_prompt_ids = [];
+    SETTINGS.example_prompt_seeds = {};
+    return null;
+  },
   clip_inbox_list: () => [],
   // P31: two snapshots for p6, each one word off from the next, so the diff
   // view has something real to highlight (list_versions is newest-first).

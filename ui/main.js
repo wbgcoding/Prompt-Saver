@@ -289,6 +289,7 @@ function applyI18n() {
   for (const { wrap } of videoCache.values()) {
     wrap.querySelector(".media-bar")?.setLabels?.(mediaBarLabels());
   }
+  updateExamplesBanner(); // its label carries a live count, not a plain data-i18n string
 }
 
 // ---- Helpers ----
@@ -3301,7 +3302,7 @@ async function renderGrid(skipFetch = false) {
       const s = await invoke("get_state");
       prompts = s.prompts;
       settings = s.settings;
-      updateExamplesBanner(); // re-evaluate on every real fetch, not just at startup
+      await updateExamplesBanner(); // re-evaluate on every real fetch, not just at startup
     } catch (e) {
       // IPC hiccup: keep the last good state instead of throwing into the
       // global handler and leaving a half-rendered grid.
@@ -15649,12 +15650,18 @@ async function seedExamplesIfNeeded() {
   return invoke("seed_example_prompts", { examples }).catch(() => []);
 }
 
-function updateExamplesBanner() {
+async function updateExamplesBanner() {
   const banner = $("examples-banner");
   if (!banner) return;
   const ids = settings.example_prompt_ids || [];
   const stillHere = ids.length > 0 && ids.some((id) => prompts.some((p) => p.id === id));
-  banner.classList.toggle("hidden", !stillHere);
+  if (!stillHere) {
+    banner.classList.add("hidden");
+    return;
+  }
+  const pending = await invoke("example_prompts_pending").catch(() => ids.length);
+  banner.classList.toggle("hidden", pending === 0);
+  $("examples-dismiss").textContent = t("examplesDismiss").replace("{n}", String(pending));
 }
 
 // The rest of applying loaded settings — flags, toolbar, the grid itself and the
