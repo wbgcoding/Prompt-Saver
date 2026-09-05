@@ -12860,10 +12860,12 @@ fn default_sync_dir(app: AppHandle) -> String {
 
 // Native folder picker (used by the expert screenshot-dir + data-dir options).
 #[tauri::command]
-async fn pick_folder(app: AppHandle) -> Option<String> {
-    file_dialog(&app)
+async fn pick_folder(app: AppHandle, win: tauri::Window) -> Option<String> {
+    let result = file_dialog_for(&app, win.label())
         .pick_folder()
-        .map(|p| p.to_string_lossy().to_string())
+        .map(|p| p.to_string_lossy().to_string());
+    let _ = win.set_focus();
+    result
 }
 
 // Current effective store location (shown in the expert menu).
@@ -19117,14 +19119,16 @@ fn place_in_dir(src: &std::path::Path, dir: &std::path::Path) -> std::io::Result
 // frontend updates its own pending-path to the new location afterwards, so
 // a later Attach/Copy on the same result still finds the file.
 #[tauri::command]
-async fn save_recording_as(app: AppHandle, src_path: String) -> Result<Option<String>, String> {
+async fn save_recording_as(app: AppHandle, win: tauri::Window, src_path: String) -> Result<Option<String>, String> {
     let src = PathBuf::from(&src_path);
     if !src.is_file() {
         return Err("recording file not found".to_string());
     }
     let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("mp4").to_string();
     let name = src.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| format!("Recording.{ext}"));
-    match file_dialog(&app).add_filter(ext.to_uppercase(), &[ext.as_str()]).set_file_name(&name).save_file() {
+    let result = file_dialog_for(&app, win.label()).add_filter(ext.to_uppercase(), &[ext.as_str()]).set_file_name(&name).save_file();
+    let _ = win.set_focus();
+    match result {
         Some(p) => {
             move_file(&src, &p).map_err(|e| e.to_string())?;
             move_mic_sidecar_alongside(&src, &p);
