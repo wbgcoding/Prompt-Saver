@@ -1,16 +1,17 @@
 ## Prompt Saver 2.7.0
 
-Twenty-four new features: tags, custom themes, folders for view tabs and for
+Twenty-five new features: tags, custom themes, folders for view tabs and for
 floating buttons, self-filling and choice variables, a markdown preview with
 syntax colors, a standalone quick launcher, multi-select in the grid, a trash
 for deleted prompts, placing one prompt in several views at once, restoring a
 backup's data and settings separately, rotating prompts, private notes,
 per-prompt hotkeys, drag-out into other apps, a tray quick-copy menu, a screen
 color picker, a screenshot editor, offline text recognition (OCR), offline
-voice dictation, screen recording, and a first-run introduction tour.
+voice dictation, screen recording, a video editor, and a first-run
+introduction tour.
 Everything new is an expert-menu switch, most of it off until you turn it on
-(text recognition, voice dictation, the screenshot editor and the
-introduction tour ship on).
+(text recognition, voice dictation, the screenshot editor, screen recording,
+the video editor and the introduction tour ship on).
 
 ### Downloads
 
@@ -52,10 +53,11 @@ Requires the Microsoft WebView2 runtime (preinstalled on Windows 11 and current 
 
 ### Capture and read
 
-- **Screenshot editor** — every capture opens for editing before it reaches a tile, the clipboard or a folder: crop, pen, marker, a highlighter-style blend, line, arrow, rectangle, ellipse, text, a self-numbering step marker, pixelation and a spotlight that dims everything outside a chosen area. Full undo/redo, an eyedropper, live width×height while dragging, snapping to the image edges and center. Cancel keeps the original untouched; Apply re-copies the edited image. Ships on.
+- **Screenshot editor** — every capture opens for editing before it reaches a tile, the clipboard or a folder: crop, pen, marker, a highlighter-style blend, line, arrow, rectangle, ellipse, text, a self-numbering step marker, pixelation, a spotlight that dims everything outside a chosen area, and a hand tool to pan around while zoomed in (also Space or the middle mouse button) for precise work on a large capture. The crop tool shows a resize cursor at each handle and a move cursor inside the current selection. Full undo/redo, an eyedropper, live width×height while dragging, snapping to the image edges and center. Cancel keeps the original untouched; Apply re-copies the edited image. Ships on.
 - **Text recognition (OCR)** — pull editable text out of a screenshot or an image file, fully offline through Windows' own recognizer. A composer button grabs a new screenshot or a file; the screenshot dialog also gets a "Recognize text" button for the capture you already have. The result opens ready to copy or save as a new prompt, with small text enlarged first so it reads reliably. Missing a language pack? A "Manage languages" dialog lists everything Windows can recognize with the download size shown up front, walks through Windows' own installer, and can keep installed packs current automatically. Ships on; the button hides itself if Windows has no recognizer at all.
 - **Voice dictation** — a microphone button beside the composer and in the editor turns speech into text through Windows' own on-device recognizer, offline unless you explicitly allow online recognition. Spoken punctuation and commands ("comma", "new line", "delete that") are applied as you talk, in the app language, and a global hotkey dictates straight into whichever field is waiting. Language packs are managed from the same dialog as OCR's. Ships on; the button hides itself if Windows has no speech engine at all.
-- **Screen recording** — a record button next to the screenshot button opens the same overlay to pick a window, a dragged region, or the whole screen, with an optional countdown before capture starts. A small floating control bar (elapsed time, live file size, Pause/Resume, Stop, Discard) follows a moved window and stays out of its own recording. System audio (on) and microphone audio (off, with a device picker) record as separate tracks; an unplugged microphone just marks its track as lost instead of stopping anything. Stopping opens the same attach/save-as/discard dialog as a screenshot. Recording always writes MP4; three quality steps and an optional WebM/GIF format convert it afterward through ffmpeg (offered as a download when missing), always falling back to the untouched original on a failed or canceled conversion.
+- **Screen recording** — a record button next to the screenshot button opens the same overlay to pick a window, a dragged region, or the whole screen, with an optional countdown before capture starts. A small floating control bar (elapsed time, live file size, Pause/Resume, Stop, Discard) follows a moved window and stays out of its own recording; two optional global hotkeys and the tray menu can stop or pause/resume it too, live only while it is actually running. System audio and microphone audio both record on by default as separate tracks — the microphone track is captured but not mixed in audibly until you bring it in yourself from the video editor below (switchable off in the expert menu if you would rather it never record); an unplugged microphone just marks its track as lost instead of stopping anything. Stopping offers Save, Save as…, Copy, Edit or Discard, Save/Copy sharing one recording folder. Recording always writes MP4; three quality steps and an optional WebM/GIF format convert it afterward through ffmpeg (offered as a download when missing), always falling back to the untouched original on a failed or canceled conversion. A recording that never reached its own stop path is removed automatically after a grace period.
+- **Video editor** — opens from a recording's result dialog or any video prompt's right-click menu: trim, crop, speed, fades and image/freeze-frame/text/pixelate/spotlight overlays on a zoomable filmstrip-and-waveform timeline, with a live preview and no processing until export. The preview itself zooms with the scroll wheel (up to 8×) and pans by dragging, for placing a small overlay precisely on a large recording. A few export presets (unchanged quality, smaller for chat, GIF) remember your last choice.
 
 ### Also in this release
 

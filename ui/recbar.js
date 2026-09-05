@@ -16,6 +16,7 @@ const stopBtn = document.getElementById("stop-btn");
 const cancelBtn = document.getElementById("cancel-btn");
 const audioSysEl = document.getElementById("audio-sys");
 const audioMicEl = document.getElementById("audio-mic");
+const hotkeyWarnEl = document.getElementById("hotkey-warn");
 
 function fmtTime(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -67,6 +68,18 @@ function applyAudio({ audio_system, audio_mic, mic_lost }) {
   if (micLabel) { audioMicEl.title = micLabel; audioMicEl.setAttribute("aria-label", micLabel); }
 }
 
+// Names which of the two hotkeys (another app already holds the
+// combination) is affected, so "it doesn't work" always has an answer.
+function applyHotkeyWarn(stopOk, pauseOk) {
+  const show = !stopOk || !pauseOk;
+  hotkeyWarnEl.classList.toggle("hidden", !show);
+  if (!show || !i18nDict) return;
+  const label = !stopOk && !pauseOk
+    ? i18nDict.recBarHotkeyBlockedBoth
+    : !stopOk ? i18nDict.recBarHotkeyBlockedStop : i18nDict.recBarHotkeyBlockedPause;
+  if (label) { hotkeyWarnEl.title = label; hotkeyWarnEl.setAttribute("aria-label", label); }
+}
+
 let pollTimer = 0;
 async function poll() {
   try {
@@ -93,6 +106,7 @@ async function poll() {
     timeEl.textContent = fmtTime(status.elapsed_ms);
     sizeEl.textContent = fmtSize(status.bytes);
     applyAudio(status);
+    applyHotkeyWarn(status.stop_hotkey_ok, status.pause_hotkey_ok);
   } catch {
     // transient -- next tick self-corrects
   }

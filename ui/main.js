@@ -1074,6 +1074,9 @@ const FLAG_LABELS = {
   confirmClearHistory: "flagConfirmClearHistory",
   chainLock: "flagChainLock",
   chainQuickStart: "flagChainQuickStart",
+  // The tile's own chain-start icon otherwise only appears on hover --
+  // invisible-until-hover is exactly what a user reported not being able to see.
+  chainStartAlwaysVisible: "flagChainStartAlwaysVisible",
   favorites: "flagFavorites",
   keyboardNav: "flagKeyboardNav",
   varDefaults: "flagVarDefaults",
@@ -1167,6 +1170,24 @@ const FLAG_LABELS = {
   // Sub-toggle of screenRecord: system audio (WASAPI loopback) into the
   // recording's audio track. Ships ON.
   recAudioSystem: "flagRecAudioSystem",
+  // Sub-toggle of screenRecord, microphone audio into its own track --
+  // moved here from OPT_FLAG_LABELS, its shipped default flipping from off to
+  // on (into a sidecar track only, muxed in audibly later from the video
+  // editor -- see lib.rs's AudioConfig.mic comment). A stored user value from
+  // before this change, or an explicit opt-out, still wins.
+  recAudioMic: "flagRecAudioMic",
+  // A running recording would otherwise have only the bar itself as a way
+  // to stop or pause it. All three ship ON.
+  recStopHotkey: "flagRecStopHotkey",
+  recPauseHotkey: "flagRecPauseHotkey",
+  recTrayEntries: "flagRecTrayEntries",
+  // Catches a crashed recording's unplayable leftover before it sits
+  // there forever -- ships ON, like the rest of the recorder's own upkeep.
+  recSweepBroken: "flagRecSweepBroken",
+  // The video editor satellite window, reachable from a recording's
+  // result modal and from any video prompt's context menu. Ships ON, like the
+  // rest of the media-editing features (snipEditor, ocr, voice).
+  videoEditor: "flagVideoEditor",
 };
 const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -1244,10 +1265,6 @@ const OPT_FLAG_LABELS = {
   // is a bigger commitment than the in-window button.
   voiceOnlineOk: "flagVoiceOnlineOk",
   voiceHotkey: "flagVoiceHotkey",
-  // Sub-toggle of screenRecord: microphone capture mixed into the recording's
-  // audio track. Ships off -- opting into mic capture is a bigger commitment
-  // than system audio, which is on by default.
-  recAudioMic: "flagRecAudioMic",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
@@ -1391,6 +1408,7 @@ const EXPERT_VALUES = {
   snipPixelBlock: { label: "valSnipPixelBlock", min: 4, max: 64, step: 2, def: 12, unit: "px", gate: "snipEditor" },
   snipSpotlightDim: { label: "valSnipSpotlightDim", min: 10, max: 90, step: 5, def: 55, unit: "%", gate: "snipEditor" },
   snipEditUndoMax: { label: "valSnipEditUndoMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "snipEditor" },
+  videoEditUndoMax: { label: "valVideoEditUndoMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "videoEditor" },
   // A crop smaller than this (either side) is upscaled 2x before recognition --
   // the trick that makes small on-screen text readable to the OCR engine.
   ocrUpscaleUnderPx: { label: "valOcrUpscaleUnderPx", min: 100, max: 800, step: 50, def: 300, unit: "px", gate: "ocr" },
@@ -1401,6 +1419,11 @@ const EXPERT_VALUES = {
   // step is produced by a separate ffmpeg CRF-0 re-encode after the recording
   // stops, not by this slider (see the recQuality/recBitrateKbps tooltips).
   recBitrateKbps: { label: "valRecBitrateKbps", min: 1000, max: 50000, step: 500, def: 12000, unit: "kbps", gate: "screenRecord" },
+  // How young a moov-less (broken) recording has to be to still get a pass
+  // (the post-capture menu's stop might just still be finalising) and how often
+  // the background sweep for it (and for merely-undecided recordings) runs.
+  recBrokenGraceMin: { label: "valRecBrokenGraceMin", min: 1, max: 60, step: 1, def: 5, unit: "min", gate: "recSweepBroken" },
+  recSweepEveryMin: { label: "valRecSweepEveryMin", min: 5, max: 1440, step: 5, def: 60, unit: "min", gate: "recSweepBroken" },
   // How often the background thread checks installed language packs for an
   // update, how long the "update available" toast stays before it counts as a
   // silent no-op, and how long a click on its Cancel button postpones the next
@@ -1701,16 +1724,16 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app. The pipette sits with the
     // screenshot tool: both are capture tools on the composer bar.
-    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }, "voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax", "recCountdownS", "recAudioKbps", "recBitrateKbps", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax", "voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["pickerFormat", "snipEditDefaultTool", "ocrLang", "recMicDevice", "recQuality", "recFormat", "rotateDefaultMode", "voiceLang", "voiceInsert", "voiceHotkeyTarget"], paths: ["screenshotDir"],
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, "videoEditor", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }, "voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax", "videoEditUndoMax", "recCountdownS", "recAudioKbps", "recBitrateKbps", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax", "voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["pickerFormat", "snipEditDefaultTool", "ocrLang", "recMicDevice", "recQuality", "recFormat", "rotateDefaultMode", "voiceLang", "voiceInsert", "voiceHotkeyTarget"], paths: ["screenshotDir", "recordingDir"],
       // Opens #ocr-langs-modal / its voice equivalent -- same gate as the rest of each feature.
-      actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }, { id: "voice-langs-open", label: "voiceLangsManage", gate: "voice" }, { id: "voice-hotkey-set", label: "voiceHotkeySet", gate: "voiceHotkey" }] },
+      actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }, { id: "voice-langs-open", label: "voiceLangsManage", gate: "voice" }, { id: "voice-hotkey-set", label: "voiceHotkeySet", gate: "voiceHotkey" }, { id: "rec-stop-hotkey-set", label: "recStopHotkeySet", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-set", label: "recPauseHotkeySet", gate: "recPauseHotkey" }] },
     // Placeholders, from the grammar to where the app asks for them.
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
     // The editor: what it shows beside the text box. Preview and highlighter belong together — the
     // highlighter only ever paints inside the preview.
     { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
-    { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "closeOnCopy", "copyBubble", "copyFlash"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"], dropdowns: ["dragOutModifier"] },
+    { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "closeOnCopy", "copyBubble", "copyFlash"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"], dropdowns: ["dragOutModifier"] },
     // Floating buttons and the two kinds of folder they can form.
     { title: "expGroupFolders", flags: ["floating", { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap", "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
     // The quick-copy sections of the tray menu, each with its own entry count.
@@ -1751,8 +1774,8 @@ const EXPERT_TABS = [
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport"], values: ["dupThreshold", "disarmMs"], selects: ["trashRetentionDays"],
-      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }] },
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken"], values: ["dupThreshold", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin"], selects: ["trashRetentionDays"],
+      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }] },
   ] },
 ];
 
@@ -1890,7 +1913,9 @@ const EXPERT_TIPS = [
   "mdPreview", "mdMaxChars", "codeHighlight", "codeAutoDetect", "hlFontPx", "hlMaxChars",
   "colorPicker", "pickerFormat", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx",
   "screenRecord", "recCursor", "recCountdownS", "recAudioSystem", "recAudioMic", "recAudioKbps", "recMicDevice",
-  "recQuality", "recBitrateKbps", "recFormat",
+  "recQuality", "recBitrateKbps", "recFormat", "recordingDir",
+  "recStopHotkey", "recPauseHotkey", "recTrayEntries",
+  "videoEditor", "videoEditUndoMax",
   "snipQuality", "snipDelayMs",
   "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim",
   "snipEditUndoMax", "snipEditSnap", "snipTextPlate", "snipEditDefaultTool",
@@ -1910,7 +1935,7 @@ const EXPERT_TIPS = [
   "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax",
   "helpTips", "helpHighlight", "firstRunTour",
   // Tiles / copying
-  "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "autoPasteEnter", "closeOnCopy",
+  "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "autoPasteEnter", "closeOnCopy",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
   "tooltipDelay", "tooltipTimeout", "iconTooltips",
   // Appearance
@@ -1924,6 +1949,7 @@ const EXPERT_TIPS = [
   "dedupCopyLog", "cleanupFiles", "blurTilesUntilHover",
   // Tools / data
   "dupFinder", "clipWatcher", "backupGfs", "backupBeforeReset", "backupBeforeDelete", "disarmMs",
+  "recSweepBroken", "recBrokenGraceMin", "recSweepEveryMin",
   "usageStats", "promptSync", "syncDir", "syncPollSecs",
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "kbFocusFadeMs", "snipPreviewVh",
@@ -2306,6 +2332,7 @@ function recFfmpegHintEl(key, sel) {
 let currentDataDir = "";
 let defaultScreenshotDir = "";
 let defaultSyncDir = "";
+let defaultRecordingDir = "";
 let ocrLangsCache = []; // [{tag, label}], fetched once at startup (init())
 let micDevicesCache = []; // [{id, name}], fetched once at startup (init())
 // Whether ffmpeg was found (see ffmpeg_status's own doc comment: never probed
@@ -2404,6 +2431,27 @@ const EXPERT_PATHS = {
     onReset: () => {
       settings.ui_texts = { ...(settings.ui_texts || {}), syncDir: "" };
       invoke("set_ui_text", { key: "syncDir", value: "" }).catch((e) => errToast(e));
+      renderExpert();
+    },
+  },
+  // Target for the recording result window's plain "Save"/"Copy" -- the
+  // raw capture itself always stays in <data>/recordings until one of those
+  // moves it here (or the window closes unsaved and it is deleted instead).
+  recordingDir: {
+    label: "valRecordingDir",
+    gate: "screenRecord",
+    def: () => defaultRecordingDir,
+    get: () => settings.ui_texts?.recordingDir || defaultRecordingDir,
+    change: async () => {
+      const dir = await invoke("pick_folder").catch(() => null);
+      if (!dir) return;
+      settings.ui_texts = { ...(settings.ui_texts || {}), recordingDir: dir };
+      invoke("set_ui_text", { key: "recordingDir", value: dir }).catch((e) => errToast(e));
+      renderExpert();
+    },
+    onReset: () => {
+      settings.ui_texts = { ...(settings.ui_texts || {}), recordingDir: "" };
+      invoke("set_ui_text", { key: "recordingDir", value: "" }).catch((e) => errToast(e));
       renderExpert();
     },
   },
@@ -4339,7 +4387,9 @@ function buildTile(p) {
   // A second small button right of the checkbox starts a chain with THIS
   // tile as entry 1 — only text prompts can ever be a chain link, so image/
   // file/video tiles never show it (a symbol there would be a false promise).
-  if (isTextPrompt(p)) {
+  // Also skipped outright with chaining off, not just left inert --
+  // .noflag-chainPrompts/.noflag-chainQuickStart below back this up in CSS.
+  if (isTextPrompt(p) && flag("chainPrompts") && flag("chainQuickStart")) {
     const chainBtn = document.createElement("button");
     chainBtn.type = "button";
     chainBtn.className = "tile-chain-start";
@@ -5357,6 +5407,7 @@ function openCtx(id, x, y) {
   // grey-and-disabled would still be a control the user cannot act on.
   const rmenuBtn = ctxEl.querySelector('[data-act="rotateAutoMenu"]');
   const rp = prompts.find((x) => x.id === id);
+  ctxEl.querySelector('[data-act="editVideo"]').classList.toggle("hidden", !(flag("videoEditor") && rp?.file_path && mediaKind(rp.file_path) === "video"));
   const rotateMenuEligible = !!rp && (rp.variants || []).length > 0 && flag("rotatingPrompts") && flag("rotateAuto");
   rmenuBtn.classList.toggle("hidden", !rotateMenuEligible);
   if (rotateMenuEligible) {
@@ -6431,12 +6482,16 @@ function hotkeyOwner(accel, excludeId = null) {
   if (!key) return null;
   if (accelKey(settings.hotkey) === key) return { app: true };
   if (accelKey(settings.voice_hotkey) === key) return { voice: true };
+  if (accelKey(settings.rec_stop_hotkey) === key) return { recStop: true };
+  if (accelKey(settings.rec_pause_hotkey) === key) return { recPause: true };
   const p = prompts.find((x) => x.id !== excludeId && accelKey(x.hotkey) === key);
   return p ? { name: p.name } : null;
 }
 const hotkeyTakenMsg = (owner) =>
   owner.app ? t("promptHotkeyTakenApp")
     : owner.voice ? t("promptHotkeyTakenVoice")
+    : owner.recStop ? t("promptHotkeyTakenRecStop")
+    : owner.recPause ? t("promptHotkeyTakenRecPause")
     : t("promptHotkeyTakenBy").replace("{name}", owner.name);
 
 // Global hotkeys have to be off while a field is capturing: Windows hands a
@@ -6539,6 +6594,21 @@ async function commitGlobalHotkey(accel) {
 async function commitVoiceHotkey(accel) {
   await invoke("set_voice_hotkey", { hotkey: accel });
   settings.voice_hotkey = accel;
+  if (accel) toast(t("hotkeySet"));
+  return accel;
+}
+// 278's own pair, same shape again -- only ever actually registered while a
+// recording runs (see rearm_hotkeys on the backend), so a successful commit
+// here can still show as blocked later through the bar's own warning icon.
+async function commitRecStopHotkey(accel) {
+  await invoke("set_rec_stop_hotkey", { hotkey: accel });
+  settings.rec_stop_hotkey = accel;
+  if (accel) toast(t("hotkeySet"));
+  return accel;
+}
+async function commitRecPauseHotkey(accel) {
+  await invoke("set_rec_pause_hotkey", { hotkey: accel });
+  settings.rec_pause_hotkey = accel;
   if (accel) toast(t("hotkeySet"));
   return accel;
 }
@@ -7630,6 +7700,16 @@ async function emptyTrashAll() {
   renderTrashList();
 }
 EXPERT_ACTIONS["trash-open"] = openTrash;
+// Runs the same sweep on demand -- unlike the silent background sweep,
+// an explicit click always gets an answer, even "nothing to clean up".
+EXPERT_ACTIONS["rec-sweep-now"] = async () => {
+  try {
+    const [count, bytes] = await invoke("sweep_recordings_now");
+    toast(count > 0 ? t("recSweepDone").replace("{n}", String(count)).replace("{v}", fmtBytes(bytes)) : t("recSweepNothing"));
+  } catch (e) {
+    errToast(e);
+  }
+};
 
 // ---- OCR + voice language pack management, one shared dialog ----
 // #ocr-langs-modal serves both OCR and voice dictation language packs -- same
@@ -12030,6 +12110,20 @@ function bind() {
   $("record-btn").addEventListener("click", () => {
     invoke("open_recorder").catch((err) => errToast(err));
   });
+  // Driven by the recording state, not by the click -- set on a
+  // successful start, cleared on stop/cancel/auto-stop, and re-synced by a
+  // slow poll so a missed event can never leave the button glowing forever.
+  function setRecordBtnState(state) {
+    const btn = $("record-btn");
+    btn.classList.toggle("is-recording", state === "recording");
+    btn.classList.toggle("is-paused", state === "paused");
+  }
+  async function syncRecordBtnFromStatus() {
+    const status = await invoke("recording_status").catch(() => null);
+    setRecordBtnState(!status ? "idle" : status.paused ? "paused" : "recording");
+  }
+  setInterval(syncRecordBtnFromStatus, 5000);
+  listen("recording-cancelled", () => setRecordBtnState("idle"));
   let recCountdownTimer = 0;
   function cancelRecCountdown() {
     clearTimeout(recCountdownTimer);
@@ -12049,6 +12143,7 @@ function bind() {
     const startNow = async () => {
       try {
         await invoke("start_recording", { targetKind: kind, targetId, regionX, regionY, regionW, regionH });
+        setRecordBtnState("recording");
         await invoke("show_rec_bar", { targetKind: kind, id: targetId });
       } catch (err) { errToast(err); }
     };
@@ -12072,11 +12167,56 @@ function bind() {
   const recModal = $("rec-modal");
   const recPreview = $("rec-preview");
   const recStatus = $("rec-modal-status");
+  const recFolderOut = $("rec-modal-folder");
+  const recFolderChangeBtn = $("rec-modal-folder-change");
   let pendingRecPath = "";
   let recGen = 0; // invalidated on every close/discard so a late progress tick or a
                    // finished conversion from a superseded recording is ignored
   let recProgressOff = null;
-  function closeRecModal() {
+  // 280 (Ben, 04.09.): closing the result window without an explicit
+  // Save/Save as.../Attach deletes the recording -- Discard, the X button,
+  // the backdrop and Escape all end up in closeRecModal(). Copy alone does
+  // NOT count as "saving" (it only relocates the file so the clipboard
+  // reference survives), so a copy-then-close still removes the working file
+  // -- recCopiedNotSaved is what gates the confirm-before-delete for that case.
+  let recSavedOrAttached = false;
+  let recCopiedNotSaved = false;
+  // Elide a long path in the middle rather than at the end -- the last
+  // segment (the actual folder name) is what tells destinations apart, so it
+  // has to stay visible; the title attribute always carries the full path.
+  function elideMiddle(s, max = 60) {
+    if (s.length <= max) return s;
+    const head = Math.ceil((max - 1) / 2);
+    return s.slice(0, head) + "…" + s.slice(s.length - (max - 1 - head));
+  }
+  function renderRecFolder() {
+    const dir = EXPERT_PATHS.recordingDir.get();
+    recFolderOut.textContent = elideMiddle(dir);
+    recFolderOut.title = dir;
+  }
+  // Once saved/attached, nothing that reaches this function may delete
+  // the file anymore -- "discard" used to force deletion regardless, which is
+  // exactly how clicking Discard right after a successful Save deleted the
+  // file the user had just saved. Both a real Discard click and an
+  // implicit close (X, backdrop, Escape) before any Save/Attach/Edit already
+  // meant "throw this away", so the two no longer need separate handling.
+  async function closeRecModal() {
+    const path = pendingRecPath;
+    const shouldDelete = !recSavedOrAttached;
+    // Copy alone does not count as saving, but it already moved the file to
+    // where the clipboard reference points -- closing without confirming
+    // first would delete that file out from under the still-live clipboard
+    // reference (280's own rule). A toast after the fact is too late; ask now,
+    // before anything else changes, so declining leaves the modal untouched.
+    if (shouldDelete && path && recCopiedNotSaved) {
+      const ok = await confirmDialog({
+        title: t("recDiscard"),
+        message: t("recClosedAfterCopy"),
+        confirmLabel: t("recDiscard"),
+        cancelLabel: t("cancel"),
+      });
+      if (!ok) return;
+    }
     recGen += 1;
     invoke("cancel_recording_convert").catch(() => {});
     if (recProgressOff) { recProgressOff(); recProgressOff = null; }
@@ -12086,11 +12226,20 @@ function bind() {
     recStatus.classList.remove("rec-status-cancellable");
     recStatus.onclick = null;
     pendingRecPath = "";
+    recSavedOrAttached = false;
+    recCopiedNotSaved = false;
+    if (shouldDelete && path) {
+      await invoke("discard_recording_file", { path }).catch(() => {});
+    }
   }
   async function openRecModal(rawPath) {
     pendingRecPath = rawPath;
+    recSavedOrAttached = false;
+    recCopiedNotSaved = false;
     recGen += 1;
     const gen = recGen;
+    renderRecFolder();
+    $("rec-modal-edit").classList.toggle("hidden", !flag("videoEditor"));
     recModal.classList.remove("hidden");
     const format = settings.ui_texts?.recFormat || "mp4";
     const lossless = (settings.ui_texts?.recQuality || "high") === "lossless";
@@ -12150,7 +12299,15 @@ function bind() {
       if (recProgressOff === myOff) recProgressOff = null;
     }
   }
+  // The periodic sweep and "once a recording ends" both fire this live
+  // (they always run after this listener exists) -- only when it removed
+  // something, per "a toast... when the total is worth mentioning".
+  listen("recording-sweep-done", (e) => {
+    const { count, bytes } = e.payload || {};
+    if (count > 0) toast(t("recSweepDone").replace("{n}", String(count)).replace("{v}", fmtBytes(bytes)));
+  });
   listen("recording-captured", (e) => {
+    setRecordBtnState("idle"); // covers both a normal stop and the auto-stop path
     const path = e.payload?.path || "";
     // An encoder write failure (disk full, etc.) already stopped the feeder
     // itself before this event fired -- whatever got captured up to that
@@ -12158,32 +12315,95 @@ function bind() {
     if (e.payload?.encode_error) toast(t("recEncodeError"));
     if (path) openRecModal(path);
   });
-  $("rec-modal-close").addEventListener("click", closeRecModal);
+  $("rec-modal-close").addEventListener("click", () => closeRecModal());
   recModal.addEventListener("pointerdown", (e) => {
     if (e.target === recModal) closeRecModal();
   });
-  $("rec-modal-discard").addEventListener("click", async () => {
-    const path = pendingRecPath;
-    closeRecModal();
-    if (path) await invoke("discard_recording_file", { path }).catch(() => {});
+  $("rec-modal-discard").addEventListener("click", () => closeRecModal());
+  // Opening the editor hands the raw file to another window that keeps working
+  // with it -- treat this like Save/Attach so closing this modal afterward never
+  // deletes a file the editor might still be reading from.
+  $("rec-modal-edit").addEventListener("click", async () => {
+    if (!pendingRecPath) return;
+    try {
+      await invoke("open_video_editor", { srcPath: pendingRecPath });
+      recSavedOrAttached = true;
+    } catch (err) {
+      errToast(err);
+    }
+  });
+  recFolderChangeBtn.addEventListener("click", async () => {
+    await EXPERT_PATHS.recordingDir.change();
+    renderRecFolder();
+  });
+  // Update the preview + pending path to a command's returned new location --
+  // Save/Save as.../Copy all move the file, so a later action in the same
+  // still-open window (Attach, another Copy) must act on where it ended up,
+  // not on the now-stale original <data>/recordings path.
+  function adoptRecPath(newPath) {
+    if (!newPath || newPath === pendingRecPath) return;
+    pendingRecPath = newPath;
+    if (!recPreview.classList.contains("hidden")) recPreview.src = convertFileSrc(newPath);
+  }
+  let recSaveBusy = false;
+  $("rec-modal-save").addEventListener("click", async () => {
+    if (!pendingRecPath || recSaveBusy) return;
+    recSaveBusy = true;
+    try {
+      const newPath = await invoke("save_recording_now", { srcPath: pendingRecPath });
+      adoptRecPath(newPath);
+      recSavedOrAttached = true;
+      toast(t("recSaved"));
+    } catch (err) {
+      errToast(err);
+    } finally {
+      recSaveBusy = false;
+    }
   });
   let recSaveAsBusy = false;
   $("rec-modal-saveas").addEventListener("click", async () => {
     if (!pendingRecPath || recSaveAsBusy) return;
     recSaveAsBusy = true;
     try {
-      await invoke("save_recording_as", { srcPath: pendingRecPath }).catch((err) => errToast(err));
+      const newPath = await invoke("save_recording_as", { srcPath: pendingRecPath }).catch((err) => { errToast(err); return null; });
+      if (newPath) {
+        adoptRecPath(newPath);
+        recSavedOrAttached = true;
+      }
     } finally {
       recSaveAsBusy = false;
+    }
+  });
+  let recCopyBusy = false;
+  $("rec-modal-copy").addEventListener("click", async () => {
+    if (!pendingRecPath || recCopyBusy) return;
+    recCopyBusy = true;
+    try {
+      // The file is already relocated by the time the backend even
+      // attempts the clipboard write, so the new path is adopted regardless
+      // of whether that write succeeded -- otherwise a clipboard failure left
+      // this window pointing at a path that no longer exists.
+      const [newPath, clipOk] = await invoke("copy_recording_to_clipboard", { srcPath: pendingRecPath });
+      adoptRecPath(newPath);
+      if (clipOk) {
+        recCopiedNotSaved = !recSavedOrAttached;
+        toast(t("copied"));
+      } else {
+        errToast("clipboard write failed");
+      }
+    } catch (err) {
+      errToast(err);
+    } finally {
+      recCopyBusy = false;
     }
   });
   $("rec-modal-yes").addEventListener("click", () => {
     const path = pendingRecPath;
     // Reuses the exact same path a picked/dropped video file already takes --
     // media.js's video detection and the editor's video preview need nothing new.
-    // closeRecModal() also cancels any conversion still in flight -- without
-    // that, a click here while converting attaches the raw mp4 path just
-    // before the backend deletes it out from under the newly opened editor.
+    // Attaching counts as "saving": mark it before closeRecModal() so the
+    // close path does not delete the file out from under the newly opened editor.
+    recSavedOrAttached = true;
     closeRecModal();
     if (path) openFileCreate(path);
   });
@@ -12334,6 +12554,9 @@ function bind() {
     step: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><text x="12" y="15.5" font-size="9" text-anchor="middle" fill="currentColor" font-family="sans-serif">1</text></svg>',
     pixelate: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g fill="currentColor"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7" opacity="0.5"/><rect x="3" y="14" width="7" height="7" opacity="0.5"/><rect x="14" y="14" width="7" height="7"/></g></svg>',
     spotlight: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity="0.6" d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3"/></svg>',
+    // The only way to reach panning used to be an undiscoverable middle-click
+    // or holding Space -- a real toolbar entry for the exact same gesture.
+    hand: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M8 13V6a1.5 1.5 0 0 1 3 0v5.5M11 11.2V4.5a1.5 1.5 0 0 1 3 0V11M14 11.3V6a1.5 1.5 0 0 1 3 0v7M17 12.5V9a1.5 1.5 0 0 1 3 0v6c0 3.6-2.2 6.5-6 6.5h-1c-2.7 0-4-.9-5.4-2.8L4.8 15c-.6-.9-.3-1.9.5-2.3.7-.4 1.5-.2 2.1.5L8 14"/></svg>',
   };
   const SNIP_EYEDROP_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M15 5l4 4-9.5 9.5H5v-4.5L14.5 5Z"/><path fill="none" stroke="currentColor" stroke-width="1.8" d="M13 7l4 4"/></svg>';
   const SNIP_TOOLS = [
@@ -12348,6 +12571,7 @@ function bind() {
     { id: "step", key: "9", label: "snipToolStep" },
     { id: "pixelate", key: "0", label: "snipToolPixelate" },
     { id: "spotlight", key: "-", label: "snipToolSpotlight" },
+    { id: "hand", key: "h", label: "snipToolHand" },
   ];
 
   const snipEdit = $("snip-edit");
@@ -12482,17 +12706,39 @@ function bind() {
     ctx.stroke();
     ctx.restore();
   }
+  // Used to draw the full shaft (round-capped) all the way to the tip and
+  // then lay a short, fairly wide triangle on top -- the round cap regularly
+  // poked out from under/beside that triangle, looking like a buggy double
+  // point. Now the shaft stops exactly at the head's own back edge (so the
+  // cap's bulge lands under the head's fill, never past its sides), and the
+  // head itself is a longer, more slender point instead of a stubby wedge.
   function snipEditDrawArrowOp(ctx, op) {
-    snipEditDrawLineOp(ctx, op);
     const [a, b] = op.points;
-    const angle = Math.atan2(b.y - a.y, b.x - a.x);
-    const size = 6 + op.width * 1.8;
+    const dist = Math.hypot(b.x - a.x, b.y - a.y);
+    const angle = dist > 0 ? Math.atan2(b.y - a.y, b.x - a.x) : 0;
+    // Capped at the actual drag distance -- otherwise a drag shorter than one
+    // arrowhead put the shaft's "back" point PAST the start point, flipping
+    // the shaft to point backwards during the first few pixels of every drag.
+    const headLen = Math.min(7 + op.width * 3.2, dist); // tip-to-back distance along the shaft
+    const headHalfAngle = Math.PI / 9;  // ~20 deg either side -- slender, not dumpy
+    const backX = b.x - headLen * Math.cos(angle);
+    const backY = b.y - headLen * Math.sin(angle);
+    ctx.save();
+    ctx.strokeStyle = op.color;
+    ctx.lineWidth = op.width;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(backX, backY);
+    ctx.stroke();
+    ctx.restore();
+    const headSide = headLen / Math.cos(headHalfAngle); // tip-to-back-corner distance
     ctx.save();
     ctx.fillStyle = op.color;
     ctx.beginPath();
     ctx.moveTo(b.x, b.y);
-    ctx.lineTo(b.x - size * Math.cos(angle - Math.PI / 7), b.y - size * Math.sin(angle - Math.PI / 7));
-    ctx.lineTo(b.x - size * Math.cos(angle + Math.PI / 7), b.y - size * Math.sin(angle + Math.PI / 7));
+    ctx.lineTo(b.x - headSide * Math.cos(angle - headHalfAngle), b.y - headSide * Math.sin(angle - headHalfAngle));
+    ctx.lineTo(b.x - headSide * Math.cos(angle + headHalfAngle), b.y - headSide * Math.sin(angle + headHalfAngle));
     ctx.closePath();
     ctx.fill();
     ctx.restore();
@@ -12700,6 +12946,24 @@ function bind() {
       if (Math.abs(pt.x - p.x) <= tol && Math.abs(pt.y - p.y) <= tol) return name;
     }
     return null;
+  }
+  // Same handle-to-cursor mapping the video editor already uses for its own
+  // crop/overlay handles (video.css .ve-h-*): a directional resize cursor at
+  // each corner/edge, a move cursor inside the rect, crosshair everywhere
+  // else -- signalling that a click there starts a brand new crop instead of
+  // dragging the existing one.
+  const SNIP_CROP_HANDLE_CURSORS = {
+    nw: "nwse-resize", n: "ns-resize", ne: "nesw-resize",
+    w: "ew-resize", e: "ew-resize",
+    sw: "nesw-resize", s: "ns-resize", se: "nwse-resize",
+  };
+  function snipEditCropCursorFor(pt) {
+    const r = SE.cropRect;
+    if (!r) return "crosshair";
+    const handle = snipEditHitCropHandle(pt, r);
+    if (handle) return SNIP_CROP_HANDLE_CURSORS[handle];
+    if (pt.x >= r.x && pt.x <= r.x + r.w && pt.y >= r.y && pt.y <= r.y + r.h) return "move";
+    return "crosshair";
   }
   function snipEditDrawCropOverlayLive() {
     snipEditClearLive();
@@ -12986,9 +13250,10 @@ function bind() {
   function snipEditBuildToolButtons() {
     snipEditToolsEl.innerHTML = "";
     for (const tdef of SNIP_TOOLS) {
-      // One divider, between the drawing tools (pen..step) and the image
-      // tools (pixelate/spotlight) -- same grouping the Snipping Tool uses.
-      if (tdef.id === "pixelate") {
+      // Dividers: between the drawing tools (pen..step) and the image tools
+      // (pixelate/spotlight) -- same grouping the Snipping Tool uses -- and
+      // again before the view tool (hand), which does not draw anything.
+      if (tdef.id === "pixelate" || tdef.id === "hand") {
         const sep = document.createElement("span");
         sep.className = "snip-edit-sep";
         sep.setAttribute("aria-hidden", "true");
@@ -13021,6 +13286,13 @@ function bind() {
     SE.tool = tool;
     SE.lastNudged = null;
     snipEditClearLive();
+    // Clear any crop-hover cursor left over from the previous tool -- an
+    // inline style would otherwise outrank the panning class below and the
+    // per-tool crosshair default.
+    snipEditWrap.style.cursor = "";
+    // A grab cursor as soon as the Hand tool is picked, not only once a
+    // drag actually starts -- the same affordance Space-hold already gets.
+    snipEditWrap.classList.toggle("panning", tool === "hand");
     if (tool === "crop") {
       const existing = SE.ops.find((o) => o.tool === "crop");
       SE.cropRect = existing ? { ...existing.rect } : null;
@@ -13089,6 +13361,12 @@ function bind() {
   // ---- pan (space+drag or middle mouse) ----
   function snipEditStartPan(e) {
     SE.panState = { x: e.clientX, y: e.clientY, sl: snipEditWrap.scrollLeft, st: snipEditWrap.scrollTop };
+    // Without capture, dragging past the canvas edge (zoomed in beyond the
+    // viewport) stops delivering pointermove once the cursor leaves it.
+    snipEditLiveCv.setPointerCapture(e.pointerId);
+    // A leftover crop-tool inline cursor otherwise outranks the grab/grabbing
+    // cursor below for this whole drag (only the Space-key path cleared it).
+    snipEditWrap.style.cursor = "";
     snipEditWrap.classList.add("panning");
     e.preventDefault();
   }
@@ -13099,7 +13377,7 @@ function bind() {
   }
   function snipEditEndPan() {
     SE.panState = null;
-    if (!SE.spaceDown) snipEditWrap.classList.remove("panning");
+    if (!SE.spaceDown && SE.tool !== "hand") snipEditWrap.classList.remove("panning");
   }
 
   // ---- zoom: pure CSS scaling of the native-resolution canvas -- no redraw needed ----
@@ -13119,7 +13397,7 @@ function bind() {
   // ---- pointer wiring ----
   function snipEditOnPointerDown(e) {
     if (!SE.active) return;
-    if (e.button === 1 || SE.spaceDown) { snipEditStartPan(e); return; }
+    if (e.button === 1 || SE.spaceDown || (e.button === 0 && SE.tool === "hand")) { snipEditStartPan(e); return; }
     if (e.button !== 0) return;
     snipEditFinishTextIfOpen();
     const pt0 = snipEditToImage(e);
@@ -13144,7 +13422,18 @@ function bind() {
   function snipEditOnPointerMove(e) {
     if (!SE.active) return;
     if (SE.panState) { snipEditDoPan(e); return; }
-    if (!SE.drag) { if (SE.tool === "crop" && SE.cropRect) snipEditDrawCropOverlayLive(); return; }
+    if (!SE.drag) {
+      if (SE.tool === "crop") {
+        // Space held means a pan is about to start (or the panning CSS class
+        // is already showing its grab cursor) -- an inline crop cursor would
+        // otherwise outrank that class and never let go/grabbing show.
+        if (!SE.spaceDown) snipEditWrap.style.cursor = snipEditCropCursorFor(snipEditToImage(e));
+        // The overlay is already on screen and unchanged by a plain hover
+        // (its handles do not react to hover position) -- redrawing it here
+        // was a full-image clear+refill on every mousemove for nothing.
+      }
+      return;
+    }
     const pt0 = snipEditToImage(e);
     let pt = e.altKey ? pt0 : snipEditSnapPoint(pt0);
     if (e.shiftKey) pt = snipEditApplyShiftConstraint(SE.drag, pt);
@@ -13205,6 +13494,17 @@ function bind() {
   snipEditLiveCv.addEventListener("pointerdown", snipEditOnPointerDown);
   snipEditLiveCv.addEventListener("pointermove", snipEditOnPointerMove);
   window.addEventListener("pointerup", snipEditOnPointerUp);
+  // A cancelled pointer stream (e.g. the browser claiming a touch drag mid-
+  // gesture) would otherwise leave SE.drag/SE.panState set forever, which
+  // makes every tool button and shortcut a no-op for the rest of the session.
+  window.addEventListener("pointercancel", snipEditOnPointerUp);
+  // Alt-Tabbing away while Space/V is held never delivers the matching keyup
+  // to this window -- without this, every later click would start a pan
+  // (SE.spaceDown stuck true) or the raw/before image would stay stuck shown.
+  window.addEventListener("blur", () => {
+    if (SE.spaceDown) { SE.spaceDown = false; if (SE.tool !== "hand") snipEditWrap.classList.remove("panning"); }
+    if (SE.showRaw) { SE.showRaw = false; snipEditRedrawBase(); }
+  });
   snipEditWrap.addEventListener("wheel", (e) => {
     if (!SE.active) return;
     e.preventDefault();
@@ -13246,7 +13546,7 @@ function bind() {
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); snipEditUndo(); return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); snipEditRedo(); return; }
-    if (e.key === " ") { SE.spaceDown = true; snipEditWrap.classList.add("panning"); e.preventDefault(); return; }
+    if (e.key === " ") { SE.spaceDown = true; snipEditWrap.style.cursor = ""; snipEditWrap.classList.add("panning"); e.preventDefault(); return; }
     if (e.key.toLowerCase() === "v" && !e.repeat) { SE.showRaw = true; snipEditRedrawBase(); return; }
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && SE.lastNudged) {
       e.preventDefault();
@@ -13258,7 +13558,7 @@ function bind() {
   }
   function snipEditKeyup(e) {
     if (snipEdit.classList.contains("hidden")) return;
-    if (e.key === " ") { SE.spaceDown = false; snipEditWrap.classList.remove("panning"); }
+    if (e.key === " ") { SE.spaceDown = false; if (SE.tool !== "hand") snipEditWrap.classList.remove("panning"); }
     if (e.key.toLowerCase() === "v") { SE.showRaw = false; snipEditRedrawBase(); }
   }
   document.addEventListener("keydown", snipEditKeydown);
@@ -13285,6 +13585,7 @@ function bind() {
       SE.onApply = onApply;
       SE.onCancel = onCancel;
       SE.active = true;
+      snipEditWrap.style.cursor = ""; // clear a cursor left inline by the previous session
 
       snipEditBaseCv.width = SE.w;
       snipEditBaseCv.height = SE.h;
@@ -13315,6 +13616,7 @@ function bind() {
     SE.spaceDown = false;
     SE.eyedropArm = null;
     snipEditWrap.classList.remove("panning");
+    snipEditWrap.style.cursor = "";
     snipEditCancelTextInput();
   }
   function snipEditCancel() {
@@ -13326,6 +13628,14 @@ function bind() {
   // The output canvas is never larger than the source, so a 4K/panorama capture is
   // never upscaled, and this is a single synchronous pass, never a per-block loop.
   function snipEditExportDataUrl() {
+    // A drawn crop rectangle otherwise only reaches SE.ops via an Enter keypress --
+    // export must not require that hidden step, or a crop drawn (or redrawn over an
+    // older one) and exported straight away silently exports uncropped/stale instead.
+    // Scoped to the crop tool being active (same guard the Enter handler already
+    // uses) so this never resurrects a crop the user has since undone while parked
+    // on another tool -- SE.cropRect is only kept in sync with SE.ops while crop is
+    // the active tool (see snipEditSetTool).
+    if (SE.tool === "crop") snipEditCropCommit();
     SE.showRaw = false;
     snipEditRedrawBase();
     const crop = SE.ops.find((o) => o.tool === "crop");
@@ -14074,6 +14384,41 @@ function bind() {
       $("opt-voice-hotkey").focus();
     });
   };
+  // Stop/pause hotkeys for a running recording, same wiring as the pair above.
+  bindHotkeyField($("opt-rec-stop-hotkey"), {
+    current: () => settings.rec_stop_hotkey,
+    onCommit: commitRecStopHotkey,
+  });
+  $("rec-stop-hotkey-clear").addEventListener("click", async () => {
+    try { await commitRecStopHotkey(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
+    $("opt-rec-stop-hotkey").value = "";
+  });
+  EXPERT_ACTIONS["rec-stop-hotkey-set"] = () => {
+    settingsOpener = document.activeElement;
+    showExpertPage(false);
+    settingsEl.classList.remove("hidden");
+    requestAnimationFrame(() => {
+      $("opt-rec-stop-hotkey").scrollIntoView({ block: "center" });
+      $("opt-rec-stop-hotkey").focus();
+    });
+  };
+  bindHotkeyField($("opt-rec-pause-hotkey"), {
+    current: () => settings.rec_pause_hotkey,
+    onCommit: commitRecPauseHotkey,
+  });
+  $("rec-pause-hotkey-clear").addEventListener("click", async () => {
+    try { await commitRecPauseHotkey(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
+    $("opt-rec-pause-hotkey").value = "";
+  });
+  EXPERT_ACTIONS["rec-pause-hotkey-set"] = () => {
+    settingsOpener = document.activeElement;
+    showExpertPage(false);
+    settingsEl.classList.remove("hidden");
+    requestAnimationFrame(() => {
+      $("opt-rec-pause-hotkey").scrollIntoView({ block: "center" });
+      $("opt-rec-pause-hotkey").focus();
+    });
+  };
   $("hotkeys-modal-close").addEventListener("click", closeHotkeysModal);
   $("hotkeys-modal").addEventListener("pointerdown", (e) => {
     if (e.target === $("hotkeys-modal")) closeHotkeysModal();
@@ -14183,6 +14528,9 @@ function bind() {
     closeCtx();
     if (act === "edit") {
       await editPrompt(id);
+    } else if (act === "editVideo") {
+      const p = prompts.find((x) => x.id === id);
+      if (p?.file_path) await invoke("open_video_editor", { srcPath: p.file_path }).catch((e) => errToast(e));
     } else if (act === "duplicate") {
       await duplicatePrompt(id);
     } else if (act === "hide") {
@@ -15177,6 +15525,12 @@ async function init() {
     }).catch(() => {});
     invoke("default_screenshot_dir").then((d) => { defaultScreenshotDir = d || ""; }).catch(() => {});
     invoke("default_sync_dir").then((d) => { defaultSyncDir = d || ""; }).catch(() => {});
+    invoke("default_recording_dir").then((d) => { defaultRecordingDir = d || ""; }).catch(() => {});
+    // Whatever the startup sweep found (if anything) -- collected once,
+    // here, since it ran before this window (or any of its listeners) existed.
+    invoke("take_recording_sweep_notice").then((r) => {
+      if (r && r[0] > 0) toast(t("recSweepDone").replace("{n}", String(r[0])).replace("{v}", fmtBytes(r[1])));
+    }).catch(() => {});
     // OCR language list -- fetched once, cached, "Automatic" is always
     // prepended separately (see EXPERT_DROPDOWNS.ocrLang above).
     invoke("ocr_languages").then((langs) => { ocrLangsCache = langs || []; }).catch(() => {});
@@ -15249,6 +15603,8 @@ function syncSettingsControls() {
     refreshFavViewUi();
     $("opt-hotkey").value = prettyAccel(settings.hotkey);
     $("opt-voice-hotkey").value = prettyAccel(settings.voice_hotkey);
+    $("opt-rec-stop-hotkey").value = prettyAccel(settings.rec_stop_hotkey);
+    $("opt-rec-pause-hotkey").value = prettyAccel(settings.rec_pause_hotkey);
     $("pin-top").classList.toggle("active", settings.always_on_top === true);
     $("pin-top").setAttribute("aria-pressed", String(settings.always_on_top === true));
     $("opt-autoupdate").checked = settings.auto_update !== false;

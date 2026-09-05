@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title></title>
+  <!-- main.css carries the theme tokens and every shared control style
+       (.icon-btn / .ghost-btn / .primary-btn / .field / .switch / .modal); video.css
+       only adds this window's own layout. No second theme or button system. -->
+  <link rel="stylesheet" href="styles/main.css" />
+  <link rel="stylesheet" href="styles/video.css" />
+</head>
+<body class="video-body">
+  <!-- The window has no OS titlebar, so this row is both the title and the drag
+       surface (data-tauri-drag-region alone moves the window, same as the main
+       window's header). -->
+  <div class="ve-titlebar" data-tauri-drag-region>
+    <span class="ve-titlebar-label" data-i18n="veTitle">Video editor</span>
+    <span id="ve-file" class="ve-file"></span>
+    <button id="ve-close" class="icon-btn ve-close" type="button" data-tauri-drag-region="false" data-i18n-title="close" data-i18n-aria="close">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>
+    </button>
+  </div>
+
+  <!-- ffmpeg is what probes, cuts and exports. Without it the clip still plays,
+       so the editor opens and says plainly what is missing instead of refusing. -->
+  <div id="ve-ffmpeg-warn" class="ve-banner hidden">
+    <span id="ve-ffmpeg-msg" data-i18n="recFfmpegMissingHint"></span>
+    <button id="ve-ffmpeg-get" class="ghost-btn" type="button" data-i18n="ffmpegOfferConfirm">Download</button>
+  </div>
+
+  <div class="ve-main">
+    <div class="ve-left">
+      <!-- Preview. The rectangle layer sits exactly on the video's painted box
+           (letterboxing included), so a crop/pixelate/spotlight rectangle is in
+           source pixels no matter how the window is sized. -->
+      <div id="ve-stage" class="ve-stage">
+        <video id="ve-video" class="ve-video" preload="auto" playsinline></video>
+        <div id="ve-rects" class="ve-rects"></div>
+        <div id="ve-stage-msg" class="ve-stage-msg" data-i18n="veLoading">Loading…</div>
+        <!-- 284: shown only once actually zoomed in (applyPreviewTransform
+             toggles "hidden"); scroll/drag on the picture itself zoom and pan it. -->
+        <div id="ve-preview-zoom" class="ve-preview-zoom hidden">
+          <span id="ve-preview-zoom-val">100%</span>
+          <button id="ve-preview-zoom-reset" class="icon-btn" type="button" data-i18n-title="veResetZoom" data-i18n-aria="veResetZoom">
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7Z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="ve-transport">
+        <button id="ve-to-start" class="icon-btn" type="button" data-i18n-title="veToStart" data-i18n-aria="veToStart">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6 5h2v14H6V5Zm12 0v14l-9-7 9-7Z"/></svg>
+        </button>
+        <button id="ve-prev-frame" class="icon-btn" type="button" data-i18n-title="vePrevFrame" data-i18n-aria="vePrevFrame">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M15 5v14l-9-7 9-7Zm3 0h2v14h-2V5Z"/></svg>
+        </button>
+        <button id="ve-play" class="icon-btn ve-play" type="button" data-i18n-title="vePlay" data-i18n-aria="vePlay">
+          <svg id="ve-play-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7L8 5Z"/></svg>
+          <svg id="ve-pause-icon" class="hidden" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M8 5h3v14H8V5Zm5 0h3v14h-3V5Z"/></svg>
+        </button>
+        <button id="ve-next-frame" class="icon-btn" type="button" data-i18n-title="veNextFrame" data-i18n-aria="veNextFrame">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M9 5l9 7-9 7V5Zm-5 0h2v14H4V5Z"/></svg>
+        </button>
+        <button id="ve-to-end" class="icon-btn" type="button" data-i18n-title="veToEnd" data-i18n-aria="veToEnd">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M16 5h2v14h-2V5ZM6 5l9 7-9 7V5Z"/></svg>
+        </button>
+
+        <span class="ve-sep" aria-hidden="true"></span>
+        <span id="ve-time" class="ve-time">00:00.000</span>
+        <span class="ve-time-sep" aria-hidden="true">/</span>
+        <span id="ve-duration" class="ve-time ve-muted">00:00.000</span>
+        <span id="ve-frame" class="ve-frame ve-muted" data-i18n-title="veFrameTip" title="Frame number at the playhead"></span>
+
+        <span class="ve-spacer"></span>
+
+        <!-- Two audio tracks: system and microphone. A browser plays only the
+             first track, so these sliders steer the export; the preview follows
+             the system track alone. -->
+        <div class="ve-audio-group">
+          <button id="ve-mute-sys" class="icon-btn" type="button" data-i18n-title="veMuteSystem" data-i18n-aria="veMuteSystem">
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M3 10v4h4l5 5V5L7 10H3Zm13.5 2a4.5 4.5 0 0 0-2.5-4.03v8.06A4.5 4.5 0 0 0 16.5 12Z"/></svg>
+          </button>
+          <input id="ve-vol-sys" class="ve-vol" type="range" min="0" max="200" step="5" value="100" data-i18n-title="veVolumeSystem" data-i18n-aria="veVolumeSystem" />
+        </div>
+        <div class="ve-audio-group">
+          <button id="ve-mute-mic" class="icon-btn" type="button" data-i18n-title="veMuteMic" data-i18n-aria="veMuteMic">
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V21h2v-3.07A7 7 0 0 0 19 11h-2Z"/></svg>
+          </button>
+          <input id="ve-vol-mic" class="ve-vol" type="range" min="0" max="200" step="5" value="100" data-i18n-title="veVolumeMic" data-i18n-aria="veVolumeMic" />
+        </div>
+      </div>
+
+      <!-- Timeline: ruler, filmstrip and one waveform per audio track, all the
+           same width, scrolled together. -->
+      <div id="ve-timeline" class="ve-timeline" tabindex="0" role="group" data-i18n-aria="veTimelineLabel">
+        <div id="ve-track" class="ve-track">
+          <div id="ve-ruler" class="ve-ruler" aria-hidden="true"></div>
+          <div id="ve-filmstrip" class="ve-filmstrip" aria-hidden="true"></div>
+          <div class="ve-waves">
+            <canvas id="ve-wave-sys" class="ve-wave" width="10" height="34" aria-hidden="true"></canvas>
+            <canvas id="ve-wave-mic" class="ve-wave hidden" width="10" height="34" aria-hidden="true"></canvas>
+          </div>
+          <div id="ve-regions" class="ve-regions">
+            <div id="ve-dim-a" class="ve-dim"></div>
+            <div id="ve-dim-b" class="ve-dim"></div>
+            <div id="ve-cuts" class="ve-cuts"></div>
+            <div id="ve-ovbars" class="ve-ovbars"></div>
+            <div id="ve-sel" class="ve-sel hidden"></div>
+            <div id="ve-trim-a" class="ve-handle ve-handle-a" tabindex="0" role="button" data-i18n-title="veTrimStart" data-i18n-aria="veTrimStart"></div>
+            <div id="ve-trim-b" class="ve-handle ve-handle-b" tabindex="0" role="button" data-i18n-title="veTrimEnd" data-i18n-aria="veTrimEnd"></div>
+            <div id="ve-playhead" class="ve-playhead" aria-hidden="true"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ve-tools">
+        <button id="ve-mark-in" class="ghost-btn" type="button" data-i18n="veMarkIn" data-i18n-title="veMarkInTip">Mark in</button>
+        <button id="ve-mark-out" class="ghost-btn" type="button" data-i18n="veMarkOut" data-i18n-title="veMarkOutTip">Mark out</button>
+        <button id="ve-trim-set" class="ghost-btn" type="button" data-i18n="veTrimToSel" data-i18n-title="veTrimToSelTip">Trim to selection</button>
+        <button id="ve-cut-add" class="ghost-btn" type="button" data-i18n="veCutSel" data-i18n-title="veCutSelTip">Cut out selection</button>
+        <button id="ve-sel-clear" class="ghost-btn" type="button" data-i18n="veSelClear" data-i18n-title="veSelClearTip">Clear selection</button>
+        <button id="ve-still" class="ghost-btn" type="button" data-i18n="veStill" data-i18n-title="veStillTip">Export frame</button>
+
+        <span class="ve-spacer"></span>
+
+        <button id="ve-zoom-out" class="icon-btn" type="button" data-i18n-title="veZoomOut" data-i18n-aria="veZoomOut">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 21l-4.3-4.3M8 11h6"/></svg>
+        </button>
+        <span id="ve-zoom-val" class="ve-zoom-val">100%</span>
+        <button id="ve-zoom-in" class="icon-btn" type="button" data-i18n-title="veZoomIn" data-i18n-aria="veZoomIn">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg>
+        </button>
+        <button id="ve-zoom-fit" class="ghost-btn" type="button" data-i18n="veZoomFit" data-i18n-title="veZoomFitTip">Fit</button>
+      </div>
+    </div>
+
+    <!-- Side panel: three tabs plus the operation list, which stays visible under
+         every tab because undo/redo has to be reachable from wherever you are. -->
+    <div class="ve-side">
+      <div class="ve-tabs" role="tablist" data-i18n-aria="veTabsLabel">
+        <button id="ve-tab-edit" class="ve-tab active" type="button" role="tab" aria-selected="true" data-panel="ve-panel-edit" data-i18n="veTabEdit">Edit</button>
+        <button id="ve-tab-overlays" class="ve-tab" type="button" role="tab" aria-selected="false" data-panel="ve-panel-overlays" data-i18n="veTabOverlays">Overlays</button>
+        <button id="ve-tab-export" class="ve-tab" type="button" role="tab" aria-selected="false" data-panel="ve-panel-export" data-i18n="veTabExport">Export</button>
+      </div>
+
+      <div class="ve-panels">
+        <!-- ---- Edit ---- -->
+        <section id="ve-panel-edit" class="ve-panel" role="tabpanel">
+          <h3 class="ve-h" data-i18n="veTrimGroup">Trim and cut</h3>
+          <div class="ve-row2">
+            <label class="field">
+              <span data-i18n="veTrimStart">Start</span>
+              <input id="ve-trim-start-val" class="modal-input ve-timefield" type="text" inputmode="decimal" placeholder="00:00.000" />
+            </label>
+            <label class="field">
+              <span data-i18n="veTrimEnd">End</span>
+              <input id="ve-trim-end-val" class="modal-input ve-timefield" type="text" inputmode="decimal" placeholder="00:00.000" />
+            </label>
+          </div>
+          <p id="ve-cut-count" class="modal-hint"></p>
+          <button id="ve-cut-clear" class="ghost-btn ve-wide" type="button" data-i18n="veCutClear">Remove all cuts</button>
+
+          <h3 class="ve-h" data-i18n="veCropGroup">Crop</h3>
+          <label class="field switch-field ve-switch-row">
+            <span data-i18n="veCropOn">Crop the picture</span>
+            <input id="ve-crop-on" class="switch" type="checkbox" />
+          </label>
+          <div id="ve-crop-fields" class="ve-crop-fields">
+            <div class="ve-row4">
+              <label class="field"><span data-i18n="veCropX">X</span><input id="ve-crop-x" class="modal-input" type="number" min="0" step="2" /></label>
+              <label class="field"><span data-i18n="veCropY">Y</span><input id="ve-crop-y" class="modal-input" type="number" min="0" step="2" /></label>
+              <label class="field"><span data-i18n="veCropW">Width</span><input id="ve-crop-w" class="modal-input" type="number" min="2" step="2" /></label>
+              <label class="field"><span data-i18n="veCropH">Height</span><input id="ve-crop-h" class="modal-input" type="number" min="2" step="2" /></label>
+            </div>
+            <p class="modal-hint" data-i18n="veCropEvenHint">Width and height always snap to even numbers — video encoders require it.</p>
+            <button id="ve-crop-reset" class="ghost-btn ve-wide" type="button" data-i18n="veCropReset">Reset to full frame</button>
+          </div>
+
+          <h3 class="ve-h" data-i18n="veSpeedGroup">Speed</h3>
+          <div id="ve-speed-steps" class="ve-steps" role="group" data-i18n-aria="veSpeedGroup"></div>
+          <div class="ve-row2">
+            <label class="field">
+              <span data-i18n="veSpeedCustom">Free value</span>
+              <input id="ve-speed-custom" class="modal-input" type="number" min="0.1" max="10" step="0.05" />
+            </label>
+            <label class="field switch-field ve-switch-row">
+              <span data-i18n="veSpeedPitch">Keep pitch</span>
+              <input id="ve-speed-pitch" class="switch" type="checkbox" checked />
+            </label>
+          </div>
+
+          <h3 class="ve-h" data-i18n="veFadeGroup">Fades</h3>
+          <label class="field switch-field ve-switch-row">
+            <span data-i18n="veFadeOn">Fade in and out</span>
+            <input id="ve-fade-on" class="switch" type="checkbox" />
+          </label>
+          <div id="ve-fade-fields" class="ve-row2">
+            <label class="field"><span data-i18n="veFadeIn">Fade in (ms)</span><input id="ve-fade-in" class="modal-input" type="number" min="0" max="10000" step="100" value="500" /></label>
+            <label class="field"><span data-i18n="veFadeOut">Fade out (ms)</span><input id="ve-fade-out" class="modal-input" type="number" min="0" max="10000" step="100" value="500" /></label>
+          </div>
+
+          <h3 class="ve-h" data-i18n="veScaleGroup">Resolution</h3>
+          <label class="field expert-dropdown-row">
+            <span data-i18n="veScale">Downscale</span>
+            <select id="ve-scale" class="modal-input">
+              <option value="" data-i18n="veScaleOff">Keep original</option>
+              <option value="1080">1080p</option>
+              <option value="720">720p</option>
+              <option value="480">480p</option>
+            </select>
+          </label>
+        </section>
+
+        <!-- ---- Overlays ---- -->
+        <section id="ve-panel-overlays" class="ve-panel hidden" role="tabpanel">
+          <h3 class="ve-h" data-i18n="veOvAdd">Add an overlay</h3>
+          <div class="ve-ov-add">
+            <button id="ve-ov-add-image" class="ghost-btn" type="button" data-i18n="veOvImage" data-i18n-title="veOvImageTip">Image</button>
+            <button id="ve-ov-add-frame" class="ghost-btn" type="button" data-i18n="veOvFrame" data-i18n-title="veOvFrameTip">Frame</button>
+            <button id="ve-ov-add-text" class="ghost-btn" type="button" data-i18n="veOvText" data-i18n-title="veOvTextTip">Text</button>
+            <button id="ve-ov-add-pixelate" class="ghost-btn" type="button" data-i18n="veOvPixelate" data-i18n-title="veOvRectTip">Pixelate</button>
+            <button id="ve-ov-add-spotlight" class="ghost-btn" type="button" data-i18n="veOvSpotlight" data-i18n-title="veOvRectTip">Spotlight</button>
+          </div>
+          <div id="ve-ov-list" class="ve-ov-list"></div>
+          <p id="ve-ov-empty" class="modal-hint" data-i18n="veOvEmpty">No overlays yet.</p>
+          <div id="ve-ov-editor" class="ve-ov-editor hidden"></div>
+        </section>
+
+        <!-- ---- Export ---- -->
+        <section id="ve-panel-export" class="ve-panel hidden" role="tabpanel">
+          <h3 class="ve-h" data-i18n="vePresets">Presets</h3>
+          <div class="export-row">
+            <button id="ve-preset-same" class="ghost-btn" type="button" data-i18n="vePresetSame" data-i18n-title="vePresetSameTip">Unchanged</button>
+            <button id="ve-preset-small" class="ghost-btn" type="button" data-i18n="vePresetSmall" data-i18n-title="vePresetSmallTip">Small for chat</button>
+            <button id="ve-preset-gif" class="ghost-btn" type="button" data-i18n="vePresetGif" data-i18n-title="vePresetGifTip">GIF</button>
+          </div>
+
+          <h3 class="ve-h" data-i18n="veExportSettings">Settings</h3>
+          <label class="field expert-dropdown-row">
+            <span data-i18n="veExportFormat">Format</span>
+            <select id="ve-export-format" class="modal-input">
+              <option value="mp4">MP4</option>
+              <option value="webm">WebM</option>
+              <option value="gif">GIF</option>
+            </select>
+          </label>
+          <label class="field expert-dropdown-row">
+            <span data-i18n="veExportQuality">Quality</span>
+            <select id="ve-export-quality" class="modal-input">
+              <option value="high" data-i18n="veQualityHigh">High</option>
+              <option value="small" data-i18n="veQualitySmall">Small</option>
+              <option value="lossless" data-i18n="veQualityLossless">Lossless</option>
+            </select>
+          </label>
+          <label class="field expert-dropdown-row">
+            <span data-i18n="veExportDownscale">Downscale</span>
+            <select id="ve-export-downscale" class="modal-input">
+              <option value="" data-i18n="veScaleOff">Keep original</option>
+              <option value="1080">1080p</option>
+              <option value="720">720p</option>
+              <option value="480">480p</option>
+            </select>
+          </label>
+          <p id="ve-export-note" class="modal-hint"></p>
+
+          <h3 class="ve-h" data-i18n="veExportTarget">Target file</h3>
+          <p id="ve-export-dest" class="ve-path"></p>
+          <div id="ve-export-progress-row" class="ve-progress-row hidden">
+            <progress id="ve-export-progress" class="ve-progress" max="100" value="0"></progress>
+            <span id="ve-export-pct" class="ve-muted">0%</span>
+          </div>
+          <p id="ve-export-status" class="modal-hint"></p>
+          <div class="export-row">
+            <button id="ve-export-start" class="primary-btn" type="button" data-i18n="veExportStart">Export</button>
+            <button id="ve-export-cancel" class="ghost-btn hidden" type="button" data-i18n="cancel">Cancel</button>
+            <button id="ve-export-saveas" class="ghost-btn hidden" type="button" data-i18n="screenshotSaveAs">Save as…</button>
+          </div>
+        </section>
+      </div>
+
+      <div class="ve-ops">
+        <div class="ve-ops-head">
+          <span class="ve-h ve-h-flat" data-i18n="veOps">Operations</span>
+          <button id="ve-undo" class="icon-btn" type="button" data-i18n-title="veUndoTip" data-i18n-aria="undo" disabled>
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M7 7 3 11l4 4M3 11h11a6 6 0 0 1 0 12h-2"/></svg>
+          </button>
+          <button id="ve-redo" class="icon-btn" type="button" data-i18n-title="veRedoTip" data-i18n-aria="redo" disabled>
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M17 7l4 4-4 4M21 11H10a6 6 0 0 0 0 12h2"/></svg>
+          </button>
+        </div>
+        <div id="ve-ops-list" class="ve-ops-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Same shape as the main window's confirm dialog; this window cannot reach
+       that one, so it carries its own with the identical markup and classes. -->
+  <div id="ve-confirm" class="overlay hidden" role="alertdialog" aria-modal="true">
+    <div class="modal modal-narrow">
+      <div class="confirm-head">
+        <h2 id="ve-confirm-title" class="modal-title"></h2>
+      </div>
+      <p id="ve-confirm-msg" class="confirm-msg"></p>
+      <div class="modal-actions">
+        <button id="ve-confirm-cancel" class="ghost-btn" type="button"></button>
+        <button id="ve-confirm-ok" class="primary-btn" type="button"></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="ve-toast" class="ve-toast hidden" role="status" aria-live="polite"></div>
+
+  <script type="module" src="video.js"></script>
+</body>
+</html>

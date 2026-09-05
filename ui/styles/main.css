@@ -866,7 +866,13 @@ body.grid-selecting .tile-type { opacity: 0; }
 .tile.grid-selected { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 /* A second small button right of the selection checkbox starts a chain
-   with this tile as entry 1 — same corner, same box, one gap over. */
+   with this tile as entry 1 — same corner, same box, one gap over. Its own
+   slot (left: 28px) never overlaps the type badge / checkbox / chain-order
+   badge sharing the left: 6px corner above, at any tile size.
+   282 (Ben, 04.09.): hover-only meant it was invisible on a tile the pointer
+   was not on, which is what was reported — chainStartAlwaysVisible (ships ON)
+   keeps it dimly visible always, full opacity on hover/keyboard focus; off
+   restores the plain hover-only look. */
 .tile-chain-start {
   position: absolute;
   top: 6px;
@@ -880,15 +886,28 @@ body.grid-selecting .tile-type { opacity: 0; }
   border: 2px solid var(--border);
   border-radius: 5px;
   background: var(--surface);
-  color: var(--text);
-  opacity: 0;
+  color: var(--fg);
+  opacity: 0.45;
   cursor: pointer;
   transition: opacity var(--transition);
 }
-.tile:hover .tile-chain-start { opacity: 1; }
+body.noflag-chainStartAlwaysVisible .tile-chain-start { opacity: 0; }
+.tile:hover .tile-chain-start,
+.tile-chain-start:focus-visible { opacity: 1; }
 /* Any chain already running takes over the corner with its order badge --
    the start button never competes with it, on ANY tile, not just the picked one. */
 body.chain-mode .tile-chain-start { opacity: 0; pointer-events: none; }
+/* Gate first: a switched-off chain feature must make the button gone
+   entirely, not merely inert -- main.js also skips building the element. */
+body.noflag-chainPrompts .tile-chain-start,
+body.noflag-chainQuickStart .tile-chain-start { display: none; }
+/* Legibility over a photo/screenshot tile: at less than full opacity the
+   plain --text icon on --surface can wash out, the same problem
+   .tile.has-image .tile-type already solves the same way. */
+.tile.has-image .tile-chain-start {
+  color: #fff;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.65));
+}
 
 /* ---- Grid folders ----
    A folder is a cell like any other: the four newest members as a 2x2 face, the name
@@ -1113,22 +1132,29 @@ body.chain-mode .tile-chain-start { opacity: 0; pointer-events: none; }
    header icons. */
 .composer-img-btn > svg { width: 22px; height: 22px; }
 .composer-img-btn > svg path, .composer-img-btn > svg circle { stroke-width: 2.3px; }
-/* Recording: filled accent colour plus a pulsing ring. The reduced-motion
-   media query further down turns every animation off, this one included. */
-#voice-btn.is-listening, #modal-voice-btn.is-listening {
+/* Recording: filled accent colour plus a pulsing ring, shared by dictation
+   (voice) and screen recording -- one animation, two consumers. The
+   reduced-motion media query further down turns every animation off,
+   this one included; the colour change alone (not an animation/transition)
+   still marks the state as active with the ring gone. */
+#voice-btn.is-listening, #modal-voice-btn.is-listening,
+#record-btn.is-recording {
   color: var(--accent);
   box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
-  animation: voice-pulse 1.6s ease-out infinite;
+  animation: capture-pulse 1.6s ease-out infinite;
 }
 /* Arming (clicked, waiting for the recognizer's first event): light up right
    away with a soft static ring — dimming here read as "something broke"
    instead of "starting up". is-listening's pulse takes over once the backend
-   confirms. */
-#voice-btn.is-arming, #modal-voice-btn.is-arming {
+   confirms. is-paused reuses the exact same static ring for the same
+   reason recAudio's own bar draws its pause differently from recording: a
+   pulsing button next to a paused recording would be a lie. */
+#voice-btn.is-arming, #modal-voice-btn.is-arming,
+#record-btn.is-paused {
   color: var(--accent);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent);
 }
-@keyframes voice-pulse {
+@keyframes capture-pulse {
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
   100% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--accent) 0%, transparent); }
 }
@@ -1520,6 +1546,12 @@ body.library-front #modal.overlay { z-index: 67; }
 /* Opt-in flag (default off): shown only once voiceHotkey is switched on, same
    convention as every other flag-<key> gated row. */
 body:not(.flag-voiceHotkey) #voice-hotkey-row { display: none; }
+/* Default-ON like screenRecord itself -- hidden only on an explicit off,
+   for the feature as a whole or for that one hotkey's own toggle. */
+body.noflag-screenRecord #rec-stop-hotkey-row,
+body.noflag-recStopHotkey #rec-stop-hotkey-row { display: none; }
+body.noflag-screenRecord #rec-pause-hotkey-row,
+body.noflag-recPauseHotkey #rec-pause-hotkey-row { display: none; }
 .noflag-quickGrid #quick-grid { display: none; }
 .flag-quickGridHoverOnly .header #quick-grid { opacity: 0; pointer-events: none; }
 .flag-quickGridHoverOnly .header:hover #quick-grid, .flag-quickGridHoverOnly .header:focus-within #quick-grid { opacity: 1; pointer-events: auto; }
@@ -2578,6 +2610,16 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .modal-actions #modal-delete,
 .modal-actions #snip-modal-retry { margin-right: auto; }
+/* Five buttons is one more than the row comfortably fits at the app's
+   narrowest supported width -- Discard peels off to the left like the other
+   destructive/secondary actions above, and the row wraps rather than
+   overflowing if it still does not fit. */
+#rec-modal .modal-actions { flex-wrap: wrap; }
+#rec-modal-discard { margin-right: auto; }
+
+/* The recording result window's folder line, above the action row. */
+.rec-modal-folder-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.rec-modal-folder-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.75; font-size: 12px; }
 
 /* Image preview inside the save/edit modal */
 .modal-img-wrap { display: flex; flex-direction: column; gap: 8px; }
@@ -2656,6 +2698,11 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 }
 /* Expert-menu action buttons (open Statistics / Backups / Duplicates). */
 .expert-action { width: 100%; margin-top: 4px; }
+/* A sub-row's own left margin (.expert-sub, depth-based indent) shrinks a
+   width:100% action button's box by the same amount -- otherwise its right
+   edge overflows the panel by exactly that margin (278's hotkey-set buttons,
+   the first long enough label at depth 2, to show it). */
+.expert-action.expert-sub { width: calc(100% - var(--expert-depth, 1) * 18px); }
 
 /* Clear-X inside text / number fields + textareas. The wrapper is block by default
    (safe inside the column-flex modals — never grows vertically); flex rows opt in. */
@@ -4109,7 +4156,7 @@ body:not(.flag-promptNotes) #modal-notes { display: none; }
   color: var(--muted);
   cursor: pointer;
 }
-.tag-pick:hover { color: var(--text); background: var(--hover); }
+.tag-pick:hover { color: var(--fg); background: var(--hover); }
 .lib-tagbar-label { flex: 0 0 auto; color: var(--muted); font-size: 11.5px; }
 
 .tag-chip {

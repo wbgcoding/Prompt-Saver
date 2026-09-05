@@ -219,18 +219,28 @@ enum HotkeyOwner {
     App,
     Prompt(String),
     Voice,
+    // Registered only while a recording is running (rearm_hotkeys checks
+    // RecPhase), so a stop/pause combination never steals input from another
+    // app the rest of the time.
+    RecStop,
+    RecPause,
 }
 
 // Every accelerator that should be registered, in registration order. Unusable
 // accelerators and combinations an earlier entry already claimed are skipped: the
-// app hotkey wins, then voice dictation, then prompts in list order. `per_prompt`
-// is the promptHotkeys feature toggle -- off leaves the stored accelerators alone
-// and simply registers none of them. `voice_hotkey` is only ever Some when both
-// the `voice` and `voiceHotkey` flags are on -- an already-resolved choice,
-// not re-checked here.
+// app hotkey wins, then voice dictation, then the two recording controls, then
+// prompts in list order. `per_prompt` is the promptHotkeys feature toggle -- off
+// leaves the stored accelerators alone and simply registers none of them.
+// `voice_hotkey` is only ever Some when both the `voice` and `voiceHotkey` flags
+// are on; `rec_stop_hotkey`/`rec_pause_hotkey` only ever Some while a recording
+// is actually running AND their own toggle is on -- both already-resolved
+// choices, not re-checked here.
+#[allow(clippy::too_many_arguments)]
 fn hotkey_plan(
     app_hotkey: &str,
     voice_hotkey: Option<&str>,
+    rec_stop_hotkey: Option<&str>,
+    rec_pause_hotkey: Option<&str>,
     prompts: &[Prompt],
     per_prompt: bool,
 ) -> Vec<(Accel, HotkeyOwner)> {
@@ -244,6 +254,15 @@ fn hotkey_plan(
         if let Some(sc) = parse_accel(vh) {
             if taken.insert(sc) {
                 plan.push((sc, HotkeyOwner::Voice));
+            }
+        }
+    }
+    for (hk, owner) in [(rec_stop_hotkey, HotkeyOwner::RecStop), (rec_pause_hotkey, HotkeyOwner::RecPause)] {
+        if let Some(hk) = hk {
+            if let Some(sc) = parse_accel(hk) {
+                if taken.insert(sc) {
+                    plan.push((sc, owner));
+                }
             }
         }
     }
@@ -286,17 +305,43 @@ fn drop_colliding_hotkeys(app_hotkey: &str, prompts: &mut [Prompt]) -> usize {
 
 // Check an accelerator from the editor against everything already bound. Empty
 // clears the binding; the error codes are turned into a localized inline message
-// by the UI.
-fn sanitize_hotkey(raw: &str, app_hotkey: &str, others: &[&Prompt]) -> Result<String, String> {
+// by the UI. rec_stop_hotkey/rec_pause_hotkey are only checked while their own
+// feature is on -- setting a prompt hotkey to the same combination used to
+// go through fine, then silently stop firing for the whole duration of every
+// future recording, because hotkey_plan gives the recording controls priority.
+// Checking here closes that loophole before it can be created.
+fn sanitize_hotkey(
+    raw: &str,
+    app_hotkey: &str,
+    rec_stop_hotkey: &str,
+    rec_pause_hotkey: &str,
+    others: &[&Prompt],
+) -> Result<String, String> {
     let hk = raw.trim();
     if hk.is_empty() {
         return Ok(String::new());
     }
     let sc = accel_error(hk).map_err(|e| e.to_string())?;
-    if parse_accel(app_hotkey) == Some(sc) || others.iter().any(|p| parse_accel(&p.hotkey) == Some(sc)) {
+    if parse_accel(app_hotkey) == Some(sc)
+        || parse_accel(rec_stop_hotkey) == Some(sc)
+        || parse_accel(rec_pause_hotkey) == Some(sc)
+        || others.iter().any(|p| parse_accel(&p.hotkey) == Some(sc))
+    {
         return Err(HK_TAKEN.to_string());
     }
     Ok(hk.to_string())
+}
+
+// The rec-stop/rec-pause accelerator to check prompt hotkeys against, or ""
+// when that control's own feature/hotkey toggle is off and the combination is
+// therefore free to reuse. Mirrors rearm_hotkeys' own gating minus
+// recording_active() -- a prompt hotkey is set long before any recording runs.
+fn active_rec_hotkey<'a>(hk: &'a str, flag_key: &str, flags: &HashMap<String, bool>) -> &'a str {
+    if flags.get("screenRecord") != Some(&false) && flags.get(flag_key) != Some(&false) {
+        hk
+    } else {
+        ""
+    }
 }
 
 // What a prompt hotkey does after copying. Empty = follow the global setting, so a
@@ -319,12 +364,44 @@ struct HotkeyTargets(Mutex<Vec<(Accel, HotkeyOwner)>>);
 // the user believes in. Returns false when the APP hotkey was the refused one.
 // Must never run while the store mutex is held: registering hops to the main
 // thread, and the shortcut handler reads the store.
+// Whether a recording is currently in flight (Recording or Paused) --
+// both configs of RecordingState just wrap an Option, so this needs no
+// windows-only gating of its own.
+fn recording_active(app: &AppHandle) -> bool {
+    app.try_state::<RecordingState>()
+        .map(|s| s.0.lock().unwrap_or_else(|e| e.into_inner()).is_some())
+        .unwrap_or(false)
+}
+
+// The running session's phase, for the two callers that need to tell Paused
+// from Recording (the tray menu's Pause/Resume label) rather than just
+// active-or-not. Windows-only build carries a real RecSession with a phase; the
+// non-Windows stub's Option<()> has none, so it always reports "not recording".
+#[cfg(windows)]
+fn recording_phase(app: &AppHandle) -> Option<RecPhase> {
+    app.try_state::<RecordingState>()?.0.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|s| s.phase)
+}
+#[cfg(not(windows))]
+fn recording_phase(_app: &AppHandle) -> Option<RecPhase> {
+    None
+}
+
+// Whether the last rearm_hotkeys() actually got the stop/pause combination
+// registered -- read by recording_status() so the bar can warn instead of the
+// user believing in a binding that silently never fires. Unlike the app/voice
+// hotkey, a conflict here never clears the stored default: the default ships
+// pre-picked, and a transient collision (another app briefly holding the same
+// combination) should not permanently blank it out from under the user.
+static REC_STOP_HOTKEY_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+static REC_PAUSE_HOTKEY_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
 fn rearm_hotkeys(app: &AppHandle) -> bool {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let rec_active = recording_active(app);
     // A binding stored by an older version can be one the blocklist now refuses.
     // It is never registered again, so the stored string is cleared here — otherwise
     // the editor keeps showing a hotkey that does nothing.
-    let (plan, mut dropped, mut app_ok, mut voice_ok) = match app.try_state::<Db>() {
+    let (plan, mut dropped, mut app_ok, mut voice_ok, mut rec_stop_ok, mut rec_pause_ok) = match app.try_state::<Db>() {
         Some(state) => {
             let store = lock(&state);
             let per_prompt = store.settings.ui_flags.get("promptHotkeys") != Some(&false);
@@ -345,11 +422,29 @@ fn rearm_hotkeys(app: &AppHandle) -> bool {
             let voice_ok = !voice_hotkey_on
                 || store.settings.voice_hotkey.trim().is_empty()
                 || parse_accel(&store.settings.voice_hotkey).is_some();
+            // Registered only while a recording is actually running -- see
+            // recording_active above -- AND their own toggle is on (both ship ON).
+            let rec_stop_on = rec_active
+                && store.settings.ui_flags.get("screenRecord") != Some(&false)
+                && store.settings.ui_flags.get("recStopHotkey") != Some(&false);
+            let rec_pause_on = rec_active
+                && store.settings.ui_flags.get("screenRecord") != Some(&false)
+                && store.settings.ui_flags.get("recPauseHotkey") != Some(&false);
+            let rec_stop_hotkey = rec_stop_on.then_some(store.settings.rec_stop_hotkey.as_str());
+            let rec_pause_hotkey = rec_pause_on.then_some(store.settings.rec_pause_hotkey.as_str());
+            let rec_stop_ok = !rec_stop_on
+                || store.settings.rec_stop_hotkey.trim().is_empty()
+                || parse_accel(&store.settings.rec_stop_hotkey).is_some();
+            let rec_pause_ok = !rec_pause_on
+                || store.settings.rec_pause_hotkey.trim().is_empty()
+                || parse_accel(&store.settings.rec_pause_hotkey).is_some();
             (
-                hotkey_plan(&store.settings.hotkey, voice_hotkey, &store.prompts, per_prompt),
+                hotkey_plan(&store.settings.hotkey, voice_hotkey, rec_stop_hotkey, rec_pause_hotkey, &store.prompts, per_prompt),
                 stale,
                 app_ok,
                 voice_ok,
+                rec_stop_ok,
+                rec_pause_ok,
             )
         }
         None => return true,
@@ -365,12 +460,16 @@ fn rearm_hotkeys(app: &AppHandle) -> bool {
                 HotkeyOwner::Prompt(id) => dropped.push(id),
                 HotkeyOwner::App => app_ok = false,
                 HotkeyOwner::Voice => voice_ok = false,
+                HotkeyOwner::RecStop => rec_stop_ok = false,
+                HotkeyOwner::RecPause => rec_pause_ok = false,
             }
         }
     }
     if let Some(targets) = app.try_state::<HotkeyTargets>() {
         *targets.0.lock().unwrap_or_else(|e| e.into_inner()) = live;
     }
+    REC_STOP_HOTKEY_OK.store(rec_stop_ok, std::sync::atomic::Ordering::Relaxed);
+    REC_PAUSE_HOTKEY_OK.store(rec_pause_ok, std::sync::atomic::Ordering::Relaxed);
     if !app_ok || !voice_ok || !dropped.is_empty() {
         if let Some(state) = app.try_state::<Db>() {
             let mut store = lock(&state);
@@ -420,6 +519,51 @@ fn toggle_voice_from_hotkey(app: &AppHandle) {
     }
     let _ = app.emit_to("main", "voice-hotkey-toggle", ());
 }
+
+// The tray/hotkey counterparts of the recording bar's own Stop/Pause
+// buttons -- same commands, never a second implementation. Both run off a
+// throwaway thread rather than inline: the global-shortcut handler fires on the
+// main thread, and stopping finalizes the encoder (disk I/O), which must not
+// stall the message loop the way the show_rec_bar/open_tray_window bugs did.
+#[cfg(windows)]
+fn trigger_rec_stop_hotkey(app: &AppHandle) {
+    let app = app.clone();
+    let _ = std::thread::Builder::new().name("rec-hotkey-stop".into()).spawn(move || {
+        let _ = stop_recording_now(&app);
+        if let Some(w) = app.get_webview_window("rec-bar") {
+            let _ = w.hide();
+        }
+    });
+}
+#[cfg(not(windows))]
+fn trigger_rec_stop_hotkey(_app: &AppHandle) {}
+
+#[cfg(windows)]
+fn trigger_rec_pause_hotkey(app: &AppHandle) {
+    let toggled = if let Some(rstate) = app.try_state::<RecordingState>() {
+        let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
+        match guard.as_mut() {
+            Some(session) if rec_can_pause(session.phase) => {
+                recording::pause(session);
+                session.phase = RecPhase::Paused;
+                true
+            }
+            Some(session) if rec_can_resume(session.phase) => {
+                recording::resume(session);
+                session.phase = RecPhase::Recording;
+                true
+            }
+            _ => false,
+        }
+    } else {
+        false
+    };
+    if toggled {
+        apply_tray_menu(app); // keep the tray's Pause/Resume label in sync
+    }
+}
+#[cfg(not(windows))]
+fn trigger_rec_pause_hotkey(_app: &AppHandle) {}
 
 // While a hotkey field is capturing, every global hotkey has to be off. Windows
 // delivers a registered combination to the owning process instead of the focused
@@ -477,6 +621,8 @@ async fn check_hotkey(
         let store = lock(&state);
         parse_accel(&store.settings.hotkey) == Some(sc)
             || parse_accel(&store.settings.voice_hotkey) == Some(sc)
+            || parse_accel(&store.settings.rec_stop_hotkey) == Some(sc)
+            || parse_accel(&store.settings.rec_pause_hotkey) == Some(sc)
             || store
                 .prompts
                 .iter()
@@ -502,6 +648,8 @@ async fn set_hotkey(app: AppHandle, state: State<'_, Db>, hotkey: String) -> Res
         let taken = {
             let store = lock(&state);
             parse_accel(&store.settings.voice_hotkey) == Some(sc)
+                || parse_accel(&store.settings.rec_stop_hotkey) == Some(sc)
+                || parse_accel(&store.settings.rec_pause_hotkey) == Some(sc)
                 || store.prompts.iter().any(|p| parse_accel(&p.hotkey) == Some(sc))
         };
         if taken {
@@ -536,6 +684,8 @@ async fn set_voice_hotkey(app: AppHandle, state: State<'_, Db>, hotkey: String) 
         let taken = {
             let store = lock(&state);
             parse_accel(&store.settings.hotkey) == Some(sc)
+                || parse_accel(&store.settings.rec_stop_hotkey) == Some(sc)
+                || parse_accel(&store.settings.rec_pause_hotkey) == Some(sc)
                 || store.prompts.iter().any(|p| parse_accel(&p.hotkey) == Some(sc))
         };
         if taken {
@@ -561,6 +711,61 @@ async fn set_voice_hotkey(app: AppHandle, state: State<'_, Db>, hotkey: String) 
     } else {
         Err(HK_CONFLICT.to_string())
     }
+}
+
+// Stop/pause counterparts of set_voice_hotkey, same shape -- validated
+// before the write against every OTHER hotkey kind (including each other), then
+// stored. Unlike the app/voice hotkey these are only actually registered while a
+// recording runs (rearm_hotkeys), so a "successful" set here can still show as
+// blocked later if another app claims the combination only once recording starts
+// -- that case is reported through recording_status(), not this call.
+#[tauri::command]
+async fn set_rec_stop_hotkey(app: AppHandle, state: State<'_, Db>, hotkey: String) -> Result<(), String> {
+    let hk = hotkey.trim().to_string();
+    if !hk.is_empty() {
+        let sc = accel_error(&hk).map_err(|e| e.to_string())?;
+        let taken = {
+            let store = lock(&state);
+            parse_accel(&store.settings.hotkey) == Some(sc)
+                || parse_accel(&store.settings.voice_hotkey) == Some(sc)
+                || parse_accel(&store.settings.rec_pause_hotkey) == Some(sc)
+                || store.prompts.iter().any(|p| parse_accel(&p.hotkey) == Some(sc))
+        };
+        if taken {
+            return Err(HK_TAKEN.to_string());
+        }
+    }
+    {
+        let mut store = lock(&state);
+        store.settings.rec_stop_hotkey.clone_from(&hk);
+        save_settings(&app, &store.settings);
+    }
+    rearm_hotkeys(&app);
+    Ok(())
+}
+#[tauri::command]
+async fn set_rec_pause_hotkey(app: AppHandle, state: State<'_, Db>, hotkey: String) -> Result<(), String> {
+    let hk = hotkey.trim().to_string();
+    if !hk.is_empty() {
+        let sc = accel_error(&hk).map_err(|e| e.to_string())?;
+        let taken = {
+            let store = lock(&state);
+            parse_accel(&store.settings.hotkey) == Some(sc)
+                || parse_accel(&store.settings.voice_hotkey) == Some(sc)
+                || parse_accel(&store.settings.rec_stop_hotkey) == Some(sc)
+                || store.prompts.iter().any(|p| parse_accel(&p.hotkey) == Some(sc))
+        };
+        if taken {
+            return Err(HK_TAKEN.to_string());
+        }
+    }
+    {
+        let mut store = lock(&state);
+        store.settings.rec_pause_hotkey.clone_from(&hk);
+        save_settings(&app, &store.settings);
+    }
+    rearm_hotkeys(&app);
+    Ok(())
 }
 
 // A hotkey-triggered prompt with manual placeholders needs its fill-in dialog on
@@ -1095,12 +1300,14 @@ fn tray_custom_menu_on(settings: &Settings) -> bool {
 // dropped before the first menu call — building a menu while holding it is the
 // classic deadlock shape here.
 fn apply_tray_menu(app: &AppHandle) {
-    let (lang, plan, custom) = match app.try_state::<Db>() {
+    let (lang, plan, custom, rec_entries_on) = match app.try_state::<Db>() {
         Some(state) => {
             let store = lock(&state);
             let cfg = tray_cfg(&store.settings);
             let plan = tray_plan(&store.prompts, &store.settings.last_used, &cfg);
-            (resolve_lang(&store.settings.language), plan, tray_custom_menu_on(&store.settings))
+            let rec_entries_on = store.settings.ui_flags.get("screenRecord") != Some(&false)
+                && store.settings.ui_flags.get("recTrayEntries") != Some(&false);
+            (resolve_lang(&store.settings.language), plan, tray_custom_menu_on(&store.settings), rec_entries_on)
         }
         None => return,
     };
@@ -1119,6 +1326,23 @@ fn apply_tray_menu(app: &AppHandle) {
     let (open_label, quit_label) = tray_labels(lang);
     let (recent_title, favs_title) = tray_section_labels(lang);
     let mut items: Vec<Box<dyn IsMenuItem<tauri::Wry>>> = Vec::new();
+    // While a recording runs, two extra entries at the very top -- the
+    // tray-menu counterpart of the bar's own Stop/Pause buttons, same commands.
+    if rec_entries_on {
+        if let Some(phase) = recording_phase(app) {
+            let paused = phase == RecPhase::Paused;
+            if let (Ok(stop), Ok(pause)) = (
+                MenuItem::with_id(app, "rec-stop", tray_rec_stop_label(lang), true, None::<&str>),
+                MenuItem::with_id(app, "rec-pause-toggle", tray_rec_pause_label(lang, paused), true, None::<&str>),
+            ) {
+                items.push(Box::new(stop));
+                items.push(Box::new(pause));
+                if let Ok(sep) = PredefinedMenuItem::separator(app) {
+                    items.push(Box::new(sep));
+                }
+            }
+        }
+    }
     for (section, entries) in &plan {
         let (head_id, title) = match section {
             TraySection::Favorites => ("tray-head-favs", favs_title),
@@ -1189,6 +1413,8 @@ fn handle_tray_menu_id(app: &AppHandle, id: &str) {
             voice_shutdown(app);
             app.exit(0);
         }
+        "rec-stop" => trigger_rec_stop_hotkey(app),
+        "rec-pause-toggle" => trigger_rec_pause_hotkey(app),
         other => {
             if let Some(id) = tray_copy_target(other) {
                 fire_tray_copy(app, id);
@@ -1228,6 +1454,10 @@ struct TrayWinSection {
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct TrayWinPlan {
+    // 0 or 2 entries (Stop, Pause/Resume) -- no header, own separator,
+    // rendered before every other row. ui/tray.js draws them with no icon,
+    // exactly like show/quit below.
+    rec_entries: Vec<TrayWinEntry>,
     sections: Vec<TrayWinSection>,
     show_label: String,
     quit_label: String,
@@ -1250,7 +1480,7 @@ fn build_tray_win_plan(app: &AppHandle) -> TrayWinPlan {
     let state: State<Db> = match app.try_state::<Db>() {
         Some(s) => s,
         None => {
-            return TrayWinPlan { sections: Vec::new(), show_label: String::new(), quit_label: String::new() };
+            return TrayWinPlan { rec_entries: Vec::new(), sections: Vec::new(), show_label: String::new(), quit_label: String::new() };
         }
     };
     let store = lock(&state);
@@ -1259,6 +1489,23 @@ fn build_tray_win_plan(app: &AppHandle) -> TrayWinPlan {
     let lang = resolve_lang(&store.settings.language);
     let (open_label, quit_label) = tray_labels(lang);
     let (recent_title, favs_title) = tray_section_labels(lang);
+    let rec_entries_on = store.settings.ui_flags.get("screenRecord") != Some(&false)
+        && store.settings.ui_flags.get("recTrayEntries") != Some(&false);
+    drop(store);
+    let rec_entries = if rec_entries_on {
+        match recording_phase(app) {
+            Some(phase) => {
+                let paused = phase == RecPhase::Paused;
+                vec![
+                    TrayWinEntry { id: "rec-stop".to_string(), label: tray_rec_stop_label(lang).to_string(), kind: "text".to_string(), color: String::new() },
+                    TrayWinEntry { id: "rec-pause-toggle".to_string(), label: tray_rec_pause_label(lang, paused).to_string(), kind: "text".to_string(), color: String::new() },
+                ]
+            }
+            None => Vec::new(),
+        }
+    } else {
+        Vec::new()
+    };
     let sections = plan
         .into_iter()
         .map(|(section, entries)| TrayWinSection {
@@ -1273,13 +1520,16 @@ fn build_tray_win_plan(app: &AppHandle) -> TrayWinPlan {
                 .collect(),
         })
         .collect();
-    TrayWinPlan { sections, show_label: open_label.to_string(), quit_label: quit_label.to_string() }
+    TrayWinPlan { rec_entries, sections, show_label: open_label.to_string(), quit_label: quit_label.to_string() }
 }
 
 // Pure, so the row/header/separator arithmetic stays testable without an app
 // handle -- mirrors tray_plan's own reasoning for why it takes plain data.
 fn tray_window_logical_height(plan: &TrayWinPlan) -> f64 {
     let mut logical_h = TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H; // show + quit always present
+    if !plan.rec_entries.is_empty() {
+        logical_h += plan.rec_entries.len() as f64 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H;
+    }
     for s in &plan.sections {
         logical_h += TRAY_WIN_HEAD_H + s.entries.len() as f64 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H;
     }
@@ -1621,6 +1871,15 @@ struct Settings {
     // exact same functions as `hotkey` above -- see HotkeyOwner.
     #[serde(default)]
     voice_hotkey: String,
+    // Global stop/pause hotkeys for a running recording -- the bar is otherwise
+    // the ONLY way to stop or pause it. Registered only while a recording is
+    // active (see rearm_hotkeys) -- unlike `hotkey`/`voice_hotkey` these ship
+    // with a real default, since a long-running, disk-filling capture needs a
+    // way out from day one.
+    #[serde(default = "default_rec_stop_hotkey")]
+    rec_stop_hotkey: String,
+    #[serde(default = "default_rec_pause_hotkey")]
+    rec_pause_hotkey: String,
     #[serde(default = "default_on")]
     auto_update: bool,
     // Update versions the user chose to skip — never offered again.
@@ -1733,6 +1992,16 @@ fn default_tile_font() -> String {
 fn default_tile_size() -> u32 {
     0
 }
+fn default_rec_stop_hotkey() -> String {
+    "Ctrl+Alt+S".to_string()
+}
+fn default_rec_pause_hotkey() -> String {
+    // Was "Ctrl+Alt+P", identical to the quick-launcher's own default
+    // (`hotkey` above) -- on every fresh install the two collided from the
+    // start and the pause hotkey silently never registered until the user
+    // changed one of them by hand.
+    "Ctrl+Alt+O".to_string()
+}
 
 impl Default for Settings {
     fn default() -> Self {
@@ -1756,6 +2025,8 @@ impl Default for Settings {
             // Unlike the app hotkey, voice dictation ships with NO global binding --
             // a fresh install is not expected to start listening from a key combo.
             voice_hotkey: String::new(),
+            rec_stop_hotkey: default_rec_stop_hotkey(),
+            rec_pause_hotkey: default_rec_pause_hotkey(),
             auto_update: true,
             skipped_versions: Vec::new(),
             ui_flags: HashMap::new(),
@@ -1912,6 +2183,56 @@ fn tray_recording_label(lang: &str) -> &'static str {
         "tr" => "Kaydediliyor…",
         "ro" => "Se înregistrează…",
         _ => "Recording…",
+    }
+}
+
+// The tray's own Stop/Pause/Resume labels for a running recording -- the
+// tray is drawn by the OS, not the webview, so (like every other tray label
+// above) these live here rather than in ui/i18n.js.
+fn tray_rec_stop_label(lang: &str) -> &'static str {
+    match lang {
+        "de" => "Aufnahme beenden",
+        "es" => "Detener grabación",
+        "it" => "Interrompi registrazione",
+        "pt" => "Parar gravação",
+        "pl" => "Zatrzymaj nagrywanie",
+        "zh" => "停止录制",
+        "ja" => "録画を停止",
+        "nl" => "Opname stoppen",
+        "tr" => "Kaydı durdur",
+        "ro" => "Oprește înregistrarea",
+        _ => "Stop recording",
+    }
+}
+fn tray_rec_pause_label(lang: &str, paused: bool) -> &'static str {
+    if paused {
+        match lang {
+            "de" => "Aufnahme fortsetzen",
+            "es" => "Reanudar grabación",
+            "it" => "Riprendi registrazione",
+            "pt" => "Retomar gravação",
+            "pl" => "Wznów nagrywanie",
+            "zh" => "继续录制",
+            "ja" => "録画を再開",
+            "nl" => "Opname hervatten",
+            "tr" => "Kaydı sürdür",
+            "ro" => "Reia înregistrarea",
+            _ => "Resume recording",
+        }
+    } else {
+        match lang {
+            "de" => "Aufnahme pausieren",
+            "es" => "Pausar grabación",
+            "it" => "Metti in pausa la registrazione",
+            "pt" => "Pausar gravação",
+            "pl" => "Wstrzymaj nagrywanie",
+            "zh" => "暂停录制",
+            "ja" => "録画を一時停止",
+            "nl" => "Opname pauzeren",
+            "tr" => "Kaydı duraklat",
+            "ro" => "Pune înregistrarea pe pauză",
+            _ => "Pause recording",
+        }
     }
 }
 
@@ -5047,30 +5368,196 @@ fn orphan_cleanup_enabled(store: &Store) -> bool {
 // unreferenced by any prompt yet, so only files older than STALE_TEMP_FILE_AGE
 // are fair game. Runs once at startup, the same "crash/abnormal-exit
 // leftovers" spot sweep_stale_temp_files already runs from.
-fn sweep_stale_recordings(app: &AppHandle, referenced: &std::collections::HashSet<String>) {
-    sweep_stale_recordings_in(&data_dir(app).join("recordings"), referenced);
+// An mp4 that never reached its stop path has no top-level "moov" atom --
+// a crash/abnormal-exit leftover, not just "maybe still in use". Walks only the
+// box headers (size + fourcc), never the payload; no ffmpeg needed. size==1
+// means a 64-bit "largesize" follows; size==0 means the box runs to EOF.
+fn mp4_has_moov(path: &std::path::Path) -> bool {
+    use std::io::{Read, Seek, SeekFrom};
+    let Ok(mut f) = fs::File::open(path) else { return false };
+    let Ok(len) = f.metadata().map(|m| m.len()) else { return false };
+    let mut pos: u64 = 0;
+    let mut header = [0u8; 8];
+    while pos + 8 <= len {
+        if f.seek(SeekFrom::Start(pos)).is_err() || f.read_exact(&mut header).is_err() {
+            return false;
+        }
+        let size32 = u32::from_be_bytes(header[0..4].try_into().unwrap()) as u64;
+        let is_moov = &header[4..8] == b"moov";
+        let box_size = match size32 {
+            1 => {
+                let mut ext = [0u8; 8];
+                if f.read_exact(&mut ext).is_err() {
+                    return false;
+                }
+                u64::from_be_bytes(ext)
+            }
+            0 => len.saturating_sub(pos),
+            n => n,
+        };
+        if box_size < 8 {
+            return false; // malformed -- stop rather than loop forever
+        }
+        // A moov box's declared size running past the actual file length
+        // means the process crashed or was killed mid-write, right after the
+        // header landed but before its payload did -- accepting the header
+        // alone as "moov present" let exactly the truncated recordings this
+        // check exists to catch slip through as healthy.
+        if is_moov {
+            return pos.saturating_add(box_size) <= len;
+        }
+        pos = pos.saturating_add(box_size);
+    }
+    false
+}
+
+// Only mp4 gets the moov check -- the only format the recorder ever writes
+// before an optional post-stop conversion. A non-mp4 file here is either
+// mid-conversion output or something else, neither of which this sweep judges.
+fn recording_is_broken(path: &std::path::Path) -> bool {
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("mp4")) && !mp4_has_moov(path)
+}
+
+fn sweep_stale_recordings(app: &AppHandle, referenced: &std::collections::HashSet<String>, broken_sweep_on: bool, broken_grace: Duration) -> (u32, u64) {
+    sweep_stale_recordings_in(&data_dir(app).join("recordings"), referenced, &[], broken_sweep_on, broken_grace)
 }
 
 // Split out from sweep_stale_recordings so the actual sweep logic is testable
 // against a plain tempdir -- no AppHandle needed, same split as
-// convert_recording/convert_recording_blocking above.
-fn sweep_stale_recordings_in(dir: &Path, referenced: &std::collections::HashSet<String>) {
-    let Ok(entries) = fs::read_dir(dir) else { return };
+// convert_recording/convert_recording_blocking above. Two independent reasons
+// to remove a file: it is old AND nobody has decided on it yet, or it is a
+// broken (moov-less) mp4 past a much shorter grace period -- either way every
+// path in `protected` (the currently recording session's own output + mic
+// sidecar, plus the video editor's currently open source + its own sidecar,
+// if any) is excluded unconditionally, never by age or state, because
+// deleting a file mid-capture or out from under an open editor would be a
+// far worse bug than the one this sweep exists to fix.
+fn sweep_stale_recordings_in(
+    dir: &Path,
+    referenced: &std::collections::HashSet<String>,
+    protected: &[PathBuf],
+    broken_sweep_on: bool,
+    broken_grace: Duration,
+) -> (u32, u64) {
+    let Ok(entries) = fs::read_dir(dir) else { return (0, 0) };
     let norm = |s: &str| s.replace('/', "\\").to_lowercase();
+    let mut count = 0u32;
+    let mut bytes = 0u64;
     for e in entries.flatten() {
         let path = e.path();
-        if !path.is_file() || referenced.contains(&norm(&path.to_string_lossy())) {
+        if !path.is_file() || protected.iter().any(|p| p == &path) {
             continue;
         }
-        let stale = e
-            .metadata()
-            .and_then(|m| m.modified())
-            .and_then(|t| SystemTime::now().duration_since(t).map_err(std::io::Error::other))
-            .is_ok_and(|age| age >= STALE_TEMP_FILE_AGE);
-        if stale {
-            let _ = fs::remove_file(&path);
+        // A "<name>.mic.wav" sidecar is referenced whenever its own
+        // recording is -- the mp4 may already be attached to a prompt while
+        // the editor has not yet consolidated the two into one two-track file.
+        let is_referenced = referenced.contains(&norm(&path.to_string_lossy()))
+            || mic_sidecar_video_path(&path).is_some_and(|v| referenced.contains(&norm(&v.to_string_lossy())));
+        let Ok(meta) = e.metadata() else { continue };
+        let age = meta.modified().ok().and_then(|t| SystemTime::now().duration_since(t).ok());
+        let stale_undecided = !is_referenced && age.is_some_and(|a| a >= STALE_TEMP_FILE_AGE);
+        let broken = broken_sweep_on && !is_referenced && age.is_some_and(|a| a >= broken_grace) && recording_is_broken(&path);
+        if stale_undecided || broken {
+            let size = meta.len();
+            if fs::remove_file(&path).is_ok() {
+                count += 1;
+                bytes += size;
+            }
         }
     }
+    (count, bytes)
+}
+
+// Startup's own one-shot result (Db is not managed yet at that point in
+// setup(), and no window exists to toast into) -- the frontend collects it
+// once, early in its own init, via take_recording_sweep_notice().
+static PENDING_SWEEP_NOTICE: Mutex<Option<(u32, u64)>> = Mutex::new(None);
+
+#[tauri::command]
+fn take_recording_sweep_notice() -> Option<(u32, u64)> {
+    PENDING_SWEEP_NOTICE.lock().unwrap_or_else(|e| e.into_inner()).take()
+}
+
+fn recording_sweep_grace(app: &AppHandle) -> (bool, Duration) {
+    app.try_state::<Db>()
+        .map(|s| {
+            let store = s.lock().unwrap_or_else(|e| e.into_inner());
+            let on = store.settings.ui_flags.get("recSweepBroken") != Some(&false);
+            let min = store.settings.ui_values.get("recBrokenGraceMin").copied().unwrap_or(5.0).max(0.0);
+            (on, Duration::from_secs((min * 60.0) as u64))
+        })
+        .unwrap_or((true, Duration::from_secs(5 * 60)))
+}
+
+// Driven by recSweepEveryMin (default 60, 5-1440) -- clamped the same way
+// lang_check_interval clamps its own expert value, and re-read every round so
+// a changed interval takes effect without a restart.
+fn recording_sweep_interval(app: &AppHandle) -> Duration {
+    let mins = app
+        .try_state::<Db>()
+        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recSweepEveryMin").copied().unwrap_or(60.0))
+        .unwrap_or(60.0)
+        .clamp(5.0, 1440.0);
+    Duration::from_secs((mins * 60.0) as u64)
+}
+
+// Shared by the periodic job and "once a recording ends": both run after
+// Db/RecordingState are managed and a window exists, so both can just
+// emit -- unlike the startup path above, which cannot.
+fn sweep_recordings_and_notify(app: &AppHandle) {
+    let (count, bytes) = sweep_recordings_now_result(app);
+    if count > 0 {
+        append_crash_log(&format!("recording sweep: removed {count} file(s), {bytes} bytes"));
+        let _ = app.emit("recording-sweep-done", serde_json::json!({ "count": count, "bytes": bytes }));
+    }
+}
+
+fn sweep_recordings_now_result(app: &AppHandle) -> (u32, u64) {
+    let Some(state) = app.try_state::<Db>() else { return (0, 0) };
+    let referenced = orphan_referenced_set(&lock(&state));
+    let (broken_on, grace) = recording_sweep_grace(app);
+    sweep_stale_recordings_in(&data_dir(app).join("recordings"), &referenced, &protected_recording_paths(app), broken_on, grace)
+}
+
+// 281's "Jetzt aufräumen" -- runs the same sweep on demand and always reports
+// what it did, even when that is nothing: an explicit request needs an answer
+// either way, unlike the silent background sweep above.
+#[tauri::command]
+fn sweep_recordings_now(app: AppHandle) -> (u32, u64) {
+    sweep_recordings_now_result(&app)
+}
+
+// Every path the sweep must never touch beyond what `referenced` already
+// covers: the actively-recording session's own output and mic sidecar (a
+// session in progress has no db entry yet), and the video editor's currently
+// open source and its own not-yet-muxed-in sidecar -- neither used to be
+// excluded, so a recording left open in the editor (or its sidecar, on any
+// recording) for longer than the stale/broken grace period was fair game for
+// the very next sweep.
+fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if let Some(p) = active_recording_path(app) {
+        out.push(p.with_extension("mic.wav"));
+        out.push(p);
+    }
+    if let Some(state) = app.try_state::<VideoEditorPending>() {
+        let src = state.lock().clone();
+        if !src.is_empty() {
+            let src = PathBuf::from(src);
+            out.push(src.with_extension("mic.wav"));
+            out.push(src);
+        }
+    }
+    out
+}
+
+#[cfg(windows)]
+fn active_recording_path(app: &AppHandle) -> Option<PathBuf> {
+    app.try_state::<RecordingState>()?.0.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|s| s.output_path.clone())
+}
+#[cfg(not(windows))]
+fn active_recording_path(_app: &AppHandle) -> Option<PathBuf> {
+    None
 }
 
 // A trashed prompt still owns its files until it is actually purged —
@@ -5131,7 +5618,9 @@ async fn add_prompt(
         let rotate_mode = sanitize_rotate_mode(rotate_mode.unwrap_or_default(), &variants);
         let rotate_auto = sanitize_rotate_auto(rotate_auto.unwrap_or(false), &variants);
         let others: Vec<&Prompt> = store.prompts.iter().collect();
-        let hotkey = sanitize_hotkey(&hotkey.unwrap_or_default(), &store.settings.hotkey, &others)?;
+        let rec_stop_hk = active_rec_hotkey(&store.settings.rec_stop_hotkey, "recStopHotkey", &store.settings.ui_flags);
+        let rec_pause_hk = active_rec_hotkey(&store.settings.rec_pause_hotkey, "recPauseHotkey", &store.settings.ui_flags);
+        let hotkey = sanitize_hotkey(&hotkey.unwrap_or_default(), &store.settings.hotkey, rec_stop_hk, rec_pause_hk, &others)?;
         let hotkey_paste = if hotkey.is_empty() {
             String::new() // no binding, no action to remember for it
         } else {
@@ -5378,7 +5867,9 @@ async fn update_prompt(
         let hotkey = match hotkey {
             Some(raw) => {
                 let others: Vec<&Prompt> = store.prompts.iter().filter(|p| p.id != id).collect();
-                Some(sanitize_hotkey(&raw, &store.settings.hotkey, &others)?)
+                let rec_stop_hk = active_rec_hotkey(&store.settings.rec_stop_hotkey, "recStopHotkey", &store.settings.ui_flags);
+                let rec_pause_hk = active_rec_hotkey(&store.settings.rec_pause_hotkey, "recPauseHotkey", &store.settings.ui_flags);
+                Some(sanitize_hotkey(&raw, &store.settings.hotkey, rec_stop_hk, rec_pause_hk, &others)?)
             }
             None => None,
         };
@@ -9250,6 +9741,24 @@ fn spawn_rec_bar_follow(app: AppHandle, hwnd: isize) {
     });
 }
 
+// Cheap insurance against a future regression of the same shape as the
+// show_rec_bar bug -- if the bar's window exists but is not visible while a
+// recording is still running, the user would otherwise be locked out with no
+// way to stop it again. Registered unconditionally at startup; the
+// recording_active() check makes every tick a no-op outside an actual
+// recording, so the always-on cost is one cheap state read every few seconds.
+fn rec_bar_heal_tick(app: &AppHandle) {
+    if !recording_active(app) {
+        return;
+    }
+    if let Some(win) = app.get_webview_window("rec-bar") {
+        if !win.is_visible().unwrap_or(true) {
+            append_crash_log("rec-bar: hidden while a recording is running, showing it again");
+            let _ = win.show();
+        }
+    }
+}
+
 // Async on purpose: a synchronous command runs on the main thread, and building
 // a webview window from there never returns -- the window gets created, but
 // every step after build() (capture exclusion, positioning, show) is skipped,
@@ -9316,6 +9825,12 @@ struct RecordingStatus {
     // control bar's own poll uses this to stop the session properly instead
     // of leaving it looking like it is still recording.
     encode_error: Option<String>,
+    // False when the last rearm_hotkeys() could not actually claim the
+    // stop/pause combination (another app already holds it) -- surfaced here
+    // rather than silently, so the bar can warn instead of the user believing
+    // in a binding that never fires.
+    stop_hotkey_ok: bool,
+    pause_hotkey_ok: bool,
 }
 
 // Read-only status for the control bar's live timer + file-size readout;
@@ -9335,6 +9850,8 @@ fn recording_status(rstate: State<'_, RecordingState>) -> Option<RecordingStatus
         audio_mic: session.audio_mic,
         mic_lost: session.mic_queue.as_ref().map(|q| q.is_lost()).unwrap_or(false),
         encode_error: recording::encode_error(session),
+        stop_hotkey_ok: REC_STOP_HOTKEY_OK.load(std::sync::atomic::Ordering::Relaxed),
+        pause_hotkey_ok: REC_PAUSE_HOTKEY_OK.load(std::sync::atomic::Ordering::Relaxed),
     })
 }
 #[cfg(not(windows))]
@@ -11043,6 +11560,21 @@ fn sweep_stale_temp_files() {
             let is_elevated_leftover = is_ours && (name.ends_with(".json") || name.ends_with(".ps1") || name.ends_with(".log"));
             if (is_ocr_png || is_elevated_leftover) && is_stale(&e) {
                 let _ = fs::remove_file(e.path());
+            }
+        }
+    }
+
+    // filmstrip_cache_dir's own comment used to claim this folder rode
+    // along with the OCR/voice cleanup above -- it never did, since that loop
+    // only ever matches flat files by name prefix, never a subdirectory. Each
+    // (recording, requested thumbnail count) pair gets its own cache
+    // subdirectory that nothing ever revisits once the recording is gone,
+    // renamed, or re-encoded, so without this the folder only ever grows.
+    let thumb_dir = ocr_dir.join("video-thumbs");
+    if let Ok(entries) = fs::read_dir(&thumb_dir) {
+        for e in entries.flatten() {
+            if is_stale(&e) {
+                let _ = fs::remove_dir_all(e.path());
             }
         }
     }
@@ -15365,6 +15897,75 @@ impl AudioQueueShared {
     }
 }
 
+// A same-stem "<name>.mic.wav" sidecar for the microphone track when a
+// recording captures both system and mic audio. Two independent AAC tracks
+// in the same MP4 is the end state the video editor produces, but writing
+// them at capture time would mean the encoder (windows-capture's own
+// MediaStreamSource-based VideoEncoder) needs a second, simultaneously
+// selectable audio stream, which that encoder does not support -- and a
+// custom Media Foundation sink writer just for this would put fresh risk on
+// an already-shipped, freshly-stabilised recording engine. So capture keeps
+// writing exactly one AAC track (system, when present) into the mp4, as
+// before, and the second source goes to this plain PCM sidecar instead; the
+// editor muxes the two into one two-track mp4 the first time it opens the
+// recording (see video_editor::mux_mic_track's contract).
+// A hand-rolled 44-byte RIFF/WAVE header rather than a new crate dependency --
+// the format is small and fixed (mono/stereo 16-bit PCM), not worth a dep.
+struct RecWavWriter {
+    file: fs::File,
+    data_bytes: u32,
+}
+impl RecWavWriter {
+    fn create(path: &Path, sample_rate: u32, channels: u16) -> std::io::Result<Self> {
+        use std::io::Write;
+        let mut file = fs::File::create(path)?;
+        let bits_per_sample: u16 = 16;
+        let block_align = channels * (bits_per_sample / 8);
+        let byte_rate = sample_rate * block_align as u32;
+        file.write_all(b"RIFF")?;
+        file.write_all(&0u32.to_le_bytes())?; // patched by finish()
+        file.write_all(b"WAVE")?;
+        file.write_all(b"fmt ")?;
+        file.write_all(&16u32.to_le_bytes())?;
+        file.write_all(&1u16.to_le_bytes())?; // PCM
+        file.write_all(&channels.to_le_bytes())?;
+        file.write_all(&sample_rate.to_le_bytes())?;
+        file.write_all(&byte_rate.to_le_bytes())?;
+        file.write_all(&block_align.to_le_bytes())?;
+        file.write_all(&bits_per_sample.to_le_bytes())?;
+        file.write_all(b"data")?;
+        file.write_all(&0u32.to_le_bytes())?; // patched by finish()
+        Ok(Self { file, data_bytes: 0 })
+    }
+    fn write_samples(&mut self, samples: &[i16]) -> std::io::Result<()> {
+        use std::io::Write;
+        for s in samples {
+            self.file.write_all(&s.to_le_bytes())?;
+        }
+        self.data_bytes = self.data_bytes.saturating_add((samples.len() * 2) as u32);
+        Ok(())
+    }
+    // Seeks back to patch the two placeholder sizes now that the real total is
+    // known -- streamed formats (WAV included) put their length in the header,
+    // so it cannot be written until the last sample has landed.
+    fn finish(mut self) -> std::io::Result<()> {
+        use std::io::{Seek, SeekFrom, Write};
+        let riff_size = 36u32.saturating_add(self.data_bytes);
+        self.file.seek(SeekFrom::Start(4))?;
+        self.file.write_all(&riff_size.to_le_bytes())?;
+        self.file.seek(SeekFrom::Start(40))?;
+        self.file.write_all(&self.data_bytes.to_le_bytes())?;
+        Ok(())
+    }
+}
+
+// The mp4 sibling of a "<name>.mic.wav" sidecar, or None if `path` is not one.
+fn mic_sidecar_video_path(path: &Path) -> Option<PathBuf> {
+    let name = path.file_name()?.to_str()?;
+    let stem = name.strip_suffix(".mic.wav")?;
+    Some(path.with_file_name(format!("{stem}.mp4")))
+}
+
 #[cfg(windows)]
 mod audio {
     // WASAPI capture only: no knowledge of the video encoder or the feeder
@@ -15567,6 +16168,12 @@ pub(crate) struct RecFeederShared {
     // Only the first is kept: a failing encoder tends to fail identically on
     // every following frame, and one message is all the user needs.
     encode_error: Mutex<Option<String>>,
+    // Set once, the same instant the audio feeder sees its first video
+    // frame -- lets a parallel mic-sidecar writer thread (RecWavWriter, spawned
+    // only when both system and mic are captured) discard its own pre-roll at
+    // the same "time zero" the main track uses, without stealing frames from
+    // the feeder's single-consumer queue to find that moment itself.
+    first_frame: std::sync::atomic::AtomicBool,
 }
 impl RecFeederShared {
     fn new() -> Self {
@@ -15576,7 +16183,14 @@ impl RecFeederShared {
             dropped: std::sync::atomic::AtomicU64::new(0),
             stopping: std::sync::atomic::AtomicBool::new(false),
             encode_error: Mutex::new(None),
+            first_frame: std::sync::atomic::AtomicBool::new(false),
         }
+    }
+    fn mark_first_frame(&self) {
+        self.first_frame.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    fn has_first_frame(&self) -> bool {
+        self.first_frame.load(std::sync::atomic::Ordering::Relaxed)
     }
     fn set_encode_error(&self, msg: String) {
         let mut e = self.encode_error.lock().unwrap_or_else(|e| e.into_inner());
@@ -15645,13 +16259,16 @@ struct RecordingStoppedPayload {
     path: String,
     dropped_frames: u64,
     encode_error: Option<String>,
+    // Set when both system and mic were captured -- the video editor
+    // consolidates this sidecar into the mp4's second AAC track on open.
+    mic_wav_path: Option<String>,
 }
 
 #[cfg(windows)]
 mod recording {
     use super::{
         append_crash_log, audio_mix_i16, crop_and_flip_rows_bottom_up, letterbox_frame_top_down, rec_filename,
-        AudioQueueShared,
+        AudioQueueShared, RecWavWriter,
         RecFeederShared, RecFrameItem, RecPhase, RecordClock, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE,
     };
     use std::path::{Path, PathBuf};
@@ -15872,6 +16489,7 @@ mod recording {
             while let Some(item) = shared.try_pop() {
                 if !video_started {
                     video_started = true;
+                    shared.mark_first_frame();
                     for q in &queues {
                         q.clear();
                     }
@@ -15941,6 +16559,63 @@ mod recording {
         }
     }
 
+    // Runs alongside feeder_loop_with_audio only when both system and mic
+    // are captured -- drains the mic queue straight to its own ".mic.wav"
+    // sidecar instead of mixing it into the encoder's one track. Same tick
+    // cadence and the same pause/first-frame gating as the main feeder so the
+    // sidecar's timeline lines up with the mp4 when the editor muxes them
+    // together (a few ms of slack is possible around the first-frame instant,
+    // since this thread only notices it on its own next tick -- same order of
+    // magnitude as the startup slop the main feeder already tolerates).
+    fn mic_wav_writer_loop(
+        queue: Arc<AudioQueueShared>,
+        clock: Arc<RecordClock>,
+        shared: Arc<RecFeederShared>,
+        stop: Arc<AtomicBool>,
+        path: PathBuf,
+    ) {
+        const TICK: Duration = Duration::from_millis(20);
+        let samples_per_tick = (REC_AUDIO_SAMPLE_RATE as usize / 50) * REC_AUDIO_CHANNELS as usize;
+        let mut writer = match RecWavWriter::create(&path, REC_AUDIO_SAMPLE_RATE, REC_AUDIO_CHANNELS as u16) {
+            Ok(w) => w,
+            Err(e) => {
+                append_crash_log(&format!("recording: mic sidecar create failed: {e}"));
+                return;
+            }
+        };
+        let mut started = false;
+        let mut next_tick = Instant::now() + TICK;
+        loop {
+            if stop.load(Ordering::Relaxed) {
+                break;
+            }
+            let now = Instant::now();
+            if now < next_tick {
+                thread::sleep(next_tick - now);
+            }
+            next_tick += TICK;
+            if !started {
+                if shared.has_first_frame() {
+                    started = true;
+                    queue.clear();
+                } else {
+                    continue;
+                }
+            }
+            if clock.is_paused() {
+                continue;
+            }
+            let chunk = queue.drain(samples_per_tick);
+            if let Err(e) = writer.write_samples(&chunk) {
+                append_crash_log(&format!("recording: mic sidecar write failed: {e}"));
+                break;
+            }
+        }
+        if let Err(e) = writer.finish() {
+            append_crash_log(&format!("recording: mic sidecar finish failed: {e}"));
+        }
+    }
+
     pub struct RecSession {
         control: CaptureControl<RecHandler, RecError>,
         clock: Arc<RecordClock>,
@@ -15958,6 +16633,10 @@ mod recording {
         // not bleed into the post-resume track out of sync with video, which
         // freezes at the pause instant and resumes exactly where it left off.
         audio_queues: Vec<Arc<AudioQueueShared>>,
+        // Only set when both system and mic are captured -- the mic's own
+        // sidecar writer thread and the path it is writing to.
+        mic_wav_thread: Option<thread::JoinHandle<()>>,
+        pub mic_wav_path: Option<PathBuf>,
         pub audio_system: bool,
         pub audio_mic: bool,
         pub output_path: PathBuf,
@@ -15994,6 +16673,13 @@ mod recording {
     ) -> Result<RecSession, String> {
         let (width, height) = resolve_target_size(target)?;
         let audio_active = audio.system || audio.mic;
+        // Both sources active used to mean "mixed into the encoder's one
+        // track" -- now the encoder only ever gets ONE source (system, when
+        // present; mic alone otherwise, byte-for-byte as before) and a
+        // second, simultaneously-active source is written to its own sidecar
+        // file instead of being mixed away. Either single-source case is
+        // completely unchanged.
+        let both_active = audio.system && audio.mic;
         let encoder = build_encoder(width, height, &output_path, audio_active.then_some(audio.kbps), video_kbps)
             .map_err(|e| e.to_string())?;
         let clock = Arc::new(RecordClock::new());
@@ -16018,14 +16704,19 @@ mod recording {
             audio_queues.push(q.clone());
             mic_queue = Some(q);
         }
+        // Queues the encoder's own feeder drains: everything except a mic
+        // riding along beside an already-present system track (both_active) --
+        // that one is pulled out to the sidecar writer below instead. System
+        // was always pushed first above, so take(1) is exactly that queue.
+        let encoder_queues: Vec<Arc<AudioQueueShared>> =
+            if both_active { audio_queues.iter().take(1).cloned().collect() } else { audio_queues.clone() };
 
         let feeder = if audio_active {
             let shared2 = shared.clone();
             let clock2 = clock.clone();
-            let queues2 = audio_queues.clone();
             thread::Builder::new()
                 .name("rec-feeder".into())
-                .spawn(move || feeder_loop_with_audio(shared2, encoder, clock2, queues2))
+                .spawn(move || feeder_loop_with_audio(shared2, encoder, clock2, encoder_queues))
                 .map_err(|e| e.to_string())?
         } else {
             let shared2 = shared.clone();
@@ -16033,6 +16724,21 @@ mod recording {
                 .name("rec-feeder".into())
                 .spawn(move || feeder_loop(shared2, encoder))
                 .map_err(|e| e.to_string())?
+        };
+
+        let mic_wav_path = both_active.then(|| output_path.with_extension("mic.wav"));
+        let mic_wav_thread = if let (Some(path), Some(q)) = (mic_wav_path.clone(), mic_queue.clone()) {
+            let stop = audio_stop.clone().unwrap();
+            let clock2 = clock.clone();
+            let shared2 = shared.clone();
+            Some(
+                thread::Builder::new()
+                    .name("rec-mic-wav".into())
+                    .spawn(move || mic_wav_writer_loop(q, clock2, shared2, stop, path))
+                    .map_err(|e| e.to_string())?,
+            )
+        } else {
+            None
         };
 
         let cursor = if show_cursor { CursorCaptureSettings::WithCursor } else { CursorCaptureSettings::WithoutCursor };
@@ -16057,7 +16763,7 @@ mod recording {
 
         Ok(RecSession {
             control, clock, shared, feeder: Some(feeder), audio_stop, audio_threads, mic_queue,
-            audio_queues,
+            audio_queues, mic_wav_thread, mic_wav_path,
             audio_system: audio.system, audio_mic: audio.mic,
             output_path, phase: RecPhase::Recording,
         })
@@ -16101,6 +16807,9 @@ mod recording {
         for t in session.audio_threads.drain(..) {
             let _ = t.join();
         }
+        if let Some(t) = session.mic_wav_thread.take() {
+            let _ = t.join();
+        }
         if let Some(feeder) = session.feeder.take() {
             let _ = feeder.join();
         }
@@ -16121,10 +16830,16 @@ mod recording {
         Ok((dropped, encode_error))
     }
 
-    pub fn stop(session: RecSession) -> Result<(PathBuf, u64, Option<String>), String> {
+    // The fourth field is the mic sidecar's path, only when both system
+    // and mic were captured -- the video editor consolidates it into a real
+    // second AAC track the first time it opens this recording; nothing else
+    // in the app looks at it, so a workflow that never opens the editor never
+    // needs ffmpeg for a plain recording.
+    pub fn stop(session: RecSession) -> Result<(PathBuf, u64, Option<String>, Option<PathBuf>), String> {
         let path = session.output_path.clone();
+        let mic_wav_path = session.mic_wav_path.clone();
         let (dropped, encode_error) = finish_and_stop(session)?;
-        Ok((path, dropped, encode_error))
+        Ok((path, dropped, encode_error, mic_wav_path))
     }
 
     // Live-poll accessor for the control bar: lets it notice an unrecoverable
@@ -16141,8 +16856,12 @@ mod recording {
     // deletes it, leaving no file behind.
     pub fn cancel(session: RecSession) -> Result<(), String> {
         let path = session.output_path.clone();
+        let mic_wav_path = session.mic_wav_path.clone();
         finish_and_stop(session)?;
         let _ = std::fs::remove_file(&path);
+        if let Some(w) = mic_wav_path {
+            let _ = std::fs::remove_file(&w);
+        }
         Ok(())
     }
 
@@ -16190,12 +16909,16 @@ async fn start_recording(
         _ => return Err("invalid recording target".to_string()),
     };
     // recCursor ships ON -- only an explicit false switches it off.
-    // recAudioSystem ships ON, recAudioMic ships OFF -- 239's audio defaults.
+    // recAudioSystem and recAudioMic both ship ON now -- the mic is
+    // captured by default too (into its own track, see start()'s both_active
+    // path), just not audible unless the user brings it up in the editor
+    // afterward. A stored user value (from before this change, or an explicit
+    // opt-out) still wins either way.
     let audio = {
         let g = db.lock().unwrap_or_else(|e| e.into_inner());
         recording::AudioConfig {
             system: g.settings.ui_flags.get("recAudioSystem") != Some(&false),
-            mic: g.settings.ui_flags.get("recAudioMic") == Some(&true),
+            mic: g.settings.ui_flags.get("recAudioMic") != Some(&false),
             mic_device_id: g.settings.ui_texts.get("recMicDevice").cloned().unwrap_or_default(),
             kbps: g.settings.ui_values.get("recAudioKbps").copied().unwrap_or(192.0).clamp(64.0, 320.0) as u32,
         }
@@ -16215,6 +16938,10 @@ async fn start_recording(
     .await
     .map_err(|e| e.to_string())??;
     *rstate.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(session);
+    // The stop/pause hotkeys are only ever live while a recording runs --
+    // this is the transition into that state. Same for the tray's two extra rows.
+    rearm_hotkeys(&app);
+    apply_tray_menu(&app);
     Ok(())
 }
 #[cfg(not(windows))]
@@ -16237,39 +16964,45 @@ async fn start_recording(
 
 #[cfg(windows)]
 #[tauri::command]
-fn pause_recording(rstate: State<'_, RecordingState>) -> Result<(), String> {
-    let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
-    let session = guard.as_mut().ok_or_else(|| "no active recording".to_string())?;
-    if !rec_can_pause(session.phase) {
-        return Err("not recording".to_string());
+fn pause_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<(), String> {
+    {
+        let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
+        let session = guard.as_mut().ok_or_else(|| "no active recording".to_string())?;
+        if !rec_can_pause(session.phase) {
+            return Err("not recording".to_string());
+        }
+        recording::pause(session);
+        session.phase = RecPhase::Paused;
     }
-    recording::pause(session);
-    session.phase = RecPhase::Paused;
+    apply_tray_menu(&app); // the tray's Pause row switches to Resume
     Ok(())
 }
 #[cfg(not(windows))]
 #[tauri::command]
-fn pause_recording(rstate: State<'_, RecordingState>) -> Result<(), String> {
-    let _ = rstate;
+fn pause_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<(), String> {
+    let _ = (app, rstate);
     Err("recording is only available on Windows".to_string())
 }
 
 #[cfg(windows)]
 #[tauri::command]
-fn resume_recording(rstate: State<'_, RecordingState>) -> Result<(), String> {
-    let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
-    let session = guard.as_mut().ok_or_else(|| "no active recording".to_string())?;
-    if !rec_can_resume(session.phase) {
-        return Err("not paused".to_string());
+fn resume_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<(), String> {
+    {
+        let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
+        let session = guard.as_mut().ok_or_else(|| "no active recording".to_string())?;
+        if !rec_can_resume(session.phase) {
+            return Err("not paused".to_string());
+        }
+        recording::resume(session);
+        session.phase = RecPhase::Recording;
     }
-    recording::resume(session);
-    session.phase = RecPhase::Recording;
+    apply_tray_menu(&app); // the tray's Resume row switches back to Pause
     Ok(())
 }
 #[cfg(not(windows))]
 #[tauri::command]
-fn resume_recording(rstate: State<'_, RecordingState>) -> Result<(), String> {
-    let _ = rstate;
+fn resume_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<(), String> {
+    let _ = (app, rstate);
     Err("recording is only available on Windows".to_string())
 }
 
@@ -16292,8 +17025,21 @@ fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayload, String
         }
         s
     };
-    let (path, dropped, encode_error) = recording::stop(session)?;
-    let payload = RecordingStoppedPayload { path: path.to_string_lossy().to_string(), dropped_frames: dropped, encode_error };
+    let (path, dropped, encode_error, mic_wav_path) = recording::stop(session)?;
+    let payload = RecordingStoppedPayload {
+        path: path.to_string_lossy().to_string(),
+        dropped_frames: dropped,
+        encode_error,
+        mic_wav_path: mic_wav_path.map(|p| p.to_string_lossy().to_string()),
+    };
+    // The stop/pause hotkeys give up their combination the instant nothing
+    // is recording, on every end path this function serves (button, hotkey,
+    // auto-stop). Same for the tray's two extra rows.
+    rearm_hotkeys(app);
+    apply_tray_menu(app);
+    // The moment a previous crash's leftover is provably not the file
+    // that just finished -- this recording is gone from RecordingState by now.
+    sweep_recordings_and_notify(app);
     // Mirrors the screenshot flow's "snip-captured": the recording bar is its
     // own window, so the main window learns the recording is ready to attach
     // through this event rather than a direct call across windows.
@@ -16318,7 +17064,7 @@ async fn stop_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Re
 
 #[cfg(windows)]
 #[tauri::command]
-async fn cancel_recording(rstate: State<'_, RecordingState>) -> Result<(), String> {
+async fn cancel_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<(), String> {
     let session = {
         let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
         let s = guard.take().ok_or_else(|| "no active recording".to_string())?;
@@ -16331,12 +17077,21 @@ async fn cancel_recording(rstate: State<'_, RecordingState>) -> Result<(), Strin
     tauri::async_runtime::spawn_blocking(move || recording::cancel(session))
         .await
         .map_err(|e| e.to_string())??;
+    // Give the stop/pause combination back up now that nothing is recording,
+    // and drop the tray's two extra rows.
+    rearm_hotkeys(&app);
+    apply_tray_menu(&app);
+    sweep_recordings_and_notify(&app); // same moment as a normal stop, see above
+    // The composer's record button has no other way to learn a cancel
+    // happened (that click lives in the rec-bar, a different window) --
+    // symmetric with stop's own "recording-captured".
+    let _ = app.emit("recording-cancelled", ());
     Ok(())
 }
 #[cfg(not(windows))]
 #[tauri::command]
-async fn cancel_recording(rstate: State<'_, RecordingState>) -> Result<(), String> {
-    let _ = rstate;
+async fn cancel_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<(), String> {
+    let _ = (app, rstate);
     Err("recording is only available on Windows".to_string())
 }
 
@@ -16849,9 +17604,15 @@ const FFMPEG_URL: &str =
     "https://github.com/GyanD/codexffmpeg/releases/download/9.0.1/ffmpeg-9.0.1-essentials_build.zip";
 const FFMPEG_SHA256: &str = "fec81ae03971d9dd4be3ebe02e263bd2ec1d789483f931bdba5f5715e65da2e9";
 const FFMPEG_ZIP_ENTRY: &str = "ffmpeg-9.0.1-essentials_build/bin/ffmpeg.exe";
-// The zip itself is ~106 MB (it also carries ffplay.exe/ffprobe.exe, which are
-// never extracted); capped generously above that so a legitimate download is
-// never mistaken for a truncation attempt.
+// The video editor needs structured probing (duration/fps/dimensions,
+// stream count for the mic-mux check) that parsing ffmpeg's own banner text
+// cannot give reliably -- ffprobe's JSON output can. Same zip, same already
+// -verified hash (FFMPEG_SHA256 covers the whole archive, not per-file), so
+// extracting a second entry from it needs no extra pinned hash of its own.
+const FFPROBE_ZIP_ENTRY: &str = "ffmpeg-9.0.1-essentials_build/bin/ffprobe.exe";
+// The zip itself is ~106 MB (it also carries ffplay.exe, never extracted);
+// capped generously above that so a legitimate download is never mistaken for
+// a truncation attempt.
 const FFMPEG_ZIP_MAX_BYTES: u64 = 160 * 1024 * 1024;
 
 // Set by `cancel_ffmpeg_download`, polled between chunks in the download loop --
@@ -16885,8 +17646,7 @@ fn ct_eq(a: &[u8], b: &[u8]) -> bool {
 // ever happens in `download_ffmpeg`, and only after explicit user consent.
 // The installer's bundled copy lands next to the exe, so an installed build
 // never reaches this function's "not found" case at all.
-fn ffmpeg_search_path(app: &AppHandle) -> Option<PathBuf> {
-    let name = "ffmpeg.exe";
+fn find_media_tool(app: &AppHandle, name: &str) -> Option<PathBuf> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             let p = dir.join(name);
@@ -16902,6 +17662,17 @@ fn ffmpeg_search_path(app: &AppHandle) -> Option<PathBuf> {
     std::env::var_os("PATH").and_then(|paths| {
         std::env::split_paths(&paths).map(|dir| dir.join(name)).find(|p| p.is_file())
     })
+}
+fn ffmpeg_search_path(app: &AppHandle) -> Option<PathBuf> {
+    find_media_tool(app, "ffmpeg.exe")
+}
+// Alongside ffmpeg.exe once download_ffmpeg_blocking has run -- same
+// install directory, same discovery order. An install from before ffprobe
+// support was added only has ffmpeg.exe; probing/editor features degrade to
+// "ffmpeg-missing" until the user re-runs the (idempotent) download, same
+// fetch-on-demand story ffmpeg.exe itself already tells.
+fn ffprobe_search_path(app: &AppHandle) -> Option<PathBuf> {
+    find_media_tool(app, "ffprobe.exe")
 }
 
 // Reports where ffmpeg was found (if anywhere) so the frontend knows whether to
@@ -17005,7 +17776,7 @@ fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String> {
         return Err("cancelled".to_string());
     }
     verify_ffmpeg_zip(&bytes)?;
-    let exe_bytes = {
+    let (exe_bytes, probe_bytes) = {
         let mut archive =
             zip::ZipArchive::new(std::io::Cursor::new(&bytes)).map_err(|e| format!("zip: {}", e))?;
         let mut entry = archive
@@ -17013,7 +17784,15 @@ fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String> {
             .map_err(|_| "ffmpeg.exe not found inside the downloaded archive".to_string())?;
         let mut out = Vec::with_capacity(entry.size() as usize);
         entry.read_to_end(&mut out).map_err(|e| format!("extract: {}", e))?;
-        out
+        drop(entry);
+        // Best-effort: a build missing ffprobe.exe still has a working
+        // convert_recording via ffmpeg.exe alone, just no video-editor
+        // probing until a fresh download supplies it.
+        let probe = archive.by_name(FFPROBE_ZIP_ENTRY).ok().and_then(|mut e| {
+            let mut buf = Vec::with_capacity(e.size() as usize);
+            e.read_to_end(&mut buf).ok().map(|_| buf)
+        });
+        (out, probe)
     };
     if exe_bytes.len() < 2 || &exe_bytes[0..2] != b"MZ" {
         return Err("extracted file is not a valid executable".to_string());
@@ -17031,6 +17810,14 @@ fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String> {
         let _ = fs::remove_file(&staged);
         format!("install: {}", e)
     })?;
+    if let Some(probe_bytes) = probe_bytes {
+        if probe_bytes.len() >= 2 && &probe_bytes[0..2] == b"MZ" {
+            let probe_staged = dir.join(format!(".ffprobe-{}-{}.tmp", std::process::id(), stamp));
+            if fs::write(&probe_staged, &probe_bytes).is_ok() {
+                let _ = fs::rename(&probe_staged, dir.join("ffprobe.exe"));
+            }
+        }
+    }
     Ok(final_path.to_string_lossy().to_string())
 }
 
@@ -17091,54 +17878,32 @@ fn convert_is_noop(same_extension: bool, format: &str, lossless: bool) -> bool {
     same_extension && !(format == "mp4" && lossless)
 }
 
-// `on_progress` is a plain closure rather than an `AppHandle` -- the only thing
-// this function does with progress is report it, so it takes no dependency on
-// Tauri's runtime at all and can be exercised in a unit test against a real
-// ffmpeg binary, with no app instance needed.
-fn convert_recording_blocking(
-    ffmpeg: &Path, src: &Path, format: &str, lossless: bool, mut on_progress: impl FnMut(u32),
-) -> Result<String, String> {
+// Shared by convert_recording (240, simple format conversion) and the video
+// editor's export (implementing the "one export path" requirement): spawns
+// ffmpeg with the given output-side arguments, streams `-progress pipe:1` into
+// `on_progress`, tails stderr for the error message on failure, and stages the
+// result under a unique temp name in `dst`'s own directory -- the caller
+// renames it into place only once it is confirmed complete, so a failed or
+// cancelled run never leaves a half-written file at any real name. Neither
+// caller talks to the ffmpeg process directly.
+fn run_ffmpeg_to_staged(
+    ffmpeg: &Path,
+    src: &Path,
+    dst: &Path,
+    input_args: &[String],
+    output_args: &[String],
+    is_cancelled: impl Fn() -> bool,
+    mut on_progress: impl FnMut(u32),
+) -> Result<PathBuf, String> {
     use std::os::windows::process::CommandExt;
-    let same_extension = src.extension().is_some_and(|e| e.eq_ignore_ascii_case(format));
-    if convert_is_noop(same_extension, format, lossless) {
-        return Err("nothing to convert".to_string());
-    }
-    // The real, final name -- for mp4 + lossless this is the SAME path as
-    // `src` (the whole point of that step is replacing it in place). ffmpeg
-    // is never pointed at it directly though: it writes a uniquely-named
-    // staged file in the same directory first (same pattern as the ffmpeg
-    // download's own install step above), so a source that is also the
-    // destination is never read and written by the same process at once, and
-    // a conversion that fails or is cancelled never leaves a half-written
-    // file at either name.
-    let dst = src.with_extension(format);
+    let ext = dst.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
     let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    let staged = src.with_file_name(format!(".convert-{}-{}.{}", std::process::id(), stamp, format));
+    let staged = dst.with_file_name(format!(".export-{}-{}.{}", std::process::id(), stamp, ext));
     let mut cmd = std::process::Command::new(ffmpeg);
-    cmd.args(["-y", "-hide_banner", "-i"]).arg(src).args(["-progress", "pipe:1", "-nostats"]);
-    match format {
-        "mp4" => {
-            cmd.args(["-c:v", "libx264"]);
-            if lossless {
-                cmd.args(["-crf", "0", "-preset", "veryfast"]);
-            } else {
-                cmd.args(["-crf", "18", "-preset", "medium"]);
-            }
-            cmd.args(["-c:a", "aac", "-b:a", "192k"]);
-        }
-        "webm" => {
-            cmd.args(["-c:v", "libvpx-vp9", "-crf", "30", "-b:v", "0", "-c:a", "libopus"]);
-        }
-        "gif" => {
-            // Capped at 30s, palette-quantised, no audio -- a straight per-frame
-            // GIF encode is both huge and visibly banded without this.
-            cmd.args([
-                "-t", "30", "-an", "-vf",
-                "fps=15,scale=iw:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer",
-            ]);
-        }
-        _ => unreachable!(),
-    }
+    cmd.args(["-y", "-hide_banner"]);
+    cmd.args(input_args);
+    cmd.arg("-i").arg(src).args(["-progress", "pipe:1", "-nostats"]);
+    cmd.args(output_args);
     cmd.arg(&staged);
     cmd.creation_flags(CREATE_NO_WINDOW);
     cmd.stdin(std::process::Stdio::null());
@@ -17169,7 +17934,7 @@ fn convert_recording_blocking(
         use std::io::BufRead;
         let reader = std::io::BufReader::new(stdout);
         for line in reader.lines() {
-            if REC_CONVERT_CANCEL.load(Ordering::SeqCst) {
+            if is_cancelled() {
                 let _ = child.kill();
                 break;
             }
@@ -17183,28 +17948,80 @@ fn convert_recording_blocking(
     let status = child.wait().map_err(|e| format!("ffmpeg wait failed: {e}"))?;
     let stderr_text = stderr_thread.and_then(|t| t.join().ok()).unwrap_or_default();
 
-    if REC_CONVERT_CANCEL.load(Ordering::SeqCst) {
+    if is_cancelled() {
         let _ = fs::remove_file(&staged);
         return Err("cancelled".to_string());
     }
     if !status.success() {
         let _ = fs::remove_file(&staged);
         let tail: String = stderr_text.chars().rev().take(1200).collect::<Vec<_>>().into_iter().rev().collect();
-        append_crash_log(&format!("recording convert failed ({format}): {tail}"));
         return Err(if tail.trim().is_empty() {
             "ffmpeg conversion failed".to_string()
         } else {
             format!("ffmpeg conversion failed: {}", tail.trim())
         });
     }
+    if !staged.is_file() {
+        return Err("ffmpeg reported success but wrote no output".to_string());
+    }
+    Ok(staged)
+}
+
+// `on_progress` is a plain closure rather than an `AppHandle` -- the only thing
+// this function does with progress is report it, so it takes no dependency on
+// Tauri's runtime at all and can be exercised in a unit test against a real
+// ffmpeg binary, with no app instance needed.
+fn convert_recording_blocking(
+    ffmpeg: &Path, src: &Path, format: &str, lossless: bool, mut on_progress: impl FnMut(u32),
+) -> Result<String, String> {
+    let same_extension = src.extension().is_some_and(|e| e.eq_ignore_ascii_case(format));
+    if convert_is_noop(same_extension, format, lossless) {
+        return Err("nothing to convert".to_string());
+    }
+    // The real, final name -- for mp4 + lossless this is the SAME path as
+    // `src` (the whole point of that step is replacing it in place). ffmpeg
+    // is never pointed at it directly though: run_ffmpeg_to_staged writes a
+    // uniquely-named staged file in the same directory first, so a source
+    // that is also the destination is never read and written by the same
+    // process at once, and a conversion that fails or is cancelled never
+    // leaves a half-written file at either name.
+    let dst = src.with_extension(format);
+    let mut args: Vec<String> = Vec::new();
+    match format {
+        "mp4" => {
+            args.extend(["-c:v", "libx264"].map(String::from));
+            if lossless {
+                args.extend(["-crf", "0", "-preset", "veryfast"].map(String::from));
+            } else {
+                args.extend(["-crf", "18", "-preset", "medium"].map(String::from));
+            }
+            args.extend(["-c:a", "aac", "-b:a", "192k"].map(String::from));
+        }
+        "webm" => {
+            args.extend(["-c:v", "libvpx-vp9", "-crf", "30", "-b:v", "0", "-c:a", "libopus"].map(String::from));
+        }
+        "gif" => {
+            // Capped at 30s, palette-quantised, no audio -- a straight per-frame
+            // GIF encode is both huge and visibly banded without this.
+            args.extend([
+                "-t", "30", "-an", "-vf",
+                "fps=15,scale=iw:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer",
+            ].map(String::from));
+        }
+        _ => unreachable!(),
+    }
+    let staged = match run_ffmpeg_to_staged(ffmpeg, src, &dst, &[], &args, || REC_CONVERT_CANCEL.load(Ordering::SeqCst), &mut on_progress) {
+        Ok(p) => p,
+        Err(e) => {
+            append_crash_log(&format!("recording convert failed ({format}): {e}"));
+            return Err(e);
+        }
+    };
     // Only now, with the converted file confirmed complete on disk, does the
     // real name get touched at all: rename the staged file into place (this
     // is also what replaces `src` in-place for the mp4 + lossless case, since
     // `dst == src` there), then remove the old source if it is a genuinely
     // different file from what now sits at `dst`.
-    if !staged.is_file() {
-        return Err("ffmpeg reported success but wrote no output".to_string());
-    }
     fs::rename(&staged, &dst).map_err(|e| {
         let _ = fs::remove_file(&staged);
         format!("could not finalise the converted file: {e}")
@@ -17215,10 +18032,702 @@ fn convert_recording_blocking(
     Ok(dst.to_string_lossy().to_string())
 }
 
+// ---------- Video editor (242-245) ----------
+//
+// probe/mux/filmstrip/waveform/still-frame are read-only or one-shot helper
+// commands the editor window calls while a recording is open; export_video is
+// the ONE additional entry point into ffmpeg beyond convert_recording above,
+// sharing run_ffmpeg_to_staged so there is never a second argument-building /
+// progress / cancel implementation.
+
+#[derive(serde::Serialize)]
+struct RecordingProbe {
+    duration_ms: u64,
+    width: u32,
+    height: u32,
+    fps: f64,
+    has_audio: bool,
+    has_mic_track: bool,
+    mic_sidecar: Option<String>,
+    // The lossless "-c copy" fast path only ever produces a valid mp4 if
+    // every mapped stream is already a codec mp4 can carry as-is -- a source
+    // dragged in from elsewhere (e.g. a webm/VP9 file) fails ffmpeg outright
+    // when the export path blindly assumes "trim-only" means "safe to copy".
+    stream_copy_safe: bool,
+}
+
+// The text-overlay font list used to hardcode "C:/Windows/Fonts/..." --
+// every export failed outright on a system where Windows itself is installed
+// on a different drive. `SystemRoot` (or `windir`, same value under a different
+// name) is what Windows itself sets this from, so it is the one thing that can
+// never disagree with where the machine actually put its Fonts folder.
+#[tauri::command]
+fn windows_fonts_dir() -> String {
+    let root = std::env::var("SystemRoot")
+        .or_else(|_| std::env::var("windir"))
+        .unwrap_or_else(|_| "C:\\Windows".to_string());
+    format!("{}/Fonts", root.replace('\\', "/"))
+}
+
+#[tauri::command]
+async fn probe_recording(app: AppHandle, path: String) -> Result<RecordingProbe, String> {
+    let src = PathBuf::from(&path);
+    if !src.is_file() {
+        return Err("recording file not found".to_string());
+    }
+    let ffprobe = ffprobe_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
+    tauri::async_runtime::spawn_blocking(move || probe_recording_blocking(&ffprobe, &src))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn parse_ffprobe_rate(s: &str) -> Option<f64> {
+    let (num, den) = s.split_once('/')?;
+    let num: f64 = num.parse().ok()?;
+    let den: f64 = den.parse().ok()?;
+    if den == 0.0 { None } else { Some(num / den) }
+}
+
+fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<RecordingProbe, String> {
+    use std::os::windows::process::CommandExt;
+    let mut cmd = std::process::Command::new(ffprobe);
+    cmd.args(["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams"]).arg(src);
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.stdin(std::process::Stdio::null());
+    let output = cmd.output().map_err(|e| format!("could not start ffprobe: {e}"))?;
+    if !output.status.success() {
+        return Err("ffprobe failed to read the recording".to_string());
+    }
+    let json: serde_json::Value =
+        serde_json::from_slice(&output.stdout).map_err(|e| format!("ffprobe output: {e}"))?;
+    let duration_ms = json["format"]["duration"]
+        .as_str()
+        .and_then(|s| s.parse::<f64>().ok())
+        .map(|s| (s * 1000.0) as u64)
+        .unwrap_or(0);
+    let streams = json["streams"].as_array().cloned().unwrap_or_default();
+    let video = streams.iter().find(|s| s["codec_type"] == "video");
+    let width = video.and_then(|v| v["width"].as_u64()).unwrap_or(0) as u32;
+    let height = video.and_then(|v| v["height"].as_u64()).unwrap_or(0) as u32;
+    let fps = video
+        .and_then(|v| v["avg_frame_rate"].as_str())
+        .and_then(parse_ffprobe_rate)
+        .filter(|f| *f > 0.0)
+        .unwrap_or(30.0);
+    let audio_count = streams.iter().filter(|s| s["codec_type"] == "audio").count();
+    let sidecar = src.with_extension("mic.wav");
+    let mic_sidecar = if audio_count < 2 && sidecar.is_file() {
+        Some(sidecar.to_string_lossy().to_string())
+    } else {
+        None
+    };
+    let video_codec = video.and_then(|v| v["codec_name"].as_str()).unwrap_or("");
+    let non_aac_audio =
+        streams.iter().any(|s| s["codec_type"] == "audio" && s["codec_name"].as_str() != Some("aac"));
+    let stream_copy_safe = matches!(video_codec, "h264" | "hevc") && !non_aac_audio;
+    Ok(RecordingProbe {
+        duration_ms,
+        width,
+        height,
+        fps,
+        has_audio: audio_count >= 1,
+        has_mic_track: audio_count >= 2,
+        mic_sidecar,
+        stream_copy_safe,
+    })
+}
+
+// Consolidates a recording's mic sidecar (see mic_sidecar_video_path / the
+// recording engine's mic_wav_writer_loop) into a genuine second AAC track,
+// once, the first time the editor opens a recording that still has one.
+// Non-fatal to the caller: the video keeps playing system-audio-only if this
+// fails, and the sidecar is left in place to retry on the next open.
+#[tauri::command]
+async fn mux_mic_track(app: AppHandle, video_path: String, sidecar_path: String) -> Result<(), String> {
+    let video = PathBuf::from(&video_path);
+    let sidecar = PathBuf::from(&sidecar_path);
+    if !video.is_file() || !sidecar.is_file() {
+        return Err("recording or mic sidecar not found".to_string());
+    }
+    let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
+    let audio_kbps = app
+        .try_state::<Db>()
+        .map(|s| {
+            s.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .settings
+                .ui_values
+                .get("recAudioKbps")
+                .copied()
+                .unwrap_or(192.0)
+                .clamp(64.0, 320.0) as u32
+        })
+        .unwrap_or(192);
+    tauri::async_runtime::spawn_blocking(move || mux_mic_track_blocking(&ffmpeg, &video, &sidecar, audio_kbps))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn mux_mic_track_blocking(ffmpeg: &Path, video: &Path, sidecar: &Path, audio_kbps: u32) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let staged = video.with_file_name(format!(".mux-{}-{}.mp4", std::process::id(), stamp));
+    let mut cmd = std::process::Command::new(ffmpeg);
+    cmd.args(["-y", "-hide_banner", "-loglevel", "error", "-i"])
+        .arg(video)
+        .arg("-i")
+        .arg(sidecar)
+        .args(["-map", "0:v", "-map", "0:a?", "-map", "1:a", "-c:v", "copy", "-c:a:0", "copy", "-c:a:1", "aac", "-b:a:1"])
+        .arg(format!("{audio_kbps}k"))
+        // No -shortest -- the mic writer can stop a moment before the
+        // video does (its own thread, its own shutdown timing), and -shortest
+        // takes the SHORTEST mapped stream as the output length, which
+        // permanently truncated the video's tail to match. Without it ffmpeg
+        // instead runs until every mapped stream is exhausted, so the mic
+        // track just ends a little early inside a video-length file -- the
+        // one-sided failure mode that actually matches "the mic dropped out",
+        // instead of "the recording lost its ending".
+        .arg(&staged);
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.stdin(std::process::Stdio::null());
+    cmd.stdout(std::process::Stdio::null());
+    cmd.stderr(std::process::Stdio::piped());
+    let output = cmd.output().map_err(|e| format!("could not start ffmpeg: {e}"))?;
+    if !output.status.success() || !staged.is_file() {
+        let _ = fs::remove_file(&staged);
+        let tail: String =
+            String::from_utf8_lossy(&output.stderr).chars().rev().take(800).collect::<Vec<_>>().into_iter().rev().collect();
+        return Err(format!("mic track mux failed: {}", tail.trim()));
+    }
+    fs::rename(&staged, video).map_err(|e| {
+        let _ = fs::remove_file(&staged);
+        format!("could not finalise the muxed file: {e}")
+    })?;
+    let _ = fs::remove_file(sidecar);
+    Ok(())
+}
+
+// Thumbnail cache keyed by (path, mtime, requested count) so re-opening the
+// same, unchanged recording at the same zoom level never re-extracts. `count`
+// is part of the key because each thumbnail's timestamp is spaced across
+// the clip AS A FRACTION OF count -- thumb 0 of 40 and thumb 0 of 12 are
+// different moments in the recording, so reusing one count's files for
+// another silently produced a filmstrip that only covered part of the clip.
+// Swept by age in sweep_stale_temp_files, not here.
+fn filmstrip_cache_dir(src: &Path, count: u32) -> Option<PathBuf> {
+    let mtime = fs::metadata(src).ok()?.modified().ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs();
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    use std::hash::{Hash, Hasher};
+    src.to_string_lossy().hash(&mut hasher);
+    mtime.hash(&mut hasher);
+    count.hash(&mut hasher);
+    let key = hasher.finish();
+    Some(std::env::temp_dir().join(brand::TEMP_DIR).join("video-thumbs").join(format!("{key:x}")))
+}
+
+// No duration parameter -- the frontend calls this with just {path, count};
+// the editor already ran probe_recording before ever reaching the timeline,
+// so ffprobe is known to be present by the time this can be called.
+#[tauri::command]
+async fn generate_filmstrip(app: AppHandle, path: String, count: u32) -> Result<Vec<String>, String> {
+    let src = PathBuf::from(&path);
+    if !src.is_file() {
+        return Err("recording file not found".to_string());
+    }
+    let count = count.clamp(1, 300);
+    let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
+    let ffprobe = ffprobe_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
+    tauri::async_runtime::spawn_blocking(move || generate_filmstrip_blocking(&ffmpeg, &ffprobe, &src, count))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+// One short seek-and-grab ffmpeg call per thumbnail rather than a single
+// `-vf select` pass: a recording's variable frame rate (WGC capture never
+// guarantees CFR) makes frame-index-based selection unreliable, while a
+// wall-clock `-ss` seek before `-i` is exact regardless of frame timing.
+fn generate_filmstrip_blocking(ffmpeg: &Path, ffprobe: &Path, src: &Path, count: u32) -> Result<Vec<String>, String> {
+    use std::os::windows::process::CommandExt;
+    let duration_ms = probe_recording_blocking(ffprobe, src)?.duration_ms;
+    let Some(cache_dir) = filmstrip_cache_dir(src, count) else {
+        return Err("could not read the recording".to_string());
+    };
+    let mut out = Vec::with_capacity(count as usize);
+    let mut all_cached = true;
+    for i in 0..count {
+        let p = cache_dir.join(format!("thumb-{i:04}.jpg"));
+        if !p.is_file() {
+            all_cached = false;
+        }
+        out.push(p);
+    }
+    if !all_cached {
+        fs::create_dir_all(&cache_dir).map_err(|e| format!("thumbnail cache: {e}"))?;
+        let dur_s = (duration_ms as f64 / 1000.0).max(0.1);
+        for (i, p) in out.iter().enumerate() {
+            let t = dur_s * (i as f64 + 0.5) / count as f64;
+            let mut cmd = std::process::Command::new(ffmpeg);
+            cmd.args(["-y", "-hide_banner", "-loglevel", "error", "-ss"])
+                .arg(format!("{t:.3}"))
+                .arg("-i")
+                .arg(src)
+                .args(["-frames:v", "1", "-vf", "scale=160:-2"])
+                .arg(p);
+            cmd.creation_flags(CREATE_NO_WINDOW);
+            cmd.stdin(std::process::Stdio::null());
+            cmd.stdout(std::process::Stdio::null());
+            cmd.stderr(std::process::Stdio::null());
+            let status = cmd.status().map_err(|e| format!("could not start ffmpeg: {e}"))?;
+            if !status.success() || !p.is_file() {
+                return Err("thumbnail extraction failed".to_string());
+            }
+        }
+    }
+    Ok(out.into_iter().map(|p| p.to_string_lossy().to_string()).collect())
+}
+
+const WAVEFORM_SAMPLE_RATE: u32 = 8_000;
+
+#[tauri::command]
+async fn generate_waveform_peaks(app: AppHandle, path: String, track: u32, buckets: u32) -> Result<Vec<f32>, String> {
+    let src = PathBuf::from(&path);
+    if !src.is_file() {
+        return Err("recording file not found".to_string());
+    }
+    let buckets = buckets.clamp(8, 4000);
+    let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
+    tauri::async_runtime::spawn_blocking(move || generate_waveform_peaks_blocking(&ffmpeg, &src, track, buckets))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn generate_waveform_peaks_blocking(ffmpeg: &Path, src: &Path, track: u32, buckets: u32) -> Result<Vec<f32>, String> {
+    use std::os::windows::process::CommandExt;
+    let map = format!("0:a:{track}");
+    let mut cmd = std::process::Command::new(ffmpeg);
+    cmd.args(["-y", "-hide_banner", "-loglevel", "error", "-i"])
+        .arg(src)
+        .args(["-map", &map, "-f", "s16le", "-ac", "1", "-ar"])
+        .arg(WAVEFORM_SAMPLE_RATE.to_string())
+        .arg("pipe:1");
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.stdin(std::process::Stdio::null());
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::null());
+    let output = cmd.output().map_err(|e| format!("could not start ffmpeg: {e}"))?;
+    if !output.status.success() {
+        return Err(format!("no audio on track {track}"));
+    }
+    Ok(pcm_s16le_to_peaks(&output.stdout, buckets))
+}
+
+// Running max tracked as u16: i16::MIN.unsigned_abs() is 32768, one past
+// i16::MAX, so a signed running max would silently wrap on exactly that
+// sample -- normalizing by dividing the u16 max by 32768.0 sidesteps it.
+fn pcm_s16le_to_peaks(pcm: &[u8], buckets: u32) -> Vec<f32> {
+    let sample_count = pcm.len() / 2;
+    if sample_count == 0 || buckets == 0 {
+        return vec![0.0; buckets.max(1) as usize];
+    }
+    let mut peaks = vec![0.0f32; buckets as usize];
+    let per_bucket = (sample_count as f64 / buckets as f64).max(1.0);
+    for (i, peak) in peaks.iter_mut().enumerate() {
+        let start = (i as f64 * per_bucket) as usize;
+        let end = (((i + 1) as f64 * per_bucket) as usize).min(sample_count);
+        let mut m: u16 = 0;
+        for s in start..end {
+            let v = i16::from_le_bytes([pcm[s * 2], pcm[s * 2 + 1]]);
+            m = m.max(v.unsigned_abs());
+        }
+        *peak = (m as f32 / 32768.0).min(1.0);
+    }
+    peaks
+}
+
+#[tauri::command]
+async fn extract_still_frame(app: AppHandle, state: State<'_, Db>, path: String, at_ms: u64) -> Result<Option<String>, String> {
+    let src = PathBuf::from(&path);
+    if !src.is_file() {
+        return Err("recording file not found".to_string());
+    }
+    let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
+    let bytes = tauri::async_runtime::spawn_blocking(move || extract_still_frame_blocking(&ffmpeg, &src, at_ms))
+        .await
+        .map_err(|e| e.to_string())??;
+    let custom = lock(&state).settings.ui_texts.get("screenshotDir").cloned().unwrap_or_default();
+    let saved = save_screenshot(&bytes, &screenshot_dir(&custom), &format!("Screenshot-{}", local_stamp()));
+    Ok(if saved.is_empty() { None } else { Some(saved) })
+}
+
+fn extract_still_frame_blocking(ffmpeg: &Path, src: &Path, at_ms: u64) -> Result<Vec<u8>, String> {
+    use std::os::windows::process::CommandExt;
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let tmp_dir = std::env::temp_dir().join(brand::TEMP_DIR);
+    fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
+    let tmp = tmp_dir.join(format!("{}-still-{}-{}.jpg", brand::TEMP_PREFIX, std::process::id(), stamp));
+    let secs = at_ms as f64 / 1000.0;
+    let mut cmd = std::process::Command::new(ffmpeg);
+    cmd.args(["-y", "-hide_banner", "-loglevel", "error", "-ss"])
+        .arg(format!("{secs:.3}"))
+        .arg("-i")
+        .arg(src)
+        .args(["-frames:v", "1", "-q:v", "2"])
+        .arg(&tmp);
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.stdin(std::process::Stdio::null());
+    cmd.stdout(std::process::Stdio::null());
+    cmd.stderr(std::process::Stdio::null());
+    let status = cmd.status().map_err(|e| format!("could not start ffmpeg: {e}"))?;
+    if !status.success() || !tmp.is_file() {
+        return Err("still-frame extraction failed".to_string());
+    }
+    let bytes = fs::read(&tmp).map_err(|e| e.to_string());
+    let _ = fs::remove_file(&tmp);
+    bytes
+}
+
+// Export request built entirely by the frontend from its own operation list:
+// filter_chain/audio_map are raw -filter_complex fragments the
+// frontend compiles, ending in the fixed output labels below when present --
+// this backend never inspects or builds a filter graph itself, only wires the
+// two fragments together and maps their outputs.
+//   filter_chain: ends with [vout] if present, else the source video stream
+//                 is mapped unfiltered.
+//   audio_map:    ends with [aout] if present, else the source audio (if any)
+//                 is mapped unfiltered. Never sent (and never mapped) for gif
+//                 -- the GIF container carries no audio at all.
+// trim_start_ms/trim_end_ms apply BEFORE any filter graph: trim_start_ms
+// becomes an input-side "-ss" (exact and, for the lossless_copy fast path,
+// keyframe-snapped by ffmpeg itself), trim_end_ms becomes an output-side
+// "-t <duration>" -- so a plain trim/cut with no other operation and
+// lossless_copy=true never touches a filter graph or re-encodes at all.
+#[derive(serde::Deserialize)]
+struct ExportRequest {
+    src_path: String,
+    dest_path: String,
+    filter_chain: Option<String>,
+    audio_map: Option<String>,
+    lossless_copy: bool,
+    // Distinct from lossless_copy (the stream-copy fast path) -- this is
+    // "Lossless" picked as a re-encode QUALITY tier, which has no bitrate of
+    // its own to map to and used to silently fall back to a fixed, lossy
+    // 8000kbps. True whenever the quality dropdown is on "lossless", even
+    // when some other op (crop, overlay, ...) still forces a real re-encode.
+    lossless_quality: bool,
+    format: String,
+    video_kbps: Option<u32>,
+    trim_start_ms: Option<u64>,
+    trim_end_ms: Option<u64>,
+}
+
+// A plain shared AtomicBool let a second export un-cancel a first one --
+// closeWindow() fires cancel_export() without awaiting it and closes the
+// window right away, so the still-running first export's blocking task can
+// outlive the window; reopening the editor and exporting again used to reset
+// the flag to false out from under it, letting both encoders race to replace
+// the same destination. Scoping the flag to a generation number fixes this:
+// each export owns the generation it was handed at start, cancel_export()
+// only ever records "cancel whichever generation is current right now", and
+// a later export's higher generation number can never match an earlier
+// export's cancellation check.
+static VIDEO_EXPORT_GEN: AtomicU64 = AtomicU64::new(0);
+static VIDEO_EXPORT_CANCEL_AT: AtomicU64 = AtomicU64::new(0);
+
+#[tauri::command]
+fn cancel_export() {
+    VIDEO_EXPORT_CANCEL_AT.store(VIDEO_EXPORT_GEN.load(Ordering::SeqCst), Ordering::SeqCst);
+}
+
+// Progress reuses "recording-convert-progress" / ConvertProgressPayload --
+// convert_recording's own event -- rather than a second progress channel; the
+// editor window listens to the same event name while an export is in flight.
+#[tauri::command]
+async fn export_video(app: AppHandle, req: ExportRequest) -> Result<String, String> {
+    if !matches!(req.format.as_str(), "mp4" | "webm" | "gif") {
+        return Err("unsupported format".to_string());
+    }
+    let src = PathBuf::from(&req.src_path);
+    if !src.is_file() {
+        return Err("source file not found".to_string());
+    }
+    let dst = PathBuf::from(&req.dest_path);
+    let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
+    let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    tauri::async_runtime::spawn_blocking(move || {
+        export_video_blocking(&ffmpeg, &src, &dst, &req, my_gen, |ms| {
+            let _ = app.emit("recording-convert-progress", ConvertProgressPayload { ms });
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn export_video_blocking(
+    ffmpeg: &Path, src: &Path, dst: &Path, req: &ExportRequest, my_gen: u64, mut on_progress: impl FnMut(u32),
+) -> Result<String, String> {
+    let mut input_args: Vec<String> = Vec::new();
+    if let Some(start) = req.trim_start_ms {
+        if start > 0 {
+            input_args.push("-ss".to_string());
+            input_args.push(format!("{:.3}", start as f64 / 1000.0));
+        }
+    }
+    let mut output_args: Vec<String> = Vec::new();
+    if let (Some(start), Some(end)) = (req.trim_start_ms, req.trim_end_ms) {
+        let dur = end.saturating_sub(start) as f64 / 1000.0;
+        if dur > 0.0 {
+            output_args.push("-t".to_string());
+            output_args.push(format!("{dur:.3}"));
+        }
+    }
+    let plain_copy = req.lossless_copy && req.filter_chain.is_none() && req.audio_map.is_none();
+    if plain_copy {
+        // Without an explicit -map, ffmpeg's own default stream selection
+        // keeps only its single "best" audio stream -- a muxed-in mic track
+        // (the file's second audio stream) silently vanished on every
+        // lossless trim-only export even though nothing asked to remove it.
+        output_args.extend(["-map", "0:v", "-map", "0:a?", "-c", "copy"].map(String::from));
+    } else {
+        let is_gif = req.format == "gif";
+        let mut graphs = Vec::new();
+        if let Some(v) = &req.filter_chain {
+            graphs.push(v.clone());
+        }
+        // GIF carries no audio at all -- never map or filter an audio stream
+        // into it, even if the frontend sent one.
+        if !is_gif {
+            if let Some(a) = &req.audio_map {
+                graphs.push(a.clone());
+            }
+        }
+        if !graphs.is_empty() {
+            output_args.push("-filter_complex".to_string());
+            output_args.push(graphs.join(";"));
+        }
+        output_args.push("-map".to_string());
+        output_args.push(if req.filter_chain.is_some() { "[vout]".to_string() } else { "0:v".to_string() });
+        if !is_gif {
+            output_args.push("-map".to_string());
+            output_args.push(if req.audio_map.is_some() { "[aout]".to_string() } else { "0:a?".to_string() });
+        }
+        match req.format.as_str() {
+            // "Lossless" has no bitrate of its own -- forcing it through
+            // the bitrate branch below silently produced an ordinary 8000kbps
+            // re-encode while still calling itself lossless. A real re-encode
+            // that must stay lossless uses -crf 0 instead (same setting the
+            // recording-conversion path already uses for its own mp4+lossless
+            // case), never a bitrate target.
+            "mp4" if req.lossless_quality => {
+                output_args.extend(["-c:v", "libx264", "-crf", "0", "-preset", "veryfast"].map(String::from));
+                output_args.extend(["-c:a", "aac", "-b:a", "320k"].map(String::from));
+            }
+            "mp4" => {
+                output_args.extend(["-c:v", "libx264"].map(String::from));
+                let kbps = req.video_kbps.unwrap_or(8000).clamp(500, 50000);
+                output_args.extend(["-b:v".to_string(), format!("{kbps}k"), "-preset".to_string(), "medium".to_string()]);
+                output_args.extend(["-c:a", "aac", "-b:a", "192k"].map(String::from));
+            }
+            "webm" if req.lossless_quality => {
+                output_args.extend(["-c:v", "libvpx-vp9", "-lossless", "1"].map(String::from));
+                output_args.extend(["-c:a", "libopus"].map(String::from));
+            }
+            "webm" => {
+                output_args.extend(["-c:v", "libvpx-vp9"].map(String::from));
+                let kbps = req.video_kbps.unwrap_or(4000).clamp(300, 50000);
+                output_args.extend(["-b:v".to_string(), format!("{kbps}k")]);
+                output_args.extend(["-c:a", "libopus"].map(String::from));
+            }
+            // The GIF preset's own filter_chain already ends in a palettegen +
+            // paletteuse pair producing [vout]; -an drops any audio outright.
+            "gif" => {
+                output_args.push("-an".to_string());
+            }
+            _ => unreachable!(),
+        }
+    }
+    let is_cancelled = || VIDEO_EXPORT_CANCEL_AT.load(Ordering::SeqCst) == my_gen;
+    let staged = run_ffmpeg_to_staged(ffmpeg, src, dst, &input_args, &output_args, is_cancelled, &mut on_progress)?;
+    // dest_path is the frontend's deterministic "<stem>-edit.<ext>" guess
+    // -- exporting the same source in the same format twice must not silently
+    // replace the first result, so the final name is only ever claimed if
+    // free, same as every other save path in the app (unique_dest_path).
+    let dir = dst.parent().unwrap_or_else(|| Path::new("."));
+    let ext = dst.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
+    let stem = dst.file_stem().and_then(|e| e.to_str()).unwrap_or("export");
+    let final_dst = unique_dest_path(dir, stem, ext);
+    fs::rename(&staged, &final_dst).map_err(|e| {
+        let _ = fs::remove_file(&staged);
+        format!("could not finalise the exported file: {e}")
+    })?;
+    Ok(final_dst.to_string_lossy().to_string())
+}
+
+// The video editor window (own label, one instance) and its own chrome —
+// decorations(false)+transparent(true)+resizable(true), same shape as the
+// main window's own (custom HTML titlebar drawn by video.html itself), not
+// the fixed-size borderless-pill pattern the other satellite windows use.
+const VIDEO_WIN_LABEL: &str = "video-editor";
+const VIDEO_WIN_W: u32 = 1100;
+const VIDEO_WIN_H: u32 = 720;
+const VIDEO_WIN_MIN_W: u32 = 760;
+const VIDEO_WIN_MIN_H: u32 = 520;
+
+// Holds the recording path the (single) editor window should be showing.
+// Same pull pattern as VarPrompt/var_window_payload: a push at window-build
+// time would race the webview's first frame, so the window asks for its own
+// target once booted (video_editor_source), and again whenever
+// "video-editor-load" fires for an already-open window.
+struct VideoEditorPending(Mutex<String>);
+impl VideoEditorPending {
+    fn new() -> Self {
+        Self(Mutex::new(String::new()))
+    }
+    fn lock(&self) -> std::sync::MutexGuard<'_, String> {
+        self.0.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
+// Opens the editor for one recording. A second call while it is already open
+// just re-targets the existing window instead of stacking a second editor.
+#[tauri::command]
+async fn open_video_editor(app: AppHandle, pending: State<'_, VideoEditorPending>, src_path: String) -> Result<(), String> {
+    if !PathBuf::from(&src_path).is_file() {
+        return Err("recording file not found".to_string());
+    }
+    *pending.lock() = src_path.clone();
+    if let Some(win) = app.get_webview_window(VIDEO_WIN_LABEL) {
+        let _ = app.emit_to(VIDEO_WIN_LABEL, "video-editor-load", &src_path);
+        let _ = win.show();
+        let _ = win.set_focus();
+        return Ok(());
+    }
+    // Never call Tauri window APIs while holding the Db lock (deadlock risk).
+    let excluded = {
+        let state: State<Db> = app.state();
+        let store = lock(&state);
+        capture_excluded(&store.settings)
+    };
+    let win = WebviewWindowBuilder::new(&app, VIDEO_WIN_LABEL, WebviewUrl::App("video.html".into()))
+        .title(brand::DISPLAY_NAME)
+        .inner_size(VIDEO_WIN_W as f64, VIDEO_WIN_H as f64)
+        .min_inner_size(VIDEO_WIN_MIN_W as f64, VIDEO_WIN_MIN_H as f64)
+        .decorations(false)
+        .transparent(true)
+        .resizable(true)
+        .visible(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+    let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
+    set_capture_exclusion(&win, excluded);
+    let geom = centered_on_primary(&win, VIDEO_WIN_W, VIDEO_WIN_H);
+    let _ = win.set_position(PhysicalPosition::new(geom.x, geom.y));
+    let _ = win.show();
+    let _ = win.set_focus();
+    Ok(())
+}
+
+#[tauri::command]
+fn video_editor_source(pending: State<VideoEditorPending>) -> Option<String> {
+    let p = pending.lock();
+    if p.is_empty() { None } else { Some(p.clone()) }
+}
+
+// Target folder for a plain "Save": a custom expert path, else
+// Videos\<app>. Mirrors screenshot_dir. The raw capture itself always keeps
+// landing in <data>/recordings until explicitly saved/copied -- 281's sweep
+// stays in charge of whatever is still undecided there.
+fn recording_dir(custom: &str) -> PathBuf {
+    let c = custom.trim();
+    if !c.is_empty() {
+        return PathBuf::from(c);
+    }
+    let base = std::env::var("USERPROFILE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir());
+    base.join("Videos").join(brand::DISPLAY_NAME)
+}
+
+// Default recording folder path (shown greyed in the expert menu / the
+// result window's folder line when no custom folder is set).
+#[tauri::command]
+fn default_recording_dir() -> String {
+    recording_dir("").to_string_lossy().to_string()
+}
+
+// Never overwrite an existing file at the target: "<stem>.<ext>", then
+// "<stem> (2).<ext>", "<stem> (3).<ext>", etc. Shared by every 280 button
+// that writes into a folder instead of a dialog-chosen exact path.
+fn unique_dest_path(dir: &std::path::Path, stem: &str, ext: &str) -> PathBuf {
+    let mut candidate = dir.join(format!("{stem}.{ext}"));
+    let mut n = 2;
+    while candidate.exists() {
+        candidate = dir.join(format!("{stem} ({n}).{ext}"));
+        n += 1;
+    }
+    candidate
+}
+
+// fs::rename fails across drives (recordingDir can be anywhere the user
+// picks, unlike the fixed same-drive <data>/recordings) -- fall back to
+// copy+remove there.
+fn move_file(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    if fs::rename(src, dst).is_ok() {
+        return Ok(());
+    }
+    fs::copy(src, dst)?;
+    fs::remove_file(src)
+}
+
+// Save/Save As/Copy relocate the video but used to leave its mic
+// sidecar (a dual-audio capture not yet muxed by the editor) behind in the
+// recordings folder, where it had no owner left and was later swept as an
+// orphan -- silently losing the microphone track on every recording saved
+// before it was ever opened in the editor. Best-effort: the primary move
+// already succeeded by the time this runs, so a sidecar move failure is
+// logged, not propagated.
+fn move_mic_sidecar_alongside(old_video: &std::path::Path, new_video: &std::path::Path) {
+    let old_sidecar = old_video.with_extension("mic.wav");
+    if !old_sidecar.is_file() {
+        return;
+    }
+    let new_sidecar = new_video.with_extension("mic.wav");
+    if old_sidecar == new_sidecar {
+        return;
+    }
+    if let Err(e) = move_file(&old_sidecar, &new_sidecar) {
+        eprintln!("failed to relocate mic sidecar: {e}");
+    }
+}
+
+// Shared by Save/Copy: if the file already sits in the target folder
+// (e.g. Copy running after a Save already placed it there), leave its name
+// alone; otherwise move it in under a name that never overwrites anything.
+fn place_in_dir(src: &std::path::Path, dir: &std::path::Path) -> std::io::Result<PathBuf> {
+    fs::create_dir_all(dir)?;
+    let same_dir = src
+        .parent()
+        .and_then(|p| p.canonicalize().ok())
+        .zip(dir.canonicalize().ok())
+        .map(|(a, b)| a == b)
+        .unwrap_or(false);
+    if same_dir {
+        return Ok(src.to_path_buf());
+    }
+    let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
+    let stem = src.file_stem().and_then(|e| e.to_str()).unwrap_or("Recording");
+    let dest = unique_dest_path(dir, stem, ext);
+    move_file(src, &dest)?;
+    move_mic_sidecar_alongside(src, &dest);
+    Ok(dest)
+}
+
 // Post-capture "Save as..." for a recording -- the file already sits in the
-// recordings folder (raw or converted), this just copies it wherever the
-// user picks, same shape as save_screenshot_as but from a real file instead
-// of a data URL.
+// recordings folder (raw or converted); this moves it wherever the user
+// picks, same shape as save_screenshot_as but from a real file instead of a
+// data URL. Moves rather than copies so the raw capture does not linger as a
+// duplicate in <data>/recordings once it has a permanent home -- the
+// frontend updates its own pending-path to the new location afterwards, so
+// a later Attach/Copy on the same result still finds the file.
 #[tauri::command]
 async fn save_recording_as(app: AppHandle, src_path: String) -> Result<Option<String>, String> {
     let src = PathBuf::from(&src_path);
@@ -17229,24 +18738,90 @@ async fn save_recording_as(app: AppHandle, src_path: String) -> Result<Option<St
     let name = src.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| format!("Recording.{ext}"));
     match file_dialog(&app).add_filter(ext.to_uppercase(), &[ext.as_str()]).set_file_name(&name).save_file() {
         Some(p) => {
-            fs::copy(&src, &p).map_err(|e| e.to_string())?;
+            move_file(&src, &p).map_err(|e| e.to_string())?;
+            move_mic_sidecar_alongside(&src, &p);
             Ok(Some(p.to_string_lossy().to_string()))
         }
         None => Ok(None),
     }
 }
 
-// Discard a not-yet-attached recording. Scoped to the app's own recordings
-// folder (never an arbitrary webview-supplied path), same defense-in-depth
-// pattern as delete_screenshot_file.
+// 280's plain "Save" -- writes straight into recordingDir without a dialog
+// (the common case); save_recording_as above keeps the free dialog for
+// everything else.
 #[tauri::command]
-fn discard_recording_file(app: AppHandle, path: String) -> bool {
+async fn save_recording_now(state: State<'_, Db>, src_path: String) -> Result<String, String> {
+    let src = PathBuf::from(&src_path);
+    if !src.is_file() {
+        return Err("recording file not found".to_string());
+    }
+    let custom = lock(&state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
+    let dest = place_in_dir(&src, &recording_dir(&custom)).map_err(|e| e.to_string())?;
+    Ok(dest.to_string_lossy().to_string())
+}
+
+// 280's "Copy" -- the video counterpart of the screenshot result dialog's
+// clipboard copy. A video cannot be a bitmap, so the file itself is the
+// clipboard payload (the same CF_HDROP path copy_prompt already uses for any
+// file-attached prompt); it is moved into recordingDir first so the pasted
+// reference still resolves after the window closes (see discard_recording_file
+// and closeRecModal on the frontend: a copy alone does not count as "saving",
+// so closing without also using Save/Save as.../Attach still deletes it).
+//
+// The move happens before the clipboard write and is not undone if that write
+// fails (undoing it would just trade one race for another) -- so the new
+// location is always returned alongside a success flag rather than folded
+// into the Err case, which used to strand the frontend pointing at the
+// now-nonexistent original path: every later action (Save, Discard, a retry)
+// would fail with "file not found" even though the recording still exists,
+// safely, at `dest`.
+#[tauri::command]
+async fn copy_recording_to_clipboard(state: State<'_, Db>, src_path: String) -> Result<(String, bool), String> {
+    let src = PathBuf::from(&src_path);
+    if !src.is_file() {
+        return Err("recording file not found".to_string());
+    }
+    let custom = lock(&state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
+    let dest = place_in_dir(&src, &recording_dir(&custom)).map_err(|e| e.to_string())?;
+    let dest_str = dest.to_string_lossy().to_string();
+    let clip_ok = set_clipboard_file(&dest_str);
+    Ok((dest_str, clip_ok))
+}
+
+// Discard a not-yet-saved recording. Scoped to the app's own recordings
+// folder OR the current recordingDir (280's Copy/Save move the working file
+// there before the window closes) -- never an arbitrary webview-supplied
+// path, same defense-in-depth pattern as delete_screenshot_file.
+#[tauri::command]
+fn discard_recording_file(app: AppHandle, state: State<'_, Db>, path: String) -> bool {
     let p = PathBuf::from(&path);
-    let Some(parent) = p.parent().and_then(|d| d.canonicalize().ok()) else { return false };
-    let allowed = data_dir(&app).join("recordings");
-    let Ok(allowed) = allowed.canonicalize() else { return false };
-    if parent != allowed || !p.is_file() {
+    // The directory check alone let this delete ANY file directly inside
+    // recordingDir -- often the user's normal Videos folder, shared with files
+    // this app never touched. delete_screenshot_file's own comment already
+    // calls its filename-prefix check "defense in depth" against exactly this;
+    // this command claimed to follow the same pattern but was missing that
+    // half. Every real recording (raw, saved, converted, or moved by Copy)
+    // keeps the "rec-" stem `rec_filename`/`place_in_dir` give it -- only
+    // Save As lets the user pick a different name, and that always sets
+    // recSavedOrAttached first, taking the file out of discard's reach.
+    let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if !name.starts_with("rec-") {
         return false;
+    }
+    let Some(parent) = p.parent().and_then(|d| d.canonicalize().ok()) else { return false };
+    let custom = lock(&state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
+    let allowed = [data_dir(&app).join("recordings"), recording_dir(&custom)];
+    let in_allowed = allowed.iter().any(|d| d.canonicalize().map(|c| c == parent).unwrap_or(false));
+    if !in_allowed || !p.is_file() {
+        return false;
+    }
+    // A discarded recording takes its mic sidecar (if any) with it --
+    // best-effort, since most recordings have none.
+    if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+        if ext.eq_ignore_ascii_case("mp4") {
+            let sidecar = p.with_extension("mic.wav");
+            let _ = fs::remove_file(&sidecar);
+        }
     }
     fs::remove_file(&p).is_ok()
 }
@@ -18970,6 +20545,8 @@ pub fn run() {
                     match owner {
                         Some(HotkeyOwner::Prompt(id)) => fire_prompt_hotkey(app, &id),
                         Some(HotkeyOwner::Voice) => toggle_voice_from_hotkey(app),
+                        Some(HotkeyOwner::RecStop) => trigger_rec_stop_hotkey(app),
+                        Some(HotkeyOwner::RecPause) => trigger_rec_pause_hotkey(app),
                         _ => summon_launcher(app), // the app hotkey (or an unknown leftover)
                     }
                 })
@@ -18988,7 +20565,18 @@ pub fn run() {
             }
             sweep_stale_temp_files(); // crash/abnormal-exit leftovers from a previous run
             let store = load_store(&handle);
-            sweep_stale_recordings(&handle, &orphan_referenced_set(&store)); // ditto, for undecided recordings
+            // Ditto, for undecided AND broken recordings -- Db is not managed
+            // yet at this point, so this reads straight off the just-loaded `store`.
+            {
+                let referenced = orphan_referenced_set(&store);
+                let broken_on = store.settings.ui_flags.get("recSweepBroken") != Some(&false);
+                let grace_min = store.settings.ui_values.get("recBrokenGraceMin").copied().unwrap_or(5.0).max(0.0);
+                let (count, bytes) = sweep_stale_recordings(&handle, &referenced, broken_on, Duration::from_secs((grace_min * 60.0) as u64));
+                if count > 0 {
+                    append_crash_log(&format!("startup recording sweep: removed {count} file(s), {bytes} bytes"));
+                    *PENDING_SWEEP_NOTICE.lock().unwrap_or_else(|e| e.into_inner()) = Some((count, bytes));
+                }
+            }
 
             let saved_geom = store.settings.window;
             let autostart = store.settings.autostart;
@@ -19005,6 +20593,7 @@ pub fn run() {
             app.manage(HiddenFloats(Mutex::new(std::collections::HashSet::new())));
             app.manage(DragHint(Mutex::new((0, None)))); // live merge highlight
             app.manage(VarPrompt::new()); // standalone fill-in window
+            app.manage(VideoEditorPending::new()); // video editor's pending target path
             app.manage(SyncWriteQueue(Mutex::new(SyncWriteState::default())));
             app.manage(VoiceState(Mutex::new(None), std::sync::atomic::AtomicBool::new(false))); // live dictation session
             app.manage(RecordingState(Mutex::new(None))); // live screen-recording session
@@ -19042,6 +20631,31 @@ pub fn run() {
                     Duration::from_secs(BACKUP_CHECK_SECS),
                     move || auto_backup_tick(&h),
                 );
+            }
+
+            // Self-heal a rec-bar window that exists but somehow ended up
+            // invisible while its recording is still running -- see rec_bar_heal_tick.
+            {
+                let h = handle.clone();
+                scheduler::register_periodic(
+                    "rec-bar-heal",
+                    Duration::from_secs(5),
+                    Duration::from_secs(5),
+                    move || rec_bar_heal_tick(&h),
+                );
+            }
+
+            // "Only at startup" left a crashed recording's leftover sitting for
+            // however long the app happened to stay open next -- the same flaw as any
+            // other startup-only sweep. First delay = one full interval since the
+            // startup sweep above just ran; each round re-times itself off the
+            // current recSweepEveryMin, so a changed interval needs no restart.
+            {
+                let h = handle.clone();
+                scheduler::register_periodic("recording-sweep", recording_sweep_interval(&handle), recording_sweep_interval(&handle), move || {
+                    sweep_recordings_and_notify(&h);
+                    scheduler::retime("recording-sweep", recording_sweep_interval(&h));
+                });
             }
 
             // Re-arm the app hotkey plus every prompt accelerator. Each
@@ -19262,7 +20876,20 @@ pub fn run() {
                             .map(|s| tray_custom_menu_on(&lock(&s).settings))
                             .unwrap_or(false);
                         if custom {
-                            open_tray_window(app);
+                            // Same root cause as the show_rec_bar hang: this
+                            // handler runs on the main thread, and building a webview
+                            // window from inside it never returns. Queue the build for
+                            // the next main-thread turn instead, with a log line on each
+                            // side so a future hang would be visible instead of silent.
+                            let app2 = app.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let app3 = app2.clone();
+                                let _ = app2.run_on_main_thread(move || {
+                                    append_crash_log("tray window: about to build");
+                                    open_tray_window(&app3);
+                                    append_crash_log("tray window: build ok");
+                                });
+                            });
                         }
                     }
                 });
@@ -19537,6 +21164,8 @@ pub fn run() {
             voice_lang_snooze,
             open_privacy_mic,
             set_voice_hotkey,
+            set_rec_stop_hotkey,
+            set_rec_pause_hotkey,
             start_recording,
             pause_recording,
             resume_recording,
@@ -19544,8 +21173,23 @@ pub fn run() {
             cancel_recording,
             convert_recording,
             cancel_recording_convert,
+            open_video_editor,
+            video_editor_source,
+            probe_recording,
+            windows_fonts_dir,
+            mux_mic_track,
+            generate_filmstrip,
+            generate_waveform_peaks,
+            extract_still_frame,
+            export_video,
+            cancel_export,
             save_recording_as,
+            save_recording_now,
+            copy_recording_to_clipboard,
+            default_recording_dir,
             discard_recording_file,
+            take_recording_sweep_notice,
+            sweep_recordings_now,
             show_rec_bar,
             hide_rec_bar,
             recording_status,
@@ -20785,6 +22429,330 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    // ---- Video editor (242-245): real ffmpeg/ffprobe, no capture hardware needed ----
+
+    fn test_ffprobe() -> Option<PathBuf> {
+        let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("ffprobe.exe");
+        p.is_file().then_some(p)
+    }
+
+    // Like make_test_mp4, but with its own (system) audio track -- needed only
+    // for the mux test below: muxing a mic sidecar into a video-only source
+    // (make_test_mp4's lavfi testsrc has no audio at all) would still end up
+    // with just one audio stream, since "0:a?" maps nothing when there is no
+    // stream 0 audio to begin with.
+    fn make_test_mp4_with_audio(ffmpeg: &Path, dir: &Path, name: &str, seconds: u32, size: &str) -> PathBuf {
+        use std::os::windows::process::CommandExt;
+        let out = dir.join(name);
+        let status = std::process::Command::new(ffmpeg)
+            .args(["-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i"])
+            .arg(format!("testsrc=duration={seconds}:size={size}:rate=15"))
+            .args(["-f", "lavfi", "-i"])
+            .arg(format!("sine=frequency=220:duration={seconds}"))
+            .args(["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest"])
+            .arg(&out)
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()
+            .expect("could not run ffmpeg to build the test fixture");
+        assert!(status.success(), "ffmpeg failed to build the test fixture clip");
+        out
+    }
+
+    fn make_test_wav(dir: &Path, name: &str, seconds: u32) -> PathBuf {
+        use std::os::windows::process::CommandExt;
+        let Some(ffmpeg) = test_ffmpeg() else { panic!("ffmpeg.exe required to build the wav fixture") };
+        let out = dir.join(name);
+        let status = std::process::Command::new(&ffmpeg)
+            .args(["-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i"])
+            .arg(format!("sine=frequency=440:duration={seconds}"))
+            .args(["-ar", "48000", "-ac", "1"])
+            .arg(&out)
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()
+            .expect("could not run ffmpeg to build the wav fixture");
+        assert!(status.success());
+        out
+    }
+
+    #[test]
+    fn pcm_s16le_to_peaks_never_overflows_on_i16_min() {
+        // i16::MIN.unsigned_abs() is 32768, one past i16::MAX -- a signed
+        // running max would wrap here; the u16 running max must not.
+        let bytes = i16::MIN.to_le_bytes();
+        let peaks = pcm_s16le_to_peaks(&bytes, 1);
+        assert_eq!(peaks, vec![1.0]);
+    }
+
+    #[test]
+    fn pcm_s16le_to_peaks_reports_zero_for_silence_and_one_bucket_per_request() {
+        let silence = vec![0u8; 8000 * 2];
+        let peaks = pcm_s16le_to_peaks(&silence, 10);
+        assert_eq!(peaks.len(), 10);
+        assert!(peaks.iter().all(|p| *p == 0.0));
+        // Empty input still returns the requested bucket count, all zero.
+        assert_eq!(pcm_s16le_to_peaks(&[], 5), vec![0.0; 5]);
+    }
+
+    #[test]
+    fn parse_ffprobe_rate_reads_a_fraction_and_rejects_zero_denominator() {
+        assert_eq!(parse_ffprobe_rate("30/1"), Some(30.0));
+        assert_eq!(parse_ffprobe_rate("30000/1001"), Some(30000.0 / 1001.0));
+        assert_eq!(parse_ffprobe_rate("0/0"), None);
+        assert_eq!(parse_ffprobe_rate("not-a-rate"), None);
+    }
+
+    #[test]
+    fn probe_recording_real_ffmpeg_reports_duration_dimensions_and_no_mic_sidecar() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-probetest-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 2, "64x48");
+        let probe = probe_recording_blocking(&ffprobe, &src).expect("probe should succeed");
+        assert!(probe.duration_ms >= 1500 && probe.duration_ms <= 3000, "duration_ms was {}", probe.duration_ms);
+        assert_eq!((probe.width, probe.height), (64, 48));
+        assert!(!probe.has_audio, "the lavfi testsrc fixture has no audio stream");
+        assert!(!probe.has_mic_track);
+        assert_eq!(probe.mic_sidecar, None);
+        assert!(probe.stream_copy_safe, "a plain h264 mp4 with no audio must be reported safe to stream-copy");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // A source whose video codec is not h264/hevc (e.g. dragged in from
+    // elsewhere as VP9/webm) must never be reported stream-copy-safe -- that
+    // flag is what gates the editor's own "-c copy" fast path, and copying a
+    // VP9 stream into an mp4 container fails ffmpeg outright.
+    #[test]
+    fn probe_recording_real_ffmpeg_reports_a_non_h264_source_as_not_stream_copy_safe() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-probetest-vp9-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        use std::os::windows::process::CommandExt;
+        let out = dir.join("src.webm");
+        let status = std::process::Command::new(&ffmpeg)
+            .args(["-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=1:size=64x48:rate=15"])
+            .args(["-c:v", "libvpx-vp9"])
+            .arg(&out)
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()
+            .expect("could not run ffmpeg to build the vp9 test fixture");
+        assert!(status.success(), "ffmpeg failed to build the vp9 test fixture clip");
+        let probe = probe_recording_blocking(&ffprobe, &out).expect("probe should succeed");
+        assert!(!probe.stream_copy_safe, "a vp9 source must never be reported safe for an mp4 stream copy");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn probe_recording_real_ffmpeg_reports_a_mic_sidecar_when_present_and_not_yet_muxed() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-probetest-sidecar-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x48");
+        let sidecar = src.with_extension("mic.wav");
+        fs::write(&sidecar, b"not real wav data, only existence matters here").unwrap();
+        let probe = probe_recording_blocking(&ffprobe, &src).expect("probe should succeed");
+        assert_eq!(probe.mic_sidecar, Some(sidecar.to_string_lossy().to_string()));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn mux_mic_track_real_ffmpeg_produces_two_distinct_audio_streams_and_removes_the_sidecar() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-muxtest-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let video = make_test_mp4_with_audio(&ffmpeg, &dir, "video.mp4", 2, "64x48");
+        let sidecar = make_test_wav(&dir, "video.mic.wav", 2);
+        mux_mic_track_blocking(&ffmpeg, &video, &sidecar, 128).expect("mux should succeed");
+        assert!(video.is_file(), "muxed output must replace the video at the same path");
+        assert!(!sidecar.is_file(), "the sidecar must be removed once muxed in");
+        let probe = probe_recording_blocking(&ffprobe, &video).expect("probe of the muxed file should succeed");
+        assert!(probe.has_audio);
+        assert!(probe.has_mic_track, "the muxed file must report two audio streams");
+        assert_eq!(probe.mic_sidecar, None);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_video_real_ffmpeg_lossless_trim_shortens_the_clip_via_stream_copy() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-exporttest-trim-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 4, "64x48");
+        let dest = dir.join("out.mp4");
+        let req = ExportRequest {
+            src_path: src.to_string_lossy().to_string(),
+            dest_path: dest.to_string_lossy().to_string(),
+            filter_chain: None,
+            audio_map: None,
+            lossless_copy: true,
+            lossless_quality: false,
+            format: "mp4".to_string(),
+            video_kbps: None,
+            trim_start_ms: Some(0),
+            trim_end_ms: Some(1000),
+        };
+        let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        let out = export_video_blocking(&ffmpeg, &src, &dest, &req, my_gen, |_| {}).expect("export should succeed");
+        assert_eq!(PathBuf::from(&out), dest);
+        let probe = probe_recording_blocking(&ffprobe, &dest).expect("probe of the exported file should succeed");
+        assert!(probe.duration_ms <= 1500, "trimmed export should be roughly 1s, was {}ms", probe.duration_ms);
+        assert!(src.is_file(), "export must never touch the source file");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_video_real_ffmpeg_filter_chain_crops_via_the_v_output_label() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-exporttest-crop-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x48");
+        let dest = dir.join("out.mp4");
+        let req = ExportRequest {
+            src_path: src.to_string_lossy().to_string(),
+            dest_path: dest.to_string_lossy().to_string(),
+            filter_chain: Some("[0:v]crop=32:32:0:0[vout]".to_string()),
+            audio_map: None,
+            lossless_copy: false,
+            lossless_quality: false,
+            format: "mp4".to_string(),
+            video_kbps: Some(1000),
+            trim_start_ms: None,
+            trim_end_ms: None,
+        };
+        let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        let out = export_video_blocking(&ffmpeg, &src, &dest, &req, my_gen, |_| {}).expect("export should succeed");
+        assert_eq!(PathBuf::from(&out), dest);
+        let probe = probe_recording_blocking(&ffprobe, &dest).expect("probe of the exported file should succeed");
+        assert_eq!((probe.width, probe.height), (32, 32), "the [v]-labelled crop must actually be applied");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // Proves the "Lossless" quality tier actually stays lossless (a real
+    // -crf 0 re-encode) rather than silently falling back to an ordinary
+    // bitrate cap -- the same request with only lossless_quality flipped and
+    // a deliberately low video_kbps must produce a dramatically larger file.
+    #[test]
+    fn export_video_real_ffmpeg_lossless_quality_is_far_larger_than_a_capped_bitrate_reencode() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-exporttest-lossless-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 3, "320x240");
+        let lossless_dest = dir.join("lossless.mp4");
+        let capped_dest = dir.join("capped.mp4");
+        let lossless_req = ExportRequest {
+            src_path: src.to_string_lossy().to_string(),
+            dest_path: lossless_dest.to_string_lossy().to_string(),
+            filter_chain: Some("[0:v]scale=320:240[vout]".to_string()),
+            audio_map: None,
+            lossless_copy: false,
+            lossless_quality: true,
+            format: "mp4".to_string(),
+            video_kbps: Some(300),
+            trim_start_ms: None,
+            trim_end_ms: None,
+        };
+        let capped_req = ExportRequest {
+            src_path: src.to_string_lossy().to_string(),
+            dest_path: capped_dest.to_string_lossy().to_string(),
+            filter_chain: Some("[0:v]scale=320:240[vout]".to_string()),
+            audio_map: None,
+            lossless_copy: false,
+            lossless_quality: false,
+            format: "mp4".to_string(),
+            video_kbps: Some(300),
+            trim_start_ms: None,
+            trim_end_ms: None,
+        };
+        let gen1 = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        export_video_blocking(&ffmpeg, &src, &lossless_dest, &lossless_req, gen1, |_| {}).expect("lossless export should succeed");
+        let gen2 = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        export_video_blocking(&ffmpeg, &src, &capped_dest, &capped_req, gen2, |_| {}).expect("capped export should succeed");
+        let lossless_len = fs::metadata(&lossless_dest).unwrap().len();
+        let capped_len = fs::metadata(&capped_dest).unwrap().len();
+        assert!(
+            lossless_len > capped_len * 2,
+            "a crf-0 lossless re-encode ({lossless_len} bytes) must be dramatically larger than a 300kbps-capped one ({capped_len} bytes) -- otherwise Lossless quality is silently falling back to a bitrate cap again"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_video_real_ffmpeg_gif_ignores_any_audio_map_and_produces_a_silent_gif() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-exporttest-gif-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4_with_audio(&ffmpeg, &dir, "src.mp4", 1, "64x48");
+        let dest = dir.join("out.gif");
+        let req = ExportRequest {
+            src_path: src.to_string_lossy().to_string(),
+            dest_path: dest.to_string_lossy().to_string(),
+            filter_chain: Some("[0:v]scale=32:32[vout]".to_string()),
+            // A gif export must never map this in -- the GIF container cannot
+            // carry audio at all; without the is_gif guard this would make
+            // ffmpeg fail with "GIF muxer does not support audio".
+            audio_map: Some("[0:a]volume=1[aout]".to_string()),
+            lossless_copy: false,
+            lossless_quality: false,
+            format: "gif".to_string(),
+            video_kbps: None,
+            trim_start_ms: None,
+            trim_end_ms: None,
+        };
+        let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        let out = export_video_blocking(&ffmpeg, &src, &dest, &req, my_gen, |_| {}).expect("gif export should succeed");
+        let bytes = fs::read(&out).unwrap();
+        assert_eq!(&bytes[0..3], b"GIF");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_video_real_ffmpeg_cancel_leaves_no_destination_file() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-exporttest-cancel-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 8, "960x720");
+        let dest = dir.join("out.mp4");
+        let req = ExportRequest {
+            src_path: src.to_string_lossy().to_string(),
+            dest_path: dest.to_string_lossy().to_string(),
+            filter_chain: None,
+            audio_map: None,
+            lossless_copy: false,
+            lossless_quality: false,
+            format: "mp4".to_string(),
+            video_kbps: Some(4000),
+            trim_start_ms: None,
+            trim_end_ms: None,
+        };
+        let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(150));
+            VIDEO_EXPORT_CANCEL_AT.store(my_gen, Ordering::SeqCst);
+        });
+        let result = export_video_blocking(&ffmpeg, &src, &dest, &req, my_gen, |_| {});
+        assert_eq!(result, Err("cancelled".to_string()));
+        assert!(!dest.exists(), "a cancelled export must leave no destination file");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // A second export's generation must survive a first export's later
+    // cancellation -- the whole point of scoping the cancel flag to a
+    // generation number instead of a shared bool.
+    #[test]
+    fn export_video_cancelling_an_earlier_generation_does_not_cancel_a_later_one() {
+        let gen_a = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        let gen_b = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        VIDEO_EXPORT_CANCEL_AT.store(gen_a, Ordering::SeqCst);
+        assert!(gen_a != gen_b);
+        let is_cancelled_b = || VIDEO_EXPORT_CANCEL_AT.load(Ordering::SeqCst) == gen_b;
+        assert!(!is_cancelled_b(), "an older generation's cancellation must not affect a newer one");
+    }
+
     // ---- Recording: state machine + clock + filename, no hardware needed ----
 
     #[test]
@@ -20996,7 +22964,7 @@ mod tests {
         };
         let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
-        let (path, _dropped, _encode_error) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
         assert!(bytes.len() > 10_000, "output suspiciously small: {} bytes", bytes.len());
         let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
@@ -21020,7 +22988,7 @@ mod tests {
         };
         let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
-        let (path, _dropped, _encode_error) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
         assert!(bytes.len() > 10_000, "output suspiciously small: {} bytes", bytes.len());
         let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
@@ -21041,7 +23009,7 @@ mod tests {
         };
         let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
-        let (path, _dropped, _encode_error) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
         assert!(bytes.len() > 10_000, "output suspiciously small: {} bytes", bytes.len());
         let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
@@ -21066,7 +23034,7 @@ mod tests {
         let wall_start = std::time::Instant::now();
         let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(600));
-        let (path, _dropped, _encode_error) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav) = recording::stop(session).expect("stop");
         let wall_elapsed = wall_start.elapsed().as_secs_f64();
         let bytes = std::fs::read(&path).expect("read output file");
         let durations = mp4_track_durations_secs(&bytes);
@@ -21106,7 +23074,7 @@ mod tests {
         };
         let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(2));
-        let (path, _dropped, _encode_error) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
         let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
         let _ = std::fs::remove_file(&path);
@@ -22895,6 +24863,44 @@ mod tests {
         let _ = fs::remove_file(&unrelated_file);
     }
 
+    // Reusing a zoomed-in filmstrip's cache for a zoomed-out request served
+    // thumbnails spaced for the WRONG count, silently covering only part of the
+    // clip -- count must be part of the cache key, same as path and mtime.
+    #[test]
+    fn filmstrip_cache_dir_keys_on_requested_count_too() {
+        let dir = std::env::temp_dir();
+        let src = dir.join(format!("ps-filmstrip-key-test-{}.mp4", std::process::id()));
+        fs::write(&src, b"x").unwrap();
+        let a = filmstrip_cache_dir(&src, 12).unwrap();
+        let b = filmstrip_cache_dir(&src, 40).unwrap();
+        assert_ne!(a, b, "different requested counts must not collide on the same cache dir");
+        assert_eq!(filmstrip_cache_dir(&src, 12).unwrap(), a, "the same (path, mtime, count) must be stable");
+        let _ = fs::remove_file(&src);
+    }
+
+    // filmstrip_cache_dir's own comment used to claim an existing sweep
+    // already covered this folder -- it never actually recursed into it, so a
+    // cache entry for a since-deleted/renamed/re-encoded recording sat forever.
+    #[test]
+    fn sweep_stale_temp_files_also_reclaims_stale_filmstrip_cache_dirs() {
+        let dir = std::env::temp_dir();
+        let pid = std::process::id();
+        let thumb_root = dir.join(brand::TEMP_DIR).join("video-thumbs");
+        let stale_entry = thumb_root.join(format!("stale-{pid}"));
+        let fresh_entry = thumb_root.join(format!("fresh-{pid}"));
+        fs::create_dir_all(&stale_entry).unwrap();
+        fs::write(stale_entry.join("thumb-0000.jpg"), b"jpeg").unwrap();
+        fs::create_dir_all(&fresh_entry).unwrap();
+        fs::write(fresh_entry.join("thumb-0000.jpg"), b"jpeg").unwrap();
+        backdate(&stale_entry, STALE_TEMP_FILE_AGE + Duration::from_secs(60));
+
+        sweep_stale_temp_files();
+
+        assert!(!stale_entry.exists(), "an old, unrevisited filmstrip cache dir must be swept");
+        assert!(fresh_entry.exists(), "a recently-touched filmstrip cache dir must survive");
+        let _ = fs::remove_dir_all(&fresh_entry);
+    }
+
     // A recording nobody decided on (attach/save/discard) yet, old enough that
     // it can only be a crash/abnormal-exit leftover, is swept; one still fresh
     // (the post-capture menu could genuinely still be open) and one a prompt
@@ -22916,11 +24922,228 @@ mod tests {
 
         let mut wanted = std::collections::HashSet::new();
         wanted.insert(referenced.to_string_lossy().replace('/', "\\").to_lowercase());
-        sweep_stale_recordings_in(&dir, &wanted);
+        sweep_stale_recordings_in(&dir, &wanted, &[], true, Duration::from_secs(300));
 
         assert!(!abandoned.exists(), "an old, unreferenced recording must be swept");
         assert!(fresh.exists(), "a fresh recording (menu possibly still open) must survive");
         assert!(referenced.exists(), "a recording a prompt still references must survive however old");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // The box parser against a valid file, a truncated (crash) one, and a
+    // non-mp4 -- exactly the three cases that matter for detection.
+    #[test]
+    fn mp4_has_moov_detects_present_and_missing_atom() {
+        let dir = std::env::temp_dir().join(format!("ps-test-moov-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let mut valid = Vec::new();
+        valid.extend_from_slice(&16u32.to_be_bytes());
+        valid.extend_from_slice(b"ftyp");
+        valid.extend_from_slice(&[0u8; 8]);
+        valid.extend_from_slice(&8u32.to_be_bytes());
+        valid.extend_from_slice(b"moov");
+        let valid_path = dir.join("valid.mp4");
+        fs::write(&valid_path, &valid).unwrap();
+        assert!(mp4_has_moov(&valid_path), "a moov box present at the top level must be found");
+
+        let mut truncated = Vec::new();
+        truncated.extend_from_slice(&16u32.to_be_bytes());
+        truncated.extend_from_slice(b"ftyp");
+        truncated.extend_from_slice(&[0u8; 8]);
+        truncated.extend_from_slice(&8u32.to_be_bytes());
+        truncated.extend_from_slice(b"mdat");
+        let truncated_path = dir.join("truncated.mp4");
+        fs::write(&truncated_path, &truncated).unwrap();
+        assert!(!mp4_has_moov(&truncated_path), "a crash leftover with no moov must be reported as such");
+
+        let garbage_path = dir.join("not-a-video.txt");
+        fs::write(&garbage_path, b"just plain text, no box structure at all here").unwrap();
+        assert!(!mp4_has_moov(&garbage_path), "non-box-shaped bytes must not be mistaken for a moov box");
+
+        // The header claims a large moov box, but the file ends right
+        // after the header itself -- a crash mid-write, not a healthy file.
+        let mut cut_short = Vec::new();
+        cut_short.extend_from_slice(&16u32.to_be_bytes());
+        cut_short.extend_from_slice(b"ftyp");
+        cut_short.extend_from_slice(&[0u8; 8]);
+        cut_short.extend_from_slice(&5000u32.to_be_bytes());
+        cut_short.extend_from_slice(b"moov");
+        let cut_short_path = dir.join("cut-short.mp4");
+        fs::write(&cut_short_path, &cut_short).unwrap();
+        assert!(!mp4_has_moov(&cut_short_path), "a moov header whose declared size overruns the file must be reported as broken");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn recording_is_broken_only_flags_moov_less_mp4() {
+        let dir = std::env::temp_dir().join(format!("ps-test-broken-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let mut valid = Vec::new();
+        valid.extend_from_slice(&8u32.to_be_bytes());
+        valid.extend_from_slice(b"moov");
+        let mp4_ok = dir.join("ok.mp4");
+        fs::write(&mp4_ok, &valid).unwrap();
+        assert!(!recording_is_broken(&mp4_ok), "an mp4 with a moov box is not broken");
+
+        let mp4_broken = dir.join("broken.mp4");
+        fs::write(&mp4_broken, b"not a real box structure").unwrap();
+        assert!(recording_is_broken(&mp4_broken), "an mp4 with no moov box is broken");
+
+        let other = dir.join("clip.webm");
+        fs::write(&other, b"not a real box structure").unwrap();
+        assert!(!recording_is_broken(&other), "only mp4 is judged by the moov check");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rec_wav_writer_roundtrips_a_valid_header_and_sample_data() {
+        let dir = std::env::temp_dir().join(format!("ps-test-wav-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("mic.wav");
+
+        let mut w = RecWavWriter::create(&path, 48_000, 2).expect("create");
+        let samples: Vec<i16> = vec![1, -1, 100, -100];
+        w.write_samples(&samples).expect("write");
+        w.write_samples(&[42]).expect("write more");
+        w.finish().expect("finish");
+
+        let bytes = fs::read(&path).unwrap();
+        assert_eq!(&bytes[0..4], b"RIFF");
+        assert_eq!(&bytes[8..12], b"WAVE");
+        assert_eq!(&bytes[12..16], b"fmt ");
+        assert_eq!(u16::from_le_bytes([bytes[20], bytes[21]]), 1, "PCM format tag");
+        assert_eq!(u16::from_le_bytes([bytes[22], bytes[23]]), 2, "channel count");
+        assert_eq!(u32::from_le_bytes([bytes[24], bytes[25], bytes[26], bytes[27]]), 48_000, "sample rate");
+        assert_eq!(&bytes[36..40], b"data");
+        let data_size = u32::from_le_bytes([bytes[40], bytes[41], bytes[42], bytes[43]]);
+        assert_eq!(data_size, (samples.len() as u32 + 1) * 2, "data chunk size must cover every written sample");
+        let riff_size = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+        assert_eq!(riff_size, 36 + data_size, "RIFF size is the fixed 36-byte header plus the data chunk");
+        assert_eq!(bytes.len() as u32, 44 + data_size, "file length must match header + data exactly");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn mic_sidecar_video_path_only_matches_the_mic_wav_suffix() {
+        assert_eq!(
+            mic_sidecar_video_path(Path::new("C:/rec/2026-09-04_10-00-00.mic.wav")),
+            Some(PathBuf::from("C:/rec/2026-09-04_10-00-00.mp4"))
+        );
+        assert_eq!(mic_sidecar_video_path(Path::new("C:/rec/2026-09-04_10-00-00.mp4")), None);
+        assert_eq!(mic_sidecar_video_path(Path::new("C:/rec/other.wav")), None);
+    }
+
+    // A mic sidecar must never be swept away while its own recording is still
+    // referenced (e.g. already attached to a prompt) even though the sidecar
+    // itself is never directly referenced by anything.
+    #[test]
+    fn sweep_stale_recordings_in_keeps_mic_sidecar_of_a_referenced_recording() {
+        let dir = std::env::temp_dir().join(format!("ps-test-mic-sidecar-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let video = dir.join("2026-09-04_12-00-00.mp4");
+        let sidecar = dir.join("2026-09-04_12-00-00.mic.wav");
+        fs::write(&video, b"not a real box structure").unwrap();
+        fs::write(&sidecar, b"RIFF....WAVE").unwrap();
+        backdate(&video, Duration::from_secs(3600));
+        backdate(&sidecar, Duration::from_secs(3600));
+
+        let mut referenced = std::collections::HashSet::new();
+        referenced.insert(video.to_string_lossy().replace('/', "\\").to_lowercase());
+        let (count, _bytes) = sweep_stale_recordings_in(&dir, &referenced, &[], true, Duration::from_secs(60));
+
+        assert_eq!(count, 0, "neither the referenced mp4 nor its sidecar may be swept");
+        assert!(video.exists());
+        assert!(sidecar.exists(), "the sidecar rides along with its referenced recording");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // A recording open in the video editor (or the mic sidecar of any
+    // protected recording, muxed in or not) must survive the sweep exactly
+    // like the actively-recording session's own output already did -- none of
+    // these four carry a db reference and all are well past every threshold.
+    #[test]
+    fn sweep_stale_recordings_in_never_touches_editor_source_or_any_mic_sidecar() {
+        let dir = std::env::temp_dir().join(format!("ps-test-editor-sweep-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let active = dir.join("2026-09-04_09-00-00.mp4");
+        let active_sidecar = dir.join("2026-09-04_09-00-00.mic.wav");
+        let editor_src = dir.join("2026-09-04_08-00-00.mp4");
+        let editor_sidecar = dir.join("2026-09-04_08-00-00.mic.wav");
+        for p in [&active, &active_sidecar, &editor_src, &editor_sidecar] {
+            fs::write(p, b"not a real box structure").unwrap();
+            backdate(p, Duration::from_secs(3600));
+        }
+
+        let empty = std::collections::HashSet::new();
+        let protected = [active.clone(), active_sidecar.clone(), editor_src.clone(), editor_sidecar.clone()];
+        let (count, bytes) = sweep_stale_recordings_in(&dir, &empty, &protected, true, Duration::from_secs(60));
+
+        assert_eq!(count, 0);
+        assert_eq!(bytes, 0);
+        for p in [&active, &active_sidecar, &editor_src, &editor_sidecar] {
+            assert!(p.exists(), "protected path must survive the sweep: {p:?}");
+        }
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // The running session's own output is excluded unconditionally, not by
+    // age or by moov presence -- a recording in progress has no moov either.
+    #[test]
+    fn sweep_stale_recordings_in_never_touches_the_active_path() {
+        let dir = std::env::temp_dir().join(format!("ps-test-active-sweep-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let active = dir.join("2026-09-04_10-00-00.mp4");
+        fs::write(&active, b"not a real box structure").unwrap();
+        backdate(&active, Duration::from_secs(3600));
+
+        let empty = std::collections::HashSet::new();
+        let (count, bytes) = sweep_stale_recordings_in(&dir, &empty, &[active.clone()], true, Duration::from_secs(60));
+
+        assert_eq!(count, 0);
+        assert_eq!(bytes, 0);
+        assert!(active.exists(), "the currently recording session's own file must survive every sweep");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // A broken (moov-less) mp4 past the short grace period is removed even
+    // though it is nowhere near STALE_TEMP_FILE_AGE -- the whole point of 281.
+    #[test]
+    fn sweep_stale_recordings_in_removes_broken_past_grace_period() {
+        let dir = std::env::temp_dir().join(format!("ps-test-broken-sweep-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let broken = dir.join("2026-09-04_11-00-00.mp4");
+        fs::write(&broken, b"not a real box structure").unwrap();
+        backdate(&broken, Duration::from_secs(10 * 60));
+        let healthy_young = dir.join("2026-09-04_11-05-00.mp4");
+        let mut moov = Vec::new();
+        moov.extend_from_slice(&8u32.to_be_bytes());
+        moov.extend_from_slice(b"moov");
+        fs::write(&healthy_young, &moov).unwrap();
+        backdate(&healthy_young, Duration::from_secs(10 * 60));
+
+        let empty = std::collections::HashSet::new();
+        let (count, bytes) = sweep_stale_recordings_in(&dir, &empty, &[], true, Duration::from_secs(5 * 60));
+
+        assert_eq!(count, 1);
+        assert!(bytes > 0);
+        assert!(!broken.exists(), "a broken mp4 past the grace period must be swept");
+        assert!(healthy_young.exists(), "a healthy mp4 well under STALE_TEMP_FILE_AGE must survive");
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -24973,14 +27196,14 @@ mod tests {
     fn a_blocked_combination_never_reaches_the_store() {
         let prompts = sample_prompts();
         let others: Vec<&Prompt> = prompts.iter().collect();
-        assert_eq!(sanitize_hotkey("Ctrl+C", "", &others), Err(HK_SYSTEM.into()));
-        assert_eq!(sanitize_hotkey("Shift+A", "", &others), Err(HK_INVALID.into()));
-        assert_eq!(sanitize_hotkey("Super+J", "", &others), Err(HK_SYSTEM.into()));
+        assert_eq!(sanitize_hotkey("Ctrl+C", "", "", "", &others), Err(HK_SYSTEM.into()));
+        assert_eq!(sanitize_hotkey("Shift+A", "", "", "", &others), Err(HK_INVALID.into()));
+        assert_eq!(sanitize_hotkey("Super+J", "", "", "", &others), Err(HK_SYSTEM.into()));
         // A blocked accelerator is never registered, whatever put it in the store.
         let mut blocked = sample_prompts();
         blocked[0].hotkey = "Ctrl+V".into();
         blocked[1].hotkey = "Alt+Tab".into();
-        assert!(hotkey_plan("Ctrl+S", None, &blocked, true).is_empty());
+        assert!(hotkey_plan("Ctrl+S", None, None, None, &blocked, true).is_empty());
         // …and an import drops it instead of keeping a binding that does nothing.
         assert_eq!(drop_colliding_hotkeys("", &mut blocked), 2);
         assert!(blocked.iter().all(|p| p.hotkey.is_empty()));
@@ -25001,20 +27224,20 @@ mod tests {
         let mut prompts = sample_prompts();
         prompts[1].hotkey = "CommandOrControl+Shift+2".into();
         // The app hotkey wins over a prompt that wants the same combination.
-        let plan = hotkey_plan("ctrl+shift+1", None, &prompts, true);
+        let plan = hotkey_plan("ctrl+shift+1", None, None, None, &prompts, true);
         assert_eq!(plan.len(), 2);
         assert_eq!(plan[0].1, HotkeyOwner::App);
         assert_eq!(plan[1].1, HotkeyOwner::Prompt("p2".into()));
 
         // Between two prompts the first one in list order keeps it.
         prompts[1].hotkey = "ctrl+shift+1".into();
-        let plan = hotkey_plan("", None, &prompts, true);
+        let plan = hotkey_plan("", None, None, None, &prompts, true);
         assert_eq!(plan.len(), 1);
         assert_eq!(plan[0].1, HotkeyOwner::Prompt("p1".into()));
 
         // Feature toggled off: nothing but the app hotkey is registered, and the
         // stored accelerators stay untouched.
-        let plan = hotkey_plan("Alt+Q", None, &prompts, false);
+        let plan = hotkey_plan("Alt+Q", None, None, None, &prompts, false);
         assert_eq!(plan.len(), 1);
         assert_eq!(plan[0].1, HotkeyOwner::App);
         assert_eq!(prompts[0].hotkey, "CommandOrControl+Shift+1");
@@ -25027,21 +27250,21 @@ mod tests {
     fn hotkey_plan_gives_voice_its_own_owner() {
         let mut prompts = sample_prompts();
         prompts[0].hotkey = "ctrl+shift+7".into();
-        let plan = hotkey_plan("ctrl+shift+1", Some("ctrl+shift+9"), &prompts, true);
+        let plan = hotkey_plan("ctrl+shift+1", Some("ctrl+shift+9"), None, None, &prompts, true);
         assert_eq!(plan[0].1, HotkeyOwner::App);
         assert!(plan.iter().any(|(_, o)| *o == HotkeyOwner::Voice));
         assert!(plan.iter().any(|(_, o)| *o == HotkeyOwner::Prompt("p1".into())));
 
         // The app hotkey wins a collision with the voice hotkey, same as with a prompt.
-        let plan = hotkey_plan("ctrl+shift+1", Some("ctrl+shift+1"), &prompts, true);
+        let plan = hotkey_plan("ctrl+shift+1", Some("ctrl+shift+1"), None, None, &prompts, true);
         assert!(!plan.iter().any(|(_, o)| *o == HotkeyOwner::Voice));
 
         // Switched off (the caller passes None): nothing voice-owned is registered.
-        let plan = hotkey_plan("ctrl+shift+1", None, &prompts, true);
+        let plan = hotkey_plan("ctrl+shift+1", None, None, None, &prompts, true);
         assert!(!plan.iter().any(|(_, o)| *o == HotkeyOwner::Voice));
 
         // A combination the blocklist refuses is dropped just like anywhere else.
-        let plan = hotkey_plan("", Some("Ctrl+C"), &prompts, true);
+        let plan = hotkey_plan("", Some("Ctrl+C"), None, None, &prompts, true);
         assert!(!plan.iter().any(|(_, o)| *o == HotkeyOwner::Voice));
     }
 
@@ -25049,9 +27272,9 @@ mod tests {
     fn a_deleted_prompt_gives_its_accelerator_back() {
         let mut prompts = sample_prompts();
         prompts[1].hotkey = "Ctrl+Shift+2".into();
-        assert_eq!(hotkey_plan("", None, &prompts, true).len(), 2);
+        assert_eq!(hotkey_plan("", None, None, None, &prompts, true).len(), 2);
         prompts.retain(|p| p.id != "p1");
-        let plan = hotkey_plan("", None, &prompts, true);
+        let plan = hotkey_plan("", None, None, None, &prompts, true);
         assert_eq!(plan.len(), 1);
         assert_eq!(plan[0].1, HotkeyOwner::Prompt("p2".into()));
     }
@@ -25081,14 +27304,34 @@ mod tests {
     fn the_editor_rejects_a_taken_or_unusable_accelerator() {
         let prompts = sample_prompts();
         let others: Vec<&Prompt> = prompts.iter().collect();
-        assert_eq!(sanitize_hotkey("", "Ctrl+Q", &others).unwrap(), "");
-        assert_eq!(sanitize_hotkey("  Alt+F9  ", "Ctrl+Q", &others).unwrap(), "Alt+F9");
-        assert_eq!(sanitize_hotkey("Ctrl+Shift+P", "ctrl+shift+p", &others), Err("hotkey-taken".into()));
-        assert_eq!(sanitize_hotkey("ctrl+shift+1", "", &others), Err("hotkey-taken".into()));
-        assert_eq!(sanitize_hotkey("F9", "", &others), Err("hotkey-invalid".into()));
+        assert_eq!(sanitize_hotkey("", "Ctrl+Q", "", "", &others).unwrap(), "");
+        assert_eq!(sanitize_hotkey("  Alt+F9  ", "Ctrl+Q", "", "", &others).unwrap(), "Alt+F9");
+        assert_eq!(sanitize_hotkey("Ctrl+Shift+P", "ctrl+shift+p", "", "", &others), Err("hotkey-taken".into()));
+        assert_eq!(sanitize_hotkey("ctrl+shift+1", "", "", "", &others), Err("hotkey-taken".into()));
+        assert_eq!(sanitize_hotkey("F9", "", "", "", &others), Err("hotkey-invalid".into()));
         // Editing the prompt that already owns the combination is not a conflict.
         let others: Vec<&Prompt> = prompts.iter().filter(|p| p.id != "p1").collect();
-        assert_eq!(sanitize_hotkey("ctrl+shift+1", "", &others).unwrap(), "ctrl+shift+1");
+        assert_eq!(sanitize_hotkey("ctrl+shift+1", "", "", "", &others).unwrap(), "ctrl+shift+1");
+    }
+
+    // A prompt hotkey identical to the currently-configured rec-stop/pause
+    // combination is refused up front -- it used to be accepted, then silently
+    // stop firing the moment a recording started (hotkey_plan gives those two
+    // priority over every prompt).
+    #[test]
+    fn the_editor_rejects_a_prompt_hotkey_matching_the_active_recording_hotkeys() {
+        let prompts = sample_prompts();
+        let others: Vec<&Prompt> = prompts.iter().collect();
+        assert_eq!(
+            sanitize_hotkey("Ctrl+Alt+S", "", "ctrl+alt+s", "ctrl+alt+o", &others),
+            Err(HK_TAKEN.into())
+        );
+        assert_eq!(
+            sanitize_hotkey("Ctrl+Alt+O", "", "ctrl+alt+s", "ctrl+alt+o", &others),
+            Err(HK_TAKEN.into())
+        );
+        // Feature/toggle off (caller passes "") -- the same combination is free again.
+        assert_eq!(sanitize_hotkey("Ctrl+Alt+S", "", "", "", &others).unwrap(), "Ctrl+Alt+S");
     }
 
     // A prompt stored before per-prompt hotkeys existed has no hotkey field at all — it must load with an
@@ -26242,12 +28485,13 @@ mod tests {
     fn tray_window_height_accounts_for_every_row_header_and_separator() {
         let entry = |id: &str| TrayWinEntry { id: id.into(), label: id.into(), kind: "text".into(), color: String::new() };
         // No sections at all: just the two terminal rows, plus the card's own padding.
-        let empty = TrayWinPlan { sections: Vec::new(), show_label: "Show".into(), quit_label: "Quit".into() };
+        let empty = TrayWinPlan { rec_entries: Vec::new(), sections: Vec::new(), show_label: "Show".into(), quit_label: "Quit".into() };
         assert_eq!(tray_window_logical_height(&empty), TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H);
 
         // One section, two entries: its own header, both rows, and the one separator
         // that always follows a section (matching push_tray_section's native shape).
         let one_section = TrayWinPlan {
+            rec_entries: Vec::new(),
             sections: vec![TrayWinSection { title: "Favorites".into(), entries: vec![entry("a"), entry("b")] }],
             show_label: "Show".into(),
             quit_label: "Quit".into(),
@@ -26258,6 +28502,7 @@ mod tests {
         // Two sections must each add their own header, rows and separator -- never
         // shared, since the native menu (push_tray_section) never shares one either.
         let two_sections = TrayWinPlan {
+            rec_entries: Vec::new(),
             sections: vec![
                 TrayWinSection { title: "Favorites".into(), entries: vec![entry("a")] },
                 TrayWinSection { title: "Recent".into(), entries: vec![entry("b"), entry("c"), entry("d")] },
@@ -26278,6 +28523,7 @@ mod tests {
         // Max entries in both sections (the supported ceiling) -- uncapped this is
         // ~742 logical px, comfortably past a 1366x768 @150% work area.
         let full = TrayWinPlan {
+            rec_entries: Vec::new(),
             sections: vec![
                 TrayWinSection { title: "Favorites".into(), entries: (0..10).map(|i| entry(&i.to_string())).collect() },
                 TrayWinSection { title: "Recent".into(), entries: (0..10).map(|i| entry(&i.to_string())).collect() },

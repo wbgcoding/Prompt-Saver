@@ -4531,8 +4531,8 @@ PROBE = """
         out.errors.push('screenshot editor did not open on snip-captured');
       } else {
         const toolBtns = [...document.querySelectorAll('#snip-edit-tools button[data-tool]')];
-        if (toolBtns.length !== 11) {
-          out.errors.push('screenshot editor: expected 11 tool buttons, found ' + toolBtns.length);
+        if (toolBtns.length !== 12) { // 284 added the Hand (pan) tool
+          out.errors.push('screenshot editor: expected 12 tool buttons, found ' + toolBtns.length);
         }
         // 178: the toolbar must stay a couple of rows tall no matter which tool
         // is active -- a full inline swatch grid used to collapse into one tall
@@ -4752,8 +4752,8 @@ PROBE = """
         window.__FIRE__('snip-captured', { data_url: TINY_PNG2, path: '', name: 'test.png' });
         await sleep(150);
         const toolBtns2 = [...document.querySelectorAll('#snip-edit-tools button[data-tool]')];
-        if (toolBtns2.length !== 11) {
-          out.errors.push('screenshot editor in ' + lang + ': expected 11 tool buttons, found ' + toolBtns2.length);
+        if (toolBtns2.length !== 12) { // 284 added the Hand (pan) tool
+          out.errors.push('screenshot editor in ' + lang + ': expected 12 tool buttons, found ' + toolBtns2.length);
         }
         layoutScan('screenshot editor in ' + lang);
         document.getElementById('snip-edit-cancel').click();
@@ -6216,6 +6216,138 @@ RECBAR_PROBE = """
 """
 
 
+# The video editor: the recording is PULLED at boot (video_editor_source), not
+# pushed, so the probe only has to wait -- tauri_stub.js's own fixture is a
+# 10-minute 1080p30 clip with both a system and a mic track, real enough that a
+# populated filmstrip and both waveforms are what "boot finished" looks like.
+VIDEO_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));""" + SIDE_SCAN + """
+  const rawKeyCheck = (where) => {
+    for (const el of document.querySelectorAll('body *')) {
+      if (el.children.length) continue;
+      const txt = (el.textContent || '').trim();
+      if (/^ve[A-Z][A-Za-z]+$/.test(txt)) errs.push(where + ': a raw i18n key rendered: ' + txt);
+    }
+  };
+  const hitTestable = (el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4) return false;
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return !!hit && hit.closest('button') === el;
+  };
+  const until = async (fn, tries) => {
+    for (let i = 0; i < (tries || 60) && !fn(); i++) await sleep(50);
+    return fn();
+  };
+  try {
+    // The recording itself resolves through invoke calls (fast, deterministic),
+    // but the localized text comes from a lazily imported module -- a real
+    // async fetch that a flat sleep can race ahead of under the virtual clock
+    // (same reasoning FLOAT_PROBE calls out for the pill window) -- and the
+    // waveform draw sits behind its own scheduleWaves() timeout on top of that.
+    // One combined poll for everything "boot finished" means, rather than a
+    // fixed delay that only happens to be long enough some of the time.
+    await until(() => {
+      const opsHint = document.querySelector('#ve-ops-list p');
+      return document.getElementById('ve-stage-msg').classList.contains('hidden') &&
+        document.querySelectorAll('#ve-filmstrip .ve-thumb').length > 0 &&
+        document.getElementById('ve-wave-sys').width > 10 &&
+        document.getElementById('ve-wave-mic').width > 10 &&
+        !!opsHint && opsHint.textContent && opsHint.textContent !== 'veOpsEmpty';
+    }, 300);
+    // ---- the pulled recording loaded into a populated editor ----
+    if (!document.getElementById('ve-stage-msg').classList.contains('hidden')) {
+      errs.push('the stage never left its loading state');
+    }
+    if (document.getElementById('ve-duration').textContent !== '10:00.000') {
+      errs.push('duration did not render from probe_recording: ' + document.getElementById('ve-duration').textContent);
+    }
+    if (!document.querySelectorAll('#ve-filmstrip .ve-thumb').length) {
+      errs.push('no filmstrip thumbnails rendered from generate_filmstrip');
+    }
+    // Both canvases carry a hardcoded placeholder width of 10 in the markup, so
+    // "still 10" is what an un-rendered waveform looks like, not zero.
+    if (document.getElementById('ve-wave-sys').width <= 10) {
+      errs.push('the system waveform canvas was never redrawn from generate_waveform_peaks');
+    }
+    if (document.getElementById('ve-wave-mic').classList.contains('hidden')) {
+      errs.push('the mic waveform track stayed hidden although the fixture reports a mic track');
+    } else if (document.getElementById('ve-wave-mic').width <= 10) {
+      errs.push('the mic waveform canvas was never redrawn from generate_waveform_peaks');
+    }
+    if (!document.getElementById('ve-ffmpeg-warn').classList.contains('hidden')) {
+      errs.push('the ffmpeg-missing banner showed although probe_recording succeeded');
+    }
+    rawKeyCheck('edit tab');
+    sideScan(errs, 'edit tab');
+
+    // ---- the timeline never clips vertically (horizontal scroll is expected) ----
+    const timeline = document.getElementById('ve-timeline');
+    const track = document.getElementById('ve-track');
+    if (track.getBoundingClientRect().height > timeline.getBoundingClientRect().height + 1) {
+      errs.push('the timeline track is taller than its own scroller and gets clipped');
+    }
+
+    // ---- every tab and toolbar control stays reachable ----
+    const controls = [...document.querySelectorAll(
+      '.ve-transport button, .ve-tools button, .ve-tabs button, .ve-titlebar button, ' +
+      '.ve-audio-group button, .ve-ops-head button')];
+    const untestable = controls.filter((b) => !hitTestable(b));
+    if (untestable.length) {
+      errs.push(untestable.length + ' toolbar control(s) cannot be hit-tested: ' +
+        untestable.map((b) => b.id || b.className).join(', '));
+    }
+
+    // ---- tabs actually switch panels ----
+    document.getElementById('ve-tab-overlays').click();
+    await sleep(80);
+    if (document.getElementById('ve-panel-overlays').classList.contains('hidden')) {
+      errs.push('the Overlays tab did not reveal its panel');
+    }
+    if (!document.getElementById('ve-panel-edit').classList.contains('hidden')) {
+      errs.push('the Edit panel stayed visible under the Overlays tab');
+    }
+    rawKeyCheck('overlays tab');
+    sideScan(errs, 'overlays tab');
+
+    document.getElementById('ve-tab-export').click();
+    await sleep(80);
+    if (document.getElementById('ve-panel-export').classList.contains('hidden')) {
+      errs.push('the Export tab did not reveal its panel');
+    }
+    rawKeyCheck('export tab');
+    sideScan(errs, 'export tab');
+
+    document.getElementById('ve-tab-edit').click();
+    await sleep(80);
+
+    // ---- a gated control actually reacts when its switch flips ----
+    const cropFields = document.getElementById('ve-crop-fields');
+    const cropOn = document.getElementById('ve-crop-on');
+    const dimmedBefore = cropFields.classList.contains('ve-off');
+    cropOn.click();
+    await sleep(80);
+    if (cropFields.classList.contains('ve-off') === dimmedBefore) {
+      errs.push('switching crop on did not change the crop fields enabled state');
+    }
+    const cropInput = cropFields.querySelector('input');
+    if (cropInput && cropInput.disabled !== !cropOn.checked) {
+      errs.push('a crop field disabled state does not track the crop switch');
+    }
+  } catch (e) { errs.push('probe: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # A DPAPI failure makes the backend write the store in plaintext instead of
 # refusing the save. That used to be reported in the error log and nowhere else.
 # The same page is booted twice — once with the backend reporting a sealed store,
@@ -6583,6 +6715,40 @@ def main():
             m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
             errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
             print(f"-- {name}")
+            for e in errs:
+                print(f"   FAIL JS error: {e}")
+            failed += len(errs)
+            if not errs:
+                print("   ok")
+
+        # The video editor keeps its own window config (1100x720 default, 760x520
+        # minimum -- both well above the ~500px floor the generic loop above never
+        # has to think about) rather than the single fixed size every other
+        # secondary window uses, so it gets its own two-size run instead of a slot
+        # in that tuple list: the file is injected once, then run twice with a
+        # different --window-size, same as the sealed/unsealed index.html pair below.
+        video_side = tmp / "ui" / "video.html"
+        video_side.write_text(
+            video_side.read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", VIDEO_PROBE + "</body>"),
+            encoding="utf-8")
+        for w, h in ((1100, 720), (760, 520)):
+            proc = subprocess.run(
+                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+                 f"--user-data-dir={tmp / ('profile-video-%dx%d' % (w, h))}", "--allow-file-access-from-files",
+                 # Same "headless Chrome eats part of the requested window" offset
+                 # the main sweep already compensates for (see WRAPPER above) --
+                 # without it "760x520" never actually delivers that innerWidth/
+                 # innerHeight to the page, and the min-size run silently tests a
+                 # bigger window than the one this feature ships with.
+                 f"--window-size={w + 30},{h + 140}", "--virtual-time-budget=30000",
+                 "--dump-dom", video_side.as_uri()],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=180)
+            m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+            errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+            print(f"-- video.html {w}x{h}")
             for e in errs:
                 print(f"   FAIL JS error: {e}")
             failed += len(errs)

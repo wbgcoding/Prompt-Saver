@@ -419,11 +419,11 @@ export const HELP_CONTENT = {
       whatItIs: "Opens right after a capture, before the shot is saved — crop, mark up, and annotate it before it becomes a tile.",
       howTo: [
         "Take a screenshot; the editor opens automatically over the capture.",
-        "Pick a tool from the toolbar: crop, pen, marker, line, arrow, rectangle, ellipse, text, step number, pixelate, or spotlight.",
+        "Pick a tool from the toolbar: crop, pen, marker, line, arrow, rectangle, ellipse, text, step number, pixelate, spotlight, or hand.",
         "Undo/redo steps back through edits; save when done.",
       ],
       whatHappens:
-        "Every edit is one step in an undo/redo list capped by its own setting; pixelate always samples the original screenshot, never an already-edited layer, so blurring a spot never smears earlier marks. Snap-to-edges lines shapes up with the image border and with each other; a text label can get its own background plate for readability over busy backgrounds. Switching the editor off (below) skips straight to the confirmation dialog instead.",
+        "Every edit is one step in an undo/redo list capped by its own setting; pixelate always samples the original screenshot, never an already-edited layer, so blurring a spot never smears earlier marks. Snap-to-edges lines shapes up with the image border and with each other; a text label can get its own background plate for readability over busy backgrounds. Once zoomed in, the hand tool (or holding Space, or the middle mouse button) drags the view around for pixel-precise work, and the crop tool shows a resize cursor at each handle and a move cursor inside the current selection. Switching the editor off (below) skips straight to the confirmation dialog instead.",
       settings: ["Screenshot editor, default tool, snap-to-edges, text-label background, pen/marker/text size, pixelate block size, spotlight dimming, undo limit — Expert menu → Features → Create prompts"],
     },
     {
@@ -433,12 +433,26 @@ export const HELP_CONTENT = {
       howTo: [
         "Click the record button; pick a window, drag a region, or click empty desktop for the whole screen — same overlay as the screenshot tool.",
         "An optional countdown toast counts down before capture actually starts.",
-        "A small floating control bar shows elapsed time and file size, and offers Pause/Resume, Stop and Discard.",
-        "Stopping opens the same attach/save-as/discard dialog a screenshot uses.",
+        "A small floating control bar shows elapsed time and file size, and offers Pause/Resume, Stop and Discard; two optional global hotkeys and the tray menu can stop or pause/resume it too, live only while it is actually running.",
+        "Stopping offers Save, Save as…, Copy, Edit or Discard.",
       ],
       whatHappens:
-        "MP4 (H.264) is always what gets written while recording; three quality steps (Small/High/Lossless) trade file size for detail, and a format setting can turn the result into WebM or GIF afterward. Anything other than plain MP4, or the Lossless step, needs ffmpeg (a separate download, offered inline when missing) — a failed or cancelled conversion always falls back to the untouched original recording. System audio (on by default) and microphone audio (off by default) each record as their own track; unplugging the microphone mid-recording keeps picture and system audio going and just marks that track as lost. The control bar follows a moved recorded window and is itself never part of the recording. If the recorded window closes on its own, the recording stops automatically and keeps what was captured so far.",
-      settings: ["Screen recording, cursor, countdown, audio sources and device, bitrate, quality, format — Expert menu → Features → Create prompts"],
+        "MP4 (H.264) is always what gets written while recording; three quality steps (Small/High/Lossless) trade file size for detail, and a format setting can turn the result into WebM or GIF afterward. Anything other than plain MP4, or the Lossless step, needs ffmpeg (a separate download, offered inline when missing) — a failed or cancelled conversion always falls back to the untouched original recording. System audio and microphone audio both record on by default, each into its own track — the microphone track is captured but not mixed in audibly until you bring it in yourself from the video editor; unplugging the microphone mid-recording keeps picture and system audio going and just marks that track as lost. Save and Copy share one recording folder; Edit opens the clip in the video editor without deciding its fate, so closing the dialog afterward without saving or copying still discards the file. The control bar follows a moved recorded window and is itself never part of the recording. If the recorded window closes on its own, the recording stops automatically and keeps what was captured so far. A recording that never reached its own stop path (a crash, a forced shutdown) is removed automatically once it clears a grace period, so a just-stopped recording that is still finalising is never touched.",
+      settings: ["Screen recording, cursor, countdown, audio sources and device, bitrate, quality, format, recording folder, stop/pause hotkeys, tray entries, auto-remove broken recordings — Expert menu → Features → Create prompts"],
+    },
+    {
+      section: "basics",
+      title: "Video editor",
+      whatItIs: "A small editor for a finished recording or any attached video, opened from the recording's own result dialog or a video prompt's right-click menu.",
+      howTo: [
+        "From a fresh recording — click Edit in the result dialog.",
+        "From any video already saved as a prompt — right-click it and choose \"Edit video\".",
+        "Trim, crop, change speed, fade in/out, and add image, freeze-frame, text, pixelate or spotlight overlays on the timeline.",
+        "Export — a lossless fast path applies when only trimming, otherwise the whole clip re-encodes once.",
+      ],
+      whatHappens:
+        "Nothing is processed until you export: the live preview plays your edits directly. A filmstrip and waveform give a zoomable overview of the whole clip for frame-exact navigation. The preview itself also zooms with the scroll wheel (up to 8×) and pans by dragging — the middle mouse button always, the left button once zoomed in — for placing a small overlay precisely on a large recording. A few ready-made export presets (unchanged quality, a smaller size for chat, an animated GIF) remember your last choice; a GIF never carries audio. Undo/redo covers every editing step, capped by an adjustable limit.",
+      settings: ["Video editor, undo limit — Expert menu → Features → Create prompts"],
     },
     {
       section: "basics",
@@ -985,11 +999,11 @@ export const HELP_CONTENT = {
       whatItIs: "Öffnet sich direkt nach einer Aufnahme, bevor der Screenshot gespeichert wird — zum Zuschneiden, Markieren und Beschriften, bevor daraus eine Kachel wird.",
       howTo: [
         "Einen Screenshot aufnehmen; der Editor öffnet sich automatisch über der Aufnahme.",
-        "Ein Werkzeug aus der Symbolleiste wählen: Zuschneiden, Stift, Marker, Linie, Pfeil, Rechteck, Ellipse, Text, Schrittnummer, Verpixeln oder Spotlight.",
+        "Ein Werkzeug aus der Symbolleiste wählen: Zuschneiden, Stift, Marker, Linie, Pfeil, Rechteck, Ellipse, Text, Schrittnummer, Verpixeln, Spotlight oder Hand.",
         "Mit Rückgängig/Wiederholen schrittweise durch die Bearbeitungen gehen; anschließend speichern.",
       ],
       whatHappens:
-        "Jede Bearbeitung ist ein Schritt in einer Rückgängig/Wiederholen-Liste, deren Höchstzahl separat einstellbar ist. Beim Verpixeln wird immer der ursprüngliche Screenshot verwendet, nie eine bereits bearbeitete Ebene; dadurch werden frühere Markierungen beim Unkenntlichmachen einer Stelle nicht verschmiert. Das Einrasten an Kanten richtet Formen am Bildrand und aneinander aus. Textbeschriftungen können für bessere Lesbarkeit auf unruhigem Hintergrund eine eigene Hintergrundfläche erhalten. Ist der Editor unten deaktiviert, erscheint stattdessen direkt der Bestätigungsdialog.",
+        "Jede Bearbeitung ist ein Schritt in einer Rückgängig/Wiederholen-Liste, deren Höchstzahl separat einstellbar ist. Beim Verpixeln wird immer der ursprüngliche Screenshot verwendet, nie eine bereits bearbeitete Ebene; dadurch werden frühere Markierungen beim Unkenntlichmachen einer Stelle nicht verschmiert. Das Einrasten an Kanten richtet Formen am Bildrand und aneinander aus. Textbeschriftungen können für bessere Lesbarkeit auf unruhigem Hintergrund eine eigene Hintergrundfläche erhalten. Beim Hineinzoomen verschiebt das Hand-Werkzeug (oder gehaltene Leertaste bzw. die mittlere Maustaste) die Ansicht für pixelgenaues Arbeiten, und das Zuschneide-Werkzeug zeigt an jedem Anfasser einen passenden Richtungspfeil sowie innerhalb des Ausschnitts einen Verschieben-Zeiger. Ist der Editor unten deaktiviert, erscheint stattdessen direkt der Bestätigungsdialog.",
       settings: ["Screenshot-Editor, Standardwerkzeug, Einrasten an Kanten, Hintergrund für Textbeschriftungen, Stift-/Marker-/Textgröße, Pixelblockgröße, Spotlight-Abdunklung, Rückgängig-Limit — Experten-Menü → Funktionen → Prompts erstellen"],
     },
     {
@@ -999,12 +1013,26 @@ export const HELP_CONTENT = {
       howTo: [
         "Auf den Aufnahme-Knopf klicken; ein Fenster anklicken, einen Bereich ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm — dieselbe Übersicht wie beim Screenshot-Werkzeug.",
         "Ein Countdown zählt optional herunter, bevor die Aufnahme wirklich startet.",
-        "Eine kleine Bedienleiste zeigt Laufzeit und Dateigröße und bietet Pause/Fortsetzen, Stopp und Verwerfen.",
-        "Stopp öffnet denselben Anheften/Speichern/Verwerfen-Dialog wie ein Screenshot.",
+        "Eine kleine Bedienleiste zeigt Laufzeit und Dateigröße und bietet Pause/Fortsetzen, Stopp und Verwerfen; zwei optionale globale Hotkeys sowie das Tray-Menü können sie ebenfalls stoppen oder pausieren/fortsetzen, aber nur, solange die Aufnahme wirklich läuft.",
+        "Stopp bietet Speichern, Speichern unter…, Kopieren, Bearbeiten oder Verwerfen an.",
       ],
       whatHappens:
-        "Aufgenommen wird immer MP4 (H.264); drei Qualitätsstufen (Klein/Hoch/Verlustfrei) tauschen Dateigröße gegen Bildschärfe, ein Format-Feld kann das Ergebnis danach in WebM oder GIF umwandeln. Alles außer reinem MP4 sowie die Stufe Verlustfrei braucht ffmpeg (ein separater Download, direkt angeboten, wenn es fehlt) — eine fehlgeschlagene oder abgebrochene Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück. Systemton (Standard an) und Mikrofon (Standard aus) werden je als eigene Spur aufgenommen; zieht man das Mikrofon während der Aufnahme ab, laufen Bild und Systemton weiter, nur diese Spur gilt als verloren. Die Bedienleiste folgt einem verschobenen Aufnahmefenster und ist selbst nie Teil der Aufnahme. Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme automatisch und behält, was bis dahin aufgenommen wurde.",
-      settings: ["Bildschirmaufnahme, Mauszeiger, Countdown, Tonquellen und -gerät, Bitrate, Qualität, Format — Experten-Menü → Funktionen → Prompts erstellen"],
+        "Aufgenommen wird immer MP4 (H.264); drei Qualitätsstufen (Klein/Hoch/Verlustfrei) tauschen Dateigröße gegen Bildschärfe, ein Format-Feld kann das Ergebnis danach in WebM oder GIF umwandeln. Alles außer reinem MP4 sowie die Stufe Verlustfrei braucht ffmpeg (ein separater Download, direkt angeboten, wenn es fehlt) — eine fehlgeschlagene oder abgebrochene Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück. Systemton und Mikrofon werden beide standardmäßig aufgenommen, je als eigene Spur — die Mikrofonspur wird zwar aufgezeichnet, aber erst hörbar, wenn man sie später selbst im Video-Editor dazumischt; zieht man das Mikrofon während der Aufnahme ab, laufen Bild und Systemton weiter, nur diese Spur gilt als verloren. Speichern und Kopieren teilen sich einen Aufnahme-Ordner; Bearbeiten öffnet den Clip im Video-Editor, ohne über sein Schicksal zu entscheiden — schließt man den Dialog danach, ohne gespeichert oder kopiert zu haben, wird die Datei trotzdem verworfen. Die Bedienleiste folgt einem verschobenen Aufnahmefenster und ist selbst nie Teil der Aufnahme. Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme automatisch und behält, was bis dahin aufgenommen wurde. Eine Aufnahme, die nie ordnungsgemäß gestoppt wurde (Absturz, erzwungenes Beenden), wird automatisch entfernt, sobald sie eine Schonfrist überschreitet — eine gerade gestoppte Aufnahme, die noch abgeschlossen wird, bleibt dabei unangetastet.",
+      settings: ["Bildschirmaufnahme, Mauszeiger, Countdown, Tonquellen und -gerät, Bitrate, Qualität, Format, Aufnahme-Ordner, Stopp-/Pause-Hotkeys, Tray-Einträge, defekte Aufnahmen automatisch entfernen — Experten-Menü → Funktionen → Prompts erstellen"],
+    },
+    {
+      section: "basics",
+      title: "Video-Editor",
+      whatItIs: "Ein kleiner Editor für eine fertige Aufnahme oder ein angehängtes Video, geöffnet aus dem Ergebnisdialog einer Aufnahme oder über das Rechtsklick-Menü eines Video-Prompts.",
+      howTo: [
+        "Bei einer frischen Aufnahme — im Ergebnisdialog auf Bearbeiten klicken.",
+        "Bei einem bereits gespeicherten Video-Prompt — rechtsklicken und „Video bearbeiten“ wählen.",
+        "Zuschneiden, Kürzen, Geschwindigkeit ändern, Ein-/Ausblenden sowie Bild-, Standbild-, Text-, Verpixelungs- oder Spotlight-Overlays auf der Zeitleiste hinzufügen.",
+        "Exportieren — bei reinem Kürzen greift ein verlustfreier Schnellpfad, sonst wird der ganze Clip einmal neu kodiert.",
+      ],
+      whatHappens:
+        "Bis zum Export wird nichts verarbeitet: Die Live-Vorschau spielt die Bearbeitungen direkt ab. Filmstreifen und Wellenform geben eine zoombare Übersicht über den ganzen Clip für bildgenaue Navigation. Die Vorschau selbst zoomt außerdem mit dem Mausrad (bis 8×) und lässt sich durch Ziehen verschieben — mit der mittleren Maustaste immer, mit der linken sobald hineingezoomt ist —, um ein kleines Overlay bei einer großen Aufnahme genau zu platzieren. Ein paar fertige Export-Voreinstellungen (unveränderte Qualität, kleiner für Chat, animiertes GIF) merken sich die letzte Wahl; ein GIF trägt nie Ton. Rückgängig/Wiederholen deckt jeden Bearbeitungsschritt ab, begrenzt durch ein einstellbares Limit.",
+      settings: ["Video-Editor, Rückgängig-Limit — Experten-Menü → Funktionen → Prompts erstellen"],
     },
     {
       section: "basics",

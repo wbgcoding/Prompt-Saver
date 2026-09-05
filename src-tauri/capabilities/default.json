@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capabilities for main window, floating quick-copy buttons, pill folders, the variable prompt, the quick launcher and the custom tray menu",
-  "windows": ["main", "float-*", "folder-*", "snip-*", "vars-*", "launcher", "tray-menu", "rec-bar"],
+  "windows": ["main", "float-*", "folder-*", "snip-*", "vars-*", "launcher", "tray-menu", "rec-bar", "video-editor"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

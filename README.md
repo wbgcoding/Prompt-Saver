@@ -65,8 +65,9 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Video player** | Looping previews on tiles *and* floating buttons, with scrubber, loop and volume — remembered per prompt |
 | **PDF & files** | Attach any file by path; a PDF's first page becomes the button's image |
 | **Screenshot tool** | Capture a region or a whole window — even protected ones like the Task Manager |
-| **Screen recording** | Record a window, a dragged region or the whole screen to MP4, with system/microphone audio, a small floating control bar, and an optional WebM/GIF conversion afterward |
-| **Screenshot editor** | Opens right after a capture: crop, pen, marker, line, arrow, rectangle, ellipse, text, step numbers, pixelate and spotlight, with undo/redo and edge snapping, before it becomes a copy button |
+| **Screen recording** | Record a window, a dragged region or the whole screen to MP4, with system and microphone audio (both on by default), a small floating control bar with optional stop/pause hotkeys and tray entries, and an optional WebM/GIF conversion afterward |
+| **Video editor** | Trim, crop, change speed, fade and add image/freeze-frame/text/pixelate/spotlight overlays on a recording or any attached video, on a zoomable filmstrip-and-waveform timeline with a live preview (itself zoomable and pannable) and no processing until export |
+| **Screenshot editor** | Opens right after a capture: crop, pen, marker, line, arrow, rectangle, ellipse, text, step numbers, pixelate, spotlight and a hand tool to pan while zoomed in, with undo/redo and edge snapping, before it becomes a copy button |
 | **Text recognition (OCR)** | Pull text out of a screenshot or an image file with Windows' own on-device recognizer — fully offline, nothing uploaded. On by default; needs a Windows language pack, which the app offers to install for you (needs administrator rights — including for the listing itself, on systems where Windows demands them) |
 | **Voice dictation** | Speak into the composer or the editor with Windows' own on-device speech recognizer — fully offline, nothing uploaded unless you allow online recognition. Spoken punctuation and formatting commands, auto-capitalization and a global hotkey included. On by default; shares OCR's language-pack dialog |
 | **Color picker** | A pipette freezes the screen, magnifies the pixel under the cursor and copies it as hex, rgb or hsl |
@@ -130,7 +131,8 @@ Full version history: [CHANGELOG.md](CHANGELOG.md)
 | Edit / hide / pin / delete | Right-click a tile (or hover **⋮**); deleting asks twice |
 | All prompts | List icon in the header: search, edit and place every prompt |
 | Screenshot | Camera icon: drag a region or click a window to save it as a copy button |
-| Screen recording | Record icon next to the camera: pick a window, region or the whole screen, then Stop to attach, save or discard |
+| Screen recording | Record icon next to the camera: pick a window, region or the whole screen, then Stop to save, copy, edit or discard |
+| Video editor | Edit button in a recording's result dialog, or "Edit video" on any video prompt's right-click menu |
 | Floating button | "Toggle floating button" in the tile menu; right-click the pill for options |
 | Views | Tabs next to the title: **+** adds one; right-click a tab to rename, resize, recolor or delete |
 | Settings | Gear icon: theme, language, fonts, sizes, autostart, hotkey, import/export, updates, reset |
@@ -195,7 +197,7 @@ point the app's data folder at it, or copy the file next to the portable exe.
 
 ## Tech stack
 
-[Tauri 2](https://tauri.app) (Rust backend, WebView2 frontend) · vanilla HTML/CSS/JS, no bundler, no framework · SQLite store · `arboard` (clipboard), `rfd` (native dialogs), `pdfium-render` (PDF previews), `xcap` (screenshots), `windows-capture` (screen recording), `winreg` (autostart), `sys-locale` (language detection), `windows` (on-device OCR, WASAPI audio), `zip` (ffmpeg download extraction).
+[Tauri 2](https://tauri.app) (Rust backend, WebView2 frontend) · vanilla HTML/CSS/JS, no bundler, no framework · SQLite store · `arboard` (clipboard), `rfd` (native dialogs), `pdfium-render` (PDF previews), `xcap` (screenshots), `windows-capture` (screen recording), `winreg` (autostart), `sys-locale` (language detection), `windows` (on-device OCR, WASAPI audio), `zip` (ffmpeg/ffprobe download extraction).
 
 Third-party components and their licenses: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
 

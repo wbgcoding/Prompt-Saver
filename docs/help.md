@@ -73,7 +73,8 @@ Before that dialog, an editor opens on the capture (on by default): crop, a
 freehand pen and highlighter marker, straight lines and arrows, rectangles and
 ellipses, text labels, numbered step markers, a pixelate tool for blurring out
 sensitive details, and a spotlight that dims everything outside a chosen area —
-with undo/redo.
+with undo/redo. Zoom in for pixel-precise work and pan around with the Hand
+tool (or hold Space, or the middle mouse button) while zoomed in.
 
 ### Screen recording
 
@@ -115,19 +116,54 @@ follows a moved recorded window and is itself excluded from the recording no
 matter what, even if the recording happens to include the monitor the bar
 sits on.
 
-System audio (on by default) and microphone audio (off by default, pick a
-device in the expert menu) each record as their own track when enabled. If
-the microphone is unplugged mid-recording, the picture and system audio keep
-going — the control bar's microphone icon switches to a "lost" state instead
-of stopping anything.
+System audio and microphone audio (pick a device in the expert menu) both
+record on by default, each into its own track. The microphone track is
+captured but not mixed in audibly — it only becomes part of what you hear
+once you bring it in yourself, from the video editor below. Turn microphone
+capture off in the expert menu if you would rather it never records at all.
+If the microphone is unplugged mid-recording, the picture and system audio
+keep going — the control bar's microphone icon switches to a "lost" state
+instead of stopping anything.
 
-Stopping leads into the same attach/save-as/discard dialog a screenshot uses.
-If the chosen format or quality step needs converting the MP4 first, the
-dialog shows a short "Converting…" status instead of a preview (click it to
-cancel); a conversion failure or cancellation always falls back to the
-untouched original recording rather than losing it. If the window being
-recorded closes on its own, the recording stops automatically and keeps
-whatever was captured up to that point.
+A running recording can also be stopped or paused/resumed from anywhere via
+two optional global hotkeys (set in the expert menu, live only while a
+recording is actually running) and from the tray menu.
+
+Stopping leads into a dialog offering Save, Save as…, Copy, Edit and Discard.
+Save and Copy use one shared recording folder (changeable here or in the
+expert menu); Edit opens the clip in the video editor below without deciding
+its fate yet — closing that dialog afterward without ever saving or copying
+still discards the file, exactly as if Edit had never been clicked. If the
+chosen format or quality step needs converting the MP4 first, the dialog
+shows a short "Converting…" status instead of a preview (click it to cancel);
+a conversion failure or cancellation always falls back to the untouched
+original recording rather than losing it. If the window being recorded
+closes on its own, the recording stops automatically and keeps whatever was
+captured up to that point.
+
+A recording that never reached its own stop path — a crash, a forced
+shutdown — leaves behind a file with no usable video track. The app checks
+for these in the background and removes them once they clear a short grace
+period, so a just-stopped recording that is still finalising is never
+touched; both the grace period and the check interval are adjustable in the
+expert menu, alongside a manual "clean up now" action.
+
+### Video editor
+
+On by default, reachable from a recording's own result dialog (the Edit
+button above) or from any video prompt's right-click menu ("Edit video"). It
+opens the clip in its own window with a live preview and no processing until
+you actually export — trim and cut (frame-exact, keeps the original quality
+when nothing else changes), crop, change speed, fade in/out, and overlay
+images, freeze-frames, text, pixelation or a spotlight anywhere on the
+timeline. A filmstrip and waveform give you a zoomable overview to navigate
+by. The preview itself also zooms (scroll wheel, up to 8×) and pans by
+dragging — the middle mouse button always, the left button once zoomed in —
+for placing a small overlay precisely on a large recording. Exporting
+re-encodes once, with a few ready-made presets (unchanged
+quality, a smaller size for chat, or an animated GIF) that remember your last
+choice. Undo/redo covers every editing step, with an adjustable limit in the
+expert menu.
 
 ### Text recognition (OCR)
 
@@ -511,7 +547,9 @@ Experten-Menü bis 200×200 einstellbar), eigenes Layout je Ansicht.
 Task-Manager) direkt zu einer neuen Kachel. Davor öffnet sich standardmäßig ein
 Editor: Zuschneiden, Stift, Marker, Linien, Pfeile, Rechtecke, Ellipsen, Text,
 nummerierte Schritte, Pixelieren und ein Spotlight, das alles außerhalb eines
-Bereichs abdunkelt — mit Rückgängig/Wiederholen.
+Bereichs abdunkelt — mit Rückgängig/Wiederholen. Zum Heranzoomen für
+pixelgenaues Arbeiten lässt sich das Bild mit dem Hand-Werkzeug (oder
+gehaltener Leertaste bzw. der mittleren Maustaste) verschieben.
 
 **Bildschirmaufnahme** — nimmt ein Fenster, einen Monitor oder einen gezogenen
 Bereich als Video auf, über den Aufnahme-Knopf neben dem Screenshot-Werkzeug.

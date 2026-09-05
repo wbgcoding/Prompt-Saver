@@ -848,6 +848,22 @@
           <button id="voice-hotkey-clear" class="ghost-btn" data-i18n="hotkeyClear">Clear</button>
         </div>
       </div>
+      <!-- Stop/pause hotkeys for a running recording -- same shape as the
+           dictation hotkey row above, each gated on its own expert flag. -->
+      <div id="rec-stop-hotkey-row" class="field field-inline">
+        <span data-i18n="recStopHotkeyLabel">Stop-recording hotkey</span>
+        <div class="hotkey-row">
+          <input id="opt-rec-stop-hotkey" class="modal-input" type="text" readonly data-i18n-ph="hotkeyPh" data-i18n-aria="recStopHotkeyLabel" />
+          <button id="rec-stop-hotkey-clear" class="ghost-btn" data-i18n="hotkeyClear">Clear</button>
+        </div>
+      </div>
+      <div id="rec-pause-hotkey-row" class="field field-inline">
+        <span data-i18n="recPauseHotkeyLabel">Pause/resume-recording hotkey</span>
+        <div class="hotkey-row">
+          <input id="opt-rec-pause-hotkey" class="modal-input" type="text" readonly data-i18n-ph="hotkeyPh" data-i18n-aria="recPauseHotkeyLabel" />
+          <button id="rec-pause-hotkey-clear" class="ghost-btn" data-i18n="hotkeyClear">Clear</button>
+        </div>
+      </div>
       <div id="impexp-field" class="field">
         <div class="export-row">
           <button id="import-btn" class="ghost-btn" data-i18n="import">Import prompts</button>
@@ -1069,9 +1085,18 @@
       </div>
       <video id="rec-preview" class="snip-preview hidden" controls></video>
       <p id="rec-modal-status" class="snip-question"></p>
+      <!-- Preselected with the recordingDir expert setting; "Change…"
+           here updates that same setting -- one place, not a second hidden one. -->
+      <div id="rec-modal-folder-row" class="rec-modal-folder-row">
+        <span id="rec-modal-folder" class="rec-modal-folder-path"></span>
+        <button id="rec-modal-folder-change" type="button" class="ghost-btn" data-i18n="pathChange">Change…</button>
+      </div>
       <div class="modal-actions">
         <button id="rec-modal-discard" class="ghost-btn" data-i18n="recDiscard">Discard</button>
+        <button id="rec-modal-edit" class="ghost-btn" data-i18n="recEdit">Edit</button>
+        <button id="rec-modal-save" class="ghost-btn" data-i18n="recSave">Save</button>
         <button id="rec-modal-saveas" class="ghost-btn" data-i18n="screenshotSaveAs">Save as…</button>
+        <button id="rec-modal-copy" class="ghost-btn" data-i18n="recCopy">Copy</button>
         <button id="rec-modal-yes" class="primary-btn" data-i18n="recAttach">Attach as button</button>
       </div>
     </div>
@@ -1206,6 +1231,9 @@
   <!-- Context menu for a tile -->
   <div id="ctx" class="ctx hidden" role="menu">
     <button data-act="edit" role="menuitem" data-i18n="edit">Edit</button>
+    <!-- Only shown for a video prompt (openCtx toggles .hidden) -- opens the
+         video editor instead of the normal text editor. -->
+    <button data-act="editVideo" role="menuitem" class="hidden" data-i18n="editVideo">Edit video</button>
     <button data-act="duplicate" role="menuitem" data-i18n="duplicate">Duplicate</button>
     <button data-act="hide" role="menuitem" data-i18n="hideInView">Hide in this view</button>
     <!-- Hidden unless multiViewPrompt is on and there is another view to place this into. -->

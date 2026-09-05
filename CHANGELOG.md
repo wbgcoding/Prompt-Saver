@@ -6,17 +6,18 @@ All notable changes to **Prompt Saver**. Download the latest version from the
 
 ## 2.7.0 (unreleased)
 
-Twenty-four new features: tags, custom themes, folders for view tabs and for
+Twenty-five new features: tags, custom themes, folders for view tabs and for
 floating buttons, self-filling and choice variables, a markdown preview with
 syntax colors, private notes, per-prompt hotkeys, drag-out into other apps, a
 tray quick-copy menu, a screen color picker, a standalone quick launcher,
 multi-select in the grid, a trash for deleted prompts, placing one prompt in
 several views at once, restoring a backup's data and settings separately,
 rotating prompts, a screenshot editor, offline text recognition (OCR), offline
-voice dictation, screen recording, and a first-run introduction tour.
+voice dictation, screen recording, a video editor, and a first-run
+introduction tour.
 Everything new is an expert-menu switch, most of it off until you turn it on
-(text recognition, voice dictation, the screenshot editor and the
-introduction tour ship on).
+(text recognition, voice dictation, the screenshot editor, screen recording,
+the video editor and the introduction tour ship on).
 
 ### Added
 
@@ -140,14 +141,18 @@ introduction tour ship on).
   window width, the tag-filter popover's column count and sort order, how long
   a confirm button stays armed, and the background update-check interval.
 - **A screenshot editor** (on by default) — every capture opens for editing before
-  it reaches a tile, the clipboard or a folder. Eleven tools: crop, pen, marker,
+  it reaches a tile, the clipboard or a folder. Twelve tools: crop, pen, marker,
   highlighter-style multiply blend, line, arrow, rectangle, ellipse, text, a
-  self-numbering step marker for annotating instructions, pixelation, and a
-  spotlight that dims everything outside a chosen area. Full undo/redo, an
-  eyedropper, live width×height while dragging a crop or shape, snapping to the
-  image edges and center, nudging the last-placed mark with the arrow keys, and
-  holding **V** to peek at the unedited shot. Cancel leaves the original capture
-  untouched; Apply re-copies the edited image and re-saves it to the screenshot
+  self-numbering step marker for annotating instructions, pixelation, a
+  spotlight that dims everything outside a chosen area, and a hand tool to pan
+  around while zoomed in (also reachable by holding Space or the middle mouse
+  button) for pixel-precise work on a large capture. The crop tool shows a
+  directional resize cursor at each handle and a move cursor inside the current
+  selection. Full undo/redo, an eyedropper, live width×height while dragging a
+  crop or shape, snapping to the image edges and center, nudging the
+  last-placed mark with the arrow keys, and holding **V** to peek at the
+  unedited shot. Cancel leaves the original capture untouched; Apply re-copies
+  the edited image and re-saves it to the screenshot
   folder if that setting is on.
 - **Text recognition (OCR)** (expert menu, on by default) — pull editable text
   out of a screenshot or an image file, fully offline through Windows' own
@@ -198,23 +203,44 @@ introduction tour ship on).
 - **Start a chain directly from a tile** — hovering a text prompt now shows a
   small chain icon next to its selection checkbox; clicking it starts a chain
   with that tile as the first entry, skipping the header button. Switchable
-  off on its own in the expert menu (on by default).
+  off on its own in the expert menu (on by default). The icon can also be
+  switched to stay dimly visible all the time instead of appearing only on
+  hover, brightening on hover or keyboard focus either way.
 - **Screen recording** — a record button next to the screenshot button opens the
   same picker overlay: click a window, drag a region, or click empty desktop
   for the whole screen. An optional countdown precedes capture, and a small
   floating control bar (elapsed time, live file size, Pause/Resume, Stop,
-  Discard) follows a moved window and is itself never part of the recording.
-  System audio (on by default) and microphone audio (off by default, with a
-  device picker) each record as their own track; unplugging the microphone
-  mid-recording keeps picture and system audio going and just marks that
-  track as lost. Stopping opens the same attach/save-as/discard dialog a
-  screenshot uses. MP4 (H.264) is what gets written while recording; three
-  quality steps (Small/High/Lossless) and an optional WebM or GIF format
+  Discard) follows a moved window and is itself never part of the recording;
+  two optional global hotkeys and the tray menu can also stop or pause/resume
+  it, live only while a recording is actually running. System audio and
+  microphone audio both record on by default, each as their own track — the
+  microphone track is captured but not mixed in audibly until you bring it in
+  yourself, from the video editor below (turn microphone capture off in the
+  expert menu if you would rather it never record at all); unplugging the
+  microphone mid-recording keeps picture and system audio going and just marks
+  that track as lost. Stopping offers Save, Save as…, Copy, Edit or Discard —
+  Save and Copy share one recording folder (changeable in the expert menu or
+  right from the dialog). MP4 (H.264) is what gets written while recording;
+  three quality steps (Small/High/Lossless) and an optional WebM or GIF format
   convert it afterward through ffmpeg (offered as an inline download when
   missing) — a failed or canceled conversion always falls back to the
   untouched original recording, and a write error (for example a full disk)
   stops the recording cleanly and keeps whatever was captured so far. If the
-  recorded window closes on its own, the recording stops automatically.
+  recorded window closes on its own, the recording stops automatically. A
+  recording that never reached its own stop path (a crash, a forced shutdown)
+  is removed automatically once it clears a grace period, both adjustable in
+  the expert menu alongside a manual clean-up action.
+- **Video editor** — opens from a recording's own result dialog or from any
+  video prompt's right-click menu, in its own window with a live preview and
+  no processing until you export. Trim and cut (a lossless fast path applies
+  when nothing else changes), crop, change speed, fade in/out, and overlay
+  images, freeze-frames, text, pixelation or a spotlight anywhere on a
+  zoomable filmstrip-and-waveform timeline. The preview itself zooms with the
+  scroll wheel (up to 8×) and pans by dragging — the middle mouse button
+  always, the left button once zoomed in — for placing a small overlay
+  precisely on a large recording. A few export presets (unchanged quality, a
+  smaller size for chat, an animated GIF) remember your last choice; undo/redo
+  covers every edit, capped by an adjustable limit.
 
 ### Improved
 

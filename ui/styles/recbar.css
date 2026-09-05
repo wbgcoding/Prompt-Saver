@@ -41,6 +41,10 @@
 .rec-audio.hidden { display: none; }
 .rec-audio.on { opacity: 0.85; }
 .rec-audio.lost { opacity: 1; color: var(--danger); }
+/* The stop/pause hotkey warning is either fully shown or not there at
+   all -- there is no dim "off" state like the audio icons have, since a
+   registration conflict is not a normal condition to sit and look muted. */
+.rec-hotkey-warn { opacity: 1; color: var(--danger); }
 
 
 .rec-btn {

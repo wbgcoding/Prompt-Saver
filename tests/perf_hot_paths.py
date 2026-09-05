@@ -41,6 +41,9 @@ TARGETS_MS = {
     "libraryOpen1000": 800,
     "viewSwitch1000": 800,
     "expertMenuOpen": 800,
+    # The video editor opens a full 10-minute 1080p30 recording (filmstrip
+    # populated, both waveforms drawn) in well under 3s.
+    "videoEditorOpen10Min1080p30": 3000,
 }
 
 # Appended after tauri_stub.js's own script tag -- overrides its 12-prompt
@@ -155,6 +158,47 @@ PROBE = """
 </script>
 """
 
+# Video editor: no PERF_SEED override needed here -- tauri_stub.js's own
+# probe_recording/generate_filmstrip/generate_waveform_peaks fixtures already
+# model a 10-minute 1080p30 recording (600000 ms, 1920x1080, system + mic audio),
+# which is exactly the non-degenerate case this timing wants. The window pulls
+# its source on boot (video_editor_source), so the timer just has to start
+# essentially at navigation and wait for the populated result -- same "click (or
+# here, boot) to fully-rendered" contract the four cases above use.
+VIDEO_PROBE = """
+<script>
+(async () => {
+  const out = { timings: {}, errors: [], counts: {} };
+  window.addEventListener("error", (e) => out.errors.push(String(e.message)));
+  window.addEventListener("unhandledrejection", (e) =>
+    out.errors.push(String((e.reason && e.reason.message) || e.reason)));
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const waitFor = async (check, timeoutMs) => {
+    const start = performance.now();
+    while (performance.now() - start < timeoutMs) {
+      if (check()) return true;
+      await sleep(10);
+    }
+    return false;
+  };
+  // Both waveform canvases carry a hardcoded placeholder width of 10 in the
+  // markup, so "still 10" is what an un-rendered waveform looks like.
+  const ready = () =>
+    document.getElementById("ve-stage-msg").classList.contains("hidden") &&
+    document.querySelectorAll("#ve-filmstrip .ve-thumb").length > 0 &&
+    document.getElementById("ve-wave-sys").width > 10 &&
+    document.getElementById("ve-wave-mic").width > 10;
+
+  const t0 = performance.now();
+  await waitFor(ready, 15000);
+  out.timings.videoEditorOpen10Min1080p30 = performance.now() - t0;
+  out.counts.videoEditorOpen10Min1080p30 = document.querySelectorAll("#ve-filmstrip .ve-thumb").length;
+
+  document.body.insertAdjacentHTML("beforeend", "<pre id=\\"PERF\\">" + JSON.stringify(out) + "</pre>");
+})();
+</script>
+"""
+
 
 def main():
     browser = next((p for p in CHROME_CANDIDATES if Path(p).exists()), None)
@@ -188,6 +232,32 @@ def main():
             print("FAIL: the UI produced no perf result")
             return 1
         r = json.loads(unescape(m.group(1)))
+
+        # Video editor: its own boot, direct-loaded the same way index.html is
+        # above (no small-viewport iframe trick -- this window is never below
+        # 760x520, well past whatever floor that trick works around).
+        video_page = tmp / "ui" / "video.html"
+        video_html = video_page.read_text(encoding="utf-8")
+        video_html = video_html.replace(
+            "<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+        video_html = video_html.replace("</body>", VIDEO_PROBE + "</body>")
+        video_page.write_text(video_html, encoding="utf-8")
+
+        video_proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-video'}", "--allow-file-access-from-files",
+             "--window-size=1100,720", "--virtual-time-budget=30000",
+             "--dump-dom", video_page.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=120)
+        vm = re.search(r'<pre id="PERF">(\{.*?\})</pre>', video_proc.stdout, re.S)
+        if not vm:
+            print("FAIL: the video editor produced no perf result")
+            return 1
+        r_video = json.loads(unescape(vm.group(1)))
+        r["timings"].update(r_video["timings"])
+        r["counts"].update(r_video["counts"])
+        r["errors"].extend(r_video["errors"])
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

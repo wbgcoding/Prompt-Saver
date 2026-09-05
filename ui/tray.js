@@ -141,6 +141,11 @@ function addSeparator() {
 function render(plan) {
   cardEl.innerHTML = "";
   rows = [];
+  // Stop/Pause-Resume, no header, no icon -- same rows the tray menu itself
+  // shows while a recording runs.
+  const recEntries = plan.recEntries || [];
+  for (const entry of recEntries) addRow(entry.id, entry.label, null);
+  if (recEntries.length) addSeparator();
   for (const section of plan.sections || []) {
     addHeader(section.title);
     for (const entry of section.entries || []) addRow(entry.id, entry.label, iconEl(entry.kind, entry.color));
@@ -189,7 +194,7 @@ document.body.addEventListener("mousedown", (e) => {
 });
 
 async function boot() {
-  const plan = await invoke("tray_window_plan").catch(() => ({ sections: [], showLabel: "", quitLabel: "" }));
+  const plan = await invoke("tray_window_plan").catch(() => ({ recEntries: [], sections: [], showLabel: "", quitLabel: "" }));
   applyFloatTheme(await invoke("current_theme").catch(() => null), await invoke("theme_vars").catch(() => ({})));
   listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
   render(plan);

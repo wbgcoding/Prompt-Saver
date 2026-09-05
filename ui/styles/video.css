@@ -1,0 +1,360 @@
+/* Video editor window. main.css supplies the theme tokens and every shared
+   control (.icon-btn / .ghost-btn / .primary-btn / .field / .switch / .modal /
+   .swatch); everything here is this window's own layout and nothing else. */
+
+/* main.css rounds the main window's body for its own frameless corners. This
+   window is a plain editor surface, so it fills its frame squarely. */
+html { background: var(--bg); }
+body.video-body {
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  user-select: none;
+}
+
+/* ---- titlebar ---- */
+.ve-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 12px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.ve-titlebar-label { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.ve-file {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ve-close { flex: 0 0 auto; }
+
+/* ---- ffmpeg banner ---- */
+.ve-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 12.5px;
+  flex: 0 0 auto;
+}
+.ve-banner span { flex: 1 1 auto; min-width: 0; }
+
+/* ---- overall split ---- */
+.ve-main { display: flex; flex: 1 1 auto; min-height: 0; }
+.ve-left { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; }
+.ve-side {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 320px;
+  max-width: 46vw;
+  min-height: 0;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+}
+
+/* ---- preview ---- */
+.ve-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 120px;
+  background: #000;
+  overflow: hidden;
+}
+.ve-video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
+/* 284: cursor feedback for the preview pan gesture -- grab while zoomed in and
+   idle, grabbing while an actual drag is in progress. At zoom 1 a left-drag on
+   empty stage space is a no-op (see the pointerdown guard in video.js), so the
+   default cursor stays put instead of promising a drag that would do nothing. */
+.ve-stage.ve-zoomed { cursor: grab; }
+.ve-stage.ve-panning { cursor: grabbing; }
+.ve-preview-zoom {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.ve-preview-zoom .icon-btn { width: 22px; height: 22px; color: #fff; }
+/* The rectangle layer covers the stage but only its own boxes take the pointer,
+   so a click on the picture still reaches the video element. */
+.ve-rects { position: absolute; inset: 0; pointer-events: none; }
+.ve-rect {
+  position: absolute;
+  pointer-events: auto;
+  cursor: move;
+  box-sizing: border-box;
+  border: 1.5px solid var(--accent);
+}
+.ve-rect-crop { border-style: dashed; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45); }
+.ve-rect-pixelate { border-color: #f59e0b; background: repeating-linear-gradient(45deg, rgba(245, 158, 11, 0.25) 0 6px, transparent 6px 12px); }
+.ve-rect-spotlight { border-color: #fde047; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45); }
+.ve-rect-image { border-color: #22c55e; }
+.ve-rect-frame { border-color: #a855f7; }
+.ve-text-chip {
+  border: 1px dashed #ffffff88;
+  padding: 1px 3px;
+  white-space: nowrap;
+  background: rgba(0, 0, 0, 0.35);
+}
+.ve-rect-size {
+  position: absolute;
+  left: 0;
+  top: -20px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.ve-rect-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  background: var(--surface);
+  border: 1.5px solid var(--accent);
+  border-radius: 2px;
+}
+.ve-h-nw { left: 0; top: 0; cursor: nwse-resize; }
+.ve-h-n { left: 50%; top: 0; cursor: ns-resize; }
+.ve-h-ne { left: 100%; top: 0; cursor: nesw-resize; }
+.ve-h-w { left: 0; top: 50%; cursor: ew-resize; }
+.ve-h-e { left: 100%; top: 50%; cursor: ew-resize; }
+.ve-h-sw { left: 0; top: 100%; cursor: nesw-resize; }
+.ve-h-s { left: 50%; top: 100%; cursor: ns-resize; }
+.ve-h-se { left: 100%; top: 100%; cursor: nwse-resize; }
+.ve-stage-msg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffffcc;
+  font-size: 13px;
+  pointer-events: none;
+}
+
+/* ---- transport ---- */
+.ve-transport {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  row-gap: 4px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.ve-sep { width: 1px; height: 20px; background: var(--border); margin: 0 6px; }
+.ve-spacer { flex: 1 1 auto; }
+.ve-time { font-variant-numeric: tabular-nums; font-size: 13px; }
+.ve-time-sep { color: var(--muted); margin: 0 2px; }
+.ve-frame { font-variant-numeric: tabular-nums; font-size: 12px; margin-left: 8px; }
+.ve-muted { color: var(--muted); }
+.ve-audio-group { display: flex; align-items: center; gap: 4px; }
+.ve-vol { width: 78px; accent-color: var(--accent); }
+.ve-audio-group .icon-btn.ve-muted-btn { color: var(--danger); }
+.ve-audio-group .icon-btn:disabled,
+.ve-vol:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ---- timeline ---- */
+.ve-timeline {
+  position: relative;
+  flex: 0 0 auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  outline: none;
+}
+.ve-timeline:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.ve-track { position: relative; height: 122px; min-width: 100%; }
+.ve-ruler { position: relative; height: 18px; pointer-events: none; }
+.ve-tick {
+  position: absolute;
+  top: 2px;
+  padding-left: 4px;
+  border-left: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 14px;
+  white-space: nowrap;
+}
+.ve-filmstrip { position: relative; height: 52px; overflow: hidden; pointer-events: none; background: var(--surface); }
+.ve-filmstrip-empty { background: repeating-linear-gradient(90deg, var(--surface) 0 12px, var(--surface-2) 12px 24px); }
+.ve-thumb { position: absolute; top: 0; height: 52px; object-fit: cover; }
+.ve-waves { display: flex; flex-direction: column; pointer-events: none; }
+.ve-wave { display: block; height: 34px; width: 100%; background: var(--surface); border-top: 1px solid var(--border); }
+
+/* Every marker lives in one absolutely-positioned layer over the whole strip, so
+   a drag never has to know which sub-track it started on. */
+.ve-regions { position: absolute; inset: 0; }
+.ve-dim { position: absolute; top: 18px; bottom: 0; left: 0; background: rgba(0, 0, 0, 0.45); pointer-events: none; }
+.ve-cuts, .ve-ovbars { position: absolute; inset: 0; pointer-events: none; }
+.ve-cut {
+  position: absolute;
+  top: 18px;
+  bottom: 0;
+  background: repeating-linear-gradient(45deg, rgba(220, 38, 38, 0.45) 0 8px, rgba(220, 38, 38, 0.2) 8px 16px);
+  border-left: 1px solid var(--danger);
+  border-right: 1px solid var(--danger);
+}
+.ve-ovbar { position: absolute; bottom: 0; height: 5px; background: var(--muted); border-radius: 3px; }
+.ve-ovbar.sel { background: var(--accent); }
+.ve-sel { position: absolute; top: 18px; bottom: 0; background: rgba(37, 99, 235, 0.18); border-left: 1px solid var(--accent); border-right: 1px solid var(--accent); pointer-events: none; }
+.ve-playhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--danger); pointer-events: none; }
+.ve-handle {
+  position: absolute;
+  top: 18px;
+  width: 12px;
+  height: 22px;
+  margin-left: -6px;
+  border-radius: 3px;
+  background: var(--accent);
+  cursor: ew-resize;
+}
+.ve-handle:focus-visible { outline: 2px solid var(--fg); outline-offset: 1px; }
+
+/* ---- timeline tools ---- */
+.ve-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  row-gap: 6px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.ve-tools .ghost-btn { padding: 4px 10px; font-size: 12px; }
+.ve-zoom-val { min-width: 46px; text-align: center; font-size: 12px; color: var(--muted); }
+
+/* ---- side panel ---- */
+.ve-tabs { display: flex; gap: 4px; padding: 8px 10px 0; flex: 0 0 auto; }
+.ve-tab {
+  flex: 1 1 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.ve-tab:hover { color: var(--fg); border-color: var(--accent); }
+.ve-tab.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.ve-panels { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 10px; }
+.ve-panel { display: flex; flex-direction: column; gap: 10px; }
+.ve-h { margin: 6px 0 0; font-size: 12px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; color: var(--muted); }
+.ve-h-flat { margin: 0; flex: 1 1 auto; text-transform: none; letter-spacing: 0; }
+.ve-panel .modal-hint { margin: 0; }
+.ve-row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.ve-row4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; }
+.ve-wide { width: 100%; }
+.ve-switch-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
+.ve-switch-row > span { color: var(--fg); font-size: 13px; }
+.ve-timefield { font-variant-numeric: tabular-nums; }
+.ve-steps { display: flex; flex-wrap: wrap; gap: 4px; }
+.ve-step { padding: 4px 8px; font-size: 12px; }
+.ve-step.sel { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+/* A switched-off group stays visible but plainly inert — a control the user
+   cannot act on must never look like one they can. */
+.ve-off { opacity: 0.45; }
+.ve-crop-fields, .ve-ov-editor { display: flex; flex-direction: column; gap: 8px; }
+.ve-path {
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 11.5px;
+  word-break: break-all;
+}
+
+/* ---- overlays ---- */
+.ve-ov-add { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 6px; }
+.ve-ov-add .ghost-btn { padding: 5px 8px; font-size: 12px; }
+.ve-ov-list { display: flex; flex-direction: column; gap: 4px; }
+.ve-ov-row {
+  text-align: left;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ve-ov-row:hover { border-color: var(--accent); }
+.ve-ov-row.sel { border-color: var(--accent); background: var(--surface-2); }
+.ve-swatches { margin: 0; max-width: none; grid-auto-flow: column; grid-template-columns: repeat(auto-fit, 20px); gap: 6px; }
+.ve-swatches .swatch { width: 20px; height: 20px; }
+
+/* ---- export ---- */
+.ve-progress-row { display: flex; align-items: center; gap: 8px; }
+.ve-progress { flex: 1 1 auto; height: 8px; accent-color: var(--accent); }
+
+/* ---- operation list ---- */
+.ve-ops { flex: 0 0 auto; max-height: 34%; display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+.ve-ops-head { display: flex; align-items: center; gap: 4px; padding: 6px 10px; }
+.ve-ops-list { flex: 1 1 auto; overflow-y: auto; padding: 0 10px 10px; display: flex; flex-direction: column; gap: 3px; }
+.ve-op-row { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.ve-op-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ve-op-clickable .ve-op-label { cursor: pointer; }
+.ve-op-clickable .ve-op-label:hover { color: var(--accent); }
+/* Past the undo window: still in effect, just no longer reachable by undo. */
+.ve-op-locked .ve-op-label { color: var(--muted); }
+.ve-op-del { flex: 0 0 auto; }
+
+/* ---- toast ---- */
+.ve-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  max-width: 80vw;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  font-size: 12.5px;
+  z-index: 90;
+  pointer-events: none;
+}
+
+/* Narrow window: the side panel drops under the preview instead of squeezing
+   both into unusable widths. */
+@media (max-width: 900px) {
+  .ve-main { flex-direction: column; }
+  /* Neither panel scrolled at this width -- content taller than what's left
+     over just painted past its own box into the panel below it. The preview
+     gives ground first (it is the one element that can shrink and stay
+     useful); transport/timeline/tools keep their normal size so every
+     toolbar control stays reachable without scrolling at the window's own
+     declared minimum height. */
+  .ve-left { overflow-y: auto; }
+  .ve-side { flex: 0 0 auto; max-width: none; max-height: 36vh; overflow-y: auto; border-left: none; border-top: 1px solid var(--border); }
+  .ve-stage { min-height: 70px; }
+}

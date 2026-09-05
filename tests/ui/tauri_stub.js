@@ -248,6 +248,26 @@ const RESULTS = {
   stop_recording: () => { window.__REC_STOPPED__ = true; return null; },
   cancel_recording: () => { window.__REC_CANCELLED__ = true; return null; },
   hide_rec_bar: () => { window.__REC_BAR_HIDDEN__ = true; return null; },
+  // Video editor: a fixed 10-minute 1080p30 recording with both a system and a
+  // mic audio track -- real enough to exercise the filmstrip/waveform rendering
+  // the same way an actual capture would, and shared by the UI smoke test and
+  // the perf hot-path timing (both want the same non-degenerate fixture).
+  // mic_sidecar stays empty so the boot never also has to route through
+  // mux_mic_track, which nothing here stubs.
+  video_editor_source: () => "C:\\Recordings\\ps-smoke-recording.mp4",
+  windows_fonts_dir: () => "C:/Windows/Fonts",
+  probe_recording: () => ({
+    duration_ms: 600000, fps: 30, width: 1920, height: 1080,
+    has_audio: true, has_mic_track: true, mic_sidecar: "",
+  }),
+  generate_filmstrip: (a) => {
+    const n = Math.max(1, Number(a && a.count) || 12);
+    return Array.from({ length: n }, (_, i) => "C:\\Temp\\ps-filmstrip-" + i + ".jpg");
+  },
+  generate_waveform_peaks: (a) => {
+    const n = Math.max(1, Number(a && a.buckets) || 200);
+    return Array.from({ length: n }, (_, i) => Math.sin(i / 13) * (0.3 + 0.5 * Math.abs(Math.sin(i / 97))));
+  },
   // Post-capture menu (241): a real ffmpeg run takes visible time, so this
   // resolves on a short timeout instead of immediately -- the probe fires a
   // recording-convert-progress event and checks the interim "Converting..."
