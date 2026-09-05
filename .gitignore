@@ -42,3 +42,6 @@ test-data/
 *.p12
 *.cer
 *.crt
+
+# scratch space for the working session (never committed)
+.tmp/

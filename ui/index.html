@@ -570,8 +570,12 @@
         <button id="lib-batch-addview" type="button" class="ghost-btn" data-i18n="batchAddView">Add</button>
         <button id="lib-batch-removeview" type="button" class="ghost-btn" data-i18n="batchRemoveView">Remove</button>
         <span class="lib-batch-sep" aria-hidden="true"></span>
-        <button id="lib-batch-csv" type="button" class="ghost-btn" data-i18n="exportCsv">CSV</button>
-        <button id="lib-batch-txt" type="button" class="ghost-btn" data-i18n="exportTxt">TXT</button>
+        <select id="lib-batch-format" class="batch-view-select" data-i18n-aria="exportFormatLabel">
+          <option value="csv" data-i18n="exportCsv">CSV export</option>
+          <option value="txt" data-i18n="exportTxt">TXT export</option>
+          <option value="json" data-i18n="exportJson">JSON export</option>
+        </select>
+        <button id="lib-batch-export" type="button" class="ghost-btn" data-i18n="exportBtn">Export</button>
         <button id="lib-batch-delete" type="button" class="ghost-btn danger-btn" data-i18n="delete">Delete</button>
       </div>
     </div>
@@ -594,6 +598,34 @@
       <div class="modal-actions">
         <button id="import-preview-cancel" class="ghost-btn" data-i18n="cancel">Cancel</button>
         <button id="import-preview-confirm" class="primary-btn" data-i18n="importConfirm">Import</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview + confirm for the video-folder cleanup action, before it deletes anything -->
+  <div id="video-cleanup-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal modal-narrow">
+      <div class="modal-titlebar">
+        <h2 class="modal-title" data-i18n="videoCleanupTitle">Clean up videos</h2>
+        <button id="video-cleanup-close" class="icon-btn modal-x" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="field field-inline">
+        <span data-i18n="videoCleanupAgeLabel">Delete recordings older than</span>
+        <select id="video-cleanup-age" class="batch-view-select">
+          <option value="7" data-i18n="videoCleanupAge7">7 days</option>
+          <option value="30" selected data-i18n="videoCleanupAge30">30 days</option>
+          <option value="90" data-i18n="videoCleanupAge90">90 days</option>
+        </select>
+      </div>
+      <p id="video-cleanup-summary" class="modal-hint"></p>
+      <div id="video-cleanup-list" class="import-preview-list"></div>
+      <div class="modal-actions">
+        <button id="video-cleanup-cancel" class="ghost-btn" data-i18n="cancel">Cancel</button>
+        <button id="video-cleanup-confirm" class="ghost-btn danger-btn" data-i18n="delete">Delete</button>
       </div>
     </div>
   </div>
@@ -867,8 +899,12 @@
       <div id="impexp-field" class="field">
         <div class="export-row">
           <button id="import-btn" class="ghost-btn" data-i18n="import">Import prompts</button>
-          <button id="export-csv" class="ghost-btn" data-i18n="exportCsv">CSV export</button>
-          <button id="export-txt" class="ghost-btn" data-i18n="exportTxt">TXT export</button>
+          <button id="export-btn" class="ghost-btn" data-i18n="exportBtn">Export</button>
+          <select id="export-format" class="batch-view-select" data-i18n-aria="exportFormatLabel">
+            <option value="csv" data-i18n="exportCsv">CSV export</option>
+            <option value="txt" data-i18n="exportTxt">TXT export</option>
+            <option value="json" data-i18n="exportJson">JSON export</option>
+          </select>
         </div>
         <div class="export-row">
           <button id="settings-backup-btn" class="ghost-btn" data-i18n="settingsBackupBtn" data-i18n-title="tipSettingsBackup">Backup manager</button>

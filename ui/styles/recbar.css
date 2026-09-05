@@ -13,8 +13,12 @@
   color: var(--menu-fg);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
   font-variant-numeric: tabular-nums;
-  -webkit-app-region: drag;
+  /* WebView2 does not honour -webkit-app-region (that's an Electron
+     feature) -- dragging is wired up in recbar.js via startDragging()
+     instead, so this is just the visual hint that the background moves it. */
+  cursor: grab;
 }
+.rec-bar:active { cursor: grabbing; }
 
 .rec-dot {
   width: 10px;
@@ -41,6 +45,11 @@
 .rec-audio.hidden { display: none; }
 .rec-audio.on { opacity: 0.85; }
 .rec-audio.lost { opacity: 1; color: var(--danger); }
+/* System/mic are buttons now (mute mid-recording), not plain status
+   icons -- strip the default button chrome so they still look identical to
+   the plain span they replaced. */
+.rec-audio-btn { border: none; background: transparent; padding: 0; color: inherit; cursor: pointer; }
+.rec-audio-btn:disabled { cursor: default; }
 /* The stop/pause hotkey warning is either fully shown or not there at
    all -- there is no dim "off" state like the audio icons have, since a
    registration conflict is not a normal condition to sit and look muted. */
@@ -48,7 +57,6 @@
 
 
 .rec-btn {
-  -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
   justify-content: center;

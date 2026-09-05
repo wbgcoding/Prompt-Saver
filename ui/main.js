@@ -7,7 +7,7 @@ import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults 
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
-import { DRAG_OUT_MODS, fileUri, resolveLang } from "./floatShared.js";
+import { DRAG_OUT_MODS, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme } from "./floatShared.js";
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
@@ -320,6 +320,9 @@ function activeThemeVars() {
 // `vars` are the colour tokens layered on top as inline styles.
 function applyTheme(theme, vars) {
   if (theme) document.documentElement.setAttribute("data-theme", theme);
+  // Lets a native control we do not style ourselves -- the video element's own
+  // three-dot menu -- follow dark/light instead of always drawing light.
+  document.documentElement.style.colorScheme = themeColorScheme(theme);
   applyThemeVars(vars ?? activeThemeVars());
 }
 
@@ -1074,9 +1077,6 @@ const FLAG_LABELS = {
   confirmClearHistory: "flagConfirmClearHistory",
   chainLock: "flagChainLock",
   chainQuickStart: "flagChainQuickStart",
-  // The tile's own chain-start icon otherwise only appears on hover --
-  // invisible-until-hover is exactly what a user reported not being able to see.
-  chainStartAlwaysVisible: "flagChainStartAlwaysVisible",
   favorites: "flagFavorites",
   keyboardNav: "flagKeyboardNav",
   varDefaults: "flagVarDefaults",
@@ -1197,6 +1197,10 @@ const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 const OPT_FLAG_LABELS = {
   // Features extras
   viewGroups: "flagViewGroups",                 // folder tabs for views
+  // The tile's own chain-start icon otherwise only appears on hover -- kept as an
+  // opt-in for whoever prefers it dimly visible on every tile all the time (04.09.
+  // decision); the 05.09. decision reversed the shipped default back to hover-only.
+  chainStartAlwaysVisible: "flagChainStartAlwaysVisible",
   gridViewBorder: "flagGridViewBorder",         // colored border around the grid in the view's color
   quickGridHoverOnly: "flagQuickGridHoverOnly", // quick-grid control shows only while the header is hovered
   // Named from the user's side: the window is kept out of screenshots, and this is
@@ -1320,7 +1324,7 @@ const EXPERT_VALUES = {
   gridPad: { label: "valGridPad", min: 0, max: 40, step: 1, def: 10, unit: "px" },
   modalRadius: { label: "valModalRadius", min: 0, max: 28, step: 1, def: 14, unit: "px" },
   overlayDim: { label: "valOverlayDim", min: 0, max: 80, step: 5, def: 40, unit: "%" },
-  bubbleMs: { label: "valBubbleMs", min: 300, max: 6000, step: 50, def: 950, unit: "ms" },
+  bubbleMs: { label: "valBubbleMs", min: 300, max: 6000, step: 50, def: 950, unit: "ms", gate: "copyBubble" },
   toastMs: { label: "valToastMs", min: 800, max: 10000, step: 100, def: 1400, unit: "ms" },
   previewLen: { label: "valPreviewLen", min: 0, max: 4000, step: 20, def: 600, unit: "" },
   viewBorder: { label: "valViewBorder", min: 1, max: 12, step: 1, def: 3, unit: "px", gate: "multiView" },
@@ -1401,19 +1405,39 @@ const EXPERT_VALUES = {
   // Screenshot JPEG quality + a delay before the capture (lets a menu stay open in shot).
   snipQuality: { label: "valSnipQuality", min: 50, max: 100, step: 5, def: 80, unit: "%", gate: "screenshot" },
   snipDelayMs: { label: "valSnipDelayMs", min: 0, max: 5000, step: 100, def: 0, unit: "ms", gate: "screenshot" },
+  // The actual saved/copied/exported JPEG quality -- every save/copy path, edited
+  // or not, shares this one value (see SNIP_SAVE_Q in lib.rs). Not the same
+  // setting as snipQuality above, which only affects the live capture preview.
+  snipSaveQuality: { label: "valSnipSaveQuality", min: 50, max: 100, step: 5, def: 90, unit: "%", gate: "screenshot" },
   // Screenshot-editor drawing defaults.
   snipPenPx: { label: "valSnipPenPx", min: 1, max: 40, step: 1, def: 6, unit: "px", gate: "snipEditor" },
   snipMarkerPx: { label: "valSnipMarkerPx", min: 4, max: 60, step: 2, def: 18, unit: "px", gate: "snipEditor" },
   snipTextPx: { label: "valSnipTextPx", min: 10, max: 96, step: 2, def: 24, unit: "px", gate: "snipEditor" },
   snipPixelBlock: { label: "valSnipPixelBlock", min: 4, max: 64, step: 2, def: 12, unit: "px", gate: "snipEditor" },
   snipSpotlightDim: { label: "valSnipSpotlightDim", min: 10, max: 90, step: 5, def: 55, unit: "%", gate: "snipEditor" },
+  snipEditSnapTolerancePx: { label: "valSnipEditSnapTolerancePx", min: 2, max: 20, step: 1, def: 6, unit: "px", gate: "snipEditSnap" },
   snipEditUndoMax: { label: "valSnipEditUndoMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "snipEditor" },
   videoEditUndoMax: { label: "valVideoEditUndoMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "videoEditor" },
+  // The H.264 bitrate each export-quality tier actually encodes at -- the
+  // "small"/"high" dropdown just picks between these two.
+  veExportKbpsHigh: { label: "valVeExportKbpsHigh", min: 4000, max: 30000, step: 500, def: 12000, unit: "kbps", gate: "videoEditor" },
+  veExportKbpsSmall: { label: "valVeExportKbpsSmall", min: 500, max: 8000, step: 250, def: 4000, unit: "kbps", gate: "videoEditor" },
+  // Seeds both the fade-in and fade-out fields the moment "Fade in and out" is
+  // first switched on for an export -- each field stays freely adjustable
+  // afterward, only the starting value comes from here.
+  veFadeMs: { label: "valVeFadeMs", min: 100, max: 5000, step: 100, def: 500, unit: "ms", gate: "videoEditor" },
+  veOvPixelateBlock: { label: "valVeOvPixelateBlock", min: 4, max: 64, step: 2, def: 16, unit: "px", gate: "videoEditor" },
+  veOvSpotlightDim: { label: "valVeOvSpotlightDim", min: 10, max: 95, step: 5, def: 60, unit: "%", gate: "videoEditor" },
+  veOvImageOpacity: { label: "valVeOvImageOpacity", min: 10, max: 100, step: 5, def: 100, unit: "%", gate: "videoEditor" },
   // A crop smaller than this (either side) is upscaled 2x before recognition --
   // the trick that makes small on-screen text readable to the OCR engine.
   ocrUpscaleUnderPx: { label: "valOcrUpscaleUnderPx", min: 100, max: 800, step: 50, def: 300, unit: "px", gate: "ocr" },
   // Delay between picking a recording target and the capture actually starting -- 0 disables it.
   recCountdownS: { label: "valRecCountdownS", min: 0, max: 10, step: 1, def: 3, unit: "s", gate: "screenRecord" },
+  // The encoder always recorded at a fixed 30fps regardless of the source
+  // monitor's real refresh rate until this was added -- a 60/144Hz screen can
+  // now be captured at its own rate instead of being silently capped.
+  recFps: { label: "valRecFps", min: 10, max: 60, step: 5, def: 30, unit: "fps", gate: "screenRecord" },
   recAudioKbps: { label: "valRecAudioKbps", min: 64, max: 320, step: 32, def: 192, unit: "kbps", gate: "screenRecord" },
   // Native H.264 bitrate. Has no effect once recQuality is "lossless" -- that
   // step is produced by a separate ffmpeg CRF-0 re-encode after the recording
@@ -1424,6 +1448,10 @@ const EXPERT_VALUES = {
   // the background sweep for it (and for merely-undecided recordings) runs.
   recBrokenGraceMin: { label: "valRecBrokenGraceMin", min: 1, max: 60, step: 1, def: 5, unit: "min", gate: "recSweepBroken" },
   recSweepEveryMin: { label: "valRecSweepEveryMin", min: 5, max: 1440, step: 5, def: 60, unit: "min", gate: "recSweepBroken" },
+  // How long a video editor "Copy to clipboard" export's throwaway temp
+  // file survives before the background sweep deletes it (also cleared at
+  // the next app start regardless).
+  videoClipTtlMin: { label: "valVideoClipTtl", min: 5, max: 240, step: 5, def: 60, unit: "min" },
   // How often the background thread checks installed language packs for an
   // update, how long the "update available" toast stays before it counts as a
   // silent no-op, and how long a click on its Cancel button postpones the next
@@ -1595,8 +1623,8 @@ const EXPERT_DROPDOWNS = {
     [["hex", "optFmtHex"], ["rgb", "optFmtRgb"], ["hsl", "optFmtHsl"]], "hex", "colorPicker"),
   // Which tool the screenshot editor opens with.
   snipEditDefaultTool: enumDropdown("snipEditDefaultTool", "valSnipEditDefaultTool",
-    [["crop", "snipToolCrop"], ["pen", "snipToolPen"], ["marker", "snipToolMarker"],
-     ["arrow", "snipToolArrow"], ["text", "snipToolText"], ["step", "snipToolStep"]], "pen", "snipEditor"),
+    [["hand", "snipToolHand"], ["crop", "snipToolCrop"], ["pen", "snipToolPen"], ["marker", "snipToolMarker"],
+     ["arrow", "snipToolArrow"], ["text", "snipToolText"], ["step", "snipToolStep"]], "hand", "snipEditor"),
   // Options are fetched once from ocr_languages() at startup and cached
   // (ocrLangsCache, near the OCR wiring below) -- "Automatic" is always first,
   // regardless of what the OS itself reports.
@@ -1657,6 +1685,15 @@ const EXPERT_DROPDOWNS = {
   // on the backend and the post-capture menu that calls it).
   recFormat: enumDropdown("recFormat", "valRecFormat",
     [["mp4", "optRecFormatMp4"], ["webm", "optRecFormatWebm"], ["gif", "optRecFormatGif"]], "mp4", "screenRecord"),
+  // The video editor's export dialog opens with these three every time --
+  // each field stays freely changeable per export, only the opening
+  // selection comes from here.
+  veDefaultFormat: enumDropdown("veDefaultFormat", "valVeDefaultFormat",
+    [["mp4", "optRecFormatMp4"], ["webm", "optRecFormatWebm"], ["gif", "optRecFormatGif"]], "mp4", "videoEditor"),
+  veDefaultQuality: enumDropdown("veDefaultQuality", "valVeDefaultQuality",
+    [["high", "veQualityHigh"], ["small", "veQualitySmall"], ["lossless", "veQualityLossless"]], "high", "videoEditor"),
+  veDefaultDownscale: enumDropdown("veDefaultDownscale", "valVeDefaultDownscale",
+    [["", "veScaleOff"], ["1080", "optVeScale1080"], ["720", "optVeScale720"], ["480", "optVeScale480"]], "", "videoEditor"),
   // Same pattern as ocrLang just above: fetched once from voice_languages()
   // at startup (voiceLangsCache), "Automatic" always first, a trailing entry
   // opens the shared language-pack dialog instead of ever being stored.
@@ -1684,6 +1721,8 @@ const EXPERT_DROPDOWNS = {
     [["alpha", "optTagSortAlpha"], ["usage", "optTagSortUsage"]], "alpha", "tags"),
   copySize: {
     label: "valCopySize",
+    // Only styles the "Copied!" bubble text -- pointless while that bubble is off.
+    gate: "copyBubble",
     // get() always returns a String (see below) — a numeric def here made
     // isRowChanged's strict !== comparison permanently true ("0" !== 0).
     def: "0",
@@ -1700,6 +1739,7 @@ const EXPERT_DROPDOWNS = {
   },
   copyFont: {
     label: "valCopyFont",
+    gate: "copyBubble",
     def: "",
     options: () => {
       const o = [["", t("styleDefault"), ""]];
@@ -1724,7 +1764,7 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app. The pipette sits with the
     // screenshot tool: both are capture tools on the composer bar.
-    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, "videoEditor", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }, "voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax", "videoEditUndoMax", "recCountdownS", "recAudioKbps", "recBitrateKbps", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax", "voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["pickerFormat", "snipEditDefaultTool", "ocrLang", "recMicDevice", "recQuality", "recFormat", "rotateDefaultMode", "voiceLang", "voiceInsert", "voiceHotkeyTarget"], paths: ["screenshotDir", "recordingDir"],
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, "videoEditor", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }, "voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipSaveQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditSnapTolerancePx", "snipEditUndoMax", "videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax", "voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["pickerFormat", "snipEditDefaultTool", "ocrLang", "recMicDevice", "recQuality", "recFormat", "veDefaultFormat", "veDefaultQuality", "veDefaultDownscale", "rotateDefaultMode", "voiceLang", "voiceInsert", "voiceHotkeyTarget"], paths: ["screenshotDir", "recordingDir"],
       // Opens #ocr-langs-modal / its voice equivalent -- same gate as the rest of each feature.
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }, { id: "voice-langs-open", label: "voiceLangsManage", gate: "voice" }, { id: "voice-hotkey-set", label: "voiceHotkeySet", gate: "voiceHotkey" }, { id: "rec-stop-hotkey-set", label: "recStopHotkeySet", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-set", label: "recPauseHotkeySet", gate: "recPauseHotkey" }] },
     // Placeholders, from the grammar to where the app asks for them.
@@ -1733,7 +1773,7 @@ const EXPERT_TABS = [
     // highlighter only ever paints inside the preview.
     { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
-    { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "closeOnCopy", "copyBubble", "copyFlash"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs"], dropdowns: ["dragOutModifier"] },
+    { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "closeOnCopy", "copyBubble", "copyFlash"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
     // Floating buttons and the two kinds of folder they can form.
     { title: "expGroupFolders", flags: ["floating", { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap", "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
     // The quick-copy sections of the tray menu, each with its own entry count.
@@ -1753,9 +1793,9 @@ const EXPERT_TABS = [
   ] },
   { title: "expTabAppearance", groups: [
     { title: "expGroupScale", values: ["uiScale", "modalScale", "composerScale", "iconScale", "primaryScale"] },
-    { title: "expGroupVisual", flags: ["animations", "accentHeader", "hideScrollbars", { key: "accentScrollbar", gate: "!hideScrollbars" }, "smoothScroll", "frostedModals"], values: ["animSpeed", "gridGap", "gridPad", "headerPadY", "modalRadius", "overlayDim", "scrollbarWidth", "frostedBlur", "composerMaxH", "popoverPad", "toastWidth", "modalMaxVh"], dropdowns: ["copySize", "copyFont", "toastPos"] },
+    { title: "expGroupVisual", flags: ["animations", "accentHeader", "hideScrollbars", { key: "accentScrollbar", gate: "!hideScrollbars" }, "smoothScroll", "frostedModals"], values: ["animSpeed", "gridGap", "gridPad", "headerPadY", "modalRadius", "overlayDim", "scrollbarWidth", "frostedBlur", "composerMaxH", "popoverPad", "toastWidth", "toastMs", "modalMaxVh"], dropdowns: ["toastPos"] },
     { title: "expGroupColors", flags: ["customThemes"], values: ["customThemeMax"], palette: true },
-    { title: "expGroupLimits", values: ["maxViews", "gridMax", "previewLen", "nameMaxLen", "bubbleMs", "toastMs"] },
+    { title: "expGroupLimits", values: ["maxViews", "gridMax", "previewLen", "nameMaxLen"] },
   ] },
   { title: "expTabLibrary", groups: [
     { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle"], values: ["searchRecentMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs"], dropdowns: ["fuzzyMaxTypos"] },
@@ -1774,7 +1814,7 @@ const EXPERT_TABS = [
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken"], values: ["dupThreshold", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin"], selects: ["trashRetentionDays"],
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken"], values: ["dupThreshold", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "videoClipTtlMin"], selects: ["trashRetentionDays"],
       actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }] },
   ] },
 ];
@@ -1912,13 +1952,15 @@ const EXPERT_TIPS = [
   "promptNotes", "notesInTooltip", "notesTipLen",
   "mdPreview", "mdMaxChars", "codeHighlight", "codeAutoDetect", "hlFontPx", "hlMaxChars",
   "colorPicker", "pickerFormat", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx",
-  "screenRecord", "recCursor", "recCountdownS", "recAudioSystem", "recAudioMic", "recAudioKbps", "recMicDevice",
+  "screenRecord", "recCursor", "recCountdownS", "recFps", "recAudioSystem", "recAudioMic", "recAudioKbps", "recMicDevice",
   "recQuality", "recBitrateKbps", "recFormat", "recordingDir",
   "recStopHotkey", "recPauseHotkey", "recTrayEntries",
   "videoEditor", "videoEditUndoMax",
-  "snipQuality", "snipDelayMs",
+  "veDefaultFormat", "veDefaultQuality", "veDefaultDownscale", "veExportKbpsHigh", "veExportKbpsSmall",
+  "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity",
+  "snipQuality", "snipSaveQuality", "snipDelayMs",
   "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim",
-  "snipEditUndoMax", "snipEditSnap", "snipTextPlate", "snipEditDefaultTool",
+  "snipEditUndoMax", "snipEditSnap", "snipEditSnapTolerancePx", "snipTextPlate", "snipEditDefaultTool",
   "ocr", "ocrUpscaleUnderPx", "ocrLang",
   "ocrAutoPickLang", "ocrLangAutoUpdate", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "ocrLangCacheH",
   "voice", "voiceInterim", "voicePunct", "voiceAutoCaps", "voiceAutoStop", "voiceAutoStopSec", "voiceMaxMin",
@@ -1949,7 +1991,7 @@ const EXPERT_TIPS = [
   "dedupCopyLog", "cleanupFiles", "blurTilesUntilHover",
   // Tools / data
   "dupFinder", "clipWatcher", "backupGfs", "backupBeforeReset", "backupBeforeDelete", "disarmMs",
-  "recSweepBroken", "recBrokenGraceMin", "recSweepEveryMin",
+  "recSweepBroken", "recBrokenGraceMin", "recSweepEveryMin", "videoClipTtlMin",
   "usageStats", "promptSync", "syncDir", "syncPollSecs",
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "kbFocusFadeMs", "snipPreviewVh",
@@ -2454,8 +2496,26 @@ const EXPERT_PATHS = {
       invoke("set_ui_text", { key: "recordingDir", value: "" }).catch((e) => errToast(e));
       renderExpert();
     },
+    // The only path row that also shows how much space its folder holds, plus
+    // a cleanup button right next to that -- pathRow() renders both only when
+    // this is set, so every other path (screenshotDir, syncDir, dataDir) is
+    // untouched.
+    videoCleanup: true,
   },
 };
+
+// (folder path -> {count, bytes}) for the recordingDir video-folder readout, so
+// switching the folder and switching back does not re-fetch what is already
+// known. Cleared (falsy) means "not fetched yet for this path" -- pathRow()
+// shows a loading placeholder until refreshVideoFolderInfo() resolves.
+let videoFolderInfo = null;
+let videoFolderInfoDir = null;
+function refreshVideoFolderInfo(dir) {
+  videoFolderInfoDir = dir;
+  invoke("video_folder_stats", { dir })
+    .then(([count, bytes]) => { videoFolderInfo = { count, bytes }; renderExpert(); })
+    .catch(() => { videoFolderInfo = { count: 0, bytes: 0 }; renderExpert(); });
+}
 
 function pathRow(key) {
   const cfg = EXPERT_PATHS[key];
@@ -2482,7 +2542,84 @@ function pathRow(key) {
   const resetBtn = rowResetBtn("paths", key);
   if (resetBtn) btns.appendChild(resetBtn);
   row.append(head, btns);
+  if (cfg.videoCleanup) {
+    const dir = cfg.get();
+    if (dir !== videoFolderInfoDir) refreshVideoFolderInfo(dir);
+    const info = document.createElement("div");
+    info.className = "path-video-stats";
+    const text = document.createElement("span");
+    text.textContent = videoFolderInfo
+      ? t("videoFolderStatsLine").replace("{n}", videoFolderInfo.count).replace("{size}", fmtBytes(videoFolderInfo.bytes))
+      : t("videoFolderStatsLoading");
+    const cleanBtn = document.createElement("button");
+    cleanBtn.type = "button";
+    cleanBtn.className = "ghost-btn";
+    cleanBtn.textContent = t("videoFolderCleanupBtn");
+    cleanBtn.disabled = !videoFolderInfo || videoFolderInfo.count === 0;
+    cleanBtn.addEventListener("click", () => openVideoCleanup(dir));
+    info.append(text, cleanBtn);
+    row.appendChild(info);
+  }
   return withTip(row, key);
+}
+
+// The full "asks for an age, lists what that would delete, deletes only after
+// confirmation" flow for the recordingDir cleanup button above. Preview and the
+// real delete share the exact same backend scan (video_folder_cleanup_preview /
+// video_folder_cleanup both call video_folder_stale with the same age), so what
+// is shown here is exactly what gets removed -- never a second, drifting list.
+async function openVideoCleanup(dir) {
+  const modal = $("video-cleanup-modal");
+  const ageSel = $("video-cleanup-age");
+  const summary = $("video-cleanup-summary");
+  const list = $("video-cleanup-list");
+  const confirmBtn = $("video-cleanup-confirm");
+  const refresh = async () => {
+    const ageDays = Number(ageSel.value);
+    const files = await invoke("video_folder_cleanup_preview", { dir, ageDays }).catch((e) => { errToast(e); return []; });
+    const totalBytes = files.reduce((s, f) => s + f.size, 0);
+    summary.textContent = files.length
+      ? t("videoCleanupSummary").replace("{n}", files.length).replace("{size}", fmtBytes(totalBytes))
+      : t("videoCleanupNone");
+    confirmBtn.disabled = files.length === 0;
+    list.innerHTML = "";
+    for (const f of files) {
+      const row = document.createElement("div");
+      row.className = "import-preview-row";
+      const name = document.createElement("span");
+      name.className = "import-preview-name";
+      name.textContent = f.name;
+      const size = document.createElement("span");
+      size.className = "import-preview-badge";
+      size.textContent = fmtBytes(f.size);
+      row.append(name, size);
+      list.appendChild(row);
+    }
+  };
+  ageSel.value = "30";
+  ageSel.onchange = refresh;
+  await refresh();
+  modal.classList.remove("hidden");
+  const confirmed = await new Promise((resolve) => {
+    const done = (v) => {
+      modal.classList.add("hidden");
+      ageSel.onchange = null;
+      confirmBtn.removeEventListener("click", onOk);
+      $("video-cleanup-cancel").removeEventListener("click", onCancel);
+      $("video-cleanup-close").removeEventListener("click", onCancel);
+      resolve(v);
+    };
+    const onOk = () => done(true);
+    const onCancel = () => done(false);
+    confirmBtn.addEventListener("click", onOk);
+    $("video-cleanup-cancel").addEventListener("click", onCancel);
+    $("video-cleanup-close").addEventListener("click", onCancel);
+  });
+  if (!confirmed) return;
+  const ageDays = Number(ageSel.value);
+  const deleted = await invoke("video_folder_cleanup", { dir, ageDays }).catch((e) => { errToast(e); return 0; });
+  toast(t("videoFolderCleanupDone").replace("{n}", deleted));
+  refreshVideoFolderInfo(dir);
 }
 
 let expertTab = 0;
@@ -4396,7 +4533,7 @@ function buildTile(p) {
     chainBtn.title = t("startChainHere");
     chainBtn.setAttribute("aria-label", t("startChainHere"));
     chainBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">'
-      + '<path transform="rotate(-45 12 12)" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h1.6M14.4 12H16"/></svg>';
+      + '<path transform="rotate(-45 12 12)" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h1.6M14.4 12H16"/></svg>';
     chainBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
     chainBtn.addEventListener("click", (e) => { e.stopPropagation(); startChainWith(p); });
     tile.appendChild(chainBtn);
@@ -5411,8 +5548,10 @@ function openCtx(id, x, y) {
   const rotateMenuEligible = !!rp && (rp.variants || []).length > 0 && flag("rotatingPrompts") && flag("rotateAuto");
   rmenuBtn.classList.toggle("hidden", !rotateMenuEligible);
   if (rotateMenuEligible) {
-    rmenuBtn.setAttribute("aria-checked", String(!!rp.rotate_auto));
-    rmenuBtn.querySelector(".tb-check").innerHTML = rp.rotate_auto ? TB_CHECK : "";
+    const on = !!rp.rotate_auto;
+    rmenuBtn.setAttribute("aria-checked", String(on));
+    rmenuBtn.classList.toggle("checked", on);
+    rmenuBtn.querySelector(".tb-check").innerHTML = on ? TB_CHECK : "";
   }
   placePopoverAt(ctxEl, x, y);
 }
@@ -12526,11 +12665,12 @@ function bind() {
   const SNIP_EDIT_UNDO_MAX = () => val("snipEditUndoMax");
   const SNIP_EDIT_SNAP = () => flag("snipEditSnap");
   const SNIP_EDIT_TEXT_PLATE = () => flag("snipTextPlate");
-  const SNIP_EDIT_DEFAULT_TOOL = () => txt("snipEditDefaultTool") || "pen";
-  const SNIP_EDIT_SNAP_TOL = 6;          // px (screen), per spec
-  // Matches SNIP_SAVE_Q in lib.rs -- the quality the capture already used for the
-  // image the editor received, so the re-export goes through the same pipeline.
-  const SNIP_EDIT_EXPORT_Q = 0.9;
+  const SNIP_EDIT_DEFAULT_TOOL = () => txt("snipEditDefaultTool") || "hand";
+  const SNIP_EDIT_SNAP_TOL = () => val("snipEditSnapTolerancePx") || 6; // px (screen)
+  // Matches SNIP_SAVE_Q in lib.rs (via the shared snipSaveQuality expert value) --
+  // the quality the capture already used for the image the editor received, so
+  // the re-export goes through the same pipeline.
+  const SNIP_EDIT_EXPORT_Q = () => (val("snipSaveQuality") || 90) / 100;
   // Function, not a static object: pen/marker's middle preset tracks the live
   // expert-menu default, so a changed snipPenPx/snipMarkerPx shows up next open.
   const SNIP_WIDTH_PRESETS_OF = (tool) => ({
@@ -12619,7 +12759,7 @@ function bind() {
   }
   function snipEditSnapPoint(pt) {
     if (!SNIP_EDIT_SNAP()) return pt;
-    const tol = SNIP_EDIT_SNAP_TOL / SE.zoom;
+    const tol = SNIP_EDIT_SNAP_TOL() / SE.zoom;
     let { x, y } = pt;
     for (const tx of [0, SE.w / 2, SE.w]) if (Math.abs(x - tx) <= tol) { x = tx; break; }
     for (const ty of [0, SE.h / 2, SE.h]) if (Math.abs(y - ty) <= tol) { y = ty; break; }
@@ -13399,6 +13539,12 @@ function bind() {
     if (!SE.active) return;
     if (e.button === 1 || SE.spaceDown || (e.button === 0 && SE.tool === "hand")) { snipEditStartPan(e); return; }
     if (e.button !== 0) return;
+    // The canvas itself is never a focus target, so the browser's default
+    // mousedown action for it is to blur whatever is currently focused --
+    // including the text-tool input this same handler is about to focus below,
+    // since that default action runs AFTER this handler returns. Without this,
+    // opening the text field looked like it immediately lost focus again.
+    e.preventDefault();
     snipEditFinishTextIfOpen();
     const pt0 = snipEditToImage(e);
     if (SE.eyedropArm) {
@@ -13651,7 +13797,7 @@ function bind() {
     out.width = sw;
     out.height = sh;
     out.getContext("2d").drawImage(snipEditBaseCv, sx, sy, sw, sh, 0, 0, sw, sh);
-    return out.toDataURL("image/jpeg", SNIP_EDIT_EXPORT_Q);
+    return out.toDataURL("image/jpeg", SNIP_EDIT_EXPORT_Q());
   }
   function snipEditApply() {
     snipEditFinishTextIfOpen();
@@ -14065,8 +14211,7 @@ function bind() {
   $("lib-batch-unfav").addEventListener("click", () => doBatch("favorite", { favorite: false }));
   $("lib-batch-addview").addEventListener("click", () => doBatch("addView", { viewId: $("lib-batch-view").value }));
   $("lib-batch-removeview").addEventListener("click", () => doBatch("removeView", { viewId: $("lib-batch-view").value }));
-  $("lib-batch-csv").addEventListener("click", () => batchExport("csv"));
-  $("lib-batch-txt").addEventListener("click", () => batchExport("txt"));
+  $("lib-batch-export").addEventListener("click", () => batchExport($("lib-batch-format").value));
   $("lib-batch-delete").addEventListener("click", (e) => {
     const n = libSelected.size;
     if (!n) return;
@@ -14426,8 +14571,7 @@ function bind() {
   $("hotkeys-search").addEventListener("input", renderHotkeysList);
 
   $("import-btn").addEventListener("click", runImport);
-  $("export-csv").addEventListener("click", () => runExport("csv"));
-  $("export-txt").addEventListener("click", () => runExport("txt"));
+  $("export-btn").addEventListener("click", () => runExport($("export-format").value));
   $("import-all").addEventListener("click", runImportAll);
   $("export-all").addEventListener("click", runExportAll);
   $("reset-settings").addEventListener("click", resetSettings);
@@ -14487,6 +14631,9 @@ function bind() {
   attachSelectPicker($("theme-edit-base"));
   attachSelectPicker($("grid-batch-view")); // themed popup, options refreshed by fillBatchViews()
   attachSelectPicker($("lib-batch-view"));
+  attachSelectPicker($("lib-batch-format"));
+  attachSelectPicker($("export-format"));
+  attachSelectPicker($("video-cleanup-age"));
 
   // UI size + icon size: percentage-preset selects mirroring the expert scales.
   fillScaleSelect("ui-scale", "uiScale");
@@ -14873,8 +15020,7 @@ function bind() {
     const origTitle = btn.title;
     btn.title = t("ffmpegCancelHint");
     const unlisten = await listen("ffmpeg-download-progress", (e) => {
-      const { downloaded, total } = e.payload || {};
-      const pct = total ? Math.min(100, Math.round((downloaded / total) * 100)) : 0;
+      const pct = ffmpegDownloadPct(e.payload);
       btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct));
     });
     try {

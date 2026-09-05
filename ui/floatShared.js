@@ -29,3 +29,22 @@ export function fileUri(path) {
   const p = encodeURI(path.replace(/\\/g, "/")).replace(/\?/g, "%3F").replace(/#/g, "%23");
   return p.startsWith("//") ? `file:${p}` : `file:///${p}`;
 }
+
+// Which of the 7 built-in themes render dark, so every window can set the
+// standard `color-scheme` CSS property from the active theme name. Without it
+// a WebView2 native control that isn't styled by our own CSS -- the video
+// element's built-in three-dot menu is the one that got reported -- always
+// renders light, regardless of which theme the app itself is drawn in.
+const DARK_THEMES = new Set(["dark", "programmer", "neon", "cyberpunk"]);
+export function themeColorScheme(theme) {
+  return DARK_THEMES.has(theme) ? "dark" : "light";
+}
+
+// The "ffmpeg-download-progress" event payload is { downloaded, total } (bytes),
+// not a ready percentage -- both listeners (main window expert menu, video editor)
+// compute the same rounded 0-100 value from it, so a payload shape change only
+// needs fixing here.
+export function ffmpegDownloadPct(payload) {
+  const { downloaded, total } = payload || {};
+  return total ? Math.min(100, Math.round((downloaded / total) * 100)) : 0;
+}

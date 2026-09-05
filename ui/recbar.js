@@ -4,6 +4,8 @@
 // -- it must never appear in the recording it controls).
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
+const { getCurrentWebviewWindow } = window.__TAURI__.webviewWindow;
+const appWin = getCurrentWebviewWindow();
 
 const bar = document.getElementById("bar");
 const dot = document.getElementById("dot");
@@ -46,27 +48,56 @@ function applyPaused(p) {
   if (label) { pauseBtn.title = label; pauseBtn.setAttribute("aria-label", label); }
 }
 
-// System-audio / mic indicators, shown for the whole recording (never
-// hidden) so the user can always see at a glance what is being captured --
-// dim when that source is off, lit when on. audio_system/audio_mic are each
-// a fixed per-session choice (set once when the recording starts); mic_lost
-// can flip true mid-recording if the device gets unplugged, and latches.
-let lastAudio = { system: false, mic: false, micLost: false };
-function applyAudio({ audio_system, audio_mic, mic_lost }) {
-  lastAudio = { system: !!audio_system, mic: !!audio_mic, micLost: !!mic_lost };
+// System-audio / mic buttons, shown for the whole recording (never hidden) so
+// the user can always see at a glance what is being captured -- dim when that
+// source is off or muted, lit when on. audio_system/audio_mic are each a
+// fixed per-session choice (set once when the recording starts) that decides
+// whether the button can be used at all; 332 added mid-recording muting on
+// top (audio_system_muted/audio_mic_muted), toggled by clicking the button.
+// mic_lost can flip true mid-recording if the device gets unplugged, and latches.
+let lastAudio = { system: false, mic: false, systemMuted: false, micMuted: false, micLost: false };
+function applyAudio({ audio_system, audio_mic, audio_system_muted, audio_mic_muted, mic_lost }) {
+  lastAudio = {
+    system: !!audio_system, mic: !!audio_mic,
+    systemMuted: !!audio_system_muted, micMuted: !!audio_mic_muted, micLost: !!mic_lost,
+  };
   audioSysEl.classList.remove("hidden");
-  audioSysEl.classList.toggle("on", lastAudio.system);
+  audioSysEl.classList.toggle("on", lastAudio.system && !lastAudio.systemMuted);
+  audioSysEl.disabled = !lastAudio.system;
   audioMicEl.classList.remove("hidden");
-  audioMicEl.classList.toggle("on", lastAudio.mic && !lastAudio.micLost);
+  audioMicEl.classList.toggle("on", lastAudio.mic && !lastAudio.micMuted && !lastAudio.micLost);
   audioMicEl.classList.toggle("lost", lastAudio.mic && lastAudio.micLost);
+  audioMicEl.disabled = !lastAudio.mic || lastAudio.micLost;
   if (!i18nDict) return;
-  const sysLabel = lastAudio.system ? i18nDict.recBarSystemAudioOn : i18nDict.recBarSystemAudioOff;
+  const sysLabel = !lastAudio.system
+    ? i18nDict.recBarSystemAudioOff
+    : (lastAudio.systemMuted ? i18nDict.recBarUnmuteSystemAudio : i18nDict.recBarMuteSystemAudio);
   if (sysLabel) { audioSysEl.title = sysLabel; audioSysEl.setAttribute("aria-label", sysLabel); }
   const micLabel = lastAudio.micLost
     ? i18nDict.recBarMicLost
-    : (lastAudio.mic ? i18nDict.recBarMicOn : i18nDict.recBarMicOff);
+    : !lastAudio.mic
+      ? i18nDict.recBarMicOff
+      : (lastAudio.micMuted ? i18nDict.recBarUnmuteMic : i18nDict.recBarMuteMic);
   if (micLabel) { audioMicEl.title = micLabel; audioMicEl.setAttribute("aria-label", micLabel); }
 }
+audioSysEl.addEventListener("click", async () => {
+  if (!lastAudio.system) return;
+  const next = !lastAudio.systemMuted;
+  try { await invoke("set_audio_muted", { source: "system", muted: next }); } catch { return; }
+  applyAudio({
+    audio_system: lastAudio.system, audio_mic: lastAudio.mic,
+    audio_system_muted: next, audio_mic_muted: lastAudio.micMuted, mic_lost: lastAudio.micLost,
+  });
+});
+audioMicEl.addEventListener("click", async () => {
+  if (!lastAudio.mic || lastAudio.micLost) return;
+  const next = !lastAudio.micMuted;
+  try { await invoke("set_audio_muted", { source: "mic", muted: next }); } catch { return; }
+  applyAudio({
+    audio_system: lastAudio.system, audio_mic: lastAudio.mic,
+    audio_system_muted: lastAudio.systemMuted, audio_mic_muted: next, mic_lost: lastAudio.micLost,
+  });
+});
 
 // Names which of the two hotkeys (another app already holds the
 // combination) is affected, so "it doesn't work" always has an answer.
@@ -137,6 +168,27 @@ cancelBtn.addEventListener("click", async () => {
   invoke("hide_rec_bar").catch(() => {});
 });
 
+// The bar used to sit locked to the recorded window's corner. Dragging
+// from its background (not a button) now moves it freely to any monitor;
+// rec_bar_mark_moved() tells the 200ms follow poll in lib.rs to stop
+// re-snapping it back for the rest of this recording -- its new position IS
+// the remembered one, simply by no longer being overwritten.
+const DRAG_THRESHOLD = 4;
+let dragStart = null;
+bar.addEventListener("mousedown", (e) => {
+  if (e.button !== 0 || e.target.closest("button")) return;
+  dragStart = { x: e.screenX, y: e.screenY };
+});
+window.addEventListener("mousemove", async (e) => {
+  if (!dragStart) return;
+  if (e.buttons === 0) { dragStart = null; return; }
+  if (Math.abs(e.screenX - dragStart.x) < DRAG_THRESHOLD && Math.abs(e.screenY - dragStart.y) < DRAG_THRESHOLD) return;
+  dragStart = null;
+  invoke("rec_bar_mark_moved").catch(() => {});
+  await appWin.startDragging();
+});
+window.addEventListener("mouseup", () => { dragStart = null; });
+
 // Theme + language: same shared helpers every satellite window uses.
 import("./floattheme.js").then(({ applyFloatTheme }) => {
   listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
@@ -156,6 +208,9 @@ Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.
     }
     const label = pauseBtnLabel();
     if (label) { pauseBtn.title = label; pauseBtn.setAttribute("aria-label", label); }
-    applyAudio({ audio_system: lastAudio.system, audio_mic: lastAudio.mic, mic_lost: lastAudio.micLost });
+    applyAudio({
+      audio_system: lastAudio.system, audio_mic: lastAudio.mic,
+      audio_system_muted: lastAudio.systemMuted, audio_mic_muted: lastAudio.micMuted, mic_lost: lastAudio.micLost,
+    });
   })
   .catch(() => {});

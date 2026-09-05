@@ -35,9 +35,14 @@
            source pixels no matter how the window is sized. -->
       <div id="ve-stage" class="ve-stage">
         <video id="ve-video" class="ve-video" preload="auto" playsinline></video>
+        <!-- Every overlay actually active at the playhead, rendered as it
+             will really look (image/frame/text/pixelation/spotlight) -- below
+             the interactive edit handles in ve-rects, so editing the selected
+             one still works the same way. -->
+        <div id="ve-overlay-live" class="ve-overlay-live"></div>
         <div id="ve-rects" class="ve-rects"></div>
         <div id="ve-stage-msg" class="ve-stage-msg" data-i18n="veLoading">Loading…</div>
-        <!-- 284: shown only once actually zoomed in (applyPreviewTransform
+        <!-- Shown only once actually zoomed in (applyPreviewTransform
              toggles "hidden"); scroll/drag on the picture itself zoom and pan it. -->
         <div id="ve-preview-zoom" class="ve-preview-zoom hidden">
           <span id="ve-preview-zoom-val">100%</span>
@@ -264,7 +269,11 @@
           <p id="ve-export-note" class="modal-hint"></p>
 
           <h3 class="ve-h" data-i18n="veExportTarget">Target file</h3>
-          <p id="ve-export-dest" class="ve-path"></p>
+          <input id="ve-export-dest" class="modal-input ve-export-dest-input" type="text" data-i18n-title="veExportDestTip" />
+          <div class="export-row">
+            <button id="ve-export-choose-file" class="ghost-btn" type="button" data-i18n="veExportChooseFile" data-i18n-title="veExportChooseFileTip">Save as…</button>
+            <button id="ve-export-choose-folder" class="ghost-btn" type="button" data-i18n="veExportChooseFolder" data-i18n-title="veExportChooseFolderTip">Export to…</button>
+          </div>
           <div id="ve-export-progress-row" class="ve-progress-row hidden">
             <progress id="ve-export-progress" class="ve-progress" max="100" value="0"></progress>
             <span id="ve-export-pct" class="ve-muted">0%</span>
@@ -272,6 +281,7 @@
           <p id="ve-export-status" class="modal-hint"></p>
           <div class="export-row">
             <button id="ve-export-start" class="primary-btn" type="button" data-i18n="veExportStart">Export</button>
+            <button id="ve-export-clip" class="ghost-btn" type="button" data-i18n="veExportClip" data-i18n-title="veExportClipTip">Copy to clipboard</button>
             <button id="ve-export-cancel" class="ghost-btn hidden" type="button" data-i18n="cancel">Cancel</button>
             <button id="ve-export-saveas" class="ghost-btn hidden" type="button" data-i18n="screenshotSaveAs">Save as…</button>
           </div>

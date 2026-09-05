@@ -885,6 +885,36 @@ PROBE = """
         await sleep(200);
       }
     }
+    // 339: library batch bar's export control -- same select+button pattern
+    // as the settings page, now also offering JSON, gated on a real selection.
+    {
+      await click('library-select-btn');
+      document.getElementById('lib-batch-all').click();
+      await sleep(150);
+      const fmtSel = document.getElementById('lib-batch-format');
+      const expBtn = document.getElementById('lib-batch-export');
+      if (!fmtSel || !expBtn) {
+        out.errors.push('the library batch bar export control (format select + button) is missing');
+      } else {
+        const optValues = [...fmtSel.options].map(o => o.value);
+        if (!['csv', 'txt', 'json'].every(v => optValues.includes(v))) {
+          out.errors.push('the library batch export select is missing csv/txt/json, has: ' + optValues.join(','));
+        }
+        window.__EXPORT_CALL__ = null;
+        fmtSel.value = 'txt';
+        fmtSel.dispatchEvent(new Event('change', { bubbles: true }));
+        expBtn.click();
+        await sleep(200);
+        if (!window.__EXPORT_CALL__ || window.__EXPORT_CALL__.format !== 'txt') {
+          out.errors.push('the library batch export did not call export_prompts with format "txt"');
+        }
+        if (!Array.isArray(window.__EXPORT_CALL__.ids) || !window.__EXPORT_CALL__.ids.length) {
+          out.errors.push('the library batch export did not pass the selected ids');
+        }
+      }
+      document.getElementById('lib-batch-none').click();
+      await click('library-select-btn'); // back out of select mode
+    }
     await click('library-close');
     await click('journal-btn');
     layoutScan('copy history');
@@ -2258,6 +2288,120 @@ PROBE = """
           if (!modal.classList.contains('hidden')) out.errors.push('canceling the import preview did not close it');
         }
       }
+    }
+    // 339: settings export control -- one "Export" button plus a CSV/TXT/JSON
+    // format select (replaces the old two hard-coded CSV/TXT buttons).
+    {
+      const fmtSel = document.getElementById('export-format');
+      const expBtn = document.getElementById('export-btn');
+      if (!fmtSel || !expBtn) {
+        out.errors.push('the settings export control (format select + button) is missing');
+      } else {
+        const optValues = [...fmtSel.options].map(o => o.value);
+        if (!['csv', 'txt', 'json'].every(v => optValues.includes(v))) {
+          out.errors.push('the export format select is missing csv/txt/json, has: ' + optValues.join(','));
+        }
+        window.__EXPORT_CALL__ = null;
+        fmtSel.value = 'json';
+        fmtSel.dispatchEvent(new Event('change', { bubbles: true }));
+        expBtn.click();
+        await sleep(200);
+        if (!window.__EXPORT_CALL__ || window.__EXPORT_CALL__.format !== 'json') {
+          out.errors.push('choosing JSON and clicking Export did not call export_prompts with format "json"');
+        }
+      }
+    }
+    // 340: recordingDir shows the folder's video count/size plus a cleanup
+    // button; the button opens a modal that previews what an age tier would
+    // delete and only deletes after Delete is clicked -- Cancel must leave
+    // the files alone.
+    {
+      const pathFieldRow = async (label) => {
+        const hit = () => [...document.querySelectorAll('.path-field')]
+          .find(r => ((r.querySelector('.value-head span') || {}).textContent || '') === label);
+        if (hit()) return hit();
+        for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+          tb.click();
+          await sleep(200);
+          if (hit()) return hit();
+        }
+        return null;
+      };
+      document.getElementById('settings').classList.remove('hidden');
+      await click('expert-open');
+      const row = await pathFieldRow('Recording folder');
+      if (!row) {
+        out.errors.push('the recording-folder path row is missing from the expert menu');
+      } else {
+        await sleep(150); // refreshVideoFolderInfo() resolves and re-renders
+        const statsEl = row.querySelector('.path-video-stats span');
+        if (!statsEl || statsEl.textContent !== '2 files, 5.0 MB') {
+          out.errors.push('the recording folder stats line reads "' + (statsEl && statsEl.textContent) + '"');
+        }
+        const cleanBtn = row.querySelector('.path-video-stats button');
+        if (!cleanBtn || cleanBtn.disabled) {
+          out.errors.push('the video cleanup button is missing or disabled although the folder has files');
+        } else {
+          cleanBtn.click();
+          await sleep(200);
+          const modal = document.getElementById('video-cleanup-modal');
+          const ageSel = document.getElementById('video-cleanup-age');
+          const summary = document.getElementById('video-cleanup-summary');
+          const list = document.getElementById('video-cleanup-list');
+          if (!modal || modal.classList.contains('hidden')) {
+            out.errors.push('the video cleanup button did not open its confirm modal');
+          } else {
+            if (ageSel.value !== '30') out.errors.push('the video cleanup age select does not default to 30 days');
+            const rows = [...list.querySelectorAll('.import-preview-row')];
+            if (rows.length !== 1) {
+              out.errors.push('the video cleanup preview lists ' + rows.length + ' rows, expected 1');
+            } else {
+              if ((rows[0].querySelector('.import-preview-name') || {}).textContent !== 'old-recording.mp4') {
+                out.errors.push('the video cleanup preview row has the wrong file name');
+              }
+              if ((rows[0].querySelector('.import-preview-badge') || {}).textContent !== '3.0 MB') {
+                out.errors.push('the video cleanup preview row has the wrong size badge');
+              }
+            }
+            if (!(summary.textContent || '').includes('3.0 MB')) {
+              out.errors.push('the video cleanup summary reads "' + summary.textContent + '"');
+            }
+            // Changing the age re-runs the preview with the new value.
+            window.__SMOKE_ARGS__ = [];
+            ageSel.value = '7';
+            ageSel.dispatchEvent(new Event('change', { bubbles: true }));
+            await sleep(200);
+            const previewCalls = window.__SMOKE_ARGS__.filter(([c]) => c === 'video_folder_cleanup_preview');
+            if (!previewCalls.length || previewCalls[previewCalls.length - 1][1].ageDays !== 7) {
+              out.errors.push('changing the cleanup age did not re-run the preview with the new value');
+            }
+            // Cancel must close without deleting anything.
+            window.__VIDEO_CLEANUP_CALLED__ = null;
+            document.getElementById('video-cleanup-cancel').click();
+            await sleep(200);
+            if (!modal.classList.contains('hidden')) out.errors.push('canceling the video cleanup did not close the modal');
+            if (window.__VIDEO_CLEANUP_CALLED__) out.errors.push('canceling the video cleanup deleted files anyway');
+            // Reopen (resets to the 30-day default) and confirm: this time it
+            // must actually delete and report back.
+            cleanBtn.click();
+            await sleep(200);
+            document.getElementById('video-cleanup-confirm').click();
+            await sleep(200);
+            if (!modal.classList.contains('hidden')) out.errors.push('confirming the video cleanup did not close the modal');
+            if (!window.__VIDEO_CLEANUP_CALLED__ || window.__VIDEO_CLEANUP_CALLED__.ageDays !== 30) {
+              out.errors.push('confirming the video cleanup did not call video_folder_cleanup with the shown age');
+            }
+            const toastEl3 = document.getElementById('toast');
+            if (!(toastEl3.textContent || '').includes('1 files deleted')) {
+              out.errors.push('the video cleanup done toast reads "' + toastEl3.textContent + '"');
+            }
+          }
+        }
+      }
+      const tab0b = document.querySelector('#expert-tabs-bar .expert-tab');
+      if (tab0b) { tab0b.click(); await sleep(150); }
+      await click('expert-back');
+      document.getElementById('settings').classList.add('hidden');
     }
     const DRAG_OUT = 'into another app';
     const offTile = gridTile('p1');
@@ -6281,6 +6425,18 @@ VIDEO_PROBE = """
     if (!document.getElementById('ve-ffmpeg-warn').classList.contains('hidden')) {
       errs.push('the ffmpeg-missing banner showed although probe_recording succeeded');
     }
+    // ---- 337: the mic track starts muted, the system track does not ----
+    if (!document.getElementById('ve-mute-mic').classList.contains('ve-muted-btn')) {
+      errs.push('the mic track must start muted in the video editor');
+    }
+    if (document.getElementById('ve-mute-sys').classList.contains('ve-muted-btn')) {
+      errs.push('the system track must not start muted in the video editor');
+    }
+    document.getElementById('ve-mute-mic').click();
+    await sleep(30);
+    if (document.getElementById('ve-mute-mic').classList.contains('ve-muted-btn')) {
+      errs.push('clicking the mic mute button must mix the mic track back in');
+    }
     rawKeyCheck('edit tab');
     sideScan(errs, 'edit tab');
 
@@ -6310,6 +6466,41 @@ VIDEO_PROBE = """
     if (!document.getElementById('ve-panel-edit').classList.contains('hidden')) {
       errs.push('the Edit panel stayed visible under the Overlays tab');
     }
+
+    // ---- 334: one of each overlay kind actually renders in the live-preview
+    // layer, not just the edit-handle rectangle ----
+    const liveLayer = document.getElementById('ve-overlay-live');
+    if (liveLayer.children.length) {
+      errs.push('the live overlay preview shows something before any overlay was added');
+    }
+    const overlayKinds = [
+      ['ve-ov-add-image', 've-live-image'],
+      ['ve-ov-add-frame', 've-live-frame'],
+      ['ve-ov-add-text', 've-live-text'],
+      ['ve-ov-add-pixelate', 've-live-pixelate'],
+      ['ve-ov-add-spotlight', 've-live-spotlight'],
+    ];
+    for (const [btnId, liveClass] of overlayKinds) {
+      document.getElementById(btnId).click();
+      await sleep(30);
+      if (!liveLayer.querySelector('.' + liveClass)) {
+        errs.push(btnId + ' did not produce a .' + liveClass + ' element in the live overlay preview');
+      }
+    }
+    // Every overlay just defaulted to the clip's [0, ve-duration] range --
+    // seeking to the exact start must still keep them all visible (inclusive
+    // boundary), proving the gate really reads the range rather than always
+    // showing everything regardless of the playhead.
+    document.getElementById('ve-tab-edit').click();
+    await sleep(30);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home' }));
+    await sleep(30);
+    if (liveLayer.children.length !== overlayKinds.length) {
+      errs.push('live overlay preview lost overlays at the exact start of their range (playhead 0)');
+    }
+    document.getElementById('ve-tab-overlays').click();
+    await sleep(30);
+
     rawKeyCheck('overlays tab');
     sideScan(errs, 'overlays tab');
 
@@ -6320,6 +6511,54 @@ VIDEO_PROBE = """
     }
     rawKeyCheck('export tab');
     sideScan(errs, 'export tab');
+
+    // ---- 335: the export destination input + its two picker buttons ----
+    const destInput = document.getElementById('ve-export-dest');
+    if (!destInput.value) {
+      errs.push('the export destination field starts empty');
+    }
+    destInput.value = 'C:\\\\Custom\\\\my-clip.mp4';
+    destInput.dispatchEvent(new Event('change'));
+    await sleep(30);
+    if (destInput.value !== 'C:\\\\Custom\\\\my-clip.mp4') {
+      errs.push('typing a destination path directly did not stick as an override');
+    }
+    document.getElementById('ve-export-choose-file').click();
+    await sleep(80);
+    if (!destInput.value.startsWith('C:\\\\Videos')) {
+      errs.push('"Save as..." did not adopt the picked file path');
+    }
+    const pickedFile = destInput.value;
+    document.getElementById('ve-export-choose-folder').click();
+    await sleep(80);
+    if (destInput.value === pickedFile) {
+      errs.push('"Export to..." did not change the destination after picking a folder');
+    }
+    if (!destInput.value.startsWith('C:\\\\Videos\\\\Exports')) {
+      errs.push('"Export to..." did not build the path from the picked folder');
+    }
+    const formatSel = document.getElementById('ve-export-format');
+    const otherOpt = formatSel && [...formatSel.options].find((o) => o.value !== formatSel.value);
+    if (otherOpt) {
+      const beforeFormatChange = destInput.value;
+      formatSel.value = otherOpt.value;
+      formatSel.dispatchEvent(new Event('change'));
+      await sleep(30);
+      if (destInput.value === beforeFormatChange) {
+        errs.push('changing the export format did not clear the manual destination override');
+      }
+    }
+
+    // ---- 336: "Copy to clipboard" runs its own export into a throwaway temp
+    // file and lands that file on the clipboard, without touching destInput ----
+    window.__CLIP_EXPORT_COPIED__ = undefined;
+    document.getElementById('ve-export-clip').click();
+    await sleep(150);
+    if (!window.__CLIP_EXPORT_COPIED__) {
+      errs.push('"Copy to clipboard" never reached copy_file_to_clipboard');
+    } else if (!window.__CLIP_EXPORT_COPIED__.includes('clipexport')) {
+      errs.push('"Copy to clipboard" copied something other than its own throwaway temp file');
+    }
 
     document.getElementById('ve-tab-edit').click();
     await sleep(80);

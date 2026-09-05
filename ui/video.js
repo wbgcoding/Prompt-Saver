@@ -6,7 +6,7 @@
 // an ordered operation list (VE.ops), exactly like the screenshot editor's own
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
-import { resolveLang } from "./floatShared.js";
+import { resolveLang, ffmpegDownloadPct } from "./floatShared.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 
@@ -47,7 +47,14 @@ const FONT_FILES = [
   ["consola", "consola.ttf"],
   ["georgia", "georgia.ttf"],
 ];
-// 305: was hardcoded per-entry as "C:/Windows/Fonts/..." -- broke every
+// The live preview draws text with the browser's own font shaping
+// (drawtext's fontfile is only reachable by ffmpeg at export time), so each
+// id gets the closest real CSS family instead.
+const FONT_CSS = {
+  segoeui: '"Segoe UI", sans-serif', arial: "Arial, sans-serif", arialbd: "Arial, sans-serif",
+  consola: "Consolas, monospace", georgia: "Georgia, serif",
+};
+// This was hardcoded per-entry as "C:/Windows/Fonts/..." -- broke every
 // text-overlay export on a system where Windows itself lives on another
 // drive. Resolved once from the backend (which reads SystemRoot/windir);
 // this fallback only covers the sliver of time before that resolves.
@@ -74,7 +81,9 @@ const VE = {
   zoom: 20,             // timeline pixels per second
   playhead: 0,          // ms on the source timeline
   drag: null,           // active pointer gesture on the preview or the timeline
-  audio: { sys: { mute: false, vol: 100 }, mic: { mute: false, vol: 100 } },
+  // The mic track starts muted in the editor/export (the recording
+  // itself is untouched, still full) -- one click on ve-mute-mic mixes it in.
+  audio: { sys: { mute: false, vol: 100 }, mic: { mute: true, vol: 100 } },
   hasSys: true,
   hasMic: false,
   loadGen: 0,           // bumped on every loadRecording() call; a stale call's
@@ -85,7 +94,9 @@ const VE = {
   exporting: false,
   dirty: false,         // ops changed since the last successful export
   lastExport: "",       // path of the file the last export produced
-  // 284: spatial zoom/pan of the preview picture itself, distinct from `zoom`
+  destOverride: null,   // a full path picked via "Save as…" or typed by hand
+  destDir: "",          // remembered folder from "Export to…", persisted across videos
+  // Spatial zoom/pan of the preview picture itself, distinct from `zoom`
   // above (the timeline's pixels-per-second). 1 = fit-to-stage, the only level
   // that existed before; panPx is a plain CSS-pixel offset, independent of
   // zoom, applied on top of the video's own fit-to-stage scaling.
@@ -251,7 +262,7 @@ function pushOp(op) {
 // Ops that may exist only once (trim, crop, speed, fade, scale) and an overlay
 // being re-edited replace their predecessor rather than stacking.
 //
-// 301: the replaced value is kept on the new op as `_prev` instead of just
+// The replaced value is kept on the new op as `_prev` instead of just
 // being dropped -- otherwise a second crop/spotlight drag silently erased the
 // first drag from history, and one undo afterward removed the operation
 // entirely instead of stepping back to it. See undo()/redo() for the other
@@ -541,7 +552,7 @@ function renderRegions() {
   } else {
     sel.classList.add("hidden");
   }
-  // 302: renderRegions() is the one function every VE.sel mutation already
+  // renderRegions() is the one function every VE.sel mutation already
   // calls (mark in/out, a timeline drag, clearing it) -- syncing the overlay
   // editor's "Use selection" button here, cheaply, instead of only from the
   // clear-selection handler, means a freshly made selection enables it
@@ -571,7 +582,7 @@ async function loadStrip() {
   // filmstrip is the most expensive call this window makes.
   if (VE.stripCount && want <= VE.stripCount * 1.6) return;
   VE.stripCount = want;
-  // 302: this call can still be in flight when the user switches source
+  // This call can still be in flight when the user switches source
   // again -- without checking the generation on return, a slow filmstrip for
   // the OLD video could land after the new one's own (faster) call and
   // silently paint the wrong recording's thumbnails.
@@ -599,7 +610,7 @@ async function loadWave(track) {
   const buckets = clamp(Math.round(trackWidth()), 100, WAVE_BUCKET_MAX);
   const cached = VE.peaks[track];
   if (cached && cached.buckets === buckets) { drawWave(track); return; }
-  // 302: same stale-response race as loadStrip() above, for the waveform.
+  // Same stale-response race as loadStrip() above, for the waveform.
   const myGen = VE.loadGen;
   try {
     const peaks = await invoke("generate_waveform_peaks", { path: VE.src, track, buckets });
@@ -656,7 +667,7 @@ const toSource = (clientX, clientY) => {
   return { x: (clientX - vb.clientLeft) / vb.scale, y: (clientY - vb.clientTop) / vb.scale };
 };
 
-// ---------------------------------------------------------------- preview zoom/pan (284)
+// ---------------------------------------------------------------- preview zoom/pan
 //
 // Zooming alone never let you land on an exact spot -- this adds the missing
 // half, a plain CSS transform on the <video> element. videoBox()/toSource()
@@ -759,7 +770,7 @@ $("ve-preview-zoom-reset").addEventListener("click", resetPreviewZoom);
 // Every rectangle is snapped to even numbers while it is being dragged, not at
 // export time — so the numbers on screen are already the numbers ffmpeg gets.
 function snapRect(rect) {
-  // 299: clamping an already-even width/height against an ODD source
+  // Clamping an already-even width/height against an ODD source
   // dimension can land back on an odd number (e.g. even(641)=642, clamped
   // down to the odd ceiling 641) -- ffmpeg's yuv420p output needs both to
   // stay even, so the ceiling itself must already be even before clamping.
@@ -828,6 +839,113 @@ function renderRects() {
     chip.textContent = selected.text || t("veOvText");
     layer.appendChild(chip);
   }
+
+  renderOverlayLive(vb);
+}
+
+// Every overlay actually active at the current playhead, drawn as close
+// to its real exported look as the browser can manage -- not just an edit
+// outline. Overlay time ranges are picked on the SOURCE timeline (same as
+// VE.playhead here), so no outMs() conversion is needed like buildVideoChain()
+// needs for ffmpeg's output-timeline `enable` clauses.
+function renderOverlayLive(vb) {
+  const layer = $("ve-overlay-live");
+  layer.innerHTML = "";
+  if (!VE.dur) return;
+  const box = vb || videoBox();
+  const now = VE.playhead;
+  for (const op of opsOf("overlay")) {
+    if (now < op.startMs || now > op.endMs) continue;
+    const el = buildLiveOverlayEl(op, box);
+    if (el) layer.appendChild(el);
+  }
+}
+
+function buildLiveOverlayEl(op, vb) {
+  const rectStyle = (el, rect) => {
+    el.style.left = `${vb.left + rect.x * vb.scale}px`;
+    el.style.top = `${vb.top + rect.y * vb.scale}px`;
+    el.style.width = `${rect.w * vb.scale}px`;
+    el.style.height = `${rect.h * vb.scale}px`;
+  };
+  if (op.kind === "image") {
+    const img = document.createElement("img");
+    img.className = "ve-live ve-live-image";
+    img.src = convertFileSrc(op.path);
+    rectStyle(img, op.rect);
+    img.style.opacity = String(clamp(op.opacity, 5, 100) / 100);
+    return img;
+  }
+  if (op.kind === "frame") {
+    const el = document.createElement("div");
+    el.className = "ve-live ve-live-frame";
+    rectStyle(el, op.rect);
+    const px = Math.max(1, op.thickness * vb.scale);
+    el.style.opacity = String(clamp(op.opacity, 0, 100) / 100);
+    el.style.borderWidth = `${px}px`;
+    el.style.borderColor = op.color;
+    if (op.style === "double") {
+      // Approximates the second, inset drawbox with an outline outside the
+      // border instead of a truly separate inner box -- close enough for a
+      // preview whose job is "roughly where and how thick", not pixel parity.
+      el.style.outline = `${px}px solid ${op.color}`;
+      el.style.outlineOffset = `${op.thickness * vb.scale}px`;
+    } else if (op.style === "soft") {
+      el.style.boxShadow = `0 0 ${px * 2}px ${px}px ${op.color}`;
+    }
+    return el;
+  }
+  if (op.kind === "text") {
+    const el = document.createElement("div");
+    el.className = "ve-live ve-live-text";
+    el.style.left = `${vb.left + op.x * vb.scale}px`;
+    el.style.top = `${vb.top + op.y * vb.scale}px`;
+    el.style.fontSize = `${Math.max(1, op.fontPx * vb.scale)}px`;
+    el.style.fontFamily = FONT_CSS[op.font] || FONT_CSS.segoeui;
+    el.style.fontWeight = op.font === "arialbd" ? "bold" : "normal";
+    el.style.color = op.color;
+    if (op.plate !== false) {
+      el.style.background = "rgba(0, 0, 0, 0.5)";
+      el.style.padding = `${Math.max(4, Math.round(op.fontPx / 4)) * vb.scale}px`;
+    }
+    el.textContent = op.text;
+    return el;
+  }
+  if (op.kind === "pixelate") {
+    const w = Math.max(1, Math.round(op.rect.w * vb.scale)), h = Math.max(1, Math.round(op.rect.h * vb.scale));
+    const canvas = document.createElement("canvas");
+    canvas.className = "ve-live ve-live-pixelate";
+    canvas.width = w;
+    canvas.height = h;
+    rectStyle(canvas, op.rect);
+    // Down-sample the live video frame to the real block grid, then blow it
+    // back up with smoothing off -- the same two-step mosaic buildVideoChain()
+    // asks ffmpeg for, just done in a canvas instead of a filter graph.
+    const bw = Math.max(1, Math.round(op.rect.w / op.blockPx)), bh = Math.max(1, Math.round(op.rect.h / op.blockPx));
+    try {
+      const tiny = document.createElement("canvas");
+      tiny.width = bw;
+      tiny.height = bh;
+      tiny.getContext("2d").drawImage(videoEl, op.rect.x, op.rect.y, op.rect.w, op.rect.h, 0, 0, bw, bh);
+      const ctx = canvas.getContext("2d");
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(tiny, 0, 0, bw, bh, 0, 0, w, h);
+    } catch {
+      // A frame that is not yet decoded (seek in flight) -- skip this tick,
+      // the next one draws once the video element has something to sample.
+    }
+    return canvas;
+  }
+  if (op.kind === "spotlight") {
+    const el = document.createElement("div");
+    el.className = "ve-live ve-live-spotlight";
+    rectStyle(el, op.rect);
+    // Same "hole punched in an oversized shadow" trick .ve-rect-spotlight
+    // already uses for its edit outline, just at the overlay's own dim level.
+    el.style.boxShadow = `0 0 0 9999px rgba(0, 0, 0, ${clamp(op.dim, 0, 1).toFixed(2)})`;
+    return el;
+  }
+  return null;
 }
 
 function resizeRect(orig, handle, point, keepRatio) {
@@ -902,7 +1020,7 @@ function endRectDrag() {
   const raw = drag.live && drag.live.w >= RECT_MIN_PX && drag.live.h >= RECT_MIN_PX ? drag.live : drag.orig;
   if (op.tool === "crop") {
     const rect = snapRect(raw);
-    // 302: a click-release with no actual movement (or one that snaps right
+    // A click-release with no actual movement (or one that snaps right
     // back to where it started) must not count as an edit -- it used to
     // still push a fresh undo step and wipe the redo stack for nothing.
     if (rectsEqual(rect, drag.orig)) { op.rect = rect; renderRects(); return; }
@@ -946,6 +1064,7 @@ function seek(ms) {
   VE.playhead = target;
   videoEl.currentTime = target / 1000;
   renderPlayhead();
+  renderOverlayLive();
   keepPlayheadVisible();
 }
 
@@ -979,6 +1098,7 @@ function tick() {
     if (Math.abs(now - VE.playhead) > 0.5) {
       VE.playhead = now;
       renderPlayhead();
+      renderOverlayLive();
       if (!videoEl.paused) keepPlayheadVisible();
     }
   }
@@ -1182,15 +1302,15 @@ async function addOverlay(kind) {
     // it is refused here with a reason instead of failing at export time.
     if (path.includes("'")) { toast(t("veOvImageQuote")); return; }
     const rect = centeredRect(0.3);
-    op = { ...base, path, rect, opacity: 100 };
+    op = { ...base, path, rect, opacity: VE.ovImageOpacityDefault ?? 100 };
   } else if (kind === "frame") {
     op = { ...base, rect: snapRect({ x: 0, y: 0, w: VE.w, h: VE.h }), color: "#ffffff", thickness: Math.max(2, even(VE.h * 0.01)), style: "solid", opacity: 100 };
   } else if (kind === "text") {
     op = { ...base, text: t("veOvTextDefault"), x: even(VE.w * 0.08), y: even(VE.h * 0.08), fontPx: Math.max(12, Math.round(VE.h / 16)), font: FONT_FILES[0][0], color: "#ffffff", plate: true };
   } else if (kind === "pixelate") {
-    op = { ...base, rect: centeredRect(0.35), blockPx: 16 };
+    op = { ...base, rect: centeredRect(0.35), blockPx: VE.ovPixelateBlockDefault ?? 16 };
   } else if (kind === "spotlight") {
-    op = { ...base, rect: centeredRect(0.45), dim: 0.6 };
+    op = { ...base, rect: centeredRect(0.45), dim: VE.ovSpotlightDimDefault ?? 0.6 };
   }
   if (!op) return;
   VE.selOv = op.id;
@@ -1570,7 +1690,7 @@ function buildVideoChain() {
     if (fade.outMs > 0) chain(`fade=t=out:st=${Math.max(0, total - fade.outMs / 1000).toFixed(3)}:d=${(fade.outMs / 1000).toFixed(3)}`);
   }
 
-  // 300 (Codex): a target at or above the source's own height must leave the
+  // A target at or above the source's own height must leave the
   // frame untouched rather than upscale it -- picking e.g. 1080p for a 720p
   // clip is "don't shrink it", not "blow it up and waste bits doing so".
   if (downscale && (!VE.h || downscale < VE.h)) chain(`scale=-2:${downscale}`);
@@ -1656,7 +1776,7 @@ function buildAudioChain() {
 function isLosslessCopy() {
   if (exportFormat() !== "mp4") return false;
   if (exportQuality() === "lossless") return false; // an explicit re-encode was asked for
-  // 298: a source whose own streams are not already mp4-safe (h264/hevc video,
+  // A source whose own streams are not already mp4-safe (h264/hevc video,
   // aac-or-silent audio -- e.g. a webm/VP9 file dragged in from elsewhere)
   // fails ffmpeg's "-c copy" outright instead of producing a trimmed mp4.
   if (VE.probe && VE.probe.stream_copy_safe === false) return false;
@@ -1669,12 +1789,22 @@ function isLosslessCopy() {
 
 // ---------------------------------------------------------------- export
 
+// Three ways to land on a destination, checked in order -- a full path
+// the user typed or picked via "Save as…" wins outright; otherwise a
+// remembered "Export to…" folder keeps the auto filename but moves it there;
+// otherwise the original stem-based guess next to the source file.
 function destPath() {
   const format = exportFormat();
   const cut = VE.src.replace(/[/\\]+$/, "");
   const dot = cut.lastIndexOf(".");
   const stem = dot > cut.lastIndexOf("\\") && dot > cut.lastIndexOf("/") ? cut.slice(0, dot) : cut;
-  return `${stem}-edit.${format}`;
+  const auto = `${stem}-edit.${format}`;
+  if (VE.destOverride) return VE.destOverride;
+  if (VE.destDir) {
+    const base = auto.replace(/^.*[\\/]/, "");
+    return `${VE.destDir.replace(/[\\/]+$/, "")}/${base}`;
+  }
+  return auto;
 }
 
 function updateExportNote() {
@@ -1684,7 +1814,8 @@ function updateExportNote() {
   if (isLosslessCopy()) notes.push(t("veCopyNote"));
   notes.push(t("veOutLength").replace("{d}", fmtTime(totalOutMs())));
   $("ve-export-note").textContent = notes.join(" ");
-  $("ve-export-dest").textContent = destPath();
+  // Never overwrite what the user is actively typing into the field itself.
+  if (document.activeElement !== $("ve-export-dest")) $("ve-export-dest").value = destPath();
   $("ve-export-dest").title = destPath();
   $("ve-export-quality").disabled = format === "gif";
 }
@@ -1696,24 +1827,33 @@ function setProgress(pct) {
   $("ve-export-pct").textContent = `${Math.round(clamp(pct, 0, 100))}%`;
 }
 
-async function startExport() {
+// toClipboard runs the very same export into a throwaway temp file
+// instead of the normal destination, then puts that file on the clipboard for
+// pasting elsewhere -- see clip_export_path/sweep_clip_export_temp on the
+// Rust side for where and when that temp file goes away.
+async function startExport(toClipboard) {
   if (VE.exporting) return;
   if (!VE.ffmpeg) { toast(t("recFfmpegMissingHint")); return; }
   const total = totalOutMs();
   if (total < 1) { toast(t("veNothingToExport")); return; }
   const lossless = isLosslessCopy();
+  const format = exportFormat();
+  const dest = toClipboard
+    ? await invoke("clip_export_path", { ext: format }).catch((err) => { toast(String(err)); return null; })
+    : destPath();
+  if (!dest) return;
   const request = {
     src_path: VE.src,
-    dest_path: destPath(),
+    dest_path: dest,
     filter_chain: lossless ? null : buildVideoChain(),
     audio_map: lossless ? null : buildAudioChain(),
     lossless_copy: lossless,
-    // 297: distinct from lossless_copy -- this is the "Lossless" QUALITY tier,
+    // Distinct from lossless_copy -- this is the "Lossless" QUALITY tier,
     // which forces a real re-encode (see isLosslessCopy above) that must
     // itself stay lossless (-crf 0) rather than falling back to an ordinary
     // bitrate target with nothing to map "lossless" to.
     lossless_quality: exportQuality() === "lossless",
-    format: exportFormat(),
+    format,
     video_kbps: lossless ? null : videoKbps(),
     // Only meaningful on the stream-copy path, where there is no filter graph
     // that could carry the trim itself.
@@ -1722,6 +1862,7 @@ async function startExport() {
   };
   VE.exporting = true;
   $("ve-export-start").disabled = true;
+  $("ve-export-clip").disabled = true;
   $("ve-export-cancel").classList.remove("hidden");
   $("ve-export-saveas").classList.add("hidden");
   $("ve-export-status").textContent = t("veExporting");
@@ -1729,11 +1870,17 @@ async function startExport() {
   try {
     await invoke("export_video", { req: request });
     VE.dirty = false;
-    VE.lastExport = request.dest_path;
     setProgress(100);
-    $("ve-export-status").textContent = t("veExportDone").replace("{path}", request.dest_path);
-    $("ve-export-saveas").classList.remove("hidden");
-    toast(t("veExportDone").replace("{path}", request.dest_path));
+    if (toClipboard) {
+      const clipOk = await invoke("copy_file_to_clipboard", { path: dest }).catch(() => false);
+      $("ve-export-status").textContent = clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", dest);
+      toast(clipOk ? t("veClipExportDone") : t("veExportDone").replace("{path}", dest));
+    } else {
+      VE.lastExport = dest;
+      $("ve-export-status").textContent = t("veExportDone").replace("{path}", dest);
+      $("ve-export-saveas").classList.remove("hidden");
+      toast(t("veExportDone").replace("{path}", dest));
+    }
   } catch (err) {
     const message = String(err);
     noteFfmpeg(err);
@@ -1741,6 +1888,7 @@ async function startExport() {
   } finally {
     VE.exporting = false;
     $("ve-export-start").disabled = false;
+    $("ve-export-clip").disabled = false;
     $("ve-export-cancel").classList.add("hidden");
   }
 }
@@ -1761,6 +1909,7 @@ function noteFfmpeg(err) {
   VE.ffmpeg = false;
   $("ve-ffmpeg-warn").classList.remove("hidden");
   $("ve-export-start").disabled = true;
+  $("ve-export-clip").disabled = true;
   $("ve-still").disabled = true;
 }
 
@@ -1768,7 +1917,7 @@ $("ve-ffmpeg-get").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   btn.disabled = true;
   const unlisten = await listen("ffmpeg-download-progress", (ev) => {
-    const pct = Math.round(Number(ev.payload?.pct ?? ev.payload ?? 0));
+    const pct = ffmpegDownloadPct(ev.payload);
     btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct));
   });
   try {
@@ -1776,6 +1925,7 @@ $("ve-ffmpeg-get").addEventListener("click", async (e) => {
     VE.ffmpeg = true;
     $("ve-ffmpeg-warn").classList.add("hidden");
     $("ve-export-start").disabled = false;
+    $("ve-export-clip").disabled = false;
     $("ve-still").disabled = false;
     toast(t("ffmpegDownloadDone"));
     await loadRecording(VE.src);
@@ -1809,7 +1959,7 @@ $("ve-redo").addEventListener("click", redo);
 $("ve-play").addEventListener("click", togglePlay);
 $("ve-to-start").addEventListener("click", () => seek(keptSegments()[0].a));
 $("ve-to-end").addEventListener("click", () => seek(keptSegments().slice(-1)[0].b));
-// 302: stepping by a fixed frameMs() from an arbitrary (scrubbed) playhead
+// Stepping by a fixed frameMs() from an arbitrary (scrubbed) playhead
 // position drifts further from the real frame grid every press instead of
 // landing on it -- snap to the actual previous/next frame boundary instead.
 // The small epsilon absorbs float error from a non-integer frame duration
@@ -1900,10 +2050,11 @@ $("ve-speed-pitch").addEventListener("change", () => {
 
 $("ve-fade-on").addEventListener("change", () => {
   if ($("ve-fade-on").checked) {
+    const fadeDef = VE.fadeMsDefault || 500;
     pushReplacing((o) => o.tool === "fade", {
       tool: "fade",
-      inMs: clamp(Number($("ve-fade-in").value) || 500, 0, 10000),
-      outMs: clamp(Number($("ve-fade-out").value) || 500, 0, 10000),
+      inMs: clamp(Number($("ve-fade-in").value) || fadeDef, 0, 10000),
+      outMs: clamp(Number($("ve-fade-out").value) || fadeDef, 0, 10000),
     });
   } else {
     removeOps((o) => o.tool === "fade");
@@ -1920,7 +2071,7 @@ for (const id of ["ve-fade-in", "ve-fade-out"]) {
   });
 }
 
-// 300: the edit tab's own resize control and the export tab's downscale
+// The edit tab's own resize control and the export tab's downscale
 // dropdown are two faces of the one same setting -- only setting a control's
 // .value from code, as each side's handler used to do to the OTHER control,
 // never fires that control's own "change" event, so only whichever one the
@@ -1965,6 +2116,16 @@ function updateAudioLabels() {
   }
 }
 
+// Reflects VE.audio in the two mute buttons/sliders -- needed on every load
+// since resetForNewSource() changes the state without any click happening to
+// trigger audioControl()'s own listener.
+function syncAudioButtons() {
+  $("ve-mute-sys").classList.toggle("ve-muted-btn", VE.audio.sys.mute);
+  $("ve-mute-mic").classList.toggle("ve-muted-btn", VE.audio.mic.mute);
+  $("ve-vol-sys").value = VE.audio.sys.vol;
+  $("ve-vol-mic").value = VE.audio.mic.vol;
+}
+
 function audioControl(kind, muteId, volId) {
   $(muteId).addEventListener("click", () => {
     VE.audio[kind].mute = !VE.audio[kind].mute;
@@ -1988,10 +2149,38 @@ for (const id of ["ve-export-format", "ve-export-quality", "ve-export-downscale"
       $("ve-scale").value = value;
       setScaleOp(value);
     }
+    // A full manual destination names its own extension -- picking a
+    // different container format makes that extension wrong, so the format
+    // dropdown is the one control that drops back to the auto-named file
+    // (still inside a remembered "Export to…" folder, if any).
+    if (id === "ve-export-format") VE.destOverride = null;
     persistExportSettings();
     updateExportNote();
   });
 }
+
+// The target field is a real input now -- typing a full path directly
+// is itself a manual override, same as picking one via the dialog below.
+$("ve-export-dest").addEventListener("change", () => {
+  const value = $("ve-export-dest").value.trim();
+  VE.destOverride = value || null;
+  updateExportNote();
+});
+$("ve-export-choose-file").addEventListener("click", async () => {
+  const defaultName = destPath().replace(/^.*[\\/]/, "");
+  const picked = await invoke("pick_export_dest", { defaultName }).catch(() => null);
+  if (!picked) return;
+  VE.destOverride = picked;
+  updateExportNote();
+});
+$("ve-export-choose-folder").addEventListener("click", async () => {
+  const folder = await invoke("pick_folder").catch(() => null);
+  if (!folder) return;
+  VE.destDir = folder;
+  VE.destOverride = null; // the auto filename moves into the new folder
+  persistExportSettings();
+  updateExportNote();
+});
 
 function applyPreset(format, quality, downscale) {
   $("ve-export-format").value = format;
@@ -2007,7 +2196,8 @@ $("ve-preset-same").addEventListener("click", () => applyPreset("mp4", "high", "
 $("ve-preset-small").addEventListener("click", () => applyPreset("mp4", "small", "720"));
 $("ve-preset-gif").addEventListener("click", () => applyPreset("gif", "small", "480"));
 
-$("ve-export-start").addEventListener("click", startExport);
+$("ve-export-start").addEventListener("click", () => startExport(false));
+$("ve-export-clip").addEventListener("click", () => startExport(true));
 $("ve-export-cancel").addEventListener("click", () => invoke("cancel_export").catch(() => {}));
 $("ve-export-saveas").addEventListener("click", async () => {
   if (!VE.lastExport) return;
@@ -2022,6 +2212,7 @@ function persistExportSettings() {
   invoke("set_ui_text", { key: "videoExportFormat", value: exportFormat() }).catch(() => {});
   invoke("set_ui_text", { key: "videoExportQuality", value: exportQuality() }).catch(() => {});
   invoke("set_ui_text", { key: "videoExportDownscale", value: exportDownscale() }).catch(() => {});
+  invoke("set_ui_text", { key: "videoExportDir", value: VE.destDir }).catch(() => {});
 }
 
 // ---------------------------------------------------------------- keyboard
@@ -2088,8 +2279,15 @@ function resetForNewSource() {
   VE.playhead = 0;
   VE.dirty = false;
   VE.lastExport = "";
-  VE.audio = { sys: { mute: false, vol: 100 }, mic: { mute: false, vol: 100 } };
-  // 309: probe/geometry were only ever set by applyProbe() on success, never
+  // A full manual "Save as…" path names THIS source's file, so a newly
+  // loaded video starts fresh with it; the remembered destination FOLDER
+  // (VE.destDir) is a standing preference and survives across videos.
+  VE.destOverride = null;
+  // Mic starts muted on every newly loaded video, same reasoning as the
+  // module-level default above.
+  VE.audio = { sys: { mute: false, vol: 100 }, mic: { mute: true, vol: 100 } };
+  syncAudioButtons();
+  // Probe/geometry were only ever set by applyProbe() on success, never
   // cleared here -- if probing the NEW source then fails (no ffmpeg, a
   // corrupt file, ...), applyProbe(null) skips its own assignment entirely
   // and every one of these silently kept the PREVIOUS video's values: wrong
@@ -2115,7 +2313,7 @@ function resetForNewSource() {
 
 async function loadRecording(path) {
   if (!path) return;
-  // 302: two "Edit video" clicks in quick succession (this recording, then
+  // Two "Edit video" clicks in quick succession (this recording, then
   // another before the first has finished probing/muxing) had no way to tell
   // a stale call's own late result apart from the current one -- whichever
   // async chain happened to finish LAST won, even if it was the older, no
@@ -2212,7 +2410,7 @@ listen("settings-changed", () => { invoke("get_settings").then(applySettings).ca
 listen("video-editor-load", async (e) => {
   const path = typeof e.payload === "string" ? e.payload : e.payload?.path;
   if (!path || path === VE.src) return;
-  // 302: switching source (clicking "Edit video" on another tile while this
+  // Switching source (clicking "Edit video" on another tile while this
   // window is already open) used to jump straight to loadRecording(), silently
   // discarding whatever was unsaved -- the same case closeWindow() already
   // guards, reusing its exact confirm.
@@ -2232,11 +2430,35 @@ listen(EXPORT_PROGRESS_EVENT, (e) => {
 function applySettings(settings) {
   const undoMax = Number(settings?.ui_values?.videoEditUndoMax);
   VE.undoMax = Number.isFinite(undoMax) && undoMax > 0 ? Math.round(undoMax) : UNDO_MAX_DEFAULT;
+  const values = settings?.ui_values || {};
   const texts = settings?.ui_texts || {};
-  if (texts.videoExportFormat) $("ve-export-format").value = texts.videoExportFormat;
-  if (texts.videoExportQuality) $("ve-export-quality").value = texts.videoExportQuality;
-  $("ve-export-downscale").value = texts.videoExportDownscale || "";
-  $("ve-scale").value = texts.videoExportDownscale || "";
+  // The user's own last export choice always wins; only a field that was never
+  // touched (no persisted videoExport* value yet) opens on the expert default.
+  $("ve-export-format").value = texts.videoExportFormat || texts.veDefaultFormat || "mp4";
+  $("ve-export-quality").value = texts.videoExportQuality || texts.veDefaultQuality || "high";
+  const downscaleDef = texts.videoExportDownscale != null ? texts.videoExportDownscale : (texts.veDefaultDownscale || "");
+  $("ve-export-downscale").value = downscaleDef;
+  $("ve-scale").value = downscaleDef;
+  VE.destDir = texts.videoExportDir || "";
+  const kbpsHigh = Number(values.veExportKbpsHigh);
+  const kbpsSmall = Number(values.veExportKbpsSmall);
+  EXPORT_KBPS.high = Number.isFinite(kbpsHigh) && kbpsHigh > 0 ? kbpsHigh : 12000;
+  EXPORT_KBPS.small = Number.isFinite(kbpsSmall) && kbpsSmall > 0 ? kbpsSmall : 4000;
+  const fadeMs = Number(values.veFadeMs);
+  VE.fadeMsDefault = Number.isFinite(fadeMs) && fadeMs > 0 ? Math.round(fadeMs) : 500;
+  // Only while fade isn't already applied -- once it is, these fields hold the
+  // user's own per-export values and a stray settings-changed elsewhere (any
+  // setting, anywhere) must never overwrite what they just typed.
+  if (!opOf("fade")) {
+    $("ve-fade-in").value = VE.fadeMsDefault;
+    $("ve-fade-out").value = VE.fadeMsDefault;
+  }
+  const pixelateBlock = Number(values.veOvPixelateBlock);
+  VE.ovPixelateBlockDefault = Number.isFinite(pixelateBlock) && pixelateBlock > 0 ? Math.round(pixelateBlock) : 16;
+  const spotlightDim = Number(values.veOvSpotlightDim);
+  VE.ovSpotlightDimDefault = Number.isFinite(spotlightDim) && spotlightDim > 0 ? spotlightDim / 100 : 0.6;
+  const imageOpacity = Number(values.veOvImageOpacity);
+  VE.ovImageOpacityDefault = Number.isFinite(imageOpacity) && imageOpacity > 0 ? Math.round(imageOpacity) : 100;
   updateExportNote();
 }
 

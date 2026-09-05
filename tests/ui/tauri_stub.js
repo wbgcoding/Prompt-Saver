@@ -256,6 +256,25 @@ const RESULTS = {
   // mux_mic_track, which nothing here stubs.
   video_editor_source: () => "C:\\Recordings\\ps-smoke-recording.mp4",
   windows_fonts_dir: () => "C:/Windows/Fonts",
+  // 334: the image-overlay "Add" button picks a file before it can add its
+  // op -- a fixed fake path is enough to exercise the add flow and the live
+  // preview's <img> element; the path never actually needs to resolve.
+  pick_file_path: () => "C:\\Pictures\\ps-smoke-badge.png",
+  // 335: export-destination pickers for the video editor's export row.
+  pick_export_dest: (a) => "C:\\Videos\\" + (a && a.defaultName || "export.mp4"),
+  pick_folder: () => "C:\\Videos\\Exports",
+  // 336: "Copy to clipboard" export -- a temp path plus a clipboard write the
+  // probe can observe without a real OS clipboard.
+  clip_export_path: (a) => "C:\\Temp\\ps-clipexport-test." + ((a && a.ext) || "mp4"),
+  copy_file_to_clipboard: (a) => { window.__CLIP_EXPORT_COPIED__ = a && a.path; return true; },
+  // 340: recordingDir's folder-size readout and cleanup flow -- a fixed
+  // fixture so the probe can assert both the stats line and the confirm
+  // list's contents regardless of which age tier is selected.
+  video_folder_stats: () => [2, 5242880],
+  video_folder_cleanup_preview: () => [
+    { name: "old-recording.mp4", size: 3145728 },
+  ],
+  video_folder_cleanup: (a) => { window.__VIDEO_CLEANUP_CALLED__ = a; return 1; },
   probe_recording: () => ({
     duration_ms: 600000, fps: 30, width: 1920, height: 1080,
     has_audio: true, has_mic_track: true, mic_sidecar: "",
@@ -403,6 +422,13 @@ const RESULTS = {
   // None of these three are favorited (favorite: i % 5 === 0) — favorites float
   // to the top independently of this sort, which would otherwise confuse the test.
   last_edited_map: () => ({ p3: 3000, p1: 2000, p9: 1000 }),
+  // 339: records the format/ids the caller asked for so a probe can assert on
+  // it, and returns a count the same shape the real command would (selection
+  // size, or the whole fixture library when no ids were passed).
+  export_prompts: (a) => {
+    window.__EXPORT_CALL__ = a || {};
+    return (a && Array.isArray(a.ids)) ? a.ids.length : PROMPTS.length;
+  },
   // 88: two new prompts, one duplicate of something already in the library.
   preview_import: () => ({
     path: "C:\\fake\\import.csv",

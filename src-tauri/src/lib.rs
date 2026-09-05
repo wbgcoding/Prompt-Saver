@@ -9718,8 +9718,21 @@ fn position_rec_bar(win: &tauri::WebviewWindow, target_kind: &str, hwnd_or_monit
 // auto-stopping the wrong (new) session when its own stale hwnd closes.
 static REC_BAR_FOLLOW_GEN: AtomicU64 = AtomicU64::new(0);
 
+// Once the user has dragged the bar themselves, the 200ms poll must stop
+// re-snapping it back to the tracked window's corner -- reset true at the
+// start of every follow thread (a fresh recording gets the auto-follow back),
+// flipped false by rec_bar_mark_moved() the moment a drag begins. The window
+// closing/stopping the recording is unaffected: that check runs regardless.
+static REC_BAR_FOLLOWING: AtomicBool = AtomicBool::new(true);
+
+#[tauri::command]
+fn rec_bar_mark_moved() {
+    REC_BAR_FOLLOWING.store(false, Ordering::SeqCst);
+}
+
 fn spawn_rec_bar_follow(app: AppHandle, hwnd: isize) {
     let my_gen = REC_BAR_FOLLOW_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    REC_BAR_FOLLOWING.store(true, Ordering::SeqCst);
     let _ = std::thread::Builder::new().name("rec-bar-follow".into()).spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_millis(200));
         if REC_BAR_FOLLOW_GEN.load(Ordering::SeqCst) != my_gen {
@@ -9737,7 +9750,9 @@ fn spawn_rec_bar_follow(app: AppHandle, hwnd: isize) {
             let _ = win.hide();
             break;
         }
-        position_rec_bar(&win, "window", hwnd);
+        if REC_BAR_FOLLOWING.load(Ordering::SeqCst) {
+            position_rec_bar(&win, "window", hwnd);
+        }
     });
 }
 
@@ -9820,6 +9835,10 @@ struct RecordingStatus {
     // silence in place of the mic track; the control bar surfaces this once
     // as a warning state on the mic indicator the first time it flips true.
     mic_lost: bool,
+    // Whether the rec bar's own mute buttons currently have each source
+    // silenced. Always false for a source that was never active this session.
+    audio_system_muted: bool,
+    audio_mic_muted: bool,
     // Set once an unrecoverable encoder write failure happened (e.g. disk
     // full) -- the feeder has already stopped itself at this point, so the
     // control bar's own poll uses this to stop the session properly instead
@@ -9849,6 +9868,8 @@ fn recording_status(rstate: State<'_, RecordingState>) -> Option<RecordingStatus
         audio_system: session.audio_system,
         audio_mic: session.audio_mic,
         mic_lost: session.mic_queue.as_ref().map(|q| q.is_lost()).unwrap_or(false),
+        audio_system_muted: session.system_queue.as_ref().map(|q| q.is_muted()).unwrap_or(false),
+        audio_mic_muted: session.mic_queue.as_ref().map(|q| q.is_muted()).unwrap_or(false),
         encode_error: recording::encode_error(session),
         stop_hotkey_ok: REC_STOP_HOTKEY_OK.load(std::sync::atomic::Ordering::Relaxed),
         pause_hotkey_ok: REC_PAUSE_HOTKEY_OK.load(std::sync::atomic::Ordering::Relaxed),
@@ -11580,6 +11601,49 @@ fn sweep_stale_temp_files() {
     }
 }
 
+// The "Copy to clipboard" export's own throwaway files, in the same
+// TEMP_DIR subfolder the OCR/voice leftovers above use. Kept separate from
+// sweep_stale_temp_files because its max age is user-configurable
+// (videoClipTtlMin, default one hour) rather than the fixed
+// STALE_TEMP_FILE_AGE every other class above uses.
+fn sweep_clip_export_temp(age: Duration) {
+    let dir = std::env::temp_dir().join(brand::TEMP_DIR);
+    let prefix = format!("{}-clipexport-", brand::TEMP_PREFIX);
+    let Ok(entries) = fs::read_dir(&dir) else { return };
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if !name.starts_with(&prefix) {
+            continue;
+        }
+        let stale = e
+            .metadata()
+            .and_then(|m| m.modified())
+            .and_then(|t| SystemTime::now().duration_since(t).map_err(std::io::Error::other))
+            .is_ok_and(|a| a >= age);
+        if stale {
+            let _ = fs::remove_file(e.path());
+        }
+    }
+}
+
+fn clip_export_ttl_from(settings: &Settings) -> Duration {
+    let min = settings.ui_values.get("videoClipTtlMin").copied().unwrap_or(60.0).max(1.0);
+    Duration::from_secs((min * 60.0) as u64)
+}
+
+// Reads the live expert setting so the periodic sweep always uses whatever
+// the user has it set to right now, the same way update_check_interval does
+// for its own re-timed job.
+fn clip_export_ttl(app: &AppHandle) -> Duration {
+    app.try_state::<Db>()
+        .map(|s| clip_export_ttl_from(&s.lock().unwrap_or_else(|e| e.into_inner()).settings))
+        .unwrap_or(Duration::from_secs(3600))
+}
+
+// How often the clip-export sweep re-checks -- finer than STALE_TEMP_SWEEP_SECS
+// since videoClipTtlMin can be set as low as 5 minutes.
+const CLIP_EXPORT_SWEEP_SECS: u64 = 5 * 60;
+
 fn remove_snip_preview() {
     if let Some(p) = SNIP_PREVIEW_FILE.lock().unwrap_or_else(|e| e.into_inner()).take() {
         let _ = fs::remove_file(p);
@@ -12402,6 +12466,9 @@ fn snip_windows(state: State<SnipState>, index: usize) -> Vec<SnipWindow> {
 const PICK_Q: u8 = 92;
 // Saved-button JPEG quality: higher (crisp text) but still a fraction of a PNG's
 // size + encode time — a full-res PNG data URL used to stall the whole app on save.
+// Default for the expert-tunable snipSaveQuality (read in finalize_capture) --
+// also mirrored by SNIP_EDIT_EXPORT_Q in main.js for the post-edit re-export,
+// so both sides of the same screenshot's lifetime share one visible quality.
 const SNIP_SAVE_Q: u8 = 90;
 
 // Encode RGBA bytes to a JPEG for the overlay preview. jpeg-encoder = SIMD baseline JPEG,
@@ -12871,19 +12938,20 @@ async fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Opt
     // Default: temp-only — the shot lives only as an in-app prompt (encrypted,
     // removed when the prompt is deleted). The folder copy is opt-in and honors
     // a custom screenshot directory (expert menu).
-    let (save_to_folder, custom_dir) = app
+    let (save_to_folder, custom_dir, save_q) = app
         .try_state::<Db>()
         .map(|s| {
             let g = s.lock().unwrap_or_else(|e| e.into_inner());
             (
                 g.settings.ui_flags.get("screenshotSave") == Some(&true),
                 g.settings.ui_texts.get("screenshotDir").cloned().unwrap_or_default(),
+                g.settings.ui_values.get("snipSaveQuality").copied().unwrap_or(f64::from(SNIP_SAVE_Q)).clamp(50.0, 100.0) as u8,
             )
         })
-        .unwrap_or((false, String::new()));
+        .unwrap_or((false, String::new(), SNIP_SAVE_Q));
 
     let (data_url, path) = tauri::async_runtime::spawn_blocking(move || -> Result<(String, String), String> {
-        let jpeg = encode_snip_jpeg(crop.as_raw(), cw, ch, SNIP_SAVE_Q).ok_or("encode failed")?;
+        let jpeg = encode_snip_jpeg(crop.as_raw(), cw, ch, save_q).ok_or("encode failed")?;
         let data_url = format!("data:image/jpeg;base64,{}", base64_encode(&jpeg));
         let _ = arboard::Clipboard::new().and_then(|mut c| {
             c.set_image(arboard::ImageData {
@@ -15644,9 +15712,11 @@ fn crop_and_flip_rows_bottom_up(
 }
 
 // Re-anchors a top-down BGRA frame of its own live (width, height) into a
-// fixed (target_w, target_h) top-down canvas, top-left corner: cropped if the
-// live frame is larger, black-padded if smaller. Used only for the case a
-// Window recording target is resized mid-capture (see RecHandler::on_frame_arrived) --
+// fixed (target_w, target_h) top-down canvas, top-left corner, black-padding
+// whatever the (smaller) live frame does not cover. Used only for the case a
+// Window recording target shrank mid-capture (see RecHandler::on_frame_arrived,
+// which routes a GROWN frame through scale_to_fit_frame_top_down instead --
+// cropping it here would have cut off whatever grew past the canvas) --
 // independent of the capture-frame type so it stays unit-testable.
 fn letterbox_frame_top_down(
     raw: &[u8], width: usize, height: usize, stride: usize, target_w: usize, target_h: usize,
@@ -15662,6 +15732,40 @@ fn letterbox_frame_top_down(
             break; // defensive -- a stale row_pitch must not panic the capture thread
         }
         out[dst..dst + copy_w * 4].copy_from_slice(&raw[src..src + copy_w * 4]);
+    }
+    (out, dst_stride)
+}
+
+// The plain top-left crop above silently cut off whatever grew past the
+// encoder's fixed canvas on the right/bottom edge. When the live frame is
+// bigger in either dimension, scale the WHOLE frame down instead (aspect
+// ratio preserved, nearest-neighbour -- cheap enough for a capture thread and
+// plenty for the brief span a live resize actually spans) and centre it, so
+// nothing recorded is ever lost to a resize.
+fn scale_to_fit_frame_top_down(
+    raw: &[u8], width: usize, height: usize, stride: usize, target_w: usize, target_h: usize,
+) -> (Vec<u8>, usize) {
+    let dst_stride = target_w * 4;
+    let mut out = vec![0u8; dst_stride * target_h];
+    if width == 0 || height == 0 || target_w == 0 || target_h == 0 {
+        return (out, dst_stride);
+    }
+    let scale = (target_w as f64 / width as f64).min(target_h as f64 / height as f64);
+    let scaled_w = ((width as f64 * scale).round() as usize).clamp(1, target_w);
+    let scaled_h = ((height as f64 * scale).round() as usize).clamp(1, target_h);
+    let (off_x, off_y) = ((target_w - scaled_w) / 2, (target_h - scaled_h) / 2);
+    for dy in 0..scaled_h {
+        let sy = ((dy as f64 / scale) as usize).min(height - 1);
+        let src_row = sy * stride;
+        if src_row + width * 4 > raw.len() {
+            break; // defensive -- a stale row_pitch must not panic the capture thread
+        }
+        let dst_row = (off_y + dy) * dst_stride + off_x * 4;
+        for dx in 0..scaled_w {
+            let sx = ((dx as f64 / scale) as usize).min(width - 1);
+            let (s, d) = (src_row + sx * 4, dst_row + dx * 4);
+            out[d..d + 4].copy_from_slice(&raw[s..s + 4]);
+        }
     }
     (out, dst_stride)
 }
@@ -15853,18 +15957,37 @@ fn mp4_track_durations_secs(data: &[u8]) -> Vec<f64> {
 pub(crate) struct AudioQueueShared {
     samples: Mutex<std::collections::VecDeque<i16>>,
     lost: std::sync::atomic::AtomicBool,
+    // The rec bar's mute buttons flip this instead of stopping the
+    // WASAPI capture thread itself -- push() below just stops feeding the
+    // queue while it is set, and drain()'s existing zero-pad-on-underflow
+    // (a few lines down) does the rest, so the muted span of the track comes
+    // out as real silence rather than a gap, with zero change to timing.
+    muted: std::sync::atomic::AtomicBool,
 }
 impl AudioQueueShared {
     fn new() -> Self {
-        Self { samples: Mutex::new(std::collections::VecDeque::new()), lost: std::sync::atomic::AtomicBool::new(false) }
+        Self {
+            samples: Mutex::new(std::collections::VecDeque::new()),
+            lost: std::sync::atomic::AtomicBool::new(false),
+            muted: std::sync::atomic::AtomicBool::new(false),
+        }
     }
     fn push(&self, chunk: &[i16]) {
+        if self.muted.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
         let cap = (REC_AUDIO_SAMPLE_RATE * REC_AUDIO_CHANNELS * 2) as usize; // ~2s
         let mut q = self.samples.lock().unwrap_or_else(|e| e.into_inner());
         q.extend(chunk.iter().copied());
         while q.len() > cap {
             q.pop_front();
         }
+    }
+    pub(crate) fn set_muted(&self, muted: bool) {
+        self.muted.store(muted, std::sync::atomic::Ordering::Relaxed);
+    }
+    pub(crate) fn is_muted(&self) -> bool {
+        self.muted.load(std::sync::atomic::Ordering::Relaxed)
     }
     // Drains exactly `n` samples, zero-padding (silence) if fewer are
     // available -- the tick must never block or shrink to keep the encoder's
@@ -16267,7 +16390,8 @@ struct RecordingStoppedPayload {
 #[cfg(windows)]
 mod recording {
     use super::{
-        append_crash_log, audio_mix_i16, crop_and_flip_rows_bottom_up, letterbox_frame_top_down, rec_filename,
+        append_crash_log, audio_mix_i16, crop_and_flip_rows_bottom_up, letterbox_frame_top_down,
+        scale_to_fit_frame_top_down, rec_filename,
         AudioQueueShared, RecWavWriter,
         RecFeederShared, RecFrameItem, RecPhase, RecordClock, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE,
     };
@@ -16373,10 +16497,17 @@ mod recording {
             let (width, height, stride) = (fb.width() as usize, fb.height() as usize, fb.row_pitch() as usize);
             let bytes = if self.crop.is_none() && (width as u32, height as u32) != self.enc_size {
                 // Live resize: re-anchor the frame into the encoder's original,
-                // fixed canvas (cropped if the window grew, black-padded if it
-                // shrank) instead of passing through the now-mismatched size.
+                // fixed canvas instead of passing through the now-mismatched
+                // size. Grown past the canvas in either dimension -> scale the
+                // whole picture down to fit (a plain crop lost whatever
+                // fell outside it); shrunk in both -> the old black-pad, since
+                // a smaller frame already shows everything on its own.
                 let (ew, eh) = (self.enc_size.0 as usize, self.enc_size.1 as usize);
-                let (padded, padded_stride) = letterbox_frame_top_down(fb.as_raw_buffer(), width, height, stride, ew, eh);
+                let (padded, padded_stride) = if width > ew || height > eh {
+                    scale_to_fit_frame_top_down(fb.as_raw_buffer(), width, height, stride, ew, eh)
+                } else {
+                    letterbox_frame_top_down(fb.as_raw_buffer(), width, height, stride, ew, eh)
+                };
                 crop_and_flip_rows_bottom_up(&padded, ew, eh, padded_stride, 0, 0, ew, eh)
             } else {
                 let (cx, cy, cw, ch) = self.crop.unwrap_or((0, 0, width as u32, height as u32));
@@ -16395,7 +16526,7 @@ mod recording {
     // 16-bit AAC), matching what audio_convert_to_target and the feeder's
     // audio tick already produce.
     fn build_encoder(
-        width: u32, height: u32, path: &Path, audio_kbps: Option<u32>, video_kbps: u32,
+        width: u32, height: u32, path: &Path, audio_kbps: Option<u32>, video_kbps: u32, video_fps: u32,
     ) -> Result<VideoEncoder, RecError> {
         // VideoSettingsBuilder defaults to HEVC -- the app always ships MP4/H.264,
         // so the sub type is set explicitly rather than trusting the default.
@@ -16410,7 +16541,7 @@ mod recording {
         let encoder = VideoEncoder::new(
             VideoSettingsBuilder::new(width, height)
                 .sub_type(VideoSettingsSubType::H264)
-                .frame_rate(30)
+                .frame_rate(video_fps)
                 .bitrate(video_kbps.saturating_mul(1000)),
             audio_settings,
             ContainerSettingsBuilder::default(),
@@ -16625,8 +16756,11 @@ mod recording {
         audio_threads: Vec<thread::JoinHandle<()>>,
         // Tracked separately from the feeder's own mixing queues (which live
         // only in the feeder thread's closure) so recording_status can report
-        // a mic-specific loss toast without guessing which queue is which.
+        // a mic-specific loss toast without guessing which queue is which, and
+        // so the rec bar's mute buttons have a queue to flip regardless
+        // of where it landed in the feeder's own encoder_queues/sidecar split.
         pub mic_queue: Option<Arc<AudioQueueShared>>,
+        pub system_queue: Option<Arc<AudioQueueShared>>,
         // Every active audio queue (system and/or mic) -- cleared on resume so
         // audio captured live during a pause (the WASAPI threads never stop
         // pushing; only the feeder's drain is gated on the pause state) does
@@ -16669,7 +16803,7 @@ mod recording {
     // own capture setting, never a manually drawn cursor. audio: neither
     // source active takes the exact original video-only path unchanged.
     pub fn start(
-        target: RecTarget, output_path: PathBuf, show_cursor: bool, audio: AudioConfig, video_kbps: u32,
+        target: RecTarget, output_path: PathBuf, show_cursor: bool, audio: AudioConfig, video_kbps: u32, video_fps: u32,
     ) -> Result<RecSession, String> {
         let (width, height) = resolve_target_size(target)?;
         let audio_active = audio.system || audio.mic;
@@ -16680,7 +16814,7 @@ mod recording {
         // file instead of being mixed away. Either single-source case is
         // completely unchanged.
         let both_active = audio.system && audio.mic;
-        let encoder = build_encoder(width, height, &output_path, audio_active.then_some(audio.kbps), video_kbps)
+        let encoder = build_encoder(width, height, &output_path, audio_active.then_some(audio.kbps), video_kbps, video_fps)
             .map_err(|e| e.to_string())?;
         let clock = Arc::new(RecordClock::new());
         let shared = Arc::new(RecFeederShared::new());
@@ -16688,13 +16822,15 @@ mod recording {
         let mut audio_queues: Vec<Arc<AudioQueueShared>> = Vec::new();
         let mut audio_threads = Vec::new();
         let mut mic_queue: Option<Arc<AudioQueueShared>> = None;
+        let mut system_queue: Option<Arc<AudioQueueShared>> = None;
         let audio_stop = if audio_active { Some(Arc::new(AtomicBool::new(false))) } else { None };
         if audio.system {
             let q = Arc::new(AudioQueueShared::new());
             audio_threads.push(super::audio::spawn_capture(
                 "system", eRender, true, String::new(), q.clone(), audio_stop.clone().unwrap(),
             ));
-            audio_queues.push(q);
+            audio_queues.push(q.clone());
+            system_queue = Some(q);
         }
         if audio.mic {
             let q = Arc::new(AudioQueueShared::new());
@@ -16762,7 +16898,7 @@ mod recording {
         };
 
         Ok(RecSession {
-            control, clock, shared, feeder: Some(feeder), audio_stop, audio_threads, mic_queue,
+            control, clock, shared, feeder: Some(feeder), audio_stop, audio_threads, mic_queue, system_queue,
             audio_queues, mic_wav_thread, mic_wav_path,
             audio_system: audio.system, audio_mic: audio.mic,
             output_path, phase: RecPhase::Recording,
@@ -16930,10 +17066,14 @@ async fn start_recording(
     // exact size barely matters on that step (see the recQuality tooltip).
     let video_kbps =
         db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recBitrateKbps").copied().unwrap_or(12000.0).clamp(1000.0, 50000.0) as u32;
+    // Every monitor gets capped to this fps regardless of its actual refresh rate
+    // unless overridden here -- a 60/144Hz screen otherwise always recorded at 30.
+    let video_fps =
+        db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recFps").copied().unwrap_or(30.0).clamp(10.0, 60.0) as u32;
     let dir = data_dir(&app).join("recordings");
     let session = tauri::async_runtime::spawn_blocking(move || {
         let out_path = recording::new_output_path(&dir)?;
-        recording::start(target, out_path, show_cursor, audio, video_kbps)
+        recording::start(target, out_path, show_cursor, audio, video_kbps, video_fps)
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -17003,6 +17143,34 @@ fn resume_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result
 #[tauri::command]
 fn resume_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<(), String> {
     let _ = (app, rstate);
+    Err("recording is only available on Windows".to_string())
+}
+
+// Mid-recording mute for either source, from the rec bar's own two audio
+// buttons. `source` is "system" or "mic"; muting a source that was never
+// active this session is a no-op (there is no queue to flip).
+#[cfg(windows)]
+#[tauri::command]
+fn set_audio_muted(rstate: State<'_, RecordingState>, source: String, muted: bool) -> Result<(), String> {
+    let guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
+    let session = guard.as_ref().ok_or_else(|| "no active recording".to_string())?;
+    let queue = match source.as_str() {
+        "system" => &session.system_queue,
+        "mic" => &session.mic_queue,
+        _ => return Err(format!("unknown audio source: {source}")),
+    };
+    match queue {
+        Some(q) => {
+            q.set_muted(muted);
+            Ok(())
+        }
+        None => Err(format!("{source} audio is not active this recording")),
+    }
+}
+#[cfg(not(windows))]
+#[tauri::command]
+fn set_audio_muted(rstate: State<'_, RecordingState>, source: String, muted: bool) -> Result<(), String> {
+    let _ = (rstate, source, muted);
     Err("recording is only available on Windows".to_string())
 }
 
@@ -18654,6 +18822,82 @@ fn default_recording_dir() -> String {
     recording_dir("").to_string_lossy().to_string()
 }
 
+// Only the extensions this app itself ever writes into the recording folder --
+// the user could point it at any folder they like (including one already full
+// of unrelated files), so both the size readout and the cleanup below must
+// never so much as count, let alone delete, anything this app did not create.
+const VIDEO_FOLDER_EXTS: [&str; 3] = ["mp4", "webm", "gif"];
+
+fn is_video_folder_file(path: &std::path::Path) -> bool {
+    path.is_file()
+        && path
+            .extension()
+            .map(|e| VIDEO_FOLDER_EXTS.contains(&e.to_string_lossy().to_lowercase().as_str()))
+            .unwrap_or(false)
+}
+
+// (file count, total bytes) of every recording in the folder -- a missing
+// folder (nothing saved there yet) is simply empty, not an error.
+#[tauri::command]
+fn video_folder_stats(dir: String) -> (u64, u64) {
+    let Ok(entries) = fs::read_dir(&dir) else { return (0, 0) };
+    let mut count = 0u64;
+    let mut bytes = 0u64;
+    for e in entries.flatten() {
+        let path = e.path();
+        if !is_video_folder_file(&path) { continue; }
+        if let Ok(meta) = e.metadata() {
+            count += 1;
+            bytes += meta.len();
+        }
+    }
+    (count, bytes)
+}
+
+#[derive(Serialize)]
+struct VideoFolderFile {
+    name: String,
+    size: u64,
+}
+
+// Shared by the preview and the real delete, so what the user confirms is
+// exactly what gets removed -- never a second, independently computed list.
+fn video_folder_stale(dir: &str, age_days: u32) -> Vec<(std::path::PathBuf, VideoFolderFile)> {
+    let age = Duration::from_secs(u64::from(age_days) * 24 * 3600);
+    let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
+    let mut out = Vec::new();
+    for e in entries.flatten() {
+        let path = e.path();
+        if !is_video_folder_file(&path) { continue; }
+        let Ok(meta) = e.metadata() else { continue };
+        let Ok(modified) = meta.modified() else { continue };
+        let Ok(elapsed) = SystemTime::now().duration_since(modified) else { continue };
+        if elapsed < age { continue; }
+        let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        out.push((path, VideoFolderFile { name, size: meta.len() }));
+    }
+    out
+}
+
+#[tauri::command]
+fn video_folder_cleanup_preview(dir: String, age_days: u32) -> Vec<VideoFolderFile> {
+    video_folder_stale(&dir, age_days).into_iter().map(|(_, f)| f).collect()
+}
+
+// Deletes exactly the files video_folder_cleanup_preview just listed -- never
+// re-scans with different criteria, so the confirmed list and the
+// actually-deleted files can never drift apart (e.g. a file aging past the
+// threshold between preview and confirm just stays for next time, not a bug).
+#[tauri::command]
+fn video_folder_cleanup(dir: String, age_days: u32) -> usize {
+    let stale = video_folder_stale(&dir, age_days);
+    let mut n = 0;
+    for (path, _) in stale {
+        if fs::remove_file(&path).is_ok() { n += 1; }
+    }
+    n
+}
+
 // Never overwrite an existing file at the target: "<stem>.<ext>", then
 // "<stem> (2).<ext>", "<stem> (3).<ext>", etc. Shared by every 280 button
 // that writes into a folder instead of a dialog-chosen exact path.
@@ -18746,6 +18990,19 @@ async fn save_recording_as(app: AppHandle, src_path: String) -> Result<Option<St
     }
 }
 
+// A plain save-file dialog for the video editor's export target, picked
+// BEFORE exporting rather than moving the result afterward like
+// save_recording_as above -- no source file to move, just a chosen path.
+#[tauri::command]
+async fn pick_export_dest(app: AppHandle, default_name: String) -> Option<String> {
+    let ext = Path::new(&default_name).extension().and_then(|e| e.to_str()).unwrap_or("mp4").to_string();
+    file_dialog(&app)
+        .add_filter(ext.to_uppercase(), &[ext.as_str()])
+        .set_file_name(&default_name)
+        .save_file()
+        .map(|p| p.to_string_lossy().to_string())
+}
+
 // 280's plain "Save" -- writes straight into recordingDir without a dialog
 // (the common case); save_recording_as above keeps the free dialog for
 // everything else.
@@ -18786,6 +19043,30 @@ async fn copy_recording_to_clipboard(state: State<'_, Db>, src_path: String) -> 
     let dest_str = dest.to_string_lossy().to_string();
     let clip_ok = set_clipboard_file(&dest_str);
     Ok((dest_str, clip_ok))
+}
+
+// The video editor's "Copy to clipboard" export target -- a throwaway
+// file in the app's own temp folder rather than anywhere the user chose, so
+// it can be swept away automatically (see sweep_clip_export_temp below)
+// without ever touching a real save.
+fn clip_export_path_impl(ext: &str) -> Result<String, String> {
+    let dir = std::env::temp_dir().join(brand::TEMP_DIR);
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let safe_ext = if !ext.is_empty() && ext.chars().all(|c| c.is_ascii_alphanumeric()) { ext } else { "mp4" };
+    let name = format!("{}-clipexport-{}.{safe_ext}", brand::TEMP_PREFIX, gen_id());
+    Ok(dir.join(name).to_string_lossy().to_string())
+}
+
+#[tauri::command]
+async fn clip_export_path(ext: String) -> Result<String, String> {
+    clip_export_path_impl(&ext)
+}
+
+// Thin wrapper so the frontend does not need a Windows-only code path of its
+// own -- same CF_HDROP mechanism copy_recording_to_clipboard already uses.
+#[tauri::command]
+async fn copy_file_to_clipboard(path: String) -> bool {
+    set_clipboard_file(&path)
 }
 
 // Discard a not-yet-saved recording. Scoped to the app's own recordings
@@ -19080,6 +19361,116 @@ fn to_txt(prompts: &[Prompt]) -> String {
     blocks.join("\n\n---\n\n")
 }
 
+// The JSON export format: unlike CSV/TXT (deliberately prompt-content-only, see
+// import_prompts) this is meant as the fully lossless round trip, so it also
+// keeps `favorite` -- still never `id`/`hotkey`/`hotkey_paste`/`trashed_at`/
+// `rotate_auto`, which stay machine-local or per-session state regardless of
+// format (a re-import that silently grabbed an existing hotkey binding, or
+// resurrected a trashed_at, would be a real footgun, not a feature). Rotating
+// entries ride as a real JSON array -- no VARIANT_SEP text marker needed here.
+#[derive(Serialize, Deserialize, Default)]
+struct ExportPrompt {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    text: String,
+    #[serde(default)]
+    color: String,
+    #[serde(default)]
+    image: String,
+    #[serde(default)]
+    show_image: bool,
+    #[serde(default)]
+    copy_image: bool,
+    #[serde(default)]
+    file_path: String,
+    #[serde(default)]
+    pdf_page: u32,
+    #[serde(default)]
+    icon_path: String,
+    #[serde(default)]
+    caption: String,
+    #[serde(default)]
+    caption_size: u32,
+    #[serde(default)]
+    font: String,
+    #[serde(default)]
+    font_size: u32,
+    #[serde(default)]
+    favorite: bool,
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default)]
+    notes: String,
+    #[serde(default)]
+    variants: Vec<String>,
+    #[serde(default)]
+    rotate_mode: String,
+}
+
+fn to_json(prompts: &[Prompt]) -> String {
+    let items: Vec<ExportPrompt> = prompts
+        .iter()
+        .map(|p| ExportPrompt {
+            name: p.name.clone(),
+            text: p.text.clone(),
+            color: p.color.clone(),
+            image: p.image.clone(),
+            show_image: p.show_image,
+            copy_image: p.copy_image,
+            file_path: p.file_path.clone(),
+            pdf_page: p.pdf_page,
+            icon_path: p.icon_path.clone(),
+            caption: p.caption.clone(),
+            caption_size: p.caption_size,
+            font: p.font.clone(),
+            font_size: p.font_size,
+            favorite: p.favorite,
+            tags: p.tags.clone(),
+            notes: p.notes.clone(),
+            variants: p.variants.clone(),
+            rotate_mode: p.rotate_mode.clone(),
+        })
+        .collect();
+    // Every field here is a String/bool/u32/Vec<String> -- serialization
+    // cannot fail, so a default on the (unreachable) error path is safe.
+    serde_json::to_string_pretty(&items).unwrap_or_default()
+}
+
+fn parse_json_data(content: &str) -> Result<ImportData, String> {
+    let items: Vec<ExportPrompt> = serde_json::from_str(content)
+        .map_err(|_| "the file is not valid JSON".to_string())?;
+    let mut data = ImportData::default();
+    for item in items {
+        // Mirrors parse_csv_data's `row[0].trim().is_empty()` skip -- an
+        // entry with neither a name nor any text is not a real prompt.
+        if item.name.trim().is_empty() && item.text.trim().is_empty() {
+            continue;
+        }
+        data.prompts.push(ImportedPrompt {
+            name: item.name,
+            text: item.text,
+            color: item.color,
+            font: item.font,
+            font_size: item.font_size,
+            file_path: item.file_path,
+            pdf_page: item.pdf_page,
+            icon_path: item.icon_path,
+            caption: item.caption,
+            caption_size: item.caption_size,
+            show_image: item.show_image,
+            copy_image: item.copy_image,
+            image: item.image,
+            tags: item.tags,
+            notes: item.notes,
+            variants: item.variants,
+            rotate_mode: item.rotate_mode,
+            favorite: item.favorite,
+        });
+    }
+    Ok(data)
+}
+
 // Async: building the export (base64 images) + writing it stays off the UI thread.
 #[tauri::command]
 async fn export_prompts(app: AppHandle, state: State<'_, Db>, format: String, ids: Option<Vec<String>>) -> Result<usize, String> {
@@ -19096,6 +19487,7 @@ async fn export_prompts(app: AppHandle, state: State<'_, Db>, format: String, id
         let content = match format.as_str() {
             "csv" => to_csv(&selected),
             "txt" => to_txt(&selected),
+            "json" => to_json(&selected),
             _ => return Err("unsupported-export-format".to_string()),
         };
         (content, selected.len())
@@ -19179,6 +19571,9 @@ struct ImportedPrompt {
     notes: String,
     variants: Vec<String>,
     rotate_mode: String,
+    // Only ever true coming from a JSON file (the one format that also
+    // exports this) -- CSV/TXT parsers always set this false.
+    favorite: bool,
 }
 
 // "a,b , c" -> ["a", "b", "c"]. Used by both import parsers; empty parts drop out.
@@ -19340,6 +19735,7 @@ fn parse_txt(content: &str) -> ImportData {
             notes,
             variants,
             rotate_mode,
+            favorite: false,
         });
     }
     data
@@ -19397,6 +19793,7 @@ fn parse_csv_data(content: &str) -> ImportData {
                 notes: row.get(14).cloned().unwrap_or_default(),
                 variants,
                 rotate_mode: row.get(16).map(|v| v.trim().to_string()).unwrap_or_default(),
+                favorite: false,
             });
     }
     data
@@ -19414,11 +19811,12 @@ fn import_sig(name: &str, text: &str, file: &str, image: &str, copy: bool) -> St
 // second read of the file).
 fn parse_import_bytes(bytes: &[u8], path: &std::path::Path) -> Result<ImportData, String> {
     let content = String::from_utf8(bytes.to_vec()).map_err(|_| "the file is not valid UTF-8 text".to_string())?;
-    let is_csv = path
-        .extension()
-        .map(|e| e.to_string_lossy().to_lowercase() == "csv")
-        .unwrap_or(false);
-    let data = if is_csv { parse_csv_data(&content) } else { parse_txt(&content) };
+    let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let data = match ext.as_str() {
+        "csv" => parse_csv_data(&content),
+        "json" => parse_json_data(&content)?,
+        _ => parse_txt(&content),
+    };
     if data.prompts.is_empty() {
         return Err(format!("no {} found", brand::ITEM_PLURAL));
     }
@@ -19450,7 +19848,7 @@ struct ImportPreview {
 #[tauri::command]
 async fn preview_import(app: AppHandle, state: State<'_, Db>) -> Result<ImportPreview, String> {
     let file = file_dialog(&app)
-        .add_filter(title_case(brand::ITEM_PLURAL), &["csv", "txt"])
+        .add_filter(title_case(brand::ITEM_PLURAL), &["csv", "txt", "json"])
         .pick_file();
     let Some(path) = file else {
         return Err("canceled".to_string());
@@ -19532,7 +19930,8 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String, hash
             caption_size: clamp_caption_size(item.caption_size),
             font: item.font,
             font_size: clamp_font_size(item.font_size),
-            favorite: false,
+            // Only ever true for a JSON import -- CSV/TXT never carry it.
+            favorite: item.favorite,
             tags,
             // A note from a foreign file must not abort the import either.
             notes: sanitize_notes(&item.notes).unwrap_or_default(),
@@ -20578,6 +20977,11 @@ pub fn run() {
                 }
             }
 
+            // Same "Db not managed yet" situation as the recording sweep
+            // above -- read the TTL straight off `store` for this one startup
+            // pass; the periodic job below re-reads it live via app state.
+            sweep_clip_export_temp(clip_export_ttl_from(&store.settings));
+
             let saved_geom = store.settings.window;
             let autostart = store.settings.autostart;
             let start_min = store.settings.start_minimized;
@@ -20963,6 +21367,20 @@ pub fn run() {
                 sweep_stale_temp_files,
             );
 
+            // The clip-export sweep needs its own finer-grained cadence since
+            // videoClipTtlMin can be as low as 5 minutes -- re-reads the live
+            // setting every round rather than a value captured once at
+            // registration time.
+            {
+                let h = handle.clone();
+                scheduler::register_periodic(
+                    "clip-export-sweep",
+                    Duration::from_secs(CLIP_EXPORT_SWEEP_SECS),
+                    Duration::from_secs(CLIP_EXPORT_SWEEP_SECS),
+                    move || sweep_clip_export_temp(clip_export_ttl(&h)),
+                );
+            }
+
             // OCR language-pack "updatable" watcher -- delayed, silent when
             // there is nothing to do, never runs at window build.
             #[cfg(windows)]
@@ -21184,14 +21602,22 @@ pub fn run() {
             export_video,
             cancel_export,
             save_recording_as,
+            pick_export_dest,
             save_recording_now,
             copy_recording_to_clipboard,
+            clip_export_path,
+            copy_file_to_clipboard,
             default_recording_dir,
+            video_folder_stats,
+            video_folder_cleanup_preview,
+            video_folder_cleanup,
             discard_recording_file,
             take_recording_sweep_notice,
             sweep_recordings_now,
             show_rec_bar,
             hide_rec_bar,
+            rec_bar_mark_moved,
+            set_audio_muted,
             recording_status,
             list_mic_devices
         ])
@@ -22632,6 +23058,173 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    // ---- overlay export, one real-ffmpeg test per overlay kind ----
+    //
+    // ui/video.js's buildVideoChain() is the only place that turns an overlay
+    // op into a -filter_complex fragment; this backend never inspects it (see
+    // the ExportRequest doc comment above). These five tests hardcode the
+    // exact fragment shape buildVideoChain() emits for each overlay kind
+    // (verified by hand against a real ffmpeg run when 333 was investigated)
+    // and prove on the actual encoded output that the overlay was really
+    // burned into the pixels, not just that ffmpeg exited 0 -- a filter typo
+    // that still parses (e.g. a wrong label) would pass a "did it error"
+    // check but produce an unmodified frame.
+
+    fn sample_pixel_rgb24(ffmpeg: &Path, path: &Path, x: u32, y: u32) -> [u8; 3] {
+        use std::os::windows::process::CommandExt;
+        // A 1x1 crop is rejected by this ffmpeg build for a yuv420p source
+        // (chroma subsampling needs even dimensions) -- 2x2 is the smallest
+        // window that reliably decodes, so every caller reads its top-left texel.
+        let out = std::process::Command::new(ffmpeg)
+            .args(["-y", "-hide_banner", "-loglevel", "error", "-i"])
+            .arg(path)
+            .arg("-vf")
+            .arg(format!("crop=2:2:{x}:{y}"))
+            .args(["-f", "rawvideo", "-pix_fmt", "rgb24", "-frames:v", "1", "-"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .expect("could not run ffmpeg to sample a pixel");
+        assert!(out.status.success(), "pixel sample failed: {}", String::from_utf8_lossy(&out.stderr));
+        [out.stdout[0], out.stdout[1], out.stdout[2]]
+    }
+
+    fn run_overlay_export(ffmpeg: &Path, src: &Path, dest: &Path, filter_chain: String) {
+        let req = ExportRequest {
+            src_path: src.to_string_lossy().to_string(),
+            dest_path: dest.to_string_lossy().to_string(),
+            filter_chain: Some(filter_chain),
+            audio_map: None,
+            lossless_copy: false,
+            lossless_quality: false,
+            format: "mp4".to_string(),
+            video_kbps: Some(1000),
+            trim_start_ms: None,
+            trim_end_ms: None,
+        };
+        let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        export_video_blocking(ffmpeg, src, dest, &req, my_gen, |_| {}).expect("overlay export should succeed");
+    }
+
+    #[test]
+    fn export_video_real_ffmpeg_frame_overlay_draws_a_visible_border() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-ovtest-frame-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x48");
+        let dest = dir.join("out.mp4");
+        // Mirrors buildVideoChain()'s "frame" branch: a solid drawbox, enabled
+        // for the whole (untrimmed) clip.
+        run_overlay_export(&ffmpeg, &src, &dest,
+            "[0:v]fps=15,trim=start=0.000:end=1.000,setpts=PTS-STARTPTS[v0];\
+             [v0]drawbox=x=0:y=0:w=64:h=48:color=0xffffff@1.00:t=4:enable='between(t,0.000,1.000)'[v1];\
+             [v1]null[vout]".to_string());
+        assert_eq!(sample_pixel_rgb24(&ffmpeg, &dest, 0, 0), [255, 255, 255], "the drawbox border must be pure white");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_video_real_ffmpeg_image_overlay_composites_the_picture() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-ovtest-image-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x48");
+        let badge = dir.join("badge.png");
+        use std::os::windows::process::CommandExt;
+        let status = std::process::Command::new(&ffmpeg)
+            .args(["-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=red:s=10x10", "-frames:v", "1"])
+            .arg(&badge)
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()
+            .expect("could not build the badge fixture");
+        assert!(status.success());
+        let dest = dir.join("out.mp4");
+        // Mirrors buildVideoChain()'s "image" branch: movie() pulls the file in
+        // as its own source, scaled/alpha-mixed, then overlaid at a fixed spot.
+        let badge_ff = badge.to_string_lossy().replace('\\', "/").replace(':', "\\:");
+        run_overlay_export(&ffmpeg, &src, &dest, format!(
+            "[0:v]fps=15,trim=start=0.000:end=1.000,setpts=PTS-STARTPTS[v0];\
+             movie='{badge_ff}'[img0];[img0]scale=10:10,format=rgba,colorchannelmixer=aa=1.00[img1];\
+             [v0][img1]overlay=5:5:enable='between(t,0.000,1.000)'[v1];[v1]null[vout]"
+        ));
+        assert_eq!(sample_pixel_rgb24(&ffmpeg, &dest, 6, 6), [252, 0, 0], "the overlaid badge must show its red pixels");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_video_real_ffmpeg_text_overlay_draws_its_plate_box() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let fonts_dir = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string()) + "/Fonts";
+        let font = PathBuf::from(&fonts_dir).join("segoeui.ttf");
+        if !font.is_file() { return; } // a stripped CI image without the standard fonts skips this
+        let dir = std::env::temp_dir().join(format!("ps-ovtest-text-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x48");
+        let dest = dir.join("out.mp4");
+        let font_ff = font.to_string_lossy().replace('\\', "/").replace(':', "\\:");
+        // Mirrors buildVideoChain()'s "text" branch, including its default
+        // semi-transparent plate box behind the caption.
+        run_overlay_export(&ffmpeg, &src, &dest, format!(
+            "[0:v]fps=15,trim=start=0.000:end=1.000,setpts=PTS-STARTPTS[v0];\
+             [v0]drawtext=fontfile='{font_ff}':x=5:y=4:fontsize=12:fontcolor=0xffffff@1.00:expansion=none\
+             :box=1:boxcolor=black@0.5:boxborderw=3:enable='between(t,0.000,1.000)':text='Test'[v1];[v1]null[vout]"
+        ));
+        // (8,2) is a non-black texel of the test pattern under the plate box --
+        // a corner-of-frame black pixel would stay black under a black@0.5
+        // plate and hide a completely missing overlay.
+        let before = sample_pixel_rgb24(&ffmpeg, &src, 8, 2);
+        let after = sample_pixel_rgb24(&ffmpeg, &dest, 8, 2);
+        assert_ne!(before, after, "the drawtext plate box must darken the frame under the caption");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_video_real_ffmpeg_pixelate_overlay_flattens_the_blocked_region() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-ovtest-pixelate-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x48");
+        let dest = dir.join("out.mp4");
+        // Mirrors buildVideoChain()'s "pixelate" branch: split, crop the region,
+        // shrink+re-enlarge with nearest-neighbour, overlay back over the original.
+        run_overlay_export(&ffmpeg, &src, &dest,
+            "[0:v]fps=15,trim=start=0.000:end=1.000,setpts=PTS-STARTPTS[v0];\
+             [v0]split[va][vb];[vb]crop=16:16:24:16,scale=4:4,scale=16:16:flags=neighbor[vsmall];\
+             [va][vsmall]overlay=24:16:enable='between(t,0.000,1.000)'[v1];[v1]null[vout]".to_string());
+        let a = sample_pixel_rgb24(&ffmpeg, &dest, 24, 16);
+        let b = sample_pixel_rgb24(&ffmpeg, &dest, 26, 16);
+        assert_eq!(a, b, "two texels inside the same 4px pixelation block must come out identical");
+        let original = sample_pixel_rgb24(&ffmpeg, &src, 24, 16);
+        assert_ne!(a, original, "the pixelated block must actually differ from the untouched source");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_video_real_ffmpeg_spotlight_overlay_dims_outside_the_clear_rect() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-ovtest-spotlight-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x48");
+        let dest = dir.join("out.mp4");
+        // Mirrors buildVideoChain()'s "spotlight" branch: split, darken the
+        // whole frame, then overlay a clear crop of the original back over the
+        // clear rect -- everything else stays dimmed.
+        run_overlay_export(&ffmpeg, &src, &dest,
+            "[0:v]fps=15,trim=start=0.000:end=1.000,setpts=PTS-STARTPTS[v0];\
+             [v0]split[va][vb];[vb]crop=20:20:22:14[vclear];\
+             [va]drawbox=x=0:y=0:w=iw:h=ih:color=black@0.60:t=fill:enable='between(t,0.000,1.000)'[vdark];\
+             [vdark][vclear]overlay=22:14:enable='between(t,0.000,1.000)'[v1];[v1]null[vout]".to_string());
+        // Outside the clear rect (50,24 is a non-black test-pattern texel, well
+        // clear of the 22..42 x 14..34 clear rect) must be dimmed toward black;
+        // inside the clear rect must match the untouched source.
+        let dimmed = sample_pixel_rgb24(&ffmpeg, &dest, 50, 24);
+        let original_corner = sample_pixel_rgb24(&ffmpeg, &src, 50, 24);
+        assert_ne!(dimmed, original_corner, "outside the spotlight must be darkened");
+        let clear = sample_pixel_rgb24(&ffmpeg, &dest, 30, 22);
+        let original_clear = sample_pixel_rgb24(&ffmpeg, &src, 30, 22);
+        assert_eq!(clear, original_clear, "inside the spotlight's clear rect the picture must be untouched");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     // Proves the "Lossless" quality tier actually stays lossless (a real
     // -crf 0 re-encode) rather than silently falling back to an ordinary
     // bitrate cap -- the same request with only lossless_quality flipped and
@@ -22962,7 +23555,7 @@ mod tests {
         let audio = recording::AudioConfig {
             system: true, mic: false, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
         let (path, _dropped, _encode_error, _mic_wav) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -22986,7 +23579,7 @@ mod tests {
         let audio = recording::AudioConfig {
             system: false, mic: true, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
         let (path, _dropped, _encode_error, _mic_wav) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -23007,7 +23600,7 @@ mod tests {
         let audio = recording::AudioConfig {
             system: true, mic: true, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
         let (path, _dropped, _encode_error, _mic_wav) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -23032,7 +23625,7 @@ mod tests {
             system: true, mic: false, mic_device_id: String::new(), kbps: 192,
         };
         let wall_start = std::time::Instant::now();
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(600));
         let (path, _dropped, _encode_error, _mic_wav) = recording::stop(session).expect("stop");
         let wall_elapsed = wall_start.elapsed().as_secs_f64();
@@ -23072,7 +23665,7 @@ mod tests {
         let audio = recording::AudioConfig {
             system: false, mic: false, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(2));
         let (path, _dropped, _encode_error, _mic_wav) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -23133,6 +23726,43 @@ mod tests {
         let (out, stride) = letterbox_frame_top_down(&raw, 2, 2, 8, 1, 1);
         assert_eq!(stride, 4);
         assert_eq!(out, vec![0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn scale_to_fit_frame_top_down_downsamples_uniformly() {
+        // 4x4 live frame shrunk to fit a 2x2 canvas (scale 0.5): nearest-
+        // neighbour picks source (0,0), (2,0), (0,2), (2,2).
+        let px = |n: u8| [n, n, n, 255u8];
+        let mut raw = Vec::new();
+        for row in 0..4u8 {
+            for col in 0..4u8 {
+                raw.extend_from_slice(&px(row * 4 + col));
+            }
+        }
+        let (out, stride) = scale_to_fit_frame_top_down(&raw, 4, 4, 16, 2, 2);
+        assert_eq!(stride, 8);
+        assert_eq!(out, vec![0, 0, 0, 255, 2, 2, 2, 255, 8, 8, 8, 255, 10, 10, 10, 255]);
+    }
+
+    #[test]
+    fn scale_to_fit_frame_top_down_letterboxes_a_mismatched_aspect_ratio() {
+        // 2x2 live frame grown into a 4x2 canvas: scale stays 1 (the taller
+        // side already fits), so the whole picture survives centred with a
+        // black column on either side instead of a crop losing the corners.
+        let px = |n: u8| [n, n, n, 255u8];
+        let mut raw = Vec::new();
+        for n in 1..5u8 {
+            raw.extend_from_slice(&px(n));
+        }
+        let (out, stride) = scale_to_fit_frame_top_down(&raw, 2, 2, 8, 4, 2);
+        assert_eq!(stride, 16);
+        assert_eq!(
+            out,
+            vec![
+                0, 0, 0, 0, 1, 1, 1, 255, 2, 2, 2, 255, 0, 0, 0, 0,
+                0, 0, 0, 0, 3, 3, 3, 255, 4, 4, 4, 255, 0, 0, 0, 0,
+            ]
+        );
     }
 
     #[test]
@@ -24861,6 +25491,113 @@ mod tests {
         let _ = fs::remove_file(&pdfium_cache);
         let _ = fs::remove_file(&unrelated_ext);
         let _ = fs::remove_file(&unrelated_file);
+    }
+
+    // The clip-export sweep has its own configurable age, separate from
+    // STALE_TEMP_FILE_AGE -- must only touch its own prefix, and must respect
+    // whatever age it is called with rather than the fixed constant above.
+    #[test]
+    fn sweep_clip_export_temp_respects_its_own_configurable_age() {
+        let dir = std::env::temp_dir().join(brand::TEMP_DIR);
+        fs::create_dir_all(&dir).unwrap();
+        let pid = std::process::id();
+        let stale = dir.join(format!("{}-clipexport-{}-stale.mp4", brand::TEMP_PREFIX, pid));
+        let fresh = dir.join(format!("{}-clipexport-{}-fresh.mp4", brand::TEMP_PREFIX, pid));
+        let unrelated = dir.join(format!("{}-ocr-{}-unrelated.png", brand::TEMP_PREFIX, pid));
+        fs::write(&stale, b"mp4").unwrap();
+        fs::write(&fresh, b"mp4").unwrap();
+        fs::write(&unrelated, b"png").unwrap();
+        let age = Duration::from_secs(120);
+        backdate(&stale, age + Duration::from_secs(5));
+        backdate(&fresh, Duration::from_secs(5));
+        backdate(&unrelated, age + Duration::from_secs(5));
+
+        sweep_clip_export_temp(age);
+
+        assert!(!stale.exists(), "a clip-export file older than the given age must be swept");
+        assert!(fresh.exists(), "a clip-export file younger than the given age must survive");
+        assert!(unrelated.exists(), "a differently-prefixed file must never be touched by this sweep");
+        let _ = fs::remove_file(&fresh);
+        let _ = fs::remove_file(&unrelated);
+    }
+
+    #[test]
+    fn clip_export_path_impl_lands_in_temp_dir_with_a_safe_extension() {
+        let path = clip_export_path_impl("mp4").unwrap();
+        let dir = std::env::temp_dir().join(brand::TEMP_DIR);
+        assert!(
+            std::path::Path::new(&path).starts_with(&dir),
+            "must be created inside the app's own temp subfolder"
+        );
+        assert!(path.ends_with(".mp4"));
+        assert!(path.contains("clipexport"));
+        // A hostile/garbage extension (path separators, empty) must never leak
+        // into the filename -- falls back to mp4 instead.
+        let fallback = clip_export_path_impl("../evil").unwrap();
+        assert!(fallback.ends_with(".mp4"), "an unsafe extension must fall back to mp4");
+        let empty = clip_export_path_impl("").unwrap();
+        assert!(empty.ends_with(".mp4"), "an empty extension must fall back to mp4");
+    }
+
+    #[test]
+    fn clip_export_ttl_from_defaults_to_one_hour_and_honours_the_setting() {
+        let mut settings = Settings::default();
+        assert_eq!(clip_export_ttl_from(&settings), Duration::from_secs(3600));
+        settings.ui_values.insert("videoClipTtlMin".to_string(), 5.0);
+        assert_eq!(clip_export_ttl_from(&settings), Duration::from_secs(300));
+        // Never zero/negative -- a sweep with a zero age would delete a file
+        // the instant it is written, mid-export.
+        settings.ui_values.insert("videoClipTtlMin".to_string(), 0.0);
+        assert_eq!(clip_export_ttl_from(&settings), Duration::from_secs(60));
+    }
+
+    #[test]
+    fn video_folder_stats_counts_only_known_video_extensions() {
+        let dir = std::env::temp_dir().join(format!("ps-video-folder-stats-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("a.mp4"), b"1234").unwrap();
+        fs::write(dir.join("b.webm"), b"12").unwrap();
+        fs::write(dir.join("c.gif"), b"123").unwrap();
+        fs::write(dir.join("notes.txt"), b"ignored, wrong extension").unwrap();
+        fs::create_dir_all(dir.join("MP4")).unwrap(); // a directory named like an extension is not a file
+        let (count, bytes) = video_folder_stats(dir.to_string_lossy().to_string());
+        assert_eq!(count, 3, "only the three video files must be counted, not the txt or the subfolder");
+        assert_eq!(bytes, 4 + 2 + 3);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn video_folder_stats_on_a_missing_folder_is_empty_not_an_error() {
+        let dir = std::env::temp_dir().join(format!("ps-video-folder-missing-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir); // guarantee it really does not exist
+        assert_eq!(video_folder_stats(dir.to_string_lossy().to_string()), (0, 0));
+    }
+
+    #[test]
+    fn video_folder_cleanup_preview_and_cleanup_agree_and_only_touch_stale_video_files() {
+        let dir = std::env::temp_dir().join(format!("ps-video-folder-cleanup-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let stale = dir.join("old-recording.mp4");
+        let fresh = dir.join("new-recording.mp4");
+        let unrelated = dir.join("readme.txt");
+        fs::write(&stale, b"old").unwrap();
+        fs::write(&fresh, b"new").unwrap();
+        fs::write(&unrelated, b"not a video").unwrap();
+        backdate(&stale, Duration::from_secs(40 * 24 * 3600));
+        backdate(&unrelated, Duration::from_secs(40 * 24 * 3600));
+
+        let dir_s = dir.to_string_lossy().to_string();
+        let preview = video_folder_cleanup_preview(dir_s.clone(), 30);
+        assert_eq!(preview.len(), 1, "only the stale video file is older than 30 days");
+        assert_eq!(preview[0].name, "old-recording.mp4");
+        assert_eq!(preview[0].size, 3);
+
+        let deleted = video_folder_cleanup(dir_s, 30);
+        assert_eq!(deleted, 1, "cleanup must delete exactly what the preview listed");
+        assert!(!stale.exists(), "the stale video must be gone");
+        assert!(fresh.exists(), "a fresh video must survive");
+        assert!(unrelated.exists(), "a non-video file must never be deleted, however old");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     // Reusing a zoomed-in filmstrip's cache for a zoomed-out request served
@@ -27440,6 +28177,70 @@ mod tests {
         assert_eq!(parse_txt(&to_txt(&prompts)).prompts[0].text, BODY);
         assert_eq!(parse_csv(&to_csv(&prompts))[1][1], BODY);
         assert_eq!(parse_csv_data(&to_csv(&prompts)).prompts[0].text, BODY);
+    }
+
+    #[test]
+    fn json_roundtrip_keeps_every_field_including_favorite() {
+        let mut prompts = sample_prompts();
+        prompts[0].favorite = true; // the one field CSV/TXT cannot carry
+        let out = to_json(&prompts);
+        let data = parse_json_data(&out).expect("valid JSON");
+        assert_eq!(data.prompts.len(), 2);
+        let p1 = &data.prompts[0];
+        assert_eq!(p1.name, "Mail");
+        assert_eq!(p1.text, "Hello\nWorld");
+        assert_eq!(p1.color, "#ef4444");
+        assert_eq!(p1.font, "mono");
+        assert_eq!(p1.font_size, 24);
+        assert_eq!(p1.image, "data:image/png;base64,QUJD");
+        assert!(p1.show_image && p1.copy_image);
+        assert_eq!(p1.tags, vec!["Work".to_string(), "E-Mail".to_string()]);
+        assert_eq!(p1.notes, "Ask Anna first.\nDeadline: Friday");
+        assert!(p1.favorite, "JSON export must keep favorite, unlike CSV/TXT");
+        let p2 = &data.prompts[1];
+        assert_eq!(p2.file_path, "C:\\tmp\\report.pdf");
+        assert_eq!(p2.pdf_page, 3);
+        assert_eq!(p2.icon_path, "C:\\tmp\\clip.mp4");
+        assert_eq!(p2.caption, "Mein Untertitel");
+        assert_eq!(p2.caption_size, 18);
+        assert!(!p2.favorite);
+    }
+
+    #[test]
+    fn json_roundtrip_keeps_rotating_entries_as_a_real_array() {
+        let mut prompts = sample_prompts();
+        prompts[0].variants = vec!["Second entry".to_string(), "Third, entry\nwith a newline".to_string()];
+        prompts[0].rotate_mode = "random".to_string();
+        let data = parse_json_data(&to_json(&prompts)).expect("valid JSON");
+        let p = &data.prompts[0];
+        assert_eq!(p.text, prompts[0].text, "text must not carry a variant-join marker in JSON");
+        assert_eq!(p.variants, prompts[0].variants);
+        assert_eq!(p.rotate_mode, "random");
+    }
+
+    #[test]
+    fn json_export_never_carries_machine_local_or_session_state() {
+        let out = to_json(&sample_prompts());
+        assert!(!out.contains("hotkey"), "hotkey bindings are machine-local, never exported");
+        assert!(!out.contains("rotate_auto"), "rotate_auto is live per-session state, never exported");
+        assert!(!out.contains("trashed_at"));
+        assert!(!out.contains("\"id\""));
+    }
+
+    #[test]
+    fn parse_json_data_rejects_invalid_json_with_a_friendly_error() {
+        match parse_json_data("not json") {
+            Err(msg) => assert_eq!(msg, "the file is not valid JSON"),
+            Ok(_) => panic!("\"not json\" must not parse as valid JSON"),
+        }
+    }
+
+    #[test]
+    fn parse_json_data_skips_entries_with_neither_name_nor_text() {
+        let data = parse_json_data(r#"[{"name":"","text":""},{"name":"Ok","text":"x"}]"#)
+            .expect("valid JSON");
+        assert_eq!(data.prompts.len(), 1);
+        assert_eq!(data.prompts[0].name, "Ok");
     }
 
     #[test]

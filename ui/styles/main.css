@@ -869,10 +869,11 @@ body.grid-selecting .tile-type { opacity: 0; }
    with this tile as entry 1 — same corner, same box, one gap over. Its own
    slot (left: 28px) never overlaps the type badge / checkbox / chain-order
    badge sharing the left: 6px corner above, at any tile size.
-   282 (Ben, 04.09.): hover-only meant it was invisible on a tile the pointer
-   was not on, which is what was reported — chainStartAlwaysVisible (ships ON)
-   keeps it dimly visible always, full opacity on hover/keyboard focus; off
-   restores the plain hover-only look. */
+   282 (Ben, 04.09.) made it always dimly visible; 326 (Ben, 05.09.) reversed
+   that back to hover/keyboard-focus only by default. chainStartAlwaysVisible
+   now ships OFF and keeps the old look as an opt-in expert setting. Its dim
+   state was also too pale to notice, hence the bumped base opacity here
+   (0.45 to 0.65) alongside the thicker glyph stroke drawn in main.js. */
 .tile-chain-start {
   position: absolute;
   top: 6px;
@@ -887,11 +888,11 @@ body.grid-selecting .tile-type { opacity: 0; }
   border-radius: 5px;
   background: var(--surface);
   color: var(--fg);
-  opacity: 0.45;
+  opacity: 0;
   cursor: pointer;
   transition: opacity var(--transition);
 }
-body.noflag-chainStartAlwaysVisible .tile-chain-start { opacity: 0; }
+body.flag-chainStartAlwaysVisible .tile-chain-start { opacity: 0.65; }
 .tile:hover .tile-chain-start,
 .tile-chain-start:focus-visible { opacity: 1; }
 /* Any chain already running takes over the corner with its order badge --
@@ -2605,6 +2606,11 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   transition: border-color var(--transition);
 }
 .modal-input:focus { border-color: var(--accent); }
+/* The padding shorthand above resets padding-right to 12px, which reclaims the
+   room the global `select` rule reserves for its chevron -- so a <select
+   class="modal-input"> drew its arrow on top of the text. Restore it here,
+   at higher specificity than either single-class/type rule so it always wins. */
+select.modal-input { padding-right: 30px; }
 /* Type metrics matched to .md-preview: the two are one field that swaps. */
 .modal-text { resize: vertical; min-height: 110px; max-height: 280px; font-size: 13px; line-height: 1.5; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
@@ -2830,7 +2836,9 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .stat-card { padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); text-align: center; }
 .stat-val { font-size: 24px; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; }
 .stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
-.stat-section { font-size: 13px; font-weight: 700; color: var(--fg); border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+/* margin-bottom, not just the heading's own padding-bottom, so the first row of
+   every section sits off the underline by the same amount instead of touching it. */
+.stat-section { font-size: 13px; font-weight: 700; color: var(--fg); border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 8px; }
 .stat-bars { display: flex; flex-direction: column; gap: 6px; }
 .stat-bar-row { display: flex; align-items: center; gap: 8px; }
 .stat-bar-name { flex: 0 0 34%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
@@ -3296,6 +3304,11 @@ select,
    the top edge of the taller Change button instead of sitting level with it. */
 .path-btns { display: flex; gap: 8px; margin-top: 4px; align-items: center; }
 .path-btns .ghost-btn { flex: 1; }
+/* recordingDir's folder-size readout + its "Clean up..." button, right under
+   the Change/Reset row above -- the only path row that shows this. */
+.path-video-stats { display: flex; gap: 8px; margin-top: 6px; align-items: center; justify-content: space-between; }
+.path-video-stats span { font-size: 12px; color: var(--muted); }
+.path-video-stats button { flex: 0 0 auto; }
 .expert-num { width: 90px; margin-top: 6px; }
 
 /* Header icons hidden when their feature flag is off */
@@ -3866,7 +3879,13 @@ body.drag-over::after {
   cursor: pointer;
 }
 .ctx button:hover { background: var(--surface-2); }
-.ctx button[data-act="rotateAutoMenu"] { display: flex; align-items: center; gap: 8px; }
+/* Unchecked, this row has no leading icon and reads flush with every other
+   entry; the checkmark's 16px slot (and the gap in front of it) only opens up
+   once it is actually set, instead of being reserved all the time. */
+.ctx button[data-act="rotateAutoMenu"] { display: flex; align-items: center; gap: 0; }
+.ctx button[data-act="rotateAutoMenu"] .tb-check { flex: 0 0 0; width: 0; }
+.ctx button[data-act="rotateAutoMenu"].checked { gap: 8px; }
+.ctx button[data-act="rotateAutoMenu"].checked .tb-check { flex: 0 0 16px; width: 16px; }
 .ctx button.danger:hover { color: var(--danger); }
 .ctx button.confirm,
 .ctx button.confirm:hover { background: var(--danger); color: #fff; }
