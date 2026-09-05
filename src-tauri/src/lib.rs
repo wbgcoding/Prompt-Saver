@@ -5906,7 +5906,7 @@ async fn dismiss_example_prompts(app: AppHandle, state: State<'_, Db>) -> Result
     if ids_to_delete.is_empty() {
         return Ok(());
     }
-    batch_prompts(app, state, ids_to_delete, "delete".to_string(), None, None, None, None)
+    batch_prompts(app, state, ids_to_delete, "delete".to_string(), None, None, None, None, None)
         .await
         .map(|_| ())
 }
@@ -6268,7 +6268,7 @@ async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Resu
 // Batch operations: apply one action to many prompts in a SINGLE store pass
 // (no per-item save loop, so 100+ selected prompts never stall the UI). Returns the
 // fresh state so the caller re-renders once. Actions: delete / favorite / color /
-// addView / removeView.
+// addView / removeView / tag-add / tag-remove.
 // One flag per independent batch action the library toolbar can trigger; splitting
 // this into several commands would just move the argument count into call-site count.
 #[allow(clippy::too_many_arguments)]
@@ -6282,6 +6282,7 @@ async fn batch_prompts(
     favorite: Option<bool>,
     view_id: Option<String>,
     from_view_id: Option<String>,
+    tag: Option<String>,
 ) -> Result<Settings, String> {
     if action == "delete" {
         // Tauri window calls must stay OUTSIDE the store mutex (deadlock trap).
@@ -6465,6 +6466,42 @@ async fn batch_prompts(
                     store.settings.views[from_idx].members.retain(|m| !ids.contains(m));
                 }
                 save_settings(&app, &store.settings);
+            }
+        }
+        // Adding a tag a prompt already carries, or removing one it never had, is
+        // not an error -- both just leave that prompt untouched. Casing follows
+        // whatever the library already uses for this tag (canonical_tags), same
+        // rule the single-prompt editor applies.
+        "tag-add" | "tag-remove" => {
+            let name = valid_tag_name(&tag.unwrap_or_default())?;
+            let known = canonical_tags(&store.prompts);
+            let previous: Vec<(String, Vec<String>)> = store
+                .prompts
+                .iter()
+                .filter(|p| idset.contains(p.id.as_str()))
+                .map(|p| (p.id.clone(), p.tags.clone()))
+                .collect();
+            let result = if action == "tag-add" {
+                add_tag_to_ids(&mut store.prompts, &idset, &name, &known)
+            } else {
+                remove_tag_from_ids(&mut store.prompts, &idset, &tag_key(&name));
+                Ok(())
+            };
+            if let Err(e) = result {
+                for (id, tags) in previous {
+                    if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
+                        p.tags = tags;
+                    }
+                }
+                return Err(e);
+            }
+            if !save_prompts(&app, &store) {
+                for (id, tags) in previous {
+                    if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
+                        p.tags = tags;
+                    }
+                }
+                return Err("save-failed".into());
             }
         }
         _ => return Err("bad-action".into()),
@@ -7161,6 +7198,38 @@ fn remove_tag_from(prompts: &mut [Prompt], key: &str) -> bool {
         changed |= p.tags.len() != before;
     }
     changed
+}
+
+// Batch "add tag": only touches the listed ids, and only those that don't already
+// carry it (case-insensitive) -- already having it is not an error, just a no-op
+// for that one prompt. `known` supplies the casing an existing tag is stored with,
+// same as the single-prompt editor's own sanitize_tags call.
+fn add_tag_to_ids(
+    prompts: &mut [Prompt],
+    ids: &std::collections::HashSet<&str>,
+    name: &str,
+    known: &HashMap<String, String>,
+) -> Result<(), String> {
+    let key = tag_key(name);
+    for p in prompts.iter_mut() {
+        if !ids.contains(p.id.as_str()) || p.tags.iter().any(|t| tag_key(t) == key) {
+            continue;
+        }
+        let mut next = p.tags.clone();
+        next.push(name.to_string());
+        p.tags = sanitize_tags(next, known)?;
+    }
+    Ok(())
+}
+
+// Batch "remove tag": only touches the listed ids. Not carrying the tag is not an
+// error, just a no-op for that one prompt.
+fn remove_tag_from_ids(prompts: &mut [Prompt], ids: &std::collections::HashSet<&str>, key: &str) {
+    for p in prompts.iter_mut() {
+        if ids.contains(p.id.as_str()) {
+            p.tags.retain(|t| tag_key(t) != key);
+        }
+    }
 }
 
 // Replace `old` with `new` in every prompt and move the color entry, in ONE store
@@ -28889,6 +28958,40 @@ mod tests {
         assert_eq!(prompts[0].tags, vec!["E-Mail".to_string()]);
         assert!(prompts[1].tags.is_empty());
         assert!(!remove_tag_from(&mut prompts, "work")); // idempotent
+    }
+
+    // Batch add: a prompt that already carries the tag is left exactly as-is (no
+    // duplicate, no reorder), and a fresh addition takes the casing the library
+    // already uses for that tag -- same rule the single-prompt editor applies.
+    #[test]
+    fn batch_add_tag_skips_prompts_that_already_have_it_and_uses_known_casing() {
+        let mut prompts = sample_prompts(); // p1: ["Work", "E-Mail"], p2: []
+        let known = canonical_tags(&prompts);
+        let ids: std::collections::HashSet<&str> = ["p1", "p2"].into_iter().collect();
+        add_tag_to_ids(&mut prompts, &ids, "work", &known).unwrap();
+        assert_eq!(prompts[0].tags, vec!["Work".to_string(), "E-Mail".to_string()]);
+        assert_eq!(prompts[1].tags, vec!["Work".to_string()]);
+    }
+
+    #[test]
+    fn batch_add_tag_only_touches_the_given_ids() {
+        let mut prompts = sample_prompts();
+        let known = canonical_tags(&prompts);
+        let ids: std::collections::HashSet<&str> = ["p2"].into_iter().collect();
+        add_tag_to_ids(&mut prompts, &ids, "New", &known).unwrap();
+        assert_eq!(prompts[0].tags, vec!["Work".to_string(), "E-Mail".to_string()], "unselected prompt must stay untouched");
+        assert_eq!(prompts[1].tags, vec!["New".to_string()]);
+    }
+
+    // Removing a tag from a prompt that never had it is not an error, just a no-op
+    // for that one prompt -- mirrors the single-prompt "already has it" rule above.
+    #[test]
+    fn batch_remove_tag_ignores_a_prompt_that_never_had_it() {
+        let mut prompts = sample_prompts();
+        let ids: std::collections::HashSet<&str> = ["p1", "p2"].into_iter().collect();
+        remove_tag_from_ids(&mut prompts, &ids, "e-mail");
+        assert_eq!(prompts[0].tags, vec!["Work".to_string()]);
+        assert!(prompts[1].tags.is_empty());
     }
 
     #[test]

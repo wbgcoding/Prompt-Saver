@@ -918,6 +918,34 @@ PROBE = """
           out.errors.push('the library batch export did not pass the selected ids');
         }
       }
+      // 422: batch tag add/remove, still on the same "select all" from above.
+      {
+        const addBtn = document.getElementById('lib-batch-tag-add');
+        const removeBtn = document.getElementById('lib-batch-tag-remove');
+        if (!addBtn || addBtn.classList.contains('hidden') || !removeBtn || removeBtn.classList.contains('hidden')) {
+          out.errors.push('422: the batch tag add/remove buttons are missing or hidden with tags enabled');
+        } else {
+          const selectedIds = [...document.querySelectorAll('.lib-item.lib-selected')].map((el) => el.dataset.id);
+          addBtn.click();
+          await sleep(150);
+          document.getElementById('confirm-input').value = 'Smoke422';
+          document.getElementById('confirm-ok').click();
+          await sleep(150);
+          const rows = [...document.querySelectorAll('.lib-item')].filter((el) => selectedIds.includes(el.dataset.id));
+          if (!rows.length || !rows.every((el) => el.textContent.includes('Smoke422'))) {
+            out.errors.push('422: adding a tag to the selection did not show it on every selected row');
+          }
+          removeBtn.click();
+          await sleep(150);
+          document.getElementById('confirm-input').value = 'Smoke422';
+          document.getElementById('confirm-ok').click();
+          await sleep(150);
+          const rows2 = [...document.querySelectorAll('.lib-item')].filter((el) => selectedIds.includes(el.dataset.id));
+          if (rows2.some((el) => el.textContent.includes('Smoke422'))) {
+            out.errors.push('422: removing the tag left it showing on a row');
+          }
+        }
+      }
       document.getElementById('lib-batch-none').click();
       await click('library-select-btn'); // back out of select mode
     }

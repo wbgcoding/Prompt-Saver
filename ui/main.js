@@ -9269,6 +9269,16 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input,
     field.placeholder = input.placeholder || "";
     eye.innerHTML = EYE_SVG;
     eye.classList.toggle("hidden", field.type !== "password");
+    // Native browser completion from the given list (e.g. existing tag names) --
+    // only wired when the caller actually passes one, so every other prompt keeps
+    // its plain input.
+    const datalist = $("confirm-input-datalist");
+    datalist.innerHTML = "";
+    for (const value of input.datalist || []) {
+      const opt = document.createElement("option");
+      opt.value = value;
+      datalist.appendChild(opt);
+    }
   }
   const cbRow = $("confirm-checkbox-row");
   cbRow.innerHTML = "";
@@ -10964,6 +10974,10 @@ function updateBatchBar() {
   const n = libSelected.size;
   $("lib-batch-count").textContent = t("selectedCount").replace("{n}", n.toLocaleString(LANG));
   const bar = $("lib-batch-bar");
+  // Same feature gate as the rest of the tag UI (filter chips, manager button).
+  const tagsEnabled = tagsOn();
+  $("lib-batch-tag-add").classList.toggle("hidden", !tagsEnabled);
+  $("lib-batch-tag-remove").classList.toggle("hidden", !tagsEnabled);
   bar.querySelectorAll("button, select").forEach((el) => {
     if (["lib-batch-all", "lib-batch-none"].includes(el.id)) return; // always usable
     el.disabled = n === 0;
@@ -11074,9 +11088,12 @@ async function doGridMove(targetViewId) {
   await renderGrid(true);
 }
 
+// Returns whether the batch actually went through, so a caller showing its own
+// "done" toast (delete, tag add/remove) never reports success over a failure
+// batchErrorToast already surfaced.
 async function doBatch(action, extra = {}) {
   const ids = [...libSelected];
-  if (!ids.length) return;
+  if (!ids.length) return false;
   const idset = new Set(ids);
   try {
     // Backend now returns ONLY settings (no prompt echo) — so a batch over
@@ -11086,12 +11103,24 @@ async function doBatch(action, extra = {}) {
       color: extra.color ?? null,
       favorite: extra.favorite ?? null,
       viewId: extra.viewId ?? null,
+      tag: extra.tag ?? null,
     });
-  } catch (e) { batchErrorToast(e); return; }
+  } catch (e) { batchErrorToast(e); return false; }
   // Mirror the change onto the local prompt list ourselves.
   if (action === "delete") prompts = prompts.filter((p) => !idset.has(p.id));
   else if (action === "favorite") { for (const p of prompts) if (idset.has(p.id)) p.favorite = extra.favorite ?? true; }
   else if (action === "color") { for (const p of prompts) if (idset.has(p.id)) p.color = extra.color ?? ""; }
+  else if (action === "tag-add") {
+    const key = tagKey(extra.tag);
+    for (const p of prompts) {
+      if (idset.has(p.id) && !(p.tags || []).some((t) => tagKey(t) === key)) {
+        p.tags = [...(p.tags || []), extra.tag];
+      }
+    }
+  } else if (action === "tag-remove") {
+    const key = tagKey(extra.tag);
+    for (const p of prompts) if (idset.has(p.id)) p.tags = (p.tags || []).filter((t) => tagKey(t) !== key);
+  }
   // The grid sits hidden behind the library modal — rebuilding it (a full fit-text
   // pass) is deferred until the library closes.
   gridDirty = true;
@@ -11106,6 +11135,7 @@ async function doBatch(action, extra = {}) {
     renderLibrary();
   }
   updateBatchBar();
+  return true;
 }
 async function batchExport(format) {
   const ids = [...libSelected];
@@ -14241,13 +14271,44 @@ function bind() {
   $("lib-batch-unfav").addEventListener("click", () => doBatch("favorite", { favorite: false }));
   $("lib-batch-addview").addEventListener("click", () => doBatch("addView", { viewId: $("lib-batch-view").value }));
   $("lib-batch-removeview").addEventListener("click", () => doBatch("removeView", { viewId: $("lib-batch-view").value }));
+  $("lib-batch-tag-add").addEventListener("click", async () => {
+    const n = libSelected.size;
+    if (!n) return;
+    const raw = await confirmDialog({
+      title: t("batchTagAdd"),
+      message: t("batchTagAddMsg").replace("{n}", String(n)),
+      confirmLabel: t("batchTagAdd"),
+      input: { type: "text", placeholder: t("tagsPh"), datalist: allTags() },
+      danger: false,
+    });
+    const tag = (raw || "").trim();
+    if (!tag) return;
+    const key = tagKey(tag);
+    const changed = prompts.filter((p) => libSelected.has(p.id) && !(p.tags || []).some((x) => tagKey(x) === key)).length;
+    if (await doBatch("tag-add", { tag })) toast(t("batchTagAddDone").replace("{n}", String(changed)));
+  });
+  $("lib-batch-tag-remove").addEventListener("click", async () => {
+    const n = libSelected.size;
+    if (!n) return;
+    const raw = await confirmDialog({
+      title: t("batchTagRemove"),
+      message: t("batchTagRemoveMsg").replace("{n}", String(n)),
+      confirmLabel: t("batchTagRemove"),
+      input: { type: "text", placeholder: t("tagsPh"), datalist: allTags() },
+      danger: false,
+    });
+    const tag = (raw || "").trim();
+    if (!tag) return;
+    const key = tagKey(tag);
+    const changed = prompts.filter((p) => libSelected.has(p.id) && (p.tags || []).some((x) => tagKey(x) === key)).length;
+    if (await doBatch("tag-remove", { tag })) toast(t("batchTagRemoveDone").replace("{n}", String(changed)));
+  });
   $("lib-batch-export").addEventListener("click", () => batchExport($("lib-batch-format").value));
   $("lib-batch-delete").addEventListener("click", (e) => {
     const n = libSelected.size;
     if (!n) return;
     armDelete(e.currentTarget, t("batchDeleteConfirm").replace("{n}", String(n)), async () => {
-      await doBatch("delete");
-      toast(t("batchDeleteDone").replace("{n}", String(n)));
+      if (await doBatch("delete")) toast(t("batchDeleteDone").replace("{n}", String(n)));
     });
   });
   // Esc leaves selection mode before it closes the library (capture beats the overlay).

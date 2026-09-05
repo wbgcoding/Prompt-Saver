@@ -573,6 +573,8 @@
         <select id="lib-batch-view" class="batch-view-select" data-i18n-aria="batchView"></select>
         <button id="lib-batch-addview" type="button" class="ghost-btn" data-i18n="batchAddView">Add</button>
         <button id="lib-batch-removeview" type="button" class="ghost-btn" data-i18n="batchRemoveView">Remove</button>
+        <button id="lib-batch-tag-add" type="button" class="ghost-btn" data-i18n="batchTagAdd">Add tag</button>
+        <button id="lib-batch-tag-remove" type="button" class="ghost-btn" data-i18n="batchTagRemove">Remove tag</button>
         <span class="lib-batch-sep" aria-hidden="true"></span>
         <select id="lib-batch-format" class="batch-view-select" data-i18n-aria="exportFormatLabel">
           <option value="csv" data-i18n="exportCsv">CSV export</option>
@@ -1256,7 +1258,8 @@
       <p id="confirm-msg" class="confirm-msg"></p>
       <!-- Optional input row (e.g. the password of a protected backup) -->
       <div id="confirm-input-row" class="confirm-input-row hidden">
-        <input id="confirm-input" class="modal-input" type="password" autocomplete="off" />
+        <input id="confirm-input" class="modal-input" type="password" autocomplete="off" list="confirm-input-datalist" />
+        <datalist id="confirm-input-datalist"></datalist>
         <button id="confirm-input-eye" class="icon-btn pw-eye" type="button" tabindex="-1"></button>
       </div>
       <!-- Optional checkboxes (e.g. restore data / restore settings) -->
