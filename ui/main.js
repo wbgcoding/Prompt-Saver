@@ -3375,6 +3375,16 @@ async function renderGrid(skipFetch = false) {
   // First run, nothing anywhere yet — a plain grid explains nothing on its own.
   $("grid-empty").classList.toggle("hidden", prompts.length > 0);
 
+  // Members that belong to this view but have no cell at this grid size (grid
+  // shrunk under them) still belong here — shown as a visible overhang instead
+  // of a silent loss.
+  const seated = new Set([...byCell.values()].map((p) => p.id));
+  const overflowCount = view.members.filter((id) => !seated.has(id) && !inFolder.has(id)).length;
+  $("grid-overflow").classList.toggle("hidden", overflowCount === 0);
+  if (overflowCount > 0) {
+    $("grid-overflow-text").textContent = t("viewOverflowTitle").replace("{n}", String(overflowCount)) + " " + t("viewOverflowBody");
+  }
+
   pruneVideoCache();
   pruneThumbCache(libThumbCache);
   pruneThumbCache(journalThumbCache);
@@ -14145,6 +14155,25 @@ function bind() {
   };
   attachGridPicker($("qg-cols"), applyQuickGrid);
   attachGridPicker($("qg-rows"), applyQuickGrid);
+
+  // Overhang row: grow the grid one step at a time, capped at
+  // gridMax, until the view has enough cells for every member (or it hits the
+  // cap - the row then just stays, since nothing was lost either way).
+  $("grid-overflow-grow").addEventListener("click", async () => {
+    if (favView) return;
+    const view = activeView();
+    const gm = val("gridMax");
+    let cols = view.cols;
+    let rows = view.rows;
+    while (cols * rows < view.members.length && (cols < gm || rows < gm)) {
+      if (cols <= rows && cols < gm) cols++;
+      else if (rows < gm) rows++;
+      else break;
+    }
+    if (cols === view.cols && rows === view.rows) return;
+    settings = await invoke("set_view_grid", { id: view.id, cols, rows });
+    await renderGrid(true);
+  });
 
   // Show/hide the top and bottom bars.
   $("hide-top").addEventListener("click", () => setBars(false, settings.show_composer !== false));

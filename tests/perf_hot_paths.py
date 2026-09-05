@@ -76,8 +76,8 @@ PERF_SEED = """
   PROMPTS_1000.slice(0, 150).forEach((p, i) => { LAYOUT_HOME[p.id] = [i % 10, Math.floor(i / 10)]; });
 
   SETTINGS.views = [
-    { id: "home", name: "Home", cols: 10, rows: 15, layouts: { "10x15": LAYOUT_HOME }, color: "" },
-    { id: "work", name: "Work", cols: 10, rows: 15, layouts: {}, color: "" },
+    { id: "home", name: "Home", cols: 10, rows: 15, layouts: { "10x15": LAYOUT_HOME }, color: "", members: PROMPTS_1000.map((p) => p.id) },
+    { id: "work", name: "Work", cols: 10, rows: 15, layouts: {}, color: "", members: [] },
   ];
   SETTINGS.active_view = "home";
   SETTINGS.ui_flags.multiView = true;

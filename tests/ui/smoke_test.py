@@ -5634,6 +5634,61 @@ PROBE = """
       document.getElementById('settings').classList.add('hidden');
       await sleep(50);
     }
+    // Point 419: shrinking a view below its member count must show an overhang
+    // row instead of losing tiles, and growing it back must restore everyone -
+    // exactly the arrangement it had before, membership included.
+    {
+      // The view-group merge test above (F9) leaves "home" folded into a group tab
+      // with no standalone .view-btn of its own, so fall back to picking it from
+      // that group's popover when the plain tab lookup comes up empty.
+      const homeTab419 = document.querySelector('.view-btn[data-view-id="home"]');
+      if (homeTab419) {
+        homeTab419.click();
+        await sleep(150);
+      } else {
+        document.querySelector('#views .view-btn[data-group-id]')?.click();
+        await sleep(200);
+        const homeRow = document.querySelector('.view-group-pop .view-group-item[data-view-id="home"]');
+        if (homeRow) { homeRow.click(); await sleep(150); }
+        else out.errors.push('Overflow: could not find "home" anywhere to make it active');
+      }
+      const before419 = await window.__TAURI__.core.invoke('get_state');
+      const homeBefore419 = before419.settings.views.find(v => v.id === 'home');
+      if (!homeBefore419) {
+        out.errors.push('Overflow: the "home" view is missing from get_state');
+      } else {
+        const setGrid419 = async (cols, rows) => {
+          const c = document.getElementById('qg-cols');
+          const r = document.getElementById('qg-rows');
+          c.focus(); c.value = String(cols); c.dispatchEvent(new Event('input', { bubbles: true })); c.blur();
+          await sleep(120);
+          r.focus(); r.value = String(rows); r.dispatchEvent(new Event('input', { bubbles: true })); r.blur();
+          await sleep(120);
+        };
+        await setGrid419(2, 2);
+        const overflowRow = document.getElementById('grid-overflow');
+        if (!overflowRow || overflowRow.classList.contains('hidden')) {
+          out.errors.push('Overflow: shrinking "home" to 2x2 did not show the overhang row for members that no longer fit');
+        } else if (!/[0-9]/.test(document.getElementById('grid-overflow-text').textContent)) {
+          out.errors.push('Overflow: the overhang row has no visible count');
+        }
+        const growBtn419 = document.getElementById('grid-overflow-grow');
+        if (!growBtn419) {
+          out.errors.push('Overflow: the "enlarge the grid" button is missing');
+        } else {
+          growBtn419.click();
+          await sleep(200);
+          if (!document.getElementById('grid-overflow').classList.contains('hidden')) {
+            out.errors.push('Overflow: "enlarge the grid" did not bring every member back');
+          }
+          const after419 = await window.__TAURI__.core.invoke('get_state');
+          const homeAfter419 = after419.settings.views.find(v => v.id === 'home');
+          if (!homeAfter419 || homeAfter419.members.length !== homeBefore419.members.length) {
+            out.errors.push('Overflow: growing the grid back lost view membership');
+          }
+        }
+      }
+    }
   } catch (e) { out.errors.push('probe: ' + e.message); }
   for (const el of document.querySelectorAll('.overlay *, #expert-flags *')) {
     const r = el.getBoundingClientRect();

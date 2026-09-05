@@ -1746,6 +1746,14 @@ struct View {
     // Optional tab color (hex); empty = default.
     #[serde(default)]
     color: String,
+    // Ordered membership: who belongs to this view, independent of where a
+    // grid size happens to have room to show them. `layouts` says WHERE a
+    // member sits, never WHETHER it belongs -- that split exists so a
+    // grid-size change can never silently drop or resurrect an entry. A
+    // member with no cell in the current size's layout is an overflow
+    // entry, not a lost one.
+    #[serde(default)]
+    members: Vec<String>,
 }
 
 // A folder-style tab holding several views. A view belongs to at most one
@@ -2309,6 +2317,9 @@ impl Settings {
                     self.legacy_layout.clone(),
                 );
             }
+            let members = layouts.get(&grid_key(self.legacy_cols, self.legacy_rows))
+                .map(|l| l.keys().cloned().collect())
+                .unwrap_or_default();
             self.views.push(View {
                 id: gen_id(),
                 name: home_name(resolve_lang(&self.language)).to_string(),
@@ -2316,6 +2327,7 @@ impl Settings {
                 rows: self.legacy_rows,
                 layouts,
                 color: String::new(),
+                members,
             });
         }
         // Every view arrives through here, including from an imported backup, so this
@@ -2326,6 +2338,27 @@ impl Settings {
         for v in self.views.iter_mut() {
             v.cols = v.cols.clamp(GRID_MIN, GRID_MAX);
             v.rows = v.rows.clamp(GRID_MIN, GRID_MAX);
+            // One-time backfill for a view saved before membership tracking existed: derive
+            // membership from the union of every saved grid size (current
+            // size first) instead of leaving it empty, which would make
+            // every existing entry look freshly hidden. Never runs again
+            // once `members` is populated, and never used as a source of
+            // truth after this.
+            if v.members.is_empty() {
+                let current_key = grid_key(v.cols, v.rows);
+                let mut sizes: Vec<&String> = v.layouts.keys().collect();
+                sizes.sort_by_key(|k| if **k == current_key { 0 } else { 1 });
+                let mut seen = std::collections::HashSet::new();
+                for key in sizes {
+                    if let Some(layout) = v.layouts.get(key) {
+                        for id in layout.keys() {
+                            if seen.insert(id.clone()) {
+                                v.members.push(id.clone());
+                            }
+                        }
+                    }
+                }
+            }
         }
         if !self.views.iter().any(|v| v.id == self.active_view) {
             if let Some(first) = self.views.first() {
@@ -4210,14 +4243,34 @@ fn is_image_prompt(p: &Prompt) -> bool {
     p.show_image && (!p.image.is_empty() || media_path(&p.file_path) || media_path(&p.icon_path))
 }
 
-// All file dialogs are parented to the main window: the window is blocked
-// until the dialog is closed, so a second dialog can never stack on top.
-fn file_dialog(app: &AppHandle) -> rfd::FileDialog {
+// Every file dialog is parented to the window that opened it: that window is
+// blocked (and only that window) until the dialog closes, so a second dialog
+// can never stack on top of it, and a satellite window (e.g. the video
+// editor) never loses focus to "main" behind the dialog's back.
+fn file_dialog_for(app: &AppHandle, label: &str) -> rfd::FileDialog {
     let dlg = rfd::FileDialog::new();
-    match app.get_webview_window("main") {
+    let chosen = resolve_dialog_parent_label(|l| app.get_webview_window(l).is_some(), label);
+    match chosen.and_then(|l| app.get_webview_window(l)) {
         Some(win) => dlg.set_parent(&win),
         None => dlg,
     }
+}
+
+// Pure label choice: the requested window if it is open, else "main" as a
+// fallback, else nobody. Kept apart from the AppHandle lookup so the choice
+// itself is unit-testable without a live Tauri app.
+fn resolve_dialog_parent_label<'a>(exists: impl Fn(&str) -> bool, label: &'a str) -> Option<&'a str> {
+    if exists(label) {
+        Some(label)
+    } else if exists("main") {
+        Some("main")
+    } else {
+        None
+    }
+}
+
+fn file_dialog(app: &AppHandle) -> rfd::FileDialog {
+    file_dialog_for(app, "main")
 }
 
 fn open_floating(app: &AppHandle, prompt: &Prompt) {
@@ -5017,10 +5070,13 @@ async fn get_clipboard_file_path() -> Option<String> {
 }
 
 #[tauri::command]
-async fn pick_file_path(app: AppHandle) -> Option<String> {
-    file_dialog(&app)
+async fn pick_file_path(app: AppHandle, win: tauri::Window) -> Option<String> {
+    let label = win.label().to_string();
+    let result = file_dialog_for(&app, &label)
         .pick_file()
-        .map(|p| p.to_string_lossy().to_string())
+        .map(|p| p.to_string_lossy().to_string());
+    let _ = win.set_focus();
+    result
 }
 
 // Preview for an attached file that happens to be an image.
@@ -5666,6 +5722,7 @@ async fn add_prompt(
             let key = grid_key(view.cols, view.rows);
             view.layouts.entry(key).or_default().insert(prompt.id.clone(), cell);
         }
+        view.members.push(prompt.id.clone());
         store.prompts.push(prompt.clone());
         if !save_prompts(&app, &store) {
             // Nothing actually reached disk (or the JSON fallback) - undo the
@@ -5673,8 +5730,10 @@ async fn add_prompt(
             // editor will believe is safely saved. The layout entry above was
             // never persisted (save_settings below is skipped too), so it is
             // harmless to leave dangling in memory: no prompt id means nothing
-            // ever draws it.
+            // ever draws it. `members` gets the same undo so it never names an
+            // id that store.prompts no longer has.
             store.prompts.pop();
+            store.settings.active_view_mut().members.retain(|m| *m != prompt.id);
             return Err("save-failed".into());
         }
         save_settings(&app, &store.settings);
@@ -5748,6 +5807,7 @@ async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, examples: Ve
                 let key = grid_key(view.cols, view.rows);
                 view.layouts.entry(key).or_default().insert(prompt.id.clone(), cell);
             }
+            view.members.push(prompt.id.clone());
             store.settings.example_prompt_ids.push(prompt.id.clone());
             store.prompts.push(prompt.clone());
             created.push(prompt);
@@ -5776,6 +5836,7 @@ async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, examples: Ve
                 if let Some(layout) = view.layouts.get_mut(&key) {
                     layout.retain(|id, _| !ids.contains(id));
                 }
+                view.members.retain(|id| !ids.contains(id));
             }
             return Err("save-failed".into());
         }
@@ -6114,6 +6175,7 @@ async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Resu
             for layout in view.layouts.values_mut() {
                 layout.remove(&id);
             }
+            view.members.retain(|m| *m != id);
         }
         store.settings.floating.remove(&id);
         store.settings.float_scale.remove(&id);
@@ -6199,6 +6261,7 @@ async fn batch_prompts(
                     for layout in view.layouts.values_mut() {
                         layout.retain(|k, _| !idset.contains(k.as_str()));
                     }
+                    view.members.retain(|m| !idset.contains(m.as_str()));
                 }
                 for id in &ids {
                     store.settings.floating.remove(id);
@@ -6291,8 +6354,16 @@ async fn batch_prompts(
                     for id in &ids {
                         layout.remove(id);
                     }
-                } else if !place_ids_in_view(layout, &ids, cols, rows, &folder_cells) {
-                    return Err("view-full".into());
+                    view.members.retain(|m| !ids.contains(m));
+                } else {
+                    if !place_ids_in_view(layout, &ids, cols, rows, &folder_cells) {
+                        return Err("view-full".into());
+                    }
+                    for id in &ids {
+                        if !view.members.iter().any(|m| m == id) {
+                            view.members.push(id.clone());
+                        }
+                    }
                 }
                 save_settings(&app, &store.settings);
             }
@@ -6324,12 +6395,18 @@ async fn batch_prompts(
                 if !place_ids_in_view(layout, &ids, cols, rows, &folder_cells) {
                     return Err("view-full".into());
                 }
+                for id in &ids {
+                    if !store.settings.views[to_idx].members.iter().any(|m| m == id) {
+                        store.settings.views[to_idx].members.push(id.clone());
+                    }
+                }
                 if to_idx != from_idx {
                     for layout in store.settings.views[from_idx].layouts.values_mut() {
                         for id in &ids {
                             layout.remove(id);
                         }
                     }
+                    store.settings.views[from_idx].members.retain(|m| !ids.contains(m));
                 }
                 save_settings(&app, &store.settings);
             }
@@ -6379,6 +6456,7 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
             let key = grid_key(view.cols, view.rows);
             view.layouts.entry(key).or_default().insert(p.id.clone(), cell);
         }
+        view.members.push(p.id.clone());
         store.prompts.push(p);
         // Same atomic prompts+trash write as delete_prompt - on failure, undo the
         // in-memory move (including the layout cell claimed above) instead of
@@ -6737,68 +6815,132 @@ async fn set_layout(app: AppHandle, state: State<'_, Db>, layout: HashMap<String
     Ok(())
 }
 
-// Change the active view's grid dimensions. The arrangement saved for the new
-// size (if any) is restored automatically because layouts are keyed per size.
-#[tauri::command]
-fn set_view_grid(app: AppHandle, state: State<Db>, id: String, cols: u32, rows: u32) -> Settings {
-    let mut store = lock(&state);
-    let Some(view) = store.settings.views.iter_mut().find(|v| v.id == id) else {
-        return store.settings.clone();
-    };
-    let (old_cols, old_rows) = (view.cols, view.rows);
-    let old_key = grid_key(view.cols, view.rows);
-    view.cols = cols.clamp(GRID_MIN, GRID_MAX);
-    view.rows = rows.clamp(GRID_MIN, GRID_MAX);
-    let new_key = grid_key(view.cols, view.rows);
-    if new_key != old_key {
-        if view.cols >= old_cols && view.rows >= old_rows {
-            // Growing: the grid expands around the current arrangement.
-            // Saved layouts double as backups — prompts that an earlier
-            // shrink pushed out return to their remembered spots (largest
-            // arrangement first, only onto free cells).
-            let merged = {
-                let mut merged = view.layouts.get(&old_key).cloned().unwrap_or_default();
-                let mut occupied: std::collections::HashSet<[u32; 2]> =
-                    merged.values().copied().collect();
-                let mut saved: Vec<_> = view.layouts.iter().collect();
-                saved.sort_by_key(|(key, _)| {
-                    std::cmp::Reverse(
-                        key.split_once('x')
-                            .and_then(|(c, r)| {
-                                Some(c.parse::<u64>().ok()? * r.parse::<u64>().ok()?)
-                            })
-                            .unwrap_or(0),
-                    )
-                });
-                for (_, layout) in saved {
-                    for (id, cell) in layout {
-                        if cell[0] < view.cols
-                            && cell[1] < view.rows
-                            && !merged.contains_key(id)
-                            && !occupied.contains(cell)
-                        {
-                            merged.insert(id.clone(), *cell);
-                            occupied.insert(*cell);
-                        }
-                    }
+// Rebuilds one view's layout for its CURRENT grid size from `members`, the
+// view's real membership list. Never removes a member: an id
+// that finds no free cell simply gets no layout entry and shows up as
+// overflow in the UI instead of silently disappearing. Replaces the old
+// grow/shrink branching (which decided membership from the layouts
+// themselves and, along three separate paths, could drop or resurrect an
+// entry) with one unconditional recompute that cannot take a wrong branch
+// because it no longer has one.
+fn rebuild_view_layout(
+    view: &mut View,
+    folder_cells: &std::collections::HashSet<(u32, u32)>,
+    folder_members: &std::collections::HashSet<String>,
+) {
+    let (cols, rows) = (view.cols, view.rows);
+    let key = grid_key(cols, rows);
+    // Keep whatever the current size already has on record, dropping only
+    // entries for ids that are no longer members, now live inside a grid
+    // folder instead of on their own, or no longer fit (the grid shrank
+    // under them).
+    let mut layout: HashMap<String, [u32; 2]> = view.layouts.get(&key).cloned().unwrap_or_default();
+    layout.retain(|pid, cell| {
+        view.members.iter().any(|m| m == pid)
+            && !folder_members.contains(pid)
+            && cell[0] < cols
+            && cell[1] < rows
+    });
+    let mut occupied: std::collections::HashSet<(u32, u32)> = folder_cells.clone();
+    occupied.extend(layout.values().map(|c| (c[0], c[1])));
+    // A member without a cell yet prefers the spot it is remembered at from
+    // ANY other saved size (so shrinking and growing back restores exactly
+    // the old arrangement, and a member new to this size still lands close
+    // to where the user last saw it) before falling back to the first free
+    // cell. Growing always finds room for everyone; shrinking may not, and
+    // the ones left over stay members without a cell (overflow).
+    let mut remembered: HashMap<&str, [u32; 2]> = HashMap::new();
+    for (k, other) in &view.layouts {
+        if *k == key {
+            continue;
+        }
+        for (pid, cell) in other {
+            remembered.entry(pid.as_str()).or_insert(*cell);
+        }
+    }
+    for pid in view.members.clone() {
+        // Lives inside a grid folder's own cell, not as an individual tile.
+        if folder_members.contains(&pid) {
+            continue;
+        }
+        if layout.contains_key(&pid) {
+            continue;
+        }
+        if let Some(cell) = remembered.get(pid.as_str()) {
+            if cell[0] < cols && cell[1] < rows && !occupied.contains(&(cell[0], cell[1])) {
+                layout.insert(pid.clone(), *cell);
+                occupied.insert((cell[0], cell[1]));
+                continue;
+            }
+        }
+        'find: for row in 0..rows {
+            for col in 0..cols {
+                if !occupied.contains(&(col, row)) {
+                    layout.insert(pid.clone(), [col, row]);
+                    occupied.insert((col, row));
+                    break 'find;
                 }
-                merged
-            };
-            view.layouts.insert(new_key, merged);
-        } else if !view.layouts.contains_key(&new_key) {
-            // Shrinking, first visit: seed with the fitting part of the
-            // previous arrangement. Saved sizes keep their arrangement.
-            if let Some(old) = view.layouts.get(&old_key) {
-                let (c_max, r_max) = (view.cols, view.rows);
-                let seeded: HashMap<String, [u32; 2]> = old
-                    .iter()
-                    .filter(|(_, cell)| cell[0] < c_max && cell[1] < r_max)
-                    .map(|(k, v)| (k.clone(), *v))
-                    .collect();
-                view.layouts.insert(new_key, seeded);
             }
         }
     }
+    view.layouts.insert(key, layout);
+}
+
+// Change the active view's grid dimensions. The arrangement saved for the new
+// size (if any) is restored automatically because layouts are keyed per size;
+// membership itself (`members`) never changes here, so no entry can appear or
+// disappear from the view just because its grid did.
+#[tauri::command]
+fn set_view_grid(app: AppHandle, state: State<Db>, id: String, cols: u32, rows: u32) -> Settings {
+    let mut store = lock(&state);
+    let cols = cols.clamp(GRID_MIN, GRID_MAX);
+    let rows = rows.clamp(GRID_MIN, GRID_MAX);
+    // A folder whose cell no longer fits the shrunk grid moves to the first free
+    // cell in this view instead of landing off-grid and becoming unreachable -
+    // it loses at most its own cell, same as a single entry would.
+    // normalize_tile_folders below resolves any collision the move creates.
+    let mut taken_cells: Vec<[u32; 2]> = Vec::new();
+    for folder in store
+        .settings
+        .tile_folders
+        .iter_mut()
+        .filter(|f| f.view_id == id)
+    {
+        if folder.cell[0] >= cols || folder.cell[1] >= rows {
+            'find: for row in 0..rows {
+                for col in 0..cols {
+                    if !taken_cells.contains(&[col, row]) {
+                        folder.cell = [col, row];
+                        break 'find;
+                    }
+                }
+            }
+        }
+        taken_cells.push(folder.cell);
+    }
+    let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
+    let view_ids: Vec<String> = store.settings.views.iter().map(|v| v.id.clone()).collect();
+    normalize_tile_folders(&mut store.settings.tile_folders, &ids, &view_ids);
+    let folder_cells: std::collections::HashSet<(u32, u32)> = store
+        .settings
+        .tile_folders
+        .iter()
+        .filter(|f| f.view_id == id)
+        .map(|f| (f.cell[0], f.cell[1]))
+        .collect();
+    let folder_members: std::collections::HashSet<String> = store
+        .settings
+        .tile_folders
+        .iter()
+        .filter(|f| f.view_id == id)
+        .flat_map(|f| f.members.iter().cloned())
+        .collect();
+    let Some(view) = store.settings.views.iter_mut().find(|v| v.id == id) else {
+        return store.settings.clone();
+    };
+    view.cols = cols;
+    view.rows = rows;
+    rebuild_view_layout(view, &folder_cells, &folder_members);
     save_settings(&app, &store.settings);
     store.settings.clone()
 }
@@ -7115,6 +7257,7 @@ fn add_view(app: AppHandle, state: State<Db>, name: String, color: String) -> Re
         rows: default_rows(),
         layouts: HashMap::new(),
         color: color.trim().to_string(),
+        members: Vec::new(),
     };
     store.settings.active_view.clone_from(&view.id);
     store.settings.views.push(view);
@@ -12634,7 +12777,7 @@ async fn save_screenshot_now(state: State<'_, Db>, data_url: String) -> Result<O
 // Save the screenshot anywhere via a native "Save as" dialog. Returns the chosen
 // path, or None if the user cancelled.
 #[tauri::command]
-async fn save_screenshot_as(app: AppHandle, data_url: String) -> Result<Option<String>, String> {
+async fn save_screenshot_as(app: AppHandle, win: tauri::Window, data_url: String) -> Result<Option<String>, String> {
     if !data_url_within_limit(&data_url, MAX_IMAGE_DATA_URL_BYTES) {
         return Err(format!(
             "image is too large ({} MB); the limit is {} MB",
@@ -12647,11 +12790,12 @@ async fn save_screenshot_as(app: AppHandle, data_url: String) -> Result<Option<S
         return Err("empty image".to_string());
     }
     let name = format!("Screenshot-{}.jpg", local_stamp());
-    match file_dialog(&app)
+    let picked = file_dialog_for(&app, win.label())
         .add_filter("JPEG", &["jpg"])
         .set_file_name(&name)
-        .save_file()
-    {
+        .save_file();
+    let _ = win.set_focus();
+    match picked {
         Some(p) => {
             fs::write(&p, &bytes).map_err(|e| e.to_string())?;
             Ok(Some(p.to_string_lossy().to_string()))
@@ -18994,13 +19138,15 @@ async fn save_recording_as(app: AppHandle, src_path: String) -> Result<Option<St
 // BEFORE exporting rather than moving the result afterward like
 // save_recording_as above -- no source file to move, just a chosen path.
 #[tauri::command]
-async fn pick_export_dest(app: AppHandle, default_name: String) -> Option<String> {
+async fn pick_export_dest(app: AppHandle, win: tauri::Window, default_name: String) -> Option<String> {
     let ext = Path::new(&default_name).extension().and_then(|e| e.to_str()).unwrap_or("mp4").to_string();
-    file_dialog(&app)
+    let result = file_dialog_for(&app, win.label())
         .add_filter(ext.to_uppercase(), &[ext.as_str()])
         .set_file_name(&default_name)
         .save_file()
-        .map(|p| p.to_string_lossy().to_string())
+        .map(|p| p.to_string_lossy().to_string());
+    let _ = win.set_focus();
+    result
 }
 
 // 280's plain "Save" -- writes straight into recordingDir without a dialog
@@ -22033,12 +22179,16 @@ fn sync_place_in_view(settings: &mut Settings, prompt_id: &str, view_id: &str, w
                 for layout in v.layouts.values_mut() {
                     layout.remove(prompt_id);
                 }
+                v.members.retain(|m| m != prompt_id);
             }
         }
     }
     let Some(view) = settings.views.iter_mut().find(|v| v.id == view_id) else { return };
     let key = grid_key(view.cols, view.rows);
     view.layouts.entry(key).or_default().insert(prompt_id.to_string(), cell);
+    if !view.members.iter().any(|m| m == prompt_id) {
+        view.members.push(prompt_id.to_string());
+    }
 }
 
 // Finds a view by NAME or creates one at the incoming grid size (clamped like
@@ -22059,6 +22209,7 @@ fn sync_find_or_create_view(settings: &mut Settings, name: &str, cols: u32, rows
         rows: rows.clamp(GRID_MIN, GRID_MAX),
         layouts: HashMap::new(),
         color: String::new(),
+        members: Vec::new(),
     });
     id
 }
@@ -22700,6 +22851,28 @@ mod tests {
         assert!(err.contains("not a valid archive"), "{err}");
     }
 
+    // ---- file dialogs parent to their caller ----
+
+    #[test]
+    fn dialog_parent_picks_the_requested_window_when_it_is_open() {
+        let open = ["main", "video-editor"];
+        let chosen = resolve_dialog_parent_label(|l| open.contains(&l), "video-editor");
+        assert_eq!(chosen, Some("video-editor"));
+    }
+
+    #[test]
+    fn dialog_parent_falls_back_to_main_when_the_label_is_unknown() {
+        let open = ["main"];
+        let chosen = resolve_dialog_parent_label(|l| open.contains(&l), "video-editor");
+        assert_eq!(chosen, Some("main"));
+    }
+
+    #[test]
+    fn dialog_parent_is_none_when_neither_window_is_open() {
+        let chosen = resolve_dialog_parent_label(|_| false, "video-editor");
+        assert_eq!(chosen, None);
+    }
+
     #[test]
     fn ffmpeg_search_path_never_touches_path_or_a_system_directory() {
         // Discovery only ever looks beside the exe, in the app's own data folder,
@@ -22792,8 +22965,15 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    // Serializes every test that reads or flips the process-global REC_CONVERT_CANCEL
+    // flag against each other -- cargo test runs tests on separate threads by default,
+    // and the cancel test flipping that flag mid-run would otherwise cancel whatever
+    // unrelated conversion another thread happened to be running at the same moment.
+    static REC_CONVERT_TEST_LOCK: Mutex<()> = Mutex::new(());
+
     #[test]
     fn convert_recording_real_ffmpeg_gif_has_gif_magic_and_removes_the_source() {
+        let _guard = REC_CONVERT_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let Some(ffmpeg) = test_ffmpeg() else { return };
         let dir = std::env::temp_dir().join(format!("ps-convtest-gif-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
@@ -22807,6 +22987,7 @@ mod tests {
 
     #[test]
     fn convert_recording_real_ffmpeg_lossless_replaces_the_source_in_place() {
+        let _guard = REC_CONVERT_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let Some(ffmpeg) = test_ffmpeg() else { return };
         let dir = std::env::temp_dir().join(format!("ps-convtest-lossless-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
@@ -22822,6 +23003,7 @@ mod tests {
 
     #[test]
     fn convert_recording_real_ffmpeg_cancel_leaves_the_source_untouched() {
+        let _guard = REC_CONVERT_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let Some(ffmpeg) = test_ffmpeg() else { return };
         let dir = std::env::temp_dir().join(format!("ps-convtest-cancel-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
@@ -28717,6 +28899,7 @@ mod tests {
             rows: default_rows(),
             layouts: HashMap::new(),
             color: String::new(),
+            members: Vec::new(),
         }
     }
 
@@ -28769,6 +28952,146 @@ mod tests {
         let ids: Vec<String> = vec!["a".to_string()];
         assert!(place_ids_in_view(&mut layout, &ids, 2, 1, &folder_cells));
         assert_eq!(layout.get("a"), Some(&[1, 0])); // [0,0] was the folder's, must be skipped
+    }
+
+    // `members` decides who belongs to a view, `layouts` only where they
+    // sit. A grid resize must never add or drop a member.
+    #[test]
+    fn rebuild_view_layout_grows_and_restores_old_positions() {
+        let mut view = test_view("v1");
+        view.cols = 2;
+        view.rows = 2;
+        view.members = vec!["a".into(), "b".into(), "c".into(), "d".into()];
+        view.layouts.insert(
+            grid_key(2, 2),
+            HashMap::from([
+                ("a".to_string(), [0, 0]),
+                ("b".to_string(), [1, 0]),
+                ("c".to_string(), [0, 1]),
+                ("d".to_string(), [1, 1]),
+            ]),
+        );
+        view.cols = 3;
+        view.rows = 3;
+        rebuild_view_layout(&mut view, &std::collections::HashSet::new(), &std::collections::HashSet::new());
+        let layout = view.layouts.get(&grid_key(3, 3)).unwrap();
+        assert_eq!(layout.len(), 4);
+        assert_eq!(layout.get("a"), Some(&[0, 0]));
+        assert_eq!(layout.get("b"), Some(&[1, 0]));
+        assert_eq!(layout.get("c"), Some(&[0, 1]));
+        assert_eq!(layout.get("d"), Some(&[1, 1]));
+    }
+
+    #[test]
+    fn rebuild_view_layout_grows_a_view_with_no_saved_layout_at_all() {
+        // A view that has never been saved at 2x2 still gets all four members
+        // placed when it grows to 3x3 - nothing to "remember" is not an excuse
+        // to leave anyone off the grid.
+        let mut view = test_view("v1");
+        view.cols = 3;
+        view.rows = 3;
+        view.members = vec!["a".into(), "b".into(), "c".into(), "d".into()];
+        rebuild_view_layout(&mut view, &std::collections::HashSet::new(), &std::collections::HashSet::new());
+        let layout = view.layouts.get(&grid_key(3, 3)).unwrap();
+        assert_eq!(layout.len(), 4);
+    }
+
+    #[test]
+    fn rebuild_view_layout_never_skips_a_member_whose_remembered_cell_is_taken() {
+        // "b" remembers [0,0] from a 1x2 layout; growing to 2x1 also wants to seat
+        // "a" fresh, and "a" happens to land on [0,0] first. "b" must still get a
+        // cell (the other free one), never be silently left off the grid - this is
+        // Ben's reported 2x2-to-3x3 loss, reduced to its smallest repro.
+        let mut view = test_view("v1");
+        view.cols = 1;
+        view.rows = 2;
+        view.members = vec!["a".into(), "b".into()];
+        view.layouts.insert(grid_key(1, 2), HashMap::from([("b".to_string(), [0, 0])]));
+        view.cols = 2;
+        view.rows = 1;
+        // Force "a" onto [0,0] first via an existing (stale) 2x1 layout entry, so
+        // "b"'s remembered [0,0] is genuinely occupied by someone else.
+        view.layouts.insert(grid_key(2, 1), HashMap::from([("a".to_string(), [0, 0])]));
+        rebuild_view_layout(&mut view, &std::collections::HashSet::new(), &std::collections::HashSet::new());
+        let layout = view.layouts.get(&grid_key(2, 1)).unwrap();
+        assert_eq!(layout.len(), 2, "both members must have a cell, none dropped");
+        assert_eq!(layout.get("a"), Some(&[0, 0]));
+        assert_eq!(layout.get("b"), Some(&[1, 0]));
+    }
+
+    #[test]
+    fn rebuild_view_layout_shrink_keeps_membership_and_shows_overhang() {
+        // 3x3 with nine members shrunk to 2x2: nobody loses membership, five have
+        // no cell (overhang) instead of being dropped.
+        let mut view = test_view("v1");
+        view.cols = 3;
+        view.rows = 3;
+        let ids: Vec<String> = (0..9).map(|i| format!("p{i}")).collect();
+        view.members = ids.clone();
+        let mut full = HashMap::new();
+        for (i, id) in ids.iter().enumerate() {
+            full.insert(id.clone(), [(i % 3) as u32, (i / 3) as u32]);
+        }
+        view.layouts.insert(grid_key(3, 3), full);
+        view.cols = 2;
+        view.rows = 2;
+        rebuild_view_layout(&mut view, &std::collections::HashSet::new(), &std::collections::HashSet::new());
+        assert_eq!(view.members.len(), 9, "shrinking must never drop membership");
+        let small = view.layouts.get(&grid_key(2, 2)).unwrap();
+        assert_eq!(small.len(), 4, "only 4 cells exist, the other 5 are overhang");
+        for id in &ids {
+            if let Some(cell) = small.get(id) {
+                assert!(cell[0] < 2 && cell[1] < 2);
+            }
+        }
+        // Growing back to 3x3 restores exactly the old arrangement, untouched
+        // the whole time under its own layouts key.
+        view.cols = 3;
+        view.rows = 3;
+        rebuild_view_layout(&mut view, &std::collections::HashSet::new(), &std::collections::HashSet::new());
+        let restored = view.layouts.get(&grid_key(3, 3)).unwrap();
+        assert_eq!(restored.len(), 9);
+        for (i, id) in ids.iter().enumerate() {
+            assert_eq!(restored.get(id), Some(&[(i % 3) as u32, (i / 3) as u32]));
+        }
+    }
+
+    #[test]
+    fn rebuild_view_layout_mixed_resize_does_not_fall_back_to_a_stale_layout() {
+        // 2x3 has 6 members. A much older, incomplete 3x2 layout (only 2 of them)
+        // is already on record from a previous visit at that size. Resizing to
+        // 3x2 (one axis grows, the other shrinks) must top up the stale layout
+        // from `members`, not just reuse it as-is and lose the other four.
+        let mut view = test_view("v1");
+        view.cols = 2;
+        view.rows = 3;
+        let ids: Vec<String> = (0..6).map(|i| format!("p{i}")).collect();
+        view.members = ids.clone();
+        view.layouts.insert(
+            grid_key(3, 2),
+            HashMap::from([("p0".to_string(), [0, 0]), ("p1".to_string(), [1, 0])]),
+        );
+        view.cols = 3;
+        view.rows = 2;
+        rebuild_view_layout(&mut view, &std::collections::HashSet::new(), &std::collections::HashSet::new());
+        let layout = view.layouts.get(&grid_key(3, 2)).unwrap();
+        assert_eq!(layout.len(), 6, "every member must be seated, not just the stale two");
+    }
+
+    #[test]
+    fn rebuild_view_layout_excludes_grid_folder_members_from_their_own_cell() {
+        // A prompt living inside a grid folder is still a view member but must
+        // never also get its own individual layout cell.
+        let mut view = test_view("v1");
+        view.cols = 2;
+        view.rows = 2;
+        view.members = vec!["a".into(), "b".into()];
+        let folder_members = std::collections::HashSet::from(["a".to_string()]);
+        let folder_cells = std::collections::HashSet::from([(0u32, 0u32)]);
+        rebuild_view_layout(&mut view, &folder_cells, &folder_members);
+        let layout = view.layouts.get(&grid_key(2, 2)).unwrap();
+        assert!(!layout.contains_key("a"), "folder member must not get its own tile");
+        assert_eq!(layout.get("b"), Some(&[1, 0]));
     }
 
     #[test]

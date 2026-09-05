@@ -167,11 +167,14 @@ const SETTINGS = {
   tag_colors: { work: "#3b82f6" },
   custom_themes: [{ id: "ct1", name: "Neon", base: "dark", vars: { accent: "#ff00aa" } }],
   tile_font: "system", tile_size: 0,
+  // Point 419: membership lives in `members`, never derived from `layouts` any
+  // more - home carries every prompt (matches the fully-packed 4x3 LAYOUT plus
+  // the folder members below), the other three views start empty.
   views: [
-    { id: "home", name: "Home", cols: 4, rows: 3, layouts: { "4x3": LAYOUT }, color: "" },
-    { id: "work", name: "Work", cols: 4, rows: 3, layouts: {}, color: "#ef4444" },
-    { id: "notes", name: "Notes", cols: 4, rows: 3, layouts: {}, color: "" },
-    { id: "archive", name: "Archive", cols: 4, rows: 3, layouts: {}, color: "" },
+    { id: "home", name: "Home", cols: 4, rows: 3, layouts: { "4x3": LAYOUT }, color: "", members: PROMPTS.map((p) => p.id) },
+    { id: "work", name: "Work", cols: 4, rows: 3, layouts: {}, color: "#ef4444", members: [] },
+    { id: "notes", name: "Notes", cols: 4, rows: 3, layouts: {}, color: "", members: [] },
+    { id: "archive", name: "Archive", cols: 4, rows: 3, layouts: {}, color: "", members: [] },
   ],
   // Two of the four views live in a folder tab, so the tab bar shows both shapes.
   view_groups: [{ id: "g1", name: "Docs", color: "", view_ids: ["notes", "archive"] }],
@@ -606,7 +609,7 @@ const RESULTS = {
   },
   add_view: (a) => {
     const id = "v" + (SETTINGS.views.length + 1);
-    SETTINGS.views.push({ id, name: (a && a.name) || "", cols: 5, rows: 4, layouts: {}, color: (a && a.color) || "" });
+    SETTINGS.views.push({ id, name: (a && a.name) || "", cols: 5, rows: 4, layouts: {}, color: (a && a.color) || "", members: [] });
     SETTINGS.active_view = id;
     return clone();
   },
@@ -620,9 +623,44 @@ const RESULTS = {
     if (view) view.color = (a && a.color) || "";
     return clone();
   },
+  // Mirror of the backend's rebuild_view_layout (point 419): membership never
+  // changes here, only where a member sits. Keeps whatever still fits at the new
+  // size, then seats the rest in the first free cell - one left without room
+  // stays a member with no cell (overflow), never dropped from `members`.
   set_view_grid: (a) => {
     const view = SETTINGS.views.find((v) => v.id === (a && a.id));
-    if (view) { view.cols = a.cols; view.rows = a.rows; }
+    if (view) {
+      view.cols = a.cols;
+      view.rows = a.rows;
+      const key = view.cols + "x" + view.rows;
+      const folderMembers = new Set(
+        SETTINGS.tile_folders.filter((f) => f.view_id === view.id).flatMap((f) => f.members)
+      );
+      const folderCells = SETTINGS.tile_folders
+        .filter((f) => f.view_id === view.id)
+        .map((f) => f.cell[0] + "," + f.cell[1]);
+      const layout = view.layouts[key] || (view.layouts[key] = {});
+      for (const [pid, cell] of Object.entries(layout)) {
+        if (
+          !view.members.includes(pid) || folderMembers.has(pid) ||
+          cell[0] >= view.cols || cell[1] >= view.rows
+        ) delete layout[pid];
+      }
+      const occupied = new Set(folderCells);
+      for (const c of Object.values(layout)) occupied.add(c[0] + "," + c[1]);
+      for (const pid of view.members) {
+        if (folderMembers.has(pid) || layout[pid]) continue;
+        outer: for (let row = 0; row < view.rows; row++) {
+          for (let col = 0; col < view.cols; col++) {
+            if (!occupied.has(col + "," + row)) {
+              layout[pid] = [col, row];
+              occupied.add(col + "," + row);
+              break outer;
+            }
+          }
+        }
+      }
+    }
     return clone();
   },
   delete_view: (a) => {

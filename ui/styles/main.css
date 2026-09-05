@@ -572,6 +572,23 @@ body.win-maximized .win-ico-restore { display: inline; }
   pointer-events: none;
 }
 
+/* Members that belong to this view but have no cell at the current
+   grid size (shrunk under them) - shown, not silently dropped. */
+.grid-overflow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  background: var(--panel-2, var(--panel));
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.9em;
+}
+
 .cell {
   border: 1px dashed transparent;
   border-radius: 10px;
