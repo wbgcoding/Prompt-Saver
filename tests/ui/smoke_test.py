@@ -7264,6 +7264,24 @@ VIDEO_PROBE = """
     rawKeyCheck('edit tab');
     sideScan(errs, 'edit tab');
 
+    // ---- numberField's stepper aria-labels used to be set once at
+    // construction and never revisited, so a live language switch left them
+    // stuck in whatever language was current at boot ----
+    // (see numberField's decreaseAriaKey/increaseAriaKey/presetsAriaKey in
+    // ui/floatShared.js, wired up here and in ui/main.js so applyI18n()'s
+    // existing generic [data-i18n-aria] refresh loop covers them too).
+    const cropDecBtn = document.getElementById('ve-crop-x').parentElement.querySelector('.numfield-dec');
+    if (cropDecBtn.getAttribute('aria-label') !== 'Decrease value') {
+      errs.push('the crop-X stepper did not start with the English aria-label: ' + cropDecBtn.getAttribute('aria-label'));
+    }
+    if (cropDecBtn.dataset.i18nAria !== 'numFieldDecrease') {
+      errs.push('the crop-X stepper has no data-i18n-aria, so its aria-label would go stale on a language switch: ' + cropDecBtn.dataset.i18nAria);
+    }
+    const speedListBtn = document.getElementById('ve-speed-custom').parentElement.querySelector('.numfield-list');
+    if (!speedListBtn || speedListBtn.dataset.i18nAria !== 'numFieldPresets') {
+      errs.push('the speed presets stepper has no data-i18n-aria: ' + (speedListBtn && speedListBtn.dataset.i18nAria));
+    }
+
     // ---- the timeline never clips vertically (horizontal scroll is expected) ----
     const timeline = document.getElementById('ve-timeline');
     const track = document.getElementById('ve-track');

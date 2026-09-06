@@ -109,7 +109,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && activeNumPop) closeActiveNumPop();
 });
 
-export function numberField({ input, value, min, max, step, bigStep, presets, decreaseLabel, increaseLabel, presetsLabel, onChange }) {
+export function numberField({ input, value, min, max, step, bigStep, presets, decreaseLabel, increaseLabel, presetsLabel, decreaseAriaKey, increaseAriaKey, presetsAriaKey, onChange }) {
   const el = input || document.createElement("input");
   el.type = "number";
   if (min != null) el.min = String(min);
@@ -127,6 +127,12 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
   minusBtn.className = "numfield-dec";
   minusBtn.textContent = "−";
   minusBtn.setAttribute("aria-label", decreaseLabel || "Decrease value");
+  // Lets the caller's own applyI18n() keep this in sync on every language
+  // switch (and, for a lazily-loaded dictionary, once it finishes loading)
+  // the same generic way it already refreshes every other [data-i18n-aria]
+  // element -- decreaseLabel/increaseLabel/presetsLabel above are only the
+  // best-effort value at construction time, otherwise never revisited.
+  if (decreaseAriaKey) minusBtn.dataset.i18nAria = decreaseAriaKey;
   // Native stepping (ArrowUp/Down, PageUp/Down) already works on the input
   // itself, so these are mouse/wheel shortcuts, not a second keyboard path --
   // skipped from Tab order to keep it short, and so a <label> wrapping this
@@ -139,6 +145,7 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
   plusBtn.className = "numfield-inc";
   plusBtn.textContent = "+";
   plusBtn.setAttribute("aria-label", increaseLabel || "Increase value");
+  if (increaseAriaKey) plusBtn.dataset.i18nAria = increaseAriaKey;
   plusBtn.tabIndex = -1;
 
   function refreshButtons() {
@@ -207,6 +214,7 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
     listBtn.className = "numfield-list";
     listBtn.textContent = "▾";
     listBtn.setAttribute("aria-label", presetsLabel || "Common values");
+    if (presetsAriaKey) listBtn.dataset.i18nAria = presetsAriaKey;
     listBtn.addEventListener("click", () => {
       if (activeNumPopTrigger === listBtn) { closeActiveNumPop(); return; } // toggle closed
       closeActiveNumPop();

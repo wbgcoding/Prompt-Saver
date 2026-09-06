@@ -791,6 +791,11 @@ the video editor and the introduction tour ship on).
   leaving half the tags colored.
 - The copy history could show a copy's time taken from a different copy of the
   same prompt when the list was grouped.
+- **The minus, plus and preset buttons on every number field (crop, speed,
+  fade, resize and more) announced their accessibility label in whatever
+  language the app started in, never the current one** — a screen reader kept
+  reading the old language after switching, and in the video editor read a raw
+  internal name instead of a translation from the very first launch.
 
 ### Security
 

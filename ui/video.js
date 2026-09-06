@@ -2170,16 +2170,21 @@ const numFieldDec = t("numFieldDecrease");
 const numFieldInc = t("numFieldIncrease");
 const numFieldList = t("numFieldPresets");
 for (const id of ["ve-crop-x", "ve-crop-y", "ve-crop-w", "ve-crop-h"]) {
-  numberField({ input: $(id), bigStep: 20, decreaseLabel: numFieldDec, increaseLabel: numFieldInc });
+  numberField({
+    input: $(id), bigStep: 20, decreaseLabel: numFieldDec, increaseLabel: numFieldInc,
+    decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease",
+  });
 }
 numberField({
   input: $("ve-speed-custom"), bigStep: 0.5, presets: [0.25, 0.5, 1, 1.5, 2, 4],
   decreaseLabel: numFieldDec, increaseLabel: numFieldInc, presetsLabel: numFieldList,
+  decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease", presetsAriaKey: "numFieldPresets",
 });
 for (const id of ["ve-fade-in", "ve-fade-out"]) {
   numberField({
     input: $(id), bigStep: 500, presets: [250, 500, 1000, 2000],
     decreaseLabel: numFieldDec, increaseLabel: numFieldInc, presetsLabel: numFieldList,
+    decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease", presetsAriaKey: "numFieldPresets",
   });
 }
 

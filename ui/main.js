@@ -13572,6 +13572,7 @@ function bind() {
       value: ts.width, min: 1, max: 80, step: 1, presets: [1, 2, 4, 8, 16],
       onChange: (v) => { ts.width = v; snipEditRenderContext(); },
       decreaseLabel: t("numFieldDecrease"), increaseLabel: t("numFieldIncrease"), presetsLabel: t("numFieldPresets"),
+      decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease", presetsAriaKey: "numFieldPresets",
     });
     const num = control.querySelector("input");
     num.title = t("snipEditWidthTip");
@@ -13653,6 +13654,7 @@ function bind() {
     const control = numberField({
       value, min, max, step: 1, presets, onChange,
       decreaseLabel: t("numFieldDecrease"), increaseLabel: t("numFieldIncrease"), presetsLabel: t("numFieldPresets"),
+      decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease", presetsAriaKey: "numFieldPresets",
     });
     control.querySelector("input").title = title;
     wrap.appendChild(control);
@@ -14154,6 +14156,7 @@ function bind() {
     const widthField = numberField({
       value: origW, min: 1, max: 20000, step: 1,
       decreaseLabel: t("numFieldDecrease"), increaseLabel: t("numFieldIncrease"),
+      decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease",
       onChange: (w) => {
         if (lockAspect) heightField.setValue(Math.max(1, Math.round((origH * w) / origW)));
         percentField.setValue(Math.round((w / origW) * 100));
@@ -14162,6 +14165,7 @@ function bind() {
     const heightField = numberField({
       value: origH, min: 1, max: 20000, step: 1,
       decreaseLabel: t("numFieldDecrease"), increaseLabel: t("numFieldIncrease"),
+      decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease",
       onChange: (h) => {
         if (lockAspect) widthField.setValue(Math.max(1, Math.round((origW * h) / origH)));
         percentField.setValue(Math.round((h / origH) * 100));
@@ -14178,6 +14182,7 @@ function bind() {
     const percentField = numberField({
       value: 100, min: 1, max: 1000, step: 5,
       decreaseLabel: t("numFieldDecrease"), increaseLabel: t("numFieldIncrease"),
+      decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease",
       onChange: (p) => {
         widthField.setValue(Math.max(1, Math.round((origW * p) / 100)));
         heightField.setValue(Math.max(1, Math.round((origH * p) / 100)));
