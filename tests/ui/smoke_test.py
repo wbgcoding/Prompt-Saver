@@ -4687,6 +4687,84 @@ PROBE = """
         document.getElementById('settings').classList.add('hidden');
       }
     }
+    // 427: a synthesised "copy" sound plays on every successful copy -- exactly
+    // once, only while the switch is on, never at volume 0. A stand-in
+    // AudioContext counts real oscillator starts; four different prompt ids
+    // keep the per-prompt copy cooldown out of the way without touching it.
+    {
+      window.__BEEP_COUNT__ = 0;
+      window.AudioContext = window.webkitAudioContext = function () {
+        return {
+          currentTime: 0,
+          createOscillator: () => ({ frequency: { value: 0 }, connect() { return this; }, start() { window.__BEEP_COUNT__++; }, stop() {} }),
+          createGain: () => ({ gain: { setValueAtTime() {}, linearRampToValueAtTime() {} }, connect() { return this; } }),
+          destination: {},
+        };
+      };
+      const expertRow427 = async (label) => {
+        const hit = () => [...document.querySelectorAll('#expert-flags .switch-field')]
+          .find(r => ((r.querySelector('span') || {}).textContent || '').includes(label));
+        if (hit()) return hit();
+        for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+          tb.click();
+          await sleep(200);
+          if (hit()) return hit();
+        }
+        return null;
+      };
+      const valueRow427 = () => [...document.querySelectorAll('#expert-flags .value-field')]
+        .find(r => ((r.querySelector('.value-head span') || {}).textContent || '').includes('Copy sound volume'));
+      document.getElementById('settings').classList.remove('hidden');
+      await click('expert-open');
+      const soundRow = await expertRow427('Sound on copy');
+      if (!soundRow) {
+        out.errors.push('427: the copy-sound option is missing from the expert menu');
+      } else {
+        soundRow.querySelector('input.switch').click();
+        await sleep(200);
+        window.__FIRE__('prompt-hotkey', 'p0');
+        await sleep(300);
+        if (window.__BEEP_COUNT__ !== 1) out.errors.push('427: turning copySound on did not play a beep on copy: ' + window.__BEEP_COUNT__);
+        window.__FIRE__('prompt-hotkey', 'p2');
+        await sleep(300);
+        if (window.__BEEP_COUNT__ !== 2) out.errors.push('427: a second copy did not play a second beep: ' + window.__BEEP_COUNT__);
+        // Volume 0 must play nothing.
+        const volRow = valueRow427();
+        if (!volRow) {
+          out.errors.push('427: the copy-sound-volume slider is missing from the expert menu');
+        } else {
+          const slider = volRow.querySelector('input.value-range');
+          slider.value = 0;
+          slider.dispatchEvent(new Event('input', { bubbles: true }));
+          slider.dispatchEvent(new Event('change', { bubbles: true }));
+          await sleep(200);
+        }
+        window.__FIRE__('prompt-hotkey', 'p4');
+        await sleep(300);
+        if (window.__BEEP_COUNT__ !== 2) out.errors.push('427: volume 0 still played a beep: ' + window.__BEEP_COUNT__);
+        // Switching the option off must play nothing either, even back at a normal volume.
+        if (volRow) {
+          const slider = volRow.querySelector('input.value-range');
+          slider.value = 30;
+          slider.dispatchEvent(new Event('input', { bubbles: true }));
+          slider.dispatchEvent(new Event('change', { bubbles: true }));
+          await sleep(200);
+        }
+        // Re-fetch the row: copySound gates copySoundVolume's visibility, so its own
+        // switch is a GATING_FLAGS member and toggling it just rebuilt the whole
+        // tab -- the earlier `soundRow` element is now detached from the document.
+        const soundRowOff = await expertRow427('Sound on copy');
+        if (soundRowOff) soundRowOff.querySelector('input.switch').click();
+        await sleep(200);
+        window.__FIRE__('prompt-hotkey', 'p6');
+        await sleep(300);
+        if (window.__BEEP_COUNT__ !== 2) out.errors.push('427: copySound off still played a beep: ' + window.__BEEP_COUNT__);
+        const firstTab427 = document.querySelector('#expert-tabs-bar .expert-tab');
+        if (firstTab427) { firstTab427.click(); await sleep(200); }
+      }
+      await click('expert-back');
+      document.getElementById('settings').classList.add('hidden');
+    }
     // 108: Save must fit --winctl-w in every language -- the longest translations
     // ("Speichern", "Speichern" DE at 9 chars is the longest of the 11) must not
     // overflow the fixed-width button.
@@ -6017,6 +6095,47 @@ FLOAT_PROBE = """
     const hideArgs = args().find((c) => c[0] === 'hide_float_for_now');
     if (!hideArgs || hideArgs[1].id !== 'p0') errs.push('menu-hide sent the wrong id: ' + JSON.stringify(hideArgs));
     if (calls().includes('toggle_floating')) errs.push('menu-hide also called the permanent toggle_floating');
+
+    // 427: a synthesised "copy" sound plays through the shared beep helper --
+    // exactly once per successful copy, only while the switch is on, never at
+    // volume 0. A stand-in AudioContext counts real oscillator starts.
+    window.__BEEP_COUNT__ = 0;
+    window.AudioContext = window.webkitAudioContext = function () {
+      return {
+        currentTime: 0,
+        createOscillator: () => ({ frequency: { value: 0 }, connect() { return this; }, start() { window.__BEEP_COUNT__++; }, stop() {} }),
+        createGain: () => ({ gain: { setValueAtTime() {}, linearRampToValueAtTime() {} }, connect() { return this; } }),
+        destination: {},
+      };
+    };
+    // Auto-paste and the copy cooldown belong to a different feature -- both would
+    // otherwise swallow the rapid, scripted clicks this test needs.
+    await window.__TAURI__.core.invoke('set_ui_flag', { key: 'autoPaste', enabled: false });
+    await window.__TAURI__.core.invoke('set_ui_value', { key: 'copyCooldownMs', value: 0 });
+    await window.__TAURI__.core.invoke('set_ui_flag', { key: 'copySound', enabled: true });
+    window.__FIRE__('settings-changed');
+    await sleep(50);
+    down({ screenX: 100, screenY: 100 }); up();
+    await until(() => window.__BEEP_COUNT__ === 1);
+    if (window.__BEEP_COUNT__ !== 1) errs.push('427: copySound on did not play exactly one beep on copy: ' + window.__BEEP_COUNT__);
+    down({ screenX: 100, screenY: 100 }); up();
+    await until(() => window.__BEEP_COUNT__ === 2);
+    if (window.__BEEP_COUNT__ !== 2) errs.push('427: a second copy did not play a second beep: ' + window.__BEEP_COUNT__);
+    // Volume 0 must play nothing.
+    await window.__TAURI__.core.invoke('set_ui_value', { key: 'copySoundVolume', value: 0 });
+    window.__FIRE__('settings-changed');
+    await sleep(50);
+    down({ screenX: 100, screenY: 100 }); up();
+    await sleep(150);
+    if (window.__BEEP_COUNT__ !== 2) errs.push('427: volume 0 still played a beep: ' + window.__BEEP_COUNT__);
+    // Switching the option off must play nothing either, even at a normal volume.
+    await window.__TAURI__.core.invoke('set_ui_value', { key: 'copySoundVolume', value: 30 });
+    await window.__TAURI__.core.invoke('set_ui_flag', { key: 'copySound', enabled: false });
+    window.__FIRE__('settings-changed');
+    await sleep(50);
+    down({ screenX: 100, screenY: 100 }); up();
+    await sleep(150);
+    if (window.__BEEP_COUNT__ !== 2) errs.push('427: copySound off still played a beep: ' + window.__BEEP_COUNT__);
   } catch (e) { errs.push('probe: ' + e.message); }
   errs.push(...(window.__SMOKE_ERRORS__ || []));
   const pre = document.createElement('pre');
@@ -6357,6 +6476,55 @@ FOLDER_PROBE = """
       await until(() => calls().includes('record_copy'));
       if (!calls().includes('copy_prompt')) errs.push('clicking a member did not copy it');
       if (!calls().includes('record_copy')) errs.push('a copy from a folder was not recorded');
+
+      // 427: same beep helper, same "exactly one per copy, only while on, never
+      // at volume 0" contract as a plain pill. clickMember() re-queries the tile
+      // by id on every call rather than reusing `tiles[0]` -- each settings-changed
+      // fire below reaches folder.js's own listener, which reloads state and (the
+      // grid being open) calls renderGrid() again, detaching the old tile node; a
+      // dispatchEvent on a detached node never bubbles to the delegated listener,
+      // so a stale reference would silently swallow every click here. Outlast the
+      // 400ms auto-paste double-click window too -- the member click just above
+      // leaves lastClick[id] fresh, and clicking again inside that window pastes
+      // instead of copying.
+      const memberId = tiles[0].dataset.id;
+      await sleep(450);
+      window.__BEEP_COUNT__ = 0;
+      window.AudioContext = window.webkitAudioContext = function () {
+        return {
+          currentTime: 0,
+          createOscillator: () => ({ frequency: { value: 0 }, connect() { return this; }, start() { window.__BEEP_COUNT__++; }, stop() {} }),
+          createGain: () => ({ gain: { setValueAtTime() {}, linearRampToValueAtTime() {} }, connect() { return this; } }),
+          destination: {},
+        };
+      };
+      const clickMember = () => {
+        const t = document.querySelector(`#grid .folder-member[data-id="${CSS.escape(memberId)}"]`);
+        if (!t) { errs.push('427: the member tile disappeared mid-test'); return; }
+        t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+        window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, clientX: 10, clientY: 10 }));
+      };
+      await window.__TAURI__.core.invoke('set_ui_flag', { key: 'autoPaste', enabled: false });
+      await window.__TAURI__.core.invoke('set_ui_value', { key: 'copyCooldownMs', value: 0 });
+      await window.__TAURI__.core.invoke('set_ui_flag', { key: 'copySound', enabled: true });
+      window.__FIRE__('settings-changed');
+      await sleep(50);
+      clickMember();
+      await until(() => window.__BEEP_COUNT__ === 1);
+      if (window.__BEEP_COUNT__ !== 1) errs.push('427: copySound on did not play a beep on a folder-member copy: ' + window.__BEEP_COUNT__);
+      await window.__TAURI__.core.invoke('set_ui_value', { key: 'copySoundVolume', value: 0 });
+      window.__FIRE__('settings-changed');
+      await sleep(50);
+      clickMember();
+      await sleep(150);
+      if (window.__BEEP_COUNT__ !== 1) errs.push('427: volume 0 still played a beep in a folder: ' + window.__BEEP_COUNT__);
+      await window.__TAURI__.core.invoke('set_ui_value', { key: 'copySoundVolume', value: 30 });
+      await window.__TAURI__.core.invoke('set_ui_flag', { key: 'copySound', enabled: false });
+      window.__FIRE__('settings-changed');
+      await sleep(50);
+      clickMember();
+      await sleep(150);
+      if (window.__BEEP_COUNT__ !== 1) errs.push('427: copySound off still played a beep in a folder: ' + window.__BEEP_COUNT__);
     }
     // 43: "hide for now" — a distinct action from Dissolve, must never touch the
     // permanent dissolve_float_folder command.
@@ -7086,10 +7254,12 @@ def main():
                  # window it has to sit through, then to 132s once the recording
                  # result dialog's probe added its own four expert-menu round trips,
                  # then to 138s once the tag-merge check added its own batch-select
-                 # round trip (two disposable tags added before the merge itself).
+                 # round trip (two disposable tags added before the merge itself),
+                 # then to 146s once the copy-sound check added its own four
+                 # copy-and-listen round trips plus a volume-slider detour.
                  # The window has to hold the iframe plus Chrome's own frame.
                  f"--window-size={max(w + 30, 520)},{h + 140}",
-                 "--virtual-time-budget=138000", "--dump-dom",
+                 "--virtual-time-budget=146000", "--dump-dom",
                  wrapper.as_uri()],
                 # The dumped DOM carries all 20 languages; without an explicit
                 # codec Windows decodes it as cp1252 and the reader thread dies,

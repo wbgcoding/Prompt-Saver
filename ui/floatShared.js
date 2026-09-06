@@ -48,3 +48,31 @@ export function ffmpegDownloadPct(payload) {
   const { downloaded, total } = payload || {};
   return total ? Math.min(100, Math.round((downloaded / total) * 100)) : 0;
 }
+
+// A short synthesised "copy" beep (the copySound expert switch) -- no audio file
+// is shipped or downloaded. Every window that can copy (main, pill, folder) calls
+// this from its own one success path, each with its own lazily-created
+// AudioContext -- there is no audio state to share across windows, only the code.
+let copySoundCtx = null;
+export function playCopySound(volumePct) {
+  if (!(volumePct > 0)) return; // 0 (or off, passed as undefined/NaN) plays nothing
+  try {
+    if (!copySoundCtx) copySoundCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = copySoundCtx;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 880;
+    const peak = Math.min(1, volumePct / 100) * 0.2; // headroom -- never a harsh beep
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(peak, now + 0.008); // fade in
+    gain.gain.linearRampToValueAtTime(0, now + 0.06); // and back out, so it never clicks
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.07);
+  } catch {
+    // No output device, or a context the browser refuses to resume -- a missing
+    // sound must never be allowed to block or fail a copy.
+  }
+}

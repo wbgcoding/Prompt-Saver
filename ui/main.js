@@ -4,10 +4,10 @@ import { applyTerms } from "./terms.js";
 import { I18N, LANGS } from "./i18n.js";
 import { FONTS, FONT_LABELS, fitText } from "./fonts.js";
 import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./media.js";
-import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
+import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
-import { DRAG_OUT_MODS, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme } from "./floatShared.js";
+import { DRAG_OUT_MODS, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound } from "./floatShared.js";
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
@@ -1281,6 +1281,9 @@ const OPT_FLAG_LABELS = {
   // is a bigger commitment than the in-window button.
   voiceOnlineOk: "flagVoiceOnlineOk",
   voiceHotkey: "flagVoiceHotkey",
+  // A short synthesised beep on every successful copy, mainly for the floating
+  // button (easy to miss visually) and for screen-reader users.
+  copySound: "flagCopySound",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
@@ -1391,6 +1394,7 @@ const EXPERT_VALUES = {
   journalWidth: { label: "valJournalWidth", min: 520, max: 1400, step: 20, def: 980, unit: "px", gate: "copyHistory" },
   // Block re-copying the SAME prompt within this window (0 = off). Never blocks others.
   copyCooldownMs: { label: "valCopyCooldown", min: 0, max: 10000, step: 100, def: COOLDOWN_MS_DEFAULT, unit: "ms" },
+  copySoundVolume: { label: "valCopySoundVolume", min: 0, max: 100, step: 5, def: COPY_SOUND_VOLUME_DEFAULT, unit: "%", gate: "copySound" },
   // Header favorites-star size.
   favStarSize: { label: "valFavStarSize", min: 14, max: 48, step: 1, def: 22, unit: "px", gate: "favViewButton" },
   // Favorites grid: cap the column count (0 = auto-size to the count).
@@ -1785,7 +1789,7 @@ const EXPERT_TABS = [
     // highlighter only ever paints inside the preview.
     { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
-    { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "closeOnCopy", "copyBubble", "copyFlash"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
+    { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "closeOnCopy", "copyBubble", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
     // Floating buttons and the two kinds of folder they can form.
     { title: "expGroupFolders", flags: ["floating", { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap", "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
     // The quick-copy sections of the tray menu, each with its own entry count.
@@ -6269,6 +6273,7 @@ function promptVarsDialog(vars) {
 // the cooldown — see below.
 const recordCopy = (id) => {
   markCopied(id);
+  if (optFlag("copySound")) playCopySound(val("copySoundVolume"));
   return invoke("record_copy", { id }).catch(() => {});
 };
 

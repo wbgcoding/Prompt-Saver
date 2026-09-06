@@ -6,8 +6,8 @@ import { mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults } from "./m
 // Custom themes: shared with the folder window (floattheme.js).
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
-import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT } from "./copyDefaults.js";
-import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang, fileUri } from "./floatShared.js";
+import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
+import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang, fileUri, playCopySound } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -39,6 +39,7 @@ let lastCopyTs = 0;
 // Auto-paste on this pill (autoPaste itself defaults on; the rest default off;
 // a fast second click pastes).
 let apOn = false, apEnter = false, apDelay = AUTO_PASTE_DELAY_MS_DEFAULT, apDblMs = DBL_CLICK_MS_DEFAULT, lastPillTs = 0;
+let copySoundOn = false, copySoundVolume = COPY_SOUND_VOLUME_DEFAULT;
 let pSize = 0;
 let pCaptionSize = 0; // per-prompt caption size (0 = default, 1 = auto)
 let menuOpen = false;
@@ -239,6 +240,9 @@ function applyPrefs(s) {
   DRAG_THRESHOLD = Number.isFinite(dt) ? dt : DRAG_THRESHOLD_DEFAULT;
   apOn = s.ui_flags?.autoPaste !== false; // default on
   apEnter = s.ui_flags?.autoPasteEnter === true;
+  copySoundOn = s.ui_flags?.copySound === true; // default off
+  const csv = Number(s.ui_values?.copySoundVolume);
+  copySoundVolume = Number.isFinite(csv) ? csv : COPY_SOUND_VOLUME_DEFAULT;
   const apd = Number(s.ui_values?.autoPasteDelayMs);
   apDelay = Number.isFinite(apd) ? apd : AUTO_PASTE_DELAY_MS_DEFAULT;
   const adb = Number(s.ui_values?.dblClickMs);
@@ -510,6 +514,7 @@ function showCopied() {
   pill.classList.add("copied");
   clearTimeout(copiedTimer);
   copiedTimer = setTimeout(() => pill.classList.remove("copied"), COPIED_MS);
+  if (copySoundOn) playCopySound(copySoundVolume);
 }
 
 // ---- Right-click menu ----
