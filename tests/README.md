@@ -21,7 +21,7 @@ soon as the run has been evaluated; only `target/release/` ships.
 | `python tests/expert_menu_check.py` | Every expert tab entry exists once, no `gate:` on an unknown flag, nothing unreachable, every `DEPENDENCIES` pair really carries the parent's gate in the parent's own group; every `EXPERT_NOTICES` entry is declared, shown by exactly one group, has both its strings, and never doubles as a flag key. |
 | `python tests/layout/modal_scroll_test.py` | Real edit-modal markup plus `main.css` in headless Chromium at five small viewports down to the app minimum: the expanded version history keeps a usable height and Save stays reachable. Also the theme editor (one column at 520 px, two at 900 px, Save reachable in both). |
 | `python tests/ui/smoke_test.py` | Boots the real `index.html` against `tests/ui/tauri_stub.js` and walks every window (see below). |
-| `python tests/perf_hot_paths.py` | Times four hot paths against a 1000-prompt fixture (see below). |
+| `python tests/perf_hot_paths.py` | Times four hot paths at 1000, 5000 and 10000 prompts, plus the video editor once (see below). Needs a Chromium-family browser (Chrome or Edge) installed. |
 
 ### `source_hygiene.py` in detail
 Covers line **and** block comments (`/* */`, `<!-- -->`), the spelled-out forms
@@ -51,12 +51,18 @@ store is unencrypted, and completely absent - with no empty gap left behind - wh
 not.
 
 ### `perf_hot_paths.py` in detail
-Boots `index.html` against `tauri_stub.js` with the fixture overridden to 1000 synthetic
-prompts (100 with an image) across two views, and times four hot paths from the real
-DOM's perspective (click to fully rendered): opening the library (1000 unfiltered rows),
+Boots `index.html` against `tauri_stub.js` with the fixture overridden to N synthetic
+prompts (10% with an image) across two views, and times four hot paths from the real
+DOM's perspective (click to fully rendered): opening the library (all unfiltered rows),
 typing a search query, switching views (a full grid re-render), opening the expert menu.
-The targets are generous on purpose (400-800 ms) - this catches an actual regression,
-not machine-to-machine noise. All four measured 10-120 ms on the 30.08. baseline.
+Runs the four paths three times, at N = 1000, 5000 and 10000, each stage against its own
+target (1000 keeps the original 400-800 ms, 5000 gets 3x, 10000 gets 6x), and prints one
+table covering every stage at the end instead of stopping at the first miss - a real
+regression at 10000 must never hide behind 1000 and 5000 passing. All four measured
+10-120 ms at 1000 entries on the 30.08. baseline. Set `PERF_QUICK=1` to run only the
+1000-entry stage while developing. Separately times the video editor opening a 10-minute
+1080p30 recording once (unrelated to prompt count, so not repeated per stage). Needs a
+Chromium-family browser (Chrome or Edge); skips cleanly if neither is found.
 
 ## Harness constraints (all three browser suites)
 - `smoke_test.py` and `modal_scroll_test.py` load the page in an IFRAME of the exact
