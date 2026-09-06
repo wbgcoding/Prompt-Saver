@@ -347,8 +347,6 @@ body.video-body {
 .ve-op-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ve-op-clickable .ve-op-label { cursor: pointer; }
 .ve-op-clickable .ve-op-label:hover { color: var(--accent); }
-/* Past the undo window: still in effect, just no longer reachable by undo. */
-.ve-op-locked .ve-op-label { color: var(--muted); }
 .ve-op-del { flex: 0 0 auto; }
 
 /* ---- toast ---- */

@@ -78,6 +78,11 @@ const VE = {
   undoMax: UNDO_MAX_DEFAULT,
   sel: null,            // { a, b } selection on the source timeline, in ms
   selOv: null,          // id of the overlay currently being edited
+  ovFields: {},         // key -> { input, getValue } for the open overlay editor,
+                         // filled by renderOverlayEditor(); lets a value commit
+                         // refresh the panel's OTHER fields without rebuilding it
+  liveEls: new Map(),   // overlay id -> its live-preview DOM node, reused across
+                         // frames instead of rebuilt (see renderOverlayLive)
   zoom: 20,             // timeline pixels per second
   playhead: 0,          // ms on the source timeline
   drag: null,           // active pointer gesture on the preview or the timeline
@@ -249,14 +254,15 @@ $("ve-confirm-cancel").addEventListener("click", () => closeConfirm(false));
 // ---------------------------------------------------------------- operation list
 
 // VE.ops IS the render list, in order. Once the undo window is exceeded the
-// floor advances instead of the oldest entry being dropped: it stays in effect,
-// undo simply cannot walk back past it. Dropping it would silently un-apply an
-// operation the user can still see.
-function pushOp(op) {
+// floor advances and entries below it are dropped outright (not just index-
+// locked): they can never be undone back to, so keeping them around forever
+// would grow VE.ops -- and the rendered #ve-ops-list -- without bound.
+function pushOp(op, opts) {
   VE.ops.push(op);
   if (VE.ops.length - VE.floor > VE.undoMax) VE.floor = VE.ops.length - VE.undoMax;
+  if (VE.floor > 0) { VE.ops = VE.ops.slice(VE.floor); VE.floor = 0; }
   VE.redo.length = 0;
-  afterOpsChanged();
+  afterOpsChanged(opts);
 }
 
 // Ops that may exist only once (trim, crop, speed, fade, scale) and an overlay
@@ -268,7 +274,7 @@ function pushOp(op) {
 // entirely instead of stepping back to it. See undo()/redo() for the other
 // half: they walk this chain one link at a time rather than treating a
 // replacing op as an ordinary push/pop.
-function pushReplacing(match, op) {
+function pushReplacing(match, op, opts) {
   const before = VE.ops.length;
   const prev = VE.ops.find(match) || null;
   VE.ops = VE.ops.filter((o) => !match(o));
@@ -276,7 +282,19 @@ function pushReplacing(match, op) {
   // every later index down, so it has to shrink by the same amount or it would
   // re-lock operations that were still undoable.
   VE.floor = Math.max(0, VE.floor - (before - VE.ops.length));
-  pushOp(prev ? { ...op, _prev: prev } : op);
+  const next = prev ? { ...op, _prev: prev } : op;
+  pushOp(next._prev ? capPrevChain(next, VE.undoMax) : next, opts);
+}
+
+// A replacing op's own `_prev` chain grows one link per re-edit of the SAME
+// operation (dragging one rectangle a thousand times keeps a thousand linked
+// copies alive otherwise, unbounded by VE.undoMax since it never touches
+// VE.ops directly) -- cut it at the same depth VE.ops itself is capped to.
+function capPrevChain(op, max) {
+  let node = op, depth = 1;
+  while (node._prev && depth < max) { node = node._prev; depth++; }
+  delete node._prev;
+  return op;
 }
 
 function removeOps(match) {
@@ -316,20 +334,42 @@ function redo() {
   afterOpsChanged();
 }
 
-function afterOpsChanged() {
+// A value commit inside the overlay editor or a rect drag on the currently
+// open overlay passes keepEditor: true -- everything still updates except the
+// two panels that would otherwise tear down and rebuild the very field the
+// user is typing in (renderOverlayEditor, renderEditFields). syncOverlayFields
+// keeps that panel's OTHER inputs current instead (see VE.ovFields).
+function afterOpsChanged(opts) {
+  const keep = opts && opts.keepEditor;
   VE.dirty = true;
   $("ve-undo").disabled = VE.ops.length <= VE.floor;
   $("ve-redo").disabled = !VE.redo.length;
   if (VE.selOv && !VE.ops.some((o) => o.id === VE.selOv)) VE.selOv = null;
   renderOps();
   renderOverlayList();
-  renderOverlayEditor();
-  renderEditFields();
+  if (keep) syncOverlayFields();
+  else { renderOverlayEditor(); renderEditFields(); }
   renderRegions();
   renderRects();
   updateCutCount();
   updateExportNote();
   applyPreviewSpeed();
+}
+
+// Writes the current op's values into the overlay editor's own inputs without
+// touching the DOM node the user may still be focused on -- the inputs are
+// registered in VE.ovFields by renderOverlayEditor() while it builds the panel.
+function syncOverlayFields() {
+  const fields = VE.ovFields;
+  if (!fields) return;
+  const op = VE.ops.find((o) => o.id === VE.selOv);
+  if (!op) return;
+  for (const key in fields) {
+    const { input, getValue } = fields[key];
+    if (input === document.activeElement) continue;
+    const value = getValue(op);
+    if (value != null) input.value = value;
+  }
 }
 
 const opOf = (tool) => VE.ops.filter((o) => o.tool === tool).pop() || null;
@@ -363,9 +403,9 @@ function renderOps() {
     list.appendChild(empty);
     return;
   }
-  VE.ops.forEach((op, index) => {
+  VE.ops.forEach((op) => {
     const row = document.createElement("div");
-    row.className = "ve-op-row" + (index < VE.floor ? " ve-op-locked" : "");
+    row.className = "ve-op-row";
     const label = document.createElement("span");
     label.className = "ve-op-label";
     label.textContent = opLabel(op);
@@ -846,20 +886,48 @@ function renderRects() {
 // outline. Overlay time ranges are picked on the SOURCE timeline (same as
 // VE.playhead here), so no outMs() conversion is needed like buildVideoChain()
 // needs for ffmpeg's output-timeline `enable` clauses.
+//
+// VE.liveEls keeps one DOM node per overlay id across frames instead of
+// rebuilding the whole layer every tick: an image overlay used to mean a
+// fresh <img src=...> sixty times a second, a pixelate overlay two fresh
+// <canvas> elements -- both wear patterns behind "the preview works at first
+// and then stops". buildLiveOverlayEl() now updates a passed-in element in
+// place when the same overlay already has one.
 function renderOverlayLive(vb) {
   const layer = $("ve-overlay-live");
-  layer.innerHTML = "";
-  if (!VE.dur) return;
+  if (!VE.dur) { layer.innerHTML = ""; VE.liveEls.clear(); return; }
   const box = vb || videoBox();
   const now = VE.playhead;
   for (const op of opsOf("overlay")) {
-    if (now < op.startMs || now > op.endMs) continue;
-    const el = buildLiveOverlayEl(op, box);
-    if (el) layer.appendChild(el);
+    const prev = VE.liveEls.get(op.id);
+    if (now < op.startMs || now > op.endMs) {
+      if (prev) prev.hidden = true;
+      continue;
+    }
+    const el = buildLiveOverlayEl(op, box, prev || null);
+    if (!el) continue;
+    if (el !== prev) {
+      if (prev && prev.parentNode) prev.remove();
+      layer.appendChild(el);
+      VE.liveEls.set(op.id, el);
+    }
+    el.hidden = false;
+  }
+  // Overlays that were removed entirely (not just out of range) must not
+  // keep their node alive in the map or the layer.
+  const liveIds = new Set(opsOf("overlay").map((o) => o.id));
+  for (const [id, el] of [...VE.liveEls]) {
+    if (!liveIds.has(id)) { el.remove(); VE.liveEls.delete(id); }
   }
 }
 
-function buildLiveOverlayEl(op, vb) {
+// `reuse`, when given, is the SAME element returned for this overlay last
+// frame -- every branch updates it in place instead of allocating a fresh
+// node, and resets whatever an earlier variant (frame style, text plate)
+// might have left behind. The pixelate canvas is the one element that must
+// still be redrawn every frame regardless, since it samples the live video,
+// but its own scratch canvas is cached on it rather than reallocated.
+function buildLiveOverlayEl(op, vb, reuse) {
   const rectStyle = (el, rect) => {
     el.style.left = `${vb.left + rect.x * vb.scale}px`;
     el.style.top = `${vb.top + rect.y * vb.scale}px`;
@@ -867,21 +935,24 @@ function buildLiveOverlayEl(op, vb) {
     el.style.height = `${rect.h * vb.scale}px`;
   };
   if (op.kind === "image") {
-    const img = document.createElement("img");
+    const img = reuse instanceof HTMLImageElement ? reuse : document.createElement("img");
     img.className = "ve-live ve-live-image";
-    img.src = convertFileSrc(op.path);
+    const src = convertFileSrc(op.path);
+    if (img.src !== src) img.src = src;
     rectStyle(img, op.rect);
     img.style.opacity = String(clamp(op.opacity, 5, 100) / 100);
     return img;
   }
   if (op.kind === "frame") {
-    const el = document.createElement("div");
+    const el = reuse instanceof HTMLElement && reuse.tagName === "DIV" && reuse.classList.contains("ve-live-frame") ? reuse : document.createElement("div");
     el.className = "ve-live ve-live-frame";
     rectStyle(el, op.rect);
     const px = Math.max(1, op.thickness * vb.scale);
     el.style.opacity = String(clamp(op.opacity, 0, 100) / 100);
     el.style.borderWidth = `${px}px`;
     el.style.borderColor = op.color;
+    el.style.outline = "";
+    el.style.boxShadow = "";
     if (op.style === "double") {
       // Approximates the second, inset drawbox with an outline outside the
       // border instead of a truly separate inner box -- close enough for a
@@ -894,7 +965,7 @@ function buildLiveOverlayEl(op, vb) {
     return el;
   }
   if (op.kind === "text") {
-    const el = document.createElement("div");
+    const el = reuse instanceof HTMLElement && reuse.classList.contains("ve-live-text") ? reuse : document.createElement("div");
     el.className = "ve-live ve-live-text";
     el.style.left = `${vb.left + op.x * vb.scale}px`;
     el.style.top = `${vb.top + op.y * vb.scale}px`;
@@ -902,6 +973,8 @@ function buildLiveOverlayEl(op, vb) {
     el.style.fontFamily = FONT_CSS[op.font] || FONT_CSS.segoeui;
     el.style.fontWeight = op.font === "arialbd" ? "bold" : "normal";
     el.style.color = op.color;
+    el.style.background = "";
+    el.style.padding = "";
     if (op.plate !== false) {
       el.style.background = "rgba(0, 0, 0, 0.5)";
       el.style.padding = `${Math.max(4, Math.round(op.fontPx / 4)) * vb.scale}px`;
@@ -911,19 +984,21 @@ function buildLiveOverlayEl(op, vb) {
   }
   if (op.kind === "pixelate") {
     const w = Math.max(1, Math.round(op.rect.w * vb.scale)), h = Math.max(1, Math.round(op.rect.h * vb.scale));
-    const canvas = document.createElement("canvas");
+    const canvas = reuse instanceof HTMLCanvasElement ? reuse : document.createElement("canvas");
     canvas.className = "ve-live ve-live-pixelate";
-    canvas.width = w;
-    canvas.height = h;
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
     rectStyle(canvas, op.rect);
     // Down-sample the live video frame to the real block grid, then blow it
     // back up with smoothing off -- the same two-step mosaic buildVideoChain()
-    // asks ffmpeg for, just done in a canvas instead of a filter graph.
+    // asks ffmpeg for, just done in a canvas instead of a filter graph. The
+    // small sampling canvas is cached on the element itself so it is
+    // resized, not reallocated, from one frame to the next.
     const bw = Math.max(1, Math.round(op.rect.w / op.blockPx)), bh = Math.max(1, Math.round(op.rect.h / op.blockPx));
     try {
-      const tiny = document.createElement("canvas");
-      tiny.width = bw;
-      tiny.height = bh;
+      const tiny = canvas._veTiny || (canvas._veTiny = document.createElement("canvas"));
+      if (tiny.width !== bw) tiny.width = bw;
+      if (tiny.height !== bh) tiny.height = bh;
       tiny.getContext("2d").drawImage(videoEl, op.rect.x, op.rect.y, op.rect.w, op.rect.h, 0, 0, bw, bh);
       const ctx = canvas.getContext("2d");
       ctx.imageSmoothingEnabled = false;
@@ -935,7 +1010,7 @@ function buildLiveOverlayEl(op, vb) {
     return canvas;
   }
   if (op.kind === "spotlight") {
-    const el = document.createElement("div");
+    const el = reuse instanceof HTMLElement && reuse.classList.contains("ve-live-spotlight") ? reuse : document.createElement("div");
     el.className = "ve-live ve-live-spotlight";
     rectStyle(el, op.rect);
     // Same "hole punched in an oversized shadow" trick .ve-rect-spotlight
@@ -1025,7 +1100,7 @@ function endRectDrag() {
     pushReplacing((o) => o.tool === "crop", { tool: "crop", rect });
   } else {
     if (rectsEqual(raw, drag.orig)) { op.rect = raw; renderRects(); return; }
-    pushReplacing((o) => o.id === op.id, { ...op, rect: raw });
+    pushReplacing((o) => o.id === op.id, { ...op, rect: raw }, { keepEditor: true });
   }
 }
 
@@ -1057,12 +1132,12 @@ function applyPreviewSpeed() {
   videoEl.volume = clamp(sys.vol / 100, 0, 1);
 }
 
-function seek(ms) {
+function seek(ms, vb) {
   const target = clamp(ms, 0, VE.dur);
   VE.playhead = target;
   videoEl.currentTime = target / 1000;
   renderPlayhead();
-  renderOverlayLive();
+  renderOverlayLive(vb);
   keepPlayheadVisible();
 }
 
@@ -1075,32 +1150,50 @@ function keepPlayheadVisible() {
   else if (x > right - 20) view.scrollLeft = Math.max(0, x - view.clientWidth + 60);
 }
 
+// A single throw used to kill this loop forever (requestAnimationFrame was its
+// own last statement): the playhead, the time display and the live overlay
+// all froze silently for the rest of the session. Reported once, never per
+// frame, and the loop always re-arms itself in the finally below.
+let tickErrorReported = false;
+function noteTickError(err) {
+  if (tickErrorReported) return;
+  tickErrorReported = true;
+  console.error("video editor tick() failed", err);
+  toast(t("veTickError"));
+}
+
 // Cut regions are skipped seamlessly during playback, so the preview is the
 // finished clip and not the raw capture with markers drawn on it. A frame loop
 // rather than the video's own timeupdate event: that fires roughly four times a
 // second, which is long enough to see a cut region play before it is skipped.
 function tick() {
-  if (VE.dur) {
-    const segments = keptSegments();
-    const last = segments[segments.length - 1];
-    const now = videoEl.currentTime * 1000;
-    if (!videoEl.paused) {
-      if (now >= last.b - 1) {
-        videoEl.pause();
-        seek(last.b);
-      } else {
-        const kept = nextKept(now);
-        if (kept > now + 1) videoEl.currentTime = kept / 1000;
+  try {
+    if (VE.dur) {
+      const segments = keptSegments();
+      const last = segments[segments.length - 1];
+      const now = videoEl.currentTime * 1000;
+      const vb = videoBox();
+      if (!videoEl.paused) {
+        if (now >= last.b - 1) {
+          videoEl.pause();
+          seek(last.b, vb);
+        } else {
+          const kept = nextKept(now);
+          if (kept > now + 1) videoEl.currentTime = kept / 1000;
+        }
+      }
+      if (Math.abs(now - VE.playhead) > 0.5) {
+        VE.playhead = now;
+        renderPlayhead();
+        renderOverlayLive(vb);
+        if (!videoEl.paused) keepPlayheadVisible();
       }
     }
-    if (Math.abs(now - VE.playhead) > 0.5) {
-      VE.playhead = now;
-      renderPlayhead();
-      renderOverlayLive();
-      if (!videoEl.paused) keepPlayheadVisible();
-    }
+  } catch (err) {
+    noteTickError(err);
+  } finally {
+    requestAnimationFrame(tick);
   }
-  requestAnimationFrame(tick);
 }
 
 function togglePlay() {
@@ -1404,12 +1497,21 @@ function colorRow(current, onPick) {
 }
 
 function commitOverlay(op, changes) {
-  pushReplacing((o) => o.id === op.id, { ...op, ...changes });
+  pushReplacing((o) => o.id === op.id, { ...op, ...changes }, { keepEditor: true });
+}
+
+// Registers an overlay-editor input so a later keepEditor commit can refresh
+// it in place (see syncOverlayFields) instead of rebuilding the panel.
+function ovTrack(key, input, getValue) {
+  input.dataset.ovField = key;
+  VE.ovFields[key] = { input, getValue };
+  return input;
 }
 
 function renderOverlayEditor() {
   const box = $("ve-ov-editor");
   box.innerHTML = "";
+  VE.ovFields = {};
   const op = VE.ops.find((o) => o.id === VE.selOv);
   if (!op) { box.classList.add("hidden"); return; }
   box.classList.remove("hidden");
@@ -1425,22 +1527,21 @@ function renderOverlayEditor() {
     const note = document.createElement("p");
     note.className = "modal-hint";
     note.textContent = t("veOvRectTip");
-    note.title = t("veOvRectTip");
     box.appendChild(note);
   }
 
   const range = document.createElement("div");
   range.className = "ve-row2";
-  const startInput = textInput(fmtTime(op.startMs), (v) => {
+  const startInput = ovTrack("startMs", textInput(fmtTime(op.startMs), (v) => {
     const ms = parseTime(v);
     if (ms != null) commitOverlay(op, { startMs: clamp(ms, 0, op.endMs) });
     else renderOverlayEditor();
-  });
-  const endInput = textInput(fmtTime(op.endMs), (v) => {
+  }), (o) => fmtTime(o.startMs));
+  const endInput = ovTrack("endMs", textInput(fmtTime(op.endMs), (v) => {
     const ms = parseTime(v);
     if (ms != null) commitOverlay(op, { endMs: clamp(ms, op.startMs, VE.dur) });
     else renderOverlayEditor();
-  });
+  }), (o) => fmtTime(o.endMs));
   range.append(fieldRow(t("veOvFrom"), startInput), fieldRow(t("veOvTo"), endInput));
   box.appendChild(range);
 
@@ -1472,27 +1573,27 @@ function renderOverlayEditor() {
       commitOverlay(op, { path });
     });
     box.appendChild(change);
-    box.appendChild(fieldRow(t("veOvOpacity"), numberInput(op.opacity, 5, 100, 5, (v) => commitOverlay(op, { opacity: v }))));
+    box.appendChild(fieldRow(t("veOvOpacity"), ovTrack("opacity", numberInput(op.opacity, 5, 100, 5, (v) => commitOverlay(op, { opacity: v })), (o) => String(o.opacity))));
   }
 
   if (op.kind === "frame") {
-    box.appendChild(fieldRow(t("veOvThickness"), numberInput(op.thickness, 1, Math.max(4, Math.round(VE.h / 4)), 1, (v) => commitOverlay(op, { thickness: v }))));
-    box.appendChild(fieldRow(t("veOvStyle"), selectInput(
+    box.appendChild(fieldRow(t("veOvThickness"), ovTrack("thickness", numberInput(op.thickness, 1, Math.max(4, Math.round(VE.h / 4)), 1, (v) => commitOverlay(op, { thickness: v })), (o) => String(o.thickness))));
+    box.appendChild(fieldRow(t("veOvStyle"), ovTrack("style", selectInput(
       [["solid", t("veOvStyleSolid")], ["double", t("veOvStyleDouble")], ["soft", t("veOvStyleSoft")]],
-      op.style, (v) => commitOverlay(op, { style: v }))));
+      op.style, (v) => commitOverlay(op, { style: v })), (o) => o.style)));
     box.appendChild(fieldRow(t("veOvColor"), colorRow(op.color, (hex) => commitOverlay(op, { color: hex }))));
-    box.appendChild(fieldRow(t("veOvOpacity"), numberInput(op.opacity, 5, 100, 5, (v) => commitOverlay(op, { opacity: v }))));
+    box.appendChild(fieldRow(t("veOvOpacity"), ovTrack("opacity", numberInput(op.opacity, 5, 100, 5, (v) => commitOverlay(op, { opacity: v })), (o) => String(o.opacity))));
   }
 
   if (op.kind === "text") {
-    box.appendChild(fieldRow(t("veOvTextValue"), textInput(op.text, (v) => commitOverlay(op, { text: v }))));
-    box.appendChild(fieldRow(t("veOvFont"), selectInput(FONT_FILES.map(([id]) => [id, id]), op.font, (v) => commitOverlay(op, { font: v }))));
-    box.appendChild(fieldRow(t("veOvFontSize"), numberInput(op.fontPx, 8, Math.max(16, VE.h), 1, (v) => commitOverlay(op, { fontPx: v }))));
+    box.appendChild(fieldRow(t("veOvTextValue"), ovTrack("text", textInput(op.text, (v) => commitOverlay(op, { text: v })), (o) => o.text)));
+    box.appendChild(fieldRow(t("veOvFont"), ovTrack("font", selectInput(FONT_FILES.map(([id]) => [id, id]), op.font, (v) => commitOverlay(op, { font: v })), (o) => o.font)));
+    box.appendChild(fieldRow(t("veOvFontSize"), ovTrack("fontPx", numberInput(op.fontPx, 8, Math.max(16, VE.h), 1, (v) => commitOverlay(op, { fontPx: v })), (o) => String(o.fontPx))));
     const pos = document.createElement("div");
     pos.className = "ve-row2";
     pos.append(
-      fieldRow(t("veCropX"), numberInput(op.x, 0, VE.w, 1, (v) => commitOverlay(op, { x: v }))),
-      fieldRow(t("veCropY"), numberInput(op.y, 0, VE.h, 1, (v) => commitOverlay(op, { y: v }))));
+      fieldRow(t("veCropX"), ovTrack("x", numberInput(op.x, 0, VE.w, 1, (v) => commitOverlay(op, { x: v })), (o) => String(o.x))),
+      fieldRow(t("veCropY"), ovTrack("y", numberInput(op.y, 0, VE.h, 1, (v) => commitOverlay(op, { y: v })), (o) => String(o.y))));
     box.appendChild(pos);
     box.appendChild(fieldRow(t("veOvColor"), colorRow(op.color, (hex) => commitOverlay(op, { color: hex }))));
     const plate = document.createElement("label");
@@ -1509,11 +1610,11 @@ function renderOverlayEditor() {
   }
 
   if (op.kind === "pixelate") {
-    box.appendChild(fieldRow(t("veOvBlock"), numberInput(op.blockPx, 4, 80, 2, (v) => commitOverlay(op, { blockPx: v }))));
+    box.appendChild(fieldRow(t("veOvBlock"), ovTrack("blockPx", numberInput(op.blockPx, 4, 80, 2, (v) => commitOverlay(op, { blockPx: v })), (o) => String(o.blockPx))));
   }
 
   if (op.kind === "spotlight") {
-    box.appendChild(fieldRow(t("veOvDim"), numberInput(Math.round(op.dim * 100), 10, 95, 5, (v) => commitOverlay(op, { dim: v / 100 }))));
+    box.appendChild(fieldRow(t("veOvDim"), ovTrack("dim", numberInput(Math.round(op.dim * 100), 10, 95, 5, (v) => commitOverlay(op, { dim: v / 100 })), (o) => String(Math.round(o.dim * 100)))));
   }
 
   if (op.rect) {
@@ -1521,10 +1622,10 @@ function renderOverlayEditor() {
     grid.className = "ve-row4";
     const setRect = (key) => (v) => commitOverlay(op, { rect: snapRect({ ...op.rect, [key]: v }) });
     grid.append(
-      fieldRow(t("veCropX"), numberInput(op.rect.x, 0, VE.w, 2, setRect("x"))),
-      fieldRow(t("veCropY"), numberInput(op.rect.y, 0, VE.h, 2, setRect("y"))),
-      fieldRow(t("veCropW"), numberInput(op.rect.w, 2, VE.w, 2, setRect("w"))),
-      fieldRow(t("veCropH"), numberInput(op.rect.h, 2, VE.h, 2, setRect("h"))));
+      fieldRow(t("veCropX"), ovTrack("rect.x", numberInput(op.rect.x, 0, VE.w, 2, setRect("x")), (o) => String(o.rect.x))),
+      fieldRow(t("veCropY"), ovTrack("rect.y", numberInput(op.rect.y, 0, VE.h, 2, setRect("y")), (o) => String(o.rect.y))),
+      fieldRow(t("veCropW"), ovTrack("rect.w", numberInput(op.rect.w, 2, VE.w, 2, setRect("w")), (o) => String(o.rect.w))),
+      fieldRow(t("veCropH"), ovTrack("rect.h", numberInput(op.rect.h, 2, VE.h, 2, setRect("h")), (o) => String(o.rect.h))));
     box.appendChild(grid);
   }
 
@@ -2281,6 +2382,11 @@ function resetForNewSource() {
   VE.floor = 0;
   VE.sel = null;
   VE.selOv = null;
+  // The live-preview nodes belong to the OLD source's overlays; a new source
+  // starts with none, so any leftover node would otherwise show a stale
+  // image/text/pixelate sampled from a video that is no longer loaded.
+  $("ve-overlay-live").innerHTML = "";
+  VE.liveEls.clear();
   VE.strip = [];
   VE.stripCount = 0;
   VE.peaks = { 0: null, 1: null };

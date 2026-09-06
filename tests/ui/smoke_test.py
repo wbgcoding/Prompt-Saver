@@ -7070,6 +7070,201 @@ VIDEO_PROBE = """
     rawKeyCheck('overlays tab');
     sideScan(errs, 'overlays tab');
 
+    // ---- 354: text can be selected in the side panels, not on the drag surfaces ----
+    const selectableIds = ['ve-export-dest', 've-trim-start-val'];
+    for (const id of selectableIds) {
+      const style = getComputedStyle(document.getElementById(id));
+      if (style.userSelect === 'none') {
+        errs.push('#' + id + ' cannot be text-selected (user-select: none)');
+      }
+    }
+    if (getComputedStyle(document.querySelector('.ve-titlebar')).userSelect !== 'none') {
+      errs.push('the titlebar drag surface must stay non-selectable');
+    }
+
+    // ---- 355/356: select the text overlay, check it draws once and that a
+    // value commit does not steal focus away from the field being edited ----
+    const ovRows = [...document.querySelectorAll('#ve-ov-list .ve-ov-row')];
+    const textRowIdx = overlayKinds.findIndex(([id]) => id === 've-ov-add-text');
+    if (!ovRows[textRowIdx]) {
+      errs.push('could not find the text overlay row in the overlay list');
+    } else {
+      ovRows[textRowIdx].click();
+      await sleep(30);
+      const textField = document.querySelector('#ve-ov-editor [data-ov-field="text"]');
+      if (!textField) {
+        errs.push('the text overlay editor has no tracked text-value field');
+      } else {
+        const before = textField.value;
+        const withText = [...document.querySelectorAll('#ve-stage *')].filter((el) => el.textContent === before && el.children.length === 0);
+        if (withText.length !== 1) {
+          errs.push('expected exactly one element showing the overlay text in #ve-stage, found ' + withText.length);
+        }
+        textField.focus();
+        textField.value = before + '!';
+        // Set the caret AFTER the value assignment -- assigning .value itself
+        // always snaps the caret to the end, so this reflects where a real
+        // typist's cursor sits right before the commit this probe simulates.
+        textField.setSelectionRange(2, 2);
+        textField.dispatchEvent(new Event('input'));
+        textField.dispatchEvent(new Event('change'));
+        await sleep(30);
+        if (document.activeElement !== textField) {
+          errs.push('356: committing a text overlay value moved focus away from the field being edited');
+        } else if (textField.selectionStart !== 2) {
+          errs.push('356: committing a text overlay value moved the caret in the still-focused field');
+        }
+      }
+      // the currently selected op is text, not spotlight/pixelate -- select the
+      // spotlight row to check its rect-tip hint carries no duplicate tooltip
+      const spotRowIdx = overlayKinds.findIndex(([id]) => id === 've-ov-add-spotlight');
+      if (ovRows[spotRowIdx]) {
+        ovRows[spotRowIdx].click();
+        await sleep(30);
+        const hint = document.querySelector('#ve-ov-editor .modal-hint');
+        if (hint && hint.hasAttribute('title')) {
+          errs.push('355: the pixelate/spotlight hint still repeats itself as a tooltip');
+        }
+      }
+    }
+
+    // ---- 356: dragging an overlay's rectangle updates its X/Y fields in
+    // place while a different field in the same panel keeps focus ----
+    {
+      const imgRowIdx = overlayKinds.findIndex(([id]) => id === 've-ov-add-image');
+      if (ovRows[imgRowIdx]) {
+        ovRows[imgRowIdx].click();
+        await sleep(30);
+        const opacityField = document.querySelector('#ve-ov-editor [data-ov-field="opacity"]');
+        const xField = document.querySelector('#ve-ov-editor [data-ov-field="rect.x"]');
+        const rectEl = document.querySelector('#ve-rects .ve-rect-image');
+        if (opacityField && xField && rectEl) {
+          opacityField.focus();
+          const beforeX = xField.value;
+          const box = rectEl.getBoundingClientRect();
+          const cx = box.left + box.width / 2, cy = box.top + box.height / 2;
+          rectEl.dispatchEvent(new PointerEvent('pointerdown', { clientX: cx, clientY: cy, pointerId: 1, bubbles: true }));
+          document.getElementById('ve-rects').dispatchEvent(new PointerEvent('pointermove', { clientX: cx + 20, clientY: cy + 20, pointerId: 1, bubbles: true }));
+          document.getElementById('ve-rects').dispatchEvent(new PointerEvent('pointerup', { clientX: cx + 20, clientY: cy + 20, pointerId: 1, bubbles: true }));
+          await sleep(30);
+          if (document.activeElement !== opacityField) {
+            errs.push('356: dragging an overlay rectangle moved focus away from an unrelated field in the same panel');
+          }
+          if (xField.value === beforeX) {
+            errs.push('356: dragging an overlay rectangle did not refresh its own X field');
+          }
+        } else {
+          errs.push('356: could not find the image overlay rect/fields to test the drag path');
+        }
+      }
+    }
+
+    // Both 358 probes below depend on tick()'s own requestAnimationFrame loop
+    // actually firing across several real sleeps -- headless Chromium stops
+    // producing frames once the page is quiet (see the heartbeat comment
+    // earlier in this file), which would otherwise starve tick() of any
+    // chance to run during the waits below. Same fix: keep something dirty.
+    const beat358 = setInterval(() => {
+      document.documentElement.style.setProperty('--smoke-tick-358', String(Date.now()));
+      document.body.getBoundingClientRect();
+    }, 20);
+
+    // ---- 358: the live-preview element for an overlay is REUSED across
+    // renders, not rebuilt (a fresh <img>/<canvas> every frame was the wear
+    // pattern behind "the preview works at first and then stops") ----
+    {
+      const img0 = document.querySelector('#ve-overlay-live .ve-live-image');
+      if (!img0) {
+        errs.push('358: no live image element to check for node reuse');
+      } else {
+        img0._probeMarker = 'kept';
+        for (let i = 0; i < 5; i++) {
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: i % 2 ? 'Home' : 'End', bubbles: true }));
+          await sleep(30);
+        }
+        const img1 = document.querySelector('#ve-overlay-live .ve-live-image');
+        if (img1 !== img0 || img1._probeMarker !== 'kept') {
+          errs.push('358: the live image overlay element was rebuilt instead of reused across renders');
+        }
+        const allImages = document.querySelectorAll('#ve-overlay-live .ve-live-image');
+        if (allImages.length !== 1) {
+          errs.push('358: expected exactly one live image element, found ' + allImages.length);
+        }
+      }
+    }
+
+    // ---- 358: a throw inside tick() must be caught once (toasted) and must
+    // not stop the frame loop from correcting the playhead on a later tick ----
+    {
+      const waitFor358 = async (fn) => { for (let i = 0; i < 20 && !fn(); i++) await sleep(50); return fn(); };
+      if (document.activeElement) document.activeElement.blur();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+      await waitFor358(() => document.getElementById('ve-time').textContent === '10:00.000');
+      if (document.getElementById('ve-time').textContent !== '10:00.000') {
+        errs.push('358: setup: End did not seek to the end of the clip');
+      }
+      const videoElD = document.getElementById('ve-video');
+      const playheadEl = document.getElementById('ve-playhead');
+      const realId = playheadEl.id;
+      playheadEl.id = 've-playhead-broken-for-test';
+      // The stub video mirrors any currentTime assignment back immediately, so
+      // going through seek() (which sets VE.playhead to the same value at the
+      // same time) never leaves tick() anything to correct. Desyncing
+      // currentTime directly, bypassing seek(), is what actually forces the
+      // next tick() into its mismatch-correction branch -- the one that
+      // touches the (now-broken) #ve-playhead node and should throw.
+      videoElD.currentTime = 0;
+      const toastEl = document.getElementById('ve-toast');
+      await waitFor358(() => !toastEl.classList.contains('hidden') && !!toastEl.textContent);
+      if (toastEl.classList.contains('hidden') || !toastEl.textContent || toastEl.textContent === 'veTickError') {
+        errs.push('358: a failing tick() did not report itself once via the toast');
+      }
+      playheadEl.id = realId;
+      // Desync again so a later, now-healthy tick has something to correct.
+      videoElD.currentTime = 5;
+      await waitFor358(() => document.getElementById('ve-time').textContent === '00:05.000');
+      if (document.getElementById('ve-time').textContent !== '00:05.000') {
+        errs.push('358: the frame loop did not keep correcting the playhead on a later, healthy tick');
+      }
+    }
+    clearInterval(beat358);
+
+    // ---- 359: a replacing op's own _prev undo chain must be capped at
+    // undoMax links, not grow forever with every re-edit of the same overlay
+    // (editing one overlay 500 times used to keep 500 linked copies alive) ----
+    {
+      const frameRowIdx = overlayKinds.findIndex(([id]) => id === 've-ov-add-frame');
+      let opacityField = null;
+      if (ovRows[frameRowIdx]) {
+        ovRows[frameRowIdx].click();
+        await sleep(30);
+        opacityField = document.querySelector('#ve-ov-editor [data-ov-field="opacity"]');
+      }
+      if (!opacityField) {
+        errs.push('359: could not find the frame overlay opacity field to drive 500 commits through');
+      } else {
+        for (let i = 0; i < 500; i++) {
+          opacityField.value = String(10 + (i % 80));
+          opacityField.dispatchEvent(new Event('change'));
+        }
+        await sleep(30);
+        const rowsBefore = document.querySelectorAll('#ve-ops-list .ve-op-row').length;
+        document.activeElement && document.activeElement.blur();
+        // undoMax defaults to 40 (UNDO_MAX_DEFAULT, unset by this fixture): the
+        // frame overlay's chain must be exhausted at exactly that many undos,
+        // never sooner and never later than the SINGLE row it owns disappearing.
+        for (let i = 0; i < 40; i++) {
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+        }
+        await sleep(30);
+        const rowsAfter = document.querySelectorAll('#ve-ops-list .ve-op-row').length;
+        if (rowsAfter !== rowsBefore - 1) {
+          errs.push('359: the _prev undo chain was not capped at undoMax -- expected ' + (rowsBefore - 1) +
+            ' op row(s) after 40 undos into 500 commits, found ' + rowsAfter);
+        }
+      }
+    }
+
     document.getElementById('ve-tab-export').click();
     await sleep(80);
     if (document.getElementById('ve-panel-export').classList.contains('hidden')) {
