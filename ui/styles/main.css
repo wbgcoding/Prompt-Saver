@@ -1976,6 +1976,36 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   box-shadow: var(--shadow);
 }
 .snip-color-pop .swatches { margin: 0; }
+.snip-scale-pop {
+  position: fixed;
+  z-index: 130;
+  padding: 12px;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  font-size: 12px;
+}
+.snip-scale-current { color: var(--text-2); }
+.snip-scale-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.snip-scale-row .numfield { flex: 0 0 auto; }
+.snip-scale-lock { display: flex; align-items: center; gap: 6px; }
+.snip-scale-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.snip-scale-presets button {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 11px;
+}
+.snip-scale-presets button:hover { background: var(--accent); color: var(--accent-fg); }
+.snip-scale-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .snip-edit-eyedrop { display: inline-flex; }
 .snip-edit-eyedrop.active { color: var(--accent); }
 .snip-edit-toggle { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }

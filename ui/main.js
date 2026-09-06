@@ -1647,6 +1647,10 @@ const EXPERT_DROPDOWNS = {
   snipEditDefaultTool: enumDropdown("snipEditDefaultTool", "valSnipEditDefaultTool",
     [["hand", "snipToolHand"], ["crop", "snipToolCrop"], ["pen", "snipToolPen"], ["marker", "snipToolMarker"],
      ["arrow", "snipToolArrow"], ["text", "snipToolText"], ["step", "snipToolStep"]], "hand", "snipEditor"),
+  // Resampling quality for the editor's own scale action: smooth for photos,
+  // nearest-neighbour ("low") to keep pixel art crisp instead of blurred.
+  snipScaleFilter: enumDropdown("snipScaleFilter", "valSnipScaleFilter",
+    [["high", "optSnipScaleFilterHigh"], ["low", "optSnipScaleFilterLow"]], "high", "snipEditor"),
   // Options are fetched once from ocr_languages() at startup and cached
   // (ocrLangsCache, near the OCR wiring below) -- "Automatic" is always first,
   // regardless of what the OS itself reports.
@@ -1786,7 +1790,7 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app. The pipette sits with the
     // screenshot tool: both are capture tools on the composer bar.
-    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, "videoEditor", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }, "voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipSaveQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditSnapTolerancePx", "snipEditUndoMax", "videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax", "voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["pickerFormat", "snipEditDefaultTool", "ocrLang", "recMicDevice", "recQuality", "recFormat", "veDefaultFormat", "veDefaultQuality", "veDefaultDownscale", "rotateDefaultMode", "voiceLang", "voiceInsert", "voiceHotkeyTarget"], paths: ["screenshotDir", "recordingDir"],
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, "videoEditor", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }, "voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipSaveQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditSnapTolerancePx", "snipEditUndoMax", "videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax", "voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["pickerFormat", "snipEditDefaultTool", "snipScaleFilter", "ocrLang", "recMicDevice", "recQuality", "recFormat", "veDefaultFormat", "veDefaultQuality", "veDefaultDownscale", "rotateDefaultMode", "voiceLang", "voiceInsert", "voiceHotkeyTarget"], paths: ["screenshotDir", "recordingDir"],
       // Opens #ocr-langs-modal / its voice equivalent -- same gate as the rest of each feature.
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }, { id: "voice-langs-open", label: "voiceLangsManage", gate: "voice" }, { id: "voice-hotkey-set", label: "voiceHotkeySet", gate: "voiceHotkey" }, { id: "rec-stop-hotkey-set", label: "recStopHotkeySet", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-set", label: "recPauseHotkeySet", gate: "recPauseHotkey" }] },
     // Placeholders, from the grammar to where the app asks for them.
@@ -1983,7 +1987,7 @@ const EXPERT_TIPS = [
   "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity",
   "snipQuality", "snipSaveQuality", "snipDelayMs",
   "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim",
-  "snipEditUndoMax", "snipEditSnap", "snipEditSnapTolerancePx", "snipTextPlate", "snipEditDefaultTool",
+  "snipEditUndoMax", "snipEditSnap", "snipEditSnapTolerancePx", "snipTextPlate", "snipEditDefaultTool", "snipScaleFilter",
   "ocr", "ocrUpscaleUnderPx", "ocrLang",
   "ocrAutoPickLang", "ocrLangAutoUpdate", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "ocrLangCacheH",
   "voice", "voiceInterim", "voicePunct", "voiceAutoCaps", "voiceAutoStop", "voiceAutoStopSec", "voiceMaxMin",
@@ -12857,6 +12861,10 @@ function bind() {
   const SNIP_EDIT_PIXELATE_PX = () => val("snipPixelBlock");
   const SNIP_EDIT_SPOTLIGHT_DIM = () => val("snipSpotlightDim") / 100;
   const SNIP_EDIT_UNDO_MAX = () => val("snipEditUndoMax");
+  const SNIP_SCALE_FILTER = () => settings.ui_texts?.snipScaleFilter || "high";
+  // Refuse a target this large outright rather than risk an out-of-memory
+  // canvas allocation -- comfortably above any real screen resolution.
+  const SNIP_SCALE_MAX_AREA = 80_000_000;
   const SNIP_EDIT_SNAP = () => flag("snipEditSnap");
   const SNIP_EDIT_TEXT_PLATE = () => flag("snipTextPlate");
   const SNIP_EDIT_DEFAULT_TOOL = () => txt("snipEditDefaultTool") || "hand";
@@ -13206,6 +13214,7 @@ function bind() {
     let stepN = 0;
     for (const op of SE.ops) {
       if (op.tool === "crop") continue; // drawn as an overlay pass below
+      if (op.tool === "scale") continue; // already baked into SE.img, see snipEditApplyScale
       if (op.tool === "step") stepN++;
       snipEditDrawOp(ctx, op, stepN);
     }
@@ -13241,16 +13250,112 @@ function bind() {
     SE.floor = Math.max(0, SE.floor - (before - SE.ops.length));
     snipEditPushOp(op);
   }
+  // Halving-step resample: a single drawImage straight down to a much smaller
+  // canvas blurs/aliases badly (the classic "shrunk screenshot text turns to
+  // mush" problem), so downscaling by more than 2x repeatedly halves first and
+  // only does the final, non-halved step at the end. Upscaling and the "low"
+  // (nearest-neighbour, for pixel art) filter always run in one step.
+  function snipEditScaleCanvas(src, targetW, targetH) {
+    const filter = SNIP_SCALE_FILTER();
+    let cur = src, curW = src.width, curH = src.height;
+    if (filter === "high") {
+      while (curW > targetW * 2 && curH > targetH * 2) {
+        const nextW = Math.max(targetW, Math.round(curW / 2));
+        const nextH = Math.max(targetH, Math.round(curH / 2));
+        const step = document.createElement("canvas");
+        step.width = nextW;
+        step.height = nextH;
+        const sctx = step.getContext("2d");
+        sctx.imageSmoothingEnabled = true;
+        sctx.imageSmoothingQuality = "high";
+        sctx.drawImage(cur, 0, 0, curW, curH, 0, 0, nextW, nextH);
+        cur = step;
+        curW = nextW;
+        curH = nextH;
+      }
+    }
+    const out = document.createElement("canvas");
+    out.width = targetW;
+    out.height = targetH;
+    const octx = out.getContext("2d");
+    octx.imageSmoothingEnabled = filter !== "low";
+    if (filter !== "low") octx.imageSmoothingQuality = "high";
+    octx.drawImage(cur, 0, 0, curW, curH, 0, 0, targetW, targetH);
+    return out;
+  }
+  // Scaling is an operation like any other tool, not a destructive edit: it
+  // pushes a "scale" op so undo/redo work the normal way. Every other op stores
+  // its coordinates in image pixels, so instead of trying to rescale each one
+  // individually this bakes the base image and every op drawn before it into a
+  // new canvas at the new size (a flatten step) -- see the "scale" skip in
+  // snipEditRedrawBase and the special-cased undo/redo just below.
+  function snipEditApplyScale(targetW, targetH) {
+    targetW = Math.max(1, Math.round(targetW));
+    targetH = Math.max(1, Math.round(targetH));
+    if (targetW * targetH > SNIP_SCALE_MAX_AREA) { toast(t("snipScaleTooLarge")); return false; }
+    if (SE.tool === "crop") snipEditCropCommit(); // same guard snipEditExportDataUrl uses for a drawn-but-uncommitted crop
+    snipEditFinishTextIfOpen();
+    const prevW = SE.w, prevH = SE.h, prevImg = SE.img, prevRawCanvas = SE.rawCanvas, prevOps = SE.ops.slice();
+    const sx = targetW / SE.w, sy = targetH / SE.h;
+    snipEditRedrawBase(); // make sure snipEditBaseCv reflects every op (but crop) before it gets baked in
+    const baked = snipEditScaleCanvas(snipEditBaseCv, targetW, targetH);
+    const rawBaked = snipEditScaleCanvas(SE.rawCanvas, targetW, targetH);
+    // Crop is never rasterized (it only ever dims an overlay preview, see
+    // snipEditRedrawBase) -- its rect is the one thing stored in image-pixel
+    // coordinates that survives the bake, so it is rescaled by hand instead of
+    // being baked away, or it would point at the wrong region afterward.
+    const keptOps = SE.ops
+      .filter((o) => o.tool === "crop")
+      .map((o) => ({ ...o, rect: { x: o.rect.x * sx, y: o.rect.y * sy, w: o.rect.w * sx, h: o.rect.h * sy } }));
+    SE.floor = Math.max(0, SE.floor - (prevOps.length - keptOps.length));
+    const op = {
+      tool: "scale", w: targetW, h: targetH, img: baked, rawCanvas: rawBaked, keptOps,
+      prevW, prevH, prevImg, prevRawCanvas, prevOps,
+    };
+    SE.img = baked;
+    SE.rawCanvas = rawBaked;
+    SE.w = targetW;
+    SE.h = targetH;
+    SE.ops = keptOps;
+    snipEditBaseCv.width = targetW;
+    snipEditBaseCv.height = targetH;
+    snipEditLiveCv.width = targetW;
+    snipEditLiveCv.height = targetH;
+    snipEditPushOp(op);
+    snipEditFit();
+    return true;
+  }
+  // Scale bakes the whole composite into a new SE.img/SE.rawCanvas at a new
+  // SE.w/SE.h (see snipEditApplyScale) instead of being replayed like every
+  // other op, so undo/redo can't just pop/push it -- the op itself carries the
+  // before/after canvases and sizes needed to swap the working image back and
+  // forth, same idea as SE.rawCanvas already keeping the untouched capture.
+  function snipEditRestoreScaleState(w, h, img, rawCanvas, ops) {
+    SE.w = w;
+    SE.h = h;
+    SE.img = img;
+    SE.rawCanvas = rawCanvas;
+    SE.ops = ops.slice();
+    snipEditBaseCv.width = w;
+    snipEditBaseCv.height = h;
+    snipEditLiveCv.width = w;
+    snipEditLiveCv.height = h;
+    snipEditFit();
+  }
   function snipEditUndo() {
     if (SE.ops.length <= SE.floor) return;
-    SE.redo.push(SE.ops.pop());
+    const op = SE.ops.pop();
+    SE.redo.push(op);
+    if (op.tool === "scale") snipEditRestoreScaleState(op.prevW, op.prevH, op.prevImg, op.prevRawCanvas, op.prevOps);
     SE.lastNudged = null;
     snipEditRedrawBase();
     snipEditUpdateUndoRedoButtons();
   }
   function snipEditRedo() {
     if (!SE.redo.length) return;
-    SE.ops.push(SE.redo.pop());
+    const op = SE.redo.pop();
+    SE.ops.push(op);
+    if (op.tool === "scale") snipEditRestoreScaleState(op.w, op.h, op.img, op.rawCanvas, [...op.keptOps, op]);
     SE.lastNudged = null;
     snipEditRedrawBase();
     snipEditUpdateUndoRedoButtons();
@@ -14029,6 +14134,130 @@ function bind() {
   $("snip-edit-zoom-in").addEventListener("click", () => snipEditZoomBy(1.25));
   $("snip-edit-zoom-out").addEventListener("click", () => snipEditZoomBy(0.8));
   $("snip-edit-fit").addEventListener("click", snipEditFit);
+
+  // ---- resize (scale the image itself, not the view -- see snipEditApplyScale) ----
+  const snipScalePop = document.createElement("div");
+  snipScalePop.className = "snip-scale-pop hidden";
+  document.body.appendChild(snipScalePop);
+  function closeSnipScalePop() { snipScalePop.classList.add("hidden"); }
+  function snipScalePopIsOpen() { return !snipScalePop.classList.contains("hidden"); }
+  function openSnipScalePop(anchor) {
+    const origW = SE.w, origH = SE.h;
+    let lockAspect = true;
+    snipScalePop.innerHTML = "";
+
+    const size = document.createElement("div");
+    size.className = "snip-scale-current";
+    size.textContent = t("snipScaleCurrentSize").replace("{w}", origW).replace("{h}", origH);
+    snipScalePop.appendChild(size);
+
+    const widthField = numberField({
+      value: origW, min: 1, max: 20000, step: 1,
+      decreaseLabel: t("numFieldDecrease"), increaseLabel: t("numFieldIncrease"),
+      onChange: (w) => {
+        if (lockAspect) heightField.setValue(Math.max(1, Math.round((origH * w) / origW)));
+        percentField.setValue(Math.round((w / origW) * 100));
+      },
+    });
+    const heightField = numberField({
+      value: origH, min: 1, max: 20000, step: 1,
+      decreaseLabel: t("numFieldDecrease"), increaseLabel: t("numFieldIncrease"),
+      onChange: (h) => {
+        if (lockAspect) widthField.setValue(Math.max(1, Math.round((origW * h) / origH)));
+        percentField.setValue(Math.round((h / origH) * 100));
+      },
+    });
+    // Presets and the percent field itself share this: they always set both
+    // dimensions from the ORIGINAL size, regardless of the lock-aspect toggle
+    // (a percentage is inherently aspect-preserving).
+    const setByPercent = (p) => {
+      percentField.setValue(p);
+      widthField.setValue(Math.max(1, Math.round((origW * p) / 100)));
+      heightField.setValue(Math.max(1, Math.round((origH * p) / 100)));
+    };
+    const percentField = numberField({
+      value: 100, min: 1, max: 1000, step: 5,
+      decreaseLabel: t("numFieldDecrease"), increaseLabel: t("numFieldIncrease"),
+      onChange: (p) => {
+        widthField.setValue(Math.max(1, Math.round((origW * p) / 100)));
+        heightField.setValue(Math.max(1, Math.round((origH * p) / 100)));
+      },
+    });
+
+    const wRow = document.createElement("label");
+    wRow.className = "snip-scale-row";
+    wRow.textContent = t("snipScaleWidth");
+    wRow.appendChild(widthField);
+    const hRow = document.createElement("label");
+    hRow.className = "snip-scale-row";
+    hRow.textContent = t("snipScaleHeight");
+    hRow.appendChild(heightField);
+    const pRow = document.createElement("label");
+    pRow.className = "snip-scale-row";
+    pRow.textContent = t("snipScalePercent");
+    pRow.appendChild(percentField);
+    snipScalePop.append(wRow, hRow, pRow);
+
+    const lockRow = document.createElement("label");
+    lockRow.className = "snip-scale-lock";
+    const lockBox = document.createElement("input");
+    lockBox.type = "checkbox";
+    lockBox.checked = true;
+    lockBox.addEventListener("change", () => { lockAspect = lockBox.checked; });
+    lockRow.append(lockBox, document.createTextNode(t("snipScaleLockAspect")));
+    snipScalePop.appendChild(lockRow);
+
+    const presets = document.createElement("div");
+    presets.className = "snip-scale-presets";
+    [25, 50, 200].forEach((p) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = `${p}%`;
+      b.addEventListener("click", () => setByPercent(p));
+      presets.appendChild(b);
+    });
+    const fitBtn = document.createElement("button");
+    fitBtn.type = "button";
+    fitBtn.textContent = t("snipScalePresetFit1920");
+    fitBtn.addEventListener("click", () => {
+      widthField.setValue(1920);
+      heightField.setValue(Math.max(1, Math.round((origH * 1920) / origW)));
+      percentField.setValue(Math.round((1920 / origW) * 100));
+    });
+    presets.appendChild(fitBtn);
+    snipScalePop.appendChild(presets);
+
+    const actions = document.createElement("div");
+    actions.className = "snip-scale-actions";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "ghost-btn";
+    cancelBtn.textContent = t("cancel");
+    cancelBtn.addEventListener("click", closeSnipScalePop);
+    const applyBtn = document.createElement("button");
+    applyBtn.type = "button";
+    applyBtn.className = "primary-btn";
+    applyBtn.textContent = t("apply");
+    applyBtn.addEventListener("click", () => {
+      const w = Number(widthField.querySelector("input").value);
+      const h = Number(heightField.querySelector("input").value);
+      if (snipEditApplyScale(w, h)) closeSnipScalePop();
+    });
+    actions.append(cancelBtn, applyBtn);
+    snipScalePop.appendChild(actions);
+
+    snipScalePop.classList.remove("hidden");
+    placePopover(snipScalePop, anchor.getBoundingClientRect(), 6);
+  }
+  $("snip-edit-scale").addEventListener("click", (e) => {
+    if (snipScalePopIsOpen()) { closeSnipScalePop(); return; }
+    openSnipScalePop(e.currentTarget);
+  });
+  document.addEventListener("pointerdown", (e) => {
+    if (!snipScalePopIsOpen()) return;
+    if (snipScalePop.contains(e.target) || e.target.closest("#snip-edit-scale")) return;
+    closeSnipScalePop();
+  });
   $("snip-edit-saveas").addEventListener("click", async () => {
     const dataUrl = snipEditExportDataUrl();
     try {

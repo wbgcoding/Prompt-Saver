@@ -5381,6 +5381,81 @@ PROBE = """
         document.getElementById('snip-edit-cancel').click();
         await sleep(200);
       }
+      // 342: scaling the image itself (not just the view). A filled rect is
+      // drawn before the scale so the test can check that the SAME drawn
+      // content survives at the proportionally scaled position afterward --
+      // a real 400x300 stub, not a 1x1 one, or the check would be as vacuous
+      // as the 363/365 lesson already found once (see WORK-IMPL 342/365).
+      {
+        const whiteCanvas = document.createElement('canvas');
+        whiteCanvas.width = 400;
+        whiteCanvas.height = 300;
+        whiteCanvas.getContext('2d').fillStyle = '#ffffff';
+        whiteCanvas.getContext('2d').fillRect(0, 0, 400, 300);
+        window.__FIRE__('snip-captured', { data_url: whiteCanvas.toDataURL('image/png'), path: '', name: 'scale.png' });
+        await sleep(300);
+        const rectBtn = document.querySelector('#snip-edit-tools button[data-tool="rect"]');
+        const scaleBtn = document.getElementById('snip-edit-scale');
+        if (!rectBtn || !scaleBtn) {
+          out.errors.push('342: the rect tool or scale button was not found in the screenshot editor toolbar');
+        } else {
+          rectBtn.click();
+          await sleep(30);
+          const filledBox = document.querySelector('#snip-edit-context .snip-edit-toggle input');
+          if (filledBox) { filledBox.checked = true; filledBox.dispatchEvent(new Event('change', { bubbles: true })); }
+          await sleep(20);
+          const baseCv = document.getElementById('snip-edit-base');
+          const liveCv = document.getElementById('snip-edit-live');
+          const rect0 = baseCv.getBoundingClientRect();
+          const zoom0 = rect0.width / 400;
+          const toClient = (ix, iy) => ({ x: rect0.left + ix * zoom0, y: rect0.top + iy * zoom0 });
+          const p1 = toClient(50, 50), p2 = toClient(150, 150);
+          liveCv.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: p1.x, clientY: p1.y }));
+          liveCv.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: p2.x, clientY: p2.y }));
+          window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, clientX: p2.x, clientY: p2.y }));
+          await sleep(60);
+          const isWhite = (data) => data[0] > 240 && data[1] > 240 && data[2] > 240;
+          const beforePixel = baseCv.getContext('2d').getImageData(100, 100, 1, 1).data;
+          if (isWhite(beforePixel)) {
+            out.errors.push('342: the rect drawn before scaling did not leave any mark at its own (100,100) center');
+          }
+          scaleBtn.click();
+          await sleep(30);
+          const pop = document.querySelector('.snip-scale-pop');
+          if (!pop) {
+            out.errors.push('342: the scale button did not open the resize popover');
+          } else {
+            const widthInput = pop.querySelectorAll('.numfield input')[0];
+            widthInput.value = '200';
+            widthInput.dispatchEvent(new Event('change', { bubbles: true }));
+            await sleep(20);
+            const heightInput = pop.querySelectorAll('.numfield input')[1];
+            if (Number(heightInput.value) !== 150) {
+              out.errors.push('342: locked aspect ratio did not follow width 200 down to height 150 (got ' + heightInput.value + ')');
+            }
+            pop.querySelector('.snip-scale-actions .primary-btn').click();
+            await sleep(60);
+            if (baseCv.width !== 200 || baseCv.height !== 150) {
+              out.errors.push('342: scaling to 200x150 did not change the canvas backing store (got ' + baseCv.width + 'x' + baseCv.height + ')');
+            }
+            const afterPixel = baseCv.getContext('2d').getImageData(50, 50, 1, 1).data;
+            if (isWhite(afterPixel)) {
+              out.errors.push('342: the rect drawn before scaling is gone from its proportionally scaled (50,50) position after a 2x downscale');
+            }
+            document.getElementById('snip-edit-undo').click();
+            await sleep(60);
+            if (baseCv.width !== 400 || baseCv.height !== 300) {
+              out.errors.push('342: undo did not restore the exact pre-scale 400x300 size (got ' + baseCv.width + 'x' + baseCv.height + ')');
+            }
+            const undonePixel = baseCv.getContext('2d').getImageData(100, 100, 1, 1).data;
+            if (isWhite(undonePixel)) {
+              out.errors.push('342: undo restored the pre-scale size but lost the rect that was drawn on it');
+            }
+          }
+        }
+        document.getElementById('snip-edit-cancel').click();
+        await sleep(200);
+      }
       // 365: the fullscreen media viewer (lightbox) keeps the point under the
       // cursor fixed while wheel-zooming instead of always zooming to its own
       // centre. Opened through a real prompt-editor preview click; the image's
@@ -7929,10 +8004,11 @@ def main():
                  # then to 149s once the number-field check added its own
                  # click/hold/wheel/preset/disabled-state round trip, then to
                  # 151s once the media-viewer zoom check added its own
-                 # prompt-editor-to-lightbox round trip.
+                 # prompt-editor-to-lightbox round trip, then to 154s once the
+                 # editor-scale check added its own draw/resize/undo round trip.
                  # The window has to hold the iframe plus Chrome's own frame.
                  f"--window-size={max(w + 30, 520)},{h + 140}",
-                 "--virtual-time-budget=151000", "--dump-dom",
+                 "--virtual-time-budget=154000", "--dump-dom",
                  wrapper.as_uri()],
                 # The dumped DOM carries all 20 languages; without an explicit
                 # codec Windows decodes it as cp1252 and the reader thread dies,

@@ -141,7 +141,7 @@ the video editor and the introduction tour ship on).
   window width, the tag-filter popover's column count and sort order, how long
   a confirm button stays armed, and the background update-check interval.
 - **A screenshot editor** (on by default) — every capture opens for editing before
-  it reaches a tile, the clipboard or a folder. Twelve tools: crop, pen, marker,
+  it reaches a tile, the clipboard or a folder. Thirteen tools: crop, pen, marker,
   highlighter-style multiply blend, line, arrow, rectangle, ellipse, text, a
   self-numbering step marker for annotating instructions, pixelation, a
   spotlight that dims everything outside a chosen area, and a hand tool to pan
@@ -151,7 +151,11 @@ the video editor and the introduction tour ship on).
   selection. Full undo/redo, an eyedropper, live width×height while dragging a
   crop or shape, snapping to the image edges and center, nudging the
   last-placed mark with the arrow keys, and holding **V** to peek at the
-  unedited shot. Cancel leaves the original capture untouched; Apply re-copies
+  unedited shot. A resize action changes the image's actual pixel size (width,
+  height or percent fields, presets for 25/50/200% and "fit 1920 wide") as an
+  undoable step of its own, with a halving-step downscale for readable text and
+  an expert setting to pick sharp/nearest-neighbour resampling for pixel art.
+  Cancel leaves the original capture untouched; Apply re-copies
   the edited image and re-saves it to the screenshot
   folder if that setting is on.
 - **Text recognition (OCR)** (expert menu, on by default) — pull editable text
