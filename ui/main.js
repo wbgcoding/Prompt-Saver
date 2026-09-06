@@ -1126,6 +1126,7 @@ const FLAG_LABELS = {
   codeHighlight: "flagCodeHighlight",   // syntax colours in the preview's code blocks
   codeAutoDetect: "flagCodeAutoDetect", // render an unfenced code prompt as code
   notesInTooltip: "flagNotesInTooltip", // show the private note in the tile tooltip
+  tileTimeTip: "flagTileTimeTip",       // show last-copied/last-edited in the tile/library tooltip
   promptHotkeys: "flagPromptHotkeys",   // per-prompt global hotkeys
   // Sub-toggle of promptHotkeys, default on -- moved from
   // OPT_FLAG_LABELS; no CSS class keys on this flag, so the move is risk-free.
@@ -1803,7 +1804,7 @@ const EXPERT_TABS = [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
     // and pure looks. One 26-entry blob made everything hard to find.
     { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale"], values: ["hoverLift", "dragThreshold"] },
-    { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipDelay", "tooltipTimeout"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
+    { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipDelay", "tooltipTimeout", "tileTimeTip"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow"], values: ["tileRadius", "tileBorderWidth"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
   ] },
@@ -2090,7 +2091,7 @@ async function resetOneExpertValue(kind, key, after) {
 // rotatingPrompts/rotateBadge gate a tile's own rotate-badge element -- without
 // a full rebuild here, an already-open grid keeps showing (or hiding) it until some
 // unrelated re-render happens to catch up.
-const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip", "rotatingPrompts", "rotateBadge"]);
+const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip", "tileTimeTip", "rotatingPrompts", "rotateBadge"]);
 
 function flagRow(key) {
   const row = document.createElement("label");
@@ -2155,6 +2156,8 @@ function flagRow(key) {
     // so a full grid rebuild (and its flash) is unnecessary.
     if (TILE_DOM_FLAGS.has(key)) await renderGrid(true);
     else fitAllTiles();
+    // The only TILE_DOM_FLAGS member that also changes a library row's tooltip.
+    if (key === "tileTimeTip" && !libraryEl.classList.contains("hidden")) renderLibrary();
   });
   const resetBtn = rowResetBtn("flags", key);
   if (resetBtn) row.append(resetBtn);
@@ -4108,11 +4111,12 @@ function wireTooltips() {
   tipEl = document.createElement("div");
   tipEl.className = "tile-tip";
   tipEl.setAttribute("role", "tooltip");
-  tipEl.innerHTML = '<div class="tile-tip-name"></div><div class="tile-tip-body"></div><div class="tile-tip-len"></div><div class="tile-tip-notes"></div><div class="tile-tip-rotate"></div><div class="tile-tip-hint"></div>';
+  tipEl.innerHTML = '<div class="tile-tip-name"></div><div class="tile-tip-body"></div><div class="tile-tip-len"></div><div class="tile-tip-times"></div><div class="tile-tip-notes"></div><div class="tile-tip-rotate"></div><div class="tile-tip-hint"></div>';
   document.body.appendChild(tipEl);
   const nameEl = tipEl.querySelector(".tile-tip-name");
   const bodyEl = tipEl.querySelector(".tile-tip-body");
   const lenEl = tipEl.querySelector(".tile-tip-len");
+  const timesEl = tipEl.querySelector(".tile-tip-times");
   const notesEl = tipEl.querySelector(".tile-tip-notes");
   const rotateEl = tipEl.querySelector(".tile-tip-rotate");
   const hintEl = tipEl.querySelector(".tile-tip-hint");
@@ -4140,6 +4144,9 @@ function wireTooltips() {
     // Plain (icon/label) tooltips get a compact single-line style; tiles get the
     // richer name + preview + hint box.
     tipEl.classList.toggle("plain", !rich);
+    // Read regardless of rich/plain -- a library row's plain "Copy" tooltip
+    // carries these same two lines, just without the rest of the rich box.
+    timesEl.textContent = el.dataset.tipTimes || "";
     if (rich) {
       nameEl.textContent = name;
       fillVarHighlighted(bodyEl, el.dataset.tipBody || "");
@@ -4585,6 +4592,8 @@ function buildTile(p) {
     // The private note rides along as its own dimmed section (opt-out flag).
     const note = notesOn() && flag("notesInTooltip") ? (p.notes || "").trim() : "";
     if (note) tile.dataset.tipNotes = clipNote(note);
+    const times = tileTimeLines(p.id);
+    if (times) tile.dataset.tipTimes = times;
   }
 
   // Media on the tile: stored still, or gif/video from the icon/file path.
@@ -10907,6 +10916,8 @@ function renderLibrary() {
     // list carries the .selecting class — so toggling select mode never re-renders).
     if (libSelectMode && libSelected.has(p.id)) row.classList.add("lib-selected");
     row.title = libSelectMode ? "" : t("copy");
+    const rowTimes = tileTimeLines(p.id);
+    if (rowTimes) row.dataset.tipTimes = rowTimes;
 
     const body = document.createElement("span");
     body.className = "lib-body";
@@ -11411,6 +11422,21 @@ const fmtCopyTime = (ts) => {
   if (!ts) return "";
   return new Date(ts * 1000).toLocaleString(LANG, { dateStyle: "short", timeStyle: "short" });
 };
+
+// The "last copied" / "last edited" lines a tile or library row's tooltip
+// shows, each hanging off the function that actually owns that data -- the copy
+// timestamp off the same settings.last_used map smartSort reads, the edit
+// timestamp off promptHistory's lastEdited map -- so a value missing because its
+// own feature is off (or just never happened yet) drops only its own line.
+function tileTimeLines(id) {
+  if (!flag("tileTimeTip")) return "";
+  const lines = [];
+  const copied = settings.last_used?.[id];
+  if (copied) lines.push(t("tipLastCopied").replace("{time}", fmtCopyTime(copied)));
+  const edited = lastEdited[id];
+  if (edited) lines.push(t("tipLastEdited").replace("{time}", fmtCopyTime(edited)));
+  return lines.join("\n");
+}
 
 function journalMatches(p) {
   if (!typeAllowed(journalTypes, p)) return false;

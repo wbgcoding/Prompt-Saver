@@ -1776,6 +1776,8 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .var-token { color: var(--accent); font-weight: 600; }
 /* Length readout — same weight as the hint line below it, not the prompt text. */
 .tile-tip-len { margin-top: 5px; font-size: 11px; color: var(--muted); }
+/* Last-copied/last-edited lines -- one per line, muted like the length readout. */
+.tile-tip-times { margin-top: 5px; font-size: 11px; color: var(--muted); white-space: pre-line; }
 /* Rotating-prompt line — accent-coloured, so it reads as live state rather
    than static metadata like the length readout next to it. */
 .tile-tip-rotate { margin-top: 5px; font-size: 11px; color: var(--accent); }
@@ -1789,6 +1791,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 }
 .tile-tip-body:empty,
 .tile-tip-len:empty,
+.tile-tip-times:empty,
 .tile-tip-notes:empty,
 .tile-tip-rotate:empty,
 .tile-tip-hint:empty { display: none; }

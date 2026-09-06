@@ -166,6 +166,9 @@ const SETTINGS = {
   // open under every later check the way it would for a genuinely fresh one.
   ui_flags: { tags: true, customThemes: true, viewGroups: true, promptNotes: true, pillFolders: true, colorPicker: true, tourSeen: true },
   ui_values: {}, ui_texts: {}, dup_ignored: [],
+  // 428: p1 also has a canned entry in last_edited_map below, so it is the one
+  // fixture with BOTH a copy and an edit timestamp; p2 (untouched) has neither.
+  usage: { p1: 3 }, last_used: { p1: 1700000000 },
   example_prompt_ids: [], example_prompt_seeds: {},
   tag_colors: { work: "#3b82f6" },
   custom_themes: [{ id: "ct1", name: "Neon", base: "dark", vars: { accent: "#ff00aa" } }],

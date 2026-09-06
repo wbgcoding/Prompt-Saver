@@ -1316,6 +1316,56 @@ PROBE = """
       document.body.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
       await sleep(200);
     }
+    // 428: last-copied/last-edited lines in the tile tooltip. p1 carries canned
+    // timestamps for both (tauri_stub's SETTINGS.last_used and last_edited_map);
+    // p2 has neither. main.js is an ES module, so its `settings`/`renderGrid`
+    // are not reachable from this classic probe script -- the data has to be
+    // baked into the stub's initial state instead of poked in live.
+    {
+      const copyId = 'p1';
+      const t1 = byId(copyId);
+      const times1 = (t1 || {}).dataset ? t1.dataset.tipTimes || '' : '';
+      if (!times1.includes('Last copied') || !times1.includes('Last edited')) {
+        out.errors.push('428: a prompt with both timestamps is missing one of the tooltip lines: "' + times1 + '"');
+      }
+      const expected = new Date(1700000000 * 1000).toLocaleString('en', { dateStyle: 'short', timeStyle: 'short' });
+      if (!times1.includes(expected)) {
+        out.errors.push('428: the copy time is not a localized date string: "' + times1 + '"');
+      }
+      const t2 = byId('p2');
+      const times2 = (t2 || {}).dataset ? t2.dataset.tipTimes || '' : '';
+      if (times2) out.errors.push('428: a prompt with no history data carries tooltip time lines anyway: "' + times2 + '"');
+      // Switch off (real click, so the expert-menu wiring is proven too): no lines
+      // at all, although the very same data is still sitting in settings.last_used.
+      const expertRow428 = async (label) => {
+        const hit = () => [...document.querySelectorAll('#expert-flags .switch-field')]
+          .find(r => ((r.querySelector('span') || {}).textContent || '').includes(label));
+        if (hit()) return hit();
+        for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+          tb.click();
+          await sleep(200);
+          if (hit()) return hit();
+        }
+        return null;
+      };
+      document.getElementById('settings').classList.remove('hidden');
+      await click('expert-open');
+      const timeTipRow = await expertRow428('Last copied/edited in the tooltip');
+      if (!timeTipRow) {
+        out.errors.push('428: the tooltip-times option is missing from the expert menu');
+      } else {
+        timeTipRow.querySelector('input.switch').click();
+        await sleep(200);
+        const t3 = byId(copyId);
+        const times3 = (t3 || {}).dataset ? t3.dataset.tipTimes || '' : '';
+        if (times3) out.errors.push('428: turning the switch off still leaves tooltip time lines: "' + times3 + '"');
+        const timeTipRowOff = await expertRow428('Last copied/edited in the tooltip');
+        if (timeTipRowOff) timeTipRowOff.querySelector('input.switch').click();
+        await sleep(200);
+      }
+      await click('expert-back');
+      document.getElementById('settings').classList.add('hidden');
+    }
     // 1: the empty-grid hint stays out of the way once prompts exist.
     if (!document.getElementById('grid-empty').classList.contains('hidden')) {
       out.errors.push('the empty-grid hint shows although the grid has prompts');
