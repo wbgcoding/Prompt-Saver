@@ -251,6 +251,10 @@
           <select id="modal-caption-size" class="modal-input caption-size" data-i18n-title="tileSize"></select>
         </div>
       </div>
+      <!-- Only shown when a stored preview and an attached file both exist for the
+           same prompt -- the one case where "the picture" and "the file" are two
+           different things and worth spelling out. -->
+      <p id="modal-preview-attach-hint" class="modal-hint hidden" data-i18n="previewAttachHint"></p>
       <!-- Attached file row (visible only when the prompt has a file) -->
       <div id="modal-file-wrap" class="modal-file-wrap hidden">
         <span id="modal-file-icon" class="modal-file-icon" aria-hidden="true"></span>

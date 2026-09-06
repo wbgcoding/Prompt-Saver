@@ -54,6 +54,11 @@ preview**, **private notes** — both off by default) add structure and history 
 a rendered Markdown preview with syntax-highlighted code blocks, a full version
 history, and a private note field never copied or exported with the text.
 
+For a file/PDF/video tile that also carries its own stored preview picture, the
+image shown above the file row is only that tile's preview — the attached file
+below it is a separate thing, and copying the tile puts the file's path on the
+clipboard, never the picture.
+
 ### The grid
 
 The main window's grid is a free-placement board of tiles — up to 20×20 cells by
@@ -540,7 +545,9 @@ für jeden Wert. Dynamische Platzhalter (`{#{date}#}`, `{#{time}#}`,
 `{#{clipboard}#}`) füllen sich selbst.
 
 **Der Editor** — Markdown-Vorschau, Syntax-Hervorhebung, Versionsverlauf, private
-Notizen (Markdown-Vorschau und Notizen standardmäßig aus).
+Notizen (Markdown-Vorschau und Notizen standardmäßig aus). Bei einer Datei-Kachel
+mit eigenem Vorschaubild: das Bild über der Dateizeile ist nur die Kachel-Vorschau,
+der Anhang darunter ist eine eigene Sache, kopiert wird immer nur der Dateipfad.
 
 **Das Raster** — freie Platzierung, standardmäßig bis 20×20 Zellen (im
 Experten-Menü bis 200×200 einstellbar), eigenes Layout je Ansicht.

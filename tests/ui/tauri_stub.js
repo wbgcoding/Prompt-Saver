@@ -106,8 +106,10 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   // to display; the rest are free, so a capture can be checked against them.
   hotkey: i === 0 ? "CommandOrControl+Shift+9" : "",
   // F22: one prompt points at a file, so a drag-out can be checked against the path
-  // payload and its file URI instead of the prompt body.
-  file_path: i === 9 ? "C:\\Notes\\brief.txt" : "",
+  // payload and its file URI instead of the prompt body. The same prompt that
+  // carries the stored preview image below also gets a file here, so there is one
+  // fixture where both sit side by side and the preview/attachment hint can fire.
+  file_path: i === 9 || i === 11 ? "C:\\Notes\\brief.txt" : "",
   // 79: one rotating prompt, so the version-history probe can open an editor that
   // actually has more than one entry (list_versions below gives it real snapshots).
   variants: i === 10 ? ["Example prompt body number 11, second entry.", "Example prompt body number 11, third entry."] : [],

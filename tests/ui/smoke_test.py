@@ -2942,6 +2942,42 @@ PROBE = """
       const cmHist9 = document.getElementById('confirm-modal');
       if (!cmHist9.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
     }
+    // 429: a prompt with both a stored preview and a real attachment gets a line
+    // explaining the difference, spelled out and not a raw i18n key.
+    if (!await openEditor('p11')) {
+      out.errors.push('429: the preview+attachment prompt did not open in the editor');
+    } else {
+      const hint = document.getElementById('modal-preview-attach-hint');
+      const fileIcon = document.getElementById('modal-file-icon');
+      if (!hint || hint.classList.contains('hidden')) {
+        out.errors.push('429: the preview/attachment hint is not shown when both exist');
+      } else if (!hint.textContent.trim() || hint.textContent.trim() === 'previewAttachHint') {
+        out.errors.push('429: the preview/attachment hint shows no text or a raw key');
+      }
+      if (!fileIcon || !fileIcon.title || fileIcon.title === 'previewAttachHint') {
+        out.errors.push('429: the attachment icon has no matching tooltip text');
+      } else if (hint && fileIcon.title !== hint.textContent.trim()) {
+        out.errors.push('429: the attachment icon tooltip does not match the editor hint text');
+      }
+      await click('modal-close-x');
+      await sleep(200);
+      const cmHist11 = document.getElementById('confirm-modal');
+      if (!cmHist11.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+    }
+    // 429: the same prompt without a file attachment must NOT show the hint — it is
+    // only for the case where the two things could actually be confused.
+    if (!await openEditor('p7')) {
+      out.errors.push('429: the plain-text prompt did not open in the editor');
+    } else {
+      const hint7 = document.getElementById('modal-preview-attach-hint');
+      if (!hint7 || !hint7.classList.contains('hidden')) {
+        out.errors.push('429: the preview/attachment hint shows for a prompt with no attachment');
+      }
+      await click('modal-close-x');
+      await sleep(200);
+      const cmHist7b = document.getElementById('confirm-modal');
+      if (!cmHist7b.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+    }
     // Duplicates: its own dialog, reachable only from the expert menu, and the last
     // window of the main surface that no scan had ever opened. Its group (147) lives
     // in the "System & data" tab, not whatever tab was last active.

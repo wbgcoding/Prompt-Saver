@@ -9060,6 +9060,12 @@ function syncModalImageUi(mode) {
   const fileHint = $("modal-file-hint");
   fileHint.classList.toggle("hidden", !filePath);
   fileHint.textContent = t(optFlag("storeFiles") ? "fileHintStored" : "fileHint");
+  // The two only actually need telling apart when both a stored preview and a
+  // real attachment exist side by side -- otherwise there is nothing to confuse.
+  const previewAttachHint = $("modal-preview-attach-hint");
+  previewAttachHint.classList.toggle("hidden", !(hasPreview && filePath));
+  const fileIconEl = $("modal-file-icon");
+  fileIconEl.title = t("previewAttachHint");
   if (filePath) {
     const isPdf = PDF_EXT.test(filePath);
     $("modal-file-icon").innerHTML = isPdf ? ICON_PDF : ICON_FILE;
