@@ -773,7 +773,21 @@ function resetPreviewZoom() {
 $("ve-stage").addEventListener("wheel", (e) => {
   if (!VE.w) return;
   e.preventDefault();
+  // Keep the source point under the cursor fixed instead of always zooming
+  // to the stage centre: read it before and after the zoom (toSource() always
+  // reflects the live, already-transformed bounding rect) and slide panPx by
+  // the difference, converted back to CSS pixels via the new live scale --
+  // panPx is a CSS translate applied AFTER the scale in the same transform,
+  // so it moves the picture in already-scaled screen pixels, not source ones.
+  const before = toSource(e.clientX, e.clientY);
   setPreviewZoom(VE.previewZoom * (e.deltaY < 0 ? 1.2 : 1 / 1.2));
+  const after = toSource(e.clientX, e.clientY);
+  const scale = videoBox().scale;
+  VE.panPx = clampPan({
+    x: VE.panPx.x + (after.x - before.x) * scale,
+    y: VE.panPx.y + (after.y - before.y) * scale,
+  }, VE.previewZoom);
+  applyPreviewTransform();
 }, { passive: false });
 
 // Pan: middle-click always (matches the screenshot editor), plain left-drag

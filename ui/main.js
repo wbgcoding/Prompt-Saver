@@ -4336,6 +4336,14 @@ function lbApply() {
   lbMedia().style.transform = `translate(${lbX}px, ${lbY}px) scale(${lbScale})`;
   $("lightbox-stage").classList.toggle("zoomed", lbScale > 1);
 }
+// Screen point -> the media's own local CSS coordinates at the CURRENT scale
+// removed again, so it stays comparable to lbX/lbY (also pre-scale units)
+// regardless of zoom level. Reads the live, already-transformed bounding
+// rect, same trick as the video editor's toSource().
+function lbToLocal(clientX, clientY) {
+  const rect = lbMedia().getBoundingClientRect();
+  return { x: (clientX - rect.left) / lbScale, y: (clientY - rect.top) / lbScale };
+}
 function openLightbox(src, isVideo) {
   if (!src) return;
   lbScale = 1; lbX = 0; lbY = 0;
@@ -4361,8 +4369,21 @@ function wireLightbox() {
   stage.addEventListener("click", (e) => { if (lbScale === 1 && e.target === stage) closeLightbox(); });
   stage.addEventListener("wheel", (e) => {
     e.preventDefault();
+    // Keep the point under the cursor fixed instead of always zooming to the
+    // media's centre: read it before and after the scale change and slide
+    // the pan by the difference, scaled back up -- the pan is a CSS translate
+    // applied AFTER the scale in the same transform, so it moves the media in
+    // already-scaled screen pixels, not the pre-scale ones lbToLocal reads in.
+    const before = lbToLocal(e.clientX, e.clientY);
     lbScale = Math.min(8, Math.max(1, lbScale * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
-    if (lbScale === 1) { lbX = 0; lbY = 0; }
+    if (lbScale === 1) {
+      lbX = 0; lbY = 0;
+    } else {
+      lbApply(); // commit the new scale so the rect below reflects it
+      const after = lbToLocal(e.clientX, e.clientY);
+      lbX += (after.x - before.x) * lbScale;
+      lbY += (after.y - before.y) * lbScale;
+    }
     lbApply();
   }, { passive: false });
   stage.addEventListener("pointerdown", (e) => {

@@ -5381,6 +5381,57 @@ PROBE = """
         document.getElementById('snip-edit-cancel').click();
         await sleep(200);
       }
+      // 365: the fullscreen media viewer (lightbox) keeps the point under the
+      // cursor fixed while wheel-zooming instead of always zooming to its own
+      // centre. Opened through a real prompt-editor preview click; the image's
+      // own top-left corner (as far from its centre as a point gets) is the
+      // known, trackable coordinate.
+      {
+        const freeCell = [...document.querySelectorAll('#grid .cell')].find((c) => !c.firstElementChild);
+        if (!freeCell) {
+          out.errors.push('365: no empty grid cell available to open the media viewer through');
+        } else {
+          freeCell.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+          await sleep(200);
+          const modalImg = document.getElementById('modal-img');
+          const modalImgWrap = document.getElementById('modal-img-wrap');
+          if (!modalImg || !modalImgWrap) {
+            out.errors.push('365: the prompt editor has no media preview element to open the viewer from');
+          } else {
+            // A real size, not the file's usual 1x1 fixture -- the viewer's
+            // <img> has no CSS floor, so a 1x1 source would render at 1x1 CSS
+            // pixel and make any zoom-anchor error too small to ever measure.
+            const bigCanvas365 = document.createElement('canvas');
+            bigCanvas365.width = 400; bigCanvas365.height = 300;
+            const ctx365 = bigCanvas365.getContext('2d');
+            ctx365.fillStyle = '#4488cc'; ctx365.fillRect(0, 0, 400, 300);
+            modalImg.src = bigCanvas365.toDataURL('image/png');
+            modalImgWrap.classList.remove('hidden');
+            modalImg.click();
+            await sleep(200);
+            const lb = document.getElementById('lightbox');
+            if (!lb || lb.classList.contains('hidden')) {
+              out.errors.push('365: clicking the media preview did not open the fullscreen viewer');
+            } else {
+              const lbImg = document.getElementById('lightbox-img');
+              const boxBefore = lbImg.getBoundingClientRect();
+              const cx = boxBefore.left, cy = boxBefore.top;
+              document.getElementById('lightbox-stage').dispatchEvent(
+                new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, deltaY: -100 }));
+              await sleep(30);
+              const boxAfter = lbImg.getBoundingClientRect();
+              const moved = Math.hypot(boxAfter.left - cx, boxAfter.top - cy);
+              if (moved >= 2) {
+                out.errors.push('365: zooming the media viewer with the wheel did not keep the point under the cursor fixed (moved ' + moved.toFixed(1) + 'px)');
+              }
+              document.getElementById('lightbox-close').click();
+              await sleep(150);
+            }
+          }
+          document.getElementById('modal-close-x').click();
+          await sleep(150);
+        }
+      }
       // 181: a properly sized capture (not the 1x1 fixture above) to check the
       // text tool near the right edge -- an unstyled <input> does not shrink to
       // fit inside the stage, so placing it purely from the click point can push
@@ -7370,6 +7421,35 @@ VIDEO_PROBE = """
       }
     }
 
+    // 365: wheel-zooming the stage keeps the point under the cursor fixed
+    // instead of always zooming to the stage centre. The image overlay's
+    // rectangle from the 356 drag above sits off-centre by now -- its own
+    // top-left corner is a known, trackable point to zoom onto.
+    {
+      const rectEl = document.querySelector('#ve-rects .ve-rect-image');
+      if (!rectEl) {
+        errs.push('365: could not find the image overlay rectangle to test the zoom anchor');
+      } else {
+        const boxBefore = rectEl.getBoundingClientRect();
+        const cx = boxBefore.left, cy = boxBefore.top;
+        document.getElementById('ve-stage').dispatchEvent(
+          new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: cx, clientY: cy, deltaY: -100 }));
+        await sleep(30);
+        // renderRects() rebuilds the rectangle elements on every zoom/pan
+        // change, so the original rectEl reference is now detached -- re-query.
+        const rectElAfter = document.querySelector('#ve-rects .ve-rect-image');
+        const boxAfter = rectElAfter ? rectElAfter.getBoundingClientRect() : { left: NaN, top: NaN };
+        const moved = Math.hypot(boxAfter.left - cx, boxAfter.top - cy);
+        if (!rectElAfter) {
+          errs.push('365: the image overlay rectangle disappeared after zooming the stage');
+        } else if (moved >= 2) {
+          errs.push('365: zooming the video stage with the wheel did not keep the point under the cursor fixed (moved ' + moved.toFixed(1) + 'px)');
+        }
+        document.getElementById('ve-preview-zoom-reset')?.click();
+        await sleep(30);
+      }
+    }
+
     // Both 358 probes below depend on tick()'s own requestAnimationFrame loop
     // actually firing across several real sleeps -- headless Chromium stops
     // producing frames once the page is quiet (see the heartbeat comment
@@ -7847,10 +7927,12 @@ def main():
                  # then to 146s once the copy-sound check added its own four
                  # copy-and-listen round trips plus a volume-slider detour,
                  # then to 149s once the number-field check added its own
-                 # click/hold/wheel/preset/disabled-state round trip.
+                 # click/hold/wheel/preset/disabled-state round trip, then to
+                 # 151s once the media-viewer zoom check added its own
+                 # prompt-editor-to-lightbox round trip.
                  # The window has to hold the iframe plus Chrome's own frame.
                  f"--window-size={max(w + 30, 520)},{h + 140}",
-                 "--virtual-time-budget=149000", "--dump-dom",
+                 "--virtual-time-budget=151000", "--dump-dom",
                  wrapper.as_uri()],
                 # The dumped DOM carries all 20 languages; without an explicit
                 # codec Windows decodes it as cp1252 and the reader thread dies,
