@@ -5249,6 +5249,72 @@ PROBE = """
           out.errors.push('screenshot editor did not close on Cancel');
         }
       }
+      // 363: an image that fails to decode (truncated data, a broken picked
+      // file) must not leave the editor silently never opening -- it shows an
+      // error toast and leaves things as if the capture had never happened.
+      {
+        const BROKEN_PNG = 'data:image/png;base64,bm90LWEtcmVhbC1pbWFnZQ==';
+        document.getElementById('toast').classList.add('hidden');
+        window.__FIRE__('snip-captured', { data_url: BROKEN_PNG, path: '', name: 'broken.png' });
+        await sleep(300);
+        if (!document.getElementById('snip-edit').classList.contains('hidden')) {
+          out.errors.push('363: a broken screenshot left the editor open instead of showing an error');
+        }
+        const brokenToast = document.getElementById('toast');
+        if (brokenToast.classList.contains('hidden') || !brokenToast.textContent) {
+          out.errors.push('363: a broken screenshot did not show an error toast');
+        }
+      }
+      // 363: the marker tool's offscreen canvas must be reused across redraws
+      // instead of reallocated every time -- cost used to scale with stroke
+      // count times image resolution, since every redraw (every new op, every
+      // undo/redo, every nudge, every tool switch) reallocated a full-size
+      // canvas per marker stroke it painted.
+      {
+        const TINY_PNG2 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+        window.__FIRE__('snip-captured', { data_url: TINY_PNG2, path: '', name: 'marker.png' });
+        await sleep(300);
+        const markerBtn = document.querySelector('#snip-edit-tools button[data-tool="marker"]');
+        const penBtn2 = document.querySelector('#snip-edit-tools button[data-tool="pen"]');
+        const live2 = document.getElementById('snip-edit-live');
+        if (markerBtn && penBtn2 && live2) {
+          markerBtn.click();
+          await sleep(30);
+          for (let i = 0; i < 3; i++) {
+            const x = 10 + i * 5, y = 10 + i * 5;
+            live2.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: x, clientY: y }));
+            live2.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: x + 5, clientY: y + 5 }));
+            window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, clientX: x + 5, clientY: y + 5 }));
+            await sleep(30);
+          }
+          // The marker path's offscreen scratch canvas is never attached to the
+          // document (it exists only to be drawn from, then discarded or
+          // reused), so counting document.getElementsByTagName('canvas') can
+          // never see it either way -- count document.createElement('canvas')
+          // calls instead, which is the actual allocation this fix removes.
+          let canvasCreations = 0;
+          const origCreateElement = document.createElement.bind(document);
+          document.createElement = (tag, ...rest) => {
+            if (String(tag).toLowerCase() === 'canvas') canvasCreations++;
+            return origCreateElement(tag, ...rest);
+          };
+          try {
+            const baseline = canvasCreations;
+            for (let i = 0; i < 10; i++) {
+              (i % 2 === 0 ? penBtn2 : markerBtn).click();
+              await sleep(15);
+            }
+            if (canvasCreations > baseline) {
+              out.errors.push('363: document.createElement("canvas") ran ' + (canvasCreations - baseline) +
+                ' more time(s) across 10 redraws of 3 marker strokes -- the scratch canvas is being reallocated');
+            }
+          } finally {
+            document.createElement = origCreateElement;
+          }
+        }
+        document.getElementById('snip-edit-cancel').click();
+        await sleep(200);
+      }
       // 181: a properly sized capture (not the 1x1 fixture above) to check the
       // text tool near the right edge -- an unstyled <input> does not shrink to
       // fit inside the stage, so placing it purely from the click point can push

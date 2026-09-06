@@ -12992,11 +12992,17 @@ function bind() {
   }
   // Collects the whole stroke on its own transparent layer first (so self-overlap
   // within one stroke never darkens further), then composites it once with alpha.
+  // Reused across calls instead of a fresh full-resolution canvas per marker
+  // stroke -- snipEditRedrawBase calls this once per marker op on EVERY redraw
+  // (every new operation, undo/redo, nudge and tool switch), so cost used to
+  // scale with marker count times image resolution.
+  let snipEditMarkerTmp = null;
   function snipEditDrawMarkerOp(ctx, op) {
-    const tmp = document.createElement("canvas");
-    tmp.width = SE.w;
-    tmp.height = SE.h;
+    const tmp = snipEditMarkerTmp || (snipEditMarkerTmp = document.createElement("canvas"));
+    if (tmp.width !== SE.w) tmp.width = SE.w;
+    if (tmp.height !== SE.h) tmp.height = SE.h;
     const tctx = tmp.getContext("2d");
+    tctx.clearRect(0, 0, tmp.width, tmp.height);
     tctx.strokeStyle = op.color;
     tctx.lineWidth = op.width;
     tctx.lineCap = "round";
@@ -13886,6 +13892,13 @@ function bind() {
   // ---- open / cancel / apply / export ----
   function snipEditOpen(dataUrl, { onApply, onCancel }) {
     const img = new Image();
+    // A capture that fails to decode (truncated data URL, a broken picked file)
+    // must not leave the editor silently never opening -- fall back to the
+    // same path a user cancel already takes, so nothing is left half-open.
+    img.onerror = () => {
+      toast(t("snipEditOpenFailed"));
+      onCancel?.();
+    };
     img.onload = () => {
       SE.img = img;
       SE.w = img.naturalWidth;
