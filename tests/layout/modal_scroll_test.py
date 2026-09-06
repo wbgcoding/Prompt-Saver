@@ -197,8 +197,8 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
 
     # The .clear-wrap / .clear-wrap-ta spans mirror what wireClear() injects at
     # runtime -- the textarea wrapper is the actual flex item, so the harness is
-    # only faithful with it in place. The F17 notes row sits collapsed above the
-    # history, as it does when the editor opens.
+    # only faithful with it in place. 456: the notes field is no longer
+    # collapsible -- it sits right under the name row and always takes its space.
     html = f"""<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
 <link rel="stylesheet" href="styles/main.css"><style>body{{margin:0}}</style></head><body class="flag-tags flag-promptNotes">
 <div id="modal" class="overlay tall{' history-open' if history_open else ''}" role="dialog" aria-modal="true"><div class="modal">
@@ -208,6 +208,7 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
     <input id="modal-name" class="modal-input" type="text" value="Code Review">
     <button type="button" class="clear-btn show">x</button></span>
     <button type="button" id="modal-fav" class="modal-fav-star">&#9733;</button></div>
+  <div id="modal-notes"><textarea id="modal-notes-text" class="modal-input modal-notes-text" rows="2"></textarea></div>
   <div id="modal-img-wrap" class="modal-img-wrap">
     <div class="modal-media-stage">
       <img id="modal-img" class="modal-preview-img" alt="" src="{preview_src}">
@@ -248,11 +249,6 @@ def build_page(out_dir: Path, n_rows: int = 8, name: str = "modal.html", vars_op
   <div id="modal-tags" class="modal-tags"><span class="modal-tags-label">{L('tagsLabel')}</span>
     <div id="modal-tag-chips" class="tag-chips">{tag_chips}</div>
     <input id="modal-tag-input" class="modal-input tag-input" type="text"></div>
-  <div id="modal-notes" class="modal-collapse">
-    <button type="button" id="modal-notes-head" class="modal-collapse-head" aria-expanded="false">
-      <span>{L('notesTitle')}</span></button>
-    <div id="modal-notes-body" class="modal-collapse-body hidden">
-      <textarea id="modal-notes-text" class="modal-input modal-notes-text" rows="3"></textarea></div></div>
   <div id="modal-hotkey" class="modal-collapse">
     <button type="button" id="modal-hotkey-head" class="modal-collapse-head" aria-expanded="false">
       <span>{L('promptHotkeyTitle')}</span>

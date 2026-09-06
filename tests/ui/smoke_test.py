@@ -1602,25 +1602,34 @@ PROBE = """
       if (!ta.value.includes('{#{tone|formal,casual}#}')) {
         out.errors.push('the helper did not insert a choice variable: ' + ta.value);
       }
-      // F17: the notes row opens collapsed, expands on click and holds the note.
+      // 456: the notes field sits directly under the name row, full width, no
+      // heading, always visible (no more collapse) and holds the stored note.
       const nRow = document.getElementById('modal-notes');
-      const nBody = document.getElementById('modal-notes-body');
+      const nText = document.getElementById('modal-notes-text');
+      const nameRow = document.querySelector('.modal-name-row');
       if (!nRow || getComputedStyle(nRow).display === 'none') {
         out.errors.push('the editor has no notes row');
-      } else if (!nBody.classList.contains('hidden')) {
-        out.errors.push('the notes row does not start collapsed');
+      } else if (nameRow.nextElementSibling !== nRow) {
+        out.errors.push('the notes field is not right under the name row');
+      } else if (document.getElementById('modal-notes-head')) {
+        out.errors.push('the notes field still has a collapse header');
+      } else if (!nText.value.includes('Moonshot')) {
+        out.errors.push('the editor did not load the stored note');
       } else {
-        document.getElementById('modal-notes-head').click();
-        await sleep(250);
-        if (nBody.classList.contains('hidden')) out.errors.push('the notes row did not expand');
-        if (!document.getElementById('modal-notes-text').value.includes('Moonshot')) {
-          out.errors.push('the editor did not load the stored note');
-        }
         // P35: the note field reads as a different kind of box, not a second
         // prompt field — its background must not match the main text area's.
-        const notesBg = getComputedStyle(document.getElementById('modal-notes-text')).backgroundColor;
+        const notesBg = getComputedStyle(nText).backgroundColor;
         const promptBg = getComputedStyle(document.getElementById('modal-text')).backgroundColor;
         if (notesBg === promptBg) out.errors.push('the notes field looks identical to the prompt field');
+        // 456: with the feature off, the gate hides the wrapper itself (not just
+        // the textarea), so no empty gap is left where the field used to be.
+        document.body.classList.remove('flag-promptNotes');
+        await sleep(30);
+        if (getComputedStyle(nRow).display !== 'none') {
+          out.errors.push('promptNotes off does not hide the notes row');
+        }
+        document.body.classList.add('flag-promptNotes');
+        await sleep(30);
       }
       // F20: the hotkey row opens collapsed (28: as part of "Advanced options" now),
       // shows the stored accelerator, refuses a combination that is already taken,
@@ -3790,7 +3799,10 @@ PROBE = """
           // Markdown pane may keep a box while the variants list is the editor —
           // both used to survive and left a tall empty gap above the colour row,
           // the pane still showing entry 1 as a stray field.
-          const taWrap = document.querySelector('#modal .clear-wrap-ta');
+          // 456: scoped to modal-text's own wrapper, not the first .clear-wrap-ta
+          // in the dialog — the always-visible notes field now sits earlier in the
+          // DOM and wears that class too, but never hides during rotation.
+          const taWrap = document.getElementById('modal-text').closest('.clear-wrap-ta');
           if (taWrap && taWrap.getBoundingClientRect().height > 0) {
             out.errors.push('the textarea wrapper still takes ' + Math.round(taWrap.getBoundingClientRect().height) + 'px while rotation is on');
           }

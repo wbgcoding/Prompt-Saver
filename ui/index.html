@@ -216,6 +216,12 @@
         </button>
         <button type="button" id="modal-fav" class="modal-fav-star" aria-pressed="false" data-i18n-title="favoriteToggle" data-i18n-aria="favoriteToggle">★</button>
       </div>
+      <!-- Private note, full width, no heading: never copied, gated on promptNotes.
+           The gate's display:none sits on this wrapper, not the textarea, so an
+           empty gap never appears when the flag is off. -->
+      <div id="modal-notes">
+        <textarea id="modal-notes-text" class="modal-input modal-notes-text" rows="2" data-i18n-ph="notesPh" data-i18n-title="notesHint"></textarea>
+      </div>
       <!-- Font/size sit right under the name — kept, not dropped, just moved
            up from the bottom so the row-level settings live together. -->
       <div id="modal-style-row" class="two-col">
@@ -337,19 +343,6 @@
       <!-- Live length readout (chars / words / ~tokens), expert-tunable -->
       <div id="modal-length" class="modal-length hidden" aria-hidden="true"></div>
       <div id="color-row" class="swatches"></div>
-      <!-- Private notes (collapsed by default; context for the user, never copied) -->
-      <div id="modal-notes" class="modal-collapse">
-        <button type="button" id="modal-notes-head" class="modal-collapse-head" aria-expanded="false">
-          <span data-i18n="notesTitle">Notes</span>
-          <svg class="collapse-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/>
-          </svg>
-        </button>
-        <div id="modal-notes-body" class="modal-collapse-body hidden">
-          <textarea id="modal-notes-text" class="modal-input modal-notes-text" rows="3" data-i18n-ph="notesPh"></textarea>
-          <p class="modal-hint modal-notes-hint" data-i18n="notesHint">Never copied — only shown here.</p>
-        </div>
-      </div>
       <!-- Tags, hotkey and version history, combined under one
            "Advanced options" toggle (collapsed by default) instead of three. -->
       <div id="modal-advanced" class="modal-collapse">

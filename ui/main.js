@@ -59,9 +59,6 @@ const modal = {
   varsHint: $("modal-vars-hint"),
   mdPreview: $("modal-md-preview"),
   mdWrap: $("modal-md-wrap"),
-  notes: $("modal-notes"),
-  notesHead: $("modal-notes-head"),
-  notesBody: $("modal-notes-body"),
   notesText: $("modal-notes-text"),
   // Tags/hotkey/history share one collapsible now.
   advanced: $("modal-advanced"),
@@ -9010,11 +9007,6 @@ function syncModalImageUi(mode) {
   modal.varsBody.classList.add("hidden");
   modal.varsHead.setAttribute("aria-expanded", "false");
   modal.textBar.classList.remove("open");
-  // Notes are available for every prompt kind; always reopen collapsed so the
-  // dialog looks the same each time and a long note never pushes Save off screen.
-  modal.notesBody.classList.add("hidden");
-  modal.notesHead.setAttribute("aria-expanded", "false");
-  modal.notes.classList.remove("open");
   // Tags/hotkey/history share one "Advanced options" collapsible, which always
   // reopens collapsed. The hotkey row exists for every prompt kind (a hotkey
   // copies whatever the prompt holds). Version history is offered for every existing
@@ -12265,19 +12257,6 @@ function bind() {
     const open = !modal.varsBody.classList.toggle("hidden");
     modal.varsHead.setAttribute("aria-expanded", String(open));
     modal.textBar.classList.toggle("open", open);
-  });
-  // Private-notes collapsible (same convention as the version history).
-  modal.notesHead.addEventListener("click", () => {
-    const open = !modal.notesBody.classList.toggle("hidden");
-    modal.notesHead.setAttribute("aria-expanded", String(open));
-    modal.notes.classList.toggle("open", open);
-    if (open) {
-      modal.notesText.focus();
-      const scroller = modal.notes.closest(".modal");
-      if (scroller) requestAnimationFrame(() => requestAnimationFrame(() => {
-        scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
-      }));
-    }
   });
   // Capture: the field is read-only, the key press itself is the input.
   bindHotkeyField(modal.hotkeyInput, {
