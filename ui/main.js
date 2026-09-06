@@ -9890,6 +9890,24 @@ function renderTagBar(bar, activeSet, rerender) {
   bar.appendChild(manage);
 }
 
+// Merging is just rename_tag with a target that already exists -- its own
+// rename_tag_in dedupes per-prompt and its color rule (keep the target's color,
+// only borrow the source's if the target has none) already matches what a merge
+// needs. Shared by the explicit Merge button and a rename that collides with an
+// existing tag, so both funnel through the same confirmation and backend call.
+async function confirmAndMergeTag(from, into, refresh) {
+  const n = tagUsage().get(tagKey(from)) || 0;
+  const ok = await confirmDialog({
+    title: t("tagMergeConfirmTitle"),
+    message: t("tagMergeConfirmMsg").replace("{from}", from).replace("{into}", into).replace("{n}", String(n)),
+    confirmLabel: t("tagMerge"),
+  });
+  if (!ok) return;
+  try { settings = await invoke("rename_tag", { old: from, new: into }); }
+  catch (err) { errToast(err); return; }
+  await refresh();
+}
+
 function openTagManager() {
   $("tag-modal").classList.remove("hidden");
   renderTagManager();
@@ -9952,10 +9970,35 @@ function renderTagManager() {
         danger: false,
         input: { type: "text", value: name, placeholder: t("tagsPh") },
       });
-      if (next == null || !next.trim() || tagKey(next) === tagKey(name)) return;
-      try { settings = await invoke("rename_tag", { old: name, new: next.trim() }); }
+      if (next == null || !next.trim()) return;
+      const nextTrimmed = next.trim();
+      if (tagKey(nextTrimmed) === tagKey(name)) return; // unchanged
+      // Renaming onto an existing tag is really a merge -- name it that way and
+      // show what it actually affects before it happens, same as the explicit
+      // Merge button below.
+      const existing = allTags().find((n2) => tagKey(n2) === tagKey(nextTrimmed));
+      if (existing) { await confirmAndMergeTag(name, existing, refresh); return; }
+      try { settings = await invoke("rename_tag", { old: name, new: nextTrimmed }); }
       catch (err) { errToast(err); return; }
       await refresh();
+    });
+    const merge = document.createElement("button");
+    merge.type = "button";
+    merge.className = "ghost-btn";
+    merge.textContent = t("tagMerge");
+    merge.addEventListener("click", async () => {
+      const others = allTags().filter((n2) => tagKey(n2) !== tagKey(name));
+      const target = await confirmDialog({
+        title: t("tagMergeTargetTitle"),
+        message: t("tagMergeTargetMsg").replace("{name}", name),
+        confirmLabel: t("tagMerge"),
+        danger: false,
+        input: { type: "text", placeholder: t("tagsPh"), datalist: others },
+      });
+      const trimmed = (target || "").trim();
+      if (!trimmed || tagKey(trimmed) === tagKey(name)) return;
+      const existing = others.find((n2) => tagKey(n2) === tagKey(trimmed)) || trimmed;
+      await confirmAndMergeTag(name, existing, refresh);
     });
     const del = document.createElement("button");
     del.type = "button";
@@ -9973,7 +10016,7 @@ function renderTagManager() {
       libTags.delete(tagKey(name));
       await refresh();
     });
-    row.append(dot, label, count, rename, del);
+    row.append(dot, label, count, rename, merge, del);
     list.appendChild(row);
   }
 }

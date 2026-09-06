@@ -7189,6 +7189,17 @@ fn rename_tag_in(prompts: &mut [Prompt], old_key: &str, new: &str) -> bool {
     changed
 }
 
+// Move `old_key`'s color onto `new_key`, but only if `new_key` doesn't already
+// have one -- the surviving tag's own color always wins. This is what makes
+// renaming onto an existing tag a real merge rather than a plain rename: the
+// same rename_tag command handles both, this rule is the only thing distinguishing
+// "merge" from "rename" at the color layer.
+fn transfer_tag_color(colors: &mut HashMap<String, String>, old_key: &str, new_key: &str) {
+    if let Some(color) = colors.remove(old_key) {
+        colors.entry(new_key.to_string()).or_insert(color);
+    }
+}
+
 // Drop one tag key from every prompt. Returns whether anything changed.
 fn remove_tag_from(prompts: &mut [Prompt], key: &str) -> bool {
     let mut changed = false;
@@ -7266,10 +7277,7 @@ async fn rename_tag(
     }
     let original_old_color = store.settings.tag_colors.get(&old_key).cloned();
     let original_new_color = store.settings.tag_colors.get(&new_key).cloned();
-    if let Some(color) = store.settings.tag_colors.remove(&old_key) {
-        // The target's own color wins if it already has one — it is the surviving tag.
-        store.settings.tag_colors.entry(new_key.clone()).or_insert(color);
-    }
+    transfer_tag_color(&mut store.settings.tag_colors, &old_key, &new_key);
     if !save_settings(&app, &store.settings) {
         match original_old_color {
             Some(c) => { store.settings.tag_colors.insert(old_key, c); }
@@ -28948,6 +28956,27 @@ mod tests {
         assert_eq!(prompts[0].tags, vec!["Job".to_string()]);
         // A name nobody uses changes nothing, so no save is triggered.
         assert!(!rename_tag_in(&mut prompts, "nothing", "Else"));
+    }
+
+    // The merge color rule: the surviving (target) tag keeps its own color if it
+    // has one, and only borrows the source's color when it had none at all.
+    #[test]
+    fn merging_a_tag_keeps_the_targets_color_if_it_has_one() {
+        let mut colors = HashMap::new();
+        colors.insert("work".to_string(), "#ff0000".to_string());
+        colors.insert("job".to_string(), "#00ff00".to_string());
+        transfer_tag_color(&mut colors, "work", "job");
+        assert_eq!(colors.get("job"), Some(&"#00ff00".to_string()), "target's own color must win");
+        assert_eq!(colors.get("work"), None, "the merged-away key's color entry is gone");
+    }
+
+    #[test]
+    fn merging_a_tag_into_an_uncolored_one_transfers_the_color() {
+        let mut colors = HashMap::new();
+        colors.insert("work".to_string(), "#ff0000".to_string());
+        transfer_tag_color(&mut colors, "work", "job");
+        assert_eq!(colors.get("job"), Some(&"#ff0000".to_string()));
+        assert_eq!(colors.get("work"), None);
     }
 
     #[test]

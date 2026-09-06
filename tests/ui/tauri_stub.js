@@ -751,7 +751,30 @@ const RESULTS = {
     return clone();
   },
   // The tag commands answer with the settings blob, like the real backend.
-  rename_tag: () => JSON.parse(JSON.stringify(SETTINGS)),
+  // Mirrors the backend's rename_tag_in + its color-transfer rule closely enough
+  // for the tag manager's own refresh() (a real get_state fetch) to see the
+  // renamed/merged result -- renaming onto an existing tag key dedupes per
+  // prompt exactly like a merge would.
+  rename_tag: (a) => {
+    const oldKey = String((a && a.old) || "").trim().toLowerCase();
+    const newName = String((a && a.new) || "").trim();
+    const newKey = newName.toLowerCase();
+    for (const p of PROMPTS) {
+      if (!(p.tags || []).some((t) => t.toLowerCase() === oldKey)) continue;
+      const kept = [];
+      for (const t of p.tags) {
+        const name = t.toLowerCase() === oldKey ? newName : t;
+        if (!kept.some((k) => k.toLowerCase() === name.toLowerCase())) kept.push(name);
+      }
+      p.tags = kept;
+    }
+    if (oldKey in SETTINGS.tag_colors) {
+      const color = SETTINGS.tag_colors[oldKey];
+      delete SETTINGS.tag_colors[oldKey];
+      if (!(newKey in SETTINGS.tag_colors)) SETTINGS.tag_colors[newKey] = color;
+    }
+    return clone();
+  },
   delete_tag: () => JSON.parse(JSON.stringify(SETTINGS)),
   set_tag_color: (a) => {
     const key = String((a && a.name) || "").toLowerCase();

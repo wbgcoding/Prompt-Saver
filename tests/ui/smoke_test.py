@@ -788,6 +788,31 @@ PROBE = """
         await sleep(200);
       }
     }
+    // 423 setup: 2 disposable tags for the merge check below, added to a single
+    // prompt (not the fixture's shared "Draft"/"Work") so later assertions that
+    // depend on those two staying exactly as the fixture made them still hold.
+    {
+      await click('library-select-btn');
+      document.querySelector('#library-list .lib-item[data-id="p1"]')?.click();
+      await sleep(150);
+      const setupAdd = document.getElementById('lib-batch-tag-add');
+      if (!setupAdd) {
+        out.errors.push('423: the batch tag add button is missing for merge-test setup');
+      } else {
+        setupAdd.click();
+        await sleep(150);
+        document.getElementById('confirm-input').value = 'MergeSrcTmp';
+        document.getElementById('confirm-ok').click();
+        await sleep(150);
+        setupAdd.click();
+        await sleep(150);
+        document.getElementById('confirm-input').value = 'MergeDstTmp';
+        document.getElementById('confirm-ok').click();
+        await sleep(150);
+      }
+      document.getElementById('lib-batch-none').click();
+      await click('library-select-btn'); // back out of select mode
+    }
     // Tags: the filter row lists them, a chip narrows the list, the manager opens.
     const chips = [...document.querySelectorAll('#library-tagbar .tag-filter')];
     if (chips.length < 2) {
@@ -822,6 +847,25 @@ PROBE = """
         const draftDot = rowFor('Draft')?.querySelector('.tag-dot');
         if (!draftDot || !draftDot.classList.contains('tag-colored')) {
           out.errors.push('colorize did not give the uncolored tag a color');
+        }
+        // 423: merge "MergeSrcTmp" into "MergeDstTmp" (the setup above) via the
+        // row's Merge button (order: Rename, Merge, Delete) -- disposable tags,
+        // never the fixture's own "Draft"/"Work" that other checks rely on.
+        const srcRow = rowFor('MergeSrcTmp');
+        const mergeBtn = srcRow?.querySelectorAll('.ghost-btn')[1];
+        if (!srcRow || !mergeBtn) {
+          out.errors.push('423: the tag manager has no Merge button for "MergeSrcTmp"');
+        } else {
+          mergeBtn.click();
+          await sleep(150);
+          document.getElementById('confirm-input').value = 'MergeDstTmp';
+          document.getElementById('confirm-ok').click(); // target picker
+          await sleep(150);
+          document.getElementById('confirm-ok').click(); // "N prompts affected" confirmation
+          await sleep(250);
+          if (rowFor('MergeSrcTmp')) out.errors.push('423: "MergeSrcTmp" is still listed after merging it into "MergeDstTmp"');
+          const stillShown = [...document.querySelectorAll('#library-list .tag-chip')].some((c) => c.textContent === 'MergeSrcTmp');
+          if (stillShown) out.errors.push('423: a library row still shows the merged-away tag');
         }
       }
       await click('tag-modal-close');
@@ -6935,10 +6979,12 @@ def main():
                  # create-and-verify round trip, then to 126s once 171's late-voice-text
                  # probe added its own editor round trip plus the 3s late-delivery grace
                  # window it has to sit through, then to 132s once the recording
-                 # result dialog's probe added its own four expert-menu round trips.
+                 # result dialog's probe added its own four expert-menu round trips,
+                 # then to 138s once the tag-merge check added its own batch-select
+                 # round trip (two disposable tags added before the merge itself).
                  # The window has to hold the iframe plus Chrome's own frame.
                  f"--window-size={max(w + 30, 520)},{h + 140}",
-                 "--virtual-time-budget=132000", "--dump-dom",
+                 "--virtual-time-budget=138000", "--dump-dom",
                  wrapper.as_uri()],
                 # The dumped DOM carries all 20 languages; without an explicit
                 # codec Windows decodes it as cp1252 and the reader thread dies,
