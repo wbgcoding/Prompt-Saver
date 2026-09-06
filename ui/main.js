@@ -1201,6 +1201,9 @@ const FLAG_LABELS = {
   // result modal and from any video prompt's context menu. Ships ON, like the
   // rest of the media-editing features (snipEditor, ocr, voice).
   videoEditor: "flagVideoEditor",
+  // Only matters once clipWatcher (itself off by default) is on -- ships ON so a
+  // guessed password never has to be manually turned away in the first place.
+  clipSkipSecrets: "flagClipSkipSecrets",
 };
 const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -1525,6 +1528,7 @@ const EXPERT_VALUES = {
   // Clipboard watcher: min length + inbox cap.
   clipMinChars: { label: "valClipMin", min: 1, max: 100, step: 1, def: 3, unit: "", gate: "clipWatcher" },
   clipInboxMax: { label: "valClipMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "clipWatcher" },
+  clipSecretMinLen: { label: "valClipSecretMinLen", min: 4, max: 32, step: 1, def: 8, unit: "", gate: "clipSkipSecrets" },
   // Keyboard grid focus fades this long after the window loses focus.
   kbFocusFadeMs: { label: "valKbFocusFade", min: 500, max: 10000, step: 500, def: 2000, unit: "ms", gate: "keyboardNav" },
   // Tag chip text size (editor, library filter row, manager).
@@ -1796,7 +1800,7 @@ const EXPERT_TABS = [
     // The quick-copy sections of the tray menu, each with its own entry count.
     { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs"], values: ["trayRecentN", "trayFavN", "trayLabelMax"] },
     // The watcher that collects what you copy elsewhere.
-    { title: "expGroupClipboard", flags: ["clipWatcher"], values: ["clipMinChars", "clipInboxMax"] },
+    { title: "expGroupClipboard", flags: ["clipWatcher", { key: "clipSkipSecrets", gate: "clipWatcher" }], values: ["clipMinChars", "clipInboxMax", "clipSecretMinLen"] },
     // Prompt folders as Markdown (beta): mirrors text-only prompts as .md files.
     { title: "expGroupSync", flags: ["promptSync"], values: ["syncPollSecs"], paths: ["syncDir"] },
   ] },
@@ -2010,10 +2014,10 @@ const EXPERT_TIPS = [
   // Tools / data
   "dupFinder", "clipWatcher", "backupGfs", "backupBeforeReset", "backupBeforeDelete", "disarmMs",
   "recSweepBroken", "recBrokenGraceMin", "recSweepEveryMin", "videoClipTtlMin",
-  "usageStats", "promptSync", "syncDir", "syncPollSecs",
+  "usageStats", "promptSync", "syncDir", "syncPollSecs", "clipSkipSecrets",
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "kbFocusFadeMs", "snipPreviewVh",
-  "historyPerPrompt", "dupThreshold", "clipMinChars", "clipInboxMax", "historyMax",
+  "historyPerPrompt", "dupThreshold", "clipMinChars", "clipInboxMax", "clipSecretMinLen", "historyMax",
   "journalLimit", "previewLen", "nameMaxLen", "searchRecentMax", "maxViews", "gridMax",
   "viewBorder", "statsTopN", "viewGroups", "viewGroupMaxRows", "multiViewPrompt",
   "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",

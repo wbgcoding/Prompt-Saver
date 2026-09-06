@@ -10321,6 +10321,57 @@ fn counts_as_paste(now: u32, armed_at: u32, last_paste: u32, last_input: u32, se
     true
 }
 
+// A DWORD-valued clipboard opt-out format (CanIncludeInClipboardHistory,
+// CanUploadToCloudClipboard) means "present and explicitly 0" = excluded, a nonzero
+// value means the source allows it, and absence means the source never said either
+// way. A value that could not be read at all (format announced but the memory block
+// came back empty) is treated the same as an explicit 0 -- the same fail-closed
+// choice as the secret heuristic below: a copy skipped by mistake costs nothing, a
+// secret kept by mistake costs a lot. Pure so the value-reading rule has its own
+// test without touching a real clipboard.
+fn dword_format_excludes(available: bool, value: Option<u32>) -> bool {
+    available && value.unwrap_or(0) == 0
+}
+
+// Nothing else this app's own UI ever copies is a single unspaced 8-64 character
+// string mixing three of the four character classes below, so the "not a word from
+// our own dictionary" carve-out only has to rule out the product name itself.
+fn is_own_ui_word(candidate: &str) -> bool {
+    candidate.trim().eq_ignore_ascii_case(brand::DISPLAY_NAME)
+}
+
+// A best-effort guess that freshly copied text is a password rather than a prompt, a
+// sentence or an address: exactly one line, `min_len` to 64 characters, no
+// whitespace, at least three of the four character classes, and not the one word the
+// app's own UI could otherwise trip this on. Getting this wrong toward "skip it" only
+// costs one entry that never reaches the inbox; getting it wrong the other way puts a
+// password into a history file, so every ambiguous case below returns true.
+fn looks_like_password(text: &str, min_len: usize) -> bool {
+    if text.lines().count() != 1 {
+        return false;
+    }
+    let t = text.trim();
+    let len = t.chars().count();
+    if len < min_len.max(1) || len > 64 {
+        return false;
+    }
+    if t.chars().any(|c| c.is_whitespace()) {
+        return false;
+    }
+    let has_lower = t.chars().any(|c| c.is_ascii_lowercase());
+    let has_upper = t.chars().any(|c| c.is_ascii_uppercase());
+    let has_digit = t.chars().any(|c| c.is_ascii_digit());
+    let has_symbol = t.chars().any(|c| !c.is_ascii_alphanumeric());
+    let classes = [has_lower, has_upper, has_digit, has_symbol].iter().filter(|b| **b).count();
+    if classes < 3 {
+        return false;
+    }
+    if is_own_ui_word(t) {
+        return false;
+    }
+    true
+}
+
 // ---- Clipboard watcher: a message-only window with AddClipboardFormatListener
 // (event-driven, no polling). New external TEXT is appended to the clip_inbox table;
 // our own copies and consecutive duplicates are skipped. Off by default; toggling it
@@ -10425,6 +10476,7 @@ mod clipwatch {
         fn CloseClipboard() -> i32;
         fn EmptyClipboard() -> i32;
         fn SetClipboardData(format: u32, hmem: isize) -> isize;
+        fn GetClipboardData(format: u32) -> isize;
         fn GetClipboardOwner() -> isize;
     }
 
@@ -10474,6 +10526,32 @@ mod clipwatch {
         LAST_OWN.store(text_hash(text.trim()), Ordering::Relaxed);
     }
 
+    // The stored value of a DWORD-payload clipboard format, or None if the format is
+    // absent or its memory block could not be read. Never called while WE hold the
+    // clipboard open -- on_clipboard_update only reaches this after the source has
+    // already closed it.
+    fn read_dword_format(fmt: u32) -> Option<u32> {
+        if fmt == 0 || unsafe { IsClipboardFormatAvailable(fmt) } == 0 {
+            return None;
+        }
+        unsafe {
+            if OpenClipboard(0) == 0 {
+                return None;
+            }
+            let h = GetClipboardData(fmt);
+            let value = if h != 0 {
+                let ptr = GlobalLock(h);
+                let v = if ptr.is_null() { None } else { Some(std::ptr::read_unaligned(ptr as *const u32)) };
+                if !ptr.is_null() { GlobalUnlock(h); }
+                v
+            } else {
+                None
+            };
+            CloseClipboard();
+            value
+        }
+    }
+
     fn on_clipboard_update() {
         // Our own delayed-rendering promise is never inbox material, and reading
         // it here would itself trigger WM_RENDERFORMAT — without this the collector
@@ -10487,23 +10565,39 @@ mod clipwatch {
             Some(a) => a,
             None => return,
         };
-        let (min, cap, enabled) = {
+        let (min, cap, enabled, skip_secrets, secret_min_len) = {
             let state = app.state::<Db>();
             let store = lock(&state);
             let enabled = store.settings.ui_flags.get("clipWatcher") == Some(&true);
             let min = store.settings.ui_values.get("clipMinChars").copied().unwrap_or(3.0).max(1.0) as usize;
             let cap = store.settings.ui_values.get("clipInboxMax").copied().unwrap_or(50.0).clamp(10.0, 200.0) as usize;
-            (min, cap, enabled)
+            // Ben's own password manager (Avira) sets neither this nor the two OS
+            // formats below, so the heuristic further down carries the real weight --
+            // this stays on unless a user deliberately turns it off.
+            let skip_secrets = store.settings.ui_flags.get("clipSkipSecrets") != Some(&false);
+            let secret_min_len = store.settings.ui_values.get("clipSecretMinLen").copied().unwrap_or(8.0).clamp(4.0, 32.0) as usize;
+            (min, cap, enabled, skip_secrets, secret_min_len)
         };
         if !enabled {
             return;
         }
-        // Respect the clipboard opt-out format password managers (KeePass, 1Password, …)
-        // set so their copied secrets never land in monitors / history.
+        // Respect the clipboard opt-out formats password managers set so their copied
+        // secrets never land in monitors / history. The first is a plain "present at
+        // all" marker (KeePass, 1Password, …); the other two are Windows' own
+        // clipboard-history/cloud-sync opt-outs, an explicit 0 meaning "do not
+        // include" -- a source setting neither still relies entirely on the guess
+        // below.
         unsafe {
             let excl = RegisterClipboardFormatW(wide("ExcludeClipboardContentFromMonitorProcessing").as_ptr());
             if excl != 0 && IsClipboardFormatAvailable(excl) != 0 {
                 return;
+            }
+            for name in ["CanIncludeInClipboardHistory", "CanUploadToCloudClipboard"] {
+                let fmt = RegisterClipboardFormatW(wide(name).as_ptr());
+                let available = fmt != 0 && IsClipboardFormatAvailable(fmt) != 0;
+                if super::dword_format_excludes(available, read_dword_format(fmt)) {
+                    return;
+                }
             }
         }
         // Text only — image/file clipboard payloads are ignored. Bracketed with
@@ -10517,6 +10611,9 @@ mod clipwatch {
         };
         let trimmed = text.trim();
         if trimmed.chars().count() < min {
+            return;
+        }
+        if skip_secrets && super::looks_like_password(trimmed, secret_min_len) {
             return;
         }
         let h = text_hash(trimmed);
@@ -28054,6 +28151,53 @@ mod tests {
                 "now={now} armed_at={armed_at} last_paste={last_paste} last_input={last_input} self_read={self_read}"
             );
         }
+    }
+
+    // Ten real-looking copies that must never reach the clip inbox, ten that must.
+    #[test]
+    fn looks_like_password_tells_secrets_from_ordinary_copies() {
+        let secrets = [
+            "Tr0ub4dor&3", "correcthorsebatterystaple9!", "P@ssw0rd2024", "xK9#mQ2$vL8p",
+            "Zx7!Bq2#Wn9$", "a1B2c3D4e5F6", "9Fj!kLmN2#Qr", "Winter2024!Snow",
+            "gH7#pL2vX9qR", "M0nk3y#Business",
+        ];
+        for s in secrets {
+            assert!(looks_like_password(s, 8), "not flagged as a secret: {s}");
+        }
+        let ordinary = [
+            "Write a short story about a dragon.",       // real sentence with spaces
+            "p1",                                        // a prompt id, far too short
+            "192.168.1.1",                                // an address, only two classes
+            "short1!",                                    // below the 8-char floor
+            "Rewrite this email so it sounds friendlier and more concise, please.\nThanks!", // multi-line
+            "helloworld",                                 // one character class only
+            "1234567890123",                               // digits only
+            "ALLCAPSNOOTHERCLASS",                          // upper only
+            "Prompt Saver",                                 // the app's own name (has a space anyway)
+            "the quick brown fox",                          // ordinary prose, spaced
+        ];
+        for s in ordinary {
+            assert!(!looks_like_password(s, 8), "wrongly flagged as a secret: {s}");
+        }
+    }
+
+    #[test]
+    fn looks_like_password_respects_the_configurable_floor() {
+        assert!(!looks_like_password("aB3!aB3!", 12), "8 chars must fail a 12-char floor");
+        assert!(looks_like_password("aB3!aB3!", 8), "8 chars must pass an 8-char floor");
+    }
+
+    // The two new Windows clipboard-history/cloud-sync opt-out formats behave exactly
+    // like the pre-existing KeePass-style one in the one respect that matters: an
+    // explicit "do not include" (a stored 0, or a marker we could not even read)
+    // skips the content, while absence or an explicit "allow" never does.
+    #[test]
+    fn dword_clipboard_formats_are_excluded_only_on_an_explicit_zero() {
+        assert!(!dword_format_excludes(false, None), "format absent -- nothing to exclude on");
+        assert!(!dword_format_excludes(false, Some(0)), "absent format's stray value must not matter");
+        assert!(dword_format_excludes(true, Some(0)), "an explicit 0 excludes");
+        assert!(!dword_format_excludes(true, Some(1)), "an explicit allow must not exclude");
+        assert!(dword_format_excludes(true, None), "present but unreadable fails closed");
     }
 
     #[test]

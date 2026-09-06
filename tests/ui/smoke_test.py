@@ -4866,6 +4866,53 @@ PROBE = """
       await click('expert-back');
       document.getElementById('settings').classList.add('hidden');
     }
+    // 431: the password-skip switch only matters once the clipboard inbox itself is
+    // on, defaults to on, and its length slider only matters while it is.
+    {
+      const valueRow431 = (label) => [...document.querySelectorAll('#expert-flags .value-field')]
+        .find(r => ((r.querySelector('.value-head span') || {}).textContent || '').includes(label));
+      document.getElementById('settings').classList.remove('hidden');
+      await click('expert-open');
+      const watcherRow = await expertRow('Clipboard inbox');
+      if (!watcherRow) {
+        out.errors.push('431: the clipboard inbox option is missing from the expert menu');
+      } else {
+        watcherRow.querySelector('input.switch').click();
+        await sleep(200);
+        const skipRow = await expertRow('Skip likely passwords');
+        if (!skipRow) {
+          out.errors.push('431: the password-skip switch does not appear once the inbox is on');
+        } else {
+          if (!skipRow.querySelector('input.switch').checked) {
+            out.errors.push('431: the password-skip switch is not on by default');
+          }
+          if (!valueRow431('Password guess minimum length')) {
+            out.errors.push('431: the minimum-length slider is missing although password-skip is on');
+          }
+          skipRow.querySelector('input.switch').click();
+          await sleep(200);
+          if (valueRow431('Password guess minimum length')) {
+            out.errors.push('431: the minimum-length slider survived turning password-skip off');
+          }
+          // Re-fetch: password-skip gates the slider's visibility, so its own switch
+          // rebuilt the tab and the earlier `skipRow` element is now detached.
+          const skipRowBack = await expertRow('Skip likely passwords');
+          if (skipRowBack) skipRowBack.querySelector('input.switch').click();
+          await sleep(200);
+          if (!valueRow431('Password guess minimum length')) {
+            out.errors.push('431: the minimum-length slider did not come back with password-skip');
+          }
+        }
+        // Restore the shipped default (off) so later checks see it unchanged.
+        const watcherRowBack = await expertRow('Clipboard inbox');
+        if (watcherRowBack) watcherRowBack.querySelector('input.switch').click();
+        await sleep(200);
+        const firstTab431 = document.querySelector('#expert-tabs-bar .expert-tab');
+        if (firstTab431) { firstTab431.click(); await sleep(150); }
+      }
+      await click('expert-back');
+      document.getElementById('settings').classList.add('hidden');
+    }
     // 108: Save must fit --winctl-w in every language -- the longest translations
     // ("Speichern", "Speichern" DE at 9 chars is the longest of the 11) must not
     // overflow the fixed-width button.
@@ -7407,7 +7454,10 @@ def main():
                 [browser, "--headless=new", "--disable-gpu", "--no-first-run",
                  f"--user-data-dir={tmp / ('profile-%s' % size_tag)}", "--allow-file-access-from-files",
                  f"--window-size={max(w + 30, 520)},{h + 140}",
-                 "--virtual-time-budget=126000", "--dump-dom",
+                 # Raised from 126s once the clipboard-secret expert-menu check
+                 # (password-skip switch plus its length slider, each gated on the
+                 # other) added its own round of tab walks and switch toggles.
+                 "--virtual-time-budget=134000", "--dump-dom",
                  wrapper.as_uri()],
                 capture_output=True, text=True, encoding="utf-8", errors="replace",
                 timeout=240)
