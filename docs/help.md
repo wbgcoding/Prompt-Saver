@@ -390,6 +390,10 @@ library/history/pin buttons, multiple views, and view groups.
 Excludes the window from screen capture (on by default), blurs tiles/media until
 hovered, hides tile names, dims unhovered tiles.
 
+The screen-capture exclusion needs Windows 10 version 2004 (build 19041) or
+newer; on an older Windows it is silently ignored and the window is captured
+like any other.
+
 Everything the database holds is sealed with Windows' own per-account
 encryption, so another account on the same PC cannot read it. Very rarely
 Windows refuses to do that — almost always a damaged user profile or account. In
@@ -685,7 +689,10 @@ Statistik mit 14-Tage-Diagramm.
 **Werkzeugleiste** — welche Buttons Kopf- und Composer-Leiste zeigen.
 
 **Datenschutz** — Bildschirmaufnahme-Ausschluss (an), Weichzeichnen, Namen
-verbergen, Abdunkeln. Alles in der Datenbank ist mit der kontogebundenen
+verbergen, Abdunkeln. Der Bildschirmaufnahme-Ausschluss braucht Windows 10 ab
+Version 2004 (Build 19041); auf einem älteren Windows wird er still ignoriert
+und das Fenster wie jedes andere aufgenommen. Alles in der Datenbank ist mit
+der kontogebundenen
 Windows-Verschlüsselung versiegelt; ein anderes Konto am selben PC kann es also
 nicht lesen. Sehr selten verweigert Windows das — fast immer wegen eines
 beschädigten Benutzerprofils oder Kontos. Dann wird weiter gespeichert, aber im
