@@ -298,7 +298,9 @@ per-entry delete, and usage statistics including a 14-day activity chart.
 ### Library & search
 
 The library lists every tile as a searchable, filterable list — fuzzy search,
-smart sort (most-used / most-recent), and type/colour filters.
+smart sort (most-used / most-recent), and type/colour filters. Type -word to
+exclude matches, or tag:word / var:word to search only tags or placeholder
+names.
 
 ### Tags
 
@@ -663,7 +665,8 @@ System.
 
 **Aussehen & Themes** — sieben mitgelieferte Themes, optionaler Theme-Editor.
 
-**Bibliothek & Suche** — unscharfe Suche, intelligente Sortierung, Filter.
+**Bibliothek & Suche** — unscharfe Suche, intelligente Sortierung, Filter,
+`tag:`/`var:`-Suchpräfixe (mit `-` auch verneint).
 
 **Tags** — freie Schlagwörter, UND/ODER-Filter.
 

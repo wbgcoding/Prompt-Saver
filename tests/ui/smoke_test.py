@@ -903,6 +903,34 @@ PROBE = """
       q.dispatchEvent(new Event('input', { bubbles: true }));
       await sleep(250);
     }
+    // 424: tag: and var: are hard filters -- typing one narrows the library
+    // to exactly the prompts carrying that tag or placeholder, nothing scored.
+    if (q) {
+      // Earlier steps above created a couple of untagged test prompts, so the
+      // total row count here is not the fixture's original 12 -- the
+      // "everyone without Work" count is checked relative to it instead.
+      const totalRows = document.querySelectorAll('#library-list .lib-item').length;
+      q.value = 'tag:work';
+      q.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(300);
+      const tagHits = document.querySelectorAll('#library-list .lib-item').length;
+      if (tagHits !== 8) out.errors.push('424: "tag:work" matched ' + tagHits + ' prompts instead of 8');
+      q.value = '-tag:work';
+      q.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(300);
+      const tagExcludeHits = document.querySelectorAll('#library-list .lib-item').length;
+      if (tagExcludeHits !== totalRows - tagHits) {
+        out.errors.push('424: "tag:work" and "-tag:work" do not add up to the full list: ' + tagHits + ' + ' + tagExcludeHits + ' != ' + totalRows);
+      }
+      q.value = 'var:Text';
+      q.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(300);
+      const varHits = document.querySelectorAll('#library-list .lib-item').length;
+      if (varHits !== 1) out.errors.push('424: "var:Text" matched ' + varHits + ' prompts instead of 1');
+      q.value = '';
+      q.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(250);
+    }
     // P25: the 2 most-used tags across the fixture (Work, Draft) are offered as
     // one-click chips on an untagged prompt, and vanish once actually added.
     {

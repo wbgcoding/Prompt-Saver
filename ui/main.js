@@ -10600,9 +10600,34 @@ function libSearchScore(p) {
   libScoreCache.set(p.id, res);
   return res;
 }
+// Whether a prompt satisfies one tag:/var: condition from the search query.
+// tag: matches a tag's own identity (tagKey), case-insensitive, not a
+// substring -- the plain search already does substring matching over tag
+// text. var: matches a placeholder's name, read the same way the variable
+// dialog itself reads it (VAR_RE over the body, then the "|options" split).
+function searchConditionMet(c, p) {
+  let hit;
+  if (c.prefix === "tag") {
+    hit = (p.tags || []).some((name) => tagKey(name) === tagKey(c.value));
+  } else {
+    const names = [p.text, ...(p.variants || [])].flatMap((t) => extractVars(t || ""));
+    hit = names.some((tok) => parseVar(tok).name.toLowerCase() === c.value);
+  }
+  return c.neg ? !hit : hit;
+}
 function computeLibSearchScore(p) {
-  const raw = libQuery.trim().toLowerCase();
-  if (!raw) return { score: 1, fuzzy: false, entryIndex: 0 };
+  const rawInput = libQuery.trim().toLowerCase();
+  if (!rawInput) return { score: 1, fuzzy: false, entryIndex: 0 };
+  // tag:word and var:word (and their negated "-tag:"/"-var:" forms) are hard
+  // conditions, pulled out before anything else runs -- a prompt that fails
+  // one of them is out, whatever the rest of the query would otherwise have
+  // scored it. parseSearchQuery leaves everything else untouched.
+  const { rest, conditions } = parseSearchQuery(rawInput);
+  if (conditions.length && !conditions.every((c) => searchConditionMet(c, p))) {
+    return { score: 0, fuzzy: false, entryIndex: 0 };
+  }
+  const raw = rest;
+  if (!raw) return { score: 1, fuzzy: false, entryIndex: 0 }; // only tag:/var: terms given
   // entryIndex tags which entry a body-field match came from (0 = p.text, the
   // library row's default preview; 1+ = variants[entryIndex-1]) — a rotating
   // prompt is findable by ANY entry, and the row can then show the one that
