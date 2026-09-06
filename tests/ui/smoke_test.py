@@ -7078,6 +7078,29 @@ VIDEO_PROBE = """
     rawKeyCheck('export tab');
     sideScan(errs, 'export tab');
 
+    // ---- 360: the edit-tab scale select and the export-tab downscale
+    // select must stay in sync with each other in both directions ----
+    {
+      const veScale = document.getElementById('ve-scale');
+      const veDownscale = document.getElementById('ve-export-downscale');
+      veScale.value = '720';
+      veScale.dispatchEvent(new Event('change'));
+      await sleep(30);
+      if (veDownscale.value !== '720') {
+        errs.push('360: setting the edit-tab scale did not update the export-tab downscale select');
+      }
+      veDownscale.value = '480';
+      veDownscale.dispatchEvent(new Event('change'));
+      await sleep(30);
+      if (veScale.value !== '480') {
+        errs.push('360: setting the export-tab downscale did not update the edit-tab scale select');
+      }
+      // Reset to "off" so this does not leak into later export assertions.
+      veScale.value = '';
+      veScale.dispatchEvent(new Event('change'));
+      await sleep(30);
+    }
+
     // ---- 335: the export destination input + its two picker buttons ----
     const destInput = document.getElementById('ve-export-dest');
     if (!destInput.value) {

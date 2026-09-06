@@ -1588,6 +1588,17 @@ const exportFormat = () => $("ve-export-format").value || "mp4";
 const exportQuality = () => $("ve-export-quality").value || "high";
 const exportDownscale = () => $("ve-export-downscale").value || "";
 
+// The export-tab downscale select and the edit-tab scale op are kept in sync
+// on every change, but an undo/redo can restore a scale op without the
+// export select's own change handler ever firing -- falling back to the op's
+// height here (instead of trusting exportDownscale() alone) covers that case.
+function scaleTarget() {
+  const fromSelect = Number(exportDownscale());
+  if (fromSelect) return fromSelect;
+  const scaleOp = opOf("scale");
+  return scaleOp ? scaleOp.height : 0;
+}
+
 // The one place the operation list becomes ffmpeg. Produces a complete graph
 // consuming [0:v] and ending on [vout]; the audio half is built separately below
 // and ends on [aout], so the backend joins the two with ";" into a single
@@ -1597,8 +1608,7 @@ function buildVideoChain() {
   const crop = opOf("crop");
   const speed = opOf("speed");
   const fade = opOf("fade");
-  const scaleOp = opOf("scale");
-  const downscale = exportDownscale() ? Number(exportDownscale()) : (scaleOp ? scaleOp.height : 0);
+  const downscale = scaleTarget();
   const overlays = opsOf("overlay");
   const gif = exportFormat() === "gif";
   const trimmed = segments.length > 1 || segments[0].a > 0 || segments[0].b < VE.dur;
@@ -1894,7 +1904,7 @@ async function startExport(toClipboard) {
 function videoKbps() {
   const base = EXPORT_KBPS[exportQuality()];
   if (base == null) return null;
-  const target = exportDownscale() ? Number(exportDownscale()) : 0;
+  const target = scaleTarget();
   if (!target || !VE.h || target >= VE.h) return base;
   // Fewer pixels need fewer bits; the floor keeps a 480p clip from going muddy.
   return Math.max(800, Math.round(base * (target / VE.h)));
