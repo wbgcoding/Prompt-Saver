@@ -834,9 +834,7 @@ function renderRects() {
     chip.dataset.op = selected.id;
     chip.style.left = `${vb.left + selected.x * vb.scale}px`;
     chip.style.top = `${vb.top + selected.y * vb.scale}px`;
-    chip.style.font = `${Math.max(8, selected.fontPx * vb.scale)}px "Segoe UI", system-ui, sans-serif`;
-    chip.style.color = selected.color;
-    chip.textContent = selected.text || t("veOvText");
+    chip.setAttribute("aria-label", selected.text || t("veOvText"));
     layer.appendChild(chip);
   }
 

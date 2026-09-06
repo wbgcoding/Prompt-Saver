@@ -12,6 +12,12 @@ body.video-body {
   min-width: 0;
   user-select: none;
 }
+/* user-select inherits into every input and textarea; allow the side panels
+   (export path, time fields, overlay values) to be selected again while the
+   drag surfaces stay non-selectable. */
+.ve-panels, .ve-panels * { user-select: text; }
+.ve-video, .ve-rects, .ve-overlay-live, .ve-timeline, .ve-titlebar,
+.ve-transport, .ve-tabs, .ve-ops { user-select: none; }
 
 /* ---- titlebar ---- */
 .ve-titlebar {
@@ -120,9 +126,10 @@ body.video-body {
 .ve-rect-image { border-color: #22c55e; }
 .ve-rect-frame { border-color: #a855f7; }
 .ve-text-chip {
-  border: 1px dashed #ffffff88;
-  padding: 1px 3px;
-  white-space: nowrap;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  outline: 2px solid var(--accent);
   background: rgba(0, 0, 0, 0.35);
 }
 .ve-rect-size {
