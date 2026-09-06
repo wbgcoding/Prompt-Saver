@@ -7,7 +7,7 @@ import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults 
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
-import { DRAG_OUT_MODS, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound } from "./floatShared.js";
+import { DRAG_OUT_MODS, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField } from "./floatShared.js";
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
@@ -13417,6 +13417,10 @@ function bind() {
 
   // ---- contextual (tool-specific) toolbar: only what the active tool understands ----
   function snipEditBuildWidthField(tool, ts) {
+    // A plain div, not a <label>: the S/M/L buttons below sit before the
+    // exact-value field, so a <label> here would forward a click on the
+    // "Width" text to the first of THEM, not to the number field -- the
+    // field gets its own aria-label instead (see the .setAttribute below).
     const wrap = document.createElement("div");
     wrap.className = "snip-edit-field";
     wrap.append(Object.assign(document.createElement("span"), { textContent: t("snipEditWidth") }));
@@ -13438,15 +13442,15 @@ function bind() {
       row.appendChild(b);
     });
     wrap.appendChild(row);
-    const num = document.createElement("input");
-    num.type = "number";
-    num.className = "snip-edit-num";
-    num.min = "1";
-    num.max = "80";
-    num.value = ts.width;
+    const control = numberField({
+      value: ts.width, min: 1, max: 80, step: 1, presets: [1, 2, 4, 8, 16],
+      onChange: (v) => { ts.width = v; snipEditRenderContext(); },
+      decreaseLabel: t("numFieldDecrease"), increaseLabel: t("numFieldIncrease"), presetsLabel: t("numFieldPresets"),
+    });
+    const num = control.querySelector("input");
     num.title = t("snipEditWidthTip");
-    num.addEventListener("change", () => { ts.width = snipEditClamp(Number(num.value) || ts.width, 1, 80); snipEditRenderContext(); });
-    wrap.appendChild(num);
+    num.setAttribute("aria-label", t("snipEditWidthTip"));
+    wrap.appendChild(control);
     return wrap;
   }
   // Single trigger button (current color) opens a popover holding the full
@@ -13513,19 +13517,19 @@ function bind() {
     wrap.append(cb, Object.assign(document.createElement("span"), { textContent: labelText }));
     return wrap;
   }
-  function snipEditBuildNumField(labelText, value, min, max, title, onChange) {
-    const wrap = document.createElement("div");
+  function snipEditBuildNumField(labelText, value, min, max, title, onChange, presets) {
+    // A real <label> (not a plain div) so the input keeps an accessible name
+    // from its own visible text -- see the numFieldDec/-Inc/-List buttons
+    // below for why they need an explicit aria-label instead.
+    const wrap = document.createElement("label");
     wrap.className = "snip-edit-field";
     wrap.append(Object.assign(document.createElement("span"), { textContent: labelText }));
-    const num = document.createElement("input");
-    num.type = "number";
-    num.className = "snip-edit-num";
-    num.min = String(min);
-    num.max = String(max);
-    num.value = value;
-    num.title = title;
-    num.addEventListener("change", () => onChange(snipEditClamp(Number(num.value) || value, min, max)));
-    wrap.appendChild(num);
+    const control = numberField({
+      value, min, max, step: 1, presets, onChange,
+      decreaseLabel: t("numFieldDecrease"), increaseLabel: t("numFieldIncrease"), presetsLabel: t("numFieldPresets"),
+    });
+    control.querySelector("input").title = title;
+    wrap.appendChild(control);
     return wrap;
   }
   function snipEditBuildDimField(ts) {
@@ -13556,11 +13560,11 @@ function bind() {
       box.appendChild(snipEditBuildToggle(t("snipEditFilled"), !!ts.filled, (v) => { ts.filled = v; }));
     }
     if (tool === "text") {
-      box.appendChild(snipEditBuildNumField(t("snipEditTextSize"), ts.fontPx, 10, 96, t("snipEditTextSizeTip"), (v) => { ts.fontPx = v; }));
+      box.appendChild(snipEditBuildNumField(t("snipEditTextSize"), ts.fontPx, 10, 96, t("snipEditTextSizeTip"), (v) => { ts.fontPx = v; }, [12, 16, 24, 32, 48, 64, 96]));
       box.appendChild(snipEditBuildToggle(t("snipEditTextPlate"), !!ts.plate, (v) => { ts.plate = v; }));
     }
     if (tool === "pixelate") {
-      box.appendChild(snipEditBuildNumField(t("snipEditBlockSize"), ts.blockPx, 4, 64, t("snipEditBlockSizeTip"), (v) => { ts.blockPx = v; }));
+      box.appendChild(snipEditBuildNumField(t("snipEditBlockSize"), ts.blockPx, 4, 64, t("snipEditBlockSizeTip"), (v) => { ts.blockPx = v; }, [8, 12, 16, 24, 32]));
     }
     if (tool === "spotlight") box.appendChild(snipEditBuildDimField(ts));
   }

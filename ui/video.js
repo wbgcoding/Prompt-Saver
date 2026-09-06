@@ -6,7 +6,7 @@
 // an ordered operation list (VE.ops), exactly like the screenshot editor's own
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
-import { resolveLang, ffmpegDownloadPct } from "./floatShared.js";
+import { resolveLang, ffmpegDownloadPct, numberField } from "./floatShared.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 
@@ -366,9 +366,13 @@ function syncOverlayFields() {
   if (!op) return;
   for (const key in fields) {
     const { input, getValue } = fields[key];
-    if (input === document.activeElement) continue;
+    // A plain <input> contains itself, so this also covers the old case where
+    // `input` was the field itself rather than a numberField() wrapper.
+    if (input.contains(document.activeElement)) continue;
     const value = getValue(op);
-    if (value != null) input.value = value;
+    if (value == null) continue;
+    if (typeof input.setValue === "function") input.setValue(value);
+    else input.value = value;
   }
 }
 
@@ -1312,6 +1316,7 @@ function renderEditFields() {
     $("ve-crop-y").value = rect.y;
     $("ve-crop-w").value = rect.w;
     $("ve-crop-h").value = rect.h;
+    for (const id of ["ve-crop-x", "ve-crop-y", "ve-crop-w", "ve-crop-h"]) $(id).numFieldRefresh?.();
   }
 
   const speed = opOf("speed");
@@ -1319,7 +1324,10 @@ function renderEditFields() {
   for (const btn of $("ve-speed-steps").querySelectorAll("button")) {
     btn.classList.toggle("sel", Math.abs(Number(btn.dataset.rate) - rate) < 0.001);
   }
-  if (document.activeElement !== $("ve-speed-custom")) $("ve-speed-custom").value = rate;
+  if (document.activeElement !== $("ve-speed-custom")) {
+    $("ve-speed-custom").value = rate;
+    $("ve-speed-custom").numFieldRefresh?.();
+  }
   $("ve-speed-pitch").checked = speed ? speed.pitch !== false : true;
 
   const fade = opOf("fade");
@@ -1327,8 +1335,14 @@ function renderEditFields() {
   $("ve-fade-fields").classList.toggle("ve-off", !fade);
   for (const input of $("ve-fade-fields").querySelectorAll("input")) input.disabled = !fade;
   if (fade) {
-    if (document.activeElement !== $("ve-fade-in")) $("ve-fade-in").value = fade.inMs;
-    if (document.activeElement !== $("ve-fade-out")) $("ve-fade-out").value = fade.outMs;
+    if (document.activeElement !== $("ve-fade-in")) {
+      $("ve-fade-in").value = fade.inMs;
+      $("ve-fade-in").numFieldRefresh?.();
+    }
+    if (document.activeElement !== $("ve-fade-out")) {
+      $("ve-fade-out").value = fade.outMs;
+      $("ve-fade-out").numFieldRefresh?.();
+    }
   }
 
   const scale = opOf("scale");
@@ -1441,20 +1455,16 @@ function fieldRow(labelText, control) {
   return label;
 }
 
-function numberInput(value, min, max, step, onChange) {
-  const input = document.createElement("input");
-  input.type = "number";
-  input.className = "modal-input";
-  input.min = String(min);
-  input.max = String(max);
-  input.step = String(step);
-  input.value = String(value);
-  input.addEventListener("change", () => {
-    const next = clamp(Number(input.value), min, max);
-    input.value = String(next);
-    onChange(next);
+// Thin positional-args shim over the shared numberField() so the overlay
+// editor's call sites below stay short -- the actual click/hold/wheel/preset
+// behaviour lives in floatShared.js, not here.
+function numberInput(value, min, max, step, onChange, presets) {
+  return numberField({
+    value, min, max, step, presets, onChange,
+    decreaseLabel: t("numFieldDecrease"),
+    increaseLabel: t("numFieldIncrease"),
+    presetsLabel: t("numFieldPresets"),
   });
-  return input;
 }
 
 function textInput(value, onChange) {
@@ -1502,10 +1512,15 @@ function commitOverlay(op, changes) {
 
 // Registers an overlay-editor input so a later keepEditor commit can refresh
 // it in place (see syncOverlayFields) instead of rebuilding the panel.
-function ovTrack(key, input, getValue) {
-  input.dataset.ovField = key;
-  VE.ovFields[key] = { input, getValue };
-  return input;
+// `control` is what a caller focuses/reads the value of -- the plain input
+// itself, or a numberField() wrapper -- so the [data-ov-field] marker (used
+// to find "the opacity field" etc.) goes on the actual <input> inside it,
+// not the wrapper div, which is neither focusable nor has a `.value`.
+function ovTrack(key, control, getValue) {
+  const focusEl = control.matches("input") ? control : control.querySelector("input") || control;
+  focusEl.dataset.ovField = key;
+  VE.ovFields[key] = { input: control, getValue };
+  return control;
 }
 
 function renderOverlayEditor() {
@@ -1573,22 +1588,22 @@ function renderOverlayEditor() {
       commitOverlay(op, { path });
     });
     box.appendChild(change);
-    box.appendChild(fieldRow(t("veOvOpacity"), ovTrack("opacity", numberInput(op.opacity, 5, 100, 5, (v) => commitOverlay(op, { opacity: v })), (o) => String(o.opacity))));
+    box.appendChild(fieldRow(t("veOvOpacity"), ovTrack("opacity", numberInput(op.opacity, 5, 100, 5, (v) => commitOverlay(op, { opacity: v }), [25, 50, 75, 100]), (o) => String(o.opacity))));
   }
 
   if (op.kind === "frame") {
-    box.appendChild(fieldRow(t("veOvThickness"), ovTrack("thickness", numberInput(op.thickness, 1, Math.max(4, Math.round(VE.h / 4)), 1, (v) => commitOverlay(op, { thickness: v })), (o) => String(o.thickness))));
+    box.appendChild(fieldRow(t("veOvThickness"), ovTrack("thickness", numberInput(op.thickness, 1, Math.max(4, Math.round(VE.h / 4)), 1, (v) => commitOverlay(op, { thickness: v }), [1, 2, 4, 8, 16]), (o) => String(o.thickness))));
     box.appendChild(fieldRow(t("veOvStyle"), ovTrack("style", selectInput(
       [["solid", t("veOvStyleSolid")], ["double", t("veOvStyleDouble")], ["soft", t("veOvStyleSoft")]],
       op.style, (v) => commitOverlay(op, { style: v })), (o) => o.style)));
     box.appendChild(fieldRow(t("veOvColor"), colorRow(op.color, (hex) => commitOverlay(op, { color: hex }))));
-    box.appendChild(fieldRow(t("veOvOpacity"), ovTrack("opacity", numberInput(op.opacity, 5, 100, 5, (v) => commitOverlay(op, { opacity: v })), (o) => String(o.opacity))));
+    box.appendChild(fieldRow(t("veOvOpacity"), ovTrack("opacity", numberInput(op.opacity, 5, 100, 5, (v) => commitOverlay(op, { opacity: v }), [25, 50, 75, 100]), (o) => String(o.opacity))));
   }
 
   if (op.kind === "text") {
     box.appendChild(fieldRow(t("veOvTextValue"), ovTrack("text", textInput(op.text, (v) => commitOverlay(op, { text: v })), (o) => o.text)));
     box.appendChild(fieldRow(t("veOvFont"), ovTrack("font", selectInput(FONT_FILES.map(([id]) => [id, id]), op.font, (v) => commitOverlay(op, { font: v })), (o) => o.font)));
-    box.appendChild(fieldRow(t("veOvFontSize"), ovTrack("fontPx", numberInput(op.fontPx, 8, Math.max(16, VE.h), 1, (v) => commitOverlay(op, { fontPx: v })), (o) => String(o.fontPx))));
+    box.appendChild(fieldRow(t("veOvFontSize"), ovTrack("fontPx", numberInput(op.fontPx, 8, Math.max(16, VE.h), 1, (v) => commitOverlay(op, { fontPx: v }), [12, 16, 24, 32, 48, 64, 96]), (o) => String(o.fontPx))));
     const pos = document.createElement("div");
     pos.className = "ve-row2";
     pos.append(
@@ -1610,7 +1625,7 @@ function renderOverlayEditor() {
   }
 
   if (op.kind === "pixelate") {
-    box.appendChild(fieldRow(t("veOvBlock"), ovTrack("blockPx", numberInput(op.blockPx, 4, 80, 2, (v) => commitOverlay(op, { blockPx: v })), (o) => String(o.blockPx))));
+    box.appendChild(fieldRow(t("veOvBlock"), ovTrack("blockPx", numberInput(op.blockPx, 4, 80, 2, (v) => commitOverlay(op, { blockPx: v }), [8, 12, 16, 24, 32]), (o) => String(o.blockPx))));
   }
 
   if (op.kind === "spotlight") {
@@ -2132,6 +2147,28 @@ $("ve-trim-end-val").addEventListener("change", () => {
   setTrim(trim ? trim.startMs : 0, ms);
 });
 
+// Decorate the static crop/speed/fade fields with the shared mouse-only
+// stepper BEFORE wiring their own change listeners below, so this control's
+// clamp runs first and the domain listener always reads an already-clamped
+// value. Each keeps its id, so every existing $(id) lookup and listener
+// elsewhere in this file keeps working unchanged.
+const numFieldDec = t("numFieldDecrease");
+const numFieldInc = t("numFieldIncrease");
+const numFieldList = t("numFieldPresets");
+for (const id of ["ve-crop-x", "ve-crop-y", "ve-crop-w", "ve-crop-h"]) {
+  numberField({ input: $(id), bigStep: 20, decreaseLabel: numFieldDec, increaseLabel: numFieldInc });
+}
+numberField({
+  input: $("ve-speed-custom"), bigStep: 0.5, presets: [0.25, 0.5, 1, 1.5, 2, 4],
+  decreaseLabel: numFieldDec, increaseLabel: numFieldInc, presetsLabel: numFieldList,
+});
+for (const id of ["ve-fade-in", "ve-fade-out"]) {
+  numberField({
+    input: $(id), bigStep: 500, presets: [250, 500, 1000, 2000],
+    decreaseLabel: numFieldDec, increaseLabel: numFieldInc, presetsLabel: numFieldList,
+  });
+}
+
 $("ve-crop-on").addEventListener("change", () => {
   if ($("ve-crop-on").checked) pushReplacing((o) => o.tool === "crop", { tool: "crop", rect: centeredRect(0.8) });
   else removeOps((o) => o.tool === "crop");
@@ -2496,6 +2533,8 @@ function applyProbe(probe) {
   updateAudioLabels();
   $("ve-crop-w").max = String(VE.w);
   $("ve-crop-h").max = String(VE.h);
+  $("ve-crop-w").numFieldRefresh?.();
+  $("ve-crop-h").numFieldRefresh?.();
   layoutTrack();
   renderRects();
 }
@@ -2566,6 +2605,8 @@ function applySettings(settings) {
   if (!opOf("fade")) {
     $("ve-fade-in").value = VE.fadeMsDefault;
     $("ve-fade-out").value = VE.fadeMsDefault;
+    $("ve-fade-in").numFieldRefresh?.();
+    $("ve-fade-out").numFieldRefresh?.();
   }
   const pixelateBlock = Number(values.veOvPixelateBlock);
   VE.ovPixelateBlockDefault = Number.isFinite(pixelateBlock) && pixelateBlock > 0 ? Math.round(pixelateBlock) : 16;

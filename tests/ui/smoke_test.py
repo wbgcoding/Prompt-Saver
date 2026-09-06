@@ -5315,6 +5315,72 @@ PROBE = """
         document.getElementById('snip-edit-cancel').click();
         await sleep(200);
       }
+      // The shared mouse-only number field, exercised on the text tool's
+      // text-size control (min 10, max 96, step 1, presets 12/16/24/32/48/64/96).
+      {
+        const TINY_PNG3 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+        window.__FIRE__('snip-captured', { data_url: TINY_PNG3, path: '', name: 'numfield.png' });
+        await sleep(300);
+        const textBtn = document.querySelector('#snip-edit-tools button[data-tool="text"]');
+        if (!textBtn) {
+          out.errors.push('the text tool button was not found while testing the text-size number field');
+        } else {
+          textBtn.click();
+          await sleep(30);
+          const numfield = document.querySelector('#snip-edit-context .numfield');
+          if (!numfield) {
+            out.errors.push('the text-size number field was not found after selecting the text tool');
+          } else {
+            const input = numfield.querySelector('input');
+            const inc = numfield.querySelector('.numfield-inc');
+            const dec = numfield.querySelector('.numfield-dec');
+            const list = numfield.querySelector('.numfield-list');
+            const beforeClick = Number(input.value);
+            inc.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 31 }));
+            await sleep(10);
+            inc.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 31 }));
+            await sleep(10);
+            const afterClick = Number(input.value);
+            if (afterClick !== beforeClick + 1) {
+              out.errors.push('clicking + did not step the text-size field by exactly 1');
+            }
+            inc.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 32 }));
+            await sleep(480);
+            inc.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 32 }));
+            await sleep(10);
+            const afterHold = Number(input.value);
+            if (!(afterHold > afterClick + 1)) {
+              out.errors.push('holding + did not repeat-step the text-size field past a single click');
+            }
+            input.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -100 }));
+            await sleep(30);
+            if (Number(input.value) !== afterHold + 1) {
+              out.errors.push('scrolling up on the text-size field did not step it by exactly 1');
+            }
+            list.click();
+            await sleep(30);
+            const pop = document.querySelector('.numfield-pop');
+            const target = pop && [...pop.querySelectorAll('button')].find((b) => b.textContent === '32');
+            if (!target) {
+              out.errors.push('the text-size presets popover did not offer 32');
+            } else {
+              target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 33 }));
+              await sleep(30);
+              if (Number(input.value) !== 32) {
+                out.errors.push('picking 32 from the text-size presets popover did not set the field to 32');
+              }
+            }
+            input.value = input.min;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            await sleep(10);
+            if (!dec.disabled) {
+              out.errors.push('the - button is not disabled once the text-size field is at its minimum');
+            }
+          }
+        }
+        document.getElementById('snip-edit-cancel').click();
+        await sleep(200);
+      }
       // 181: a properly sized capture (not the 1x1 fixture above) to check the
       // text tool near the right edge -- an unstyled <input> does not shrink to
       // fit inside the stage, so placing it purely from the click point can push
@@ -7225,6 +7291,85 @@ VIDEO_PROBE = """
       }
     }
 
+    // 364: the shared mouse-only number field, exercised on the still-selected
+    // image overlay's opacity control (step 5, presets 25/50/75/100).
+    {
+      const opacityInput = document.querySelector('#ve-ov-editor [data-ov-field="opacity"]');
+      const numfield = opacityInput && opacityInput.closest('.numfield');
+      if (!numfield) {
+        errs.push('364: could not find the opacity number field to test it');
+      } else {
+        const inc = numfield.querySelector('.numfield-inc');
+        const dec = numfield.querySelector('.numfield-dec');
+        const list = numfield.querySelector('.numfield-list');
+        // Seed a mid-range value first -- the overlay's default opacity can
+        // already sit at this field's max, which would leave + disabled and
+        // make the click/hold steps below silent no-ops.
+        opacityInput.value = '50';
+        opacityInput.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(10);
+        // Click: one pointerdown+up steps by exactly `step` (5).
+        const beforeClick = Number(opacityInput.value);
+        inc.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 21 }));
+        await sleep(10);
+        inc.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 21 }));
+        await sleep(10);
+        if (Number(opacityInput.value) !== beforeClick + 5) {
+          errs.push('364: clicking + did not step the opacity field by exactly 5');
+        }
+        // Hold: still down past the 400ms/60ms repeat threshold must step more
+        // than once (using - this time, so it also cannot get stuck at max=100).
+        const beforeHold = Number(opacityInput.value);
+        dec.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 22 }));
+        await sleep(550);
+        dec.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 22 }));
+        await sleep(10);
+        if (Number(opacityInput.value) > beforeHold - 10) {
+          errs.push('364: holding - did not repeat-step the opacity field past a single step');
+        }
+        // Wheel: one wheel tick steps by exactly `step` (5), and must not
+        // scroll the panel underneath it.
+        const beforeWheel = Number(opacityInput.value);
+        opacityInput.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -100 }));
+        await sleep(30);
+        if (Number(opacityInput.value) !== beforeWheel + 5) {
+          errs.push('364: wheel over the opacity field did not step by exactly 5');
+        }
+        // Presets: opening the list and picking 100 sets the field to it and
+        // closes the popover again.
+        if (!list) {
+          errs.push('364: the opacity field has no presets button');
+        } else {
+          list.click();
+          await sleep(30);
+          const pop = document.querySelector('.numfield-pop');
+          const target = pop && [...pop.querySelectorAll('button')].find((b) => b.textContent === '100');
+          if (!target) {
+            errs.push('364: the opacity presets popover did not offer 100');
+          } else {
+            target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 23 }));
+            await sleep(30);
+            if (Number(opacityInput.value) !== 100) {
+              errs.push('364: picking the 100 preset did not set the opacity field to it');
+            }
+            if (document.querySelector('.numfield-pop')) {
+              errs.push('364: picking a preset did not close the popover');
+            }
+          }
+        }
+        // At its max (just set to 100 above), + must now be visibly dead.
+        if (!inc.disabled) {
+          errs.push('364: the + button is not disabled once the opacity field is at its max');
+        }
+      }
+      // The overlay editor column must not scroll sideways at this window's
+      // minimum width just because a numfield now lives in it.
+      const ovEditor = document.getElementById('ve-ov-editor');
+      if (ovEditor && ovEditor.scrollWidth > ovEditor.clientWidth + 1) {
+        errs.push('364: a number field overflows the overlay editor column at this window width');
+      }
+    }
+
     // Both 358 probes below depend on tick()'s own requestAnimationFrame loop
     // actually firing across several real sleeps -- headless Chromium stops
     // producing frames once the page is quiet (see the heartbeat comment
@@ -7700,10 +7845,12 @@ def main():
                  # then to 138s once the tag-merge check added its own batch-select
                  # round trip (two disposable tags added before the merge itself),
                  # then to 146s once the copy-sound check added its own four
-                 # copy-and-listen round trips plus a volume-slider detour.
+                 # copy-and-listen round trips plus a volume-slider detour,
+                 # then to 149s once the number-field check added its own
+                 # click/hold/wheel/preset/disabled-state round trip.
                  # The window has to hold the iframe plus Chrome's own frame.
                  f"--window-size={max(w + 30, 520)},{h + 140}",
-                 "--virtual-time-budget=146000", "--dump-dom",
+                 "--virtual-time-budget=149000", "--dump-dom",
                  wrapper.as_uri()],
                 # The dumped DOM carries all 20 languages; without an explicit
                 # codec Windows decodes it as cp1252 and the reader thread dies,
