@@ -290,6 +290,7 @@ function applyI18n() {
     wrap.querySelector(".media-bar")?.setLabels?.(mediaBarLabels());
   }
   updateExamplesBanner(); // its label carries a live count, not a plain data-i18n string
+  applyBarToggleTips();
 }
 
 // ---- Helpers ----
@@ -1014,6 +1015,15 @@ function setBars(header, composer) {
   applyBars();
 }
 
+// Mentions the double-click shortcut in the four bar buttons' own tooltip
+// while barToggleBoth is on, reusing the expert-menu row's own explanation
+// text instead of a second translated sentence.
+function applyBarToggleTips() {
+  const hint = flag("barToggleBoth") ? ` ${t("tipBarToggleBoth")}` : "";
+  for (const id of ["hide-top", "hide-bottom"]) $(id).title = t("hideBar") + hint;
+  for (const id of ["show-top", "show-bottom"]) $(id).title = t("showBar") + hint;
+}
+
 // ---- Expert feature flags & values ----
 // Every feature ships enabled; the expert menu lets the user switch single
 // pieces off. A missing flag means enabled, so old configs keep everything on.
@@ -1027,6 +1037,7 @@ const FLAG_LABELS = {
   quickGrid: "flagQuickGrid",
   floating: "flagFloating",
   barToggles: "flagBarToggles",
+  barToggleBoth: "flagBarToggleBoth",
   tileMenu: "flagTileMenu",
   tileHover: "flagTileHover",
   tilePreview: "flagTilePreview",
@@ -1809,7 +1820,7 @@ const EXPERT_TABS = [
   ] },
   { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
-    { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "gridViewBorder", "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }, "pinButton", "barToggles", "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
+    { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "gridViewBorder", "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }, "pinButton", "barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
     { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
     { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances"], values: ["kbFocusFadeMs"], selects: ["updateCheckH"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
@@ -1869,6 +1880,7 @@ function applyFlags() {
   // An open library must follow a flag flip (the tag row appears/disappears).
   if (prompts.length && !$("library")?.classList.contains("hidden")) renderLibrary();
   refreshClipInbox(); // Reflect the watcher toggle + badge count
+  applyBarToggleTips();
 }
 
 // Apply every numeric tweak to its live target (CSS vars + JS constants).
@@ -1999,7 +2011,7 @@ const EXPERT_TIPS = [
   "historyPerPrompt", "dupThreshold", "clipMinChars", "clipInboxMax", "historyMax",
   "journalLimit", "previewLen", "nameMaxLen", "searchRecentMax", "maxViews", "gridMax",
   "viewBorder", "statsTopN", "viewGroups", "viewGroupMaxRows", "multiViewPrompt",
-  "barToggles", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
+  "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
 ];
 const EXPERT_TIP_SET = new Set(EXPERT_TIPS);
 // Attach the tooltip for `key` to a rendered expert row, if one is defined.
@@ -14295,6 +14307,17 @@ function bind() {
   $("show-top").addEventListener("click", () => setBars(true, settings.show_composer !== false));
   $("hide-bottom").addEventListener("click", () => setBars(settings.show_header !== false, false));
   $("show-bottom").addEventListener("click", () => setBars(settings.show_header !== false, true));
+
+  // A double-click on any one of the four buttons folds or unfolds both bars
+  // together, target state taken from the clicked button; the single click
+  // that already fired on the way to the double-click is left as it landed.
+  const bindBarToggleDbl = (id, target) => $(id).addEventListener("dblclick", () => {
+    if (flag("barToggleBoth")) setBars(target, target);
+  });
+  bindBarToggleDbl("hide-top", false);
+  bindBarToggleDbl("show-top", true);
+  bindBarToggleDbl("hide-bottom", false);
+  bindBarToggleDbl("show-bottom", true);
 
   buildColorFilter($("library-colors"), libColor);
   $("library-btn").addEventListener("click", async () => {

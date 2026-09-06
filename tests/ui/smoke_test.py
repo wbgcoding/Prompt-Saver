@@ -4624,6 +4624,69 @@ PROBE = """
         }
       }
     }
+    // 426: a double-click on any of the four bar buttons folds/unfolds both
+    // bars together while barToggleBoth stays on; a single click is untouched
+    // either way. A real double-click fires click, click, dblclick -- click()
+    // exercises the existing single-bar toggle, the synthetic dblclick layers
+    // the extra behaviour on top, same as a genuine double-click would.
+    {
+      if (!document.getElementById('settings').classList.contains('hidden')) {
+        await click('settings-close');
+        await sleep(50);
+      }
+      const dbl = async (id) => {
+        await click(id);
+        document.getElementById(id).dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+        await sleep(100);
+      };
+      const bothHidden = () => document.body.classList.contains('no-header') && document.body.classList.contains('no-composer');
+      const bothShown = () => !document.body.classList.contains('no-header') && !document.body.classList.contains('no-composer');
+      await dbl('hide-top');
+      if (!bothHidden()) out.errors.push('426: double-clicking hide-top did not fold both bars');
+      await dbl('show-bottom');
+      if (!bothShown()) out.errors.push('426: double-clicking show-bottom did not unfold both bars');
+      // Switch barToggleBoth off through its real expert switch, same idiom as
+      // the prompt-hotkey-paste option above.
+      const expertRow426 = async (label) => {
+        const hit = () => [...document.querySelectorAll('#expert-flags .switch-field')]
+          .find(r => ((r.querySelector('span') || {}).textContent || '').includes(label));
+        if (hit()) return hit();
+        for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+          tb.click();
+          await sleep(200);
+          if (hit()) return hit();
+        }
+        return null;
+      };
+      document.getElementById('settings').classList.remove('hidden');
+      await click('expert-open');
+      const bothRow = await expertRow426('folds both bars');
+      if (!bothRow) {
+        out.errors.push('426: the double-click-folds-both option is missing from the expert menu');
+      } else {
+        bothRow.querySelector('input.switch').click();
+        await sleep(200);
+        await click('expert-back');
+        document.getElementById('settings').classList.add('hidden');
+        await dbl('hide-top');
+        if (document.body.classList.contains('no-composer')) {
+          out.errors.push('426: double-click still folded the other bar with the option off');
+        }
+        if (!document.body.classList.contains('no-header')) {
+          out.errors.push('426: the plain single click stopped working with the option off');
+        }
+        // Undo the single click, then put the option back for the rest of the run.
+        await click('show-top');
+        document.getElementById('settings').classList.remove('hidden');
+        await click('expert-open');
+        const backRow = await expertRow426('folds both bars');
+        if (backRow) { backRow.querySelector('input.switch').click(); await sleep(200); }
+        const firstTab426 = document.querySelector('#expert-tabs-bar .expert-tab');
+        if (firstTab426) { firstTab426.click(); await sleep(200); }
+        await click('expert-back');
+        document.getElementById('settings').classList.add('hidden');
+      }
+    }
     // 108: Save must fit --winctl-w in every language -- the longest translations
     // ("Speichern", "Speichern" DE at 9 chars is the longest of the 11) must not
     // overflow the fixed-width button.
