@@ -32,7 +32,7 @@ SRC = "\n".join(l for l in SRC.splitlines() if not l.lstrip().startswith("//"))
 NOT_IN_EXPERT = {
     "autoPaste",
     # Backup settings, rendered by renderBackupPanel.
-    "autoBackup", "backupGfs", "backupKeep", "backupIntervalH",
+    "autoBackup", "backupGfs", "backupKeep", "backupIntervalH", "backupStartDelayS",
     "backupDaily", "backupWeekly", "backupMonthly", "backupYearly",
     # Statistics, rendered by renderStatsPanel.
     "usageStats", "statsTopN",
@@ -180,6 +180,7 @@ DEPENDENCIES = {
     # Backups + statistics (rendered outside the expert menu, gate still required)
     "backupKeep": "autoBackup",
     "backupIntervalH": "autoBackup",
+    "backupStartDelayS": "autoBackup",
     "backupDaily": "backupGfs",
     "backupWeekly": "backupGfs",
     "backupMonthly": "backupGfs",

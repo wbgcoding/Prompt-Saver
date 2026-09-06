@@ -8647,6 +8647,16 @@ const BACKUP_DB_GZ: &str = "data.db.gz";
 // offers is 6 h, so a quarter of an hour is precise enough and costs nothing.
 const BACKUP_CHECK_SECS: u64 = 900;
 
+// No backup on disk at all is always due; otherwise due once the newest one is
+// at least a full interval old. Pulled out of auto_backup_tick so the two
+// cases (an aged backup vs. one made moments ago) are unit-testable without an
+// AppHandle -- the second case is also what keeps two app starts shortly after
+// each other from both taking a backup: the later one sees the first one's
+// backup as fresh and skips.
+fn backup_is_due(newest_age_secs: Option<u64>, interval_h: u64) -> bool {
+    newest_age_secs.map_or(true, |age| age >= interval_h.saturating_mul(3600))
+}
+
 // One round of the auto-backup job. Due-ness comes from the age of the newest
 // backup on disk, never from a counter this process keeps, so a restart neither
 // skips a due backup nor takes an extra one.
@@ -8664,7 +8674,7 @@ fn auto_backup_tick(app: &AppHandle) {
         .copied()
         .filter(|v| *v >= 1.0)
         .unwrap_or(24.0) as u64;
-    let due = newest_backup_age(app).map_or(true, |age| age >= interval_h.saturating_mul(3600));
+    let due = backup_is_due(newest_backup_age(app), interval_h);
     if on && due {
         // A snapshot copies data.db, so anything still collected has to be in it.
         flush_settings(app, &store.settings);
@@ -21367,6 +21377,13 @@ pub fn run() {
             let start_min = store.settings.start_minimized;
             let on_top = store.settings.always_on_top;
             let capture_excl = capture_excluded(&store.settings);
+            let backup_start_delay_s = store
+                .settings
+                .ui_values
+                .get("backupStartDelayS")
+                .copied()
+                .unwrap_or(20.0)
+                .clamp(0.0, 300.0) as u64;
 
             app.manage(Mutex::new(store));
             app.manage(SnipState(Mutex::new(Vec::new())));
@@ -21402,16 +21419,19 @@ pub fn run() {
             // see start_missing_files_poll.
             start_missing_files_poll(handle.clone());
 
-            // Take a backup whenever the newest one is older than the interval —
-            // once at start, then on every tick for as long as the app runs. The
-            // settings are re-read each round, so switching auto-backup off or
-            // changing the interval takes effect without a restart. Off the UI thread
-            // so it never delays the first paint.
+            // Take a backup whenever the newest one is older than the interval --
+            // a short delay after start (backupStartDelayS, 0-300s, default 20 --
+            // long enough for the window and store to settle, short enough that a
+            // backup due at launch no longer waits out a full BACKUP_CHECK_SECS
+            // tick), then on every tick for as long as the app runs. The settings
+            // are re-read each round, so switching auto-backup off or changing the
+            // interval takes effect without a restart. Off the UI thread so it
+            // never delays the first paint.
             {
                 let h = handle.clone();
                 scheduler::register_periodic(
                     "auto-backup",
-                    Duration::ZERO,
+                    Duration::from_secs(backup_start_delay_s),
                     Duration::from_secs(BACKUP_CHECK_SECS),
                     move || auto_backup_tick(&h),
                 );
@@ -26422,6 +26442,22 @@ mod tests {
         assert!(backup_decrypt(&blob, None).is_err(), "missing password rejected");
         // The fixed key must NOT open a password-protected backup.
         assert!(backup_decrypt(&blob, Some("")).is_err());
+    }
+
+    #[test]
+    fn backup_is_due_fires_for_an_aged_backup_and_for_none_at_all() {
+        assert!(backup_is_due(None, 24), "no backup on disk is always due");
+        assert!(backup_is_due(Some(24 * 3600), 24), "exactly one interval old is due");
+        assert!(backup_is_due(Some(25 * 3600), 24), "older than the interval is due");
+    }
+
+    #[test]
+    fn backup_is_due_stays_false_right_after_a_backup_just_ran() {
+        // The same check that lets a due backup fire at start also keeps a
+        // second app start moments later from taking a second one: it sees the
+        // first start's backup as a few seconds old, nowhere near the interval.
+        assert!(!backup_is_due(Some(0), 24));
+        assert!(!backup_is_due(Some(30), 24), "30s old is nowhere near a 24h interval");
     }
 
     #[test]

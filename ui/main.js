@@ -1514,6 +1514,10 @@ const EXPERT_VALUES = {
   disarmMs: { label: "valDisarmMs", min: 1000, max: 10000, step: 500, def: 3000, unit: "ms" },
   // Automatic backups: how many rotating snapshots to keep.
   backupKeep: { label: "valBackupKeep", min: 1, max: 50, step: 1, def: 10, unit: "", gate: "autoBackup" },
+  // How long the auto-backup job waits after launch before its first check --
+  // long enough for the window and store to settle, short enough that a
+  // backup due at launch does not sit for a full BACKUP_CHECK_SECS tick.
+  backupStartDelayS: { label: "valBackupStartDelay", min: 0, max: 300, step: 5, def: 20, unit: "s", gate: "autoBackup" },
   // GFS retention tiers (kept per distinct day / week / month / year).
   backupDaily: { label: "valBackupDaily", min: 0, max: 30, step: 1, def: 3, unit: "", gate: "backupGfs" },
   backupWeekly: { label: "valBackupWeekly", min: 0, max: 52, step: 1, def: 4, unit: "", gate: "backupGfs" },
@@ -8655,6 +8659,10 @@ async function renderBackupPanel(body) {
     if (ivReset) ivRight.append(ivReset);
     ivRight.append(ivs);
     iv.append(ivl, ivRight); left.appendChild(iv);
+    left.appendChild(numRow("valBackupStartDelay", "backupStartDelayS", 0, 300, async (v) => {
+      await saveBackupSetting("value", "backupStartDelayS", v);
+      renderBackupPanel(body);
+    }, "backup-start-delay-row", () => renderBackupPanel(body)));
   }
 
   // Right column — retention. A plain number field replaces the three preset
