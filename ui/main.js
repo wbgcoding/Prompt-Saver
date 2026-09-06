@@ -6629,9 +6629,14 @@ const hotkeyMessage = (err) =>
   HOTKEY_ERRORS[err] ? t(HOTKEY_ERRORS[err]) : err === "save-failed" ? t("persistFailed") : t("hotkeyFail");
 
 // Show an inline reason and drop the capture; empty text clears the message again.
+// Whatever the reason, the full list of what is already bound is one click away
+// through the same button -- naming the owner is not enough on its own when the
+// fix is to open that other binding and change it.
 function showHotkeyError(msg) {
   modal.hotkeyErr.textContent = msg || "";
   modal.hotkeyErr.classList.toggle("hidden", !msg);
+  const showAll = $("modal-hotkey-showall");
+  if (showAll) showAll.classList.toggle("hidden", !msg);
 }
 
 // What a hotkey without its own choice inherits — named on the row, so "Default"
@@ -6722,11 +6727,12 @@ function reassertHotkeyCapture() {
 //             editor uses this when the user moved to a different prompt while an
 //             await was in flight, so a stale answer never overwrites what is by
 //             then a completely different prompt's row.
-function bindHotkeyField(input, { id = null, errEl = null, current, onCommit }) {
+function bindHotkeyField(input, { id = null, errEl = null, showAllEl = null, current, onCommit }) {
   const resolveId = () => (typeof id === "function" ? id() : id);
   const showErr = (msg) => {
     if (errEl) { errEl.textContent = msg || ""; errEl.classList.toggle("hidden", !msg); }
     else if (msg) toast(msg);
+    if (showAllEl) showAllEl.classList.toggle("hidden", !msg);
   };
   // A commit is a round trip (check_hotkey, maybe update_prompt); a second keypress
   // landing before the first resolves could otherwise finish out of order and
@@ -12273,6 +12279,7 @@ function bind() {
   bindHotkeyField(modal.hotkeyInput, {
     id: () => modalState?.id || null,
     errEl: modal.hotkeyErr,
+    showAllEl: $("modal-hotkey-showall"),
     current: () => modalState?.hotkey || "",
     onCommit: async (accel) => {
       const before = modalState?.id;
@@ -12288,6 +12295,7 @@ function bind() {
     },
   });
   $("modal-hotkey-clear").addEventListener("click", () => setPromptHotkey(""));
+  $("modal-hotkey-showall").addEventListener("click", () => openHotkeysModal());
   modal.hotkeyAction.addEventListener("change", () => {
     if (modalState) modalState.hotkeyPaste = modal.hotkeyAction.value;
   });

@@ -28251,8 +28251,15 @@ mod tests {
         ] {
             assert_eq!(reason(s), Some(HK_SYSTEM), "not refused: {s}");
         }
-        // Anything with the Windows key: that namespace belongs to the OS.
-        for s in ["Super+K", "Super+Shift+S", "Alt+Super+P", "Cmd+Q"] {
+        // Anything with the Windows key: that namespace belongs to the OS. Named
+        // explicitly for the well-known Win+<x> shortcuts (number-pin, screenshot,
+        // clipboard history, emoji picker, share, dictation, dot/emoji on some
+        // keyboards) even though the SUPER/META check above already refuses the
+        // whole namespace on its own.
+        for s in [
+            "Super+K", "Super+Shift+S", "Alt+Super+P", "Cmd+Q", "Super+1", "Super+9",
+            "Super+G", "Super+V", "Super+H", "Super+Period",
+        ] {
             assert_eq!(reason(s), Some(HK_SYSTEM), "not refused: {s}");
         }
         // Shift alone is how a capital letter is typed — never a modifier here.

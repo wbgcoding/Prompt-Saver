@@ -1665,6 +1665,21 @@ PROBE = """
           out.errors.push('Ctrl+C produced no inline error');
         }
         if (hField.value !== beforeSys) out.errors.push('a system shortcut was captured anyway: ' + hField.value);
+        // 430: whatever the reason, a button under the message opens the full list
+        // instead of leaving the user to guess what already holds the combination.
+        const showAll = document.getElementById('modal-hotkey-showall');
+        if (!showAll || showAll.classList.contains('hidden')) {
+          out.errors.push('430: no "show all hotkeys" button next to a hotkey error');
+        } else {
+          showAll.click();
+          await sleep(200);
+          const allPopup = document.getElementById('hotkeys-modal');
+          if (allPopup.classList.contains('hidden')) {
+            out.errors.push('430: the show-all button did not open the hotkeys list');
+          }
+          document.getElementById('hotkeys-modal-close').click();
+          await sleep(150);
+        }
         // A combination another running app owns is refused the same way.
         await press({ key: 'B', ctrlKey: true, altKey: true });
         if (hErr.classList.contains('hidden')) out.errors.push('a combination owned by another app produced no inline error');

@@ -1303,6 +1303,9 @@ body.library-front #library.overlay { z-index: 66; }
 body.library-front #modal.overlay { z-index: 67; }
 /* Variable-fill dialog stacks above the library/journal it was opened from. */
 #vars-modal.overlay { z-index: 70; }
+/* The all-hotkeys list can now also be opened from inside the edit dialog's own
+   error message, so it has to stack above that dialog too, not just settings. */
+#hotkeys-modal.overlay { z-index: 71; }
 /* Confirm dialog stacks above everything (incl. the edit modal). */
 #confirm-modal.overlay { z-index: 80; }
 .modal {

@@ -398,6 +398,10 @@
               <button type="button" id="modal-hotkey-clear" class="ghost-btn" data-i18n="hotkeyClear">Clear</button>
             </div>
             <p id="modal-hotkey-err" class="modal-hint modal-hotkey-err hidden" role="alert"></p>
+            <!-- Whatever the error, the full list is one click away instead of
+                 guessing what already holds the combination. -->
+            <button type="button" id="modal-hotkey-showall" class="ghost-btn modal-hotkey-showall hidden"
+                    data-i18n="hotkeyShowAllBtn">Show all hotkeys</button>
             <!-- What THIS hotkey does after copying; the first entry names the global default. -->
             <label id="modal-hotkey-action-row" class="field expert-dropdown-row hidden">
               <span data-i18n="promptHotkeyAction">After copying</span>
