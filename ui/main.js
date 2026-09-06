@@ -5841,17 +5841,27 @@ function fillVarHighlighted(el, text) {
   if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
 }
 
-// A token is either a plain name or `name|opt,opt,…`. Options are trimmed and
-// empty ones dropped; a comma always starts the next option, so an option can never
-// contain one. A bar without a usable name or option list stays an ordinary
-// text variable — the whole token is then its name, so the placeholder still fills.
+// A token is `name`, `name=default`, `name|opt,opt,…` or `name=default|opt,opt,…`.
+// Options are trimmed and empty ones dropped; a comma always starts the next
+// option, so an option can never contain one. A default selects the matching
+// entry in a choice list, or prefills a plain text variable when there is no
+// list. A bar or an equals sign without a usable name before it stays an
+// ordinary text variable — the whole token is then its name, exactly as
+// before, and no default is extracted from it.
 function parseVar(token) {
   const raw = String(token).trim();
   const bar = raw.indexOf("|");
-  if (bar < 0 || !flag("choiceVars")) return { name: raw, options: [] };
-  const name = raw.slice(0, bar).trim();
+  const namePart = bar < 0 ? raw : raw.slice(0, bar);
+  const eq = namePart.indexOf("=");
+  const rawName = eq < 0 ? namePart.trim() : namePart.slice(0, eq).trim();
+  const rawDefault = eq < 0 ? "" : namePart.slice(eq + 1).trim();
+  if (bar < 0 || !flag("choiceVars")) {
+    return rawName ? { name: rawName, options: [], default: rawDefault } : { name: raw, options: [], default: "" };
+  }
   const options = raw.slice(bar + 1).split(",").map((o) => o.trim()).filter(Boolean);
-  return name && options.length ? { name, options } : { name: raw, options: [] };
+  return rawName && options.length
+    ? { name: rawName, options, default: rawDefault }
+    : { name: raw, options: [], default: "" };
 }
 
 // Reserved names that fill themselves in at copy time, no dialog. They win
@@ -6123,7 +6133,7 @@ function promptVarsDialog(vars) {
   const keepChoice = flag("choiceRemember");
   const remembered = readRememberedVars();
   const rows = vars.map((token) => {
-    const { name, options } = parseVar(token);
+    const { name, options, default: def } = parseVar(token);
     const label = document.createElement("label");
     label.className = "field";
     const span = document.createElement("span");
@@ -6141,7 +6151,9 @@ function promptVarsDialog(vars) {
       }
       const last = keepChoice ? remembered[name] : null;
       const usedLast = options.includes(last);
-      control.value = usedLast ? last : options[0];
+      // Remembered pick wins over the text's own default -- it is the more
+      // recent decision.
+      control.value = usedLast ? last : (def && options.includes(def) ? def : options[0]);
       // Says outright that this pick came from last time, not just the checkbox
       // state (there is none for a choice variable — it remembers silently).
       if (usedLast) control.title = t("rememberedValueHint");
@@ -6156,6 +6168,8 @@ function promptVarsDialog(vars) {
       if (useRemember && name in remembered) {
         control.value = remembered[name];
         control.title = t("rememberedValueHint"); // Says so, not just a checked box
+      } else if (def) {
+        control.value = def;
       }
       label.append(span, control);
       if (useRemember) {
@@ -6353,15 +6367,17 @@ async function promptVarsWindow(tokens) {
   const keepChoice = flag("choiceRemember");
   const remembered = readRememberedVars();
   const rows = tokens.map((token) => {
-    const { name, options } = parseVar(token);
+    const { name, options, default: def } = parseVar(token);
     const last = remembered[name];
     return {
       token,
       name,
       options,
+      // Remembered pick/value wins over the text's own default everywhere --
+      // it is the more recent decision.
       value: options.length
-        ? (keepChoice && options.includes(last) ? last : options[0])
-        : (useRemember && name in remembered ? String(last) : ""),
+        ? (keepChoice && options.includes(last) ? last : (def && options.includes(def) ? def : options[0]))
+        : (useRemember && name in remembered ? String(last) : (def || "")),
       remember: !options.length && useRemember && name in remembered,
     };
   });

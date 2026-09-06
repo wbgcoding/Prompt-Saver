@@ -1273,7 +1273,7 @@ PROBE = """
         out.errors.push('the tooltip shows a note for a prompt that has none');
       }
       // 6/14: the length readout and the {#{variable}#} highlight, on a prompt that
-      // actually has placeholders (p1: "Translate {#{Text}#} into {#{Language}#}.").
+      // actually has placeholders (p1: "Translate {#{Text=Hello}#} into {#{Language}#}.").
       const varHoverTile = byId('p1');
       if (varHoverTile) {
         await hover(varHoverTile, 90);
@@ -1283,7 +1283,7 @@ PROBE = """
         }
         const varSpans = [...document.querySelectorAll('.tile-tip .tile-tip-body .var-token')];
         const varTexts = varSpans.map((s) => s.textContent);
-        if (varTexts.length !== 2 || !varTexts.includes('{#{Text}#}') || !varTexts.includes('{#{Language}#}')) {
+        if (varTexts.length !== 2 || !varTexts.includes('{#{Text=Hello}#}') || !varTexts.includes('{#{Language}#}')) {
           out.errors.push('the tile tooltip does not highlight both variables: ' + JSON.stringify(varTexts));
         }
       }
@@ -1334,6 +1334,13 @@ PROBE = """
       await sleep(400);
       const varsOpen = !document.getElementById('vars-modal').classList.contains('hidden');
       if (!varsOpen) out.errors.push('clicking a variable prompt did not open the fill-in dialog');
+      // 425: a text default in the prompt itself prefills the field on first
+      // ask (Text=Hello); a variable with no default stays empty (Language).
+      if (varsOpen) {
+        const prefill = document.querySelectorAll('#vars-fields input[type=text]');
+        if (prefill[0]?.value !== 'Hello') out.errors.push('425: the text default did not prefill the field: ' + prefill[0]?.value);
+        if (prefill[1]?.value) out.errors.push('425: a variable with no default was prefilled anyway: ' + prefill[1].value);
+      }
       // 37: "Clear all" empties every text field in one click, without touching a
       // choice dropdown (there is none here, but the handler must not throw either).
       if (varsOpen) {
@@ -1413,7 +1420,9 @@ PROBE = """
         if ([...sel.options].map(o => o.value).join(',') !== 'formal,casual,witty') {
           out.errors.push('the choice dropdown lists the wrong options');
         }
-        if (sel.value !== 'formal') out.errors.push('the choice dropdown did not preselect the first option');
+        // 425: the token's own default (tone=casual) preselects that entry
+        // instead of the list's first one.
+        if (sel.value !== 'casual') out.errors.push('425: the choice dropdown did not preselect the text default: ' + sel.value);
         sel.value = 'witty';
       }
       if (texts.length !== 1) out.errors.push('the mixed dialog shows ' + texts.length + ' text fields instead of 1');
@@ -1818,6 +1827,11 @@ PROBE = """
         out.errors.push('the standalone rows are ' + req.rows.map(r => r.name).join(','));
       } else if (!req.title || !req.ok) {
         out.errors.push('the standalone window was handed no labels');
+      } else {
+        // 425: same prefill rule as the in-window dialog -- the standalone
+        // window is handed the resolved value, not just the raw token.
+        if (req.rows[0].value !== 'Hello') out.errors.push('425: the standalone window got the wrong default: ' + req.rows[0].value);
+        if (req.rows[1].value) out.errors.push('425: the standalone window prefilled a variable with no default: ' + req.rows[1].value);
       }
       // Answer the way the small window does, then the copy has to finish here.
       window.__FIRE__('vars-filled', JSON.stringify({ values: ['Hello', 'Dutch'], remember: [false, false] }));
@@ -2570,7 +2584,7 @@ PROBE = """
       if (!varTile2.draggable) out.errors.push('the modifier did not arm the drag-out');
       const ev = fireDragStart(varTile2);
       const dropped = ev.dataTransfer.getData('text/plain');
-      if (dropped !== 'Translate {#{Text}#} into {#{Language}#}.') {
+      if (dropped !== 'Translate {#{Text=Hello}#} into {#{Language}#}.') {
         out.errors.push('the dragged text is wrong: ' + dropped);
       }
       if (document.querySelector('.drag-ghost')) out.errors.push('a drag-out left a reorder ghost behind');

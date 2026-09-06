@@ -81,14 +81,16 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   name: "Prompt " + (i + 1),
   // One prompt carries a placeholder so the fill-in dialog gets exercised too;
   // p3 is dynamic-only (must NOT ask) and p5 mixes a choice with a text variable.
+  // Text has a default (Hello) so the fill-in dialog's prefill can be checked;
+  // Language has none, so the same check also covers the plain, empty case.
   text: i === 1
-    ? "Translate {#{Text}#} into {#{Language}#}."
+    ? "Translate {#{Text=Hello}#} into {#{Language}#}."
     : i === 3
       ? "Meeting on {#{/date\\}#} at {#{/time\\}#}, {#{/weekday\\}#} (week {#{/week\\}#} of {#{/month\\}#} {#{/year\\}#}), " +
         "yesterday {#{/yesterday\\}#}, tomorrow {#{/tomorrow\\}#}, stamp {#{/timestamp\\}#}, epoch {#{/epoch\\}#}, " +
         "by {#{/username\\}#} ref {#{/random\\}#} no {#{/counter\\}#}: {#{/clipboard\\}#}"
       : i === 5
-        ? "Write a {#{tone|formal,casual,witty}#} note about {#{Topic}#}."
+        ? "Write a {#{tone=casual|formal,casual,witty}#} note about {#{Topic}#}."
         : i === 7
           ? MD_SAMPLE
           : "Example prompt body number " + (i + 1) + ".",
