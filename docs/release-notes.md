@@ -67,6 +67,11 @@ Requires the Microsoft WebView2 runtime (preinstalled on Windows 11 and current 
 - **An About dialog** and **a real help search** that matches several words in any order and highlights what it found.
 - **Allow multiple instances** (expert menu, off by default) — run the app more than once at the same time, e.g. against two different data folders. Off keeps the familiar single-instance behaviour. Takes a restart to apply.
 - The backups window can open its snapshot folder in Explorer directly.
+- **Taskbar progress and a remaining-time estimate** — a long export, recording
+  conversion, ffmpeg download, backup or import fills the app's Windows
+  taskbar icon with its progress, and its progress bar shows a plain "about X
+  left" once enough has run for the guess to mean something. Both switchable
+  off in the expert menu.
 - Dragging a button, tab or tile onto another shows what would happen: the target dims behind a folder mark in the accent colour — the same gesture in all three places.
 - Dropdowns and menus flip above their anchor when there is no room below, and never open past the edge of the window.
 - The copy history reads like the library — same rows, tags, a type chip and a quiet timestamp.

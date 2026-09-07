@@ -7,7 +7,7 @@ import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults 
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
-import { DRAG_OUT_MODS, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField } from "./floatShared.js";
+import { DRAG_OUT_MODS, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta } from "./floatShared.js";
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
@@ -1070,6 +1070,11 @@ const FLAG_LABELS = {
   showJournal: "journal",   // top-bar copy-history button visibility (toolbar menu)
   chainPrompts: "flagChainPrompts",
   showUpdates: "flagShowUpdates",
+  // Windows taskbar icon progress during export, conversion, backup, import
+  // and the ffmpeg download; and the shared "about how long is left" estimate
+  // shown on every progress bar in the app.
+  taskbarProgress: "flagTaskbarProgress",
+  etaShow: "flagEtaShow",
   importExport: "flagImportExport",
   tileReorder: "flagTileReorder",
   libraryTypeFilter: "flagLibraryTypeFilter",
@@ -1579,6 +1584,10 @@ const EXPERT_VALUES = {
   rotateAutoCooldownMs: { label: "valRotateAutoCooldownMs", min: 0, max: 2000, step: 50, def: 250, unit: "ms", gate: "rotateAuto" },
   rotateAutoInputMs: { label: "valRotateAutoInputMs", min: 500, max: 10000, step: 250, def: 3000, unit: "ms", gate: "rotateAuto" },
   rotateAutoRearmMax: { label: "valRotateAutoRearmMax", min: 0, max: 50, step: 1, def: 12, unit: "", gate: "rotateAuto" },
+  // A remaining-time estimate only shows once a progress bar has moved this
+  // far, and only if what's left is still worth naming a number for.
+  etaMinPct: { label: "valEtaMinPct", min: 0, max: 50, step: 1, def: 10, unit: "%", gate: "etaShow" },
+  etaMinSecs: { label: "valEtaMinSecs", min: 0, max: 120, step: 5, def: 20, unit: "s", gate: "etaShow" },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -1842,7 +1851,7 @@ const EXPERT_TABS = [
     // Toolbar button visibility (mirrors the header right-click tool list).
     { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "gridViewBorder", "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }, "pinButton", "barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
     { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
-    { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances"], values: ["kbFocusFadeMs"], selects: ["updateCheckH"], paths: ["dataDir"],
+    { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances", "taskbarProgress", "etaShow"], values: ["kbFocusFadeMs", "etaMinPct", "etaMinSecs"], selects: ["updateCheckH"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
@@ -1876,6 +1885,18 @@ const val = (key) => {
   return v;
 };
 const txt = (key) => settings.ui_texts?.[key] || "";
+
+// Wraps a command that reports no real progress of its own (backup, import)
+// with an indeterminate taskbar entry -- "something is happening" is all that
+// can honestly be shown without a percentage to work from.
+async function withTaskbarBusy(op, fn) {
+  invoke("set_taskbar_progress", { op, state: "indeterminate" }).catch(() => {});
+  try {
+    return await fn();
+  } finally {
+    invoke("set_taskbar_progress", { op, state: "done" }).catch(() => {});
+  }
+}
 
 // Mirror each disabled flag onto a body class so CSS can hide the matching UI.
 function applyFlags() {
@@ -2001,6 +2022,7 @@ const EXPERT_TIPS = [
   "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH", "voiceHotkey", "voiceHotkeyTarget",
   "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "trayLabelMax",
   "checkUpdateOnStart", "showUpdates", "updateCheckH", "importExport", "dimToolbar", "keyboardNav", "allowMultipleInstances",
+  "taskbarProgress", "etaShow",
   "headerSeparators", "floating",
   "pillFolders", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap",
   "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap",
@@ -8660,7 +8682,7 @@ async function renderBackupPanel(body) {
 
   const nowBtn = document.createElement("button"); nowBtn.type = "button"; nowBtn.className = "ghost-btn backup-now-btn"; nowBtn.textContent = t("backupNow");
   nowBtn.addEventListener("click", async () => {
-    try { await invoke("create_backup", { keep: Math.round(val("backupKeep")) }); toast(t("backupDone")); }
+    try { await withTaskbarBusy("backup", () => invoke("create_backup", { keep: Math.round(val("backupKeep")) })); toast(t("backupDone")); }
     catch (e) { errToast(e); }
     await saveUiState("backupListOpen", true); // reveal the fresh backup right away
     renderBackupPanel(body);
@@ -8925,7 +8947,7 @@ async function restoreBackup(name) {
   // The same safety net as delete — restoring replaces the current
   // data just as permanently, so it follows the same "before delete" switch.
   await maybeBackupBeforeWipe("delete");
-  try { await invoke("restore_backup", { name, keep: Math.round(val("backupKeep")), scope }); }
+  try { await withTaskbarBusy("backup", () => invoke("restore_backup", { name, keep: Math.round(val("backupKeep")), scope })); }
   catch (e) { errToast(e); } // on success the app relaunches
 }
 
@@ -11963,7 +11985,7 @@ async function runImport() {
     // never opens a native dialog itself (that guard is preview_import's job).
     // hash is preview_import's digest of that same file -- import_prompts
     // refuses if the file changed underneath the preview.
-    const count = await invoke("import_prompts", { path: picked.path, hash: picked.hash });
+    const count = await withTaskbarBusy("import", () => invoke("import_prompts", { path: picked.path, hash: picked.hash }));
     if (count == null) return;
     await renderGrid(); // refreshes prompts AND settings
     // Imported preferences apply on the spot — no restart needed.
@@ -12025,7 +12047,7 @@ async function runImportAll() {
   let asked = false;
   for (;;) {
     try {
-      const res = await invoke("import_all", { path, password, scope });
+      const res = await withTaskbarBusy("import", () => invoke("import_all", { path, password, scope }));
       await reloadEverything();
       let msg = t("importAllDone").replace("{f}", res.name).replace("{n}", Number(res.count).toLocaleString(LANG));
       // A hotkey the restore could not keep is named, never silently dropped.
@@ -12613,6 +12635,9 @@ function bind() {
       if (recProgressOff === myOff) recProgressOff = null;
       return;
     }
+    // No real percentage is computed here (only elapsed seconds, above), so the
+    // taskbar just shows "something is happening" rather than a fake number.
+    invoke("set_taskbar_progress", { op: "convert", state: "indeterminate" }).catch(() => {});
     try {
       const outPath = await invoke("convert_recording", { srcPath: rawPath, format, lossless });
       if (gen !== recGen) return;
@@ -12640,6 +12665,9 @@ function bind() {
       // tear down a newer, still-active openRecModal call's own listener.
       myOff();
       if (recProgressOff === myOff) recProgressOff = null;
+      // Same superseding concern as the listener above: only the still-current
+      // generation may clear the taskbar entry a newer call might now own.
+      if (gen === recGen) invoke("set_taskbar_progress", { op: "convert", state: "done" }).catch(() => {});
     }
   }
   // The periodic sweep and "once a recording ends" both fire this live
@@ -15531,9 +15559,13 @@ function bind() {
     const label = btn.textContent;
     const origTitle = btn.title;
     btn.title = t("ffmpegCancelHint");
+    const dlEta = makeEtaEstimator();
     const unlisten = await listen("ffmpeg-download-progress", (e) => {
       const pct = ffmpegDownloadPct(e.payload);
-      btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct));
+      dlEta.feed(pct);
+      const eta = flag("etaShow") ? formatEta(dlEta.estimate(val("etaMinPct"), val("etaMinSecs")), t) : "";
+      btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
+      invoke("set_taskbar_progress", { op: "ffmpeg-download", state: "running", value: pct }).catch(() => {});
     });
     try {
       await invoke("download_ffmpeg");
@@ -15547,6 +15579,7 @@ function bind() {
       ffmpegBusy = false;
       btn.textContent = label;
       btn.title = origTitle || "";
+      invoke("set_taskbar_progress", { op: "ffmpeg-download", state: "done" }).catch(() => {});
     }
   };
 

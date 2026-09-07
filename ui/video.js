@@ -6,7 +6,7 @@
 // an ordered operation list (VE.ops), exactly like the screenshot editor's own
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
-import { resolveLang, ffmpegDownloadPct, numberField } from "./floatShared.js";
+import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta } from "./floatShared.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 
@@ -114,6 +114,9 @@ const VE = {
   stripCount: 0,
   peaks: { 0: null, 1: null },
   exporting: false,
+  etaShow: true,        // "Show remaining time" -- settings-driven, see applySettings
+  etaMinPct: 10,
+  etaMinSecs: 20,
   dirty: false,         // ops changed since the last successful export
   lastExport: "",       // path of the file the last export produced
   destOverride: null,   // a full path picked via "Save as…" or typed by hand
@@ -2097,11 +2100,18 @@ function updateExportNote() {
   updateAudioLabels();
 }
 
+const exportEta = makeEtaEstimator();
+
 function setProgress(pct) {
+  const clamped = clamp(pct, 0, 100);
   const row = $("ve-export-progress-row");
   row.classList.remove("hidden");
-  $("ve-export-progress").value = clamp(pct, 0, 100);
-  $("ve-export-pct").textContent = `${Math.round(clamp(pct, 0, 100))}%`;
+  $("ve-export-progress").value = clamped;
+  $("ve-export-pct").textContent = `${Math.round(clamped)}%`;
+  exportEta.feed(clamped);
+  const etaSpan = $("ve-export-eta");
+  etaSpan.textContent = VE.etaShow ? formatEta(exportEta.estimate(VE.etaMinPct, VE.etaMinSecs), t) : "";
+  invoke("set_taskbar_progress", { op: "export", state: "running", value: Math.round(clamped) }).catch(() => {});
 }
 
 // toClipboard runs the very same export into a throwaway temp file
@@ -2143,6 +2153,7 @@ async function startExport(toClipboard) {
   $("ve-export-cancel").classList.remove("hidden");
   $("ve-export-saveas").classList.add("hidden");
   $("ve-export-status").textContent = t("veExporting");
+  exportEta.reset();
   setProgress(0);
   try {
     await invoke("export_video", { req: request });
@@ -2167,6 +2178,10 @@ async function startExport(toClipboard) {
     $("ve-export-start").disabled = false;
     $("ve-export-clip").disabled = false;
     $("ve-export-cancel").classList.add("hidden");
+    $("ve-export-eta").textContent = "";
+    // Finish, cancel and error all land here -- the taskbar entry always goes
+    // away, never left stuck mid-progress or flagged red forever.
+    invoke("set_taskbar_progress", { op: "export", state: "done" }).catch(() => {});
   }
 }
 
@@ -2193,9 +2208,13 @@ function noteFfmpeg(err) {
 $("ve-ffmpeg-get").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   btn.disabled = true;
+  const dlEta = makeEtaEstimator();
   const unlisten = await listen("ffmpeg-download-progress", (ev) => {
     const pct = ffmpegDownloadPct(ev.payload);
-    btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct));
+    dlEta.feed(pct);
+    const eta = VE.etaShow ? formatEta(dlEta.estimate(VE.etaMinPct, VE.etaMinSecs), t) : "";
+    btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
+    invoke("set_taskbar_progress", { op: "ffmpeg-download", state: "running", value: pct }).catch(() => {});
   });
   try {
     await invoke("download_ffmpeg");
@@ -2212,6 +2231,7 @@ $("ve-ffmpeg-get").addEventListener("click", async (e) => {
     btn.disabled = false;
     btn.textContent = t("ffmpegOfferConfirm");
     unlisten();
+    invoke("set_taskbar_progress", { op: "ffmpeg-download", state: "done" }).catch(() => {});
   }
 });
 
@@ -2778,6 +2798,11 @@ function applySettings(settings) {
   const undoMax = Number(settings?.ui_values?.videoEditUndoMax);
   VE.undoMax = Number.isFinite(undoMax) && undoMax > 0 ? Math.round(undoMax) : UNDO_MAX_DEFAULT;
   const values = settings?.ui_values || {};
+  VE.etaShow = settings?.ui_flags?.etaShow !== false;
+  const etaMinPct = Number(values.etaMinPct);
+  VE.etaMinPct = Number.isFinite(etaMinPct) ? etaMinPct : 10;
+  const etaMinSecs = Number(values.etaMinSecs);
+  VE.etaMinSecs = Number.isFinite(etaMinSecs) ? etaMinSecs : 20;
   const texts = settings?.ui_texts || {};
   // The user's own last export choice always wins; only a field that was never
   // touched (no persisted videoExport* value yet) opens on the expert default.

@@ -51,6 +51,54 @@ export function ffmpegDownloadPct(payload) {
   return total ? Math.min(100, Math.round((downloaded / total) * 100)) : 0;
 }
 
+// A rough "how much longer" estimate for a progress bar, shared by export,
+// recording conversion and the ffmpeg download. Feed it every progress update;
+// it keeps a short rolling window of percent/time pairs and turns the average
+// rate of change over that window into a remaining-time guess, so a single
+// stall or a single burst does not swing the estimate on its own.
+export function makeEtaEstimator() {
+  let samples = [];
+  return {
+    reset() {
+      samples = [];
+    },
+    feed(pct, now = Date.now()) {
+      samples.push({ pct, t: now });
+      if (samples.length > 11) samples.shift(); // last 11 points -> 10 rate measurements
+    },
+    // Returns null (show nothing) once too little has run, once the shown
+    // percentage has not reached minPct yet, or once what remains is not worth
+    // naming a number for; otherwise { key, value? } ready for formatEta below.
+    estimate(minPct, minSecs) {
+      if (samples.length < 2) return null;
+      const last = samples[samples.length - 1];
+      if (last.pct < minPct) return null;
+      const rates = [];
+      for (let i = 1; i < samples.length; i++) {
+        const dt = (samples[i].t - samples[i - 1].t) / 1000;
+        const dPct = samples[i].pct - samples[i - 1].pct;
+        if (dt > 0 && dPct > 0) rates.push(dPct / dt);
+      }
+      if (!rates.length) return null;
+      const avgRate = rates.reduce((a, b) => a + b, 0) / rates.length;
+      const remainingSecs = (100 - last.pct) / avgRate;
+      if (!(remainingSecs > minSecs)) return null;
+      if (remainingSecs >= 3600) return { key: "etaOverHour" };
+      if (remainingSecs > 120) return { key: "etaMinutes", value: Math.round(remainingSecs / 60) };
+      return { key: "etaSeconds", value: Math.max(5, Math.round(remainingSecs / 5) * 5) };
+    },
+  };
+}
+
+// Turns an estimate() result into the localized display string, or "" once
+// there is nothing worth showing. `t` is the caller's own translation lookup
+// (main.js and video.js each have their own, same one-argument shape).
+export function formatEta(result, t) {
+  if (!result) return "";
+  if (result.key === "etaOverHour") return t("etaOverHour");
+  return t("etaAbout").replace("{time}", t(result.key).replace("{n}", String(result.value)));
+}
+
 // A short synthesised "copy" beep (the copySound expert switch) -- no audio file
 // is shipped or downloaded. Every window that can copy (main, pill, folder) calls
 // this from its own one success path, each with its own lazily-created

@@ -433,7 +433,10 @@ failing — it clears itself the moment a save reaches disk again.
 ### System
 
 Update checks (never installs without asking), keyboard navigation, allowing
-multiple instances at once, and where the data folder lives.
+multiple instances at once, and where the data folder lives. A long export,
+conversion, ffmpeg download, backup or import fills the app's taskbar icon
+with its progress, and shows a plain "about X left" estimate once enough of
+it has run for the guess to mean something — both switchable off.
 
 ### Data maintenance
 
@@ -737,6 +740,9 @@ Datenschutz-Gruppe, solange der letzte Speichervorgang fehlschlägt — sie
 verschwindet von selbst, sobald wieder erfolgreich gespeichert wird.
 
 **System** — Updates, Tastatur-Navigation, mehrere Instanzen, Datenordner.
+Lange Vorgänge (Export, Umwandlung, ffmpeg-Download, Sicherung, Import) füllen
+das Taskleistensymbol und zeigen ab einer eingestellten Schwelle „noch etwa …" —
+beides abschaltbar.
 
 **Datenwartung** — Duplikatfinder, Papierkorb, Import/Export.
 

@@ -18144,6 +18144,126 @@ fn install_update_blocking(url: String) -> Result<(), String> {
     Ok(())
 }
 
+// ---------- Windows taskbar icon progress, combined across every long-running task ----------
+//
+// Export, recording conversion, the ffmpeg download, a backup and an import can
+// each run for a while with the window sitting in the background. Every one of
+// them reports its own state into this small registry instead of touching the
+// taskbar icon directly, so two running at once -- or one finishing while
+// another starts -- combine into one sane reading instead of the second simply
+// overwriting the first's icon state.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum TaskbarOpState {
+    Running(u8), // a percent value, never above 100
+    Indeterminate,
+    Error,
+}
+
+fn taskbar_ops() -> &'static Mutex<HashMap<String, TaskbarOpState>> {
+    use std::sync::OnceLock;
+    static OPS: OnceLock<Mutex<HashMap<String, TaskbarOpState>>> = OnceLock::new();
+    OPS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+// Pure and window-free on purpose, so the state machine (several operations at
+// once, one erroring, all finishing) can be unit-tested without a real HWND.
+// Any error wins outright; otherwise an empty map is "off"; otherwise any
+// indeterminate operation wins over a plain percentage; otherwise the shown
+// percentage is the average across every running operation.
+fn aggregate_taskbar_state(ops: &HashMap<String, TaskbarOpState>) -> (&'static str, Option<u8>) {
+    if ops.values().any(|s| *s == TaskbarOpState::Error) {
+        return ("error", None);
+    }
+    if ops.is_empty() {
+        return ("off", None);
+    }
+    if ops.values().any(|s| *s == TaskbarOpState::Indeterminate) {
+        return ("indeterminate", None);
+    }
+    let sum: u32 = ops
+        .values()
+        .map(|s| match s {
+            TaskbarOpState::Running(v) => *v as u32,
+            _ => 0,
+        })
+        .sum();
+    ("normal", Some((sum / ops.len() as u32) as u8))
+}
+
+#[cfg(windows)]
+fn apply_taskbar_state(app: &AppHandle, state: &str, value: Option<u8>) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED};
+    use windows::Win32::UI::Shell::{ITaskbarList3, TaskbarList, TBPF_ERROR, TBPF_INDETERMINATE, TBPF_NOPROGRESS, TBPF_NORMAL};
+    let Some(win) = app.get_webview_window("main") else { return };
+    let Ok(hwnd) = win.hwnd() else { return };
+    let hwnd = HWND(hwnd.0);
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        let Ok(taskbar): windows::core::Result<ITaskbarList3> = CoCreateInstance(&TaskbarList, None, CLSCTX_INPROC_SERVER) else {
+            return;
+        };
+        match state {
+            "off" => {
+                let _ = taskbar.SetProgressState(hwnd, TBPF_NOPROGRESS);
+            }
+            "indeterminate" => {
+                let _ = taskbar.SetProgressState(hwnd, TBPF_INDETERMINATE);
+            }
+            "error" => {
+                let _ = taskbar.SetProgressState(hwnd, TBPF_ERROR);
+            }
+            _ => {
+                let _ = taskbar.SetProgressValue(hwnd, value.unwrap_or(0) as u64, 100);
+                let _ = taskbar.SetProgressState(hwnd, TBPF_NORMAL);
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn apply_taskbar_state(_app: &AppHandle, _state: &str, _value: Option<u8>) {}
+
+// `op` names which feature is reporting ("export", "convert", "ffmpeg-download",
+// "backup", "import"); `state` is "running" (with a 0-100 `value`),
+// "indeterminate", "error", or "done" (drops this operation's own entry). Every
+// caller is expected to eventually send "done" or "error" even on its own
+// cancel/failure path -- a taskbar icon stuck mid-progress is worse than none.
+#[tauri::command]
+fn set_taskbar_progress(app: AppHandle, state_db: State<Db>, op: String, state: String, value: Option<u32>) {
+    let enabled = state_db
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .settings
+        .ui_flags
+        .get("taskbarProgress")
+        .copied()
+        .unwrap_or(true);
+    if !enabled {
+        apply_taskbar_state(&app, "off", None);
+        return;
+    }
+    let (agg_state, agg_value) = {
+        let mut ops = taskbar_ops().lock().unwrap_or_else(|e| e.into_inner());
+        match state.as_str() {
+            "done" => {
+                ops.remove(&op);
+            }
+            "error" => {
+                ops.insert(op, TaskbarOpState::Error);
+            }
+            "indeterminate" => {
+                ops.insert(op, TaskbarOpState::Indeterminate);
+            }
+            _ => {
+                ops.insert(op, TaskbarOpState::Running(value.unwrap_or(0).min(100) as u8));
+            }
+        }
+        aggregate_taskbar_state(&ops)
+    };
+    apply_taskbar_state(&app, agg_state, agg_value);
+}
+
 // ---------- ffmpeg: fetched on demand for video export/conversion ----------
 //
 // ffmpeg is used as a separate, independently-invoked subprocess -- never linked
@@ -21957,6 +22077,7 @@ pub fn run() {
             ffmpeg_status,
             download_ffmpeg,
             cancel_ffmpeg_download,
+            set_taskbar_progress,
             set_auto_update,
             set_hotkey,
             check_hotkey,
@@ -23129,6 +23250,48 @@ fn start_sync_poll(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- taskbar progress: the pure aggregation state machine, no real window ----
+
+    #[test]
+    fn taskbar_aggregate_is_off_with_no_operations() {
+        let ops: HashMap<String, TaskbarOpState> = HashMap::new();
+        assert_eq!(aggregate_taskbar_state(&ops), ("off", None));
+    }
+
+    #[test]
+    fn taskbar_aggregate_averages_several_running_operations() {
+        let mut ops = HashMap::new();
+        ops.insert("export".to_string(), TaskbarOpState::Running(40));
+        ops.insert("ffmpeg-download".to_string(), TaskbarOpState::Running(60));
+        assert_eq!(aggregate_taskbar_state(&ops), ("normal", Some(50)));
+    }
+
+    #[test]
+    fn taskbar_aggregate_prefers_indeterminate_over_a_running_percentage() {
+        let mut ops = HashMap::new();
+        ops.insert("export".to_string(), TaskbarOpState::Running(75));
+        ops.insert("backup".to_string(), TaskbarOpState::Indeterminate);
+        assert_eq!(aggregate_taskbar_state(&ops), ("indeterminate", None));
+    }
+
+    #[test]
+    fn taskbar_aggregate_reports_error_even_with_other_operations_still_running() {
+        let mut ops = HashMap::new();
+        ops.insert("export".to_string(), TaskbarOpState::Running(20));
+        ops.insert("convert".to_string(), TaskbarOpState::Error);
+        assert_eq!(aggregate_taskbar_state(&ops), ("error", None));
+    }
+
+    #[test]
+    fn taskbar_aggregate_returns_to_off_once_the_only_operation_is_removed_mid_way() {
+        let mut ops = HashMap::new();
+        ops.insert("convert".to_string(), TaskbarOpState::Running(30));
+        assert_eq!(aggregate_taskbar_state(&ops), ("normal", Some(30)));
+        // "done" (a cancel or a normal finish) drops the entry, the same as set_taskbar_progress does.
+        ops.remove("convert");
+        assert_eq!(aggregate_taskbar_state(&ops), ("off", None));
+    }
 
     // ---- ffmpeg: zip-signature + pinned-hash verification, no network needed ----
 

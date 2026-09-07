@@ -322,6 +322,14 @@ const RESULTS = {
     return new Promise((resolve) => setTimeout(() => resolve(dst), 80));
   },
   cancel_recording_convert: () => null,
+  // 386/387: the export progress row and its remaining-time estimate both need
+  // export_video to stay pending for a moment, the same way convert_recording
+  // does above, so the probe can fire progress events while VE.exporting is
+  // still true. window.__EXPORT_DELAY_MS__ lets one probe step ask for a
+  // longer pending window than the default, without changing it for every
+  // other export_video call in the suite.
+  export_video: () => new Promise((resolve) => setTimeout(() => resolve(null), window.__EXPORT_DELAY_MS__ || 80)),
+  set_taskbar_progress: () => null,
   save_recording_as: (a) => { window.__REC_SAVED_AS__ = a.srcPath; return "C:/fake/saved.mp4"; },
   discard_recording_file: (a) => { window.__REC_DISCARDED__ = a.path; return true; },
   // P100: the probe reads this back instead of a real backend hand-off to main.js.

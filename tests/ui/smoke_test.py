@@ -7842,6 +7842,40 @@ VIDEO_PROBE = """
     formatSel.dispatchEvent(new Event('change'));
     await sleep(30);
 
+    // ---- 387: the remaining-time estimate stays hidden below etaMinPct (10%
+    // by default), regardless of how fast progress is moving ----
+    const exportEtaEl = document.getElementById('ve-export-eta');
+    const exportStartBtn = document.getElementById('ve-export-start');
+    // probe_recording's fixture duration is 10 real minutes (600000ms) and
+    // nothing before this point trims or re-speeds the clip, so a payload's
+    // percentage is exactly ms/600000 -- no need to derive it indirectly.
+    exportStartBtn.click();
+    await sleep(10);
+    window.__FIRE__('recording-convert-progress', { ms: 18000 }); // 3%
+    await sleep(15);
+    window.__FIRE__('recording-convert-progress', { ms: 30000 }); // 5%, fast rate but still under 10%
+    await sleep(10);
+    if (exportEtaEl.textContent.trim() !== '') {
+      errs.push(`387: remaining-time text showed before etaMinPct, got ${JSON.stringify(exportEtaEl.textContent)}`);
+    }
+    await sleep(120); // let this export resolve so a second one can start clean
+
+    // ---- 387: past etaMinPct, a slow enough rate shows an "about ..." text ----
+    // startExport() itself feeds an initial 0% sample the instant it starts, so
+    // the very first real tick below is measured against that -- a real 3s gap
+    // keeps that first rate low enough for the average to clear etaMinSecs.
+    // export_video needs to still be pending 3s in, hence the longer delay.
+    window.__EXPORT_DELAY_MS__ = 3500;
+    exportStartBtn.click();
+    await sleep(3000);
+    window.__FIRE__('recording-convert-progress', { ms: 60000 }); // 10% after ~3s -> roughly 3.3%/s
+    await sleep(10);
+    if (!/about/i.test(exportEtaEl.textContent)) {
+      errs.push(`387: remaining-time text did not appear past etaMinPct with a slow rate, got ${JSON.stringify(exportEtaEl.textContent)}`);
+    }
+    await sleep(700);
+    window.__EXPORT_DELAY_MS__ = undefined;
+
     // ---- 336: "Copy to clipboard" runs its own export into a throwaway temp
     // file and lands that file on the clipboard, without touching destInput ----
     window.__CLIP_EXPORT_COPIED__ = undefined;

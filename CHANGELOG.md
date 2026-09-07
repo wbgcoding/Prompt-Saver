@@ -382,6 +382,11 @@ the video editor and the introduction tour ship on).
   otherwise sit in the copied text exactly like that, since it never becomes an
   actual variable.
 - The backups window can open its snapshot folder in Explorer directly.
+- A long export, recording conversion, ffmpeg download, backup or import now
+  fills the Windows taskbar icon with its progress, so it stays visible while
+  the app sits in the background. Its progress bar also shows a plain "about X
+  left" once enough has run for the guess to be worth showing. Both switchable
+  off in the expert menu.
 - Closing to the tray for the very first time now explains what just happened —
   right-click the tray icon to copy a prompt without reopening the window —
   before the window disappears. Every later close is instant again.
