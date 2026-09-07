@@ -72,6 +72,7 @@ const VE = {
   fps: 30,
   w: 0,
   h: 0,
+  pendingScaleKey: null, // a scale preset waiting on VE.w/VE.h from applyProbe()
   ops: [],
   redo: [],
   floor: 0,             // undo may not walk back past this index
@@ -135,6 +136,7 @@ function applyI18n() {
   renderOverlayList();
   renderOverlayEditor();
   renderSpeedSteps();
+  renderScalePresets();
   updateCutCount();
   updateExportNote();
   updatePlayButton();
@@ -352,6 +354,7 @@ function afterOpsChanged(opts) {
   renderRegions();
   renderRects();
   updateCutCount();
+  updateScaleCurrent();
   updateExportNote();
   applyPreviewSpeed();
 }
@@ -386,7 +389,7 @@ function opLabel(op) {
     case "crop": return `${t("veOpCrop")} ${op.rect.w}×${op.rect.h}`;
     case "speed": return `${t("veOpSpeed")} ${op.rate}×`;
     case "fade": return `${t("veOpFade")} ${op.inMs}/${op.outMs} ms`;
-    case "scale": return `${t("veOpScale")} ${op.height}p`;
+    case "scale": return `${t("veOpScale")} ${op.w}×${op.h}`;
     case "overlay": return `${t("veOpOverlay")}: ${t(overlayLabelKey(op.kind))}`;
     default: return op.tool;
   }
@@ -1358,9 +1361,6 @@ function renderEditFields() {
       $("ve-fade-out").numFieldRefresh?.();
     }
   }
-
-  const scale = opOf("scale");
-  $("ve-scale").value = scale ? String(scale.height) : "";
 }
 
 function renderSpeedSteps() {
@@ -1392,6 +1392,117 @@ function updateCutCount() {
     ? t("veCutCount").replace("{n}", String(cuts.length)).replace("{d}", fmtTime(totalOutMs()))
     : t("veCutNone").replace("{d}", fmtTime(totalOutMs()));
   $("ve-cut-clear").disabled = !cuts.length;
+}
+
+const SCALE_HEIGHT_PRESETS = [2160, 1440, 1080, 720, 480, 360];
+const SCALE_PERCENT_PRESETS = [50, 25];
+const AUDIO_KBPS_ESTIMATE = 128;
+
+function renderScalePresets() {
+  const wrap = $("ve-scale-presets");
+  wrap.innerHTML = "";
+  const addBtn = (key, label) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ghost-btn ve-step";
+    btn.dataset.key = key;
+    btn.textContent = label;
+    btn.addEventListener("click", () => {
+      applyScalePresetKey(key);
+      persistExportSettings();
+      updateExportNote();
+    });
+    wrap.appendChild(btn);
+  };
+  addBtn("", t("veScaleOff"));
+  for (const h of SCALE_HEIGHT_PRESETS) addBtn(String(h), t(`optVeScale${h}`));
+  for (const pct of SCALE_PERCENT_PRESETS) addBtn(String(pct), t(`optVeScale${pct}pct`));
+  updateScaleCurrent();
+}
+
+// The one place a scale op becomes literal pixels: a fixed-height preset
+// refuses to enlarge past the source (picking 1080p for a 720p clip means
+// "don't shrink it", not "blow it up and waste bits doing so"), while a
+// percent value always applies as typed -- upscaling on purpose stays
+// possible through the percent field and its 50%/25%... well above 100 too.
+function scaleForHeightPreset(h) {
+  if (!VE.w || !VE.h || h >= VE.h) return null;
+  return { w: even(Math.round((VE.w * h) / VE.h)), h: even(h) };
+}
+function scaleForPercent(pct) {
+  if (!VE.w || !VE.h) return null;
+  return { w: even(Math.round((VE.w * pct) / 100)), h: even(Math.round((VE.h * pct) / 100)) };
+}
+
+// Returns the preset key matching the current scale op exactly ("" for no
+// op, a height/percent key), or null when it is a custom/free-typed value --
+// used both to persist the last choice and to highlight the preset buttons.
+function currentScalePresetKey() {
+  const scale = opOf("scale");
+  if (!scale) return "";
+  for (const h of SCALE_HEIGHT_PRESETS) {
+    const target = scaleForHeightPreset(h);
+    if (target && target.w === scale.w && target.h === scale.h) return String(h);
+  }
+  for (const pct of SCALE_PERCENT_PRESETS) {
+    const target = scaleForPercent(pct);
+    if (target && target.w === scale.w && target.h === scale.h) return String(pct);
+  }
+  return null;
+}
+
+function applyScalePresetKey(key) {
+  if (!key) { setScaleOp(null, null); return; }
+  const keyNum = Number(key);
+  if (SCALE_HEIGHT_PRESETS.includes(keyNum)) {
+    const target = scaleForHeightPreset(keyNum);
+    if (target) setScaleOp(target.w, target.h);
+    else setScaleOp(null, null);
+    return;
+  }
+  const pct = SCALE_PERCENT_PRESETS.includes(keyNum) ? scaleForPercent(keyNum) : null;
+  if (pct) setScaleOp(pct.w, pct.h);
+}
+
+function updateScaleCurrent() {
+  const scale = opOf("scale");
+  if (document.activeElement !== $("ve-scale-w")) { $("ve-scale-w").value = scale ? scale.w : VE.w || ""; $("ve-scale-w").numFieldRefresh?.(); }
+  if (document.activeElement !== $("ve-scale-h")) { $("ve-scale-h").value = scale ? scale.h : VE.h || ""; $("ve-scale-h").numFieldRefresh?.(); }
+  if (document.activeElement !== $("ve-scale-pct")) {
+    const pct = scale && VE.w ? Math.round((scale.w / VE.w) * 100) : 100;
+    $("ve-scale-pct").value = pct;
+    $("ve-scale-pct").numFieldRefresh?.();
+  }
+
+  const line = $("ve-scale-current");
+  if (!VE.w || !VE.h) {
+    line.textContent = "";
+  } else if (!scale) {
+    line.textContent = t("veScaleCurrentOriginal").replace("{sw}", VE.w).replace("{sh}", VE.h);
+  } else {
+    const kbps = videoKbps();
+    const durS = totalOutMs() / 1000;
+    let text = kbps != null && durS > 0
+      ? t("veScaleCurrent").replace("{size}", fmtSize(Math.round(((kbps + AUDIO_KBPS_ESTIMATE) * 1000 / 8) * durS)))
+      : t("veScaleCurrentNoSize");
+    text = text.replace("{sw}", VE.w).replace("{sh}", VE.h).replace("{tw}", scale.w).replace("{th}", scale.h);
+    if (scale.w > VE.w || scale.h > VE.h) text += " " + t("veScaleUpscaleNote");
+    line.textContent = text;
+  }
+
+  const key = currentScalePresetKey();
+  for (const btn of $("ve-scale-presets").querySelectorAll("button")) {
+    btn.classList.toggle("sel", key !== null && btn.dataset.key === key);
+  }
+  $("ve-export-scale-summary").textContent = scale
+    ? t("veExportScaleSummary").replace("{w}", scale.w).replace("{h}", scale.h)
+    : t("veScaleOff");
+}
+
+function fmtSize(bytes) {
+  if (!bytes) return "";
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // ---------------------------------------------------------------- overlays
@@ -1716,17 +1827,12 @@ function atempoChain(rate) {
 
 const exportFormat = () => $("ve-export-format").value || "mp4";
 const exportQuality = () => $("ve-export-quality").value || "high";
-const exportDownscale = () => $("ve-export-downscale").value || "";
 
-// The export-tab downscale select and the edit-tab scale op are kept in sync
-// on every change, but an undo/redo can restore a scale op without the
-// export select's own change handler ever firing -- falling back to the op's
-// height here (instead of trusting exportDownscale() alone) covers that case.
+// The scale op is the one resolution setting of the window -- both the
+// Edit-tab fields and the Export-tab summary read and write it directly.
 function scaleTarget() {
-  const fromSelect = Number(exportDownscale());
-  if (fromSelect) return fromSelect;
   const scaleOp = opOf("scale");
-  return scaleOp ? scaleOp.height : 0;
+  return scaleOp ? { w: scaleOp.w, h: scaleOp.h } : null;
 }
 
 // The one place the operation list becomes ffmpeg. Produces a complete graph
@@ -1828,10 +1934,11 @@ function buildVideoChain() {
     if (fade.outMs > 0) chain(`fade=t=out:st=${Math.max(0, total - fade.outMs / 1000).toFixed(3)}:d=${(fade.outMs / 1000).toFixed(3)}`);
   }
 
-  // A target at or above the source's own height must leave the
-  // frame untouched rather than upscale it -- picking e.g. 1080p for a 720p
-  // clip is "don't shrink it", not "blow it up and waste bits doing so".
-  if (downscale && (!VE.h || downscale < VE.h)) chain(`scale=-2:${downscale}`);
+  // The op itself already carries the decision: fixed-height presets refuse
+  // to be set at or above the source size (see scaleForHeightPreset), while
+  // the percent field and free width/height typing are meant to upscale on
+  // request. Nothing left to guard here.
+  if (downscale) chain(`scale=${downscale.w}:${downscale.h}`);
 
   if (gif) {
     // Palette generation and use in the SAME graph — two ffmpeg runs would mean
@@ -1918,7 +2025,6 @@ function isLosslessCopy() {
   // aac-or-silent audio -- e.g. a webm/VP9 file dragged in from elsewhere)
   // fails ffmpeg's "-c copy" outright instead of producing a trimmed mp4.
   if (VE.probe && VE.probe.stream_copy_safe === false) return false;
-  if (exportDownscale()) return false;
   if (opsOf("cut").length) return false;
   if (opOf("crop") || opOf("speed") || opOf("fade") || opOf("scale") || opsOf("overlay").length) return false;
   const { sys, mic } = VE.audio;
@@ -2035,9 +2141,9 @@ function videoKbps() {
   const base = EXPORT_KBPS[exportQuality()];
   if (base == null) return null;
   const target = scaleTarget();
-  if (!target || !VE.h || target >= VE.h) return base;
+  if (!target || !VE.h || target.h >= VE.h) return base;
   // Fewer pixels need fewer bits; the floor keeps a 480p clip from going muddy.
-  return Math.max(800, Math.round(base * (target / VE.h)));
+  return Math.max(800, Math.round(base * (target.h / VE.h)));
 }
 
 // ---------------------------------------------------------------- ffmpeg presence
@@ -2187,6 +2293,16 @@ for (const id of ["ve-fade-in", "ve-fade-out"]) {
     decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease", presetsAriaKey: "numFieldPresets",
   });
 }
+for (const id of ["ve-scale-w", "ve-scale-h"]) {
+  numberField({
+    input: $(id), bigStep: 20, decreaseLabel: numFieldDec, increaseLabel: numFieldInc,
+    decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease",
+  });
+}
+numberField({
+  input: $("ve-scale-pct"), bigStep: 25, decreaseLabel: numFieldDec, increaseLabel: numFieldInc,
+  decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease",
+});
 
 $("ve-crop-on").addEventListener("change", () => {
   if ($("ve-crop-on").checked) pushReplacing((o) => o.tool === "crop", { tool: "crop", rect: centeredRect(0.8) });
@@ -2236,25 +2352,46 @@ for (const id of ["ve-fade-in", "ve-fade-out"]) {
   });
 }
 
-// The edit tab's own resize control and the export tab's downscale
-// dropdown are two faces of the one same setting -- only setting a control's
-// .value from code, as each side's handler used to do to the OTHER control,
-// never fires that control's own "change" event, so only whichever one the
-// user actually touched ever updated the real "scale" op. Picking "Original"
-// in the export tab only ever reset the dropdown's own display; the stale
-// scale op from an earlier edit-tab resize stayed in VE.ops and still applied.
-function setScaleOp(value) {
-  if (!value) removeOps((o) => o.tool === "scale");
-  else pushReplacing((o) => o.tool === "scale", { tool: "scale", height: Number(value) });
+// The Edit tab's width/height/percent fields and the Export tab's read-only
+// summary are two faces of the one same "scale" op -- this is the only
+// place that ever writes it, literally, with no upscale guard: that guard
+// belongs to the fixed-height presets alone (see scaleForHeightPreset).
+function setScaleOp(w, h) {
+  if (w == null || h == null) { removeOps((o) => o.tool === "scale"); return; }
+  const cw = even(clamp(Math.round(w), 16, 7680));
+  const ch = even(clamp(Math.round(h), 16, 7680));
+  pushReplacing((o) => o.tool === "scale", { tool: "scale", w: cw, h: ch });
 }
 
-$("ve-scale").addEventListener("change", () => {
-  const value = $("ve-scale").value;
-  setScaleOp(value);
-  $("ve-export-downscale").value = value;
+$("ve-scale-w").addEventListener("change", () => {
+  const w = Number($("ve-scale-w").value) || VE.w;
+  const h = $("ve-scale-lock").checked && VE.w && VE.h ? Math.round((w * VE.h) / VE.w) : (opOf("scale") || { h: VE.h }).h;
+  setScaleOp(w, h);
   persistExportSettings();
   updateExportNote();
 });
+$("ve-scale-h").addEventListener("change", () => {
+  const h = Number($("ve-scale-h").value) || VE.h;
+  const w = $("ve-scale-lock").checked && VE.w && VE.h ? Math.round((h * VE.w) / VE.h) : (opOf("scale") || { w: VE.w }).w;
+  setScaleOp(w, h);
+  persistExportSettings();
+  updateExportNote();
+});
+$("ve-scale-pct").addEventListener("change", () => {
+  const pct = clamp(Number($("ve-scale-pct").value) || 100, 10, 400);
+  const target = scaleForPercent(pct);
+  if (target) { setScaleOp(target.w, target.h); persistExportSettings(); updateExportNote(); }
+});
+$("ve-scale-lock").addEventListener("change", () => {
+  if (!$("ve-scale-lock").checked || !VE.w || !VE.h) return;
+  const scale = opOf("scale");
+  if (!scale) return;
+  // Re-locking snaps the current values back onto the source aspect ratio
+  // immediately, keyed off the width so both fields agree afterward.
+  setScaleOp(scale.w, Math.round((scale.w * VE.h) / VE.w));
+  persistExportSettings();
+});
+$("ve-export-scale-edit").addEventListener("click", () => showPanel("ve-panel-edit"));
 
 $("ve-ov-add-image").addEventListener("click", () => addOverlay("image"));
 $("ve-ov-add-frame").addEventListener("click", () => addOverlay("frame"));
@@ -2307,13 +2444,8 @@ function audioControl(kind, muteId, volId) {
 audioControl("sys", "ve-mute-sys", "ve-vol-sys");
 audioControl("mic", "ve-mute-mic", "ve-vol-mic");
 
-for (const id of ["ve-export-format", "ve-export-quality", "ve-export-downscale"]) {
+for (const id of ["ve-export-format", "ve-export-quality"]) {
   $(id).addEventListener("change", () => {
-    if (id === "ve-export-downscale") {
-      const value = $("ve-export-downscale").value;
-      $("ve-scale").value = value;
-      setScaleOp(value);
-    }
     // A full manual destination names its own extension -- picking a
     // different container format makes that extension wrong, so the format
     // dropdown is the one control that drops back to the auto-named file
@@ -2350,9 +2482,7 @@ $("ve-export-choose-folder").addEventListener("click", async () => {
 function applyPreset(format, quality, downscale) {
   $("ve-export-format").value = format;
   $("ve-export-quality").value = quality;
-  $("ve-export-downscale").value = downscale;
-  $("ve-scale").value = downscale;
-  setScaleOp(downscale);
+  applyScalePresetKey(downscale);
   persistExportSettings();
   updateExportNote();
 }
@@ -2376,7 +2506,9 @@ $("ve-export-saveas").addEventListener("click", async () => {
 function persistExportSettings() {
   invoke("set_ui_text", { key: "videoExportFormat", value: exportFormat() }).catch(() => {});
   invoke("set_ui_text", { key: "videoExportQuality", value: exportQuality() }).catch(() => {});
-  invoke("set_ui_text", { key: "videoExportDownscale", value: exportDownscale() }).catch(() => {});
+  // A custom free-typed size has no discrete preset to remember -- it falls
+  // back to "keep original" as the safe default for the next session.
+  invoke("set_ui_text", { key: "videoExportScale", value: currentScalePresetKey() || "" }).catch(() => {});
   invoke("set_ui_text", { key: "videoExportDir", value: VE.destDir }).catch(() => {});
 }
 
@@ -2547,6 +2679,13 @@ function applyProbe(probe) {
   if (!VE.w) VE.w = videoEl.videoWidth || 1920;
   if (!VE.h) VE.h = videoEl.videoHeight || 1080;
 
+  // Deferred from applySettings(), which ran before VE.w/VE.h were known --
+  // consumed once here so the loadedmetadata fallback re-entry never re-applies it.
+  if (VE.pendingScaleKey != null) {
+    applyScalePresetKey(VE.pendingScaleKey);
+    VE.pendingScaleKey = null;
+  }
+
   $("ve-duration").textContent = fmtTime(VE.dur);
   $("ve-wave-mic").classList.toggle("hidden", !VE.hasMic);
   updateAudioLabels();
@@ -2608,9 +2747,16 @@ function applySettings(settings) {
   // touched (no persisted videoExport* value yet) opens on the expert default.
   $("ve-export-format").value = texts.videoExportFormat || texts.veDefaultFormat || "mp4";
   $("ve-export-quality").value = texts.videoExportQuality || texts.veDefaultQuality || "high";
-  const downscaleDef = texts.videoExportDownscale != null ? texts.videoExportDownscale : (texts.veDefaultDownscale || "");
-  $("ve-export-downscale").value = downscaleDef;
-  $("ve-scale").value = downscaleDef;
+  // VE.w/VE.h are still 0 the first time this runs (applyProbe() hasn't landed
+  // yet) -- a scale preset needs the source size to turn into real pixels, so
+  // it is deferred to VE.pendingScaleKey and consumed once VE.w/VE.h are known.
+  // A scale op the user (or an earlier default) already set is left alone, same
+  // as the fade-default guard just below.
+  const scaleDef = texts.videoExportScale != null ? texts.videoExportScale : (texts.veDefaultScale || "");
+  if (!opOf("scale")) {
+    if (VE.w && VE.h) applyScalePresetKey(scaleDef);
+    else VE.pendingScaleKey = scaleDef;
+  }
   VE.destDir = texts.videoExportDir || "";
   const kbpsHigh = Number(values.veExportKbpsHigh);
   const kbpsSmall = Number(values.veExportKbpsSmall);
@@ -2649,6 +2795,7 @@ function applySettings(settings) {
   } catch (_) {}
   loadTexts(settings).catch(() => {});
   renderSpeedSteps();
+  renderScalePresets();
   // The recording is PULLED, not pushed: a push would race the webview's first
   // frame, which is why the placeholder window does the same. The
   // "video-editor-load" event covers the other case — opening a second recording

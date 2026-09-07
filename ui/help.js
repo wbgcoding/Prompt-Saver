@@ -447,7 +447,7 @@ export const HELP_CONTENT = {
       howTo: [
         "From a fresh recording — click Edit in the result dialog.",
         "From any video already saved as a prompt — right-click it and choose \"Edit video\".",
-        "Trim, crop, change speed, fade in/out, and add image, freeze-frame, text, pixelate or spotlight overlays on the timeline.",
+        "Trim, crop, change speed, fade in/out, resize (typed dimensions, a percentage, or a quick preset), and add image, freeze-frame, text, pixelate or spotlight overlays on the timeline.",
         "Export — a lossless fast path applies when only trimming, otherwise the whole clip re-encodes once.",
       ],
       whatHappens:
@@ -1027,7 +1027,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Bei einer frischen Aufnahme — im Ergebnisdialog auf Bearbeiten klicken.",
         "Bei einem bereits gespeicherten Video-Prompt — rechtsklicken und „Video bearbeiten“ wählen.",
-        "Zuschneiden, Kürzen, Geschwindigkeit ändern, Ein-/Ausblenden sowie Bild-, Standbild-, Text-, Verpixelungs- oder Spotlight-Overlays auf der Zeitleiste hinzufügen.",
+        "Zuschneiden, Kürzen, Geschwindigkeit ändern, Ein-/Ausblenden, Größe ändern (eingegebene Maße, ein Prozentwert oder eine Schnellauswahl) sowie Bild-, Standbild-, Text-, Verpixelungs- oder Spotlight-Overlays auf der Zeitleiste hinzufügen.",
         "Exportieren — bei reinem Kürzen greift ein verlustfreier Schnellpfad, sonst wird der ganze Clip einmal neu kodiert.",
       ],
       whatHappens:

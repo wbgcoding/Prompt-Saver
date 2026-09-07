@@ -7657,27 +7657,113 @@ VIDEO_PROBE = """
     rawKeyCheck('export tab');
     sideScan(errs, 'export tab');
 
-    // ---- 360: the edit-tab scale select and the export-tab downscale
-    // select must stay in sync with each other in both directions ----
+    // ---- 366: free width/height/percent scale fields, lock-aspect,
+    // snap-to-even, the fixed-height anti-upscale guard, the Export tab's
+    // read-only summary + "Change..." button, and undo ----
+    document.getElementById('ve-tab-edit').click();
+    await sleep(80);
     {
-      const veScale = document.getElementById('ve-scale');
-      const veDownscale = document.getElementById('ve-export-downscale');
-      veScale.value = '720';
-      veScale.dispatchEvent(new Event('change'));
+      const wField = document.getElementById('ve-scale-w');
+      const hField = document.getElementById('ve-scale-h');
+      const lockBox = document.getElementById('ve-scale-lock');
+      const opsBefore = document.querySelectorAll('#ve-ops-list .ve-op-row').length;
+
+      if (!lockBox.checked) errs.push('366: aspect lock is not on by default');
+      // 1280x720 on the 1920x1080 fixture, lock on -- height must follow.
+      wField.value = '1280';
+      wField.dispatchEvent(new Event('change'));
       await sleep(30);
-      if (veDownscale.value !== '720') {
-        errs.push('360: setting the edit-tab scale did not update the export-tab downscale select');
+      if (wField.value !== '1280' || hField.value !== '720') {
+        errs.push('366: locked width change did not carry height to 720, got ' + wField.value + 'x' + hField.value);
       }
-      veDownscale.value = '480';
-      veDownscale.dispatchEvent(new Event('change'));
-      await sleep(30);
-      if (veScale.value !== '480') {
-        errs.push('360: setting the export-tab downscale did not update the edit-tab scale select');
+      const rowsAfterScale = document.querySelectorAll('#ve-ops-list .ve-op-row').length;
+      if (rowsAfterScale !== opsBefore + 1) {
+        errs.push('366: setting a scale did not add exactly one op row');
       }
-      // Reset to "off" so this does not leak into later export assertions.
-      veScale.value = '';
-      veScale.dispatchEvent(new Event('change'));
+      const scaleRow = [...document.querySelectorAll('#ve-ops-list .ve-op-row')].pop();
+      if (!scaleRow || !scaleRow.textContent.includes('1280') || !scaleRow.textContent.includes('720')) {
+        errs.push('366: the op row does not show the 1280x720 target: ' + (scaleRow && scaleRow.textContent));
+      }
+
+      // Unlock: a width change must leave the height field alone.
+      lockBox.checked = false;
+      lockBox.dispatchEvent(new Event('change'));
       await sleep(30);
+      wField.value = '800';
+      wField.dispatchEvent(new Event('change'));
+      await sleep(30);
+      if (hField.value !== '720') {
+        errs.push('366: an unlocked width change moved the height field, got ' + hField.value);
+      }
+
+      // An odd width always snaps to an even number.
+      wField.value = '801';
+      wField.dispatchEvent(new Event('change'));
+      await sleep(30);
+      if (Number(wField.value) % 2 !== 0) {
+        errs.push('366: an odd width was not snapped to an even number, got ' + wField.value);
+      }
+
+      // Re-lock, then the 25% preset must set both numbers and mark itself selected.
+      lockBox.checked = true;
+      lockBox.dispatchEvent(new Event('change'));
+      await sleep(30);
+      const presetBtns = [...document.querySelectorAll('#ve-scale-presets button')];
+      const pct25 = presetBtns.find((b) => b.dataset.key === '25');
+      if (!pct25) {
+        errs.push('366: no 25% preset button found');
+      } else {
+        pct25.click();
+        await sleep(30);
+        if (wField.value !== '480' || hField.value !== '270') {
+          errs.push('366: the 25% preset did not set 480x270, got ' + wField.value + 'x' + hField.value);
+        }
+        if (!pct25.classList.contains('sel')) {
+          errs.push('366: the 25% preset button is not marked selected after being picked');
+        }
+      }
+
+      // The Export tab mirrors the same target as a read-only summary, and
+      // its "Change..." button jumps back to the Edit tab.
+      document.getElementById('ve-tab-export').click();
+      await sleep(80);
+      const summary = document.getElementById('ve-export-scale-summary').textContent;
+      if (!summary.includes('480') || !summary.includes('270')) {
+        errs.push('366: the export-tab scale summary does not show 480x270: ' + summary);
+      }
+      document.getElementById('ve-export-scale-edit').click();
+      await sleep(80);
+      if (document.getElementById('ve-panel-edit').classList.contains('hidden')) {
+        errs.push('366: the export-tab "Change..." button did not jump back to the Edit tab');
+      }
+
+      // A fixed-height preset at or above the source size leaves the frame
+      // untouched instead of upscaling it (the source here is 1080p).
+      const rowsBeforeGuard = document.querySelectorAll('#ve-ops-list .ve-op-row').length;
+      const preset1080 = presetBtns.find((b) => b.dataset.key === '1080');
+      if (!preset1080) {
+        errs.push('366: no 1080p preset button found');
+      } else {
+        preset1080.click();
+        await sleep(30);
+        const rowsAfterGuard = document.querySelectorAll('#ve-ops-list .ve-op-row').length;
+        if (rowsAfterGuard !== rowsBeforeGuard - 1) {
+          errs.push('366: picking the 1080p preset on a 1080p source did not clear the scale op (anti-upscale guard)');
+        }
+        if (wField.value !== '1920' || hField.value !== '1080') {
+          errs.push('366: after the guard clears the scale, the fields do not show the source size, got ' + wField.value + 'x' + hField.value);
+        }
+      }
+
+      // Undo restores the original resolution.
+      wField.value = '1280';
+      wField.dispatchEvent(new Event('change'));
+      await sleep(30);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+      await sleep(30);
+      if (wField.value !== '1920' || hField.value !== '1080') {
+        errs.push('366: undo did not restore the original resolution, got ' + wField.value + 'x' + hField.value);
+      }
     }
 
     // ---- 335: the export destination input + its two picker buttons ----

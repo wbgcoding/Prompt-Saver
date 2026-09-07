@@ -163,10 +163,12 @@ On by default, reachable from a recording's own result dialog (the Edit
 button above) or from any video prompt's right-click menu ("Edit video"). It
 opens the clip in its own window with a live preview and no processing until
 you actually export — trim and cut (frame-exact, keeps the original quality
-when nothing else changes), crop, change speed, fade in/out, and overlay
-images, freeze-frames, text, pixelation or a spotlight anywhere on the
-timeline. A filmstrip and waveform give you a zoomable overview to navigate
-by. The preview itself also zooms (scroll wheel, up to 8×) and pans by
+when nothing else changes), crop, change speed, fade in/out, resize (typed
+width/height or a percentage, an aspect-ratio lock, and quick presets from
+4K down to 25% — a preset never enlarges past the source, but the percent
+field and free typing can, for upscaling on purpose), and overlay images,
+freeze-frames, text, pixelation or a spotlight anywhere on the timeline. A
+filmstrip and waveform give you a zoomable overview to navigate by. The preview itself also zooms (scroll wheel, up to 8×) and pans by
 dragging — the middle mouse button always, the left button once zoomed in —
 for placing a small overlay precisely on a large recording. Exporting
 re-encodes once, with a few ready-made presets (unchanged

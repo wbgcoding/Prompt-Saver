@@ -23496,6 +23496,36 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    #[test]
+    fn export_video_real_ffmpeg_filter_chain_scales_to_the_requested_dimensions() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-exporttest-scale-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x48");
+        let dest = dir.join("out.mp4");
+        let req = ExportRequest {
+            src_path: src.to_string_lossy().to_string(),
+            dest_path: dest.to_string_lossy().to_string(),
+            filter_chain: Some("[0:v]scale=32:24[vout]".to_string()),
+            audio_map: None,
+            lossless_copy: false,
+            lossless_quality: false,
+            format: "mp4".to_string(),
+            video_kbps: Some(1000),
+            trim_start_ms: None,
+            trim_end_ms: None,
+        };
+        let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        let out = export_video_blocking(&ffmpeg, &src, &dest, &req, my_gen, |_| {}).expect("export should succeed");
+        assert_eq!(PathBuf::from(&out), dest);
+        let probe = probe_recording_blocking(&ffprobe, &dest).expect("probe of the exported file should succeed");
+        // ui/video.js's setScaleOp() always emits an explicit W:H pair (never
+        // ffmpeg's -2 auto-side), so the real output must match both exactly.
+        assert_eq!((probe.width, probe.height), (32, 24), "the [v]-labelled scale must actually be applied");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     // ---- overlay export, one real-ffmpeg test per overlay kind ----
     //
     // ui/video.js's buildVideoChain() is the only place that turns an overlay

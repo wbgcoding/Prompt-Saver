@@ -205,15 +205,20 @@
           </div>
 
           <h3 class="ve-h" data-i18n="veScaleGroup">Resolution</h3>
-          <label class="field expert-dropdown-row">
-            <span data-i18n="veScale">Downscale</span>
-            <select id="ve-scale" class="modal-input">
-              <option value="" data-i18n="veScaleOff">Keep original</option>
-              <option value="1080">1080p</option>
-              <option value="720">720p</option>
-              <option value="480">480p</option>
-            </select>
-          </label>
+          <p id="ve-scale-current" class="modal-hint"></p>
+          <div class="ve-row2">
+            <label class="field"><span data-i18n="veScaleWidth">Width</span><input id="ve-scale-w" class="modal-input" type="number" min="16" max="7680" step="2" /></label>
+            <label class="field"><span data-i18n="veScaleHeight">Height</span><input id="ve-scale-h" class="modal-input" type="number" min="16" max="7680" step="2" /></label>
+          </div>
+          <div class="ve-row2">
+            <label class="field"><span data-i18n="veScalePercent">Percent</span><input id="ve-scale-pct" class="modal-input" type="number" min="10" max="400" step="5" /></label>
+            <label class="field switch-field ve-switch-row">
+              <span data-i18n="veScaleLock">Lock aspect ratio</span>
+              <input id="ve-scale-lock" class="switch" type="checkbox" checked />
+            </label>
+          </div>
+          <p class="modal-hint" data-i18n="veCropEvenHint">Width and height always snap to even numbers — video encoders require it.</p>
+          <div id="ve-scale-presets" class="ve-steps" role="group" data-i18n-aria="veScaleGroup"></div>
         </section>
 
         <!-- ---- Overlays ---- -->
@@ -257,15 +262,13 @@
               <option value="lossless" data-i18n="veQualityLossless">Lossless</option>
             </select>
           </label>
-          <label class="field expert-dropdown-row">
-            <span data-i18n="veExportDownscale">Downscale</span>
-            <select id="ve-export-downscale" class="modal-input">
-              <option value="" data-i18n="veScaleOff">Keep original</option>
-              <option value="1080">1080p</option>
-              <option value="720">720p</option>
-              <option value="480">480p</option>
-            </select>
-          </label>
+          <div class="field">
+            <span data-i18n="veScaleGroup">Resolution</span>
+            <div class="export-row">
+              <span id="ve-export-scale-summary" class="ve-muted"></span>
+              <button id="ve-export-scale-edit" class="ghost-btn" type="button" data-i18n="veExportScaleEdit">Change…</button>
+            </div>
+          </div>
           <p id="ve-export-note" class="modal-hint"></p>
 
           <h3 class="ve-h" data-i18n="veExportTarget">Target file</h3>
