@@ -62,6 +62,22 @@ let fontsDir = "C:/Windows/Fonts";
 invoke("windows_fonts_dir").then((d) => { if (d) fontsDir = d; }).catch(() => {});
 const EXPORT_KBPS = { high: 12000, small: 4000, lossless: null };
 
+// Three of the eight export formats never carry sound at all; the internal
+// format key and the file extension it writes differ only for animated
+// WebP ("webpanim" distinguishes it, inside this app, from a possible future
+// single-frame WebP screenshot format -- the file itself is just ".webp").
+const SILENT_FORMATS = new Set(["gif", "webpanim", "apng"]);
+const formatHasAudio = (fmt) => !SILENT_FORMATS.has(fmt);
+const FORMAT_EXT = { webpanim: "webp" };
+const formatExt = (fmt) => FORMAT_EXT[fmt] || fmt;
+// A length above which GIF/WebP/APNG tend to balloon in size -- shown as a
+// warning, never enforced (trimming or a smaller size is the user's call).
+const SILENT_FORMAT_LENGTH_WARN_MS = 10000;
+// Unlike the length warning, this one IS enforced: the same three formats
+// never encode above this on their long side, on top of whatever scale op
+// the user set -- it only ever shrinks, never upscales.
+const MAX_SILENT_DIM = 1280;
+
 // ---------------------------------------------------------------- state
 
 const VE = {
@@ -1847,8 +1863,9 @@ function buildVideoChain() {
   const downscale = scaleTarget();
   const overlays = opsOf("overlay");
   const gif = exportFormat() === "gif";
+  const silentFormat = SILENT_FORMATS.has(exportFormat());
   const trimmed = segments.length > 1 || segments[0].a > 0 || segments[0].b < VE.dur;
-  if (!trimmed && !crop && !speed && !fade && !downscale && !overlays.length && !gif) return null;
+  if (!trimmed && !crop && !speed && !fade && !downscale && !overlays.length && !silentFormat) return null;
 
   const parts = [];
   let counter = 0;
@@ -1940,6 +1957,10 @@ function buildVideoChain() {
   // request. Nothing left to guard here.
   if (downscale) chain(`scale=${downscale.w}:${downscale.h}`);
 
+  // GIF, animated WebP and APNG balloon in file size fast at a high resolution
+  // -- cap the long side regardless of any explicit scale op above.
+  if (silentFormat) chain(`scale='min(iw,${MAX_SILENT_DIM})':'min(ih,${MAX_SILENT_DIM})':force_original_aspect_ratio=decrease`);
+
   if (gif) {
     // Palette generation and use in the SAME graph — two ffmpeg runs would mean
     // an intermediate file for nothing.
@@ -1957,7 +1978,7 @@ function buildVideoChain() {
 // Audio half of the same graph: per track trim/cut/concat, volume, speed and
 // fades, mixed down to one stream on [aout].
 function buildAudioChain() {
-  if (exportFormat() === "gif") return null;
+  if (!formatHasAudio(exportFormat())) return null;
   const tracks = [];
   if (VE.hasSys) tracks.push({ index: 0, spec: "0:a:0", state: VE.audio.sys });
   if (VE.hasMic) tracks.push({ index: 1, spec: "0:a:1", state: VE.audio.mic });
@@ -2019,11 +2040,13 @@ function buildAudioChain() {
 // A pure trim with nothing else touched can be copied instead of re-encoded —
 // instant, and bit-identical to the source.
 function isLosslessCopy() {
-  if (exportFormat() !== "mp4") return false;
+  // mp4, mov and mkv can all carry an h264/aac stream untouched; the other
+  // five formats always need a real re-encode to become themselves at all.
+  if (!["mp4", "mov", "mkv"].includes(exportFormat())) return false;
   if (exportQuality() === "lossless") return false; // an explicit re-encode was asked for
-  // A source whose own streams are not already mp4-safe (h264/hevc video,
+  // A source whose own streams are not already safe to copy (h264/hevc video,
   // aac-or-silent audio -- e.g. a webm/VP9 file dragged in from elsewhere)
-  // fails ffmpeg's "-c copy" outright instead of producing a trimmed mp4.
+  // fails ffmpeg's "-c copy" outright instead of producing a trimmed export.
   if (VE.probe && VE.probe.stream_copy_safe === false) return false;
   if (opsOf("cut").length) return false;
   if (opOf("crop") || opOf("speed") || opOf("fade") || opOf("scale") || opsOf("overlay").length) return false;
@@ -2042,7 +2065,7 @@ function destPath() {
   const cut = VE.src.replace(/[/\\]+$/, "");
   const dot = cut.lastIndexOf(".");
   const stem = dot > cut.lastIndexOf("\\") && dot > cut.lastIndexOf("/") ? cut.slice(0, dot) : cut;
-  const auto = `${stem}-edit.${format}`;
+  const auto = `${stem}-edit.${formatExt(format)}`;
   if (VE.destOverride) return VE.destOverride;
   if (VE.destDir) {
     const base = auto.replace(/^.*[\\/]/, "");
@@ -2051,17 +2074,27 @@ function destPath() {
   return auto;
 }
 
+// One explanatory note per format that needs one, kept as a lookup instead of
+// a chain of ifs so a future format only ever needs one new entry here.
+const FORMAT_NOTE_KEY = { gif: "veGifNote", avi: "veAviNote", mov: "veMovNote", mkv: "veMkvNote", webpanim: "veWebpNote", apng: "veApngNote" };
+
 function updateExportNote() {
   const format = exportFormat();
   const notes = [];
-  if (format === "gif") notes.push(t("veGifNote"));
+  if (FORMAT_NOTE_KEY[format]) notes.push(t(FORMAT_NOTE_KEY[format]));
+  if (SILENT_FORMATS.has(format)) {
+    notes.push(t("veNoAudioNote"));
+    if (totalOutMs() > SILENT_FORMAT_LENGTH_WARN_MS) notes.push(t("veLengthWarn").replace("{n}", String(Math.round(totalOutMs() / 1000))));
+  }
   if (isLosslessCopy()) notes.push(t("veCopyNote"));
   notes.push(t("veOutLength").replace("{d}", fmtTime(totalOutMs())));
   $("ve-export-note").textContent = notes.join(" ");
   // Never overwrite what the user is actively typing into the field itself.
   if (document.activeElement !== $("ve-export-dest")) $("ve-export-dest").value = destPath();
   $("ve-export-dest").title = destPath();
-  $("ve-export-quality").disabled = format === "gif";
+  // None of the three silent formats read the quality/bitrate setting at all.
+  $("ve-export-quality").disabled = SILENT_FORMATS.has(format);
+  updateAudioLabels();
 }
 
 function setProgress(pct) {
@@ -2083,7 +2116,7 @@ async function startExport(toClipboard) {
   const lossless = isLosslessCopy();
   const format = exportFormat();
   const dest = toClipboard
-    ? await invoke("clip_export_path", { ext: format }).catch((err) => { toast(String(err)); return null; })
+    ? await invoke("clip_export_path", { ext: formatExt(format) }).catch((err) => { toast(String(err)); return null; })
     : destPath();
   if (!dest) return;
   const request = {
@@ -2401,18 +2434,21 @@ $("ve-ov-add-spotlight").addEventListener("click", () => addOverlay("spotlight")
 
 // A recording without a microphone track leaves those two controls switched off
 // and says why, rather than offering a slider that could not change anything.
+// An export format that drops audio entirely (gif/webpanim/apng) does the same
+// to BOTH tracks' controls, on top of whichever per-track reason already applies.
 function updateAudioLabels() {
+  const silent = SILENT_FORMATS.has(exportFormat());
   for (const [id, key] of [["ve-mute-mic", "veMuteMic"], ["ve-vol-mic", "veVolumeMic"]]) {
     const el = $(id);
-    el.disabled = !VE.hasMic;
-    const label = VE.hasMic ? t(key) : t("veNoMicTrack");
+    el.disabled = !VE.hasMic || silent;
+    const label = silent ? t("veNoAudioNote") : VE.hasMic ? t(key) : t("veNoMicTrack");
     el.title = label;
     el.setAttribute("aria-label", label);
   }
   for (const [id, key] of [["ve-mute-sys", "veMuteSystem"], ["ve-vol-sys", "veVolumeSystem"]]) {
     const el = $(id);
-    el.disabled = !VE.hasSys;
-    const label = VE.hasSys ? t(key) : t("veNoAudioTrack");
+    el.disabled = !VE.hasSys || silent;
+    const label = silent ? t("veNoAudioNote") : VE.hasSys ? t(key) : t("veNoAudioTrack");
     el.title = label;
     el.setAttribute("aria-label", label);
   }

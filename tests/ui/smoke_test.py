@@ -7803,6 +7803,45 @@ VIDEO_PROBE = """
       }
     }
 
+    // ---- 367: five new export formats -- extension follows, audio controls
+    // and the quality dropdown are disabled exactly for the three silent ones ----
+    const newFormats = ['avi', 'mov', 'mkv', 'webpanim', 'apng'];
+    const formatExpectedExt = { webpanim: 'webp' };
+    const silentFormats = new Set(['gif', 'webpanim', 'apng']);
+    const optionValues = formatSel ? [...formatSel.options].map((o) => o.value) : [];
+    for (const fmt of newFormats) {
+      if (!optionValues.includes(fmt)) errs.push(`367: export format select is missing an option for "${fmt}"`);
+    }
+    const muteMic = document.getElementById('ve-mute-mic');
+    const volMic = document.getElementById('ve-vol-mic');
+    const muteSys = document.getElementById('ve-mute-sys');
+    const volSys = document.getElementById('ve-vol-sys');
+    const qualitySel = document.getElementById('ve-export-quality');
+    for (const fmt of [...newFormats, 'gif', 'mp4']) {
+      if (!optionValues.includes(fmt)) continue;
+      formatSel.value = fmt;
+      formatSel.dispatchEvent(new Event('change'));
+      await sleep(30);
+      const wantExt = formatExpectedExt[fmt] || fmt;
+      if (!destInput.value.endsWith(`.${wantExt}`)) {
+        errs.push(`367: picking "${fmt}" left the destination as "${destInput.value}" instead of ending in .${wantExt}`);
+      }
+      const wantSilent = silentFormats.has(fmt);
+      if (qualitySel.disabled !== wantSilent) {
+        errs.push(`367: quality dropdown disabled=${qualitySel.disabled} for "${fmt}", expected ${wantSilent}`);
+      }
+      for (const [name, el] of [['mute-mic', muteMic], ['vol-mic', volMic], ['mute-sys', muteSys], ['vol-sys', volSys]]) {
+        if (wantSilent && !el.disabled) {
+          errs.push(`367: ${name} stayed enabled for the silent format "${fmt}"`);
+        }
+      }
+    }
+    // Leaving the destination on the last silent format's ".webp"/".apng" name
+    // would break the next real test step below -- put it back on mp4.
+    formatSel.value = 'mp4';
+    formatSel.dispatchEvent(new Event('change'));
+    await sleep(30);
+
     // ---- 336: "Copy to clipboard" runs its own export into a throwaway temp
     // file and lands that file on the clipboard, without touching destInput ----
     window.__CLIP_EXPORT_COPIED__ = undefined;

@@ -225,10 +225,11 @@ the video editor and the introduction tour ship on).
   that track as lost. Stopping offers Save, Save as…, Copy, Edit or Discard —
   Save and Copy share one recording folder (changeable in the expert menu or
   right from the dialog). MP4 (H.264) is what gets written while recording;
-  three quality steps (Small/High/Lossless) and an optional WebM or GIF format
-  convert it afterward through ffmpeg (offered as an inline download when
-  missing) — a failed or canceled conversion always falls back to the
-  untouched original recording, and a write error (for example a full disk)
+  three quality steps (Small/High/Lossless) and an optional WebM, AVI, MOV,
+  MKV, animated WebP or APNG format convert it afterward through ffmpeg
+  (offered as an inline download when missing) — GIF, WebP and APNG are
+  capped at 30 seconds and carry no audio. A failed or canceled conversion
+  always falls back to the untouched original recording, and a write error (for example a full disk)
   stops the recording cleanly and keeps whatever was captured so far. If the
   recorded window closes on its own, the recording stops automatically. A
   recording that never reached its own stop path (a crash, a forced shutdown)
@@ -245,8 +246,12 @@ the video editor and the introduction tour ship on).
   scroll wheel (up to 8×) and pans by dragging — the middle mouse button
   always, the left button once zoomed in — for placing a small overlay
   precisely on a large recording. A few export presets (unchanged quality, a
-  smaller size for chat, an animated GIF) remember your last choice; undo/redo
-  covers every edit, capped by an adjustable limit.
+  smaller size for chat, an animated GIF) remember your last choice. Export
+  format also reaches beyond MP4, WebM and GIF to AVI, MOV, MKV, animated
+  WebP and APNG, each with a one-line note on what it's for; GIF, WebP and
+  APNG never carry audio, warn past ten seconds and get their long side
+  capped, since all three grow large fast. Undo/redo covers every edit,
+  capped by an adjustable limit.
 
 ### Improved
 

@@ -1710,12 +1710,16 @@ const EXPERT_DROPDOWNS = {
   // an ffmpeg conversion pass once the recording stops (see convert_recording
   // on the backend and the post-capture menu that calls it).
   recFormat: enumDropdown("recFormat", "valRecFormat",
-    [["mp4", "optRecFormatMp4"], ["webm", "optRecFormatWebm"], ["gif", "optRecFormatGif"]], "mp4", "screenRecord"),
-  // The video editor's export dialog opens with these three every time --
+    [["mp4", "optRecFormatMp4"], ["webm", "optRecFormatWebm"], ["gif", "optRecFormatGif"],
+      ["avi", "optRecFormatAvi"], ["mov", "optRecFormatMov"], ["mkv", "optRecFormatMkv"],
+      ["webpanim", "optRecFormatWebpanim"], ["apng", "optRecFormatApng"]], "mp4", "screenRecord"),
+  // The video editor's export dialog opens with these eight every time --
   // each field stays freely changeable per export, only the opening
   // selection comes from here.
   veDefaultFormat: enumDropdown("veDefaultFormat", "valVeDefaultFormat",
-    [["mp4", "optRecFormatMp4"], ["webm", "optRecFormatWebm"], ["gif", "optRecFormatGif"]], "mp4", "videoEditor"),
+    [["mp4", "optRecFormatMp4"], ["webm", "optRecFormatWebm"], ["gif", "optRecFormatGif"],
+      ["avi", "optRecFormatAvi"], ["mov", "optRecFormatMov"], ["mkv", "optRecFormatMkv"],
+      ["webpanim", "optRecFormatWebpanim"], ["apng", "optRecFormatApng"]], "mp4", "videoEditor"),
   veDefaultQuality: enumDropdown("veDefaultQuality", "valVeDefaultQuality",
     [["high", "veQualityHigh"], ["small", "veQualitySmall"], ["lossless", "veQualityLossless"]], "high", "videoEditor"),
   veDefaultScale: enumDropdown("veDefaultScale", "valVeDefaultScale",

@@ -18405,7 +18405,7 @@ fn cancel_recording_convert() {
 // the backend guessing at one.
 #[tauri::command]
 async fn convert_recording(app: AppHandle, src_path: String, format: String, lossless: bool) -> Result<String, String> {
-    if !matches!(format.as_str(), "mp4" | "webm" | "gif") {
+    if !matches!(format.as_str(), "mp4" | "webm" | "gif" | "avi" | "mov" | "mkv" | "webpanim" | "apng") {
         return Err("unsupported format".to_string());
     }
     let src = PathBuf::from(&src_path);
@@ -18430,6 +18430,14 @@ async fn convert_recording(app: AppHandle, src_path: String, format: String, los
 // re-encode, so same-extension alone cannot be the guard.
 fn convert_is_noop(same_extension: bool, format: &str, lossless: bool) -> bool {
     same_extension && !(format == "mp4" && lossless)
+}
+
+// The internal format key and the file extension it writes are almost always
+// the same string -- "webpanim" is the one exception (an animated WebP is
+// still just a ".webp" file; the "anim" half only distinguishes it, inside
+// this app, from a possible future single-frame WebP screenshot format).
+fn video_format_ext(format: &str) -> &str {
+    if format == "webpanim" { "webp" } else { format }
 }
 
 // Shared by convert_recording (240, simple format conversion) and the video
@@ -18528,7 +18536,7 @@ fn run_ffmpeg_to_staged(
 fn convert_recording_blocking(
     ffmpeg: &Path, src: &Path, format: &str, lossless: bool, mut on_progress: impl FnMut(u32),
 ) -> Result<String, String> {
-    let same_extension = src.extension().is_some_and(|e| e.eq_ignore_ascii_case(format));
+    let same_extension = src.extension().is_some_and(|e| e.eq_ignore_ascii_case(video_format_ext(format)));
     if convert_is_noop(same_extension, format, lossless) {
         return Err("nothing to convert".to_string());
     }
@@ -18539,7 +18547,7 @@ fn convert_recording_blocking(
     // that is also the destination is never read and written by the same
     // process at once, and a conversion that fails or is cancelled never
     // leaves a half-written file at either name.
-    let dst = src.with_extension(format);
+    let dst = src.with_extension(video_format_ext(format));
     let mut args: Vec<String> = Vec::new();
     match format {
         "mp4" => {
@@ -18561,6 +18569,26 @@ fn convert_recording_blocking(
                 "-t", "30", "-an", "-vf",
                 "fps=15,scale=iw:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer",
             ].map(String::from));
+        }
+        // avi/mov/mkv: same codec families as mp4, just repackaged into a
+        // container an older program, an Apple tool or an interrupted export
+        // handles better.
+        "avi" => {
+            args.extend(["-c:v", "mpeg4", "-q:v", "5", "-c:a", "libmp3lame", "-b:a", "192k"].map(String::from));
+        }
+        "mov" => {
+            args.extend(["-c:v", "libx264", "-crf", "18", "-preset", "medium", "-c:a", "aac", "-b:a", "192k"].map(String::from));
+        }
+        "mkv" => {
+            args.extend(["-c:v", "libx264", "-crf", "18", "-preset", "medium", "-c:a", "aac", "-b:a", "192k"].map(String::from));
+        }
+        // Same 30s cap as GIF just above, for the same reason: this quick
+        // conversion has no interactive length warning to show first.
+        "webpanim" => {
+            args.extend(["-t", "30", "-an", "-c:v", "libwebp_anim", "-loop", "0", "-lossless", "0", "-q:v", "75"].map(String::from));
+        }
+        "apng" => {
+            args.extend(["-t", "30", "-an", "-c:v", "apng", "-plays", "0"].map(String::from));
         }
         _ => unreachable!(),
     }
@@ -18997,7 +19025,7 @@ fn cancel_export() {
 // editor window listens to the same event name while an export is in flight.
 #[tauri::command]
 async fn export_video(app: AppHandle, req: ExportRequest) -> Result<String, String> {
-    if !matches!(req.format.as_str(), "mp4" | "webm" | "gif") {
+    if !matches!(req.format.as_str(), "mp4" | "webm" | "gif" | "avi" | "mov" | "mkv" | "webpanim" | "apng") {
         return Err("unsupported format".to_string());
     }
     let src = PathBuf::from(&req.src_path);
@@ -19042,14 +19070,14 @@ fn export_video_blocking(
         // lossless trim-only export even though nothing asked to remove it.
         output_args.extend(["-map", "0:v", "-map", "0:a?", "-c", "copy"].map(String::from));
     } else {
-        let is_gif = req.format == "gif";
+        // GIF, animated WebP and APNG carry no audio at all -- never map or
+        // filter an audio stream into any of them, even if the frontend sent one.
+        let is_silent = matches!(req.format.as_str(), "gif" | "webpanim" | "apng");
         let mut graphs = Vec::new();
         if let Some(v) = &req.filter_chain {
             graphs.push(v.clone());
         }
-        // GIF carries no audio at all -- never map or filter an audio stream
-        // into it, even if the frontend sent one.
-        if !is_gif {
+        if !is_silent {
             if let Some(a) = &req.audio_map {
                 graphs.push(a.clone());
             }
@@ -19060,7 +19088,7 @@ fn export_video_blocking(
         }
         output_args.push("-map".to_string());
         output_args.push(if req.filter_chain.is_some() { "[vout]".to_string() } else { "0:v".to_string() });
-        if !is_gif {
+        if !is_silent {
             output_args.push("-map".to_string());
             output_args.push(if req.audio_map.is_some() { "[aout]".to_string() } else { "0:a?".to_string() });
         }
@@ -19095,6 +19123,38 @@ fn export_video_blocking(
             // paletteuse pair producing [vout]; -an drops any audio outright.
             "gif" => {
                 output_args.push("-an".to_string());
+            }
+            // avi/mov/mkv: same codec families as mp4/webm, just repackaged
+            // into a container an older program, an Apple tool, or an
+            // interrupted export handles better. mkv keeps its audio mixed to
+            // one track like every other format here; muxing mic and system
+            // audio as two separate Matroska tracks was left out as
+            // disproportionate complexity for this one container alone.
+            "avi" => {
+                output_args.extend(["-c:v", "mpeg4"].map(String::from));
+                let kbps = req.video_kbps.unwrap_or(8000).clamp(500, 50000);
+                output_args.extend(["-b:v".to_string(), format!("{kbps}k")]);
+                output_args.extend(["-c:a", "libmp3lame", "-b:a", "192k"].map(String::from));
+            }
+            "mov" => {
+                output_args.extend(["-c:v", "libx264"].map(String::from));
+                let kbps = req.video_kbps.unwrap_or(8000).clamp(500, 50000);
+                output_args.extend(["-b:v".to_string(), format!("{kbps}k"), "-preset".to_string(), "medium".to_string()]);
+                output_args.extend(["-c:a", "aac", "-b:a", "192k"].map(String::from));
+            }
+            "mkv" => {
+                output_args.extend(["-c:v", "libx264"].map(String::from));
+                let kbps = req.video_kbps.unwrap_or(8000).clamp(500, 50000);
+                output_args.extend(["-b:v".to_string(), format!("{kbps}k"), "-preset".to_string(), "medium".to_string()]);
+                output_args.extend(["-c:a", "aac", "-b:a", "192k"].map(String::from));
+            }
+            // Animated WebP and APNG: silent, so -an is the only audio-side
+            // argument -- the -map above already left audio out entirely.
+            "webpanim" => {
+                output_args.extend(["-an", "-c:v", "libwebp_anim", "-loop", "0", "-lossless", "0", "-q:v", "75"].map(String::from));
+            }
+            "apng" => {
+                output_args.extend(["-an", "-c:v", "apng", "-plays", "0"].map(String::from));
             }
             _ => unreachable!(),
         }
@@ -19212,7 +19272,7 @@ fn default_recording_dir() -> String {
 // the user could point it at any folder they like (including one already full
 // of unrelated files), so both the size readout and the cleanup below must
 // never so much as count, let alone delete, anything this app did not create.
-const VIDEO_FOLDER_EXTS: [&str; 3] = ["mp4", "webm", "gif"];
+const VIDEO_FOLDER_EXTS: [&str; 8] = ["mp4", "webm", "gif", "avi", "mov", "mkv", "webp", "apng"];
 
 fn is_video_folder_file(path: &std::path::Path) -> bool {
     path.is_file()
@@ -23358,6 +23418,14 @@ mod tests {
     }
 
     #[test]
+    fn video_format_ext_maps_webpanim_to_webp_and_leaves_everything_else_alone() {
+        assert_eq!(video_format_ext("webpanim"), "webp");
+        for f in ["mp4", "webm", "gif", "avi", "mov", "mkv", "apng"] {
+            assert_eq!(video_format_ext(f), f);
+        }
+    }
+
+    #[test]
     fn parse_ffprobe_rate_reads_a_fraction_and_rejects_zero_denominator() {
         assert_eq!(parse_ffprobe_rate("30/1"), Some(30.0));
         assert_eq!(parse_ffprobe_rate("30000/1001"), Some(30000.0 / 1001.0));
@@ -23523,6 +23591,136 @@ mod tests {
         // ui/video.js's setScaleOp() always emits an explicit W:H pair (never
         // ffmpeg's -2 auto-side), so the real output must match both exactly.
         assert_eq!((probe.width, probe.height), (32, 24), "the [v]-labelled scale must actually be applied");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ---- the five newer export formats, one real-ffmpeg test each ----
+
+    fn ffprobe_format_and_video_codec(ffprobe: &Path, path: &Path) -> (String, String, usize) {
+        use std::os::windows::process::CommandExt;
+        let mut cmd = std::process::Command::new(ffprobe);
+        cmd.args(["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams"]).arg(path);
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        let output = cmd.output().expect("could not run ffprobe");
+        assert!(output.status.success(), "ffprobe failed to read {}", path.display());
+        let json: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("ffprobe output was not valid json");
+        let format_name = json["format"]["format_name"].as_str().unwrap_or("").to_string();
+        let streams = json["streams"].as_array().cloned().unwrap_or_default();
+        let video_codec = streams
+            .iter()
+            .find(|s| s["codec_type"] == "video")
+            .and_then(|v| v["codec_name"].as_str())
+            .unwrap_or("")
+            .to_string();
+        let audio_count = streams.iter().filter(|s| s["codec_type"] == "audio").count();
+        (format_name, video_codec, audio_count)
+    }
+
+    fn run_format_export(ffmpeg: &Path, src: &Path, dest: &Path, format: &str) -> String {
+        let req = ExportRequest {
+            src_path: src.to_string_lossy().to_string(),
+            dest_path: dest.to_string_lossy().to_string(),
+            filter_chain: None,
+            audio_map: None,
+            lossless_copy: false,
+            lossless_quality: false,
+            format: format.to_string(),
+            video_kbps: Some(2000),
+            trim_start_ms: None,
+            trim_end_ms: None,
+        };
+        let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        export_video_blocking(ffmpeg, src, dest, &req, my_gen, |_| {})
+            .unwrap_or_else(|e| panic!("{format} export should succeed, got: {e}"))
+    }
+
+    #[test]
+    fn export_video_real_ffmpeg_avi_format_carries_mpeg4_video_and_its_audio() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-exporttest-avi-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4_with_audio(&ffmpeg, &dir, "src.mp4", 2, "64x48");
+        let dest = dir.join("out.avi");
+        let out = run_format_export(&ffmpeg, &src, &dest, "avi");
+        assert_eq!(PathBuf::from(&out), dest);
+        let (format_name, video_codec, audio_count) = ffprobe_format_and_video_codec(&ffprobe, &dest);
+        assert!(format_name.contains("avi"), "format_name was {format_name}");
+        assert_eq!(video_codec, "mpeg4");
+        assert_eq!(audio_count, 1, "avi export must keep the source's audio track");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_video_real_ffmpeg_mov_format_carries_h264_video_and_its_audio() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-exporttest-mov-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4_with_audio(&ffmpeg, &dir, "src.mp4", 2, "64x48");
+        let dest = dir.join("out.mov");
+        let out = run_format_export(&ffmpeg, &src, &dest, "mov");
+        assert_eq!(PathBuf::from(&out), dest);
+        let (format_name, video_codec, audio_count) = ffprobe_format_and_video_codec(&ffprobe, &dest);
+        assert!(format_name.contains("mov"), "format_name was {format_name}");
+        assert_eq!(video_codec, "h264");
+        assert_eq!(audio_count, 1, "mov export must keep the source's audio track");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_video_real_ffmpeg_mkv_format_carries_h264_video_and_its_audio() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-exporttest-mkv-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4_with_audio(&ffmpeg, &dir, "src.mp4", 2, "64x48");
+        let dest = dir.join("out.mkv");
+        let out = run_format_export(&ffmpeg, &src, &dest, "mkv");
+        assert_eq!(PathBuf::from(&out), dest);
+        let (format_name, video_codec, audio_count) = ffprobe_format_and_video_codec(&ffprobe, &dest);
+        assert!(format_name.contains("matroska"), "format_name was {format_name}");
+        assert_eq!(video_codec, "h264");
+        // Mixed to one track like every other format here (see the comment on
+        // the "mkv" arm in export_video_blocking) -- not two separate tracks.
+        assert_eq!(audio_count, 1, "mkv export must keep the source's audio, mixed to one track");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_video_real_ffmpeg_webpanim_format_is_silent_even_when_the_source_has_audio() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-exporttest-webpanim-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        // Source deliberately HAS audio -- proves the is_silent gate strips it,
+        // not merely that there was nothing to strip.
+        let src = make_test_mp4_with_audio(&ffmpeg, &dir, "src.mp4", 2, "64x48");
+        let dest = dir.join("out.webp");
+        let out = run_format_export(&ffmpeg, &src, &dest, "webpanim");
+        assert_eq!(PathBuf::from(&out), dest);
+        let (format_name, video_codec, audio_count) = ffprobe_format_and_video_codec(&ffprobe, &dest);
+        assert!(format_name.contains("webp"), "format_name was {format_name}");
+        assert_eq!(video_codec, "webp_anim");
+        assert_eq!(audio_count, 0, "animated WebP must never carry audio");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_video_real_ffmpeg_apng_format_is_silent_even_when_the_source_has_audio() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-exporttest-apng-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4_with_audio(&ffmpeg, &dir, "src.mp4", 2, "64x48");
+        let dest = dir.join("out.apng");
+        let out = run_format_export(&ffmpeg, &src, &dest, "apng");
+        assert_eq!(PathBuf::from(&out), dest);
+        let (format_name, video_codec, audio_count) = ffprobe_format_and_video_codec(&ffprobe, &dest);
+        assert_eq!(format_name, "apng");
+        assert_eq!(video_codec, "apng");
+        assert_eq!(audio_count, 0, "APNG must never carry audio");
         let _ = fs::remove_dir_all(&dir);
     }
 
