@@ -6,7 +6,7 @@
 // an ordered operation list (VE.ops), exactly like the screenshot editor's own
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
-import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta } from "./floatShared.js";
+import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, parseFfmpegError } from "./floatShared.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 
@@ -201,6 +201,19 @@ function fmtTime(ms) {
   const s = Math.floor((v % 60000) / 1000);
   return `${pad(m, 2)}:${pad(s, 2)}.${pad(v % 1000, 3)}`;
 }
+
+// Shows or hides the collapsible "technical details" row under the export
+// status line -- empty `raw` (a non-ffmpeg error, or success) just hides it,
+// closed, ready for the next failure.
+function showExportErrorDetails(raw) {
+  const box = $("ve-export-error-details");
+  box.classList.toggle("hidden", !raw);
+  box.open = false;
+  $("ve-export-error-raw").textContent = raw || "";
+}
+$("ve-export-error-copy").addEventListener("click", () => {
+  invoke("copy_text", { text: $("ve-export-error-raw").textContent }).then(() => toast(t("copied"))).catch(() => {});
+});
 
 // Accepts "mm:ss.mmm", "ss.mmm" and a bare number of seconds — whichever the
 // user happens to type. Anything unreadable returns null so the caller can keep
@@ -2153,6 +2166,7 @@ async function startExport(toClipboard) {
   $("ve-export-cancel").classList.remove("hidden");
   $("ve-export-saveas").classList.add("hidden");
   $("ve-export-status").textContent = t("veExporting");
+  showExportErrorDetails("");
   exportEta.reset();
   setProgress(0);
   try {
@@ -2170,9 +2184,22 @@ async function startExport(toClipboard) {
       toast(t("veExportDone").replace("{path}", dest));
     }
   } catch (err) {
-    const message = String(err);
     noteFfmpeg(err);
-    $("ve-export-status").textContent = message.includes("cancel") ? t("veExportCancelled") : message;
+    const raw = String(err);
+    // A user cancel is not a failure and never shows the error UI at all; a
+    // still-missing ffmpeg already has its own dedicated warning banner from
+    // noteFfmpeg() above. Everything else is a real ffmpeg (or filesystem)
+    // failure, translated by the one shared classifier -- never its raw text
+    // as the headline, only reachable underneath in "Technical details".
+    if (raw.includes("cancel")) {
+      $("ve-export-status").textContent = t("veExportCancelled");
+    } else if (raw.includes("ffmpeg-missing")) {
+      $("ve-export-status").textContent = t("recFfmpegMissingHint");
+    } else {
+      const { message, details } = parseFfmpegError(err, t);
+      $("ve-export-status").textContent = message;
+      showExportErrorDetails(details);
+    }
   } finally {
     VE.exporting = false;
     $("ve-export-start").disabled = false;

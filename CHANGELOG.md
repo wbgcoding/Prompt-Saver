@@ -387,6 +387,11 @@ the video editor and the introduction tour ship on).
   the app sits in the background. Its progress bar also shows a plain "about X
   left" once enough has run for the guess to be worth showing. Both switchable
   off in the expert menu.
+- A video export or recording conversion that fails now names the actual
+  reason in plain language — file incomplete, no space left, no access, and
+  so on — instead of a raw ffmpeg log line. The exact log line stays
+  reachable underneath in a closed "Technical details" row with a copy
+  button; a cancel was never treated as a failure to begin with.
 - Closing to the tray for the very first time now explains what just happened —
   right-click the tray icon to copy a prompt without reopening the window —
   before the window disappears. Every later close is instant again.

@@ -288,6 +288,11 @@
             <span id="ve-export-eta" class="ve-muted"></span>
           </div>
           <p id="ve-export-status" class="modal-hint"></p>
+          <details id="ve-export-error-details" class="ffmpeg-error-details hidden">
+            <summary data-i18n="ffErrDetails">Technical details</summary>
+            <pre id="ve-export-error-raw"></pre>
+            <button id="ve-export-error-copy" class="ghost-btn" type="button" data-i18n="copy">Copy</button>
+          </details>
           <div class="export-row">
             <button id="ve-export-start" class="primary-btn" type="button" data-i18n="veExportStart">Export</button>
             <button id="ve-export-clip" class="ghost-btn" type="button" data-i18n="veExportClip" data-i18n-title="veExportClipTip">Copy to clipboard</button>

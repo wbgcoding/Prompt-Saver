@@ -318,6 +318,11 @@ const RESULTS = {
   // return before ever starting a process).
   convert_recording: (a) => {
     if (a && a.srcPath && a.srcPath.includes("MISSING")) throw new Error("ffmpeg-missing");
+    // 399: same classified-failure simulation as export_video below, rejecting
+    // with the plain JSON string a real Result<_, String> command hands back.
+    if (a && a.srcPath && a.srcPath.includes("FAILCLASSIFY")) {
+      return Promise.reject(JSON.stringify({ key: "ffErrNoSpace", code: null, raw: "out.mp4: No space left on device" }));
+    }
     const dst = a.srcPath.replace(/\.[a-z0-9]+$/i, "." + a.format);
     return new Promise((resolve) => setTimeout(() => resolve(dst), 80));
   },
@@ -328,7 +333,19 @@ const RESULTS = {
   // still true. window.__EXPORT_DELAY_MS__ lets one probe step ask for a
   // longer pending window than the default, without changing it for every
   // other export_video call in the suite.
-  export_video: () => new Promise((resolve) => setTimeout(() => resolve(null), window.__EXPORT_DELAY_MS__ || 80)),
+  // 399: a destination path containing "FAILCLASSIFY" simulates a real
+  // classified ffmpeg failure -- the exact JSON shape ffmpeg_error_json()
+  // produces in lib.rs, so the probe can check the frontend never shows this
+  // raw text as the headline. Rejecting with a plain string (not an Error
+  // object) matches what a real Tauri Result<_, String> command actually
+  // hands back to JS.
+  export_video: (a) => {
+    const destPath = (a && a.req && a.req.dest_path) || "";
+    if (destPath.includes("FAILCLASSIFY")) {
+      return Promise.reject(JSON.stringify({ key: "ffErrNoSpace", code: null, raw: "out.mp4: No space left on device" }));
+    }
+    return new Promise((resolve) => setTimeout(() => resolve(null), window.__EXPORT_DELAY_MS__ || 80));
+  },
   set_taskbar_progress: () => null,
   save_recording_as: (a) => { window.__REC_SAVED_AS__ = a.srcPath; return "C:/fake/saved.mp4"; },
   discard_recording_file: (a) => { window.__REC_DISCARDED__ = a.path; return true; },

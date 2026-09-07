@@ -5670,6 +5670,28 @@ PROBE = """
       document.getElementById('rec-modal-close').click();
       await sleep(30);
 
+      // 399: a real classified ffmpeg failure here too -- translated headline,
+      // raw ffmpeg text only under the closed "Technical details" row, kept
+      // recording still previewable.
+      const recErrDetails = document.getElementById('rec-modal-error-details');
+      const recErrRaw = document.getElementById('rec-modal-error-raw');
+      window.__FIRE__('recording-captured', { path: 'C:/fake/needs-ffmpeg-FAILCLASSIFY.mp4' });
+      await sleep(150);
+      if (recStatus.textContent.includes('No space left on device') || recStatus.textContent.trim().startsWith('{')) {
+        out.errors.push('rec-modal: a classified failure showed the raw/JSON text verbatim, got ' + JSON.stringify(recStatus.textContent));
+      }
+      if (recErrDetails.classList.contains('hidden') || recErrDetails.open) {
+        out.errors.push('rec-modal: "Technical details" must appear closed, not hidden and not pre-opened');
+      }
+      if (!recErrRaw.textContent.includes('No space left on device')) {
+        out.errors.push('rec-modal: "Technical details" did not carry the raw ffmpeg text, got ' + JSON.stringify(recErrRaw.textContent));
+      }
+      if (recPreview.classList.contains('hidden')) {
+        out.errors.push('rec-modal: a failed conversion must fall back to previewing the raw recording');
+      }
+      document.getElementById('rec-modal-close').click();
+      await sleep(30);
+
       // Reset recFormat back to mp4 -- everything below is the no-conversion path.
       if (recFormatSel) {
         await click('expert-open');
@@ -7875,6 +7897,42 @@ VIDEO_PROBE = """
     }
     await sleep(700);
     window.__EXPORT_DELAY_MS__ = undefined;
+
+    // ---- 399: a real classified ffmpeg failure never shows its raw log text
+    // as the headline -- the status line gets the translated key, the raw
+    // text only appears, closed by default, under "Technical details" ----
+    const errDetails = document.getElementById('ve-export-error-details');
+    const errRaw = document.getElementById('ve-export-error-raw');
+    const rawNeedle = 'No space left on device';
+    destInput.value = 'C:\\\\FAILCLASSIFY\\\\clip.mp4';
+    destInput.dispatchEvent(new Event('change'));
+    await sleep(30);
+    exportStartBtn.click();
+    await sleep(120);
+    const statusText = document.getElementById('ve-export-status').textContent;
+    if (statusText.includes(rawNeedle) || statusText.trim().startsWith('{')) {
+      errs.push(`399: export failure status showed the raw/JSON text verbatim, got ${JSON.stringify(statusText)}`);
+    }
+    if (!statusText.trim()) {
+      errs.push('399: export failure left the status line empty');
+    }
+    if (errDetails.classList.contains('hidden') || errDetails.open) {
+      errs.push('399: "Technical details" must appear closed, not hidden and not pre-opened');
+    }
+    if (!errRaw.textContent.includes(rawNeedle)) {
+      errs.push(`399: "Technical details" did not carry the raw ffmpeg text, got ${JSON.stringify(errRaw.textContent)}`);
+    }
+    // A later successful export must clear both the status wording concern is
+    // moot for and the stale details row -- nothing about a past failure
+    // should linger once a new export actually starts.
+    destInput.value = 'C:\\\\Custom\\\\my-clip.mp4';
+    destInput.dispatchEvent(new Event('change'));
+    await sleep(30);
+    exportStartBtn.click();
+    await sleep(120);
+    if (!errDetails.classList.contains('hidden')) {
+      errs.push('399: a later successful export left the previous failure details row visible');
+    }
 
     // ---- 336: "Copy to clipboard" runs its own export into a throwaway temp
     // file and lands that file on the clipboard, without touching destInput ----

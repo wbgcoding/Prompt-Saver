@@ -72,6 +72,11 @@ Requires the Microsoft WebView2 runtime (preinstalled on Windows 11 and current 
   taskbar icon with its progress, and its progress bar shows a plain "about X
   left" once enough has run for the guess to mean something. Both switchable
   off in the expert menu.
+- **Plain-language ffmpeg errors** — a failed video export or recording
+  conversion now names the actual reason (file incomplete, no space left, no
+  access, and so on) instead of a raw ffmpeg log line. The log line itself
+  stays reachable underneath in a closed "Technical details" row with a copy
+  button; a cancel was never shown as a failure to begin with.
 - Dragging a button, tab or tile onto another shows what would happen: the target dims behind a folder mark in the accent colour — the same gesture in all three places.
 - Dropdowns and menus flip above their anchor when there is no room below, and never open past the edge of the window.
 - The copy history reads like the library — same rows, tags, a type chip and a quiet timestamp.

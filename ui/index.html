@@ -1128,6 +1128,11 @@
       </div>
       <video id="rec-preview" class="snip-preview hidden" controls></video>
       <p id="rec-modal-status" class="snip-question"></p>
+      <details id="rec-modal-error-details" class="ffmpeg-error-details hidden">
+        <summary data-i18n="ffErrDetails">Technical details</summary>
+        <pre id="rec-modal-error-raw"></pre>
+        <button id="rec-modal-error-copy" class="ghost-btn" type="button" data-i18n="copy">Copy</button>
+      </details>
       <!-- Preselected with the recordingDir expert setting; "Change…"
            here updates that same setting -- one place, not a second hidden one. -->
       <div id="rec-modal-folder-row" class="rec-modal-folder-row">

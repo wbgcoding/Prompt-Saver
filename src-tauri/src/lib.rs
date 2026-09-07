@@ -18530,7 +18530,7 @@ async fn convert_recording(app: AppHandle, src_path: String, format: String, los
     }
     let src = PathBuf::from(&src_path);
     if !src.is_file() {
-        return Err("source file not found".to_string());
+        return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
     }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     REC_CONVERT_CANCEL.store(false, Ordering::SeqCst);
@@ -18559,6 +18559,111 @@ fn convert_is_noop(same_extension: bool, format: &str, lossless: bool) -> bool {
 fn video_format_ext(format: &str) -> &str {
     if format == "webpanim" { "webp" } else { format }
 }
+
+// ---------- ffmpeg errors in plain language, one classifier for every caller ----------
+//
+// ffmpeg's own log lines ("moov atom not found", "Invalid data found when
+// processing input") are a diagnosis for a person who already knows what
+// they mean, not a message to show someone who does not. Every ffmpeg (and
+// ffmpeg-adjacent Windows IO) failure funnels through classify_ffmpeg_error()
+// to one of these stable keys, translated in all eleven languages; the exact
+// wording stays reachable underneath as a collapsible "technical details"
+// line, never as the headline. A user-triggered cancel is handled entirely
+// separately (see is_cancelled() below) and never reaches this classifier at
+// all -- it is not an error.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FfmpegErrorKey {
+    Truncated,
+    Unreadable,
+    Missing,
+    Denied,
+    NoSpace,
+    OddSize,
+    TooLarge,
+    Timeout,
+    Other,
+}
+
+impl FfmpegErrorKey {
+    fn as_str(self) -> &'static str {
+        match self {
+            FfmpegErrorKey::Truncated => "ffErrTruncated",
+            FfmpegErrorKey::Unreadable => "ffErrUnreadable",
+            FfmpegErrorKey::Missing => "ffErrMissing",
+            FfmpegErrorKey::Denied => "ffErrDenied",
+            FfmpegErrorKey::NoSpace => "ffErrNoSpace",
+            FfmpegErrorKey::OddSize => "ffErrOddSize",
+            FfmpegErrorKey::TooLarge => "ffErrTooLarge",
+            FfmpegErrorKey::Timeout => "ffErrTimeout",
+            FfmpegErrorKey::Other => "ffErrOther",
+        }
+    }
+}
+
+// Ordered by specificity: a truncated file's log also contains generic
+// "Invalid data" noise further down, so the more precise match must be tried
+// first. Covers both ffmpeg's own AVERROR text (the same fixed, English,
+// POSIX-style strings on every platform ffmpeg runs on) and the plain
+// std::io::Error wording Rust itself produces for a failed spawn, wait or
+// rename, since both kinds of text reach this function from the call sites
+// below.
+fn classify_ffmpeg_error(text: &str) -> FfmpegErrorKey {
+    if text.contains("moov atom not found") {
+        FfmpegErrorKey::Truncated
+    } else if text.contains("No such file or directory")
+        || text.contains("cannot find the file")
+        || text.contains("cannot find the path")
+    {
+        FfmpegErrorKey::Missing
+    } else if text.contains("Permission denied") || text.contains("Access is denied") {
+        FfmpegErrorKey::Denied
+    } else if text.contains("No space left on device") || text.contains("There is not enough space") {
+        FfmpegErrorKey::NoSpace
+    } else if text.contains("Unknown encoder") || text.contains("Encoder not found") {
+        FfmpegErrorKey::Other
+    } else if text.contains("not divisible by 2") || text.contains("dimensions not divisible") {
+        FfmpegErrorKey::OddSize
+    } else if text.contains("Cannot allocate memory") || text.contains("dimensions too large") {
+        FfmpegErrorKey::TooLarge
+    } else if text.contains("Invalid data found when processing input") {
+        FfmpegErrorKey::Unreadable
+    } else {
+        FfmpegErrorKey::Other
+    }
+}
+
+// Capped in LINES rather than characters, so a run with many short
+// diagnostic lines is not cut off mid-sentence the way a character cap
+// would; not a user-facing setting, just a sane bound on the collapsible
+// "technical details" text.
+const FFMPEG_ERROR_TAIL_LINES: usize = 20;
+
+fn tail_lines(text: &str, n: usize) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let start = lines.len().saturating_sub(n);
+    lines[start..].join("\n")
+}
+
+#[derive(serde::Serialize)]
+struct FfmpegErrorPayload {
+    key: &'static str,
+    code: Option<i32>,
+    raw: String,
+}
+
+// The one place an ffmpeg failure becomes the string a Tauri command
+// actually returns: a small JSON envelope the frontend's shared
+// parseFfmpegError() unwraps, rather than a copy of this classify-and-format
+// logic per call site.
+fn ffmpeg_error_json(key: FfmpegErrorKey, code: Option<i32>, raw_text: &str) -> String {
+    let payload = FfmpegErrorPayload { key: key.as_str(), code, raw: tail_lines(raw_text, FFMPEG_ERROR_TAIL_LINES) };
+    serde_json::to_string(&payload).unwrap_or_else(|_| key.as_str().to_string())
+}
+
+// Generous on purpose: this is a last-resort safety net against a hung
+// ffmpeg process, not a quality-of-service limit, so it must never fire on a
+// large export that is genuinely just slow.
+const FFMPEG_MAX_RUN_SECS: u64 = 30 * 60;
 
 // Shared by convert_recording (240, simple format conversion) and the video
 // editor's export (implementing the "one export path" requirement): spawns
@@ -18591,7 +18696,13 @@ fn run_ffmpeg_to_staged(
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
-    let mut child = cmd.spawn().map_err(|e| format!("could not start ffmpeg: {e}"))?;
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            let text = e.to_string();
+            return Err(ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text));
+        }
+    };
 
     // ffmpeg's normal log on stderr is drained on its own thread so it can
     // never block the stdout progress reader below via a full OS pipe buffer
@@ -18611,12 +18722,24 @@ fn run_ffmpeg_to_staged(
     // would otherwise print to stderr -- polled between reads so a cancel
     // takes effect within one progress tick instead of waiting for the whole
     // conversion to finish. `out_time_ms` is ffmpeg's own field name for a
-    // value that is actually in MICROSECONDS, hence the /1000 below.
+    // value that is actually in MICROSECONDS, hence the /1000 below. The same
+    // loop also enforces FFMPEG_MAX_RUN_SECS: a last-resort kill for a run
+    // that is still producing progress lines but never finishing, not a
+    // quality target -- a process that is fully stuck and prints nothing at
+    // all is caught by the exit-status path below instead, once it does
+    // eventually end.
+    let start = std::time::Instant::now();
+    let mut timed_out = false;
     if let Some(stdout) = child.stdout.take() {
         use std::io::BufRead;
         let reader = std::io::BufReader::new(stdout);
         for line in reader.lines() {
             if is_cancelled() {
+                let _ = child.kill();
+                break;
+            }
+            if start.elapsed().as_secs() > FFMPEG_MAX_RUN_SECS {
+                timed_out = true;
                 let _ = child.kill();
                 break;
             }
@@ -18627,24 +18750,30 @@ fn run_ffmpeg_to_staged(
         }
     }
 
-    let status = child.wait().map_err(|e| format!("ffmpeg wait failed: {e}"))?;
+    let status = match child.wait() {
+        Ok(s) => s,
+        Err(e) => {
+            let text = e.to_string();
+            return Err(ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text));
+        }
+    };
     let stderr_text = stderr_thread.and_then(|t| t.join().ok()).unwrap_or_default();
 
     if is_cancelled() {
         let _ = fs::remove_file(&staged);
         return Err("cancelled".to_string());
     }
+    if timed_out {
+        let _ = fs::remove_file(&staged);
+        return Err(ffmpeg_error_json(FfmpegErrorKey::Timeout, status.code(), &stderr_text));
+    }
     if !status.success() {
         let _ = fs::remove_file(&staged);
-        let tail: String = stderr_text.chars().rev().take(1200).collect::<Vec<_>>().into_iter().rev().collect();
-        return Err(if tail.trim().is_empty() {
-            "ffmpeg conversion failed".to_string()
-        } else {
-            format!("ffmpeg conversion failed: {}", tail.trim())
-        });
+        let key = classify_ffmpeg_error(&stderr_text);
+        return Err(ffmpeg_error_json(key, status.code(), &stderr_text));
     }
     if !staged.is_file() {
-        return Err("ffmpeg reported success but wrote no output".to_string());
+        return Err(ffmpeg_error_json(FfmpegErrorKey::Other, None, "ffmpeg reported success but wrote no output"));
     }
     Ok(staged)
 }
@@ -18726,7 +18855,8 @@ fn convert_recording_blocking(
     // different file from what now sits at `dst`.
     fs::rename(&staged, &dst).map_err(|e| {
         let _ = fs::remove_file(&staged);
-        format!("could not finalise the converted file: {e}")
+        let text = e.to_string();
+        ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text)
     })?;
     if dst != src {
         let _ = fs::remove_file(src);
@@ -19150,7 +19280,7 @@ async fn export_video(app: AppHandle, req: ExportRequest) -> Result<String, Stri
     }
     let src = PathBuf::from(&req.src_path);
     if !src.is_file() {
-        return Err("source file not found".to_string());
+        return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
     }
     let dst = PathBuf::from(&req.dest_path);
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
@@ -19291,7 +19421,8 @@ fn export_video_blocking(
     let final_dst = unique_dest_path(dir, stem, ext);
     fs::rename(&staged, &final_dst).map_err(|e| {
         let _ = fs::remove_file(&staged);
-        format!("could not finalise the exported file: {e}")
+        let text = e.to_string();
+        ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text)
     })?;
     Ok(final_dst.to_string_lossy().to_string())
 }
@@ -23251,6 +23382,98 @@ fn start_sync_poll(app: AppHandle) {
 mod tests {
     use super::*;
 
+    // ---- ffmpeg errors in plain language: real log snippets, one per key ----
+
+    #[test]
+    fn ffmpeg_error_truncated_wins_over_the_generic_invalid_data_line_below_it() {
+        let text = "[mov,mp4,m4a,3gp,3g2,mj2 @ 0000021a] moov atom not found\n\
+                     source.mp4: Invalid data found when processing input";
+        assert_eq!(classify_ffmpeg_error(text), FfmpegErrorKey::Truncated);
+    }
+
+    #[test]
+    fn ffmpeg_error_unreadable_from_a_plain_invalid_data_line() {
+        let text = "[matroska,webm @ 0000021a] Could not find codec parameters\n\
+                     source.webm: Invalid data found when processing input";
+        assert_eq!(classify_ffmpeg_error(text), FfmpegErrorKey::Unreadable);
+    }
+
+    #[test]
+    fn ffmpeg_error_missing_from_no_such_file() {
+        assert_eq!(classify_ffmpeg_error("in.mp4: No such file or directory"), FfmpegErrorKey::Missing);
+    }
+
+    #[test]
+    fn ffmpeg_error_denied_from_permission_denied() {
+        assert_eq!(classify_ffmpeg_error("out.mp4: Permission denied"), FfmpegErrorKey::Denied);
+        // The same category, reached from a plain Windows IO error string
+        // instead of ffmpeg's own log (a locked destination file, e.g.).
+        assert_eq!(classify_ffmpeg_error("Access is denied. (os error 5)"), FfmpegErrorKey::Denied);
+    }
+
+    #[test]
+    fn ffmpeg_error_no_space_from_the_write_failure_line() {
+        let text = "av_interleaved_write_frame(): Error number -28 occurred\n\
+                     out.mp4: No space left on device";
+        assert_eq!(classify_ffmpeg_error(text), FfmpegErrorKey::NoSpace);
+    }
+
+    #[test]
+    fn ffmpeg_error_odd_size_from_the_encoder_line() {
+        let text = "[libx264 @ 0000021a] width not divisible by 2 (641x480)\n\
+                     Error initializing output stream 0:0 -- Error while opening encoder";
+        assert_eq!(classify_ffmpeg_error(text), FfmpegErrorKey::OddSize);
+    }
+
+    #[test]
+    fn ffmpeg_error_too_large_from_an_allocation_failure() {
+        let text = "[libx264 @ 0000021a] Cannot allocate memory\n\
+                     Error while opening encoder for output stream 0:0";
+        assert_eq!(classify_ffmpeg_error(text), FfmpegErrorKey::TooLarge);
+    }
+
+    #[test]
+    fn ffmpeg_error_timeout_key_has_no_matching_ffmpeg_text() {
+        // Unlike every other key above, a timeout is this app's own wall-clock
+        // decision (see FFMPEG_MAX_RUN_SECS), never something ffmpeg's own log
+        // says -- so its coverage is the key itself, not a classify() case.
+        assert_eq!(FfmpegErrorKey::Timeout.as_str(), "ffErrTimeout");
+    }
+
+    #[test]
+    fn ffmpeg_error_unrecognised_text_falls_back_to_other_not_nothing() {
+        let key = classify_ffmpeg_error("some future ffmpeg build's brand new log line");
+        assert_eq!(key, FfmpegErrorKey::Other);
+        assert_eq!(key.as_str(), "ffErrOther");
+    }
+
+    #[test]
+    fn ffmpeg_error_json_round_trips_key_code_and_tailed_raw_text() {
+        let json = ffmpeg_error_json(FfmpegErrorKey::NoSpace, Some(1), "out.mp4: No space left on device");
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["key"], "ffErrNoSpace");
+        assert_eq!(parsed["code"], 1);
+        assert_eq!(parsed["raw"], "out.mp4: No space left on device");
+    }
+
+    #[test]
+    fn ffmpeg_error_tail_lines_keeps_only_the_last_n() {
+        let text = (1..=25).map(|n| format!("line {n}")).collect::<Vec<_>>().join("\n");
+        let tail = tail_lines(&text, 20);
+        assert_eq!(tail.lines().count(), 20);
+        assert_eq!(tail.lines().next().unwrap(), "line 6");
+        assert_eq!(tail.lines().last().unwrap(), "line 25");
+    }
+
+    // A user-triggered cancel is not classified at all -- run_ffmpeg_to_staged
+    // returns the plain "cancelled" sentinel before ever reaching
+    // classify_ffmpeg_error, and it is real ffmpeg output that would otherwise
+    // often exist alongside it (a killed process usually still wrote a log).
+    #[test]
+    fn ffmpeg_error_a_cancel_sentinel_is_not_json_and_is_never_classified() {
+        assert!(serde_json::from_str::<serde_json::Value>("cancelled").is_err());
+    }
+
     // ---- taskbar progress: the pure aggregation state machine, no real window ----
 
     #[test]
@@ -23503,16 +23726,51 @@ mod tests {
 
     #[test]
     fn convert_recording_real_ffmpeg_failure_leaves_the_source_untouched() {
+        // Guards against the cancel test's own thread flipping REC_CONVERT_CANCEL
+        // mid-run and turning this into a spurious "cancelled" result instead of
+        // the classified failure this test actually checks for.
+        let _guard = REC_CONVERT_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let Some(ffmpeg) = test_ffmpeg() else { return };
         let dir = std::env::temp_dir().join(format!("ps-convtest-fail-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         // Not a real video -- ffmpeg exits non-zero, exercising the failure path.
+        // ffmpeg's mp4 demuxer reports this exact case ("no valid moov box at
+        // all", whether from garbage bytes or a real truncation) as the same
+        // "moov atom not found" line as a genuinely cut-short recording, so
+        // this lands on ffErrTruncated too -- confirmed empirically here
+        // rather than assumed, which is why the dedicated truncated-file test
+        // right below exists as its own separate case.
         let src = dir.join("src.mp4");
         fs::write(&src, b"this is not a video file").unwrap();
         let result = convert_recording_blocking(&ffmpeg, &src, "webm", false, |_| {});
-        assert!(result.is_err());
+        let Err(err) = result else { panic!("garbage input must fail") };
+        let payload: serde_json::Value = serde_json::from_str(&err).expect("error must be the classified JSON shape");
+        assert_eq!(payload["key"], "ffErrTruncated");
         assert!(src.is_file(), "a failed conversion must never remove the source");
         assert!(!dir.join("src.webm").exists(), "a failed conversion must leave no destination file");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // The point-399 Abnahme's own required scenario: a genuinely truncated
+    // video file (built by cutting a real, valid mp4 down to a prefix, which
+    // for ffmpeg's default (non-faststart) muxer removes the moov atom it
+    // writes at the end) must show the friendly "incomplete file" key, never
+    // ffmpeg's own raw log line as the headline.
+    #[test]
+    fn convert_recording_real_ffmpeg_truncated_file_shows_the_friendly_incomplete_key() {
+        let _guard = REC_CONVERT_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-convtest-truncated-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let whole = make_test_mp4(&ffmpeg, &dir, "whole.mp4", 2, "320x240");
+        let bytes = fs::read(&whole).unwrap();
+        let src = dir.join("src.mp4");
+        fs::write(&src, &bytes[..bytes.len() / 3]).unwrap();
+        let result = convert_recording_blocking(&ffmpeg, &src, "webm", false, |_| {});
+        let Err(err) = result else { panic!("a truncated file must fail to convert") };
+        let payload: serde_json::Value = serde_json::from_str(&err).expect("error must be the classified JSON shape");
+        assert_eq!(payload["key"], "ffErrTruncated");
+        assert!(src.is_file(), "a failed conversion must never remove the source");
         let _ = fs::remove_dir_all(&dir);
     }
 

@@ -2737,6 +2737,30 @@ select.modal-input { padding-right: 30px; }
   font-size: 11px;
   line-height: 1.4;
 }
+
+/* The raw ffmpeg text behind a translated error message: closed by default,
+   a person chasing a real bug opens it, everyone else never sees it. */
+.ffmpeg-error-details {
+  margin: -2px 0 0;
+}
+.ffmpeg-error-details summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 11px;
+}
+.ffmpeg-error-details pre {
+  margin: 6px 0;
+  padding: 8px;
+  max-height: 140px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font: 11px ui-monospace, "Cascadia Code", Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 /* Live length readout: dimmed line right under the editor textarea. */
 .modal-length {
   margin: -4px 2px 0;

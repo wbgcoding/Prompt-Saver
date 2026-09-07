@@ -114,7 +114,10 @@ does not ship with its portable build. If it is missing, the format and
 quality controls say so directly and offer to fetch it (a one-time download,
 only ever with your consent); an installed build already carries it and never
 needs to download anything. A failed or cancelled conversion always leaves
-the original MP4 recording untouched.
+the original MP4 recording untouched. A failure names the actual reason in
+plain language (the file was incomplete, there was no space left, and so on)
+instead of a raw ffmpeg log line; a "Technical details" row underneath, closed
+by default, holds that log line with a copy button for anyone who wants it.
 
 Clicking the record button opens the same frozen-desktop overlay a screenshot
 uses: click a window, drag a region, or click empty desktop for the whole
@@ -179,7 +182,9 @@ animated WebP and APNG as well, each with a short note on what it's good for;
 GIF, WebP and APNG carry no sound at all (the source audio stays untouched in
 the original recording) and warn past ten seconds, since all three grow large
 fast. Undo/redo covers every editing step, with an adjustable limit in the
-expert menu.
+expert menu. A failed export shows the actual reason in plain language, with
+the raw ffmpeg log reachable underneath in a closed "Technical details" row —
+never the log itself as the message.
 
 ### Text recognition (OCR)
 
@@ -598,7 +603,11 @@ separates, GPL-lizenziertes Werkzeug; fehlt es, sagen Format- und
 Qualitätsauswahl das direkt und bieten den Download an (einmalig, nur mit
 Zustimmung) — eine installierte Version bringt es bereits mit. Eine
 fehlgeschlagene oder abgebrochene Umwandlung lässt die ursprüngliche
-MP4-Aufnahme immer unangetastet. Ein Klick auf den Aufnahme-Knopf öffnet
+MP4-Aufnahme immer unangetastet. Ein Fehlschlag nennt den eigentlichen Grund
+in Klartext (Datei unvollständig, kein Platz mehr und so weiter) statt einer
+rohen ffmpeg-Protokollzeile; eine zugeklappte Zeile „Technische Angaben"
+darunter hält diese Zeile samt Kopierknopf für alle bereit, die sie brauchen.
+Ein Klick auf den Aufnahme-Knopf öffnet
 dieselbe Bildschirm-Übersicht wie ein Screenshot: Fenster anklicken, Bereich
 ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm. Ein
 Countdown zählt danach herunter, bevor die Aufnahme wirklich startet

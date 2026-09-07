@@ -7,7 +7,7 @@ import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults 
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
-import { DRAG_OUT_MODS, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta } from "./floatShared.js";
+import { DRAG_OUT_MODS, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, parseFfmpegError } from "./floatShared.js";
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
@@ -12538,6 +12538,18 @@ function bind() {
   let recGen = 0; // invalidated on every close/discard so a late progress tick or a
                    // finished conversion from a superseded recording is ignored
   let recProgressOff = null;
+  // Same "closed by default, raw text only under Technical details" treatment
+  // as the video editor's own export error row, for a recording conversion
+  // that fails instead of exporting.
+  function showRecErrorDetails(raw) {
+    const box = $("rec-modal-error-details");
+    box.classList.toggle("hidden", !raw);
+    box.open = false;
+    $("rec-modal-error-raw").textContent = raw || "";
+  }
+  $("rec-modal-error-copy").addEventListener("click", () => {
+    invoke("copy_text", { text: $("rec-modal-error-raw").textContent }).then(() => toast(t("copied"))).catch(() => {});
+  });
   // 280 (Ben, 04.09.): closing the result window without an explicit
   // Save/Save as.../Attach deletes the recording -- Discard, the X button,
   // the backdrop and Escape all end up in closeRecModal(). Copy alone does
@@ -12615,6 +12627,7 @@ function bind() {
       return;
     }
     recPreview.classList.add("hidden");
+    showRecErrorDetails("");
     let secs = 0;
     const showConverting = () => { recStatus.textContent = t("recConverting").replace("{s}", String(secs)); };
     showConverting();
@@ -12653,10 +12666,18 @@ function bind() {
       recStatus.onclick = null;
       // Cancelled by the user's own click above, ffmpeg missing, or ffmpeg
       // genuinely failed on this input -- either way the untouched raw
-      // recording is still there to fall back to.
-      recStatus.textContent = String(err).includes("ffmpeg-missing")
-        ? `${t("recFfmpegMissingHint")} ${t("recConvertFailedKeepRaw")}`
-        : t("recConvertFailedKeepRaw");
+      // recording is still there to fall back to, and only a real failure
+      // gets the "Technical details" row (never a cancel).
+      const raw = String(err);
+      if (raw.includes("cancel")) {
+        recStatus.textContent = t("recConvertCancelled");
+      } else if (raw.includes("ffmpeg-missing")) {
+        recStatus.textContent = `${t("recFfmpegMissingHint")} ${t("recConvertFailedKeepRaw")}`;
+      } else {
+        const { message, details } = parseFfmpegError(err, t);
+        recStatus.textContent = `${message} ${t("recConvertFailedKeepRaw")}`;
+        showRecErrorDetails(details);
+      }
       recPreview.classList.remove("hidden");
       recPreview.src = convertFileSrc(rawPath);
     } finally {

@@ -99,6 +99,32 @@ export function formatEta(result, t) {
   return t("etaAbout").replace("{time}", t(result.key).replace("{n}", String(result.value)));
 }
 
+// Turns a rejected export_video/convert_recording call into what a person
+// should actually see. The backend wraps a classified ffmpeg (or ffmpeg-
+// adjacent Windows IO) failure as `{"key":..., "code":..., "raw":...}` JSON
+// (ffmpeg_error_json in lib.rs) -- exactly one place builds that shape, so
+// this is the one place that reads it back, rather than each caller
+// reimplementing the same JSON.parse/fallback dance. Anything that is not
+// that JSON shape (the plain "cancelled" and "ffmpeg-missing" sentinels, or
+// an unrelated command's own error string) is returned unparsed with no raw
+// detail, so an existing `.includes("cancel")`/`.includes("ffmpeg-missing")`
+// check elsewhere keeps seeing exactly what it always did.
+export function parseFfmpegError(err, t) {
+  const text = String(err);
+  let payload = null;
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed.key === "string") payload = parsed;
+  } catch {
+    payload = null;
+  }
+  if (!payload) return { message: text, details: "" };
+  const message = payload.key === "ffErrOther"
+    ? t("ffErrOther").replace("{code}", payload.code != null ? String(payload.code) : "?")
+    : t(payload.key);
+  return { message, details: payload.raw || "" };
+}
+
 // A short synthesised "copy" beep (the copySound expert switch) -- no audio file
 // is shipped or downloaded. Every window that can copy (main, pill, folder) calls
 // this from its own one success path, each with its own lazily-created
