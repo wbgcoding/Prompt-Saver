@@ -346,6 +346,18 @@ const RESULTS = {
     }
     return new Promise((resolve) => setTimeout(() => resolve(null), window.__EXPORT_DELAY_MS__ || 80));
   },
+  // 412: mirrors the shape of the real Rust estimate_export_bytes (a plain
+  // byte figure for most formats, a low/high bracket for the three silent
+  // image formats) closely enough for the probe to check the note text
+  // changes and carries a size -- the exact numbers are Rust's own test's job.
+  estimate_export_size: (a) => {
+    const secs = (a && a.durationMs) / 1000 || 0;
+    if (["gif", "webpanim", "apng"].includes(a && a.format)) {
+      return { bytes: null, low_bytes: Math.round(secs * 3750), high_bytes: Math.round(secs * 37500) };
+    }
+    const kbps = ((a && a.videoKbps) || 8000) + (a && a.losslessQuality ? 320 : 192);
+    return { bytes: Math.round((kbps * 1000) / 8 * secs), low_bytes: null, high_bytes: null };
+  },
   set_taskbar_progress: () => null,
   save_recording_as: (a) => { window.__REC_SAVED_AS__ = a.srcPath; return "C:/fake/saved.mp4"; },
   discard_recording_file: (a) => { window.__REC_DISCARDED__ = a.path; return true; },

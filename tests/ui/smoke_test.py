@@ -7864,6 +7864,42 @@ VIDEO_PROBE = """
     formatSel.dispatchEvent(new Event('change'));
     await sleep(30);
 
+    // ---- 412: the export format note changes with the format, names the
+    // silent formats' missing audio, and carries a size estimate ----
+    const exportNoteEl = document.getElementById('ve-export-note');
+    if (optionValues.includes('avi')) {
+      formatSel.value = 'avi';
+      formatSel.dispatchEvent(new Event('change'));
+      await sleep(30);
+      const aviNote = exportNoteEl.textContent;
+      formatSel.value = 'mp4';
+      formatSel.dispatchEvent(new Event('change'));
+      await sleep(30);
+      const mp4Note = exportNoteEl.textContent;
+      if (aviNote === mp4Note) {
+        errs.push('412: the export note did not change when the format changed');
+      }
+      if (!/\\d/.test(mp4Note)) {
+        errs.push(`412: the export note carries no size figure for mp4, got ${JSON.stringify(mp4Note)}`);
+      }
+    }
+    for (const fmt of ['gif', 'webpanim', 'apng']) {
+      if (!optionValues.includes(fmt)) continue;
+      formatSel.value = fmt;
+      formatSel.dispatchEvent(new Event('change'));
+      await sleep(30);
+      const note = exportNoteEl.textContent;
+      if (!note.includes('carries no sound')) {
+        errs.push(`412: the export note is missing the no-audio hint for "${fmt}", got ${JSON.stringify(note)}`);
+      }
+      if (!/\\d/.test(note)) {
+        errs.push(`412: the export note carries no size figure for "${fmt}", got ${JSON.stringify(note)}`);
+      }
+    }
+    formatSel.value = 'mp4';
+    formatSel.dispatchEvent(new Event('change'));
+    await sleep(30);
+
     // ---- 387: the remaining-time estimate stays hidden below etaMinPct (10%
     // by default), regardless of how fast progress is moving ----
     const exportEtaEl = document.getElementById('ve-export-eta');

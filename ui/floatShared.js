@@ -90,6 +90,15 @@ export function makeEtaEstimator() {
   };
 }
 
+// Shared by the backups list and the video editor's export size note --
+// same rounding, same thresholds, so a number never reads differently in
+// one place than the other.
+export function fmtBytes(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
 // Turns an estimate() result into the localized display string, or "" once
 // there is nothing worth showing. `t` is the caller's own translation lookup
 // (main.js and video.js each have their own, same one-argument shape).

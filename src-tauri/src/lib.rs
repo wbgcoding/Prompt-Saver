@@ -19294,6 +19294,60 @@ async fn export_video(app: AppHandle, req: ExportRequest) -> Result<String, Stri
     .map_err(|e| e.to_string())?
 }
 
+// ---------- Export size estimate: "roughly this big" in the format's own hint ----------
+
+#[derive(serde::Serialize)]
+struct ExportSizeEstimate {
+    // A plain bitrate-based format gets a single number; the three
+    // image-based formats below get a low/high bracket instead, since their
+    // real size depends far more on motion and color count than on a fixed
+    // bitrate. Exactly one of the two shapes is ever filled in.
+    bytes: Option<u64>,
+    low_bytes: Option<u64>,
+    high_bytes: Option<u64>,
+}
+
+// Mirrors export_video_blocking's own per-format "-b:a" settings above
+// exactly, so the estimate can never quietly drift from what the encoder
+// actually burns into the file. gif/webpanim/apng are always silent (-an),
+// hence 0 -- they never reach this function anyway (see the match below).
+fn export_audio_kbps(format: &str, lossless_quality: bool) -> u32 {
+    match format {
+        "mp4" if lossless_quality => 320,
+        "mp4" | "mov" | "mkv" | "avi" => 192,
+        "webm" => 128, // libopus with no explicit -b:a: ffmpeg's own default range
+        _ => 0,
+    }
+}
+
+// Pure and window-free so the formula itself has a real unit test, not just
+// its wiring. A plain stream-copy ("lossless" trim-only) export has no
+// bitrate of its own to estimate from at all -- the frontend never calls
+// this for that case (see isLosslessCopy() in video.js), the same way this
+// function never claims to know what a copy would weigh.
+fn estimate_export_bytes(format: &str, video_kbps: Option<u32>, lossless_quality: bool, duration_ms: u64) -> ExportSizeEstimate {
+    let secs = duration_ms as f64 / 1000.0;
+    match format {
+        "gif" | "webpanim" | "apng" => {
+            // A static, few-color clip can run under 5 KB/s; fast full-frame
+            // motion easily exceeds 300 kbps once palette dithering kicks in.
+            let low = (secs * 30_000.0 / 8.0).round() as u64;
+            let high = (secs * 300_000.0 / 8.0).round() as u64;
+            ExportSizeEstimate { bytes: None, low_bytes: Some(low), high_bytes: Some(high) }
+        }
+        _ => {
+            let kbps = video_kbps.unwrap_or(8000) as f64 + export_audio_kbps(format, lossless_quality) as f64;
+            let bytes = (kbps * 1000.0 / 8.0 * secs).round() as u64;
+            ExportSizeEstimate { bytes: Some(bytes), low_bytes: None, high_bytes: None }
+        }
+    }
+}
+
+#[tauri::command]
+fn estimate_export_size(format: String, video_kbps: Option<u32>, lossless_quality: bool, duration_ms: u64) -> ExportSizeEstimate {
+    estimate_export_bytes(&format, video_kbps, lossless_quality, duration_ms)
+}
+
 fn export_video_blocking(
     ffmpeg: &Path, src: &Path, dst: &Path, req: &ExportRequest, my_gen: u64, mut on_progress: impl FnMut(u32),
 ) -> Result<String, String> {
@@ -22313,6 +22367,7 @@ pub fn run() {
             generate_waveform_peaks,
             extract_still_frame,
             export_video,
+            estimate_export_size,
             cancel_export,
             save_recording_as,
             pick_export_dest,
@@ -23772,6 +23827,46 @@ mod tests {
         assert_eq!(payload["key"], "ffErrTruncated");
         assert!(src.is_file(), "a failed conversion must never remove the source");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ---- The export format note's size estimate ----
+
+    #[test]
+    fn estimate_export_bytes_matches_the_plain_bitrate_formula_for_mp4() {
+        // 1000 kbps video + 192 kbps AAC (export_audio_kbps's own mp4-normal
+        // constant) over exactly 10 seconds must be an exact, not approximate, match.
+        let est = estimate_export_bytes("mp4", Some(1000), false, 10_000);
+        let expected = (1000 + 192) * 1000 / 8 * 10;
+        assert_eq!(est.bytes, Some(expected as u64));
+        assert!(est.low_bytes.is_none() && est.high_bytes.is_none());
+    }
+
+    #[test]
+    fn estimate_export_bytes_lossless_quality_uses_the_higher_mp4_audio_rate() {
+        // lossless_quality on mp4 burns 320k AAC instead of 192k -- the estimate
+        // must reflect the same jump export_video_blocking's own encoder settings make.
+        let normal = estimate_export_bytes("mp4", Some(1000), false, 10_000);
+        let lossless = estimate_export_bytes("mp4", Some(1000), true, 10_000);
+        assert!(lossless.bytes.unwrap() > normal.bytes.unwrap());
+    }
+
+    #[test]
+    fn estimate_export_bytes_image_formats_return_a_range_not_a_number() {
+        for format in ["gif", "webpanim", "apng"] {
+            let est = estimate_export_bytes(format, None, false, 5_000);
+            assert!(est.bytes.is_none(), "{format} must not report a single byte figure");
+            let low = est.low_bytes.expect("range must have a low bound");
+            let high = est.high_bytes.expect("range must have a high bound");
+            assert!(low > 0 && low < high, "{format}'s range must be a real, ordered bracket");
+        }
+    }
+
+    #[test]
+    fn estimate_export_bytes_falls_back_to_a_sane_default_without_a_known_bitrate() {
+        // A silent read (video_kbps: None) for a plain video format must not
+        // panic or report zero -- it falls back to a reasonable assumed bitrate.
+        let est = estimate_export_bytes("webm", None, false, 10_000);
+        assert!(est.bytes.unwrap() > 0);
     }
 
     // ---- Video editor (242-245): real ffmpeg/ffprobe, no capture hardware needed ----

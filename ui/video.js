@@ -6,7 +6,7 @@
 // an ordered operation list (VE.ops), exactly like the screenshot editor's own
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
-import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, parseFfmpegError } from "./floatShared.js";
+import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes } from "./floatShared.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 
@@ -2094,8 +2094,12 @@ function destPath() {
 // a chain of ifs so a future format only ever needs one new entry here.
 const FORMAT_NOTE_KEY = { gif: "veGifNote", avi: "veAviNote", mov: "veMovNote", mkv: "veMkvNote", webpanim: "veWebpNote", apng: "veApngNote" };
 
-function updateExportNote() {
-  const format = exportFormat();
+// Builds everything the note can say without asking the backend anything --
+// unchanged from before the size estimate was added, so all 13 existing call
+// sites keep their instant synchronous DOM update. The size estimate (the
+// note's third, backend-computed element) is patched in afterwards by
+// refreshExportSizeNote.
+function buildExportNoteBase(format) {
   const notes = [];
   if (FORMAT_NOTE_KEY[format]) notes.push(t(FORMAT_NOTE_KEY[format]));
   if (SILENT_FORMATS.has(format)) {
@@ -2104,13 +2108,51 @@ function updateExportNote() {
   }
   if (isLosslessCopy()) notes.push(t("veCopyNote"));
   notes.push(t("veOutLength").replace("{d}", fmtTime(totalOutMs())));
+  return notes;
+}
+
+function formatExportSizeNote(est) {
+  if (!est) return "";
+  if (est.low_bytes != null && est.high_bytes != null) {
+    return t("veSizeRange").replace("{low}", fmtBytes(est.low_bytes)).replace("{high}", fmtBytes(est.high_bytes));
+  }
+  if (est.bytes != null) return t("veSizeAbout").replace("{size}", fmtBytes(est.bytes));
+  return "";
+}
+
+// Monotonic guard so a slow estimate_export_size reply for a format the user
+// has since clicked away from never overwrites a newer, still-current note.
+let exportNoteGen = 0;
+
+async function refreshExportSizeNote(format) {
+  const myGen = ++exportNoteGen;
+  const est = await invoke("estimate_export_size", {
+    format,
+    videoKbps: videoKbps(),
+    losslessQuality: exportQuality() === "lossless",
+    durationMs: totalOutMs(),
+  }).catch(() => null);
+  if (myGen !== exportNoteGen) return; // superseded by a later call
+  if (exportFormat() !== format || isLosslessCopy()) return; // stale by the time it landed
+  const sizeText = formatExportSizeNote(est);
+  if (!sizeText) return;
+  const notes = buildExportNoteBase(format);
+  notes.push(sizeText);
   $("ve-export-note").textContent = notes.join(" ");
+}
+
+function updateExportNote() {
+  const format = exportFormat();
+  $("ve-export-note").textContent = buildExportNoteBase(format).join(" ");
   // Never overwrite what the user is actively typing into the field itself.
   if (document.activeElement !== $("ve-export-dest")) $("ve-export-dest").value = destPath();
   $("ve-export-dest").title = destPath();
   // None of the three silent formats read the quality/bitrate setting at all.
   $("ve-export-quality").disabled = SILENT_FORMATS.has(format);
   updateAudioLabels();
+  // A stream copy has no bitrate of its own to estimate from; veCopyNote
+  // above already explains why no number is shown for it.
+  if (!isLosslessCopy()) refreshExportSizeNote(format);
 }
 
 const exportEta = makeEtaEstimator();
