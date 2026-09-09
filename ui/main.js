@@ -12844,6 +12844,12 @@ function bind() {
     // itself before this event fired -- whatever got captured up to that
     // point is still a valid, playable file, just cut short unexpectedly.
     if (e.payload?.encode_error) toast(t("recEncodeError"));
+    // A window recording whose canvas had to fall back below the
+    // "every display" default (too large for the encoder, or the user
+    // picked a smaller mode) says so once, here -- the normal "every
+    // display" case stays silent since that is simply the default working.
+    if (e.payload?.canvas_note === "monitor") toast(t("recCanvasFallbackMonitor"));
+    else if (e.payload?.canvas_note === "window") toast(t("recCanvasFallbackWindow"));
     if (path) openRecModal(path);
   });
   $("rec-modal-close").addEventListener("click", () => closeRecModal());

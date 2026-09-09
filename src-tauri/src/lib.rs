@@ -12886,7 +12886,7 @@ fn screenshot_format_mime(format: &str) -> &'static str {
 // VP8L, it has no lossy/quality mode to plug snipSaveQuality into, so quality
 // only ever applies to JPEG (see screenshot_format_needs_quality below).
 fn encode_screenshot(rgba: &[u8], w: u32, h: u32, format: &str, jpeg_quality: u8) -> Option<Vec<u8>> {
-    if format == "jpeg" {
+    if screenshot_format_needs_quality(format) {
         return encode_snip_jpeg(rgba, w, h, jpeg_quality);
     }
     let img = image::RgbaImage::from_raw(w, h, rgba.to_vec())?;
@@ -16258,6 +16258,167 @@ fn scale_to_fit_frame_top_down(
     (out, dst_stride)
 }
 
+// Places a top-down BGRA frame of its own live (width, height) at (at_x, at_y)
+// inside a fixed (canvas_w, canvas_h) top-down output buffer, black-padding
+// whatever the frame does not cover and silently clipping whatever falls
+// outside the buffer on any edge. A multi-display recording canvas can start
+// at a negative coordinate (a second display placed left of or above the first one), and a
+// tracked window dragged to the very edge of that canvas can still overhang
+// it by a pixel or two -- both are ordinary placements here, not error cases.
+// `letterbox_frame_top_down` is the (0, 0) case of this, kept as its own name
+// since its own two existing tests call it directly. Independent of any
+// capture-frame type so it stays unit-testable without a GPU or a Windows
+// build.
+#[allow(clippy::too_many_arguments)]
+fn place_frame_in_canvas(
+    raw: &[u8], width: usize, height: usize, stride: usize,
+    canvas_w: usize, canvas_h: usize, at_x: i64, at_y: i64,
+) -> (Vec<u8>, usize) {
+    let dst_stride = canvas_w * 4;
+    let mut out = vec![0u8; dst_stride * canvas_h];
+    for row in 0..height {
+        let dy = at_y + row as i64;
+        if dy < 0 || dy as usize >= canvas_h {
+            continue;
+        }
+        let src = row * stride;
+        // Clip horizontally: skip source columns that would land left of
+        // x=0, then stop at the buffer's right edge.
+        let src_x0 = if at_x < 0 { (-at_x) as usize } else { 0 };
+        if src_x0 >= width {
+            continue;
+        }
+        let dst_x0 = (at_x + src_x0 as i64).max(0) as usize;
+        if dst_x0 >= canvas_w {
+            continue;
+        }
+        let copy_w = (width - src_x0).min(canvas_w - dst_x0);
+        if copy_w == 0 {
+            continue;
+        }
+        let src_off = src + src_x0 * 4;
+        if src_off + copy_w * 4 > raw.len() {
+            continue; // defensive -- a stale row_pitch must not panic the capture thread
+        }
+        let dst_off = (dy as usize) * dst_stride + dst_x0 * 4;
+        out[dst_off..dst_off + copy_w * 4].copy_from_slice(&raw[src_off..src_off + copy_w * 4]);
+    }
+    (out, dst_stride)
+}
+
+// The combined-display rectangle (369's default recording canvas for a
+// Window target), via the same desktop-geometry metrics Windows itself
+// already tracks -- a plain four-integer query, not an image read, and
+// already the union of every display, so no per-display enumeration or
+// union math is needed on top of it.
+#[cfg(windows)]
+fn virtual_screen_bounds() -> Result<(i32, i32, u32, u32), String> {
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetSystemMetrics(index: i32) -> i32;
+    }
+    const SM_XVIRTUALSCREEN: i32 = 76;
+    const SM_YVIRTUALSCREEN: i32 = 77;
+    const SM_CXVIRTUALSCREEN: i32 = 78;
+    const SM_CYVIRTUALSCREEN: i32 = 79;
+    let (x, y, w, h) = unsafe {
+        (
+            GetSystemMetrics(SM_XVIRTUALSCREEN),
+            GetSystemMetrics(SM_YVIRTUALSCREEN),
+            GetSystemMetrics(SM_CXVIRTUALSCREEN),
+            GetSystemMetrics(SM_CYVIRTUALSCREEN),
+        )
+    };
+    if w <= 0 || h <= 0 {
+        return Err("could not read the combined display size".to_string());
+    }
+    Ok((x, y, w as u32, h as u32))
+}
+
+// Whether an output size of (w, h) is small enough to even attempt (369's
+// safety guard against the memory cost -- and possible outright refusal --
+// of a very large combined-display output). `build_encoder` is still tried
+// on top of this and can still fail on its own; this only short-circuits the
+// obviously too-large case before paying for that attempt.
+fn canvas_within_ceiling(w: u32, h: u32, ceiling_w: u32, ceiling_h: u32) -> bool {
+    w <= ceiling_w && h <= ceiling_h
+}
+
+// The bounds of whichever display currently contains (x, y) -- 369's "the
+// display the window is on" fallback tier, using the same Win32 lookup
+// `resolve_region_monitor` already does for region recordings (no second way
+// to ask which display a point belongs to).
+#[cfg(windows)]
+fn monitor_rect_at(x: i32, y: i32) -> Option<(i32, i32, u32, u32)> {
+    let (hmon, ..) = resolve_region_monitor(x, y, 1, 1).ok()?;
+    let (left, top, right, bottom) = monitor_bounds(hmon as isize)?;
+    Some((left, top, (right - left).max(1) as u32, (bottom - top).max(1) as u32))
+}
+
+// Tracks the union of every placed frame's own rectangle over a recording,
+// so the post-capture crop step knows the smallest rectangle that
+// still contains everything actually shown, rather than the full output
+// size -- which is mostly black once that size covers every display. Four
+// `AtomicU32`s rather than a `Mutex<Rect>`: `on_frame_arrived` runs on the
+// capture thread and must never block behind a lock a slow reader could be
+// holding.
+pub(crate) struct UsedAreaTracker {
+    min_x: std::sync::atomic::AtomicU32,
+    min_y: std::sync::atomic::AtomicU32,
+    max_x: std::sync::atomic::AtomicU32, // exclusive (x + w)
+    max_y: std::sync::atomic::AtomicU32, // exclusive (y + h)
+    seen: std::sync::atomic::AtomicBool,
+}
+impl UsedAreaTracker {
+    fn new() -> Self {
+        Self {
+            min_x: std::sync::atomic::AtomicU32::new(u32::MAX),
+            min_y: std::sync::atomic::AtomicU32::new(u32::MAX),
+            max_x: std::sync::atomic::AtomicU32::new(0),
+            max_y: std::sync::atomic::AtomicU32::new(0),
+            seen: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+    // (x, y) is the frame's top-left placement in output coordinates
+    // (already clamped by the caller), (w, h) its size.
+    fn update(&self, x: u32, y: u32, w: u32, h: u32) {
+        use std::sync::atomic::Ordering::Relaxed;
+        self.min_x.fetch_min(x, Relaxed);
+        self.min_y.fetch_min(y, Relaxed);
+        self.max_x.fetch_max(x + w, Relaxed);
+        self.max_y.fetch_max(y + h, Relaxed);
+        self.seen.store(true, Relaxed);
+    }
+    // The union rectangle over every update() call so far, or None if there
+    // was never one.
+    pub(crate) fn get(&self) -> Option<(u32, u32, u32, u32)> {
+        use std::sync::atomic::Ordering::Relaxed;
+        if !self.seen.load(Relaxed) {
+            return None;
+        }
+        let (min_x, min_y) = (self.min_x.load(Relaxed), self.min_y.load(Relaxed));
+        let (max_x, max_y) = (self.max_x.load(Relaxed), self.max_y.load(Relaxed));
+        Some((min_x, min_y, max_x.saturating_sub(min_x), max_y.saturating_sub(min_y)))
+    }
+}
+
+// 369's bitrate scaling: `recBitrateKbps` is defined as the rate for a
+// full-canvas recording, so when the canvas ends up larger than the window
+// itself (the every-display case), the encoder's bitrate is scaled down by
+// the fraction the window occupies of that canvas -- otherwise a small
+// window recorded on a huge canvas would spend most of its budget on pixels
+// that are just going to be black. Floored well above zero so a tiny window
+// on a huge canvas never gets an unusably low rate, and never scaled UP past
+// the configured value even if the "window" size handed in is somehow
+// already bigger than the canvas.
+fn scale_bitrate_to_used_area(full_canvas_kbps: u32, used_w: u32, used_h: u32, canvas_w: u32, canvas_h: u32) -> u32 {
+    if canvas_w == 0 || canvas_h == 0 {
+        return full_canvas_kbps;
+    }
+    let fraction = (used_w as f64 * used_h as f64) / (canvas_w as f64 * canvas_h as f64);
+    ((full_canvas_kbps as f64 * fraction).round() as u32).clamp(500, full_canvas_kbps)
+}
+
 // ---------- Screen recording: audio (loopback + microphone) ----------
 //
 // windows-capture's own VideoEncoder already accepts an AAC audio track
@@ -16873,6 +17034,11 @@ struct RecordingStoppedPayload {
     // Set when both system and mic were captured -- the video editor
     // consolidates this sidecar into the mp4's second AAC track on open.
     mic_wav_path: Option<String>,
+    // One sentence naming the canvas 369 actually used for a Window
+    // recording (e.g. "every display", "the display the window is on",
+    // "the window's own size") -- None for Monitor/Region targets, which
+    // have exactly one candidate and nothing to report.
+    canvas_note: Option<String>,
 }
 
 #[cfg(windows)]
@@ -16882,6 +17048,8 @@ mod recording {
         scale_to_fit_frame_top_down, rec_filename,
         AudioQueueShared, RecWavWriter,
         RecFeederShared, RecFrameItem, RecPhase, RecordClock, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE,
+        canvas_within_ceiling, external_window_rect, monitor_rect_at, place_frame_in_canvas,
+        scale_bitrate_to_used_area, virtual_screen_bounds, UsedAreaTracker,
     };
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -16950,6 +17118,22 @@ mod recording {
         }
     }
 
+    // A Window recording whose canvas ended up bigger than the window
+    // itself (the every-display or the current-display fallback tier): each
+    // frame is placed at the window's own LIVE screen position inside that
+    // fixed canvas instead of at (0, 0), and the union of every placement is
+    // tracked for the post-capture crop. Absent for Monitor/Region targets
+    // and for the "window's own size" fallback tier, both of which keep
+    // today's original single-fixed-rectangle behaviour untouched.
+    struct WindowPlacement {
+        hwnd: isize,
+        // The canvas' own top-left in the same coordinate space GetWindowRect
+        // reports (virtual-screen pixels) -- subtracted from the window's live
+        // position to get its offset inside the canvas.
+        canvas_origin: (i32, i32),
+        used_area: Arc<UsedAreaTracker>,
+    }
+
     pub(crate) struct RecHandler {
         clock: Arc<RecordClock>,
         shared: Arc<RecFeederShared>,
@@ -16962,14 +17146,19 @@ mod recording {
         // Monitor/Region targets never change size mid-capture, so this only
         // ever bites Window.
         enc_size: (u32, u32),
+        placement: Option<WindowPlacement>,
     }
     impl GraphicsCaptureApiHandler for RecHandler {
-        type Flags = (Arc<RecordClock>, Arc<RecFeederShared>, Option<(u32, u32, u32, u32)>, (u32, u32));
+        type Flags = (
+            Arc<RecordClock>, Arc<RecFeederShared>, Option<(u32, u32, u32, u32)>, (u32, u32),
+            Option<(isize, (i32, i32), Arc<UsedAreaTracker>)>,
+        );
         type Error = RecError;
 
         fn new(ctx: Context<Self::Flags>) -> Result<Self, Self::Error> {
-            let (clock, shared, crop, enc_size) = ctx.flags;
-            Ok(Self { clock, shared, crop, enc_size })
+            let (clock, shared, crop, enc_size, placement) = ctx.flags;
+            let placement = placement.map(|(hwnd, canvas_origin, used_area)| WindowPlacement { hwnd, canvas_origin, used_area });
+            Ok(Self { clock, shared, crop, enc_size, placement })
         }
 
         fn on_frame_arrived(
@@ -16983,7 +17172,24 @@ mod recording {
             let ts = self.clock.now_ticks();
             let mut fb = frame.buffer()?;
             let (width, height, stride) = (fb.width() as usize, fb.height() as usize, fb.row_pitch() as usize);
-            let bytes = if self.crop.is_none() && (width as u32, height as u32) != self.enc_size {
+            let bytes = if let Some(placement) = &self.placement {
+                // Place this window's own frame at its live screen
+                // position inside the fixed (all-displays or current-display)
+                // canvas. If the window's rect cannot be read this instant
+                // (e.g. it just closed), keep the last frame's slot rather
+                // than dropping the frame outright.
+                let live_origin = external_window_rect(placement.hwnd)
+                    .map(|(l, t, _, _)| (l, t))
+                    .unwrap_or(placement.canvas_origin);
+                let at_x = (live_origin.0 - placement.canvas_origin.0) as i64;
+                let at_y = (live_origin.1 - placement.canvas_origin.1) as i64;
+                let (ew, eh) = (self.enc_size.0 as usize, self.enc_size.1 as usize);
+                let clamped_x = at_x.clamp(0, ew as i64) as u32;
+                let clamped_y = at_y.clamp(0, eh as i64) as u32;
+                placement.used_area.update(clamped_x, clamped_y, width.min(ew) as u32, height.min(eh) as u32);
+                let (padded, padded_stride) = place_frame_in_canvas(fb.as_raw_buffer(), width, height, stride, ew, eh, at_x, at_y);
+                crop_and_flip_rows_bottom_up(&padded, ew, eh, padded_stride, 0, 0, ew, eh)
+            } else if self.crop.is_none() && (width as u32, height as u32) != self.enc_size {
                 // Live resize: re-anchor the frame into the encoder's original,
                 // fixed canvas instead of passing through the now-mismatched
                 // size. Grown past the canvas in either dimension -> scale the
@@ -17263,6 +17469,62 @@ mod recording {
         pub audio_mic: bool,
         pub output_path: PathBuf,
         pub phase: RecPhase,
+        // Set only for a Window recording whose canvas ended up bigger
+        // than the window (see WindowPlacement) -- the post-capture crop step
+        // reads the union of every placed frame from this once the capture
+        // callback is done writing to it. None for Monitor/Region targets and
+        // for the "window's own size" fallback tier.
+        pub used_area: Option<Arc<UsedAreaTracker>>,
+        // Stable key naming which canvas this recording actually used, for
+        // the result dialog -- e.g. "all" (every display) or "window"
+        // (fell back to the window's own size). None for Monitor/Region
+        // targets.
+        pub canvas_note: Option<&'static str>,
+    }
+
+    // A Window recording's canvas defaults to the union of every display
+    // (Ben's decision, 05.09.), so dragging the window across displays never
+    // re-scales it -- but that canvas can be too large to use (a huge memory
+    // cost per frame, or the encoder simply refusing the size), so candidates
+    // are tried in order and the first one that is both within the ceiling AND
+    // actually accepted by `build_encoder` wins. `recCanvasMode` (a stored
+    // setting the expert menu does not expose yet, defaulting to "all") lets a
+    // user who already knows they want the smaller, error-prone-on-drag
+    // canvas skip straight past the tiers they do not want.
+    struct CanvasCandidate {
+        size: (u32, u32),
+        origin: (i32, i32),
+        // Whether a frame needs live per-frame placement at all -- false only
+        // for the final "window's own size" tier, which is byte-for-byte
+        // today's original single-fixed-rectangle behaviour.
+        placement: bool,
+        // Stable key, not display text -- shares its three values with
+        // `recCanvasMode` ("all"/"monitor"/"window") since a note IS just
+        // "which mode this recording actually ended up using". The frontend
+        // looks its own translated sentence up from this key.
+        note: &'static str,
+    }
+    fn window_canvas_candidates(
+        hwnd: isize, native_w: u32, native_h: u32, mode: &str, ceiling: (u32, u32),
+    ) -> Vec<CanvasCandidate> {
+        let native_origin = external_window_rect(hwnd).map(|(l, t, _, _)| (l, t)).unwrap_or((0, 0));
+        let mut out = Vec::new();
+        if mode != "window" {
+            if mode != "monitor" {
+                if let Ok((vx, vy, vw, vh)) = virtual_screen_bounds() {
+                    if canvas_within_ceiling(vw, vh, ceiling.0, ceiling.1) {
+                        out.push(CanvasCandidate { size: (vw, vh), origin: (vx, vy), placement: true, note: "all" });
+                    }
+                }
+            }
+            if let Some((mx, my, mw, mh)) = monitor_rect_at(native_origin.0, native_origin.1) {
+                out.push(CanvasCandidate { size: (mw, mh), origin: (mx, my), placement: true, note: "monitor" });
+            }
+        }
+        out.push(CanvasCandidate {
+            size: (native_w, native_h), origin: native_origin, placement: false, note: "window",
+        });
+        out
     }
 
     fn resolve_target_size(target: RecTarget) -> Result<(u32, u32), String> {
@@ -17292,8 +17554,9 @@ mod recording {
     // source active takes the exact original video-only path unchanged.
     pub fn start(
         target: RecTarget, output_path: PathBuf, show_cursor: bool, audio: AudioConfig, video_kbps: u32, video_fps: u32,
+        canvas_mode: &str, canvas_ceiling: (u32, u32),
     ) -> Result<RecSession, String> {
-        let (width, height) = resolve_target_size(target)?;
+        let (native_w, native_h) = resolve_target_size(target)?;
         let audio_active = audio.system || audio.mic;
         // Both sources active used to mean "mixed into the encoder's one
         // track" -- now the encoder only ever gets ONE source (system, when
@@ -17302,8 +17565,36 @@ mod recording {
         // file instead of being mixed away. Either single-source case is
         // completely unchanged.
         let both_active = audio.system && audio.mic;
-        let encoder = build_encoder(width, height, &output_path, audio_active.then_some(audio.kbps), video_kbps, video_fps)
-            .map_err(|e| e.to_string())?;
+        // A Window target tries its canvas candidates in order (every
+        // display -> the display it started on -> its own size); Monitor and
+        // Region targets have exactly one candidate, unchanged from before.
+        // Bitrate is scaled down for a placement candidate whose canvas is
+        // bigger than the window itself, so a small window on a big canvas
+        // does not spend its whole budget on pixels that are just black.
+        let candidates = match target {
+            RecTarget::Window(hwnd) => window_canvas_candidates(hwnd, native_w, native_h, canvas_mode, canvas_ceiling),
+            _ => vec![CanvasCandidate { size: (native_w, native_h), origin: (0, 0), placement: false, note: "" }],
+        };
+        let mut built: Option<(VideoEncoder, CanvasCandidate)> = None;
+        let mut last_err = String::new();
+        for cand in candidates {
+            let kbps = if cand.placement {
+                scale_bitrate_to_used_area(video_kbps, native_w, native_h, cand.size.0, cand.size.1)
+            } else {
+                video_kbps
+            };
+            match build_encoder(cand.size.0, cand.size.1, &output_path, audio_active.then_some(audio.kbps), kbps, video_fps) {
+                Ok(enc) => {
+                    built = Some((enc, cand));
+                    break;
+                }
+                Err(e) => last_err = e.to_string(),
+            }
+        }
+        let (encoder, canvas) = built.ok_or_else(|| if last_err.is_empty() { "could not start the encoder".to_string() } else { last_err })?;
+        let (width, height) = canvas.size;
+        let used_area = canvas.placement.then(|| Arc::new(UsedAreaTracker::new()));
+        let canvas_note = if canvas.note.is_empty() { None } else { Some(canvas.note) };
         let clock = Arc::new(RecordClock::new());
         let shared = Arc::new(RecFeederShared::new());
 
@@ -17367,7 +17658,11 @@ mod recording {
 
         let cursor = if show_cursor { CursorCaptureSettings::WithCursor } else { CursorCaptureSettings::WithoutCursor };
         let crop = resolve_crop(target);
-        let flags = (clock.clone(), shared.clone(), crop, (width, height));
+        let placement_flags = match (canvas.placement, target) {
+            (true, RecTarget::Window(hwnd)) => Some((hwnd, canvas.origin, used_area.clone().unwrap())),
+            _ => None,
+        };
+        let flags = (clock.clone(), shared.clone(), crop, (width, height), placement_flags);
         let control = match resolve_capture_item(target)? {
             CaptureItem::Monitor(m) => {
                 let settings = Settings::new(
@@ -17390,6 +17685,7 @@ mod recording {
             audio_queues, mic_wav_thread, mic_wav_path,
             audio_system: audio.system, audio_mic: audio.mic,
             output_path, phase: RecPhase::Recording,
+            used_area, canvas_note,
         })
     }
 
@@ -17459,11 +17755,12 @@ mod recording {
     // second AAC track the first time it opens this recording; nothing else
     // in the app looks at it, so a workflow that never opens the editor never
     // needs ffmpeg for a plain recording.
-    pub fn stop(session: RecSession) -> Result<(PathBuf, u64, Option<String>, Option<PathBuf>), String> {
+    pub fn stop(session: RecSession) -> Result<(PathBuf, u64, Option<String>, Option<PathBuf>, Option<&'static str>), String> {
         let path = session.output_path.clone();
         let mic_wav_path = session.mic_wav_path.clone();
+        let canvas_note = session.canvas_note;
         let (dropped, encode_error) = finish_and_stop(session)?;
-        Ok((path, dropped, encode_error, mic_wav_path))
+        Ok((path, dropped, encode_error, mic_wav_path, canvas_note))
     }
 
     // Live-poll accessor for the control bar: lets it notice an unrecoverable
@@ -17558,10 +17855,21 @@ async fn start_recording(
     // unless overridden here -- a 60/144Hz screen otherwise always recorded at 30.
     let video_fps =
         db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recFps").copied().unwrap_or(30.0).clamp(10.0, 60.0) as u32;
+    // The canvas a Window recording uses. Neither setting has an expert-menu
+    // control yet, so both only ever come from a value some future menu
+    // already wrote -- "every display" is the default either way.
+    let canvas_mode = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_texts.get("recCanvasMode").cloned().unwrap_or_else(|| "all".to_string());
+    let canvas_ceiling = {
+        let g = db.lock().unwrap_or_else(|e| e.into_inner());
+        (
+            g.settings.ui_values.get("recCanvasCeilingW").copied().unwrap_or(8192.0).max(1.0) as u32,
+            g.settings.ui_values.get("recCanvasCeilingH").copied().unwrap_or(4320.0).max(1.0) as u32,
+        )
+    };
     let dir = data_dir(&app).join("recordings");
     let session = tauri::async_runtime::spawn_blocking(move || {
         let out_path = recording::new_output_path(&dir)?;
-        recording::start(target, out_path, show_cursor, audio, video_kbps, video_fps)
+        recording::start(target, out_path, show_cursor, audio, video_kbps, video_fps, &canvas_mode, canvas_ceiling)
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -17681,12 +17989,13 @@ fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayload, String
         }
         s
     };
-    let (path, dropped, encode_error, mic_wav_path) = recording::stop(session)?;
+    let (path, dropped, encode_error, mic_wav_path, canvas_note) = recording::stop(session)?;
     let payload = RecordingStoppedPayload {
         path: path.to_string_lossy().to_string(),
         dropped_frames: dropped,
         encode_error,
         mic_wav_path: mic_wav_path.map(|p| p.to_string_lossy().to_string()),
+        canvas_note: canvas_note.map(str::to_string),
     };
     // The stop/pause hotkeys give up their combination the instant nothing
     // is recording, on every end path this function serves (button, hotkey,
@@ -25260,9 +25569,9 @@ mod tests {
         let audio = recording::AudioConfig {
             system: true, mic: false, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
-        let (path, _dropped, _encode_error, _mic_wav) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav, _canvas_note) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
         assert!(bytes.len() > 10_000, "output suspiciously small: {} bytes", bytes.len());
         let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
@@ -25284,9 +25593,9 @@ mod tests {
         let audio = recording::AudioConfig {
             system: false, mic: true, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
-        let (path, _dropped, _encode_error, _mic_wav) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav, _canvas_note) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
         assert!(bytes.len() > 10_000, "output suspiciously small: {} bytes", bytes.len());
         let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
@@ -25305,9 +25614,9 @@ mod tests {
         let audio = recording::AudioConfig {
             system: true, mic: true, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
-        let (path, _dropped, _encode_error, _mic_wav) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav, _canvas_note) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
         assert!(bytes.len() > 10_000, "output suspiciously small: {} bytes", bytes.len());
         let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
@@ -25330,9 +25639,9 @@ mod tests {
             system: true, mic: false, mic_device_id: String::new(), kbps: 192,
         };
         let wall_start = std::time::Instant::now();
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(600));
-        let (path, _dropped, _encode_error, _mic_wav) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav, _canvas_note) = recording::stop(session).expect("stop");
         let wall_elapsed = wall_start.elapsed().as_secs_f64();
         let bytes = std::fs::read(&path).expect("read output file");
         let durations = mp4_track_durations_secs(&bytes);
@@ -25370,9 +25679,9 @@ mod tests {
         let audio = recording::AudioConfig {
             system: false, mic: false, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(2));
-        let (path, _dropped, _encode_error, _mic_wav) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav, _canvas_note) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
         let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
         let _ = std::fs::remove_file(&path);
@@ -25431,6 +25740,102 @@ mod tests {
         let (out, stride) = letterbox_frame_top_down(&raw, 2, 2, 8, 1, 1);
         assert_eq!(stride, 4);
         assert_eq!(out, vec![0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn letterbox_frame_top_down_is_place_frame_in_canvas_at_the_origin() {
+        // 369's placement helper must reproduce the existing (0, 0) case
+        // byte-for-byte -- letterbox_frame_top_down is only ever this now.
+        let raw = vec![9u8, 8, 7, 255];
+        assert_eq!(letterbox_frame_top_down(&raw, 1, 1, 4, 2, 2), place_frame_in_canvas(&raw, 1, 1, 4, 2, 2, 0, 0));
+    }
+
+    #[test]
+    fn place_frame_in_canvas_pads_at_a_positive_offset() {
+        // 1x1 live frame placed at (1,1) inside a 3x3 canvas: everything but
+        // that one destination pixel stays black.
+        let raw = vec![9u8, 8, 7, 255];
+        let (out, stride) = place_frame_in_canvas(&raw, 1, 1, 4, 3, 3, 1, 1);
+        assert_eq!(stride, 12);
+        let mut expected = vec![0u8; 12 * 3];
+        let off = 12 + 4;
+        expected[off..off + 4].copy_from_slice(&[9, 8, 7, 255]);
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn place_frame_in_canvas_clips_a_negative_offset() {
+        // 2x2 live frame placed at (-1,-1): only its bottom-right pixel is
+        // still inside the canvas, landing at (0,0) -- the "display placed
+        // left of/above the first one" case.
+        let px = |n: u8| [n, n, n, 255u8];
+        let mut raw = Vec::new();
+        for n in 0..4u8 {
+            raw.extend_from_slice(&px(n));
+        }
+        let (out, stride) = place_frame_in_canvas(&raw, 2, 2, 8, 2, 2, -1, -1);
+        assert_eq!(stride, 8);
+        assert_eq!(out, vec![3, 3, 3, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn place_frame_in_canvas_clips_a_frame_hanging_past_the_right_edge() {
+        // 2x1 live frame placed at (1,0) inside a 2x1 canvas: only its first
+        // column fits, the second is clipped off.
+        let px = |n: u8| [n, n, n, 255u8];
+        let mut raw = Vec::new();
+        raw.extend_from_slice(&px(5));
+        raw.extend_from_slice(&px(6));
+        let (out, stride) = place_frame_in_canvas(&raw, 2, 1, 8, 2, 1, 1, 0);
+        assert_eq!(stride, 8);
+        assert_eq!(out, vec![0, 0, 0, 0, 5, 5, 5, 255]);
+    }
+
+    #[test]
+    fn canvas_within_ceiling_accepts_up_to_and_rejects_past_the_limit() {
+        assert!(canvas_within_ceiling(8192, 4320, 8192, 4320));
+        assert!(!canvas_within_ceiling(8193, 4320, 8192, 4320));
+        assert!(!canvas_within_ceiling(7680, 4321, 8192, 4320));
+    }
+
+    #[test]
+    fn used_area_tracker_is_none_before_the_first_update() {
+        let t = UsedAreaTracker::new();
+        assert_eq!(t.get(), None);
+    }
+
+    #[test]
+    fn used_area_tracker_returns_the_union_of_every_update() {
+        let t = UsedAreaTracker::new();
+        t.update(100, 200, 50, 50); // covers (100,200)..(150,250)
+        t.update(80, 300, 20, 20); // covers (80,300)..(100,320)
+        t.update(120, 210, 10, 10); // fully inside the first rect
+        // Union of the three: x in [80,150), y in [200,320).
+        assert_eq!(t.get(), Some((80, 200, 70, 120)));
+    }
+
+    #[test]
+    fn scale_bitrate_to_used_area_is_unscaled_when_the_window_fills_the_canvas() {
+        assert_eq!(scale_bitrate_to_used_area(12000, 1920, 1080, 1920, 1080), 12000);
+    }
+
+    #[test]
+    fn scale_bitrate_to_used_area_scales_down_proportionally_to_the_area_fraction() {
+        // A 1920x1080 window on a 3840x2160 canvas covers exactly a quarter
+        // of the area, so the bitrate is scaled to a quarter too.
+        assert_eq!(scale_bitrate_to_used_area(12000, 1920, 1080, 3840, 2160), 3000);
+    }
+
+    #[test]
+    fn scale_bitrate_to_used_area_never_exceeds_the_configured_full_canvas_value() {
+        // A "used" area somehow reported larger than the canvas (should not
+        // happen, but the clamp guards it regardless) never scales upward.
+        assert_eq!(scale_bitrate_to_used_area(12000, 4000, 3000, 1920, 1080), 12000);
+    }
+
+    #[test]
+    fn scale_bitrate_to_used_area_floors_a_tiny_window_at_a_usable_rate() {
+        assert_eq!(scale_bitrate_to_used_area(12000, 10, 10, 7680, 2160), 500);
     }
 
     #[test]
