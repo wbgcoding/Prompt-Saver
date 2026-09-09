@@ -709,6 +709,139 @@ document.addEventListener("pointerdown", (e) => {
   }
 });
 
+// ---- Background jobs popover (header button) --------------------------
+// The registry lives entirely in Rust (see list_bg_ops/push_bg_op) and is
+// shared with the taskbar icon -- this just displays it. Export runs in the
+// video-editor window, convert and the ffmpeg download can run from this one,
+// but every one of their progress events is broadcast app-wide, so this
+// window learns about all three the same way regardless of which window
+// actually started them.
+const BG_OP_CANCEL_CMD = {
+  export: "cancel_export",
+  convert: "cancel_recording_convert",
+  "ffmpeg-download": "cancel_ffmpeg_download",
+};
+function bgKindNoun(kind) {
+  if (kind === "export") return t("bgKindExport");
+  if (kind === "convert") return t("bgKindConvert");
+  return t("bgKindDownload");
+}
+// The three progress strings ("Converting… {s}s (click to cancel)", etc.) all
+// start with the same short present-tense phrase this popover needs -- reusing
+// them here avoids a fourth near-duplicate translation for every language.
+function bgOpLabel(kind) {
+  const key = kind === "export" ? "veExporting" : kind === "convert" ? "recConverting" : "ffmpegDownloading";
+  const s = t(key);
+  const i = s.indexOf("{");
+  return (i >= 0 ? s.slice(0, i) : s).trim();
+}
+const bgOpsPop = document.createElement("div");
+bgOpsPop.className = "pick-history-pop hidden";
+document.body.appendChild(bgOpsPop);
+function closeBgOpsPop() { bgOpsPop.classList.add("hidden"); }
+document.addEventListener("pointerdown", (e) => {
+  if (bgOpsPop.classList.contains("hidden")) return;
+  if (!bgOpsPop.contains(e.target) && !e.target.closest("#bg-ops-btn")) closeBgOpsPop();
+});
+
+function renderBgOpsPop(ops) {
+  bgOpsPop.innerHTML = "";
+  if (!ops.length) {
+    const empty = document.createElement("div");
+    empty.className = "pick-history-empty";
+    empty.textContent = t("bgNone");
+    bgOpsPop.appendChild(empty);
+    return;
+  }
+  for (const op of ops) {
+    const row = document.createElement("div");
+    row.className = "bg-ops-row";
+    const label = document.createElement("span");
+    label.className = "bg-ops-label";
+    label.textContent = bgOpLabel(op.kind);
+    const pct = document.createElement("span");
+    pct.className = "bg-ops-pct";
+    pct.textContent = op.state === "error" ? "–" : op.state === "done" ? "100%" : (op.pct != null ? `${op.pct}%` : "…");
+    row.append(label, pct);
+    if (op.target) {
+      const openBtn = document.createElement("button");
+      openBtn.type = "button";
+      openBtn.className = "ghost-btn bg-ops-action";
+      openBtn.textContent = t("bgOpenFolder");
+      openBtn.addEventListener("click", () => invoke("open_bg_op_folder", { path: op.target }).catch((err) => errToast(err)));
+      row.appendChild(openBtn);
+    }
+    if (op.state === "running" || op.state === "indeterminate") {
+      const cancelCmd = BG_OP_CANCEL_CMD[op.kind];
+      if (cancelCmd) {
+        const cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.className = "ghost-btn bg-ops-action";
+        cancelBtn.textContent = t("cancel");
+        cancelBtn.addEventListener("click", () => invoke(cancelCmd).catch(() => {}));
+        row.appendChild(cancelBtn);
+      }
+    }
+    bgOpsPop.appendChild(row);
+  }
+}
+
+// Keyed by "kind:started_at_ms" -- the registry itself is keyed by kind alone
+// (only one job per kind at a time today), but that combination is what tells
+// this toast-once check a NEW run of the same kind from one it already showed.
+const bgOpsToasted = new Set();
+let bgOpsFirstRun = true;
+
+async function refreshBgOps() {
+  let ops = [];
+  try { ops = (await invoke("list_bg_ops")) || []; } catch { return; }
+  const running = ops.filter((o) => o.state === "running" || o.state === "indeterminate");
+  $("bg-ops-btn").classList.toggle("hidden", running.length === 0);
+  $("bg-ops-badge").classList.toggle("hidden", running.length === 0);
+  $("bg-ops-badge").textContent = String(running.length);
+  if (!bgOpsPop.classList.contains("hidden")) renderBgOpsPop(ops);
+  for (const op of ops) {
+    if (op.state !== "done" && op.state !== "error") continue;
+    const key = `${op.kind}:${op.started_at_ms}`;
+    if (bgOpsToasted.has(key)) continue;
+    bgOpsToasted.add(key);
+    // First call after load just learns the current state -- a job finished
+    // before this window ever asked about it does not need a toast for it.
+    if (bgOpsFirstRun || op.state !== "done") continue;
+    const action = op.target
+      ? { label: t("bgOpenFolder"), onClick: () => invoke("open_bg_op_folder", { path: op.target }).catch((err) => errToast(err)) }
+      : null;
+    toast(t("bgDoneToast").replace("{what}", bgKindNoun(op.kind)), action);
+  }
+  bgOpsFirstRun = false;
+}
+
+$("bg-ops-btn").addEventListener("click", async () => {
+  if (!bgOpsPop.classList.contains("hidden")) { closeBgOpsPop(); return; }
+  let ops = [];
+  try { ops = (await invoke("list_bg_ops")) || []; } catch { /* show empty rather than nothing */ }
+  renderBgOpsPop(ops);
+  bgOpsPop.classList.remove("hidden");
+  placePopover(bgOpsPop, $("bg-ops-btn").getBoundingClientRect());
+});
+
+// push_bg_op (Rust) broadcasts this on every state change -- running tick,
+// done, error -- regardless of which window (if any) started the job, so this
+// popover stays live without a separate poll timer.
+listen("bg-ops-changed", refreshBgOps);
+refreshBgOps();
+
+listen("bg-quit-requested", async (e) => {
+  const n = Number(e.payload) || 0;
+  const ok = await confirmDialog({
+    title: t("bgTitle"),
+    message: t("bgQuitRunning").replace("{n}", String(n)),
+    confirmLabel: t("bgCancelClose"),
+    danger: true,
+  });
+  if (ok) invoke("confirm_quit_with_running_ops").catch(() => {});
+});
+
 function renderNumPop() {
   const v = clampGrid(popInput.value, 1);
   numPop.innerHTML = "";
@@ -1588,6 +1721,7 @@ const EXPERT_VALUES = {
   // far, and only if what's left is still worth naming a number for.
   etaMinPct: { label: "valEtaMinPct", min: 0, max: 50, step: 1, def: 10, unit: "%", gate: "etaShow" },
   etaMinSecs: { label: "valEtaMinSecs", min: 0, max: 120, step: 5, def: 20, unit: "s", gate: "etaShow" },
+  bgDoneKeepMin: { label: "bgDoneKeepMin", min: 1, max: 120, step: 1, def: 10, unit: "min" },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -1851,7 +1985,7 @@ const EXPERT_TABS = [
     // Toolbar button visibility (mirrors the header right-click tool list).
     { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "gridViewBorder", "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }, "pinButton", "barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
     { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
-    { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances", "taskbarProgress", "etaShow"], values: ["kbFocusFadeMs", "etaMinPct", "etaMinSecs"], selects: ["updateCheckH"], paths: ["dataDir"],
+    { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances", "taskbarProgress", "etaShow"], values: ["kbFocusFadeMs", "etaMinPct", "etaMinSecs", "bgDoneKeepMin"], selects: ["updateCheckH"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
@@ -12643,9 +12777,6 @@ function bind() {
       if (recProgressOff === myOff) recProgressOff = null;
       return;
     }
-    // No real percentage is computed here (only elapsed seconds, above), so the
-    // taskbar just shows "something is happening" rather than a fake number.
-    invoke("set_taskbar_progress", { op: "convert", state: "indeterminate" }).catch(() => {});
     try {
       const outPath = await invoke("convert_recording", { srcPath: rawPath, format, lossless });
       if (gen !== recGen) return;
@@ -12681,9 +12812,6 @@ function bind() {
       // tear down a newer, still-active openRecModal call's own listener.
       myOff();
       if (recProgressOff === myOff) recProgressOff = null;
-      // Same superseding concern as the listener above: only the still-current
-      // generation may clear the taskbar entry a newer call might now own.
-      if (gen === recGen) invoke("set_taskbar_progress", { op: "convert", state: "done" }).catch(() => {});
     }
   }
   // The periodic sweep and "once a recording ends" both fire this live
@@ -15581,7 +15709,6 @@ function bind() {
       dlEta.feed(pct);
       const eta = flag("etaShow") ? formatEta(dlEta.estimate(val("etaMinPct"), val("etaMinSecs")), t) : "";
       btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
-      invoke("set_taskbar_progress", { op: "ffmpeg-download", state: "running", value: pct }).catch(() => {});
     });
     try {
       await invoke("download_ffmpeg");
@@ -15595,7 +15722,6 @@ function bind() {
       ffmpegBusy = false;
       btn.textContent = label;
       btn.title = origTitle || "";
-      invoke("set_taskbar_progress", { op: "ffmpeg-download", state: "done" }).catch(() => {});
     }
   };
 

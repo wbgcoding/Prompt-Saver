@@ -1403,16 +1403,7 @@ fn fire_tray_copy(app: &AppHandle, id: &str) {
 fn handle_tray_menu_id(app: &AppHandle, id: &str) {
     match id {
         "show" => show_main(app),
-        "quit" => {
-            if let Some(state) = app.try_state::<Db>() {
-                let store = state.lock().unwrap_or_else(|e| e.into_inner());
-                save_settings(app, &store.settings);
-            }
-            #[cfg(windows)]
-            clipwatch::stop(); // flush a pending auto-session for real
-            voice_shutdown(app);
-            app.exit(0);
-        }
+        "quit" => request_app_quit(app),
         "rec-stop" => trigger_rec_stop_hotkey(app),
         "rec-pause-toggle" => trigger_rec_pause_hotkey(app),
         other => {
@@ -18144,50 +18135,188 @@ fn install_update_blocking(url: String) -> Result<(), String> {
     Ok(())
 }
 
-// ---------- Windows taskbar icon progress, combined across every long-running task ----------
+// ---------- Background operations: one source for the taskbar icon AND
+// the running-jobs list in the main window's header ----------
 //
 // Export, recording conversion, the ffmpeg download, a backup and an import can
 // each run for a while with the window sitting in the background. Every one of
 // them reports its own state into this small registry instead of touching the
 // taskbar icon directly, so two running at once -- or one finishing while
 // another starts -- combine into one sane reading instead of the second simply
-// overwriting the first's icon state.
+// overwriting the first's icon state. The same registry backs the header
+// popover's list of jobs, so the two views can never disagree about what is
+// actually running.
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum TaskbarOpState {
+enum OpPhase {
     Running(u8), // a percent value, never above 100
     Indeterminate,
     Error,
+    // Kept around (not removed) for bgDoneKeepMin minutes so a finished job
+    // still shows in the header popover after it completes.
+    Done,
 }
 
-fn taskbar_ops() -> &'static Mutex<HashMap<String, TaskbarOpState>> {
+#[derive(Clone, Debug)]
+struct BgOp {
+    phase: OpPhase,
+    target: Option<String>, // destination file/folder, for the popover's "open folder"
+    started_at_ms: u64,
+    finished_at_ms: Option<u64>,
+}
+
+impl BgOp {
+    fn fresh() -> Self {
+        Self { phase: OpPhase::Indeterminate, target: None, started_at_ms: now_ms(), finished_at_ms: None }
+    }
+    fn state_str(&self) -> &'static str {
+        match self.phase {
+            OpPhase::Running(_) => "running",
+            OpPhase::Indeterminate => "indeterminate",
+            OpPhase::Error => "error",
+            OpPhase::Done => "done",
+        }
+    }
+    fn pct(&self) -> Option<u8> {
+        match self.phase {
+            OpPhase::Running(v) => Some(v),
+            _ => None,
+        }
+    }
+}
+
+// What the frontend actually reads (`list_bg_ops`) -- OpPhase itself has no
+// serde impl, so this is the flattened, JSON-friendly shape.
+#[derive(Clone, Debug, serde::Serialize)]
+struct BgOpInfo {
+    kind: String,
+    target: Option<String>,
+    state: String,
+    pct: Option<u8>,
+    started_at_ms: u64,
+    finished_at_ms: Option<u64>,
+}
+
+fn bg_ops() -> &'static Mutex<HashMap<String, BgOp>> {
     use std::sync::OnceLock;
-    static OPS: OnceLock<Mutex<HashMap<String, TaskbarOpState>>> = OnceLock::new();
+    static OPS: OnceLock<Mutex<HashMap<String, BgOp>>> = OnceLock::new();
     OPS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 // Pure and window-free on purpose, so the state machine (several operations at
 // once, one erroring, all finishing) can be unit-tested without a real HWND.
-// Any error wins outright; otherwise an empty map is "off"; otherwise any
-// indeterminate operation wins over a plain percentage; otherwise the shown
-// percentage is the average across every running operation.
-fn aggregate_taskbar_state(ops: &HashMap<String, TaskbarOpState>) -> (&'static str, Option<u8>) {
-    if ops.values().any(|s| *s == TaskbarOpState::Error) {
+// A finished job stays in the map for the popover but never affects the icon:
+// any error still running wins outright; otherwise no active job is "off";
+// otherwise any indeterminate operation wins over a plain percentage;
+// otherwise the shown percentage is the average across every running operation.
+fn aggregate_taskbar_state(ops: &HashMap<String, BgOp>) -> (&'static str, Option<u8>) {
+    let active: Vec<&BgOp> = ops.values().filter(|o| o.phase != OpPhase::Done).collect();
+    if active.iter().any(|o| o.phase == OpPhase::Error) {
         return ("error", None);
     }
-    if ops.is_empty() {
+    if active.is_empty() {
         return ("off", None);
     }
-    if ops.values().any(|s| *s == TaskbarOpState::Indeterminate) {
+    if active.iter().any(|o| o.phase == OpPhase::Indeterminate) {
         return ("indeterminate", None);
     }
-    let sum: u32 = ops
+    let sum: u32 = active.iter().map(|o| o.pct().unwrap_or(0) as u32).sum();
+    ("normal", Some((sum / active.len() as u32) as u8))
+}
+
+// A finished job survives for `keep_min` minutes so the header popover still
+// shows it, then is swept away on the next read or write.
+fn prune_finished_ops(ops: &mut HashMap<String, BgOp>, keep_min: f64) {
+    let cutoff = now_ms().saturating_sub((keep_min.max(0.0) * 60_000.0) as u64);
+    ops.retain(|_, o| o.finished_at_ms.map_or(true, |f| f >= cutoff));
+}
+
+fn bg_ops_running_count() -> usize {
+    bg_ops()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
         .values()
-        .map(|s| match s {
-            TaskbarOpState::Running(v) => *v as u32,
-            _ => 0,
+        .filter(|o| matches!(o.phase, OpPhase::Running(_) | OpPhase::Indeterminate))
+        .count()
+}
+
+fn bg_done_keep_min(state_db: &State<Db>) -> f64 {
+    state_db
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .settings
+        .ui_values
+        .get("bgDoneKeepMin")
+        .copied()
+        .unwrap_or(10.0)
+        .max(0.0)
+}
+
+// The one place `bg_ops()` is ever written. Deliberately free of any
+// AppHandle/window dependency: an export's own progress closure calls this
+// directly (see export_video_blocking's caller), so a job keeps reporting
+// correctly even once the window that started it is gone -- proved with no
+// window at all by export_progress_survives_a_closed_window below.
+fn record_bg_op(op: &str, state: &str, value: Option<u32>, target: Option<String>, keep_min: f64) -> (&'static str, Option<u8>) {
+    let mut ops = bg_ops().lock().unwrap_or_else(|e| e.into_inner());
+    match state {
+        "done" => {
+            if let Some(existing) = ops.get_mut(op) {
+                existing.phase = OpPhase::Done;
+                existing.finished_at_ms = Some(now_ms());
+            }
+        }
+        "error" => {
+            let entry = ops.entry(op.to_string()).or_insert_with(BgOp::fresh);
+            entry.phase = OpPhase::Error;
+            entry.finished_at_ms = Some(now_ms());
+            if target.is_some() {
+                entry.target = target;
+            }
+        }
+        "indeterminate" => {
+            let entry = ops.entry(op.to_string()).or_insert_with(BgOp::fresh);
+            entry.phase = OpPhase::Indeterminate;
+            entry.finished_at_ms = None;
+            if target.is_some() {
+                entry.target = target;
+            }
+        }
+        _ => {
+            let entry = ops.entry(op.to_string()).or_insert_with(BgOp::fresh);
+            entry.phase = OpPhase::Running(value.unwrap_or(0).min(100) as u8);
+            entry.finished_at_ms = None;
+            if target.is_some() {
+                entry.target = target;
+            }
+        }
+    }
+    prune_finished_ops(&mut ops, keep_min);
+    aggregate_taskbar_state(&ops)
+}
+
+fn list_bg_ops_impl(keep_min: f64) -> Vec<BgOpInfo> {
+    let mut ops = bg_ops().lock().unwrap_or_else(|e| e.into_inner());
+    prune_finished_ops(&mut ops, keep_min);
+    let mut list: Vec<BgOpInfo> = ops
+        .iter()
+        .map(|(kind, o)| BgOpInfo {
+            kind: kind.clone(),
+            target: o.target.clone(),
+            state: o.state_str().to_string(),
+            pct: o.pct(),
+            started_at_ms: o.started_at_ms,
+            finished_at_ms: o.finished_at_ms,
         })
-        .sum();
-    ("normal", Some((sum / ops.len() as u32) as u8))
+        .collect();
+    list.sort_by_key(|o| o.started_at_ms);
+    list
 }
 
 #[cfg(windows)]
@@ -18226,42 +18355,139 @@ fn apply_taskbar_state(_app: &AppHandle, _state: &str, _value: Option<u8>) {}
 
 // `op` names which feature is reporting ("export", "convert", "ffmpeg-download",
 // "backup", "import"); `state` is "running" (with a 0-100 `value`),
-// "indeterminate", "error", or "done" (drops this operation's own entry). Every
-// caller is expected to eventually send "done" or "error" even on its own
-// cancel/failure path -- a taskbar icon stuck mid-progress is worse than none.
+// "indeterminate", "error", or "done" (marks this operation's own entry done,
+// kept for bgDoneKeepMin minutes rather than dropped right away). `target` is
+// an optional destination file/folder for the header popover's "open folder"
+// button; omitted or None leaves a previously reported target unchanged.
+// Every caller is expected to eventually send "done" or "error" even on its
+// own cancel/failure path -- a taskbar icon stuck mid-progress is worse than
+// none. The registry itself is updated regardless of the taskbarProgress
+// switch below -- that switch only controls the Windows icon, never whether
+// the header's own running-jobs list sees the job.
+//
+// This is deliberately just a thin AppHandle-holder around push_bg_op, kept
+// as its own function so the frontend still has a single, stable command
+// name to invoke -- the internal Rust progress loops below (export_video,
+// convert_recording, download_ffmpeg) call push_bg_op directly instead of
+// going through this command, so their own reporting survives a closed window.
 #[tauri::command]
-fn set_taskbar_progress(app: AppHandle, state_db: State<Db>, op: String, state: String, value: Option<u32>) {
-    let enabled = state_db
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .settings
-        .ui_flags
-        .get("taskbarProgress")
-        .copied()
+fn set_taskbar_progress(app: AppHandle, op: String, state: String, value: Option<u32>, target: Option<String>) {
+    push_bg_op(&app, &op, &state, value, target);
+}
+
+// Updates the shared registry AND the real taskbar icon in one call --
+// exactly what the set_taskbar_progress command above does, but usable from
+// anywhere in Rust that already holds an AppHandle, with no window or
+// command-invocation round trip required.
+fn push_bg_op(app: &AppHandle, op: &str, state: &str, value: Option<u32>, target: Option<String>) {
+    let keep_min = app.try_state::<Db>().map(|s| bg_done_keep_min(&s)).unwrap_or(10.0);
+    let (agg_state, agg_value) = record_bg_op(op, state, value, target, keep_min);
+    // One shared broadcast point for every state change (running tick, done,
+    // error) -- the main window's header popover listens for this instead of
+    // polling, so a job finishing is reflected there even when the window that
+    // started it (the video editor, say) is the one whose own promise resolves.
+    let _ = app.emit("bg-ops-changed", ());
+    let enabled = app
+        .try_state::<Db>()
+        .map(|s| {
+            s.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .settings
+                .ui_flags
+                .get("taskbarProgress")
+                .copied()
+                .unwrap_or(true)
+        })
         .unwrap_or(true);
-    if !enabled {
-        apply_taskbar_state(&app, "off", None);
-        return;
+    if enabled {
+        apply_taskbar_state(app, agg_state, agg_value);
+    } else {
+        apply_taskbar_state(app, "off", None);
     }
-    let (agg_state, agg_value) = {
-        let mut ops = taskbar_ops().lock().unwrap_or_else(|e| e.into_inner());
-        match state.as_str() {
-            "done" => {
-                ops.remove(&op);
-            }
-            "error" => {
-                ops.insert(op, TaskbarOpState::Error);
-            }
-            "indeterminate" => {
-                ops.insert(op, TaskbarOpState::Indeterminate);
-            }
-            _ => {
-                ops.insert(op, TaskbarOpState::Running(value.unwrap_or(0).min(100) as u8));
-            }
-        }
-        aggregate_taskbar_state(&ops)
-    };
-    apply_taskbar_state(&app, agg_state, agg_value);
+}
+
+#[tauri::command]
+fn list_bg_ops(state_db: State<Db>) -> Vec<BgOpInfo> {
+    list_bg_ops_impl(bg_done_keep_min(&state_db))
+}
+
+// Cancels every cancelable kind of running job unconditionally -- each of the
+// three is a cheap no-op when its own job is not actually running. Backup and
+// import have no cancel primitive of their own (interrupting a database write
+// mid-flight is the genuinely risky case), so quitting with one of those still
+// running is gated by asking first (see the CloseRequested handler below),
+// never by trying to abort it here.
+#[tauri::command]
+fn cancel_all_bg_ops() {
+    cancel_export();
+    cancel_recording_convert();
+    cancel_ffmpeg_download();
+}
+
+// Reveals the folder for a path already recorded as some job's own `target` --
+// never a path typed or picked by anything else, so this is exactly as safe
+// as open_backups_folder's own single-fixed-argument Explorer call above.
+#[tauri::command]
+fn open_bg_op_folder(path: String) -> Result<(), String> {
+    let p = PathBuf::from(&path);
+    let dir = if p.is_dir() { p } else { p.parent().map(|d| d.to_path_buf()).unwrap_or(p) };
+    if !dir.is_dir() {
+        return Err("folder not found".to_string());
+    }
+    std::process::Command::new("explorer")
+        .arg(&dir)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+// Set once the main window's own confirm dialog answers "quit anyway" to a
+// bg-quit-requested prompt -- the close() that follows re-enters
+// CloseRequested a second time, and this flag lets that second pass through
+// instead of asking again. Never reset: a fresh app run starts at false.
+static QUIT_CONFIRMED: AtomicBool = AtomicBool::new(false);
+
+// The app's one real shutdown sequence -- same three steps whether it runs
+// straight from CloseRequested (nothing was running) or from
+// confirm_quit_with_running_ops (the user chose to quit anyway).
+fn do_full_exit(handle: &AppHandle) {
+    if let Some(state) = handle.try_state::<Db>() {
+        let store = state.lock().unwrap_or_else(|e| e.into_inner());
+        save_settings(handle, &store.settings);
+    }
+    #[cfg(windows)]
+    clipwatch::stop();
+    voice_shutdown(handle);
+    handle.exit(0);
+}
+
+// The one gate every full-quit path goes through -- the main window's close
+// button AND the tray menu's "Quit", so a job started from either entry point
+// gets the same "N jobs are still running, cancel them and quit?" question
+// instead of the tray simply skipping it. Shows the main window first: the
+// confirm dialog lives in its webview, so asking while it is still hidden
+// (minimized to tray) would leave the question unseen.
+fn request_app_quit(app: &AppHandle) {
+    let running = bg_ops_running_count();
+    if running > 0 && !QUIT_CONFIRMED.load(Ordering::SeqCst) {
+        show_main(app);
+        let _ = app.emit_to("main", "bg-quit-requested", running);
+    } else {
+        do_full_exit(app);
+    }
+}
+
+// Called only after the main window's own dialog asked "N jobs are still
+// running, cancel them and quit?" and the user said yes. Cancels every
+// cancelable job (backup/import have no cancel of their own -- see
+// cancel_all_bg_ops) and closes the main window again, this time for real.
+#[tauri::command]
+fn confirm_quit_with_running_ops(app: AppHandle) {
+    cancel_all_bg_ops();
+    QUIT_CONFIRMED.store(true, Ordering::SeqCst);
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.close();
+    }
 }
 
 // ---------- ffmpeg: fetched on demand for video export/conversion ----------
@@ -18388,9 +18614,13 @@ fn ffmpeg_install_dir(app: &AppHandle) -> PathBuf {
 #[tauri::command]
 async fn download_ffmpeg(app: AppHandle) -> Result<String, String> {
     FFMPEG_DOWNLOAD_CANCEL.store(false, Ordering::SeqCst);
-    tauri::async_runtime::spawn_blocking(move || download_ffmpeg_blocking(&app))
+    push_bg_op(&app, "ffmpeg-download", "indeterminate", None, None);
+    let app_done = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || download_ffmpeg_blocking(&app))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
+    push_bg_op(&app_done, "ffmpeg-download", if result.is_ok() { "done" } else { "error" }, None, None);
+    result
 }
 
 // Sanity-check this is actually a zip (local file header "PK\x03\x04") before
@@ -18445,6 +18675,8 @@ fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String> {
             "ffmpeg-download-progress",
             serde_json::json!({ "downloaded": bytes.len() as u64, "total": total }),
         );
+        let pct = if total > 0 { Some(((bytes.len() as u64 * 100) / total) as u32) } else { None };
+        push_bg_op(app, "ffmpeg-download", if pct.is_some() { "running" } else { "indeterminate" }, pct, None);
     }
     if FFMPEG_DOWNLOAD_CANCEL.load(Ordering::SeqCst) {
         return Err("cancelled".to_string());
@@ -18534,13 +18766,17 @@ async fn convert_recording(app: AppHandle, src_path: String, format: String, los
     }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     REC_CONVERT_CANCEL.store(false, Ordering::SeqCst);
-    tauri::async_runtime::spawn_blocking(move || {
+    push_bg_op(&app, "convert", "indeterminate", None, Some(src_path.clone()));
+    let app_done = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
         convert_recording_blocking(&ffmpeg, &src, &format, lossless, |ms| {
             let _ = app.emit("recording-convert-progress", ConvertProgressPayload { ms });
         })
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+    push_bg_op(&app_done, "convert", if result.is_ok() { "done" } else { "error" }, None, None);
+    result
 }
 
 // A request to "convert" mp4 -> mp4 without the lossless step would just
@@ -19250,6 +19486,11 @@ struct ExportRequest {
     video_kbps: Option<u32>,
     trim_start_ms: Option<u64>,
     trim_end_ms: Option<u64>,
+    // The finished export's own expected length, in the caller's own words --
+    // never read by export_video_blocking itself, only by export_video's own
+    // progress wrapper, to turn a raw "ms encoded so far" reading into the
+    // percent the header's running-jobs list actually shows.
+    total_ms: u64,
 }
 
 // A plain shared AtomicBool let a second export un-cancel a first one --
@@ -19273,6 +19514,10 @@ fn cancel_export() {
 // Progress reuses "recording-convert-progress" / ConvertProgressPayload --
 // convert_recording's own event -- rather than a second progress channel; the
 // editor window listens to the same event name while an export is in flight.
+// The taskbar/running-jobs registry is updated from RIGHT HERE, inside the
+// progress closure and around the result, rather than by the editor window's
+// own JS calling set_taskbar_progress -- so a job keeps reporting correctly
+// even once the window that started it has closed.
 #[tauri::command]
 async fn export_video(app: AppHandle, req: ExportRequest) -> Result<String, String> {
     if !matches!(req.format.as_str(), "mp4" | "webm" | "gif" | "avi" | "mov" | "mkv" | "webpanim" | "apng") {
@@ -19285,13 +19530,26 @@ async fn export_video(app: AppHandle, req: ExportRequest) -> Result<String, Stri
     let dst = PathBuf::from(&req.dest_path);
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
-    tauri::async_runtime::spawn_blocking(move || {
-        export_video_blocking(&ffmpeg, &src, &dst, &req, my_gen, |ms| {
-            let _ = app.emit("recording-convert-progress", ConvertProgressPayload { ms });
+    let target = req.dest_path.clone();
+    let total_ms = req.total_ms.max(1);
+    let progress_app = app.clone();
+    let progress_target = target.clone();
+    push_bg_op(&app, "export", "running", Some(0), Some(target.clone()));
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        export_video_blocking(&ffmpeg, &src, &dst, &req, my_gen, move |ms| {
+            let _ = progress_app.emit("recording-convert-progress", ConvertProgressPayload { ms });
+            let pct = ((ms as u64 * 100) / total_ms).min(100) as u32;
+            push_bg_op(&progress_app, "export", "running", Some(pct), Some(progress_target.clone()));
         })
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+    match &result {
+        Ok(_) => push_bg_op(&app, "export", "done", None, None),
+        Err(e) if e == "cancelled" => push_bg_op(&app, "export", "done", None, None),
+        Err(_) => push_bg_op(&app, "export", "error", None, None),
+    }
+    result
 }
 
 // ---------- Export size estimate: "roughly this big" in the format's own hint ----------
@@ -21981,14 +22239,14 @@ pub fn run() {
                                 let _ = w.hide();
                             }
                         } else {
-                            if let Some(state) = handle2.try_state::<Db>() {
-                                let store = state.lock().unwrap_or_else(|e| e.into_inner());
-                                save_settings(&handle2, &store.settings);
-                            }
-                            #[cfg(windows)]
-                            clipwatch::stop(); // flush a pending auto-session for real
-                            voice_shutdown(&handle2);
-                            handle2.exit(0);
+                            // Never vanish while an export, conversion, ffmpeg
+                            // download, backup or import is still going --
+                            // request_app_quit asks the main window first,
+                            // exactly once per quit attempt (QUIT_CONFIRMED
+                            // short-circuits the second CloseRequested that
+                            // confirm_quit_with_running_ops itself triggers).
+                            api.prevent_close();
+                            request_app_quit(&handle2);
                         }
                     }
                     WindowEvent::Destroyed => {
@@ -22263,6 +22521,10 @@ pub fn run() {
             download_ffmpeg,
             cancel_ffmpeg_download,
             set_taskbar_progress,
+            list_bg_ops,
+            cancel_all_bg_ops,
+            open_bg_op_folder,
+            confirm_quit_with_running_ops,
             set_auto_update,
             set_hotkey,
             check_hotkey,
@@ -23531,44 +23793,109 @@ mod tests {
 
     // ---- taskbar progress: the pure aggregation state machine, no real window ----
 
+    fn bg_op(phase: OpPhase) -> BgOp {
+        BgOp { phase, target: None, started_at_ms: now_ms(), finished_at_ms: None }
+    }
+
     #[test]
     fn taskbar_aggregate_is_off_with_no_operations() {
-        let ops: HashMap<String, TaskbarOpState> = HashMap::new();
+        let ops: HashMap<String, BgOp> = HashMap::new();
         assert_eq!(aggregate_taskbar_state(&ops), ("off", None));
     }
 
     #[test]
     fn taskbar_aggregate_averages_several_running_operations() {
         let mut ops = HashMap::new();
-        ops.insert("export".to_string(), TaskbarOpState::Running(40));
-        ops.insert("ffmpeg-download".to_string(), TaskbarOpState::Running(60));
+        ops.insert("export".to_string(), bg_op(OpPhase::Running(40)));
+        ops.insert("ffmpeg-download".to_string(), bg_op(OpPhase::Running(60)));
         assert_eq!(aggregate_taskbar_state(&ops), ("normal", Some(50)));
     }
 
     #[test]
     fn taskbar_aggregate_prefers_indeterminate_over_a_running_percentage() {
         let mut ops = HashMap::new();
-        ops.insert("export".to_string(), TaskbarOpState::Running(75));
-        ops.insert("backup".to_string(), TaskbarOpState::Indeterminate);
+        ops.insert("export".to_string(), bg_op(OpPhase::Running(75)));
+        ops.insert("backup".to_string(), bg_op(OpPhase::Indeterminate));
         assert_eq!(aggregate_taskbar_state(&ops), ("indeterminate", None));
     }
 
     #[test]
     fn taskbar_aggregate_reports_error_even_with_other_operations_still_running() {
         let mut ops = HashMap::new();
-        ops.insert("export".to_string(), TaskbarOpState::Running(20));
-        ops.insert("convert".to_string(), TaskbarOpState::Error);
+        ops.insert("export".to_string(), bg_op(OpPhase::Running(20)));
+        ops.insert("convert".to_string(), bg_op(OpPhase::Error));
         assert_eq!(aggregate_taskbar_state(&ops), ("error", None));
     }
 
     #[test]
     fn taskbar_aggregate_returns_to_off_once_the_only_operation_is_removed_mid_way() {
         let mut ops = HashMap::new();
-        ops.insert("convert".to_string(), TaskbarOpState::Running(30));
+        ops.insert("convert".to_string(), bg_op(OpPhase::Running(30)));
         assert_eq!(aggregate_taskbar_state(&ops), ("normal", Some(30)));
-        // "done" (a cancel or a normal finish) drops the entry, the same as set_taskbar_progress does.
         ops.remove("convert");
         assert_eq!(aggregate_taskbar_state(&ops), ("off", None));
+    }
+
+    #[test]
+    fn taskbar_aggregate_ignores_a_done_job_kept_around_for_the_popover() {
+        // A finished job lingers in the map for bgDoneKeepMin so the header
+        // popover can still list it, but must never keep the taskbar icon
+        // showing stale progress.
+        let mut ops = HashMap::new();
+        ops.insert("export".to_string(), bg_op(OpPhase::Done));
+        assert_eq!(aggregate_taskbar_state(&ops), ("off", None));
+        ops.insert("convert".to_string(), bg_op(OpPhase::Running(55)));
+        assert_eq!(aggregate_taskbar_state(&ops), ("normal", Some(55)));
+    }
+
+    // ---- background operations: the shared registry behind 386 and 397 ----
+
+    #[test]
+    fn record_bg_op_reports_running_then_done_and_keeps_the_done_entry_briefly() {
+        let op = format!("test-record-{}", std::process::id());
+        record_bg_op(&op, "running", Some(10), Some("C:\\out\\x.mp4".to_string()), 10.0);
+        let list = list_bg_ops_impl(10.0);
+        let row = list.iter().find(|o| o.kind == op).expect("running job must be listed");
+        assert_eq!(row.state, "running");
+        assert_eq!(row.pct, Some(10));
+        assert_eq!(row.target.as_deref(), Some("C:\\out\\x.mp4"));
+
+        record_bg_op(&op, "done", None, None, 10.0);
+        let list = list_bg_ops_impl(10.0);
+        let row = list.iter().find(|o| o.kind == op).expect("a just-finished job stays listed");
+        assert_eq!(row.state, "done");
+        assert!(row.finished_at_ms.is_some());
+        // A "done" call with no target must not blank out the one already recorded.
+        assert_eq!(row.target.as_deref(), Some("C:\\out\\x.mp4"));
+
+        bg_ops().lock().unwrap_or_else(|e| e.into_inner()).remove(&op);
+    }
+
+    #[test]
+    fn prune_finished_ops_drops_a_done_job_past_its_keep_window() {
+        let mut ops = HashMap::new();
+        ops.insert(
+            "old-export".to_string(),
+            BgOp { phase: OpPhase::Done, target: None, started_at_ms: 0, finished_at_ms: Some(0) },
+        );
+        prune_finished_ops(&mut ops, 10.0); // 0ms is far more than 10 minutes ago
+        assert!(ops.is_empty(), "a long-finished job must be swept away");
+    }
+
+    #[test]
+    fn bg_ops_running_count_ignores_done_and_error_entries() {
+        let a = format!("test-count-a-{}", std::process::id());
+        let b = format!("test-count-b-{}", std::process::id());
+        let before = bg_ops_running_count();
+        record_bg_op(&a, "running", Some(1), None, 10.0);
+        record_bg_op(&b, "error", None, None, 10.0);
+        // Only `a` (still running) should raise the count; `b` already failed.
+        assert_eq!(bg_ops_running_count(), before + 1);
+        record_bg_op(&a, "done", None, None, 10.0);
+        assert_eq!(bg_ops_running_count(), before);
+        let mut ops = bg_ops().lock().unwrap_or_else(|e| e.into_inner());
+        ops.remove(&a);
+        ops.remove(&b);
     }
 
     // ---- ffmpeg: zip-signature + pinned-hash verification, no network needed ----
@@ -24042,6 +24369,7 @@ mod tests {
             video_kbps: None,
             trim_start_ms: Some(0),
             trim_end_ms: Some(1000),
+            total_ms: 60_000,
         };
         let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
         let out = export_video_blocking(&ffmpeg, &src, &dest, &req, my_gen, |_| {}).expect("export should succeed");
@@ -24071,6 +24399,7 @@ mod tests {
             video_kbps: Some(1000),
             trim_start_ms: None,
             trim_end_ms: None,
+            total_ms: 60_000,
         };
         let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
         let out = export_video_blocking(&ffmpeg, &src, &dest, &req, my_gen, |_| {}).expect("export should succeed");
@@ -24099,6 +24428,7 @@ mod tests {
             video_kbps: Some(1000),
             trim_start_ms: None,
             trim_end_ms: None,
+            total_ms: 60_000,
         };
         let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
         let out = export_video_blocking(&ffmpeg, &src, &dest, &req, my_gen, |_| {}).expect("export should succeed");
@@ -24145,6 +24475,7 @@ mod tests {
             video_kbps: Some(2000),
             trim_start_ms: None,
             trim_end_ms: None,
+            total_ms: 60_000,
         };
         let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
         export_video_blocking(ffmpeg, src, dest, &req, my_gen, |_| {})
@@ -24282,6 +24613,7 @@ mod tests {
             video_kbps: Some(1000),
             trim_start_ms: None,
             trim_end_ms: None,
+            total_ms: 60_000,
         };
         let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
         export_video_blocking(ffmpeg, src, dest, &req, my_gen, |_| {}).expect("overlay export should succeed");
@@ -24430,6 +24762,7 @@ mod tests {
             video_kbps: Some(300),
             trim_start_ms: None,
             trim_end_ms: None,
+            total_ms: 60_000,
         };
         let capped_req = ExportRequest {
             src_path: src.to_string_lossy().to_string(),
@@ -24442,6 +24775,7 @@ mod tests {
             video_kbps: Some(300),
             trim_start_ms: None,
             trim_end_ms: None,
+            total_ms: 60_000,
         };
         let gen1 = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
         export_video_blocking(&ffmpeg, &src, &lossless_dest, &lossless_req, gen1, |_| {}).expect("lossless export should succeed");
@@ -24477,6 +24811,7 @@ mod tests {
             video_kbps: None,
             trim_start_ms: None,
             trim_end_ms: None,
+            total_ms: 60_000,
         };
         let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
         let out = export_video_blocking(&ffmpeg, &src, &dest, &req, my_gen, |_| {}).expect("gif export should succeed");
@@ -24503,6 +24838,7 @@ mod tests {
             video_kbps: Some(4000),
             trim_start_ms: None,
             trim_end_ms: None,
+            total_ms: 60_000,
         };
         let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
         std::thread::spawn(move || {

@@ -247,14 +247,21 @@ function toast(message) {
 // separate window, so this one carries the same markup, classes and behaviour.
 let confirmState = null;
 
-function veConfirm(title, message, okLabel) {
+// opts.cancelLabel/opts.thirdLabel let a caller turn this into a 3-way choice
+// (see closeWindow()'s export-in-progress case) -- the third button is click-only,
+// with no Escape/Enter shortcut of its own, and resolves the promise to "third"
+// rather than a boolean.
+function veConfirm(title, message, okLabel, opts = {}) {
   return new Promise((resolve) => {
     const overlay = $("ve-confirm");
     confirmState = { resolve, prev: document.activeElement };
     $("ve-confirm-title").textContent = title;
     $("ve-confirm-msg").textContent = message;
     $("ve-confirm-ok").textContent = okLabel || t("veDiscard");
-    $("ve-confirm-cancel").textContent = t("cancel");
+    $("ve-confirm-cancel").textContent = opts.cancelLabel || t("cancel");
+    const third = $("ve-confirm-third");
+    third.textContent = opts.thirdLabel || "";
+    third.classList.toggle("hidden", !opts.thirdLabel);
     overlay.classList.remove("hidden");
     $("ve-confirm-ok").focus();
   });
@@ -284,6 +291,7 @@ function trapTabWithin(container, e) {
 
 $("ve-confirm-ok").addEventListener("click", () => closeConfirm(true));
 $("ve-confirm-cancel").addEventListener("click", () => closeConfirm(false));
+$("ve-confirm-third").addEventListener("click", () => closeConfirm("third"));
 
 // ---------------------------------------------------------------- operation list
 
@@ -2166,7 +2174,6 @@ function setProgress(pct) {
   exportEta.feed(clamped);
   const etaSpan = $("ve-export-eta");
   etaSpan.textContent = VE.etaShow ? formatEta(exportEta.estimate(VE.etaMinPct, VE.etaMinSecs), t) : "";
-  invoke("set_taskbar_progress", { op: "export", state: "running", value: Math.round(clamped) }).catch(() => {});
 }
 
 // toClipboard runs the very same export into a throwaway temp file
@@ -2201,6 +2208,7 @@ async function startExport(toClipboard) {
     // that could carry the trim itself.
     trim_start_ms: lossless ? Math.round(keptSegments()[0].a) : null,
     trim_end_ms: lossless ? Math.round(keptSegments().slice(-1)[0].b) : null,
+    total_ms: total,
   };
   VE.exporting = true;
   $("ve-export-start").disabled = true;
@@ -2248,9 +2256,6 @@ async function startExport(toClipboard) {
     $("ve-export-clip").disabled = false;
     $("ve-export-cancel").classList.add("hidden");
     $("ve-export-eta").textContent = "";
-    // Finish, cancel and error all land here -- the taskbar entry always goes
-    // away, never left stuck mid-progress or flagged red forever.
-    invoke("set_taskbar_progress", { op: "export", state: "done" }).catch(() => {});
   }
 }
 
@@ -2283,7 +2288,6 @@ $("ve-ffmpeg-get").addEventListener("click", async (e) => {
     dlEta.feed(pct);
     const eta = VE.etaShow ? formatEta(dlEta.estimate(VE.etaMinPct, VE.etaMinSecs), t) : "";
     btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
-    invoke("set_taskbar_progress", { op: "ffmpeg-download", state: "running", value: pct }).catch(() => {});
   });
   try {
     await invoke("download_ffmpeg");
@@ -2300,7 +2304,6 @@ $("ve-ffmpeg-get").addEventListener("click", async (e) => {
     btn.disabled = false;
     btn.textContent = t("ffmpegOfferConfirm");
     unlisten();
-    invoke("set_taskbar_progress", { op: "ffmpeg-download", state: "done" }).catch(() => {});
   }
 });
 
@@ -2641,9 +2644,16 @@ function persistExportSettings() {
 
 async function closeWindow() {
   if (VE.exporting) {
-    const stop = await veConfirm(t("veCloseTitle"), t("veCloseExporting"), t("veDiscard"));
-    if (!stop) return;
-    invoke("cancel_export").catch(() => {});
+    // Three-way choice: keep it running in the background (the export is
+    // Rust-driven now, so it survives this window closing), cancel it and
+    // close, or stay put. "Keep running" is the safe default (Enter key);
+    // cancelling is the click-only, visually flagged destructive option.
+    const choice = await veConfirm(t("veCloseTitle"), t("veCloseExporting"), t("bgKeepRunning"), {
+      cancelLabel: t("bgStayOpen"),
+      thirdLabel: t("bgCancelClose"),
+    });
+    if (choice === false) return;
+    if (choice === "third") invoke("cancel_export").catch(() => {});
   } else if (VE.ops.length && VE.dirty) {
     const ok = await veConfirm(t("veCloseTitle"), t("veCloseUnsaved"), t("veDiscard"));
     if (!ok) return;

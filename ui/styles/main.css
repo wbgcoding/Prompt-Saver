@@ -3209,6 +3209,17 @@ input[type="password"]::-ms-clear { display: none; }
   font-variant-numeric: tabular-nums;
 }
 
+/* Background jobs (header button + popover). */
+.bg-ops-btn { position: relative; }
+.bg-ops-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; border-radius: 6px; min-width: 220px;
+}
+.bg-ops-row:hover { background: var(--surface-2); }
+.bg-ops-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bg-ops-pct { flex: 0 0 auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bg-ops-action { flex: 0 0 auto; padding: 2px 8px; font-size: 12px; }
+
 /* Clipboard inbox. */
 .clip-inbox-btn { position: relative; }
 .clip-badge {
@@ -3915,6 +3926,7 @@ body.drag-over::after {
 /* Confirm dialog (discard unsaved changes) */
 .confirm-msg { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .primary-btn.danger-confirm { background: var(--danger); color: #fff; }
+.ghost-btn.danger-confirm { color: var(--danger); border-color: var(--danger); }
 
 /* Attached-file row icon slot */
 .modal-file-icon { display: inline-flex; flex: 0 0 auto; }
