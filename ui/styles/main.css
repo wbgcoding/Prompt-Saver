@@ -1811,6 +1811,9 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 /* Screenshot keep-as-button popup: scales with the main window so the
    preview is as large as possible while keeping a comfortable margin. */
 .snip-modal-box { width: min(1200px, 94vw); }
+/* Retry + folder toggle + OCR + format picker + save-as + keep can exceed one
+   row on narrow windows; wrap instead of overflowing the modal. */
+.snip-modal-box .modal-actions { flex-wrap: wrap; row-gap: 10px; }
 .snip-preview {
   display: block;
   max-width: 100%;

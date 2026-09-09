@@ -1869,6 +1869,14 @@ const EXPERT_DROPDOWNS = {
     [["", "veScaleOff"], ["2160", "optVeScale2160"], ["1440", "optVeScale1440"], ["1080", "optVeScale1080"],
       ["720", "optVeScale720"], ["480", "optVeScale480"], ["360", "optVeScale360"],
       ["50", "optVeScale50pct"], ["25", "optVeScale25pct"]], "", "videoEditor"),
+  // Applies to every screenshot: the snip tool's own save/save-as/save-to-folder
+  // paths AND the video editor's "export still frame" (same setting, one format
+  // for anything this app calls a screenshot). webp and bmp/tiff are always
+  // lossless (see encode_screenshot in lib.rs); only jpeg has a quality of its
+  // own, which is why snipQuality/snipSaveQuality below only show for jpeg.
+  screenshotFormat: enumDropdown("screenshotFormat", "valScreenshotFormat",
+    [["png", "optScreenshotFormatPng"], ["jpeg", "optScreenshotFormatJpeg"], ["webp", "optScreenshotFormatWebp"],
+      ["bmp", "optScreenshotFormatBmp"], ["tiff", "optScreenshotFormatTiff"]], "png", "screenshot"),
   // Same pattern as ocrLang just above: fetched once from voice_languages()
   // at startup (voiceLangsCache), "Automatic" always first, a trailing entry
   // opens the shared language-pack dialog instead of ever being stored.
@@ -1939,7 +1947,7 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app. The pipette sits with the
     // screenshot tool: both are capture tools on the composer bar.
-    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, "videoEditor", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }, "voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipSaveQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditSnapTolerancePx", "snipEditUndoMax", "videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax", "voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["pickerFormat", "snipEditDefaultTool", "snipScaleFilter", "ocrLang", "recMicDevice", "recQuality", "recFormat", "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "rotateDefaultMode", "voiceLang", "voiceInsert", "voiceHotkeyTarget"], paths: ["screenshotDir", "recordingDir"],
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, "videoEditor", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }, "voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipSaveQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditSnapTolerancePx", "snipEditUndoMax", "videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax", "voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["pickerFormat", "screenshotFormat", "snipEditDefaultTool", "snipScaleFilter", "ocrLang", "recMicDevice", "recQuality", "recFormat", "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "rotateDefaultMode", "voiceLang", "voiceInsert", "voiceHotkeyTarget"], paths: ["screenshotDir", "recordingDir"],
       // Opens #ocr-langs-modal / its voice equivalent -- same gate as the rest of each feature.
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }, { id: "voice-langs-open", label: "voiceLangsManage", gate: "voice" }, { id: "voice-hotkey-set", label: "voiceHotkeySet", gate: "voiceHotkey" }, { id: "rec-stop-hotkey-set", label: "recStopHotkeySet", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-set", label: "recPauseHotkeySet", gate: "recPauseHotkey" }] },
     // Placeholders, from the grammar to where the app asks for them.
@@ -2410,6 +2418,14 @@ function valueRow(key) {
   if (resetBtn) right.append(resetBtn);
   head.append(span, right);
   row.append(head, slider);
+  // Both quality sliders are a JPEG-only concept -- every other screenshot
+  // format is always lossless (see encode_screenshot in lib.rs), so a
+  // quality percentage would apply to nothing. renderExpert() rebuilds this
+  // row whenever screenshotFormat itself changes (dropdownRow's own change
+  // handler), so this stays in sync without a dedicated listener of its own.
+  if (key === "snipQuality" || key === "snipSaveQuality") {
+    row.classList.toggle("hidden", txt("screenshotFormat") !== "jpeg");
+  }
   return row;
 }
 
@@ -13047,10 +13063,6 @@ function bind() {
   const SNIP_EDIT_TEXT_PLATE = () => flag("snipTextPlate");
   const SNIP_EDIT_DEFAULT_TOOL = () => txt("snipEditDefaultTool") || "hand";
   const SNIP_EDIT_SNAP_TOL = () => val("snipEditSnapTolerancePx") || 6; // px (screen)
-  // Matches SNIP_SAVE_Q in lib.rs (via the shared snipSaveQuality expert value) --
-  // the quality the capture already used for the image the editor received, so
-  // the re-export goes through the same pipeline.
-  const SNIP_EDIT_EXPORT_Q = () => (val("snipSaveQuality") || 90) / 100;
   // Function, not a static object: pen/marker's middle preset tracks the live
   // expert-menu default, so a changed snipPenPx/snipMarkerPx shows up next open.
   const SNIP_WIDTH_PRESETS_OF = (tool) => ({
@@ -14293,7 +14305,11 @@ function bind() {
     out.width = sw;
     out.height = sh;
     out.getContext("2d").drawImage(snipEditBaseCv, sx, sy, sw, sh, 0, 0, sw, sh);
-    return out.toDataURL("image/jpeg", SNIP_EDIT_EXPORT_Q());
+    // Always lossless png regardless of the screenshotFormat setting -- the
+    // setting's actual target format is applied once, in Rust, at the real
+    // save step (save_screenshot_now/_as re-encode from this data URL), so an
+    // edited screenshot never picks up a lossy detour on its way there.
+    return out.toDataURL("image/png");
   }
   function snipEditApply() {
     snipEditFinishTextIfOpen();
@@ -14477,6 +14493,7 @@ function bind() {
       // Off -> the pre-117/118 flow, unedited shot straight into the result dialog.
       $("snip-preview").src = pendingSnip;
       $("snip-save-folder").checked = settings.ui_flags?.screenshotSave === true;
+      $("snip-modal-saveas-format").value = txt("screenshotFormat") || "png";
       snipModal.classList.remove("hidden");
       return;
     }
@@ -14493,6 +14510,7 @@ function bind() {
         }
         $("snip-preview").src = pendingSnip;
         $("snip-save-folder").checked = settings.ui_flags?.screenshotSave === true;
+        $("snip-modal-saveas-format").value = txt("screenshotFormat") || "png";
         snipModal.classList.remove("hidden");
       },
       // Cancel behaves like closing the result dialog today: the unedited shot
@@ -14523,7 +14541,8 @@ function bind() {
   });
   $("snip-modal-saveas").addEventListener("click", async () => {
     if (!pendingSnip) return;
-    await invoke("save_screenshot_as", { dataUrl: pendingSnip }).catch((err) => errToast(err));
+    const format = $("snip-modal-saveas-format").value || undefined;
+    await invoke("save_screenshot_as", { dataUrl: pendingSnip, format }).catch((err) => errToast(err));
   });
   $("snip-modal-yes").addEventListener("click", () => {
     const image = pendingSnip;

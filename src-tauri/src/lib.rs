@@ -12855,6 +12855,75 @@ fn encode_snip_jpeg(rgba: &[u8], w: u32, h: u32, quality: u8) -> Option<Vec<u8>>
     Some(buf)
 }
 
+// The screenshot format setting's file extension and data-URL mime type --
+// one place for both, so a fifth format never needs updating in two spots
+// that could drift apart. Any value other than the four named ones (an old
+// setting from before this list existed, a hand-edited settings file) falls
+// back to png, the current default.
+fn screenshot_format_ext(format: &str) -> &'static str {
+    match format {
+        "jpeg" => "jpg",
+        "webp" => "webp",
+        "bmp" => "bmp",
+        "tiff" => "tiff",
+        _ => "png",
+    }
+}
+fn screenshot_format_mime(format: &str) -> &'static str {
+    match format {
+        "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "tiff" => "image/tiff",
+        _ => "image/png",
+    }
+}
+
+// Encodes a screenshot in whichever of the five formats the setting names.
+// JPEG keeps the fast SIMD path above; the other four go through the image
+// crate, already linked for thumbnails elsewhere. All four are written
+// lossless -- the image crate's own WebP encoder only ever writes lossless
+// VP8L, it has no lossy/quality mode to plug snipSaveQuality into, so quality
+// only ever applies to JPEG (see screenshot_format_needs_quality below).
+fn encode_screenshot(rgba: &[u8], w: u32, h: u32, format: &str, jpeg_quality: u8) -> Option<Vec<u8>> {
+    if format == "jpeg" {
+        return encode_snip_jpeg(rgba, w, h, jpeg_quality);
+    }
+    let img = image::RgbaImage::from_raw(w, h, rgba.to_vec())?;
+    let out_format = match format {
+        "webp" => image::ImageFormat::WebP,
+        "bmp" => image::ImageFormat::Bmp,
+        "tiff" => image::ImageFormat::Tiff,
+        _ => image::ImageFormat::Png,
+    };
+    let mut buf = Vec::<u8>::new();
+    image::DynamicImage::ImageRgba8(img)
+        .write_to(&mut std::io::Cursor::new(&mut buf), out_format)
+        .ok()?;
+    Some(buf)
+}
+
+// Whether the quality slider means anything for this format -- JPEG only
+// (see encode_screenshot's own comment on why WebP does not qualify too,
+// despite the image crate technically supporting it as a target format).
+fn screenshot_format_needs_quality(format: &str) -> bool {
+    format == "jpeg"
+}
+
+// A screenshot's own data URL is always PNG or whatever the format setting
+// already was when it was captured (see finalize_capture) -- both the "Save
+// as" dialog and a later "save to folder" toggle can still ask for a
+// DIFFERENT format than what is already encoded (the setting changed since
+// capture, or the save dialog's own per-operation choice), so both decode
+// back to raw pixels first and re-encode fresh rather than writing the
+// existing bytes under a new, wrong extension. Lossless start to lossless
+// end never loses anything; only landing on jpeg is ever lossy, exactly once.
+fn reencode_screenshot_bytes(bytes: &[u8], format: &str, quality: u8) -> Result<Vec<u8>, String> {
+    let img = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
+    let (w, h) = (img.width(), img.height());
+    encode_screenshot(&img.into_rgba8().into_raw(), w, h, format, quality).ok_or_else(|| "encode failed".to_string())
+}
+
 // Hand the overlay its frozen-desktop preview. The encode was started in
 // open_snip the instant the desktop was frozen; here we just wait for it (the
 // slot is usually already filled, so this returns near-instantly) and hand it
@@ -12968,10 +13037,11 @@ fn screenshot_dir(custom: &str) -> PathBuf {
     base.join("Pictures").join("Screenshots")
 }
 
-// Save screenshot bytes (JPEG) into the given folder as "<stem>.jpg". "" on failure.
-fn save_screenshot(bytes: &[u8], dir: &std::path::Path, stem: &str) -> String {
+// Save already-encoded screenshot bytes into the given folder as "<stem>.<ext>".
+// "" on failure. Never re-encodes -- the caller decides the format up front.
+fn save_screenshot(bytes: &[u8], dir: &std::path::Path, stem: &str, ext: &str) -> String {
     let _ = fs::create_dir_all(dir);
-    let path = dir.join(format!("{}.jpg", stem));
+    let path = dir.join(format!("{}.{}", stem, ext));
     if fs::write(&path, bytes).is_ok() {
         path.to_string_lossy().to_string()
     } else {
@@ -12986,9 +13056,11 @@ fn data_url_bytes(data_url: &str) -> Vec<u8> {
 }
 
 // Save a screenshot data URL into Pictures\Screenshots now (result dialog: the
-// user enabled folder-saving after the shot was taken). Returns the path.
+// user enabled folder-saving after the shot was taken, or an edit changed the
+// image after an earlier auto-save). Returns the path. `format` overrides the
+// screenshotFormat setting for this one save -- None uses the setting as-is.
 #[tauri::command]
-async fn save_screenshot_now(state: State<'_, Db>, data_url: String) -> Result<Option<String>, String> {
+async fn save_screenshot_now(state: State<'_, Db>, data_url: String, format: Option<String>) -> Result<Option<String>, String> {
     if !data_url_within_limit(&data_url, MAX_IMAGE_DATA_URL_BYTES) {
         return Err(format!(
             "image is too large ({} MB); the limit is {} MB",
@@ -13000,15 +13072,28 @@ async fn save_screenshot_now(state: State<'_, Db>, data_url: String) -> Result<O
     if bytes.is_empty() {
         return Ok(None);
     }
-    let custom = lock(&state).settings.ui_texts.get("screenshotDir").cloned().unwrap_or_default();
-    let path = save_screenshot(&bytes, &screenshot_dir(&custom), &format!("Screenshot-{}", local_stamp()));
+    let (custom, default_format, quality) = {
+        let g = lock(&state);
+        (
+            g.settings.ui_texts.get("screenshotDir").cloned().unwrap_or_default(),
+            g.settings.ui_texts.get("screenshotFormat").cloned().unwrap_or_else(|| "png".to_string()),
+            g.settings.ui_values.get("snipSaveQuality").copied().unwrap_or(f64::from(SNIP_SAVE_Q)).clamp(50.0, 100.0) as u8,
+        )
+    };
+    let format = format.unwrap_or(default_format);
+    let out_bytes = tauri::async_runtime::spawn_blocking(move || reencode_screenshot_bytes(&bytes, &format, quality).map(|b| (b, format)))
+        .await
+        .map_err(|e| e.to_string())?;
+    let (out_bytes, format) = out_bytes?;
+    let path = save_screenshot(&out_bytes, &screenshot_dir(&custom), &format!("Screenshot-{}", local_stamp()), screenshot_format_ext(&format));
     Ok(if path.is_empty() { None } else { Some(path) })
 }
 
 // Save the screenshot anywhere via a native "Save as" dialog. Returns the chosen
-// path, or None if the user cancelled.
+// path, or None if the user cancelled. `format` is this one save's own choice
+// (the save dialog's own format picker) -- None falls back to the setting.
 #[tauri::command]
-async fn save_screenshot_as(app: AppHandle, win: tauri::Window, data_url: String) -> Result<Option<String>, String> {
+async fn save_screenshot_as(app: AppHandle, state: State<'_, Db>, win: tauri::Window, data_url: String, format: Option<String>) -> Result<Option<String>, String> {
     if !data_url_within_limit(&data_url, MAX_IMAGE_DATA_URL_BYTES) {
         return Err(format!(
             "image is too large ({} MB); the limit is {} MB",
@@ -13020,15 +13105,28 @@ async fn save_screenshot_as(app: AppHandle, win: tauri::Window, data_url: String
     if bytes.is_empty() {
         return Err("empty image".to_string());
     }
-    let name = format!("Screenshot-{}.jpg", local_stamp());
+    let (default_format, quality) = {
+        let g = lock(&state);
+        (
+            g.settings.ui_texts.get("screenshotFormat").cloned().unwrap_or_else(|| "png".to_string()),
+            g.settings.ui_values.get("snipSaveQuality").copied().unwrap_or(f64::from(SNIP_SAVE_Q)).clamp(50.0, 100.0) as u8,
+        )
+    };
+    let format = format.unwrap_or(default_format);
+    let out_bytes = tauri::async_runtime::spawn_blocking(move || reencode_screenshot_bytes(&bytes, &format, quality).map(|b| (b, format)))
+        .await
+        .map_err(|e| e.to_string())??;
+    let (out_bytes, format) = out_bytes;
+    let ext = screenshot_format_ext(&format);
+    let name = format!("Screenshot-{}.{}", local_stamp(), ext);
     let picked = file_dialog_for(&app, win.label())
-        .add_filter("JPEG", &["jpg"])
+        .add_filter(&ext.to_uppercase(), &[ext])
         .set_file_name(&name)
         .save_file();
     let _ = win.set_focus();
     match picked {
         Some(p) => {
-            fs::write(&p, &bytes).map_err(|e| e.to_string())?;
+            fs::write(&p, &out_bytes).map_err(|e| e.to_string())?;
             Ok(Some(p.to_string_lossy().to_string()))
         }
         None => Ok(None),
@@ -13036,8 +13134,9 @@ async fn save_screenshot_as(app: AppHandle, win: tauri::Window, data_url: String
 }
 
 // Delete a previously auto-saved screenshot (result dialog: folder-saving turned
-// off). Safety: only ever removes our own Screenshot-*.jpg (or the legacy
-// <brand>-*.png a much older version wrote) files.
+// off). Safety: only ever removes our own Screenshot-*.<one of the five
+// screenshot formats> (or the legacy <brand>-*.png a much older version wrote,
+// back when the format itself was never a choice) files.
 #[tauri::command]
 async fn delete_screenshot_file(state: State<'_, Db>, path: String) -> Result<bool, String> {
     let p = std::path::Path::new(&path);
@@ -13045,7 +13144,8 @@ async fn delete_screenshot_file(state: State<'_, Db>, path: String) -> Result<bo
     let legacy = !brand::LEGACY_SCREENSHOT_PREFIX.is_empty()
         && name.starts_with(brand::LEGACY_SCREENSHOT_PREFIX)
         && name.ends_with(".png");
-    let ours = (name.starts_with("Screenshot-") && name.ends_with(".jpg")) || legacy;
+    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let ours = (name.starts_with("Screenshot-") && matches!(ext, "jpg" | "png" | "webp" | "bmp" | "tiff")) || legacy;
     if !ours || !p.is_file() {
         return Ok(false);
     }
@@ -13315,7 +13415,7 @@ async fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Opt
     // Default: temp-only — the shot lives only as an in-app prompt (encrypted,
     // removed when the prompt is deleted). The folder copy is opt-in and honors
     // a custom screenshot directory (expert menu).
-    let (save_to_folder, custom_dir, save_q) = app
+    let (save_to_folder, custom_dir, save_q, format) = app
         .try_state::<Db>()
         .map(|s| {
             let g = s.lock().unwrap_or_else(|e| e.into_inner());
@@ -13323,13 +13423,23 @@ async fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Opt
                 g.settings.ui_flags.get("screenshotSave") == Some(&true),
                 g.settings.ui_texts.get("screenshotDir").cloned().unwrap_or_default(),
                 g.settings.ui_values.get("snipSaveQuality").copied().unwrap_or(f64::from(SNIP_SAVE_Q)).clamp(50.0, 100.0) as u8,
+                g.settings.ui_texts.get("screenshotFormat").cloned().unwrap_or_else(|| "png".to_string()),
             )
         })
-        .unwrap_or((false, String::new(), SNIP_SAVE_Q));
+        .unwrap_or((false, String::new(), SNIP_SAVE_Q, "png".to_string()));
 
     let (data_url, path) = tauri::async_runtime::spawn_blocking(move || -> Result<(String, String), String> {
-        let jpeg = encode_snip_jpeg(crop.as_raw(), cw, ch, save_q).ok_or("encode failed")?;
-        let data_url = format!("data:image/jpeg;base64,{}", base64_encode(&jpeg));
+        // The data URL feeds an <img>/canvas on the JS side (the result dialog's
+        // preview, then the editor if it opens) -- tiff has no browser decoder,
+        // so it alone falls back to png here; every other format already is one.
+        let data_format: &str = if format == "tiff" { "png" } else { &format };
+        let data_bytes = encode_screenshot(crop.as_raw(), cw, ch, data_format, save_q).ok_or("encode failed")?;
+        // Computed before the tiff-only second encode below needs crop.as_raw()
+        // again, and before the clipboard write just after consumes crop outright.
+        let folder_bytes_if_different = (save_to_folder && format != data_format)
+            .then(|| encode_screenshot(crop.as_raw(), cw, ch, &format, save_q))
+            .flatten();
+        let data_url = format!("data:{};base64,{}", screenshot_format_mime(data_format), base64_encode(&data_bytes));
         let _ = arboard::Clipboard::new().and_then(|mut c| {
             c.set_image(arboard::ImageData {
                 width: cw as usize,
@@ -13338,7 +13448,8 @@ async fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Opt
             })
         });
         let path = if save_to_folder {
-            save_screenshot(&jpeg, &screenshot_dir(&custom_dir), &stem)
+            let bytes = folder_bytes_if_different.as_deref().unwrap_or(&data_bytes);
+            save_screenshot(bytes, &screenshot_dir(&custom_dir), &stem, screenshot_format_ext(&format))
         } else {
             String::new()
         };
@@ -19419,28 +19530,47 @@ async fn extract_still_frame(app: AppHandle, state: State<'_, Db>, path: String,
         return Err("recording file not found".to_string());
     }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
-    let bytes = tauri::async_runtime::spawn_blocking(move || extract_still_frame_blocking(&ffmpeg, &src, at_ms))
+    let (custom, format) = {
+        let g = lock(&state);
+        (
+            g.settings.ui_texts.get("screenshotDir").cloned().unwrap_or_default(),
+            g.settings.ui_texts.get("screenshotFormat").cloned().unwrap_or_else(|| "png".to_string()),
+        )
+    };
+    let format_for_ffmpeg = format.clone();
+    let bytes = tauri::async_runtime::spawn_blocking(move || extract_still_frame_blocking(&ffmpeg, &src, at_ms, &format_for_ffmpeg))
         .await
         .map_err(|e| e.to_string())??;
-    let custom = lock(&state).settings.ui_texts.get("screenshotDir").cloned().unwrap_or_default();
-    let saved = save_screenshot(&bytes, &screenshot_dir(&custom), &format!("Screenshot-{}", local_stamp()));
+    let saved = save_screenshot(&bytes, &screenshot_dir(&custom), &format!("Screenshot-{}", local_stamp()), screenshot_format_ext(&format));
     Ok(if saved.is_empty() { None } else { Some(saved) })
 }
 
-fn extract_still_frame_blocking(ffmpeg: &Path, src: &Path, at_ms: u64) -> Result<Vec<u8>, String> {
+// Same screenshotFormat setting the snip tool uses -- "Einzelbild exportieren"
+// is a screenshot in every sense but where its pixels come from. ffmpeg
+// encodes the still directly (no round trip through the image crate): the
+// format-appropriate extension picks its encoder, -q:v is JPEG's own quality
+// knob (meaningless, and unset, for every lossless target), and -lossless 1
+// keeps WebP consistent with encode_screenshot's own image-crate WebP, which
+// has no lossy mode to diverge from in the first place.
+fn extract_still_frame_blocking(ffmpeg: &Path, src: &Path, at_ms: u64, format: &str) -> Result<Vec<u8>, String> {
     use std::os::windows::process::CommandExt;
     let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     let tmp_dir = std::env::temp_dir().join(brand::TEMP_DIR);
     fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
-    let tmp = tmp_dir.join(format!("{}-still-{}-{}.jpg", brand::TEMP_PREFIX, std::process::id(), stamp));
+    let tmp = tmp_dir.join(format!("{}-still-{}-{}.{}", brand::TEMP_PREFIX, std::process::id(), stamp, screenshot_format_ext(format)));
     let secs = at_ms as f64 / 1000.0;
     let mut cmd = std::process::Command::new(ffmpeg);
     cmd.args(["-y", "-hide_banner", "-loglevel", "error", "-ss"])
         .arg(format!("{secs:.3}"))
         .arg("-i")
         .arg(src)
-        .args(["-frames:v", "1", "-q:v", "2"])
-        .arg(&tmp);
+        .args(["-frames:v", "1"]);
+    match format {
+        "jpeg" => { cmd.args(["-q:v", "2"]); }
+        "webp" => { cmd.args(["-lossless", "1"]); }
+        _ => {}
+    }
+    cmd.arg(&tmp);
     cmd.creation_flags(CREATE_NO_WINDOW);
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::null());
@@ -24266,6 +24396,63 @@ mod tests {
         for f in ["mp4", "webm", "gif", "avi", "mov", "mkv", "apng"] {
             assert_eq!(video_format_ext(f), f);
         }
+    }
+
+    #[test]
+    fn screenshot_format_ext_and_mime_cover_all_five_and_fall_back_to_png() {
+        let cases = [
+            ("png", "png", "image/png"),
+            ("jpeg", "jpg", "image/jpeg"),
+            ("webp", "webp", "image/webp"),
+            ("bmp", "bmp", "image/bmp"),
+            ("tiff", "tiff", "image/tiff"),
+            ("something-unknown", "png", "image/png"),
+        ];
+        for (format, ext, mime) in cases {
+            assert_eq!(screenshot_format_ext(format), ext, "ext for {format}");
+            assert_eq!(screenshot_format_mime(format), mime, "mime for {format}");
+        }
+    }
+
+    #[test]
+    fn screenshot_format_needs_quality_is_true_only_for_jpeg() {
+        assert!(screenshot_format_needs_quality("jpeg"));
+        for f in ["png", "webp", "bmp", "tiff", "unknown"] {
+            assert!(!screenshot_format_needs_quality(f), "{f} should not need a quality slider");
+        }
+    }
+
+    // A 2x2 checkerboard -- small enough to assert on exact bytes, varied
+    // enough (opaque and transparent, black and white) that a lossy encoder
+    // could not accidentally produce the same output as a lossless one.
+    fn checkerboard_rgba() -> Vec<u8> {
+        vec![
+            255, 255, 255, 255, 0, 0, 0, 128, // top-left opaque white, top-right translucent black
+            0, 0, 0, 255, 255, 255, 255, 0, // bottom-left opaque black, bottom-right transparent white
+        ]
+    }
+
+    #[test]
+    fn encode_screenshot_png_webp_bmp_tiff_all_roundtrip_losslessly() {
+        let rgba = checkerboard_rgba();
+        for format in ["png", "webp", "bmp", "tiff"] {
+            let bytes = encode_screenshot(&rgba, 2, 2, format, 90).unwrap_or_else(|| panic!("{format} failed to encode"));
+            let decoded = image::load_from_memory(&bytes).unwrap_or_else(|e| panic!("{format} failed to decode: {e}"));
+            assert_eq!(decoded.width(), 2, "{format} width");
+            assert_eq!(decoded.height(), 2, "{format} height");
+            assert_eq!(decoded.to_rgba8().into_raw(), rgba, "{format} must round-trip every pixel exactly");
+        }
+    }
+
+    #[test]
+    fn encode_screenshot_jpeg_still_uses_the_fast_encoder_and_ignores_alpha_losslessness() {
+        // JPEG has no alpha channel and is lossy by design -- this only proves
+        // the dispatch still reaches encode_snip_jpeg (a valid, decodable JPEG
+        // of the right size comes back), never that JPEG matches source bytes.
+        let rgba = checkerboard_rgba();
+        let bytes = encode_screenshot(&rgba, 2, 2, "jpeg", 90).expect("jpeg encode failed");
+        let decoded = image::load_from_memory(&bytes).expect("jpeg failed to decode");
+        assert_eq!((decoded.width(), decoded.height()), (2, 2));
     }
 
     #[test]
