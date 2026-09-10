@@ -16946,6 +16946,19 @@ pub(crate) struct RecFeederShared {
     // the same "time zero" the main track uses, without stealing frames from
     // the feeder's single-consumer queue to find that moment itself.
     first_frame: std::sync::atomic::AtomicBool,
+    // Written only by the capture callback (never the feeder thread), the
+    // same "window size" canvas default's resize-safety-net path
+    // (scale_to_fit_frame_top_down) that shrinks a grown window's picture to
+    // keep fitting the encoder's original, smaller canvas -- the exact
+    // moment content starts being lost off the edge. Largest frame size ever
+    // seen (for a possible future message; only the timestamp is shown
+    // today) plus the timestamp of the FIRST such frame, encoded as ms + 1 so
+    // 0 unambiguously means "never happened" -- a real first frame at ms=0 is
+    // not something this recorder can produce anyway (on_frame_arrived does
+    // real work before ever reading the clock a second time).
+    resize_crop_max_w: std::sync::atomic::AtomicU32,
+    resize_crop_max_h: std::sync::atomic::AtomicU32,
+    resize_crop_first_ms_plus_one: std::sync::atomic::AtomicU64,
 }
 impl RecFeederShared {
     fn new() -> Self {
@@ -16956,7 +16969,30 @@ impl RecFeederShared {
             stopping: std::sync::atomic::AtomicBool::new(false),
             encode_error: Mutex::new(None),
             first_frame: std::sync::atomic::AtomicBool::new(false),
+            resize_crop_max_w: std::sync::atomic::AtomicU32::new(0),
+            resize_crop_max_h: std::sync::atomic::AtomicU32::new(0),
+            resize_crop_first_ms_plus_one: std::sync::atomic::AtomicU64::new(0),
         }
+    }
+    // Called only from on_frame_arrived's legacy resize-safety-net branch, at
+    // the exact instant a grown window's picture is being shrunk to keep
+    // fitting the canvas -- never from the 369 placement-canvas branch, which
+    // is deliberately oversized and can never lose content this way.
+    fn mark_resize_crop(&self, width: u32, height: u32, ts_ticks: i64) {
+        use std::sync::atomic::Ordering::Relaxed;
+        self.resize_crop_max_w.fetch_max(width, Relaxed);
+        self.resize_crop_max_h.fetch_max(height, Relaxed);
+        let ts_ms = (ts_ticks / 10_000).max(0) as u64;
+        let _ = self.resize_crop_first_ms_plus_one.compare_exchange(0, ts_ms + 1, Relaxed, Relaxed);
+    }
+    // Safe to call only once the capture callback is provably done (after
+    // finish_and_stop has run session.control.stop()) -- the same threading
+    // rule as the used-area tracker: written only by the capture thread,
+    // read only once that thread is guaranteed to have stopped writing.
+    fn resize_crop_at_ms(&self) -> Option<u64> {
+        use std::sync::atomic::Ordering::Relaxed;
+        let plus_one = self.resize_crop_first_ms_plus_one.load(Relaxed);
+        (plus_one > 0).then(|| plus_one - 1)
     }
     fn mark_first_frame(&self) {
         self.first_frame.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -17044,6 +17080,11 @@ struct RecordingStoppedPayload {
     // (crop_recording_to_used_area) before showing the result. Always
     // false for Monitor/Region and for the "window's own size" fallback.
     needs_crop: bool,
+    // Milliseconds into the recording when the "window size" canvas default
+    // first had to shrink the picture to keep it fitting (the window grew
+    // past its starting size) -- None if that never happened. Drives the
+    // reactive notice offering to switch recCanvasMode to "all" from now on.
+    resize_crop_at_ms: Option<u64>,
 }
 
 #[cfg(windows)]
@@ -17203,6 +17244,7 @@ mod recording {
                 // a smaller frame already shows everything on its own.
                 let (ew, eh) = (self.enc_size.0 as usize, self.enc_size.1 as usize);
                 let (padded, padded_stride) = if width > ew || height > eh {
+                    self.shared.mark_resize_crop(width as u32, height as u32, ts);
                     scale_to_fit_frame_top_down(fb.as_raw_buffer(), width, height, stride, ew, eh)
                 } else {
                     letterbox_frame_top_down(fb.as_raw_buffer(), width, height, stride, ew, eh)
@@ -17767,21 +17809,29 @@ mod recording {
     // The sixth and seventh fields let the caller decide whether a post-capture
     // crop is worthwhile: the used-area union rect (canvas-local coordinates,
     // None when this was not a placement recording) and the canvas size it is
-    // relative to.
+    // relative to. The eighth is the "window size" canvas default's own
+    // reactive notice: the timestamp of the first frame the resize-safety-net
+    // had to shrink to keep fitting, or None if that never happened this
+    // recording.
     pub fn stop(
         session: RecSession,
-    ) -> Result<(PathBuf, u64, Option<String>, Option<PathBuf>, Option<&'static str>, Option<(u32, u32, u32, u32)>, (u32, u32)), String>
-    {
+    ) -> Result<
+        (PathBuf, u64, Option<String>, Option<PathBuf>, Option<&'static str>, Option<(u32, u32, u32, u32)>, (u32, u32), Option<u64>),
+        String,
+    > {
         let path = session.output_path.clone();
         let mic_wav_path = session.mic_wav_path.clone();
         let canvas_note = session.canvas_note;
         let used_area = session.used_area.clone();
         let canvas_size = session.canvas_size;
+        let shared = session.shared.clone();
         let (dropped, encode_error) = finish_and_stop(session)?;
-        // Only safe to read now: the capture thread (used_area's sole writer)
-        // is guaranteed joined once finish_and_stop has returned.
+        // Only safe to read now: the capture thread (used_area's and the
+        // resize-crop tracker's sole writer) is guaranteed joined once
+        // finish_and_stop has returned.
         let crop_rect = used_area.and_then(|u| u.get());
-        Ok((path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size))
+        let resize_crop_at_ms = shared.resize_crop_at_ms();
+        Ok((path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size, resize_crop_at_ms))
     }
 
     // Live-poll accessor for the control bar: lets it notice an unrecoverable
@@ -17876,10 +17926,13 @@ async fn start_recording(
     // unless overridden here -- a 60/144Hz screen otherwise always recorded at 30.
     let video_fps =
         db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recFps").copied().unwrap_or(30.0).clamp(10.0, 60.0) as u32;
-    // The canvas a Window recording uses. Neither setting has an expert-menu
-    // control yet, so both only ever come from a value some future menu
-    // already wrote -- "every display" is the default either way.
-    let canvas_mode = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_texts.get("recCanvasMode").cloned().unwrap_or_else(|| "all".to_string());
+    // The canvas a Window recording uses. Defaults to the window's own size
+    // (today's original behaviour, resize-unsafe) rather than every display --
+    // the "every display" candidate chain is opt-in via this same setting,
+    // offered reactively the first time a recording actually hits the resize
+    // problem (see the recording-captured payload's resize_crop_at_ms). No
+    // expert-menu row for this setting yet (a future menu writes it directly).
+    let canvas_mode = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_texts.get("recCanvasMode").cloned().unwrap_or_else(|| "window".to_string());
     let canvas_ceiling = {
         let g = db.lock().unwrap_or_else(|e| e.into_inner());
         (
@@ -18010,7 +18063,7 @@ fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayload, String
         }
         s
     };
-    let (path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size) = recording::stop(session)?;
+    let (path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size, resize_crop_at_ms) = recording::stop(session)?;
     // A crop is only worth running when the union of every placed frame is
     // strictly smaller than the canvas it was placed on -- a window that
     // used the whole canvas leaves nothing to trim.
@@ -18026,6 +18079,7 @@ fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayload, String
         mic_wav_path: mic_wav_path.map(|p| p.to_string_lossy().to_string()),
         canvas_note: canvas_note.map(str::to_string),
         needs_crop,
+        resize_crop_at_ms,
     };
     // The stop/pause hotkeys give up their combination the instant nothing
     // is recording, on every end path this function serves (button, hotkey,
@@ -25607,6 +25661,34 @@ mod tests {
         assert_eq!(shared.peek_encode_error(), Some("disk full".to_string()));
     }
 
+    #[test]
+    fn rec_feeder_resize_crop_is_none_before_any_call() {
+        let shared = RecFeederShared::new();
+        assert_eq!(shared.resize_crop_at_ms(), None);
+    }
+
+    #[test]
+    fn rec_feeder_resize_crop_latches_the_first_timestamp_and_tracks_the_largest_size() {
+        let shared = RecFeederShared::new();
+        // A synthetic stream: three frames past the resize point, at growing
+        // sizes and later timestamps -- only the FIRST one's timestamp may
+        // stick, even though every one of them re-triggers the safety net.
+        shared.mark_resize_crop(1000, 800, 25_000_000); // 2.5s in (100ns ticks)
+        shared.mark_resize_crop(1200, 900, 30_000_000);
+        shared.mark_resize_crop(1100, 850, 35_000_000);
+        assert_eq!(shared.resize_crop_at_ms(), Some(2500), "must report the FIRST occurrence's time, not the latest");
+        assert_eq!(shared.resize_crop_max_w.load(std::sync::atomic::Ordering::Relaxed), 1200);
+        assert_eq!(shared.resize_crop_max_h.load(std::sync::atomic::Ordering::Relaxed), 900);
+    }
+
+    #[test]
+    fn rec_feeder_resize_crop_at_exactly_zero_ms_still_reports_a_hit() {
+        // The ms+1 encoding trick must not swallow a genuine ts=0 frame.
+        let shared = RecFeederShared::new();
+        shared.mark_resize_crop(999, 777, 0);
+        assert_eq!(shared.resize_crop_at_ms(), Some(0));
+    }
+
     // ---- Audio mixing/resampling + the WASAPI-producer queue, no hardware needed ----
 
     #[test]
@@ -25743,7 +25825,7 @@ mod tests {
         };
         let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
-        let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
         assert!(bytes.len() > 10_000, "output suspiciously small: {} bytes", bytes.len());
         let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
@@ -25767,7 +25849,7 @@ mod tests {
         };
         let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
-        let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
         assert!(bytes.len() > 10_000, "output suspiciously small: {} bytes", bytes.len());
         let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
@@ -25788,7 +25870,7 @@ mod tests {
         };
         let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
-        let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
         assert!(bytes.len() > 10_000, "output suspiciously small: {} bytes", bytes.len());
         let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
@@ -25813,7 +25895,7 @@ mod tests {
         let wall_start = std::time::Instant::now();
         let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(600));
-        let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let wall_elapsed = wall_start.elapsed().as_secs_f64();
         let bytes = std::fs::read(&path).expect("read output file");
         let durations = mp4_track_durations_secs(&bytes);
@@ -25853,7 +25935,7 @@ mod tests {
         };
         let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(2));
-        let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
         let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
         let _ = std::fs::remove_file(&path);

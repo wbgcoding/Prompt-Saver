@@ -5756,6 +5756,56 @@ PROBE = """
       document.getElementById('modal-close-x').click();
       await sleep(30);
 
+      // 384: the "window size" canvas default's reactive notice -- appears
+      // BEFORE the result menu, names the reported second, its confirm
+      // button writes recCanvasMode to "all", and its checkbox turns off
+      // recCropNotice so a later occurrence stays silent.
+      const confirmModal = document.getElementById('confirm-modal');
+      window.__SMOKE_ARGS__ = [];
+      window.__FIRE__('recording-captured', { path: 'C:/fake/raw5-cropnotice.mp4', resize_crop_at_ms: 4200 });
+      await sleep(30);
+      if (confirmModal.classList.contains('hidden')) {
+        out.errors.push('rec-modal: resize-crop notice did not appear for resize_crop_at_ms');
+      }
+      if (!document.getElementById('confirm-msg').textContent.includes('4')) {
+        out.errors.push('rec-modal: resize-crop notice message did not mention the reported second');
+      }
+      if (!recModal.classList.contains('hidden')) {
+        out.errors.push('rec-modal: the result menu must not open before the resize-crop notice is dismissed');
+      }
+      document.getElementById('confirm-cb-dontShowAgain').checked = true;
+      document.getElementById('confirm-ok').click();
+      await sleep(30);
+      if (!confirmModal.classList.contains('hidden')) {
+        out.errors.push('rec-modal: resize-crop notice did not close on confirm');
+      }
+      if (recModal.classList.contains('hidden')) {
+        out.errors.push('rec-modal: the result menu did not open once the resize-crop notice was dismissed');
+      }
+      const canvasCall = window.__SMOKE_ARGS__.find(([cmd, args]) => cmd === 'set_ui_text' && args && args.key === 'recCanvasMode');
+      if (!canvasCall || canvasCall[1].value !== 'all') {
+        out.errors.push('rec-modal: confirming the resize-crop notice did not set recCanvasMode to all');
+      }
+      const noticeFlagCall = window.__SMOKE_ARGS__.find(([cmd, args]) => cmd === 'set_ui_flag' && args && args.key === 'recCropNotice');
+      if (!noticeFlagCall || noticeFlagCall[1].enabled !== false) {
+        out.errors.push('rec-modal: checking "do not show again" did not turn off recCropNotice');
+      }
+      document.getElementById('rec-modal-close').click();
+      await sleep(30);
+
+      // A later occurrence must stay silent once recCropNotice is off, but
+      // the result menu must still open normally.
+      window.__FIRE__('recording-captured', { path: 'C:/fake/raw6-cropnotice-off.mp4', resize_crop_at_ms: 1000 });
+      await sleep(30);
+      if (!confirmModal.classList.contains('hidden')) {
+        out.errors.push('rec-modal: resize-crop notice must stay off once "do not show again" was checked');
+      }
+      if (recModal.classList.contains('hidden')) {
+        out.errors.push('rec-modal: the result menu must still open once the notice is suppressed');
+      }
+      document.getElementById('rec-modal-close').click();
+      await sleep(30);
+
       langSel3.value = 'de';
       langSel3.dispatchEvent(new Event('change'));
       await sleep(100);

@@ -1326,6 +1326,11 @@ const FLAG_LABELS = {
   recAudioMic: "flagRecAudioMic",
   // A running recording would otherwise have only the bar itself as a way
   // to stop or pause it. All three ship ON.
+  // Sub-toggle of screenRecord: the one-time reactive notice offering to
+  // switch the recording canvas to "every display" the first time a window
+  // recording (still on its "window size" default) actually grows past its
+  // starting size and starts losing picture at the edge. Ships ON.
+  recCropNotice: "flagRecCropNotice",
   recStopHotkey: "flagRecStopHotkey",
   recPauseHotkey: "flagRecPauseHotkey",
   recTrayEntries: "flagRecTrayEntries",
@@ -1947,7 +1952,7 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app. The pipette sits with the
     // screenshot tool: both are capture tools on the composer bar.
-    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, "videoEditor", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }, "voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipSaveQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditSnapTolerancePx", "snipEditUndoMax", "videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax", "voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["pickerFormat", "screenshotFormat", "snipEditDefaultTool", "snipScaleFilter", "ocrLang", "recMicDevice", "recQuality", "recFormat", "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "rotateDefaultMode", "voiceLang", "voiceInsert", "voiceHotkeyTarget"], paths: ["screenshotDir", "recordingDir"],
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, "videoEditor", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }, "voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipSaveQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditSnapTolerancePx", "snipEditUndoMax", "videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax", "voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["pickerFormat", "screenshotFormat", "snipEditDefaultTool", "snipScaleFilter", "ocrLang", "recMicDevice", "recQuality", "recFormat", "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "rotateDefaultMode", "voiceLang", "voiceInsert", "voiceHotkeyTarget"], paths: ["screenshotDir", "recordingDir"],
       // Opens #ocr-langs-modal / its voice equivalent -- same gate as the rest of each feature.
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }, { id: "voice-langs-open", label: "voiceLangsManage", gate: "voice" }, { id: "voice-hotkey-set", label: "voiceHotkeySet", gate: "voiceHotkey" }, { id: "rec-stop-hotkey-set", label: "recStopHotkeySet", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-set", label: "recPauseHotkeySet", gate: "recPauseHotkey" }] },
     // Placeholders, from the grammar to where the app asks for them.
@@ -2150,7 +2155,7 @@ const EXPERT_TIPS = [
   "colorPicker", "pickerFormat", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx",
   "screenRecord", "recCursor", "recCountdownS", "recFps", "recAudioSystem", "recAudioMic", "recAudioKbps", "recMicDevice",
   "recQuality", "recBitrateKbps", "recFormat", "recordingDir",
-  "recStopHotkey", "recPauseHotkey", "recTrayEntries",
+  "recStopHotkey", "recPauseHotkey", "recTrayEntries", "recCropNotice",
   "videoEditor", "videoEditUndoMax",
   "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veExportKbpsHigh", "veExportKbpsSmall",
   "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity",
@@ -9492,9 +9497,11 @@ let confirmCleanup = null;
 // `checkboxes`: [{key, label, checked}] — rendered into #confirm-checkbox-row,
 // read back by the caller via document.getElementById(`confirm-cb-${key}`) once
 // the promise resolves true (the return value itself stays plain bool/string, so
-// no existing `if (!ok) return` caller needs to change). At least one must stay
-// checked, or the confirm button offers nothing to actually do.
-function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input, checkboxes, danger = true, oneButton = false }) {
+// no existing `if (!ok) return` caller needs to change). Default requires at
+// least one to stay checked (the confirm button would otherwise offer nothing
+// to actually do) -- pass `checkboxesOptional: true` for a plain standalone
+// toggle (e.g. "don't show this again") that must never block either button.
+function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input, checkboxes, checkboxesOptional = false, danger = true, oneButton = false }) {
   // Restored once this dialog resolves, so a keyboard user's next Tab
   // continues from where they were instead of restarting from the page top.
   const opener = document.activeElement;
@@ -9539,7 +9546,7 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input,
   const cbRow = $("confirm-checkbox-row");
   cbRow.innerHTML = "";
   cbRow.classList.toggle("hidden", !checkboxes);
-  const syncOk = () => { ok.disabled = !!checkboxes && !cbRow.querySelector("input:checked"); };
+  const syncOk = () => { ok.disabled = !checkboxesOptional && !!checkboxes && !cbRow.querySelector("input:checked"); };
   if (checkboxes) {
     for (const cb of checkboxes) {
       const label = document.createElement("label");
@@ -12872,7 +12879,7 @@ function bind() {
     const { count, bytes } = e.payload || {};
     if (count > 0) toast(t("recSweepDone").replace("{n}", String(count)).replace("{v}", fmtBytes(bytes)));
   });
-  listen("recording-captured", (e) => {
+  listen("recording-captured", async (e) => {
     setRecordBtnState("idle"); // covers both a normal stop and the auto-stop path
     const path = e.payload?.path || "";
     // An encoder write failure (disk full, etc.) already stopped the feeder
@@ -12885,6 +12892,32 @@ function bind() {
     // display" case stays silent since that is simply the default working.
     if (e.payload?.canvas_note === "monitor") toast(t("recCanvasFallbackMonitor"));
     else if (e.payload?.canvas_note === "window") toast(t("recCanvasFallbackWindow"));
+    // The "window size" canvas default (today's Vorgabe) just cut off part
+    // of the picture because the window grew mid-recording -- offer, once
+    // per occurrence and only while the notice is on, to switch the canvas
+    // to every display so a resize like this stops losing content. Runs
+    // before the result menu itself opens, never instead of it.
+    const cropMs = e.payload?.resize_crop_at_ms;
+    if (cropMs != null && flag("recCropNotice")) {
+      const secs = Math.floor(cropMs / 1000);
+      const switchNow = await confirmDialog({
+        title: t("recCropNoticeTitle"),
+        message: t("recCropNoticeMsg").replace("{s}", String(secs)),
+        confirmLabel: t("recCropNoticeSwitch"),
+        cancelLabel: t("recCropNoticeOk"),
+        danger: false,
+        checkboxes: [{ key: "dontShowAgain", label: t("recCropNoticeDontShowAgain"), checked: false }],
+        checkboxesOptional: true,
+      });
+      if ($("confirm-cb-dontShowAgain").checked) {
+        settings.ui_flags = { ...(settings.ui_flags || {}), recCropNotice: false };
+        invoke("set_ui_flag", { key: "recCropNotice", enabled: false }).catch(() => {});
+      }
+      if (switchNow) {
+        settings.ui_texts = { ...(settings.ui_texts || {}), recCanvasMode: "all" };
+        invoke("set_ui_text", { key: "recCanvasMode", value: "all" }).catch(() => {});
+      }
+    }
     if (path) openRecModal(path, !!e.payload?.needs_crop);
   });
   $("rec-modal-close").addEventListener("click", () => closeRecModal());
