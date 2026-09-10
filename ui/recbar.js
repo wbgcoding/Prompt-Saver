@@ -32,6 +32,18 @@ function fmtSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// recBarSize gates the whole readout, shown from recBarSizeFromMb onward
+// so the narrow bar stays narrow in the normal case -- the threshold decision
+// itself lives in recording_status (rec_bar_size_state), this only renders
+// what it already decided. etaSecs is only ever set past three quarters of
+// recMaxMb, where the text turns into a warm color and gets a tooltip with
+// the estimated time left at the recording's own observed rate so far.
+function applySize(bytes, etaSecs) {
+  sizeEl.textContent = fmtSize(bytes);
+  sizeEl.classList.toggle("rec-size-warn", etaSecs != null);
+  sizeEl.title = etaSecs != null && i18nDict ? (i18nDict.recBarSizeEta || "").replace("{time}", fmtTime(etaSecs * 1000)) : "";
+}
+
 let paused = false;
 let i18nDict = null;
 function pauseBtnLabel() {
@@ -135,7 +147,7 @@ async function poll() {
     }
     applyPaused(status.paused);
     timeEl.textContent = fmtTime(status.elapsed_ms);
-    sizeEl.textContent = fmtSize(status.bytes);
+    applySize(status.show_size ? status.bytes : 0, status.size_eta_secs);
     applyAudio(status);
     applyHotkeyWarn(status.stop_hotkey_ok, status.pause_hotkey_ok);
   } catch {

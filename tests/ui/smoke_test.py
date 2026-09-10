@@ -7270,6 +7270,23 @@ RECBAR_PROBE = """
     if (timeEl.textContent !== '01:05') errs.push('time did not render from recording_status: ' + timeEl.textContent);
     const sizeEl = document.getElementById('size');
     if (!/MB/.test(sizeEl.textContent)) errs.push('size did not render: ' + sizeEl.textContent);
+    if (sizeEl.classList.contains('rec-size-warn')) errs.push('size was highlighted well below the ceiling');
+    const until = async (fn, tries) => {
+      for (let i = 0; i < (tries || 40) && !fn(); i++) await sleep(50);
+      return fn();
+    };
+    // Under the show threshold: the readout should go blank on the next poll.
+    window.__REC_STATUS_OVERRIDE__ = { bytes: 50 * 1024 * 1024, show_size: false, size_eta_secs: null };
+    if (!await until(() => sizeEl.textContent === '')) errs.push('size stayed visible under the show threshold: ' + sizeEl.textContent);
+    // Past three quarters of the configured ceiling: highlighted. The eta
+    // tooltip text itself needs the i18n module, which this stripped-down
+    // harness never finishes loading (no real navigation, so the dynamic
+    // import never settles) -- rec_bar_size_state's own ETA math has its own
+    // Rust unit tests, so this only checks what this harness can see.
+    window.__REC_STATUS_OVERRIDE__ = { bytes: 7500 * 1024 * 1024, show_size: true, size_eta_secs: 45 };
+    if (!await until(() => /MB/.test(sizeEl.textContent) && sizeEl.classList.contains('rec-size-warn'))) errs.push('size did not render/highlight near the ceiling: ' + sizeEl.textContent);
+    window.__REC_STATUS_OVERRIDE__ = null;
+    await sleep(600);
     document.getElementById('pause-btn').click();
     await sleep(30);
     if (!window.__REC_PAUSED__) errs.push('pause button did not call pause_recording');

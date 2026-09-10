@@ -36,6 +36,9 @@
 
 .rec-time { font-size: 13px; min-width: 3.6em; }
 .rec-size { font-size: 12px; opacity: 0.7; min-width: 3.6em; }
+/* Past three quarters of recMaxMb -- same warm color the hotkey/mic
+   warnings already use, at full opacity so it actually stands out. */
+.rec-size-warn { color: var(--danger); opacity: 1; }
 
 .rec-audio {
   width: 16px;

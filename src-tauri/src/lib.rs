@@ -10182,6 +10182,40 @@ struct RecordingStatus {
     // in a binding that never fires.
     stop_hotkey_ok: bool,
     pause_hotkey_ok: bool,
+    // recBarSize (Vorgabe an): whether the bar should show the size at all
+    // right now -- false below recBarSizeFromMb, or with the switch off.
+    show_size: bool,
+    // Seconds left at the observed average rate (bytes so far / elapsed so
+    // far -- never estimated from the configured bitrate, see rec_bar_size_state)
+    // before recMaxMb is reached. Only Some(..) past three quarters of that
+    // ceiling; None both below it and with show_size false.
+    size_eta_secs: Option<u64>,
+}
+
+// recBarSize's own threshold logic: whether to show the size at all, and
+// once past three quarters of recMaxMb, an ETA to that ceiling from the
+// recording's own observed average rate so far -- pure and window-free so
+// this has a real unit test, not just its recording_status wiring (same
+// reasoning as estimate_export_bytes/recording_disk_warning above).
+// recMaxMb <= 0 disables the ETA half only, size still shows past show_from_mb.
+fn rec_bar_size_state(bytes: u64, elapsed_ms: i64, show_from_mb: f64, max_mb: f64) -> (bool, Option<u64>) {
+    let mb = bytes as f64 / (1024.0 * 1024.0);
+    if mb < show_from_mb {
+        return (false, None);
+    }
+    if max_mb <= 0.0 || mb < max_mb * 0.75 {
+        return (true, None);
+    }
+    let elapsed_secs = elapsed_ms as f64 / 1000.0;
+    if elapsed_secs <= 0.0 {
+        return (true, None);
+    }
+    let rate = bytes as f64 / elapsed_secs;
+    if rate <= 0.0 {
+        return (true, None);
+    }
+    let remaining_bytes = (max_mb * 1024.0 * 1024.0 - bytes as f64).max(0.0);
+    (true, Some((remaining_bytes / rate) as u64))
 }
 
 // Read-only status for the control bar's live timer + file-size readout;
@@ -10189,13 +10223,24 @@ struct RecordingStatus {
 // tick self-corrects on the next one instead of drifting.
 #[cfg(windows)]
 #[tauri::command]
-fn recording_status(rstate: State<'_, RecordingState>) -> Option<RecordingStatus> {
+fn recording_status(rstate: State<'_, RecordingState>, db: State<'_, Db>) -> Option<RecordingStatus> {
     let guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
     let session = guard.as_ref()?;
     let bytes = std::fs::metadata(&session.output_path).map(|m| m.len()).unwrap_or(0);
+    let elapsed_ms = recording::elapsed_ms(session);
+    let (bar_size_on, show_from_mb, max_mb) = {
+        let g = lock(&db);
+        (
+            g.settings.ui_flags.get("recBarSize") != Some(&false),
+            g.settings.ui_values.get("recBarSizeFromMb").copied().unwrap_or(500.0),
+            g.settings.ui_values.get("recMaxMb").copied().unwrap_or(8000.0),
+        )
+    };
+    let (show_size, size_eta_secs) =
+        if bar_size_on { rec_bar_size_state(bytes, elapsed_ms, show_from_mb, max_mb) } else { (false, None) };
     Some(RecordingStatus {
         paused: session.phase == RecPhase::Paused,
-        elapsed_ms: recording::elapsed_ms(session),
+        elapsed_ms,
         bytes,
         audio_system: session.audio_system,
         audio_mic: session.audio_mic,
@@ -10205,12 +10250,14 @@ fn recording_status(rstate: State<'_, RecordingState>) -> Option<RecordingStatus
         encode_error: recording::encode_error(session),
         stop_hotkey_ok: REC_STOP_HOTKEY_OK.load(std::sync::atomic::Ordering::Relaxed),
         pause_hotkey_ok: REC_PAUSE_HOTKEY_OK.load(std::sync::atomic::Ordering::Relaxed),
+        show_size,
+        size_eta_secs,
     })
 }
 #[cfg(not(windows))]
 #[tauri::command]
-fn recording_status(rstate: State<'_, RecordingState>) -> Option<RecordingStatus> {
-    let _ = rstate;
+fn recording_status(rstate: State<'_, RecordingState>, db: State<'_, Db>) -> Option<RecordingStatus> {
+    let _ = (rstate, db);
     None
 }
 
@@ -25214,6 +25261,48 @@ mod tests {
     #[test]
     fn estimate_recording_seconds_remaining_never_divides_by_zero() {
         assert_eq!(estimate_recording_seconds_remaining(10_000_000, 0, false), 0);
+    }
+
+    // ---- Recording bar file size ----
+
+    #[test]
+    fn rec_bar_size_state_hides_below_the_show_threshold() {
+        let mb = 1024 * 1024;
+        assert_eq!(rec_bar_size_state(499 * mb, 60_000, 500.0, 8000.0), (false, None));
+    }
+
+    #[test]
+    fn rec_bar_size_state_shows_at_and_above_the_threshold_without_an_eta_yet() {
+        let mb = 1024 * 1024;
+        // Well past the show threshold but nowhere near three quarters of the
+        // 8000 MB ceiling -- shown, but with no ETA to a limit this far off.
+        assert_eq!(rec_bar_size_state(600 * mb, 60_000, 500.0, 8000.0), (true, None));
+    }
+
+    #[test]
+    fn rec_bar_size_state_adds_an_eta_past_three_quarters_of_the_ceiling() {
+        let mb = 1024u64 * 1024;
+        // 6100 MB of an 8000 MB ceiling is past the 6000 MB three-quarter mark.
+        // Observed rate: 6100 MB in 60s -> remaining 1900 MB at that same
+        // rate takes 1900/6100*60 ~= 18.7s.
+        let (show, eta) = rec_bar_size_state(6100 * mb, 60_000, 500.0, 8000.0);
+        assert!(show);
+        let eta = eta.expect("must carry an ETA this close to the ceiling");
+        assert!((17..=20).contains(&eta), "eta was {eta}, expected roughly 18-19s");
+    }
+
+    #[test]
+    fn rec_bar_size_state_zero_ceiling_disables_the_eta_but_not_the_size() {
+        let mb = 1024 * 1024;
+        assert_eq!(rec_bar_size_state(600 * mb, 60_000, 500.0, 0.0), (true, None));
+    }
+
+    #[test]
+    fn rec_bar_size_state_never_panics_at_zero_elapsed_time() {
+        let mb = 1024 * 1024;
+        let (show, eta) = rec_bar_size_state(6100 * mb, 0, 500.0, 8000.0);
+        assert!(show);
+        assert_eq!(eta, None, "no observed rate yet at elapsed=0, so no ETA rather than a division by zero");
     }
 
     #[test]

@@ -265,7 +265,13 @@ const RESULTS = {
   theme_vars: () => ({ accent: "#ff00aa" }),
   // Recording control bar's poll target -- a fixed fixture so the probe can
   // assert the timer/size labels render from it.
-  recording_status: () => ({ paused: false, elapsed_ms: 65000, bytes: 2500000 }),
+  // show_size/size_eta_secs mirror what rec_bar_size_state would compute
+  // server side; __REC_STATUS_OVERRIDE__ lets a probe swap in a different
+  // reading (e.g. past the size ceiling) between polls.
+  recording_status: () => Object.assign(
+    { paused: false, elapsed_ms: 65000, bytes: 600000000, show_size: true, size_eta_secs: null },
+    window.__REC_STATUS_OVERRIDE__ || {},
+  ),
   pause_recording: () => { window.__REC_PAUSED__ = true; return null; },
   resume_recording: () => { window.__REC_PAUSED__ = false; return null; },
   stop_recording: () => { window.__REC_STOPPED__ = true; return null; },
