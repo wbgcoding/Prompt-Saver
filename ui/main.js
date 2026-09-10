@@ -12741,6 +12741,7 @@ function bind() {
     }
     recGen += 1;
     invoke("cancel_recording_convert").catch(() => {});
+    invoke("cancel_recording_crop").catch(() => {});
     if (recProgressOff) { recProgressOff(); recProgressOff = null; }
     recModal.classList.add("hidden");
     recPreview.classList.add("hidden");
@@ -12754,7 +12755,35 @@ function bind() {
       await invoke("discard_recording_file", { path }).catch(() => {});
     }
   }
-  async function openRecModal(rawPath) {
+  // needsCrop: the window recording's canvas was bigger than the window
+  // ever used (369's multi-display canvas) -- trim the black margin first,
+  // with the same visible/cancellable status line as the format conversion
+  // below, before either showing the raw preview or starting that conversion.
+  // A cancel or any failure here just keeps the untouched, letterboxed
+  // recording -- never something worth an error toast.
+  async function runRecCrop(rawPath, gen) {
+    let secs = 0;
+    const showCropping = () => { recStatus.textContent = t("recCropping").replace("{s}", String(secs)); };
+    showCropping();
+    recStatus.classList.add("rec-status-cancellable");
+    recStatus.onclick = () => { if (gen === recGen) invoke("cancel_recording_crop").catch(() => {}); };
+    recProgressOff = await listen("recording-crop-progress", (e) => {
+      if (gen !== recGen) return;
+      secs = Math.floor((e.payload?.ms || 0) / 1000);
+      showCropping();
+    });
+    const myOff = recProgressOff;
+    if (gen === recGen) {
+      await invoke("crop_recording_to_used_area", { path: rawPath }).catch(() => {});
+    }
+    myOff();
+    if (recProgressOff === myOff) recProgressOff = null;
+    if (gen !== recGen) return;
+    recStatus.classList.remove("rec-status-cancellable");
+    recStatus.onclick = null;
+    recStatus.textContent = "";
+  }
+  async function openRecModal(rawPath, needsCrop) {
     pendingRecPath = rawPath;
     recSavedOrAttached = false;
     recCopiedNotSaved = false;
@@ -12763,6 +12792,12 @@ function bind() {
     renderRecFolder();
     $("rec-modal-edit").classList.toggle("hidden", !flag("videoEditor"));
     recModal.classList.remove("hidden");
+    if (needsCrop) {
+      recPreview.classList.add("hidden");
+      showRecErrorDetails("");
+      await runRecCrop(rawPath, gen);
+      if (gen !== recGen) return;
+    }
     const format = settings.ui_texts?.recFormat || "mp4";
     const lossless = (settings.ui_texts?.recQuality || "high") === "lossless";
     if (format === "mp4" && !lossless) {
@@ -12850,7 +12885,7 @@ function bind() {
     // display" case stays silent since that is simply the default working.
     if (e.payload?.canvas_note === "monitor") toast(t("recCanvasFallbackMonitor"));
     else if (e.payload?.canvas_note === "window") toast(t("recCanvasFallbackWindow"));
-    if (path) openRecModal(path);
+    if (path) openRecModal(path, !!e.payload?.needs_crop);
   });
   $("rec-modal-close").addEventListener("click", () => closeRecModal());
   recModal.addEventListener("pointerdown", (e) => {

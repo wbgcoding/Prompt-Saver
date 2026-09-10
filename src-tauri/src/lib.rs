@@ -17034,11 +17034,16 @@ struct RecordingStoppedPayload {
     // Set when both system and mic were captured -- the video editor
     // consolidates this sidecar into the mp4's second AAC track on open.
     mic_wav_path: Option<String>,
-    // One sentence naming the canvas 369 actually used for a Window
-    // recording (e.g. "every display", "the display the window is on",
-    // "the window's own size") -- None for Monitor/Region targets, which
-    // have exactly one candidate and nothing to report.
+    // One sentence naming the canvas a window recording actually used
+    // (e.g. "every display", "the display the window is on", "the
+    // window's own size") -- None for Monitor/Region targets, which have
+    // exactly one candidate and nothing to report.
     canvas_note: Option<String>,
+    // True when the window used less of its canvas than the canvas itself,
+    // leaving a black margin the frontend should now trim automatically
+    // (crop_recording_to_used_area) before showing the result. Always
+    // false for Monitor/Region and for the "window's own size" fallback.
+    needs_crop: bool,
 }
 
 #[cfg(windows)]
@@ -17480,6 +17485,10 @@ mod recording {
         // (fell back to the window's own size). None for Monitor/Region
         // targets.
         pub canvas_note: Option<&'static str>,
+        // The encoder's actual frame size -- needed alongside used_area to
+        // decide whether the post-capture crop step has anything to do at
+        // all (a used area that already fills the canvas needs no crop).
+        pub canvas_size: (u32, u32),
     }
 
     // A Window recording's canvas defaults to the union of every display
@@ -17685,7 +17694,7 @@ mod recording {
             audio_queues, mic_wav_thread, mic_wav_path,
             audio_system: audio.system, audio_mic: audio.mic,
             output_path, phase: RecPhase::Recording,
-            used_area, canvas_note,
+            used_area, canvas_note, canvas_size: (width, height),
         })
     }
 
@@ -17755,12 +17764,24 @@ mod recording {
     // second AAC track the first time it opens this recording; nothing else
     // in the app looks at it, so a workflow that never opens the editor never
     // needs ffmpeg for a plain recording.
-    pub fn stop(session: RecSession) -> Result<(PathBuf, u64, Option<String>, Option<PathBuf>, Option<&'static str>), String> {
+    // The sixth and seventh fields let the caller decide whether a post-capture
+    // crop is worthwhile: the used-area union rect (canvas-local coordinates,
+    // None when this was not a placement recording) and the canvas size it is
+    // relative to.
+    pub fn stop(
+        session: RecSession,
+    ) -> Result<(PathBuf, u64, Option<String>, Option<PathBuf>, Option<&'static str>, Option<(u32, u32, u32, u32)>, (u32, u32)), String>
+    {
         let path = session.output_path.clone();
         let mic_wav_path = session.mic_wav_path.clone();
         let canvas_note = session.canvas_note;
+        let used_area = session.used_area.clone();
+        let canvas_size = session.canvas_size;
         let (dropped, encode_error) = finish_and_stop(session)?;
-        Ok((path, dropped, encode_error, mic_wav_path, canvas_note))
+        // Only safe to read now: the capture thread (used_area's sole writer)
+        // is guaranteed joined once finish_and_stop has returned.
+        let crop_rect = used_area.and_then(|u| u.get());
+        Ok((path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size))
     }
 
     // Live-poll accessor for the control bar: lets it notice an unrecoverable
@@ -17989,13 +18010,22 @@ fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayload, String
         }
         s
     };
-    let (path, dropped, encode_error, mic_wav_path, canvas_note) = recording::stop(session)?;
+    let (path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size) = recording::stop(session)?;
+    // A crop is only worth running when the union of every placed frame is
+    // strictly smaller than the canvas it was placed on -- a window that
+    // used the whole canvas leaves nothing to trim.
+    let needs_crop = crop_rect.is_some_and(|(x, y, w, h)| x > 0 || y > 0 || w < canvas_size.0 || h < canvas_size.1);
+    if needs_crop {
+        let mut pending = PENDING_REC_CROP.lock().unwrap_or_else(|e| e.into_inner());
+        *pending = Some((path.clone(), crop_rect.unwrap()));
+    }
     let payload = RecordingStoppedPayload {
         path: path.to_string_lossy().to_string(),
         dropped_frames: dropped,
         encode_error,
         mic_wav_path: mic_wav_path.map(|p| p.to_string_lossy().to_string()),
         canvas_note: canvas_note.map(str::to_string),
+        needs_crop,
     };
     // The stop/pause hotkeys give up their combination the instant nothing
     // is recording, on every end path this function serves (button, hotkey,
@@ -19166,6 +19196,84 @@ struct ConvertProgressPayload {
 #[tauri::command]
 fn cancel_recording_convert() {
     REC_CONVERT_CANCEL.store(true, Ordering::SeqCst);
+}
+
+// The crop rect a window recording's stop_recording_now just computed,
+// waiting for the frontend's automatic post-capture crop step -- exactly
+// one recording result flow is ever open at a time, same assumption
+// REC_CONVERT_CANCEL already makes. Keyed by path so a crop request for a
+// stale/superseded recording (the result modal was discarded and a new
+// recording already started) is refused rather than acting on the wrong
+// file.
+static PENDING_REC_CROP: Mutex<Option<(PathBuf, (u32, u32, u32, u32))>> = Mutex::new(None);
+static REC_CROP_CANCEL: AtomicBool = AtomicBool::new(false);
+
+#[derive(serde::Serialize, Clone)]
+struct CropProgressPayload {
+    ms: u32,
+}
+
+#[tauri::command]
+fn cancel_recording_crop() {
+    REC_CROP_CANCEL.store(true, Ordering::SeqCst);
+}
+
+// Trims a window recording down to the union of every position the window
+// actually occupied, dropping the black margin its fixed multi-display
+// canvas leaves around it. Reuses run_ffmpeg_to_staged so a cancel or
+// failure leaves the original, letterboxed recording untouched -- this step
+// is a pure quality nicety, never something a plain window recording can
+// fail to complete without. Progress arrives as "recording-crop-progress"
+// ({ms}), same shape as convert_recording's own progress event.
+#[tauri::command]
+async fn crop_recording_to_used_area(app: AppHandle, path: String) -> Result<String, String> {
+    let src = PathBuf::from(&path);
+    let rect = {
+        let mut pending = PENDING_REC_CROP.lock().unwrap_or_else(|e| e.into_inner());
+        match pending.take() {
+            Some((p, r)) if p == src => r,
+            other => {
+                *pending = other;
+                return Err("nothing to crop".to_string());
+            }
+        }
+    };
+    let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
+    REC_CROP_CANCEL.store(false, Ordering::SeqCst);
+    tauri::async_runtime::spawn_blocking(move || {
+        crop_recording_blocking(&ffmpeg, &src, rect, |ms| {
+            let _ = app.emit("recording-crop-progress", CropProgressPayload { ms });
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// crf 16 (rather than convert_recording's lossless crf 0): a crop-only pass
+// has no reason to balloon the file size for a difference nobody can see,
+// just to stay visually transparent while it removes a plain black border.
+// Audio is copied untouched -- cropping never touches timing, so
+// re-encoding it would only risk a sync drift for no benefit.
+fn crop_recording_blocking(
+    ffmpeg: &Path, src: &Path, rect: (u32, u32, u32, u32), mut on_progress: impl FnMut(u32),
+) -> Result<String, String> {
+    // libx264 requires even dimensions; the offset is floored to even too so
+    // chroma stays aligned on the 4:2:0 subsampling grid.
+    let (x, y, w, h) = rect;
+    let (x, y) = (x & !1, y & !1);
+    let (w, h) = ((w & !1).max(2), (h & !1).max(2));
+    let args = vec![
+        "-vf".to_string(), format!("crop={w}:{h}:{x}:{y}"),
+        "-c:v".to_string(), "libx264".to_string(), "-crf".to_string(), "16".to_string(), "-preset".to_string(), "veryfast".to_string(),
+        "-c:a".to_string(), "copy".to_string(),
+    ];
+    let staged = run_ffmpeg_to_staged(ffmpeg, src, src, &[], &args, || REC_CROP_CANCEL.load(Ordering::SeqCst), &mut on_progress)?;
+    fs::rename(&staged, src).map_err(|e| {
+        let _ = fs::remove_file(&staged);
+        let text = e.to_string();
+        ffmpeg_error_json(classify_ffmpeg_error(&text), None, &text)
+    })?;
+    Ok(src.to_string_lossy().to_string())
 }
 
 // `format`: "mp4" | "webm" | "gif". `lossless` only means anything for "mp4"
@@ -23059,6 +23167,8 @@ pub fn run() {
             cancel_recording,
             convert_recording,
             cancel_recording_convert,
+            crop_recording_to_used_area,
+            cancel_recording_crop,
             open_video_editor,
             video_editor_source,
             probe_recording,
@@ -24595,6 +24705,68 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    // Serializes every test that reads or flips the process-global REC_CROP_CANCEL
+    // flag against each other, same reasoning as REC_CONVERT_TEST_LOCK above.
+    static REC_CROP_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn crop_recording_real_ffmpeg_produces_the_requested_size_in_place() {
+        let _guard = REC_CROP_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        REC_CROP_CANCEL.store(false, Ordering::SeqCst);
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-croptest-size-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x48");
+        let out = crop_recording_blocking(&ffmpeg, &src, (8, 8, 32, 24), |_| {}).expect("crop should succeed");
+        assert_eq!(PathBuf::from(&out), src, "the crop must replace the source path, not a new one");
+        let probe = probe_recording_blocking(&ffprobe, &src).expect("probe should succeed");
+        assert_eq!((probe.width, probe.height), (32, 24));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn crop_recording_real_ffmpeg_floors_odd_rect_values_to_even() {
+        let _guard = REC_CROP_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        REC_CROP_CANCEL.store(false, Ordering::SeqCst);
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-croptest-odd-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        // libx264 needs even dimensions; an odd rect (from an odd window
+        // position/size) must still produce a playable file, not an
+        // "odd dimensions" ffmpeg failure.
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x48");
+        let out = crop_recording_blocking(&ffmpeg, &src, (7, 5, 31, 23), |_| {}).expect("crop should succeed");
+        assert_eq!(PathBuf::from(&out), src);
+        let probe = probe_recording_blocking(&ffprobe, &src).expect("probe should succeed");
+        assert_eq!((probe.width, probe.height), (30, 22), "odd rect values must floor to even");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn crop_recording_real_ffmpeg_cancel_leaves_the_source_untouched() {
+        let _guard = REC_CROP_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-croptest-cancel-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 2, "320x240");
+        let before = fs::read(&src).unwrap();
+        // Set BEFORE starting rather than racing a delayed flip against an
+        // unknown encode speed: run_ffmpeg_to_staged re-checks is_cancelled()
+        // once more right after the process exits, so a flag already true
+        // from the start is caught deterministically whether or not the
+        // stdout-progress loop itself ever observes it mid-run.
+        REC_CROP_CANCEL.store(true, Ordering::SeqCst);
+        let result = crop_recording_blocking(&ffmpeg, &src, (10, 10, 200, 150), |_| {});
+        assert_eq!(result, Err("cancelled".to_string()));
+        assert!(src.is_file(), "a cancelled crop must never remove the source");
+        let after = fs::read(&src).unwrap();
+        assert_eq!(before, after, "a cancelled crop must leave the source byte-for-byte untouched");
+        REC_CROP_CANCEL.store(false, Ordering::SeqCst);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     // ---- The export format note's size estimate ----
 
     #[test]
@@ -25571,7 +25743,7 @@ mod tests {
         };
         let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
-        let (path, _dropped, _encode_error, _mic_wav, _canvas_note) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
         assert!(bytes.len() > 10_000, "output suspiciously small: {} bytes", bytes.len());
         let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
@@ -25595,7 +25767,7 @@ mod tests {
         };
         let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
-        let (path, _dropped, _encode_error, _mic_wav, _canvas_note) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
         assert!(bytes.len() > 10_000, "output suspiciously small: {} bytes", bytes.len());
         let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
@@ -25616,7 +25788,7 @@ mod tests {
         };
         let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
-        let (path, _dropped, _encode_error, _mic_wav, _canvas_note) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
         assert!(bytes.len() > 10_000, "output suspiciously small: {} bytes", bytes.len());
         let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
@@ -25641,7 +25813,7 @@ mod tests {
         let wall_start = std::time::Instant::now();
         let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(600));
-        let (path, _dropped, _encode_error, _mic_wav, _canvas_note) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size) = recording::stop(session).expect("stop");
         let wall_elapsed = wall_start.elapsed().as_secs_f64();
         let bytes = std::fs::read(&path).expect("read output file");
         let durations = mp4_track_durations_secs(&bytes);
@@ -25681,7 +25853,7 @@ mod tests {
         };
         let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(2));
-        let (path, _dropped, _encode_error, _mic_wav, _canvas_note) = recording::stop(session).expect("stop");
+        let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
         let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
         let _ = std::fs::remove_file(&path);
