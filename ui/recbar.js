@@ -11,6 +11,7 @@ const bar = document.getElementById("bar");
 const dot = document.getElementById("dot");
 const timeEl = document.getElementById("time");
 const sizeEl = document.getElementById("size");
+const switchBtn = document.getElementById("switch-btn");
 const pauseBtn = document.getElementById("pause-btn");
 const pauseIcon = document.getElementById("pause-icon");
 const resumeIcon = document.getElementById("resume-icon");
@@ -42,6 +43,22 @@ function applySize(bytes, etaSecs) {
   sizeEl.textContent = fmtSize(bytes);
   sizeEl.classList.toggle("rec-size-warn", etaSecs != null);
   sizeEl.title = etaSecs != null && i18nDict ? (i18nDict.recBarSizeEta || "").replace("{time}", fmtTime(etaSecs * 1000)) : "";
+}
+
+// recTargetSwitch's own button: stays visible even when it cannot do
+// anything right now (a Monitor/Region recording, or a Window recording that
+// never got a placement canvas) rather than popping in and out, with a
+// tooltip naming why. The actual "same screen" check for a canvas-mode
+// "monitor" recording only happens once something is actually picked (see
+// the recording-target-switch-failed listener in main.js) -- this only
+// covers the up-front, always-knowable half of the gate.
+let switchEnabled = false;
+function applyTargetSwitch(enabled) {
+  switchEnabled = enabled;
+  switchBtn.disabled = !enabled;
+  if (!i18nDict) return;
+  const label = enabled ? i18nDict.recBarSwitchTarget : i18nDict.recTargetSwitchUnsupported;
+  if (label) { switchBtn.title = label; switchBtn.setAttribute("aria-label", label); }
 }
 
 let paused = false;
@@ -148,6 +165,7 @@ async function poll() {
     applyPaused(status.paused);
     timeEl.textContent = fmtTime(status.elapsed_ms);
     applySize(status.show_size ? status.bytes : 0, status.size_eta_secs);
+    applyTargetSwitch(status.target_switch_enabled);
     applyAudio(status);
     applyHotkeyWarn(status.stop_hotkey_ok, status.pause_hotkey_ok);
   } catch {
@@ -156,6 +174,25 @@ async function poll() {
 }
 pollTimer = setInterval(poll, 500);
 poll();
+
+// Opens the same overlay recording itself starts from, in "pick a switch
+// target" mode -- recorder-target-picked (below) is what actually acts on
+// the result, since the overlay closes and reopens no window of its own.
+switchBtn.addEventListener("click", () => {
+  if (!switchEnabled) return;
+  invoke("open_recorder_switch").catch(() => {});
+});
+listen("recorder-target-picked", async (e) => {
+  const p = e.payload || {};
+  if (!p.forSwitch || p.kind !== "window") return;
+  try {
+    await invoke("switch_recording_target", { targetKind: p.kind, targetId: p.id });
+  } catch {
+    // Surfaced to the user via the main window's own toast (main.js listens
+    // for recording-target-switch-failed) -- this bar has no toast of its own
+    // and the previous source is already still recording regardless.
+  }
+});
 
 pauseBtn.addEventListener("click", async () => {
   try {
@@ -220,6 +257,7 @@ Promise.all([invoke("get_settings"), import("./i18n.js"), import("./floatShared.
     }
     const label = pauseBtnLabel();
     if (label) { pauseBtn.title = label; pauseBtn.setAttribute("aria-label", label); }
+    applyTargetSwitch(switchEnabled);
     applyAudio({
       audio_system: lastAudio.system, audio_mic: lastAudio.mic,
       audio_system_muted: lastAudio.systemMuted, audio_mic_muted: lastAudio.micMuted, mic_lost: lastAudio.micLost,

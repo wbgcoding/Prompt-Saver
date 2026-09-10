@@ -433,7 +433,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Click the record button; pick a window, drag a region, or click empty desktop for the whole screen — same overlay as the screenshot tool.",
         "An optional countdown toast counts down before capture actually starts.",
-        "A small floating control bar shows elapsed time and file size, and offers Pause/Resume, Stop and Discard; two optional global hotkeys and the tray menu can stop or pause/resume it too, live only while it is actually running.",
+        "A small floating control bar shows elapsed time and file size, and offers Pause/Resume, Stop and Discard; two optional global hotkeys and the tray menu can stop or pause/resume it too, live only while it is actually running. A window recording using the every-display or current-display canvas also gets a switch-target button, to swap what it is capturing without starting over.",
         "Stopping offers Save, Save as…, Copy, Edit or Discard.",
       ],
       whatHappens:
@@ -1013,7 +1013,7 @@ export const HELP_CONTENT = {
       howTo: [
         "Auf den Aufnahme-Knopf klicken; ein Fenster anklicken, einen Bereich ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm — dieselbe Übersicht wie beim Screenshot-Werkzeug.",
         "Ein Countdown zählt optional herunter, bevor die Aufnahme wirklich startet.",
-        "Eine kleine Bedienleiste zeigt Laufzeit und Dateigröße und bietet Pause/Fortsetzen, Stopp und Verwerfen; zwei optionale globale Hotkeys sowie das Tray-Menü können sie ebenfalls stoppen oder pausieren/fortsetzen, aber nur, solange die Aufnahme wirklich läuft.",
+        "Eine kleine Bedienleiste zeigt Laufzeit und Dateigröße und bietet Pause/Fortsetzen, Stopp und Verwerfen; zwei optionale globale Hotkeys sowie das Tray-Menü können sie ebenfalls stoppen oder pausieren/fortsetzen, aber nur, solange die Aufnahme wirklich läuft. Eine Fensteraufnahme mit der Leinwand für alle Bildschirme oder den aktuellen Bildschirm bekommt zusätzlich einen Knopf zum Wechseln des Aufnahmeziels, ohne von vorn zu beginnen.",
         "Stopp bietet Speichern, Speichern unter…, Kopieren, Bearbeiten oder Verwerfen an.",
       ],
       whatHappens:

@@ -269,7 +269,7 @@ const RESULTS = {
   // server side; __REC_STATUS_OVERRIDE__ lets a probe swap in a different
   // reading (e.g. past the size ceiling) between polls.
   recording_status: () => Object.assign(
-    { paused: false, elapsed_ms: 65000, bytes: 600000000, show_size: true, size_eta_secs: null },
+    { paused: false, elapsed_ms: 65000, bytes: 600000000, show_size: true, size_eta_secs: null, target_switch_enabled: false },
     window.__REC_STATUS_OVERRIDE__ || {},
   ),
   pause_recording: () => { window.__REC_PAUSED__ = true; return null; },
@@ -277,6 +277,8 @@ const RESULTS = {
   stop_recording: () => { window.__REC_STOPPED__ = true; return null; },
   cancel_recording: () => { window.__REC_CANCELLED__ = true; return null; },
   hide_rec_bar: () => { window.__REC_BAR_HIDDEN__ = true; return null; },
+  open_recorder_switch: () => null,
+  switch_recording_target: () => null,
   // Video editor: a fixed 10-minute 1080p30 recording with both a system and a
   // mic audio track -- real enough to exercise the filmstrip/waveform rendering
   // the same way an actual capture would, and shared by the UI smoke test and

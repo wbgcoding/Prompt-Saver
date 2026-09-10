@@ -73,3 +73,8 @@
 }
 .rec-btn:hover { background: var(--menu-line); }
 .rec-btn-danger:hover { background: var(--danger); color: #fff; }
+/* Shown but inert when the target-switch button cannot do anything right
+   now (see recbar.js's applyTargetSwitch) -- stays visible so it can still
+   be found, rather than disappearing and reappearing as settings change. */
+.rec-btn:disabled { opacity: 0.35; cursor: default; }
+.rec-btn:disabled:hover { background: transparent; }

@@ -10190,6 +10190,14 @@ struct RecordingStatus {
     // before recMaxMb is reached. Only Some(..) past three quarters of that
     // ceiling; None both below it and with show_size false.
     size_eta_secs: Option<u64>,
+    // recTargetSwitch (Vorgabe an): whether the bar's target-switch button is
+    // enabled at all right now -- a window recording using the "every
+    // display" or "current display" canvas, with the master flag on. A
+    // canvas-mode "monitor" recording still needs the actual pick to land on
+    // the same screen, only checkable once something has actually been
+    // picked, so a false here already means the button itself is disabled;
+    // a true here does not yet guarantee any given pick will succeed.
+    target_switch_enabled: bool,
 }
 
 // recBarSize's own threshold logic: whether to show the size at all, and
@@ -10228,16 +10236,18 @@ fn recording_status(rstate: State<'_, RecordingState>, db: State<'_, Db>) -> Opt
     let session = guard.as_ref()?;
     let bytes = std::fs::metadata(&session.output_path).map(|m| m.len()).unwrap_or(0);
     let elapsed_ms = recording::elapsed_ms(session);
-    let (bar_size_on, show_from_mb, max_mb) = {
+    let (bar_size_on, show_from_mb, max_mb, target_switch_on) = {
         let g = lock(&db);
         (
             g.settings.ui_flags.get("recBarSize") != Some(&false),
             g.settings.ui_values.get("recBarSizeFromMb").copied().unwrap_or(500.0),
             g.settings.ui_values.get("recMaxMb").copied().unwrap_or(8000.0),
+            g.settings.ui_flags.get("recTargetSwitch") != Some(&false),
         )
     };
     let (show_size, size_eta_secs) =
         if bar_size_on { rec_bar_size_state(bytes, elapsed_ms, show_from_mb, max_mb) } else { (false, None) };
+    let target_switch_enabled = target_switch_on && recording::can_switch_target(session);
     Some(RecordingStatus {
         paused: session.phase == RecPhase::Paused,
         elapsed_ms,
@@ -10252,6 +10262,7 @@ fn recording_status(rstate: State<'_, RecordingState>, db: State<'_, Db>) -> Opt
         pause_hotkey_ok: REC_PAUSE_HOTKEY_OK.load(std::sync::atomic::Ordering::Relaxed),
         show_size,
         size_eta_secs,
+        target_switch_enabled,
     })
 }
 #[cfg(not(windows))]
@@ -11903,6 +11914,12 @@ static SNIP_ACTIVE: AtomicBool = AtomicBool::new(false);
 // snip. Both share the freeze + overlay pipeline; only the overlay's mode differs.
 static PICK_ACTIVE: AtomicBool = AtomicBool::new(false);
 
+// The running recording-target pick is for a live target switch on an
+// already-running recording, not for starting a new one -- read once by
+// recorder_target_picked to mark its emitted event so the two very different
+// listeners (start a recording vs. swap its source) never both react to it.
+static REC_SWITCH_PICK: AtomicBool = AtomicBool::new(false);
+
 // End the current snip session: HIDE (never close) the reusable overlay so its
 // warm WebView2 survives for the next snip, bring the app's own windows back, and
 // drop the temp preview. Closing the overlay is what forced every snip to pay the
@@ -12671,6 +12688,7 @@ async fn open_picker(
     if !on {
         return Err("color picker is off".to_string());
     }
+    REC_SWITCH_PICK.store(false, Ordering::SeqCst);
     begin_capture(app, state, preview, true, false).await
 }
 
@@ -12684,6 +12702,21 @@ async fn open_recorder(
     state: State<'_, SnipState>,
     preview: State<'_, SnipPreview>,
 ) -> Result<(), String> {
+    REC_SWITCH_PICK.store(false, Ordering::SeqCst);
+    begin_capture(app, state, preview, false, true).await
+}
+
+// The same picker again, opened FROM the running recording's own control bar
+// to swap its source instead of starting a new recording -- the only
+// difference from open_recorder is the flag recorder_target_picked reads to
+// mark its result as a switch, not a start.
+#[tauri::command]
+async fn open_recorder_switch(
+    app: AppHandle,
+    state: State<'_, SnipState>,
+    preview: State<'_, SnipPreview>,
+) -> Result<(), String> {
+    REC_SWITCH_PICK.store(true, Ordering::SeqCst);
     begin_capture(app, state, preview, false, true).await
 }
 
@@ -13067,7 +13100,7 @@ fn recorder_target_picked(
     width: u32,
     height: u32,
 ) -> Result<(), String> {
-    let payload = match kind.as_str() {
+    let mut payload = match kind.as_str() {
         "window" => serde_json::json!({ "kind": "window", "id": id }),
         "monitor" => {
             let (monitor, ..) = resolve_region_monitor(x, y, 1, 1)?;
@@ -13082,6 +13115,12 @@ fn recorder_target_picked(
         }
         _ => return Err("invalid recording target".to_string()),
     };
+    // A pick opened from the running recording's own bar (open_recorder_switch)
+    // is meant to swap that recording's source, not start a second one -- see
+    // REC_SWITCH_PICK's own doc comment for why this needs a flag at all.
+    if REC_SWITCH_PICK.swap(false, Ordering::SeqCst) {
+        payload["forSwitch"] = serde_json::json!(true);
+    }
     close_all_snip(&app);
     state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
     let _ = app.emit("recorder-target-picked", payload);
@@ -17295,18 +17334,24 @@ mod recording {
         // ever bites Window.
         enc_size: (u32, u32),
         placement: Option<WindowPlacement>,
+        // Set only on the handler a live target switch just started --
+        // flipped once this handler's own first frame is pushed, so the
+        // switch can wait for it before closing the OLD handler and losing
+        // nothing at the seam. None for every ordinary handler.
+        first_frame_signal: Option<Arc<AtomicBool>>,
     }
     impl GraphicsCaptureApiHandler for RecHandler {
         type Flags = (
             Arc<RecordClock>, Arc<RecFeederShared>, Option<(u32, u32, u32, u32)>, (u32, u32),
             Option<(isize, (i32, i32), Arc<UsedAreaTracker>)>,
+            Option<Arc<AtomicBool>>,
         );
         type Error = RecError;
 
         fn new(ctx: Context<Self::Flags>) -> Result<Self, Self::Error> {
-            let (clock, shared, crop, enc_size, placement) = ctx.flags;
+            let (clock, shared, crop, enc_size, placement, first_frame_signal) = ctx.flags;
             let placement = placement.map(|(hwnd, canvas_origin, used_area)| WindowPlacement { hwnd, canvas_origin, used_area });
-            Ok(Self { clock, shared, crop, enc_size, placement })
+            Ok(Self { clock, shared, crop, enc_size, placement, first_frame_signal })
         }
 
         fn on_frame_arrived(
@@ -17360,6 +17405,9 @@ mod recording {
                 )
             };
             self.shared.push(RecFrameItem { bytes, ts });
+            if let Some(sig) = &self.first_frame_signal {
+                sig.store(true, Ordering::Release);
+            }
             Ok(())
         }
     }
@@ -17633,6 +17681,17 @@ mod recording {
         // decide whether the post-capture crop step has anything to do at
         // all (a used area that already fills the canvas needs no crop).
         pub canvas_size: (u32, u32),
+        // The placement canvas' own top-left (see CanvasCandidate::origin),
+        // kept only for a Window recording that actually used one (canvas_note
+        // "all" or "monitor") -- a live target switch re-anchors its new
+        // window inside this SAME origin instead of re-deriving a canvas.
+        // None for Monitor/Region targets and for the "window's own size"
+        // fallback tier, both of which have nothing a switch could reuse.
+        canvas_origin: Option<(i32, i32)>,
+        // Whether the cursor was drawn into the picture -- kept so a target
+        // switch can build its replacement capture with the same setting
+        // rather than silently reverting to the default.
+        show_cursor: bool,
     }
 
     // A Window recording's canvas defaults to the union of every display
@@ -17851,7 +17910,7 @@ mod recording {
             (true, RecTarget::Window(hwnd)) => Some((hwnd, canvas.origin, used_area.clone().unwrap())),
             _ => None,
         };
-        let flags = (clock.clone(), shared.clone(), crop, (width, height), placement_flags);
+        let flags = (clock.clone(), shared.clone(), crop, (width, height), placement_flags, None);
         let control = match resolve_capture_item(target)? {
             CaptureItem::Monitor(m) => {
                 let settings = Settings::new(
@@ -17869,12 +17928,14 @@ mod recording {
             }
         };
 
+        let canvas_origin = canvas.placement.then_some(canvas.origin);
         Ok(RecSession {
             control, clock, shared, feeder: Some(feeder), audio_stop, audio_threads, mic_queue, system_queue,
             audio_queues, mic_wav_thread, mic_wav_path,
             audio_system: audio.system, audio_mic: audio.mic,
             output_path, phase: RecPhase::Recording,
             used_area, canvas_note, canvas_size: (width, height),
+            canvas_origin, show_cursor,
         })
     }
 
@@ -17897,6 +17958,88 @@ mod recording {
     // the encoder.
     pub fn elapsed_ms(session: &RecSession) -> i64 {
         session.clock.now_ticks() / 10_000
+    }
+
+    // Whether this session can offer a live target switch at all -- a plain
+    // window recording using one of the placement canvases (see CanvasCandidate).
+    // A Monitor/Region target, or the "window's own size" fallback tier, has
+    // no spare canvas room a different window could be re-anchored into.
+    pub fn can_switch_target(session: &RecSession) -> bool {
+        session.canvas_origin.is_some()
+    }
+
+    // Whether a specific new window fits the ALREADY BUILT canvas without
+    // rebuilding the encoder: "all" fits anything within the virtual screen
+    // by construction, "monitor" only a window on that exact same display, and
+    // the "window" fallback tier (Some("window") or None) never offers a
+    // switch at all. Pure and independent of any capture handle so it is
+    // unit-testable on any platform.
+    pub(crate) fn target_fits_canvas(
+        canvas_note: Option<&str>, canvas_origin: (i32, i32), canvas_size: (u32, u32),
+        new_monitor: Option<(i32, i32, u32, u32)>,
+    ) -> bool {
+        match canvas_note {
+            Some("all") => true,
+            Some("monitor") => new_monitor == Some((canvas_origin.0, canvas_origin.1, canvas_size.0, canvas_size.1)),
+            _ => false,
+        }
+    }
+
+    // Swaps a Window recording's capture source to a different window while
+    // keeping the same encoder, canvas, clock and output file. A new,
+    // second WGC session is started into the SAME canvas origin and pushes
+    // frames into the SAME feeder queue the running encoder already drains;
+    // only once that new session has proven it is actually delivering (its own
+    // first frame) does the old one get torn down, so the seam never drops a
+    // frame and the timestamps -- driven by the one shared clock throughout --
+    // never jump. A failure at any step leaves the OLD session completely
+    // untouched: the recording it is already producing never dies from a
+    // failed switch.
+    pub fn switch_target(session: &mut RecSession, new_hwnd: isize, new_monitor: Option<(i32, i32, u32, u32)>) -> Result<(), String> {
+        let canvas_origin = session
+            .canvas_origin
+            .ok_or_else(|| "recording-target-switch-not-supported".to_string())?;
+        if !target_fits_canvas(session.canvas_note, canvas_origin, session.canvas_size, new_monitor) {
+            return Err("recording-target-switch-different-monitor".to_string());
+        }
+        let used_area = session
+            .used_area
+            .clone()
+            .ok_or_else(|| "recording-target-switch-not-supported".to_string())?;
+        let w = Window::from_raw_hwnd(new_hwnd as *mut std::ffi::c_void);
+        if !w.is_valid() {
+            return Err("recording-target-switch-invalid-window".to_string());
+        }
+        let cursor = if session.show_cursor { CursorCaptureSettings::WithCursor } else { CursorCaptureSettings::WithoutCursor };
+        let first_frame = Arc::new(AtomicBool::new(false));
+        let flags = (
+            session.clock.clone(), session.shared.clone(), None, session.canvas_size,
+            Some((new_hwnd, canvas_origin, used_area)), Some(first_frame.clone()),
+        );
+        let settings = Settings::new(
+            w, cursor, DrawBorderSettings::Default, SecondaryWindowSettings::Default,
+            MinimumUpdateIntervalSettings::Default, DirtyRegionSettings::Default, ColorFormat::Bgra8, flags,
+        );
+        let new_control = RecHandler::start_free_threaded(settings).map_err(|e| e.to_string())?;
+        // A real frame typically lands within a couple hundred ms; 2s gives a
+        // slow first WGC frame plenty of room without leaving a failed switch
+        // hanging the caller for long.
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !first_frame.load(Ordering::Acquire) {
+            if Instant::now() >= deadline {
+                let _ = new_control.stop();
+                return Err("recording-target-switch-timeout".to_string());
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        let old_control = std::mem::replace(&mut session.control, new_control);
+        if let Err(e) = old_control.stop() {
+            // The new source is already live and recording fine -- losing the
+            // old capture handle cleanly is a log-worthy oddity, not a reason
+            // to fail a switch that otherwise fully succeeded.
+            append_crash_log(&format!("recording: old capture control stop failed after a target switch: {e}"));
+        }
+        Ok(())
     }
 
     // Shared tail of stop/cancel: drain the queue and finalise the encoder,
@@ -18238,6 +18381,63 @@ async fn start_recording(
     region_h: u32,
 ) -> Result<(), String> {
     let _ = (app, rstate, db, target_kind, target_id, region_x, region_y, region_w, region_h);
+    Err("recording is only available on Windows".to_string())
+}
+
+// Swaps a running recording's own source rather than starting a new
+// one -- the control bar's target-switch button, only ever enabled (see
+// RecordingStatus::target_switch_enabled) for a window recording using a
+// placement canvas. Only a "window" pick is accepted: a monitor or region
+// target never fits an already-built placement canvas the same way, and this
+// feature never rebuilds the encoder to accommodate one. A failure here
+// leaves the current recording completely untouched and is also broadcast as
+// an event, since the caller (the separate control-bar window) has nowhere
+// of its own to show it.
+#[cfg(windows)]
+#[tauri::command]
+async fn switch_recording_target(
+    app: AppHandle,
+    rstate: State<'_, RecordingState>,
+    target_kind: String,
+    target_id: i64,
+) -> Result<(), String> {
+    if target_kind != "window" {
+        let _ = app.emit("recording-target-switch-failed", "recording-target-switch-not-supported");
+        return Err("recording-target-switch-not-supported".to_string());
+    }
+    {
+        let guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
+        let phase = guard.as_ref().map(|s| s.phase).unwrap_or(RecPhase::Idle);
+        if phase != RecPhase::Recording {
+            let _ = app.emit("recording-target-switch-failed", "recording-target-switch-not-supported");
+            return Err("recording-target-switch-not-supported".to_string());
+        }
+    }
+    let new_hwnd = target_id as isize;
+    // The window's OWN rect only names its corner -- what target_fits_canvas
+    // needs is the display it sits on, the same shape monitor_rect_at already
+    // gives window_canvas_candidates for the "current display" tier.
+    let new_monitor = external_window_rect(new_hwnd).and_then(|(l, t, _, _)| monitor_rect_at(l, t));
+    // spawn_blocking cannot borrow the request-scoped State -- re-fetched from
+    // the cloned, 'static AppHandle instead, same as stop_recording_now does.
+    let app2 = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let rstate = app2.state::<RecordingState>();
+        let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
+        let session = guard.as_mut().ok_or_else(|| "no active recording".to_string())?;
+        recording::switch_target(session, new_hwnd, new_monitor)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    if let Err(e) = &result {
+        let _ = app.emit("recording-target-switch-failed", e);
+    }
+    result
+}
+#[cfg(not(windows))]
+#[tauri::command]
+async fn switch_recording_target(app: AppHandle, rstate: State<'_, RecordingState>, target_kind: String, target_id: i64) -> Result<(), String> {
+    let _ = (app, rstate, target_kind, target_id);
     Err("recording is only available on Windows".to_string())
 }
 
@@ -23519,6 +23719,7 @@ pub fn run() {
             open_snip,
             open_picker,
             open_recorder,
+            open_recorder_switch,
             recorder_target_picked,
             pick_tile,
             pick_color,
@@ -23588,6 +23789,7 @@ pub fn run() {
             set_rec_stop_hotkey,
             set_rec_pause_hotkey,
             start_recording,
+            switch_recording_target,
             check_recording_disk_space,
             check_export_disk_space,
             pause_recording,
@@ -25303,6 +25505,29 @@ mod tests {
         let (show, eta) = rec_bar_size_state(6100 * mb, 0, 500.0, 8000.0);
         assert!(show);
         assert_eq!(eta, None, "no observed rate yet at elapsed=0, so no ETA rather than a division by zero");
+    }
+
+    // ---- Live recording target switch ----
+
+    #[test]
+    fn target_fits_canvas_accepts_anything_on_the_every_display_canvas() {
+        assert!(recording::target_fits_canvas(Some("all"), (-1920, 0), (5760, 1080), Some((3840, 0, 1920, 1080))));
+        assert!(recording::target_fits_canvas(Some("all"), (-1920, 0), (5760, 1080), None));
+    }
+
+    #[test]
+    fn target_fits_canvas_requires_the_same_monitor_in_monitor_mode() {
+        let canvas_origin = (0, 0);
+        let canvas_size = (1920, 1080);
+        assert!(recording::target_fits_canvas(Some("monitor"), canvas_origin, canvas_size, Some((0, 0, 1920, 1080))));
+        assert!(!recording::target_fits_canvas(Some("monitor"), canvas_origin, canvas_size, Some((1920, 0, 1920, 1080))));
+        assert!(!recording::target_fits_canvas(Some("monitor"), canvas_origin, canvas_size, None));
+    }
+
+    #[test]
+    fn target_fits_canvas_never_offers_a_switch_on_the_window_size_canvas() {
+        assert!(!recording::target_fits_canvas(Some("window"), (0, 0), (800, 600), Some((0, 0, 800, 600))));
+        assert!(!recording::target_fits_canvas(None, (0, 0), (800, 600), Some((0, 0, 800, 600))));
     }
 
     #[test]

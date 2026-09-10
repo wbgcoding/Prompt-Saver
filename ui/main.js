@@ -673,6 +673,10 @@ const ERROR_MSG_KEYS = {
   "autostart is only supported on Windows": "errAutostartWindowsOnly",
   "delete-incomplete": "errDeleteIncomplete",
   "unsupported-export-format": "exportUnsupportedFormat",
+  "recording-target-switch-not-supported": "recTargetSwitchUnsupported",
+  "recording-target-switch-different-monitor": "recTargetSwitchDifferentMonitor",
+  "recording-target-switch-invalid-window": "recTargetSwitchInvalidWindow",
+  "recording-target-switch-timeout": "recTargetSwitchTimeout",
 };
 function errToast(err) {
   const s = String(err);
@@ -1334,6 +1338,9 @@ const FLAG_LABELS = {
   // The control bar's file-size readout, past recBarSizeFromMb, plus a
   // highlighted ETA once the recording nears recMaxMb. Ships ON.
   recBarSize: "flagRecBarSize",
+  // The control bar's target-switch button: swaps a running window
+  // recording's own source without restarting it. Ships ON.
+  recTargetSwitch: "flagRecTargetSwitch",
   recStopHotkey: "flagRecStopHotkey",
   recPauseHotkey: "flagRecPauseHotkey",
   recTrayEntries: "flagRecTrayEntries",
@@ -1955,7 +1962,7 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app. The pipette sits with the
     // screenshot tool: both are capture tools on the composer bar.
-    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, "videoEditor", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }, "voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipSaveQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditSnapTolerancePx", "snipEditUndoMax", "videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax", "voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["pickerFormat", "screenshotFormat", "snipEditDefaultTool", "snipScaleFilter", "ocrLang", "recMicDevice", "recQuality", "recFormat", "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "rotateDefaultMode", "voiceLang", "voiceInsert", "voiceHotkeyTarget"], paths: ["screenshotDir", "recordingDir"],
+    { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, "videoEditor", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }, "voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipSaveQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditSnapTolerancePx", "snipEditUndoMax", "videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax", "voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["pickerFormat", "screenshotFormat", "snipEditDefaultTool", "snipScaleFilter", "ocrLang", "recMicDevice", "recQuality", "recFormat", "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "rotateDefaultMode", "voiceLang", "voiceInsert", "voiceHotkeyTarget"], paths: ["screenshotDir", "recordingDir"],
       // Opens #ocr-langs-modal / its voice equivalent -- same gate as the rest of each feature.
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }, { id: "voice-langs-open", label: "voiceLangsManage", gate: "voice" }, { id: "voice-hotkey-set", label: "voiceHotkeySet", gate: "voiceHotkey" }, { id: "rec-stop-hotkey-set", label: "recStopHotkeySet", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-set", label: "recPauseHotkeySet", gate: "recPauseHotkey" }] },
     // Placeholders, from the grammar to where the app asks for them.
@@ -2158,7 +2165,7 @@ const EXPERT_TIPS = [
   "colorPicker", "pickerFormat", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx",
   "screenRecord", "recCursor", "recCountdownS", "recFps", "recAudioSystem", "recAudioMic", "recAudioKbps", "recMicDevice",
   "recQuality", "recBitrateKbps", "recFormat", "recordingDir",
-  "recStopHotkey", "recPauseHotkey", "recTrayEntries", "recCropNotice", "recBarSize",
+  "recStopHotkey", "recPauseHotkey", "recTrayEntries", "recCropNotice", "recBarSize", "recTargetSwitch",
   "videoEditor", "videoEditUndoMax",
   "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veExportKbpsHigh", "veExportKbpsSmall",
   "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity",
@@ -12696,6 +12703,10 @@ function bind() {
   }
   listen("recorder-target-picked", async (e) => {
     const p = e.payload || {};
+    // A pick made from the running recording's own bar, switching its target
+    // instead of starting a new one -- recbar.js's own listener handles that
+    // one, this window must not also try to start a second recording from it.
+    if (p.forSwitch) return;
     const kind = p.kind;
     let targetId = 0, regionX = 0, regionY = 0, regionW = 0, regionH = 0;
     if (kind === "window") targetId = p.id;
@@ -12945,6 +12956,10 @@ function bind() {
     const { count, bytes } = e.payload || {};
     if (count > 0) toast(t("recSweepDone").replace("{n}", String(count)).replace("{v}", fmtBytes(bytes)));
   });
+  // The control bar's own target-switch button lives in a separate
+  // window with no toast of its own -- a failed switch always leaves the
+  // previous source still recording, this is purely the "here is why" note.
+  listen("recording-target-switch-failed", (e) => errToast(e.payload));
   listen("recording-captured", async (e) => {
     setRecordBtnState("idle"); // covers both a normal stop and the auto-stop path
     const path = e.payload?.path || "";

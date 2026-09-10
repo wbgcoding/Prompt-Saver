@@ -7287,6 +7287,24 @@ RECBAR_PROBE = """
     if (!await until(() => /MB/.test(sizeEl.textContent) && sizeEl.classList.contains('rec-size-warn'))) errs.push('size did not render/highlight near the ceiling: ' + sizeEl.textContent);
     window.__REC_STATUS_OVERRIDE__ = null;
     await sleep(600);
+    // Target-switch button: disabled by the default fixture (not a window
+    // recording on a placement canvas), enabled once the status says so,
+    // and a pick routed back through recorder-target-picked with forSwitch
+    // reaches switch_recording_target rather than start_recording.
+    const switchBtn = document.getElementById('switch-btn');
+    if (!switchBtn.disabled) errs.push('switch button was not disabled by default');
+    window.__REC_STATUS_OVERRIDE__ = { target_switch_enabled: true };
+    if (!await until(() => !switchBtn.disabled)) errs.push('switch button never enabled once the status allowed it');
+    switchBtn.click();
+    await sleep(30);
+    if (!window.__SMOKE_CALLS__.includes('open_recorder_switch')) errs.push('switch button did not open the picker');
+    window.__FIRE__('recorder-target-picked', { kind: 'window', id: 4242, forSwitch: true });
+    await sleep(30);
+    const switchCall = (window.__SMOKE_ARGS__ || []).find((c) => c[0] === 'switch_recording_target');
+    if (!switchCall) errs.push('a forSwitch pick did not call switch_recording_target');
+    else if (switchCall[1].targetId !== 4242) errs.push('switch_recording_target got the wrong target id: ' + JSON.stringify(switchCall[1]));
+    window.__REC_STATUS_OVERRIDE__ = null;
+    await sleep(600);
     document.getElementById('pause-btn').click();
     await sleep(30);
     if (!window.__REC_PAUSED__) errs.push('pause button did not call pause_recording');
