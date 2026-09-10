@@ -17090,7 +17090,7 @@ struct RecordingStoppedPayload {
 #[cfg(windows)]
 mod recording {
     use super::{
-        append_crash_log, audio_mix_i16, crop_and_flip_rows_bottom_up, letterbox_frame_top_down,
+        append_crash_log, audio_mix_i16, crop_and_flip_rows_bottom_up, free_space_bytes, letterbox_frame_top_down,
         scale_to_fit_frame_top_down, rec_filename,
         AudioQueueShared, RecWavWriter,
         RecFeederShared, RecFrameItem, RecPhase, RecordClock, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE,
@@ -17600,12 +17600,47 @@ mod recording {
         }
     }
 
+    // Runs for as long as the recording does, checking roughly once a minute
+    // whether the destination drive is about to run out from under it. The
+    // 1-second sleep granularity (rather than one 60s sleep) is what lets this
+    // thread notice a normal stop and exit on its own within a second, instead
+    // of a caller having to join a thread that might otherwise be mid-sleep for
+    // up to a minute.
+    fn spawn_disk_watch(shared: Arc<RecFeederShared>, output_path: PathBuf, warn_mb: f64) {
+        let spawned = thread::Builder::new().name("rec-disk-watch".into()).spawn(move || {
+            let critical_bytes = ((warn_mb / 4.0).max(1.0) * 1024.0 * 1024.0) as u64;
+            let mut waited = Duration::ZERO;
+            while !shared.is_stopping() {
+                thread::sleep(Duration::from_secs(1));
+                waited += Duration::from_secs(1);
+                if waited < Duration::from_secs(60) {
+                    continue;
+                }
+                waited = Duration::ZERO;
+                if let Ok(free) = free_space_bytes(&output_path) {
+                    if free < critical_bytes {
+                        // Same channel an unrecoverable encoder failure already uses (see
+                        // feeder_loop above) -- the control bar's existing poll notices
+                        // this and stops the recording cleanly, before ffmpeg itself would
+                        // have hit ENOSPC mid-write.
+                        shared.set_encode_error("low-disk-space".to_string());
+                        shared.request_stop();
+                        return;
+                    }
+                }
+            }
+        });
+        if spawned.is_err() {
+            append_crash_log("recording: could not start the disk-space watch thread");
+        }
+    }
+
     // show_cursor: the mouse-cursor toggle (ships ON) -- windows-capture's
     // own capture setting, never a manually drawn cursor. audio: neither
     // source active takes the exact original video-only path unchanged.
     pub fn start(
         target: RecTarget, output_path: PathBuf, show_cursor: bool, audio: AudioConfig, video_kbps: u32, video_fps: u32,
-        canvas_mode: &str, canvas_ceiling: (u32, u32),
+        canvas_mode: &str, canvas_ceiling: (u32, u32), disk_warn_mb: f64,
     ) -> Result<RecSession, String> {
         let (native_w, native_h) = resolve_target_size(target)?;
         let audio_active = audio.system || audio.mic;
@@ -17648,6 +17683,7 @@ mod recording {
         let canvas_note = if canvas.note.is_empty() { None } else { Some(canvas.note) };
         let clock = Arc::new(RecordClock::new());
         let shared = Arc::new(RecFeederShared::new());
+        spawn_disk_watch(shared.clone(), output_path.clone(), disk_warn_mb);
 
         let mut audio_queues: Vec<Arc<AudioQueueShared>> = Vec::new();
         let mut audio_threads = Vec::new();
@@ -17871,6 +17907,134 @@ mod recording {
     }
 }
 
+// ---------- Disk space check (recording start, mid-recording, export) ----------
+
+// Walks up to the nearest existing ancestor: the destination folder may not exist
+// yet (a fresh recordings or export folder), but the drive it will land on always
+// does. GetDiskFreeSpaceExW resolves whichever drive the given path sits on --
+// never a fixed "C:\" -- so a target on a secondary drive is checked correctly.
+#[cfg(windows)]
+fn free_space_bytes(path: &std::path::Path) -> std::io::Result<u64> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::PCWSTR;
+    use windows::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+    let mut probe = path;
+    while !probe.exists() {
+        match probe.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => probe = parent,
+            _ => break,
+        }
+    }
+    let wide: Vec<u16> = probe.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    let mut free_available = 0u64;
+    unsafe { GetDiskFreeSpaceExW(PCWSTR(wide.as_ptr()), Some(&mut free_available), None, None) }
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
+    Ok(free_available)
+}
+
+// The drive letter a path resolves under ("C:"), for the disk-space warning
+// message. Empty when the path has no such prefix -- never happens for the
+// absolute paths this app always deals in; a message missing the drive is
+// harmless either way.
+fn drive_label(path: &std::path::Path) -> String {
+    match path.components().next() {
+        Some(std::path::Component::Prefix(p)) => p.as_os_str().to_string_lossy().into_owned(),
+        _ => String::new(),
+    }
+}
+
+// Bitrate times time, with a flat surcharge for whichever audio track(s) are
+// active (matches recAudioKbps's own default) -- good enough for a warning
+// message, not a byte-exact prediction.
+fn estimate_recording_seconds_remaining(free_bytes: u64, video_kbps: u32, audio_active: bool) -> u64 {
+    let total_kbps = video_kbps as u64 + if audio_active { 192 } else { 0 };
+    let bytes_per_sec = (total_kbps * 1000) / 8;
+    if bytes_per_sec == 0 {
+        return 0;
+    }
+    free_bytes / bytes_per_sec
+}
+
+#[derive(serde::Serialize)]
+struct RecDiskWarning {
+    drive: String,
+    free_mb: u64,
+    est_seconds: u64,
+}
+
+// Pure so the threshold decision itself has a real unit test, not just its
+// AppHandle/Db wiring (same reasoning as estimate_export_bytes above it).
+fn recording_disk_warning(drive: String, free_bytes: u64, warn_mb: f64, video_kbps: u32, audio_active: bool) -> Option<RecDiskWarning> {
+    let free_mb = free_bytes / (1024 * 1024);
+    if free_mb as f64 >= warn_mb {
+        return None;
+    }
+    Some(RecDiskWarning { drive, free_mb, est_seconds: estimate_recording_seconds_remaining(free_bytes, video_kbps, audio_active) })
+}
+
+// recDiskWarnMb has no expert-menu row yet (a future settings catch-up writes
+// it directly, same as recCanvasMode above) -- the 500 MB default lives here
+// until then.
+#[cfg(windows)]
+#[tauri::command]
+fn check_recording_disk_space(app: AppHandle, db: State<Db>) -> Option<RecDiskWarning> {
+    let dir = data_dir(&app).join("recordings");
+    let free = free_space_bytes(&dir).ok()?;
+    let (warn_mb, video_kbps, audio_active) = {
+        let g = db.lock().unwrap_or_else(|e| e.into_inner());
+        (
+            g.settings.ui_values.get("recDiskWarnMb").copied().unwrap_or(500.0),
+            g.settings.ui_values.get("recBitrateKbps").copied().unwrap_or(12000.0).clamp(1000.0, 50000.0) as u32,
+            g.settings.ui_flags.get("recAudioSystem") != Some(&false) || g.settings.ui_flags.get("recAudioMic") != Some(&false),
+        )
+    };
+    recording_disk_warning(drive_label(&dir), free, warn_mb, video_kbps, audio_active)
+}
+#[cfg(not(windows))]
+#[tauri::command]
+fn check_recording_disk_space(app: AppHandle, db: State<Db>) -> Option<RecDiskWarning> {
+    let _ = (app, db);
+    None
+}
+
+#[derive(serde::Serialize)]
+struct ExportDiskWarning {
+    drive: String,
+    free_mb: u64,
+    needed_mb: u64,
+}
+
+// needed_bytes already includes whatever headroom the caller wants (see
+// check_export_disk_space: the estimate plus a working-file margin) -- this
+// function only compares it against what is actually free.
+fn export_disk_warning(drive: String, free_bytes: u64, needed_bytes: u64) -> Option<ExportDiskWarning> {
+    let free_mb = free_bytes / (1024 * 1024);
+    let needed_mb = needed_bytes / (1024 * 1024);
+    if free_mb >= needed_mb {
+        return None;
+    }
+    Some(ExportDiskWarning { drive, free_mb, needed_mb })
+}
+
+#[cfg(windows)]
+#[tauri::command]
+fn check_export_disk_space(dest_path: String, format: String, video_kbps: Option<u32>, lossless_quality: bool, duration_ms: u64) -> Option<ExportDiskWarning> {
+    let dest = std::path::Path::new(&dest_path);
+    let free = free_space_bytes(dest).ok()?;
+    let est = estimate_export_bytes(&format, video_kbps, lossless_quality, duration_ms);
+    let needed = est.bytes.or(est.high_bytes).unwrap_or(0);
+    // A generous margin rather than a byte-exact one -- covers filesystem
+    // overhead and any working file ffmpeg creates alongside the final output.
+    let needed_with_margin = needed + needed / 5;
+    export_disk_warning(drive_label(dest), free, needed_with_margin)
+}
+#[cfg(not(windows))]
+#[tauri::command]
+fn check_export_disk_space(dest_path: String, format: String, video_kbps: Option<u32>, lossless_quality: bool, duration_ms: u64) -> Option<ExportDiskWarning> {
+    let _ = (dest_path, format, video_kbps, lossless_quality, duration_ms);
+    None
+}
+
 #[cfg(windows)]
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
@@ -17940,10 +18104,13 @@ async fn start_recording(
             g.settings.ui_values.get("recCanvasCeilingH").copied().unwrap_or(4320.0).max(1.0) as u32,
         )
     };
+    // The mid-recording disk-space watch's own threshold -- see
+    // check_recording_disk_space for the same value used before the start.
+    let disk_warn_mb = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recDiskWarnMb").copied().unwrap_or(500.0);
     let dir = data_dir(&app).join("recordings");
     let session = tauri::async_runtime::spawn_blocking(move || {
         let out_path = recording::new_output_path(&dir)?;
-        recording::start(target, out_path, show_cursor, audio, video_kbps, video_fps, &canvas_mode, canvas_ceiling)
+        recording::start(target, out_path, show_cursor, audio, video_kbps, video_fps, &canvas_mode, canvas_ceiling, disk_warn_mb)
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -23215,6 +23382,8 @@ pub fn run() {
             set_rec_stop_hotkey,
             set_rec_pause_hotkey,
             start_recording,
+            check_recording_disk_space,
+            check_export_disk_space,
             pause_recording,
             resume_recording,
             stop_recording,
@@ -24861,6 +25030,68 @@ mod tests {
         assert!(est.bytes.unwrap() > 0);
     }
 
+    // ---- Disk space check (recording start, mid-recording, export) ----
+
+    #[test]
+    fn estimate_recording_seconds_remaining_uses_bitrate_times_time() {
+        // 8000 kbps = 1,000,000 bytes/sec with no audio -- 10,000,000 bytes
+        // should buy exactly 10 seconds, an exact match like the export
+        // formula test above, not just "roughly right".
+        assert_eq!(estimate_recording_seconds_remaining(10_000_000, 8000, false), 10);
+    }
+
+    #[test]
+    fn estimate_recording_seconds_remaining_adds_the_audio_surcharge() {
+        // Same free space either way -- the higher combined bitrate with
+        // audio active must buy strictly fewer seconds than video alone.
+        let with_audio = estimate_recording_seconds_remaining(10_000_000, 8000, true);
+        let without_audio = estimate_recording_seconds_remaining(10_000_000, 8000, false);
+        assert!(with_audio < without_audio);
+    }
+
+    #[test]
+    fn estimate_recording_seconds_remaining_never_divides_by_zero() {
+        assert_eq!(estimate_recording_seconds_remaining(10_000_000, 0, false), 0);
+    }
+
+    #[test]
+    fn recording_disk_warning_fires_only_below_the_threshold() {
+        let mb = 1024 * 1024;
+        // Free space at or above the threshold: no warning.
+        assert!(recording_disk_warning("C:".to_string(), 500 * mb, 500.0, 8000, false).is_none());
+        // Below it: a warning, carrying the drive and free space through untouched.
+        let warn = recording_disk_warning("D:".to_string(), 100 * mb, 500.0, 8000, false).expect("must warn");
+        assert_eq!(warn.drive, "D:");
+        assert_eq!(warn.free_mb, 100);
+    }
+
+    #[test]
+    fn export_disk_warning_fires_only_when_the_estimate_does_not_fit() {
+        let mb = 1024 * 1024;
+        assert!(export_disk_warning("C:".to_string(), 500 * mb, 400 * mb).is_none());
+        let warn = export_disk_warning("C:".to_string(), 300 * mb, 400 * mb).expect("must warn");
+        assert_eq!(warn.free_mb, 300);
+        assert_eq!(warn.needed_mb, 400);
+    }
+
+    #[test]
+    fn free_space_bytes_walks_up_to_the_nearest_existing_ancestor() {
+        // A destination folder that does not exist yet (a fresh recordings or
+        // export folder) must still resolve to its real drive's free space --
+        // proven here by getting the exact same figure as the real ancestor
+        // directory two levels up.
+        let base = std::env::temp_dir();
+        let base_free = free_space_bytes(&base).expect("free space on an existing dir");
+        let missing = base.join("prompt-saver-disk-check-probe").join("deeper");
+        let missing_free = free_space_bytes(&missing).expect("free space on a missing nested path");
+        assert_eq!(base_free, missing_free);
+    }
+
+    #[test]
+    fn free_space_bytes_returns_a_plausible_positive_number() {
+        assert!(free_space_bytes(&std::env::temp_dir()).expect("free space") > 0);
+    }
+
     // ---- Video editor (242-245): real ffmpeg/ffprobe, no capture hardware needed ----
 
     fn test_ffprobe() -> Option<PathBuf> {
@@ -25823,7 +26054,7 @@ mod tests {
         let audio = recording::AudioConfig {
             system: true, mic: false, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -25847,7 +26078,7 @@ mod tests {
         let audio = recording::AudioConfig {
             system: false, mic: true, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -25868,7 +26099,7 @@ mod tests {
         let audio = recording::AudioConfig {
             system: true, mic: true, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -25893,7 +26124,7 @@ mod tests {
             system: true, mic: false, mic_device_id: String::new(), kbps: 192,
         };
         let wall_start = std::time::Instant::now();
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(600));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let wall_elapsed = wall_start.elapsed().as_secs_f64();
@@ -25933,7 +26164,7 @@ mod tests {
         let audio = recording::AudioConfig {
             system: false, mic: false, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320)).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(2));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");

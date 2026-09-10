@@ -2210,6 +2210,21 @@ async function startExport(toClipboard) {
     trim_end_ms: lossless ? Math.round(keptSegments().slice(-1)[0].b) : null,
     total_ms: total,
   };
+  // A stream copy has no bitrate-based estimate to check against (see
+  // estimate_export_bytes) -- skipped the same way its size note above is.
+  if (!lossless) {
+    const diskWarn = await invoke("check_export_disk_space", {
+      destPath: dest, format, videoKbps: request.video_kbps, losslessQuality: request.lossless_quality, durationMs: total,
+    }).catch(() => null);
+    if (diskWarn) {
+      const msg = t("recDiskWarnExportMsg")
+        .replace("{drive}", diskWarn.drive)
+        .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024))
+        .replace("{needed}", fmtBytes(diskWarn.needed_mb * 1024 * 1024));
+      const proceed = await veConfirm(t("recDiskWarnTitle"), msg, t("recDiskWarnExportAnyway"));
+      if (!proceed) return;
+    }
+  }
   VE.exporting = true;
   $("ve-export-start").disabled = true;
   $("ve-export-clip").disabled = true;

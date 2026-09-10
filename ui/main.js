@@ -12664,6 +12664,21 @@ function bind() {
         await invoke("show_rec_bar", { targetKind: kind, id: targetId });
       } catch (err) { errToast(err); }
     };
+    // Checked before the countdown even starts -- discovering low disk space
+    // only after a 3-2-1 count would just waste the user's time on a "no" answer.
+    const diskWarn = await invoke("check_recording_disk_space").catch(() => null);
+    if (diskWarn) {
+      const minutes = Math.max(1, Math.round(diskWarn.est_seconds / 60));
+      const proceed = await confirmDialog({
+        title: t("recDiskWarnTitle"),
+        message: t("recDiskWarnMsg")
+          .replace("{drive}", diskWarn.drive)
+          .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024))
+          .replace("{minutes}", String(minutes)),
+        confirmLabel: t("recDiskWarnRecordAnyway"),
+      });
+      if (!proceed) return;
+    }
     cancelRecCountdown();
     let n = Math.round(val("recCountdownS"));
     if (n <= 0) { await startNow(); return; }
@@ -12885,7 +12900,11 @@ function bind() {
     // An encoder write failure (disk full, etc.) already stopped the feeder
     // itself before this event fired -- whatever got captured up to that
     // point is still a valid, playable file, just cut short unexpectedly.
-    if (e.payload?.encode_error) toast(t("recEncodeError"));
+    // "low-disk-space" is the one case with a message of its own: the
+    // disk-space watch stopped the recording proactively, before the
+    // encoder itself would have hit that same wall.
+    if (e.payload?.encode_error === "low-disk-space") toast(t("recDiskStoppedMsg"));
+    else if (e.payload?.encode_error) toast(t("recEncodeError"));
     // A window recording whose canvas had to fall back below the
     // "every display" default (too large for the encoder, or the user
     // picked a smaller mode) says so once, here -- the normal "every
