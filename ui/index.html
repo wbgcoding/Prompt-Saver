@@ -638,6 +638,14 @@
       </div>
       <p id="video-cleanup-summary" class="modal-hint"></p>
       <div id="video-cleanup-list" class="import-preview-list"></div>
+      <!-- A discarded recording sits here, in the folder's own "verworfen"
+           subfolder, until its retention window runs out -- shown only while at
+           least one is actually waiting, right next to the age-based cleanup above
+           since both act on the same recording folder. -->
+      <div id="video-cleanup-discarded-section" class="hidden">
+        <p class="modal-hint" data-i18n="videoDiscardedLabel">Recently discarded</p>
+        <div id="video-cleanup-discarded-list" class="import-preview-list"></div>
+      </div>
       <div class="modal-actions">
         <button id="video-cleanup-cancel" class="ghost-btn" data-i18n="cancel">Cancel</button>
         <button id="video-cleanup-confirm" class="ghost-btn danger-btn" data-i18n="delete">Delete</button>

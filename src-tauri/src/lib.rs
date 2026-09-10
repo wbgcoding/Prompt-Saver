@@ -5581,7 +5581,62 @@ fn sweep_recordings_now_result(app: &AppHandle) -> (u32, u64) {
     let Some(state) = app.try_state::<Db>() else { return (0, 0) };
     let referenced = orphan_referenced_set(&lock(&state));
     let (broken_on, grace) = recording_sweep_grace(app);
-    sweep_stale_recordings_in(&data_dir(app).join("recordings"), &referenced, &protected_recording_paths(app), broken_on, grace)
+    let (mut count, mut bytes) =
+        sweep_stale_recordings_in(&data_dir(app).join("recordings"), &referenced, &protected_recording_paths(app), broken_on, grace);
+    let (c, b) = sweep_discarded_recordings(app);
+    count += c;
+    bytes += b;
+    (count, bytes)
+}
+
+// A discarded recording sits in its folder's own "verworfen" subfolder
+// -- unconditionally stale-eligible past recDiscardKeepH, no "referenced"
+// check needed (a discarded recording is by definition attached to nothing).
+// recDiscardKeepH <= 0 disables this leg entirely, keeping every discard
+// around until someone clears it by hand. Runs against BOTH places a working
+// recording can live (data_dir's own recordings folder, and the current
+// recordingDir, default or custom) -- discard_recording_file itself accepts
+// either, so the trash this sweeps must cover both too.
+fn sweep_discarded_recordings(app: &AppHandle) -> (u32, u64) {
+    let Some(state) = app.try_state::<Db>() else { return (0, 0) };
+    let (keep_h, custom) = {
+        let g = lock(&state);
+        (g.settings.ui_values.get("recDiscardKeepH").copied().unwrap_or(24.0), g.settings.ui_texts.get("recordingDir").cloned().unwrap_or_default())
+    };
+    if keep_h <= 0.0 {
+        return (0, 0);
+    }
+    let age = Duration::from_secs((keep_h * 3600.0) as u64);
+    let default_dir = data_dir(app).join("recordings");
+    let custom_dir = recording_dir(&custom);
+    let mut count = 0u32;
+    let mut bytes = 0u64;
+    for dir in [default_dir.clone(), custom_dir].into_iter().collect::<std::collections::HashSet<_>>() {
+        let (c, b) = discarded_stale_in(&dir.join("verworfen"), age);
+        count += c;
+        bytes += b;
+    }
+    (count, bytes)
+}
+
+fn discarded_stale_in(dir: &Path, age: Duration) -> (u32, u64) {
+    let Ok(entries) = fs::read_dir(dir) else { return (0, 0) };
+    let mut count = 0u32;
+    let mut bytes = 0u64;
+    for e in entries.flatten() {
+        let path = e.path();
+        if !is_video_folder_file(&path) { continue; }
+        let Ok(meta) = e.metadata() else { continue };
+        let Some(elapsed) = meta.modified().ok().and_then(|t| SystemTime::now().duration_since(t).ok()) else { continue };
+        if elapsed < age { continue; }
+        let size = meta.len();
+        if fs::remove_file(&path).is_ok() {
+            count += 1;
+            bytes += size;
+            let _ = fs::remove_file(path.with_extension("mic.wav"));
+        }
+    }
+    (count, bytes)
 }
 
 // 281's "Jetzt aufräumen" -- runs the same sweep on demand and always reports
@@ -20613,11 +20668,8 @@ fn is_video_folder_file(path: &std::path::Path) -> bool {
             .unwrap_or(false)
 }
 
-// (file count, total bytes) of every recording in the folder -- a missing
-// folder (nothing saved there yet) is simply empty, not an error.
-#[tauri::command]
-fn video_folder_stats(dir: String) -> (u64, u64) {
-    let Ok(entries) = fs::read_dir(&dir) else { return (0, 0) };
+fn video_folder_stats_in(dir: &std::path::Path) -> (u64, u64) {
+    let Ok(entries) = fs::read_dir(dir) else { return (0, 0) };
     let mut count = 0u64;
     let mut bytes = 0u64;
     for e in entries.flatten() {
@@ -20629,6 +20681,19 @@ fn video_folder_stats(dir: String) -> (u64, u64) {
         }
     }
     (count, bytes)
+}
+
+// (file count, total bytes) of every recording in the folder -- a missing
+// folder (nothing saved there yet) is simply empty, not an error. Includes
+// the "verworfen" discard-trash subfolder too: those files still sit on
+// this same drive, under this same folder, so leaving them out would make the
+// displayed folder size quietly wrong the moment anything gets discarded.
+#[tauri::command]
+fn video_folder_stats(dir: String) -> (u64, u64) {
+    let base = std::path::Path::new(&dir);
+    let (c1, b1) = video_folder_stats_in(base);
+    let (c2, b2) = video_folder_stats_in(&base.join("verworfen"));
+    (c1 + c2, b1 + b2)
 }
 
 #[derive(Serialize)]
@@ -20850,14 +20915,26 @@ async fn copy_file_to_clipboard(path: String) -> bool {
     set_clipboard_file(&path)
 }
 
+// recDiscardKeepH has no expert-menu row yet (same "future menu writes it
+// directly" state as recCanvasMode/recDiskWarnMb above) -- 0 disables the
+// whole discard-trash cleanup, keeping everything in "verworfen" forever.
+fn discard_keep_hours(state: &State<'_, Db>) -> f64 {
+    lock(state).settings.ui_values.get("recDiscardKeepH").copied().unwrap_or(24.0)
+}
+
 // Discard a not-yet-saved recording. Scoped to the app's own recordings
 // folder OR the current recordingDir (280's Copy/Save move the working file
 // there before the window closes) -- never an arbitrary webview-supplied
-// path, same defense-in-depth pattern as delete_screenshot_file.
-#[tauri::command]
-fn discard_recording_file(app: AppHandle, state: State<'_, Db>, path: String) -> bool {
-    let p = PathBuf::from(&path);
-    // The directory check alone let this delete ANY file directly inside
+// path, same defense-in-depth pattern as delete_screenshot_file. Moves into
+// a "verworfen" subfolder of whichever of those two it was actually in,
+// rather than deleting outright, so a wrong click can still be undone --
+// see restore_discarded_recording and the sweep in sweep_recordings_now_result,
+// which is what eventually clears this subfolder back out.
+// Split out so the actual move logic has a real unit test against a plain
+// tempdir, no AppHandle/Db needed -- same split as sweep_stale_recordings_in
+// above. Returns the file's new path in "verworfen" on success.
+fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::Path) -> Option<PathBuf> {
+    // The directory check alone let this touch ANY file directly inside
     // recordingDir -- often the user's normal Videos folder, shared with files
     // this app never touched. delete_screenshot_file's own comment already
     // calls its filename-prefix check "defense in depth" against exactly this;
@@ -20866,26 +20943,108 @@ fn discard_recording_file(app: AppHandle, state: State<'_, Db>, path: String) ->
     // keeps the "rec-" stem `rec_filename`/`place_in_dir` give it -- only
     // Save As lets the user pick a different name, and that always sets
     // recSavedOrAttached first, taking the file out of discard's reach.
-    let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     if !name.starts_with("rec-") {
-        return false;
+        return None;
     }
-    let Some(parent) = p.parent().and_then(|d| d.canonicalize().ok()) else { return false };
-    let custom = lock(&state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
-    let allowed = [data_dir(&app).join("recordings"), recording_dir(&custom)];
+    let parent = path.parent().and_then(|d| d.canonicalize().ok())?;
     let in_allowed = allowed.iter().any(|d| d.canonicalize().map(|c| c == parent).unwrap_or(false));
-    if !in_allowed || !p.is_file() {
-        return false;
+    if !in_allowed || !path.is_file() {
+        return None;
     }
+    let trash = parent.join("verworfen");
+    fs::create_dir_all(&trash).ok()?;
+    let dest = trash.join(name);
+    move_file(path, &dest).ok()?;
     // A discarded recording takes its mic sidecar (if any) with it --
     // best-effort, since most recordings have none.
-    if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
         if ext.eq_ignore_ascii_case("mp4") {
-            let sidecar = p.with_extension("mic.wav");
-            let _ = fs::remove_file(&sidecar);
+            let sidecar = path.with_extension("mic.wav");
+            if sidecar.is_file() {
+                let _ = move_file(&sidecar, &dest.with_extension("mic.wav"));
+            }
         }
     }
-    fs::remove_file(&p).is_ok()
+    Some(dest)
+}
+
+// Discard a not-yet-saved recording. Scoped to the app's own recordings
+// folder OR the current recordingDir (280's Copy/Save move the working file
+// there before the window closes) -- never an arbitrary webview-supplied
+// path, same defense-in-depth pattern as delete_screenshot_file. Moves into
+// a "verworfen" subfolder of whichever of those two it was actually in,
+// rather than deleting outright, so a wrong click can still be undone --
+// see restore_discarded_recording and the sweep in sweep_recordings_now_result,
+// which is what eventually clears this subfolder back out.
+#[tauri::command]
+fn discard_recording_file(app: AppHandle, state: State<'_, Db>, path: String) -> Option<f64> {
+    let custom = lock(&state).settings.ui_texts.get("recordingDir").cloned().unwrap_or_default();
+    let allowed = [data_dir(&app).join("recordings"), recording_dir(&custom)];
+    discard_recording_file_in(&allowed, std::path::Path::new(&path))?;
+    Some(discard_keep_hours(&state))
+}
+
+// Bare filename only, never a path -- every caller below reaches into a
+// folder's own "verworfen" subfolder with a name taken from that same
+// folder's listing, but this guard stops a hand-crafted "../x" from ever
+// escaping it, the same defense-in-depth discard_recording_file already
+// applies to the file it moves in.
+fn is_bare_filename(name: &str) -> bool {
+    !name.is_empty() && std::path::Path::new(name).file_name().is_some_and(|f| f == std::ffi::OsStr::new(name))
+}
+
+// The Aufnahmeordner dialog's own listing of what is currently sitting in
+// the trash, waiting out its retention window -- same shape and same
+// extension filter as video_folder_stats/video_folder_cleanup_preview above.
+#[tauri::command]
+fn list_discarded_recordings(dir: String) -> Vec<VideoFolderFile> {
+    let trash = std::path::Path::new(&dir).join("verworfen");
+    let Ok(entries) = fs::read_dir(&trash) else { return Vec::new() };
+    let mut out = Vec::new();
+    for e in entries.flatten() {
+        let path = e.path();
+        if !is_video_folder_file(&path) { continue; }
+        let Ok(meta) = e.metadata() else { continue };
+        let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        out.push(VideoFolderFile { name, size: meta.len() });
+    }
+    out
+}
+
+#[tauri::command]
+fn restore_discarded_recording(dir: String, name: String) -> bool {
+    if !is_bare_filename(&name) {
+        return false;
+    }
+    let trash = std::path::Path::new(&dir).join("verworfen");
+    let src = trash.join(&name);
+    let dst = std::path::Path::new(&dir).join(&name);
+    // Never overwrites a same-named file that has appeared at the old spot
+    // since the discard -- restoring silently on top of someone else's
+    // recording would be a worse surprise than the restore just failing.
+    if !src.is_file() || dst.exists() || move_file(&src, &dst).is_err() {
+        return false;
+    }
+    let sidecar_src = src.with_extension("mic.wav");
+    if sidecar_src.is_file() {
+        let _ = move_file(&sidecar_src, &dst.with_extension("mic.wav"));
+    }
+    true
+}
+
+#[tauri::command]
+fn delete_discarded_recording_now(dir: String, name: String) -> bool {
+    if !is_bare_filename(&name) {
+        return false;
+    }
+    let trash = std::path::Path::new(&dir).join("verworfen");
+    let path = trash.join(&name);
+    if !path.is_file() {
+        return false;
+    }
+    let _ = fs::remove_file(path.with_extension("mic.wav"));
+    fs::remove_file(&path).is_ok()
 }
 
 // Called by the frontend once the first render + text fit is complete.
@@ -23414,6 +23573,9 @@ pub fn run() {
             video_folder_cleanup_preview,
             video_folder_cleanup,
             discard_recording_file,
+            list_discarded_recordings,
+            restore_discarded_recording,
+            delete_discarded_recording_now,
             take_recording_sweep_notice,
             sweep_recordings_now,
             show_rec_bar,
@@ -28166,6 +28328,125 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("ps-video-folder-missing-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir); // guarantee it really does not exist
         assert_eq!(video_folder_stats(dir.to_string_lossy().to_string()), (0, 0));
+    }
+
+    // ---- Discard trash ----
+
+    #[test]
+    fn video_folder_stats_includes_the_verworfen_subfolder_in_its_totals() {
+        let dir = std::env::temp_dir().join(format!("ps-video-folder-discard-stats-{}", std::process::id()));
+        let trash = dir.join("verworfen");
+        fs::create_dir_all(&trash).unwrap();
+        fs::write(dir.join("rec-a.mp4"), b"1234").unwrap();
+        fs::write(trash.join("rec-b.mp4"), b"12").unwrap();
+        let (count, bytes) = video_folder_stats(dir.to_string_lossy().to_string());
+        assert_eq!(count, 2, "a discarded recording still occupies real disk space in this folder");
+        assert_eq!(bytes, 4 + 2);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn discard_recording_file_in_moves_into_verworfen_instead_of_deleting() {
+        let dir = std::env::temp_dir().join(format!("ps-discard-move-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("rec-2026-01-01-00-00-00.mp4");
+        fs::write(&src, b"video").unwrap();
+        let moved = discard_recording_file_in(&[dir.clone()], &src).expect("must move, not fail");
+        // discard_recording_file_in canonicalizes the parent internally (the \\?\
+        // extended-length form on Windows) -- canonicalize the expected side too
+        // rather than comparing a canonical path against a plain one.
+        let want = dir.join("verworfen").join("rec-2026-01-01-00-00-00.mp4").canonicalize().unwrap();
+        assert_eq!(moved, want);
+        assert!(!src.exists(), "the original spot must be empty afterwards");
+        assert!(moved.is_file(), "the file must really be at the new spot, not just claimed to be");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn discard_recording_file_in_refuses_a_name_without_the_rec_prefix() {
+        let dir = std::env::temp_dir().join(format!("ps-discard-prefix-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("not-a-recording.mp4");
+        fs::write(&src, b"video").unwrap();
+        assert!(discard_recording_file_in(&[dir.clone()], &src).is_none());
+        assert!(src.is_file(), "a refused discard must leave the file untouched");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn discard_recording_file_in_refuses_a_file_outside_the_allowed_folders() {
+        let dir = std::env::temp_dir().join(format!("ps-discard-outside-{}", std::process::id()));
+        let other = std::env::temp_dir().join(format!("ps-discard-other-{}", std::process::id()));
+        fs::create_dir_all(&other).unwrap();
+        let src = other.join("rec-somewhere-else.mp4");
+        fs::write(&src, b"video").unwrap();
+        assert!(discard_recording_file_in(&[dir], &src).is_none(), "dir is not in the allowed list");
+        assert!(src.is_file());
+        let _ = fs::remove_dir_all(&other);
+    }
+
+    #[test]
+    fn restore_discarded_recording_moves_the_file_back_to_its_original_folder() {
+        let dir = std::env::temp_dir().join(format!("ps-restore-{}", std::process::id()));
+        let trash = dir.join("verworfen");
+        fs::create_dir_all(&trash).unwrap();
+        fs::write(trash.join("rec-x.mp4"), b"video").unwrap();
+        let dir_s = dir.to_string_lossy().to_string();
+        assert!(restore_discarded_recording(dir_s.clone(), "rec-x.mp4".to_string()));
+        assert!(dir.join("rec-x.mp4").is_file());
+        assert!(!trash.join("rec-x.mp4").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn restore_discarded_recording_never_overwrites_a_file_already_at_the_old_spot() {
+        let dir = std::env::temp_dir().join(format!("ps-restore-collide-{}", std::process::id()));
+        let trash = dir.join("verworfen");
+        fs::create_dir_all(&trash).unwrap();
+        fs::write(trash.join("rec-x.mp4"), b"discarded copy").unwrap();
+        fs::write(dir.join("rec-x.mp4"), b"a newer recording already took this name").unwrap();
+        let dir_s = dir.to_string_lossy().to_string();
+        assert!(!restore_discarded_recording(dir_s, "rec-x.mp4".to_string()));
+        assert_eq!(fs::read(dir.join("rec-x.mp4")).unwrap(), b"a newer recording already took this name");
+        assert!(trash.join("rec-x.mp4").is_file(), "the discarded copy must stay put, not vanish on a failed restore");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn delete_discarded_recording_now_removes_it_for_good() {
+        let dir = std::env::temp_dir().join(format!("ps-discard-delete-now-{}", std::process::id()));
+        let trash = dir.join("verworfen");
+        fs::create_dir_all(&trash).unwrap();
+        fs::write(trash.join("rec-x.mp4"), b"video").unwrap();
+        let dir_s = dir.to_string_lossy().to_string();
+        assert!(delete_discarded_recording_now(dir_s, "rec-x.mp4".to_string()));
+        assert!(!trash.join("rec-x.mp4").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn is_bare_filename_rejects_a_path_traversal_attempt() {
+        assert!(is_bare_filename("rec-x.mp4"));
+        assert!(!is_bare_filename("../rec-x.mp4"));
+        assert!(!is_bare_filename("sub/rec-x.mp4"));
+        assert!(!is_bare_filename(""));
+    }
+
+    #[test]
+    fn discarded_stale_in_removes_only_files_past_the_configured_age() {
+        let dir = std::env::temp_dir().join(format!("ps-discarded-stale-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let old = dir.join("rec-old.mp4");
+        let recent = dir.join("rec-recent.mp4");
+        fs::write(&old, b"old").unwrap();
+        fs::write(&recent, b"recent").unwrap();
+        backdate(&old, Duration::from_secs(25 * 3600));
+        let (count, bytes) = discarded_stale_in(&dir, Duration::from_secs(24 * 3600));
+        assert_eq!(count, 1, "only the file past the retention window is removed");
+        assert_eq!(bytes, 3);
+        assert!(!old.exists());
+        assert!(recent.is_file(), "a recent discard must survive this sweep");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

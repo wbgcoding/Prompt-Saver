@@ -298,6 +298,12 @@ const RESULTS = {
     { name: "old-recording.mp4", size: 3145728 },
   ],
   video_folder_cleanup: (a) => { window.__VIDEO_CLEANUP_CALLED__ = a; return 1; },
+  // The same modal's own discard-trash section -- window.__DISCARDED_FIXTURE__
+  // lets one probe step ask for an empty list (default) so the section stays
+  // hidden, without changing it for every other list_discarded_recordings call.
+  list_discarded_recordings: () => window.__DISCARDED_FIXTURE__ || [],
+  restore_discarded_recording: () => true,
+  delete_discarded_recording_now: () => true,
   probe_recording: () => ({
     duration_ms: 600000, fps: 30, width: 1920, height: 1080,
     has_audio: true, has_mic_track: true, mic_sidecar: "",
@@ -360,7 +366,9 @@ const RESULTS = {
   },
   set_taskbar_progress: () => null,
   save_recording_as: (a) => { window.__REC_SAVED_AS__ = a.srcPath; return "C:/fake/saved.mp4"; },
-  discard_recording_file: (a) => { window.__REC_DISCARDED__ = a.path; return true; },
+  // A number back (the retention hours), not a bare true/false, since
+  // discard now moves the file into "verworfen" instead of deleting it.
+  discard_recording_file: (a) => { window.__REC_DISCARDED__ = a.path; return 24; },
   // P100: the probe reads this back instead of a real backend hand-off to main.js.
   launcher_select: (a) => { window.__LAUNCHER_SELECTED__ = a && a.id; return null; },
   launcher_close: () => { window.__LAUNCHER_CLOSED__ = true; return null; },

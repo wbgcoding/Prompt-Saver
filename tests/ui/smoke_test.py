@@ -2545,6 +2545,12 @@ PROBE = """
           if (!modal || modal.classList.contains('hidden')) {
             out.errors.push('the video cleanup button did not open its confirm modal');
           } else {
+            // 389: with nothing discarded yet, the trash section stays hidden --
+            // window.__DISCARDED_FIXTURE__ is unset at this point in the probe.
+            const discardedSection = document.getElementById('video-cleanup-discarded-section');
+            if (!discardedSection || !discardedSection.classList.contains('hidden')) {
+              out.errors.push('the discard-trash section shows although nothing was discarded');
+            }
             if (ageSel.value !== '30') out.errors.push('the video cleanup age select does not default to 30 days');
             const rows = [...list.querySelectorAll('.import-preview-row')];
             if (rows.length !== 1) {
@@ -2589,6 +2595,34 @@ PROBE = """
             if (!(toastEl3.textContent || '').includes('1 files deleted')) {
               out.errors.push('the video cleanup done toast reads "' + toastEl3.textContent + '"');
             }
+            // 389: now with one discarded recording waiting -- the trash section
+            // must appear, list it, and its Restore button must call the right command.
+            window.__DISCARDED_FIXTURE__ = [{ name: 'rec-discarded.mp4', size: 1048576 }];
+            cleanBtn.click();
+            await sleep(200);
+            if (discardedSection.classList.contains('hidden')) {
+              out.errors.push('the discard-trash section stays hidden although a recording was discarded');
+            } else {
+              const dRows = [...document.getElementById('video-cleanup-discarded-list').querySelectorAll('.import-preview-row')];
+              if (dRows.length !== 1) {
+                out.errors.push('the discard-trash list shows ' + dRows.length + ' rows, expected 1');
+              } else {
+                if ((dRows[0].querySelector('.import-preview-name') || {}).textContent !== 'rec-discarded.mp4') {
+                  out.errors.push('the discard-trash row has the wrong file name');
+                }
+                const restoreBtn = [...dRows[0].querySelectorAll('.import-preview-actions button')][0];
+                window.__SMOKE_ARGS__ = [];
+                restoreBtn.click();
+                await sleep(200);
+                const restoreCall = window.__SMOKE_ARGS__.find(([c]) => c === 'restore_discarded_recording');
+                if (!restoreCall || restoreCall[1].name !== 'rec-discarded.mp4') {
+                  out.errors.push('clicking Restore on a discarded recording did not call restore_discarded_recording with its name');
+                }
+              }
+            }
+            window.__DISCARDED_FIXTURE__ = null;
+            document.getElementById('video-cleanup-close').click();
+            await sleep(150);
           }
         }
       }

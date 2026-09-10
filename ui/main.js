@@ -2808,9 +2808,54 @@ async function openVideoCleanup(dir) {
       list.appendChild(row);
     }
   };
+  // The trash section: a discarded recording sitting in this same
+  // folder's "verworfen" subfolder, restorable or deletable one at a time --
+  // independent of the age-based bulk cleanup above, so it refreshes on its
+  // own after either action instead of closing the whole dialog.
+  const discardedSection = $("video-cleanup-discarded-section");
+  const discardedList = $("video-cleanup-discarded-list");
+  const refreshDiscarded = async () => {
+    const files = await invoke("list_discarded_recordings", { dir }).catch(() => []);
+    discardedSection.classList.toggle("hidden", files.length === 0);
+    discardedList.innerHTML = "";
+    for (const f of files) {
+      const row = document.createElement("div");
+      row.className = "import-preview-row";
+      const name = document.createElement("span");
+      name.className = "import-preview-name";
+      name.textContent = f.name;
+      const size = document.createElement("span");
+      size.className = "import-preview-badge";
+      size.textContent = fmtBytes(f.size);
+      const restoreBtn = document.createElement("button");
+      restoreBtn.type = "button";
+      restoreBtn.className = "ghost-btn";
+      restoreBtn.textContent = t("videoDiscardedRestore");
+      restoreBtn.addEventListener("click", async () => {
+        const ok = await invoke("restore_discarded_recording", { dir, name: f.name }).catch(() => false);
+        if (ok) { toast(t("videoDiscardedRestored")); refreshDiscarded(); refreshVideoFolderInfo(dir); }
+        else toast(t("videoDiscardedRestoreFailed"));
+      });
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "ghost-btn danger-btn";
+      deleteBtn.textContent = t("videoDiscardedDeleteNow");
+      deleteBtn.addEventListener("click", async () => {
+        const ok = await invoke("delete_discarded_recording_now", { dir, name: f.name }).catch(() => false);
+        if (ok) { refreshDiscarded(); refreshVideoFolderInfo(dir); }
+        else toast(t("videoDiscardedDeleteFailed"));
+      });
+      const actions = document.createElement("div");
+      actions.className = "import-preview-actions";
+      actions.append(restoreBtn, deleteBtn);
+      row.append(name, size, actions);
+      discardedList.appendChild(row);
+    }
+  };
   ageSel.value = "30";
   ageSel.onchange = refresh;
   await refresh();
+  await refreshDiscarded();
   modal.classList.remove("hidden");
   const confirmed = await new Promise((resolve) => {
     const done = (v) => {
@@ -12774,7 +12819,10 @@ function bind() {
     recSavedOrAttached = false;
     recCopiedNotSaved = false;
     if (shouldDelete && path) {
-      await invoke("discard_recording_file", { path }).catch(() => {});
+      // A number back means it actually moved to "verworfen" (see
+      // discard_recording_file) -- null/failure stays silent, same as before.
+      const keepH = await invoke("discard_recording_file", { path }).catch(() => null);
+      if (keepH != null) toast(t("recDiscardedToast").replace("{hours}", String(Math.round(keepH))));
     }
   }
   // needsCrop: the window recording's canvas was bigger than the window

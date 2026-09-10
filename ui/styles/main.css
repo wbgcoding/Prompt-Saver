@@ -4480,6 +4480,11 @@ button.tag-chip:hover { border-color: var(--accent); }
 .import-preview-row.dup { opacity: 0.55; }
 .import-preview-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .import-preview-badge { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
+/* Restore/delete-forever pair on a discarded-recording row -- its own small
+   group so justify-content: space-between on the row spaces name/badge/group
+   apart, not the two buttons apart from each other. */
+.import-preview-actions { flex: 0 0 auto; display: flex; gap: 6px; }
+.import-preview-actions .ghost-btn { padding: 3px 8px; font-size: 12px; }
 
 /* ---- Custom themes ---- */
 /* The editor button sits right of the theme dropdown, which gives up the width. */
