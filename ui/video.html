@@ -45,7 +45,13 @@
         <!-- Shown only once actually zoomed in (applyPreviewTransform
              toggles "hidden"); scroll/drag on the picture itself zoom and pan it. -->
         <div id="ve-preview-zoom" class="ve-preview-zoom hidden">
+          <button id="ve-preview-zoom-out" class="icon-btn" type="button" data-i18n-title="vePreviewZoomOut" data-i18n-aria="vePreviewZoomOut">
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 21l-4.3-4.3M8 11h6"/></svg>
+          </button>
           <span id="ve-preview-zoom-val">100%</span>
+          <button id="ve-preview-zoom-in" class="icon-btn" type="button" data-i18n-title="vePreviewZoomIn" data-i18n-aria="vePreviewZoomIn">
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg>
+          </button>
           <button id="ve-preview-zoom-reset" class="icon-btn" type="button" data-i18n-title="veResetZoom" data-i18n-aria="veResetZoom">
             <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7Z"/></svg>
           </button>
@@ -294,10 +300,10 @@
             <button id="ve-export-error-copy" class="ghost-btn" type="button" data-i18n="copy">Copy</button>
           </details>
           <div class="export-row">
-            <button id="ve-export-start" class="primary-btn" type="button" data-i18n="veExportStart">Export</button>
-            <button id="ve-export-clip" class="ghost-btn" type="button" data-i18n="veExportClip" data-i18n-title="veExportClipTip">Copy to clipboard</button>
             <button id="ve-export-cancel" class="ghost-btn hidden" type="button" data-i18n="cancel">Cancel</button>
+            <button id="ve-export-clip" class="ghost-btn" type="button" data-i18n="veExportClip" data-i18n-title="veExportClipTip">Copy to clipboard</button>
             <button id="ve-export-saveas" class="ghost-btn hidden" type="button" data-i18n="screenshotSaveAs">Save as…</button>
+            <button id="ve-export-start" class="primary-btn" type="button" data-i18n="veExportStart">Export</button>
           </div>
         </section>
       </div>

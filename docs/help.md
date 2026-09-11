@@ -186,6 +186,17 @@ expert menu. A failed export shows the actual reason in plain language, with
 the raw ffmpeg log reachable underneath in a closed "Technical details" row —
 never the log itself as the message.
 
+Both editors work the same way for their shared tools: Ctrl+Plus, Ctrl+Minus
+and Ctrl+0 zoom in, zoom out and fit the view in either one, and Ctrl+Z,
+Ctrl+Y (or Ctrl+Shift+Z) undo and redo through the same button pair. In the
+screenshot editor, clicking an existing rectangle, ellipse, line or arrow
+selects it and shows the same handles as dragging one out fresh. The video
+editor keeps selecting its overlays from its own list instead, since it only
+draws an overlay's handles once that overlay is already selected — the two
+toolbars stay where they are too, a bar on top for the screenshot editor and
+a side column next to the timeline for the video editor, because the
+timeline needs the room the screenshot editor doesn't.
+
 ### Text recognition (OCR)
 
 On by default. A button on the composer and in the screenshot dialog pulls the
@@ -625,6 +636,19 @@ Abbrechen) statt einer Vorschau — eine fehlgeschlagene oder abgebrochene
 Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück.
 Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme
 automatisch und behält, was bis dahin aufgenommen wurde.
+
+**Screenshot- und Video-Editor** — arbeiten bei den gemeinsamen Werkzeugen
+gleich: Strg+Plus, Strg+Minus und Strg+0 zoomen in beiden hinein, heraus und
+passen die Ansicht ein; Strg+Z, Strg+Y (oder Strg+Umschalt+Z) machen mit
+demselben Knopfpaar rückgängig oder wiederholen. Im Screenshot-Editor wählt
+ein Klick auf ein vorhandenes Rechteck, eine Ellipse, eine Linie oder einen
+Pfeil es mit denselben Anfassern aus, die auch beim frischen Ziehen
+erscheinen. Der Video-Editor wählt seine Überlagerungen weiter über seine
+eigene Liste, weil er die Anfasser einer Überlagerung erst zeichnet, sobald
+sie schon ausgewählt ist; die Werkzeugleisten selbst bleiben ebenfalls an
+ihrem Platz, oben beim Screenshot-Editor, seitlich neben der Zeitleiste beim
+Video-Editor, weil die Zeitleiste den Platz braucht, den der
+Screenshot-Editor nicht hat.
 
 **Texterkennung (OCR)** — standardmäßig an; liest per Knopf in der Leiste und
 im Screenshot-Dialog Text aus einem Screenshot oder einer Bilddatei, komplett

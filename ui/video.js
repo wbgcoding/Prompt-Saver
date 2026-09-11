@@ -894,6 +894,8 @@ function endPreviewPan() {
 $("ve-stage").addEventListener("pointerup", endPreviewPan);
 $("ve-stage").addEventListener("pointercancel", endPreviewPan);
 $("ve-preview-zoom-reset").addEventListener("click", resetPreviewZoom);
+$("ve-preview-zoom-in").addEventListener("click", () => setPreviewZoom(VE.previewZoom * VE.zoomStepFactor));
+$("ve-preview-zoom-out").addEventListener("click", () => setPreviewZoom(VE.previewZoom / VE.zoomStepFactor));
 
 // Every rectangle is snapped to even numbers while it is being dragged, not at
 // export time — so the numbers on screen are already the numbers ffmpeg gets.
@@ -2762,6 +2764,11 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); return; }
+  // Preview zoom: Ctrl+Plus/Minus/0, matching the screenshot editor's canvas
+  // zoom keys -- plain +/- stay the timeline zoom below, unchanged.
+  if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); setPreviewZoom(VE.previewZoom * VE.zoomStepFactor); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key === "-") { e.preventDefault(); setPreviewZoom(VE.previewZoom / VE.zoomStepFactor); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key === "0") { e.preventDefault(); resetPreviewZoom(); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
 
   switch (e.key) {

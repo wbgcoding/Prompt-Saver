@@ -5799,6 +5799,77 @@ PROBE = """
         document.getElementById('snip-edit-cancel').click();
         await sleep(200);
       }
+      // 383: the screenshot and video editors zoom on the same three keys and
+      // select an existing rectangle with the same handle count -- this half
+      // checks the screenshot editor, VIDEO_PROBE below checks the other.
+      {
+        const parityCanvas = document.createElement('canvas');
+        parityCanvas.width = 400; parityCanvas.height = 300;
+        parityCanvas.getContext('2d').fillStyle = '#ffffff';
+        parityCanvas.getContext('2d').fillRect(0, 0, 400, 300);
+        window.__FIRE__('snip-captured', { data_url: parityCanvas.toDataURL('image/png'), path: '', name: 'parity.png' });
+        await sleep(300);
+        const zoomVal = document.getElementById('snip-edit-zoom-val');
+        const rectBtn2 = document.querySelector('#snip-edit-tools button[data-tool="rect"]');
+        if (!zoomVal || !rectBtn2) {
+          out.errors.push('383: screenshot editor is missing the zoom readout or the rect tool');
+        } else {
+          const readPct = () => Number(zoomVal.textContent.replace('%', ''));
+          const fitPct = readPct();
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: '+', ctrlKey: true, bubbles: true }));
+          await sleep(30);
+          const zoomedInPct = readPct();
+          if (zoomedInPct <= fitPct) {
+            out.errors.push('383: Ctrl+Plus did not zoom the screenshot editor in (was ' + fitPct + '%, now ' + zoomedInPct + '%)');
+          }
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: '-', ctrlKey: true, bubbles: true }));
+          await sleep(30);
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: '-', ctrlKey: true, bubbles: true }));
+          await sleep(30);
+          const zoomedOutPct = readPct();
+          if (zoomedOutPct >= zoomedInPct) {
+            out.errors.push('383: Ctrl+Minus did not zoom the screenshot editor out (was ' + zoomedInPct + '%, now ' + zoomedOutPct + '%)');
+          }
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: '0', ctrlKey: true, bubbles: true }));
+          await sleep(30);
+          const fitAgainPct = readPct();
+          if (fitAgainPct !== fitPct) {
+            out.errors.push('383: Ctrl+0 did not return the screenshot editor to its ' + fitPct + '% fit (got ' + fitAgainPct + '%)');
+          }
+
+          rectBtn2.click();
+          await sleep(30);
+          const baseCv2 = document.getElementById('snip-edit-base');
+          const liveCv2 = document.getElementById('snip-edit-live');
+          const rect2 = baseCv2.getBoundingClientRect();
+          const zoom2 = rect2.width / 400;
+          const toClient2 = (ix, iy) => ({ x: rect2.left + ix * zoom2, y: rect2.top + iy * zoom2 });
+          const q1 = toClient2(50, 50), q2 = toClient2(150, 150);
+          liveCv2.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: q1.x, clientY: q1.y }));
+          liveCv2.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: q2.x, clientY: q2.y }));
+          window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, clientX: q2.x, clientY: q2.y }));
+          await sleep(60);
+          // Selection handles are painted white on the LIVE canvas at fixed
+          // image-space points around the rect's border -- nothing is there
+          // until a click actually selects the shape (drawing one does not).
+          const liveCtx2 = liveCv2.getContext('2d');
+          const handlePoints = [[50, 50], [100, 50], [150, 50], [50, 100], [150, 100], [50, 150], [100, 150], [150, 150]];
+          const countPaintedHandles = () => handlePoints.filter(([hx, hy]) => liveCtx2.getImageData(hx, hy, 1, 1).data[3] > 200).length;
+          if (countPaintedHandles() !== 0) {
+            out.errors.push('383: the freshly drawn rect already shows selection handles before it was clicked');
+          }
+          const borderPt = toClient2(50, 100); // left-edge midpoint, on the rect outline
+          liveCv2.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: borderPt.x, clientY: borderPt.y }));
+          window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, clientX: borderPt.x, clientY: borderPt.y }));
+          await sleep(60);
+          const seHandleCount = countPaintedHandles();
+          if (seHandleCount !== 8) {
+            out.errors.push('383: clicking the rect selected it with ' + seHandleCount + ' handles, expected 8');
+          }
+        }
+        document.getElementById('snip-edit-cancel').click();
+        await sleep(200);
+      }
       // 365: the fullscreen media viewer (lightbox) keeps the point under the
       // cursor fixed while wheel-zooming instead of always zooming to its own
       // centre. Opened through a real prompt-editor preview click; the image's
@@ -8074,6 +8145,62 @@ VIDEO_PROBE = """
         }
         document.getElementById('ve-preview-zoom-reset')?.click();
         await sleep(30);
+      }
+    }
+
+    // ---- 383: the video editor's other half of the zoom-key and
+    // click-to-select-handles parity check, screenshot editor side in
+    // smoke_test.py's own '383:' block above ----
+    {
+      const zoomValVe = document.getElementById('ve-preview-zoom-val');
+      if (!zoomValVe) {
+        errs.push('383: video editor preview has no zoom readout to check');
+      } else {
+        const readVePct = () => Number(zoomValVe.textContent.replace('%', ''));
+        const startPct = readVePct(); // reset to 100 by the 365 check just above
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: '+', ctrlKey: true, bubbles: true }));
+        await sleep(30);
+        const inPct = readVePct();
+        if (inPct <= startPct) {
+          errs.push('383: Ctrl+Plus did not zoom the video editor preview in (was ' + startPct + '%, now ' + inPct + '%)');
+        }
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: '-', ctrlKey: true, bubbles: true }));
+        await sleep(30);
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: '-', ctrlKey: true, bubbles: true }));
+        await sleep(30);
+        const outPct = readVePct();
+        if (outPct >= inPct) {
+          errs.push('383: Ctrl+Minus did not zoom the video editor preview out (was ' + inPct + '%, now ' + outPct + '%)');
+        }
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: '0', ctrlKey: true, bubbles: true }));
+        await sleep(30);
+        const fitPctVe = readVePct();
+        if (fitPctVe !== startPct) {
+          errs.push('383: Ctrl+0 did not reset the video editor preview to its starting ' + startPct + '% (got ' + fitPctVe + '%)');
+        }
+      }
+
+      // The video editor selects an overlay from its own list rather than by
+      // clicking its canvas rectangle -- renderRects() only ever draws the
+      // rect and handles of the overlay already selected, so there is
+      // nothing on the canvas to click before that. Selecting the pixelate
+      // overlay (the same rectangular-region tool the screenshot editor
+      // unified the wording for) must still show the same 8 handles.
+      // Earlier edits above (355/356: the text and image overlays each got a
+      // field or drag commit) replace-and-reappend the edited op, so the list
+      // no longer sits in its original add order -- find the pixelate row by
+      // its own label rather than assuming overlayKinds' add-time position.
+      const ovRows383 = [...document.querySelectorAll('#ve-ov-list .ve-ov-row')];
+      const pixelRow = ovRows383.find((r) => r.textContent.startsWith('Pixelate'));
+      if (!pixelRow) {
+        errs.push('383: could not find the pixelate overlay row to select for the handle count');
+      } else {
+        pixelRow.click();
+        await sleep(30);
+        const veHandles = document.querySelectorAll('#ve-rects .ve-rect-pixelate .ve-rect-handle');
+        if (veHandles.length !== 8) {
+          errs.push('383: selecting the pixelate overlay showed ' + veHandles.length + ' handles, expected 8');
+        }
       }
     }
 

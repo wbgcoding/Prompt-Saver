@@ -13616,7 +13616,7 @@ function bind() {
     active: false, img: null, rawCanvas: null, w: 0, h: 0,
     ops: [], redo: [], floor: 0, perTool: {}, tool: SNIP_EDIT_DEFAULT_TOOL(),
     zoom: 1, drag: null, panState: null, spaceDown: false, showRaw: false,
-    cropRect: null, lastNudged: null, eyedropArm: null, textEdit: null,
+    cropRect: null, lastNudged: null, eyedropArm: null, textEdit: null, selOp: null,
     onApply: null, onCancel: null,
   };
 
@@ -14183,6 +14183,98 @@ function bind() {
     snipEditRedrawBase();
   }
 
+  // ---- shape selection: a click on an existing rect/ellipse/line/arrow, made
+  // while that same tool is active, selects it instead of starting a new one --
+  // the same 8-handle box the crop tool already draws (2 endpoint handles for a
+  // line/arrow). Pen, marker, pixelate, spotlight, text and step keep their prior
+  // behaviour; text already has its own move-only selection above. ----
+  const SNIP_SHAPE_TOOLS = ["rect", "ellipse", "line", "arrow"];
+  function snipEditShapeBounds(op) {
+    if (op.rect) return op.rect;
+    const [a, b] = op.points;
+    return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) };
+  }
+  function snipEditDistToSegment(pt, a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const lenSq = dx * dx + dy * dy;
+    const t = lenSq ? snipEditClamp(((pt.x - a.x) * dx + (pt.y - a.y) * dy) / lenSq, 0, 1) : 0;
+    return snipEditDist(pt, { x: a.x + t * dx, y: a.y + t * dy });
+  }
+  function snipEditHitTestShape(pt) {
+    if (!SNIP_SHAPE_TOOLS.includes(SE.tool)) return null;
+    const tol = 8 / SE.zoom;
+    for (let i = SE.ops.length - 1; i >= 0; i--) {
+      const op = SE.ops[i];
+      if (op.tool !== SE.tool) continue;
+      if (op.points) {
+        if (snipEditDistToSegment(pt, op.points[0], op.points[1]) <= tol) return op;
+        continue;
+      }
+      const r = op.rect;
+      const inBox = pt.x >= r.x - tol && pt.x <= r.x + r.w + tol && pt.y >= r.y - tol && pt.y <= r.y + r.h + tol;
+      if (!inBox) continue;
+      const onBorder = Math.abs(pt.x - r.x) <= tol || Math.abs(pt.x - r.x - r.w) <= tol
+        || Math.abs(pt.y - r.y) <= tol || Math.abs(pt.y - r.y - r.h) <= tol;
+      const inside = op.filled && pt.x >= r.x && pt.x <= r.x + r.w && pt.y >= r.y && pt.y <= r.y + r.h;
+      if (onBorder || inside) return op;
+    }
+    return null;
+  }
+  function snipEditShapeHandlePoints(op) {
+    if (op.points) return { a: op.points[0], b: op.points[1] };
+    return snipEditCropHandlePoints(op.rect);
+  }
+  function snipEditHitShapeHandle(pt, op) {
+    const tol = 10 / SE.zoom;
+    for (const [name, p] of Object.entries(snipEditShapeHandlePoints(op))) {
+      if (Math.abs(pt.x - p.x) <= tol && Math.abs(pt.y - p.y) <= tol) return name;
+    }
+    return null;
+  }
+  function snipEditShapeCursorFor(pt) {
+    const op = SE.selOp;
+    if (!op || op.tool !== SE.tool) return "";
+    const handle = snipEditHitShapeHandle(pt, op);
+    if (handle) return op.points ? "move" : SNIP_CROP_HANDLE_CURSORS[handle];
+    const r = snipEditShapeBounds(op);
+    if (pt.x >= r.x && pt.x <= r.x + r.w && pt.y >= r.y && pt.y <= r.y + r.h) return "move";
+    return "";
+  }
+  function snipEditPaintShapeHandles(op) {
+    const hs = 8;
+    snipEditLiveCtx.save();
+    snipEditLiveCtx.fillStyle = "#fff";
+    snipEditLiveCtx.strokeStyle = "#2563eb";
+    snipEditLiveCtx.lineWidth = 1.5;
+    for (const p of Object.values(snipEditShapeHandlePoints(op))) {
+      snipEditLiveCtx.fillRect(p.x - hs / 2, p.y - hs / 2, hs, hs);
+      snipEditLiveCtx.strokeRect(p.x - hs / 2, p.y - hs / 2, hs, hs);
+    }
+    snipEditLiveCtx.restore();
+  }
+  function snipEditDrawShapeSelectionLive() {
+    snipEditClearLive();
+    if (SE.selOp) snipEditPaintShapeHandles(SE.selOp);
+  }
+  // Drag-preview ghost: drawn on the live layer at the new position while the
+  // committed op (old position) stays visible underneath on the base canvas
+  // until pointerup -- the same simplification already used for a text move.
+  function snipEditDrawShapeDragLive(op) {
+    snipEditClearLive();
+    snipEditDrawOp(snipEditLiveCtx, op);
+    snipEditPaintShapeHandles(op);
+  }
+  function snipEditSelectShape(op) {
+    SE.selOp = op;
+    SE.lastNudged = op;
+    snipEditDrawShapeSelectionLive();
+  }
+  function snipEditDeselectShape() {
+    if (!SE.selOp) return;
+    SE.selOp = null;
+    snipEditClearLive();
+  }
+
   // ---- text: a real <input> positioned over the canvas, in stage-local (i.e.
   // already-zoomed) pixels, since the input shares the stage's containing block. ----
   function snipEditHitTestText(pt) {
@@ -14557,8 +14649,27 @@ function bind() {
     switch (SE.tool) {
       case "crop": snipEditCropPointerDown(pt); break;
       case "pen": case "marker": SE.drag = { kind: SE.tool, points: [pt] }; break;
-      case "line": case "arrow": SE.drag = { kind: SE.tool, a: pt, b: pt }; break;
-      case "rect": case "ellipse": case "pixelate": case "spotlight": SE.drag = { kind: SE.tool, a: pt, b: pt }; break;
+      case "line": case "arrow": case "rect": case "ellipse": {
+        if (SE.selOp && SE.selOp.tool === SE.tool) {
+          const handle = snipEditHitShapeHandle(pt, SE.selOp);
+          if (handle) {
+            SE.drag = SE.selOp.points
+              ? { kind: "shape-endpoint", op: SE.selOp, handle, orig: SE.selOp.points.map((p) => ({ ...p })) }
+              : { kind: "shape-resize", op: SE.selOp, handle, orig: { ...SE.selOp.rect } };
+            break;
+          }
+        }
+        const hit = snipEditHitTestShape(pt);
+        if (hit) {
+          snipEditSelectShape(hit);
+          SE.drag = { kind: "shape-move", op: hit, start: pt, orig: hit.points ? hit.points.map((p) => ({ ...p })) : { ...hit.rect } };
+          break;
+        }
+        snipEditDeselectShape();
+        SE.drag = { kind: SE.tool, a: pt, b: pt };
+        break;
+      }
+      case "pixelate": case "spotlight": SE.drag = { kind: SE.tool, a: pt, b: pt }; break;
       case "text": snipEditTextPointerDown(pt); break;
       case "step": snipEditPushOp({ tool: "step", point: pt, color: snipEditToolState("step").color, width: snipEditToolState("step").width }); break;
     }
@@ -14575,6 +14686,8 @@ function bind() {
         // The overlay is already on screen and unchanged by a plain hover
         // (its handles do not react to hover position) -- redrawing it here
         // was a full-image clear+refill on every mousemove for nothing.
+      } else if (SNIP_SHAPE_TOOLS.includes(SE.tool)) {
+        if (!SE.spaceDown) snipEditWrap.style.cursor = snipEditShapeCursorFor(snipEditToImage(e));
       }
       return;
     }
@@ -14634,6 +14747,11 @@ function bind() {
       case "crop-new": case "crop-move": case "crop-resize": snipEditCropPointerUp(); break;
       case "text-move": if (d.newPoint) { d.op.point = d.newPoint; snipEditRedrawBase(); } break;
     }
+    // snipEditClearLive() above wiped the selection handles a plain click
+    // (kind "shape-move" with no actual movement) just painted on mousedown --
+    // redraw them so the selection stays visible instead of vanishing the
+    // instant the button is released.
+    if (SE.selOp && SE.selOp.tool === SE.tool) snipEditDrawShapeSelectionLive();
   }
   snipEditLiveCv.addEventListener("pointerdown", snipEditOnPointerDown);
   snipEditLiveCv.addEventListener("pointermove", snipEditOnPointerMove);
@@ -14689,8 +14807,13 @@ function bind() {
       snipEditApply();
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); snipEditUndo(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) snipEditRedo(); else snipEditUndo(); return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); snipEditRedo(); return; }
+    // Canvas zoom: Ctrl+Plus/Minus/0, matching the video editor's preview zoom
+    // keys -- plain 0 and - stay the pixelate/spotlight tool shortcuts above.
+    if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); snipEditZoomBy(snipZoomStepFactor()); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key === "-") { e.preventDefault(); snipEditZoomBy(1 / snipZoomStepFactor()); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key === "0") { e.preventDefault(); snipEditFit(); return; }
     if (e.key === " ") { SE.spaceDown = true; snipEditWrap.style.cursor = ""; snipEditWrap.classList.add("panning"); e.preventDefault(); return; }
     if (e.key.toLowerCase() === "v" && !e.repeat) { SE.showRaw = true; snipEditRedrawBase(); return; }
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && SE.lastNudged) {
