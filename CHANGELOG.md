@@ -919,6 +919,11 @@ the video editor and the introduction tour ship on).
 - **Every expert-menu row's "changed" tooltip no longer shows when it was last
   changed.** The undo arrow and the "only changed" filter stay exactly as
   before; only the date/time line is gone.
+- **"Hide window after copy" is a renamed internal setting.** If you had
+  turned it on, it resets to its default (off) this one time; everything
+  else about it is unchanged. Multiple views and the quick grid size now
+  have their own "Views and quick grid" group instead of sitting among plain
+  toolbar-visibility switches.
 - The help tip line now sits behind a lightbulb icon instead of a text prefix,
   and the warning line above the expert menu is shorter and carries a warning
   icon.

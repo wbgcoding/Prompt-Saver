@@ -1682,8 +1682,8 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .flag-italicTiles .tile-name { font-style: italic; }
 /* v2.6.0 opt features */
 .flag-editorMonospace .modal-text { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
-.flag-dimToolbar .header { opacity: 0.5; transition: opacity var(--transition); }
-.flag-dimToolbar .header:hover, .flag-dimToolbar .header:focus-within { opacity: 1; }
+.flag-toolbarHoverDim .header { opacity: 0.5; transition: opacity var(--transition); }
+.flag-toolbarHoverDim .header:hover, .flag-toolbarHoverDim .header:focus-within { opacity: 1; }
 .flag-tileTextShadow .tile-name { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 /* Appearance extras */
 .flag-compactTiles .tile { padding: 2px; }
@@ -1731,12 +1731,12 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .flag-blurMediaUntilHover .tile:hover .tile-video { filter: none; }
 .flag-hideTileNames .tile-name { opacity: 0; transition: opacity var(--transition); }
 .flag-hideTileNames .tile:hover .tile-name { opacity: 1; }
-.flag-dimUnhovered .grid:hover .tile:not(:hover) { opacity: var(--dim-unhovered, 0.45); }
+.flag-tilesHoverDim .grid:hover .tile:not(:hover) { opacity: var(--dim-unhovered, 0.45); }
 /* Media extras */
 .flag-grayscaleMedia .tile-img,
 .flag-grayscaleMedia .tile-video { filter: grayscale(1); }
-.flag-dimMedia .tile-img,
-.flag-dimMedia .tile-video { opacity: var(--dim-media, 0.8); }
+.flag-mediaHoverDim .tile-img,
+.flag-mediaHoverDim .tile-video { opacity: var(--dim-media, 0.8); }
 .flag-mediaBorder .tile.has-image { border-color: var(--accent); }
 .flag-roundMedia .tile-img,
 .flag-roundMedia .tile-video { border-radius: var(--media-radius, 8px); }

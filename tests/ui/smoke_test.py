@@ -3541,6 +3541,40 @@ PROBE = """
         }
       }
     }
+    // 373: closeOnCopy/dimUnhovered/dimMedia/dimToolbar were renamed to
+    // hideWindowOnCopy/tilesHoverDim/mediaHoverDim/toolbarHoverDim -- a rename
+    // silently breaks if the CSS class the flag drives on <body> is missed,
+    // so flip each switch and check the class right on the body element.
+    {
+      const flagRowByLabel = (text) => {
+        for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+          tb.click();
+          const hit = [...document.querySelectorAll('#expert-flags .switch-field')]
+            .find(r => (r.querySelector('span') || {}).textContent === text);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const checkRenamedFlag = async (label, cls) => {
+        const row = flagRowByLabel(label);
+        const cb = row && row.querySelector('input.switch');
+        if (!cb) { out.errors.push(`373: no switch found for "${label}"`); return; }
+        const was = cb.checked;
+        cb.checked = !was;
+        cb.dispatchEvent(new Event('change'));
+        await sleep(80);
+        if (document.body.classList.contains(cls) !== !was) {
+          out.errors.push(`373: body class "${cls}" did not flip with "${label}"`);
+        }
+        cb.checked = was; // restore, later probes assume the shipped default
+        cb.dispatchEvent(new Event('change'));
+        await sleep(80);
+      };
+      await checkRenamedFlag('Hide window after copy', 'flag-hideWindowOnCopy');
+      await checkRenamedFlag('Dim toolbar until hover', 'flag-toolbarHoverDim');
+      await checkRenamedFlag('Dim other buttons on hover', 'flag-tilesHoverDim');
+      await checkRenamedFlag('Dim media', 'flag-mediaHoverDim');
+    }
     // P68: the expert-menu search also matches a word that lives only in a
     // setting's tooltip, not its label.
     {

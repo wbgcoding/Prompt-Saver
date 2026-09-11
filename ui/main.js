@@ -1304,10 +1304,10 @@ const OPT_FLAG_LABELS = {
   blurTilesUntilHover: "flagBlurTilesUntilHover",
   blurMediaUntilHover: "flagBlurMediaUntilHover",
   hideTileNames: "flagHideTileNames",
-  dimUnhovered: "flagDimUnhovered",
+  tilesHoverDim: "flagTilesHoverDim",
   // Media extras
   grayscaleMedia: "flagGrayscaleMedia",
-  dimMedia: "flagDimMedia",
+  mediaHoverDim: "flagMediaHoverDim",
   mediaBorder: "flagMediaBorder",
   roundMedia: "flagRoundMedia",
   // New features (default off).
@@ -1317,8 +1317,8 @@ const OPT_FLAG_LABELS = {
   backupGfs: "flagBackupGfs",           // period-based retention
   // v2.6.0 additions (all default off → "(Standard Aus)").
   editorMonospace: "flagEditorMonospace",       // monospace editor textarea
-  dimToolbar: "flagDimToolbar",                 // header dims until hovered
-  closeOnCopy: "flagCloseOnCopy",               // hide window after copying a prompt
+  toolbarHoverDim: "flagToolbarHoverDim",        // header dims until hovered
+  hideWindowOnCopy: "flagHideWindowOnCopy",     // hide window after copying a prompt
   dedupCopyLog: "flagDedupCopyLog",             // skip identical consecutive copies
   // Keep the clipboard-inbox and copy-history buttons in the toolbar even while
   // their feature is switched off, so the feature can be paused, not hidden.
@@ -1563,8 +1563,8 @@ const EXPERT_VALUES = {
   tileBlur: { label: "valTileBlur", min: 1, max: 16, step: 1, def: 4, unit: "px", gate: "blurTilesUntilHover" },
   mediaBlur: { label: "valMediaBlur", min: 1, max: 30, step: 1, def: 10, unit: "px", gate: "blurMediaUntilHover" },
   // Dim strength for the "dim unhovered / dim media" toggles (lower = dimmer).
-  dimOpacity: { label: "valDimOpacity", min: 10, max: 90, step: 5, def: 45, unit: "%", gate: "dimUnhovered" },
-  mediaDimOpacity: { label: "valMediaDim", min: 10, max: 95, step: 5, def: 80, unit: "%", gate: "dimMedia" },
+  tilesHoverOpacity: { label: "valTilesHoverOpacity", min: 10, max: 90, step: 5, def: 45, unit: "%", gate: "tilesHoverDim" },
+  mediaHoverOpacity: { label: "valMediaHoverOpacity", min: 10, max: 95, step: 5, def: 80, unit: "%", gate: "mediaHoverDim" },
   // Rounded-media corner radius (paired with the roundMedia toggle).
   mediaRadius: { label: "valMediaRadius", min: 0, max: 24, step: 1, def: 8, unit: "px", gate: "roundMedia" },
   // Prompt version history: versions kept per prompt.
@@ -1872,13 +1872,14 @@ const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app.
     { title: "expGroupInput", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "pasteMedia", "dragDrop"] },
+    { title: "expGroupViews", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }], values: ["viewBorder", "viewGroupMaxRows"] },
     // Placeholders, from the grammar to where the app asks for them.
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
     // The editor: what it shows beside the text box. Preview and highlighter belong together — the
     // highlighter only ever paints inside the preview.
     { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
-    { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "closeOnCopy", "copyBubble", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
+    { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyBubble", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
     // Floating buttons and the two kinds of folder they can form.
     { title: "expGroupFolders", flags: ["floating", { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap", "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
     // The quick-copy sections of the tray menu, each with its own entry count.
@@ -1919,8 +1920,8 @@ const EXPERT_TABS = [
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
   ] },
   { title: "expTabAppearance", groups: [
-    { title: "expGroupScale", values: ["uiScale", "modalScale", "composerScale", "iconScale", "primaryScale"] },
-    { title: "expGroupVisual", flags: ["animations", "accentHeader", "hideScrollbars", { key: "accentScrollbar", gate: "!hideScrollbars" }, "smoothScroll", "frostedModals"], values: ["animSpeed", "gridGap", "gridPad", "headerPadY", "modalRadius", "overlayDim", "scrollbarWidth", "frostedBlur", "composerMaxH", "popoverPad", "toastWidth", "toastMs", "modalMaxVh"], dropdowns: ["toastPos"] },
+    { title: "expGroupScales", values: ["uiScale", "modalScale", "composerScale", "iconScale", "primaryScale"] },
+    { title: "expGroupAppearanceDetails", flags: ["animations", "accentHeader", "hideScrollbars", { key: "accentScrollbar", gate: "!hideScrollbars" }, "smoothScroll", "frostedModals"], values: ["animSpeed", "gridGap", "gridPad", "headerPadY", "modalRadius", "overlayDim", "scrollbarWidth", "frostedBlur", "composerMaxH", "popoverPad", "toastWidth", "toastMs", "modalMaxVh"], dropdowns: ["toastPos"] },
     { title: "expGroupColors", flags: ["customThemes"], values: ["customThemeMax"], palette: true },
     { title: "expGroupLimits", values: ["maxViews", "gridMax", "previewLen", "nameMaxLen"] },
   ] },
@@ -1931,12 +1932,12 @@ const EXPERT_TABS = [
     { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", { key: "journalTagFilter", gate: "tags" }, "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalLimit", "journalWidth"], selects: ["historyDays"] },
   ] },
   { title: "expTabMedia", groups: [
-    { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "grayscaleMedia", "dimMedia", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaDimOpacity", "mediaRadius"] },
+    { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "grayscaleMedia", "mediaHoverDim", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaHoverOpacity", "mediaRadius"] },
   ] },
   { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
-    { title: "expGroupToolbar", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "gridViewBorder", "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }, "pinButton", "barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "dimToolbar"], values: ["viewBorder", "viewGroupMaxRows"] },
-    { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "dimUnhovered"], values: ["tileBlur", "mediaBlur", "dimOpacity"] },
+    { title: "expGroupToolbar", flags: ["gridViewBorder", "pinButton", "barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "toolbarHoverDim"] },
+    { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "tilesHoverDim"], values: ["tileBlur", "mediaBlur", "tilesHoverOpacity"] },
     { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances", "taskbarProgress", "etaShow"], values: ["kbFocusFadeMs", "etaMinPct", "etaMinSecs", "bgDoneKeepMin"], selects: ["updateCheckH"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
@@ -2048,8 +2049,8 @@ function applyValues() {
   root.setProperty("--tooltip-width", `${val("tooltipWidth")}px`);
   root.setProperty("--blur-tiles", `${val("tileBlur")}px`);
   root.setProperty("--blur-media", `${val("mediaBlur")}px`);
-  root.setProperty("--dim-unhovered", val("dimOpacity") / 100);
-  root.setProperty("--dim-media", val("mediaDimOpacity") / 100);
+  root.setProperty("--dim-unhovered", val("tilesHoverOpacity") / 100);
+  root.setProperty("--dim-media", val("mediaHoverOpacity") / 100);
   root.setProperty("--media-radius", `${val("mediaRadius")}px`);
   root.setProperty("--tag-chip-px", `${val("tagChipPx")}px`);
   root.setProperty("--hl-font-px", `${val("hlFontPx")}px`);
@@ -2107,7 +2108,7 @@ const EXPERT_TIPS = [
   "voiceLangCacheH", "voiceLang", "voiceInsert", "voiceOnlineOk", "voiceAutoPickLang", "voiceLangAutoUpdate",
   "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH", "voiceHotkey", "voiceHotkeyTarget",
   "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "trayLabelMax",
-  "checkUpdateOnStart", "showUpdates", "updateCheckH", "importExport", "dimToolbar", "keyboardNav", "allowMultipleInstances",
+  "checkUpdateOnStart", "showUpdates", "updateCheckH", "importExport", "toolbarHoverDim", "keyboardNav", "allowMultipleInstances",
   "taskbarProgress", "etaShow",
   "headerSeparators", "floating",
   "pillFolders", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap",
@@ -2118,7 +2119,7 @@ const EXPERT_TIPS = [
   "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax",
   "helpTips", "helpHighlight", "firstRunTour",
   // Tiles / copying
-  "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "autoPasteEnter", "closeOnCopy",
+  "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "autoPasteEnter", "hideWindowOnCopy",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
   "tooltipDelay", "tooltipTimeout", "iconTooltips",
   // Appearance
@@ -6800,7 +6801,7 @@ async function copyOutsideApp(p, paste) {
 }
 // Expert opt: hide the window to the tray right after a prompt copy.
 function maybeCloseOnCopy() {
-  if (!optFlag("closeOnCopy")) return;
+  if (!optFlag("hideWindowOnCopy")) return;
   try { window.__TAURI__?.window?.getCurrentWindow?.()?.hide?.().catch?.(() => {}); } catch { /* no-op */ }
 }
 

@@ -166,10 +166,10 @@ DEPENDENCIES = {
     "journalTagFilter": "tags",
     "tileBlur": "blurTilesUntilHover",
     "mediaBlur": "blurMediaUntilHover",
-    "dimOpacity": "dimUnhovered",
+    "tilesHoverOpacity": "tilesHoverDim",
     # Media
     "videoVolume": "!videoMuted",
-    "mediaDimOpacity": "dimMedia",
+    "mediaHoverOpacity": "mediaHoverDim",
     "mediaRadius": "roundMedia",
     # Tools + data
     "viewGroups": "multiView",
