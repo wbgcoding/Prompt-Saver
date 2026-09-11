@@ -382,7 +382,8 @@ if not tips:
     problems.append("EXPERT_TIPS: list not found")
 else:
     tip_keys = re.findall(r'"([A-Za-z0-9_]+)"', tips.group(1))
-    known_settings = all_flags | values | selects | dropdowns | set(top_keys(paths_src))
+    colors_src = block("const EXPERT_COLORS", "{", "}")
+    known_settings = all_flags | values | selects | dropdowns | set(top_keys(paths_src)) | set(top_keys(colors_src))
     for key in tip_keys:
         want = "tip" + key[0].upper() + key[1:]
         if want not in en_keys:

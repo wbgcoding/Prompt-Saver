@@ -252,6 +252,16 @@ the video editor and the introduction tour ship on).
   APNG never carry audio, warn past ten seconds and get their long side
   capped, since all three grow large fast. Undo/redo covers every edit,
   capped by an adjustable limit.
+- **Every value a screenshot or video editor sets automatically when it opens**
+  — stroke width and color per drawing tool, the video editor's start tool,
+  starting tab and default font, and more — now has its own expert-menu row
+  for the default, alongside a new row for the video export folder (which
+  already remembered your last choice; it just had no row of its own before).
+- **The video editor now remembers unfinished cuts and overlays.** Closing it
+  with something not yet exported offers to pick up right where you left off
+  the next time you open the same recording; declining discards the saved
+  state. Kept for 30 days by default (adjustable, zero keeps it forever) and
+  cleaned up automatically once the recording itself is gone.
 
 ### Improved
 

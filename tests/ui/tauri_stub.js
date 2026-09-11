@@ -331,6 +331,16 @@ const RESULTS = {
     duration_ms: 600000, fps: 30, width: 1920, height: 1080,
     has_audio: true, has_mic_track: true, mic_sidecar: "",
   }),
+  // A fixed (size, mtime) tuple so a probe can control whether it "matches" a
+  // window.__EDIT_STATE_FIXTURE__ saved under the same numbers.
+  stat_file: () => [4096, 1700000000],
+  // window.__EDIT_STATE_FIXTURE__ (default: nothing saved) lets one probe step
+  // ask for a matching saved state without changing it for every other call;
+  // __EDIT_STATE_SAVED__/__EDIT_STATE_DISCARDED__ record what the editor did,
+  // same pattern as __VIDEO_CLEANUP_CALLED__ above.
+  load_edit_state: () => (window.__EDIT_STATE_FIXTURE__ !== undefined ? window.__EDIT_STATE_FIXTURE__ : null),
+  save_edit_state: (a) => { window.__EDIT_STATE_SAVED__ = a; return null; },
+  discard_edit_state: (a) => { window.__EDIT_STATE_DISCARDED__ = a; return null; },
   generate_filmstrip: (a) => {
     const n = Math.max(1, Number(a && a.count) || 12);
     return Array.from({ length: n }, (_, i) => "C:\\Temp\\ps-filmstrip-" + i + ".jpg");

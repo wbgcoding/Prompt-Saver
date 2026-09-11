@@ -8359,6 +8359,61 @@ VIDEO_PROBE = """
 """
 
 
+# 385: the remembered-unfinished-edit restore dialog, both answers. A saved
+# edit_state fixture (two ops: trim + fade, matching the exact shapes
+# loadRecording's own trim/fade handlers push) is planted before boot, so
+# checkEditState() finds it on the very first load and opens the dialog --
+# same "own boot each time" reasoning as SEAL_PROBE, since the dialog only
+# ever opens during the initial loadRecording() pass.
+EDIT_STATE_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const action = window.__EDIT_STATE_RESTORE_ACTION__;
+  const which = action + ': ';
+  const until = async (fn, tries) => {
+    for (let i = 0; i < (tries || 100) && !fn(); i++) await sleep(50);
+    return fn();
+  };
+  try {
+    const overlay = document.getElementById('ve-confirm');
+    const shown = await until(() => overlay && !overlay.classList.contains('hidden'));
+    if (!shown) {
+      errs.push(which + 'the restore dialog never opened although a saved edit state was planted');
+    } else {
+      const title = document.getElementById('ve-confirm-title').textContent.trim();
+      const msg = document.getElementById('ve-confirm-msg').textContent.trim();
+      if (!title || /^editStateRestore/.test(title)) errs.push(which + 'the dialog title is empty or a raw i18n key: ' + title);
+      if (!msg.includes('(2)')) errs.push(which + 'the dialog message does not name the saved op count: ' + msg);
+      const okBtn = document.getElementById('ve-confirm-ok');
+      const cancelBtn = document.getElementById('ve-confirm-cancel');
+      if (!okBtn.textContent.trim() || !cancelBtn.textContent.trim()) {
+        errs.push(which + 'the dialog buttons carry no label');
+      }
+      (action === 'continue' ? okBtn : cancelBtn).click();
+      await sleep(200);
+      if (!overlay.classList.contains('hidden')) errs.push(which + 'the dialog did not close after the answer');
+      const opRows = document.querySelectorAll('#ve-ops-list .ve-op-row').length;
+      if (action === 'continue') {
+        if (opRows !== 2) errs.push(which + 'continuing did not restore the saved ops onto the timeline: ' + opRows + ' rows');
+        if (window.__EDIT_STATE_DISCARDED__) errs.push(which + 'continuing must not also discard the saved edit state');
+      } else {
+        if (opRows !== 0) errs.push(which + 'starting fresh left restored ops on the timeline: ' + opRows + ' rows');
+        const d = window.__EDIT_STATE_DISCARDED__;
+        if (!d || d.kind !== 'video' || !d.target) errs.push(which + 'starting fresh did not tell the backend to discard the saved edit state');
+      }
+    }
+  } catch (e) { errs.push(which + 'probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # A DPAPI failure makes the backend write the store in plaintext instead of
 # refusing the save. That used to be reported in the error log and nowhere else.
 # The same page is booted twice — once with the backend reporting a sealed store,
@@ -8777,6 +8832,41 @@ def main():
             print(f"-- video.html {w}x{h}")
             for e in errs:
                 print(f"   FAIL JS error: {e}")
+            failed += len(errs)
+            if not errs:
+                print("   ok")
+
+        # 385: the remembered-unfinished-edit restore dialog, both answers --
+        # its own boot each time, same reasoning as the seal/write-fail pairs below.
+        edit_state_fixture = json.dumps(json.dumps({
+            "v": 1,
+            "ops": [
+                {"tool": "trim", "startMs": 0, "endMs": 2000},
+                {"tool": "fade", "inMs": 100, "outMs": 200},
+            ],
+        }))
+        for action in ("continue", "discard"):
+            side = tmp / "ui" / f"video-restore-{action}.html"
+            side.write_text(
+                (REPO / "ui" / "video.html").read_text(encoding="utf-8")
+                .replace("<script",
+                         f'<script>window.__EDIT_STATE_FIXTURE__ = {edit_state_fixture};'
+                         f'window.__EDIT_STATE_RESTORE_ACTION__ = "{action}";</script>\n'
+                         '<script src="tauri_stub.js"></script>\n<script', 1)
+                .replace("</body>", EDIT_STATE_PROBE + "</body>"),
+                encoding="utf-8")
+            proc = subprocess.run(
+                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+                 f"--user-data-dir={tmp / ('profile-video-restore-%s' % action)}", "--allow-file-access-from-files",
+                 "--window-size=1130,860", "--virtual-time-budget=30000",
+                 "--dump-dom", side.as_uri()],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=180)
+            m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+            errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+            print(f"-- video.html restore dialog ({action})")
+            for e in errs:
+                print(f"   FAIL: {e}")
             failed += len(errs)
             if not errs:
                 print("   ok")

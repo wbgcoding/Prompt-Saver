@@ -1255,6 +1255,7 @@ const FLAG_LABELS = {
   // Ships ON, matching today's unconditional automatic crop exactly.
   recAutoCrop: "flagRecAutoCrop",
   numFieldWheel: "flagNumFieldWheel",
+  editStateKeep: "flagEditStateKeep",
   recStopHotkey: "flagRecStopHotkey",
   recPauseHotkey: "flagRecPauseHotkey",
   recTrayEntries: "flagRecTrayEntries",
@@ -1496,6 +1497,12 @@ const EXPERT_VALUES = {
   // Screenshot-editor drawing defaults.
   snipPenPx: { label: "valSnipPenPx", min: 1, max: 40, step: 1, def: 6, unit: "px", gate: "snipEditor" },
   snipMarkerPx: { label: "valSnipMarkerPx", min: 4, max: 60, step: 2, def: 18, unit: "px", gate: "snipEditor" },
+  snipLinePx: { label: "valSnipLinePx", min: 1, max: 40, step: 1, def: 4, unit: "px", gate: "snipEditor" },
+  snipArrowPx: { label: "valSnipArrowPx", min: 1, max: 40, step: 1, def: 4, unit: "px", gate: "snipEditor" },
+  snipRectPx: { label: "valSnipRectPx", min: 1, max: 40, step: 1, def: 4, unit: "px", gate: "snipEditor" },
+  snipEllipsePx: { label: "valSnipEllipsePx", min: 1, max: 40, step: 1, def: 4, unit: "px", gate: "snipEditor" },
+  snipStepPx: { label: "valSnipStepPx", min: 1, max: 40, step: 1, def: 8, unit: "px", gate: "snipEditor" },
+  snipArrowHeadScale: { label: "valSnipArrowHeadScale", min: 1, max: 6, step: 0.1, def: 3.2, unit: "x", gate: "snipEditor" },
   snipTextPx: { label: "valSnipTextPx", min: 10, max: 96, step: 2, def: 24, unit: "px", gate: "snipEditor" },
   snipPixelBlock: { label: "valSnipPixelBlock", min: 4, max: 64, step: 2, def: 12, unit: "px", gate: "snipEditor" },
   snipSpotlightDim: { label: "valSnipSpotlightDim", min: 10, max: 90, step: 5, def: 55, unit: "%", gate: "snipEditor" },
@@ -1524,6 +1531,9 @@ const EXPERT_VALUES = {
   // editor's 1x-8x factor) -- see snip.js/video.js for the unit conversion.
   zoomStepPct: { label: "valZoomStepPct", min: 5, max: 50, step: 5, def: 20, unit: "%" },
   zoomMaxPct: { label: "valZoomMaxPct", min: 200, max: 1600, step: 100, def: 800, unit: "%" },
+  editStateSaveSecs: { label: "valEditStateSaveSecs", min: 5, max: 300, step: 5, def: 30, unit: "s", gate: "editStateKeep" },
+  // 0 means forever, same convention as trashRetentionDays.
+  editStateKeepDays: { label: "valEditStateKeepDays", min: 0, max: 365, step: 1, def: 30, unit: "", gate: "editStateKeep" },
   // A crop smaller than this (either side) is upscaled 2x before recognition --
   // the trick that makes small on-screen text readable to the OCR engine.
   ocrUpscaleUnderPx: { label: "valOcrUpscaleUnderPx", min: 100, max: 800, step: 50, def: 300, unit: "px", gate: "ocr" },
@@ -1824,6 +1834,15 @@ const EXPERT_DROPDOWNS = {
     [["", "veScaleOff"], ["2160", "optVeScale2160"], ["1440", "optVeScale1440"], ["1080", "optVeScale1080"],
       ["720", "optVeScale720"], ["480", "optVeScale480"], ["360", "optVeScale360"],
       ["50", "optVeScale50pct"], ["25", "optVeScale25pct"]], "", "videoEditor"),
+  // "segoeui" matches FONT_FILES[0][0] in video.js -- the hardcoded font every
+  // new text overlay opens with today.
+  veOvFont: enumDropdown("veOvFont", "valVeOvFont",
+    [["segoeui", "optFontSegoeui"], ["arial", "optFontArial"], ["arialbd", "optFontArialBold"],
+      ["consola", "optFontConsola"], ["georgia", "optFontGeorgia"]], "segoeui", "videoEditor"),
+  // "edit" matches the Edit tab's "active" class in video.html -- the panel
+  // shown today whenever the video editor opens.
+  veDefaultPanel: enumDropdown("veDefaultPanel", "valVeDefaultPanel",
+    [["edit", "veTabEdit"], ["overlays", "veTabOverlays"], ["export", "veTabExport"]], "edit", "videoEditor"),
   // Applies to every screenshot: the snip tool's own save/save-as/save-to-folder
   // paths AND the video editor's "export still frame" (same setting, one format
   // for anything this app calls a screenshot). webp and bmp/tiff are always
@@ -1929,7 +1948,7 @@ const EXPERT_TABS = [
     // Everything below is a capture tool: it reads something off the screen or the
     // microphone rather than putting typed content into the app.
     { title: "expGroupScreenshot", flags: ["screenshot"], values: ["snipPreviewVh", "snipQuality", "snipSaveQuality", "snipDelayMs"], dropdowns: ["screenshotFormat"], paths: ["screenshotDir"] },
-    { title: "expGroupSnipEditor", flags: [{ key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }], values: ["snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditSnapTolerancePx", "snipEditUndoMax"], dropdowns: ["snipEditDefaultTool", "snipScaleFilter"] },
+    { title: "expGroupSnipEditor", flags: [{ key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }], values: ["snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx", "snipArrowHeadScale", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditSnapTolerancePx", "snipEditUndoMax"], dropdowns: ["snipEditDefaultTool", "snipScaleFilter"], colors: ["snipDefaultColor"] },
     // Opens #ocr-langs-modal -- same gate as the rest of the feature.
     { title: "expGroupOcr", flags: ["ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }], values: ["ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH"], dropdowns: ["ocrLang"],
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }] },
@@ -1939,10 +1958,10 @@ const EXPERT_TABS = [
     // "hotkey" branch.
     { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode"], paths: ["recordingDir"],
       actions: [{ id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recStopHotkeyLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recPauseHotkeyLabel", gate: "recPauseHotkey" }] },
-    { title: "expGroupVideoEditor", flags: ["videoEditor"], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale"], colors: ["veOvColor"] },
+    { title: "expGroupVideoEditor", flags: ["videoEditor"], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor"], paths: ["videoExportDir"] },
     // What the screenshot editor and the video editor share -- created here so
     // no setting key is ever declared in two groups (expert_menu_check.py).
-    { title: "expGroupEditors", flags: ["numFieldWheel"], values: ["numFieldStep", "numFieldBigStep", "zoomStepPct", "zoomMaxPct"] },
+    { title: "expGroupEditors", flags: ["numFieldWheel", "editStateKeep"], values: ["numFieldStep", "numFieldBigStep", "zoomStepPct", "zoomMaxPct", "editStateSaveSecs", "editStateKeepDays"] },
   ] },
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
@@ -2129,11 +2148,16 @@ const EXPERT_TIPS = [
   "screenRecord", "recCursor", "recCountdownS", "recFps", "recAudioSystem", "recAudioMic", "recAudioKbps", "recMicDevice",
   "recQuality", "recBitrateKbps", "recFormat", "recordingDir",
   "recStopHotkey", "recPauseHotkey", "recTrayEntries", "recCropNotice", "recBarSize", "recTargetSwitch",
+  "recAutoCrop", "recCanvasMode", "recCanvasMaxPx", "recMaxMin", "recMaxMb", "recDiskWarnMb",
   "videoEditor", "videoEditUndoMax",
   "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veExportKbpsHigh", "veExportKbpsSmall",
-  "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity",
+  "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veOvColor", "veOvFont",
+  "veDefaultPanel", "videoExportDir",
+  "numFieldWheel", "zoomStepPct", "zoomMaxPct", "errorLogKeepKb",
+  "editStateKeep", "editStateSaveSecs", "editStateKeepDays",
   "snipQuality", "snipSaveQuality", "snipDelayMs",
-  "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim",
+  "snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx",
+  "snipArrowHeadScale", "snipDefaultColor", "snipTextPx", "snipPixelBlock", "snipSpotlightDim",
   "snipEditUndoMax", "snipEditSnap", "snipEditSnapTolerancePx", "snipTextPlate", "snipEditDefaultTool", "snipScaleFilter",
   "ocr", "ocrUpscaleUnderPx", "ocrLang",
   "ocrAutoPickLang", "ocrLangAutoUpdate", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "ocrLangCacheH",
@@ -2621,6 +2645,29 @@ const EXPERT_PATHS = {
       renderExpert();
     },
   },
+  // Same storage key the video editor's own "Export to…" folder picker
+  // already writes (video.js persistExportSettings/videoExportDir) -- this
+  // row only makes that existing, already-persisted preference visible and
+  // resettable from the expert menu, it does not add a second place it is
+  // remembered. Empty means "next to the source file", exactly like today.
+  videoExportDir: {
+    label: "valVideoExportDir",
+    gate: "videoEditor",
+    def: () => "",
+    get: () => settings.ui_texts?.videoExportDir || "",
+    change: async () => {
+      const dir = await invoke("pick_folder").catch(() => null);
+      if (!dir) return;
+      settings.ui_texts = { ...(settings.ui_texts || {}), videoExportDir: dir };
+      invoke("set_ui_text", { key: "videoExportDir", value: dir }).catch((e) => errToast(e));
+      renderExpert();
+    },
+    onReset: () => {
+      settings.ui_texts = { ...(settings.ui_texts || {}), videoExportDir: "" };
+      invoke("set_ui_text", { key: "videoExportDir", value: "" }).catch((e) => errToast(e));
+      renderExpert();
+    },
+  },
   dataDir: {
     label: "valDataDir",
     get: () => currentDataDir,
@@ -2698,6 +2745,12 @@ const EXPERT_COLORS = {
   // per-overlay "Colour" field caption in the overlay editor itself (video.js),
   // a wholly unrelated existing string this must not collide with or overwrite.
   veOvColor: { label: "veOvDefaultColor", def: "#ffffff", gate: "videoEditor" },
+  // `def` is a FUNCTION here, not a fixed hex, because the screenshot editor's
+  // own current fallback (COLORS[1]) already tracks the user's custom palette
+  // -- freezing this row at a fixed hex would silently stop following a
+  // palette someone already recoloured, which is a real behaviour change this
+  // row must not cause. colorRow() below resolves a function `def` before use.
+  snipDefaultColor: { label: "valSnipDefaultColor", def: () => COLORS[1] || "#ef4444", gate: "snipEditor" },
 };
 
 // (folder path -> {count, bytes}) for the recordingDir video-folder readout, so
@@ -2961,6 +3014,9 @@ async function savePalette(colors) {
 
 function colorRow(key) {
   const cfg = EXPERT_COLORS[key];
+  // `def` is usually a fixed hex, but snipDefaultColor's is a function that
+  // reads the user's live custom palette -- resolve it fresh every render.
+  const defColor = typeof cfg.def === "function" ? cfg.def() : cfg.def;
   const row = document.createElement("div");
   row.className = "field value-field color-field";
   const head = document.createElement("div");
@@ -2968,7 +3024,7 @@ function colorRow(key) {
   const span = document.createElement("span");
   span.textContent = t(cfg.label);
   head.appendChild(span);
-  const cur = HEX_RE.test(settings.ui_texts?.[key] || "") ? settings.ui_texts[key] : cfg.def;
+  const cur = HEX_RE.test(settings.ui_texts?.[key] || "") ? settings.ui_texts[key] : defColor;
   const swatch = document.createElement("button");
   swatch.type = "button";
   swatch.className = "color-swatch";
@@ -2982,7 +3038,7 @@ function colorRow(key) {
   };
   swatch.addEventListener("click", () => openColorPop(swatch, cur, setColor));
   head.appendChild(swatch);
-  if (cur !== cfg.def) {
+  if (cur !== defColor) {
     const reset = document.createElement("button");
     reset.type = "button";
     reset.className = "expert-row-reset";
@@ -2990,7 +3046,7 @@ function colorRow(key) {
     reset.title = label;
     reset.setAttribute("aria-label", label);
     putIcon(reset, ICON_UNDO);
-    reset.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); setColor(cfg.def).then(renderExpert); });
+    reset.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); setColor(defColor).then(renderExpert); });
     head.appendChild(reset);
   }
   row.appendChild(head);
@@ -13363,11 +13419,11 @@ function bind() {
   const SNIP_WIDTH_PRESETS_OF = (tool) => ({
     pen: [2, SNIP_EDIT_PEN_PX(), 14],
     marker: [10, SNIP_EDIT_MARKER_PX(), 28],
-    line: [2, 4, 8],
-    arrow: [2, 4, 8],
-    rect: [2, 4, 8],
-    ellipse: [2, 4, 8],
-    step: [4, 8, 14],
+    line: [2, val("snipLinePx"), 8],
+    arrow: [2, val("snipArrowPx"), 8],
+    rect: [2, val("snipRectPx"), 8],
+    ellipse: [2, val("snipEllipsePx"), 8],
+    step: [4, val("snipStepPx"), 14],
   }[tool] || [2, 4, 8]);
   const SNIP_TOOL_SVG = {
     crop: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14"/></svg>',
@@ -13463,7 +13519,7 @@ function bind() {
     if (!SE.perTool[tool]) {
       const widths = SNIP_WIDTH_PRESETS_OF(tool);
       SE.perTool[tool] = {
-        color: COLORS[1] || "#ef4444",
+        color: txt("snipDefaultColor") || COLORS[1] || "#ef4444",
         width: widths[1],
         filled: false,
         fontPx: SNIP_EDIT_TEXT_PX(),
@@ -13558,7 +13614,7 @@ function bind() {
     // Capped at the actual drag distance -- otherwise a drag shorter than one
     // arrowhead put the shaft's "back" point PAST the start point, flipping
     // the shaft to point backwards during the first few pixels of every drag.
-    const headLen = Math.min(7 + op.width * 3.2, dist); // tip-to-back distance along the shaft
+    const headLen = Math.min(7 + op.width * val("snipArrowHeadScale"), dist); // tip-to-back distance along the shaft
     const headHalfAngle = Math.PI / 9;  // ~20 deg either side -- slender, not dumpy
     const backX = b.x - headLen * Math.cos(angle);
     const backY = b.y - headLen * Math.sin(angle);

@@ -116,6 +116,11 @@ const VE = {
   audio: { sys: { mute: false, vol: 100 }, mic: { mute: true, vol: 100 } },
   hasSys: true,
   hasMic: false,
+  // The source file's own size/mtime as of the last successful load or save,
+  // stamped once per loadRecording() -- edit_state matches on this exact triple,
+  // never re-stat'd mid-session so a transient touch elsewhere cannot invalidate it.
+  editStateSize: 0,
+  editStateMtime: 0,
   loadGen: 0,           // bumped on every loadRecording() call; a stale call's
                          // own late-arriving results check this before applying
   strip: [],            // filmstrip thumbnail paths
@@ -146,6 +151,10 @@ const VE = {
 let TXT_READY = false;
 let I18N_DICT = null;
 let LANG = "en";
+// Resolves once loadTexts() has landed, so a modal built entirely at open-time
+// (t() calls read once, never revisited) can wait for real strings instead of
+// risking raw i18n keys if it opens before the lazy i18n import has resolved.
+let textsReady = null;
 let applyTermsFn = (s) => s;
 
 // ---------------------------------------------------------------- i18n
@@ -1594,7 +1603,7 @@ async function addOverlay(kind) {
   } else if (kind === "frame") {
     op = { ...base, rect: snapRect({ x: 0, y: 0, w: VE.w, h: VE.h }), color: VE.ovColorDefault, thickness: Math.max(2, even(VE.h * 0.01)), style: "solid", opacity: 100 };
   } else if (kind === "text") {
-    op = { ...base, text: t("veOvTextDefault"), x: even(VE.w * 0.08), y: even(VE.h * 0.08), fontPx: Math.max(12, Math.round(VE.h / 16)), font: FONT_FILES[0][0], color: VE.ovColorDefault, plate: true };
+    op = { ...base, text: t("veOvTextDefault"), x: even(VE.w * 0.08), y: even(VE.h * 0.08), fontPx: Math.max(12, Math.round(VE.h / 16)), font: VE.ovFontDefault || FONT_FILES[0][0], color: VE.ovColorDefault, plate: true };
   } else if (kind === "pixelate") {
     op = { ...base, rect: centeredRect(0.35), blockPx: VE.ovPixelateBlockDefault ?? 16 };
   } else if (kind === "spotlight") {
@@ -2276,6 +2285,13 @@ async function startExport(toClipboard) {
   try {
     await invoke("export_video", { req: request });
     VE.dirty = false;
+    // A finished export means nothing here is "unfinished" any more -- clear the
+    // remembered row so reopening this recording later never offers to restore
+    // work that already made it out. Continued editing after this point simply
+    // gets a fresh row from the next autosave tick, same as any other edit.
+    if (VE.editStateKeepOn && VE.src) {
+      invoke("discard_edit_state", { kind: "video", target: VE.src }).catch(() => {});
+    }
     setProgress(100);
     if (toClipboard) {
       const clipOk = await invoke("copy_file_to_clipboard", { path: dest }).catch(() => false);
@@ -2715,6 +2731,11 @@ async function closeWindow() {
     const ok = await veConfirm(t("veCloseTitle"), t("veCloseUnsaved"), t("veDiscard"));
     if (!ok) return;
   }
+  // Best-effort: the periodic autosave (armEditStateAutosave) is the real safety
+  // net for a close this cannot intercept (the native titlebar button skips this
+  // function entirely); this just shaves off the last few seconds for the path
+  // that does go through it.
+  await saveEditStateNow();
   appWin.close().catch(() => {});
 }
 
@@ -2785,6 +2806,9 @@ function resetForNewSource() {
   // module-level default above.
   VE.audio = { sys: { mute: false, vol: 100 }, mic: { mute: true, vol: 100 } };
   syncAudioButtons();
+  // "edit" matches the Edit tab's markup default when veDefaultPanel was
+  // never touched, so a fresh install opens exactly where it does today.
+  showPanel(`ve-panel-${VE.defaultPanel || "edit"}`);
   // Probe/geometry were only ever set by applyProbe() on success, never
   // cleared here -- if probing the NEW source then fails (no ffmpeg, a
   // corrupt file, ...), applyProbe(null) skips its own assignment entirely
@@ -2807,6 +2831,100 @@ function resetForNewSource() {
   $("ve-export-status").textContent = "";
   $("ve-export-progress-row").classList.add("hidden");
   $("ve-export-saveas").classList.add("hidden");
+}
+
+// ---------------------------------------------------------------- edit state
+//
+// Remembers unfinished edits (cuts, overlays) across closing and reopening the
+// SAME recording, so an accidental close does not throw the work away. Keyed by
+// the source file's own (size, mtime) as of the load that produced these ops --
+// a changed file never matches, so this can never restore ops drawn against
+// content that is no longer there. The video editor is the only place this
+// applies today: the screenshot editor (see main.js) always opens a fresh
+// in-memory capture with no file path of its own to key on -- opening an
+// EXISTING file in either editor is a separate, not-yet-built feature that
+// would first give it one, and the Rust side already accepts kind="snip" for
+// exactly that day.
+let editStateTimer = null;
+
+function armEditStateAutosave() {
+  if (editStateTimer) { clearInterval(editStateTimer); editStateTimer = null; }
+  if (!VE.editStateKeepOn) return;
+  editStateTimer = setInterval(saveEditStateNow, Math.max(5, VE.editStateSaveSecs) * 1000);
+}
+
+async function saveEditStateNow() {
+  if (!VE.editStateKeepOn || !VE.src || !VE.ops.length || !VE.editStateSize) return;
+  try {
+    await invoke("save_edit_state", {
+      kind: "video",
+      target: VE.src,
+      size: VE.editStateSize,
+      mtime: VE.editStateMtime,
+      ops: JSON.stringify({ v: 1, ops: VE.ops }),
+    });
+  } catch (_) {
+    // Best-effort: a failed autosave tick is not worth bothering the user with,
+    // the next tick (or the periodic Rust-side sweep on a truly broken store)
+    // tries again.
+  }
+}
+
+// Called once per loadRecording(), after resetForNewSource() has already put
+// VE.ops back to empty -- so any ops this finds and applies are entirely the
+// restored ones, never mixed with anything from the source file's own probe.
+async function checkEditState(path, myGen) {
+  VE.editStateSize = 0;
+  VE.editStateMtime = 0;
+  if (!VE.editStateKeepOn) return;
+  let stat;
+  try {
+    stat = await invoke("stat_file", { path });
+  } catch (_) {
+    return; // no stat, no key to save or restore against this session
+  }
+  if (VE.loadGen !== myGen) return;
+  if (!Array.isArray(stat) || stat.length !== 2) return; // an unreadable stat leaves no key to save or restore against
+  const [size, mtime] = stat;
+  VE.editStateSize = size;
+  VE.editStateMtime = mtime;
+  let saved;
+  try {
+    saved = await invoke("load_edit_state", { kind: "video", target: path, size, mtime });
+  } catch (_) {
+    return;
+  }
+  if (VE.loadGen !== myGen || !saved) return;
+  let parsed;
+  try {
+    parsed = JSON.parse(saved);
+  } catch (_) {
+    parsed = null;
+  }
+  // Rust already filters an unreadable "v" before this ever arrives; this local
+  // check costs nothing and keeps this function correct even if that changes.
+  if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.ops)) return;
+  // The dialog's title, message and buttons are all t() calls made once at open
+  // time -- opening it before loadTexts() has landed would freeze raw i18n keys
+  // into a modal that never re-renders.
+  if (!TXT_READY) await textsReady;
+  if (VE.loadGen !== myGen) return;
+  const ok = await askRestoreEditState(parsed.ops.length);
+  if (VE.loadGen !== myGen) return;
+  if (ok) {
+    VE.ops = parsed.ops;
+    VE.floor = 0;
+    VE.redo = [];
+    afterOpsChanged();
+  } else {
+    invoke("discard_edit_state", { kind: "video", target: path }).catch(() => {});
+  }
+}
+
+function askRestoreEditState(opCount) {
+  return veConfirm(t("editStateRestoreTitle"), t("editStateRestoreMsg").replace("{count}", String(opCount)), t("editStateRestoreContinue"), {
+    cancelLabel: t("editStateRestoreDiscard"),
+  });
 }
 
 async function loadRecording(path) {
@@ -2857,6 +2975,8 @@ async function loadRecording(path) {
   afterOpsChanged();
   loadStrip();
   scheduleWaves();
+  await checkEditState(path, myGen);
+  armEditStateAutosave();
 }
 
 function applyProbe(probe) {
@@ -2939,6 +3059,10 @@ function applySettings(settings) {
   VE.undoMax = Number.isFinite(undoMax) && undoMax > 0 ? Math.round(undoMax) : UNDO_MAX_DEFAULT;
   const values = settings?.ui_values || {};
   VE.etaShow = settings?.ui_flags?.etaShow !== false;
+  VE.editStateKeepOn = settings?.ui_flags?.editStateKeep !== false;
+  const editStateSaveSecs = Number(values.editStateSaveSecs);
+  VE.editStateSaveSecs = Number.isFinite(editStateSaveSecs) && editStateSaveSecs > 0 ? editStateSaveSecs : 30;
+  armEditStateAutosave();
   const etaMinPct = Number(values.etaMinPct);
   VE.etaMinPct = Number.isFinite(etaMinPct) ? etaMinPct : 10;
   const etaMinSecs = Number(values.etaMinSecs);
@@ -2982,6 +3106,8 @@ function applySettings(settings) {
   const zoomMaxPct = Number(values.zoomMaxPct);
   VE.zoomMax = Number.isFinite(zoomMaxPct) && zoomMaxPct > 0 ? zoomMaxPct / 100 : PREVIEW_ZOOM_MAX;
   VE.ovColorDefault = HEX_RE.test(texts.veOvColor || "") ? texts.veOvColor : "#ffffff";
+  VE.ovFontDefault = FONT_FILES.some(([id]) => id === texts.veOvFont) ? texts.veOvFont : FONT_FILES[0][0];
+  VE.defaultPanel = ["edit", "overlays", "export"].includes(texts.veDefaultPanel) ? texts.veDefaultPanel : "edit";
   const pixelateBlock = Number(values.veOvPixelateBlock);
   VE.ovPixelateBlockDefault = Number.isFinite(pixelateBlock) && pixelateBlock > 0 ? Math.round(pixelateBlock) : 16;
   const spotlightDim = Number(values.veOvSpotlightDim);
@@ -3001,7 +3127,7 @@ function applySettings(settings) {
     settings = await invoke("get_settings");
     applySettings(settings);
   } catch (_) {}
-  loadTexts(settings).catch(() => {});
+  textsReady = loadTexts(settings).catch(() => {});
   renderSpeedSteps();
   renderScalePresets();
   // The recording is PULLED, not pushed: a push would race the webview's first

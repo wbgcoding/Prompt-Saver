@@ -2854,7 +2854,8 @@ fn db_conn_init_schema(conn: &Connection) -> bool {
              CREATE INDEX IF NOT EXISTS idx_copy_log_id ON copy_log(id);
              CREATE TABLE IF NOT EXISTS prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '');
              CREATE INDEX IF NOT EXISTS idx_pv_prompt ON prompt_versions(prompt_id);
-             CREATE TABLE IF NOT EXISTS clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);",
+             CREATE TABLE IF NOT EXISTS clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);
+             CREATE TABLE IF NOT EXISTS edit_state(id TEXT PRIMARY KEY, kind TEXT NOT NULL, target TEXT NOT NULL, size INTEGER NOT NULL, mtime INTEGER NOT NULL, ops TEXT NOT NULL, updated_at INTEGER NOT NULL);",
         )
         .is_err()
     {
@@ -6771,6 +6772,7 @@ async fn delete_all_data(app: AppHandle, state: State<'_, Db>) -> Result<(), Str
                     ("DELETE FROM copy_log", "copy_log"),               // copy history
                     ("DELETE FROM clip_inbox", "clip_inbox"),           // clipboard inbox
                     ("DELETE FROM trash", "trash"),                     // trashed prompts
+                    ("DELETE FROM edit_state", "edit_state"),           // unfinished editor work
                 ] {
                     if let Err(e) = c.execute(sql, []) {
                         incomplete = true;
@@ -11221,6 +11223,131 @@ async fn clip_inbox_clear(app: AppHandle) -> Result<(), String> {
         return Err("delete-incomplete".into());
     }
     Ok(())
+}
+
+// Unfinished screenshot/video editor work, remembered so closing the window by
+// accident does not lose it. One row per (kind, target) pair -- kind is "snip"
+// or "video", target the absolute source path, so `id` is simply their join and
+// an upsert never needs a separate existence check. `ops` is whatever JSON the
+// editor itself produced; this side never parses it, so a version embedded IN
+// that JSON (the caller's job, not this table's) is free to change without a
+// migration here. size/mtime are the file's own stat at save time -- load only
+// ever matches on the exact triple, so a changed source file simply misses
+// rather than restoring onto content it was never drawn against.
+// The (size, mtime) triple save_edit_state/load_edit_state key on -- a plain
+// stat, not opened or read, so this stays cheap enough to call on every open.
+#[tauri::command]
+async fn stat_file(path: String) -> Result<(i64, i64), String> {
+    let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    Ok((meta.len() as i64, mtime))
+}
+
+#[tauri::command]
+async fn save_edit_state(app: AppHandle, kind: String, target: String, size: i64, mtime: i64, ops: String) -> Result<(), String> {
+    let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
+    let id = format!("{kind}:{target}");
+    let updated_at = (now_ms() / 1000) as i64;
+    conn.execute(
+        "INSERT INTO edit_state(id, kind, target, size, mtime, ops, updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7)
+         ON CONFLICT(id) DO UPDATE SET size=excluded.size, mtime=excluded.mtime, ops=excluded.ops, updated_at=excluded.updated_at",
+        params![id, kind, target, size, mtime, ops, updated_at],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+#[tauri::command]
+async fn load_edit_state(app: AppHandle, kind: String, target: String, size: i64, mtime: i64) -> Result<Option<String>, String> {
+    let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
+    let id = format!("{kind}:{target}");
+    let ops = conn
+        .query_row(
+            "SELECT ops FROM edit_state WHERE id = ?1 AND size = ?2 AND mtime = ?3",
+            params![id, size, mtime],
+            |r| r.get::<_, String>(0),
+        )
+        .ok();
+    let Some(ops) = ops else { return Ok(None) };
+    // Malformed JSON, or a "v" this build does not recognise, must never reach the
+    // editor -- it would try to replay operations it cannot make sense of. Decided
+    // here rather than in JS, so there is exactly one place "usable" is defined;
+    // discarded silently to the caller (an empty editor is the safe outcome) but
+    // logged, so a real corruption pattern is still visible somewhere.
+    let is_known_version = edit_state_ops_version(&ops) == Some(1);
+    if !is_known_version {
+        append_crash_log(&format!("load_edit_state: discarding unreadable saved state for {target}"));
+        let _ = conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]);
+        return Ok(None);
+    }
+    Ok(Some(ops))
+}
+// A minimal sniff, not a full parse of every op inside -- this table's whole point
+// is staying opaque to the individual op shapes JS invents, it only ever needs to
+// know "can any of this be understood at all".
+fn edit_state_ops_version(ops: &str) -> Option<i64> {
+    serde_json::from_str::<serde_json::Value>(ops)
+        .ok()?
+        .get("v")?
+        .as_i64()
+}
+#[tauri::command]
+async fn discard_edit_state(app: AppHandle, kind: String, target: String) -> Result<(), String> {
+    let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
+    let id = format!("{kind}:{target}");
+    conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// Periodic cleanup for edit_state, run through the existing job scheduler rather
+// than a hand-rolled thread (same reasoning as recording-sweep above): a row
+// disappears once its own source file is gone -- deleted from the library, swept
+// out of the recordings folder, or moved to the "verworfen" folder and then aged
+// out of it -- without this needing its own hook into any of those three call
+// sites. keep_days = 0 means "never expire by age" (same convention as
+// trashRetentionDays), a missing file is removed on the next tick regardless.
+// `exists` is a parameter so a test can run this against paths that were never
+// meant to be real files on the runner's own disk.
+fn sweep_edit_state_conn(conn: &Connection, exists: impl Fn(&str) -> bool, keep_days: f64) -> usize {
+    let cutoff = (now_ms() / 1000) as i64 - (keep_days.max(0.0) * 86400.0) as i64;
+    let mut stmt = match conn.prepare("SELECT id, target, updated_at FROM edit_state") {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let rows: Vec<(String, String, i64)> = match stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))) {
+        Ok(it) => it.filter_map(|r| r.ok()).collect(),
+        Err(_) => return 0,
+    };
+    drop(stmt);
+    let mut removed = 0usize;
+    for (id, target, updated_at) in rows {
+        let gone = !exists(&target);
+        let expired = keep_days > 0.0 && updated_at < cutoff;
+        if gone || expired {
+            if conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]).is_ok() {
+                removed += 1;
+            }
+        }
+    }
+    removed
+}
+
+// Re-read every round, same as recording_sweep_interval, so a changed value takes
+// effect without a restart.
+fn edit_state_keep_days(app: &AppHandle) -> f64 {
+    app.try_state::<Db>()
+        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("editStateKeepDays").copied().unwrap_or(30.0))
+        .unwrap_or(30.0)
+        .max(0.0)
+}
+
+fn sweep_edit_state_tick(app: &AppHandle) {
+    let Some(conn) = db_conn(app) else { return };
+    sweep_edit_state_conn(&conn, |p| std::path::Path::new(p).exists(), edit_state_keep_days(app));
 }
 
 // Emergency purge: something sensitive (a password) ended up in the clipboard inbox
@@ -24044,6 +24171,17 @@ pub fn run() {
                 });
             }
 
+            // Remembered unfinished-edit rows for a file that is gone, or old enough
+            // to age out -- see sweep_edit_state_tick. A daily tick is plenty: unlike
+            // stale recording files these cost a few bytes each, so leaving one a
+            // little longer than strictly necessary is harmless.
+            {
+                let h = handle.clone();
+                scheduler::register_periodic("edit-state-sweep", Duration::from_secs(60), Duration::from_secs(86400), move || {
+                    sweep_edit_state_tick(&h);
+                });
+            }
+
             // Re-arm the app hotkey plus every prompt accelerator. Each
             // registration is a round trip to the main thread, so this runs on a
             // worker — the first paint never waits for it, however many prompts
@@ -24401,6 +24539,10 @@ pub fn run() {
             clip_inbox_dismiss,
             clip_inbox_clear,
             purge_clip_inbox_from_backups,
+            stat_file,
+            save_edit_state,
+            load_edit_state,
+            discard_edit_state,
             open_repo,
             set_ui_zoom,
             delete_all_data,
@@ -30398,16 +30540,18 @@ mod tests {
              CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);
              CREATE TABLE prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '');
              CREATE TABLE clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);
+             CREATE TABLE edit_state(id TEXT PRIMARY KEY, kind TEXT NOT NULL, target TEXT NOT NULL, size INTEGER NOT NULL, mtime INTEGER NOT NULL, ops TEXT NOT NULL, updated_at INTEGER NOT NULL);
              INSERT INTO prompts VALUES('a', 0, '{}');
              INSERT INTO trash VALUES('b', 0, '{}');
              INSERT INTO meta VALUES('settings', '{\"theme\":\"ocean\"}');
              INSERT INTO copy_log VALUES(1, 'a');
              INSERT INTO prompt_versions(prompt_id, ts, name, text) VALUES('a', 1, 'n', 't');
-             INSERT INTO clip_inbox(ts, text) VALUES(1, 'clip');",
+             INSERT INTO clip_inbox(ts, text) VALUES(1, 'clip');
+             INSERT INTO edit_state VALUES('snip:c', 'snip', 'c', 1, 1, '{}', 1);",
         )
         .unwrap();
         // Exactly the statements delete_all_data issues.
-        for table in ["prompt_versions", "copy_log", "clip_inbox", "trash"] {
+        for table in ["prompt_versions", "copy_log", "clip_inbox", "trash", "edit_state"] {
             conn.execute(&format!("DELETE FROM {table}"), []).unwrap();
         }
         conn.execute("DELETE FROM prompts", []).unwrap();
@@ -30419,7 +30563,112 @@ mod tests {
         assert_eq!(count("copy_log"), 0);
         assert_eq!(count("prompt_versions"), 0);
         assert_eq!(count("clip_inbox"), 0);
+        assert_eq!(count("edit_state"), 0);
         assert_eq!(count("meta"), 1, "settings must survive a data-only wipe");
+    }
+
+    fn edit_state_test_conn() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE edit_state(id TEXT PRIMARY KEY, kind TEXT NOT NULL, target TEXT NOT NULL, size INTEGER NOT NULL, mtime INTEGER NOT NULL, ops TEXT NOT NULL, updated_at INTEGER NOT NULL);",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn sweep_edit_state_removes_a_row_whose_target_is_gone() {
+        let conn = edit_state_test_conn();
+        let now = (now_ms() / 1000) as i64;
+        conn.execute(
+            "INSERT INTO edit_state VALUES('snip:c:\\gone.png', 'snip', 'c:\\gone.png', 1, 1, '{}', ?1)",
+            params![now],
+        )
+        .unwrap();
+        let removed = sweep_edit_state_conn(&conn, |_| false, 30.0);
+        assert_eq!(removed, 1);
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM edit_state", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn sweep_edit_state_keeps_a_fresh_row_whose_target_still_exists() {
+        let conn = edit_state_test_conn();
+        let now = (now_ms() / 1000) as i64;
+        conn.execute(
+            "INSERT INTO edit_state VALUES('snip:c:\\there.png', 'snip', 'c:\\there.png', 1, 1, '{}', ?1)",
+            params![now],
+        )
+        .unwrap();
+        let removed = sweep_edit_state_conn(&conn, |_| true, 30.0);
+        assert_eq!(removed, 0);
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM edit_state", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn sweep_edit_state_removes_a_row_older_than_keep_days() {
+        let conn = edit_state_test_conn();
+        let stale = (now_ms() / 1000) as i64 - 40 * 86400; // 40 days ago, past a 30-day keep
+        conn.execute(
+            "INSERT INTO edit_state VALUES('video:c:\\old.mp4', 'video', 'c:\\old.mp4', 1, 1, '{}', ?1)",
+            params![stale],
+        )
+        .unwrap();
+        let removed = sweep_edit_state_conn(&conn, |_| true, 30.0);
+        assert_eq!(removed, 1, "the file still exists, but the entry itself aged out");
+    }
+
+    #[test]
+    fn sweep_edit_state_zero_keep_days_means_forever() {
+        let conn = edit_state_test_conn();
+        let ancient = (now_ms() / 1000) as i64 - 3650 * 86400; // ten years ago
+        conn.execute(
+            "INSERT INTO edit_state VALUES('video:c:\\old.mp4', 'video', 'c:\\old.mp4', 1, 1, '{}', ?1)",
+            params![ancient],
+        )
+        .unwrap();
+        let removed = sweep_edit_state_conn(&conn, |_| true, 0.0);
+        assert_eq!(removed, 0, "0 keep-days means never expire by age, same as trashRetentionDays");
+    }
+
+    #[test]
+    fn edit_state_ops_version_reads_v_and_rejects_junk() {
+        assert_eq!(edit_state_ops_version("{\"v\":1,\"ops\":[]}"), Some(1));
+        assert_eq!(edit_state_ops_version("{\"v\":2,\"ops\":[]}"), Some(2));
+        assert_eq!(edit_state_ops_version("not json"), None, "corrupt JSON has no readable version");
+        assert_eq!(edit_state_ops_version("{\"ops\":[]}"), None, "missing v field is unreadable, not v0");
+        assert_eq!(edit_state_ops_version("{\"v\":\"one\"}"), None, "a non-numeric v is unreadable too");
+    }
+
+    #[test]
+    fn save_load_discard_edit_state_roundtrip_matches_only_on_the_exact_triple() {
+        let conn = edit_state_test_conn();
+        let id = "snip:c:\\shot.png";
+        conn.execute(
+            "INSERT INTO edit_state VALUES(?1, 'snip', 'c:\\shot.png', 100, 5000, '{\"v\":1,\"ops\":[]}', ?2)",
+            params![id, (now_ms() / 1000) as i64],
+        )
+        .unwrap();
+        let hit: Option<String> = conn
+            .query_row(
+                "SELECT ops FROM edit_state WHERE id = ?1 AND size = ?2 AND mtime = ?3",
+                params![id, 100i64, 5000i64],
+                |r| r.get(0),
+            )
+            .ok();
+        assert_eq!(hit.as_deref(), Some("{\"v\":1,\"ops\":[]}"), "an exact path/size/mtime match restores the saved ops");
+        let miss: Option<String> = conn
+            .query_row(
+                "SELECT ops FROM edit_state WHERE id = ?1 AND size = ?2 AND mtime = ?3",
+                params![id, 100i64, 9999i64],
+                |r| r.get(0),
+            )
+            .ok();
+        assert!(miss.is_none(), "a changed mtime must never restore onto a file the ops were not drawn against");
+        conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]).unwrap();
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM edit_state", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0, "discard removes the row outright");
     }
 
     #[test]
