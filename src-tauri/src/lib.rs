@@ -18280,6 +18280,32 @@ fn check_export_disk_space(dest_path: String, format: String, video_kbps: Option
     None
 }
 
+// The batch-export dialog's own version of the check above: the same
+// per-file estimate, summed over every selected recording instead of just
+// one, because a batch's real risk is running out of space partway through
+// the third or fourth file, not the first.
+#[cfg(windows)]
+#[tauri::command]
+fn check_export_disk_space_batch(dest_dir: String, format: String, video_kbps: Option<u32>, lossless_quality: bool, durations_ms: Vec<u64>) -> Option<ExportDiskWarning> {
+    let dest = std::path::Path::new(&dest_dir);
+    let free = free_space_bytes(dest).ok()?;
+    let needed: u64 = durations_ms
+        .iter()
+        .map(|d| {
+            let est = estimate_export_bytes(&format, video_kbps, lossless_quality, *d);
+            est.bytes.or(est.high_bytes).unwrap_or(0)
+        })
+        .sum();
+    let needed_with_margin = needed + needed / 5;
+    export_disk_warning(drive_label(dest), free, needed_with_margin)
+}
+#[cfg(not(windows))]
+#[tauri::command]
+fn check_export_disk_space_batch(dest_dir: String, format: String, video_kbps: Option<u32>, lossless_quality: bool, durations_ms: Vec<u64>) -> Option<ExportDiskWarning> {
+    let _ = (dest_dir, format, video_kbps, lossless_quality, durations_ms);
+    None
+}
+
 #[cfg(windows)]
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
@@ -19131,6 +19157,12 @@ enum OpPhase {
 
 #[derive(Clone, Debug)]
 struct BgOp {
+    // Feature grouping ("export", "convert", "ffmpeg-download", ...) shown to
+    // the frontend for its label/icon/cancel-command lookup. Distinct from the
+    // registry's own key (see bg_ops() below), which is unique PER JOB so a
+    // batch of same-kind jobs (several exports at once) each get their own
+    // row instead of overwriting one shared "export" entry.
+    kind: String,
     phase: OpPhase,
     target: Option<String>, // destination file/folder, for the popover's "open folder"
     started_at_ms: u64,
@@ -19138,8 +19170,8 @@ struct BgOp {
 }
 
 impl BgOp {
-    fn fresh() -> Self {
-        Self { phase: OpPhase::Indeterminate, target: None, started_at_ms: now_ms(), finished_at_ms: None }
+    fn fresh(kind: &str) -> Self {
+        Self { kind: kind.to_string(), phase: OpPhase::Indeterminate, target: None, started_at_ms: now_ms(), finished_at_ms: None }
     }
     fn state_str(&self) -> &'static str {
         match self.phase {
@@ -19158,9 +19190,13 @@ impl BgOp {
 }
 
 // What the frontend actually reads (`list_bg_ops`) -- OpPhase itself has no
-// serde impl, so this is the flattened, JSON-friendly shape.
+// serde impl, so this is the flattened, JSON-friendly shape. `id` is the
+// registry's own unique key (see bg_ops() below); `kind` is the feature
+// grouping ("export", "convert", "ffmpeg-download", ...) the frontend already
+// keys its label/cancel-command lookup on.
 #[derive(Clone, Debug, serde::Serialize)]
 struct BgOpInfo {
+    id: String,
     kind: String,
     target: Option<String>,
     state: String,
@@ -19236,17 +19272,17 @@ fn bg_done_keep_min(state_db: &State<Db>) -> f64 {
 // directly (see export_video_blocking's caller), so a job keeps reporting
 // correctly even once the window that started it is gone -- proved with no
 // window at all by export_progress_survives_a_closed_window below.
-fn record_bg_op(op: &str, state: &str, value: Option<u32>, target: Option<String>, keep_min: f64) -> (&'static str, Option<u8>) {
+fn record_bg_op(id: &str, kind: &str, state: &str, value: Option<u32>, target: Option<String>, keep_min: f64) -> (&'static str, Option<u8>) {
     let mut ops = bg_ops().lock().unwrap_or_else(|e| e.into_inner());
     match state {
         "done" => {
-            if let Some(existing) = ops.get_mut(op) {
+            if let Some(existing) = ops.get_mut(id) {
                 existing.phase = OpPhase::Done;
                 existing.finished_at_ms = Some(now_ms());
             }
         }
         "error" => {
-            let entry = ops.entry(op.to_string()).or_insert_with(BgOp::fresh);
+            let entry = ops.entry(id.to_string()).or_insert_with(|| BgOp::fresh(kind));
             entry.phase = OpPhase::Error;
             entry.finished_at_ms = Some(now_ms());
             if target.is_some() {
@@ -19254,7 +19290,7 @@ fn record_bg_op(op: &str, state: &str, value: Option<u32>, target: Option<String
             }
         }
         "indeterminate" => {
-            let entry = ops.entry(op.to_string()).or_insert_with(BgOp::fresh);
+            let entry = ops.entry(id.to_string()).or_insert_with(|| BgOp::fresh(kind));
             entry.phase = OpPhase::Indeterminate;
             entry.finished_at_ms = None;
             if target.is_some() {
@@ -19262,7 +19298,7 @@ fn record_bg_op(op: &str, state: &str, value: Option<u32>, target: Option<String
             }
         }
         _ => {
-            let entry = ops.entry(op.to_string()).or_insert_with(BgOp::fresh);
+            let entry = ops.entry(id.to_string()).or_insert_with(|| BgOp::fresh(kind));
             entry.phase = OpPhase::Running(value.unwrap_or(0).min(100) as u8);
             entry.finished_at_ms = None;
             if target.is_some() {
@@ -19279,8 +19315,9 @@ fn list_bg_ops_impl(keep_min: f64) -> Vec<BgOpInfo> {
     prune_finished_ops(&mut ops, keep_min);
     let mut list: Vec<BgOpInfo> = ops
         .iter()
-        .map(|(kind, o)| BgOpInfo {
-            kind: kind.clone(),
+        .map(|(id, o)| BgOpInfo {
+            id: id.clone(),
+            kind: o.kind.clone(),
             target: o.target.clone(),
             state: o.state_str().to_string(),
             pct: o.pct(),
@@ -19345,16 +19382,21 @@ fn apply_taskbar_state(_app: &AppHandle, _state: &str, _value: Option<u8>) {}
 // going through this command, so their own reporting survives a closed window.
 #[tauri::command]
 fn set_taskbar_progress(app: AppHandle, op: String, state: String, value: Option<u32>, target: Option<String>) {
-    push_bg_op(&app, &op, &state, value, target);
+    // This command's callers (backup, import, ...) only ever run one instance
+    // at a time, so the job's id and its kind are the same string -- unlike
+    // export_video's own push_bg_op calls below, which give a batch of exports
+    // one id each while keeping "export" as their shared kind.
+    push_bg_op(&app, &op, &op, &state, value, target);
 }
 
 // Updates the shared registry AND the real taskbar icon in one call --
 // exactly what the set_taskbar_progress command above does, but usable from
 // anywhere in Rust that already holds an AppHandle, with no window or
-// command-invocation round trip required.
-fn push_bg_op(app: &AppHandle, op: &str, state: &str, value: Option<u32>, target: Option<String>) {
+// command-invocation round trip required. `id` is this job's own unique
+// registry key; `kind` is the feature grouping shown to the frontend.
+fn push_bg_op(app: &AppHandle, id: &str, kind: &str, state: &str, value: Option<u32>, target: Option<String>) {
     let keep_min = app.try_state::<Db>().map(|s| bg_done_keep_min(&s)).unwrap_or(10.0);
-    let (agg_state, agg_value) = record_bg_op(op, state, value, target, keep_min);
+    let (agg_state, agg_value) = record_bg_op(id, kind, state, value, target, keep_min);
     // One shared broadcast point for every state change (running tick, done,
     // error) -- the main window's header popover listens for this instead of
     // polling, so a job finishing is reflected there even when the window that
@@ -19392,7 +19434,7 @@ fn list_bg_ops(state_db: State<Db>) -> Vec<BgOpInfo> {
 // never by trying to abort it here.
 #[tauri::command]
 fn cancel_all_bg_ops() {
-    cancel_export();
+    cancel_all_exports();
     cancel_recording_convert();
     cancel_ffmpeg_download();
 }
@@ -19587,12 +19629,12 @@ fn ffmpeg_install_dir(app: &AppHandle) -> PathBuf {
 #[tauri::command]
 async fn download_ffmpeg(app: AppHandle) -> Result<String, String> {
     FFMPEG_DOWNLOAD_CANCEL.store(false, Ordering::SeqCst);
-    push_bg_op(&app, "ffmpeg-download", "indeterminate", None, None);
+    push_bg_op(&app, "ffmpeg-download", "ffmpeg-download", "indeterminate", None, None);
     let app_done = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || download_ffmpeg_blocking(&app))
         .await
         .map_err(|e| e.to_string())?;
-    push_bg_op(&app_done, "ffmpeg-download", if result.is_ok() { "done" } else { "error" }, None, None);
+    push_bg_op(&app_done, "ffmpeg-download", "ffmpeg-download", if result.is_ok() { "done" } else { "error" }, None, None);
     result
 }
 
@@ -19649,7 +19691,7 @@ fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String> {
             serde_json::json!({ "downloaded": bytes.len() as u64, "total": total }),
         );
         let pct = if total > 0 { Some(((bytes.len() as u64 * 100) / total) as u32) } else { None };
-        push_bg_op(app, "ffmpeg-download", if pct.is_some() { "running" } else { "indeterminate" }, pct, None);
+        push_bg_op(app, "ffmpeg-download", "ffmpeg-download", if pct.is_some() { "running" } else { "indeterminate" }, pct, None);
     }
     if FFMPEG_DOWNLOAD_CANCEL.load(Ordering::SeqCst) {
         return Err("cancelled".to_string());
@@ -19817,7 +19859,7 @@ async fn convert_recording(app: AppHandle, src_path: String, format: String, los
     }
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     REC_CONVERT_CANCEL.store(false, Ordering::SeqCst);
-    push_bg_op(&app, "convert", "indeterminate", None, Some(src_path.clone()));
+    push_bg_op(&app, "convert", "convert", "indeterminate", None, Some(src_path.clone()));
     let app_done = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         convert_recording_blocking(&ffmpeg, &src, &format, lossless, |ms| {
@@ -19826,7 +19868,7 @@ async fn convert_recording(app: AppHandle, src_path: String, format: String, los
     })
     .await
     .map_err(|e| e.to_string())?;
-    push_bg_op(&app_done, "convert", if result.is_ok() { "done" } else { "error" }, None, None);
+    push_bg_op(&app_done, "convert", "convert", if result.is_ok() { "done" } else { "error" }, None, None);
     result
 }
 
@@ -20563,22 +20605,63 @@ struct ExportRequest {
     total_ms: u64,
 }
 
-// A plain shared AtomicBool let a second export un-cancel a first one --
-// closeWindow() fires cancel_export() without awaiting it and closes the
-// window right away, so the still-running first export's blocking task can
-// outlive the window; reopening the editor and exporting again used to reset
-// the flag to false out from under it, letting both encoders race to replace
-// the same destination. Scoping the flag to a generation number fixes this:
-// each export owns the generation it was handed at start, cancel_export()
-// only ever records "cancel whichever generation is current right now", and
-// a later export's higher generation number can never match an earlier
-// export's cancellation check.
+// Each export owns the generation number it was handed at start. Cancelling
+// used to store a single "cancel whichever generation is current" value
+// (a plain AtomicU64) -- correct as long as at most one export ever ran at
+// once. A batch export can run several generations at the same time
+// (exportParallel, 1 to 4), so a single slot is no longer enough: two jobs
+// running together would fight over it, and cancelling one would either miss
+// or wrongly cancel the other. A set of cancelled generations fixes this --
+// each generation is cancelled (or not) independently, and a finished job
+// removes its own entry so the set never grows unbounded.
 static VIDEO_EXPORT_GEN: AtomicU64 = AtomicU64::new(0);
-static VIDEO_EXPORT_CANCEL_AT: AtomicU64 = AtomicU64::new(0);
 
+fn video_export_cancelled() -> &'static Mutex<std::collections::HashSet<u64>> {
+    use std::sync::OnceLock;
+    static SET: OnceLock<Mutex<std::collections::HashSet<u64>>> = OnceLock::new();
+    SET.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
+}
+
+// The single-editor "Cancel" button: no generation of its own to name, so it
+// cancels whichever one is current right now -- unchanged behaviour from
+// before the set, and still correct because the editor only ever has one
+// export of its own in flight.
 #[tauri::command]
 fn cancel_export() {
-    VIDEO_EXPORT_CANCEL_AT.store(VIDEO_EXPORT_GEN.load(Ordering::SeqCst), Ordering::SeqCst);
+    let gen = VIDEO_EXPORT_GEN.load(Ordering::SeqCst);
+    video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).insert(gen);
+}
+
+// The batch-export list's per-row cancel button: targets one specific
+// job by the generation number embedded in its bg-ops id ("export-<gen>"),
+// leaving every other job in the batch running.
+#[tauri::command]
+fn cancel_export_job(generation: u64) {
+    video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).insert(generation);
+}
+
+// Global cancel (app quit, cancel_all_bg_ops below) must stop every export
+// currently in flight, not just the most recent one -- unlike cancel_export()
+// above, whose "whichever is current" is correct ONLY because the editor
+// never has more than one export of its own running. A batch can have
+// several generations running at once (exportParallel, 1 to 4); scanning the
+// bg-ops registry for every still-running "export" row is how every one of
+// them gets cancelled instead of just the last one, which is what the app-quit
+// path actually needs. The current generation is also inserted directly, in
+// case a brand new export's own bg-ops row has not been written yet.
+fn cancel_all_exports() {
+    let running_gens: Vec<u64> = bg_ops()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+        .filter(|(_, op)| op.kind == "export" && matches!(op.phase, OpPhase::Running(_) | OpPhase::Indeterminate))
+        .filter_map(|(id, _)| id.strip_prefix("export-").and_then(|s| s.parse::<u64>().ok()))
+        .collect();
+    let mut cancelled = video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner());
+    cancelled.insert(VIDEO_EXPORT_GEN.load(Ordering::SeqCst));
+    for gen in running_gens {
+        cancelled.insert(gen);
+    }
 }
 
 // Progress reuses "recording-convert-progress" / ConvertProgressPayload --
@@ -20600,26 +20683,188 @@ async fn export_video(app: AppHandle, req: ExportRequest) -> Result<String, Stri
     let dst = PathBuf::from(&req.dest_path);
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    // Own registry key per job (not just "export"), so a batch of exports
+    // running together each show as their own row instead of overwriting one
+    // shared entry -- "export" itself stays the kind the frontend groups
+    // and labels by.
+    let id = format!("export-{my_gen}");
     let target = req.dest_path.clone();
     let total_ms = req.total_ms.max(1);
     let progress_app = app.clone();
     let progress_target = target.clone();
-    push_bg_op(&app, "export", "running", Some(0), Some(target.clone()));
+    let progress_id = id.clone();
+    push_bg_op(&app, &id, "export", "running", Some(0), Some(target.clone()));
     let result = tauri::async_runtime::spawn_blocking(move || {
         export_video_blocking(&ffmpeg, &src, &dst, &req, my_gen, move |ms| {
             let _ = progress_app.emit("recording-convert-progress", ConvertProgressPayload { ms });
             let pct = ((ms as u64 * 100) / total_ms).min(100) as u32;
-            push_bg_op(&progress_app, "export", "running", Some(pct), Some(progress_target.clone()));
+            push_bg_op(&progress_app, &progress_id, "export", "running", Some(pct), Some(progress_target.clone()));
         })
     })
     .await
     .map_err(|e| e.to_string())?;
     match &result {
-        Ok(_) => push_bg_op(&app, "export", "done", None, None),
-        Err(e) if e == "cancelled" => push_bg_op(&app, "export", "done", None, None),
-        Err(_) => push_bg_op(&app, "export", "error", None, None),
+        Ok(_) => push_bg_op(&app, &id, "export", "done", None, None),
+        Err(e) if e == "cancelled" => push_bg_op(&app, &id, "export", "done", None, None),
+        Err(_) => push_bg_op(&app, &id, "export", "error", None, None),
     }
+    video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).remove(&my_gen);
     result
+}
+
+// ---------- Batch export: several whole recordings, one dialog ----------
+
+#[derive(serde::Deserialize)]
+struct BatchExportItem {
+    src_path: String,
+    dest_path: String,
+    total_ms: u64,
+}
+
+#[derive(serde::Serialize)]
+struct BatchExportResult {
+    ok: usize,
+    failed: usize,
+}
+
+// One batch item's whole outcome: missing source is rejected the same way
+// export_video itself rejects it, otherwise it runs through the exact same
+// export_video_blocking every single export uses. AppHandle-free like that
+// function, on purpose -- a batch of several recordings needs a real, fast,
+// deterministic test proving three in gives three files out and one
+// deliberately broken source does not stop the other two, with no Tauri app
+// needed, and this is the one place both that test and the real async
+// command call into, so neither can drift from the other.
+// `my_gen` is reserved by the caller (VIDEO_EXPORT_GEN.fetch_add), not by this
+// function, so a batch caller can build its bg-ops id and register the
+// "running" row before the job even starts -- same reasoning as
+// export_video_blocking's own `my_gen` parameter.
+#[allow(clippy::too_many_arguments)]
+fn run_batch_job_blocking(
+    ffmpeg: &Path, src_path: &str, dest_path: &str, total_ms: u64, format: &str, lossless_quality: bool, video_kbps: Option<u32>, my_gen: u64,
+    on_progress: impl FnMut(u32),
+) -> Result<String, String> {
+    let src = PathBuf::from(src_path);
+    if !src.is_file() {
+        return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
+    }
+    let dst = PathBuf::from(dest_path);
+    let req = ExportRequest {
+        src_path: src_path.to_string(),
+        dest_path: dest_path.to_string(),
+        filter_chain: None,
+        audio_map: None,
+        lossless_copy: false,
+        lossless_quality,
+        format: format.to_string(),
+        video_kbps,
+        trim_start_ms: None,
+        trim_end_ms: None,
+        total_ms: total_ms.max(1),
+    };
+    let result = export_video_blocking(ffmpeg, &src, &dst, &req, my_gen, on_progress);
+    video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).remove(&my_gen);
+    result
+}
+
+type ExportJoinHandle = tauri::async_runtime::JoinHandle<Result<String, String>>;
+
+// Awaits one in-flight export and records its outcome in the bg-ops registry
+// -- pulled out of export_recordings_batch below so the concurrency-window
+// loop and the final drain (after the last item is spawned) share the exact
+// same bookkeeping instead of two near-identical copies.
+async fn await_batch_export(handle: ExportJoinHandle, id: String, generation: u64, app: AppHandle) -> Result<bool, String> {
+    let res = handle.await.map_err(|e| e.to_string())?;
+    let ok = match &res {
+        Ok(_) => {
+            push_bg_op(&app, &id, "export", "done", None, None);
+            true
+        }
+        Err(_) => {
+            push_bg_op(&app, &id, "export", "error", None, None);
+            false
+        }
+    };
+    video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).remove(&generation);
+    Ok(ok)
+}
+
+// One format/quality/target choice (from the one export dialog the batch
+// opens up front instead of one per file) applied to every selected
+// recording. Runs them with a concurrency window (exportParallel, 1 to 4,
+// default 1) rather than all at once -- ffmpeg is single-threaded-decode-bound
+// enough that four truly parallel encodes already make a normal machine
+// unpleasant to use. A source file that fails to open, or an encode that
+// fails partway, only counts against that one file -- every other job in the
+// batch still runs; one bad recording must never take the rest of the batch
+// down with it.
+#[tauri::command]
+async fn export_recordings_batch(
+    app: AppHandle,
+    items: Vec<BatchExportItem>,
+    format: String,
+    lossless_quality: bool,
+    video_kbps: Option<u32>,
+) -> Result<BatchExportResult, String> {
+    if !matches!(format.as_str(), "mp4" | "webm" | "gif" | "avi" | "mov" | "mkv" | "webpanim" | "apng") {
+        return Err("unsupported format".to_string());
+    }
+    let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
+    let parallel = app
+        .try_state::<Db>()
+        .map(|s| {
+            s.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .settings
+                .ui_values
+                .get("exportParallel")
+                .copied()
+                .unwrap_or(1.0)
+                .clamp(1.0, 4.0) as usize
+        })
+        .unwrap_or(1)
+        .max(1);
+
+    let mut ok = 0usize;
+    let mut failed = 0usize;
+    let mut in_flight: std::collections::VecDeque<(ExportJoinHandle, String, u64, AppHandle)> = std::collections::VecDeque::new();
+
+    for item in items {
+        if in_flight.len() >= parallel {
+            let (handle, id, generation, job_app) = in_flight.pop_front().unwrap();
+            if await_batch_export(handle, id, generation, job_app).await? { ok += 1 } else { failed += 1 }
+        }
+        if !PathBuf::from(&item.src_path).is_file() {
+            failed += 1;
+            continue;
+        }
+        // Reserved up front (not inside run_batch_job_blocking) so this
+        // command's own bg-ops "running" row appears the instant the job is
+        // queued, before its spawn_blocking thread is even scheduled.
+        let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        let id = format!("export-{my_gen}");
+        let target = item.dest_path.clone();
+        let total_ms = item.total_ms.max(1);
+        let ffmpeg_job = ffmpeg.clone();
+        let src_path = item.src_path.clone();
+        let dest_path = item.dest_path.clone();
+        let format_job = format.clone();
+        let progress_app = app.clone();
+        let progress_target = target.clone();
+        let progress_id = id.clone();
+        push_bg_op(&app, &id, "export", "running", Some(0), Some(target));
+        let handle = tauri::async_runtime::spawn_blocking(move || {
+            run_batch_job_blocking(&ffmpeg_job, &src_path, &dest_path, total_ms, &format_job, lossless_quality, video_kbps, my_gen, move |ms| {
+                let pct = ((ms as u64 * 100) / total_ms).min(100) as u32;
+                push_bg_op(&progress_app, &progress_id, "export", "running", Some(pct), Some(progress_target.clone()));
+            })
+        });
+        in_flight.push_back((handle, id, my_gen, app.clone()));
+    }
+    while let Some((handle, id, generation, job_app)) = in_flight.pop_front() {
+        if await_batch_export(handle, id, generation, job_app).await? { ok += 1 } else { failed += 1 }
+    }
+    Ok(BatchExportResult { ok, failed })
 }
 
 // ---------- Export size estimate: "roughly this big" in the format's own hint ----------
@@ -20791,7 +21036,7 @@ fn export_video_blocking(
             _ => unreachable!(),
         }
     }
-    let is_cancelled = || VIDEO_EXPORT_CANCEL_AT.load(Ordering::SeqCst) == my_gen;
+    let is_cancelled = || video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).contains(&my_gen);
     let staged = run_ffmpeg_to_staged(ffmpeg, src, dst, &input_args, &output_args, is_cancelled, &mut on_progress)?;
     // dest_path is the frontend's deterministic "<stem>-edit.<ext>" guess
     // -- exporting the same source in the same format twice must not silently
@@ -23792,6 +24037,7 @@ pub fn run() {
             switch_recording_target,
             check_recording_disk_space,
             check_export_disk_space,
+            check_export_disk_space_batch,
             pause_recording,
             resume_recording,
             stop_recording,
@@ -23809,8 +24055,10 @@ pub fn run() {
             generate_waveform_peaks,
             extract_still_frame,
             export_video,
+            export_recordings_batch,
             estimate_export_size,
             cancel_export,
+            cancel_export_job,
             save_recording_as,
             pick_export_dest,
             save_recording_now,
@@ -24977,7 +25225,7 @@ mod tests {
     // ---- taskbar progress: the pure aggregation state machine, no real window ----
 
     fn bg_op(phase: OpPhase) -> BgOp {
-        BgOp { phase, target: None, started_at_ms: now_ms(), finished_at_ms: None }
+        BgOp { kind: "test".to_string(), phase, target: None, started_at_ms: now_ms(), finished_at_ms: None }
     }
 
     #[test]
@@ -25033,19 +25281,29 @@ mod tests {
 
     // ---- background operations: the shared registry behind 386 and 397 ----
 
+    // Serializes every test below that reads or writes the process-global
+    // bg_ops() registry against each other -- cargo test runs tests on
+    // separate threads by default, and bg_ops_running_count() in particular
+    // counts every entry in the map regardless of which test put it there, so
+    // two of these tests racing would inflate each other's counts (same
+    // reasoning as REC_CONVERT_TEST_LOCK above).
+    static BG_OPS_TEST_LOCK: Mutex<()> = Mutex::new(());
+
     #[test]
     fn record_bg_op_reports_running_then_done_and_keeps_the_done_entry_briefly() {
+        let _guard = BG_OPS_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let op = format!("test-record-{}", std::process::id());
-        record_bg_op(&op, "running", Some(10), Some("C:\\out\\x.mp4".to_string()), 10.0);
+        record_bg_op(&op, "export", "running", Some(10), Some("C:\\out\\x.mp4".to_string()), 10.0);
         let list = list_bg_ops_impl(10.0);
-        let row = list.iter().find(|o| o.kind == op).expect("running job must be listed");
+        let row = list.iter().find(|o| o.id == op).expect("running job must be listed");
+        assert_eq!(row.kind, "export");
         assert_eq!(row.state, "running");
         assert_eq!(row.pct, Some(10));
         assert_eq!(row.target.as_deref(), Some("C:\\out\\x.mp4"));
 
-        record_bg_op(&op, "done", None, None, 10.0);
+        record_bg_op(&op, "export", "done", None, None, 10.0);
         let list = list_bg_ops_impl(10.0);
-        let row = list.iter().find(|o| o.kind == op).expect("a just-finished job stays listed");
+        let row = list.iter().find(|o| o.id == op).expect("a just-finished job stays listed");
         assert_eq!(row.state, "done");
         assert!(row.finished_at_ms.is_some());
         // A "done" call with no target must not blank out the one already recorded.
@@ -25054,12 +25312,36 @@ mod tests {
         bg_ops().lock().unwrap_or_else(|e| e.into_inner()).remove(&op);
     }
 
+    // A batch export gives each file its own registry key while sharing the
+    // "export" kind -- proves the fix directly, since keying by kind alone
+    // would have both calls share the single key "export" and the second
+    // would overwrite the first instead of the list showing two rows.
+    #[test]
+    fn record_bg_op_keeps_two_same_kind_jobs_as_separate_rows() {
+        let _guard = BG_OPS_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let id_a = format!("test-batch-a-{}", std::process::id());
+        let id_b = format!("test-batch-b-{}", std::process::id());
+        record_bg_op(&id_a, "export", "running", Some(10), Some("C:\\out\\a.mp4".to_string()), 10.0);
+        record_bg_op(&id_b, "export", "running", Some(40), Some("C:\\out\\b.mp4".to_string()), 10.0);
+        let list = list_bg_ops_impl(10.0);
+        let row_a = list.iter().find(|o| o.id == id_a).expect("first batch job must be listed");
+        let row_b = list.iter().find(|o| o.id == id_b).expect("second batch job must still be listed");
+        assert_eq!(row_a.kind, "export");
+        assert_eq!(row_b.kind, "export");
+        assert_eq!(row_a.pct, Some(10), "the second job must not overwrite the first's progress");
+        assert_eq!(row_b.pct, Some(40));
+
+        let mut ops = bg_ops().lock().unwrap_or_else(|e| e.into_inner());
+        ops.remove(&id_a);
+        ops.remove(&id_b);
+    }
+
     #[test]
     fn prune_finished_ops_drops_a_done_job_past_its_keep_window() {
         let mut ops = HashMap::new();
         ops.insert(
             "old-export".to_string(),
-            BgOp { phase: OpPhase::Done, target: None, started_at_ms: 0, finished_at_ms: Some(0) },
+            BgOp { kind: "export".to_string(), phase: OpPhase::Done, target: None, started_at_ms: 0, finished_at_ms: Some(0) },
         );
         prune_finished_ops(&mut ops, 10.0); // 0ms is far more than 10 minutes ago
         assert!(ops.is_empty(), "a long-finished job must be swept away");
@@ -25067,14 +25349,15 @@ mod tests {
 
     #[test]
     fn bg_ops_running_count_ignores_done_and_error_entries() {
+        let _guard = BG_OPS_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let a = format!("test-count-a-{}", std::process::id());
         let b = format!("test-count-b-{}", std::process::id());
         let before = bg_ops_running_count();
-        record_bg_op(&a, "running", Some(1), None, 10.0);
-        record_bg_op(&b, "error", None, None, 10.0);
+        record_bg_op(&a, "export", "running", Some(1), None, 10.0);
+        record_bg_op(&b, "export", "error", None, None, 10.0);
         // Only `a` (still running) should raise the count; `b` already failed.
         assert_eq!(bg_ops_running_count(), before + 1);
-        record_bg_op(&a, "done", None, None, 10.0);
+        record_bg_op(&a, "export", "done", None, None, 10.0);
         assert_eq!(bg_ops_running_count(), before);
         let mut ops = bg_ops().lock().unwrap_or_else(|e| e.into_inner());
         ops.remove(&a);
@@ -26272,25 +26555,128 @@ mod tests {
         let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(150));
-            VIDEO_EXPORT_CANCEL_AT.store(my_gen, Ordering::SeqCst);
+            video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).insert(my_gen);
         });
         let result = export_video_blocking(&ffmpeg, &src, &dest, &req, my_gen, |_| {});
         assert_eq!(result, Err("cancelled".to_string()));
         assert!(!dest.exists(), "a cancelled export must leave no destination file");
+        video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).remove(&my_gen);
         let _ = fs::remove_dir_all(&dir);
     }
 
     // A second export's generation must survive a first export's later
-    // cancellation -- the whole point of scoping the cancel flag to a
-    // generation number instead of a shared bool.
+    // cancellation -- the whole point of scoping cancellation to a set of
+    // generation numbers instead of a single shared slot. Also proves two
+    // generations can be cancelled independently of each other, which a
+    // batch export (several generations running at once) relies on.
     #[test]
     fn export_video_cancelling_an_earlier_generation_does_not_cancel_a_later_one() {
         let gen_a = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
         let gen_b = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
-        VIDEO_EXPORT_CANCEL_AT.store(gen_a, Ordering::SeqCst);
+        video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).insert(gen_a);
         assert!(gen_a != gen_b);
-        let is_cancelled_b = || VIDEO_EXPORT_CANCEL_AT.load(Ordering::SeqCst) == gen_b;
+        let is_cancelled_b = || video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).contains(&gen_b);
         assert!(!is_cancelled_b(), "an older generation's cancellation must not affect a newer one");
+        video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).remove(&gen_a);
+    }
+
+    // cancel_all_bg_ops used to call plain cancel_export(), which only ever
+    // cancels the single latest generation -- correct for the single-editor
+    // button, wrong for a batch with several generations running at once
+    // (exportParallel > 1). Proves the fix: two concurrently "running" export
+    // rows must BOTH end up cancelled.
+    #[test]
+    fn cancel_all_exports_cancels_every_running_generation_not_just_the_latest() {
+        let _guard = BG_OPS_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let gen_a = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        let gen_b = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        let id_a = format!("export-{gen_a}");
+        let id_b = format!("export-{gen_b}");
+        record_bg_op(&id_a, "export", "running", Some(10), None, 10.0);
+        record_bg_op(&id_b, "export", "running", Some(20), None, 10.0);
+
+        cancel_all_exports();
+
+        let cancelled = video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner());
+        assert!(cancelled.contains(&gen_a), "the older of two concurrent generations must be cancelled too");
+        assert!(cancelled.contains(&gen_b), "the newer generation must be cancelled");
+        drop(cancelled);
+
+        video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).remove(&gen_a);
+        video_export_cancelled().lock().unwrap_or_else(|e| e.into_inner()).remove(&gen_b);
+        let mut ops = bg_ops().lock().unwrap_or_else(|e| e.into_inner());
+        ops.remove(&id_a);
+        ops.remove(&id_b);
+    }
+
+    // Three recordings selected for a batch export, run one by one through
+    // run_batch_job_blocking exactly as export_recordings_batch itself does
+    // per item -- all three destination files must exist.
+    #[test]
+    fn batch_export_runs_every_job_and_produces_every_file() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-batchtest-ok-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let srcs = [
+            make_test_mp4(&ffmpeg, &dir, "src-a.mp4", 1, "64x48"),
+            make_test_mp4(&ffmpeg, &dir, "src-b.mp4", 1, "64x48"),
+            make_test_mp4(&ffmpeg, &dir, "src-c.mp4", 1, "64x48"),
+        ];
+        let mut ok = 0usize;
+        for (i, src) in srcs.iter().enumerate() {
+            let dest = dir.join(format!("out-{i}.mp4"));
+            let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+            let result = run_batch_job_blocking(
+                &ffmpeg,
+                &src.to_string_lossy(),
+                &dest.to_string_lossy(),
+                1000,
+                "mp4",
+                false,
+                Some(2000),
+                my_gen,
+                |_| {},
+            );
+            match result {
+                Ok(_) => {
+                    ok += 1;
+                    assert!(dest.exists(), "job {i} must produce its destination file");
+                }
+                Err(e) => panic!("job {i} unexpectedly failed: {e}"),
+            }
+        }
+        assert_eq!(ok, 3);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // One deliberately broken source must not stop the batch -- the other
+    // two jobs still run and produce their files, and the batch's own
+    // ok/failed count reflects exactly the one failure.
+    #[test]
+    fn batch_export_one_broken_source_does_not_stop_the_others() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-batchtest-broken-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let broken = dir.join("broken.mp4");
+        fs::write(&broken, b"not a real video file").unwrap();
+        let srcs = [make_test_mp4(&ffmpeg, &dir, "src-a.mp4", 1, "64x48"), broken, make_test_mp4(&ffmpeg, &dir, "src-c.mp4", 1, "64x48")];
+        let mut ok = 0usize;
+        let mut failed = 0usize;
+        for (i, src) in srcs.iter().enumerate() {
+            let dest = dir.join(format!("out-{i}.mp4"));
+            let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+            let result = run_batch_job_blocking(&ffmpeg, &src.to_string_lossy(), &dest.to_string_lossy(), 1000, "mp4", false, Some(2000), my_gen, |_| {});
+            match result {
+                Ok(_) => {
+                    ok += 1;
+                    assert!(dest.exists(), "job {i} must produce its destination file");
+                }
+                Err(_) => failed += 1,
+            }
+        }
+        assert_eq!(ok, 2, "the two valid recordings must still both succeed");
+        assert_eq!(failed, 1, "only the broken recording must be counted as failed");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     // ---- Recording: state machine + clock + filename, no hardware needed ----
