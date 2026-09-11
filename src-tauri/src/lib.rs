@@ -27658,7 +27658,7 @@ mod tests {
         assert_eq!(track_count, 2, "expected 1 video + 1 mixed-audio track box, found {track_count}");
     }
 
-    // The spec's actual acceptance number (WORK-IMPL.md 239): "drift under
+    // The acceptance number this was written against: "drift under
     // 50ms over 10 minutes, clocked from WASAPI timestamps... measure it
     // over a real 10-minute recording, do not assume it." Runs for a real
     // ~10 real minutes -- not part of any normal or CI run.

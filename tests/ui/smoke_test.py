@@ -5728,7 +5728,7 @@ PROBE = """
       // drawn before the scale so the test can check that the SAME drawn
       // content survives at the proportionally scaled position afterward --
       // a real 400x300 stub, not a 1x1 one, or the check would be as vacuous
-      // as the 363/365 lesson already found once (see WORK-IMPL 342/365).
+      // as the scaling and zoom lesson already found once.
       {
         const whiteCanvas = document.createElement('canvas');
         whiteCanvas.width = 400;
