@@ -9,6 +9,7 @@ import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
 import { DRAG_OUT_MODS, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes } from "./floatShared.js";
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
+import { createColorPop } from "./colorpop.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen, emit } = window.__TAURI__.event;
@@ -1003,100 +1004,9 @@ function attachGridPicker(input, apply) {
 }
 
 // ---- Custom color picker (theme-styled popup with SV field + hue bar) ----
-const colorPop = document.createElement("div");
-colorPop.className = "color-pop hidden";
-colorPop.innerHTML =
-  '<div class="cp-sv"><div class="cp-knob"></div></div>' +
-  '<input class="cp-hue" type="range" min="0" max="360" step="1" data-i18n-aria="colorHue" />' +
-  '<div class="cp-row"><span class="cp-preview"></span><input class="cp-hex" type="text" maxlength="7" spellcheck="false" data-i18n-aria="colorHex" /></div>';
-document.body.appendChild(colorPop);
-const cpSv = colorPop.querySelector(".cp-sv");
-const cpKnob = colorPop.querySelector(".cp-knob");
-const cpHue = colorPop.querySelector(".cp-hue");
-const cpPreview = colorPop.querySelector(".cp-preview");
-const cpHex = colorPop.querySelector(".cp-hex");
-let cp = { h: 215, s: 0.85, v: 0.92 };
-let cpOnPick = null;
-
-function hsvToHex({ h, s, v }) {
-  const f = (n) => {
-    const k = (n + h / 60) % 6;
-    const c = v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
-    return Math.round(c * 255).toString(16).padStart(2, "0");
-  };
-  return `#${f(5)}${f(3)}${f(1)}`;
-}
-
-function hexToHsv(hex) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
-  if (!m) return { h: 215, s: 0.85, v: 0.92 };
-  const n = parseInt(m[1], 16);
-  const r = (n >> 16) / 255;
-  const g = ((n >> 8) & 255) / 255;
-  const b = (n & 255) / 255;
-  const max = Math.max(r, g, b);
-  const d = max - Math.min(r, g, b);
-  let h = 0;
-  if (d) {
-    h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
-    h = Math.round(h * 60);
-    if (h < 0) h += 360;
-  }
-  return { h, s: max ? d / max : 0, v: max };
-}
-
-function cpRender(notify = true) {
-  cpSv.style.background =
-    `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${cp.h}, 100%, 50%))`;
-  cpKnob.style.left = `${cp.s * 100}%`;
-  cpKnob.style.top = `${(1 - cp.v) * 100}%`;
-  cpHue.value = cp.h;
-  const hex = hsvToHex(cp);
-  cpPreview.style.background = hex;
-  if (document.activeElement !== cpHex) cpHex.value = hex;
-  if (notify) cpOnPick?.(hex);
-}
-
-function openColorPop(anchor, current, onPick) {
-  cp = hexToHsv(current);
-  cpOnPick = null;
-  cpRender(false); // show the current color without re-triggering the pick
-  cpOnPick = onPick;
-  placePopover(colorPop, anchor.getBoundingClientRect(), 6);
-}
-
-function closeColorPop() {
-  cpOnPick = null;
-  colorPop.classList.add("hidden");
-}
-
-function cpDrag(e) {
-  const r = cpSv.getBoundingClientRect();
-  cp.s = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
-  cp.v = Math.min(1, Math.max(0, 1 - (e.clientY - r.top) / r.height));
-  cpRender();
-}
-cpSv.addEventListener("pointerdown", (e) => {
-  cpSv.setPointerCapture(e.pointerId);
-  cpDrag(e);
-});
-cpSv.addEventListener("pointermove", (e) => {
-  if (cpSv.hasPointerCapture(e.pointerId)) cpDrag(e);
-});
-cpHue.addEventListener("input", () => {
-  cp.h = Number(cpHue.value);
-  cpRender();
-});
-cpHex.addEventListener("change", () => {
-  if (/^#?[0-9a-f]{6}$/i.test(cpHex.value)) {
-    cp = hexToHsv(cpHex.value);
-    cpRender();
-  }
-});
-document.addEventListener("pointerdown", (e) => {
-  if (colorPop.classList.contains("hidden")) return;
-  if (!colorPop.contains(e.target) && !e.target.closest(".swatch.custom")) closeColorPop();
-});
+// Shared with the video editor through colorpop.js, the one implementation
+// both windows load.
+const { el: colorPop, open: openColorPop, close: closeColorPop } = createColorPop();
 
 // Two-step confirmation: first call arms the button and returns false,
 // the second call (while armed) returns true.

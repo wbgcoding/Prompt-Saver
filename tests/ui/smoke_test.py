@@ -7601,6 +7601,55 @@ VIDEO_PROBE = """
       }
     }
 
+    // 370: the overlay colour row's custom swatch opens the same shared
+    // colour popup the main window uses, and picking a hex both updates the
+    // live preview and shows on the swatch itself.
+    {
+      ovRows[textRowIdx].click();
+      await sleep(30);
+      const customSwatch = document.querySelector('#ve-ov-editor .ve-swatches .swatch.custom');
+      if (!customSwatch) {
+        errs.push('370: no custom-colour swatch in the overlay colour row');
+      } else {
+        customSwatch.click();
+        await sleep(30);
+        const pop = document.querySelector('.color-pop');
+        if (!pop || pop.classList.contains('hidden')) {
+          errs.push('370: clicking the custom swatch did not open the shared colour popup');
+        } else {
+          const hexInput = pop.querySelector('.cp-hex');
+          const liveText = document.querySelector('#ve-overlay-live .ve-live-text');
+          hexInput.value = '#3fa796';
+          hexInput.dispatchEvent(new Event('change', { bubbles: true }));
+          await sleep(30);
+          if (!liveText) {
+            errs.push('370: no .ve-live-text element to check the colour change against');
+          } else if (liveText.style.color !== 'rgb(63, 167, 150)') {
+            errs.push('370: picking a custom colour did not update the live overlay preview, got ' + liveText.style.color);
+          }
+          const freshSwatch = document.querySelector('#ve-ov-editor .ve-swatches .swatch.custom');
+          if (!freshSwatch || !freshSwatch.classList.contains('sel') || freshSwatch.style.background !== 'rgb(63, 167, 150)') {
+            errs.push('370: the custom swatch does not show the picked colour after the row refreshes');
+          }
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+          await sleep(30);
+          if (!pop.classList.contains('hidden')) {
+            errs.push('370: Escape did not close the shared colour popup');
+          }
+          if (!document.getElementById('ve-confirm').classList.contains('hidden')) {
+            errs.push('370: Escape while the colour popup was open also triggered the close-window confirm dialog');
+          }
+        }
+      }
+      // Restore the image overlay selection the later 364/365 checks below
+      // depend on -- this block borrowed the text overlay for its own probe.
+      const imgRowIdxAgain = overlayKinds.findIndex(([id]) => id === 've-ov-add-image');
+      if (ovRows[imgRowIdxAgain]) {
+        ovRows[imgRowIdxAgain].click();
+        await sleep(30);
+      }
+    }
+
     // 364: the shared mouse-only number field, exercised on the still-selected
     // image overlay's opacity control (step 5, presets 25/50/75/100).
     {

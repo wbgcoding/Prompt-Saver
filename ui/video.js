@@ -9,6 +9,7 @@
 import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes } from "./floatShared.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
+import { createColorPop } from "./colorpop.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -20,6 +21,8 @@ const { getCurrentWebviewWindow } = window.__TAURI__.webviewWindow;
 
 const appWin = getCurrentWebviewWindow();
 const $ = (id) => document.getElementById(id);
+// The shared custom-colour popup -- see colorRow() below.
+const { el: colorPop, open: openColorPop, close: closeColorPop } = createColorPop();
 
 // ---------------------------------------------------------------- constants
 
@@ -37,8 +40,8 @@ const UNDO_MAX_DEFAULT = 40;      // expert value videoEditUndoMax
 const MIN_CLIP_MS = 100;          // shortest trim/cut range that still means something
 const RECT_MIN_PX = 16;           // smallest draggable rectangle, in source pixels
 // Colour choices offered for text and frame overlays. Same palette the rest of
-// the app starts from; the editor deliberately offers no second colour-picker
-// implementation of its own.
+// the app starts from; a custom colour beyond these goes through the one
+// shared popup (colorRow()'s own "custom" swatch), never a second picker.
 const OVERLAY_COLORS = ["#ffffff", "#000000", "#ef4444", "#f59e0b", "#22c55e", "#3b82f6", "#a855f7", "#ec4899"];
 const FONT_FILES = [
   ["segoeui", "segoeui.ttf"],
@@ -393,6 +396,10 @@ function afterOpsChanged(opts) {
   else { renderOverlayEditor(); renderEditFields(); }
   renderRegions();
   renderRects();
+  // The tick() loop only redraws the live overlay layer once the playhead
+  // itself moves, so an edit made while paused (a colour, a position, an
+  // opacity) would otherwise sit invisible until the next scrub or play.
+  renderOverlayLive(videoBox());
   updateCutCount();
   updateScaleCurrent();
   updateExportNote();
@@ -1668,6 +1675,18 @@ function colorRow(current, onPick) {
     btn.addEventListener("click", () => onPick(hex));
     wrap.appendChild(btn);
   }
+  // The shared custom-colour popup: shows the current colour when it is not
+  // one of the fixed presets above, same swatch pattern main.js's own
+  // buildSwatches() uses for tag/tile colours.
+  const isCustom = !!current && !OVERLAY_COLORS.some((c) => c.toLowerCase() === String(current).toLowerCase());
+  const custom = document.createElement("button");
+  custom.type = "button";
+  custom.className = "swatch custom" + (isCustom ? " sel" : "");
+  if (isCustom) custom.style.background = current;
+  custom.title = t("colorCustom");
+  custom.setAttribute("aria-label", t("colorCustom"));
+  custom.addEventListener("click", () => openColorPop(custom, isCustom ? current : "", onPick));
+  wrap.appendChild(custom);
   return wrap;
 }
 
@@ -1761,7 +1780,11 @@ function renderOverlayEditor() {
     box.appendChild(fieldRow(t("veOvStyle"), ovTrack("style", selectInput(
       [["solid", t("veOvStyleSolid")], ["double", t("veOvStyleDouble")], ["soft", t("veOvStyleSoft")]],
       op.style, (v) => commitOverlay(op, { style: v })), (o) => o.style)));
-    box.appendChild(fieldRow(t("veOvColor"), colorRow(op.color, (hex) => commitOverlay(op, { color: hex }))));
+    // A full rebuild rather than commitOverlay's usual keepEditor path: a
+    // swatch click never holds text-typing focus the way the other fields in
+    // this panel can, so there is nothing to protect, and the row's own
+    // selected-swatch highlight only ever comes from a fresh render.
+    box.appendChild(fieldRow(t("veOvColor"), colorRow(op.color, (hex) => { commitOverlay(op, { color: hex }); renderOverlayEditor(); })));
     box.appendChild(fieldRow(t("veOvOpacity"), ovTrack("opacity", numberInput(op.opacity, 5, 100, 5, (v) => commitOverlay(op, { opacity: v }), [25, 50, 75, 100]), (o) => String(o.opacity))));
   }
 
@@ -1775,7 +1798,11 @@ function renderOverlayEditor() {
       fieldRow(t("veCropX"), ovTrack("x", numberInput(op.x, 0, VE.w, 1, (v) => commitOverlay(op, { x: v })), (o) => String(o.x))),
       fieldRow(t("veCropY"), ovTrack("y", numberInput(op.y, 0, VE.h, 1, (v) => commitOverlay(op, { y: v })), (o) => String(o.y))));
     box.appendChild(pos);
-    box.appendChild(fieldRow(t("veOvColor"), colorRow(op.color, (hex) => commitOverlay(op, { color: hex }))));
+    // A full rebuild rather than commitOverlay's usual keepEditor path: a
+    // swatch click never holds text-typing focus the way the other fields in
+    // this panel can, so there is nothing to protect, and the row's own
+    // selected-swatch highlight only ever comes from a fresh render.
+    box.appendChild(fieldRow(t("veOvColor"), colorRow(op.color, (hex) => { commitOverlay(op, { color: hex }); renderOverlayEditor(); })));
     const plate = document.createElement("label");
     plate.className = "field switch-field ve-switch-row";
     const plateLabel = document.createElement("span");
@@ -2684,6 +2711,10 @@ document.addEventListener("keydown", (e) => {
     else if (e.key === "Tab") trapTabWithin($("ve-confirm"), e);
     else if (e.key === "Enter") { e.preventDefault(); closeConfirm(true); }
     return;
+  }
+  if (!colorPop.classList.contains("hidden")) {
+    if (e.key === "Escape") { e.preventDefault(); closeColorPop(); return; }
+    if (e.key === "Tab") { trapTabWithin(colorPop, e); return; }
   }
   const typing = TYPING.has(document.activeElement?.tagName);
   if (e.key === "Escape") { e.preventDefault(); closeWindow(); return; }
