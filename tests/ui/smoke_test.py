@@ -1759,6 +1759,21 @@ PROBE = """
             out.errors.push('the popup does not list Prompt 1 with its stored hotkey');
           }
           if (rowByName('Prompt 4')) out.errors.push('the popup lists a prompt with no hotkey bound');
+          // 343: the recording stop/pause hotkeys moved out of Settings and into the
+          // expert menu's own capture row, but still show up here too, same as every
+          // other hotkey in the app.
+          const recStopInput = rowByName('Stop-recording hotkey')?.querySelector('.modal-input');
+          const recPauseInput = rowByName('Pause/resume-recording hotkey')?.querySelector('.modal-input');
+          if (!recStopInput || !/8$/.test(recStopInput.value)) {
+            out.errors.push('the popup does not list the stop-recording hotkey with its stored value');
+          }
+          if (!recPauseInput || !/7$/.test(recPauseInput.value)) {
+            out.errors.push('the popup does not list the pause-recording hotkey with its stored value');
+          }
+          if (document.querySelectorAll('.hotkeys-row').length !== 4) {
+            out.errors.push('expected 4 rows in the "All hotkeys" popup (global, one prompt, two recording), got ' +
+              document.querySelectorAll('.hotkeys-row').length);
+          }
           // Search filters by name — a prompt-name query hides the global row.
           const search = document.getElementById('hotkeys-search');
           search.value = 'Prompt 1';
@@ -3512,6 +3527,59 @@ PROBE = """
         search.value = '';
         search.dispatchEvent(new Event('input', { bubbles: true }));
         await sleep(200);
+      }
+    }
+    // 343: the recording stop/pause hotkeys moved out of Settings and into the
+    // expert menu itself, as a real capture row (not a jump-to-settings button).
+    {
+      if (document.getElementById('rec-stop-hotkey-row') || document.getElementById('rec-pause-hotkey-row')) {
+        out.errors.push('343: the recording hotkey rows are still in the Settings dialog');
+      }
+      const rowByLabel = (text) => {
+        for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+          tb.click();
+          const hit = [...document.querySelectorAll('#expert-flags .hotkey-field')]
+            .find(r => (r.querySelector('.value-head span') || {}).textContent === text);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const stopRow = rowByLabel('Stop-recording hotkey');
+      const pauseRow = rowByLabel('Pause/resume-recording hotkey');
+      if (!stopRow || !pauseRow) {
+        out.errors.push('343: the expert menu has no capture row for one or both recording hotkeys');
+      } else {
+        const input = stopRow.querySelector('.hotkey-row .modal-input');
+        const clearBtn = stopRow.querySelector('.hotkey-row .ghost-btn');
+        if (!input || !/8$/.test(input.value)) {
+          out.errors.push('343: the stop-recording row does not show its stored hotkey');
+        }
+        if (!clearBtn) out.errors.push('343: the stop-recording row has no Clear button');
+        // Turning its own flag off must drop the row, same as every other gated setting.
+        // Re-queried fresh after each click rather than reused: flipping the flag
+        // rebuilds the whole group, so a reference taken before the click would be
+        // detached from the document by the time this reads or clicks it again.
+        const switchRowByLabel = (text) => {
+          for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+            tb.click();
+            const hit = [...document.querySelectorAll('#expert-flags .switch-field')]
+              .find(r => (r.querySelector('span') || {}).textContent === text);
+            if (hit) return hit;
+          }
+          return null;
+        };
+        const stopFlagRow = switchRowByLabel('Stop-recording hotkey');
+        if (!stopFlagRow) {
+          out.errors.push('343: no flag toggle found for the stop-recording hotkey');
+        } else {
+          stopFlagRow.querySelector('.switch').click();
+          await sleep(80);
+          if (rowByLabel('Stop-recording hotkey')) {
+            out.errors.push('343: the stop-recording capture row stayed visible after its own flag was switched off');
+          }
+          switchRowByLabel('Stop-recording hotkey')?.querySelector('.switch').click(); // restore
+          await sleep(80);
+        }
       }
     }
     // 67: "only changed" filter — a flag at its default is hidden, flipping it in
@@ -6297,7 +6365,20 @@ PROBE = """
           if (!title || isRawKey(title)) out.errors.push('Tour step ' + step + ': heading missing or raw key (' + title + ')');
           if (step < 4) {
             const art = body.querySelector('.tour-art svg');
-            if (!art) out.errors.push('Tour step ' + step + ': no drawing');
+            if (!art) {
+              out.errors.push('Tour step ' + step + ': no drawing');
+            } else {
+              // 344: every step's art must actually render (not a collapsed/empty
+              // SVG) and highlight the one thing the step is about, via the shared
+              // var(--accent) convention every tour drawing follows.
+              const box = art.getBoundingClientRect();
+              if (box.width < 4 || box.height < 4) {
+                out.errors.push('Tour step ' + step + ': the drawing renders at zero size (' + box.width + 'x' + box.height + ')');
+              }
+              if (!art.querySelector('[fill*="--accent"], [stroke*="--accent"]')) {
+                out.errors.push('Tour step ' + step + ': the drawing has no var(--accent)-highlighted element');
+              }
+            }
             const lines = [...body.querySelectorAll('.tour-text p')].map((p) => p.textContent.trim());
             if (!lines.length || lines.some((l) => !l || isRawKey(l))) {
               out.errors.push('Tour step ' + step + ': missing text line or raw key (' + JSON.stringify(lines) + ')');

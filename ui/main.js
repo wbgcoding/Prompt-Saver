@@ -1874,7 +1874,9 @@ const EXPERT_TABS = [
     // screenshot tool: both are capture tools on the composer bar.
     { title: "expGroupCreate", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "screenshot", { key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }, "ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }, "colorPicker", "screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, "videoEditor", "pasteMedia", "dragDrop", "rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }, "voice", { key: "voiceInterim", gate: "voice" }, { key: "voicePunct", gate: "voice" }, { key: "voiceAutoCaps", gate: "voicePunct" }, { key: "voiceAutoStop", gate: "voice" }, { key: "voiceOnlineOk", gate: "voice" }, { key: "voiceAutoPickLang", gate: "voice" }, { key: "voiceLangAutoUpdate", gate: "voice" }, { key: "voiceHotkey", gate: "voice" }], values: ["snipPreviewVh", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx", "snipQuality", "snipSaveQuality", "snipDelayMs", "snipPenPx", "snipMarkerPx", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditSnapTolerancePx", "snipEditUndoMax", "videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax", "voiceAutoStopSec", "voiceMaxMin", "voiceLangCacheH", "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH"], dropdowns: ["pickerFormat", "screenshotFormat", "snipEditDefaultTool", "snipScaleFilter", "ocrLang", "recMicDevice", "recQuality", "recFormat", "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "rotateDefaultMode", "voiceLang", "voiceInsert", "voiceHotkeyTarget"], paths: ["screenshotDir", "recordingDir"],
       // Opens #ocr-langs-modal / its voice equivalent -- same gate as the rest of each feature.
-      actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }, { id: "voice-langs-open", label: "voiceLangsManage", gate: "voice" }, { id: "voice-hotkey-set", label: "voiceHotkeySet", gate: "voiceHotkey" }, { id: "rec-stop-hotkey-set", label: "recStopHotkeySet", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-set", label: "recPauseHotkeySet", gate: "recPauseHotkey" }] },
+      // The recording hotkeys render their own capture row directly (hotkeyRow()) instead
+      // of a button that jumps to a settings field -- see actionRow()'s "hotkey" branch.
+      actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }, { id: "voice-langs-open", label: "voiceLangsManage", gate: "voice" }, { id: "voice-hotkey-set", label: "voiceHotkeySet", gate: "voiceHotkey" }, { id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recStopHotkeyLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recPauseHotkeyLabel", gate: "recPauseHotkey" }] },
     // Placeholders, from the grammar to where the app asks for them.
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
     // The editor: what it shows beside the text box. Preview and highlighter belong together — the
@@ -3003,6 +3005,7 @@ function noticeRow(id) {
 }
 
 function actionRow(a) {
+  if (a.type === "hotkey") return hotkeyRow(a.hotkeyKey, a.label);
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "ghost-btn expert-action";
@@ -3012,6 +3015,50 @@ function actionRow(a) {
   // existing handler ignores the extra argument.
   btn.addEventListener("click", () => EXPERT_ACTIONS[a.id]?.(btn));
   return btn;
+}
+
+// A hotkey-capture row for the expert menu itself, not a button that jumps to a
+// settings field -- click the input, press a combo, same as every other hotkey
+// field in the app (bindHotkeyField). Rebuilt on every renderExpert() call, so
+// the field is bound fresh each time rather than once at boot like the settings
+// dialog's own fields.
+const HOTKEY_ROW_DEFS = {
+  recStopHotkey: { current: () => settings.rec_stop_hotkey, onCommit: commitRecStopHotkey },
+  recPauseHotkey: { current: () => settings.rec_pause_hotkey, onCommit: commitRecPauseHotkey },
+};
+function hotkeyRow(key, labelKey) {
+  const def = HOTKEY_ROW_DEFS[key];
+  const row = document.createElement("div");
+  // Label above the capture field, same stacked shape as pathRow -- the expert
+  // menu's own column is narrower than the settings dialog .field-inline was
+  // built for, and a single "label ... 460px field" line would overflow it.
+  row.className = "field value-field hotkey-field";
+  const head = document.createElement("div");
+  head.className = "value-head";
+  const span = document.createElement("span");
+  span.textContent = t(labelKey);
+  head.appendChild(span);
+  const wrap = document.createElement("div");
+  wrap.className = "hotkey-row";
+  const input = document.createElement("input");
+  input.className = "modal-input";
+  input.type = "text";
+  input.readOnly = true;
+  input.placeholder = t("hotkeyPh");
+  input.setAttribute("aria-label", t(labelKey));
+  input.value = prettyAccel(def.current());
+  const clear = document.createElement("button");
+  clear.type = "button";
+  clear.className = "ghost-btn";
+  clear.textContent = t("hotkeyClear");
+  clear.addEventListener("click", async () => {
+    try { await def.onCommit(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
+    input.value = "";
+  });
+  wrap.append(input, clear);
+  row.append(head, wrap);
+  bindHotkeyField(input, { current: def.current, onCommit: def.onCommit });
+  return withTip(row, key);
 }
 
 // Rows that carry a label plus one narrow control fit two to a line; a slider needs
@@ -7055,13 +7102,27 @@ function closeHotkeysModal() {
   $("hotkeys-modal").classList.add("hidden");
 }
 
+// One entry per row kind: how to read its current value and how to commit a
+// new one. "prompt" rows carry their own id (used both for the lookup and to
+// exclude themselves from hotkeyOwner's conflict check); the other three share
+// the null-id bucket the same way their own dedicated fields always have.
+const HOTKEYS_LIST_KINDS = {
+  global: { current: () => settings.hotkey, onCommit: commitGlobalHotkey },
+  prompt: {
+    current: (id) => prompts.find((x) => x.id === id)?.hotkey || "",
+    onCommit: (accel, id) => commitPromptHotkeyDirect(id, accel),
+  },
+  recStop: { current: () => settings.rec_stop_hotkey, onCommit: commitRecStopHotkey },
+  recPause: { current: () => settings.rec_pause_hotkey, onCommit: commitRecPauseHotkey },
+};
 function renderHotkeysList() {
   const box = $("hotkeys-list");
   if (!box || $("hotkeys-modal").classList.contains("hidden")) return;
   const q = ($("hotkeys-search").value || "").trim().toLowerCase();
-  const rows = [{ id: null, name: t("hotkeysGlobalRow"), accel: settings.hotkey }].concat(
-    promptHotkeysOn() ? prompts.filter((p) => p.hotkey).map((p) => ({ id: p.id, name: p.name, accel: p.hotkey })) : []
-  );
+  const rows = [{ kind: "global", id: null, name: t("hotkeysGlobalRow"), accel: settings.hotkey }]
+    .concat(promptHotkeysOn() ? prompts.filter((p) => p.hotkey).map((p) => ({ kind: "prompt", id: p.id, name: p.name, accel: p.hotkey })) : [])
+    .concat(flag("screenRecord") && flag("recStopHotkey") ? [{ kind: "recStop", id: null, name: t("recStopHotkeyLabel"), accel: settings.rec_stop_hotkey }] : [])
+    .concat(flag("screenRecord") && flag("recPauseHotkey") ? [{ kind: "recPause", id: null, name: t("recPauseHotkeyLabel"), accel: settings.rec_pause_hotkey }] : []);
   const hit = (r) => !q || r.name.toLowerCase().includes(q) || prettyAccel(r.accel).toLowerCase().includes(q);
   const filtered = rows.filter(hit);
   box.innerHTML = "";
@@ -7073,10 +7134,11 @@ function renderHotkeysList() {
     return;
   }
   for (const r of filtered) {
+    const kindDef = HOTKEYS_LIST_KINDS[r.kind];
     const row = document.createElement("div");
     row.className = "hotkeys-row";
     const name = document.createElement("span");
-    name.className = "hotkeys-row-name" + (r.id ? "" : " hotkeys-row-global");
+    name.className = "hotkeys-row-name" + (r.kind === "global" ? " hotkeys-row-global" : "");
     name.textContent = r.name;
     const input = document.createElement("input");
     input.className = "modal-input";
@@ -7092,13 +7154,12 @@ function renderHotkeysList() {
     box.appendChild(row);
     bindHotkeyField(input, {
       id: r.id,
-      current: () => (r.id ? (prompts.find((x) => x.id === r.id)?.hotkey || "") : settings.hotkey),
-      onCommit: (accel) => (r.id ? commitPromptHotkeyDirect(r.id, accel) : commitGlobalHotkey(accel)),
+      current: () => kindDef.current(r.id),
+      onCommit: (accel) => kindDef.onCommit(accel, r.id),
     });
     clear.addEventListener("click", async () => {
-      try {
-        input.value = prettyAccel(await (r.id ? commitPromptHotkeyDirect(r.id, "") : commitGlobalHotkey("")));
-      } catch (err) { toast(hotkeyMessage(String(err))); }
+      try { input.value = prettyAccel(await kindDef.onCommit("", r.id)); }
+      catch (err) { toast(hotkeyMessage(String(err))); }
     });
   }
 }
@@ -15308,41 +15369,6 @@ function bind() {
       $("opt-voice-hotkey").focus();
     });
   };
-  // Stop/pause hotkeys for a running recording, same wiring as the pair above.
-  bindHotkeyField($("opt-rec-stop-hotkey"), {
-    current: () => settings.rec_stop_hotkey,
-    onCommit: commitRecStopHotkey,
-  });
-  $("rec-stop-hotkey-clear").addEventListener("click", async () => {
-    try { await commitRecStopHotkey(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
-    $("opt-rec-stop-hotkey").value = "";
-  });
-  EXPERT_ACTIONS["rec-stop-hotkey-set"] = () => {
-    settingsOpener = document.activeElement;
-    showExpertPage(false);
-    settingsEl.classList.remove("hidden");
-    requestAnimationFrame(() => {
-      $("opt-rec-stop-hotkey").scrollIntoView({ block: "center" });
-      $("opt-rec-stop-hotkey").focus();
-    });
-  };
-  bindHotkeyField($("opt-rec-pause-hotkey"), {
-    current: () => settings.rec_pause_hotkey,
-    onCommit: commitRecPauseHotkey,
-  });
-  $("rec-pause-hotkey-clear").addEventListener("click", async () => {
-    try { await commitRecPauseHotkey(""); } catch (_) { /* Clear always leaves an empty field regardless */ }
-    $("opt-rec-pause-hotkey").value = "";
-  });
-  EXPERT_ACTIONS["rec-pause-hotkey-set"] = () => {
-    settingsOpener = document.activeElement;
-    showExpertPage(false);
-    settingsEl.classList.remove("hidden");
-    requestAnimationFrame(() => {
-      $("opt-rec-pause-hotkey").scrollIntoView({ block: "center" });
-      $("opt-rec-pause-hotkey").focus();
-    });
-  };
   $("hotkeys-modal-close").addEventListener("click", closeHotkeysModal);
   $("hotkeys-modal").addEventListener("pointerdown", (e) => {
     if (e.target === $("hotkeys-modal")) closeHotkeysModal();
@@ -16050,19 +16076,22 @@ const TOUR_SVG_WELCOME = `<svg viewBox="0 0 100 100" width="110" height="110" ar
   <line x1="46" y1="43" x2="54" y2="43" stroke="var(--accent-fg)" stroke-width="1.5" stroke-linecap="round"/>
   <line x1="46" y1="48" x2="54" y2="48" stroke="var(--accent-fg)" stroke-width="1.5" stroke-linecap="round"/>
 </svg>`;
+// A click on a tile sends its text to the clipboard: the tile itself, a cursor
+// over it, a motion arc for the copy, and the clipboard the line of text lands
+// in. Replaces an earlier drawing whose two rectangles either side of a plus
+// sign read as a battery rather than a click-to-copy action.
 const TOUR_SVG_USAGE = `<svg viewBox="0 0 100 100" width="110" height="110" aria-hidden="true">
-  <rect x="2" y="40" width="32" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/>
-  <line x1="8" y1="49" x2="28" y2="49" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-  <path d="M36 49 L46 49" stroke="currentColor" stroke-width="2.5" fill="none"/>
-  <path d="M43 45 L47 49 L43 53" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="49" y="38" width="22" height="22" rx="3" fill="var(--accent)" stroke="var(--accent)" stroke-width="2.5"/>
-  <path d="M56 49 h8 M60 45 v8" stroke="var(--accent-fg)" stroke-width="2" stroke-linecap="round"/>
-  <path d="M74 49 L84 49" stroke="currentColor" stroke-width="2.5" fill="none"/>
-  <path d="M81 45 L85 49 L81 53" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="86" y="34" width="12" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2.5"/>
-  <rect x="90" y="31" width="4" height="4" rx="1" fill="currentColor"/>
-  <line x1="89" y1="41" x2="95" y2="41" stroke="currentColor" stroke-width="1.5"/>
-  <line x1="89" y1="46" x2="95" y2="46" stroke="currentColor" stroke-width="1.5"/>
+  <rect x="6" y="32" width="36" height="28" rx="4" fill="none" stroke="currentColor" stroke-width="2.2"/>
+  <line x1="13" y1="42" x2="35" y2="42" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  <line x1="13" y1="50" x2="29" y2="50" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M34 46 L34 64 L38.2 60.4 L41.5 67.5 L45 65.8 L41.5 58.8 L47.5 58.8 Z" fill="currentColor"/>
+  <path d="M48 44 Q64 26 80 36" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-dasharray="4 3" stroke-linecap="round"/>
+  <path d="M75 32 L81 36 L76 41" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="64" y="48" width="30" height="36" rx="3" fill="none" stroke="currentColor" stroke-width="2.2"/>
+  <rect x="72" y="43" width="14" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="2.2"/>
+  <line x1="71" y1="64" x2="89" y2="64" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/>
+  <line x1="71" y1="72" x2="85" y2="72" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity="0.6"/>
+  <line x1="71" y1="80" x2="81" y2="80" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity="0.4"/>
 </svg>`;
 const TOUR_SVG_TILES = `<svg viewBox="0 0 100 100" width="110" height="110" aria-hidden="true">
   <rect x="8" y="14" width="22" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2.2"/>
@@ -16537,8 +16566,6 @@ function syncSettingsControls() {
     refreshFavViewUi();
     $("opt-hotkey").value = prettyAccel(settings.hotkey);
     $("opt-voice-hotkey").value = prettyAccel(settings.voice_hotkey);
-    $("opt-rec-stop-hotkey").value = prettyAccel(settings.rec_stop_hotkey);
-    $("opt-rec-pause-hotkey").value = prettyAccel(settings.rec_pause_hotkey);
     $("pin-top").classList.toggle("active", settings.always_on_top === true);
     $("pin-top").setAttribute("aria-pressed", String(settings.always_on_top === true));
     $("opt-autoupdate").checked = settings.auto_update !== false;

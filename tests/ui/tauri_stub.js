@@ -155,7 +155,11 @@ const SETTINGS = {
   theme: "dark", language: "en", floating: {}, float_scale: {}, video_prefs: {},
   window: null, minimize_to_tray: false, autostart: false, start_minimized: false,
   // F20: the app hotkey is set, so a prompt trying to claim it must be refused.
-  always_on_top: false, hotkey: "CommandOrControl+Shift+P", voice_hotkey: "", auto_update: true, skipped_versions: [],
+  always_on_top: false, hotkey: "CommandOrControl+Shift+P", voice_hotkey: "",
+  // 343: a real value on each so the "All hotkeys" modal has something to render
+  // and format for both of the moved expert-menu rows.
+  rec_stop_hotkey: "CommandOrControl+Shift+8", rec_pause_hotkey: "CommandOrControl+Shift+7",
+  auto_update: true, skipped_versions: [],
   // Tags, custom themes, view groups and private notes ship off; the stub turns them
   // on so the smoke run covers that UI too. The Markdown preview is deliberately NOT
   // listed — it ships on, and the run proves that.
@@ -497,6 +501,14 @@ const RESULTS = {
     if (/^(commandorcontrol|ctrl)\+[a-z]$/.test(accel)) throw new Error("hotkey-system");
     if (accel === "commandorcontrol+alt+b") throw new Error("hotkey-conflict");
     SETTINGS.voice_hotkey = a && a.hotkey ? a.hotkey : "";
+    return null;
+  },
+  set_rec_stop_hotkey: (a) => {
+    SETTINGS.rec_stop_hotkey = a && a.hotkey ? a.hotkey : "";
+    return null;
+  },
+  set_rec_pause_hotkey: (a) => {
+    SETTINGS.rec_pause_hotkey = a && a.hotkey ? a.hotkey : "";
     return null;
   },
   default_screenshot_dir: () => "C:\\Pictures",

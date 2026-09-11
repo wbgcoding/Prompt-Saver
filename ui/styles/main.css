@@ -1567,12 +1567,6 @@ body.library-front #modal.overlay { z-index: 67; }
 /* Opt-in flag (default off): shown only once voiceHotkey is switched on, same
    convention as every other flag-<key> gated row. */
 body:not(.flag-voiceHotkey) #voice-hotkey-row { display: none; }
-/* Default-ON like screenRecord itself -- hidden only on an explicit off,
-   for the feature as a whole or for that one hotkey's own toggle. */
-body.noflag-screenRecord #rec-stop-hotkey-row,
-body.noflag-recStopHotkey #rec-stop-hotkey-row { display: none; }
-body.noflag-screenRecord #rec-pause-hotkey-row,
-body.noflag-recPauseHotkey #rec-pause-hotkey-row { display: none; }
 .noflag-quickGrid #quick-grid { display: none; }
 .flag-quickGridHoverOnly .header #quick-grid { opacity: 0; pointer-events: none; }
 .flag-quickGridHoverOnly .header:hover #quick-grid, .flag-quickGridHoverOnly .header:focus-within #quick-grid { opacity: 1; pointer-events: auto; }
