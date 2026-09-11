@@ -3505,6 +3505,42 @@ PROBE = """
         }
       }
     }
+    // 372: expGroupCreate was split into expTabCapture's finer groups — a moved
+    // setting only changed its group, never its key, so a value set before the
+    // split must still read back correctly after it (and survive a re-render).
+    {
+      const dropdownRowByLabel = (text) => {
+        for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+          tb.click();
+          const hit = [...document.querySelectorAll('#expert-flags .expert-dropdown-row')]
+            .find(r => (r.querySelector('.value-head span') || {}).textContent === text);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const row = dropdownRowByLabel('Color notation'); // pickerFormat, moved into expGroupPicker
+      const sel = row && row.querySelector('select');
+      if (!sel) {
+        out.errors.push('372: the colour picker format dropdown is missing from the Capture tab');
+      } else {
+        sel.value = 'rgb';
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(120);
+        const wrote = [...(window.__SMOKE_ARGS__ || [])]
+          .some(([c, a]) => c === 'set_ui_text' && a.key === 'pickerFormat' && a.value === 'rgb');
+        if (!wrote) out.errors.push('372: changing the colour picker format did not persist');
+        const row2 = dropdownRowByLabel('Color notation'); // re-finds it after switching tabs away and back
+        const sel2 = row2 && row2.querySelector('select');
+        if (!sel2 || sel2.value !== 'rgb') {
+          out.errors.push('372: the colour picker format did not survive a re-render after the group split');
+        }
+        if (sel2) {
+          sel2.value = 'hex';
+          sel2.dispatchEvent(new Event('change', { bubbles: true }));
+          await sleep(120);
+        }
+      }
+    }
     // P68: the expert-menu search also matches a word that lives only in a
     // setting's tooltip, not its label.
     {
@@ -6036,7 +6072,14 @@ PROBE = """
       // fresh on every call instead.
       window.__OCR_CAPS_TEST__ = FAKE_CAPS;
 
-      const langsRow = rowByLabel('Sprachen verwalten…');
+      // 372: ocrLangsManage and voiceLangsManage share the exact same text
+      // ("Manage languages…") -- harmless while both actions sat in one shared
+      // group, but rowByLabel's cross-tab search now finds Voice's copy first
+      // (its tab comes before the new Capture tab). toggleOcrFlag just left the
+      // OCR tab active, so search only the current tab instead of restarting
+      // the tab walk from the first one.
+      const langsRow = [...document.querySelectorAll('#expert-flags .expert-action')]
+        .find((r) => (r.tagName === 'BUTTON' ? r : r.querySelector('span'))?.textContent === 'Sprachen verwalten…');
       if (!langsRow) {
         out.errors.push('OCR langs-modal action button not found in the expert menu');
       } else {
@@ -8602,8 +8645,11 @@ def main():
                  f"--window-size={max(w + 30, 520)},{h + 140}",
                  # Raised from 126s once the clipboard-secret expert-menu check
                  # (password-skip switch plus its length slider, each gated on the
-                 # other) added its own round of tab walks and switch toggles.
-                 "--virtual-time-budget=134000", "--dump-dom",
+                 # other) added its own round of tab walks and switch toggles, then
+                 # from 134s once the Capture tab split (372) added a 7th expert
+                 # tab -- lengthening every existing tab walk by one click -- plus
+                 # its own group-survives-the-split probe, itself two full walks.
+                 "--virtual-time-budget=148000", "--dump-dom",
                  wrapper.as_uri()],
                 capture_output=True, text=True, encoding="utf-8", errors="replace",
                 timeout=240)

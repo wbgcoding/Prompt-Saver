@@ -926,6 +926,12 @@ the video editor and the introduction tour ship on).
   spelled out across the code, the interface and the build scripts. Nothing about
   the app changes: it keeps the same data folder, autostart entry and update
   source, and a unit test pins every one of those values.
+- **The expert menu has a new "Capture" tab** for everything to do with
+  capturing the screen: screenshots and their editor, text recognition, the
+  colour picker, screen recording and the video editor now have their own
+  fine-grained groups there instead of sharing one long list under Features.
+  No setting was removed or renamed, only regrouped, so every saved value keeps
+  reading back exactly as before.
 
 ## 2.6.3 (2026-07-26)
 
