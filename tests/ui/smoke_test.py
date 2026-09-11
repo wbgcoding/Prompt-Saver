@@ -3599,6 +3599,78 @@ PROBE = """
         await sleep(200);
       }
     }
+    // 403: the expert-menu search also finds a hit outside the expert menu --
+    // a normal-settings-page row here -- and clicking it leaves the expert
+    // page, reveals the right dialog and flashes the right row.
+    {
+      const search = document.getElementById('expert-search');
+      search.value = 'start in the background';
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(200);
+      const foreignRow = [...document.querySelectorAll('.expert-foreign-row')]
+        .find(r => (r.querySelector('span') || {}).textContent === 'Start in the background on autostart');
+      if (!foreignRow) {
+        out.errors.push('403: search for a normal-settings-only word found no foreign hit');
+      } else {
+        if (!foreignRow.querySelector('.expert-foreign-badge')) {
+          out.errors.push('403: a foreign hit carries no area badge');
+        }
+        foreignRow.click();
+        await sleep(250);
+        if (!document.getElementById('settings-expert').classList.contains('hidden')) {
+          out.errors.push('403: clicking a foreign hit did not leave the expert page');
+        }
+        if (document.getElementById('settings-main').classList.contains('hidden')) {
+          out.errors.push('403: clicking a foreign hit did not reveal the normal settings page');
+        }
+        if (!document.getElementById('opt-startmin').closest('.field').classList.contains('settings-search-hit')) {
+          out.errors.push('403: clicking a foreign hit did not flash the target row');
+        }
+      }
+      // Back into the expert menu for the rest of this walk.
+      document.getElementById('expert-open').click();
+      await sleep(150);
+      // A hit that lives in the backup manager -- a dialog of its own, not the
+      // settings page -- must close Settings entirely and open that dialog.
+      const search2 = document.getElementById('expert-search');
+      search2.value = 'smart retention';
+      search2.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(200);
+      const backupRow = [...document.querySelectorAll('.expert-foreign-row')]
+        .find(r => (r.querySelector('span') || {}).textContent === 'Smart retention');
+      if (!backupRow) {
+        out.errors.push('403: search for a backup-only word found no foreign hit');
+      } else {
+        backupRow.click();
+        await sleep(400); // renderBackupPanel() awaits a real invoke round-trip
+        if (!document.getElementById('settings').classList.contains('hidden')) {
+          out.errors.push('403: clicking a backup hit left the settings dialog open');
+        }
+        if (document.getElementById('backup-modal').classList.contains('hidden')) {
+          out.errors.push('403: clicking a backup hit did not open the backup manager');
+        }
+        const gfsTarget = document.querySelector('#backup-panel [data-setting-row="backup-gfs"]');
+        if (!gfsTarget || !gfsTarget.classList.contains('settings-search-hit')) {
+          out.errors.push('403: clicking a backup hit did not flash the target row');
+        }
+        document.getElementById('backup-modal').classList.add('hidden'); // close it, back to settings
+      }
+      document.getElementById('gear').click();
+      await sleep(150);
+      document.getElementById('expert-open').click();
+      await sleep(150);
+      const search3 = document.getElementById('expert-search');
+      search3.value = 'zzz_totally_unmatched_zzz';
+      search3.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(200);
+      const hint = document.querySelector('#expert-flags .hint');
+      if (!hint || !hint.textContent) {
+        out.errors.push('403: a search with no hits anywhere shows no explanatory message');
+      }
+      search3.value = '';
+      search3.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(150);
+    }
     // 343: the recording stop/pause hotkeys moved out of Settings and into the
     // expert menu itself, as a real capture row (not a jump-to-settings button).
     {
@@ -3777,6 +3849,95 @@ PROBE = """
             }
           }
         }
+      }
+    }
+    // 405: a group reset must also clear a row currently hidden behind its own
+    // gate ("auch die durch eine Gattung gerade unsichtbaren", Ben's own
+    // wording) -- otherwise a changed value survives, invisible, behind a
+    // switched-off toggle.
+    {
+      const rowByLabel5 = (text) => {
+        const tabs = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
+        const find = () => [...document.querySelectorAll('#expert-flags .switch-field')]
+          .find(r => ((r.querySelector('span') || {}).textContent || '') === text) || null;
+        if (!tabs.length) return find();
+        for (const tb of tabs) { tb.click(); const hit = find(); if (hit) return hit; }
+        return null;
+      };
+      let historySw = rowByLabel5('Prompt version history')?.querySelector('input.switch');
+      if (!historySw) {
+        out.errors.push('could not find "Prompt version history" for the gated-hidden-row reset test');
+      } else {
+        if (!historySw.checked) { historySw.click(); await sleep(120); } // reveal the gated child
+        const diffSw = rowByLabel5('Word-level diff in history')?.querySelector('input.switch');
+        if (!diffSw) {
+          out.errors.push('could not find the gated "Word-level diff in history" row');
+        } else {
+          if (diffSw.checked) { diffSw.click(); await sleep(120); } // move it away from its default (on)
+          // Hide it again by switching its own parent back off.
+          rowByLabel5('Prompt version history')?.querySelector('input.switch')?.click();
+          await sleep(120);
+          if (rowByLabel5('Word-level diff in history')) {
+            out.errors.push('405 setup: the gated row is still visible, cannot test the hidden-row case');
+          } else {
+            const groupSec = rowByLabel5('Prompt version history')?.closest('.expert-group');
+            const resetBtn = groupSec && groupSec.querySelector('.expert-group-reset');
+            if (!resetBtn) {
+              out.errors.push('405: the group reset button did not appear although a row hidden behind its own gate differs from its default');
+            } else {
+              // This group also holds "Markdown preview", deliberately switched
+              // on by an earlier block (F14/F15) and still relied on by a much
+              // later one (the voice-dictation session test) -- a real group
+              // reset resets the WHOLE group, so record it here and put it back
+              // afterwards rather than letting this probe silently undo another
+              // block's setup.
+              const mdWasOn = rowByLabel5('Markdown preview')?.querySelector('input.switch')?.checked;
+              resetBtn.click();
+              await sleep(150);
+              document.getElementById('confirm-ok').click();
+              await sleep(300);
+              const historySwAfter = rowByLabel5('Prompt version history')?.querySelector('input.switch');
+              if (!historySwAfter || !historySwAfter.checked) {
+                out.errors.push('405: group reset did not restore the parent flag to its own default');
+              }
+              const diffSwAfter = rowByLabel5('Word-level diff in history')?.querySelector('input.switch');
+              if (!diffSwAfter || !diffSwAfter.checked) {
+                out.errors.push('405: group reset left a row that was hidden behind its own gate still changed from its default');
+              }
+              if (mdWasOn) {
+                const mdSwAfter = rowByLabel5('Markdown preview')?.querySelector('input.switch');
+                if (mdSwAfter && !mdSwAfter.checked) { mdSwAfter.click(); await sleep(120); }
+              }
+            }
+          }
+        }
+      }
+    }
+    // 405: the group reset button must never appear for "Data & system"
+    // (expGroupData) -- it sits right next to one-click destructive actions
+    // (emergency purge, delete all data), so Ben ruled it out entirely,
+    // regardless of whether a real setting in that group differs from default.
+    {
+      const rowByLabel6 = (text) => {
+        const tabs = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')];
+        const find = () => [...document.querySelectorAll('#expert-flags .switch-field')]
+          .find(r => ((r.querySelector('span') || {}).textContent || '') === text) || null;
+        if (!tabs.length) return find();
+        for (const tb of tabs) { tb.click(); const hit = find(); if (hit) return hit; }
+        return null;
+      };
+      const dupSw = rowByLabel6('Duplicate finder')?.querySelector('input.switch');
+      if (!dupSw) {
+        out.errors.push('could not find "Duplicate finder" for the expGroupData no-reset-button test');
+      } else {
+        dupSw.click();
+        await sleep(120);
+        const groupSec = rowByLabel6('Duplicate finder')?.closest('.expert-group');
+        if (groupSec && groupSec.querySelector('.expert-group-reset')) {
+          out.errors.push('405: "Data & system" shows a group reset button, which must never appear there');
+        }
+        const dupSw2 = rowByLabel6('Duplicate finder')?.querySelector('input.switch');
+        if (dupSw2) { dupSw2.click(); await sleep(120); } // restore
       }
     }
     // 31: per-value reset — a row's own undo icon appears only once IT changes,

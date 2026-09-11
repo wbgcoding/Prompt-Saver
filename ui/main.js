@@ -3089,6 +3089,104 @@ function settingHit(settingKey, labelKey, q) {
   return i18nHit(tipKey, q);
 }
 
+// A hand-maintained directory of every findable setting OUTSIDE the expert
+// menu -- the normal settings page, the always-visible toolbar, the library
+// dialog and the backup manager. The expert search above already covers
+// EXPERT_TABS itself; this is what lets the same search also surface a hit in
+// one of these other areas, badge it, and jump straight to it on click.
+// `key` is the element's real DOM id for "normal"/"toolbar"/"library" entries
+// (they already carry a stable id); for "backup" entries -- built fresh by
+// renderBackupPanel() and otherwise id-less -- it is the `data-setting-row`
+// value stamped onto that row below. tests/settings_directory_check.py cross-
+// checks this list against the real markup so a forgotten field is caught.
+const SETTINGS_DIRECTORY = [
+  { key: "theme-select", area: "normal", label: "theme" },
+  { key: "lang-select", area: "normal", label: "language" },
+  { key: "tile-font", area: "normal", label: "tileFont" },
+  { key: "ui-scale", area: "normal", label: "valUiScale" },
+  { key: "icon-scale", area: "normal", label: "valIconScale" },
+  { key: "tile-size", area: "normal", label: "tileSize" },
+  { key: "opt-ontop", area: "normal", label: "alwaysOnTop" },
+  { key: "opt-minimize", area: "normal", label: "minimizeOnClose" },
+  { key: "opt-autostart", area: "normal", label: "autostart" },
+  { key: "opt-startmin", area: "normal", label: "startMinimized" },
+  { key: "opt-autopaste", area: "normal", label: "autoPasteSetting", tip: "tipAutoPaste" },
+  { key: "opt-tooltips", area: "normal", label: "showTooltips", tip: "tipTooltips" },
+  { key: "opt-screenshot-folder", area: "normal", label: "screenshotToFolder", tip: "tipScreenshotFolder" },
+  { key: "opt-favview", area: "normal", label: "favViewTitle", tip: "favViewOption" },
+  { key: "opt-hotkey", area: "normal", label: "hotkeyLabel" },
+  { key: "opt-voice-hotkey", area: "normal", label: "voiceHotkeyLabel", gate: "voiceHotkey" },
+  { key: "opt-autoupdate", area: "normal", label: "autoUpdate", tip: "autoUpdateHint" },
+  { key: "quick-grid", area: "toolbar", label: "gridSize" },
+  { key: "library-sort", area: "library", label: "sortBy" },
+  { key: "backup-auto", area: "backup", label: "flagAutoBackup" },
+  { key: "backup-interval", area: "backup", label: "valBackupInterval", gate: "autoBackup" },
+  { key: "backup-start-delay", area: "backup", label: "valBackupStartDelay", gate: "autoBackup" },
+  { key: "backup-gfs", area: "backup", label: "flagBackupGfs", tip: "tipBackupGfs" },
+  { key: "backup-keep", area: "backup", label: "valBackupKeep" },
+  { key: "backup-daily", area: "backup", label: "valBackupDaily" },
+  { key: "backup-weekly", area: "backup", label: "valBackupWeekly" },
+  { key: "backup-monthly", area: "backup", label: "valBackupMonthly" },
+  { key: "backup-yearly", area: "backup", label: "valBackupYearly" },
+  { key: "backup-password", area: "backup", label: "backupPasswordLabel" },
+];
+const SETTINGS_AREA_LABEL = { normal: "settingsAreaNormal", toolbar: "settingsAreaToolbar", library: "settingsAreaLibrary", backup: "settingsAreaBackup" };
+
+function settingsDirectoryHit(entry, q) {
+  if (!gateOpen(entry.gate)) return false;
+  return i18nHit(entry.label, q) || (entry.tip && i18nHit(entry.tip, q));
+}
+
+// The DOM node to scroll to and flash for one directory entry. Only valid
+// once that entry's own area is already open (see openSettingsDirectoryEntry).
+function settingsDirectoryTarget(entry) {
+  if (entry.area === "backup") return document.querySelector(`#backup-panel [data-setting-row="${entry.key}"]`);
+  const el = $(entry.key);
+  return el ? (el.closest(".field") || el) : null;
+}
+
+function flashSettingsRow(el) {
+  if (!el) return;
+  el.scrollIntoView({ block: "center" });
+  el.classList.add("settings-search-hit");
+  setTimeout(() => el.classList.remove("settings-search-hit"), 1800);
+}
+
+// A click on a foreign hit: close the expert menu, open whichever dialog/tab
+// actually owns the row, then scroll it into view and flash it -- exactly the
+// behaviour Ben asked for.
+async function openSettingsDirectoryEntry(entry) {
+  if (entry.area === "normal") {
+    settingsEl.classList.remove("hidden");
+    showExpertPage(false);
+  } else if (entry.area === "toolbar") {
+    hideSettings();
+  } else if (entry.area === "library") {
+    hideSettings();
+    $("library-btn").click();
+  } else if (entry.area === "backup") {
+    hideSettings();
+    $("backup-modal").classList.remove("hidden");
+    await renderBackupPanel($("backup-panel"));
+    renderStatsPanel($("stats-panel"));
+  }
+  flashSettingsRow(settingsDirectoryTarget(entry));
+}
+
+function foreignHitRow(entry) {
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "field expert-foreign-row";
+  const label = document.createElement("span");
+  label.textContent = t(entry.label);
+  const badge = document.createElement("span");
+  badge.className = "expert-foreign-badge";
+  badge.textContent = t(SETTINGS_AREA_LABEL[entry.area]);
+  row.append(label, badge);
+  row.addEventListener("click", () => openSettingsDirectoryEntry(entry));
+  return row;
+}
+
 // The "off by default" extras groups start folded (kept tidy until wanted).
 const DEFAULT_COLLAPSED_GROUPS = [];
 // Collapsed expert categories, persisted as a JSON title list in ui_texts. Unset
@@ -3340,10 +3438,15 @@ function renderExpert() {
       }
       // Per-category reset — only worth showing when there is something in this
       // group to reset. Reuses the same isRowChanged() diff as 66/67.
+      // Data & system (expGroupData) mixes ordinary settings with destructive,
+      // one-click data actions (emergency purge, delete all data) right below
+      // them -- a bulk-reset button in that neighbourhood is one misclick away
+      // from looking like another destructive action, so it never appears here
+      // regardless of how many of its settings differ from default.
       const right = document.createElement("span");
       right.className = "expert-group-title-right";
       const changedHere = changedKeysInGroup(group);
-      const changedCount = changedHere.flags.length + changedHere.values.length +
+      const changedCount = group.title === "expGroupData" ? 0 : changedHere.flags.length + changedHere.values.length +
         changedHere.selects.length + changedHere.dropdowns.length + changedHere.paths.length +
         (changedHere.palette ? 1 : 0);
       if (changedCount) {
@@ -3407,27 +3510,50 @@ function renderExpert() {
       box.appendChild(sec);
     }
   }
-  if (globalView && !shown) {
+  // Hits outside the expert menu: normal settings, the toolbar, the library
+  // dialog and the backup manager. Search only -- "only changed" has no
+  // meaning for a directory entry, there is nothing here to diff.
+  let foreignShown = 0;
+  if (searching) {
+    const hits = SETTINGS_DIRECTORY.filter((e) => settingsDirectoryHit(e, q));
+    if (hits.length) {
+      foreignShown = hits.length;
+      const sec = document.createElement("div");
+      sec.className = "expert-group expert-foreign-group";
+      const head = document.createElement("div");
+      head.className = "expert-group-title";
+      const titleSpan = document.createElement("span");
+      titleSpan.textContent = t("expertForeignHits");
+      head.appendChild(titleSpan);
+      sec.appendChild(head);
+      for (const entry of hits) sec.appendChild(foreignHitRow(entry));
+      box.appendChild(sec);
+    }
+  }
+  if (globalView && !shown && !foreignShown) {
     const empty = document.createElement("div");
     empty.className = "hint";
-    empty.textContent = t(!searching && expertOnlyChanged ? "expertNothingChanged" : "libraryNoResults");
+    empty.textContent = t(!searching && expertOnlyChanged ? "expertNothingChanged" : searching ? "expertSearchNoHits" : "libraryNoResults");
     box.appendChild(empty);
   }
   box.scrollTop = keepScroll;
 }
 
 // Which of this group's own rows currently differ from their default — reuses
-// the same gate + isRowChanged() checks renderExpert()'s keep() applies, just
-// standalone so the reset button can both decide whether to show itself and know
-// exactly what to touch.
+// the same isRowChanged() diff renderExpert()'s keep() applies, just standalone
+// so the reset button can both decide whether to show itself and know exactly
+// what to touch. Deliberately NOT gated on gateOpen(): a row hidden behind a
+// switched-off toggle can still hold a changed value underneath, and a group
+// reset must clear that too -- otherwise the stale value survives, invisible,
+// until the toggle is turned back on.
 function changedKeysInGroup(group) {
   const out = { flags: [], values: [], selects: [], dropdowns: [], paths: [], palette: false };
   for (const f of groupFlags(group)) {
-    if (gateOpen(f.gate) && isRowChanged("flags", f.key)) out.flags.push(f.key);
+    if (isRowChanged("flags", f.key)) out.flags.push(f.key);
   }
   for (const kind of ["values", "selects", "dropdowns", "paths"]) {
     for (const k of group[kind] || []) {
-      if (gateOpen(EXPERT_DEFS[kind]?.[k]?.gate) && isRowChanged(kind, k)) out[kind].push(k);
+      if (isRowChanged(kind, k)) out[kind].push(k);
     }
   }
   // Closes the one category the per-kind loop above cannot see — the colour
@@ -9076,13 +9202,16 @@ async function renderBackupPanel(body) {
   openFolderBtn.textContent = t("backupOpenFolder");
   openFolderBtn.addEventListener("click", () => invoke("open_backups_folder").catch((e) => errToast(e)));
   left.appendChild(openFolderBtn);
-  left.appendChild(switchRow(t("flagAutoBackup"), flag("autoBackup"), async (on) => {
+  const autoBackupRow = switchRow(t("flagAutoBackup"), flag("autoBackup"), async (on) => {
     await saveBackupSetting("flag", "autoBackup", on);
     renderBackupPanel(body);
-  }));
+  });
+  autoBackupRow.dataset.settingRow = "backup-auto";
+  left.appendChild(autoBackupRow);
   // The interval only means something while automatic backups run.
   if (flag("autoBackup")) {
     const iv = document.createElement("label"); iv.className = "field backup-set-row backup-interval-row";
+    iv.dataset.settingRow = "backup-interval";
     const ivl = document.createElement("span"); ivl.textContent = t("valBackupInterval");
     const ivs = document.createElement("select"); ivs.className = "modal-input backup-interval";
     for (const h of [6, 12, 24, 48, 168]) { const o = document.createElement("option"); o.value = String(h); o.textContent = fmtInterval(h); ivs.appendChild(o); }
@@ -9094,24 +9223,29 @@ async function renderBackupPanel(body) {
     if (ivReset) ivRight.append(ivReset);
     ivRight.append(ivs);
     iv.append(ivl, ivRight); left.appendChild(iv);
-    left.appendChild(numRow("valBackupStartDelay", "backupStartDelayS", 0, 300, async (v) => {
+    const delayRow = numRow("valBackupStartDelay", "backupStartDelayS", 0, 300, async (v) => {
       await saveBackupSetting("value", "backupStartDelayS", v);
       renderBackupPanel(body);
-    }, "backup-start-delay-row", () => renderBackupPanel(body)));
+    }, "backup-start-delay-row", () => renderBackupPanel(body));
+    delayRow.dataset.settingRow = "backup-start-delay";
+    left.appendChild(delayRow);
   }
 
   // Right column — retention. A plain number field replaces the three preset
   // buttons; "Smart retention" is a switch above it that turns the field grey
   // (backend ignores backupKeep while it is on) and activates the tiers below.
   const gfsOn = optFlag("backupGfs");
-  right.appendChild(switchRow(t("flagBackupGfs"), gfsOn, async (on) => {
+  const gfsRow = switchRow(t("flagBackupGfs"), gfsOn, async (on) => {
     await saveBackupSetting("flag", "backupGfs", on);
     renderBackupPanel(body);
-  }, "tipBackupGfs"));
+  }, "tipBackupGfs");
+  gfsRow.dataset.settingRow = "backup-gfs";
+  right.appendChild(gfsRow);
   const keepRow = numRow("valBackupKeep", "backupKeep", 1, 50, async (v) => {
     await saveBackupSetting("value", "backupKeep", v);
     renderBackupPanel(body); // without this the reset icon never appears live
   }, "backup-keep-row", () => renderBackupPanel(body));
+  keepRow.dataset.settingRow = "backup-keep";
   if (gfsOn) {
     keepRow.classList.add("is-disabled");
     keepRow.querySelector("input").disabled = true;
@@ -9132,15 +9266,21 @@ async function renderBackupPanel(body) {
   // appears/disappears live instead of only after some unrelated change.
   const onTier = (key) => async (v) => { await saveBackupSetting("value", key, v); renderBackupPanel(body); };
   const rerenderPanel = () => renderBackupPanel(body);
-  tiers.appendChild(numRow("valBackupDaily", "backupDaily", 0, 30, onTier("backupDaily"), null, rerenderPanel));
-  tiers.appendChild(numRow("valBackupWeekly", "backupWeekly", 0, 52, onTier("backupWeekly"), null, rerenderPanel));
-  tiers.appendChild(numRow("valBackupMonthly", "backupMonthly", 0, 60, onTier("backupMonthly"), null, rerenderPanel));
-  tiers.appendChild(numRow("valBackupYearly", "backupYearly", 0, 20, onTier("backupYearly"), null, rerenderPanel));
+  const tierRow = (labelKey, key, max, dataKey) => {
+    const row = numRow(labelKey, key, 0, max, onTier(key), null, rerenderPanel);
+    row.dataset.settingRow = dataKey;
+    return row;
+  };
+  tiers.appendChild(tierRow("valBackupDaily", "backupDaily", 30, "backup-daily"));
+  tiers.appendChild(tierRow("valBackupWeekly", "backupWeekly", 52, "backup-weekly"));
+  tiers.appendChild(tierRow("valBackupMonthly", "backupMonthly", 60, "backup-monthly"));
+  tiers.appendChild(tierRow("valBackupYearly", "backupYearly", 20, "backup-yearly"));
   slot.appendChild(tiers);
   // Optional backup password. Without one, backups use a fixed key and restore on any
   // PC; with one they need exactly this password. The stored password is never sent
   // back to the UI — the eye only reveals what was just typed in this session.
   const pwRow = document.createElement("div"); pwRow.className = "field backup-pw-row";
+  pwRow.dataset.settingRow = "backup-password";
   // Dots as the PLACEHOLDER, never as a value: they show that a password exists
   // without putting anything revealable — or accidentally saveable — in the field.
   const PW_DOTS = "••••••••";

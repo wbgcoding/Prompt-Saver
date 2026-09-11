@@ -989,6 +989,13 @@ export const I18N = {
     expertSearchPh: "Search settings…",
     expertOnlyChanged: "Only changed",
     expertNothingChanged: "Nothing has been changed from its defaults yet",
+    // --- expert search also covers normal settings, the toolbar, the library, backups ---
+    expertForeignHits: "Also in the normal settings",
+    expertSearchNoHits: "No matches in the expert menu, settings, library or backups.",
+    settingsAreaNormal: "Settings",
+    settingsAreaLibrary: "Library",
+    settingsAreaBackup: "Backups",
+    settingsAreaToolbar: "Toolbar",
     expertResetGroupBtn: "Reset this category",
     expertResetOne: "Reset this value",
     expertResetGroupConfirm: "Reset {n} setting(s) in this category to their defaults?",
@@ -2752,6 +2759,13 @@ export const I18N = {
     expertSearchPh: "Einstellungen suchen…",
     expertOnlyChanged: "Nur geänderte",
     expertNothingChanged: "Bisher wurde nichts vom Standard geändert",
+    // --- expert search also covers normal settings, the toolbar, the library, backups ---
+    expertForeignHits: "Auch in den normalen Einstellungen",
+    expertSearchNoHits: "Keine Treffer im Expertenmenü, in den Einstellungen, der Bibliothek oder den Sicherungen.",
+    settingsAreaNormal: "Einstellungen",
+    settingsAreaLibrary: "Bibliothek",
+    settingsAreaBackup: "Sicherungen",
+    settingsAreaToolbar: "Werkzeugleiste",
     expertResetGroupBtn: "Diese Kategorie zurücksetzen",
     expertResetOne: "Diesen Wert zurücksetzen",
     expertResetGroupConfirm: "{n} Einstellung(en) in dieser Kategorie auf Standard zurücksetzen?",
@@ -5293,6 +5307,13 @@ export const I18N = {
     editStateRestoreMsg: "Esta grabación tiene cambios sin terminar de la última vez ({count}). ¿Continuar editando o empezar de nuevo?",
     editStateRestoreContinue: "Continuar editando",
     editStateRestoreDiscard: "Empezar de nuevo",
+    // --- expert search also covers normal settings, the toolbar, the library, backups ---
+    expertForeignHits: "También en la configuración normal",
+    expertSearchNoHits: "No hay coincidencias en el menú de experto, configuración, biblioteca ni copias de seguridad.",
+    settingsAreaNormal: "Configuración",
+    settingsAreaLibrary: "Biblioteca",
+    settingsAreaBackup: "Copias de seguridad",
+    settingsAreaToolbar: "Barra de herramientas",
   },
   it: {
     flagChainPrompts: "Concatenazione prompt",
@@ -7056,6 +7077,13 @@ export const I18N = {
     editStateRestoreMsg: "Questa registrazione contiene modifiche non completate della sessione precedente ({count}). Continuare la modifica o ricominciare da capo?",
     editStateRestoreContinue: "Continua a modificare",
     editStateRestoreDiscard: "Ricomincia da capo",
+    // --- expert search also covers normal settings, the toolbar, the library, backups ---
+    expertForeignHits: "Anche nelle impostazioni normali",
+    expertSearchNoHits: "Nessuna corrispondenza nel menu per esperti, nelle impostazioni, nella libreria o nei backup.",
+    settingsAreaNormal: "Impostazioni",
+    settingsAreaLibrary: "Libreria",
+    settingsAreaBackup: "Backup",
+    settingsAreaToolbar: "Barra degli strumenti",
   },
   pt: {
     flagChainPrompts: "Encadear prompts",
@@ -8819,6 +8847,13 @@ export const I18N = {
     editStateRestoreMsg: "Esta gravação tem alterações não concluídas da última sessão ({count}). Continuar a editar ou começar de novo?",
     editStateRestoreContinue: "Continuar a editar",
     editStateRestoreDiscard: "Começar de novo",
+    // --- expert search also covers normal settings, the toolbar, the library, backups ---
+    expertForeignHits: "Também nas configurações normais",
+    expertSearchNoHits: "Nenhuma correspondência no menu de especialista, configurações, biblioteca ou cópias de segurança.",
+    settingsAreaNormal: "Configurações",
+    settingsAreaLibrary: "Biblioteca",
+    settingsAreaBackup: "Cópias de segurança",
+    settingsAreaToolbar: "Barra de ferramentas",
   },
   pl: {
     flagChainPrompts: "Łączenie promptów",
@@ -10593,6 +10628,13 @@ export const I18N = {
     editStateRestoreMsg: "To nagranie zawiera niedokończone zmiany z poprzedniej sesji ({count}). Kontynuować edycję czy zacząć od nowa?",
     editStateRestoreContinue: "Kontynuuj edycję",
     editStateRestoreDiscard: "Zacznij od nowa",
+    // --- expert search also covers normal settings, the toolbar, the library, backups ---
+    expertForeignHits: "Również w zwykłych ustawieniach",
+    expertSearchNoHits: "Brak wyników w menu eksperckim, ustawieniach, bibliotece lub kopiach zapasowych.",
+    settingsAreaNormal: "Ustawienia",
+    settingsAreaLibrary: "Biblioteka",
+    settingsAreaBackup: "Kopie zapasowe",
+    settingsAreaToolbar: "Pasek narzędzi",
   },
   zh: {
     flagChainPrompts: "提示词链接",
@@ -12356,6 +12398,13 @@ export const I18N = {
     editStateRestoreMsg: "此录像包含上次未完成的更改（{count}）。继续编辑还是重新开始？",
     editStateRestoreContinue: "继续编辑",
     editStateRestoreDiscard: "重新开始",
+    // --- expert search also covers normal settings, the toolbar, the library, backups ---
+    expertForeignHits: "在常规设置中也有",
+    expertSearchNoHits: "在专家菜单、设置、库或备份中未找到匹配项。",
+    settingsAreaNormal: "设置",
+    settingsAreaLibrary: "库",
+    settingsAreaBackup: "备份",
+    settingsAreaToolbar: "工具栏",
   },
   ja: {
     flagChainPrompts: "プロンプト連結",
@@ -14119,6 +14168,13 @@ export const I18N = {
     editStateRestoreMsg: "この録画には前回からの未完了の変更が残っています（{count}）。編集を続けますか、それとも最初からやり直しますか？",
     editStateRestoreContinue: "編集を続ける",
     editStateRestoreDiscard: "最初からやり直す",
+    // --- expert search also covers normal settings, the toolbar, the library, backups ---
+    expertForeignHits: "通常の設定にも該当",
+    expertSearchNoHits: "エキスパートメニュー、設定、ライブラリ、バックアップに一致する項目はありません。",
+    settingsAreaNormal: "設定",
+    settingsAreaLibrary: "ライブラリ",
+    settingsAreaBackup: "バックアップ",
+    settingsAreaToolbar: "ツールバー",
   },
   nl: {
     flagChainPrompts: "Prompts koppelen",
@@ -15882,6 +15938,13 @@ export const I18N = {
     editStateRestoreMsg: "Deze opname bevat nog niet-voltooide wijzigingen van de vorige keer ({count}). Verdergaan met bewerken of opnieuw beginnen?",
     editStateRestoreContinue: "Verder bewerken",
     editStateRestoreDiscard: "Opnieuw beginnen",
+    // --- expert search also covers normal settings, the toolbar, the library, backups ---
+    expertForeignHits: "Ook in de normale instellingen",
+    expertSearchNoHits: "Geen overeenkomsten in het expertmenu, de instellingen, de bibliotheek of back-ups.",
+    settingsAreaNormal: "Instellingen",
+    settingsAreaLibrary: "Bibliotheek",
+    settingsAreaBackup: "Back-ups",
+    settingsAreaToolbar: "Werkbalk",
   },
   tr: {
     flagChainPrompts: "Komut zincirleme",
@@ -17645,6 +17708,13 @@ export const I18N = {
     editStateRestoreMsg: "Bu kayıtta önceki oturumdan kalan tamamlanmamış değişiklikler var ({count}). Düzenlemeye devam etmek mi, yoksa baştan başlamak mı istersiniz?",
     editStateRestoreContinue: "Düzenlemeye devam et",
     editStateRestoreDiscard: "Baştan başla",
+    // --- expert search also covers normal settings, the toolbar, the library, backups ---
+    expertForeignHits: "Ayrıca normal ayarlarda",
+    expertSearchNoHits: "Uzman menüsünde, ayarlarda, kitaplıkta veya yedeklerde eşleşme bulunamadı.",
+    settingsAreaNormal: "Ayarlar",
+    settingsAreaLibrary: "Kitaplık",
+    settingsAreaBackup: "Yedekler",
+    settingsAreaToolbar: "Araç çubuğu",
   },
   ro: {
     flagChainPrompts: "Înlănțuire prompturi",
@@ -19408,6 +19478,13 @@ export const I18N = {
     editStateRestoreMsg: "Această înregistrare are modificări nefinalizate din sesiunea anterioară ({count}). Continuați editarea sau începeți de la capăt?",
     editStateRestoreContinue: "Continuă editarea",
     editStateRestoreDiscard: "Începe de la capăt",
+    // --- expert search also covers normal settings, the toolbar, the library, backups ---
+    expertForeignHits: "Și în setările normale",
+    expertSearchNoHits: "Nicio potrivire în meniul de expert, setări, bibliotecă sau copii de rezervă.",
+    settingsAreaNormal: "Setări",
+    settingsAreaLibrary: "Bibliotecă",
+    settingsAreaBackup: "Copii de rezervă",
+    settingsAreaToolbar: "Bară de instrumente",
   },
 };
 

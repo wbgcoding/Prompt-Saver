@@ -2143,6 +2143,45 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   cursor: pointer;
 }
 .expert-row-reset:hover { color: var(--accent); }
+/* A search hit outside the expert menu (normal settings, toolbar, library,
+   backups) — a clickable row, same base look as a real expert row, with a
+   small area badge on the right so it never reads as an actual setting. */
+.expert-foreign-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 4px 0;
+  font: inherit;
+  text-align: left;
+  color: var(--fg);
+  cursor: pointer;
+  border-radius: 5px;
+}
+.expert-foreign-row:hover { background: var(--surface-2); }
+.expert-foreign-row > span:first-child { font-size: 13px; }
+.expert-foreign-badge {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+/* The row a foreign-hit click jumps to, briefly flashed so it stands out from
+   the rest of the (now-scrolled) dialog. Fades out on its own; no re-render
+   removes the class earlier, since the row can legitimately still be on
+   screen once the highlight ends. */
+.settings-search-hit { animation: settings-search-flash 1.8s ease-out; border-radius: 6px; }
+@keyframes settings-search-flash {
+  0%, 15% { background: var(--surface-2); box-shadow: 0 0 0 2px var(--accent); }
+  100% { background: transparent; box-shadow: 0 0 0 0 transparent; }
+}
 /* In-app documentation. .help-group reuses .expert-group's own collapse
    mechanic (unscoped rules, see above) — only the body typography is new here.
    Section chips became a fixed tab bar (#help-tabs-bar, .expert-tabs reused),

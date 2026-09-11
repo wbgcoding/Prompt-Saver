@@ -262,6 +262,11 @@ the video editor and the introduction tour ship on).
   the next time you open the same recording; declining discards the saved
   state. Kept for 30 days by default (adjustable, zero keeps it forever) and
   cleaned up automatically once the recording itself is gone.
+- **The expert-menu search now also finds a hit outside the expert menu** —
+  the normal settings page, the toolbar's grid-size control, the library's
+  sort order, or a setting in the backup manager. A match appears in its own
+  section with a small badge saying where it lives; clicking it opens the
+  right place and briefly highlights the row.
 
 ### Improved
 
@@ -489,6 +494,10 @@ the video editor and the introduction tour ship on).
 - Importing a file, a theme or a synced Markdown file reads it under a size
   limit in one pass, so an unexpectedly huge file is refused instead of being
   pulled into memory whole.
+- **An expert-menu category's reset button now also clears a setting hidden
+  behind a switched-off toggle within that category**, instead of leaving it
+  stuck at its changed value where it could never be reached again without
+  first turning the toggle back on.
 
 ### Fixed
 
