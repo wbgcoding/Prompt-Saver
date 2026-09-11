@@ -13003,6 +13003,13 @@ function bind() {
         invoke("set_ui_text", { key: "recCanvasMode", value: "all" }).catch(() => {});
       }
     }
+    // "Finish and continue" split this recording into several files -- the
+    // result dialog below still only ever opens the LAST one (opening every
+    // part in sequence in the editor is future work), so at least name how
+    // many earlier parts exist and were kept, rather than the split going
+    // unmentioned.
+    const partsCount = e.payload?.parts?.length || 0;
+    if (partsCount > 0) toast(t("recContinuePartsSaved").replace("{n}", String(partsCount)));
     if (path) openRecModal(path, !!e.payload?.needs_crop);
   });
   $("rec-modal-close").addEventListener("click", () => closeRecModal());

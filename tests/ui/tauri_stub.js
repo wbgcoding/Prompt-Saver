@@ -279,6 +279,17 @@ const RESULTS = {
   hide_rec_bar: () => { window.__REC_BAR_HIDDEN__ = true; return null; },
   open_recorder_switch: () => null,
   switch_recording_target: () => null,
+  finish_and_continue_recording: () => {
+    window.__REC_CONTINUED__ = true;
+    return {
+      finished_part_path: "C:\\Recordings\\ps-smoke-recording.mp4",
+      finished_part_dropped_frames: 0,
+      finished_part_encode_error: null,
+      new_path: "C:\\Recordings\\ps-smoke-recording_part2.mp4",
+      part_number: 2,
+      gap_ms: 140,
+    };
+  },
   // Video editor: a fixed 10-minute 1080p30 recording with both a system and a
   // mic audio track -- real enough to exercise the filmstrip/waveform rendering
   // the same way an actual capture would, and shared by the UI smoke test and

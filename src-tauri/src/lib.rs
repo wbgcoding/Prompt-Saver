@@ -17226,13 +17226,43 @@ struct RecordingStoppedPayload {
     // past its starting size) -- None if that never happened. Drives the
     // reactive notice offering to switch recCanvasMode to "all" from now on.
     resize_crop_at_ms: Option<u64>,
+    // Every earlier part of this recording, oldest first, when the "finish and
+    // continue" button was used at least once -- empty for a plain recording,
+    // so existing callers reading only `path` see no change at all. The
+    // frontend chains [...parts, { path, mic_wav_path }] when it wants the
+    // full sequence, e.g. to open every part in the video editor one after
+    // another with its own mic sidecar muxed in.
+    parts: Vec<RecordingPartInfo>,
+}
+
+#[derive(serde::Serialize, Clone)]
+struct RecordingPartInfo {
+    path: String,
+    mic_wav_path: Option<String>,
+}
+
+#[derive(serde::Serialize, Clone)]
+struct RecordingContinuedPayload {
+    // The just-finished part's own outcome -- surfaced here (rather than only
+    // logged) because this part gets no result dialog of its own; the final
+    // stop is still the only place a dropped-frame count or encode error
+    // becomes visible to the user, via `RecordingStoppedPayload.parts`.
+    finished_part_path: String,
+    finished_part_dropped_frames: u64,
+    finished_part_encode_error: Option<String>,
+    new_path: String,
+    part_number: u32,
+    // How long the switch itself took, start to finish -- shown briefly in
+    // the control bar so the missing moment between the two files is never
+    // silently hidden from the user.
+    gap_ms: u64,
 }
 
 #[cfg(windows)]
 mod recording {
     use super::{
         append_crash_log, audio_mix_i16, crop_and_flip_rows_bottom_up, free_space_bytes, letterbox_frame_top_down,
-        scale_to_fit_frame_top_down, rec_filename,
+        scale_to_fit_frame_top_down, rec_filename, now_ms,
         AudioQueueShared, RecWavWriter,
         RecFeederShared, RecFrameItem, RecPhase, RecordClock, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE,
         canvas_within_ceiling, external_window_rect, monitor_rect_at, place_frame_in_canvas,
@@ -17665,7 +17695,19 @@ mod recording {
         pub audio_system: bool,
         pub audio_mic: bool,
         pub output_path: PathBuf,
+        // What this session is actually capturing right now -- kept up to
+        // date across a live target switch (see switch_target) so "finish and
+        // continue" can reopen against the SAME source without asking the
+        // control bar to remember a target it was never given in the first
+        // place (start_recording is invoked from the composer window, not
+        // from the bar).
+        pub target: RecTarget,
         pub phase: RecPhase,
+        // Wall-clock time this session actually started, so "finish and
+        // continue" can refuse a click inside the first few seconds -- the
+        // riskiest moment for a file switch, when the encoder has barely
+        // begun.
+        pub started_at_ms: u64,
         // Set only for a Window recording whose canvas ended up bigger
         // than the window (see WindowPlacement) -- the post-capture crop step
         // reads the union of every placed frame from this once the capture
@@ -17691,7 +17733,17 @@ mod recording {
         // Whether the cursor was drawn into the picture -- kept so a target
         // switch can build its replacement capture with the same setting
         // rather than silently reverting to the default.
-        show_cursor: bool,
+        pub show_cursor: bool,
+        // Every other setting this session was actually built with, kept so
+        // "finish and continue" reopens with the EXACT same values -- not
+        // whatever the settings store happens to hold at that later moment,
+        // which the user could have changed in between.
+        pub audio_config: AudioConfig,
+        pub video_kbps: u32,
+        pub video_fps: u32,
+        pub canvas_mode: String,
+        pub canvas_ceiling: (u32, u32),
+        pub disk_warn_mb: f64,
     }
 
     // A Window recording's canvas defaults to the union of every display
@@ -17933,9 +17985,12 @@ mod recording {
             control, clock, shared, feeder: Some(feeder), audio_stop, audio_threads, mic_queue, system_queue,
             audio_queues, mic_wav_thread, mic_wav_path,
             audio_system: audio.system, audio_mic: audio.mic,
-            output_path, phase: RecPhase::Recording,
+            output_path, target, phase: RecPhase::Recording, started_at_ms: now_ms(),
             used_area, canvas_note, canvas_size: (width, height),
             canvas_origin, show_cursor,
+            video_kbps, video_fps, canvas_ceiling, disk_warn_mb,
+            canvas_mode: canvas_mode.to_string(),
+            audio_config: audio,
         })
     }
 
@@ -18039,6 +18094,9 @@ mod recording {
             // to fail a switch that otherwise fully succeeded.
             append_crash_log(&format!("recording: old capture control stop failed after a target switch: {e}"));
         }
+        // A later "finish and continue" reopens against whatever this session
+        // is ACTUALLY capturing right now, so a switch updates that record too.
+        session.target = RecTarget::Window(new_hwnd);
         Ok(())
     }
 
@@ -18149,6 +18207,18 @@ mod recording {
             st.wYear as i32, st.wMonth as u32, st.wDay as u32, st.wHour as u32, st.wMinute as u32, st.wSecond as u32,
         );
         Ok(recordings_dir.join(name))
+    }
+
+    // Every continuation part keeps the very first file's own name stem and
+    // timestamp, with a numbered suffix -- so a folder listing groups every
+    // part of one "finish and continue" chain together under its original
+    // name instead of scattering fresh timestamps across it. Numbering starts
+    // at the second file: the first part IS the recording, nothing about its
+    // name says "part 1".
+    pub fn continuation_output_path(base: &Path, part_number: u32) -> PathBuf {
+        let stem = base.file_stem().and_then(|s| s.to_str()).unwrap_or("rec");
+        let ext = base.extension().and_then(|s| s.to_str()).unwrap_or("mp4");
+        base.with_file_name(format!("{stem}_part{part_number}.{ext}"))
     }
 }
 
@@ -18306,35 +18376,35 @@ fn check_export_disk_space_batch(dest_dir: String, format: String, video_kbps: O
     None
 }
 
+// The target half of what start_recording resolves from the picker -- its
+// own function since finish_and_continue_recording never resolves a target
+// this way at all (it reopens against RecSession.target, whatever the
+// running session is ACTUALLY capturing right now, not a fresh pick).
 #[cfg(windows)]
-#[allow(clippy::too_many_arguments)]
-#[tauri::command]
-async fn start_recording(
-    app: AppHandle,
-    rstate: State<'_, RecordingState>,
-    db: State<'_, Db>,
-    target_kind: String,
-    target_id: i64,
-    region_x: i32,
-    region_y: i32,
-    region_w: u32,
-    region_h: u32,
-) -> Result<(), String> {
-    {
-        let guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
-        let phase = guard.as_ref().map(|s| s.phase).unwrap_or(RecPhase::Idle);
-        if !rec_can_start(phase) {
-            return Err("recording-busy".to_string());
-        }
-    }
-    let target = match target_kind.as_str() {
-        "monitor" => recording::RecTarget::Monitor(target_id as isize),
-        "window" => recording::RecTarget::Window(target_id as isize),
-        "region" => recording::RecTarget::Region {
+fn resolve_recording_target(
+    target_kind: &str, target_id: i64, region_x: i32, region_y: i32, region_w: u32, region_h: u32,
+) -> Result<recording::RecTarget, String> {
+    match target_kind {
+        "monitor" => Ok(recording::RecTarget::Monitor(target_id as isize)),
+        "window" => Ok(recording::RecTarget::Window(target_id as isize)),
+        "region" => Ok(recording::RecTarget::Region {
             monitor: target_id as isize, x: region_x, y: region_y, w: region_w, h: region_h,
-        },
-        _ => return Err("invalid recording target".to_string()),
-    };
+        }),
+        _ => Err("invalid recording target".to_string()),
+    }
+}
+
+// Everything BUT the target that start_recording reads from the settings
+// store to build one recording::start() call -- pulled out so
+// finish_and_continue_recording can reopen with EXACTLY the same resolved
+// settings the just-finished part used, instead of duplicating this whole
+// block a second time and risking the two drifting apart. Settings are
+// re-read fresh here rather than copied from the finishing session on
+// purpose: a value the user changed WHILE recording (bitrate, mic device,
+// canvas mode, ...) is meant to take effect starting at the next part, the
+// same way it already would have at the very first start_recording call.
+#[cfg(windows)]
+fn resolve_recording_settings(db: &State<Db>) -> (bool, recording::AudioConfig, u32, u32, String, (u32, u32), f64) {
     // recCursor ships ON -- only an explicit false switches it off.
     // recAudioSystem and recAudioMic both ship ON now -- the mic is
     // captured by default too (into its own track, see start()'s both_active
@@ -18378,6 +18448,32 @@ async fn start_recording(
     // The mid-recording disk-space watch's own threshold -- see
     // check_recording_disk_space for the same value used before the start.
     let disk_warn_mb = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recDiskWarnMb").copied().unwrap_or(500.0);
+    (show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb)
+}
+
+#[cfg(windows)]
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+async fn start_recording(
+    app: AppHandle,
+    rstate: State<'_, RecordingState>,
+    db: State<'_, Db>,
+    target_kind: String,
+    target_id: i64,
+    region_x: i32,
+    region_y: i32,
+    region_w: u32,
+    region_h: u32,
+) -> Result<(), String> {
+    {
+        let guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
+        let phase = guard.as_ref().map(|s| s.phase).unwrap_or(RecPhase::Idle);
+        if !rec_can_start(phase) {
+            return Err("recording-busy".to_string());
+        }
+    }
+    let target = resolve_recording_target(&target_kind, target_id, region_x, region_y, region_w, region_h)?;
+    let (show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb) = resolve_recording_settings(&db);
     let dir = data_dir(&app).join("recordings");
     let session = tauri::async_runtime::spawn_blocking(move || {
         let out_path = recording::new_output_path(&dir)?;
@@ -18386,6 +18482,9 @@ async fn start_recording(
     .await
     .map_err(|e| e.to_string())??;
     *rstate.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(session);
+    // A fresh recording never inherits an earlier chain's already-closed
+    // parts -- only finish_and_continue_recording ever adds to this list.
+    REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner()).clear();
     // The stop/pause hotkeys are only ever live while a recording runs --
     // this is the transition into that state. Same for the tray's two extra rows.
     rearm_hotkeys(&app);
@@ -18464,6 +18563,169 @@ async fn switch_recording_target(
 #[tauri::command]
 async fn switch_recording_target(app: AppHandle, rstate: State<'_, RecordingState>, target_kind: String, target_id: i64) -> Result<(), String> {
     let _ = (app, rstate, target_kind, target_id);
+    Err("recording is only available on Windows".to_string())
+}
+
+#[cfg(windows)]
+enum ContinueOutcome {
+    Continued(recording::RecSession, RecordingContinuedPayload),
+    // The switch itself failed after the old file was already closed for
+    // good -- there is no way back to "still recording" from there, so this
+    // names the finished take instead of a failed no-op (the String is the
+    // error the command itself still returns to the caller).
+    StoppedInstead(String),
+}
+
+// The "finish and continue" button: closes the running file exactly like
+// Stop does, then immediately opens the next one with the SAME target, audio
+// sources and canvas/resolution settings -- so a long recording can be split
+// into playable parts without setting anything up again. No target/settings
+// parameters are taken at all: both come straight off the session that is
+// being closed (RecSession.target, kept current across a live target switch;
+// the rest exactly as resolve_recording_settings resolved it at that
+// session's own start), never re-read from the store, so a value the user
+// changes mid-recording only takes effect starting at the NEXT recording,
+// same as before this button existed.
+#[cfg(windows)]
+#[tauri::command]
+async fn finish_and_continue_recording(
+    app: AppHandle,
+    rstate: State<'_, RecordingState>,
+) -> Result<RecordingContinuedPayload, String> {
+    let session = {
+        let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
+        let s = guard.take().ok_or_else(|| "no active recording".to_string())?;
+        if !rec_can_finish(s.phase) {
+            *guard = Some(s);
+            return Err("nothing to stop".to_string());
+        }
+        // The riskiest moment for a file switch is right after the encoder
+        // has barely begun -- the frontend keeps this same button dead for
+        // the first five seconds too; this is the backend's own refusal in
+        // case that guard is ever bypassed (a stale button state, a direct
+        // call).
+        if now_ms().saturating_sub(s.started_at_ms) < 5_000 {
+            *guard = Some(s);
+            return Err("recording-too-young-to-continue".to_string());
+        }
+        s
+    };
+    // Every part after the first keeps the very FIRST file's own name stem,
+    // never the previous part's already-numbered one -- read once, before
+    // this call's own finished part is pushed further down.
+    let base_path = {
+        let parts = REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner());
+        match parts.first() {
+            Some(p) => PathBuf::from(p.path.as_str()),
+            None => session.output_path.clone(),
+        }
+    };
+    let target = session.target;
+    let (show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb) = (
+        session.show_cursor, session.audio_config.clone(), session.video_kbps, session.video_fps,
+        session.canvas_mode.clone(), session.canvas_ceiling, session.disk_warn_mb,
+    );
+    let app2 = app.clone();
+    let closure_result: Result<ContinueOutcome, String> = tauri::async_runtime::spawn_blocking(move || {
+        let switch_start = std::time::Instant::now();
+        let (path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size, resize_crop_at_ms) =
+            recording::stop(session)?;
+        let needs_crop = crop_rect.is_some_and(|(x, y, w, h)| x > 0 || y > 0 || w < canvas_size.0 || h < canvas_size.1);
+        let part_number = REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner()).len() as u32 + 2;
+        let out_path = recording::continuation_output_path(&base_path, part_number);
+        match recording::start(
+            target, out_path.clone(), show_cursor, audio, video_kbps, video_fps, &canvas_mode, canvas_ceiling, disk_warn_mb,
+        ) {
+            Ok(new_session) => {
+                // The switch worked -- this part is now an interim one with no
+                // result dialog of its own, so its crop (if any) runs right away
+                // in the background instead of waiting on
+                // PENDING_REC_CROP/REC_CROP_CANCEL, which stay reserved for the
+                // take's FINAL file and its own visible cancel button. A real,
+                // per-job cancel flag (not "never cancelled") lets a whole-take
+                // cancel stop this cleanly instead of racing its own delete
+                // against ffmpeg still reading the very file being removed.
+                if needs_crop {
+                    if let Some(ffmpeg) = ffmpeg_search_path(&app2) {
+                        let crop_path = path.clone();
+                        let rect = crop_rect.unwrap();
+                        let cancel_flag = Arc::new(AtomicBool::new(false));
+                        let cancel_flag2 = cancel_flag.clone();
+                        let spawned = std::thread::Builder::new().name("rec-continue-crop".into()).spawn(move || {
+                            let _ = crop_recording_blocking(&ffmpeg, &crop_path, rect, move || cancel_flag2.load(Ordering::SeqCst), |_| {});
+                            let me = std::thread::current().id();
+                            REC_INTERIM_CROPS.lock().unwrap_or_else(|e| e.into_inner()).retain(|(_, h)| h.thread().id() != me);
+                        });
+                        match spawned {
+                            Ok(handle) => REC_INTERIM_CROPS.lock().unwrap_or_else(|e| e.into_inner()).push((cancel_flag, handle)),
+                            Err(_) => append_crash_log("recording: could not start the interim-part crop thread"),
+                        }
+                    }
+                }
+                REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner()).push(RecordingPartInfo {
+                    path: path.to_string_lossy().to_string(),
+                    mic_wav_path: mic_wav_path.map(|p| p.to_string_lossy().to_string()),
+                });
+                Ok(ContinueOutcome::Continued(new_session, RecordingContinuedPayload {
+                    finished_part_path: path.to_string_lossy().to_string(),
+                    finished_part_dropped_frames: dropped,
+                    finished_part_encode_error: encode_error,
+                    new_path: out_path.to_string_lossy().to_string(),
+                    part_number,
+                    gap_ms: switch_start.elapsed().as_millis() as u64,
+                }))
+            }
+            Err(start_err) => {
+                // This file becomes the take's final one after all -- same
+                // crop/result path a real stop uses, with every earlier part
+                // folded in.
+                if needs_crop {
+                    let mut pending = PENDING_REC_CROP.lock().unwrap_or_else(|e| e.into_inner());
+                    *pending = Some((path.clone(), crop_rect.unwrap()));
+                }
+                let parts = std::mem::take(&mut *REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner()));
+                let payload = RecordingStoppedPayload {
+                    path: path.to_string_lossy().to_string(),
+                    dropped_frames: dropped,
+                    encode_error,
+                    mic_wav_path: mic_wav_path.map(|p| p.to_string_lossy().to_string()),
+                    canvas_note: canvas_note.map(str::to_string),
+                    needs_crop,
+                    resize_crop_at_ms,
+                    parts,
+                };
+                let _ = app2.emit("recording-captured", payload);
+                Ok(ContinueOutcome::StoppedInstead(format!("recording-continue-failed-stopped:{start_err}")))
+            }
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    match closure_result {
+        Err(e) => {
+            // recording::stop itself failed -- practically unreachable (it
+            // folds every internal failure into encode_error instead), but if
+            // it ever does, the old session is already gone either way.
+            rearm_hotkeys(&app);
+            apply_tray_menu(&app);
+            Err(e)
+        }
+        Ok(ContinueOutcome::Continued(new_session, payload)) => {
+            *rstate.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(new_session);
+            Ok(payload)
+        }
+        Ok(ContinueOutcome::StoppedInstead(err)) => {
+            rearm_hotkeys(&app);
+            apply_tray_menu(&app);
+            sweep_recordings_and_notify(&app);
+            Err(err)
+        }
+    }
+}
+#[cfg(not(windows))]
+#[tauri::command]
+async fn finish_and_continue_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<RecordingContinuedPayload, String> {
+    let _ = (app, rstate);
     Err("recording is only available on Windows".to_string())
 }
 
@@ -18567,6 +18829,11 @@ fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayload, String
         let mut pending = PENDING_REC_CROP.lock().unwrap_or_else(|e| e.into_inner());
         *pending = Some((path.clone(), crop_rect.unwrap()));
     }
+    // Every earlier part a "finish and continue" chain already closed --
+    // empty for a plain recording, since nothing but that button ever adds
+    // to this list. Taken (not just read) so the next recording starts clean
+    // even if start_recording's own clear were ever skipped.
+    let parts = std::mem::take(&mut *REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner()));
     let payload = RecordingStoppedPayload {
         path: path.to_string_lossy().to_string(),
         dropped_frames: dropped,
@@ -18575,6 +18842,7 @@ fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayload, String
         canvas_note: canvas_note.map(str::to_string),
         needs_crop,
         resize_crop_at_ms,
+        parts,
     };
     // The stop/pause hotkeys give up their combination the instant nothing
     // is recording, on every end path this function serves (button, hotkey,
@@ -18618,9 +18886,31 @@ async fn cancel_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> 
         }
         s
     };
-    tauri::async_runtime::spawn_blocking(move || recording::cancel(session))
-        .await
-        .map_err(|e| e.to_string())??;
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        recording::cancel(session)?;
+        // A cancel discards the WHOLE take, not just its current file -- every
+        // earlier part a "finish and continue" chain already closed goes with
+        // it. Every interim crop still running against one of those files is
+        // signalled and joined FIRST, so deleting them can never race an
+        // ffmpeg process still reading the very file being removed (a delete
+        // that fails because the file is still open, or one that "succeeds"
+        // only for the crop's own rename to recreate it right after).
+        for (flag, handle) in std::mem::take(&mut *REC_INTERIM_CROPS.lock().unwrap_or_else(|e| e.into_inner())) {
+            flag.store(true, Ordering::SeqCst);
+            let _ = handle.join();
+        }
+        // Best-effort from here: a missing file (already moved/deleted by the
+        // user) is not a reason to fail an otherwise-successful cancel.
+        for part in std::mem::take(&mut *REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner())) {
+            let _ = std::fs::remove_file(&part.path);
+            if let Some(w) = &part.mic_wav_path {
+                let _ = std::fs::remove_file(w);
+            }
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     // Give the stop/pause combination back up now that nothing is recording,
     // and drop the tray's two extra rows.
     rearm_hotkeys(&app);
@@ -19773,6 +20063,25 @@ fn cancel_recording_convert() {
 static PENDING_REC_CROP: Mutex<Option<(PathBuf, (u32, u32, u32, u32))>> = Mutex::new(None);
 static REC_CROP_CANCEL: AtomicBool = AtomicBool::new(false);
 
+// Every part a "finish and continue" chain has already closed, oldest first
+// -- read once the recording finally stops for real (stop_recording_now) to
+// fill RecordingStoppedPayload.parts, and cleared the moment a new recording
+// actually starts so a finished chain never leaks into the next one's
+// result. A plain recording that never used the continue button leaves this
+// empty the whole time. Each entry keeps its own mic sidecar path too (both
+// system and mic audio active), so a cancel can remove every part's leftover
+// files, not just its video.
+static REC_SESSION_PARTS: Mutex<Vec<RecordingPartInfo>> = Mutex::new(Vec::new());
+
+// One entry per interim continuation-part crop currently running in the
+// background -- a cancel of the whole take signals every one of these to stop
+// and waits for it before deleting that part's file, so an ffmpeg process
+// still reading the source can never lose that race against the delete (a
+// deleted-then-recreated file, or a delete that fails outright because the
+// file is still open). Each thread removes its own entry once it is done,
+// cancelled or not.
+static REC_INTERIM_CROPS: Mutex<Vec<(Arc<AtomicBool>, std::thread::JoinHandle<()>)>> = Mutex::new(Vec::new());
+
 #[derive(serde::Serialize, Clone)]
 struct CropProgressPayload {
     ms: u32,
@@ -19806,7 +20115,7 @@ async fn crop_recording_to_used_area(app: AppHandle, path: String) -> Result<Str
     let ffmpeg = ffmpeg_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
     REC_CROP_CANCEL.store(false, Ordering::SeqCst);
     tauri::async_runtime::spawn_blocking(move || {
-        crop_recording_blocking(&ffmpeg, &src, rect, |ms| {
+        crop_recording_blocking(&ffmpeg, &src, rect, || REC_CROP_CANCEL.load(Ordering::SeqCst), |ms| {
             let _ = app.emit("recording-crop-progress", CropProgressPayload { ms });
         })
     })
@@ -19820,7 +20129,7 @@ async fn crop_recording_to_used_area(app: AppHandle, path: String) -> Result<Str
 // Audio is copied untouched -- cropping never touches timing, so
 // re-encoding it would only risk a sync drift for no benefit.
 fn crop_recording_blocking(
-    ffmpeg: &Path, src: &Path, rect: (u32, u32, u32, u32), mut on_progress: impl FnMut(u32),
+    ffmpeg: &Path, src: &Path, rect: (u32, u32, u32, u32), is_cancelled: impl Fn() -> bool, mut on_progress: impl FnMut(u32),
 ) -> Result<String, String> {
     // libx264 requires even dimensions; the offset is floored to even too so
     // chroma stays aligned on the 4:2:0 subsampling grid.
@@ -19832,7 +20141,7 @@ fn crop_recording_blocking(
         "-c:v".to_string(), "libx264".to_string(), "-crf".to_string(), "16".to_string(), "-preset".to_string(), "veryfast".to_string(),
         "-c:a".to_string(), "copy".to_string(),
     ];
-    let staged = run_ffmpeg_to_staged(ffmpeg, src, src, &[], &args, || REC_CROP_CANCEL.load(Ordering::SeqCst), &mut on_progress)?;
+    let staged = run_ffmpeg_to_staged(ffmpeg, src, src, &[], &args, is_cancelled, &mut on_progress)?;
     fs::rename(&staged, src).map_err(|e| {
         let _ = fs::remove_file(&staged);
         let text = e.to_string();
@@ -24035,6 +24344,7 @@ pub fn run() {
             set_rec_pause_hotkey,
             start_recording,
             switch_recording_target,
+            finish_and_continue_recording,
             check_recording_disk_space,
             check_export_disk_space,
             check_export_disk_space_batch,
@@ -25635,7 +25945,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("ps-croptest-size-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x48");
-        let out = crop_recording_blocking(&ffmpeg, &src, (8, 8, 32, 24), |_| {}).expect("crop should succeed");
+        let out = crop_recording_blocking(&ffmpeg, &src, (8, 8, 32, 24), || REC_CROP_CANCEL.load(Ordering::SeqCst), |_| {}).expect("crop should succeed");
         assert_eq!(PathBuf::from(&out), src, "the crop must replace the source path, not a new one");
         let probe = probe_recording_blocking(&ffprobe, &src).expect("probe should succeed");
         assert_eq!((probe.width, probe.height), (32, 24));
@@ -25654,7 +25964,7 @@ mod tests {
         // position/size) must still produce a playable file, not an
         // "odd dimensions" ffmpeg failure.
         let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x48");
-        let out = crop_recording_blocking(&ffmpeg, &src, (7, 5, 31, 23), |_| {}).expect("crop should succeed");
+        let out = crop_recording_blocking(&ffmpeg, &src, (7, 5, 31, 23), || REC_CROP_CANCEL.load(Ordering::SeqCst), |_| {}).expect("crop should succeed");
         assert_eq!(PathBuf::from(&out), src);
         let probe = probe_recording_blocking(&ffprobe, &src).expect("probe should succeed");
         assert_eq!((probe.width, probe.height), (30, 22), "odd rect values must floor to even");
@@ -25675,7 +25985,7 @@ mod tests {
         // from the start is caught deterministically whether or not the
         // stdout-progress loop itself ever observes it mid-run.
         REC_CROP_CANCEL.store(true, Ordering::SeqCst);
-        let result = crop_recording_blocking(&ffmpeg, &src, (10, 10, 200, 150), |_| {});
+        let result = crop_recording_blocking(&ffmpeg, &src, (10, 10, 200, 150), || REC_CROP_CANCEL.load(Ordering::SeqCst), |_| {});
         assert_eq!(result, Err("cancelled".to_string()));
         assert!(src.is_file(), "a cancelled crop must never remove the source");
         let after = fs::read(&src).unwrap();
@@ -27033,6 +27343,91 @@ mod tests {
         let track_count = bytes.windows(4).filter(|w| *w == b"trak").count();
         let _ = std::fs::remove_file(&path);
         assert_eq!(track_count, 2, "expected 1 video + 1 empty audio track box, found {track_count}");
+    }
+
+    // Pure naming/numbering check, no capture hardware needed -- runs on
+    // every plain `cargo test --lib`.
+    #[test]
+    #[cfg(windows)]
+    fn continuation_output_path_keeps_the_stem_and_numbers_from_two() {
+        let base = std::path::Path::new(r"C:\recordings\rec-2026-09-11_120000.mp4");
+        assert_eq!(
+            recording::continuation_output_path(base, 2),
+            std::path::PathBuf::from(r"C:\recordings\rec-2026-09-11_120000_part2.mp4")
+        );
+        assert_eq!(
+            recording::continuation_output_path(base, 5),
+            std::path::PathBuf::from(r"C:\recordings\rec-2026-09-11_120000_part5.mp4")
+        );
+        // A continuation of a continuation still derives from the ORIGINAL
+        // stem, never from an already-numbered one -- callers are expected to
+        // always pass the first part's own path in, matching how
+        // finish_and_continue_recording resolves its own base_path.
+        assert_eq!(
+            recording::continuation_output_path(base, 3).file_stem().unwrap(),
+            "rec-2026-09-11_120000_part3"
+        );
+    }
+
+    // Two files come out of a "finish and continue" style sequence, both
+    // playable, correctly numbered, and started from the exact same settings
+    // values (the same variables handed to `start` twice -- the actual
+    // command instead reads them off the finishing session itself, but the
+    // effect this proves, identical settings on both calls, is the same).
+    // Needs a real display: `cargo test --lib -- --ignored
+    // rec_continue_two_parts_are_both_playable_with_matching_settings`.
+    #[test]
+    #[cfg(windows)]
+    #[ignore]
+    fn rec_continue_two_parts_are_both_playable_with_matching_settings() {
+        let dir = std::env::temp_dir().join(format!("ps-continue-probe-{}", std::process::id()));
+        let part1_path = recording::new_output_path(&dir).expect("output path");
+        let audio = recording::AudioConfig { system: false, mic: false, mic_device_id: String::new(), kbps: 192 };
+        let target = recording::RecTarget::Monitor(0);
+        let (show_cursor, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb) =
+            (true, 12000u32, 30u32, "all", (8192u32, 4320u32), 500.0f64);
+
+        let session1 = recording::start(
+            target, part1_path.clone(), show_cursor, audio.clone(), video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb,
+        )
+        .expect("start part 1");
+        // The session retains exactly what it was built with -- this is what
+        // finish_and_continue_recording reads back to reopen the next part,
+        // instead of re-reading settings that may have changed since.
+        assert_eq!(session1.video_kbps, video_kbps);
+        assert_eq!(session1.video_fps, video_fps);
+        assert_eq!(session1.canvas_mode, canvas_mode);
+        assert_eq!(session1.canvas_ceiling, canvas_ceiling);
+        assert_eq!(session1.disk_warn_mb, disk_warn_mb);
+        assert_eq!(session1.audio_config.system, audio.system);
+        assert_eq!(session1.audio_config.mic, audio.mic);
+        assert_eq!(session1.show_cursor, show_cursor);
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let (stopped1_path, _d1, _e1, _m1, _c1, _r1, _s1, _rc1) = recording::stop(session1).expect("stop part 1");
+        assert_eq!(stopped1_path, part1_path);
+
+        let part2_path = recording::continuation_output_path(&part1_path, 2);
+        let session2 = recording::start(
+            target, part2_path.clone(), show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb,
+        )
+        .expect("start part 2 with the SAME settings as part 1");
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let (stopped2_path, _d2, _e2, _m2, _c2, _r2, _s2, _rc2) = recording::stop(session2).expect("stop part 2");
+        assert_eq!(stopped2_path, part2_path);
+
+        assert_ne!(part1_path, part2_path, "the two parts must not collide on the same file");
+        assert_eq!(
+            part2_path.file_stem().unwrap(),
+            format!("{}_part2", part1_path.file_stem().unwrap().to_str().unwrap()).as_str()
+        );
+
+        for p in [&part1_path, &part2_path] {
+            let bytes = std::fs::read(p).unwrap_or_else(|e| panic!("read {p:?}: {e}"));
+            assert!(bytes.len() > 5_000, "{p:?} suspiciously small: {} bytes", bytes.len());
+            assert!(mp4_has_moov(p), "{p:?} has no closed moov atom, not playable");
+        }
+        let _ = std::fs::remove_file(&part1_path);
+        let _ = std::fs::remove_file(&part2_path);
     }
 
     #[test]

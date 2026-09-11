@@ -7305,6 +7305,21 @@ RECBAR_PROBE = """
     else if (switchCall[1].targetId !== 4242) errs.push('switch_recording_target got the wrong target id: ' + JSON.stringify(switchCall[1]));
     window.__REC_STATUS_OVERRIDE__ = null;
     await sleep(600);
+    // "Finish and continue": disabled inside the first five seconds
+    // (elapsed_ms mirrors the backend's own started_at_ms guard), enabled
+    // past it, and a click reaches the backend command and shows its gap.
+    const continueBtn = document.getElementById('continue-btn');
+    const continueGapEl = document.getElementById('continue-gap');
+    window.__REC_STATUS_OVERRIDE__ = { elapsed_ms: 2000 };
+    if (!await until(() => continueBtn.disabled)) errs.push('continue button was not disabled in the first five seconds');
+    window.__REC_STATUS_OVERRIDE__ = { elapsed_ms: 65000 };
+    if (!await until(() => !continueBtn.disabled)) errs.push('continue button never enabled past the five-second lockout');
+    continueBtn.click();
+    await sleep(30);
+    if (!window.__REC_CONTINUED__) errs.push('continue button did not call finish_and_continue_recording');
+    if (continueGapEl.classList.contains('hidden')) errs.push('continue gap badge did not show after a successful continue');
+    window.__REC_STATUS_OVERRIDE__ = null;
+    await sleep(600);
     document.getElementById('pause-btn').click();
     await sleep(30);
     if (!window.__REC_PAUSED__) errs.push('pause button did not call pause_recording');

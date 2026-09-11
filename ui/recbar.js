@@ -15,6 +15,8 @@ const switchBtn = document.getElementById("switch-btn");
 const pauseBtn = document.getElementById("pause-btn");
 const pauseIcon = document.getElementById("pause-icon");
 const resumeIcon = document.getElementById("resume-icon");
+const continueBtn = document.getElementById("continue-btn");
+const continueGapEl = document.getElementById("continue-gap");
 const stopBtn = document.getElementById("stop-btn");
 const cancelBtn = document.getElementById("cancel-btn");
 const audioSysEl = document.getElementById("audio-sys");
@@ -59,6 +61,27 @@ function applyTargetSwitch(enabled) {
   if (!i18nDict) return;
   const label = enabled ? i18nDict.recBarSwitchTarget : i18nDict.recTargetSwitchUnsupported;
   if (label) { switchBtn.title = label; switchBtn.setAttribute("aria-label", label); }
+}
+
+// Mirrors the backend's own 5-second refusal (finish_and_continue_recording)
+// so the button is never enabled for a click the backend would reject anyway
+// -- the backend guard is still what actually decides, this only avoids a
+// pointless round trip during the riskiest moment for a file switch.
+const CONTINUE_LOCKOUT_MS = 5000;
+function applyContinueEnabled(elapsedMs) {
+  continueBtn.disabled = elapsedMs < CONTINUE_LOCKOUT_MS;
+}
+
+// A successful continue's own gap (ms the switch itself took, start to
+// finish) is shown for a few seconds right where the file size normally
+// sits, so the missing moment between the two files is never silently
+// hidden from the user -- not localized, same as fmtSize's "KB"/"MB".
+let gapHideTimer = 0;
+function showContinueGap(gapMs) {
+  clearTimeout(gapHideTimer);
+  continueGapEl.textContent = gapMs >= 1000 ? `+${(gapMs / 1000).toFixed(1)}s` : `+${gapMs}ms`;
+  continueGapEl.classList.remove("hidden");
+  gapHideTimer = setTimeout(() => continueGapEl.classList.add("hidden"), 4000);
 }
 
 let paused = false;
@@ -166,6 +189,7 @@ async function poll() {
     timeEl.textContent = fmtTime(status.elapsed_ms);
     applySize(status.show_size ? status.bytes : 0, status.size_eta_secs);
     applyTargetSwitch(status.target_switch_enabled);
+    applyContinueEnabled(status.elapsed_ms);
     applyAudio(status);
     applyHotkeyWarn(status.stop_hotkey_ok, status.pause_hotkey_ok);
   } catch {
@@ -200,8 +224,34 @@ pauseBtn.addEventListener("click", async () => {
     applyPaused(!paused);
   } catch {}
 });
+// Closes the running file exactly like Stop, then immediately opens the
+// next one with the same target/settings -- no target is sent along, the
+// backend reopens against whatever the session it is closing was actually
+// capturing (see finish_and_continue_recording).
+continueBtn.addEventListener("click", async () => {
+  if (continueBtn.disabled) return;
+  continueBtn.disabled = true;
+  try {
+    const result = await invoke("finish_and_continue_recording");
+    showContinueGap(result.gap_ms);
+  } catch (err) {
+    // The switch failed AFTER the old file was already closed for good --
+    // the backend already emitted "recording-captured" with every part
+    // folded in (main.js's own listener shows the result), this bar just
+    // closes like a normal stop instead of surfacing a second, redundant
+    // error on top of that.
+    if (typeof err === "string" && err.startsWith("recording-continue-failed-stopped:")) {
+      pauseBtn.disabled = true; stopBtn.disabled = true; cancelBtn.disabled = true; continueBtn.disabled = true;
+      clearInterval(pollTimer);
+      invoke("hide_rec_bar").catch(() => {});
+      return;
+    }
+    // "recording-too-young-to-continue" (a race with the 5-second guard) or
+    // "no active recording" -- the next poll tick re-syncs the button state.
+  }
+});
 stopBtn.addEventListener("click", async () => {
-  pauseBtn.disabled = true; stopBtn.disabled = true; cancelBtn.disabled = true;
+  pauseBtn.disabled = true; stopBtn.disabled = true; cancelBtn.disabled = true; continueBtn.disabled = true;
   try {
     await invoke("stop_recording");
   } catch {}
@@ -209,7 +259,7 @@ stopBtn.addEventListener("click", async () => {
   invoke("hide_rec_bar").catch(() => {});
 });
 cancelBtn.addEventListener("click", async () => {
-  pauseBtn.disabled = true; stopBtn.disabled = true; cancelBtn.disabled = true;
+  pauseBtn.disabled = true; stopBtn.disabled = true; cancelBtn.disabled = true; continueBtn.disabled = true;
   try {
     await invoke("cancel_recording");
   } catch {}
