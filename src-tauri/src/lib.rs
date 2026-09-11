@@ -10198,6 +10198,10 @@ struct RecordingStatus {
     // picked, so a false here already means the button itself is disabled;
     // a true here does not yet guarantee any given pick will succeed.
     target_switch_enabled: bool,
+    // recDiskWarnMb's mid-recording half (the before-start check is
+    // check_recording_disk_space) -- Some at most once per recording, the
+    // instant free space first drops below the threshold. Never causes a stop.
+    disk_low: Option<(u64, u64)>,
 }
 
 // recBarSize's own threshold logic: whether to show the size at all, and
@@ -10263,6 +10267,7 @@ fn recording_status(rstate: State<'_, RecordingState>, db: State<'_, Db>) -> Opt
         show_size,
         size_eta_secs,
         target_switch_enabled,
+        disk_low: recording::take_disk_low(session),
     })
 }
 #[cfg(not(windows))]
@@ -16485,6 +16490,15 @@ fn canvas_within_ceiling(w: u32, h: u32, ceiling_w: u32, ceiling_h: u32) -> bool
     w <= ceiling_w && h <= ceiling_h
 }
 
+// Pure predicate for the two optional recording safety nets (recMaxMin and
+// recMaxMb, both 0 = off) -- kept free of the watch thread's sleep loop so it
+// is unit-testable without spinning up a real recording.
+fn recording_limit_reached(elapsed_secs: u64, file_len: u64, max_min: f64, max_mb: f64) -> bool {
+    let by_time = max_min > 0.0 && elapsed_secs >= (max_min * 60.0) as u64;
+    let by_size = max_mb > 0.0 && file_len >= (max_mb * 1024.0 * 1024.0) as u64;
+    by_time || by_size
+}
+
 // The bounds of whichever display currently contains (x, y) -- 369's "the
 // display the window is on" fallback tier, using the same Win32 lookup
 // `resolve_region_monitor` already does for region recordings (no second way
@@ -17100,6 +17114,12 @@ pub(crate) struct RecFeederShared {
     resize_crop_max_w: std::sync::atomic::AtomicU32,
     resize_crop_max_h: std::sync::atomic::AtomicU32,
     resize_crop_first_ms_plus_one: std::sync::atomic::AtomicU64,
+    // Set at most once per recording, by the disk-space watch thread, the
+    // first time free space drops below recDiskWarnMb -- read (and cleared)
+    // by the live recording_status poll so the control bar can show it
+    // exactly once, never stopping the recording (that is the hard, separate
+    // "low-disk-space" threshold at warn_mb/4 below).
+    disk_low: Mutex<Option<(u64, u64)>>,
 }
 impl RecFeederShared {
     fn new() -> Self {
@@ -17113,6 +17133,7 @@ impl RecFeederShared {
             resize_crop_max_w: std::sync::atomic::AtomicU32::new(0),
             resize_crop_max_h: std::sync::atomic::AtomicU32::new(0),
             resize_crop_first_ms_plus_one: std::sync::atomic::AtomicU64::new(0),
+            disk_low: Mutex::new(None),
         }
     }
     // Called only from on_frame_arrived's legacy resize-safety-net branch, at
@@ -17140,6 +17161,17 @@ impl RecFeederShared {
     }
     fn has_first_frame(&self) -> bool {
         self.first_frame.load(std::sync::atomic::Ordering::Relaxed)
+    }
+    fn note_disk_low(&self, free_mb: u64, est_seconds: u64) {
+        let mut d = self.disk_low.lock().unwrap_or_else(|e| e.into_inner());
+        if d.is_none() {
+            *d = Some((free_mb, est_seconds));
+        }
+    }
+    // Consuming: recording_status() takes it exactly once, so the control
+    // bar's toast fires exactly once per recording, not on every poll tick.
+    fn take_disk_low(&self) -> Option<(u64, u64)> {
+        self.disk_low.lock().unwrap_or_else(|e| e.into_inner()).take()
     }
     fn set_encode_error(&self, msg: String) {
         let mut e = self.encode_error.lock().unwrap_or_else(|e| e.into_inner());
@@ -17266,8 +17298,10 @@ mod recording {
         AudioQueueShared, RecWavWriter,
         RecFeederShared, RecFrameItem, RecPhase, RecordClock, REC_AUDIO_CHANNELS, REC_AUDIO_SAMPLE_RATE,
         canvas_within_ceiling, external_window_rect, monitor_rect_at, place_frame_in_canvas,
-        scale_bitrate_to_used_area, virtual_screen_bounds, UsedAreaTracker,
+        scale_bitrate_to_used_area, virtual_screen_bounds, recording_limit_reached,
+        estimate_recording_seconds_remaining, UsedAreaTracker,
     };
+    use std::fs;
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
@@ -17744,6 +17778,11 @@ mod recording {
         pub canvas_mode: String,
         pub canvas_ceiling: (u32, u32),
         pub disk_warn_mb: f64,
+        // Recording-length and file-size safety nets (0 = off, matching
+        // disk_warn_mb's own carry-through: "finish and continue" reuses the
+        // just-finished part's values, never re-reads the store).
+        pub max_min: f64,
+        pub max_mb: f64,
     }
 
     // A Window recording's canvas defaults to the union of every display
@@ -17819,13 +17858,32 @@ mod recording {
     // thread notice a normal stop and exit on its own within a second, instead
     // of a caller having to join a thread that might otherwise be mid-sleep for
     // up to a minute.
-    fn spawn_disk_watch(shared: Arc<RecFeederShared>, output_path: PathBuf, warn_mb: f64) {
+    // Also enforces the two optional user-set safety nets (recMaxMin/recMaxMb,
+    // 0 = off): same clean "set an error, request a stop" channel as the
+    // disk-space check below, checked on the same 1s tick since both are just
+    // reading an already-cheap number (elapsed time, one fs::metadata call).
+    fn spawn_disk_watch(
+        shared: Arc<RecFeederShared>, output_path: PathBuf, warn_mb: f64, max_min: f64, max_mb: f64,
+        video_kbps: u32, audio_active: bool,
+    ) {
         let spawned = thread::Builder::new().name("rec-disk-watch".into()).spawn(move || {
+            let warn_bytes = (warn_mb.max(1.0) * 1024.0 * 1024.0) as u64;
             let critical_bytes = ((warn_mb / 4.0).max(1.0) * 1024.0 * 1024.0) as u64;
+            let limits_active = max_min > 0.0 || max_mb > 0.0;
             let mut waited = Duration::ZERO;
+            let mut elapsed = Duration::ZERO;
             while !shared.is_stopping() {
                 thread::sleep(Duration::from_secs(1));
+                elapsed += Duration::from_secs(1);
                 waited += Duration::from_secs(1);
+                if limits_active {
+                    let file_len = fs::metadata(&output_path).map(|m| m.len()).unwrap_or(0);
+                    if recording_limit_reached(elapsed.as_secs(), file_len, max_min, max_mb) {
+                        shared.set_encode_error("max-limit-reached".to_string());
+                        shared.request_stop();
+                        return;
+                    }
+                }
                 if waited < Duration::from_secs(60) {
                     continue;
                 }
@@ -17840,6 +17898,13 @@ mod recording {
                         shared.request_stop();
                         return;
                     }
+                    // The softer, non-stopping notice: fires once, well above the
+                    // hard critical_bytes threshold above.
+                    if free < warn_bytes {
+                        let free_mb = free / (1024 * 1024);
+                        let est_min = estimate_recording_seconds_remaining(free, video_kbps, audio_active) / 60;
+                        shared.note_disk_low(free_mb, est_min);
+                    }
                 }
             }
         });
@@ -17853,7 +17918,7 @@ mod recording {
     // source active takes the exact original video-only path unchanged.
     pub fn start(
         target: RecTarget, output_path: PathBuf, show_cursor: bool, audio: AudioConfig, video_kbps: u32, video_fps: u32,
-        canvas_mode: &str, canvas_ceiling: (u32, u32), disk_warn_mb: f64,
+        canvas_mode: &str, canvas_ceiling: (u32, u32), disk_warn_mb: f64, max_min: f64, max_mb: f64,
     ) -> Result<RecSession, String> {
         let (native_w, native_h) = resolve_target_size(target)?;
         let audio_active = audio.system || audio.mic;
@@ -17896,7 +17961,7 @@ mod recording {
         let canvas_note = if canvas.note.is_empty() { None } else { Some(canvas.note) };
         let clock = Arc::new(RecordClock::new());
         let shared = Arc::new(RecFeederShared::new());
-        spawn_disk_watch(shared.clone(), output_path.clone(), disk_warn_mb);
+        spawn_disk_watch(shared.clone(), output_path.clone(), disk_warn_mb, max_min, max_mb, video_kbps, audio_active);
 
         let mut audio_queues: Vec<Arc<AudioQueueShared>> = Vec::new();
         let mut audio_threads = Vec::new();
@@ -17988,7 +18053,7 @@ mod recording {
             output_path, target, phase: RecPhase::Recording, started_at_ms: now_ms(),
             used_area, canvas_note, canvas_size: (width, height),
             canvas_origin, show_cursor,
-            video_kbps, video_fps, canvas_ceiling, disk_warn_mb,
+            video_kbps, video_fps, canvas_ceiling, disk_warn_mb, max_min, max_mb,
             canvas_mode: canvas_mode.to_string(),
             audio_config: audio,
         })
@@ -18179,6 +18244,12 @@ mod recording {
     // capturing while every frame silently fails in the background.
     pub fn encode_error(session: &RecSession) -> Option<String> {
         session.shared.peek_encode_error()
+    }
+
+    // Same live-poll shape as encode_error above, but consuming: recDiskWarnMb's
+    // mid-recording notice fires exactly once, never stops the recording.
+    pub fn take_disk_low(session: &RecSession) -> Option<(u64, u64)> {
+        session.shared.take_disk_low()
     }
 
     // The output file exists the instant VideoEncoder::new() runs (it opens the
@@ -18404,7 +18475,7 @@ fn resolve_recording_target(
 // canvas mode, ...) is meant to take effect starting at the next part, the
 // same way it already would have at the very first start_recording call.
 #[cfg(windows)]
-fn resolve_recording_settings(db: &State<Db>) -> (bool, recording::AudioConfig, u32, u32, String, (u32, u32), f64) {
+fn resolve_recording_settings(db: &State<Db>) -> (bool, recording::AudioConfig, u32, u32, String, (u32, u32), f64, f64, f64) {
     // recCursor ships ON -- only an explicit false switches it off.
     // recAudioSystem and recAudioMic both ship ON now -- the mic is
     // captured by default too (into its own track, see start()'s both_active
@@ -18438,17 +18509,24 @@ fn resolve_recording_settings(db: &State<Db>) -> (bool, recording::AudioConfig, 
     // problem (see the recording-captured payload's resize_crop_at_ms). No
     // expert-menu row for this setting yet (a future menu writes it directly).
     let canvas_mode = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_texts.get("recCanvasMode").cloned().unwrap_or_else(|| "window".to_string());
+    // One expert-menu row (`recCanvasMaxPx`) now governs both the width and
+    // the height ceiling -- there was never a settings row for the two
+    // separate constants this replaces, so no stored value can have relied
+    // on them differing.
     let canvas_ceiling = {
-        let g = db.lock().unwrap_or_else(|e| e.into_inner());
-        (
-            g.settings.ui_values.get("recCanvasCeilingW").copied().unwrap_or(8192.0).max(1.0) as u32,
-            g.settings.ui_values.get("recCanvasCeilingH").copied().unwrap_or(4320.0).max(1.0) as u32,
-        )
+        let max_px = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recCanvasMaxPx").copied().unwrap_or(8192.0).max(1.0) as u32;
+        (max_px, max_px)
     };
     // The mid-recording disk-space watch's own threshold -- see
     // check_recording_disk_space for the same value used before the start.
     let disk_warn_mb = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recDiskWarnMb").copied().unwrap_or(500.0);
-    (show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb)
+    // Optional safety nets, both off (0) unless the user sets them -- unrelated
+    // to recMaxMb's own older, display-only ETA threshold (see rec_size_eta),
+    // which keeps its own separate 8000 default so adding these rows changes
+    // nothing about what is already shown today.
+    let max_min = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recMaxMin").copied().unwrap_or(0.0).max(0.0);
+    let max_mb = db.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recMaxMb").copied().unwrap_or(0.0).max(0.0);
+    (show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb)
 }
 
 #[cfg(windows)]
@@ -18473,11 +18551,11 @@ async fn start_recording(
         }
     }
     let target = resolve_recording_target(&target_kind, target_id, region_x, region_y, region_w, region_h)?;
-    let (show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb) = resolve_recording_settings(&db);
+    let (show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb) = resolve_recording_settings(&db);
     let dir = data_dir(&app).join("recordings");
     let session = tauri::async_runtime::spawn_blocking(move || {
         let out_path = recording::new_output_path(&dir)?;
-        recording::start(target, out_path, show_cursor, audio, video_kbps, video_fps, &canvas_mode, canvas_ceiling, disk_warn_mb)
+        recording::start(target, out_path, show_cursor, audio, video_kbps, video_fps, &canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb)
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -18621,9 +18699,9 @@ async fn finish_and_continue_recording(
         }
     };
     let target = session.target;
-    let (show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb) = (
+    let (show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb) = (
         session.show_cursor, session.audio_config.clone(), session.video_kbps, session.video_fps,
-        session.canvas_mode.clone(), session.canvas_ceiling, session.disk_warn_mb,
+        session.canvas_mode.clone(), session.canvas_ceiling, session.disk_warn_mb, session.max_min, session.max_mb,
     );
     let app2 = app.clone();
     let closure_result: Result<ContinueOutcome, String> = tauri::async_runtime::spawn_blocking(move || {
@@ -18634,7 +18712,7 @@ async fn finish_and_continue_recording(
         let part_number = REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner()).len() as u32 + 2;
         let out_path = recording::continuation_output_path(&base_path, part_number);
         match recording::start(
-            target, out_path.clone(), show_cursor, audio, video_kbps, video_fps, &canvas_mode, canvas_ceiling, disk_warn_mb,
+            target, out_path.clone(), show_cursor, audio, video_kbps, video_fps, &canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb,
         ) {
             Ok(new_session) => {
                 // The switch worked -- this part is now an interim one with no
@@ -19196,6 +19274,7 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
 fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
     let is_tray = key == "trayRecentN" || key == "trayFavN" || key == "trayLabelMax";
     let is_folder_grid = key == "folderGridCols";
+    let is_error_log_cap = key == "errorLogKeepKb";
     {
         let mut store = lock(&state);
         store.settings.ui_values.insert(key, value);
@@ -19211,6 +19290,11 @@ fn set_ui_value(app: AppHandle, state: State<Db>, key: String, value: f64) {
                 let _ = app.emit_to(label.as_str(), "folder-changed", ());
             }
         }
+    }
+    // append_crash_log has no DB access at most of its call sites, so its
+    // rotation cap lives in this static instead, kept current from here.
+    if is_error_log_cap {
+        ERROR_LOG_KEEP_BYTES.store((value.max(1.0) * 1024.0) as u64, Ordering::Relaxed);
     }
     notify_float_settings(&app);
 }
@@ -19248,6 +19332,7 @@ fn reset_expert(app: AppHandle, state: State<Db>) {
         store.settings.ui_texts.clear();
         save_settings(&app, &store.settings);
     }
+    ERROR_LOG_KEEP_BYTES.store(256 * 1024, Ordering::Relaxed);
     // Cleared flags put the screenshot permission back to its default (off), which
     // means the exclusion is on — re-assert it on every window so it is immediate.
     for (_label, win) in app.webview_windows() {
@@ -22952,6 +23037,139 @@ async fn pick_backup_file(app: AppHandle) -> Option<String> {
         .map(|p| p.display().to_string())
 }
 
+// Settings-only export/import: a plain, unencrypted JSON of just the expert-menu
+// state -- never prompts, never hotkey bindings, the same "settings vs data"
+// split the app's own prompt-library export already draws. Deliberately a
+// separate, smaller pair of commands rather than export_all/import_all's
+// "settings" scope, which carries the WHOLE Settings struct (window
+// geometry, the hotkey, ...).
+const MAX_SETTINGS_IMPORT_BYTES: u64 = 2 * 1024 * 1024;
+
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+struct SettingsOnlyExport {
+    #[serde(default)]
+    ui_flags: HashMap<String, bool>,
+    #[serde(default)]
+    ui_values: HashMap<String, f64>,
+    #[serde(default)]
+    ui_texts: HashMap<String, String>,
+}
+
+#[tauri::command]
+async fn export_settings_only(app: AppHandle, state: State<'_, Db>) -> Result<String, String> {
+    let payload = {
+        let store = lock(&state);
+        SettingsOnlyExport {
+            ui_flags: store.settings.ui_flags.clone(),
+            ui_values: store.settings.ui_values.clone(),
+            ui_texts: store.settings.ui_texts.clone(),
+        }
+    };
+    let json = serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?;
+    let file = file_dialog(&app)
+        .set_file_name(format!("{}-settings.json", brand::SLUG))
+        .add_filter("JSON", &["json"])
+        .save_file();
+    match file {
+        Some(path) => {
+            fs::write(&path, json).map_err(|e| e.to_string())?;
+            Ok(path.display().to_string())
+        }
+        None => Err("canceled".to_string()),
+    }
+}
+
+#[tauri::command]
+async fn pick_settings_import_file(app: AppHandle) -> Option<String> {
+    file_dialog(&app).add_filter("JSON", &["json"]).pick_file().map(|p| p.display().to_string())
+}
+
+fn parse_settings_only(raw: &[u8]) -> Result<SettingsOnlyExport, String> {
+    let text = std::str::from_utf8(raw).map_err(|_| "bad-file".to_string())?;
+    // A wholly empty or non-object file (no ui_flags/ui_values/ui_texts key at
+    // all) is rejected too -- this ONLY accepts a file this same export produced,
+    // never an unrelated JSON document that would otherwise silently parse into
+    // three empty maps and "successfully" change nothing.
+    let value: serde_json::Value = serde_json::from_str(text).map_err(|_| "bad-file".to_string())?;
+    if !value.is_object()
+        || !(value.get("ui_flags").is_some() || value.get("ui_values").is_some() || value.get("ui_texts").is_some())
+    {
+        return Err("bad-file".to_string());
+    }
+    serde_json::from_value(value).map_err(|_| "bad-file".to_string())
+}
+
+// Counts how many of the file's own rows would actually change against the
+// live store, without writing anything -- what the import preview shows before
+// the user confirms.
+fn settings_import_diff(current: &Settings, incoming: &SettingsOnlyExport) -> (usize, usize) {
+    let mut changed = 0;
+    let total = incoming.ui_flags.len() + incoming.ui_values.len() + incoming.ui_texts.len();
+    for (k, v) in &incoming.ui_flags {
+        if current.ui_flags.get(k) != Some(v) {
+            changed += 1;
+        }
+    }
+    for (k, v) in &incoming.ui_values {
+        if current.ui_values.get(k) != Some(v) {
+            changed += 1;
+        }
+    }
+    for (k, v) in &incoming.ui_texts {
+        if current.ui_texts.get(k) != Some(v) {
+            changed += 1;
+        }
+    }
+    (changed, total)
+}
+
+#[tauri::command]
+async fn preview_settings_import(state: State<'_, Db>, path: String) -> Result<(usize, usize), String> {
+    let raw = read_file_capped(&PathBuf::from(path), MAX_SETTINGS_IMPORT_BYTES)?;
+    let incoming = parse_settings_only(&raw)?;
+    let store = lock(&state);
+    Ok(settings_import_diff(&store.settings, &incoming))
+}
+
+#[tauri::command]
+async fn apply_settings_import(app: AppHandle, state: State<'_, Db>, path: String) -> Result<usize, String> {
+    let raw = read_file_capped(&PathBuf::from(path), MAX_SETTINGS_IMPORT_BYTES)?;
+    let incoming = parse_settings_only(&raw)?;
+    let changed = {
+        let mut store = lock(&state);
+        let (changed, _) = settings_import_diff(&store.settings, &incoming);
+        // Merge, not replace: a row this file never mentions (e.g. a newer
+        // setting an older export predates) is left exactly as it is.
+        for (k, v) in incoming.ui_flags {
+            store.settings.ui_flags.insert(k, v);
+        }
+        for (k, v) in incoming.ui_values {
+            store.settings.ui_values.insert(k, v);
+        }
+        for (k, v) in incoming.ui_texts {
+            store.settings.ui_texts.insert(k, v);
+        }
+        save_settings(&app, &store.settings);
+        changed
+    };
+    // Same broad refresh reset_expert already uses for "many settings just
+    // changed at once": the tray, every window's screenshot exclusion, and the
+    // crash-log cap static all need to reflect whatever just landed.
+    let (excluded, error_log_kb) = {
+        let store = lock(&state);
+        (capture_excluded(&store.settings), store.settings.ui_values.get("errorLogKeepKb").copied())
+    };
+    for (_label, win) in app.webview_windows() {
+        set_capture_exclusion(&win, excluded);
+    }
+    apply_tray_menu(&app);
+    if let Some(kb) = error_log_kb {
+        ERROR_LOG_KEEP_BYTES.store((kb.max(1.0) * 1024.0) as u64, Ordering::Relaxed);
+    }
+    notify_float_settings(&app);
+    Ok(changed)
+}
+
 // Pure scope-branching core of import_all -- split out so it is unit-testable
 // without an AppHandle/State (the async command below owns the save/rollback/
 // AppHandle-dependent side of the contract). Returns (prompt count, dropped
@@ -23237,11 +23455,18 @@ fn update_geom<F: FnOnce(&mut WindowGeom)>(handle: &AppHandle, f: F) {
     }
 }
 
+// The error log's rotation cap in bytes, configurable via `errorLogKeepKb`
+// (expert menu). A global, since dozens of `append_crash_log` call sites
+// throughout this file have no `State<Db>` handy — set once at startup from
+// the persisted setting (see `load_store`'s caller) and again on every
+// `set_ui_value("errorLogKeepKb", ..)`, read here without touching the DB.
+static ERROR_LOG_KEEP_BYTES: AtomicU64 = AtomicU64::new(256 * 1024);
+
 // Append one line to a local crash log so a hard failure on a user's machine
 // leaves something diagnosable. Privacy: the message is only the panic location
 // and our own static panic text (never prompt content or other user data), and
-// the file is local — never uploaded. Rotates past 256 KB so it can't grow
-// without bound. Best-effort: every step is ignored on failure.
+// the file is local — never uploaded. Rotates past `errorLogKeepKb` (default
+// 256 KB) so it can't grow without bound. Best-effort: every step is ignored on failure.
 fn append_crash_log(msg: &str) {
     let dir = std::env::var_os("APPDATA")
         .map(PathBuf::from)
@@ -23249,7 +23474,8 @@ fn append_crash_log(msg: &str) {
         .join(DATA_FOLDER);
     let _ = fs::create_dir_all(&dir);
     let path = dir.join("error.log");
-    if fs::metadata(&path).map(|m| m.len() > 256 * 1024).unwrap_or(false) {
+    let cap = ERROR_LOG_KEEP_BYTES.load(std::sync::atomic::Ordering::Relaxed);
+    if fs::metadata(&path).map(|m| m.len() > cap).unwrap_or(false) {
         let _ = fs::remove_file(&path);
     }
     let secs = SystemTime::now()
@@ -23705,6 +23931,11 @@ pub fn run() {
             }
             sweep_stale_temp_files(); // crash/abnormal-exit leftovers from a previous run
             let store = load_store(&handle);
+            // Seed the crash-log rotation cap from whatever was persisted, before
+            // anything below can possibly call append_crash_log.
+            if let Some(kb) = store.settings.ui_values.get("errorLogKeepKb").copied() {
+                ERROR_LOG_KEEP_BYTES.store((kb.max(1.0) * 1024.0) as u64, Ordering::Relaxed);
+            }
             // Ditto, for undecided AND broken recordings -- Db is not managed
             // yet at this point, so this reads straight off the just-loaded `store`.
             {
@@ -24295,6 +24526,10 @@ pub fn run() {
             export_all,
             import_all,
             pick_backup_file,
+            export_settings_only,
+            pick_settings_import_file,
+            preview_settings_import,
+            apply_settings_import,
             takeover_offer,
             takeover_apply,
             set_backup_password,
@@ -27226,7 +27461,7 @@ mod tests {
         let audio = recording::AudioConfig {
             system: true, mic: false, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0, 0.0, 0.0).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -27250,7 +27485,7 @@ mod tests {
         let audio = recording::AudioConfig {
             system: false, mic: true, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0, 0.0, 0.0).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -27271,7 +27506,7 @@ mod tests {
         let audio = recording::AudioConfig {
             system: true, mic: true, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0, 0.0, 0.0).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -27296,7 +27531,7 @@ mod tests {
             system: true, mic: false, mic_device_id: String::new(), kbps: 192,
         };
         let wall_start = std::time::Instant::now();
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0, 0.0, 0.0).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(600));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let wall_elapsed = wall_start.elapsed().as_secs_f64();
@@ -27336,7 +27571,7 @@ mod tests {
         let audio = recording::AudioConfig {
             system: false, mic: false, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0).expect("start");
+        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0, 0.0, 0.0).expect("start");
         std::thread::sleep(std::time::Duration::from_secs(2));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -27384,11 +27619,11 @@ mod tests {
         let part1_path = recording::new_output_path(&dir).expect("output path");
         let audio = recording::AudioConfig { system: false, mic: false, mic_device_id: String::new(), kbps: 192 };
         let target = recording::RecTarget::Monitor(0);
-        let (show_cursor, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb) =
-            (true, 12000u32, 30u32, "all", (8192u32, 4320u32), 500.0f64);
+        let (show_cursor, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb) =
+            (true, 12000u32, 30u32, "all", (8192u32, 4320u32), 500.0f64, 0.0f64, 0.0f64);
 
         let session1 = recording::start(
-            target, part1_path.clone(), show_cursor, audio.clone(), video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb,
+            target, part1_path.clone(), show_cursor, audio.clone(), video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb,
         )
         .expect("start part 1");
         // The session retains exactly what it was built with -- this is what
@@ -27408,7 +27643,7 @@ mod tests {
 
         let part2_path = recording::continuation_output_path(&part1_path, 2);
         let session2 = recording::start(
-            target, part2_path.clone(), show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb,
+            target, part2_path.clone(), show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb,
         )
         .expect("start part 2 with the SAME settings as part 1");
         std::thread::sleep(std::time::Duration::from_secs(2));
@@ -27538,6 +27773,24 @@ mod tests {
         assert!(canvas_within_ceiling(8192, 4320, 8192, 4320));
         assert!(!canvas_within_ceiling(8193, 4320, 8192, 4320));
         assert!(!canvas_within_ceiling(7680, 4321, 8192, 4320));
+    }
+
+    #[test]
+    fn recording_limit_reached_is_off_by_default() {
+        assert!(!recording_limit_reached(u64::MAX, u64::MAX, 0.0, 0.0));
+    }
+
+    #[test]
+    fn recording_limit_reached_trips_on_the_minute_cap() {
+        assert!(!recording_limit_reached(299, 0, 5.0, 0.0));
+        assert!(recording_limit_reached(300, 0, 5.0, 0.0));
+    }
+
+    #[test]
+    fn recording_limit_reached_trips_on_the_size_cap() {
+        let cap_bytes = 100 * 1024 * 1024;
+        assert!(!recording_limit_reached(0, cap_bytes - 1, 0.0, 100.0));
+        assert!(recording_limit_reached(0, cap_bytes, 0.0, 100.0));
     }
 
     #[test]

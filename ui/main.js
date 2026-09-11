@@ -1251,6 +1251,10 @@ const FLAG_LABELS = {
   // The control bar's target-switch button: swaps a running window
   // recording's own source without restarting it. Ships ON.
   recTargetSwitch: "flagRecTargetSwitch",
+  // Trims the black border the larger-than-window recording area leaves.
+  // Ships ON, matching today's unconditional automatic crop exactly.
+  recAutoCrop: "flagRecAutoCrop",
+  numFieldWheel: "flagNumFieldWheel",
   recStopHotkey: "flagRecStopHotkey",
   recPauseHotkey: "flagRecPauseHotkey",
   recTrayEntries: "flagRecTrayEntries",
@@ -1509,6 +1513,17 @@ const EXPERT_VALUES = {
   veOvPixelateBlock: { label: "valVeOvPixelateBlock", min: 4, max: 64, step: 2, def: 16, unit: "px", gate: "videoEditor" },
   veOvSpotlightDim: { label: "valVeOvSpotlightDim", min: 10, max: 95, step: 5, def: 60, unit: "%", gate: "videoEditor" },
   veOvImageOpacity: { label: "valVeOvImageOpacity", min: 10, max: 100, step: 5, def: 100, unit: "%", gate: "videoEditor" },
+  // Shared by the screenshot editor's and the video editor's own numeric
+  // input fields (numberField() in floatShared.js) -- default matches that
+  // component's own existing hardcoded step/bigStep, so nothing changes for
+  // anyone who never opens this new group.
+  numFieldStep: { label: "valNumFieldStep", min: 1, max: 50, step: 1, def: 1, unit: "" },
+  numFieldBigStep: { label: "valNumFieldBigStep", min: 1, max: 100, step: 1, def: 10, unit: "" },
+  // Percent-based so one pair of settings covers both editors' own different
+  // native zoom units (the screenshot editor's 0.05x-8x factor, the video
+  // editor's 1x-8x factor) -- see snip.js/video.js for the unit conversion.
+  zoomStepPct: { label: "valZoomStepPct", min: 5, max: 50, step: 5, def: 20, unit: "%" },
+  zoomMaxPct: { label: "valZoomMaxPct", min: 200, max: 1600, step: 100, def: 800, unit: "%" },
   // A crop smaller than this (either side) is upscaled 2x before recognition --
   // the trick that makes small on-screen text readable to the OCR engine.
   ocrUpscaleUnderPx: { label: "valOcrUpscaleUnderPx", min: 100, max: 800, step: 50, def: 300, unit: "px", gate: "ocr" },
@@ -1523,6 +1538,15 @@ const EXPERT_VALUES = {
   // step is produced by a separate ffmpeg CRF-0 re-encode after the recording
   // stops, not by this slider (see the recQuality/recBitrateKbps tooltips).
   recBitrateKbps: { label: "valRecBitrateKbps", min: 1000, max: 50000, step: 500, def: 12000, unit: "kbps", gate: "screenRecord" },
+  // Replaces the two separate width/height ceiling constants resolve_recording_settings
+  // used to read (8192/4320) -- there was never a settings row for either, so unifying
+  // them into one value is not a behaviour change for anyone who never set them.
+  recCanvasMaxPx: { label: "valRecCanvasMaxPx", min: 2048, max: 15360, step: 256, def: 8192, unit: "px", gate: "screenRecord" },
+  // Matches resolve_recording_settings' own existing default of 500 -- adding
+  // this row must not change what already happens today.
+  recDiskWarnMb: { label: "valRecDiskWarnMb", min: 200, max: 20000, step: 100, def: 500, unit: "MB", gate: "screenRecord" },
+  recMaxMin: { label: "valRecMaxMin", min: 0, max: 600, step: 5, def: 0, unit: "min", zeroLabel: "valUnlimited", gate: "screenRecord" },
+  recMaxMb: { label: "valRecMaxMb", min: 0, max: 100000, step: 500, def: 0, unit: "MB", zeroLabel: "valUnlimited", gate: "screenRecord" },
   // How young a moov-less (broken) recording has to be to still get a pass
   // (the post-capture menu's stop might just still be finalising) and how often
   // the background sweep for it (and for merely-undecided recordings) runs.
@@ -1575,6 +1599,8 @@ const EXPERT_VALUES = {
   dupThreshold: { label: "valDupThreshold", min: 70, max: 100, step: 1, def: 90, unit: "%", gate: "dupFinder" },
   // How long a confirm button (delete etc.) stays armed before it auto-resets.
   disarmMs: { label: "valDisarmMs", min: 1000, max: 10000, step: 500, def: 3000, unit: "ms" },
+  // Matches append_crash_log's own pre-existing hardcoded rotation cap (256 KB).
+  errorLogKeepKb: { label: "valErrorLogKeepKb", min: 64, max: 4096, step: 64, def: 256, unit: "KB" },
   // Automatic backups: how many rotating snapshots to keep.
   backupKeep: { label: "valBackupKeep", min: 1, max: 50, step: 1, def: 10, unit: "", gate: "autoBackup" },
   // How long the auto-backup job waits after launch before its first check --
@@ -1781,6 +1807,10 @@ const EXPERT_DROPDOWNS = {
     [["mp4", "optRecFormatMp4"], ["webm", "optRecFormatWebm"], ["gif", "optRecFormatGif"],
       ["avi", "optRecFormatAvi"], ["mov", "optRecFormatMov"], ["mkv", "optRecFormatMkv"],
       ["webpanim", "optRecFormatWebpanim"], ["apng", "optRecFormatApng"]], "mp4", "screenRecord"),
+  // "window" matches resolve_recording_settings' own existing fallback default
+  // exactly -- adding this row must not change what already happens today.
+  recCanvasMode: enumDropdown("recCanvasMode", "valRecCanvasMode",
+    [["all", "recCanvasAll"], ["monitor", "recCanvasMonitor"], ["window", "recCanvasWindow"]], "window", "screenRecord"),
   // The video editor's export dialog opens with these eight every time --
   // each field stays freely changeable per export, only the opening
   // selection comes from here.
@@ -1907,9 +1937,12 @@ const EXPERT_TABS = [
     // The recording hotkeys render their own capture row directly (hotkeyRow())
     // instead of a button that jumps to a settings field -- see actionRow()'s
     // "hotkey" branch.
-    { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps"], dropdowns: ["recMicDevice", "recQuality", "recFormat"], paths: ["recordingDir"],
+    { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode"], paths: ["recordingDir"],
       actions: [{ id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recStopHotkeyLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recPauseHotkeyLabel", gate: "recPauseHotkey" }] },
-    { title: "expGroupVideoEditor", flags: ["videoEditor"], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale"] },
+    { title: "expGroupVideoEditor", flags: ["videoEditor"], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale"], colors: ["veOvColor"] },
+    // What the screenshot editor and the video editor share -- created here so
+    // no setting key is ever declared in two groups (expert_menu_check.py).
+    { title: "expGroupEditors", flags: ["numFieldWheel"], values: ["numFieldStep", "numFieldBigStep", "zoomStepPct", "zoomMaxPct"] },
   ] },
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
@@ -1942,8 +1975,8 @@ const EXPERT_TABS = [
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken"], values: ["dupThreshold", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "videoClipTtlMin"], selects: ["trashRetentionDays"],
-      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }] },
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken"], values: ["dupThreshold", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "videoClipTtlMin", "errorLogKeepKb"], selects: ["trashRetentionDays"],
+      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }] },
   ] },
 ];
 
@@ -2656,6 +2689,17 @@ const EXPERT_PATHS = {
   },
 };
 
+// A colour, through the shared colorpop.js picker (never a native
+// <input type=color>) -- unlike the accent palette above, each of these is
+// one single stored hex string in ui_texts, so it stays out of the generic
+// EXPERT_DEFS/isRowChanged machinery the same deliberate way `palette` does.
+const EXPERT_COLORS = {
+  // Label is "veOvDefaultColor", not "veOvColor" -- that key is already the
+  // per-overlay "Colour" field caption in the overlay editor itself (video.js),
+  // a wholly unrelated existing string this must not collide with or overwrite.
+  veOvColor: { label: "veOvDefaultColor", def: "#ffffff", gate: "videoEditor" },
+};
+
 // (folder path -> {count, bytes}) for the recordingDir video-folder readout, so
 // switching the folder and switching back does not re-fetch what is already
 // known. Cleared (falsy) means "not fetched yet for this path" -- pathRow()
@@ -2913,6 +2957,44 @@ async function savePalette(colors) {
   renderViews();
   renderExpert();
   await renderGrid(true);
+}
+
+function colorRow(key) {
+  const cfg = EXPERT_COLORS[key];
+  const row = document.createElement("div");
+  row.className = "field value-field color-field";
+  const head = document.createElement("div");
+  head.className = "value-head";
+  const span = document.createElement("span");
+  span.textContent = t(cfg.label);
+  head.appendChild(span);
+  const cur = HEX_RE.test(settings.ui_texts?.[key] || "") ? settings.ui_texts[key] : cfg.def;
+  const swatch = document.createElement("button");
+  swatch.type = "button";
+  swatch.className = "color-swatch";
+  swatch.style.background = cur;
+  swatch.title = cur;
+  const setColor = async (hex) => {
+    swatch.style.background = hex;
+    swatch.title = hex;
+    settings.ui_texts = { ...(settings.ui_texts || {}), [key]: hex };
+    try { await invoke("set_ui_text", { key, value: hex }); } catch (e) { errToast(e); }
+  };
+  swatch.addEventListener("click", () => openColorPop(swatch, cur, setColor));
+  head.appendChild(swatch);
+  if (cur !== cfg.def) {
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.className = "expert-row-reset";
+    const label = t("expertResetOne");
+    reset.title = label;
+    reset.setAttribute("aria-label", label);
+    putIcon(reset, ICON_UNDO);
+    reset.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); setColor(cfg.def).then(renderExpert); });
+    head.appendChild(reset);
+  }
+  row.appendChild(head);
+  return withTip(row, key);
 }
 
 // Translation-key lookup per setting kind — used by the expert-menu search.
@@ -3180,8 +3262,12 @@ function renderExpert() {
       // its own per-swatch compare; an action is a button, not a value) — "only
       // changed" drops both rather than showing them unconditionally.
       const palette = !expertOnlyChanged && group.palette && (!searching || groupHit || i18nHit("expGroupColors", q));
+      // Bespoke, same reasoning as palette above: one hex string per key, no
+      // single "default" the generic isRowChanged diff machinery could reuse.
+      const colors = expertOnlyChanged ? [] : (group.colors || [])
+        .filter((k) => gateOpen(EXPERT_COLORS[k]?.gate) && (!searching || groupHit || settingHit(k, EXPERT_COLORS[k]?.label, q)));
       const actions = expertOnlyChanged ? [] : (group.actions || []).filter((a) => gateOpen(a.gate) && (!searching || groupHit || i18nHit(a.label, q)));
-      if (globalView && !flags.length && !values.length && !selects.length && !dropdowns.length && !paths.length && !palette && !actions.length) continue;
+      if (globalView && !flags.length && !values.length && !selects.length && !dropdowns.length && !paths.length && !palette && !colors.length && !actions.length) continue;
       shown++;
       // Categories collapse on click (persisted); scanning every tab always shows them.
       const isCollapsed = !globalView && collapsed.has(group.title);
@@ -3261,6 +3347,7 @@ function renderExpert() {
         emitExpertRows(roots, sec, actionById, 0);
       }
       if (palette) sec.appendChild(paletteRow());
+      for (const key of colors) sec.appendChild(colorRow(key));
       box.appendChild(sec);
     }
   }
@@ -8165,6 +8252,51 @@ EXPERT_ACTIONS["rec-sweep-now"] = async () => {
     errToast(e);
   }
 };
+// Only ui_flags/ui_values/ui_texts, plain JSON, no encryption -- never prompts,
+// never hotkeys (see export_settings_only in the backend for why this is a
+// separate, smaller pair of commands from the full-backup export/import).
+EXPERT_ACTIONS["settings-export"] = async () => {
+  try {
+    const path = await invoke("export_settings_only");
+    toast(t("settingsExportDone").replace("{path}", path));
+  } catch (e) {
+    if (e !== "canceled") errToast(e);
+  }
+};
+EXPERT_ACTIONS["settings-import"] = async () => {
+  const path = await invoke("pick_settings_import_file").catch(() => null);
+  if (!path) return;
+  let changed, total;
+  try {
+    [changed, total] = await invoke("preview_settings_import", { path });
+  } catch (e) {
+    toast(t("settingsImportBadFile"));
+    return;
+  }
+  if (changed === 0) {
+    toast(t("settingsImportNone"));
+    return;
+  }
+  const ok = await confirmDialog({
+    title: t("settingsImportAction"),
+    message: t("settingsImportPreview").replace("{n}", String(changed)).replace("{total}", String(total)),
+    confirmLabel: t("settingsImportAction"),
+    cancelLabel: t("cancel"),
+    danger: false,
+  });
+  if (!ok) return;
+  try {
+    await invoke("apply_settings_import", { path });
+    const s = await invoke("get_state");
+    prompts = s.prompts;
+    settings = s.settings;
+    applyValues();
+    renderExpert();
+    renderGrid(true);
+  } catch (e) {
+    errToast(e);
+  }
+};
 
 // ---- OCR + voice language pack management, one shared dialog ----
 // #ocr-langs-modal serves both OCR and voice dictation language packs -- same
@@ -12847,7 +12979,11 @@ function bind() {
     });
     const myOff = recProgressOff;
     if (gen === recGen) {
-      await invoke("crop_recording_to_used_area", { path: rawPath }).catch(() => {});
+      try {
+        await invoke("crop_recording_to_used_area", { path: rawPath });
+      } catch (e) {
+        if (e === "ffmpeg-missing") toast(t("recCropSkippedNoTools"));
+      }
     }
     myOff();
     if (recProgressOff === myOff) recProgressOff = null;
@@ -12865,7 +13001,10 @@ function bind() {
     renderRecFolder();
     $("rec-modal-edit").classList.toggle("hidden", !flag("videoEditor"));
     recModal.classList.remove("hidden");
-    if (needsCrop) {
+    // recAutoCrop off means the user chose to keep the border -- skip the whole
+    // cropping step (and its status line) silently, same as a canvas that
+    // never needed cropping in the first place.
+    if (needsCrop && flag("recAutoCrop")) {
       recPreview.classList.add("hidden");
       showRecErrorDetails("");
       await runRecCrop(rawPath, gen);
@@ -12959,6 +13098,7 @@ function bind() {
     // disk-space watch stopped the recording proactively, before the
     // encoder itself would have hit that same wall.
     if (e.payload?.encode_error === "low-disk-space") toast(t("recDiskStoppedMsg"));
+    else if (e.payload?.encode_error === "max-limit-reached") toast(t("recStoppedByLimit"));
     else if (e.payload?.encode_error) toast(t("recEncodeError"));
     // A window recording whose canvas had to fall back below the
     // "every display" default (too large for the encoder, or the user
@@ -13285,6 +13425,12 @@ function bind() {
   };
 
   function snipEditClamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+  // Percent-based shared setting mapped onto this editor's own raw-factor zoom
+  // (0.05x-8x) -- defaults (20%, 800%) do change today's hardcoded wheel step
+  // (1.1x) and button step (1.25x/0.8x), unifying every zoom control in this
+  // editor and the video editor under the one shared percentage.
+  const snipZoomStepFactor = () => 1 + val("zoomStepPct") / 100;
+  const snipZoomMax = () => val("zoomMaxPct") / 100;
   function snipEditDist(a, b) { return Math.hypot(b.x - a.x, b.y - a.y); }
   function snipEditNormRect(r) {
     if (r && "a" in r) {
@@ -14178,7 +14324,7 @@ function bind() {
 
   // ---- zoom: pure CSS scaling of the native-resolution canvas -- no redraw needed ----
   function snipEditSetZoom(z) {
-    SE.zoom = snipEditClamp(z, 0.05, 8);
+    SE.zoom = snipEditClamp(z, 0.05, snipZoomMax());
     snipEditStage.style.width = `${SE.w * SE.zoom}px`;
     snipEditStage.style.height = `${SE.h * SE.zoom}px`;
     $("snip-edit-zoom-val").textContent = `${Math.round(SE.zoom * 100)}%`;
@@ -14314,7 +14460,8 @@ function bind() {
     const cx = e.clientX - rect.left + snipEditWrap.scrollLeft;
     const cy = e.clientY - rect.top + snipEditWrap.scrollTop;
     const oldZoom = SE.zoom;
-    const newZoom = snipEditClamp(oldZoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1), 0.05, 8);
+    const step = snipZoomStepFactor();
+    const newZoom = snipEditClamp(oldZoom * (e.deltaY < 0 ? step : 1 / step), 0.05, snipZoomMax());
     const ratio = newZoom / oldZoom;
     snipEditSetZoom(newZoom);
     snipEditWrap.scrollLeft = cx * ratio - (e.clientX - rect.left);
@@ -14482,8 +14629,8 @@ function bind() {
   });
   $("snip-edit-undo").addEventListener("click", snipEditUndo);
   $("snip-edit-redo").addEventListener("click", snipEditRedo);
-  $("snip-edit-zoom-in").addEventListener("click", () => snipEditZoomBy(1.25));
-  $("snip-edit-zoom-out").addEventListener("click", () => snipEditZoomBy(0.8));
+  $("snip-edit-zoom-in").addEventListener("click", () => snipEditZoomBy(snipZoomStepFactor()));
+  $("snip-edit-zoom-out").addEventListener("click", () => snipEditZoomBy(1 / snipZoomStepFactor()));
   $("snip-edit-fit").addEventListener("click", snipEditFit);
 
   // ---- resize (scale the image itself, not the view -- see snipEditApplyScale) ----

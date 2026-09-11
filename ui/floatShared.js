@@ -192,7 +192,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && activeNumPop) closeActiveNumPop();
 });
 
-export function numberField({ input, value, min, max, step, bigStep, presets, decreaseLabel, increaseLabel, presetsLabel, decreaseAriaKey, increaseAriaKey, presetsAriaKey, onChange }) {
+export function numberField({ input, value, min, max, step, bigStep, presets, decreaseLabel, increaseLabel, presetsLabel, decreaseAriaKey, increaseAriaKey, presetsAriaKey, onChange, wheelEnabled = true }) {
   const el = input || document.createElement("input");
   el.type = "number";
   if (min != null) el.min = String(min);
@@ -257,6 +257,7 @@ export function numberField({ input, value, min, max, step, bigStep, presets, de
   el.addEventListener(
     "wheel",
     (e) => {
+      if (!wheelEnabled) return;
       e.preventDefault();
       stepBy(e.deltaY < 0 ? 1 : -1, e.shiftKey);
     },

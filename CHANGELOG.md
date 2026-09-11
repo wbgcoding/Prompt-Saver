@@ -908,6 +908,14 @@ the video editor and the introduction tour ship on).
   still appears. The language pack dialog also got a clearer row layout: the
   language name is now the most prominent thing in its row, with the size in
   its own column and the state shown as a small chip.
+- **Screen recordings can stop themselves at a length or file size you set.**
+  Two new expert-menu limits, off by default, end a recording cleanly with a
+  message instead of letting it run forever or fill the disk.
+- **A low-disk warning now also appears while a recording is running,** not
+  only before it starts, with its own icon in the recording bar.
+- **Settings can be exported to a file and imported back,** for carrying your
+  switches, values and text fields to another machine without prompts or
+  hotkeys coming along. Importing shows a preview of what will change first.
 
 ### Changed
 
@@ -937,6 +945,9 @@ the video editor and the introduction tour ship on).
   fine-grained groups there instead of sharing one long list under Features.
   No setting was removed or renamed, only regrouped, so every saved value keeps
   reading back exactly as before.
+- **The screenshot editor's zoom step and maximum zoom are now tunable in the
+  expert menu** and match the video editor's own defaults, replacing its
+  separate hardcoded values.
 
 ## 2.6.3 (2026-07-26)
 

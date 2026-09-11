@@ -83,6 +83,11 @@ const MAX_SILENT_DIM = 1280;
 
 // ---------------------------------------------------------------- state
 
+// Populated once the boot IIFE below fetches it; read by numberInput() and
+// the wheel-toggle setup for the static crop/speed/fade fields so both agree
+// with applySettings() on the numFieldWheel flag instead of throwing.
+let settings = null;
+
 const VE = {
   src: "",
   probe: null,          // RecordingProbe, or a locally guessed one without ffmpeg
@@ -130,6 +135,12 @@ const VE = {
   // zoom, applied on top of the video's own fit-to-stage scaling.
   previewZoom: 1,
   panPx: { x: 0, y: 0 },
+  // Overwritten by applySettings() once settings actually load -- these
+  // defaults match PREVIEW_ZOOM_MAX/the hardcoded 1.2x-per-tick exactly, for
+  // the brief window before that first happens.
+  zoomStepFactor: 1.2,
+  zoomMax: 8,
+  ovColorDefault: "#ffffff",
 };
 
 let TXT_READY = false;
@@ -806,7 +817,7 @@ function applyPreviewTransform() {
 }
 
 function setPreviewZoom(z) {
-  VE.previewZoom = clamp(z, PREVIEW_ZOOM_MIN, PREVIEW_ZOOM_MAX);
+  VE.previewZoom = clamp(z, PREVIEW_ZOOM_MIN, VE.zoomMax);
   VE.panPx = clampPan(VE.panPx, VE.previewZoom);
   applyPreviewTransform();
 }
@@ -830,7 +841,7 @@ $("ve-stage").addEventListener("wheel", (e) => {
   // panPx is a CSS translate applied AFTER the scale in the same transform,
   // so it moves the picture in already-scaled screen pixels, not source ones.
   const before = toSource(e.clientX, e.clientY);
-  setPreviewZoom(VE.previewZoom * (e.deltaY < 0 ? 1.2 : 1 / 1.2));
+  setPreviewZoom(VE.previewZoom * (e.deltaY < 0 ? VE.zoomStepFactor : 1 / VE.zoomStepFactor));
   const after = toSource(e.clientX, e.clientY);
   const scale = videoBox().scale;
   VE.panPx = clampPan({
@@ -1581,9 +1592,9 @@ async function addOverlay(kind) {
     const rect = centeredRect(0.3);
     op = { ...base, path, rect, opacity: VE.ovImageOpacityDefault ?? 100 };
   } else if (kind === "frame") {
-    op = { ...base, rect: snapRect({ x: 0, y: 0, w: VE.w, h: VE.h }), color: "#ffffff", thickness: Math.max(2, even(VE.h * 0.01)), style: "solid", opacity: 100 };
+    op = { ...base, rect: snapRect({ x: 0, y: 0, w: VE.w, h: VE.h }), color: VE.ovColorDefault, thickness: Math.max(2, even(VE.h * 0.01)), style: "solid", opacity: 100 };
   } else if (kind === "text") {
-    op = { ...base, text: t("veOvTextDefault"), x: even(VE.w * 0.08), y: even(VE.h * 0.08), fontPx: Math.max(12, Math.round(VE.h / 16)), font: FONT_FILES[0][0], color: "#ffffff", plate: true };
+    op = { ...base, text: t("veOvTextDefault"), x: even(VE.w * 0.08), y: even(VE.h * 0.08), fontPx: Math.max(12, Math.round(VE.h / 16)), font: FONT_FILES[0][0], color: VE.ovColorDefault, plate: true };
   } else if (kind === "pixelate") {
     op = { ...base, rect: centeredRect(0.35), blockPx: VE.ovPixelateBlockDefault ?? 16 };
   } else if (kind === "spotlight") {
@@ -1636,6 +1647,7 @@ function numberInput(value, min, max, step, onChange, presets) {
     decreaseLabel: t("numFieldDecrease"),
     increaseLabel: t("numFieldIncrease"),
     presetsLabel: t("numFieldPresets"),
+    wheelEnabled: settings?.ui_flags?.numFieldWheel !== false,
   });
 }
 
@@ -2442,33 +2454,36 @@ $("ve-trim-end-val").addEventListener("change", () => {
 const numFieldDec = t("numFieldDecrease");
 const numFieldInc = t("numFieldIncrease");
 const numFieldList = t("numFieldPresets");
+const numFieldWheelOn = settings?.ui_flags?.numFieldWheel !== false;
 for (const id of ["ve-crop-x", "ve-crop-y", "ve-crop-w", "ve-crop-h"]) {
   numberField({
     input: $(id), bigStep: 20, decreaseLabel: numFieldDec, increaseLabel: numFieldInc,
-    decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease",
+    decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease", wheelEnabled: numFieldWheelOn,
   });
 }
 numberField({
   input: $("ve-speed-custom"), bigStep: 0.5, presets: [0.25, 0.5, 1, 1.5, 2, 4],
   decreaseLabel: numFieldDec, increaseLabel: numFieldInc, presetsLabel: numFieldList,
   decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease", presetsAriaKey: "numFieldPresets",
+  wheelEnabled: numFieldWheelOn,
 });
 for (const id of ["ve-fade-in", "ve-fade-out"]) {
   numberField({
     input: $(id), bigStep: 500, presets: [250, 500, 1000, 2000],
     decreaseLabel: numFieldDec, increaseLabel: numFieldInc, presetsLabel: numFieldList,
     decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease", presetsAriaKey: "numFieldPresets",
+    wheelEnabled: numFieldWheelOn,
   });
 }
 for (const id of ["ve-scale-w", "ve-scale-h"]) {
   numberField({
     input: $(id), bigStep: 20, decreaseLabel: numFieldDec, increaseLabel: numFieldInc,
-    decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease",
+    decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease", wheelEnabled: numFieldWheelOn,
   });
 }
 numberField({
   input: $("ve-scale-pct"), bigStep: 25, decreaseLabel: numFieldDec, increaseLabel: numFieldInc,
-  decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease",
+  decreaseAriaKey: "numFieldDecrease", increaseAriaKey: "numFieldIncrease", wheelEnabled: numFieldWheelOn,
 });
 
 $("ve-crop-on").addEventListener("change", () => {
@@ -2959,6 +2974,14 @@ function applySettings(settings) {
     $("ve-fade-in").numFieldRefresh?.();
     $("ve-fade-out").numFieldRefresh?.();
   }
+  // Percent-based shared setting mapped onto this editor's own raw-factor zoom
+  // (1x-8x) -- defaults (20%, 800%) reproduce today's hardcoded 1.2x-per-tick,
+  // 8x-max exactly, so nothing changes for anyone who never opens this row.
+  const zoomStepPct = Number(values.zoomStepPct);
+  VE.zoomStepFactor = 1 + (Number.isFinite(zoomStepPct) && zoomStepPct > 0 ? zoomStepPct : 20) / 100;
+  const zoomMaxPct = Number(values.zoomMaxPct);
+  VE.zoomMax = Number.isFinite(zoomMaxPct) && zoomMaxPct > 0 ? zoomMaxPct / 100 : PREVIEW_ZOOM_MAX;
+  VE.ovColorDefault = HEX_RE.test(texts.veOvColor || "") ? texts.veOvColor : "#ffffff";
   const pixelateBlock = Number(values.veOvPixelateBlock);
   VE.ovPixelateBlockDefault = Number.isFinite(pixelateBlock) && pixelateBlock > 0 ? Math.round(pixelateBlock) : 16;
   const spotlightDim = Number(values.veOvSpotlightDim);
@@ -2974,7 +2997,6 @@ function applySettings(settings) {
   try {
     applyTheme(await invoke("current_theme"), await invoke("theme_vars"));
   } catch (_) {}
-  let settings = null;
   try {
     settings = await invoke("get_settings");
     applySettings(settings);

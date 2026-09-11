@@ -22,6 +22,7 @@ const cancelBtn = document.getElementById("cancel-btn");
 const audioSysEl = document.getElementById("audio-sys");
 const audioMicEl = document.getElementById("audio-mic");
 const hotkeyWarnEl = document.getElementById("hotkey-warn");
+const diskWarnEl = document.getElementById("disk-warn");
 
 function fmtTime(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -163,6 +164,19 @@ function applyHotkeyWarn(stopOk, pauseOk) {
   if (label) { hotkeyWarnEl.title = label; hotkeyWarnEl.setAttribute("aria-label", label); }
 }
 
+// recDiskWarnMb's mid-recording half -- fires at most once (the backend
+// already only reports it once), never hides again: a quiet standing
+// reminder rather than a toast this narrow bar has no room for, and free
+// space recovering mid-recording does not make the earlier warning untrue.
+function applyDiskLow(diskLow) {
+  if (!diskLow || !i18nDict) return;
+  const [mb, min] = diskLow;
+  const label = (i18nDict.recDiskLow || "").replace("{mb}", String(mb)).replace("{min}", String(min));
+  diskWarnEl.classList.remove("hidden");
+  diskWarnEl.title = label;
+  diskWarnEl.setAttribute("aria-label", label);
+}
+
 let pollTimer = 0;
 async function poll() {
   try {
@@ -192,6 +206,7 @@ async function poll() {
     applyContinueEnabled(status.elapsed_ms);
     applyAudio(status);
     applyHotkeyWarn(status.stop_hotkey_ok, status.pause_hotkey_ok);
+    applyDiskLow(status.disk_low);
   } catch {
     // transient -- next tick self-corrects
   }
