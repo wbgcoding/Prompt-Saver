@@ -113,6 +113,12 @@ body.video-body {
 .ve-live-pixelate { image-rendering: pixelated; }
 
 .ve-rects { position: absolute; inset: 0; pointer-events: none; }
+/* Shown only while a crop/overlay drag is actually snapped to an edge or
+   centre (see renderSnapGuides() in video.js); gone again the instant the
+   pointer moves off the snap or the drag ends. */
+.ve-snap-guide { position: absolute; pointer-events: none; background: var(--accent); opacity: 0.85; }
+.ve-snap-guide-x { width: 1px; }
+.ve-snap-guide-y { height: 1px; }
 .ve-rect {
   position: absolute;
   pointer-events: auto;

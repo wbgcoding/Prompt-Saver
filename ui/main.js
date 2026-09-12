@@ -10,6 +10,7 @@ import { HELP_CONTENT } from "./help.js";
 import { DRAG_OUT_MODS, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes } from "./floatShared.js";
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 import { createColorPop } from "./colorpop.js";
+import { snapMove } from "./snap.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen, emit } = window.__TAURI__.event;
@@ -1270,6 +1271,11 @@ const FLAG_LABELS = {
   // starting point for the next one of that kind, saved across sessions. Off falls
   // back to the fixed defaults (veOvColor, veOvFont, veOvPixelateBlock, ...).
   veOvRemember: "flagVeOvRemember",
+  // The screenshot editor has had edge/center snapping for a while
+  // (snipEditSnap); this is the same behaviour for the video editor's crop box
+  // and overlays, kept as its own switch since the two editors want it
+  // independently.
+  videoEditSnap: "flagVideoEditSnap",
   // Only matters once clipWatcher (itself off by default) is on -- ships ON so a
   // guessed password never has to be manually turned away in the first place.
   clipSkipSecrets: "flagClipSkipSecrets",
@@ -1510,7 +1516,6 @@ const EXPERT_VALUES = {
   snipTextPx: { label: "valSnipTextPx", min: 10, max: 96, step: 2, def: 24, unit: "px", gate: "snipEditor" },
   snipPixelBlock: { label: "valSnipPixelBlock", min: 4, max: 64, step: 2, def: 12, unit: "px", gate: "snipEditor" },
   snipSpotlightDim: { label: "valSnipSpotlightDim", min: 10, max: 90, step: 5, def: 55, unit: "%", gate: "snipEditor" },
-  snipEditSnapTolerancePx: { label: "valSnipEditSnapTolerancePx", min: 2, max: 20, step: 1, def: 6, unit: "px", gate: "snipEditSnap" },
   snipEditUndoMax: { label: "valSnipEditUndoMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "snipEditor" },
   videoEditUndoMax: { label: "valVideoEditUndoMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "videoEditor" },
   // The H.264 bitrate each export-quality tier actually encodes at -- the
@@ -1533,6 +1538,10 @@ const EXPERT_VALUES = {
   // How far a duplicated overlay/shape is shifted from its source, in both editors,
   // so the copy is visible right away instead of sitting exactly on top of it.
   veOvDupOffsetPx: { label: "valVeOvDupOffsetPx", min: 0, max: 100, step: 1, def: 16, unit: "px" },
+  // Shared by both editors' snapping (snipEditSnap, videoEditSnap) -- used to
+  // live under the screenshot editor alone, moved here once the video editor
+  // grew the same feature so one value covers both.
+  editSnapTolerancePx: { label: "valEditSnapTolerancePx", min: 2, max: 20, step: 1, def: 6, unit: "px" },
   // Percent-based so one pair of settings covers both editors' own different
   // native zoom units (the screenshot editor's 0.05x-8x factor, the video
   // editor's 1x-8x factor) -- see snip.js/video.js for the unit conversion.
@@ -1957,7 +1966,7 @@ const EXPERT_TABS = [
     // Everything below is a capture tool: it reads something off the screen or the
     // microphone rather than putting typed content into the app.
     { title: "expGroupScreenshot", flags: ["screenshot"], values: ["snipPreviewVh", "snipQuality", "snipSaveQuality", "snipDelayMs"], dropdowns: ["screenshotFormat"], paths: ["screenshotDir"] },
-    { title: "expGroupSnipEditor", flags: [{ key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }], values: ["snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx", "snipArrowHeadScale", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditSnapTolerancePx", "snipEditUndoMax"], dropdowns: ["snipEditDefaultTool", "snipScaleFilter"], colors: ["snipDefaultColor"] },
+    { title: "expGroupSnipEditor", flags: [{ key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }], values: ["snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx", "snipArrowHeadScale", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax"], dropdowns: ["snipEditDefaultTool", "snipScaleFilter"], colors: ["snipDefaultColor"] },
     // Opens #ocr-langs-modal -- same gate as the rest of the feature.
     { title: "expGroupOcr", flags: ["ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }], values: ["ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH"], dropdowns: ["ocrLang"],
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }] },
@@ -1967,10 +1976,10 @@ const EXPERT_TABS = [
     // "hotkey" branch.
     { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode"], paths: ["recordingDir"],
       actions: [{ id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recStopHotkeyLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recPauseHotkeyLabel", gate: "recPauseHotkey" }] },
-    { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor"], paths: ["videoExportDir"] },
+    { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor"], paths: ["videoExportDir"] },
     // What the screenshot editor and the video editor share -- created here so
     // no setting key is ever declared in two groups (expert_menu_check.py).
-    { title: "expGroupEditors", flags: ["numFieldWheel", "editStateKeep"], values: ["numFieldStep", "numFieldBigStep", "zoomStepPct", "zoomMaxPct", "editStateSaveSecs", "editStateKeepDays", "veOvDupOffsetPx"] },
+    { title: "expGroupEditors", flags: ["numFieldWheel", "editStateKeep"], values: ["numFieldStep", "numFieldBigStep", "zoomStepPct", "zoomMaxPct", "editStateSaveSecs", "editStateKeepDays", "veOvDupOffsetPx", "editSnapTolerancePx"] },
   ] },
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
@@ -2158,16 +2167,16 @@ const EXPERT_TIPS = [
   "recQuality", "recBitrateKbps", "recFormat", "recordingDir",
   "recStopHotkey", "recPauseHotkey", "recTrayEntries", "recCropNotice", "recBarSize", "recTargetSwitch",
   "recAutoCrop", "recCanvasMode", "recCanvasMaxPx", "recMaxMin", "recMaxMb", "recDiskWarnMb",
-  "videoEditor", "videoEditUndoMax", "veOvRemember",
+  "videoEditor", "videoEditUndoMax", "veOvRemember", "videoEditSnap",
   "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veExportKbpsHigh", "veExportKbpsSmall",
   "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veOvColor", "veOvFont",
   "veDefaultPanel", "videoExportDir",
-  "numFieldWheel", "zoomStepPct", "zoomMaxPct", "errorLogKeepKb", "veOvDupOffsetPx",
+  "numFieldWheel", "zoomStepPct", "zoomMaxPct", "errorLogKeepKb", "veOvDupOffsetPx", "editSnapTolerancePx",
   "editStateKeep", "editStateSaveSecs", "editStateKeepDays",
   "snipQuality", "snipSaveQuality", "snipDelayMs",
   "snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx",
   "snipArrowHeadScale", "snipDefaultColor", "snipTextPx", "snipPixelBlock", "snipSpotlightDim",
-  "snipEditUndoMax", "snipEditSnap", "snipEditSnapTolerancePx", "snipTextPlate", "snipEditDefaultTool", "snipScaleFilter",
+  "snipEditUndoMax", "snipEditSnap", "snipTextPlate", "snipEditDefaultTool", "snipScaleFilter",
   "ocr", "ocrUpscaleUnderPx", "ocrLang",
   "ocrAutoPickLang", "ocrLangAutoUpdate", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "ocrLangCacheH",
   "voice", "voiceInterim", "voicePunct", "voiceAutoCaps", "voiceAutoStop", "voiceAutoStopSec", "voiceMaxMin",
@@ -13653,7 +13662,7 @@ function bind() {
   const SNIP_EDIT_SNAP = () => flag("snipEditSnap");
   const SNIP_EDIT_TEXT_PLATE = () => flag("snipTextPlate");
   const SNIP_EDIT_DEFAULT_TOOL = () => txt("snipEditDefaultTool") || "hand";
-  const SNIP_EDIT_SNAP_TOL = () => val("snipEditSnapTolerancePx") || 6; // px (screen)
+  const SNIP_EDIT_SNAP_TOL = () => val("editSnapTolerancePx") || 6; // px (screen)
   const SNIP_DUP_OFFSET_PX = () => val("veOvDupOffsetPx");
   // Function, not a static object: pen/marker's middle preset tracks the live
   // expert-menu default, so a changed snipPenPx/snipMarkerPx shows up next open.
@@ -13781,13 +13790,54 @@ function bind() {
       y: snipEditClamp((ev.clientY - r.top) / SE.zoom, 0, SE.h),
     };
   }
+  // Bounding rect of an op for snap purposes -- a rect-shaped op already has
+  // one, a two-point op (line/arrow/pen/marker) gets the box around its points.
+  function snipEditOpBoundingRect(op) {
+    if (op.rect) return op.rect;
+    if (op.points && op.points.length >= 2) {
+      const xs = op.points.map((p) => p.x), ys = op.points.map((p) => p.y);
+      return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+    }
+    return null;
+  }
+  // The canvas itself (its four edges plus both centres) counts as one target,
+  // then every already-placed shape adds its own edges and centres.
+  function snipEditSnapTargets() {
+    const targets = [{ x: 0, y: 0, w: SE.w, h: SE.h }];
+    for (const op of SE.ops) {
+      const r = snipEditOpBoundingRect(op);
+      if (r) targets.push(r);
+    }
+    return targets;
+  }
+  // Set by snipEditSnapPoint while a drag is snapped, read by the live-preview
+  // draw functions to show a thin accent-coloured guide line; cleared again as
+  // soon as nothing is snapped, so it never lingers after the pointer moves on.
+  let snipEditGuide = null;
   function snipEditSnapPoint(pt) {
-    if (!SNIP_EDIT_SNAP()) return pt;
+    if (!SNIP_EDIT_SNAP()) { snipEditGuide = null; return pt; }
     const tol = SNIP_EDIT_SNAP_TOL() / SE.zoom;
-    let { x, y } = pt;
-    for (const tx of [0, SE.w / 2, SE.w]) if (Math.abs(x - tx) <= tol) { x = tx; break; }
-    for (const ty of [0, SE.h / 2, SE.h]) if (Math.abs(y - ty) <= tol) { y = ty; break; }
-    return { x, y };
+    const r = snapMove({ x: pt.x, y: pt.y, w: 0, h: 0 }, snipEditSnapTargets(), tol);
+    snipEditGuide = (r.guideX != null || r.guideY != null) ? { x: r.guideX, y: r.guideY } : null;
+    return { x: r.x, y: r.y };
+  }
+  // Alt disables snapping for the duration of the drag, same as the shift-key
+  // constraint below is per-drag rather than a persistent mode.
+  function snipEditApplySnap(pt0, altKey) {
+    if (altKey) { snipEditGuide = null; return pt0; }
+    return snipEditSnapPoint(pt0);
+  }
+  function snipEditDrawGuides() {
+    if (!snipEditGuide) return;
+    const ctx = snipEditLiveCtx;
+    const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#2563eb";
+    ctx.save();
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 1 / SE.zoom;
+    ctx.setLineDash([4 / SE.zoom, 3 / SE.zoom]);
+    if (snipEditGuide.x != null) { ctx.beginPath(); ctx.moveTo(snipEditGuide.x, 0); ctx.lineTo(snipEditGuide.x, SE.h); ctx.stroke(); }
+    if (snipEditGuide.y != null) { ctx.beginPath(); ctx.moveTo(0, snipEditGuide.y); ctx.lineTo(SE.w, snipEditGuide.y); ctx.stroke(); }
+    ctx.restore();
   }
 
   function snipEditToolState(tool) {
@@ -14247,6 +14297,7 @@ function bind() {
       snipEditLiveCtx.strokeRect(p.x - hs / 2, p.y - hs / 2, hs, hs);
     }
     snipEditLiveCtx.restore();
+    snipEditDrawGuides();
   }
   function snipEditCropPointerDown(pt) {
     const r = SE.cropRect;
@@ -14734,28 +14785,33 @@ function bind() {
     const ts = snipEditToolState(SE.tool);
     const op = { color: ts.color, width: ts.width, points: SE.drag.points };
     if (SE.tool === "marker") snipEditDrawMarkerOp(snipEditLiveCtx, op); else snipEditDrawPenOp(snipEditLiveCtx, op);
+    snipEditDrawGuides();
   }
   function snipEditDrawLiveLineArrow() {
     snipEditClearLive();
     const ts = snipEditToolState(SE.tool);
     const op = { color: ts.color, width: ts.width, points: [SE.drag.a, SE.drag.b] };
     if (SE.tool === "arrow") snipEditDrawArrowOp(snipEditLiveCtx, op); else snipEditDrawLineOp(snipEditLiveCtx, op);
+    snipEditDrawGuides();
   }
   function snipEditDrawLiveRectEllipse() {
     snipEditClearLive();
     const ts = snipEditToolState(SE.tool);
     const op = { color: ts.color, width: ts.width, rect: snipEditNormRect(SE.drag), filled: !!ts.filled };
     if (SE.tool === "ellipse") snipEditDrawEllipseOp(snipEditLiveCtx, op); else snipEditDrawRectOp(snipEditLiveCtx, op);
+    snipEditDrawGuides();
   }
   function snipEditDrawLivePixelatePreview() {
     snipEditClearLive();
     const ts = snipEditToolState("pixelate");
     snipEditDrawPixelate(snipEditLiveCtx, snipEditNormRect(SE.drag), ts.blockPx);
+    snipEditDrawGuides();
   }
   function snipEditDrawLiveSpotlightPreview() {
     snipEditClearLive();
     const ts = snipEditToolState("spotlight");
     snipEditDrawSpotlight(snipEditLiveCtx, snipEditNormRect(SE.drag), ts.dim);
+    snipEditDrawGuides();
   }
 
   function snipEditShowMeasure(e, rect) {
@@ -14840,7 +14896,7 @@ function bind() {
     }
     snipEditLiveCv.setPointerCapture(e.pointerId);
     SE.lastNudged = null;
-    const pt = e.altKey ? pt0 : snipEditSnapPoint(pt0);
+    const pt = snipEditApplySnap(pt0, e.altKey);
     switch (SE.tool) {
       case "crop": snipEditCropPointerDown(pt); break;
       case "pen": case "marker": SE.drag = { kind: SE.tool, points: [pt] }; break;
@@ -14887,7 +14943,7 @@ function bind() {
       return;
     }
     const pt0 = snipEditToImage(e);
-    let pt = e.altKey ? pt0 : snipEditSnapPoint(pt0);
+    let pt = snipEditApplySnap(pt0, e.altKey);
     if (e.shiftKey) pt = snipEditApplyShiftConstraint(SE.drag, pt);
     switch (SE.drag.kind) {
       case "pen": case "marker": SE.drag.points.push(pt); snipEditDrawLivePenStroke(); break;

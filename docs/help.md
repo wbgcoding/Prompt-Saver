@@ -206,6 +206,14 @@ for that same kind (image, frame, text, pixelation or spotlight), across
 restarts too; an expert switch turns that off again in favour of the fixed
 starting values.
 
+Dragging a shape (screenshot editor) or a crop box or overlay (video editor)
+snaps to the canvas or frame edges, its centre in both directions, and the
+edges and centre of every other shape or overlay already placed, once the
+pointer gets close enough. A thin accent-coloured line marks which one it
+caught, and disappears the instant the drag ends. Holding Alt while dragging
+turns snapping off for that one drag. Each editor has its own switch for this,
+sharing one distance setting between them.
+
 ### Text recognition (OCR)
 
 On by default. A button on the composer and in the screenshot dialog pulls the
@@ -694,6 +702,16 @@ richten sich Farbe, Stärke, Deckkraft und Schriftgröße einer neuen
 Überlagerung außerdem nach dem, was für dieselbe Art (Bild, Rahmen, Text,
 Verpixeln oder Spotlight) zuletzt benutzt wurde, auch über einen Neustart
 hinweg; ein Expertenschalter stellt stattdessen wieder feste Vorgabewerte ein.
+
+Beim Ziehen einer Form (Screenshot-Editor) oder eines Zuschnitts bzw. einer
+Überlagerung (Video-Editor) rastet die Bewegung an den Kanten der Leinwand
+oder des Bildes, an dessen Mitte in beide Richtungen und an den Kanten und der
+Mitte jeder anderen schon platzierten Form oder Überlagerung ein, sobald der
+Zeiger nah genug kommt. Eine dünne Linie in der Akzentfarbe zeigt, welche
+Linie gerade getroffen wurde, und verschwindet sofort wieder, sobald das
+Ziehen endet. Gedrückt gehaltenes Alt schaltet das Einrasten für diesen einen
+Zug ab. Jeder Editor hat dafür einen eigenen Schalter, die Toleranz teilen sie
+sich.
 
 **Texterkennung (OCR)** — standardmäßig an; liest per Knopf in der Leiste und
 im Screenshot-Dialog Text aus einem Screenshot oder einer Bilddatei, komplett

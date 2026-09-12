@@ -285,6 +285,14 @@ the video editor and the introduction tour ship on).
   remembers the last colour, thickness, opacity and font size used for each
   overlay kind and starts the next one of that kind from it, across restarts
   too, with an expert switch to turn that off again.
+- **Snapping while dragging, in both editors.** A shape (screenshot editor) or
+  a crop box or overlay (video editor) now snaps to the canvas or frame edges,
+  its centre in both directions, and the edges and centre of every other shape
+  or overlay already placed. A thin accent-coloured guide line marks whichever
+  line it caught, gone again the instant the drag ends. Holding Alt turns it
+  off for that one drag; each editor keeps its own on/off switch, sharing one
+  distance setting between them. The screenshot editor already snapped to the
+  image edges and centre before this; it now also catches other shapes.
 
 ### Improved
 

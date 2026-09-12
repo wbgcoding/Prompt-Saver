@@ -11,6 +11,7 @@ import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { createColorPop } from "./colorpop.js";
 import { placePopoverAt } from "./popover.js";
+import { snapMove } from "./snap.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -150,6 +151,9 @@ const VE = {
   ovTextColorDefault: "#ffffff",
   ovFrameColorDefault: "#ffffff",
   ovDupOffsetPx: 16,
+  snapOn: true,
+  snapTolPx: 6,
+  guide: null,
 };
 
 let TXT_READY = false;
@@ -776,6 +780,8 @@ function videoBox() {
     top: box.top - stage.top + (box.height - ph) / 2,
     clientLeft: box.left + (box.width - pw) / 2,
     clientTop: box.top + (box.height - ph) / 2,
+    width: pw,
+    height: ph,
     scale,
   };
 }
@@ -901,8 +907,37 @@ $("ve-preview-zoom-reset").addEventListener("click", resetPreviewZoom);
 $("ve-preview-zoom-in").addEventListener("click", () => setPreviewZoom(VE.previewZoom * VE.zoomStepFactor));
 $("ve-preview-zoom-out").addEventListener("click", () => setPreviewZoom(VE.previewZoom / VE.zoomStepFactor));
 
+// Thin accent-coloured lines shown only while a rect/overlay drag is actually
+// snapped to an edge or centre -- created once and toggled hidden the rest of
+// the time, the same idea as the screenshot editor's own live-canvas guides.
+const veGuideX = document.createElement("div");
+veGuideX.className = "ve-snap-guide ve-snap-guide-x hidden";
+const veGuideY = document.createElement("div");
+veGuideY.className = "ve-snap-guide ve-snap-guide-y hidden";
+$("ve-rects").after(veGuideX, veGuideY);
+
+function renderSnapGuides(vb) {
+  const box = vb || videoBox();
+  if (VE.guide && VE.guide.x != null) {
+    veGuideX.style.left = `${box.left + VE.guide.x * box.scale}px`;
+    veGuideX.style.top = `${box.top}px`;
+    veGuideX.style.height = `${box.height}px`;
+    veGuideX.classList.remove("hidden");
+  } else {
+    veGuideX.classList.add("hidden");
+  }
+  if (VE.guide && VE.guide.y != null) {
+    veGuideY.style.top = `${box.top + VE.guide.y * box.scale}px`;
+    veGuideY.style.left = `${box.left}px`;
+    veGuideY.style.width = `${box.width}px`;
+    veGuideY.classList.remove("hidden");
+  } else {
+    veGuideY.classList.add("hidden");
+  }
+}
+
 // Every rectangle is snapped to even numbers while it is being dragged, not at
-// export time — so the numbers on screen are already the numbers ffmpeg gets.
+// export time -- so the numbers on screen are already the numbers ffmpeg gets.
 function snapRect(rect) {
   // Clamping an already-even width/height against an ODD source
   // dimension can land back on an odd number (e.g. even(641)=642, clamped
@@ -925,6 +960,23 @@ function rectFor(op) {
   if (op.tool === "crop") return op.rect;
   if (op.tool === "overlay" && op.rect) return op.rect;
   return null;
+}
+
+// The frame itself (its four edges plus both centres) counts as one target,
+// then every other crop/overlay adds its own edges and centre -- the op
+// currently being dragged is excluded so it never snaps to its own last
+// committed position. A text overlay has no rect, only a point, which
+// snapMove treats as a zero-size target (all three candidate lines collapse
+// onto that one point).
+function veSnapTargets(excludeOp) {
+  const targets = [{ x: 0, y: 0, w: VE.w, h: VE.h }];
+  for (const op of VE.ops) {
+    if (op === excludeOp) continue;
+    const r = rectFor(op);
+    if (r) targets.push(r);
+    else if (op.tool === "overlay" && op.kind === "text") targets.push({ x: op.x, y: op.y, w: 0, h: 0 });
+  }
+  return targets;
 }
 
 // The visible rectangles: the crop box plus whichever overlay is being edited.
@@ -1154,27 +1206,51 @@ $("ve-rects").addEventListener("pointerdown", (e) => {
 $("ve-rects").addEventListener("pointermove", (e) => {
   const drag = VE.drag;
   if (!drag || drag.kind !== "rect") return;
-  const point = toSource(e.clientX, e.clientY);
+  const vb = videoBox();
+  const point = { x: (e.clientX - vb.clientLeft) / vb.scale, y: (e.clientY - vb.clientTop) / vb.scale };
+  // Alt disables snapping for the duration of the drag, same as in the
+  // screenshot editor. Tolerance is kept in source pixels, like the drag math
+  // itself, by dividing the on-screen setting through the same box scale.
+  const tol = !e.altKey && VE.snapOn ? VE.snapTolPx / vb.scale : 0;
+  const targets = tol ? veSnapTargets(drag.op) : null;
+  VE.guide = null;
   if (drag.live) {
+    let next;
     if (drag.handle) {
-      drag.live = snapRect(resizeRect(drag.orig, drag.handle, point, e.shiftKey));
+      let anchor = point;
+      if (tol) {
+        const s = snapMove({ x: point.x, y: point.y, w: 0, h: 0 }, targets, tol);
+        anchor = { x: s.x, y: s.y };
+        VE.guide = { x: s.guideX, y: s.guideY };
+      }
+      next = resizeRect(drag.orig, drag.handle, anchor, e.shiftKey);
     } else {
-      drag.live = snapRect({
+      next = {
         x: drag.orig.x + (point.x - drag.start.x),
         y: drag.orig.y + (point.y - drag.start.y),
         w: drag.orig.w, h: drag.orig.h,
-      });
+      };
+      if (tol) {
+        const s = snapMove(next, targets, tol);
+        next.x = s.x; next.y = s.y;
+        VE.guide = { x: s.guideX, y: s.guideY };
+      }
     }
+    drag.live = snapRect(next);
     drag.op.rect = drag.live; // live preview only; the op is re-pushed on release
   } else {
-    drag.livePoint = {
-      x: clamp(Math.round(drag.orig.x + (point.x - drag.start.x)), 0, VE.w),
-      y: clamp(Math.round(drag.orig.y + (point.y - drag.start.y)), 0, VE.h),
-    };
+    let p = { x: drag.orig.x + (point.x - drag.start.x), y: drag.orig.y + (point.y - drag.start.y) };
+    if (tol) {
+      const s = snapMove({ x: p.x, y: p.y, w: 0, h: 0 }, targets, tol);
+      p = { x: s.x, y: s.y };
+      VE.guide = { x: s.guideX, y: s.guideY };
+    }
+    drag.livePoint = { x: clamp(Math.round(p.x), 0, VE.w), y: clamp(Math.round(p.y), 0, VE.h) };
     drag.op.x = drag.livePoint.x;
     drag.op.y = drag.livePoint.y;
   }
   renderRects();
+  renderSnapGuides(vb);
 });
 
 const rectsEqual = (a, b) => !!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
@@ -1182,6 +1258,8 @@ const rectsEqual = (a, b) => !!a && !!b && a.x === b.x && a.y === b.y && a.w ===
 function endRectDrag() {
   const drag = VE.drag;
   VE.drag = null;
+  VE.guide = null;
+  renderSnapGuides();
   if (!drag || drag.kind !== "rect") return;
   const op = drag.op;
   const raw = drag.live && drag.live.w >= RECT_MIN_PX && drag.live.h >= RECT_MIN_PX ? drag.live : drag.orig;
@@ -3236,6 +3314,11 @@ function applySettings(settings) {
   VE.ovImageOpacityDefault = Number.isFinite(imageOpacity) && imageOpacity > 0 ? Math.round(imageOpacity) : 100;
   const dupOffset = Number(values.veOvDupOffsetPx);
   VE.ovDupOffsetPx = Number.isFinite(dupOffset) && dupOffset >= 0 ? Math.round(dupOffset) : 16;
+  // Shared with the screenshot editor's own snapping (see snap.js); the switch
+  // to turn it off is per editor, same reasoning as veOvRemember above.
+  VE.snapOn = settings?.ui_flags?.videoEditSnap !== false;
+  const snapTol = Number(values.editSnapTolerancePx);
+  VE.snapTolPx = Number.isFinite(snapTol) && snapTol > 0 ? snapTol : 6;
   // Each overlay kind starts from its own last-used colour/thickness/opacity/font
   // size instead of the fixed default above, kept in the ordinary settings store
   // (not the per-file edit state) because it belongs to the user, not the file.

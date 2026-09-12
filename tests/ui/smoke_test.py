@@ -8278,6 +8278,90 @@ VIDEO_PROBE = """
       }
     }
 
+    // ---- 393: dragging an overlay near the frame centre snaps it exactly
+    // onto that centre, and Alt held during the drag suppresses the snap.
+    // Runs after 365 above (rather than right after 356, where it would
+    // otherwise sit) because 365 depends on the image overlay still sitting
+    // exactly where the 356 drag left it, off-centre, as its own known point
+    // to zoom onto -- this block moves it around a great deal, so it runs
+    // once that dependency is no longer needed. ----
+    {
+      const imgRowIdxSnap = overlayKinds.findIndex(([id]) => id === 've-ov-add-image');
+      if (ovRows[imgRowIdxSnap]) {
+        // The row is still the one selected from 356/364/365 above; a row
+        // click toggles selection off, so only click if it is not open.
+        const ovEditorBox = document.getElementById('ve-ov-editor');
+        const imageAlreadyOpen = !ovEditorBox.classList.contains('hidden') && !!ovEditorBox.querySelector('.ve-path');
+        if (!imageAlreadyOpen) {
+          ovRows[imgRowIdxSnap].click();
+          await sleep(30);
+        }
+        const xField = document.querySelector('#ve-ov-editor [data-ov-field="rect.x"]');
+        const yField = document.querySelector('#ve-ov-editor [data-ov-field="rect.y"]');
+        const wField = document.querySelector('#ve-ov-editor [data-ov-field="rect.w"]');
+        const hField = document.querySelector('#ve-ov-editor [data-ov-field="rect.h"]');
+        if (!xField || !yField || !wField || !hField || !document.querySelector('#ve-rects .ve-rect-image')) {
+          errs.push('393: could not find the image overlay rect/fields to test snapping');
+        } else {
+          const expectX = 960 - Number(wField.value) / 2;
+          const expectY = 540 - Number(hField.value) / 2;
+          // Moves the overlay by a source-pixel delta, converting it to a
+          // client-space drag distance from the rect element's OWN current
+          // size against its known source width -- robust to however the
+          // video is actually laid out inside the stage, rather than
+          // recomputing that layout by hand. Reuses pointerId 1, same as the
+          // 356 drag above: a fresh custom id is never recognised as an
+          // active pointer by setPointerCapture, only the mouse's own is.
+          // renderRects() also rebuilds '#ve-rects' from scratch on every
+          // drag, so the rect element is re-queried fresh each call rather
+          // than reused from an earlier, by-then-detached one.
+          const dragBy = (dxSource, dySource, altKey) => {
+            const el = document.querySelector('#ve-rects .ve-rect-image');
+            const box = el.getBoundingClientRect();
+            const scale = box.width / Number(wField.value);
+            const from = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+            const to = { x: from.x + dxSource * scale, y: from.y + dySource * scale };
+            el.dispatchEvent(new PointerEvent('pointerdown', { clientX: from.x, clientY: from.y, pointerId: 1, bubbles: true }));
+            document.getElementById('ve-rects').dispatchEvent(new PointerEvent('pointermove', { clientX: to.x, clientY: to.y, pointerId: 1, altKey, bubbles: true }));
+            document.getElementById('ve-rects').dispatchEvent(new PointerEvent('pointerup', { clientX: to.x, clientY: to.y, pointerId: 1, altKey, bubbles: true }));
+          };
+          // Move it well away from the centre first, Alt held so this setup
+          // move does not get pulled onto a snap line itself.
+          dragBy(-300, 200, true);
+          await sleep(30);
+          if (Number(xField.value) === expectX && Number(yField.value) === expectY) {
+            errs.push('393: the Alt-held setup drag left the overlay exactly on the frame centre, cannot prove the next drag snaps it there');
+          }
+          // Aim to within a source pixel or two of the exact centre -- not
+          // exactly on it -- and expect the snap to land it exactly there.
+          // The fixed 1920x1080 fixture puts the frame centre at source
+          // (960, 540); the tolerance is always well above a couple of
+          // source pixels here since the preview is always shown well below
+          // its native size.
+          let curX = Number(xField.value) + Number(wField.value) / 2;
+          let curY = Number(yField.value) + Number(hField.value) / 2;
+          dragBy(960 + 1 - curX, 540 - 1 - curY, false);
+          await sleep(30);
+          if (Number(xField.value) !== expectX || Number(yField.value) !== expectY) {
+            errs.push('393: dragging near the frame centre did not snap onto it exactly, got ' +
+              xField.value + ',' + yField.value + ' expected ' + expectX + ',' + expectY);
+          }
+          // The same near-centre approach with Alt held must not snap. The
+          // overlay is already sitting exactly on the centre from the drag
+          // above, so this nudges it 4 source pixels off -- an even number,
+          // so the drag's own even-pixel rounding cannot coincidentally land
+          // back on the same value the snap itself would have produced.
+          curX = Number(xField.value) + Number(wField.value) / 2;
+          curY = Number(yField.value) + Number(hField.value) / 2;
+          dragBy(960 + 4 - curX, 540 - 4 - curY, true);
+          await sleep(30);
+          if (Number(xField.value) === expectX && Number(yField.value) === expectY) {
+            errs.push('393: holding Alt during the drag did not suppress the centre snap');
+          }
+        }
+      }
+    }
+
     // ---- 383: the video editor's other half of the zoom-key and
     // click-to-select-handles parity check, screenshot editor side in
     // smoke_test.py's own '383:' block above ----
