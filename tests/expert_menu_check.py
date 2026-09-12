@@ -74,10 +74,11 @@ DEPENDENCIES = {
     # 117/118: screenshot editor
     "snipEditor": "screenshot",
     "snipEditSnap": "snipEditor",
-    "snipTextPlate": "snipEditor",
+    "snipTextBack": "snipEditor",
     "snipPenPx": "snipEditor",
     "snipMarkerPx": "snipEditor",
     "snipTextPx": "snipEditor",
+    "snipTextOutlinePx": "snipEditor",
     "snipPixelBlock": "snipEditor",
     "snipSpotlightDim": "snipEditor",
     "snipEditUndoMax": "snipEditor",

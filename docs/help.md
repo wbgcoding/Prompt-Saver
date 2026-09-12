@@ -214,6 +214,12 @@ caught, and disappears the instant the drag ends. Holding Alt while dragging
 turns snapping off for that one drag. Each editor has its own switch for this,
 sharing one distance setting between them.
 
+The text tool's background is a choice of none, a solid plate or an outline,
+so white or light-coloured text stays readable on a light background too;
+plate was the only option before, and stays the default. An expert setting
+picks the outline width, and its colour, black or white, follows the text
+colour automatically for the best contrast.
+
 ### Text recognition (OCR)
 
 On by default. A button on the composer and in the screenshot dialog pulls the
@@ -712,6 +718,13 @@ Linie gerade getroffen wurde, und verschwindet sofort wieder, sobald das
 Ziehen endet. Gedrückt gehaltenes Alt schaltet das Einrasten für diesen einen
 Zug ab. Jeder Editor hat dafür einen eigenen Schalter, die Toleranz teilen sie
 sich.
+
+Der Hintergrund des Textwerkzeugs ist jetzt eine Wahl zwischen keinem, einer
+deckenden Platte oder einem Umriss, damit auch weißer oder heller Text auf
+hellem Untergrund lesbar bleibt; Platte war bisher die einzige Möglichkeit und
+bleibt die Vorgabe. Eine Expertenzeile stellt die Umrissbreite ein, seine
+Farbe, schwarz oder weiß, folgt für den besten Kontrast automatisch der
+Textfarbe.
 
 **Texterkennung (OCR)** — standardmäßig an; liest per Knopf in der Leiste und
 im Screenshot-Dialog Text aus einem Screenshot oder einer Bilddatei, komplett

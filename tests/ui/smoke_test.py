@@ -5838,6 +5838,85 @@ PROBE = """
         document.getElementById('snip-edit-cancel').click();
         await sleep(200);
       }
+      // 394: the text tool's background is now three choices (none, plate,
+      // outline) instead of a plain switch. A previously stored
+      // snipTextPlate: false (see the stub's initial ui_flags) must arrive as
+      // "none" on its own, and picking Outline must reveal its own width field.
+      {
+        const dropdownRowByLabel = (text) => {
+          for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+            tb.click();
+            const hit = [...document.querySelectorAll('#expert-flags .expert-dropdown-row')]
+              .find((r) => (r.querySelector('.value-head span') || {}).textContent === text);
+            if (hit) return hit;
+          }
+          return null;
+        };
+        document.getElementById('gear').click();
+        await sleep(200);
+        document.getElementById('expert-open').click();
+        await sleep(300);
+        // The suite is left running in German from the 112 pass above onward
+        // (see its own comment), so the row is found by its German label.
+        const row = dropdownRowByLabel('Texthintergrund');
+        const sel = row && row.querySelector('select');
+        if (!sel) {
+          out.errors.push('394: the text background dropdown is missing from the expert menu');
+        } else {
+          const values = [...sel.options].map((o) => o.value);
+          if (values.join(',') !== 'none,plate,outline') {
+            out.errors.push('394: the text background dropdown does not offer exactly none/plate/outline, got ' + values.join(','));
+          }
+          if (sel.value !== 'none') {
+            out.errors.push('394: a stored snipTextPlate:false did not migrate to "none", got "' + sel.value + '"');
+          }
+          sel.value = 'outline';
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+          await sleep(120);
+          const wrote = [...(window.__SMOKE_ARGS__ || [])]
+            .some(([c, a]) => c === 'set_ui_text' && a.key === 'snipTextBack' && a.value === 'outline');
+          if (!wrote) out.errors.push('394: picking Outline in the expert menu did not persist snipTextBack');
+        }
+        document.getElementById('settings-close').click();
+        await sleep(200);
+        const TINY_PNG4 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+        window.__FIRE__('snip-captured', { data_url: TINY_PNG4, path: '', name: 'textback.png' });
+        await sleep(300);
+        const textBtn2 = document.querySelector('#snip-edit-tools button[data-tool="text"]');
+        if (!textBtn2) {
+          out.errors.push('394: the text tool button was not found while testing the per-shape background field');
+        } else {
+          textBtn2.click();
+          await sleep(30);
+          let shapeSel = document.querySelector('#snip-edit-context select');
+          if (!shapeSel) {
+            out.errors.push('394: the per-shape text background select was not found');
+          } else {
+            const values2 = [...shapeSel.options].map((o) => o.value);
+            if (values2.join(',') !== 'none,plate,outline') {
+              out.errors.push('394: the per-shape text background select does not offer exactly none/plate/outline, got ' + values2.join(','));
+            }
+            shapeSel.value = 'none';
+            shapeSel.dispatchEvent(new Event('change', { bubbles: true }));
+            await sleep(30);
+            if (document.querySelectorAll('#snip-edit-context .numfield').length !== 1) {
+              out.errors.push('394: an outline-width field is shown while the background is set to None');
+            }
+            // The panel was just rebuilt from scratch (innerHTML = ""), so the
+            // old select node is detached -- re-query the live one.
+            shapeSel = document.querySelector('#snip-edit-context select');
+            shapeSel.value = 'outline';
+            shapeSel.dispatchEvent(new Event('change', { bubbles: true }));
+            await sleep(30);
+            const numfields = document.querySelectorAll('#snip-edit-context .numfield input');
+            if (numfields.length !== 2 || Number(numfields[1].value) !== 3) {
+              out.errors.push('394: choosing Outline in the per-shape panel did not reveal a width field defaulting to 3px');
+            }
+          }
+        }
+        document.getElementById('snip-edit-cancel').click();
+        await sleep(200);
+      }
       // 342: scaling the image itself (not just the view). A filled rect is
       // drawn before the scale so the test can check that the SAME drawn
       // content survives at the proportionally scaled position afterward --

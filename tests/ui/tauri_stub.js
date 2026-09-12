@@ -170,7 +170,10 @@ const SETTINGS = {
   // tourSeen: true -- this fixture models an existing, already-onboarded install
   // (a non-empty library, real settings), so the first-run tour must not pop
   // open under every later check the way it would for a genuinely fresh one.
-  ui_flags: { tags: true, customThemes: true, viewGroups: true, promptNotes: true, pillFolders: true, colorPicker: true, tourSeen: true },
+  // snipTextPlate: false models the same kind of existing install, from before
+  // the text tool's background became a three-way choice -- its old boolean
+  // setting must convert to "none" on read without the user touching anything.
+  ui_flags: { tags: true, customThemes: true, viewGroups: true, promptNotes: true, pillFolders: true, colorPicker: true, tourSeen: true, snipTextPlate: false },
   ui_values: {}, ui_texts: {}, dup_ignored: [],
   // 428: p1 also has a canned entry in last_edited_map below, so it is the one
   // fixture with BOTH a copy and an edit timestamp; p2 (untouched) has neither.

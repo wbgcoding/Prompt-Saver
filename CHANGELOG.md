@@ -293,6 +293,12 @@ the video editor and the introduction tour ship on).
   off for that one drag; each editor keeps its own on/off switch, sharing one
   distance setting between them. The screenshot editor already snapped to the
   image edges and centre before this; it now also catches other shapes.
+- **Text outline, in both editors.** The text tool's background is now a
+  choice of none, a solid plate or an outline, so white or light-coloured
+  text stays readable on a light background too. Plate was the only option
+  before and stays the default; an expert setting picks the outline width,
+  and its colour, black or white, follows the text colour for the best
+  contrast.
 
 ### Improved
 

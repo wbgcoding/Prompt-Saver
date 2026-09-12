@@ -27680,6 +27680,35 @@ mod tests {
     }
 
     #[test]
+    fn export_video_real_ffmpeg_text_overlay_draws_its_outline() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let fonts_dir = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string()) + "/Fonts";
+        let font = PathBuf::from(&fonts_dir).join("segoeui.ttf");
+        if !font.is_file() { return; } // a stripped CI image without the standard fonts skips this
+        let dir = std::env::temp_dir().join(format!("ps-ovtest-text-outline-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 1, "64x48");
+        let dest = dir.join("out.mp4");
+        let font_ff = font.to_string_lossy().replace('\\', "/").replace(':', "\\:");
+        // Mirrors buildVideoChain()'s "text" branch with the background set to
+        // Outline instead of Plate: borderw/bordercolor replace the box, the
+        // colour picked for contrast against white text (dark grey, not black,
+        // to match snipEditContrastColor's own threshold on the JS side).
+        run_overlay_export(&ffmpeg, &src, &dest, format!(
+            "[0:v]fps=15,trim=start=0.000:end=1.000,setpts=PTS-STARTPTS[v0];\
+             [v0]drawtext=fontfile='{font_ff}':x=5:y=4:fontsize=12:fontcolor=0xffffff@1.00:expansion=none\
+             :borderw=3:bordercolor=0x111111@1.00:enable='between(t,0.000,1.000)':text='Test'[v1];[v1]null[vout]"
+        ));
+        // (8,2) sits just above the caption's first letter, inside the outline's
+        // 3px ring but outside the letter itself -- confirmed empirically against
+        // this exact filter string. The plate-box test above shows the same spot
+        // is a plain, non-black test-pattern texel with no overlay at all.
+        assert_eq!(sample_pixel_rgb24(&ffmpeg, &dest, 8, 2), [17, 17, 17],
+            "the drawtext outline must paint its border colour around the caption");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn export_video_real_ffmpeg_pixelate_overlay_flattens_the_blocked_region() {
         let Some(ffmpeg) = test_ffmpeg() else { return };
         let dir = std::env::temp_dir().join(format!("ps-ovtest-pixelate-{}", std::process::id()));

@@ -1077,7 +1077,6 @@ const FLAG_LABELS = {
   screenshot: "flagScreenshot",
   snipEditor: "flagSnipEditor",
   snipEditSnap: "flagSnipEditSnap",
-  snipTextPlate: "flagSnipTextPlate",
   multiView: "flagMultiView",
   quickGrid: "flagQuickGrid",
   floating: "flagFloating",
@@ -1514,6 +1513,7 @@ const EXPERT_VALUES = {
   snipStepPx: { label: "valSnipStepPx", min: 1, max: 40, step: 1, def: 8, unit: "px", gate: "snipEditor" },
   snipArrowHeadScale: { label: "valSnipArrowHeadScale", min: 1, max: 6, step: 0.1, def: 3.2, unit: "x", gate: "snipEditor" },
   snipTextPx: { label: "valSnipTextPx", min: 10, max: 96, step: 2, def: 24, unit: "px", gate: "snipEditor" },
+  snipTextOutlinePx: { label: "valSnipTextOutlinePx", min: 1, max: 12, step: 1, def: 3, unit: "px", gate: "snipEditor" },
   snipPixelBlock: { label: "valSnipPixelBlock", min: 4, max: 64, step: 2, def: 12, unit: "px", gate: "snipEditor" },
   snipSpotlightDim: { label: "valSnipSpotlightDim", min: 10, max: 90, step: 5, def: 55, unit: "%", gate: "snipEditor" },
   snipEditUndoMax: { label: "valSnipEditUndoMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "snipEditor" },
@@ -1773,6 +1773,25 @@ const EXPERT_DROPDOWNS = {
   // nearest-neighbour ("low") to keep pixel art crisp instead of blurred.
   snipScaleFilter: enumDropdown("snipScaleFilter", "valSnipScaleFilter",
     [["high", "optSnipScaleFilterHigh"], ["low", "optSnipScaleFilterLow"]], "high", "snipEditor"),
+  // What the text tool draws behind its letters. Replaces the old boolean
+  // snipTextPlate flag; a stored true/false there converts once on read
+  // (below) since the program has no released version to stay compatible with.
+  snipTextBack: {
+    label: "valSnipTextBack",
+    gate: "snipEditor",
+    def: "plate",
+    options: () => [["none", t("optSnipTextBackNone")], ["plate", t("optSnipTextBackPlate")], ["outline", t("optSnipTextBackOutline")]],
+    get: () => {
+      const stored = settings.ui_texts?.snipTextBack;
+      if (stored) return stored;
+      return settings.ui_flags?.snipTextPlate === false ? "none" : "plate";
+    },
+    set: async (v) => {
+      settings.ui_texts = { ...(settings.ui_texts || {}), snipTextBack: v };
+      try { await invoke("set_ui_text", { key: "snipTextBack", value: v }); } catch (e) { errToast(e); }
+      applyValues();
+    },
+  },
   // Options are fetched once from ocr_languages() at startup and cached
   // (ocrLangsCache, near the OCR wiring below) -- "Automatic" is always first,
   // regardless of what the OS itself reports.
@@ -1966,7 +1985,7 @@ const EXPERT_TABS = [
     // Everything below is a capture tool: it reads something off the screen or the
     // microphone rather than putting typed content into the app.
     { title: "expGroupScreenshot", flags: ["screenshot"], values: ["snipPreviewVh", "snipQuality", "snipSaveQuality", "snipDelayMs"], dropdowns: ["screenshotFormat"], paths: ["screenshotDir"] },
-    { title: "expGroupSnipEditor", flags: [{ key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }, { key: "snipTextPlate", gate: "snipEditor" }], values: ["snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx", "snipArrowHeadScale", "snipTextPx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax"], dropdowns: ["snipEditDefaultTool", "snipScaleFilter"], colors: ["snipDefaultColor"] },
+    { title: "expGroupSnipEditor", flags: [{ key: "snipEditor", gate: "screenshot" }, { key: "snipEditSnap", gate: "snipEditor" }], values: ["snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx", "snipArrowHeadScale", "snipTextPx", "snipTextOutlinePx", "snipPixelBlock", "snipSpotlightDim", "snipEditUndoMax"], dropdowns: ["snipEditDefaultTool", "snipScaleFilter", "snipTextBack"], colors: ["snipDefaultColor"] },
     // Opens #ocr-langs-modal -- same gate as the rest of the feature.
     { title: "expGroupOcr", flags: ["ocr", { key: "ocrAutoCopy", gate: "ocr" }, { key: "ocrJoinLines", gate: "ocr" }, { key: "ocrAutoPickLang", gate: "ocr" }, { key: "ocrLangAutoUpdate", gate: "ocr" }], values: ["ocrUpscaleUnderPx", "ocrLangCacheH", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH"], dropdowns: ["ocrLang"],
       actions: [{ id: "ocr-langs-open", label: "ocrLangsManage", gate: "ocr" }] },
@@ -2175,8 +2194,8 @@ const EXPERT_TIPS = [
   "editStateKeep", "editStateSaveSecs", "editStateKeepDays",
   "snipQuality", "snipSaveQuality", "snipDelayMs",
   "snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx",
-  "snipArrowHeadScale", "snipDefaultColor", "snipTextPx", "snipPixelBlock", "snipSpotlightDim",
-  "snipEditUndoMax", "snipEditSnap", "snipTextPlate", "snipEditDefaultTool", "snipScaleFilter",
+  "snipArrowHeadScale", "snipDefaultColor", "snipTextPx", "snipTextOutlinePx", "snipPixelBlock", "snipSpotlightDim",
+  "snipEditUndoMax", "snipEditSnap", "snipTextBack", "snipEditDefaultTool", "snipScaleFilter",
   "ocr", "ocrUpscaleUnderPx", "ocrLang",
   "ocrAutoPickLang", "ocrLangAutoUpdate", "ocrLangCheckH", "ocrLangNoticeMs", "ocrLangSnoozeH", "ocrLangCacheH",
   "voice", "voiceInterim", "voicePunct", "voiceAutoCaps", "voiceAutoStop", "voiceAutoStopSec", "voiceMaxMin",
@@ -13660,7 +13679,8 @@ function bind() {
   // canvas allocation -- comfortably above any real screen resolution.
   const SNIP_SCALE_MAX_AREA = 80_000_000;
   const SNIP_EDIT_SNAP = () => flag("snipEditSnap");
-  const SNIP_EDIT_TEXT_PLATE = () => flag("snipTextPlate");
+  const SNIP_TEXT_BACK = () => EXPERT_DROPDOWNS.snipTextBack.get();
+  const SNIP_EDIT_TEXT_OUTLINE_PX = () => val("snipTextOutlinePx");
   const SNIP_EDIT_DEFAULT_TOOL = () => txt("snipEditDefaultTool") || "hand";
   const SNIP_EDIT_SNAP_TOL = () => val("editSnapTolerancePx") || 6; // px (screen)
   const SNIP_DUP_OFFSET_PX = () => val("veOvDupOffsetPx");
@@ -13848,7 +13868,8 @@ function bind() {
         width: widths[1],
         filled: false,
         fontPx: SNIP_EDIT_TEXT_PX(),
-        plate: SNIP_EDIT_TEXT_PLATE(),
+        back: SNIP_TEXT_BACK(),
+        outlinePx: SNIP_EDIT_TEXT_OUTLINE_PX(),
         blockPx: SNIP_EDIT_PIXELATE_PX(),
         dim: SNIP_EDIT_SPOTLIGHT_DIM(),
       };
@@ -13990,7 +14011,7 @@ function bind() {
     ctx.textBaseline = "top";
     const w = ctx.measureText(op.text).width;
     const h = op.fontPx * 1.25;
-    if (op.plate) {
+    if (op.back === "plate") {
       ctx.fillStyle = "rgba(0,0,0,0.45)";
       ctx.fillRect(op.point.x - 4, op.point.y - 2, w + 8, h + 4);
     }
@@ -13998,6 +14019,11 @@ function bind() {
     ctx.shadowBlur = 3;
     ctx.shadowOffsetX = 1;
     ctx.shadowOffsetY = 1;
+    if (op.back === "outline") {
+      ctx.lineWidth = op.outlinePx || SNIP_EDIT_TEXT_OUTLINE_PX();
+      ctx.strokeStyle = snipEditContrastColor(op.color);
+      ctx.strokeText(op.text, op.point.x, op.point.y);
+    }
     ctx.fillStyle = op.color;
     ctx.fillText(op.text, op.point.x, op.point.y);
     ctx.restore();
@@ -14552,7 +14578,7 @@ function bind() {
     snipEditTextInput.classList.add("hidden");
     if (!val.trim()) return; // empty input -> discard the operation
     const ts = snipEditToolState("text");
-    snipEditPushOp({ tool: "text", point, text: val, color: ts.color, fontPx: ts.fontPx, plate: ts.plate });
+    snipEditPushOp({ tool: "text", point, text: val, color: ts.color, fontPx: ts.fontPx, back: ts.back, outlinePx: ts.outlinePx });
   }
   function snipEditCancelTextInput() {
     SE.textEdit = null;
@@ -14669,6 +14695,19 @@ function bind() {
     wrap.append(cb, Object.assign(document.createElement("span"), { textContent: labelText }));
     return wrap;
   }
+  function snipEditBuildSelectField(labelText, value, options, onChange) {
+    const wrap = document.createElement("label");
+    wrap.className = "snip-edit-field";
+    wrap.append(Object.assign(document.createElement("span"), { textContent: labelText }));
+    const select = document.createElement("select");
+    for (const [v, label] of options) {
+      select.appendChild(Object.assign(document.createElement("option"), { value: v, textContent: label }));
+    }
+    select.value = value;
+    select.addEventListener("change", () => onChange(select.value));
+    wrap.appendChild(select);
+    return wrap;
+  }
   function snipEditBuildNumField(labelText, value, min, max, title, onChange, presets) {
     // A real <label> (not a plain div) so the input keeps an accessible name
     // from its own visible text -- see the numFieldDec/-Inc/-List buttons
@@ -14714,7 +14753,12 @@ function bind() {
     }
     if (tool === "text") {
       box.appendChild(snipEditBuildNumField(t("snipEditTextSize"), ts.fontPx, 10, 96, t("snipEditTextSizeTip"), (v) => { ts.fontPx = v; }, [12, 16, 24, 32, 48, 64, 96]));
-      box.appendChild(snipEditBuildToggle(t("snipEditTextPlate"), !!ts.plate, (v) => { ts.plate = v; }));
+      box.appendChild(snipEditBuildSelectField(t("snipEditTextBack"), ts.back, [
+        ["none", t("optSnipTextBackNone")], ["plate", t("optSnipTextBackPlate")], ["outline", t("optSnipTextBackOutline")],
+      ], (v) => { ts.back = v; snipEditRenderContext(); }));
+      if (ts.back === "outline") {
+        box.appendChild(snipEditBuildNumField(t("snipEditTextOutline"), ts.outlinePx, 1, 12, t("snipEditTextOutlineTip"), (v) => { ts.outlinePx = v; }));
+      }
     }
     if (tool === "pixelate") {
       box.appendChild(snipEditBuildNumField(t("snipEditBlockSize"), ts.blockPx, 4, 64, t("snipEditBlockSizeTip"), (v) => { ts.blockPx = v; }, [8, 12, 16, 24, 32]));

@@ -1067,9 +1067,23 @@ function renderOverlayLive(vb) {
   }
 }
 
+// Black or white, whichever reads better on top of the given color -- the
+// same luminance formula the screenshot editor's snipEditContrastColor uses,
+// duplicated here rather than shared since the two editors' text-drawing code
+// does not otherwise call into each other.
+// Full 6-digit hex (not the 3-digit "#fff" shorthand CSS would also accept):
+// the result feeds hexToFf() for ffmpeg's bordercolor, and ffmpeg's own color
+// parser does not expand a 3-digit hex the way a browser does.
+function contrastTextColor(hex) {
+  const c = String(hex || "").replace("#", "");
+  if (c.length !== 6) return "#ffffff";
+  const r = parseInt(c.slice(0, 2), 16), g = parseInt(c.slice(2, 4), 16), b = parseInt(c.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#111111" : "#ffffff";
+}
+
 // `reuse`, when given, is the SAME element returned for this overlay last
 // frame -- every branch updates it in place instead of allocating a fresh
-// node, and resets whatever an earlier variant (frame style, text plate)
+// node, and resets whatever an earlier variant (frame style, text background)
 // might have left behind. The pixelate canvas is the one element that must
 // still be redrawn every frame regardless, since it samples the live video,
 // but its own scratch canvas is cached on it rather than reallocated.
@@ -1121,9 +1135,12 @@ function buildLiveOverlayEl(op, vb, reuse) {
     el.style.color = op.color;
     el.style.background = "";
     el.style.padding = "";
-    if (op.plate !== false) {
+    el.style.webkitTextStroke = "";
+    if (op.back === "plate") {
       el.style.background = "rgba(0, 0, 0, 0.5)";
       el.style.padding = `${Math.max(4, Math.round(op.fontPx / 4)) * vb.scale}px`;
+    } else if (op.back === "outline") {
+      el.style.webkitTextStroke = `${Math.max(1, (op.outlinePx || 3) * vb.scale)}px ${contrastTextColor(op.color)}`;
     }
     el.textContent = op.text;
     return el;
@@ -1687,7 +1704,7 @@ async function addOverlay(kind) {
   } else if (kind === "frame") {
     op = { ...base, rect: snapRect({ x: 0, y: 0, w: VE.w, h: VE.h }), color: VE.ovFrameColorDefault, thickness: VE.ovLastFrameThickness ?? Math.max(2, even(VE.h * 0.01)), style: "solid", opacity: VE.ovFrameOpacityDefault ?? 100 };
   } else if (kind === "text") {
-    op = { ...base, text: t("veOvTextDefault"), x: even(VE.w * 0.08), y: even(VE.h * 0.08), fontPx: VE.ovLastTextFontPx ?? Math.max(12, Math.round(VE.h / 16)), font: VE.ovFontDefault || FONT_FILES[0][0], color: VE.ovTextColorDefault, plate: true };
+    op = { ...base, text: t("veOvTextDefault"), x: even(VE.w * 0.08), y: even(VE.h * 0.08), fontPx: VE.ovLastTextFontPx ?? Math.max(12, Math.round(VE.h / 16)), font: VE.ovFontDefault || FONT_FILES[0][0], color: VE.ovTextColorDefault, back: "plate", outlinePx: 3 };
   } else if (kind === "pixelate") {
     op = { ...base, rect: centeredRect(0.35), blockPx: VE.ovPixelateBlockDefault ?? 16 };
   } else if (kind === "spotlight") {
@@ -2013,17 +2030,12 @@ function renderOverlayEditor() {
     // this panel can, so there is nothing to protect, and the row's own
     // selected-swatch highlight only ever comes from a fresh render.
     box.appendChild(fieldRow(t("veOvColor"), colorRow(op.color, (hex) => { commitOverlay(op, { color: hex }); renderOverlayEditor(); })));
-    const plate = document.createElement("label");
-    plate.className = "field switch-field ve-switch-row";
-    const plateLabel = document.createElement("span");
-    plateLabel.textContent = t("veOvPlate");
-    const plateBox = document.createElement("input");
-    plateBox.type = "checkbox";
-    plateBox.className = "switch";
-    plateBox.checked = op.plate !== false;
-    plateBox.addEventListener("change", () => commitOverlay(op, { plate: plateBox.checked }));
-    plate.append(plateLabel, plateBox);
-    box.appendChild(plate);
+    box.appendChild(fieldRow(t("veOvTextBack"), selectInput(
+      [["none", t("optSnipTextBackNone")], ["plate", t("optSnipTextBackPlate")], ["outline", t("optSnipTextBackOutline")]],
+      op.back, (v) => { commitOverlay(op, { back: v }); renderOverlayEditor(); })));
+    if (op.back === "outline") {
+      box.appendChild(fieldRow(t("veOvTextOutline"), ovTrack("outlinePx", numberInput(op.outlinePx ?? 3, 1, 12, 1, (v) => commitOverlay(op, { outlinePx: v }), [1, 2, 3, 4, 6, 8]), (o) => String(o.outlinePx))));
+    }
   }
 
   if (op.kind === "pixelate") {
@@ -2182,10 +2194,11 @@ function buildVideoChain() {
       }
     } else if (op.kind === "text") {
       const font = FONT_FILES.find(([id]) => id === op.font) || FONT_FILES[0];
-      const plate = op.plate !== false ? `:box=1:boxcolor=black@0.5:boxborderw=${Math.max(4, Math.round(op.fontPx / 4))}` : "";
+      const plate = op.back === "plate" ? `:box=1:boxcolor=black@0.5:boxborderw=${Math.max(4, Math.round(op.fontPx / 4))}` : "";
+      const outline = op.back === "outline" ? `:borderw=${op.outlinePx || 3}:bordercolor=${hexToFf(contrastTextColor(op.color), 100)}` : "";
       // expansion=none keeps a caption containing % or {} literal instead of
       // running it through drawtext's own text expansion.
-      chain(`drawtext=fontfile='${ffPath(`${fontsDir}/${font[1]}`)}':x=${op.x}:y=${op.y}:fontsize=${op.fontPx}:fontcolor=${hexToFf(op.color, 100)}:expansion=none${plate}:${enable}:text='${ffText(op.text)}'`);
+      chain(`drawtext=fontfile='${ffPath(`${fontsDir}/${font[1]}`)}':x=${op.x}:y=${op.y}:fontsize=${op.fontPx}:fontcolor=${hexToFf(op.color, 100)}:expansion=none${plate}${outline}:${enable}:text='${ffText(op.text)}'`);
     } else if (op.kind === "pixelate") {
       // Sampled down and blown back up with nearest-neighbour: a real mosaic,
       // not a blur that a sharpening pass could partly undo.
