@@ -7,7 +7,7 @@ import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults 
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
-import { DRAG_OUT_MODS, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes } from "./floatShared.js";
+import { DRAG_OUT_MODS, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 import { createColorPop } from "./colorpop.js";
 import { snapMove } from "./snap.js";
@@ -13785,6 +13785,16 @@ function bind() {
     onApply: null, onCancel: null,
   };
 
+  // Hold the toolbar button (or V) to peek at the untouched capture, or tap
+  // it to lock the original on screen until pressed again; the same control
+  // drives both the button and the key, see the wiring further down.
+  const snipOriginalToggle = makeHoldOrTapToggle((shown) => {
+    SE.showRaw = shown;
+    snipEditRedrawBase();
+    $("snip-edit-original").classList.toggle("active", shown);
+    $("snip-edit-original-badge").classList.toggle("hidden", !shown);
+  });
+
   function snipEditClamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
   // Percent-based shared setting mapped onto this editor's own raw-factor zoom
   // (0.05x-8x) -- defaults (20%, 800%) do change today's hardcoded wheel step
@@ -14108,8 +14118,12 @@ function bind() {
   function snipEditRedrawBase() {
     const ctx = snipEditBaseCtx;
     ctx.clearRect(0, 0, SE.w, SE.h);
+    // Showing the original means the untouched capture, not just "before the
+    // pending annotations" -- SE.img is the last baked composite (a scale op
+    // bakes every annotation drawn before it), so only SE.rawCanvas is still
+    // the same pixels the capture started with.
+    if (SE.showRaw) { ctx.drawImage(SE.rawCanvas, 0, 0, SE.w, SE.h); return; }
     ctx.drawImage(SE.img, 0, 0, SE.w, SE.h);
-    if (SE.showRaw) return; // "V" held: show the unedited base only
     let stepN = 0;
     for (const op of SE.ops) {
       if (op.tool === "crop") continue; // drawn as an overlay pass below
@@ -15098,7 +15112,7 @@ function bind() {
   // (SE.spaceDown stuck true) or the raw/before image would stay stuck shown.
   window.addEventListener("blur", () => {
     if (SE.spaceDown) { SE.spaceDown = false; if (SE.tool !== "hand") snipEditWrap.classList.remove("panning"); }
-    if (SE.showRaw) { SE.showRaw = false; snipEditRedrawBase(); }
+    snipOriginalToggle.reset();
   });
   snipEditWrap.addEventListener("wheel", (e) => {
     if (!SE.active) return;
@@ -15153,7 +15167,7 @@ function bind() {
     if ((e.ctrlKey || e.metaKey) && e.key === "-") { e.preventDefault(); snipEditZoomBy(1 / snipZoomStepFactor()); return; }
     if ((e.ctrlKey || e.metaKey) && e.key === "0") { e.preventDefault(); snipEditFit(); return; }
     if (e.key === " ") { SE.spaceDown = true; snipEditWrap.style.cursor = ""; snipEditWrap.classList.add("panning"); e.preventDefault(); return; }
-    if (e.key.toLowerCase() === "v" && !e.repeat) { SE.showRaw = true; snipEditRedrawBase(); return; }
+    if (e.key.toLowerCase() === "v" && !e.repeat) { snipOriginalToggle.press(); return; }
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && SE.lastNudged) {
       e.preventDefault();
       const amount = e.shiftKey ? val("numFieldBigStep") : val("numFieldStep");
@@ -15166,7 +15180,7 @@ function bind() {
   function snipEditKeyup(e) {
     if (snipEdit.classList.contains("hidden")) return;
     if (e.key === " ") { SE.spaceDown = false; if (SE.tool !== "hand") snipEditWrap.classList.remove("panning"); }
-    if (e.key.toLowerCase() === "v") { SE.showRaw = false; snipEditRedrawBase(); }
+    if (e.key.toLowerCase() === "v") snipOriginalToggle.release();
   }
   document.addEventListener("keydown", snipEditKeydown);
   document.addEventListener("keyup", snipEditKeyup);
@@ -15195,7 +15209,7 @@ function bind() {
       SE.lastNudged = null;
       snipEditUpdateNudgeHint();
       SE.eyedropArm = null;
-      SE.showRaw = false;
+      snipOriginalToggle.reset();
       SE.drag = null;
       closeSnipColorPop();
       SE.onApply = onApply;
@@ -15231,6 +15245,7 @@ function bind() {
     SE.panState = null;
     SE.spaceDown = false;
     SE.eyedropArm = null;
+    snipOriginalToggle.reset();
     snipEditWrap.classList.remove("panning");
     snipEditWrap.style.cursor = "";
     snipEditCancelTextInput();
@@ -15253,8 +15268,7 @@ function bind() {
     // on another tool -- SE.cropRect is only kept in sync with SE.ops while crop is
     // the active tool (see snipEditSetTool).
     if (SE.tool === "crop") snipEditCropCommit();
-    SE.showRaw = false;
-    snipEditRedrawBase();
+    snipOriginalToggle.reset();
     const crop = SE.ops.find((o) => o.tool === "crop");
     let sx = 0, sy = 0, sw = SE.w, sh = SE.h;
     if (crop) {
@@ -15293,6 +15307,9 @@ function bind() {
   $("snip-edit-zoom-in").addEventListener("click", () => snipEditZoomBy(snipZoomStepFactor()));
   $("snip-edit-zoom-out").addEventListener("click", () => snipEditZoomBy(1 / snipZoomStepFactor()));
   $("snip-edit-fit").addEventListener("click", snipEditFit);
+  $("snip-edit-original").addEventListener("pointerdown", () => snipOriginalToggle.press());
+  document.addEventListener("pointerup", () => snipOriginalToggle.release());
+  document.addEventListener("pointercancel", () => snipOriginalToggle.release());
 
   // ---- resize (scale the image itself, not the view -- see snipEditApplyScale) ----
   const snipScalePop = document.createElement("div");

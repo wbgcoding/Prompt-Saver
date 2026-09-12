@@ -230,6 +230,15 @@ instead, and a short line above the transport controls always says what the
 arrow keys currently do. Escape deselects and hands the arrow keys back to
 their usual job.
 
+A toolbar button in either editor compares against the untouched capture:
+hold it down to peek at the original for as long as it is held, or tap it to
+lock that view on until tapped again. The V key does the same, and a small
+"Original" badge appears whenever it is showing so it is never mistaken for
+the edit. In the video editor this only hides overlays (fades and the export
+resolution never show in the live preview to begin with), and the current
+cuts stay in effect, since jumping to a cut-out moment would only confuse.
+None of it touches the export.
+
 ### Text recognition (OCR)
 
 On by default. A button on the composer and in the screenshot dialog pulls the
@@ -746,6 +755,16 @@ schalten; solange ausgewählt, übernehmen stattdessen Komma und Punkt das
 Weiterschalten der Einzelbilder, und eine kurze Zeile über der Wiedergabeleiste
 zeigt immer, was die Pfeiltasten gerade tun. Escape hebt die Auswahl auf und
 gibt den Pfeiltasten ihre gewohnte Aufgabe zurück.
+
+Ein Knopf in der Werkzeugleiste beider Editoren vergleicht mit der
+unbearbeiteten Aufnahme: gedrückt gehalten zeigt er das Original, solange er
+gehalten wird, ein Klick lässt diese Ansicht stehen, bis erneut geklickt wird.
+Dieselbe Taste V tut dasselbe, und eine kleine Marke „Original" erscheint,
+solange es zu sehen ist, damit es nie für die Bearbeitung gehalten wird. Im
+Video-Editor blendet das nur Überlagerungen aus (Blenden und die Export-
+Auflösung zeigt die laufende Vorschau ohnehin nie), der laufende Schnitt
+bleibt dabei bestehen, weil ein Sprung an eine herausgeschnittene Stelle nur
+verwirren würde. Der Export bleibt davon unberührt.
 
 **Texterkennung (OCR)** — standardmäßig an; liest per Knopf in der Leiste und
 im Screenshot-Dialog Text aus einem Screenshot oder einer Bilddatei, komplett

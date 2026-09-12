@@ -162,6 +162,48 @@ export function playCopySound(volumePct) {
   }
 }
 
+// ---- Shared hold-or-tap "show original" toggle ----
+// A press that releases quickly locks the shown state on until pressed once
+// more; the same press held past HOLD_MS instead shows it only for as long
+// as it is held, reverting the moment it is released. One state machine
+// drives the screenshot and video editor's "show original" control, whatever
+// reaches it -- a pointer on the toolbar button or a held key. 400ms matches
+// the hold delay the number field's press-and-repeat buttons already use.
+const HOLD_OR_TAP_MS = 400;
+export function makeHoldOrTapToggle(onChange) {
+  let shown = false;
+  let locked = false;
+  let pressed = false;
+  let downAt = 0;
+  function set(v) {
+    if (shown === v) return;
+    shown = v;
+    onChange(v);
+  }
+  function press() {
+    if (pressed) return; // key auto-repeat, or a second pointerdown mid-press
+    pressed = true;
+    if (locked) return; // this press is the one that unlocks on release
+    downAt = Date.now();
+    set(true);
+  }
+  function release() {
+    if (!pressed) return;
+    pressed = false;
+    if (locked) { locked = false; set(false); return; }
+    if (Date.now() - downAt < HOLD_OR_TAP_MS) { locked = true; return; } // stays shown until pressed again
+    set(false);
+  }
+  // Alt-tabbing away, closing the editor or loading a new file mid-press must
+  // never leave the original stuck on screen with nothing left to release it.
+  function reset() {
+    pressed = false;
+    locked = false;
+    set(false);
+  }
+  return { press, release, reset, isShown: () => shown };
+}
+
 // ---- Shared mouse-only number field ----
 // A minus button, the number input itself, a plus button and, when `presets`
 // is given, a small popover of common values -- one implementation so the

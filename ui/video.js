@@ -6,7 +6,7 @@
 // an ordered operation list (VE.ops), exactly like the screenshot editor's own
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
-import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes } from "./floatShared.js";
+import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { createColorPop } from "./colorpop.js";
@@ -2696,6 +2696,20 @@ $("ve-zoom-in").addEventListener("click", () => setZoom(VE.zoom * 1.4));
 $("ve-zoom-out").addEventListener("click", () => setZoom(VE.zoom / 1.4));
 $("ve-zoom-fit").addEventListener("click", () => setZoom(fitZoom()));
 
+// Hold the button (or V) to peek at the source without overlays, fades or
+// the scale target, or tap it to lock that view on until pressed again --
+// the current cut still applies, this only ever touches the live preview.
+const veOriginalToggle = makeHoldOrTapToggle((shown) => {
+  $("ve-overlay-live").classList.toggle("hidden", shown);
+  $("ve-rects").classList.toggle("hidden", shown);
+  $("ve-original").classList.toggle("active", shown);
+  $("ve-original-badge").classList.toggle("hidden", !shown);
+});
+$("ve-original").addEventListener("pointerdown", () => veOriginalToggle.press());
+document.addEventListener("pointerup", () => veOriginalToggle.release());
+document.addEventListener("pointercancel", () => veOriginalToggle.release());
+window.addEventListener("blur", () => veOriginalToggle.reset());
+
 $("ve-trim-start-val").addEventListener("change", () => {
   const ms = parseTime($("ve-trim-start-val").value);
   const trim = opOf("trim");
@@ -3056,8 +3070,12 @@ document.addEventListener("keydown", (e) => {
     case "c": case "C": e.preventDefault(); $("ve-cut-add").click(); break;
     case "+": case "=": e.preventDefault(); setZoom(VE.zoom * 1.4); break;
     case "-": e.preventDefault(); setZoom(VE.zoom / 1.4); break;
+    case "v": case "V": if (!e.repeat) veOriginalToggle.press(); e.preventDefault(); break;
     default: break;
   }
+});
+document.addEventListener("keyup", (e) => {
+  if (e.key.toLowerCase() === "v") veOriginalToggle.release();
 });
 
 // ---------------------------------------------------------------- loading
@@ -3068,6 +3086,7 @@ function resetForNewSource() {
   VE.floor = 0;
   VE.sel = null;
   VE.selOv = null;
+  veOriginalToggle.reset();
   updateNudgeHint();
   // The live-preview nodes belong to the OLD source's overlays; a new source
   // starts with none, so any leftover node would otherwise show a stale

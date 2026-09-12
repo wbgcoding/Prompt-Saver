@@ -307,6 +307,12 @@ the video editor and the introduction tour ship on).
   that job for as long as it is selected, and a short line above the
   transport controls always says what the arrow keys currently do. Escape
   deselects and hands the arrow keys back.
+- **Compare against the original, in both editors.** A toolbar button (and
+  the V key) shows the untouched capture while held down, or locks that view
+  on with a tap until tapped again; a small badge marks it either way so it
+  is never mistaken for the edit. In the video editor this only hides
+  overlays, since fades and the export resolution were never shown in the
+  live preview to begin with, and the current cuts stay in effect.
 
 ### Improved
 

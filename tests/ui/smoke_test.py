@@ -6135,6 +6135,59 @@ PROBE = """
           if (!hint395.classList.contains('hidden')) {
             out.errors.push('395: the nudge hint stayed visible after Escape deselected the shape');
           }
+
+          // ---- 398: the show-original button (and the V key) compare against
+          // the untouched capture -- a quick click locks it on until clicked
+          // again, holding it down only peeks for as long as it stays held,
+          // and a badge marks either state so it is never mistaken for the
+          // edit. Drawn fresh at (200,50)-(300,150) rather than reusing the
+          // rect above, which the 395 checks just moved and resized -- its
+          // left edge midpoint would no longer be a known coordinate. Undo
+          // staying enabled throughout proves the operation list itself was
+          // never touched by any of this. ----
+          const origBtn398 = document.getElementById('snip-edit-original');
+          const origBadge398 = document.getElementById('snip-edit-original-badge');
+          const undoBtn398 = document.getElementById('snip-edit-undo');
+          if (!origBtn398 || !origBadge398) {
+            out.errors.push('398: the screenshot editor is missing the show-original button or badge');
+          } else {
+            const q1b398 = toClient2(200, 50), q2b398 = toClient2(300, 150);
+            liveCv2.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: q1b398.x, clientY: q1b398.y }));
+            liveCv2.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: q2b398.x, clientY: q2b398.y }));
+            window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, clientX: q2b398.x, clientY: q2b398.y }));
+            await sleep(60);
+            const baseCtx398 = document.getElementById('snip-edit-base').getContext('2d');
+            const isWhite398 = (x, y) => { const d = baseCtx398.getImageData(x, y, 1, 1).data; return d[0] > 250 && d[1] > 250 && d[2] > 250; };
+            const undoWasDisabled398 = undoBtn398.disabled;
+            if (isWhite398(200, 100)) {
+              out.errors.push('398: the freshly drawn rect border is not visible before the show-original check even runs');
+            }
+            origBtn398.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 2 }));
+            origBtn398.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 2 }));
+            await sleep(30);
+            if (!isWhite398(200, 100)) out.errors.push('398: a quick click on the show-original button did not reveal the untouched capture');
+            if (origBadge398.classList.contains('hidden')) out.errors.push('398: the original badge did not appear once the original was locked on');
+            if (!origBtn398.classList.contains('active')) out.errors.push('398: the show-original button did not switch to its active state while locked on');
+            origBtn398.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 2 }));
+            origBtn398.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 2 }));
+            await sleep(30);
+            if (isWhite398(200, 100)) out.errors.push('398: a second click did not lock the original back off');
+            if (!origBadge398.classList.contains('hidden')) out.errors.push('398: the original badge stayed after the second click turned it off');
+            origBtn398.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 2 }));
+            await sleep(450);
+            if (!isWhite398(200, 100)) out.errors.push('398: holding the show-original button down did not reveal the untouched capture');
+            origBtn398.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 2 }));
+            await sleep(30);
+            if (isWhite398(200, 100)) out.errors.push('398: releasing a held show-original press did not restore the edit');
+            if (!origBadge398.classList.contains('hidden')) out.errors.push('398: the original badge stayed visible after releasing a held press');
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', bubbles: true }));
+            await sleep(450);
+            if (!isWhite398(200, 100)) out.errors.push('398: holding V did not reveal the untouched capture');
+            document.dispatchEvent(new KeyboardEvent('keyup', { key: 'v', bubbles: true }));
+            await sleep(30);
+            if (isWhite398(200, 100)) out.errors.push('398: releasing V did not restore the edit');
+            if (undoBtn398.disabled !== undoWasDisabled398) out.errors.push('398: the show-original round trip changed the operation list (undo availability changed)');
+          }
         }
         document.getElementById('snip-edit-cancel').click();
         await sleep(200);
@@ -8632,6 +8685,53 @@ VIDEO_PROBE = """
         if (frameAfterArrow === frameAfterDeselect) {
           errs.push('395: ArrowRight did not move the playhead once nothing was selected');
         }
+      }
+    }
+
+    // ---- 398: the show-original button (and V) hide the overlay and edit-
+    // handle layers so the live preview compares against the untouched source
+    // (fades and the export scale target never render live in the first
+    // place, so hiding these two is the whole of it here) -- a quick click
+    // locks it on until clicked again, holding it only peeks for as long as
+    // it stays held, and a badge marks either state. ----
+    {
+      const origBtn398 = document.getElementById('ve-original');
+      const origBadge398 = document.getElementById('ve-original-badge');
+      const overlayLive398 = document.getElementById('ve-overlay-live');
+      const rects398 = document.getElementById('ve-rects');
+      if (!origBtn398 || !origBadge398 || !overlayLive398 || !rects398) {
+        errs.push('398: the video editor is missing the show-original button, badge or overlay/rects layers');
+      } else {
+        if (overlayLive398.classList.contains('hidden') || rects398.classList.contains('hidden')) {
+          errs.push('398: the overlay or rects layer starts hidden before the show-original check even runs');
+        }
+        origBtn398.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 4 }));
+        origBtn398.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 4 }));
+        await sleep(30);
+        if (!overlayLive398.classList.contains('hidden') || !rects398.classList.contains('hidden')) {
+          errs.push('398: a quick click on the show-original button did not hide the overlay and rects layers');
+        }
+        if (origBadge398.classList.contains('hidden')) errs.push('398: the original badge did not appear once the original was locked on');
+        if (!origBtn398.classList.contains('active')) errs.push('398: the show-original button did not switch to its active state while locked on');
+        origBtn398.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 4 }));
+        origBtn398.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 4 }));
+        await sleep(30);
+        if (overlayLive398.classList.contains('hidden') || rects398.classList.contains('hidden')) {
+          errs.push('398: a second click did not lock the original back off');
+        }
+        if (!origBadge398.classList.contains('hidden')) errs.push('398: the original badge stayed after the second click turned it off');
+        origBtn398.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 4 }));
+        await sleep(450);
+        if (!overlayLive398.classList.contains('hidden')) errs.push('398: holding the show-original button down did not hide the overlay layer');
+        origBtn398.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 4 }));
+        await sleep(30);
+        if (overlayLive398.classList.contains('hidden')) errs.push('398: releasing a held show-original press did not restore the overlay layer');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', bubbles: true }));
+        await sleep(450);
+        if (!overlayLive398.classList.contains('hidden')) errs.push('398: holding V did not hide the overlay layer');
+        document.dispatchEvent(new KeyboardEvent('keyup', { key: 'v', bubbles: true }));
+        await sleep(30);
+        if (overlayLive398.classList.contains('hidden')) errs.push('398: releasing V did not restore the overlay layer');
       }
     }
 
