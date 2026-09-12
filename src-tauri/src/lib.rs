@@ -30301,8 +30301,15 @@ mod tests {
 
     // A thousand entries, checked every few seconds: the round must not read the
     // whole folder every time. Prints both numbers so a regression is visible.
+    // Repeats each side and keeps the smallest time: this test runs inside the
+    // full suite alongside a lot of unrelated disk and ffmpeg activity, and a
+    // single sample of a few dozen milliseconds was getting swamped by someone
+    // else's scheduling slice often enough to fail on a clean tree. The minimum
+    // of several still reflects the real cost of each approach - a regression
+    // back to a full read every round would still lose every single time.
     #[test]
     fn a_thousand_entries_cost_metadata_and_not_a_full_read_each_round() {
+        const ROUNDS: u32 = 7;
         let dir = sync_tmp_dir("perf-1000");
         let mut prompts = Vec::new();
         for i in 0..1000 {
@@ -30312,39 +30319,47 @@ mod tests {
             fs::write(dir.join(format!("{}.md", p.id)), prompt_to_md(&p, &SyncPlacement::default())).unwrap();
             prompts.push(p);
         }
-        // What the round used to cost: every file read and compared, every time.
-        let t0 = std::time::Instant::now();
-        let mut read = 0usize;
-        for p in &prompts {
-            let path = dir.join(format!("{}.md", p.id));
-            if let Some(c) = read_text_capped(&path, MAX_SYNC_MD_BYTES) {
-                if c != prompt_to_md(p, &SyncPlacement::default()) {
-                    panic!("written and re-read content must match");
-                }
-                read += 1;
-            }
-        }
-        let full = t0.elapsed();
-        // What it costs now once everything has settled: one stat per file.
         let mut seen: SyncSeenMap = HashMap::new();
         for p in &prompts {
             let path = dir.join(format!("{}.md", p.id));
             seen.insert(sync_seen_key(&path), SyncSeen { stamp: sync_stamp_of(&path).unwrap(), handled: true });
         }
-        let t1 = std::time::Instant::now();
-        let mut skipped = 0usize;
-        for entry in fs::read_dir(&dir).unwrap().flatten() {
-            let path = entry.path();
-            let Some(stamp) = sync_stamp_of(&path) else { continue };
-            if sync_scan_decision(seen.get(&sync_seen_key(&path)).copied(), stamp) == SyncScan::Skip {
-                skipped += 1;
+        let mut full_best = Duration::MAX;
+        let mut stamped_best = Duration::MAX;
+        let (mut read, mut skipped) = (0usize, 0usize);
+        for _ in 0..ROUNDS {
+            // What the round used to cost: every file read and compared, every time.
+            let t0 = std::time::Instant::now();
+            read = 0;
+            for p in &prompts {
+                let path = dir.join(format!("{}.md", p.id));
+                if let Some(c) = read_text_capped(&path, MAX_SYNC_MD_BYTES) {
+                    if c != prompt_to_md(p, &SyncPlacement::default()) {
+                        panic!("written and re-read content must match");
+                    }
+                    read += 1;
+                }
             }
+            full_best = full_best.min(t0.elapsed());
+            // What it costs now once everything has settled: one stat per file.
+            let t1 = std::time::Instant::now();
+            skipped = 0;
+            for entry in fs::read_dir(&dir).unwrap().flatten() {
+                let path = entry.path();
+                let Some(stamp) = sync_stamp_of(&path) else { continue };
+                if sync_scan_decision(seen.get(&sync_seen_key(&path)).copied(), stamp) == SyncScan::Skip {
+                    skipped += 1;
+                }
+            }
+            stamped_best = stamped_best.min(t1.elapsed());
         }
-        let stamped = t1.elapsed();
-        println!("sync round over {read} entries: full read {full:?}, unchanged-check {stamped:?}, skipped {skipped}");
+        println!(
+            "sync round over {read} entries: full read {full_best:?} (best of {ROUNDS}), \
+             unchanged-check {stamped_best:?} (best of {ROUNDS}), skipped {skipped}"
+        );
         assert_eq!(read, 1000);
         assert_eq!(skipped, 1000, "an unchanged folder is skipped file by file, not re-read");
-        assert!(stamped < full, "the settled round must be the cheaper one: {stamped:?} vs {full:?}");
+        assert!(stamped_best < full_best, "the settled round must be the cheaper one: {stamped_best:?} vs {full_best:?}");
         let _ = fs::remove_dir_all(&dir);
     }
 
