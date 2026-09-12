@@ -1759,6 +1759,12 @@ document.addEventListener("pointerdown", (e) => {
 function duplicateOverlay(op) {
   const offset = VE.ovDupOffsetPx;
   const dup = { ...op, id: newId() };
+  // A duplicate is a brand new op, not a continuation of the original's own
+  // undo history -- without this, duplicating an overlay that had already
+  // been dragged, resized or nudged before copies its _prev chain along with
+  // it, and a single undo afterward steps that chain back instead of
+  // removing the duplicate outright.
+  delete dup._prev;
   if (dup.rect) dup.rect = snapRect({ ...dup.rect, x: dup.rect.x + offset, y: dup.rect.y + offset });
   if (dup.kind === "text") { dup.x = clamp(dup.x + offset, 0, VE.w); dup.y = clamp(dup.y + offset, 0, VE.h); }
   VE.selOv = dup.id;
