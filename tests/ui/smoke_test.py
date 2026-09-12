@@ -6059,6 +6059,82 @@ PROBE = """
           if (seHandleCount !== 8) {
             out.errors.push('383: clicking the rect selected it with ' + seHandleCount + ' handles, expected 8');
           }
+
+          // ---- 395: with the same rect still selected, arrow keys move it
+          // (by numFieldStep, default 1 -- see tests/ui/tauri_stub.js),
+          // Ctrl+Arrow resizes it from its top-left corner, and Escape
+          // deselects instead of closing the whole editor -- there is no
+          // frame-stepping to hand the arrow keys back to here, unlike the
+          // video editor's own 395 check. ----
+          const hint395 = document.getElementById('snip-edit-nudge-hint');
+          if (!hint395 || hint395.classList.contains('hidden')) {
+            out.errors.push('395: the nudge hint is not shown while a shape is selected');
+          }
+          // Handles are 8x8px squares (see snipEditPaintShapeHandles), too wide
+          // to tell a 4px move apart from noise with a single pixel sample --
+          // this instead finds the painted band's own centre within a window
+          // wide enough to hold it at every position it visits here but far
+          // enough from the neighbouring handles (50px apart) not to catch one
+          // of those instead.
+          const bandCentreX = (xMin, xMax, y) => {
+            let lo = null, hi = null;
+            for (let sx = xMin; sx <= xMax; sx++) {
+              if (liveCtx2.getImageData(sx, y, 1, 1).data[3] > 200) { if (lo === null) lo = sx; hi = sx; }
+            }
+            return lo === null ? null : (lo + hi) / 2;
+          };
+          const bandCentreY = (x, yMin, yMax) => {
+            let lo = null, hi = null;
+            for (let sy = yMin; sy <= yMax; sy++) {
+              if (liveCtx2.getImageData(x, sy, 1, 1).data[3] > 200) { if (lo === null) lo = sy; hi = sy; }
+            }
+            return lo === null ? null : (lo + hi) / 2;
+          };
+          const nwBefore = bandCentreX(30, 70, 50);
+          const seBefore = bandCentreX(130, 170, 150);
+          for (let i = 0; i < 4; i++) {
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+            await sleep(20);
+          }
+          const nwAfterMove = bandCentreX(30, 70, 50);
+          const seAfterMove = bandCentreX(130, 170, 150);
+          if (nwAfterMove !== nwBefore + 4 || seAfterMove !== seBefore + 4) {
+            out.errors.push('395: four ArrowRight presses did not move the shape by exactly 4 pixels (corner at ' +
+              nwBefore + ' -> ' + nwAfterMove + ')');
+          }
+          // Ctrl+ArrowRight grows the width from the still-fixed top-left corner
+          // -- the bottom-right corner's row does not move yet, only its column.
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', ctrlKey: true, bubbles: true, cancelable: true }));
+          await sleep(20);
+          const nwAfterWidthGrow = bandCentreX(30, 70, 50);
+          const seAfterWidthGrow = bandCentreX(130, 175, 150);
+          if (nwAfterWidthGrow !== nwAfterMove || seAfterWidthGrow !== seAfterMove + 1) {
+            out.errors.push('395: Ctrl+ArrowRight did not grow the shape from its top-left corner instead of moving it');
+          }
+          // Ctrl+ArrowDown then grows the height the same way -- its row
+          // shifts down by one, its column stays exactly where the width
+          // growth above just left it. Row centres (not single pixels) again,
+          // since an 8px-tall handle square hides a 1px shift from a plain
+          // presence check at either row.
+          const seRowBeforeHeightGrow = bandCentreY(155, 140, 165);
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', ctrlKey: true, bubbles: true, cancelable: true }));
+          await sleep(20);
+          const seRowAfterHeightGrow = bandCentreY(155, 140, 165);
+          const seColAfterHeightGrow = bandCentreX(130, 175, 151);
+          if (seRowAfterHeightGrow !== seRowBeforeHeightGrow + 1 || seColAfterHeightGrow !== seAfterWidthGrow) {
+            out.errors.push('395: Ctrl+ArrowDown did not grow the shape height from its fixed top-left corner');
+          }
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+          await sleep(60);
+          if (document.getElementById('snip-edit').classList.contains('hidden')) {
+            out.errors.push('395: Escape while a shape was selected closed the whole editor instead of just deselecting it');
+          }
+          if (bandCentreX(30, 70, 50) !== null || bandCentreY(155, 140, 165) !== null) {
+            out.errors.push('395: Escape did not remove the selection handles');
+          }
+          if (!hint395.classList.contains('hidden')) {
+            out.errors.push('395: the nudge hint stayed visible after Escape deselected the shape');
+          }
         }
         document.getElementById('snip-edit-cancel').click();
         await sleep(200);
@@ -8493,6 +8569,68 @@ VIDEO_PROBE = """
         const veHandles = document.querySelectorAll('#ve-rects .ve-rect-pixelate .ve-rect-handle');
         if (veHandles.length !== 8) {
           errs.push('383: selecting the pixelate overlay showed ' + veHandles.length + ' handles, expected 8');
+        }
+      }
+    }
+
+    // ---- 395: with an overlay selected, arrow keys move it (by numFieldStep,
+    // default 1 -- see tests/ui/tauri_stub.js), Ctrl+Arrow resizes it instead,
+    // comma/period take over frame-stepping, and Escape gives the arrow keys
+    // back to the playhead. The pixelate overlay is still selected from the
+    // 383 check just above -- being a rect-based overlay its x/y/w/h must
+    // stay on even numbers (see snapRect() in video.js), so each press here
+    // moves it by 2 (the nearest even number to the default step of 1), not
+    // by the step itself; a text overlay has no such rect and moves by the
+    // exact step, which is covered by the screenshot editor's own 395 check. ----
+    {
+      const xField395 = document.querySelector('#ve-ov-editor [data-ov-field="rect.x"]');
+      const wField395 = document.querySelector('#ve-ov-editor [data-ov-field="rect.w"]');
+      const hintEl = document.getElementById('ve-nudge-hint');
+      if (!xField395 || !wField395 || !hintEl) {
+        errs.push('395: could not find the selected overlay rect fields or the nudge hint element');
+      } else {
+        if (hintEl.classList.contains('hidden')) {
+          errs.push('395: the nudge hint is not shown while an overlay is selected');
+        }
+        const beforeX = Number(xField395.value);
+        for (let i = 0; i < 4; i++) {
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+          await sleep(20);
+        }
+        const afterX = Number(document.querySelector('#ve-ov-editor [data-ov-field="rect.x"]').value);
+        if (afterX !== beforeX + 8) {
+          errs.push('395: four ArrowRight presses moved the selected overlay by ' + (afterX - beforeX) + ', expected exactly 8 (2 per press, rounded up to stay even)');
+        }
+        const beforeW = Number(document.querySelector('#ve-ov-editor [data-ov-field="rect.w"]').value);
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', ctrlKey: true, bubbles: true, cancelable: true }));
+        await sleep(20);
+        const afterW = Number(document.querySelector('#ve-ov-editor [data-ov-field="rect.w"]').value);
+        if (afterW <= beforeW) {
+          errs.push('395: Ctrl+ArrowRight did not grow the selected overlay instead of moving it (was ' + beforeW + ', now ' + afterW + ')');
+        }
+        const beforeFrame = document.getElementById('ve-frame').textContent;
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: '.', bubbles: true, cancelable: true }));
+        await sleep(30);
+        const afterFrame = document.getElementById('ve-frame').textContent;
+        if (afterFrame === beforeFrame) {
+          errs.push('395: period did not step a frame forward while an overlay is selected');
+        }
+        // Escape deselects and hands the arrow keys back to frame-stepping,
+        // rather than also popping the close-window confirm dialog.
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        await sleep(30);
+        if (!document.getElementById('ve-confirm').classList.contains('hidden')) {
+          errs.push('395: Escape while an overlay was selected also opened the close-window confirm dialog');
+        }
+        if (!hintEl.classList.contains('hidden')) {
+          errs.push('395: the nudge hint stayed visible after Escape deselected the overlay');
+        }
+        const frameAfterDeselect = document.getElementById('ve-frame').textContent;
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+        await sleep(30);
+        const frameAfterArrow = document.getElementById('ve-frame').textContent;
+        if (frameAfterArrow === frameAfterDeselect) {
+          errs.push('395: ArrowRight did not move the playhead once nothing was selected');
         }
       }
     }

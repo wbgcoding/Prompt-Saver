@@ -103,6 +103,8 @@ const VE = {
   redo: [],
   floor: 0,             // undo may not walk back past this index
   undoMax: UNDO_MAX_DEFAULT,
+  numFieldStep: 1,      // arrow-key overlay nudge, settings-driven, see applySettings
+  numFieldBigStep: 10,  // the same with Shift held
   sel: null,            // { a, b } selection on the source timeline, in ms
   selOv: null,          // id of the overlay currently being edited
   ovFields: {},         // key -> { input, getValue } for the open overlay editor,
@@ -432,6 +434,14 @@ function afterOpsChanged(opts) {
   updateScaleCurrent();
   updateExportNote();
   applyPreviewSpeed();
+  updateNudgeHint();
+}
+
+// Shown only while an overlay is selected -- the arrow keys quietly change
+// job at that point (nudging the overlay instead of stepping frames), and a
+// silent behaviour switch is still a silent behaviour switch.
+function updateNudgeHint() {
+  $("ve-nudge-hint").classList.toggle("hidden", !VE.selOv);
 }
 
 // Writes the current op's values into the overlay editor's own inputs without
@@ -502,7 +512,7 @@ function renderOps() {
     row.appendChild(del);
     if (op.tool === "overlay") {
       row.classList.add("ve-op-clickable");
-      label.addEventListener("click", () => { VE.selOv = op.id; showPanel("ve-panel-overlays"); renderOverlayList(); renderOverlayEditor(); renderRects(); });
+      label.addEventListener("click", () => { VE.selOv = op.id; showPanel("ve-panel-overlays"); renderOverlayList(); renderOverlayEditor(); renderRects(); updateNudgeHint(); });
     }
     list.appendChild(row);
   });
@@ -960,6 +970,34 @@ function rectFor(op) {
   if (op.tool === "crop") return op.rect;
   if (op.tool === "overlay" && op.rect) return op.rect;
   return null;
+}
+
+// Arrow-key move/resize for the selected overlay, mirroring the mouse drag in
+// the "ve-rects" handlers below one step at a time. Ctrl changes the size
+// instead of the position -- meaningless for a text overlay (a bare x/y, no
+// rect), so that combination is simply a no-op there rather than guessing at
+// what "bigger" would mean for it.
+function nudgeSelectedOverlay(op, e) {
+  const dx = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
+  const dy = e.key === "ArrowUp" ? -1 : e.key === "ArrowDown" ? 1 : 0;
+  const rect = rectFor(op);
+  // A crop/image/frame/pixelate/spotlight rect must stay on even coordinates
+  // (see snapRect above) -- rounding the resulting x/y/w/h AFTER adding an odd
+  // step would silently double every other press instead of moving by the
+  // requested amount, so the step itself is rounded up to the nearest even
+  // number first for those. Text has no such rect and no such constraint.
+  const rawAmount = e.shiftKey ? VE.numFieldBigStep : VE.numFieldStep;
+  const amount = rect ? Math.max(2, even(rawAmount)) : rawAmount;
+  let patch;
+  if (e.ctrlKey || e.metaKey) {
+    if (!rect) return;
+    patch = { rect: snapRect({ ...rect, w: Math.max(RECT_MIN_PX, rect.w + dx * amount), h: Math.max(RECT_MIN_PX, rect.h + dy * amount) }) };
+  } else if (rect) {
+    patch = { rect: snapRect({ ...rect, x: rect.x + dx * amount, y: rect.y + dy * amount }) };
+  } else {
+    patch = { x: clamp(Math.round(op.x + dx * amount), 0, VE.w), y: clamp(Math.round(op.y + dy * amount), 0, VE.h) };
+  }
+  pushReplacing((o) => o.id === op.id, { ...op, ...patch }, { keepEditor: true });
 }
 
 // The frame itself (its four edges plus both centres) counts as one target,
@@ -1788,6 +1826,7 @@ function renderOverlayList() {
       renderOverlayEditor();
       renderRects();
       renderRegions();
+      updateNudgeHint();
     });
     row.addEventListener("contextmenu", (e) => {
       e.preventDefault();
@@ -2965,7 +3004,15 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "Tab") { trapTabWithin(ovCtxPop, e); return; }
   }
   const typing = TYPING.has(document.activeElement?.tagName);
-  if (e.key === "Escape") { e.preventDefault(); closeWindow(); return; }
+  if (e.key === "Escape") {
+    e.preventDefault();
+    // A selected overlay only gives up the arrow keys, never the whole
+    // window -- closing here would throw away every edit made so far just
+    // because something happened to be selected.
+    if (VE.selOv) { VE.selOv = null; renderOverlayList(); renderOverlayEditor(); renderRects(); renderRegions(); updateNudgeHint(); return; }
+    closeWindow();
+    return;
+  }
   if (typing) return;
 
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
@@ -2979,6 +3026,23 @@ document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); setPreviewZoom(VE.previewZoom * VE.zoomStepFactor); return; }
   if ((e.ctrlKey || e.metaKey) && e.key === "-") { e.preventDefault(); setPreviewZoom(VE.previewZoom / VE.zoomStepFactor); return; }
   if ((e.ctrlKey || e.metaKey) && e.key === "0") { e.preventDefault(); resetPreviewZoom(); return; }
+
+  // While an overlay is selected the arrow keys move/resize it instead of
+  // stepping frames -- frame-stepping moves to comma/period instead, the way
+  // other editing programs free up the arrow keys once something is picked.
+  const selectedOverlay = VE.selOv && VE.ops.find((o) => o.id === VE.selOv);
+  if (selectedOverlay) {
+    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+      e.preventDefault();
+      nudgeSelectedOverlay(selectedOverlay, e);
+      return;
+    }
+    if (e.key === "," || e.key === ".") {
+      e.preventDefault();
+      stepFrame(e.key === "," ? -1 : 1);
+      return;
+    }
+  }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
 
   switch (e.key) {
@@ -3004,6 +3068,7 @@ function resetForNewSource() {
   VE.floor = 0;
   VE.sel = null;
   VE.selOv = null;
+  updateNudgeHint();
   // The live-preview nodes belong to the OLD source's overlays; a new source
   // starts with none, so any leftover node would otherwise show a stale
   // image/text/pixelate sampled from a video that is no longer loaded.
@@ -3284,6 +3349,10 @@ function applySettings(settings) {
   VE.etaMinPct = Number.isFinite(etaMinPct) ? etaMinPct : 10;
   const etaMinSecs = Number(values.etaMinSecs);
   VE.etaMinSecs = Number.isFinite(etaMinSecs) ? etaMinSecs : 20;
+  const numFieldStep = Number(values.numFieldStep);
+  VE.numFieldStep = Number.isFinite(numFieldStep) && numFieldStep > 0 ? numFieldStep : 1;
+  const numFieldBigStep = Number(values.numFieldBigStep);
+  VE.numFieldBigStep = Number.isFinite(numFieldBigStep) && numFieldBigStep > 0 ? numFieldBigStep : 10;
   const texts = settings?.ui_texts || {};
   // The user's own last export choice always wins; only a field that was never
   // touched (no persisted videoExport* value yet) opens on the expert default.

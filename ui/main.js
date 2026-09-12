@@ -13736,6 +13736,7 @@ function bind() {
   const snipEditLiveCv = $("snip-edit-live");
   const snipEditTextInput = $("snip-edit-text-input");
   const snipEditMeasureEl = $("snip-edit-measure");
+  const snipEditNudgeHintEl = $("snip-edit-nudge-hint");
   // Right-click menu for duplicating/deleting a shape, built once like the
   // other dynamic popovers (tileFolderPop, viewsPop) instead of static markup.
   const snipCtxPop = document.createElement("div");
@@ -14134,6 +14135,7 @@ function bind() {
     if (SE.ops.length - SE.floor > SNIP_EDIT_UNDO_MAX()) SE.floor = SE.ops.length - SNIP_EDIT_UNDO_MAX();
     SE.redo.length = 0;
     SE.lastNudged = op;
+    snipEditUpdateNudgeHint();
     snipEditRedrawBase();
     snipEditUpdateUndoRedoButtons();
   }
@@ -14245,7 +14247,9 @@ function bind() {
     const op = SE.ops.pop();
     SE.redo.push(op);
     if (op.tool === "scale") snipEditRestoreScaleState(op.prevW, op.prevH, op.prevImg, op.prevRawCanvas, op.prevOps);
+    snipEditDeselectShape();
     SE.lastNudged = null;
+    snipEditUpdateNudgeHint();
     snipEditRedrawBase();
     snipEditUpdateUndoRedoButtons();
   }
@@ -14254,17 +14258,39 @@ function bind() {
     const op = SE.redo.pop();
     SE.ops.push(op);
     if (op.tool === "scale") snipEditRestoreScaleState(op.w, op.h, op.img, op.rawCanvas, [...op.keptOps, op]);
+    snipEditDeselectShape();
     SE.lastNudged = null;
+    snipEditUpdateNudgeHint();
     snipEditRedrawBase();
     snipEditUpdateUndoRedoButtons();
   }
-  function snipEditNudge(op, key, amount) {
+  // Shown only while something is nudgeable -- the arrow keys have no other
+  // job in this editor (no frames to step through), but a silent behaviour
+  // switch is still a silent behaviour switch, so a short line always says
+  // what they currently do.
+  function snipEditUpdateNudgeHint() {
+    snipEditNudgeHintEl.classList.toggle("hidden", !SE.lastNudged);
+  }
+  function snipEditNudge(op, key, amount, resize) {
     const dx = key === "ArrowLeft" ? -amount : key === "ArrowRight" ? amount : 0;
     const dy = key === "ArrowUp" ? -amount : key === "ArrowDown" ? amount : 0;
-    if (op.points) for (const p of op.points) { p.x += dx; p.y += dy; }
-    if (op.point) { op.point.x += dx; op.point.y += dy; }
-    if (op.rect) { op.rect.x += dx; op.rect.y += dy; }
+    if (resize) {
+      // Only a rect has a size to change; a line/arrow/pen/text/step has none,
+      // so Ctrl+Arrow is simply a no-op for those instead of guessing at what
+      // "bigger" would mean for a bare pair of points.
+      if (!op.rect) return;
+      op.rect.w = Math.max(4, op.rect.w + dx);
+      op.rect.h = Math.max(4, op.rect.h + dy);
+    } else {
+      if (op.points) for (const p of op.points) { p.x += dx; p.y += dy; }
+      if (op.point) { op.point.x += dx; op.point.y += dy; }
+      if (op.rect) { op.rect.x += dx; op.rect.y += dy; }
+    }
     snipEditRedrawBase();
+    // The move/resize above only touched the op's own coordinates -- the
+    // selection handles are a separate live-layer drawing keyed to the same
+    // op, and would otherwise keep showing the pre-nudge position/size.
+    if (SE.selOp === op) snipEditDrawShapeSelectionLive();
     // The crop tool's own live overlay (handles + dim) is drawn from SE.cropRect,
     // not from the committed op -- without this, nudging a just-committed crop
     // moves what gets exported while the on-screen handles stay put, so Apply/
@@ -14479,9 +14505,12 @@ function bind() {
   function snipEditSelectShape(op) {
     SE.selOp = op;
     SE.lastNudged = op;
+    snipEditUpdateNudgeHint();
     snipEditDrawShapeSelectionLive();
   }
   function snipEditDeselectShape() {
+    SE.lastNudged = null;
+    snipEditUpdateNudgeHint();
     if (!SE.selOp) return;
     SE.selOp = null;
     snipEditClearLive();
@@ -14542,7 +14571,7 @@ function bind() {
     if (SE.ops.length === before) return;
     SE.floor = Math.max(0, SE.floor - (before - SE.ops.length));
     if (SE.selOp === op) snipEditDeselectShape();
-    if (SE.lastNudged === op) SE.lastNudged = null;
+    if (SE.lastNudged === op) { SE.lastNudged = null; snipEditUpdateNudgeHint(); }
     snipEditUpdateUndoRedoButtons();
     snipEditRedrawBase();
   }
@@ -14805,6 +14834,7 @@ function bind() {
     closeSnipColorPop();
     SE.tool = tool;
     SE.lastNudged = null;
+    snipEditUpdateNudgeHint();
     snipEditClearLive();
     // Clear any crop-hover cursor left over from the previous tool -- an
     // inline style would otherwise outrank the panning class below and the
@@ -14940,6 +14970,7 @@ function bind() {
     }
     snipEditLiveCv.setPointerCapture(e.pointerId);
     SE.lastNudged = null;
+    snipEditUpdateNudgeHint();
     const pt = snipEditApplySnap(pt0, e.altKey);
     switch (SE.tool) {
       case "crop": snipEditCropPointerDown(pt); break;
@@ -15100,6 +15131,10 @@ function bind() {
       if (snipColorPopIsOpen()) { closeSnipColorPop(); return; }
       if (SE.eyedropArm) { SE.eyedropArm = null; snipEditRenderContext(); return; }
       if (SE.tool === "crop" && (SE.drag || SE.cropRect)) { snipEditCropDiscard(); return; }
+      // A selected/just-drawn shape only gives up the arrow keys, never the
+      // whole editor -- closing on Escape here would throw away every edit
+      // made so far just because something happened to be selected.
+      if (SE.lastNudged) { snipEditDeselectShape(); return; }
       snipEditCancel();
       return;
     }
@@ -15121,7 +15156,8 @@ function bind() {
     if (e.key.toLowerCase() === "v" && !e.repeat) { SE.showRaw = true; snipEditRedrawBase(); return; }
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && SE.lastNudged) {
       e.preventDefault();
-      snipEditNudge(SE.lastNudged, e.key, e.shiftKey ? 10 : 1);
+      const amount = e.shiftKey ? val("numFieldBigStep") : val("numFieldStep");
+      snipEditNudge(SE.lastNudged, e.key, amount, e.ctrlKey || e.metaKey);
       return;
     }
     const tdef = SNIP_TOOLS.find((t) => t.key === e.key || (t.key === "-" && e.key === "ß"));
@@ -15155,7 +15191,9 @@ function bind() {
       SE.perTool = {};
       SE.tool = SNIP_EDIT_DEFAULT_TOOL();
       SE.cropRect = null;
+      SE.selOp = null;
       SE.lastNudged = null;
+      snipEditUpdateNudgeHint();
       SE.eyedropArm = null;
       SE.showRaw = false;
       SE.drag = null;

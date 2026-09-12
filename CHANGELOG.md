@@ -299,6 +299,14 @@ the video editor and the introduction tour ship on).
   before and stays the default; an expert setting picks the outline width,
   and its colour, black or white, follows the text colour for the best
   contrast.
+- **Move a selected shape or overlay with the arrow keys.** Holding Ctrl
+  resizes it instead of moving it, and Shift takes a bigger step; both step
+  sizes are expert settings shared by every place that uses them. In the
+  video editor this only applies while something is selected, since the
+  arrow keys normally step through frames there; comma and period take over
+  that job for as long as it is selected, and a short line above the
+  transport controls always says what the arrow keys currently do. Escape
+  deselects and hands the arrow keys back.
 
 ### Improved
 

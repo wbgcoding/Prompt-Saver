@@ -176,6 +176,15 @@ body.video-body {
   font-size: 13px;
   pointer-events: none;
 }
+.ve-nudge-hint {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
 
 /* ---- transport ---- */
 .ve-transport {

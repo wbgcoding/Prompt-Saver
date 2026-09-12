@@ -220,6 +220,16 @@ plate was the only option before, and stays the default. An expert setting
 picks the outline width, and its colour, black or white, follows the text
 colour automatically for the best contrast.
 
+A selected shape (screenshot editor) or overlay (video editor) can be nudged
+with the arrow keys, a step at a time; holding Ctrl changes its size instead
+of its position, and Shift takes a bigger step. Both step sizes are expert
+settings shared by every place that uses them. In the video editor the arrow
+keys only take on this job while something is selected, since they normally
+step through frames there; while selected, comma and period step frames
+instead, and a short line above the transport controls always says what the
+arrow keys currently do. Escape deselects and hands the arrow keys back to
+their usual job.
+
 ### Text recognition (OCR)
 
 On by default. A button on the composer and in the screenshot dialog pulls the
@@ -725,6 +735,17 @@ hellem Untergrund lesbar bleibt; Platte war bisher die einzige Möglichkeit und
 bleibt die Vorgabe. Eine Expertenzeile stellt die Umrissbreite ein, seine
 Farbe, schwarz oder weiß, folgt für den besten Kontrast automatisch der
 Textfarbe.
+
+Eine ausgewählte Form (Screenshot-Editor) oder Überlagerung (Video-Editor)
+lässt sich mit den Pfeiltasten schrittweise verschieben; gedrückt gehaltenes
+Strg ändert stattdessen die Größe, Umschalt macht einen größeren Schritt.
+Beide Schrittweiten sind Expertenzeilen, die überall dort gelten, wo sie
+gebraucht werden. Im Video-Editor übernehmen die Pfeiltasten diese Aufgabe nur,
+solange etwas ausgewählt ist, weil sie dort sonst durch die Einzelbilder
+schalten; solange ausgewählt, übernehmen stattdessen Komma und Punkt das
+Weiterschalten der Einzelbilder, und eine kurze Zeile über der Wiedergabeleiste
+zeigt immer, was die Pfeiltasten gerade tun. Escape hebt die Auswahl auf und
+gibt den Pfeiltasten ihre gewohnte Aufgabe zurück.
 
 **Texterkennung (OCR)** — standardmäßig an; liest per Knopf in der Leiste und
 im Screenshot-Dialog Text aus einem Screenshot oder einer Bilddatei, komplett
