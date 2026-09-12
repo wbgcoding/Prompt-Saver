@@ -123,7 +123,17 @@ the video editor and the introduction tour ship on).
   straight into a prompt has no path and stays in the database. Switching the
   feature on takes a backup first, and the folder is written the moment you pick
   it. **The files are plain text** — the database is not — so keep anything
-  sensitive out of a folder other people or other services can read.
+  sensitive out of a folder other people or other services can read. The folder
+  is `prompt-saver-sync` next to your data unless you pick another one, and
+  picking another one asks whether the old folder should be deleted: that delete
+  only ever removes the files this app wrote itself, never a sub-folder, and
+  stops without touching anything if a file it did not write is in there. A file
+  is read once it has stopped changing, so a half-written file is never imported;
+  an unreachable folder pauses the sync after five failed rounds instead of
+  retrying forever, and the folder row shows the last round, the number of files
+  and why it is paused. When a prompt and its file changed at the same time,
+  neither version is lost: the one that is replaced is kept, in the prompt's
+  version history or as a conflict copy beside the file.
 - **An About dialog** — a button beside Check for updates opens the current
   version and a link to the project page.
 - **A real help search** — searching now matches several words in any order,

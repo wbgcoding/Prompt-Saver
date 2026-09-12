@@ -63,7 +63,7 @@ Requires the Microsoft WebView2 runtime (preinstalled on Windows 11 and current 
 
 - **Grid folders** — drop one tile onto another and both move into a folder in that cell; drag one out and it goes back to the layout.
 - **Restore data and settings separately** — restoring a backup, or importing a `.psb`/`.json` backup file, now offers two checkboxes instead of an all-or-nothing swap: bring back your prompts without touching your current setup, or the other way around.
-- **Markdown folder sync** (expert menu, off by default, beta) — mirrors every prompt as its own readable `.md` file in a folder you pick, kept in sync both ways. The files are plain text — the database is not — so keep anything sensitive out of a folder other people or services can read.
+- **Markdown folder sync** (expert menu, off by default, beta) — mirrors every prompt as its own readable `.md` file in a folder you pick, kept in sync both ways. The files are plain text — the database is not — so keep anything sensitive out of a folder other people or services can read. Switching to a different folder asks what should happen to the old one, and a delete there only ever removes the files the app wrote itself.
 - **An About dialog** and **a real help search** that matches several words in any order and highlights what it found.
 - **Allow multiple instances** (expert menu, off by default) — run the app more than once at the same time, e.g. against two different data folders. Off keeps the familiar single-instance behaviour. Takes a restart to apply.
 - The backups window can open its snapshot folder in Explorer directly.

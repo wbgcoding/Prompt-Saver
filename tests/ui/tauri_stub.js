@@ -308,7 +308,9 @@ const RESULTS = {
   pick_file_path: () => "C:\\Pictures\\ps-smoke-badge.png",
   // 335: export-destination pickers for the video editor's export row.
   pick_export_dest: (a) => "C:\\Videos\\" + (a && a.defaultName || "export.mp4"),
-  pick_folder: () => "C:\\Videos\\Exports",
+  // A probe that needs the picker to answer with a specific folder sets
+  // window.__PICK_FOLDER__ first; everything else gets the export folder.
+  pick_folder: () => window.__PICK_FOLDER__ || "C:\\Videos\\Exports",
   // 336: "Copy to clipboard" export -- a temp path plus a clipboard write the
   // probe can observe without a real OS clipboard.
   clip_export_path: (a) => "C:\\Temp\\ps-clipexport-test." + ((a && a.ext) || "mp4"),
@@ -522,7 +524,16 @@ const RESULTS = {
     return null;
   },
   default_screenshot_dir: () => "C:\\Pictures",
-  default_sync_dir: () => "C:\\Data\\Prompts",
+  default_sync_dir: () => "C:\\Data\\prompt-saver-sync",
+  // The old sync folder holds three files this app wrote and nothing else, so
+  // switching folders asks its three-way question instead of going straight
+  // through.
+  sync_dir_info: () => ({ path: "C:\\Data\\prompt-saver-sync", ours: 3, foreign: 0 }),
+  sync_status: () => ({ enabled: true, last_ok: Math.floor(Date.now() / 1000) - 60, files: 3, paused: false, reason: "" }),
+  set_sync_dir: (a) => {
+    window.__SYNC_DIR_CALL__ = { dir: a ? a.dir : null, deleteOld: a ? a.deleteOld : null };
+    return 0;
+  },
   // One snapshot carries its prompt count and names (61), one is from an older
   // build and has neither — the list has to show both without a gap in the row.
   open_backups_folder: () => null,

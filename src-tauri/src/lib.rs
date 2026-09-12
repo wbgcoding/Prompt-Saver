@@ -13459,7 +13459,7 @@ fn default_screenshot_dir() -> String {
 // say "default", which tells the user nothing about where their files went.
 #[tauri::command]
 fn default_sync_dir(app: AppHandle) -> String {
-    data_dir(&app).join("Prompts").to_string_lossy().to_string()
+    sync_default_dir(&app).to_string_lossy().to_string()
 }
 
 // Native folder picker (used by the expert screenshot-dir + data-dir options).
@@ -24119,6 +24119,31 @@ pub fn run() {
             #[cfg(windows)]
             clipwatch::start(handle.clone());
 
+            // The default sync folder used to be called differently. Anyone who was
+            // syncing into it without ever picking a folder of their own keeps it,
+            // now as an explicit choice, so nothing moves under them unannounced.
+            if let Some(state) = handle.try_state::<Db>() {
+                let legacy = data_dir(&handle).join(SYNC_LEGACY_DIR_NAME);
+                let adopted = {
+                    let mut store = lock(&state);
+                    // Checked here as well as inside, so that every later start is a
+                    // map lookup and not a settings write for nothing.
+                    if store.settings.ui_texts.contains_key(SYNC_LEGACY_MARK) {
+                        None
+                    } else {
+                        let adopted = sync_adopt_legacy_dir(&mut store.settings, &legacy);
+                        save_settings(&handle, &store.settings);
+                        adopted
+                    }
+                };
+                if let Some(path) = adopted {
+                    append_crash_log(&format!(
+                        "prompt-sync: kept the existing folder {path} as this installation's sync folder; new installations use {}",
+                        sync_default_dir(&handle).display()
+                    ));
+                }
+            }
+
             // Prompt-folders-as-Markdown: harmless to start unconditionally — the
             // poll itself checks the opt-in flag on every tick and is a no-op until
             // it is switched on.
@@ -24686,6 +24711,9 @@ pub fn run() {
             delete_screenshot_file,
             default_screenshot_dir,
             default_sync_dir,
+            set_sync_dir,
+            sync_dir_info,
+            sync_status,
             pick_folder,
             current_data_dir,
             store_sealed,
@@ -24787,7 +24815,7 @@ pub fn run() {
 //
 // A text-only prompt (no attached file/image/icon — those stay DB-only, binary
 // content does not belong in a git-friendly text file) round-trips through one
-// `<id>.md` per prompt in a chosen folder (default `<data dir>/Prompts`). The id is
+// `<id>.md` per prompt in a chosen folder (default `<data dir>/<slug>-sync`). The id is
 // the filename, so renaming a prompt in the app never orphans its file. Hooked at
 // save_prompts() — the single choke point every prompt mutation already funnels
 // through — so no individual command (add/update/delete/batch/import) needs to know
@@ -24806,26 +24834,91 @@ pub fn run() {
 // None of these lose data outright — worst case a change waits one more poll
 // interval — but this has NOT had the multi-instance crash-simulation stress test
 // the original spec calls for as a "done" gate. Treat it as a beta feature.
-const SYNC_POLL_SECS: u64 = 4;
+const SYNC_POLL_SECS: u64 = 5;
 
 // Expert-tunable poll interval, clamped the same way as tray_label_max: an
 // absent or out-of-range stored value falls back to the shipped default.
 fn sync_poll_secs(settings: &Settings) -> u64 {
     settings.ui_values.get("syncPollSecs").copied().unwrap_or(SYNC_POLL_SECS as f64).clamp(2.0, 30.0) as u64
 }
+// A lock is only ever held around one small file write, so 15 s is already far
+// past any real one. The age is deliberately NOT tied to the poll interval: the
+// second half of the staleness check is whether the process that wrote the lock
+// is still alive, so a genuinely slow write by a running instance is never
+// stolen however long it takes, and a lock left by a crashed one is picked up as
+// soon as the age passes.
 const SYNC_LOCK_STALE_SECS: u64 = 15;
+
+// After this many consecutive failed rounds (an unreachable folder, a network
+// share that is not mounted) the poll pauses instead of retrying every tick
+// forever, says so once, and from then on only tries again at
+// SYNC_PAUSED_FACTOR times the interval.
+const SYNC_FAIL_MAX: u32 = 5;
+const SYNC_PAUSED_FACTOR: u64 = 10;
+
+fn sync_fail_max(settings: &Settings) -> u32 {
+    settings.ui_values.get("syncFailMax").copied().unwrap_or(SYNC_FAIL_MAX as f64).clamp(1.0, 50.0) as u32
+}
 
 fn sync_enabled(settings: &Settings) -> bool {
     settings.ui_flags.get("promptSync").copied().unwrap_or(false)
 }
 
+// The shipped folder, built from the brand slug rather than written out: the name
+// lives in exactly one place, and a fork gets its own folder without a code change.
+fn sync_dir_leaf(slug: &str) -> String {
+    format!("{slug}-sync")
+}
+
+fn sync_default_dir(app: &AppHandle) -> PathBuf {
+    data_dir(app).join(sync_dir_leaf(brand::SLUG))
+}
+
+// What earlier versions used before the folder was named after the brand. Adopted
+// once for anyone who already syncs (sync_adopt_legacy_dir), never written to again.
+const SYNC_LEGACY_DIR_NAME: &str = "Prompts";
+// Set to "1" the first time the legacy folder was considered, so the adoption
+// below can never run twice and move a folder the user has since changed.
+const SYNC_LEGACY_MARK: &str = "syncDirLegacyChecked";
+
 fn sync_dir_path(app: &AppHandle, settings: &Settings) -> PathBuf {
     let custom = settings.ui_texts.get("syncDir").cloned().unwrap_or_default();
     if custom.is_empty() {
-        data_dir(app).join("Prompts")
+        sync_default_dir(app)
     } else {
         PathBuf::from(custom)
     }
+}
+
+// Whether a folder holds at least one file this feature could have written. Used
+// by the one-time legacy adoption, which must not claim an empty leftover folder.
+fn sync_dir_has_md(dir: &Path) -> bool {
+    let Ok(entries) = fs::read_dir(dir) else { return false };
+    entries.flatten().any(|e| {
+        let name = e.file_name().to_string_lossy().to_string();
+        name != "AGENTS.md"
+            && name.ends_with(".md")
+            && Path::new(&name).file_stem().and_then(|s| s.to_str()).is_some_and(sync_safe_id)
+    })
+}
+
+// The default folder changed name. Anyone who synced into the old one without ever
+// picking a folder of their own would silently start over in an empty new one, so
+// on the first start after the change their old folder becomes their explicit
+// choice. Runs once (marked in ui_texts), only when no custom folder is set and the
+// old folder actually holds our files. Returns the adopted path for the log line.
+fn sync_adopt_legacy_dir(settings: &mut Settings, legacy: &Path) -> Option<String> {
+    if settings.ui_texts.contains_key(SYNC_LEGACY_MARK) {
+        return None;
+    }
+    settings.ui_texts.insert(SYNC_LEGACY_MARK.into(), "1".into());
+    let custom = settings.ui_texts.get("syncDir").cloned().unwrap_or_default();
+    if !custom.is_empty() || !sync_dir_has_md(legacy) {
+        return None;
+    }
+    let path = legacy.to_string_lossy().into_owned();
+    settings.ui_texts.insert("syncDir".into(), path.clone());
+    Some(path)
 }
 
 // A media prompt syncs too, but only ever as a REFERENCE: the `file`/`icon` headers
@@ -25011,11 +25104,17 @@ fn apply_md_to_prompt(base: &Prompt, content: &str) -> Option<Prompt> {
         p.color.clone_from(v);
     }
     if let Some(v) = fields.get("tags") {
+        // Same rules every other way into the app enforces (length, character set,
+        // how many per prompt): a hand-written file is an entry point like any
+        // other, and a tag that breaks them would sit in the library unfixable.
+        // Leniently: a bad tag is dropped, it never costs the whole file its text.
         let mut seen = std::collections::HashSet::new();
         p.tags = v
             .split(',')
             .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty() && seen.insert(s.to_lowercase()))
+            .filter(|s| !s.is_empty() && s.chars().count() <= MAX_TAG_LEN && tag_chars_ok(s))
+            .filter(|s| seen.insert(tag_key(s)))
+            .take(MAX_TAGS_PER_PROMPT)
             .collect();
     }
     if let Some(v) = fields.get("notes") {
@@ -25367,14 +25466,21 @@ fn sync_normalize_float_folders(folders: &mut Vec<FloatFolder>, prompt_ids: &[St
     folders.truncate(MAX_FLOAT_FOLDERS);
 }
 
+// The note's first line, which is also how this folder's own file is recognised
+// again later (a note from an older version still counts as ours).
+fn sync_agents_md_head() -> String {
+    format!("# {} sync folder", brand::DISPLAY_NAME)
+}
+
 // Written into the user's own folder, so it obeys the fork rule like every other
 // visible text: the product name and the word for what it stores both come from
 // the brand, never from a literal here.
 fn sync_agents_md() -> String {
+    let head = sync_agents_md_head();
     let app = brand::DISPLAY_NAME;
     let item = brand::ITEM;
     format!(
-        "# {app} sync folder
+        "{head}
 
 Each `<id>.md` file here mirrors one {item}: a short header (`name`, `color`, `tags`,
 `notes`) between two `---` lines, then the {item}'s text below. A {item} that carries a
@@ -25382,13 +25488,22 @@ file, an icon or a PDF page lists those as paths in the header — the files the
 stay where they are.
 
 Edit the text (or a header field) and save — {app} checks this folder every
-few seconds and picks up the change. Do not rename a file; the filename is the
-{item}'s permanent id, and renaming it orphans the file instead of renaming the
-{item}.
+few seconds and picks up the change. A file is read once it has stopped changing,
+so an edit can take one extra round to arrive.
+
+Do not rename a file; the filename is the {item}'s permanent id. A renamed file
+arrives as a NEW {item} and the original is written back out under its own name,
+so you end up with two.
+
+Deleting a file here does not delete the {item}: it is written again from the app.
+Delete the {item} in the app and its file goes with it. Anything in this folder
+that {app} did not write itself is never changed and never deleted.
 
 While a file is being written, a matching `<file>.md.lock` may briefly appear next
 to it — leave it alone, it clears itself within seconds. If one lingers (e.g. after
-a crash), it is safe to delete by hand.
+a crash), it is safe to delete by hand. A `<id>.conflict-<number>.md` is a copy
+{app} kept because the file and the {item} had both changed; nothing is lost, and
+the file is yours to keep or delete.
 "
     )
 }
@@ -25397,6 +25512,150 @@ fn sync_write_agents_md(dir: &Path) {
     let path = dir.join("AGENTS.md");
     if !path.exists() {
         let _ = fs::write(&path, sync_agents_md());
+    }
+}
+
+// ---- What each file in the folder looked like the last time it was seen ----
+//
+// Two problems share one answer. A file is only read when its modification time or
+// size differs from the last round, which keeps a thousand-entry folder from being
+// read end to end every few seconds; and a file whose stamp CHANGED since the last
+// round is deliberately not read yet, because an editor that writes straight into
+// the file (rather than the usual temp-file-and-rename) can be caught mid-write.
+// One round later the stamp has settled and what is read is a whole file.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+struct SyncStamp {
+    mtime_ns: u128,
+    len: u64,
+}
+
+// A file the app wrote itself is recorded as already handled: its content is known,
+// so the next round has nothing to read.
+#[derive(Clone, Copy, Debug)]
+struct SyncSeen {
+    stamp: SyncStamp,
+    handled: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum SyncScan {
+    /// Changed (or never seen): remember the stamp and look again next round.
+    Settle,
+    /// Unchanged since the last round and not read yet: this one is safe to read.
+    Read,
+    /// Unchanged and already handled: nothing to do.
+    Skip,
+}
+
+fn sync_scan_decision(prev: Option<SyncSeen>, now: SyncStamp) -> SyncScan {
+    match prev {
+        Some(p) if p.stamp == now => {
+            if p.handled {
+                SyncScan::Skip
+            } else {
+                SyncScan::Read
+            }
+        }
+        _ => SyncScan::Settle,
+    }
+}
+
+fn sync_stamp_of(path: &Path) -> Option<SyncStamp> {
+    let meta = fs::metadata(path).ok()?;
+    let mtime_ns = meta
+        .modified()
+        .ok()
+        .and_then(|m| m.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    Some(SyncStamp { mtime_ns, len: meta.len() })
+}
+
+type SyncSeenMap = HashMap<String, SyncSeen>;
+static SYNC_SEEN: std::sync::OnceLock<Mutex<SyncSeenMap>> = std::sync::OnceLock::new();
+
+fn sync_seen() -> &'static Mutex<SyncSeenMap> {
+    SYNC_SEEN.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn sync_seen_lock() -> std::sync::MutexGuard<'static, SyncSeenMap> {
+    sync_seen().lock().unwrap_or_else(|e| e.into_inner())
+}
+
+// Keyed by the whole path, never by the file name alone: the same `<id>.md` exists
+// in the old and the new folder after a folder change, and a stamp from one of them
+// must never be read as the other one's.
+fn sync_seen_key(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
+}
+
+// Called right after the app writes a file itself: the content is ours and known,
+// so the poll neither has to re-read it nor may mistake it for someone's edit.
+fn sync_seen_record_own_write(path: &Path) {
+    let Some(stamp) = sync_stamp_of(path) else { return };
+    sync_seen_lock().insert(sync_seen_key(path), SyncSeen { stamp, handled: true });
+}
+
+// Whether the file changed since the app last wrote or read it. `None` (never seen)
+// is deliberately NOT a conflict: on a fresh start every file is unknown, and
+// claiming a conflict there would litter the folder with copies of itself.
+fn sync_changed_since_seen(path: &Path) -> bool {
+    let seen = sync_seen_lock();
+    match (seen.get(&sync_seen_key(path)), sync_stamp_of(path)) {
+        (Some(prev), Some(now)) => prev.stamp != now,
+        _ => false,
+    }
+}
+
+// ---- How the folder itself is doing (shown in the expert menu) ----
+#[derive(Clone, Default)]
+struct SyncHealth {
+    /// Unix seconds of the last round that could read the folder.
+    last_ok: u64,
+    /// Files seen in that round.
+    files: usize,
+    fails: u32,
+    paused: bool,
+    /// Plain-language reason the poll is paused, for the status line.
+    reason: String,
+}
+
+static SYNC_HEALTH: std::sync::OnceLock<Mutex<SyncHealth>> = std::sync::OnceLock::new();
+
+fn sync_health() -> &'static Mutex<SyncHealth> {
+    SYNC_HEALTH.get_or_init(|| Mutex::new(SyncHealth::default()))
+}
+
+fn sync_health_lock() -> std::sync::MutexGuard<'static, SyncHealth> {
+    sync_health().lock().unwrap_or_else(|e| e.into_inner())
+}
+
+// Returns true exactly on the round that flips the pause on, so the log line is
+// written once instead of on every failed round.
+fn sync_health_note_fail(h: &mut SyncHealth, max: u32, reason: &str) -> bool {
+    h.fails = h.fails.saturating_add(1);
+    h.reason = reason.to_string();
+    if h.paused || h.fails < max {
+        return false;
+    }
+    h.paused = true;
+    true
+}
+
+fn sync_health_note_ok(h: &mut SyncHealth, files: usize, now: u64) {
+    h.fails = 0;
+    h.paused = false;
+    h.reason.clear();
+    h.files = files;
+    h.last_ok = now;
+}
+
+// A paused poll still comes back, just far less often.
+fn sync_wait_secs(paused: bool, poll: u64) -> u64 {
+    if paused {
+        poll.saturating_mul(SYNC_PAUSED_FACTOR)
+    } else {
+        poll
     }
 }
 
@@ -25504,10 +25763,28 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
         let filename = format!("{}.md", p.id);
         let path = dir.join(&filename);
         let content = prompt_to_md(p, &sync_placement_for(p, settings));
-        if fs::read_to_string(&path).unwrap_or_default() != content && sync_lock_acquire(&path) {
+        let on_disk = fs::read_to_string(&path).unwrap_or_default();
+        if on_disk != content && sync_lock_acquire(&path) {
+            // Both sides changed: the file was edited outside the app since the app
+            // last touched it, and the prompt in the app has since changed too. The
+            // app's version wins the file, but the one being replaced is kept beside
+            // it instead of disappearing. A conflict is rare, a silent loss is not
+            // acceptable. The copy's name carries a dot, so it is neither a valid
+            // prompt id (the poll skips it) nor something the orphan sweep may touch.
+            if !on_disk.is_empty() && sync_changed_since_seen(&path) {
+                let copy = dir.join(format!("{}.conflict-{}.md", p.id, now_secs()));
+                if write_file_atomic(&copy, &on_disk) {
+                    append_crash_log(&format!(
+                        "prompt-sync: {filename} was edited outside the app and in the app at the same time; the outside version was kept as {}",
+                        copy.file_name().unwrap_or_default().to_string_lossy()
+                    ));
+                }
+            }
             let ok = write_file_atomic(&path, &content);
             sync_lock_release(&path);
-            if !ok {
+            if ok {
+                sync_seen_record_own_write(&path);
+            } else {
                 failed += 1;
                 append_crash_log(&format!("prompt-sync: writing {filename} failed"));
             }
@@ -25615,6 +25892,13 @@ fn sync_sweep_orphans(dir: &Path, wanted: &std::collections::HashSet<String>) {
         if !name.ends_with(".md") || name == "AGENTS.md" || wanted.contains(&name) {
             continue;
         }
+        // Only a name this feature could have written itself, i.e. one that is a
+        // valid prompt id. A copy the user made of one of our files ("notes copy.md",
+        // "plan (1).md") carries our header too, and deleting that as an orphan would
+        // destroy a file the user deliberately put there.
+        if !Path::new(&name).file_stem().and_then(|s| s.to_str()).is_some_and(sync_safe_id) {
+            continue;
+        }
         let path = e.path();
         let ours = read_text_capped(&path, MAX_SYNC_MD_BYTES)
             .and_then(|c| parse_frontmatter(&c))
@@ -25679,8 +25963,29 @@ fn sync_poll_once(app: &AppHandle) {
         }
         (sync_dir_path(app, &store.settings), store.prompts.clone(), store.settings.clone())
     };
-    let Ok(entries) = fs::read_dir(&dir) else { return };
+    let entries = match fs::read_dir(&dir) {
+        Ok(e) => e,
+        Err(e) => {
+            // An unreachable folder (a network share that is not mounted, a removed
+            // drive) must not turn into a failure every few seconds for the rest of
+            // the session. After enough failed rounds the poll pauses and says so.
+            let max = sync_fail_max(&settings_snapshot);
+            let just_paused = {
+                let mut h = sync_health_lock();
+                sync_health_note_fail(&mut h, max, &e.to_string())
+            };
+            if just_paused {
+                append_crash_log(&format!(
+                    "prompt-sync: paused after {max} rounds that could not read {}: {e}",
+                    dir.display()
+                ));
+            }
+            return;
+        }
+    };
     let mut candidates: Vec<(String, String, bool)> = Vec::new(); // (stem, content, is_new)
+    let mut present: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut files = 0usize;
     for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) != Some("md") {
@@ -25690,6 +25995,23 @@ fn sync_poll_once(app: &AppHandle) {
         // The stem becomes a prompt id, and every id is written back out as a file
         // name — so it has to pass the same gate an outgoing id does.
         if !sync_safe_id(&stem) {
+            continue;
+        }
+        let name = format!("{stem}.md");
+        if name == "AGENTS.md" {
+            continue; // the folder's own readme, never a prompt (the sweep skips it too)
+        }
+        files += 1;
+        let key = sync_seen_key(&path);
+        present.insert(key.clone());
+        let Some(stamp) = sync_stamp_of(&path) else { continue };
+        // Metadata only, for every file in the folder: a folder whose files have not
+        // changed since the last round costs one stat each and not a single read.
+        let decision = sync_scan_decision(sync_seen_lock().get(&key).copied(), stamp);
+        if decision != SyncScan::Read {
+            if decision == SyncScan::Settle {
+                sync_seen_lock().insert(key, SyncSeen { stamp, handled: false });
+            }
             continue;
         }
         // Acquire the file lock BEFORE reading, not after - the
@@ -25702,7 +26024,22 @@ fn sync_poll_once(app: &AppHandle) {
         }
         let content = read_text_capped(&path, MAX_SYNC_MD_BYTES);
         sync_lock_release(&path);
-        let Some(content) = content else { continue };
+        // Whatever the read said, this stamp has now been dealt with: a file that
+        // is too big or unreadable must not be retried (and re-logged) every round.
+        sync_seen_lock().insert(key, SyncSeen { stamp, handled: true });
+        let Some(content) = content else {
+            // Refused, never truncated: a half file would be imported as the whole
+            // prompt. The user only ever learns why from the error log, so say it.
+            if stamp.len > MAX_SYNC_MD_BYTES {
+                append_crash_log(&format!(
+                    "prompt-sync: {name} is {} bytes, past the {} byte limit, skipped and not truncated",
+                    stamp.len, MAX_SYNC_MD_BYTES
+                ));
+            } else {
+                append_crash_log(&format!("prompt-sync: {name} could not be read as UTF-8 text, skipped"));
+            }
+            continue;
+        };
         if let Some(idx) = snapshot.iter().position(|p| p.id == stem) {
             let placement = sync_placement_for(&snapshot[idx], &settings_snapshot);
             if prompt_to_md(&snapshot[idx], &placement) == content {
@@ -25713,6 +26050,13 @@ fn sync_poll_once(app: &AppHandle) {
             candidates.push((stem, content, true));
         }
     }
+    {
+        let mut h = sync_health_lock();
+        sync_health_note_ok(&mut h, files, now_secs());
+    }
+    // Files that are gone leave no entry behind: this map would otherwise grow for
+    // the life of the process in a folder with a lot of coming and going.
+    sync_seen_lock().retain(|key, _| present.contains(key));
     if candidates.is_empty() {
         return;
     }
@@ -25763,6 +26107,24 @@ fn sync_poll_once(app: &AppHandle) {
                 continue; // a concurrent edit already made this file's content current
             }
             if let Some(updated) = apply_md_to_prompt(&store.prompts[idx], &content) {
+                // The file wins this round, so whatever the prompt said before is
+                // about to be gone. If both sides changed since the last sync this is
+                // the losing side of a conflict, so keep it as a restore point instead
+                // of dropping it, the same way an edit in the app keeps one.
+                let old = &store.prompts[idx];
+                if history_enabled(&store.settings)
+                    && (old.name != updated.name || old.text != updated.text || old.variants != updated.variants)
+                {
+                    let cap = history_cap(&store.settings);
+                    match db_conn(app) {
+                        Some(c) => {
+                            if let Err(e) = db_add_version(&c, &stem, now_secs(), &old.name, &old.text, &old.variants, cap) {
+                                append_crash_log(&format!("prompt-sync: no restore point kept for {stem}: {e}"));
+                            }
+                        }
+                        None => append_crash_log(&format!("prompt-sync: no restore point kept for {stem}: no DB connection")),
+                    }
+                }
                 store.prompts[idx] = updated;
                 changed = true;
             }
@@ -25797,6 +26159,194 @@ fn sync_poll_once(app: &AppHandle) {
     }
 }
 
+// ---- Letting go of the old folder when the user picks a new one ----
+//
+// The sync folder belongs to the USER. Deleting one is the single most one-way
+// thing this feature can do, so it is built to refuse rather than to guess: it
+// only ever removes files this app wrote itself, in one folder, never into
+// sub-folders, never by pattern, and the folder itself only if it ends up empty.
+#[derive(Default)]
+struct SyncDirScan {
+    /// Files this app wrote and may therefore remove.
+    ours: Vec<PathBuf>,
+    /// Everything else, in the order found. One of these aborts a delete.
+    foreign: Vec<String>,
+}
+
+fn sync_dir_scan(dir: &Path) -> SyncDirScan {
+    let mut scan = SyncDirScan::default();
+    let Ok(entries) = fs::read_dir(dir) else { return scan };
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        let path = e.path();
+        // A sub-folder is never ours: this feature writes flat files and nothing
+        // else, and a folder would need a recursive delete to go away at all.
+        if path.is_dir() {
+            scan.foreign.push(format!("{name}\\"));
+            continue;
+        }
+        let ours = if name == "AGENTS.md" {
+            // Only the note this feature writes itself, recognised by its first line
+            // rather than by the whole text, so a note written by an older version is
+            // still ours. Once the user has rewritten it, it is their text and stays.
+            fs::read_to_string(&path).is_ok_and(|c| c.starts_with(&sync_agents_md_head()))
+        } else if let Some(stem) = name.strip_suffix(".md") {
+            sync_safe_id(stem)
+                && read_text_capped(&path, MAX_SYNC_MD_BYTES)
+                    .and_then(|c| parse_frontmatter(&c))
+                    .is_some_and(|(fields, _)| md_is_ours(&fields))
+        } else if let Some(rest) = name.strip_suffix(".md.lock") {
+            sync_safe_id(rest) // our own write lock, cleared by whoever holds it
+        } else {
+            // Deliberately NOT the `.tmp` half of an interrupted write of ours: a
+            // file called "notes.tmp" could just as easily be the user's own, and
+            // guessing wrong here deletes something nobody can get back. A leftover
+            // temp file stops the delete and is named, like any other stranger.
+            false
+        };
+        if ours {
+            scan.ours.push(path);
+        } else {
+            scan.foreign.push(name);
+        }
+    }
+    scan
+}
+
+// Refuses a path that is not a plain, existing folder of its own. The caller
+// already only ever passes the folder the app itself is syncing to; this is the
+// second lock on the door, not the first.
+fn sync_dir_is_deletable(dir: &Path, data: &Path) -> Result<(), String> {
+    if !dir.is_absolute() || dir.parent().is_none() {
+        return Err("not a folder that can be removed".into());
+    }
+    if !dir.is_dir() {
+        return Err("the folder is no longer there".into());
+    }
+    if dir == data || data.starts_with(dir) {
+        return Err("this folder holds the app's own data".into());
+    }
+    Ok(())
+}
+
+// Returns how many files were removed, or a plain-language reason it did not
+// touch anything. Never partially deletes on a refusal: the scan decides first.
+fn sync_delete_dir(dir: &Path, data: &Path) -> Result<usize, String> {
+    sync_dir_is_deletable(dir, data)?;
+    let scan = sync_dir_scan(dir);
+    if !scan.foreign.is_empty() {
+        let shown: Vec<String> = scan.foreign.iter().take(5).cloned().collect();
+        let more = scan.foreign.len().saturating_sub(shown.len());
+        let list = shown.join(", ");
+        return Err(if more > 0 {
+            format!("{list} and {more} more")
+        } else {
+            list
+        });
+    }
+    let mut removed = 0usize;
+    for path in &scan.ours {
+        if fs::remove_file(path).is_ok() {
+            removed += 1;
+        }
+    }
+    // Only ever the one folder, and only when nothing is left in it. A failure here
+    // (something appeared in the meantime) leaves the folder standing, which is the
+    // harmless outcome.
+    let _ = fs::remove_dir(dir);
+    Ok(removed)
+}
+
+// What the window needs to phrase its question: how many of the files in the
+// current folder are ours, and whether anything else is in there.
+#[derive(Serialize)]
+struct SyncDirInfo {
+    path: String,
+    ours: usize,
+    foreign: usize,
+}
+
+#[tauri::command]
+fn sync_dir_info(app: AppHandle, state: State<Db>) -> SyncDirInfo {
+    let dir = {
+        let store = lock(&state);
+        sync_dir_path(&app, &store.settings)
+    };
+    let scan = sync_dir_scan(&dir);
+    SyncDirInfo {
+        path: dir.to_string_lossy().into_owned(),
+        // Only the prompt files: the folder's own readme and a leftover lock are
+        // ours as well, but neither is what the question is about.
+        ours: scan
+            .ours
+            .iter()
+            .filter(|p| {
+                p.extension().and_then(|e| e.to_str()) == Some("md")
+                    && p.file_name().and_then(|n| n.to_str()) != Some("AGENTS.md")
+            })
+            .count(),
+        foreign: scan.foreign.len(),
+    }
+}
+
+// Live state of the feature for the expert menu: the last round that could read the
+// folder, how many files it saw, and why it is paused if it is.
+#[derive(Serialize)]
+struct SyncStatus {
+    enabled: bool,
+    last_ok: u64,
+    files: usize,
+    paused: bool,
+    reason: String,
+}
+
+#[tauri::command]
+fn sync_status(state: State<Db>) -> SyncStatus {
+    let enabled = sync_enabled(&lock(&state).settings);
+    let h = sync_health_lock().clone();
+    SyncStatus { enabled, last_ok: h.last_ok, files: h.files, paused: h.paused, reason: h.reason }
+}
+
+// Point the sync at another folder. `delete_old` is an explicit decision the WINDOW
+// made after asking the user. A backend that deleted a folder on its own initiative
+// is exactly the kind of surprise this app does not do. The folder that may be
+// deleted is never passed in: it is the one the app itself was syncing to a moment
+// ago, read from the settings here.
+#[tauri::command]
+fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete_old: bool) -> Result<usize, String> {
+    let (old, write_failures) = {
+        let mut store = lock(&state);
+        let old = sync_dir_path(&app, &store.settings);
+        store.settings.ui_texts.insert("syncDir".into(), dir.trim().to_string());
+        save_settings(&app, &store.settings);
+        // Same synchronous, one-off treatment activation gets: when this returns, the
+        // files are in the new folder. Deliberately inside the lock, as before.
+        let failures = if sync_enabled(&store.settings) {
+            sync_write_all_impl(&app, &store.prompts, &store.settings)
+        } else {
+            0
+        };
+        (old, failures)
+    };
+    notify_float_settings(&app);
+    if !delete_old {
+        return Ok(0);
+    }
+    // The new folder is written FIRST and the old one only goes once that worked.
+    // Deleting after a failed write would take the only copy of those files with it.
+    if write_failures > 0 {
+        return Err(format!("the new folder could not be written ({write_failures} files), so nothing was deleted"));
+    }
+    let new = {
+        let store = lock(&state);
+        sync_dir_path(&app, &store.settings)
+    };
+    if old == new {
+        return Ok(0); // nothing moved, so there is no old folder to let go of
+    }
+    sync_delete_dir(&old, &data_dir(&app))
+}
+
 fn start_sync_poll(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         loop {
@@ -25807,7 +26357,11 @@ fn start_sync_poll(app: AppHandle) {
                 .try_state::<Db>()
                 .map(|s| sync_poll_secs(&lock(&s).settings))
                 .unwrap_or(SYNC_POLL_SECS);
-            tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
+            // A paused poll (an unreachable folder) keeps the same one task and only
+            // slows down: never a second timer, and never a thread that has to be
+            // stopped and started again when the feature or the interval changes.
+            let paused = sync_health_lock().paused;
+            tokio::time::sleep(std::time::Duration::from_secs(sync_wait_secs(paused, secs))).await;
             sync_poll_once(&app);
         }
     });
@@ -29403,11 +29957,346 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    // ---- The folder the files live in, and letting go of an old one ----
+
+    fn sync_tmp_dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("ps-sync-{tag}-{}", gen_id()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    // Writes a file with exactly the header md_is_ours() demands.
+    fn write_ours(dir: &Path, name: &str, text: &str) {
+        fs::write(dir.join(name), format!("---\nname: n\ncolor: \ntags: \nnotes: \n---\n{text}\n")).unwrap();
+    }
+
+    #[test]
+    fn sync_default_folder_is_named_after_the_brand_not_a_fixed_word() {
+        // Fed a different slug it must produce that slug's folder: a hard-written
+        // name would come out the same for every brand and fail right here.
+        assert_eq!(sync_dir_leaf("other-brand"), "other-brand-sync");
+        assert!(sync_dir_leaf(brand::SLUG).starts_with(brand::SLUG));
+        assert_ne!(sync_dir_leaf(brand::SLUG), SYNC_LEGACY_DIR_NAME);
+    }
+
+    // The timer lives in Rust, the number shown in the expert menu lives in JS. If
+    // they drift apart the menu claims one interval while the app runs another.
+    #[test]
+    fn sync_poll_and_fail_defaults_match_the_expert_menus_own_defaults() {
+        let js = include_str!("../../ui/main.js");
+        let js_def = |key: &str| -> f64 {
+            let at = js.find(&format!("{key}: {{ label:")).unwrap_or_else(|| panic!("{key} row missing from the expert menu"));
+            let row = &js[at..js[at..].find('\n').map(|e| at + e).unwrap_or(js.len())];
+            let d = row.find("def: ").expect("row has a default");
+            row[d + 5..]
+                .split([',', ' '])
+                .next()
+                .expect("default value")
+                .parse()
+                .expect("default is a number")
+        };
+        assert_eq!(js_def("syncPollSecs"), SYNC_POLL_SECS as f64);
+        assert_eq!(js_def("syncFailMax"), SYNC_FAIL_MAX as f64);
+    }
+
+    #[test]
+    fn sync_adopts_the_old_default_folder_once_and_only_for_an_unset_path() {
+        let legacy = sync_tmp_dir("legacy");
+        write_ours(&legacy, "p1.md", "body");
+        let mut settings = Settings::default();
+        let adopted = sync_adopt_legacy_dir(&mut settings, &legacy).expect("an existing folder with our files is adopted");
+        assert_eq!(adopted, legacy.to_string_lossy());
+        assert_eq!(settings.ui_texts.get("syncDir").map(String::as_str), Some(adopted.as_str()));
+        // Once. A later run must never point the folder somewhere the user has since
+        // moved away from.
+        settings.ui_texts.insert("syncDir".into(), "D:\\elsewhere".into());
+        assert!(sync_adopt_legacy_dir(&mut settings, &legacy).is_none());
+        assert_eq!(settings.ui_texts.get("syncDir").map(String::as_str), Some("D:\\elsewhere"));
+
+        // Somebody who already picked their own folder is left alone.
+        let mut own = Settings::default();
+        own.ui_texts.insert("syncDir".into(), "D:\\mine".into());
+        assert!(sync_adopt_legacy_dir(&mut own, &legacy).is_none());
+        assert_eq!(own.ui_texts.get("syncDir").map(String::as_str), Some("D:\\mine"));
+
+        // An empty leftover folder is not something to adopt.
+        let empty = sync_tmp_dir("legacy-empty");
+        let mut fresh = Settings::default();
+        assert!(sync_adopt_legacy_dir(&mut fresh, &empty).is_none());
+        assert_eq!(fresh.ui_texts.get("syncDir").map(String::as_str), None);
+        // A folder that is not there at all is the normal case for a new install.
+        let mut newest = Settings::default();
+        assert!(sync_adopt_legacy_dir(&mut newest, &empty.join("gone")).is_none());
+
+        let _ = fs::remove_dir_all(&legacy);
+        let _ = fs::remove_dir_all(&empty);
+    }
+
+    #[test]
+    fn sync_sweep_leaves_a_users_own_copy_of_one_of_our_files() {
+        let dir = sync_tmp_dir("sweep-copy");
+        write_ours(&dir, "p1.md", "kept, still in the library");
+        // A copy the user made by hand. It carries our header (it is a copy of our
+        // file), but its name could never be a prompt id, so it is not an orphan of
+        // ours, and deleting it would destroy a file the user put there deliberately.
+        write_ours(&dir, "p1 - Copy.md", "the user's own copy");
+        write_ours(&dir, "gone.md", "belongs to a prompt that no longer exists");
+        let wanted: std::collections::HashSet<String> = ["p1.md".to_string()].into_iter().collect();
+        sync_sweep_orphans(&dir, &wanted);
+        assert!(dir.join("p1.md").exists(), "a live prompt's file stays");
+        assert!(dir.join("p1 - Copy.md").exists(), "a name this app could never have written is never swept");
+        assert!(!dir.join("gone.md").exists(), "a real orphan of ours is still cleaned up");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sync_delete_dir_removes_only_the_files_the_app_wrote() {
+        let dir = sync_tmp_dir("del-ok");
+        write_ours(&dir, "p1.md", "one");
+        write_ours(&dir, "p2.md", "two");
+        fs::write(dir.join("AGENTS.md"), sync_agents_md()).unwrap();
+        fs::write(dir.join("p1.md.lock"), "1234").unwrap();
+        let data = sync_tmp_dir("del-ok-data");
+        assert_eq!(sync_delete_dir(&dir, &data).unwrap(), 4);
+        assert!(!dir.exists(), "an emptied folder goes with the files");
+        let _ = fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn sync_delete_dir_aborts_whole_on_one_file_the_app_did_not_write() {
+        let dir = sync_tmp_dir("del-foreign");
+        write_ours(&dir, "p1.md", "one");
+        fs::write(dir.join("my-taxes.txt"), "not yours").unwrap();
+        fs::write(dir.join("plain-note.md"), "# just a note\n").unwrap();
+        let data = sync_tmp_dir("del-foreign-data");
+        let err = sync_delete_dir(&dir, &data).expect_err("a stranger's file stops the delete");
+        assert!(err.contains("my-taxes.txt"), "the reason names what is in the way: {err}");
+        assert!(err.contains("plain-note.md"), "every unknown file is named: {err}");
+        // Nothing at all is removed on a refusal, not even our own files.
+        assert!(dir.join("p1.md").exists());
+        assert!(dir.join("my-taxes.txt").exists());
+        assert!(dir.exists());
+        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn sync_delete_dir_is_never_recursive_and_never_the_data_folder() {
+        let dir = sync_tmp_dir("del-sub");
+        write_ours(&dir, "p1.md", "one");
+        let sub = dir.join("holiday photos");
+        fs::create_dir_all(&sub).unwrap();
+        write_ours(&sub, "p9.md", "a file below, must not be reached");
+        let data = sync_tmp_dir("del-sub-data");
+        let err = sync_delete_dir(&dir, &data).expect_err("a sub-folder stops the delete");
+        assert!(err.contains("holiday photos"), "the sub-folder is named: {err}");
+        assert!(sub.join("p9.md").exists(), "nothing below the folder is ever touched");
+
+        // The folder that holds the database itself can never be the one deleted,
+        // whatever the settings claim.
+        assert!(sync_delete_dir(&data, &data).is_err());
+        assert!(data.exists());
+        let err = sync_delete_dir(&data.join("sub"), &data.join("sub").join("deeper")).unwrap_err();
+        assert!(!err.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn sync_dir_scan_counts_our_files_apart_from_everything_else() {
+        let dir = sync_tmp_dir("scan");
+        write_ours(&dir, "p1.md", "one");
+        fs::write(dir.join("AGENTS.md"), "the user rewrote this note").unwrap();
+        fs::write(dir.join("notes.md"), "no header at all").unwrap();
+        let scan = sync_dir_scan(&dir);
+        assert_eq!(scan.ours.len(), 1);
+        assert_eq!(scan.foreign.len(), 2, "an edited AGENTS.md is the user's text now");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ---- Reading the folder: settle first, then read, then leave it alone ----
+
+    #[test]
+    fn sync_scan_reads_a_file_only_once_it_has_stopped_changing() {
+        let a = SyncStamp { mtime_ns: 10, len: 100 };
+        let b = SyncStamp { mtime_ns: 20, len: 140 };
+        // Never seen: remember it, read it next round. An editor that writes straight
+        // into the file would otherwise be caught halfway through.
+        assert_eq!(sync_scan_decision(None, a), SyncScan::Settle);
+        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: false }), b), SyncScan::Settle);
+        // Unchanged since the last look: now it is whole and worth reading.
+        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: false }), a), SyncScan::Read);
+        // Already dealt with (read, or written by the app itself): no read at all.
+        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: true }), a), SyncScan::Skip);
+        assert_eq!(sync_scan_decision(Some(SyncSeen { stamp: a, handled: true }), b), SyncScan::Settle);
+    }
+
+    #[test]
+    fn sync_stamp_notices_a_rewrite_of_the_same_length() {
+        let dir = sync_tmp_dir("stamp");
+        let path = dir.join("p1.md");
+        fs::write(&path, "aaaa").unwrap();
+        let first = sync_stamp_of(&path).unwrap();
+        // Same size, different content: the modification time is what catches it.
+        std::thread::sleep(Duration::from_millis(20));
+        fs::write(&path, "bbbb").unwrap();
+        let second = sync_stamp_of(&path).unwrap();
+        assert_ne!(first, second);
+        assert!(sync_stamp_of(&dir.join("nope.md")).is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ---- An unreachable folder pauses instead of failing forever ----
+
+    #[test]
+    fn sync_pauses_after_the_set_number_of_failed_rounds_and_says_so_once() {
+        let mut h = SyncHealth::default();
+        assert!(!sync_health_note_fail(&mut h, 3, "drive not there"));
+        assert!(!sync_health_note_fail(&mut h, 3, "drive not there"));
+        assert!(h.reason.contains("drive"));
+        assert!(sync_health_note_fail(&mut h, 3, "drive not there"), "the round that reaches the limit reports once");
+        assert!(h.paused);
+        assert!(!sync_health_note_fail(&mut h, 3, "drive not there"), "and never again while it stays paused");
+        // Paused rounds come back far apart, never stop entirely.
+        assert_eq!(sync_wait_secs(true, 5), 50);
+        assert_eq!(sync_wait_secs(false, 5), 5);
+        // One good round clears everything.
+        sync_health_note_ok(&mut h, 42, 1700);
+        assert!(!h.paused);
+        assert_eq!(h.fails, 0);
+        assert_eq!(h.files, 42);
+        assert_eq!(h.last_ok, 1700);
+        assert!(h.reason.is_empty());
+    }
+
+    #[test]
+    fn sync_fail_max_clamps_the_stored_expert_value() {
+        let mut s = Settings::default();
+        assert_eq!(sync_fail_max(&s), SYNC_FAIL_MAX);
+        s.ui_values.insert("syncFailMax".into(), 0.0);
+        assert_eq!(sync_fail_max(&s), 1);
+        s.ui_values.insert("syncFailMax".into(), 9999.0);
+        assert_eq!(sync_fail_max(&s), 50);
+    }
+
+    // ---- What a hand-written file may put into the library ----
+
+    #[test]
+    fn incoming_tags_obey_the_same_rules_as_every_other_way_in() {
+        let p = sync_test_prompt();
+        let long = "x".repeat(MAX_TAG_LEN + 1);
+        let many = (0..MAX_TAGS_PER_PROMPT + 5).map(|i| format!("t{i}")).collect::<Vec<_>>().join(", ");
+        let content = format!("---\nname: n\ncolor: \ntags: ok, {long}, with\tcontrol, ok, {many}\nnotes: \n---\nbody\n");
+        let out = apply_md_to_prompt(&p, &content).expect("a bad tag never costs the file its text");
+        assert_eq!(out.text, "body", "the prompt itself still arrives");
+        assert!(out.tags.len() <= MAX_TAGS_PER_PROMPT, "never more tags than the app allows: {:?}", out.tags);
+        assert!(out.tags.iter().all(|t| t.chars().count() <= MAX_TAG_LEN), "no over-long tag: {:?}", out.tags);
+        assert!(out.tags.iter().all(|t| tag_chars_ok(t)), "no control characters: {:?}", out.tags);
+        assert_eq!(out.tags.iter().filter(|t| t.as_str() == "ok").count(), 1, "the duplicate is dropped");
+    }
+
+    #[test]
+    fn md_roundtrip_survives_umlauts_emoji_separators_and_the_rotation_marker() {
+        let mut p = sync_test_prompt();
+        p.name = "Grüße; Ümläute 🎉".into();
+        p.notes = "Semikolon; Doppelpunkt: Emoji 🙂".into();
+        p.text = "Zeile eins\n\nZeile zwei mit ; und : und 🎯\nund ein wörtliches <!-- next --> im Text".into();
+        p.variants = vec!["Zweiter Eintrag 🌍".into(), "Dritter; mit Umlaut ä".into()];
+        let content = prompt_to_md(&p, &SyncPlacement::default());
+        let back = apply_md_to_prompt(&p, &content).expect("valid frontmatter");
+        assert_eq!(back.name, p.name);
+        assert_eq!(back.notes, p.notes);
+        assert_eq!(back.text, p.text, "a literal rotation marker in the text is not a separator");
+        assert_eq!(back.variants, p.variants);
+        assert_eq!(back.variants.len(), p.variants.len(), "the number of entries is the same both ways");
+        // Byte-identical the second time round, or the folder would rewrite itself
+        // on every poll.
+        assert_eq!(prompt_to_md(&back, &SyncPlacement::default()), content);
+        assert!(content.is_char_boundary(content.len()), "written as plain UTF-8");
+
+        // A separator someone broke by hand is simply not a separator any more: the
+        // entries merge into one, and not a single character is lost.
+        let hand_edited = content.replace("<!-- next -->", "<!-- nxt -->");
+        let merged = apply_md_to_prompt(&p, &hand_edited).expect("still our file");
+        assert!(merged.variants.is_empty());
+        assert!(merged.text.contains("Zweiter Eintrag 🌍") && merged.text.contains("Dritter; mit Umlaut ä"));
+    }
+
     #[test]
     fn sync_lock_is_stale_once_the_holder_pid_is_dead() {
         // Bypasses the age check by asserting the pid-liveness half directly —
         // the age half needs real elapsed wall-clock time, not worth a sleeping test.
         assert!(pid_is_alive(std::process::id()), "this test's own process is alive");
+    }
+
+    // The poll interval and the staleness window are independent numbers. What keeps
+    // a lock held through a long write from being stolen by the next round is not the
+    // window at all, it is that the writing process is still alive.
+    #[test]
+    fn a_lock_held_by_a_living_process_never_goes_stale_however_old_it_is() {
+        let dir = sync_tmp_dir("lock-age");
+        let md = dir.join("p1.md");
+        fs::write(&md, "x").unwrap();
+        assert!(sync_lock_acquire(&md));
+        let lock_path = sync_lock_path(&md);
+        backdate(&lock_path, Duration::from_secs(SYNC_LOCK_STALE_SECS * 20));
+        assert!(!sync_lock_is_stale(&lock_path), "our own still-running write keeps its lock");
+        assert!(!sync_lock_acquire(&md), "and nobody else takes it from us");
+        // A lock whose writer is gone (no readable pid) is picked up once it is old.
+        fs::write(&lock_path, "not a pid").unwrap();
+        backdate(&lock_path, Duration::from_secs(SYNC_LOCK_STALE_SECS * 20));
+        assert!(sync_lock_is_stale(&lock_path), "an abandoned lock does not block the folder forever");
+        sync_lock_release(&md);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // A thousand entries, checked every few seconds: the round must not read the
+    // whole folder every time. Prints both numbers so a regression is visible.
+    #[test]
+    fn a_thousand_entries_cost_metadata_and_not_a_full_read_each_round() {
+        let dir = sync_tmp_dir("perf-1000");
+        let mut prompts = Vec::new();
+        for i in 0..1000 {
+            let mut p = sync_blank_prompt(format!("perf{i}"));
+            p.name = format!("Entry {i}");
+            p.text = format!("Line one of entry {i}\nLine two, a bit of text to make the file realistic.\n");
+            fs::write(dir.join(format!("{}.md", p.id)), prompt_to_md(&p, &SyncPlacement::default())).unwrap();
+            prompts.push(p);
+        }
+        // What the round used to cost: every file read and compared, every time.
+        let t0 = std::time::Instant::now();
+        let mut read = 0usize;
+        for p in &prompts {
+            let path = dir.join(format!("{}.md", p.id));
+            if let Some(c) = read_text_capped(&path, MAX_SYNC_MD_BYTES) {
+                if c != prompt_to_md(p, &SyncPlacement::default()) {
+                    panic!("written and re-read content must match");
+                }
+                read += 1;
+            }
+        }
+        let full = t0.elapsed();
+        // What it costs now once everything has settled: one stat per file.
+        let mut seen: SyncSeenMap = HashMap::new();
+        for p in &prompts {
+            let path = dir.join(format!("{}.md", p.id));
+            seen.insert(sync_seen_key(&path), SyncSeen { stamp: sync_stamp_of(&path).unwrap(), handled: true });
+        }
+        let t1 = std::time::Instant::now();
+        let mut skipped = 0usize;
+        for entry in fs::read_dir(&dir).unwrap().flatten() {
+            let path = entry.path();
+            let Some(stamp) = sync_stamp_of(&path) else { continue };
+            if sync_scan_decision(seen.get(&sync_seen_key(&path)).copied(), stamp) == SyncScan::Skip {
+                skipped += 1;
+            }
+        }
+        let stamped = t1.elapsed();
+        println!("sync round over {read} entries: full read {full:?}, unchanged-check {stamped:?}, skipped {skipped}");
+        assert_eq!(read, 1000);
+        assert_eq!(skipped, 1000, "an unchanged folder is skipped file by file, not re-read");
+        assert!(stamped < full, "the settled round must be the cheaper one: {stamped:?} vs {full:?}");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     // Every identifier a rebrand may NOT quietly change. These literals are a

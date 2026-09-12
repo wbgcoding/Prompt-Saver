@@ -3494,6 +3494,9 @@ select,
 .path-video-stats { display: flex; gap: 8px; margin-top: 6px; align-items: center; justify-content: space-between; }
 .path-video-stats span { font-size: 12px; color: var(--muted); }
 .path-video-stats button { flex: 0 0 auto; }
+/* Same quiet line under the sync folder row: when it was last read, how many files. */
+.path-sync-stats { margin-top: 6px; }
+.path-sync-stats span { font-size: 12px; color: var(--muted); }
 .expert-num { width: 90px; margin-top: 6px; }
 
 /* Header icons hidden when their feature flag is off */

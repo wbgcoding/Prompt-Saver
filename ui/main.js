@@ -1648,7 +1648,9 @@ const EXPERT_VALUES = {
   // approximation either way.
   trayLabelMax: { label: "valTrayLabelMax", min: 20, max: 80, step: 5, def: 40, unit: "", gate: "trayRecent" },
   // How often the Markdown-sync folder is re-scanned for outside edits.
-  syncPollSecs: { label: "valSyncPollSecs", min: 2, max: 30, step: 1, def: 4, unit: "s", gate: "promptSync" },
+  syncPollSecs: { label: "valSyncPollSecs", min: 2, max: 30, step: 1, def: 5, unit: "s", gate: "promptSync" },
+  // Failed rounds in a row (an unreachable folder) before the sync pauses itself.
+  syncFailMax: { label: "valSyncFailMax", min: 1, max: 50, step: 1, def: 5, unit: "", gate: "promptSync" },
   // Code text size inside the Markdown preview.
   hlFontPx: { label: "valHlFontPx", min: 10, max: 18, step: 1, def: 13, unit: "px", gate: "codeHighlight" },
   // Markdown preview + syntax-highlight size caps, past which they fall back to plain text.
@@ -1936,7 +1938,7 @@ const EXPERT_TABS = [
     // The watcher that collects what you copy elsewhere.
     { title: "expGroupClipboard", flags: ["clipWatcher", { key: "clipSkipSecrets", gate: "clipWatcher" }], values: ["clipMinChars", "clipInboxMax", "clipSecretMinLen"] },
     // Prompt folders as Markdown (beta): mirrors text-only prompts as .md files.
-    { title: "expGroupSync", flags: ["promptSync"], values: ["syncPollSecs"], paths: ["syncDir"] },
+    { title: "expGroupSync", flags: ["promptSync"], values: ["syncPollSecs", "syncFailMax"], paths: ["syncDir"] },
     // Auto-advancing through a rotation -- not a capture tool, stays in tab 1.
     { title: "expGroupRotation", flags: ["rotatingPrompts", { key: "rotateBadge", gate: "rotatingPrompts" }, { key: "rotateAuto", gate: "rotatingPrompts" }], values: ["rotateMaxEntries", "rotateTipLen", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax"], dropdowns: ["rotateDefaultMode"] },
     // Voice dictation -- not a capture tool either (it puts text into the composer,
@@ -2191,7 +2193,7 @@ const EXPERT_TIPS = [
   // Tools / data
   "dupFinder", "clipWatcher", "backupGfs", "backupBeforeReset", "backupBeforeDelete", "disarmMs",
   "recSweepBroken", "recBrokenGraceMin", "recSweepEveryMin", "videoClipTtlMin",
-  "usageStats", "promptSync", "syncDir", "syncPollSecs", "clipSkipSecrets",
+  "usageStats", "promptSync", "syncDir", "syncPollSecs", "syncFailMax", "clipSkipSecrets",
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "kbFocusFadeMs", "snipPreviewVh",
   "historyPerPrompt", "dupThreshold", "clipMinChars", "clipInboxMax", "clipSecretMinLen", "historyMax",
@@ -2693,20 +2695,16 @@ const EXPERT_PATHS = {
   syncDir: {
     label: "valSyncDir",
     gate: "promptSync",
+    syncStats: true,
     def: () => defaultSyncDir,
     get: () => settings.ui_texts?.syncDir || defaultSyncDir,
     change: async () => {
       const dir = await invoke("pick_folder").catch(() => null);
       if (!dir) return;
-      settings.ui_texts = { ...(settings.ui_texts || {}), syncDir: dir };
-      invoke("set_ui_text", { key: "syncDir", value: dir }).catch((e) => errToast(e));
-      renderExpert();
+      await applySyncDir(dir);
     },
-    onReset: () => {
-      settings.ui_texts = { ...(settings.ui_texts || {}), syncDir: "" };
-      invoke("set_ui_text", { key: "syncDir", value: "" }).catch((e) => errToast(e));
-      renderExpert();
-    },
+    // Back to the default folder is a folder change like any other, same question.
+    onReset: () => { applySyncDir(""); },
   },
   // Target for the recording result window's plain "Save"/"Copy" -- the
   // raw capture itself always stays in <data>/recordings until one of those
@@ -2766,6 +2764,71 @@ function refreshVideoFolderInfo(dir) {
     .catch(() => { videoFolderInfo = { count: 0, bytes: 0 }; renderExpert(); });
 }
 
+// Switching the Markdown-sync folder. The files in the old folder stay where they
+// are unless the user says otherwise, so the question comes first and its answer
+// rides along as an explicit instruction -- the backend never decides to delete a
+// folder by itself, and it only ever removes files this app wrote (a stranger's
+// file in there stops the whole delete and is reported instead).
+async function applySyncDir(dir) {
+  const next = dir || "";
+  if ((settings.ui_texts?.syncDir || "") === next) return;
+  const info = await invoke("sync_dir_info").catch(() => null);
+  let deleteOld = false;
+  if (info && info.ours > 0) {
+    const answer = await confirmDialog({
+      title: t("syncOldDirTitle"),
+      message: t("syncOldDirMsg").replace("{path}", info.path).replace("{n}", info.ours),
+      confirmLabel: t("syncOldDirDelete"),
+      altLabel: t("syncOldDirKeep"),
+      cancelLabel: t("cancel"),
+    });
+    if (answer === false) return; // cancelled: the folder is not switched at all
+    deleteOld = answer === true;
+  }
+  settings.ui_texts = { ...(settings.ui_texts || {}), syncDir: next };
+  renderExpert();
+  try {
+    await invoke("set_sync_dir", { dir: next, deleteOld });
+  } catch (e) {
+    // The switch itself went through; only the delete refused. Name what is left
+    // in the old folder and why nothing there was touched.
+    await infoDialog(
+      t("syncOldDirTitle"),
+      t("syncOldDirKept").replace("{path}", info?.path || "").replace("{what}", String(e)),
+    );
+  }
+  refreshSyncStatus(true);
+}
+
+// Live state of the Markdown sync, shown under its folder row: when the folder was
+// last read, how many files were in it, and why it is paused if it is. Fetched once
+// per expert-menu render at most -- a second render while the answer is still on its
+// way must not start a second round trip.
+let syncStatus = null;
+let syncStatusPending = false;
+// Asked-at-all, not answered: a command that fails (or answers with nothing) must
+// leave the row saying so, never start the next request from the redraw its own
+// answer triggers. That would be an endless render loop, not a retry.
+let syncStatusAsked = false;
+function refreshSyncStatus(force) {
+  if (syncStatusPending || (syncStatusAsked && !force)) return;
+  syncStatusPending = true;
+  syncStatusAsked = true;
+  invoke("sync_status")
+    .then((s) => { syncStatus = s || null; })
+    .catch(() => { syncStatus = null; })
+    .finally(() => { syncStatusPending = false; renderExpert(); });
+}
+
+// "just now" / "3 min ago" / a plain time for anything older, from a unix second.
+function syncAgoText(unixSecs) {
+  if (!unixSecs) return t("syncStatsNever");
+  const mins = Math.max(0, Math.round((Date.now() / 1000 - unixSecs) / 60));
+  if (mins < 1) return t("syncStatsJustNow");
+  if (mins < 60) return t("syncStatsMinsAgo").replace("{n}", mins);
+  return new Date(unixSecs * 1000).toLocaleTimeString();
+}
+
 function pathRow(key) {
   const cfg = EXPERT_PATHS[key];
   const row = document.createElement("div");
@@ -2807,6 +2870,24 @@ function pathRow(key) {
     cleanBtn.disabled = !videoFolderInfo || videoFolderInfo.count === 0;
     cleanBtn.addEventListener("click", () => openVideoCleanup(dir));
     info.append(text, cleanBtn);
+    row.appendChild(info);
+  }
+  if (cfg.syncStats) {
+    refreshSyncStatus();
+    const info = document.createElement("div");
+    info.className = "path-sync-stats";
+    info.setAttribute("role", "status");
+    const line = document.createElement("span");
+    if (!syncStatus) {
+      line.textContent = t("syncStatsLoading");
+    } else if (syncStatus.paused) {
+      line.textContent = t("syncStatsPaused").replace("{why}", syncStatus.reason || t("syncStatsNoFolder"));
+    } else {
+      line.textContent = t("syncStatsLine")
+        .replace("{when}", syncAgoText(syncStatus.last_ok))
+        .replace("{n}", syncStatus.files);
+    }
+    info.appendChild(line);
     row.appendChild(info);
   }
   return withTip(row, key);
@@ -9873,7 +9954,11 @@ let confirmCleanup = null;
 // least one to stay checked (the confirm button would otherwise offer nothing
 // to actually do) -- pass `checkboxesOptional: true` for a plain standalone
 // toggle (e.g. "don't show this again") that must never block either button.
-function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input, checkboxes, checkboxesOptional = false, danger = true, oneButton = false }) {
+// `altLabel` adds a third choice between Cancel and the confirm button and
+// resolves to the string "alt": a question with two different ways to go ahead
+// (delete the old sync folder, keep it) plus the way out. Left out, the dialog is
+// exactly the two-button one every other caller gets.
+function confirmDialog({ title, message, confirmLabel, cancelLabel, altLabel, icon, input, checkboxes, checkboxesOptional = false, danger = true, oneButton = false }) {
   // Restored once this dialog resolves, so a keyboard user's next Tab
   // continues from where they were instead of restarting from the page top.
   const opener = document.activeElement;
@@ -9892,7 +9977,10 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input,
   // Part of THIS call's own render, not a side effect toggled by the caller
   // around await confirmDialog(...) — a second, unrelated dialog opening while
   // this one is still pending must never flip the wrong dialog's cancel button.
+  const alt = $("confirm-alt");
   cancel.classList.toggle("hidden", oneButton);
+  alt.classList.toggle("hidden", !altLabel);
+  alt.textContent = altLabel || "";
   ok.classList.toggle("danger-confirm", danger);
   ok.textContent = confirmLabel;
   cancel.textContent = cancelLabel || t("cancel");
@@ -9944,6 +10032,7 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input,
       ok.disabled = false;
       ok.removeEventListener("click", onOk);
       cancel.removeEventListener("click", onCancel);
+      alt.removeEventListener("click", onAlt);
       root.removeEventListener("pointerdown", onBg);
       field.removeEventListener("keydown", onKey);
       eye.removeEventListener("click", onEye);
@@ -9954,11 +10043,14 @@ function confirmDialog({ title, message, confirmLabel, cancelLabel, icon, input,
     const finish = (okPressed) => done(input ? (okPressed ? field.value : null) : okPressed);
     const onOk = () => finish(true);
     const onCancel = () => finish(false);
+    // The third choice is its own answer, never true and never the cancel answer.
+    const onAlt = () => done("alt");
     const onBg = (e) => { if (e.target === root) finish(false); };
     const onKey = (e) => { if (e.key === "Enter" && !ok.disabled) { e.preventDefault(); finish(true); } };
     const onEye = () => { field.type = field.type === "password" ? "text" : "password"; };
     ok.addEventListener("click", onOk);
     cancel.addEventListener("click", onCancel);
+    alt.addEventListener("click", onAlt);
     root.addEventListener("pointerdown", onBg);
     field.addEventListener("keydown", onKey);
     eye.addEventListener("click", onEye);

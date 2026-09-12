@@ -2025,6 +2025,120 @@ PROBE = """
       document.getElementById('settings').classList.add('hidden');
       return !!row;
     };
+    // Changing the Markdown-sync folder must ASK what happens to the old one, with
+    // three real choices, and hand the answer to the backend as an explicit
+    // instruction. Cancel must leave the folder exactly where it was.
+    try {
+      const openExpert = async () => {
+        document.getElementById('settings').classList.remove('hidden');
+        await click('expert-open');
+      };
+      const closeExpert = async () => {
+        const tab0 = document.querySelector('#expert-tabs-bar .expert-tab');
+        if (tab0) { tab0.click(); await sleep(150); }
+        await click('expert-back');
+        document.getElementById('settings').classList.add('hidden');
+      };
+      const syncPathRow = async () => {
+        const hit = () => [...document.querySelectorAll('#expert-flags .path-field')]
+          .find(r => ((r.querySelector('span') || {}).textContent || '').includes('Sync folder'));
+        if (hit()) return hit();
+        for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+          tb.click();
+          await sleep(200);
+          if (hit()) return hit();
+        }
+        return null;
+      };
+      // The switch warns about plain text first; accept it, that is not this test.
+      await openExpert();
+      const syncSwitch = await expertRow('Sync prompts as Markdown');
+      if (!syncSwitch) {
+        out.errors.push('the Markdown-sync switch is missing from the expert menu');
+      } else {
+        const sw = syncSwitch.querySelector('input.switch');
+        if (!sw.checked) {
+          sw.click();
+          await sleep(200);
+          const warn = document.getElementById('confirm-modal');
+          if (!warn.classList.contains('hidden')) { await click('confirm-ok'); await sleep(250); }
+        }
+        const row = await syncPathRow();
+        if (!row) {
+          out.errors.push('the sync folder row does not appear once Markdown sync is on');
+        } else {
+          if (!row.querySelector('.path-sync-stats')) {
+            out.errors.push('the sync folder row shows no status line');
+          }
+          // The picker is stubbed, so each round can name its own target folder;
+          // the row is looked up again every time because the menu redraws itself
+          // after a change.
+          const askFor = async (folder) => {
+            window.__PICK_FOLDER__ = folder;
+            const fresh = await syncPathRow();
+            const btn = fresh && fresh.querySelector('.path-btns button');
+            if (!btn) return null;
+            btn.click();
+            await sleep(300);
+            return document.getElementById('confirm-modal');
+          };
+          const answer = async (folder, buttonId) => {
+            window.__SYNC_DIR_CALL__ = null;
+            const cm = await askFor(folder);
+            if (!cm) {
+              out.errors.push('the sync folder row lost its change button');
+              return null;
+            }
+            if (cm.classList.contains('hidden')) {
+              out.errors.push('changing the sync folder did not ask about the old folder');
+              return null;
+            }
+            const alt = document.getElementById('confirm-alt');
+            const cancel = document.getElementById('confirm-cancel');
+            const ok = document.getElementById('confirm-ok');
+            for (const b of [alt, cancel, ok]) {
+              if (b.classList.contains('hidden') || !b.textContent.trim()) {
+                out.errors.push('the old-folder question is missing one of its three buttons: ' + b.id);
+              }
+            }
+            if (!cm.textContent.includes('3')) {
+              out.errors.push('the old-folder question does not say how many files are in there');
+            }
+            await click(buttonId);
+            await sleep(300);
+            return window.__SYNC_DIR_CALL__;
+          };
+          const deleted = await answer('D:/SyncA', 'confirm-ok');
+          if (!deleted || deleted.dir !== 'D:/SyncA' || deleted.deleteOld !== true) {
+            out.errors.push('choosing to delete the old folder did not reach the backend as such: ' + JSON.stringify(deleted));
+          }
+          const kept = await answer('D:/SyncB', 'confirm-alt');
+          if (!kept || kept.dir !== 'D:/SyncB' || kept.deleteOld !== false) {
+            out.errors.push('choosing to keep the old folder did not reach the backend as such: ' + JSON.stringify(kept));
+          }
+          const cancelled = await answer('D:/SyncC', 'confirm-cancel');
+          if (cancelled) {
+            out.errors.push('cancelling the old-folder question still switched the folder: ' + JSON.stringify(cancelled));
+          }
+          const shown = ((await syncPathRow()).querySelector('.path-out') || {}).textContent || '';
+          if (!shown.includes('SyncB')) {
+            out.errors.push('after cancelling, the folder shown is not the last one actually chosen: ' + shown);
+          }
+        }
+        // Back to the shipped default for everything after this.
+        const off = await expertRow('Sync prompts as Markdown');
+        const offSw = off && off.querySelector('input.switch');
+        if (offSw && offSw.checked) { offSw.click(); await sleep(200); }
+        window.__PICK_FOLDER__ = null;
+      }
+      await closeExpert();
+    } catch (e) {
+      // Whatever went wrong here, the rest of the run must still find the app in
+      // the state it expects: no dialog on screen, settings closed.
+      out.errors.push('the sync folder walk broke off: ' + (e && (e.stack || e.message) || e));
+      document.getElementById('confirm-modal').classList.add('hidden');
+      document.getElementById('settings').classList.add('hidden');
+    }
     // 11: grid bulk selection — checkbox click must never fall through to the
     // tile's own copy/drag handling (same .tile-select guard as .tile-menu).
     {
@@ -8970,10 +9084,12 @@ def main():
                  # click/hold/wheel/preset/disabled-state round trip, then to
                  # 151s once the media-viewer zoom check added its own
                  # prompt-editor-to-lightbox round trip, then to 154s once the
-                 # editor-scale check added its own draw/resize/undo round trip.
+                 # editor-scale check added its own draw/resize/undo round trip,
+                 # then to 172s once the sync-folder check added three full
+                 # question-and-answer rounds, each with its own tab walk.
                  # The window has to hold the iframe plus Chrome's own frame.
                  f"--window-size={max(w + 30, 520)},{h + 140}",
-                 "--virtual-time-budget=154000", "--dump-dom",
+                 "--virtual-time-budget=172000", "--dump-dom",
                  wrapper.as_uri()],
                 # The dumped DOM carries all 20 languages; without an explicit
                 # codec Windows decodes it as cp1252 and the reader thread dies,

@@ -498,6 +498,33 @@ screenshot pasted straight into a tile has no path and stays in the database onl
 The expert menu controls how often the sync folder is re-checked for files
 edited outside the app.
 
+The folder is `<data folder>\prompt-saver-sync` unless you pick another one; an
+installation that was already syncing keeps the folder it has. A file is read
+once it has stopped changing, so an edit made outside can take one extra round
+to arrive. What happens in either direction is fixed and never silent:
+
+- **A file deleted in the folder does not delete the tile.** It is written again
+  from the app on the next round. Delete the tile in the app and its file goes
+  with it.
+- **Renaming a file makes a second tile.** The file name is the tile's permanent
+  id, so the renamed file arrives as a new tile and the original is written back
+  out under its own name. Rename in the app instead.
+- **A tile and its file changed at the same time?** The file wins that round, and
+  the version it replaced is kept in that tile's version history. The other way
+  round the app wins the file, and what was in the file is kept next to it as
+  `<id>.conflict-<number>.md`.
+- **Files this app did not write are never touched** in either direction, and a
+  file past 8 MB is skipped whole, never cut short. The error log says why.
+- **Picking a different folder asks** what should happen to the old one: delete
+  it, or keep it. Deleting only ever removes the `.md` files this app wrote
+  itself, never a sub-folder, and the folder itself only if it ends up empty. One
+  file in there that the app did not write and nothing at all is deleted, with a
+  message naming what is in the way.
+- **An unreachable folder pauses the sync** instead of failing every few seconds
+  (after five failed rounds, adjustable). The line under the folder in the expert
+  menu says when the folder was last read, how many files were in it, and why it
+  is paused.
+
 ### The expert menu
 
 Every optional feature lives behind an on/off switch, with its own parameters
@@ -804,6 +831,35 @@ wird automatisch angelegt, per Namensabgleich. **Die Dateien sind Klartext** —
 anders als die Datenbank, also kein synchronisierter oder geteilter Ordner für
 Sensibles. Im Expertenmenü lässt sich einstellen, wie oft der Sync-Ordner auf
 außerhalb der App bearbeitete Dateien geprüft wird.
+
+Der Ordner ist `<Datenordner>\prompt-saver-sync`, solange kein eigener gewählt
+ist; wer schon synchronisiert, behält seinen bisherigen Ordner. Eine Datei wird
+erst gelesen, wenn sie sich nicht mehr ändert, eine Änderung von außen kann also
+einen Durchlauf länger brauchen. Was in welche Richtung passiert, steht fest und
+geschieht nie stillschweigend:
+
+- **Eine im Ordner gelöschte Datei löscht die Kachel nicht.** Sie wird im
+  nächsten Durchlauf neu geschrieben. Wer die Kachel in der App löscht, löscht
+  auch die Datei.
+- **Umbenennen erzeugt eine zweite Kachel.** Der Dateiname ist die feste Kennung
+  der Kachel; die umbenannte Datei kommt als neue Kachel an, das Original wird
+  unter seinem eigenen Namen neu geschrieben. Also in der App umbenennen.
+- **Kachel und Datei gleichzeitig geändert?** In diesem Durchlauf gewinnt die
+  Datei, und die ersetzte Fassung landet in der Versionsgeschichte der Kachel.
+  Umgekehrt gewinnt die App die Datei, und der Dateiinhalt bleibt daneben als
+  `<Kennung>.conflict-<Zahl>.md` liegen.
+- **Dateien, die diese App nicht geschrieben hat, werden nie angefasst**, in
+  keiner Richtung, und eine Datei über 8 MB wird ganz übersprungen, nie
+  abgeschnitten. Das Fehlerprotokoll sagt warum.
+- **Ein Ordnerwechsel fragt nach**, was mit dem alten Ordner geschehen soll:
+  löschen oder behalten. Gelöscht werden nur die `.md`-Dateien, die diese App
+  selbst geschrieben hat, nie ein Unterordner, und der Ordner selbst nur, wenn er
+  danach leer ist. Liegt eine fremde Datei darin, wird gar nichts gelöscht und
+  eine Meldung nennt, was im Weg liegt.
+- **Ein nicht erreichbarer Ordner pausiert die Synchronisierung**, statt alle
+  paar Sekunden zu scheitern (nach fünf Fehlversuchen, einstellbar). Die Zeile
+  unter dem Ordner im Expertenmenü nennt den letzten gelesenen Stand, die Zahl
+  der Dateien und den Grund der Pause.
 
 **Das Experten-Menü** — jede Funktion hat einen Schalter mit ihren Parametern
 direkt darunter. Die Suche durchsucht alle Tabs auf einmal; ausgeschaltete
