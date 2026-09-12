@@ -19357,6 +19357,10 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
             abort(&app, &state);
             return Err(format!("sync-write-failed: {failed}"));
         }
+        // The poll loop ends itself the moment it next finds the feature off, so
+        // switching it back on needs a fresh one - the claim inside start_sync_poll
+        // makes this safe even if one somehow were still winding down.
+        start_sync_poll(app.clone());
     }
     // Capture exclusion applies live to every open window. Never hold the store
     // lock across window API calls (deadlock risk). The flag says "allow
@@ -24144,9 +24148,10 @@ pub fn run() {
                 }
             }
 
-            // Prompt-folders-as-Markdown: harmless to start unconditionally — the
-            // poll itself checks the opt-in flag on every tick and is a no-op until
-            // it is switched on.
+            // Prompt-folders-as-Markdown: harmless to call unconditionally at setup —
+            // if the feature is off this loop checks once and ends itself immediately
+            // rather than ticking forever for nothing. set_ui_flag starts a fresh one
+            // when the feature is switched back on.
             start_sync_poll(handle.clone());
 
             // One shared poll instead of every window running its own -
@@ -26347,19 +26352,49 @@ fn set_sync_dir(app: AppHandle, state: State<Db>, dir: String, delete_old: bool)
     sync_delete_dir(&old, &data_dir(&app))
 }
 
+// Guards start_sync_poll against a second loop: the feature can be switched on
+// again before the previous loop has noticed it was switched off (or the setup
+// call and an immediate activation race), and either way only one timer may
+// ever be ticking at once.
+static SYNC_POLL_RUNNING: AtomicBool = AtomicBool::new(false);
+
+// Claims the single poll slot. False means a loop already holds it and this
+// caller must not start a second one.
+fn sync_poll_try_claim() -> bool {
+    !SYNC_POLL_RUNNING.swap(true, Ordering::SeqCst)
+}
+
+fn sync_poll_release() {
+    SYNC_POLL_RUNNING.store(false, Ordering::SeqCst);
+}
+
 fn start_sync_poll(app: AppHandle) {
+    if !sync_poll_try_claim() {
+        return; // already running - set_ui_flag calls this again on every activation
+    }
     tauri::async_runtime::spawn(async move {
         loop {
+            let Some(state) = app.try_state::<Db>() else {
+                sync_poll_release();
+                return;
+            };
             // Read fresh each round (not once at spawn time) so a changed
             // syncPollSecs expert value takes effect on the very next wait,
             // no scheduler restart needed.
-            let secs = app
-                .try_state::<Db>()
-                .map(|s| sync_poll_secs(&lock(&s).settings))
-                .unwrap_or(SYNC_POLL_SECS);
+            let (enabled, secs) = {
+                let s = lock(&state);
+                (sync_enabled(&s.settings), sync_poll_secs(&s.settings))
+            };
+            // The feature is off: end the task instead of waking up forever for
+            // nothing. Whoever switches it back on (set_ui_flag) starts a fresh
+            // loop, guarded by the claim above against ever running two at once.
+            if !enabled {
+                sync_poll_release();
+                return;
+            }
             // A paused poll (an unreachable folder) keeps the same one task and only
             // slows down: never a second timer, and never a thread that has to be
-            // stopped and started again when the feature or the interval changes.
+            // stopped and started again when the interval changes.
             let paused = sync_health_lock().paused;
             tokio::time::sleep(std::time::Duration::from_secs(sync_wait_secs(paused, secs))).await;
             sync_poll_once(&app);
@@ -30144,6 +30179,20 @@ mod tests {
         assert_ne!(first, second);
         assert!(sync_stamp_of(&dir.join("nope.md")).is_none());
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ---- One poll loop at a time, and none at all once the feature is off ----
+
+    #[test]
+    fn sync_poll_claim_lets_only_one_loop_hold_the_slot_at_once() {
+        // A stray claim left by another test in this binary would make this one
+        // flaky, so start from a known-released state regardless of history.
+        sync_poll_release();
+        assert!(sync_poll_try_claim(), "the first caller gets the slot");
+        assert!(!sync_poll_try_claim(), "a second caller must not start a second timer");
+        sync_poll_release();
+        assert!(sync_poll_try_claim(), "released, the next caller can claim it again");
+        sync_poll_release();
     }
 
     // ---- An unreachable folder pauses instead of failing forever ----
