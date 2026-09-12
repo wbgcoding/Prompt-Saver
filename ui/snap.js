@@ -1,8 +1,9 @@
 // Shared drag-snap helper for the screenshot editor and the video editor.
 // The screenshot editor used to snap only to the four canvas edges and its
 // centre; the video editor did not snap at all. Rather than write the video
-// editor its own copy (and let the two drift apart the way point 383 found
-// them already had for other things), both call this one pure function.
+// editor its own copy (and let the two drift apart the way earlier duplicated
+// logic between the two editors already had for other things), both call
+// this one pure function.
 //
 // `rect` is the shape currently being moved: {x, y, w, h} in whatever
 // coordinate space the caller uses (image pixels for the screenshot editor,
