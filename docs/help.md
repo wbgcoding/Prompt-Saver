@@ -196,6 +196,16 @@ toolbars stay where they are too, a bar on top for the screenshot editor and
 a side column next to the timeline for the video editor, because the
 timeline needs the room the screenshot editor doesn't.
 
+Right-clicking a shape (screenshot editor) or an overlay's row (video editor)
+opens a small menu to duplicate or delete it. A duplicate keeps the same
+values and time range and is offset a little so it sits next to the
+original instead of exactly on top of it — how far, in an expert setting
+shared by both editors. In the video editor, the colour, thickness, opacity
+and font size a new overlay starts with also follow whatever was last used
+for that same kind (image, frame, text, pixelation or spotlight), across
+restarts too; an expert switch turns that off again in favour of the fixed
+starting values.
+
 ### Text recognition (OCR)
 
 On by default. A button on the composer and in the screenshot dialog pulls the
@@ -674,6 +684,16 @@ sie schon ausgewählt ist; die Werkzeugleisten selbst bleiben ebenfalls an
 ihrem Platz, oben beim Screenshot-Editor, seitlich neben der Zeitleiste beim
 Video-Editor, weil die Zeitleiste den Platz braucht, den der
 Screenshot-Editor nicht hat.
+
+Ein Rechtsklick auf eine Form (Screenshot-Editor) oder die Zeile einer
+Überlagerung (Video-Editor) öffnet ein kleines Menü zum Duplizieren oder
+Löschen. Ein Duplikat behält Werte und Zeitbereich und wird ein Stück
+verschoben, damit es neben dem Original liegt statt genau darauf — wie weit,
+in einer Expertenzeile, die sich beide Editoren teilen. Im Video-Editor
+richten sich Farbe, Stärke, Deckkraft und Schriftgröße einer neuen
+Überlagerung außerdem nach dem, was für dieselbe Art (Bild, Rahmen, Text,
+Verpixeln oder Spotlight) zuletzt benutzt wurde, auch über einen Neustart
+hinweg; ein Expertenschalter stellt stattdessen wieder feste Vorgabewerte ein.
 
 **Texterkennung (OCR)** — standardmäßig an; liest per Knopf in der Leiste und
 im Screenshot-Dialog Text aus einem Screenshot oder einer Bilddatei, komplett

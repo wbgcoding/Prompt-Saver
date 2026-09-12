@@ -8440,6 +8440,90 @@ VIDEO_PROBE = """
       }
     }
 
+    // ---- 392: duplicate an overlay from its row context menu; undo removes
+    // only the duplicate, nothing else in the list ----
+    {
+      const rowsDup = [...document.querySelectorAll('#ve-ov-list .ve-ov-row')];
+      const pixelRowDup = rowsDup.find((r) => r.textContent.startsWith('Pixelate'));
+      if (!pixelRowDup) {
+        errs.push('392: could not find the pixelate overlay row to duplicate');
+      } else {
+        const beforeCount = rowsDup.length;
+        const box = pixelRowDup.getBoundingClientRect();
+        pixelRowDup.dispatchEvent(new MouseEvent('contextmenu', {
+          bubbles: true, clientX: box.left + 4, clientY: box.top + 4,
+        }));
+        await sleep(30);
+        const ctxMenu = document.querySelector('.ctx');
+        const ctxBtns = ctxMenu ? [...ctxMenu.querySelectorAll('button')] : [];
+        if (!ctxMenu || ctxMenu.classList.contains('hidden') || ctxBtns.length !== 2) {
+          errs.push('392: right-clicking an overlay row did not open a two-action context menu');
+        } else {
+          ctxBtns[0].click();
+          await sleep(30);
+          const afterCount = document.querySelectorAll('#ve-ov-list .ve-ov-row').length;
+          if (afterCount !== beforeCount + 1) {
+            errs.push('392: duplicating an overlay produced ' + afterCount + ' rows, expected ' + (beforeCount + 1));
+          }
+          if (document.activeElement) document.activeElement.blur();
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+          await sleep(30);
+          const undoCount = document.querySelectorAll('#ve-ov-list .ve-ov-row').length;
+          if (undoCount !== beforeCount) {
+            errs.push('392: undo after duplicating left ' + undoCount + ' row(s), expected exactly ' + beforeCount +
+              ' (undo must remove only the duplicate)');
+          }
+        }
+      }
+    }
+
+    // ---- 392: the last colour picked for a text overlay is remembered as the
+    // starting colour for the next text overlay, and veOvRemember off falls
+    // back to the fixed default again ----
+    {
+      const rowsRem = [...document.querySelectorAll('#ve-ov-list .ve-ov-row')];
+      const textRowRem = rowsRem.find((r) => r.textContent.startsWith('Text'));
+      if (!textRowRem) {
+        errs.push('392: could not find the text overlay row to test the remembered colour');
+      } else {
+        textRowRem.click();
+        await sleep(30);
+        const pick = document.querySelector('#ve-ov-editor .swatch[title="#ef4444"]');
+        if (!pick) {
+          errs.push('392: no red swatch to pick for the remembered-colour check');
+        } else {
+          pick.click();
+          await sleep(30);
+          const afterPick = await window.__TAURI__.core.invoke('get_settings');
+          if ((afterPick.ui_texts || {}).veOvLastTextColor !== '#ef4444') {
+            errs.push('392: picking a text overlay colour did not remember it as veOvLastTextColor');
+          }
+          // The new overlay is already selected by addOverlay() itself -- clicking
+          // its row again would TOGGLE the selection back off (ve-ov-row's own
+          // click handler flips VE.selOv when it already matches).
+          document.getElementById('ve-ov-add-text').click();
+          await sleep(30);
+          const selSwatch = document.querySelector('#ve-ov-editor .swatch.sel');
+          if (!selSwatch || selSwatch.title !== '#ef4444') {
+            errs.push('392: a new text overlay did not start with the remembered colour, got ' +
+              (selSwatch && selSwatch.title));
+          }
+          await window.__TAURI__.core.invoke('set_ui_flag', { key: 'veOvRemember', enabled: false });
+          window.__FIRE__('settings-changed');
+          await sleep(50);
+          document.getElementById('ve-ov-add-text').click();
+          await sleep(30);
+          const selSwatchOff = document.querySelector('#ve-ov-editor .swatch.sel');
+          if (selSwatchOff && selSwatchOff.title === '#ef4444') {
+            errs.push('392: veOvRemember off still started a new text overlay from the remembered colour');
+          }
+          await window.__TAURI__.core.invoke('set_ui_flag', { key: 'veOvRemember', enabled: true });
+          window.__FIRE__('settings-changed');
+          await sleep(30);
+        }
+      }
+    }
+
     document.getElementById('ve-tab-export').click();
     await sleep(80);
     if (document.getElementById('ve-panel-export').classList.contains('hidden')) {

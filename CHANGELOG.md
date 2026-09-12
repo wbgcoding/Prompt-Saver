@@ -277,6 +277,14 @@ the video editor and the introduction tour ship on).
   sort order, or a setting in the backup manager. A match appears in its own
   section with a small badge saying where it lives; clicking it opens the
   right place and briefly highlights the row.
+- **Duplicate a shape or overlay** — right-click a rectangle, ellipse, line,
+  arrow, spotlight or pixelation in the screenshot editor, or an overlay's row
+  in the video editor, for a menu to duplicate or delete it. A duplicate keeps
+  the same values and time range and is offset slightly so it is easy to spot
+  next to the original; the offset is adjustable. The video editor also
+  remembers the last colour, thickness, opacity and font size used for each
+  overlay kind and starts the next one of that kind from it, across restarts
+  too, with an expert switch to turn that off again.
 
 ### Improved
 

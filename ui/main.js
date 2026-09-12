@@ -1266,6 +1266,10 @@ const FLAG_LABELS = {
   // result modal and from any video prompt's context menu. Ships ON, like the
   // rest of the media-editing features (snipEditor, ocr, voice).
   videoEditor: "flagVideoEditor",
+  // Keeps the last colour/thickness/opacity/font size used per overlay kind as the
+  // starting point for the next one of that kind, saved across sessions. Off falls
+  // back to the fixed defaults (veOvColor, veOvFont, veOvPixelateBlock, ...).
+  veOvRemember: "flagVeOvRemember",
   // Only matters once clipWatcher (itself off by default) is on -- ships ON so a
   // guessed password never has to be manually turned away in the first place.
   clipSkipSecrets: "flagClipSkipSecrets",
@@ -1526,6 +1530,9 @@ const EXPERT_VALUES = {
   // anyone who never opens this new group.
   numFieldStep: { label: "valNumFieldStep", min: 1, max: 50, step: 1, def: 1, unit: "" },
   numFieldBigStep: { label: "valNumFieldBigStep", min: 1, max: 100, step: 1, def: 10, unit: "" },
+  // How far a duplicated overlay/shape is shifted from its source, in both editors,
+  // so the copy is visible right away instead of sitting exactly on top of it.
+  veOvDupOffsetPx: { label: "valVeOvDupOffsetPx", min: 0, max: 100, step: 1, def: 16, unit: "px" },
   // Percent-based so one pair of settings covers both editors' own different
   // native zoom units (the screenshot editor's 0.05x-8x factor, the video
   // editor's 1x-8x factor) -- see snip.js/video.js for the unit conversion.
@@ -1960,10 +1967,10 @@ const EXPERT_TABS = [
     // "hotkey" branch.
     { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode"], paths: ["recordingDir"],
       actions: [{ id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recStopHotkeyLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recPauseHotkeyLabel", gate: "recPauseHotkey" }] },
-    { title: "expGroupVideoEditor", flags: ["videoEditor"], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor"], paths: ["videoExportDir"] },
+    { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor"], paths: ["videoExportDir"] },
     // What the screenshot editor and the video editor share -- created here so
     // no setting key is ever declared in two groups (expert_menu_check.py).
-    { title: "expGroupEditors", flags: ["numFieldWheel", "editStateKeep"], values: ["numFieldStep", "numFieldBigStep", "zoomStepPct", "zoomMaxPct", "editStateSaveSecs", "editStateKeepDays"] },
+    { title: "expGroupEditors", flags: ["numFieldWheel", "editStateKeep"], values: ["numFieldStep", "numFieldBigStep", "zoomStepPct", "zoomMaxPct", "editStateSaveSecs", "editStateKeepDays", "veOvDupOffsetPx"] },
   ] },
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
@@ -2151,11 +2158,11 @@ const EXPERT_TIPS = [
   "recQuality", "recBitrateKbps", "recFormat", "recordingDir",
   "recStopHotkey", "recPauseHotkey", "recTrayEntries", "recCropNotice", "recBarSize", "recTargetSwitch",
   "recAutoCrop", "recCanvasMode", "recCanvasMaxPx", "recMaxMin", "recMaxMb", "recDiskWarnMb",
-  "videoEditor", "videoEditUndoMax",
+  "videoEditor", "videoEditUndoMax", "veOvRemember",
   "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veExportKbpsHigh", "veExportKbpsSmall",
   "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veOvColor", "veOvFont",
   "veDefaultPanel", "videoExportDir",
-  "numFieldWheel", "zoomStepPct", "zoomMaxPct", "errorLogKeepKb",
+  "numFieldWheel", "zoomStepPct", "zoomMaxPct", "errorLogKeepKb", "veOvDupOffsetPx",
   "editStateKeep", "editStateSaveSecs", "editStateKeepDays",
   "snipQuality", "snipSaveQuality", "snipDelayMs",
   "snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx",
@@ -13647,6 +13654,7 @@ function bind() {
   const SNIP_EDIT_TEXT_PLATE = () => flag("snipTextPlate");
   const SNIP_EDIT_DEFAULT_TOOL = () => txt("snipEditDefaultTool") || "hand";
   const SNIP_EDIT_SNAP_TOL = () => val("snipEditSnapTolerancePx") || 6; // px (screen)
+  const SNIP_DUP_OFFSET_PX = () => val("veOvDupOffsetPx");
   // Function, not a static object: pen/marker's middle preset tracks the live
   // expert-menu default, so a changed snipPenPx/snipMarkerPx shows up next open.
   const SNIP_WIDTH_PRESETS_OF = (tool) => ({
@@ -13699,6 +13707,40 @@ function bind() {
   const snipEditLiveCv = $("snip-edit-live");
   const snipEditTextInput = $("snip-edit-text-input");
   const snipEditMeasureEl = $("snip-edit-measure");
+  // Right-click menu for duplicating/deleting a shape, built once like the
+  // other dynamic popovers (tileFolderPop, viewsPop) instead of static markup.
+  const snipCtxPop = document.createElement("div");
+  snipCtxPop.className = "ctx hidden";
+  snipCtxPop.setAttribute("role", "menu");
+  const snipCtxDupBtn = document.createElement("button");
+  snipCtxDupBtn.type = "button";
+  const snipCtxDelBtn = document.createElement("button");
+  snipCtxDelBtn.type = "button";
+  snipCtxDelBtn.className = "danger";
+  snipCtxPop.append(snipCtxDupBtn, snipCtxDelBtn);
+  document.body.appendChild(snipCtxPop);
+  let snipCtxOp = null;
+  function closeSnipCtxPop() { snipCtxPop.classList.add("hidden"); snipCtxOp = null; }
+  function openSnipCtxPop(op, x, y) {
+    snipCtxOp = op;
+    snipCtxDupBtn.textContent = t("duplicate");
+    snipCtxDelBtn.textContent = t("delete");
+    placePopoverAt(snipCtxPop, x, y);
+  }
+  snipCtxDupBtn.addEventListener("click", () => {
+    const op = snipCtxOp;
+    closeSnipCtxPop();
+    if (op) snipEditDuplicateOp(op);
+  });
+  snipCtxDelBtn.addEventListener("click", () => {
+    const op = snipCtxOp;
+    closeSnipCtxPop();
+    if (op) snipEditRemoveOp(op);
+  });
+  document.addEventListener("pointerdown", (e) => {
+    if (snipCtxPop.classList.contains("hidden") || snipCtxPop.contains(e.target)) return;
+    closeSnipCtxPop();
+  });
   const snipEditBaseCtx = snipEditBaseCv.getContext("2d");
   const snipEditLiveCtx = snipEditLiveCv.getContext("2d");
 
@@ -14368,6 +14410,66 @@ function bind() {
     snipEditClearLive();
   }
 
+  // ---- duplicate / delete via right-click. Independent of the active tool: a
+  // right-click always tests every duplicable kind, not only SE.tool's, so the
+  // menu works for whatever shape sits under the pointer. ----
+  const SNIP_CTX_RECT_KINDS = ["rect", "ellipse", "spotlight", "pixelate"];
+  function snipEditHitTestForCtx(pt) {
+    const tol = 8 / SE.zoom;
+    for (let i = SE.ops.length - 1; i >= 0; i--) {
+      const op = SE.ops[i];
+      if (op.tool === "text") {
+        const w = snipEditMeasureTextWidth(op);
+        const h = op.fontPx * 1.3;
+        if (pt.x >= op.point.x && pt.x <= op.point.x + w && pt.y >= op.point.y - 2 && pt.y <= op.point.y + h) return op;
+        continue;
+      }
+      if (op.tool === "line" || op.tool === "arrow") {
+        if (snipEditDistToSegment(pt, op.points[0], op.points[1]) <= tol) return op;
+        continue;
+      }
+      if (!SNIP_CTX_RECT_KINDS.includes(op.tool)) continue;
+      const r = op.rect;
+      if (!r) continue;
+      const inBox = pt.x >= r.x - tol && pt.x <= r.x + r.w + tol && pt.y >= r.y - tol && pt.y <= r.y + r.h + tol;
+      if (!inBox) continue;
+      // Spotlight/pixelate have no outline-only edge -- the whole rect is the target.
+      if (op.tool === "spotlight" || op.tool === "pixelate") return op;
+      const onBorder = Math.abs(pt.x - r.x) <= tol || Math.abs(pt.x - r.x - r.w) <= tol
+        || Math.abs(pt.y - r.y) <= tol || Math.abs(pt.y - r.y - r.h) <= tol;
+      const inside = op.filled && pt.x >= r.x && pt.x <= r.x + r.w && pt.y >= r.y && pt.y <= r.y + r.h;
+      if (onBorder || inside) return op;
+    }
+    return null;
+  }
+  // A fresh push at the end, never spliced next to the source -- snipEditUndo()
+  // always pops the last entry, so anything inserted mid-array would make undo
+  // remove the wrong operation.
+  function snipEditDuplicateOp(op) {
+    const offset = SNIP_DUP_OFFSET_PX();
+    const dup = JSON.parse(JSON.stringify(op));
+    if (dup.rect) {
+      dup.rect = { ...dup.rect, x: snipEditClamp(dup.rect.x + offset, 0, SE.w - dup.rect.w), y: snipEditClamp(dup.rect.y + offset, 0, SE.h - dup.rect.h) };
+    } else if (dup.points) {
+      dup.points = dup.points.map((p) => ({ x: snipEditClamp(p.x + offset, 0, SE.w), y: snipEditClamp(p.y + offset, 0, SE.h) }));
+    } else if (dup.point) {
+      dup.point = { x: snipEditClamp(dup.point.x + offset, 0, SE.w), y: snipEditClamp(dup.point.y + offset, 0, SE.h) };
+    }
+    snipEditPushOp(dup);
+  }
+  // Removes one specific op wherever it sits in SE.ops, same floor bookkeeping
+  // as snipEditCropDiscard/snipEditPushUniqueOp.
+  function snipEditRemoveOp(op) {
+    const before = SE.ops.length;
+    SE.ops = SE.ops.filter((o) => o !== op);
+    if (SE.ops.length === before) return;
+    SE.floor = Math.max(0, SE.floor - (before - SE.ops.length));
+    if (SE.selOp === op) snipEditDeselectShape();
+    if (SE.lastNudged === op) SE.lastNudged = null;
+    snipEditUpdateUndoRedoButtons();
+    snipEditRedrawBase();
+  }
+
   // ---- text: a real <input> positioned over the canvas, in stage-local (i.e.
   // already-zoomed) pixels, since the input shares the stage's containing block. ----
   function snipEditHitTestText(pt) {
@@ -14848,6 +14950,13 @@ function bind() {
   }
   snipEditLiveCv.addEventListener("pointerdown", snipEditOnPointerDown);
   snipEditLiveCv.addEventListener("pointermove", snipEditOnPointerMove);
+  snipEditLiveCv.addEventListener("contextmenu", (e) => {
+    if (!SE.active) return;
+    e.preventDefault();
+    const hit = snipEditHitTestForCtx(snipEditToImage(e));
+    if (!hit) { closeSnipCtxPop(); return; }
+    openSnipCtxPop(hit, e.clientX, e.clientY);
+  });
   window.addEventListener("pointerup", snipEditOnPointerUp);
   // A cancelled pointer stream (e.g. the browser claiming a touch drag mid-
   // gesture) would otherwise leave SE.drag/SE.panState set forever, which
@@ -14887,6 +14996,7 @@ function bind() {
     if (e.key === "Tab") { trapTabWithin(snipEdit, e); return; }
     if (e.key === "Escape") {
       e.preventDefault();
+      if (!snipCtxPop.classList.contains("hidden")) { closeSnipCtxPop(); return; }
       if (snipColorPopIsOpen()) { closeSnipColorPop(); return; }
       if (SE.eyedropArm) { SE.eyedropArm = null; snipEditRenderContext(); return; }
       if (SE.tool === "crop" && (SE.drag || SE.cropRect)) { snipEditCropDiscard(); return; }
@@ -14986,6 +15096,7 @@ function bind() {
     snipEditWrap.classList.remove("panning");
     snipEditWrap.style.cursor = "";
     snipEditCancelTextInput();
+    closeSnipCtxPop();
   }
   function snipEditCancel() {
     const cb = SE.onCancel;

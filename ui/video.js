@@ -10,6 +10,7 @@ import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEt
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { createColorPop } from "./colorpop.js";
+import { placePopoverAt } from "./popover.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -146,6 +147,9 @@ const VE = {
   zoomStepFactor: 1.2,
   zoomMax: 8,
   ovColorDefault: "#ffffff",
+  ovTextColorDefault: "#ffffff",
+  ovFrameColorDefault: "#ffffff",
+  ovDupOffsetPx: 16,
 };
 
 let TXT_READY = false;
@@ -1603,9 +1607,9 @@ async function addOverlay(kind) {
     const rect = centeredRect(0.3);
     op = { ...base, path, rect, opacity: VE.ovImageOpacityDefault ?? 100 };
   } else if (kind === "frame") {
-    op = { ...base, rect: snapRect({ x: 0, y: 0, w: VE.w, h: VE.h }), color: VE.ovColorDefault, thickness: Math.max(2, even(VE.h * 0.01)), style: "solid", opacity: 100 };
+    op = { ...base, rect: snapRect({ x: 0, y: 0, w: VE.w, h: VE.h }), color: VE.ovFrameColorDefault, thickness: VE.ovLastFrameThickness ?? Math.max(2, even(VE.h * 0.01)), style: "solid", opacity: VE.ovFrameOpacityDefault ?? 100 };
   } else if (kind === "text") {
-    op = { ...base, text: t("veOvTextDefault"), x: even(VE.w * 0.08), y: even(VE.h * 0.08), fontPx: Math.max(12, Math.round(VE.h / 16)), font: VE.ovFontDefault || FONT_FILES[0][0], color: VE.ovColorDefault, plate: true };
+    op = { ...base, text: t("veOvTextDefault"), x: even(VE.w * 0.08), y: even(VE.h * 0.08), fontPx: VE.ovLastTextFontPx ?? Math.max(12, Math.round(VE.h / 16)), font: VE.ovFontDefault || FONT_FILES[0][0], color: VE.ovTextColorDefault, plate: true };
   } else if (kind === "pixelate") {
     op = { ...base, rect: centeredRect(0.35), blockPx: VE.ovPixelateBlockDefault ?? 16 };
   } else if (kind === "spotlight") {
@@ -1614,6 +1618,56 @@ async function addOverlay(kind) {
   if (!op) return;
   VE.selOv = op.id;
   pushOp(op);
+  showPanel("ve-panel-overlays");
+}
+
+// Right-click menu for duplicating/deleting an overlay row, mirroring the
+// screenshot editor's own equivalent context menu one for one.
+const ovCtxPop = document.createElement("div");
+ovCtxPop.className = "ctx hidden";
+ovCtxPop.setAttribute("role", "menu");
+const ovCtxDupBtn = document.createElement("button");
+ovCtxDupBtn.type = "button";
+const ovCtxDelBtn = document.createElement("button");
+ovCtxDelBtn.type = "button";
+ovCtxDelBtn.className = "danger";
+ovCtxPop.append(ovCtxDupBtn, ovCtxDelBtn);
+document.body.appendChild(ovCtxPop);
+let ovCtxOp = null;
+function closeOvCtxPop() { ovCtxPop.classList.add("hidden"); ovCtxOp = null; }
+function openOvCtxPop(op, x, y) {
+  ovCtxOp = op;
+  ovCtxDupBtn.textContent = t("duplicate");
+  ovCtxDelBtn.textContent = t("delete");
+  placePopoverAt(ovCtxPop, x, y);
+}
+ovCtxDupBtn.addEventListener("click", () => {
+  const op = ovCtxOp;
+  closeOvCtxPop();
+  if (op) duplicateOverlay(op);
+});
+ovCtxDelBtn.addEventListener("click", () => {
+  const op = ovCtxOp;
+  closeOvCtxPop();
+  if (!op) return;
+  if (VE.selOv === op.id) VE.selOv = null;
+  removeOps((o) => o.id === op.id);
+});
+document.addEventListener("pointerdown", (e) => {
+  if (ovCtxPop.classList.contains("hidden") || ovCtxPop.contains(e.target)) return;
+  closeOvCtxPop();
+});
+
+// A fresh push at the end, never spliced next to the source -- undo() always
+// pops the last entry, so anything inserted mid-array would make undo remove
+// the wrong operation.
+function duplicateOverlay(op) {
+  const offset = VE.ovDupOffsetPx;
+  const dup = { ...op, id: newId() };
+  if (dup.rect) dup.rect = snapRect({ ...dup.rect, x: dup.rect.x + offset, y: dup.rect.y + offset });
+  if (dup.kind === "text") { dup.x = clamp(dup.x + offset, 0, VE.w); dup.y = clamp(dup.y + offset, 0, VE.h); }
+  VE.selOv = dup.id;
+  pushOp(dup);
   showPanel("ve-panel-overlays");
 }
 
@@ -1633,6 +1687,10 @@ function renderOverlayList() {
       renderOverlayEditor();
       renderRects();
       renderRegions();
+    });
+    row.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      openOvCtxPop(op, e.clientX, e.clientY);
     });
     list.appendChild(row);
   }
@@ -1715,6 +1773,57 @@ function colorRow(current, onPick) {
 
 function commitOverlay(op, changes) {
   pushReplacing((o) => o.id === op.id, { ...op, ...changes }, { keepEditor: true });
+  rememberOverlayValues(op.kind, changes);
+}
+
+// Keeps the colour/thickness/opacity/font size a kind was last given as the
+// starting point for the next overlay of that same kind -- in the ordinary
+// settings store (set_ui_text/set_ui_value), not the per-file edit state,
+// since it belongs to the user rather than to the file being edited. Also
+// updates the live VE.ov*Default fields right away: set_ui_text/set_ui_value
+// only broadcast "settings-changed" to the floating-pill and pill-folder
+// windows (see notify_float_settings in the backend), never to this one, so
+// waiting for that event would leave the very same session one overlay behind.
+function rememberOverlayValues(kind, changes) {
+  if (!VE.ovRemember) return;
+  if (kind === "text") {
+    if (changes.color !== undefined) {
+      VE.ovTextColorDefault = changes.color;
+      invoke("set_ui_text", { key: "veOvLastTextColor", value: changes.color }).catch(() => {});
+    }
+    if (changes.fontPx !== undefined) {
+      VE.ovLastTextFontPx = changes.fontPx;
+      invoke("set_ui_value", { key: "veOvLastTextFontPx", value: changes.fontPx }).catch(() => {});
+    }
+  } else if (kind === "frame") {
+    if (changes.color !== undefined) {
+      VE.ovFrameColorDefault = changes.color;
+      invoke("set_ui_text", { key: "veOvLastFrameColor", value: changes.color }).catch(() => {});
+    }
+    if (changes.thickness !== undefined) {
+      VE.ovLastFrameThickness = changes.thickness;
+      invoke("set_ui_value", { key: "veOvLastFrameThickness", value: changes.thickness }).catch(() => {});
+    }
+    if (changes.opacity !== undefined) {
+      VE.ovFrameOpacityDefault = changes.opacity;
+      invoke("set_ui_value", { key: "veOvLastFrameOpacity", value: changes.opacity }).catch(() => {});
+    }
+  } else if (kind === "pixelate") {
+    if (changes.blockPx !== undefined) {
+      VE.ovPixelateBlockDefault = changes.blockPx;
+      invoke("set_ui_value", { key: "veOvLastPixelateBlock", value: changes.blockPx }).catch(() => {});
+    }
+  } else if (kind === "spotlight") {
+    if (changes.dim !== undefined) {
+      VE.ovSpotlightDimDefault = changes.dim;
+      invoke("set_ui_value", { key: "veOvLastSpotlightDim", value: Math.round(changes.dim * 100) }).catch(() => {});
+    }
+  } else if (kind === "image") {
+    if (changes.opacity !== undefined) {
+      VE.ovImageOpacityDefault = changes.opacity;
+      invoke("set_ui_value", { key: "veOvLastImageOpacity", value: changes.opacity }).catch(() => {});
+    }
+  }
 }
 
 // Registers an overlay-editor input so a later keepEditor commit can refresh
@@ -2754,6 +2863,10 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { e.preventDefault(); closeColorPop(); return; }
     if (e.key === "Tab") { trapTabWithin(colorPop, e); return; }
   }
+  if (!ovCtxPop.classList.contains("hidden")) {
+    if (e.key === "Escape") { e.preventDefault(); closeOvCtxPop(); return; }
+    if (e.key === "Tab") { trapTabWithin(ovCtxPop, e); return; }
+  }
   const typing = TYPING.has(document.activeElement?.tagName);
   if (e.key === "Escape") { e.preventDefault(); closeWindow(); return; }
   if (typing) return;
@@ -3121,6 +3234,31 @@ function applySettings(settings) {
   VE.ovSpotlightDimDefault = Number.isFinite(spotlightDim) && spotlightDim > 0 ? spotlightDim / 100 : 0.6;
   const imageOpacity = Number(values.veOvImageOpacity);
   VE.ovImageOpacityDefault = Number.isFinite(imageOpacity) && imageOpacity > 0 ? Math.round(imageOpacity) : 100;
+  const dupOffset = Number(values.veOvDupOffsetPx);
+  VE.ovDupOffsetPx = Number.isFinite(dupOffset) && dupOffset >= 0 ? Math.round(dupOffset) : 16;
+  // Each overlay kind starts from its own last-used colour/thickness/opacity/font
+  // size instead of the fixed default above, kept in the ordinary settings store
+  // (not the per-file edit state) because it belongs to the user, not the file.
+  // Off, every new overlay always starts from the fixed defaults, unchanged.
+  VE.ovRemember = settings?.ui_flags?.veOvRemember !== false;
+  VE.ovTextColorDefault = VE.ovRemember && HEX_RE.test(texts.veOvLastTextColor || "") ? texts.veOvLastTextColor : VE.ovColorDefault;
+  VE.ovFrameColorDefault = VE.ovRemember && HEX_RE.test(texts.veOvLastFrameColor || "") ? texts.veOvLastFrameColor : VE.ovColorDefault;
+  // Kept as the raw remembered number (or null), resolved against VE.h only
+  // once a new overlay is actually created -- VE.h is still 0 the first time
+  // this function runs, before applyProbe() lands.
+  const lastTextFontPx = Number(values.veOvLastTextFontPx);
+  VE.ovLastTextFontPx = VE.ovRemember && Number.isFinite(lastTextFontPx) && lastTextFontPx > 0 ? Math.round(lastTextFontPx) : null;
+  const lastThickness = Number(values.veOvLastFrameThickness);
+  VE.ovLastFrameThickness = VE.ovRemember && Number.isFinite(lastThickness) && lastThickness > 0 ? Math.round(lastThickness) : null;
+  const lastPixelateBlock = Number(values.veOvLastPixelateBlock);
+  if (VE.ovRemember && Number.isFinite(lastPixelateBlock) && lastPixelateBlock > 0) VE.ovPixelateBlockDefault = Math.round(lastPixelateBlock);
+  const lastSpotlightDim = Number(values.veOvLastSpotlightDim);
+  if (VE.ovRemember && Number.isFinite(lastSpotlightDim) && lastSpotlightDim > 0) VE.ovSpotlightDimDefault = lastSpotlightDim / 100;
+  const lastImageOpacity = Number(values.veOvLastImageOpacity);
+  if (VE.ovRemember && Number.isFinite(lastImageOpacity) && lastImageOpacity > 0) VE.ovImageOpacityDefault = Math.round(lastImageOpacity);
+  VE.ovFrameOpacityDefault = 100;
+  const lastFrameOpacity = Number(values.veOvLastFrameOpacity);
+  if (VE.ovRemember && Number.isFinite(lastFrameOpacity) && lastFrameOpacity > 0) VE.ovFrameOpacityDefault = Math.round(lastFrameOpacity);
   updateExportNote();
 }
 
