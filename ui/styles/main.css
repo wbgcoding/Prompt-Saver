@@ -2510,11 +2510,6 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
    `.field.` specificity guard so the column default can't stack them. */
 .field.settings-btn-row { flex-direction: row; gap: 10px; }
 .field.settings-btn-row > button { flex: 1; }
-/* The tour reopen entry sits beside Help but stays out of the equal 4-way
-   split (Help/Expert/Reset/Delete) below it -- a 5th flex:1 button would squeeze
-   those four under their longest-translation width and wrap the whole row at the
-   app's minimum window size. */
-.field.settings-btn-row > #tour-open-btn { flex: 0 0 auto; padding-left: 10px; padding-right: 10px; }
 /* Settings body: rows stack with comfortable, even spacing (close, not touching). */
 /* Settings/expert: the head (and, for expert, the search + tabs) stays fixed; only
    the body scrolls, so nothing bleeds past the header. */

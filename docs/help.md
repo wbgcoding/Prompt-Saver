@@ -19,9 +19,8 @@ A five-step walkthrough shown once on first launch, right after the sample tiles
 appear. The last step offers to switch on the screenshot editor, colour picker,
 OCR or voice dictation right there — nothing is written until the tour actually
 finishes. Escape or "Skip" asks to confirm first instead of closing right away.
-Reopen it anytime from Settings ("Introduction") or the expert menu; reopened
-this way, a switch on that last step takes effect immediately instead of
-waiting for a Finish click.
+Reopen it anytime from the expert menu; reopened this way, a switch on that
+last step takes effect immediately instead of waiting for a Finish click.
 
 ### Creating tiles
 
@@ -594,9 +593,8 @@ ersten Start bereits da — ein Button über dem Raster entfernt sie mit einem K
 Beispielkacheln; der letzte Schritt bietet an, Screenshot-Editor, Farbpipette,
 OCR oder Spracheingabe gleich einzuschalten — geschrieben wird erst, wenn die
 Tour tatsächlich beendet ist. Escape oder „Überspringen" fragt zuerst nach, statt
-sofort zu schließen. Jederzeit erneut aufrufbar über die Einstellungen
-(„Einführung") oder das Experten-Menü — dort wirkt ein Schalter auf dem letzten
-Schritt sofort statt erst bei „Fertig".
+sofort zu schließen. Jederzeit erneut aufrufbar über das Experten-Menü — dort
+wirkt ein Schalter auf dem letzten Schritt sofort statt erst bei „Fertig".
 
 **Kacheln anlegen** — Dateianhang, Screenshot-Werkzeug, Farbpipette (aus),
 Ziehen & Ablegen.

@@ -6770,7 +6770,23 @@ PROBE = """
     {
       document.getElementById('settings').classList.remove('hidden');
       await sleep(50);
-      document.getElementById('tour-open-btn').click();
+      // No always-available settings button any more -- reach the tour through
+      // its one remaining real entry point, the gated expert-menu action, same
+      // as an actual user would (data-action survives translation/tab order).
+      const findTourBtn = () => document.querySelector('.expert-action[data-action="tour-open"]');
+      await click('expert-open');
+      let tourBtn = findTourBtn();
+      for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+        if (tourBtn) break;
+        tb.click();
+        await sleep(150);
+        tourBtn = findTourBtn();
+      }
+      if (!tourBtn) {
+        out.errors.push('tour-open expert action not found in any tab');
+      } else {
+        tourBtn.click();
+      }
       await sleep(150);
       // The height-per-step comparison below is sensitive to font-metric settling;
       // wait for webfonts to finish loading so it does not race one.
@@ -6778,7 +6794,7 @@ PROBE = """
       await sleep(50);
       const tourEl = document.getElementById('tour-modal');
       if (!tourEl || tourEl.classList.contains('hidden')) {
-        out.errors.push('Tour did not open from the settings-dialog button');
+        out.errors.push('Tour did not open from the expert-menu action');
       } else {
         const isRawKey = (s) => /^(flag|val|tip|exp|stat|backup|help|tour)[A-Z][A-Za-z0-9]+$/.test((s || '').trim());
         const body = document.getElementById('tour-body');

@@ -42,7 +42,7 @@ MAIN_NC = "\n".join(l for l in MAIN_NC.splitlines() if not l.lstrip().startswith
 NOT_A_SETTING = {
     "import-btn", "export-format", "export-btn", "settings-backup-btn",
     "export-all", "import-all", "about-btn", "update-btn", "update-version",
-    "help-open", "tour-open-btn", "expert-open", "reset-settings",
+    "help-open", "expert-open", "reset-settings",
     "delete-data", "hotkey-clear", "hotkey-list-btn", "voice-hotkey-clear",
 }
 

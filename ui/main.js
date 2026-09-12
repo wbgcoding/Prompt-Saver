@@ -3344,6 +3344,7 @@ function actionRow(a) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "ghost-btn expert-action";
+  btn.dataset.action = a.id;
   btn.textContent = t(a.label);
   // Passing the button itself lets a long-running action (ffmpeg-download) show
   // progress in its own label and repurpose a second click as cancel — every
@@ -15763,10 +15764,6 @@ function bind() {
     if (e.target === aboutEl) closeAbout();
   });
 
-  // Reopen the five-step tour (Help-menu style entry, always available
-  // regardless of the firstRunTour toggle — that flag only gates the automatic
-  // open). Step 5 writes live from here, see openTour()'s firstRun param.
-  $("tour-open-btn").addEventListener("click", () => openTour({ firstRun: false }));
   $("tour-skip").addEventListener("click", tourSkip);
   $("tour-back").addEventListener("click", () => tourGoto(tourStep - 1));
   $("tour-next").addEventListener("click", () => (tourStep === TOUR_LAST_STEP ? tourFinish() : tourGoto(tourStep + 1)));
@@ -16629,10 +16626,9 @@ function setupDragDrop() {
 //    fresh install (maybeOpenFirstRunTour, called from init()'s reveal()). Step 5
 //    buffers its switches in a local draft and only writes what differs from the
 //    shipped default, on Finish. Skip writes nothing but tourSeen.
-//  - Manually via the settings dialog's "tour-open-btn" (always available) or the
-//    expert menu's gated "tour-open" action (EXPERT_ACTIONS). Step 5 then writes
-//    live, exactly like a normal expert-menu flag row — nothing is buffered or reset
-//    just from reopening it this way.
+//  - Manually via the expert menu's gated "tour-open" action (EXPERT_ACTIONS). Step 5
+//    then writes live, exactly like a normal expert-menu flag row — nothing is
+//    buffered or reset just from reopening it this way.
 
 // Tiny hand-drawn illustrations, ~110x110, currentColor + var(--accent) on the one
 // interactive element each drawing highlights (never a raster asset, matches the
@@ -16662,7 +16658,7 @@ const TOUR_SVG_USAGE = `<svg viewBox="0 0 100 100" width="110" height="110" aria
   <line x1="13" y1="50" x2="29" y2="50" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
   <path d="M34 46 L34 64 L38.2 60.4 L41.5 67.5 L45 65.8 L41.5 58.8 L47.5 58.8 Z" fill="currentColor"/>
   <path d="M48 44 Q64 26 80 36" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-dasharray="4 3" stroke-linecap="round"/>
-  <path d="M75 32 L81 36 L76 41" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M73 35 L80 36 L76 30" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
   <rect x="64" y="48" width="30" height="36" rx="3" fill="none" stroke="currentColor" stroke-width="2.2"/>
   <rect x="72" y="43" width="14" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="2.2"/>
   <line x1="71" y1="64" x2="89" y2="64" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/>
@@ -16677,7 +16673,7 @@ const TOUR_SVG_TILES = `<svg viewBox="0 0 100 100" width="110" height="110" aria
   <rect x="70" y="41" width="22" height="18" rx="3" fill="var(--accent)" stroke="var(--accent)" stroke-width="2.5"/>
   <rect x="70" y="68" width="22" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2.2"/>
   <path d="M32 23 Q50 6 68 23" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="4 3"/>
-  <path d="M64 20 L69 23 L65 27" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M62 21 L68 23 L66 17" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
   <line x1="13" y1="19" x2="25" y2="19" stroke="currentColor" stroke-width="1.4"/>
   <line x1="13" y1="73" x2="25" y2="73" stroke="currentColor" stroke-width="1.4"/>
   <line x1="75" y1="19" x2="87" y2="19" stroke="currentColor" stroke-width="1.4"/>
