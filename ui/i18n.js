@@ -16216,7 +16216,7 @@ export const I18N = {
     snipEditBlockSize: "Blok boyutu",
     snipEditBlockSizeTip: "Pikselleştirme blok boyutu (px)",
     snipEditDim: "Karart",
-    snipEditDimTip: "Odak ışığı karartma yoğunluğu (%)",
+    snipEditDimTip: "Spot ışığı karartma yoğunluğu (%)",
     redo: "Yinele",
     apply: "Uygula",
     flagSnipEditor: "Ekran görüntüsü düzenleyici",
