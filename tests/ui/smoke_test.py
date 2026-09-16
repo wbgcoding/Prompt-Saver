@@ -8764,6 +8764,59 @@ VIDEO_PROBE = """
         }
       }
 
+      // 473: zoomed in, every corner of the picture can be panned up to the
+      // middle of the stage instead of stopping at the stage border.
+      if (zoomValVe) {
+        const readPct473 = () => Number(zoomValVe.textContent.replace('%', ''));
+        const stageVe = document.getElementById('ve-stage');
+        for (let i = 0; i < 20 && readPct473() < 400; i++) {
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: '+', ctrlKey: true, bubbles: true }));
+          await sleep(20);
+        }
+        const v = document.getElementById('ve-video');
+        if (readPct473() <= 100 || !v || !v.videoWidth) {
+          // No decoded video in this harness (or the zoom keys never reached
+          // above 100%): nothing to measure a picture box against, so this
+          // check is skipped rather than faked.
+        } else {
+          const pan = (dx, dy) => {
+            stageVe.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: 0, clientY: 0 }));
+            stageVe.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, button: 0, pointerId: 1, clientX: dx, clientY: dy }));
+            stageVe.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 1, clientX: dx, clientY: dy }));
+          };
+          const pictureBox = () => {
+            const videoRect = v.getBoundingClientRect();
+            const stageRect = stageVe.getBoundingClientRect();
+            const zoom = videoRect.width / stageRect.width;
+            const s = Math.min(stageRect.width / v.videoWidth, stageRect.height / v.videoHeight);
+            const picW = v.videoWidth * s * zoom, picH = v.videoHeight * s * zoom;
+            const vcx = videoRect.left + videoRect.width / 2, vcy = videoRect.top + videoRect.height / 2;
+            return { left: vcx - picW / 2, top: vcy - picH / 2, right: vcx + picW / 2, bottom: vcy + picH / 2, stageRect };
+          };
+          pan(5000, 5000);
+          await sleep(30);
+          {
+            const { left, top, stageRect } = pictureBox();
+            const scx = stageRect.left + stageRect.width / 2, scy = stageRect.top + stageRect.height / 2;
+            if (Math.abs(left - scx) > 2) errs.push('473: the picture left edge cannot be panned to the middle of the stage');
+            if (Math.abs(top - scy) > 2) errs.push('473: the picture top edge cannot be panned to the middle of the stage');
+          }
+          pan(-5000, -5000);
+          await sleep(30);
+          {
+            const { right, bottom, stageRect } = pictureBox();
+            const scx = stageRect.left + stageRect.width / 2, scy = stageRect.top + stageRect.height / 2;
+            if (Math.abs(right - scx) > 2) errs.push('473: the picture right edge cannot be panned to the middle of the stage');
+            if (Math.abs(bottom - scy) > 2) errs.push('473: the picture bottom edge cannot be panned to the middle of the stage');
+          }
+          document.getElementById('ve-preview-zoom-reset')?.click();
+          await sleep(30);
+          if (v.style.transform !== '') {
+            errs.push('473: resetting the preview zoom left a stale transform on the video element');
+          }
+        }
+      }
+
       // The video editor selects an overlay from its own list rather than by
       // clicking its canvas rectangle -- renderRects() only ever draws the
       // rect and handles of the overlay already selected, so there is

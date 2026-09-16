@@ -824,12 +824,13 @@ function fitBoxSize() {
   return { w: w * scale, h: h * scale, stageW: stage.width, stageH: stage.height };
 }
 
-// Keeps the picture from being dragged fully out of view: at most half the
-// zoomed overhang in either axis, zero once back at zoom 1.
+// Any point of the picture may be panned up to the middle of the stage, so
+// corners and edges can be looked at head-on instead of only at the border.
+// Nothing to pan at zoom 1.
 function clampPan(pan, zoom) {
-  const { w, h, stageW, stageH } = fitBoxSize();
-  const maxX = Math.max(0, (w * zoom - stageW) / 2);
-  const maxY = Math.max(0, (h * zoom - stageH) / 2);
+  if (zoom <= 1) return { x: 0, y: 0 };
+  const { w, h } = fitBoxSize();
+  const maxX = (w * zoom) / 2, maxY = (h * zoom) / 2;
   return { x: clamp(pan.x, -maxX, maxX), y: clamp(pan.y, -maxY, maxY) };
 }
 
