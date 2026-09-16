@@ -303,12 +303,28 @@ const RESULTS = {
   // the perf hot-path timing (both want the same non-degenerate fixture).
   // mic_sidecar stays empty so the boot never also has to route through
   // mux_mic_track, which nothing here stubs.
-  video_editor_source: () => "C:\\Recordings\\ps-smoke-recording.mp4",
+  video_editor_source: () => ({ path: "C:\\Recordings\\ps-smoke-recording.mp4", origin_dir: "" }),
   windows_fonts_dir: () => "C:/Windows/Fonts",
   // 334: the image-overlay "Add" button picks a file before it can add its
   // op -- a fixed fake path is enough to exercise the add flow and the live
   // preview's <img> element; the path never actually needs to resolve.
   pick_file_path: () => "C:\\Pictures\\ps-smoke-badge.png",
+  // Right-click the screenshot/record button (or a library attachment) to
+  // open an existing file in whichever editor its content calls for.
+  // window.__OPEN_EDIT_PICK__ lets a probe steer which path the "pick a
+  // file" dialog answers with; window.__OPEN_EDIT_RESULT__ lets a probe
+  // steer open_file_in_editor's own answer (image vs video vs a rejection).
+  pick_media_file_path: () => window.__OPEN_EDIT_PICK__ || "C:\\Pictures\\ps-smoke-openedit.mp4",
+  open_file_in_editor: () => {
+    if (window.__OPEN_EDIT_RESULT__) return window.__OPEN_EDIT_RESULT__;
+    return {
+      kind: "video",
+      copied_path: "C:\\Temp\\ps-smoke-openedit-copy.mp4",
+      origin_dir: "C:\\Pictures",
+      name: "ps-smoke-openedit",
+    };
+  },
+  open_video_editor: () => null,
   // 335: export-destination pickers for the video editor's export row.
   pick_export_dest: (a) => "C:\\Videos\\" + (a && a.defaultName || "export.mp4"),
   // A probe that needs the picker to answer with a specific folder sets

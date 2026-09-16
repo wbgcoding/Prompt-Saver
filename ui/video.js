@@ -92,6 +92,7 @@ let settings = null;
 
 const VE = {
   src: "",
+  originDir: "", // set only for a copy of a file opened for editing from outside the app
   probe: null,          // RecordingProbe, or a locally guessed one without ffmpeg
   ffmpeg: true,         // false once a call reported "ffmpeg-missing"
   dur: 0,               // source duration in ms
@@ -2749,9 +2750,13 @@ function destPath() {
   const stem = dot > cut.lastIndexOf("\\") && dot > cut.lastIndexOf("/") ? cut.slice(0, dot) : cut;
   const auto = `${stem}-edit.${formatExt(format)}`;
   if (VE.destOverride) return VE.destOverride;
-  if (VE.destDir) {
+  // A file opened for editing from outside the app suggests ITS OWN folder
+  // over the standing videoExportDir preference -- that preference is about
+  // where every ordinary recording export lands, not about this one-off copy.
+  const dir = VE.originDir || VE.destDir;
+  if (dir) {
     const base = auto.replace(/^.*[\\/]/, "");
-    return `${VE.destDir.replace(/[\\/]+$/, "")}/${base}`;
+    return `${dir.replace(/[\\/]+$/, "")}/${base}`;
   }
   return auto;
 }
@@ -3617,7 +3622,7 @@ function askRestoreEditState(opCount) {
   });
 }
 
-async function loadRecording(path) {
+async function loadRecording(path, originDir) {
   if (!path) return;
   // Two "Edit video" clicks in quick succession (this recording, then
   // another before the first has finished probing/muxing) had no way to tell
@@ -3628,6 +3633,11 @@ async function loadRecording(path) {
   const myGen = ++VE.loadGen;
   VE.src = path;
   resetForNewSource();
+  // When this is set, VE.src is a throwaway copy, never the file the user
+  // actually opened -- destPath() already prefers this folder for the "Save" default,
+  // and this note says why the working file's own name looks unfamiliar.
+  VE.originDir = originDir || "";
+  if (VE.originDir) toast(t("openedCopyNote"));
   $("ve-file").textContent = path.split(/[\\/]/).pop() || "";
   $("ve-file").title = path;
   $("ve-stage-msg").classList.remove("hidden");
@@ -3726,6 +3736,7 @@ listen("settings-changed", () => { invoke("get_settings").then(applySettings).ca
 // Opening a second recording reuses this window instead of stacking another one.
 listen("video-editor-load", async (e) => {
   const path = typeof e.payload === "string" ? e.payload : e.payload?.path;
+  const originDir = typeof e.payload === "object" ? e.payload?.origin_dir : "";
   if (!path || path === VE.src) return;
   // Switching source (clicking "Edit video" on another tile while this
   // window is already open) used to jump straight to loadRecording(), silently
@@ -3735,7 +3746,7 @@ listen("video-editor-load", async (e) => {
     const ok = await veConfirm(t("veCloseTitle"), t("veCloseUnsaved"), t("veDiscard"));
     if (!ok) return;
   }
-  loadRecording(path);
+  loadRecording(path, originDir);
 });
 listen(EXPORT_PROGRESS_EVENT, (e) => {
   if (!VE.exporting) return;
@@ -3859,13 +3870,16 @@ function applySettings(settings) {
   // "video-editor-load" event covers the other case — opening a second recording
   // into a window that is already up.
   let path = "";
+  let originDir = "";
   try {
-    path = await invoke("video_editor_source");
+    const source = await invoke("video_editor_source");
+    path = source?.path || "";
+    originDir = source?.origin_dir || "";
   } catch (_) {
     // No source command yet, or none set: wait for the event instead of showing
     // an error for what is a normal startup order.
   }
-  if (path) await loadRecording(path);
+  if (path) await loadRecording(path, originDir);
   else $("ve-stage-msg").textContent = t("veNoRecording");
   requestAnimationFrame(tick);
 })();

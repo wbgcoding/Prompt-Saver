@@ -1881,6 +1881,58 @@ PROBE = """
         out.errors.push('19: clicking outside the pick-history popover did not close it');
       }
     }
+    // 417: right-click either composer button for a quiet menu to open an
+    // existing file in whichever editor its content calls for, not only
+    // through a fresh capture or recording.
+    const snipBtnEl = document.getElementById('snip-btn');
+    const recordBtnEl = document.getElementById('record-btn');
+    if (!snipBtnEl || !recordBtnEl) {
+      out.errors.push('417: the screenshot or record button is missing');
+    } else {
+      recordBtnEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(150);
+      let openEditPop = document.querySelector('.open-editor-pop');
+      if (!openEditPop || openEditPop.classList.contains('hidden')) {
+        out.errors.push('417: right-clicking the record button did not open the open-in-editor menu');
+      }
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+      await sleep(120);
+      if (openEditPop && !openEditPop.classList.contains('hidden')) {
+        out.errors.push('417: clicking outside the open-in-editor menu did not close it');
+      }
+      // Picking a VIDEO through the screenshot (image) button must still open
+      // the video editor: content decides, never which button was used.
+      snipBtnEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(150);
+      openEditPop = document.querySelector('.open-editor-pop');
+      if (!openEditPop || openEditPop.classList.contains('hidden')) {
+        out.errors.push('417: right-clicking the screenshot button did not open the open-in-editor menu');
+      } else if (!(openEditPop.querySelector('button').textContent || '').trim()) {
+        out.errors.push('417: the open-in-editor menu entry has no label');
+      } else {
+        window.__SMOKE_CALLS__ = [];
+        window.__SMOKE_ARGS__ = [];
+        openEditPop.querySelector('button').click();
+        await sleep(200);
+        if (!window.__SMOKE_CALLS__.includes('pick_media_file_path')) {
+          out.errors.push('417: choosing the menu entry did not offer a file picker');
+        }
+        if (!window.__SMOKE_CALLS__.includes('open_file_in_editor')) {
+          out.errors.push('417: choosing the menu entry did not ask the backend what the file is');
+        }
+        const openCall = (window.__SMOKE_ARGS__ || []).find((c) => c[0] === 'open_video_editor');
+        if (!openCall) {
+          out.errors.push('417: picking a video through the screenshot button did not open the video editor');
+        } else {
+          if (openCall[1].srcPath !== 'C:\\\\Temp\\\\ps-smoke-openedit-copy.mp4') {
+            out.errors.push('417: the video editor opened on the wrong file: ' + openCall[1].srcPath);
+          }
+          if (openCall[1].originDir !== 'C:\\\\Pictures') {
+            out.errors.push('417: the video editor did not receive the origin folder');
+          }
+        }
+      }
+    }
     // P60: an automatic backup toasts the same way a manual one already did —
     // the backend has no other call site to toast from, so it fires this itself.
     window.__FIRE__('backup-done');

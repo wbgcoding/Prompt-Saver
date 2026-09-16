@@ -282,6 +282,14 @@ the video editor and the introduction tour ship on).
   everything after it. Each extra source is checked once when picked, up to
   a small fixed number per project, and stays visibly marked as missing if it
   is later moved or deleted.
+- **Open an existing file in the editor.** Right-click the screenshot or
+  record button, or an image/video attachment in the library, for "Open a
+  file in the editor". One file dialog covers both kinds; the file's own
+  content decides which editor opens, not its extension, so a video saved
+  with a picture extension still opens the video editor. The editor always
+  works on a copy, never the original, and saving asks where to put the
+  result, starting in the original file's own folder. A file past a
+  configurable size is rejected before it loads.
 - **The expert-menu search now also finds a hit outside the expert menu** —
   the normal settings page, the toolbar's grid-size control, the library's
   sort order, or a setting in the backup manager. A match appears in its own

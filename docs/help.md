@@ -84,6 +84,14 @@ height, or percentage, with presets for 25/50/200% and "fit 1920 wide"; it is
 its own undoable step, so scaling back and forth never loses quality beyond
 what the last resize itself introduced.
 
+Both editors can also open a file you already have, not just a fresh
+capture or recording: right-click the screenshot or record button (or an
+image/video attachment in the library) and choose "Open a file in the
+editor". The content of the file decides which editor opens, no matter what
+its extension says. The editor always works on a copy, so the original file
+is never changed; saving asks where to put the result, starting in the
+original file's own folder.
+
 ### Screen recording
 
 Records a window, a monitor, or a dragged region as a video, via the record

@@ -5089,6 +5089,23 @@ async fn pick_file_path(app: AppHandle, win: tauri::Window) -> Option<String> {
     result
 }
 
+// Opening an existing file for editing uses one filter for both kinds, since
+// which editor actually opens is decided by open_file_in_editor's own content
+// sniff, not by which extension the user picked here.
+#[tauri::command]
+async fn pick_media_file_path(app: AppHandle, win: tauri::Window) -> Option<String> {
+    let label = win.label().to_string();
+    let result = file_dialog_for(&app, &label)
+        .add_filter(
+            "Images and videos",
+            &["png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff", "mp4", "webm", "avi", "mov", "mkv", "apng"],
+        )
+        .pick_file()
+        .map(|p| p.to_string_lossy().to_string());
+    let _ = win.set_focus();
+    result
+}
+
 // Preview for an attached file that happens to be an image.
 #[tauri::command]
 async fn load_image_file(path: String) -> Option<String> {
@@ -5662,7 +5679,7 @@ fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
         out.push(p);
     }
     if let Some(state) = app.try_state::<VideoEditorPending>() {
-        let src = state.lock().clone();
+        let (src, _origin_dir) = state.lock().clone();
         if !src.is_empty() {
             let src = PathBuf::from(src);
             out.push(src.with_extension("mic.wav"));
@@ -12224,6 +12241,20 @@ fn sweep_stale_temp_files() {
             }
         }
     }
+
+    // Working copies of a file opened for editing from outside the app
+    // (never the original) -- one directory per open, holding exactly one
+    // copy. The editor itself never deletes this once the window is closed,
+    // so without this sweep the folder would only ever grow.
+    let openedit_prefix = format!("{}-openedit-", brand::TEMP_PREFIX);
+    if let Ok(entries) = fs::read_dir(&ocr_dir) {
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            if name.starts_with(&openedit_prefix) && is_stale(&e) {
+                let _ = fs::remove_dir_all(e.path());
+            }
+        }
+    }
 }
 
 // The "Copy to clipboard" export's own throwaway files, in the same
@@ -13146,6 +13177,21 @@ fn screenshot_format_mime(format: &str) -> &'static str {
     }
 }
 
+// Mime for a format the `image` crate itself sniffed from a file's content
+// when opening it for editing -- distinct from screenshot_format_mime above,
+// which maps the SETTING's chosen output format, not a guessed input one.
+fn image_format_mime(fmt: image::ImageFormat) -> &'static str {
+    match fmt {
+        image::ImageFormat::Jpeg => "image/jpeg",
+        image::ImageFormat::WebP => "image/webp",
+        image::ImageFormat::Bmp => "image/bmp",
+        image::ImageFormat::Tiff => "image/tiff",
+        image::ImageFormat::Gif => "image/gif",
+        image::ImageFormat::Ico => "image/x-icon",
+        _ => "image/png",
+    }
+}
+
 // Encodes a screenshot in whichever of the five formats the setting names.
 // JPEG keeps the fast SIMD path above; the other four go through the image
 // crate, already linked for thumbnails elsewhere. All four are written
@@ -13366,7 +13412,15 @@ async fn save_screenshot_now(state: State<'_, Db>, data_url: String, format: Opt
 // path, or None if the user cancelled. `format` is this one save's own choice
 // (the save dialog's own format picker) -- None falls back to the setting.
 #[tauri::command]
-async fn save_screenshot_as(app: AppHandle, state: State<'_, Db>, win: tauri::Window, data_url: String, format: Option<String>) -> Result<Option<String>, String> {
+async fn save_screenshot_as(
+    app: AppHandle,
+    state: State<'_, Db>,
+    win: tauri::Window,
+    data_url: String,
+    format: Option<String>,
+    default_dir: Option<String>,
+    default_name: Option<String>,
+) -> Result<Option<String>, String> {
     if !data_url_within_limit(&data_url, MAX_IMAGE_DATA_URL_BYTES) {
         return Err(format!(
             "image is too large ({} MB); the limit is {} MB",
@@ -13391,11 +13445,19 @@ async fn save_screenshot_as(app: AppHandle, state: State<'_, Db>, win: tauri::Wi
         .map_err(|e| e.to_string())??;
     let (out_bytes, format) = out_bytes;
     let ext = screenshot_format_ext(&format);
-    let name = format!("Screenshot-{}.{}", local_stamp(), ext);
-    let picked = file_dialog_for(&app, win.label())
-        .add_filter(&ext.to_uppercase(), &[ext])
-        .set_file_name(&name)
-        .save_file();
+    // A file opened for editing from outside the app suggests its own origin
+    // folder and stem (never the origin's own extension -- the edited copy keeps whatever
+    // format the save dialog itself is offering) instead of the usual
+    // "Screenshot-<stamp>" name built for a fresh capture.
+    let name = match default_name {
+        Some(n) if !n.trim().is_empty() => format!("{}.{}", n.trim(), ext),
+        _ => format!("Screenshot-{}.{}", local_stamp(), ext),
+    };
+    let mut dlg = file_dialog_for(&app, win.label()).add_filter(ext.to_uppercase(), &[ext]).set_file_name(&name);
+    if let Some(dir) = default_dir.filter(|d| !d.trim().is_empty()) {
+        dlg = dlg.set_directory(dir);
+    }
+    let picked = dlg.save_file();
     let _ = win.set_focus();
     match picked {
         Some(p) => {
@@ -21609,31 +21671,44 @@ const VIDEO_WIN_H: u32 = 720;
 const VIDEO_WIN_MIN_W: u32 = 760;
 const VIDEO_WIN_MIN_H: u32 = 520;
 
-// Holds the recording path the (single) editor window should be showing.
+// Holds the recording path the (single) editor window should be showing, plus
+// the origin folder to suggest on save when that path is a working copy made
+// of a file opened from elsewhere for editing (empty for every other caller --
+// a fresh recording or "Edit video" on an existing attachment, both of which
+// keep editing the real file in place, same as before this point).
 // Same pull pattern as VarPrompt/var_window_payload: a push at window-build
 // time would race the webview's first frame, so the window asks for its own
 // target once booted (video_editor_source), and again whenever
 // "video-editor-load" fires for an already-open window.
-struct VideoEditorPending(Mutex<String>);
+struct VideoEditorPending(Mutex<(String, String)>);
 impl VideoEditorPending {
     fn new() -> Self {
-        Self(Mutex::new(String::new()))
+        Self(Mutex::new((String::new(), String::new())))
     }
-    fn lock(&self) -> std::sync::MutexGuard<'_, String> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, (String, String)> {
         self.0.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
 
+#[derive(Serialize, Clone)]
+struct VideoEditorSource {
+    path: String,
+    origin_dir: String,
+}
+
 // Opens the editor for one recording. A second call while it is already open
 // just re-targets the existing window instead of stacking a second editor.
+// origin_dir is Some only for a copy made of an externally opened file --
+// see open_file_in_editor.
 #[tauri::command]
-async fn open_video_editor(app: AppHandle, pending: State<'_, VideoEditorPending>, src_path: String) -> Result<(), String> {
+async fn open_video_editor(app: AppHandle, pending: State<'_, VideoEditorPending>, src_path: String, origin_dir: Option<String>) -> Result<(), String> {
     if !PathBuf::from(&src_path).is_file() {
         return Err("recording file not found".to_string());
     }
-    *pending.lock() = src_path.clone();
+    let origin_dir = origin_dir.unwrap_or_default();
+    *pending.lock() = (src_path.clone(), origin_dir.clone());
     if let Some(win) = app.get_webview_window(VIDEO_WIN_LABEL) {
-        let _ = app.emit_to(VIDEO_WIN_LABEL, "video-editor-load", &src_path);
+        let _ = app.emit_to(VIDEO_WIN_LABEL, "video-editor-load", &VideoEditorSource { path: src_path, origin_dir });
         let _ = win.show();
         let _ = win.set_focus();
         return Ok(());
@@ -21664,9 +21739,105 @@ async fn open_video_editor(app: AppHandle, pending: State<'_, VideoEditorPending
 }
 
 #[tauri::command]
-fn video_editor_source(pending: State<VideoEditorPending>) -> Option<String> {
-    let p = pending.lock();
-    if p.is_empty() { None } else { Some(p.clone()) }
+fn video_editor_source(pending: State<VideoEditorPending>) -> Option<VideoEditorSource> {
+    let (path, origin_dir) = pending.lock().clone();
+    if path.is_empty() { None } else { Some(VideoEditorSource { path, origin_dir }) }
+}
+
+// ---- Open an existing file (not a fresh capture/recording) in whichever
+// editor its actual content calls for. ----
+
+// True once a file is past the configured ceiling -- kept as its own pure
+// function so the boundary (exactly at the limit still opens) is unit
+// testable without a running app.
+fn exceeds_open_edit_limit(bytes: u64, max_mb: f64) -> bool {
+    let cap = ((max_mb.max(1.0)) as u64).saturating_mul(1024 * 1024);
+    bytes > cap
+}
+
+// Content, never the extension, decides what opens: a real image (any of the
+// formats the `image` crate reads, sniffed the same way decode_image_file
+// already does) wins first since it is by far the cheaper check; only then is
+// ffprobe asked whether this is a video it can read. `ffprobe` is None in a
+// unit test that has no bundled
+// ffprobe.exe, which correctly makes every video case fall through to "not
+// media" there rather than false-negative on the image branch.
+fn detect_media_kind(path: &Path, ffprobe: Option<&Path>) -> Option<(&'static str, Option<image::ImageFormat>)> {
+    if decode_image_file(&path.to_string_lossy()).is_some() {
+        let fmt = image::ImageReader::open(path)
+            .ok()
+            .and_then(|r| r.with_guessed_format().ok())
+            .and_then(|r| r.format());
+        return Some(("image", fmt));
+    }
+    if let Some(ffprobe) = ffprobe {
+        if probe_recording_blocking(ffprobe, path).is_ok() {
+            return Some(("video", None));
+        }
+    }
+    None
+}
+
+#[derive(Serialize)]
+#[serde(tag = "kind")]
+enum OpenEditResult {
+    #[serde(rename = "image")]
+    Image { data_url: String, origin_dir: String, name: String },
+    #[serde(rename = "video")]
+    Video { copied_path: String, origin_dir: String, name: String },
+}
+
+// Right-click "Open a file in the editor" (the screenshot/record buttons, and
+// an image/video attachment in the library) all land here. The original file
+// is never touched: an image is read into a data URL straight into the same
+// #snip-modal flow a fresh capture uses, a video is copied once into its own
+// throwaway working folder (swept by sweep_stale_temp_files) and THAT copy is
+// what open_video_editor is pointed at.
+#[tauri::command]
+async fn open_file_in_editor(app: AppHandle, state: State<'_, Db>, path: String) -> Result<OpenEditResult, String> {
+    let p = PathBuf::from(&path);
+    if !p.is_file() {
+        return Err("file-missing".to_string());
+    }
+    let max_mb = lock(&state).settings.ui_values.get("editorOpenMaxMb").copied().unwrap_or(2048.0);
+    let len = fs::metadata(&p).map_err(|e| e.to_string())?.len();
+    if exceeds_open_edit_limit(len, max_mb) {
+        return Err(format!("too-large:{}", max_mb.max(1.0) as u64));
+    }
+    let origin_dir = p.parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
+    let name = p.file_stem().and_then(|s| s.to_str()).unwrap_or("file").to_string();
+    let ffprobe = ffprobe_search_path(&app);
+    let kind = tauri::async_runtime::spawn_blocking({
+        let p = p.clone();
+        let ffprobe = ffprobe.clone();
+        move || detect_media_kind(&p, ffprobe.as_deref())
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    match kind {
+        Some(("image", fmt)) => {
+            let bytes = fs::read(&p).map_err(|e| e.to_string())?;
+            let mime = fmt.map(image_format_mime).unwrap_or("image/png");
+            let data_url = format!("data:{};base64,{}", mime, base64_encode(&bytes));
+            Ok(OpenEditResult::Image { data_url, origin_dir, name })
+        }
+        Some(("video", _)) => {
+            let ext = p
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_lowercase())
+                .filter(|e| VIDEO_FOLDER_EXTS.contains(&e.as_str()))
+                .unwrap_or_else(|| "mp4".to_string());
+            let base = clean_app_name(&name);
+            let base = if base.is_empty() { "video".to_string() } else { base };
+            let work_dir = std::env::temp_dir().join(brand::TEMP_DIR).join(format!("{}-openedit-{}-{}", brand::TEMP_PREFIX, local_stamp(), std::process::id()));
+            fs::create_dir_all(&work_dir).map_err(|e| e.to_string())?;
+            let dest = work_dir.join(format!("{base}.{ext}"));
+            fs::copy(&p, &dest).map_err(|e| e.to_string())?;
+            Ok(OpenEditResult::Video { copied_path: dest.to_string_lossy().to_string(), origin_dir, name })
+        }
+        _ => Err("not-media".to_string()),
+    }
 }
 
 // Target folder for a plain "Save": a custom expert path, else
@@ -24729,6 +24900,8 @@ pub fn run() {
             get_clipboard_image,
             get_clipboard_file_path,
             pick_file_path,
+            pick_media_file_path,
+            open_file_in_editor,
             load_image_file,
             missing_files,
             save_screenshot_now,
@@ -27153,6 +27326,63 @@ mod tests {
     fn test_ffprobe() -> Option<PathBuf> {
         let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("ffprobe.exe");
         p.is_file().then_some(p)
+    }
+
+    // ---- detect_media_kind / exceeds_open_edit_limit: opening an existing file for editing ----
+
+    #[test]
+    fn exceeds_open_edit_limit_rejects_only_past_the_configured_mb() {
+        let mb = 1024 * 1024;
+        assert!(!exceeds_open_edit_limit(2048 * mb, 2048.0), "exactly at the limit must still open");
+        assert!(exceeds_open_edit_limit(2048 * mb + 1, 2048.0), "one byte past the limit must be rejected");
+        // A stray zero/negative setting must never turn into "anything goes".
+        assert!(exceeds_open_edit_limit(2 * mb, 0.0));
+    }
+
+    #[test]
+    fn detect_media_kind_recognizes_a_jpeg_saved_with_the_wrong_extension() {
+        let dir = std::env::temp_dir().join(format!("ps-openedit-jpg-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("photo.png"); // real JPEG bytes, misleading extension
+        let img = image::RgbImage::from_pixel(4, 4, image::Rgb([200, 50, 10]));
+        image::DynamicImage::ImageRgb8(img).save_with_format(&path, image::ImageFormat::Jpeg).unwrap();
+        let kind = detect_media_kind(&path, None);
+        assert_eq!(kind.map(|(k, _)| k), Some("image"), "content, not the .png extension, must decide");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn detect_media_kind_rejects_a_text_file_named_png() {
+        let dir = std::env::temp_dir().join(format!("ps-openedit-txt-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("notes.png");
+        fs::write(&path, b"just some plain text, not an image at all").unwrap();
+        assert!(detect_media_kind(&path, None).is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn detect_media_kind_rejects_an_empty_file() {
+        let dir = std::env::temp_dir().join(format!("ps-openedit-empty-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("empty.jpg");
+        fs::write(&path, b"").unwrap();
+        assert!(detect_media_kind(&path, None).is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn detect_media_kind_recognizes_an_mp4_saved_with_the_wrong_extension() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-openedit-mp4-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let real = make_test_mp4(&ffmpeg, &dir, "clip.mp4", 1, "64x64");
+        let path = dir.join("clip.jpg"); // real mp4 bytes, misleading extension
+        fs::rename(&real, &path).unwrap();
+        let kind = detect_media_kind(&path, Some(&ffprobe));
+        assert_eq!(kind.map(|(k, _)| k), Some("video"), "content, not the .jpg extension, must decide");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     // Like make_test_mp4, but with its own (system) audio track -- needed only

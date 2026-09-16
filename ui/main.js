@@ -679,6 +679,7 @@ const ERROR_MSG_KEYS = {
   "recording-target-switch-different-monitor": "recTargetSwitchDifferentMonitor",
   "recording-target-switch-invalid-window": "recTargetSwitchInvalidWindow",
   "recording-target-switch-timeout": "recTargetSwitchTimeout",
+  "file-missing": "openFileMissing",
 };
 function errToast(err) {
   const s = String(err);
@@ -1547,6 +1548,9 @@ const EXPERT_VALUES = {
   // editor's 1x-8x factor) -- see snip.js/video.js for the unit conversion.
   zoomStepPct: { label: "valZoomStepPct", min: 5, max: 50, step: 5, def: 20, unit: "%" },
   zoomMaxPct: { label: "valZoomMaxPct", min: 200, max: 1600, step: 100, def: 800, unit: "%" },
+  // A file past this size is rejected before it loads when opening one for
+  // editing -- open_file_in_editor reads the very same key.
+  editorOpenMaxMb: { label: "valEditorOpenMaxMb", min: 64, max: 8192, step: 64, def: 2048, unit: "MB" },
   editStateSaveSecs: { label: "valEditStateSaveSecs", min: 5, max: 300, step: 5, def: 30, unit: "s", gate: "editStateKeep" },
   // 0 means forever, same convention as trashRetentionDays.
   editStateKeepDays: { label: "valEditStateKeepDays", min: 0, max: 365, step: 1, def: 30, unit: "", gate: "editStateKeep" },
@@ -1998,7 +2002,7 @@ const EXPERT_TABS = [
     { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor"], paths: ["videoExportDir"] },
     // What the screenshot editor and the video editor share -- created here so
     // no setting key is ever declared in two groups (expert_menu_check.py).
-    { title: "expGroupEditors", flags: ["numFieldWheel", "editStateKeep"], values: ["numFieldStep", "numFieldBigStep", "zoomStepPct", "zoomMaxPct", "editStateSaveSecs", "editStateKeepDays", "veOvDupOffsetPx", "editSnapTolerancePx"] },
+    { title: "expGroupEditors", flags: ["numFieldWheel", "editStateKeep"], values: ["numFieldStep", "numFieldBigStep", "zoomStepPct", "zoomMaxPct", "editStateSaveSecs", "editStateKeepDays", "veOvDupOffsetPx", "editSnapTolerancePx", "editorOpenMaxMb"] },
   ] },
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
@@ -2191,7 +2195,7 @@ const EXPERT_TIPS = [
   "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veOvColor", "veOvFont",
   "veDefaultPanel", "videoExportDir",
   "numFieldWheel", "zoomStepPct", "zoomMaxPct", "errorLogKeepKb", "veOvDupOffsetPx", "editSnapTolerancePx",
-  "editStateKeep", "editStateSaveSecs", "editStateKeepDays",
+  "editStateKeep", "editStateSaveSecs", "editStateKeepDays", "editorOpenMaxMb",
   "snipQuality", "snipSaveQuality", "snipDelayMs",
   "snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx",
   "snipArrowHeadScale", "snipDefaultColor", "snipTextPx", "snipTextOutlinePx", "snipPixelBlock", "snipSpotlightDim",
@@ -11673,6 +11677,19 @@ function renderLibrary() {
     // Per-type preview: video plays inline, image/gif as a thumbnail, else a dot.
     row.append(thumbEl(p, libThumbCache), body);
 
+    // The library's own way to reach an editor: right-click an image/video/gif
+    // attachment for "Open a file in the editor", working on a copy exactly
+    // like the composer buttons' own menu -- only shown for a prompt that
+    // actually attaches one, never for a text prompt or an icon-only one.
+    const rowKind = p.file_path ? mediaKind(p.file_path) : "";
+    if (rowKind === "image" || rowKind === "gif" || rowKind === "video") {
+      row.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openOpenEditorPopAt(row, p.file_path);
+      });
+    }
+
     // Place on the current layout: drag the row onto the grid, or one click.
     row.addEventListener("pointerdown", (e) => {
       if (libSelectMode) return; // no drag while multi-selecting
@@ -13127,6 +13144,64 @@ function bind() {
   $("record-btn").addEventListener("click", () => {
     invoke("open_recorder").catch((err) => errToast(err));
   });
+
+  // A right-click on either composer button opens a quiet, one-item
+  // menu to edit an EXISTING file instead of only ever reaching an editor
+  // through a fresh capture/recording. Which editor opens is decided by the
+  // file's own content (open_file_in_editor), never by which button was used.
+  const openEditorPop = document.createElement("div");
+  openEditorPop.className = "ctx open-editor-pop hidden";
+  openEditorPop.setAttribute("role", "menu");
+  openEditorPop.innerHTML = '<button type="button" role="menuitem"></button>';
+  document.body.appendChild(openEditorPop);
+  function closeOpenEditorPop() {
+    openEditorPop.classList.add("hidden");
+  }
+  // path is set only when the menu is opened for a KNOWN attachment (the
+  // library's own right-click, below); left empty it means "let the user
+  // pick a file", which is what the composer buttons always do.
+  let openEditorPopPath = "";
+  function openOpenEditorPopAt(anchorEl, path) {
+    openEditorPopPath = path || "";
+    openEditorPop.querySelector("button").textContent = t("openFileInEditor");
+    placePopover(openEditorPop, anchorEl.getBoundingClientRect());
+  }
+  openEditorPop.querySelector("button").addEventListener("click", () => {
+    const path = openEditorPopPath;
+    closeOpenEditorPop();
+    openExternalFileInEditor(path || undefined);
+  });
+  $("snip-btn").addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    openOpenEditorPopAt($("snip-btn"));
+  });
+  $("record-btn").addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    openOpenEditorPopAt($("record-btn"));
+  });
+  // Shared by the composer menu above and the library's own "Open in editor"
+  // right-click on an image/video attachment -- existingPath lets the caller
+  // hand over a path it already knows instead of showing the picker.
+  async function openExternalFileInEditor(existingPath) {
+    const path = existingPath || (await invoke("pick_media_file_path").catch(() => null));
+    if (!path) return;
+    let res;
+    try {
+      res = await invoke("open_file_in_editor", { path });
+    } catch (err) {
+      const msg = String(err);
+      if (msg === "not-media") toast(t("openFileNotMedia"));
+      else if (msg.startsWith("too-large:")) toast(t("openFileTooBig").replace("{mb}", msg.split(":")[1] || ""));
+      else errToast(err);
+      return;
+    }
+    if (res.kind === "image") {
+      openImageFileInEditor(res);
+    } else if (res.kind === "video") {
+      toast(t("openedCopyNote"));
+      await invoke("open_video_editor", { srcPath: res.copied_path, originDir: res.origin_dir }).catch((e) => errToast(e));
+    }
+  }
   // Driven by the recording state, not by the click -- set on a
   // successful start, cleared on stop/cancel/auto-stop, and re-synced by a
   // slow poll so a missed event can never leave the button glowing forever.
@@ -15501,17 +15576,23 @@ function bind() {
   let pendingSnip = null;
   let pendingSnipPath = ""; // disk path if this shot was auto-saved to the folder
   let pendingSnipName = ""; // backend-suggested "Screenshot <app?> <timestamp>"
+  // Set only for a file opened for editing from outside the app -- the folder
+  // this "Save as..." should default into, since the original itself is never
+  // touched. Empty for every ordinary capture.
+  let pendingSnipOriginDir = "";
   const closeSnipModal = () => {
     snipModal.classList.add("hidden");
     pendingSnip = null;
     pendingSnipPath = "";
     pendingSnipName = "";
+    pendingSnipOriginDir = "";
   };
   listen("snip-captured", (e) => {
     pendingSnip = e.payload?.data_url || "";
     if (!pendingSnip) return;
     pendingSnipPath = e.payload?.path || "";
     pendingSnipName = e.payload?.name || "";
+    pendingSnipOriginDir = "";
     if (!flag("snipEditor")) {
       // Off -> the pre-117/118 flow, unedited shot straight into the result dialog.
       $("snip-preview").src = pendingSnip;
@@ -15534,6 +15615,7 @@ function bind() {
         $("snip-preview").src = pendingSnip;
         $("snip-save-folder").checked = settings.ui_flags?.screenshotSave === true;
         $("snip-modal-saveas-format").value = txt("screenshotFormat") || "png";
+        $("snip-modal-retry").classList.remove("hidden");
         snipModal.classList.remove("hidden");
       },
       // Cancel behaves like closing the result dialog today: the unedited shot
@@ -15545,6 +15627,28 @@ function bind() {
       },
     });
   });
+  // An existing image opened from the composer buttons' right-click
+  // menu or the library. Reuses the very same editor and result dialog as a
+  // fresh capture, but the source file is a copy -- no clipboard write, no
+  // auto-save to the screenshot folder, and "Save as..." below defaults to the
+  // origin file's own folder and name instead of a fresh "Screenshot-<stamp>".
+  function openImageFileInEditor(res) {
+    snipEditOpen(res.data_url, {
+      onApply: (editedDataUrl) => {
+        pendingSnip = editedDataUrl;
+        pendingSnipPath = "";
+        pendingSnipName = res.name || "";
+        pendingSnipOriginDir = res.origin_dir || "";
+        toast(t("openedCopyNote"));
+        $("snip-preview").src = pendingSnip;
+        $("snip-save-folder").checked = false;
+        $("snip-modal-saveas-format").value = txt("screenshotFormat") || "png";
+        $("snip-modal-retry").classList.add("hidden"); // "retry" means recapture -- meaningless for an opened file
+        snipModal.classList.remove("hidden");
+      },
+      onCancel: () => {},
+    });
+  }
   // Folder toggle on the result dialog = the same setting as in the main settings.
   // On -> save this shot to the folder now; off -> delete the saved copy.
   $("snip-save-folder").addEventListener("change", async (ev) => {
@@ -15565,7 +15669,12 @@ function bind() {
   $("snip-modal-saveas").addEventListener("click", async () => {
     if (!pendingSnip) return;
     const format = $("snip-modal-saveas-format").value || undefined;
-    await invoke("save_screenshot_as", { dataUrl: pendingSnip, format }).catch((err) => errToast(err));
+    await invoke("save_screenshot_as", {
+      dataUrl: pendingSnip,
+      format,
+      defaultDir: pendingSnipOriginDir || undefined,
+      defaultName: pendingSnipOriginDir ? pendingSnipName : undefined,
+    }).catch((err) => errToast(err));
   });
   $("snip-modal-yes").addEventListener("click", () => {
     const image = pendingSnip;
@@ -15582,8 +15691,10 @@ function bind() {
       copyImage: true,
     });
   });
-  // Discard this shot and immediately start a new one.
+  // Discard this shot and immediately start a new one -- hidden for a file
+  // opened for editing from elsewhere, where "retry" (a fresh capture) makes no sense.
   $("snip-modal-retry").addEventListener("click", () => {
+    if (pendingSnipOriginDir) { closeSnipModal(); return; }
     closeSnipModal();
     invoke("open_snip").catch((err) => errToast(err));
   });
@@ -16402,6 +16513,9 @@ function bind() {
     // The toolbar button toggles its own popover, so let its own press through.
     if (!gridTagPop.classList.contains("hidden") && !gridTagPop.contains(e.target) &&
         !e.target.closest("#grid-tag-btn")) closeGridTagPop();
+    // The two composer buttons toggle it themselves (their own contextmenu handler).
+    if (!openEditorPop.classList.contains("hidden") && !openEditorPop.contains(e.target) &&
+        !e.target.closest("#snip-btn") && !e.target.closest("#record-btn")) closeOpenEditorPop();
   });
   // Ctrl+Tab walks the views in the order the tab bar shows them, so a group's
   // members are reached in place instead of being skipped.
@@ -16443,6 +16557,7 @@ function bind() {
     if (!tileFolderPop.classList.contains("hidden")) { trapTabWithin(tileFolderPop, e); return; }
     if (!viewsPop.classList.contains("hidden")) { trapTabWithin(viewsPop, e); return; }
     if (!gridTagPop.classList.contains("hidden")) { trapTabWithin(gridTagPop, e); return; }
+    if (!openEditorPop.classList.contains("hidden")) { trapTabWithin(openEditorPop, e); return; }
     if (!$("lightbox").classList.contains("hidden")) { trapTabWithin($("lightbox"), e); return; }
     if (!$("confirm-modal").classList.contains("hidden")) { trapTabWithin($("confirm-modal"), e); return; }
     if (!colorPop.classList.contains("hidden")) { trapTabWithin(colorPop, e); return; }
@@ -16474,6 +16589,7 @@ function bind() {
     if (!tileFolderPop.classList.contains("hidden")) { closeTileFolderPop(); return; }
     if (!viewsPop.classList.contains("hidden")) { closeViewsPop(); return; }
     if (!gridTagPop.classList.contains("hidden")) { closeGridTagPop(); return; }
+    if (!openEditorPop.classList.contains("hidden")) { closeOpenEditorPop(); return; }
     if (!$("lightbox").classList.contains("hidden")) closeLightbox();
     else if (confirmCleanup) confirmCleanup(false);
     // The variable-fill dialog has its own keydown handler; consume Escape here so the

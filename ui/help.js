@@ -428,6 +428,19 @@ export const HELP_CONTENT = {
     },
     {
       section: "basics",
+      title: "Open a file in the editor",
+      whatItIs: "Opens an existing picture or video in whichever editor its content calls for, instead of only ever reaching an editor through a fresh capture or recording.",
+      howTo: [
+        "Right-click the screenshot or record button, or an image/video attachment in the library.",
+        "Choose \"Open a file in the editor\" and pick the file.",
+        "Edit as usual; saving asks where to put the result.",
+      ],
+      whatHappens:
+        "The file's content decides which editor opens, not its extension — a video saved with a picture extension still opens the video editor. The editor always works on a copy, so the original file is never changed; the save dialog starts in the original file's own folder. A file past the configured size limit is rejected before it loads.",
+      settings: ["Largest file to open — Expert menu → Capture → Both editors"],
+    },
+    {
+      section: "basics",
       title: "Screen recording",
       whatItIs: "Records a window, a monitor, or a dragged region as a video, next to the screenshot tool.",
       howTo: [
@@ -1005,6 +1018,19 @@ export const HELP_CONTENT = {
       whatHappens:
         "Jede Bearbeitung ist ein Schritt in einer Rückgängig/Wiederholen-Liste, deren Höchstzahl separat einstellbar ist. Beim Verpixeln wird immer der ursprüngliche Screenshot verwendet, nie eine bereits bearbeitete Ebene; dadurch werden frühere Markierungen beim Unkenntlichmachen einer Stelle nicht verschmiert. Das Einrasten an Kanten richtet Formen am Bildrand und aneinander aus. Textbeschriftungen können für bessere Lesbarkeit auf unruhigem Hintergrund eine eigene Hintergrundfläche erhalten. Beim Hineinzoomen verschiebt das Hand-Werkzeug (oder gehaltene Leertaste bzw. die mittlere Maustaste) die Ansicht für pixelgenaues Arbeiten, und das Zuschneide-Werkzeug zeigt an jedem Anfasser einen passenden Richtungspfeil sowie innerhalb des Ausschnitts einen Verschieben-Zeiger. Ist der Editor unten deaktiviert, erscheint stattdessen direkt der Bestätigungsdialog.",
       settings: ["Screenshot-Editor, Standardwerkzeug, Einrasten an Kanten, Hintergrund für Textbeschriftungen, Stift-/Marker-/Textgröße, Pixelblockgröße, Spotlight-Abdunklung, Rückgängig-Limit — Experten-Menü → Funktionen → Prompts erstellen"],
+    },
+    {
+      section: "basics",
+      title: "Datei im Editor öffnen",
+      whatItIs: "Öffnet ein vorhandenes Bild oder Video in dem Editor, den sein Inhalt verlangt, statt einen Editor nur über eine frische Aufnahme zu erreichen.",
+      howTo: [
+        "Rechtsklick auf den Bildschirmfoto- oder Aufnahme-Knopf, oder auf einen Bild-/Videoanhang in der Bibliothek.",
+        "\"Datei im Editor öffnen\" wählen und die Datei aussuchen.",
+        "Wie gewohnt bearbeiten; beim Speichern wird nach dem Ziel gefragt.",
+      ],
+      whatHappens:
+        "Der Inhalt der Datei entscheidet, welcher Editor sich öffnet, nicht ihre Endung — ein Video mit einer Bild-Endung öffnet trotzdem den Video-Editor. Der Editor arbeitet immer auf einer Kopie, das Original wird also nie verändert; der Speichern-Dialog startet im Ordner der Ausgangsdatei. Eine Datei über der eingestellten Größe wird abgelehnt, bevor sie geladen wird.",
+      settings: ["Größte zu öffnende Datei — Experten-Menü → Aufnehmen → Beide Editoren"],
     },
     {
       section: "basics",
