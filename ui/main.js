@@ -14952,11 +14952,29 @@ function bind() {
   // ---- zoom: pure CSS scaling of the native-resolution canvas -- no redraw needed ----
   function snipEditSetZoom(z) {
     SE.zoom = snipEditClamp(z, 0.05, snipZoomMax());
-    snipEditStage.style.width = `${SE.w * SE.zoom}px`;
-    snipEditStage.style.height = `${SE.h * SE.zoom}px`;
+    const sw = SE.w * SE.zoom, sh = SE.h * SE.zoom;
+    snipEditStage.style.width = `${sw}px`;
+    snipEditStage.style.height = `${sh}px`;
+    // Once the picture is larger than the view, leave half a view of room on
+    // every side so any corner or edge can be panned into the middle. While it
+    // fits, the CSS auto margin keeps it centred.
+    const vw = snipEditWrap.clientWidth, vh = snipEditWrap.clientHeight;
+    snipEditStage.style.margin = (sw > vw || sh > vh) ? `${Math.round(vh / 2)}px ${Math.round(vw / 2)}px` : "";
     $("snip-edit-zoom-val").textContent = `${Math.round(SE.zoom * 100)}%`;
   }
-  function snipEditZoomBy(factor) { snipEditSetZoom(SE.zoom * factor); }
+  // Zooms while the picture point under (clientX, clientY) stays where it is.
+  function snipEditZoomAt(z, clientX, clientY) {
+    const r0 = snipEditStage.getBoundingClientRect();
+    const ix = (clientX - r0.left) / SE.zoom, iy = (clientY - r0.top) / SE.zoom;
+    snipEditSetZoom(z);
+    const r1 = snipEditStage.getBoundingClientRect();
+    snipEditWrap.scrollLeft += r1.left + ix * SE.zoom - clientX;
+    snipEditWrap.scrollTop += r1.top + iy * SE.zoom - clientY;
+  }
+  function snipEditZoomBy(factor) {
+    const wr = snipEditWrap.getBoundingClientRect();
+    snipEditZoomAt(SE.zoom * factor, wr.left + snipEditWrap.clientWidth / 2, wr.top + snipEditWrap.clientHeight / 2);
+  }
   function snipEditFit() {
     const availW = snipEditWrap.clientWidth - 24;
     const availH = snipEditWrap.clientHeight - 24;
@@ -15148,17 +15166,11 @@ function bind() {
   snipEditWrap.addEventListener("wheel", (e) => {
     if (!SE.active) return;
     e.preventDefault();
-    const rect = snipEditWrap.getBoundingClientRect();
-    const cx = e.clientX - rect.left + snipEditWrap.scrollLeft;
-    const cy = e.clientY - rect.top + snipEditWrap.scrollTop;
-    const oldZoom = SE.zoom;
     const step = snipZoomStepFactor();
-    const newZoom = snipEditClamp(oldZoom * (e.deltaY < 0 ? step : 1 / step), 0.05, snipZoomMax());
-    const ratio = newZoom / oldZoom;
-    snipEditSetZoom(newZoom);
-    snipEditWrap.scrollLeft = cx * ratio - (e.clientX - rect.left);
-    snipEditWrap.scrollTop = cy * ratio - (e.clientY - rect.top);
+    snipEditZoomAt(SE.zoom * (e.deltaY < 0 ? step : 1 / step), e.clientX, e.clientY);
   }, { passive: false });
+  // The pan room depends on the view size, so a resized window recomputes it.
+  window.addEventListener("resize", () => { if (SE.active) snipEditSetZoom(SE.zoom); });
 
   snipEditTextInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); snipEditCommitTextInput(); }

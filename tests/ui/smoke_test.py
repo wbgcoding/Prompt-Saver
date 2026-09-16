@@ -6371,6 +6371,73 @@ PROBE = """
               Math.round(tr.right - wr.right) + 'px');
           }
         }
+        // 472: pan room reaches every corner and edge, and the wheel zoom
+        // anchors on the picture point under the cursor.
+        ti.blur();
+        await sleep(30);
+        if (document.activeElement === ti) {
+          out.errors.push('472: the text input kept focus after blur, so the editor key handler would ignore shortcuts');
+        }
+        {
+          const zoomInBtn = document.getElementById('snip-edit-zoom-in');
+          const zoomVal2 = document.getElementById('snip-edit-zoom-val');
+          let lastPct = parseInt(zoomVal2.textContent, 10);
+          for (let i = 0; i < 12; i++) {
+            zoomInBtn.click();
+            await sleep(20);
+            const pct = parseInt(zoomVal2.textContent, 10);
+            if (pct <= lastPct) break;
+            lastPct = pct;
+          }
+          const stage = document.querySelector('.snip-edit-stage');
+          wrap.scrollLeft = 0; wrap.scrollTop = 0;
+          let stageRect = stage.getBoundingClientRect();
+          let wrapRect = wrap.getBoundingClientRect();
+          if (stageRect.left - wrapRect.left < wrap.clientWidth / 2 - 2) {
+            out.errors.push('472: the left edge of the picture cannot be panned to the middle of the view');
+          }
+          if (stageRect.top - wrapRect.top < wrap.clientHeight / 2 - 2) {
+            out.errors.push('472: the top edge of the picture cannot be panned to the middle of the view');
+          }
+          wrap.scrollLeft = wrap.scrollWidth; wrap.scrollTop = wrap.scrollHeight;
+          stageRect = stage.getBoundingClientRect();
+          wrapRect = wrap.getBoundingClientRect();
+          if (wrapRect.left + wrap.clientWidth - stageRect.right < wrap.clientWidth / 2 - 2) {
+            out.errors.push('472: the right edge of the picture cannot be panned to the middle of the view');
+          }
+          if (wrapRect.top + wrap.clientHeight - stageRect.bottom < wrap.clientHeight / 2 - 2) {
+            out.errors.push('472: the bottom edge of the picture cannot be panned to the middle of the view');
+          }
+          wrap.scrollLeft = (wrap.scrollWidth - wrap.clientWidth) / 2;
+          wrap.scrollTop = (wrap.scrollHeight - wrap.clientHeight) / 2;
+          stageRect = stage.getBoundingClientRect();
+          wrapRect = wrap.getBoundingClientRect();
+          const px = wrapRect.left + wrap.clientWidth / 2 + 40;
+          const py = wrapRect.top + wrap.clientHeight / 2 + 30;
+          const scale = stageRect.width / 1600;
+          const picX = (px - stageRect.left) / scale;
+          const picY = (py - stageRect.top) / scale;
+          wrap.dispatchEvent(new WheelEvent('wheel', { deltaY: 100, clientX: px, clientY: py, bubbles: true, cancelable: true }));
+          await sleep(30);
+          const stageRect2 = stage.getBoundingClientRect();
+          const scale2 = stageRect2.width / 1600;
+          const picX2 = (px - stageRect2.left) / scale2;
+          const picY2 = (py - stageRect2.top) / scale2;
+          if (Math.abs(picX2 - picX) > 1 || Math.abs(picY2 - picY) > 1) {
+            out.errors.push('472: zooming with the wheel did not keep the picture point under the cursor');
+          }
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: '0', ctrlKey: true, bubbles: true }));
+          await sleep(30);
+          const stageRect3 = stage.getBoundingClientRect();
+          const wrapRect3 = wrap.getBoundingClientRect();
+          const wrapCx = wrapRect3.left + wrap.clientWidth / 2;
+          const wrapCy = wrapRect3.top + wrap.clientHeight / 2;
+          const stageCx = stageRect3.left + stageRect3.width / 2;
+          const stageCy = stageRect3.top + stageRect3.height / 2;
+          if (Math.abs(stageCx - wrapCx) > 1 || Math.abs(stageCy - wrapCy) > 1) {
+            out.errors.push('472: Ctrl+0 did not fit and centre the picture in the view');
+          }
+        }
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
         await sleep(30);
         document.getElementById('snip-edit-cancel').click();
