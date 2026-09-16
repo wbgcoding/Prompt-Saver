@@ -272,6 +272,16 @@ the video editor and the introduction tour ship on).
   the next time you open the same recording; declining discards the saved
   state. Kept for 30 days by default (adjustable, zero keeps it forever) and
   cleaned up automatically once the recording itself is gone.
+- **The video editor can now insert another video, not just images.** "Add a
+  video" offers it either as a new overlay kind (its own rectangle, time
+  range and volume, muted by default, playing once or on repeat) or as a
+  whole extra section spliced in at the start, the end or the current
+  position. Two files rarely share a resolution, frame rate or sound format,
+  so every inserted section is matched to the main video's own values first;
+  a section with no sound of its own gets silence instead of shifting
+  everything after it. Each extra source is checked once when picked, up to
+  a small fixed number per project, and stays visibly marked as missing if it
+  is later moved or deleted.
 - **The expert-menu search now also finds a hit outside the expert menu** —
   the normal settings page, the toolbar's grid-size control, the library's
   sort order, or a setting in the backup manager. A match appears in its own

@@ -9092,6 +9092,63 @@ VIDEO_PROBE = """
       }
     }
 
+    // ---- 416: "Add a video" as a section clip updates the timeline scale,
+    // and an unreadable extra source is rejected before it reaches the list ----
+    {
+      const beforeText = document.getElementById('ve-cut-count').textContent;
+      document.getElementById('ve-add-video').click();
+      await sleep(30);
+      const pickPop = document.getElementById('ve-add-video-pop');
+      if (!pickPop || pickPop.classList.contains('hidden') || pickPop.querySelectorAll('button').length !== 2) {
+        errs.push('416: "Add a video" did not open the overlay/section choice');
+      } else {
+        pickPop.querySelectorAll('button')[1].click(); // "As its own section"
+        await sleep(30);
+        const posButtons = pickPop.querySelectorAll('button');
+        if (pickPop.classList.contains('hidden') || posButtons.length !== 3) {
+          errs.push('416: choosing "as its own section" did not open the start/end/current-position choice');
+        } else {
+          posButtons[1].click(); // "At the end"
+          await sleep(30);
+          const clipList = document.getElementById('ve-clip-list');
+          const clipRow = clipList ? clipList.querySelector('.ve-op-row') : null;
+          if (!clipRow || clipList.classList.contains('hidden')) {
+            errs.push('416: the inserted section did not appear in the clip list');
+          } else if (!/ps-smoke-badge/.test(clipRow.textContent)) {
+            errs.push('416: the clip row did not show the name of the inserted file: ' + clipRow.textContent);
+          }
+          const afterText = document.getElementById('ve-cut-count').textContent;
+          if (afterText === beforeText) {
+            errs.push('416: the total-length readout did not change once a section was inserted (timeline scale not updated)');
+          }
+          // Clean up so later probes see the plain single-source state again.
+          const del = clipRow ? clipRow.querySelector('.ve-op-del') : null;
+          if (del) { del.click(); await sleep(30); }
+        }
+      }
+    }
+    {
+      window.__EXTRA_VIDEO_FAIL__ = true;
+      const beforeCount = document.querySelectorAll('#ve-clip-list .ve-op-row').length;
+      document.getElementById('ve-add-video').click();
+      await sleep(30);
+      window.__EXTRA_VIDEO_FAIL__ = false;
+      const toastEl = document.getElementById('ve-toast');
+      const pickPop = document.getElementById('ve-add-video-pop');
+      const popOpened = pickPop && !pickPop.classList.contains('hidden') && pickPop.querySelectorAll('button').length;
+      if (popOpened) {
+        errs.push('416: an unreadable extra video source still opened the overlay/section choice');
+      }
+      if (!toastEl || toastEl.classList.contains('hidden') || toastEl.textContent.includes('ffErrUnreadable')) {
+        errs.push('416: an unreadable extra video source was not rejected with plain-language wording, got: ' +
+          (toastEl ? toastEl.textContent : '(no toast)'));
+      }
+      const afterCount = document.querySelectorAll('#ve-clip-list .ve-op-row').length;
+      if (afterCount !== beforeCount) {
+        errs.push('416: an unreadable extra video source was added to the clip list anyway');
+      }
+    }
+
     // ---- 392: the last colour picked for a text overlay is remembered as the
     // starting colour for the next text overlay, and veOvRemember off falls
     // back to the fixed default again ----

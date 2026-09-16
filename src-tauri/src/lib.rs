@@ -20767,6 +20767,26 @@ async fn probe_recording(app: AppHandle, path: String) -> Result<RecordingProbe,
         .map_err(|e| e.to_string())?
 }
 
+// Checks one extra video source (an inserted overlay or section clip, the
+// video editor's "Add a video" path) before the user builds anything on top
+// of it. Unlike probe_recording above, a failure here comes back as the same
+// classified JSON envelope export_video's own errors use, so the editor's
+// existing ffErr* messages (see classify_ffmpeg_error) cover this path too
+// instead of a second, separate wording for the same three failure shapes.
+#[tauri::command]
+async fn probe_extra_video_source(app: AppHandle, path: String) -> Result<RecordingProbe, String> {
+    let src = PathBuf::from(&path);
+    if !src.is_file() {
+        return Err(ffmpeg_error_json(FfmpegErrorKey::Missing, None, ""));
+    }
+    let ffprobe = ffprobe_search_path(&app).ok_or_else(|| "ffmpeg-missing".to_string())?;
+    tauri::async_runtime::spawn_blocking(move || {
+        probe_recording_blocking(&ffprobe, &src).map_err(|e| ffmpeg_error_json(FfmpegErrorKey::Unreadable, None, &e))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 fn parse_ffprobe_rate(s: &str) -> Option<f64> {
     let (num, den) = s.split_once('/')?;
     let num: f64 = num.parse().ok()?;
@@ -24769,6 +24789,7 @@ pub fn run() {
             open_video_editor,
             video_editor_source,
             probe_recording,
+            probe_extra_video_source,
             windows_fonts_dir,
             mux_mic_track,
             generate_filmstrip,
@@ -27834,6 +27855,194 @@ mod tests {
         let out = export_video_blocking(&ffmpeg, &src, &dest, &req, my_gen, |_| {}).expect("gif export should succeed");
         let bytes = fs::read(&out).unwrap();
         assert_eq!(&bytes[0..3], b"GIF");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ---- extra video sources: overlay + section clip, one real-ffmpeg test each ----
+    //
+    // ui/video.js's timelinePlan()/buildVideoChain()/buildAudioChain() turn an
+    // inserted video (an overlay, or a whole section spliced into the kept
+    // timeline) into `movie=`/`amovie=` source filters referencing the extra
+    // file directly, normalized to the main video's own size/rate before any
+    // concat -- no second `-i` on the ffmpeg command line at all, so nothing
+    // here needs a backend change beyond the fragments themselves. These tests
+    // hardcode the exact fragment shape those functions emit and prove it
+    // against a real ffmpeg run, the same pattern the five overlay-kind tests
+    // above already use.
+
+    // Same two-level escape ui/video.js's own ffPath() applies to a filter
+    // option's path -- single-quoted, exactly one backslash before the drive
+    // colon. A test fixture path is always local (never contains an
+    // apostrophe), so this is the escaping alone, not the whole helper.
+    fn ff_path_for_test(path: &Path) -> String {
+        path.to_string_lossy().replace('\\', "/").replace(':', "\\:")
+    }
+
+    fn ffprobe_stream_durations_secs(ffprobe: &Path, path: &Path) -> (Option<f64>, Option<f64>) {
+        use std::os::windows::process::CommandExt;
+        let mut cmd = std::process::Command::new(ffprobe);
+        cmd.args(["-v", "quiet", "-print_format", "json", "-show_streams"]).arg(path);
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        let output = cmd.output().expect("could not run ffprobe");
+        assert!(output.status.success(), "ffprobe failed to read {}", path.display());
+        let json: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("ffprobe output was not valid json");
+        let streams = json["streams"].as_array().cloned().unwrap_or_default();
+        let dur_of = |kind: &str| {
+            streams
+                .iter()
+                .find(|s| s["codec_type"] == kind)
+                .and_then(|s| s["duration"].as_str())
+                .and_then(|s| s.parse::<f64>().ok())
+        };
+        (dur_of("video"), dur_of("audio"))
+    }
+
+    fn sample_pixel_rgb24_at(ffmpeg: &Path, path: &Path, seconds: f64, x: u32, y: u32) -> [u8; 3] {
+        use std::os::windows::process::CommandExt;
+        let out = std::process::Command::new(ffmpeg)
+            .args(["-y", "-hide_banner", "-loglevel", "error", "-ss", &format!("{seconds:.3}"), "-i"])
+            .arg(path)
+            .arg("-vf")
+            .arg(format!("crop=2:2:{x}:{y}"))
+            .args(["-f", "rawvideo", "-pix_fmt", "rgb24", "-frames:v", "1", "-"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .expect("could not run ffmpeg to sample a pixel");
+        assert!(out.status.success(), "pixel sample failed: {}", String::from_utf8_lossy(&out.stderr));
+        [out.stdout[0], out.stdout[1], out.stdout[2]]
+    }
+
+    #[test]
+    fn export_video_real_ffmpeg_two_clips_of_different_resolution_and_rate_concatenate_cleanly() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-clip-concat-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let main = make_test_mp4_with_audio(&ffmpeg, &dir, "main.mp4", 2, "64x48");
+        let extra = make_test_mp4_with_audio(&ffmpeg, &dir, "extra.mp4", 1, "100x80");
+        let dest = dir.join("out.mp4");
+        let extra_ff = ff_path_for_test(&extra);
+        let video_chain = format!(
+            "[0:v]fps=15,trim=start=0.000:end=2.000,setpts=PTS-STARTPTS[v0];\
+             movie='{extra_ff}'[vb];\
+             [vb]fps=15,scale=64:48:force_original_aspect_ratio=decrease,pad=64:48:(ow-iw)/2:(oh-ih)/2:color=black,setpts=PTS-STARTPTS[v1];\
+             [v0][v1]concat=n=2:v=1:a=0[vout]"
+        );
+        let audio_chain = format!(
+            "[0:a]atrim=start=0.000:end=2.000,asetpts=PTS-STARTPTS[a0];\
+             amovie='{extra_ff}'[ab];\
+             [ab]aresample=48000,aformat=channel_layouts=stereo,atrim=0:1.000,asetpts=PTS-STARTPTS[a1];\
+             [a0][a1]concat=n=2:v=0:a=1[aout]"
+        );
+        let req = ExportRequest {
+            src_path: main.to_string_lossy().to_string(),
+            dest_path: dest.to_string_lossy().to_string(),
+            filter_chain: Some(video_chain),
+            audio_map: Some(audio_chain),
+            lossless_copy: false,
+            lossless_quality: false,
+            format: "mp4".to_string(),
+            video_kbps: Some(1000),
+            trim_start_ms: None,
+            trim_end_ms: None,
+            total_ms: 60_000,
+        };
+        let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        export_video_blocking(&ffmpeg, &main, &dest, &req, my_gen, |_| {}).expect("concat export should succeed");
+        let (_, video_codec, audio_count) = ffprobe_format_and_video_codec(&ffprobe, &dest);
+        assert_eq!(video_codec, "h264");
+        assert_eq!(audio_count, 1, "the two source audio tracks must end up mixed into one output track");
+        let probe = probe_recording_blocking(&ffprobe, &dest).expect("probe of the exported file should succeed");
+        assert_eq!((probe.width, probe.height), (64, 48), "the joined clip must carry the MAIN video's own size, not the inserted clip's");
+        assert!((2700..=3300).contains(&probe.duration_ms), "expected roughly 3s (2s main + 1s inserted), was {}ms", probe.duration_ms);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_video_real_ffmpeg_a_silent_inserted_clip_gets_silence_and_does_not_shift_the_track() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-clip-silence-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let main = make_test_mp4_with_audio(&ffmpeg, &dir, "main.mp4", 2, "64x48");
+        // No -c:a at all -- the inserted clip genuinely has no audio track,
+        // the case buildAudioChain() must fill with anullsrc rather than
+        // just skipping (or every track after it drifts out of sync).
+        let extra = make_test_mp4(&ffmpeg, &dir, "extra.mp4", 1, "64x48");
+        let dest = dir.join("out.mp4");
+        let extra_ff = ff_path_for_test(&extra);
+        let video_chain = format!(
+            "[0:v]fps=15,trim=start=0.000:end=2.000,setpts=PTS-STARTPTS[v0];\
+             movie='{extra_ff}'[vb];\
+             [vb]fps=15,scale=64:48:force_original_aspect_ratio=decrease,pad=64:48:(ow-iw)/2:(oh-ih)/2:color=black,setpts=PTS-STARTPTS[v1];\
+             [v0][v1]concat=n=2:v=1:a=0[vout]"
+        );
+        let audio_chain = "[0:a]atrim=start=0.000:end=2.000,asetpts=PTS-STARTPTS[a0];\
+             anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:1.000,asetpts=PTS-STARTPTS[a1];\
+             [a0][a1]concat=n=2:v=0:a=1[aout]".to_string();
+        let req = ExportRequest {
+            src_path: main.to_string_lossy().to_string(),
+            dest_path: dest.to_string_lossy().to_string(),
+            filter_chain: Some(video_chain),
+            audio_map: Some(audio_chain),
+            lossless_copy: false,
+            lossless_quality: false,
+            format: "mp4".to_string(),
+            video_kbps: Some(1000),
+            trim_start_ms: None,
+            trim_end_ms: None,
+            total_ms: 60_000,
+        };
+        let my_gen = VIDEO_EXPORT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+        export_video_blocking(&ffmpeg, &main, &dest, &req, my_gen, |_| {}).expect("export should succeed");
+        let (video_dur, audio_dur) = ffprobe_stream_durations_secs(&ffprobe, &dest);
+        let video_dur = video_dur.expect("video stream must report a duration");
+        let audio_dur = audio_dur.expect("the silence-padded audio stream must still exist");
+        assert!((video_dur - audio_dur).abs() < 0.3, "audio must not drift from video once silence is inserted: video={video_dur}s audio={audio_dur}s");
+        assert!((2.7..=3.3).contains(&video_dur), "expected roughly 3s total, was {video_dur}s");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_video_real_ffmpeg_video_overlay_appears_only_in_its_own_time_range() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-ovtest-video-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 3, "64x48");
+        // A pure green clip -- unmistakable against the base testsrc pattern's
+        // own colours, so a hit at (0,0) rules out every branch except "the
+        // overlay drew there".
+        use std::os::windows::process::CommandExt;
+        let overlay_src = dir.join("overlay.mp4");
+        let status = std::process::Command::new(&ffmpeg)
+            .args(["-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=green:s=8x8:d=1", "-c:v", "libx264", "-pix_fmt", "yuv420p"])
+            .arg(&overlay_src)
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()
+            .expect("could not build the green overlay fixture");
+        assert!(status.success());
+        let dest = dir.join("out.mp4");
+        let overlay_ff = ff_path_for_test(&overlay_src);
+        // Mirrors buildVideoChain()'s "video" overlay branch: enabled only
+        // between t=1 and t=2 on the (untouched, 1x-speed) output timeline.
+        let video_chain = format!(
+            "[0:v]fps=15,trim=start=0.000:end=3.000,setpts=PTS-STARTPTS[v0];\
+             movie='{overlay_ff}'[ob];\
+             [ob]scale=8:8:force_original_aspect_ratio=decrease,pad=8:8:(ow-iw)/2:(oh-ih)/2:color=black,format=rgba,colorchannelmixer=aa=1.00[os];\
+             [v0][os]overlay=0:0:enable='between(t,1.000,2.000)'[vout]"
+        );
+        run_overlay_export(&ffmpeg, &src, &dest, video_chain);
+        let before = sample_pixel_rgb24_at(&ffmpeg, &dest, 0.2, 0, 0);
+        let during = sample_pixel_rgb24_at(&ffmpeg, &dest, 1.5, 0, 0);
+        let after = sample_pixel_rgb24_at(&ffmpeg, &dest, 2.8, 0, 0);
+        // Pure green survives the h264 re-encode almost exactly but not
+        // pixel-perfectly -- a few units of quantization noise either way is
+        // expected, not a sign the overlay drew the wrong thing.
+        let is_green = |p: [u8; 3]| p[0] < 20 && (p[1] as i16 - 128).abs() < 20 && p[2] < 20;
+        assert!(is_green(during), "the overlay must be visible at t=1.5s, sampled {during:?}");
+        assert!(!is_green(before), "the overlay must not be visible before its range, sampled {before:?}");
+        assert!(!is_green(after), "the overlay must not be visible after its range, sampled {after:?}");
         let _ = fs::remove_dir_all(&dir);
     }
 

@@ -336,6 +336,19 @@ const RESULTS = {
     duration_ms: 600000, fps: 30, width: 1920, height: 1080,
     has_audio: true, has_mic_track: true, mic_sidecar: "",
   }),
+  // 416: the "Add a video" flow's own ffprobe check. window.__EXTRA_VIDEO_FAIL__
+  // (default: unset) lets one probe step exercise the rejection path -- the
+  // same JSON envelope shape a real ffmpeg-error rejection uses -- without
+  // changing every other call's success fixture.
+  probe_extra_video_source: () => {
+    if (window.__EXTRA_VIDEO_FAIL__) {
+      throw JSON.stringify({ key: "ffErrUnreadable", code: null, raw: "" });
+    }
+    return window.__EXTRA_VIDEO_PROBE__ || {
+      duration_ms: 4000, fps: 30, width: 640, height: 360,
+      has_audio: true, has_mic_track: false, mic_sidecar: "",
+    };
+  },
   // A fixed (size, mtime) tuple so a probe can control whether it "matches" a
   // window.__EDIT_STATE_FIXTURE__ saved under the same numbers.
   stat_file: () => [4096, 1700000000],
