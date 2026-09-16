@@ -6192,6 +6192,89 @@ PROBE = """
         document.getElementById('snip-edit-cancel').click();
         await sleep(200);
       }
+      // 470: dragging a selected rect (or one of its resize handles), and
+      // dragging a line endpoint, used to be silent no-ops -- clicking to
+      // select already worked on pointerdown, but the drag itself had no
+      // matching case in pointermove or pointerup.
+      {
+        const canvas470 = document.createElement('canvas');
+        canvas470.width = 400; canvas470.height = 300;
+        canvas470.getContext('2d').fillStyle = '#ffffff';
+        canvas470.getContext('2d').fillRect(0, 0, 400, 300);
+        window.__FIRE__('snip-captured', { data_url: canvas470.toDataURL('image/png'), path: '', name: 'drag470.png' });
+        await sleep(300);
+        const rectBtn470 = document.querySelector('#snip-edit-tools button[data-tool="rect"]');
+        const lineBtn470 = document.querySelector('#snip-edit-tools button[data-tool="line"]');
+        const baseCv470 = document.getElementById('snip-edit-base');
+        const liveCv470 = document.getElementById('snip-edit-live');
+        if (!rectBtn470 || !lineBtn470 || !baseCv470 || !liveCv470) {
+          out.errors.push('470: the screenshot editor is missing the rect tool, the line tool or a canvas');
+        } else {
+          // Reads the canvas position fresh on every call rather than caching
+          // it once -- the tool options panel changes width per tool, which
+          // shifts the canvas, so a cached rect drifts out of date as soon as
+          // a different tool gets picked.
+          const toClient470 = (ix, iy) => {
+            const r = baseCv470.getBoundingClientRect();
+            const zoom = r.width / 400;
+            return { clientX: r.left + ix * zoom, clientY: r.top + iy * zoom };
+          };
+          // altKey turns off the editor snap-to-edges feature for the whole
+          // drag, so every coordinate below lands exactly where sent instead
+          // of drifting toward a nearby edge or centre.
+          const down470 = (p) => liveCv470.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, altKey: true, ...p }));
+          const move470 = (p) => liveCv470.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, altKey: true, ...p }));
+          const up470 = (p) => window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, altKey: true, ...p }));
+          const drag470 = async (ix1, iy1, ix2, iy2) => {
+            down470(toClient470(ix1, iy1));
+            move470(toClient470(ix2, iy2));
+            up470(toClient470(ix2, iy2));
+            await sleep(60);
+          };
+          const click470 = async (ix, iy) => {
+            down470(toClient470(ix, iy));
+            up470(toClient470(ix, iy));
+            await sleep(60);
+          };
+          const baseCtx470 = baseCv470.getContext('2d');
+          const hasInk470 = (x, y) => {
+            const d = baseCtx470.getImageData(x, y, 1, 1).data;
+            return !(d[0] > 250 && d[1] > 250 && d[2] > 250);
+          };
+
+          // ---- drag a selected rect by its body ----
+          // Every ink check below samples 2px inward from the shape's own
+          // corner or endpoint, never the exact boundary pixel -- a stroked
+          // canvas edge anti-aliases its outermost pixel down to a partial
+          // tint that a strict whiteness check can misread as blank.
+          rectBtn470.click();
+          await sleep(30);
+          await drag470(40, 40, 140, 140); // draw the rect
+          await click470(40, 60); // left border, away from any handle -- selects it
+          if (!hasInk470(42, 42)) out.errors.push('470: the drawn rect shows no ink near its own corner before the move drag runs');
+          await drag470(40, 60, 90, 110); // grab the same border point, drag it by (50,50)
+          if (hasInk470(42, 42)) out.errors.push('470: dragging a selected rect left ink behind near its old corner (40,40)');
+          if (!hasInk470(92, 92)) out.errors.push('470: dragging a selected rect by (50,50) did not move its corner near (90,90)');
+
+          // ---- resize the same rect from its bottom-right handle ----
+          if (!hasInk470(186, 186)) out.errors.push('470: the moved rect shows no ink near its own corner before the resize drag runs');
+          await drag470(190, 190, 230, 230); // the se handle sits at the moved corner
+          if (hasInk470(186, 186)) out.errors.push('470: resizing a selected rect from its se handle left ink behind near the old corner (190,190)');
+          if (!hasInk470(226, 226)) out.errors.push('470: resizing a selected rect from its se handle did not grow it near (230,230)');
+
+          // ---- drag one endpoint of a selected line ----
+          lineBtn470.click();
+          await sleep(30);
+          await drag470(250, 50, 350, 100); // draw the line
+          await click470(300, 75); // midpoint, away from either endpoint handle -- selects it
+          if (!hasInk470(340, 95)) out.errors.push('470: the drawn line shows no ink near its own endpoint before the endpoint drag runs');
+          await drag470(350, 100, 390, 140); // grab the far endpoint and pull it further out
+          if (hasInk470(340, 95)) out.errors.push('470: dragging a line endpoint left ink behind near its old position (350,100)');
+          if (!hasInk470(380, 134)) out.errors.push('470: dragging a line endpoint to (390,140) put no line near there');
+        }
+        document.getElementById('snip-edit-cancel').click();
+        await sleep(200);
+      }
       // 365: the fullscreen media viewer (lightbox) keeps the point under the
       // cursor fixed while wheel-zooming instead of always zooming to its own
       // centre. Opened through a real prompt-editor preview click; the image's

@@ -15052,6 +15052,31 @@ function bind() {
         d.newPoint = newPoint;
         break;
       }
+      case "shape-move": {
+        const d = SE.drag;
+        const dx = pt.x - d.start.x, dy = pt.y - d.start.y;
+        if (d.op.points) {
+          d.newPoints = d.orig.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+          snipEditDrawShapeDragLive({ ...d.op, points: d.newPoints });
+        } else {
+          d.newRect = { ...d.orig, x: d.orig.x + dx, y: d.orig.y + dy };
+          snipEditDrawShapeDragLive({ ...d.op, rect: d.newRect });
+        }
+        break;
+      }
+      case "shape-resize": {
+        const d = SE.drag;
+        d.newRect = snipEditResizeCropRect(d.orig, d.handle, pt, e.shiftKey);
+        snipEditDrawShapeDragLive({ ...d.op, rect: d.newRect });
+        break;
+      }
+      case "shape-endpoint": {
+        const d = SE.drag;
+        d.newPoints = d.orig.map((p) => ({ ...p }));
+        d.newPoints[d.handle === "a" ? 0 : 1] = pt;
+        snipEditDrawShapeDragLive({ ...d.op, points: d.newPoints });
+        break;
+      }
     }
   }
   function snipEditOnPointerUp() {
@@ -15086,6 +15111,12 @@ function bind() {
       }
       case "crop-new": case "crop-move": case "crop-resize": snipEditCropPointerUp(); break;
       case "text-move": if (d.newPoint) { d.op.point = d.newPoint; snipEditRedrawBase(); } break;
+      case "shape-move":
+        if (d.newPoints) d.op.points = d.newPoints; else if (d.newRect) d.op.rect = d.newRect;
+        snipEditRedrawBase();
+        break;
+      case "shape-resize": if (d.newRect) d.op.rect = d.newRect; snipEditRedrawBase(); break;
+      case "shape-endpoint": if (d.newPoints) d.op.points = d.newPoints; snipEditRedrawBase(); break;
     }
     // snipEditClearLive() above wiped the selection handles a plain click
     // (kind "shape-move" with no actual movement) just painted on mousedown --
