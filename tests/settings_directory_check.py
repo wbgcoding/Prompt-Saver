@@ -12,7 +12,7 @@ Catches the mistakes that are invisible until someone actually searches:
   * a real, findable control in the normal settings page (an <input> or
     <select> with an id, inside #settings-main) that is NOT in the
     directory and not explicitly whitelisted as "not a setting" -- a
-    forgotten field, exactly what Ben's own spec for this check asked for.
+    forgotten field, the main thing this check exists to catch.
 
 Run:  python tests/settings_directory_check.py
 Exit: 0 = clean, 1 = problems found.

@@ -3978,8 +3978,7 @@ PROBE = """
       }
     }
     // 405: a group reset must also clear a row currently hidden behind its own
-    // gate ("auch die durch eine Gattung gerade unsichtbaren", Ben's own
-    // wording) -- otherwise a changed value survives, invisible, behind a
+    // gate -- otherwise a changed value survives, invisible, behind a
     // switched-off toggle.
     {
       const rowByLabel5 = (text) => {
@@ -4041,7 +4040,7 @@ PROBE = """
     }
     // 405: the group reset button must never appear for "Data & system"
     // (expGroupData) -- it sits right next to one-click destructive actions
-    // (emergency purge, delete all data), so Ben ruled it out entirely,
+    // (emergency purge, delete all data), so it is ruled out entirely,
     // regardless of whether a real setting in that group differs from default.
     {
       const rowByLabel6 = (text) => {
@@ -5671,7 +5670,7 @@ PROBE = """
           // A stub-only check: it proves the handler runs against the same
           // window.__TAURI__.window.ResizeDirection shape the real Tauri v2 API
           // exposes, not that the real WebView2 window actually resizes -- that
-          // needs Ben's own hands, same as moving it (see WORK.md 179).
+          // needs a real window and a person at the mouse, same as moving it.
           grip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1 }));
           await sleep(30);
         }
@@ -7036,7 +7035,7 @@ PROBE = """
         }
         // 171: a second dictation round, with nothing else touching the field
         // in between, must continue from where the first one left off rather
-        // than jumping back to the front -- Ben reproduced this landing at the
+        // than jumping back to the front -- in the real app this landed at the
         // start roughly every third time.
         voiceBtn.click();
         await sleep(50);

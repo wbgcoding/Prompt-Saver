@@ -55,7 +55,7 @@ check("zh trailing literal word is not swallowed", zh("说完字面量"), "说�
 
 // "point" used to be a synonym for "period", but it is also completely
 // ordinary English ("the point is ...") and got silently swallowed into a
-// full stop mid-sentence -- removed per Ben's decision. "period" stays, it is
+// full stop mid-sentence -- removed on purpose. "period" stays, it is
 // unambiguous in a dictation context. Asserted here so a future change to
 // this trade-off is a deliberate edit to this test, not a silent regression.
 check("english 'point' is plain text, not a punctuation command", applyVoiceCommands("the point is clear", { punct: true, autoCaps: false, lang: "en" }), "the point is clear");

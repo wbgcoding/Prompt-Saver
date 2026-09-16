@@ -136,7 +136,7 @@ for /f "delims=" %%F in ('dir /b /a-d /o-d "%~dp0src-tauri\target\release\bundle
 rem Collect both artifacts in dist\ for convenience (clean, predictable names).
 set "DIST=%~dp0dist"
 if not exist "%DIST%" mkdir "%DIST%"
-rem The portable exe in dist\ may itself be the one Ben is running. Copying
+rem The portable exe in dist\ may itself be the copy that is running. Copying
 rem straight onto a running exe can fail, so land the new build under a
 rem temporary name first and only then try to swap it onto the final name -
 rem a locked destination then leaves a clearly-named ".new.exe" behind instead

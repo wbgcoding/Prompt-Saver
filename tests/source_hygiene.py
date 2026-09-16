@@ -70,9 +70,13 @@ FORBIDDEN_FILENAMES = [
     "DESIGN.md",
 ]
 
-# Real name to guard against once Ben supplies one; empty until then (not
+# Real name to guard against once the owner supplies one; empty until then (not
 # present anywhere in the tracked tree today, verified via git log/manifests).
 FORBIDDEN_NAMES = []
+
+# The owner's first name in a comment is a process trace just like an item
+# number: say what the code does and why, not who asked for it.
+OWNER_NAME = re.compile(r"\bBen(?:'s)?\b")
 
 FORBIDDEN_PATH = "C:\\Users\\"
 OLD_COPYRIGHT_SPELLING = "BG Coding"
@@ -187,6 +191,8 @@ def check_file(rel_path, text):
             found = "work-item reference '%s'" % WORK_ITEM_WORD.search(comment).group(0)
         elif DECISION_DATE.search(comment):
             found = "decision date '%s'" % DECISION_DATE.search(comment).group(0)
+        elif OWNER_NAME.search(comment):
+            found = "owner name in comment"
         elif FORBIDDEN_WORDS.search(comment):
             found = "AI-tool reference '%s'" % FORBIDDEN_WORDS.search(comment).group(0)
         if found:

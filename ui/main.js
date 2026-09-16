@@ -3269,8 +3269,8 @@ function flashSettingsRow(el) {
 }
 
 // A click on a foreign hit: close the expert menu, open whichever dialog/tab
-// actually owns the row, then scroll it into view and flash it -- exactly the
-// behaviour Ben asked for.
+// actually owns the row, then scroll it into view and flash it, so the
+// setting that was found is the one the eye lands on.
 async function openSettingsDirectoryEntry(entry) {
   if (entry.area === "normal") {
     settingsEl.classList.remove("hidden");
@@ -13221,7 +13221,7 @@ function bind() {
   $("rec-modal-error-copy").addEventListener("click", () => {
     invoke("copy_text", { text: $("rec-modal-error-raw").textContent }).then(() => toast(t("copied"))).catch(() => {});
   });
-  // 280 (Ben, 04.09.): closing the result window without an explicit
+  // Closing the result window without an explicit
   // Save/Save as.../Attach deletes the recording -- Discard, the X button,
   // the backdrop and Escape all end up in closeRecModal(). Copy alone does
   // NOT count as "saving" (it only relocates the file so the clipboard
