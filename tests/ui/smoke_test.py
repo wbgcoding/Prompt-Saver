@@ -1137,7 +1137,19 @@ PROBE = """
       } else if (imgTile && imgTile.querySelector('.tile-chain-start')) {
         out.errors.push('199: an image tile shows a chain-start button');
       } else {
-        textTile.querySelector('.tile-chain-start').click();
+        const csBtn = textTile.querySelector('.tile-chain-start');
+        const csSvg = csBtn.querySelector('svg');
+        const btnRect = csBtn.getBoundingClientRect();
+        const svgRect = csSvg.getBoundingClientRect();
+        const btnCx = btnRect.left + btnRect.width / 2, btnCy = btnRect.top + btnRect.height / 2;
+        const svgCx = svgRect.left + svgRect.width / 2, svgCy = svgRect.top + svgRect.height / 2;
+        if (svgRect.width < 15 || svgRect.height < 15) {
+          out.errors.push('199: the chain-start glyph does not fill its tile button');
+        }
+        if (Math.abs(svgCx - btnCx) > 0.5 || Math.abs(svgCy - btnCy) > 0.5) {
+          out.errors.push('199: the chain-start glyph is not centred in its tile button');
+        }
+        csBtn.click();
         await sleep(150);
         if (!document.body.classList.contains('chain-mode')) {
           out.errors.push('199: clicking a tile chain-start button did not enter chain mode');

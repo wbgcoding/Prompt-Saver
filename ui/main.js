@@ -5195,7 +5195,7 @@ function buildTile(p) {
     chainBtn.className = "tile-chain-start";
     chainBtn.title = t("startChainHere");
     chainBtn.setAttribute("aria-label", t("startChainHere"));
-    chainBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">'
+    chainBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">'
       + '<path transform="rotate(-45 12 12)" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h1.6M14.4 12H16"/></svg>';
     chainBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
     chainBtn.addEventListener("click", (e) => { e.stopPropagation(); startChainWith(p); });

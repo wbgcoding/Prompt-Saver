@@ -883,14 +883,12 @@ body.grid-selecting .tile-type { opacity: 0; }
 .tile.grid-selected { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 /* A second small button right of the selection checkbox starts a chain
-   with this tile as entry 1 — same corner, same box, one gap over. Its own
+   with this tile as entry 1 -- same corner, same box, one gap over. Its own
    slot (left: 28px) never overlaps the type badge / checkbox / chain-order
-   badge sharing the left: 6px corner above, at any tile size.
-   282 (Ben, 04.09.) made it always dimly visible; 326 (Ben, 05.09.) reversed
-   that back to hover/keyboard-focus only by default. chainStartAlwaysVisible
-   now ships OFF and keeps the old look as an opt-in expert setting. Its dim
-   state was also too pale to notice, hence the bumped base opacity here
-   (0.45 to 0.65) alongside the thicker glyph stroke drawn in main.js. */
+   badge sharing the left: 6px corner above, at any tile size. Hidden until
+   hover or keyboard focus by default; chainStartAlwaysVisible keeps it dimly
+   visible as an opt-in expert setting, at a base opacity high enough to
+   notice. Border and padding stay minimal so the glyph fills the box. */
 .tile-chain-start {
   position: absolute;
   top: 6px;
@@ -901,7 +899,8 @@ body.grid-selecting .tile-type { opacity: 0; }
   justify-content: center;
   width: 18px;
   height: 18px;
-  border: 2px solid var(--border);
+  border: 1px solid var(--border);
+  padding: 0;
   border-radius: 5px;
   background: var(--surface);
   color: var(--fg);
@@ -909,6 +908,7 @@ body.grid-selecting .tile-type { opacity: 0; }
   cursor: pointer;
   transition: opacity var(--transition);
 }
+.tile-chain-start > svg { display: block; width: 100%; height: 100%; }
 body.flag-chainStartAlwaysVisible .tile-chain-start { opacity: 0.65; }
 .tile:hover .tile-chain-start,
 .tile-chain-start:focus-visible { opacity: 1; }
