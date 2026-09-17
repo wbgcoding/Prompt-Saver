@@ -2710,6 +2710,14 @@ mod store_crypt {
 // it at startup through the `store_sealed` command and listens for `store-unsealed`
 // for the rest of the session, so a failure that happens while the app is already
 // open still reaches the user instead of only the log file.
+//
+// Deliberately never flips back: a row written in plaintext during the outage stays
+// exactly that way on disk until something rewrites ITS content (write_rows only
+// re-seals a row whose content actually changed, see "Diff writes"), so "the profile
+// is repaired now" does not mean every row is sealed again — only the ones touched
+// from that point on. Clearing the flag on the first later success would tell the
+// user the problem is fully gone while old plaintext rows could still be sitting on
+// disk untouched; leaving it sticky for the rest of the session is the honest answer.
 static STORE_SEALED: AtomicBool = AtomicBool::new(true);
 // Set once the app handle exists; None while the store is still being loaded, which
 // is fine — no window exists yet to receive an event, and the flag above already
@@ -32302,6 +32310,33 @@ mod tests {
 
         assert!(!store_sealed(), "the flag must report unsealed once the fallback ran");
         assert_eq!(calls.load(Ordering::Relaxed), 1, "the notify must fire exactly once, not once per row");
+    }
+
+    // "A repaired profile re-seals on the next save" (the warning dialog's own
+    // words) is a promise about the ROW being written, not about STORE_SEALED --
+    // that flag stays sticky for the rest of the session on purpose (see its
+    // comment: an old plaintext row is not retroactively sealed just because a
+    // later write succeeded, so un-warning the user here would be misleading).
+    // enc_str re-checks DPAPI on every single call with no persisted "give up"
+    // state, so the row-level promise needs no new machinery -- only a test that
+    // FORCE_PLAINTEXT_FALLBACK really is a per-call toggle and not a latch.
+    #[test]
+    fn a_write_after_a_forced_failure_is_sealed_again_once_dpapi_is_available() {
+        let _guard = SEAL_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        if !sealing_is_randomised() {
+            return; // DPAPI unavailable on this machine -- nothing to prove here
+        }
+        let prior_sealed = STORE_SEALED.swap(true, Ordering::Relaxed);
+        FORCE_PLAINTEXT_FALLBACK.with(|f| f.set(true));
+        let _restore = SealOverrideGuard { prior_sealed };
+
+        let unsealed = enc_str("written during the outage");
+        assert!(!unsealed.starts_with(ENC_PREFIX), "the forced failure must fall back to plaintext");
+
+        // The profile is "repaired": nothing but the thread-local override changes.
+        FORCE_PLAINTEXT_FALLBACK.with(|f| f.set(false));
+        let resealed = enc_str("written after the profile was repaired");
+        assert!(resealed.starts_with(ENC_PREFIX), "a write with DPAPI available again must come out sealed");
     }
 
     // A plaintext-fallback value whose own text happens to start with the literal

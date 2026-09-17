@@ -9691,7 +9691,22 @@ SEAL_PROBE = """
       // Two paragraphs: what happened, then what helps.
       if (!msg.includes('\\n\\n')) errs.push(which + 'the warning does not say what helps');
       if (!visible(icon) || !icon.querySelector('svg')) errs.push(which + 'the warning has no icon');
-      document.getElementById('confirm-ok').click();
+      // The way out: an encrypted manual backup does not depend on DPAPI at all,
+      // so the dialog offers to make one right now instead of only explaining.
+      const alt = document.getElementById('confirm-alt');
+      if (!visible(alt)) {
+        errs.push(which + 'the warning offers no way to back up now');
+      } else {
+        const altText = alt.textContent.trim();
+        if (!altText || /storeUnsealed/.test(altText)) {
+          errs.push(which + 'the backup button renders a raw i18n key: ' + altText);
+        }
+        alt.click();
+        await sleep(300);
+        if (!(window.__SMOKE_CALLS__ || []).includes('export_all')) {
+          errs.push(which + 'the backup button did not start a backup');
+        }
+      }
       await sleep(400);
       // Once per session: it must not come straight back after being closed.
       if (visible(cm)) errs.push(which + 'the warning reopened after it was closed');

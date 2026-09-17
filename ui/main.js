@@ -17479,11 +17479,19 @@ let storeUnsealedTold = false;
 async function warnStoreUnsealed() {
   if (storeSealed || storeUnsealedTold) return false;
   storeUnsealedTold = true;
-  await infoDialog(
-    t("storeUnsealedTitle"),
-    `${t("storeUnsealedMsg")}\n\n${t("storeUnsealedFix")}`,
-    ICON_WARN
-  );
+  // The manual export (export_all, the .psb file) is encrypted with its own key,
+  // never DPAPI, so it is the one way out that still works right now -- offer it
+  // instead of only explaining the problem.
+  const choice = await confirmDialog({
+    title: t("storeUnsealedTitle"),
+    message: `${t("storeUnsealedMsg")}\n\n${t("storeUnsealedFix")}`,
+    confirmLabel: t("close"),
+    altLabel: t("backupSave"),
+    icon: ICON_WARN,
+    danger: false,
+    oneButton: true,
+  });
+  if (choice === "alt") await runExportAll();
   return true;
 }
 
