@@ -901,6 +901,13 @@ the video editor and the introduction tour ship on).
   language the app started in, never the current one** — a screen reader kept
   reading the old language after switching, and in the video editor read a raw
   internal name instead of a translation from the very first launch.
+- **The warning that the store is being written unencrypted now offers a way
+  out instead of only stating the problem**: it carries a second button that
+  saves a manual backup right away, so the data can be secured before anything
+  else is written.
+- The error log no longer collects noise from the test suite, and trimming it
+  keeps the newest entries instead of deleting the whole file once it passes
+  its size limit.
 
 ### Security
 
