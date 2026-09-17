@@ -1575,6 +1575,7 @@ body.library-front #modal.overlay { z-index: 67; }
 .noflag-screenshot #snip-btn { display: none; }
 .noflag-colorPicker #picker-btn { display: none; }
 .noflag-screenRecord #record-btn { display: none; }
+.noflag-dupFinder #settings-dupes-btn { display: none; }
 /* OCR ships on -- a default-on flag only ever sets noflag-<key>, never flag-<key>,
    so both entry points hide via noflag-ocr. */
 .noflag-ocr #ocr-btn,

@@ -533,7 +533,9 @@ it has run for the guess to mean something — both switchable off.
 ### Data maintenance
 
 Duplicate finder, trash (with its own retention setting), CSV/TXT export, and
-full backup export/import — reached from the expert menu's data group.
+full backup export/import — reached from the expert menu's data group. The
+duplicate finder also has a shortcut in the settings dialog, next to import
+and export, so it does not take opening the expert menu to find it.
 
 ### Trash & restoring tiles
 
@@ -954,7 +956,9 @@ Lange Vorgänge (Export, Umwandlung, ffmpeg-Download, Sicherung, Import) füllen
 das Taskleistensymbol und zeigen ab einer eingestellten Schwelle „noch etwa …" —
 beides abschaltbar.
 
-**Datenwartung** — Duplikatfinder, Papierkorb, Import/Export.
+**Datenwartung** — Duplikatfinder, Papierkorb, Import/Export. Der Duplikatfinder
+hat zusätzlich eine Abkürzung im Einstellungsdialog, direkt neben Import und
+Export, damit man dafür nicht erst das Expertenmenü öffnen muss.
 
 **Papierkorb & Kacheln wiederherstellen** — gelöschte Kacheln landen zuerst im
 Papierkorb (Aufbewahrung in Tagen, 0 = für immer). Wiederherstellen legt in die

@@ -16549,6 +16549,7 @@ function bind() {
   $("reset-settings").addEventListener("click", resetSettings);
   $("delete-data").addEventListener("click", deleteData);
   $("settings-backup-btn").addEventListener("click", openBackups);
+  $("settings-dupes-btn").addEventListener("click", openDupes);
   $("backup-close").addEventListener("click", closeBackups);
   $("backup-modal").addEventListener("pointerdown", (e) => {
     if (e.target === $("backup-modal")) closeBackups();
