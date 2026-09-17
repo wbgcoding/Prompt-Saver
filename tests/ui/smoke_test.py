@@ -10199,6 +10199,77 @@ FOLDER_WORDING_PROBE = """
 """
 
 
+# 376: the small keyboard badge on a tile whose prompt carries its own hotkey.
+# Its own boot, same reasoning as the probes above -- the fixture's p0 already
+# carries a hotkey and nothing later in the main sweep needs it still bound.
+TILE_HOTKEY_BADGE_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const beat = setInterval(() => {
+    document.documentElement.style.setProperty('--hk-badge-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && cm.classList.contains('hidden'); i++) await sleep(100);
+    if (!cm.classList.contains('hidden')) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+
+    const badgeCount = (id) => document.querySelectorAll('.tile[data-id="' + id + '"] .tile-hotkey-badge').length;
+
+    const withHotkey = badgeCount('p0');
+    if (withHotkey !== 1) errs.push('376: prompt p0 has a hotkey but shows ' + withHotkey + ' badge(s) instead of 1');
+    const withoutHotkey = badgeCount('p1');
+    if (withoutHotkey !== 0) errs.push('376: prompt p1 has no hotkey but shows ' + withoutHotkey + ' badge(s)');
+
+    const badge = document.querySelector('.tile[data-id="p0"] .tile-hotkey-badge');
+    const title = badge ? (badge.getAttribute('title') || '') : '';
+    if (!title || title === 'tileHotkeyBadgeTitle' || !title.includes('9')) {
+      errs.push('376: the hotkey badge title reads "' + title + '" instead of the formatted combination');
+    }
+    if (badge && badge.getAttribute('aria-label') !== title) {
+      errs.push('376: the hotkey badge title and aria-label do not match');
+    }
+    if (badge && (badge.tabIndex >= 0 || badge.tagName === 'BUTTON' || badge.tagName === 'A')) {
+      errs.push('376: the hotkey badge is focusable or clickable, it should be pure information');
+    }
+
+    // Switching the flag off must remove the badge live, not just after reload.
+    document.getElementById('gear').click();
+    await sleep(200);
+    document.getElementById('expert-open').click();
+    await sleep(300);
+    let row = null;
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click();
+      await sleep(80);
+      row = [...document.querySelectorAll('#expert-flags .switch-field')]
+        .find(r => (r.querySelector('span') || {}).textContent === 'Hotkey badge');
+      if (row) break;
+    }
+    const cb = row && row.querySelector('input.switch');
+    if (!cb) {
+      errs.push('376: no expert-menu switch found for the hotkey badge');
+    } else {
+      if (!cb.checked) errs.push('376: the hotkey badge flag does not ship on');
+      cb.checked = false;
+      cb.dispatchEvent(new Event('change'));
+      await sleep(300);
+      const left = badgeCount('p0');
+      if (left !== 0) errs.push('376: switching the flag off left ' + left + ' badge(s) on the tile');
+    }
+  } catch (e) { errs.push('376 probe: ' + e.message); }
+  clearInterval(beat);
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 def unescape(s):
     for a, b in (("&quot;", '"'), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
         s = s.replace(a, b)
@@ -10553,6 +10624,29 @@ def main():
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- folder/group ungroup wording")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # 376: the tile hotkey badge, its wording and the live flag toggle.
+        side = tmp / "ui" / "tile-hotkey-badge.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", TILE_HOTKEY_BADGE_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-tile-hotkey-badge'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- tile hotkey badge")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

@@ -824,6 +824,23 @@ body.drag-active .cell.drag-over {
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.65));
 }
 
+/* Hotkey badge: sits right of the type-badge/checkbox slot (never inside it,
+   so it never swaps out with either on hover or selection) and, unlike them,
+   stays visible the whole time -- it is information, not a control. */
+.tile-hotkey-badge {
+  position: absolute;
+  top: 6px;
+  left: 26px;
+  z-index: 3;
+  display: flex;
+  opacity: var(--hotkey-badge-opacity, 0.4);
+  pointer-events: none;
+}
+.tile.has-image .tile-hotkey-badge {
+  color: #fff;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.65));
+}
+
 /* Rotating-prompt "next entry" pill, bottom-left — free corner on a text tile
    (media caption/bar live bottom-right/full-width, never on a rotating prompt). */
 .tile-rotate-badge {

@@ -370,6 +370,8 @@ a colliding hotkey drops the losing one instead of failing the import.
 global and per-tile — in one searchable, live-rebindable list, so rebinding or
 clearing one no longer means opening that tile's editor.
 
+A tile with its own hotkey shows a small keyboard symbol.
+
 ### Clipboard watcher
 
 Off by default. When switched on, everything copied anywhere on the system (not
@@ -853,7 +855,8 @@ ohne Modifikatortaste), automatisches Einfügen.
 Strg+Alt+P), ein eigener Hotkey pro Kachel kopiert (und fügt optional ein). Bei
 einer Kollision gewinnt der App-Hotkey, sonst die erste Kachel in der Liste.
 "Alle Hotkeys" neben dem globalen Feld listet jeden Hotkey durchsuchbar auf und
-belegt jede Zeile direkt um, ohne den jeweiligen Editor zu öffnen.
+belegt jede Zeile direkt um, ohne den jeweiligen Editor zu öffnen. Eine Kachel
+mit eigenem Hotkey zeigt ein kleines Tastatursymbol.
 
 **Schwebende Buttons:** kleine, immer sichtbare Kopier-Buttons außerhalb des
 Hauptfensters, über jeder anderen App.

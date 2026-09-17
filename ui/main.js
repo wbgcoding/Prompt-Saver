@@ -205,6 +205,9 @@ const ICON_UP =
   '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 15l6-6 6 6"/></svg>';
 const ICON_DOWN =
   '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>';
+// A prompt's own hotkey, shown as a small always-visible tile badge.
+const ICON_KEYBOARD =
+  '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="currentColor" d="M5.5 9h1.6v1.6H5.5V9Zm3.2 0h1.6v1.6H8.7V9Zm3.2 0h1.6v1.6h-1.6V9Zm3.2 0h1.6v1.6h-1.6V9Zm3.2 0h1.6v1.6h-1.6V9ZM5.5 12.2h1.6v1.6H5.5v-1.6Zm3.2 0h1.6v1.6H8.7v-1.6Zm3.2 0h1.6v1.6h-1.6v-1.6Zm3.2 0h1.6v1.6h-1.6v-1.6Zm3.2 0h1.6v1.6h-1.6v-1.6ZM5.5 15.4h11.6V17H5.5v-1.6Z"/></svg>';
 
 // Icon markup handed out as ready-made nodes. Assigning the same SVG string to
 // innerHTML re-parses it every time, which a list of hundreds of rows pays for
@@ -1090,6 +1093,7 @@ const FLAG_LABELS = {
   tooltipDelay: "flagTooltipDelay",
   tooltipTimeout: "flagTooltipTimeout",
   typeBadges: "flagTypeBadges",
+  tileHotkeyBadge: "flagTileHotkeyBadge",
   captions: "flagCaptions",
   copyBubble: "flagCopyBubble",
   videoControls: "flagVideoControls",
@@ -1623,6 +1627,9 @@ const EXPERT_VALUES = {
   // Dim strength for the "dim unhovered / dim media" toggles (lower = dimmer).
   tilesHoverOpacity: { label: "valTilesHoverOpacity", min: 10, max: 90, step: 5, def: 45, unit: "%", gate: "tilesHoverDim" },
   mediaHoverOpacity: { label: "valMediaHoverOpacity", min: 10, max: 95, step: 5, def: 80, unit: "%", gate: "mediaHoverDim" },
+  // Default matches the type badge's own fixed dim level (0.4) so a hotkey
+  // badge reads the same as every other passive tile badge out of the box.
+  tileHotkeyBadgeOpacity: { label: "valTileHotkeyBadgeOpacity", min: 10, max: 100, step: 5, def: 40, unit: "%", gate: "tileHotkeyBadge" },
   // Rounded-media corner radius (paired with the roundMedia toggle).
   mediaRadius: { label: "valMediaRadius", min: 0, max: 24, step: 1, def: 8, unit: "px", gate: "roundMedia" },
   // Prompt version history: versions kept per prompt.
@@ -2011,7 +2018,7 @@ const EXPERT_TABS = [
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
     // and pure looks. One 26-entry blob made everything hard to find.
-    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale"], values: ["hoverLift", "dragThreshold", "viewDropHoverMs"] },
+    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "dragThreshold", "viewDropHoverMs", "tileHotkeyBadgeOpacity"] },
     { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipDelay", "tooltipTimeout", "tileTimeTip"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow"], values: ["tileRadius", "tileBorderWidth"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
@@ -2148,6 +2155,7 @@ function applyValues() {
   root.setProperty("--blur-media", `${val("mediaBlur")}px`);
   root.setProperty("--dim-unhovered", val("tilesHoverOpacity") / 100);
   root.setProperty("--dim-media", val("mediaHoverOpacity") / 100);
+  root.setProperty("--hotkey-badge-opacity", val("tileHotkeyBadgeOpacity") / 100);
   root.setProperty("--media-radius", `${val("mediaRadius")}px`);
   root.setProperty("--tag-chip-px", `${val("tagChipPx")}px`);
   root.setProperty("--hl-font-px", `${val("hlFontPx")}px`);
@@ -2221,7 +2229,7 @@ const EXPERT_TIPS = [
   "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax",
   "helpTips", "helpHighlight", "firstRunTour",
   // Tiles / copying
-  "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "autoPasteEnter", "hideWindowOnCopy",
+  "tilePreview", "tileMenu", "typeBadges", "tileHotkeyBadge", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "autoPasteEnter", "hideWindowOnCopy",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
   "tooltipDelay", "tooltipTimeout", "iconTooltips",
   "dragToView", "viewDropHoverMs",
@@ -2318,7 +2326,7 @@ async function resetOneExpertValue(kind, key, after) {
 // rotatingPrompts/rotateBadge gate a tile's own rotate-badge element -- without
 // a full rebuild here, an already-open grid keeps showing (or hiding) it until some
 // unrelated re-render happens to catch up.
-const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip", "tileTimeTip", "rotatingPrompts", "rotateBadge"]);
+const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip", "tileTimeTip", "rotatingPrompts", "rotateBadge", "tileHotkeyBadge"]);
 
 function flagRow(key) {
   const row = document.createElement("label");
@@ -5417,6 +5425,21 @@ function buildTile(p) {
     badge.className = "tile-type";
     badge.innerHTML = typeIcon;
     tile.appendChild(badge);
+  }
+
+  // A prompt's own hotkey (set in the editor's Advanced options) is otherwise
+  // invisible until it is used — pure information, so unlike the chain-start
+  // button above it stays visible all the time, not just on hover. Sits right
+  // of the type badge/checkbox slot rather than inside it, so it never swaps
+  // out with either on hover or selection.
+  if (p.hotkey && promptHotkeysOn() && flag("tileHotkeyBadge")) {
+    const hkBadge = document.createElement("span");
+    hkBadge.className = "tile-hotkey-badge";
+    const hkLabel = t("tileHotkeyBadgeTitle").replace("{accel}", prettyAccel(p.hotkey));
+    hkBadge.title = hkLabel;
+    hkBadge.setAttribute("aria-label", hkLabel);
+    hkBadge.innerHTML = ICON_KEYBOARD;
+    tile.appendChild(hkBadge);
   }
 
   // Rotating prompt — "next entry" position pill, bottom-left (a rotating

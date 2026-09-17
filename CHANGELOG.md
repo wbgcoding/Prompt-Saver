@@ -62,7 +62,8 @@ the video editor and the introduction tour ship on).
 - **Per-prompt hotkeys** — give a prompt its own global key combination that
   copies it from anywhere, even with the app in the tray, and optionally pastes
   it straight away. Conflicts with the app hotkey or another prompt are refused
-  in the editor.
+  in the editor. A tile with its own hotkey carries a small keyboard badge, on
+  by default.
 - **Drag-out** — hold Ctrl and drag a tile, a library row or a floating button
   into any other app to drop its text there. The key is switchable, and a second
   switch swaps the two gestures so a plain drag leaves the app and the key moves
