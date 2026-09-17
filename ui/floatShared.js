@@ -8,6 +8,12 @@ export const COPIED_MS = 900; // "copied!" tile/pill flash duration
 export const RING_MIN = 8;    // smallest resize-ring thickness (px)
 export const RING_MAX = 60;   // largest resize-ring thickness (px)
 export const DRAG_OUT_MODS = { ctrl: "ctrlKey", alt: "altKey", shift: "shiftKey" };
+// The one folder glyph. Pill folders, grid folders and view groups stay three
+// separate mechanisms underneath, but a user reads them as one idea, so this
+// is the single drawing all three point at instead of each keeping its own
+// copy: the pill-folder rename dialog, the grid-folder and view-group
+// "ungroup" menu entries, and the "group into a folder" entry.
+export const FOLDER_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.2l2 2.4h8.8A1.5 1.5 0 0 1 21 8.9v9.6a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5Z"/></svg>';
 
 // Resolve the active UI language: the explicit setting first, the browser locale
 // as fallback, matched against a list of available language codes (pass the

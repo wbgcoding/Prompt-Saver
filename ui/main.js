@@ -7,7 +7,7 @@ import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults 
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
-import { DRAG_OUT_MODS, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
+import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 import { createColorPop } from "./colorpop.js";
 import { snapMove } from "./snap.js";
@@ -4090,7 +4090,7 @@ function viewTabEl(v) {
       { label: t("editViewTitle"), run: () => openViewModal(v) },
       { label: t("duplicate"), run: () => duplicateView(v) },
     ];
-    if (groupsOn()) items.push({ label: t("viewGroupNew"), run: () => newViewGroup([v.id], v.name) });
+    if (groupsOn()) items.push({ label: t("viewGroupNew"), icon: FOLDER_SVG, run: () => newViewGroup([v.id], v.name) });
     openMiniMenu(items, e.clientX, e.clientY);
   });
   makeTabDraggable(btn, v.id, false);
@@ -4163,7 +4163,7 @@ function groupTabEl(g, views) {
     openMiniMenu([
       { label: t("viewGroupRename"), run: () => renameViewGroup(g) },
       { label: t("viewGroupColor"), run: () => pickViewGroupColor(g, btn) },
-      { label: t("viewGroupDissolve"), danger: true, run: () => dissolveViewGroup(g) },
+      { label: t("viewGroupDissolve"), icon: FOLDER_SVG, danger: true, run: () => dissolveViewGroup(g) },
     ], e.clientX, e.clientY);
   });
   // A folder tab is a drag source too: dropped on a loose tab it swallows that view,
@@ -4244,8 +4244,19 @@ function openMiniMenu(items, x, y) {
     const b = document.createElement("button");
     b.type = "button";
     b.setAttribute("role", "menuitem");
-    if (it.danger) b.className = "danger";
-    b.textContent = it.label;
+    b.className = it.danger ? "danger" : "";
+    // The shared folder glyph on a "group into a folder" / "ungroup" entry --
+    // same markup wherever one of the three folder kinds offers it.
+    if (it.icon) {
+      b.classList.add("has-icon");
+      const ic = document.createElement("span");
+      ic.className = "menu-icon";
+      ic.innerHTML = it.icon;
+      b.appendChild(ic);
+    }
+    const lbl = document.createElement("span");
+    lbl.textContent = it.label;
+    b.appendChild(lbl);
     b.addEventListener("click", () => { closeMiniMenu(); it.run(); });
     miniMenu.appendChild(b);
   }
@@ -4773,8 +4784,6 @@ const CLEAR_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="
 // password prompt.
 const TAKEOVER_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7.5" ry="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4.5 5.5v13c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-13M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/></svg>';
 const LOCK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.6" fill="currentColor"/></svg>';
-// A folder for the pill-folder rename dialog.
-const FOLDER_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.2l2 2.4h8.8A1.5 1.5 0 0 1 21 8.9v9.6a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5Z"/></svg>';
 // Reveal toggle for password fields (backup settings + the restore prompt).
 const EYE_SVG ='<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
 function wireClear(el) {
@@ -6103,7 +6112,7 @@ function buildFolderTile(f) {
     openMiniMenu([
       { label: t("tileFolderRename"), run: () => renameTileFolder(f) },
       { label: t("tileFolderColor"), run: () => pickTileFolderColor(f, tile) },
-      { label: t("tileFolderDissolve"), danger: true, run: () => dissolveTileFolder(f) },
+      { label: t("tileFolderDissolve"), icon: FOLDER_SVG, danger: true, run: () => dissolveTileFolder(f) },
     ], e.clientX, e.clientY);
   });
   // Same drag machine as a tile — only what a press means differs (open, not copy).

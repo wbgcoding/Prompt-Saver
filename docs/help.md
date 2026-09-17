@@ -419,12 +419,17 @@ privacy-leaning media tiles.
 
 ## Always on top
 
-### Floating buttons & folders
+### Floating buttons
 
-Floating buttons are small always-on-top copy buttons that sit outside the main
-window, over whatever app is in use. Pill folders and grid folders (both on by
-default) merge several of them, or several grid tiles, into one expandable group
-the same way — a tile belongs to only one grid folder at a time.
+Small always-on-top copy buttons that sit outside the main window, over
+whatever app is in use.
+
+### Folders
+
+One gesture works in three places: drop one onto another to gather it into a
+folder. A view tab dropped onto another view tab makes a group tab. A floating
+button dropped onto another makes a pill folder. A tile dropped onto another
+tile makes a grid folder, and belongs to only one grid folder at a time.
 
 ### Tray
 
@@ -850,8 +855,14 @@ einer Kollision gewinnt der App-Hotkey, sonst die erste Kachel in der Liste.
 "Alle Hotkeys" neben dem globalen Feld listet jeden Hotkey durchsuchbar auf und
 belegt jede Zeile direkt um, ohne den jeweiligen Editor zu öffnen.
 
-**Schwebende Buttons & Ordner** — Pillen-Ordner und Raster-Ordner (beide aus);
-eine Kachel gehört immer nur zu einem Raster-Ordner gleichzeitig.
+**Schwebende Buttons:** kleine, immer sichtbare Kopier-Buttons außerhalb des
+Hauptfensters, über jeder anderen App.
+
+**Ordner:** eine Geste an drei Stellen, ein Ziehen auf ein anderes fasst es zu
+einem Ordner zusammen. Ein Ansichts-Reiter auf einen anderen ergibt einen
+Gruppen-Reiter. Ein schwebender Button auf einen anderen ergibt einen
+Pillen-Ordner. Eine Kachel auf eine andere ergibt einen Raster-Ordner, und
+gehört immer nur zu einem Raster-Ordner gleichzeitig.
 
 **Taskleistenmenü** — Zuletzt kopiert, Favoriten. Erscheint als abgerundetes,
 zum Thema passendes Fenster statt des einfachen Windows-Menüs; im Expertenmenü

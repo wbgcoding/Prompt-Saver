@@ -10128,6 +10128,77 @@ WRITE_FAIL_PROBE = """
 """
 
 
+# 375: pill folders, grid folders and view groups are three separate
+# mechanisms, but the "take it apart" menu entry must read and look the same
+# in all of them. Its own boot, same reasoning as SEAL_PROBE above: the
+# fixture already carries one grid folder and one view group by default, and
+# nothing later in the main sweep needs either left standing.
+FOLDER_WORDING_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const beat = setInterval(() => {
+    document.documentElement.style.setProperty('--wording-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && cm.classList.contains('hidden'); i++) await sleep(100);
+    if (!cm.classList.contains('hidden')) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+
+    const readDissolve = (menu) => {
+      const btn = menu ? menu.querySelector('button.danger') : null;
+      const icon = btn ? btn.querySelector('.menu-icon') : null;
+      return btn ? { label: btn.textContent.trim(), icon: icon ? icon.innerHTML : null } : null;
+    };
+
+    let gridDissolve = null;
+    const fTile = document.querySelector('.tile.folder-tile');
+    if (!fTile) {
+      errs.push('375: no grid folder in the fixture to compare');
+    } else {
+      fTile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(150);
+      gridDissolve = readDissolve(document.querySelector('.tab-menu:not(.hidden)'));
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+      await sleep(120);
+      if (!gridDissolve) errs.push('375: the grid folder context menu has no ungroup option');
+    }
+
+    let groupDissolve = null;
+    const groupTab = [...document.querySelectorAll('#views .view-btn')].find(b => b.dataset.groupId);
+    if (!groupTab) {
+      errs.push('375: no view group in the fixture to compare');
+    } else {
+      groupTab.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(150);
+      groupDissolve = readDissolve(document.querySelector('.tab-menu:not(.hidden)'));
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+      await sleep(120);
+      if (!groupDissolve) errs.push('375: the view group context menu has no ungroup option');
+    }
+
+    if (gridDissolve && groupDissolve) {
+      if (gridDissolve.label !== groupDissolve.label) {
+        errs.push('375: the grid folder and view group ungroup entries read differently ("' +
+          gridDissolve.label + '" vs "' + groupDissolve.label + '")');
+      }
+      if (!gridDissolve.icon || gridDissolve.icon !== groupDissolve.icon) {
+        errs.push('375: the grid folder and view group ungroup entries do not share the same icon markup');
+      }
+    }
+  } catch (e) { errs.push('375 probe: ' + e.message); }
+  clearInterval(beat);
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 def unescape(s):
     for a, b in (("&quot;", '"'), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
         s = s.replace(a, b)
@@ -10463,6 +10534,30 @@ def main():
             failed += len(errs)
             if not errs:
                 print("   ok")
+
+        # 375: the grid-folder and view-group "ungroup" menu entries must read
+        # and look the same. Its own boot, same reasoning as the pair above.
+        side = tmp / "ui" / "folder-wording.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", FOLDER_WORDING_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-folder-wording'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- folder/group ungroup wording")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
 
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

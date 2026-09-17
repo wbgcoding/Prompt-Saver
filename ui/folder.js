@@ -8,7 +8,7 @@ import { applyFloatTheme } from "./floattheme.js";
 import { mediaKind } from "./media.js";
 import { APP_NAME } from "./brand.js";
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
-import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, resolveLang, fileUri, playCopySound } from "./floatShared.js";
+import { COPIED_MS, RING_MIN, RING_MAX, DRAG_OUT_MODS, FOLDER_SVG, resolveLang, fileUri, playCopySound } from "./floatShared.js";
 
 // Frameless window: the title is invisible in the app but shows in the Alt-Tab
 // switcher, so it comes from the brand rather than a hardcoded English word.
@@ -55,7 +55,7 @@ let openReq = 0;
 // "edit" starts empty, not a hardcoded English literal -- unlike every other
 // field here it spells the item word, which must only ever reach the screen
 // through the real (lazily loaded) i18n text and its fork-brand substitution.
-let TXT = { copied: "Copied!", size: "Size", edit: "", close: "Close", rename: "Rename", dissolve: "Dissolve folder", takeOut: "Take out of folder" };
+let TXT = { copied: "Copied!", size: "Size", edit: "", close: "Close", rename: "Rename", dissolve: "Ungroup", takeOut: "Take out of folder" };
 
 // Copy behaviour, mirrored from the pill window.
 let cooldownMs = COOLDOWN_MS_DEFAULT;
@@ -369,7 +369,24 @@ async function applyTexts(s) {
   document.getElementById("size-label").textContent = TXT.size;
   document.getElementById("menu-rename").textContent = TXT.rename;
   document.getElementById("menu-hide").textContent = TXT.hideForNow;
-  document.getElementById("menu-dissolve").textContent = TXT.dissolve;
+  // The same folder glyph the grid-folder and view-group "ungroup" menu
+  // entries carry -- built once, language changes only touch the label.
+  const dissolveBtn = document.getElementById("menu-dissolve");
+  let dissolveIcon = dissolveBtn.querySelector(".menu-icon");
+  if (!dissolveIcon) {
+    dissolveBtn.classList.add("has-icon");
+    dissolveIcon = document.createElement("span");
+    dissolveIcon.className = "menu-icon";
+    dissolveIcon.innerHTML = FOLDER_SVG;
+    dissolveBtn.appendChild(dissolveIcon);
+  }
+  let dissolveLabel = dissolveBtn.querySelector(".menu-label");
+  if (!dissolveLabel) {
+    dissolveLabel = document.createElement("span");
+    dissolveLabel.className = "menu-label";
+    dissolveBtn.appendChild(dissolveLabel);
+  }
+  dissolveLabel.textContent = TXT.dissolve;
   document.getElementById("mm-edit").textContent = TXT.edit;
   document.getElementById("mm-out").textContent = TXT.takeOut;
   const closeBtn = document.getElementById("menu-close");
