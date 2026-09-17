@@ -319,6 +319,15 @@ the history is mirrored into settings, so it survives a restart too.
 
 ### Rotating tiles
 
+Not the same as chaining (see Copying below): rotation changes the text inside
+ONE tile from copy to copy, chaining copies several DIFFERENT tiles together
+as one text.
+
+| I want... | use... |
+| --- | --- |
+| several wordings of the same prompt | rotation |
+| several different prompts, one after another | chaining |
+
 A tile can hold a list of texts instead of one — each copy serves the next entry,
 in order or shuffled without repeats, instead of always the same text. On by
 default; the per-tile switch sits under Advanced options in the editor.
@@ -346,10 +355,12 @@ fast too often pauses the session with a toast instead of looping.
 
 ### Copying
 
-- Chaining — click several tiles in a row, they combine into one clipboard copy.
-  Hovering a text tile also shows a small chain icon next to its selection
-  checkbox that starts a chain with that tile as the first entry directly —
-  switchable off on its own in the expert menu.
+- Chaining: not the same as rotation (see Rotating tiles above). Several
+  DIFFERENT tiles copied together as one text, rather than one tile changing
+  what it holds. Click several tiles in a row, they combine into one clipboard
+  copy. Hovering a text tile also shows a small chain icon next to its
+  selection checkbox that starts a chain with that tile as the first entry
+  directly, switchable off on its own in the expert menu.
 - Per-tile hotkeys — copy a specific tile from anywhere, without opening the app
 - Drag-out — hold the modifier key and drag a tile onto another window to paste
   directly, no clipboard round-trip. An expert switch swaps the two gestures, so a
@@ -832,6 +843,14 @@ vorübergehend aus, oder die Prüfung lässt sich ganz abschalten.
 **Farbpipette & Auswahlverlauf** — Pixel als Hex/RGB/HSL kopieren; die letzten
 Auswahlen überstehen einen Neustart. Standardmäßig aus.
 
+**Rotation und Kette:** zwei verschiedene Dinge. Rotation ändert den Text
+EINER Kachel, Kette kopiert MEHRERE verschiedene Kacheln zusammen.
+
+| Ich will... | nutze... |
+| --- | --- |
+| verschiedene Formulierungen desselben Prompts | Rotation |
+| mehrere verschiedene Prompts hintereinander | Kette |
+
 **Wechselnde Kacheln** — eine Kachel trägt eine Liste von Texten, jede Kopie
 liefert den nächsten Eintrag (Reihenfolge oder Zufall). Standardmäßig an; der
 Schalter pro Kachel sitzt im Editor unter Erweiterte Optionen. Ein Badge auf
@@ -847,9 +866,10 @@ Sitzung abgefragt, dieselben Werte gelten für jeden Eintrag. Fünf
 Experteneinstellungen regeln Zeitlimit und Erkennungsfenster; zu schnelles,
 zu häufiges Einfügen pausiert die Sitzung mit einem Hinweis statt zu wiederholen.
 
-**Kopieren** — Verketten (auch direkt über ein Kettensymbol an der Kachel,
-einzeln abschaltbar), Hotkeys pro Kachel, Herausziehen (mit oder, per Schalter,
-ohne Modifikatortaste), automatisches Einfügen.
+**Kopieren** — Verketten (mehrere verschiedene Kacheln als ein Text, anders als
+Rotation oben; auch direkt über ein Kettensymbol an der Kachel, einzeln
+abschaltbar), Hotkeys pro Kachel, Herausziehen (mit oder, per Schalter, ohne
+Modifikatortaste), automatisches Einfügen.
 
 **Hotkeys** — ein globaler Hotkey öffnet den Schnellstarter (Standard
 Strg+Alt+P), ein eigener Hotkey pro Kachel kopiert (und fügt optional ein). Bei
