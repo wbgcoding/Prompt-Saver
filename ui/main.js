@@ -1125,6 +1125,7 @@ const FLAG_LABELS = {
   etaShow: "flagEtaShow",
   importExport: "flagImportExport",
   tileReorder: "flagTileReorder",
+  dragToView: "flagDragToView",
   libraryTypeFilter: "flagLibraryTypeFilter",
   journalSearch: "flagJournalSearch",
   journalTypeFilter: "flagJournalTypeFilter",
@@ -1494,6 +1495,9 @@ const EXPERT_VALUES = {
   hoverLift: { label: "valHoverLift", min: 1, max: 12, step: 1, def: 1, unit: "px", gate: "tileHoverLift" },
   // Drag-vs-click distance before a pointer-down turns into a drag (tiles, tabs, folders).
   dragThreshold: { label: "valDragThreshold", min: 2, max: 20, step: 1, def: DRAG_THRESHOLD_DEFAULT, unit: "px" },
+  // Dragging a tile onto a collapsed view group's tab: how long it has to rest
+  // there before the group opens so the drop can target a view inside it.
+  viewDropHoverMs: { label: "valViewDropHoverMs", min: 100, max: 3000, step: 100, def: 600, unit: "ms", gate: "dragToView" },
   // Header vertical padding + screenshot-preview max height.
   headerPadY: { label: "valHeaderPadY", min: 2, max: 30, step: 1, def: 10, unit: "px" },
   snipPreviewVh: { label: "valSnipPreviewVh", min: 30, max: 92, step: 1, def: 74, unit: "%", gate: "screenshot" },
@@ -2007,7 +2011,7 @@ const EXPERT_TABS = [
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
     // and pure looks. One 26-entry blob made everything hard to find.
-    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale"], values: ["hoverLift", "dragThreshold"] },
+    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale"], values: ["hoverLift", "dragThreshold", "viewDropHoverMs"] },
     { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipDelay", "tooltipTimeout", "tileTimeTip"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow"], values: ["tileRadius", "tileBorderWidth"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
@@ -2220,6 +2224,7 @@ const EXPERT_TIPS = [
   "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "autoPasteEnter", "hideWindowOnCopy",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
   "tooltipDelay", "tooltipTimeout", "iconTooltips",
+  "dragToView", "viewDropHoverMs",
   // Appearance
   "hideScrollbars", "gridLines", "pausedIcons",
   "customThemes", "customThemeMax",
@@ -4099,6 +4104,7 @@ const groupsOn = () => optFlag("viewGroups") && flag("multiView");
 const viewGroupList = () => (groupsOn() ? settings.view_groups || [] : []);
 const groupOfView = (id) => viewGroupList().find((g) => (g.view_ids || []).includes(id));
 const viewById = (id) => settings.views.find((v) => v.id === id);
+const groupById = (id) => viewGroupList().find((g) => g.id === id);
 // Members in tab-bar order, not in the order they were added.
 const groupViews = (g) => settings.views.filter((v) => (g.view_ids || []).includes(v.id));
 
@@ -4363,13 +4369,103 @@ async function mergeViewGroups(fromId, intoId) {
   await saveViewGroup(into, { viewIds: [...(into.view_ids || []), ...(from.view_ids || [])] });
 }
 
-const tabDropTarget = (x, y) => document.elementFromPoint(x, y)?.closest(".view-btn") || null;
+// A tab-bar button, OR a row of an already-open group popover — the same hit
+// test a tab-to-tab drag (below) and a tile-to-tab drag (420, further down)
+// both call, so hovering either kind of target looks and behaves identically.
+const tabDropTarget = (x, y) => document.elementFromPoint(x, y)?.closest(".view-btn, .view-group-item") || null;
 
 function markTabDrop(el) {
   if (tabDrag.target === el) return;
   tabDrag.target?.classList.remove("tab-drop");
   tabDrag.target = el;
   el?.classList.add("tab-drop");
+}
+
+// ---- Dragging a grid tile onto a view tab -----------------------------
+// The tile's own drag state (`drag`, defined with the grid below) grows a
+// second target next to `tabDrag` above rather than sharing its state: the two
+// gestures start on different elements (a tile vs. a tab) and are never live
+// together, but a tab-to-tab drag must keep working exactly as before.
+let viewDropHoverTimer = null;
+let viewDropHoverEl = null;
+
+function clearViewDropHover() {
+  clearTimeout(viewDropHoverTimer);
+  viewDropHoverTimer = null;
+  viewDropHoverEl = null;
+  if (!drag) return;
+  drag.viewTarget?.classList.remove("tab-drop");
+  if (drag.viewTarget) drag.viewTarget.title = drag.viewTargetTitle ?? drag.viewTarget.title;
+  drag.viewTarget = null;
+}
+
+// Resolves a drop target element to the view it means: a loose tab or an open
+// group-popover row name their view directly; a still-collapsed group tab has
+// no single view yet, so it offers the one already on screen (or, failing
+// that, its first member) — the hover-expand below is what lets the user aim
+// at a DIFFERENT view inside the group instead.
+function resolveViewDropTarget(el) {
+  if (!el) return null;
+  if (el.dataset.viewId) return viewById(el.dataset.viewId);
+  if (el.dataset.groupId) {
+    const g = groupById(el.dataset.groupId);
+    if (!g) return null;
+    const views = groupViews(g);
+    return views.find((v) => v.id === settings.active_view) || views[0] || null;
+  }
+  return null;
+}
+
+function updateViewDropHover(x, y, copy) {
+  const hit = tabDropTarget(x, y);
+  if (drag.viewTarget !== hit) {
+    if (drag.viewTarget) {
+      drag.viewTarget.classList.remove("tab-drop");
+      drag.viewTarget.title = drag.viewTargetTitle ?? drag.viewTarget.title;
+    }
+    drag.viewTarget = hit;
+    if (hit) {
+      drag.viewTargetTitle = hit.title;
+      hit.title = t("viewDropMoveHint"); // names the Ctrl-to-copy key while hovered
+      hit.classList.add("tab-drop");
+    }
+  }
+  drag.ghost?.classList.toggle("will-copy", !!copy && !!hit);
+  if (hit?.dataset.groupId) {
+    if (hit !== viewDropHoverEl) {
+      clearTimeout(viewDropHoverTimer);
+      viewDropHoverEl = hit;
+      viewDropHoverTimer = setTimeout(() => {
+        if (drag && drag.viewTarget === hit) {
+          const g = groupById(hit.dataset.groupId);
+          if (g) openViewGroupPop(g, hit);
+        }
+      }, val("viewDropHoverMs"));
+    }
+  } else if (viewDropHoverEl) {
+    clearTimeout(viewDropHoverTimer);
+    viewDropHoverEl = null;
+  }
+}
+
+// One invoke moves or copies the dragged id(s) into `targetViewId`, then
+// re-renders whatever the source view's grid shows now. A rejected drop (the
+// target is full) leaves both views untouched -- batch_prompts is all-or-nothing.
+async function dropTilesOnView(ids, targetViewId, fromViewId, copy) {
+  try {
+    settings = await invoke("batch_prompts", {
+      ids, action: copy ? "addView" : "moveView",
+      color: null, favorite: null, viewId: targetViewId, fromViewId,
+    });
+  } catch (e) {
+    const m = String(e).match(/view-full:(\d+)/);
+    if (m) toast(t("viewDropFull").replace("{name}", viewById(targetViewId)?.name || "").replace("{n}", m[1]));
+    else errToast(e);
+    return;
+  }
+  closeViewGroupPop();
+  clearGridSelection();
+  await renderGrid(true);
 }
 
 window.addEventListener("pointermove", (e) => {
@@ -5609,6 +5705,13 @@ window.addEventListener("pointermove", (e) => {
     `translate(${e.clientX - drag.offX}px, ${e.clientY - drag.offY}px)`;
   setHoverCell(cellAt(e.clientX, e.clientY));
   armFolderDrop(e); // Hovering the middle of a tile offers a folder
+  // An already-placed tile (not a folder, not fresh from the library, not
+  // the free-form favorites grid) can also be dropped on a view tab above.
+  if (flag("dragToView") && flag("multiView") && !drag.folderId && !drag.fromLibrary && !favView) {
+    updateViewDropHover(e.clientX, e.clientY, e.ctrlKey);
+  } else if (drag.viewTarget) {
+    clearViewDropHover();
+  }
 });
 
 // Resume videos the drag paused (visibility pauses use the same marker).
@@ -5623,12 +5726,21 @@ function resumeDragVideos(el) {
 
 window.addEventListener("pointerup", async (e) => {
   if (!drag) return;
-  const { id, moved, el, ghost, folderId } = drag;
+  const { id, moved, el, ghost, folderId, viewTarget, viewTargetTitle } = drag;
   drag = null;
   ghost?.remove();
   el.classList.remove("dragging");
   resumeDragVideos(el);
   endDragVisuals();
+  // A tile hovering a view tab never also reaches the grid below -- restore
+  // the tab's own title and drop the hover-expand timer either way.
+  clearTimeout(viewDropHoverTimer);
+  viewDropHoverTimer = null;
+  viewDropHoverEl = null;
+  if (viewTarget) {
+    viewTarget.classList.remove("tab-drop");
+    viewTarget.title = viewTargetTitle ?? viewTarget.title;
+  }
   // What an armed centre would swallow, decided before the arm is dropped.
   const armed = folderArm && folderArm.armed ? folderArm.el : null;
   disarmFolder();
@@ -5676,6 +5788,17 @@ window.addEventListener("pointerup", async (e) => {
     }
     return;
   }
+  // Dropped on a view tab instead of a grid cell -- move it there, or with
+  // Ctrl held, copy it so it stays in both views. The tab of the view already on
+  // screen is a no-op: nothing to move within the view the tile is already in.
+  if (viewTarget && flag("dragToView")) {
+    const targetView = resolveViewDropTarget(viewTarget);
+    if (targetView && targetView.id !== activeView().id) {
+      const ids = gridSelected.has(id) && gridSelected.size > 1 ? [...gridSelected] : [id];
+      await dropTilesOnView(ids, targetView.id, activeView().id, e.ctrlKey);
+    }
+    return;
+  }
   const cell = cellAt(e.clientX, e.clientY);
   if (!cell) return;
   if (favView) { await placeFav(id, Number(cell.dataset.col), Number(cell.dataset.row)); return; }
@@ -5702,6 +5825,7 @@ window.addEventListener("pointercancel", () => {
     drag.el.classList.remove("dragging");
     drag.ghost?.remove();
     resumeDragVideos(drag.el);
+    clearViewDropHover();
   }
   drag = null;
   disarmFolder();

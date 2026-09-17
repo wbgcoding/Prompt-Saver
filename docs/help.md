@@ -63,7 +63,10 @@ clipboard, never the picture.
 The main window's grid is a free-placement board of tiles — up to 20×20 cells by
 default (adjustable to 200×200 in the expert menu), with its own layout per view.
 Drag a tile to any empty cell, or drop it on an occupied one to swap the two; the
-grid never rearranges itself on its own.
+grid never rearranges itself on its own. Drop a tile on a view tab above the grid
+to move it into that view instead, or hold Ctrl while dropping to copy it there
+so it stays in both. Hovering over a collapsed view group opens it after a
+moment, so the drop can target a view inside.
 
 ### Screenshot tool
 
@@ -665,7 +668,11 @@ mit eigenem Vorschaubild: das Bild über der Dateizeile ist nur die Kachel-Vorsc
 der Anhang darunter ist eine eigene Sache, kopiert wird immer nur der Dateipfad.
 
 **Das Raster** — freie Platzierung, standardmäßig bis 20×20 Zellen (im
-Experten-Menü bis 200×200 einstellbar), eigenes Layout je Ansicht.
+Experten-Menü bis 200×200 einstellbar), eigenes Layout je Ansicht. Eine Kachel
+auf einen Ansichtsreiter über dem Raster gezogen verschiebt sie in diese
+Ansicht, mit gedrückter Strg-Taste wird stattdessen kopiert und sie bleibt in
+beiden. Über einer eingeklappten Ansichtsgruppe verweilt klappt diese nach
+kurzer Zeit auf, damit sich in eine Ansicht darin ablegen lässt.
 
 **Screenshot-Werkzeug** — Bereich oder ganzes Fenster (auch geschützte wie den
 Task-Manager) direkt zu einer neuen Kachel. Davor öffnet sich standardmäßig ein

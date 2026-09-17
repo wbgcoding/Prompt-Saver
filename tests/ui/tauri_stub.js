@@ -206,6 +206,15 @@ const SETTINGS = {
 // a stub that never restored one, because the stale index-based cell was still there.
 for (const f of SETTINGS.tile_folders) for (const m of f.members) delete LAYOUT[m];
 
+// 420: the drag-to-view probe needs one view it can fill with a single tile, to
+// prove a genuinely full target refuses the whole drop -- shrinking "work" to
+// its one and only cell is far cheaper than padding it with eleven throwaway
+// placements first. Off by default, so every other run keeps "work" empty.
+if (window.__DRAG_VIEW_TEST__) {
+  const work = SETTINGS.views.find((v) => v.id === "work");
+  if (work) { work.cols = 1; work.rows = 1; }
+}
+
 const clone = () => JSON.parse(JSON.stringify(SETTINGS));
 
 // Mirror of the backend's normalize_view_groups: no unknown ids, no view in two
@@ -714,10 +723,37 @@ const RESULTS = {
         if (a.action === "removeView") {
           for (const id of ids) delete layout[id];
         } else {
+          const need = ids.filter((id) => !(id in layout));
+          const free = view.cols * view.rows - Object.keys(layout).length;
+          if (need.length > free) throw new Error("view-full:" + (need.length - free));
           for (const id of ids) {
             if (id in layout) continue;
             const { cell } = firstFreeCell(view);
             if (cell) layout[id] = cell;
+          }
+        }
+      }
+    }
+    // Dragging a tile onto a view tab moves it there in one call -- mirrors the
+    // real backend's single-write moveView: place into the target (all-or-nothing,
+    // same capacity check addView uses above), only then drop it from the source.
+    if (a && a.action === "moveView") {
+      const to = SETTINGS.views.find((v) => v.id === a.viewId);
+      const from = SETTINGS.views.find((v) => v.id === a.fromViewId);
+      if (to) {
+        const toKey = to.cols + "x" + to.rows;
+        const toLayout = to.layouts[toKey] || (to.layouts[toKey] = {});
+        const need = ids.filter((id) => !(id in toLayout));
+        const free = to.cols * to.rows - Object.keys(toLayout).length;
+        if (need.length > free) throw new Error("view-full:" + (need.length - free));
+        for (const id of ids) {
+          if (id in toLayout) continue;
+          const { cell } = firstFreeCell(to);
+          if (cell) toLayout[id] = cell;
+        }
+        if (from && from !== to) {
+          for (const layout of Object.values(from.layouts)) {
+            for (const id of ids) delete layout[id];
           }
         }
       }

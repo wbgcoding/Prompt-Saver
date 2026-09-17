@@ -29,7 +29,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 
 | | |
 |---|---|
-| **Grid & views** | Free placement on a per-view grid (1×1 up to 20×20), drag tiles anywhere, drop on an occupied cell to swap. Up to 20 named views, each with its own size and layout |
+| **Grid & views** | Free placement on a per-view grid (1×1 up to 20×20), drag tiles anywhere, drop on an occupied cell to swap. Up to 20 named views, each with its own size and layout. Drop a tile on a view tab to move it into that view, Ctrl to copy it there instead; hovering a collapsed view group opens it |
 | **Library** | Every saved prompt in one searchable list — copy, edit, drag onto the grid, filter by color or type |
 | **Search & sort** | Typo-tolerant search ("promt" still finds "prompt"), sorted by most used or recently used |
 | **Tags** | Label prompts with your own colored tags and narrow the library down to any combination of them |
@@ -127,7 +127,7 @@ Full version history: [CHANGELOG.md](CHANGELOG.md)
 |---|---|
 | Save a prompt | Type it in the input line → **Save** → name + color (Ctrl+Enter works too) |
 | Copy a prompt | Click its tile |
-| Move a tile | Drag it to any grid cell; drop on an occupied cell to swap |
+| Move a tile | Drag it to any grid cell; drop on an occupied cell to swap, or onto a view tab to file it there (Ctrl to copy) |
 | Edit / hide / pin / delete | Right-click a tile (or hover **⋮**); deleting asks twice |
 | All prompts | List icon in the header: search, edit and place every prompt |
 | Screenshot | Camera icon: drag a region or click a window to save it as a copy button |

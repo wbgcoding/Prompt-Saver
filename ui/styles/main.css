@@ -1119,6 +1119,10 @@ body.noflag-chainQuickStart .tile-chain-start { display: none; }
   transition: none; /* follow the cursor 1:1, no elastic lag */
   transform-origin: top left;
 }
+/* Ctrl held over a view tab copies instead of moving -- the ghost is a
+   custom element, not a real OS drag, so it carries its own cue for which of
+   the two is about to happen. */
+.drag-ghost.will-copy { outline: 2px dashed var(--accent); outline-offset: 2px; }
 
 /* ---- Composer ---- */
 .composer {

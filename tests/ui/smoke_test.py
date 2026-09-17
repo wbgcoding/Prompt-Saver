@@ -9748,6 +9748,210 @@ SEAL_PROBE = """
 """
 
 
+# 420: dragging a grid tile onto a view tab. Its own boot, same reasoning as
+# SEAL_PROBE above: the fixture's "work" view is shrunk to its own single cell
+# (window.__DRAG_VIEW_TEST__, see tauri_stub.js) so one placement fills it,
+# and the whole scenario needs a fixture shape the main sweep no longer has by
+# the time it gets this far.
+DRAG_VIEW_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const beat = setInterval(() => {
+    document.documentElement.style.setProperty('--drag-view-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
+  const visible = (el) => !!el && !el.classList.contains('hidden');
+  const callsFor = (cmd) => (window.__SMOKE_ARGS__ || []).filter(([c]) => c === cmd).map(([, a]) => a);
+  const tabFor = (id) => document.querySelector('.view-btn[data-view-id="' + id + '"]');
+  const groupTab = () => document.querySelector('.view-btn[data-group-id]');
+  const tileEl = (id) => document.querySelector('#grid .tile[data-id="' + id + '"]');
+  const centre = (el) => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+  // "notes"/"archive" are grouped -- no standalone tab of their own to click,
+  // only reachable through the folder tab's own popover.
+  const switchToGroupedView = async (id) => {
+    groupTab().click();
+    await sleep(250);
+    const row = document.querySelector('.view-group-pop .view-group-item[data-view-id="' + id + '"]');
+    if (row) row.click();
+    await sleep(250);
+  };
+  const ptr = (type, x, y, el, extra) => (el || window).dispatchEvent(new PointerEvent(type, Object.assign({
+    bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 6, clientX: x, clientY: y,
+  }, extra || {})));
+  // Presses a tile and drags it toward (tx, ty) -- past the reorder threshold,
+  // then onto the target -- without releasing yet.
+  const dragTileTo = async (tile, tx, ty) => {
+    const [sx, sy] = centre(tile);
+    ptr('pointerdown', sx, sy, tile);
+    ptr('pointermove', sx + 8, sy - 8, tile);
+    await sleep(80);
+    ptr('pointermove', tx, ty, window);
+    await sleep(80);
+  };
+  const endDrag = async (x, y, ctrl) => {
+    ptr('pointerup', x, y, window, ctrl ? { ctrlKey: true } : {});
+    await sleep(300);
+  };
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && !visible(cm); i++) await sleep(100);
+    if (visible(cm)) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+
+    const viewsBar = document.getElementById('views');
+    if (!visible(viewsBar)) {
+      errs.push('the view switcher is not visible for the drag-to-view check');
+    } else if (!tabFor('home') || !tabFor('work') || !groupTab()) {
+      errs.push('the fixture does not show the expected home/work/group tabs');
+    } else {
+      // ---- fill "work" (shrunk to 1x1) so it counts as a full target ---------
+      tabFor('work').click();
+      await sleep(200);
+      const workCell = document.querySelector('#grid .cell[data-col="0"][data-row="0"]');
+      if (!workCell || workCell.firstElementChild) {
+        errs.push('expected "work" to offer one empty cell to fill for the full-target check');
+      } else {
+        workCell.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+        await sleep(200);
+        document.getElementById('modal-name').value = 'Work Filler Tile';
+        document.getElementById('modal-text').value = 'Fills the only cell in work.';
+        document.getElementById('modal-confirm').click();
+        await sleep(300);
+      }
+      const fillerTile = document.querySelector('#grid .cell[data-col="0"][data-row="0"] .tile');
+      if (!fillerTile) {
+        errs.push('"work" has no tile after filling its only cell');
+      } else {
+        const fillerId = fillerTile.dataset.id;
+        tabFor('home').click();
+        await sleep(200);
+
+        // ---- a full target refuses the whole drop, and says so -----------------
+        const homeTileP0 = tileEl('p0');
+        if (!homeTileP0) {
+          errs.push('fixture tile "p0" is missing from "home" for the full-target check');
+        } else {
+          window.__SMOKE_ARGS__.length = 0;
+          await dragTileTo(homeTileP0, ...centre(tabFor('work')));
+          if (!tabFor('work').classList.contains('tab-drop')) {
+            errs.push('dragging a tile over a view tab does not highlight it');
+          }
+          await endDrag(...centre(tabFor('work')));
+          const fullCalls = callsFor('batch_prompts').filter(a => a && a.action === 'moveView' && a.viewId === 'work');
+          if (!fullCalls.length) errs.push('dropping on a full view never asked the backend to move it there');
+          const toastText = (document.getElementById('toast').textContent || '');
+          if (!toastText.includes('Work') || !toastText.includes('1')) {
+            errs.push('a full target view did not toast which view and how many cells are missing: "' + toastText + '"');
+          }
+          if (!tileEl('p0')) errs.push('a rejected move removed the tile from its own view anyway');
+          tabFor('work').click();
+          await sleep(200);
+          if (tileEl('p0')) errs.push('a rejected move placed the tile in the full target view');
+          if (!tileEl(fillerId)) errs.push('a rejected move disturbed the tile already filling the target');
+          tabFor('home').click();
+          await sleep(200);
+        }
+      }
+
+      // ---- hovering a collapsed group opens it; copy leaves the source in place
+      const homeTileP1 = tileEl('p1');
+      const gt = groupTab();
+      if (!homeTileP1 || !gt) {
+        errs.push('missing fixture tile or the folder tab for the copy check');
+      } else {
+        window.__SMOKE_ARGS__.length = 0;
+        await dragTileTo(homeTileP1, ...centre(gt));
+        if (!gt.classList.contains('tab-drop')) {
+          errs.push('dragging a tile over a collapsed view group does not highlight it');
+        }
+        await sleep(750); // past the default 600 ms hover-open delay
+        const pop = document.querySelector('.view-group-pop');
+        if (!visible(pop)) {
+          errs.push('hovering a tile over a collapsed view group never opened it');
+        } else {
+          const notesRow = pop.querySelector('.view-group-item[data-view-id="notes"]');
+          if (!notesRow) {
+            errs.push('the opened group popover has no row for "notes"');
+          } else {
+            // The group only just opened under the drag -- one more move onto the
+            // now-visible row before releasing, exactly as a real drag would.
+            const [nx, ny] = centre(notesRow);
+            ptr('pointermove', nx, ny, window, { ctrlKey: true });
+            await sleep(80);
+            if (!notesRow.classList.contains('tab-drop')) {
+              errs.push('a view row inside an opened group does not highlight as a drop target');
+            }
+            await endDrag(nx, ny, true); // Ctrl held: copy, not move
+            const addCalls = callsFor('batch_prompts').filter(a => a && a.action === 'addView' && a.viewId === 'notes');
+            if (!addCalls.some(a => (a.ids || []).includes('p1'))) {
+              errs.push('Ctrl-dropping on a view revealed by the hover-expand did not copy the tile there');
+            }
+            if (!tileEl('p1')) errs.push('copying a tile removed it from the source view');
+            await switchToGroupedView('notes');
+            if (!tileEl('p1')) errs.push('the copied tile is missing from the view opened by the hover-expand');
+            tabFor('home').click();
+            await sleep(200);
+          }
+        }
+      }
+
+      // ---- the same path without Ctrl moves instead of copying ---------------
+      const homeTileP2 = tileEl('p2');
+      const gt2 = groupTab();
+      if (!homeTileP2 || !gt2) {
+        errs.push('missing fixture tile or the folder tab for the move check');
+      } else {
+        window.__SMOKE_ARGS__.length = 0;
+        await dragTileTo(homeTileP2, ...centre(gt2));
+        await sleep(750);
+        const pop2 = document.querySelector('.view-group-pop');
+        const archiveRow = pop2 && pop2.querySelector('.view-group-item[data-view-id="archive"]');
+        if (!archiveRow) {
+          errs.push('the opened group popover has no row for "archive"');
+        } else {
+          const [ax, ay] = centre(archiveRow);
+          ptr('pointermove', ax, ay, window);
+          await sleep(80);
+          await endDrag(ax, ay);
+          const moveCalls = callsFor('batch_prompts').filter(a => a && a.action === 'moveView' && a.viewId === 'archive');
+          if (!moveCalls.some(a => a.fromViewId === 'home' && (a.ids || []).includes('p2'))) {
+            errs.push('dropping on a view revealed by the hover-expand did not move the tile there');
+          }
+          if (tileEl('p2')) errs.push('moving a tile left it behind in the source view');
+          await switchToGroupedView('archive');
+          if (!tileEl('p2')) errs.push('the moved tile is missing from the view opened by the hover-expand');
+          tabFor('home').click();
+          await sleep(200);
+        }
+      }
+
+      // ---- dropping on the view already on screen does nothing, no message ---
+      const homeTileP3 = tileEl('p3');
+      if (!homeTileP3) {
+        errs.push('fixture tile "p3" is missing from "home" for the same-view check');
+      } else {
+        window.__SMOKE_ARGS__.length = 0;
+        await dragTileTo(homeTileP3, ...centre(tabFor('home')));
+        await endDrag(...centre(tabFor('home')));
+        if (callsFor('batch_prompts').length) {
+          errs.push('dropping a tile on its own view\\'s tab called the backend anyway');
+        }
+        if (!tileEl('p3')) errs.push('dropping a tile on its own view removed it');
+      }
+    }
+  } catch (e) { errs.push('probe: ' + e.message); }
+  clearInterval(beat);
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
+
 # 276: same idea as SEAL_PROBE just above, for the settings-write-failure notice.
 # A failed disk write is backend-only, so the probe cannot trigger a real one --
 # it only proves the two states the window itself can show: the startup dialog
@@ -10098,6 +10302,34 @@ def main():
             failed += len(errs)
             if not errs:
                 print("   ok")
+
+        # 420: dragging a grid tile onto a view tab. Its own boot, same reasoning
+        # as the restore-dialog and store-sealing runs below: window.__DRAG_VIEW_TEST__
+        # shrinks "work" to its own single cell so the probe can fill and exhaust
+        # it cheaply, a shape the main sweep above never sets up.
+        side = tmp / "ui" / "drag-view.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script",
+                     '<script>window.__DRAG_VIEW_TEST__ = true;</script>\n'
+                     '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", DRAG_VIEW_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-drag-view'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- drag a tile onto a view tab")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
 
         # The store-sealing warning, both ways round. Its own boot each time: the
         # dialog only ever opens during startup, so it cannot be reached by walking

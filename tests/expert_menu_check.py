@@ -136,6 +136,7 @@ DEPENDENCIES = {
     "promptHotkeyPaste": "promptHotkeys",
     "dragOutModifier": "dragOut",
     "dragOutInvert": "dragOut",
+    "viewDropHoverMs": "dragToView",
     "tooltipWidth": "tilePreview",
     "tooltipDelayMs": "tooltipDelay",
     "tooltipTimeoutMs": "tooltipTimeout",

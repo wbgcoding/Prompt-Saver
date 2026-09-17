@@ -38,6 +38,11 @@ the video editor and the introduction tour ship on).
   another to group them; the group tab opens a popover listing its views, and
   its context menu renames, recolors or dissolves it. Ctrl+Tab cycles through
   views in visual order.
+- **Drag a tile onto a view tab** — files it into that view; hold Ctrl while
+  dropping to copy it there instead, so it stays in both. Hovering a collapsed
+  view group opens it after a moment, so the drop can target a view inside.
+  A target with no room left refuses the whole drop and says how many cells
+  are missing.
 - **Self-filling variables** — `date`, `time`, `datetime`, `weekday`,
   `clipboard` and `uuid` fill themselves in on copy, with no dialog; a prompt
   mixing them with your own variables only asks for yours. Date and time follow

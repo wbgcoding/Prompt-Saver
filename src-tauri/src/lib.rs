@@ -5354,6 +5354,36 @@ fn place_ids_in_view(
     true
 }
 
+// Same accounting `place_ids_in_view` does internally, so a caller that just got
+// `false` back can tell the user how many cells are still missing.
+fn view_capacity_deficit(
+    layout: &std::collections::HashMap<String, [u32; 2]>,
+    ids: &[String],
+    cols: u32,
+    rows: u32,
+    extra_occupied: &std::collections::HashSet<(u32, u32)>,
+) -> usize {
+    let mut occupied: std::collections::HashSet<(u32, u32)> =
+        layout.values().map(|c| (c[0], c[1])).collect();
+    occupied.extend(extra_occupied.iter().copied());
+    let need = ids.iter().filter(|id| !layout.contains_key(id.as_str())).count();
+    let free = (cols as usize * rows as usize).saturating_sub(occupied.len());
+    need.saturating_sub(free)
+}
+
+// Drops `ids` from every layout size a view has ever been resized to, and from
+// its authoritative `members` list -- what a cross-view move's source side does
+// once the target has durably accepted the same ids (batch_prompts "moveView"),
+// so a prompt dragged onto another view's tab never lingers behind in this one.
+fn strip_ids_from_view(view: &mut View, ids: &[String]) {
+    for layout in view.layouts.values_mut() {
+        for id in ids {
+            layout.remove(id);
+        }
+    }
+    view.members.retain(|m| !ids.contains(m));
+}
+
 // "Store files" opt-in flag (off by default).
 fn store_files_enabled(store: &Store) -> bool {
     store.settings.ui_flags.get("storeFiles").copied().unwrap_or(false)
@@ -6478,7 +6508,8 @@ async fn batch_prompts(
                     view.members.retain(|m| !ids.contains(m));
                 } else {
                     if !place_ids_in_view(layout, &ids, cols, rows, &folder_cells) {
-                        return Err("view-full".into());
+                        let deficit = view_capacity_deficit(layout, &ids, cols, rows, &folder_cells);
+                        return Err(format!("view-full:{deficit}"));
                     }
                     for id in &ids {
                         if !view.members.iter().any(|m| m == id) {
@@ -6514,7 +6545,8 @@ async fn batch_prompts(
                 // All-or-nothing - only drop the source placement once the
                 // target has durably accepted every id.
                 if !place_ids_in_view(layout, &ids, cols, rows, &folder_cells) {
-                    return Err("view-full".into());
+                    let deficit = view_capacity_deficit(layout, &ids, cols, rows, &folder_cells);
+                    return Err(format!("view-full:{deficit}"));
                 }
                 for id in &ids {
                     if !store.settings.views[to_idx].members.iter().any(|m| m == id) {
@@ -6522,12 +6554,7 @@ async fn batch_prompts(
                     }
                 }
                 if to_idx != from_idx {
-                    for layout in store.settings.views[from_idx].layouts.values_mut() {
-                        for id in &ids {
-                            layout.remove(id);
-                        }
-                    }
-                    store.settings.views[from_idx].members.retain(|m| !ids.contains(m));
+                    strip_ids_from_view(&mut store.settings.views[from_idx], &ids);
                 }
                 save_settings(&app, &store.settings);
             }
@@ -6577,6 +6604,13 @@ async fn batch_prompts(
     if action == "delete" {
         rearm_hotkeys(&app); // The deleted prompts give their accelerators back
         sync_float_windows(&app); // Folders left too small dissolve
+    }
+    // A floating button's own pill/folder window reads view membership too
+    // (pill folders group by view) -- moving or copying a prompt between
+    // views, including dragging a tile onto a view tab, must reach it the
+    // same way any other settings change does.
+    if matches!(action.as_str(), "addView" | "removeView" | "moveView") {
+        notify_float_settings(&app);
     }
     rebuild_tray(&app); // One rebuild for the whole batch, not one per prompt
     Ok(settings)
@@ -34818,6 +34852,93 @@ mod tests {
         let ids: Vec<String> = vec!["a".to_string()];
         assert!(place_ids_in_view(&mut layout, &ids, 2, 1, &folder_cells));
         assert_eq!(layout.get("a"), Some(&[1, 0])); // [0,0] was the folder's, must be skipped
+    }
+
+    #[test]
+    fn view_capacity_deficit_counts_only_the_ids_still_missing_a_cell() {
+        // 2x1 grid, "a" already placed: one free cell, two new ids asked for.
+        let layout = HashMap::from([("a".to_string(), [0, 0])]);
+        let ids: Vec<String> = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        // "a" is already there and doesn't count against the need.
+        assert_eq!(view_capacity_deficit(&layout, &ids, 2, 1, &std::collections::HashSet::new()), 1);
+        // A folder cell shrinks the free count the same way it does in place_ids_in_view.
+        let folder_cells = std::collections::HashSet::from([(1u32, 0u32)]);
+        let empty: HashMap<String, [u32; 2]> = HashMap::new();
+        let one_id: Vec<String> = vec!["z".to_string()];
+        assert_eq!(view_capacity_deficit(&empty, &one_id, 1, 1, &std::collections::HashSet::new()), 0);
+        assert_eq!(view_capacity_deficit(&layout, &vec!["b".to_string()], 2, 1, &folder_cells), 1);
+    }
+
+    #[test]
+    fn strip_ids_from_view_drops_them_from_every_layout_size_and_from_members() {
+        // A view resized at least once carries more than one layout entry ("2x1" from
+        // an earlier size, "3x1" the current one) -- a member dropped from the view
+        // must lose its cell in BOTH, not just the size it happens to sit in today.
+        let mut view = test_view("v1");
+        view.cols = 3;
+        view.rows = 1;
+        view.members = vec!["a".to_string(), "b".to_string()];
+        view.layouts.insert("2x1".to_string(), HashMap::from([("a".to_string(), [0, 0])]));
+        view.layouts.insert(
+            "3x1".to_string(),
+            HashMap::from([("a".to_string(), [0, 0]), ("b".to_string(), [1, 0])]),
+        );
+        strip_ids_from_view(&mut view, &["a".to_string()]);
+        assert_eq!(view.members, vec!["b".to_string()]);
+        assert!(!view.layouts["2x1"].contains_key("a"));
+        assert!(!view.layouts["3x1"].contains_key("a"));
+        assert_eq!(view.layouts["3x1"].get("b"), Some(&[1, 0])); // untouched
+    }
+
+    #[test]
+    fn moving_between_views_places_in_the_target_and_strips_the_source() {
+        // The exact two-step sequence batch_prompts's "moveView" arm runs: place
+        // into the target first (all-or-nothing), only then strip the source --
+        // proves "moved" means gone from one view and present in the other.
+        let mut from_view = test_view("home");
+        from_view.cols = 2;
+        from_view.rows = 1;
+        from_view.members = vec!["a".to_string()];
+        from_view.layouts.insert(grid_key(2, 1), HashMap::from([("a".to_string(), [0, 0])]));
+
+        let mut to_view = test_view("work");
+        to_view.cols = 2;
+        to_view.rows = 1;
+        let ids: Vec<String> = vec!["a".to_string()];
+        let to_layout = to_view.layouts.entry(grid_key(2, 1)).or_default();
+        assert!(place_ids_in_view(to_layout, &ids, 2, 1, &std::collections::HashSet::new()));
+        to_view.members.push("a".to_string());
+        strip_ids_from_view(&mut from_view, &ids);
+
+        assert!(from_view.members.is_empty());
+        assert!(!from_view.layouts[&grid_key(2, 1)].contains_key("a"));
+        assert_eq!(to_view.members, vec!["a".to_string()]);
+        assert_eq!(to_view.layouts[&grid_key(2, 1)].get("a"), Some(&[0, 0]));
+    }
+
+    #[test]
+    fn copying_into_a_view_never_touches_a_second_view() {
+        // The "addView" (Ctrl-drop / copy) arm never calls strip_ids_from_view --
+        // placing "a" into a target view must leave an unrelated view's own
+        // members/layouts byte-for-byte unchanged, proving a copy really is one.
+        let mut other_view = test_view("home");
+        other_view.members = vec!["a".to_string()];
+        other_view.layouts.insert(grid_key(2, 1), HashMap::from([("a".to_string(), [0, 0])]));
+        let other_before = other_view.clone();
+
+        let mut to_view = test_view("work");
+        to_view.cols = 2;
+        to_view.rows = 1;
+        let ids: Vec<String> = vec!["a".to_string()];
+        let to_layout = to_view.layouts.entry(grid_key(2, 1)).or_default();
+        assert!(place_ids_in_view(to_layout, &ids, 2, 1, &std::collections::HashSet::new()));
+        to_view.members.push("a".to_string());
+
+        // The source view was never touched -- View has no PartialEq of its own,
+        // so the two fields a copy could plausibly disturb are compared directly.
+        assert_eq!(other_view.members, other_before.members);
+        assert_eq!(other_view.layouts, other_before.layouts);
+        assert_eq!(to_view.layouts[&grid_key(2, 1)].get("a"), Some(&[0, 0]));
     }
 
     // `members` decides who belongs to a view, `layouts` only where they
