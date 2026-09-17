@@ -2714,7 +2714,7 @@ mod store_crypt {
 // Deliberately never flips back: a row written in plaintext during the outage stays
 // exactly that way on disk until something rewrites ITS content (write_rows only
 // re-seals a row whose content actually changed, see "Diff writes"), so "the profile
-// is repaired now" does not mean every row is sealed again — only the ones touched
+// is repaired now" does not mean every row is sealed again -- only the ones touched
 // from that point on. Clearing the flag on the first later success would tell the
 // user the problem is fully gone while old plaintext rows could still be sitting on
 // disk untouched; leaving it sticky for the rest of the session is the honest answer.
@@ -23826,22 +23826,78 @@ fn update_geom<F: FnOnce(&mut WindowGeom)>(handle: &AppHandle, f: F) {
 // `set_ui_value("errorLogKeepKb", ..)`, read here without touching the DB.
 static ERROR_LOG_KEEP_BYTES: AtomicU64 = AtomicU64::new(256 * 1024);
 
+// Name of the env var `crash_log_path` checks before falling back to the real
+// %APPDATA% location. Checked unconditionally (not only in a test build) so a test
+// can prove the redirect actually took effect on the exact value `append_crash_log`
+// reads, rather than proving a separate compile-time flag that could drift out of
+// sync with it.
+const CRASH_LOG_DIR_ENV: &str = "PROMPT_SAVER_TEST_CRASH_LOG_DIR";
+
+// Where `append_crash_log` writes. `cargo test` must never touch the real file:
+// dozens of call sites throughout this module fire during entirely unrelated tests
+// (a recording-conversion failure test, for one), not just the ones that test
+// logging itself, so every test needs the same redirect without each one having to
+// set it up by hand. The first call from a test binary seeds `CRASH_LOG_DIR_ENV` to
+// a per-process temp folder, the same `ps-<name>test-<pid>` shape the recording
+// tests already use for their own scratch files, and every later call, from any
+// thread, just reads the now-stable value; `Once` keeps that seeding itself race-free.
+fn crash_log_path() -> PathBuf {
+    #[cfg(test)]
+    {
+        static INIT: std::sync::Once = std::sync::Once::new();
+        INIT.call_once(|| {
+            if std::env::var_os(CRASH_LOG_DIR_ENV).is_none() {
+                let dir = std::env::temp_dir().join(format!("ps-crashlogtest-{}", std::process::id()));
+                std::env::set_var(CRASH_LOG_DIR_ENV, &dir);
+            }
+        });
+    }
+    let dir = match std::env::var_os(CRASH_LOG_DIR_ENV) {
+        Some(dir) => PathBuf::from(dir),
+        None => std::env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir)
+            .join(DATA_FOLDER),
+    };
+    dir.join("error.log")
+}
+
+// Trims `path` down to its last `cap` bytes, cutting on a line boundary so the
+// kept tail never opens on a fragment of a line whose start was just thrown away.
+// Pulled out of `append_crash_log` as its own function, taking an explicit path,
+// so a test can prove the trimming itself against a private file it owns:
+// dozens of unrelated tests append to the real crash log's redirected path at the
+// same time, and asserting exact content against that shared, moving target would
+// be a race, not a test.
+fn rotate_log_file(path: &Path, cap: usize) {
+    let Ok(contents) = fs::read(path) else { return };
+    if contents.len() <= cap {
+        return;
+    }
+    let cut_from = contents.len() - cap;
+    let start = contents[cut_from..]
+        .iter()
+        .position(|&b| b == b'\n')
+        .map(|i| cut_from + i + 1)
+        .unwrap_or(contents.len());
+    let _ = fs::write(path, &contents[start..]);
+}
+
 // Append one line to a local crash log so a hard failure on a user's machine
 // leaves something diagnosable. Privacy: the message is only the panic location
 // and our own static panic text (never prompt content or other user data), and
 // the file is local — never uploaded. Rotates past `errorLogKeepKb` (default
-// 256 KB) so it can't grow without bound. Best-effort: every step is ignored on failure.
+// 256 KB) so it can't grow without bound -- trims the OLDEST bytes and keeps the
+// newest, rather than deleting the whole file, so a real failure a user just hit
+// is never the one line that gets thrown away. Best-effort: every step is ignored
+// on failure.
 fn append_crash_log(msg: &str) {
-    let dir = std::env::var_os("APPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir)
-        .join(DATA_FOLDER);
-    let _ = fs::create_dir_all(&dir);
-    let path = dir.join("error.log");
-    let cap = ERROR_LOG_KEEP_BYTES.load(std::sync::atomic::Ordering::Relaxed);
-    if fs::metadata(&path).map(|m| m.len() > cap).unwrap_or(false) {
-        let _ = fs::remove_file(&path);
+    let path = crash_log_path();
+    if let Some(dir) = path.parent() {
+        let _ = fs::create_dir_all(dir);
     }
+    let cap = ERROR_LOG_KEEP_BYTES.load(std::sync::atomic::Ordering::Relaxed) as usize;
+    rotate_log_file(&path, cap);
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -23850,6 +23906,42 @@ fn append_crash_log(msg: &str) {
     if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
         let _ = writeln!(f, "[t={} v{}] {}", secs, env!("CARGO_PKG_VERSION"), msg);
     }
+}
+
+// Rewrites `path` without any line that carries a Windows user-profile path.
+// Matched structurally (`\Users\` as a path segment, case-insensitive) rather
+// than against today's own account name, see `scrub_user_paths_from_crash_log`
+// for why. Its own function, taking an explicit path, for the same testability
+// reason as `rotate_log_file` above.
+fn strip_user_path_lines(path: &Path) {
+    let Ok(text) = fs::read_to_string(path) else { return };
+    let has_user_path = |line: &str| {
+        let lower = line.to_ascii_lowercase();
+        lower.contains(r"\users\") || lower.contains("/users/")
+    };
+    if !text.lines().any(has_user_path) {
+        return;
+    }
+    let cleaned: String = text
+        .lines()
+        .filter(|line| !has_user_path(line))
+        .map(|line| format!("{line}\n"))
+        .collect();
+    let _ = fs::write(path, cleaned);
+}
+
+// One-time cleanup: an older build's crash log can carry the BUILD MACHINE's own
+// user-profile path baked into a panic location from anything outside this
+// workspace (a dependency crate compiles with its full source path,
+// `\Users\<name>\...` and all) -- `build.bat`'s `--remap-path-prefix` only keeps
+// that out of entries logged by a build made after it was added, so an older log
+// can still carry it. Rewrite the file without those lines rather than leaving
+// them sitting there for whoever eventually reads a support mail. The path is
+// the machine that BUILT the exe, essentially never the machine running it, which
+// is why this checks the structural shape of a user path rather than today's own
+// account name. Best-effort, like everything else here; runs once at startup.
+fn scrub_user_paths_from_crash_log() {
+    strip_user_path_lines(&crash_log_path());
 }
 
 // ---------- App entry ----------
@@ -24295,6 +24387,9 @@ pub fn run() {
             }
             sweep_stale_temp_files(); // crash/abnormal-exit leftovers from a previous run
             let store = load_store(&handle);
+            // A one-off pass over whatever the log already holds -- see its own
+            // comment for why this cannot just check today's own account name.
+            scrub_user_paths_from_crash_log();
             // Seed the crash-log rotation cap from whatever was persisted, before
             // anything below can possibly call append_crash_log.
             if let Some(kb) = store.settings.ui_values.get("errorLogKeepKb").copied() {
@@ -32337,6 +32432,117 @@ mod tests {
         FORCE_PLAINTEXT_FALLBACK.with(|f| f.set(false));
         let resealed = enc_str("written after the profile was repaired");
         assert!(resealed.starts_with(ENC_PREFIX), "a write with DPAPI available again must come out sealed");
+    }
+
+    // A cargo test run must never touch the real error.log -- dozens of call
+    // sites fire during entirely unrelated tests, not just the ones that test
+    // logging directly, so this has to hold for the redirect mechanism itself.
+    #[test]
+    fn append_crash_log_never_writes_the_real_appdata_file() {
+        let real_path = std::env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir)
+            .join(DATA_FOLDER)
+            .join("error.log");
+        let before = fs::metadata(&real_path).ok().map(|m| (m.len(), m.modified().ok()));
+
+        assert_ne!(crash_log_path(), real_path, "a test build must redirect away from the real file");
+        const MARKER: &str = "PROBE-crash-log-redirect-never-writes-the-real-appdata-file";
+        append_crash_log(MARKER);
+
+        let after = fs::metadata(&real_path).ok().map(|m| (m.len(), m.modified().ok()));
+        assert_eq!(before, after, "the real error.log must be untouched by a test run");
+
+        let redirected = fs::read_to_string(crash_log_path()).unwrap_or_default();
+        assert!(redirected.contains(MARKER), "the message must land in the redirected file instead");
+    }
+
+    // A log grown past the cap must keep its newest lines and lose only the
+    // oldest -- deleting the whole file (the old behaviour) would throw away the
+    // real failure a user just hit along with everything before it. Runs against
+    // its own private file, never the shared redirected crash log, so nothing
+    // else appending concurrently can move this test's goalposts.
+    #[test]
+    fn rotate_log_file_keeps_the_newest_lines_and_drops_only_the_oldest() {
+        let path = std::env::temp_dir().join(format!("ps-crashlog-rotate-test-{}", std::process::id()));
+        let lines: Vec<String> = (0..50).map(|i| format!("line {i:03} of the log before rotation")).collect();
+        let body = lines.iter().map(|l| format!("{l}\n")).collect::<String>();
+        fs::write(&path, &body).unwrap();
+        let full_len = body.len();
+
+        // Cap well under the full size but well over one line, so several of the
+        // oldest lines must go and several of the newest must survive intact.
+        let cap = full_len / 3;
+        rotate_log_file(&path, cap);
+
+        let kept = fs::read_to_string(&path).unwrap();
+        assert!(kept.len() <= cap, "the kept tail must not exceed the cap: {} > {cap}", kept.len());
+        assert!(!kept.is_empty(), "some of the log must survive a rotation");
+        assert!(
+            kept.starts_with("line "),
+            "the tail must start on a whole line, not a fragment of one that was cut: {kept:?}"
+        );
+        assert!(
+            lines.last().map(|l| kept.contains(l.as_str())).unwrap_or(false),
+            "the newest line must survive the rotation"
+        );
+        assert!(
+            !lines.first().map(|l| kept.contains(l.as_str())).unwrap_or(false),
+            "the oldest line must be the one that gets dropped"
+        );
+
+        let _ = fs::remove_file(&path);
+    }
+
+    // A file already under the cap must be left completely alone -- rotation is
+    // only for a log that actually outgrew its budget.
+    #[test]
+    fn rotate_log_file_leaves_a_file_under_the_cap_untouched() {
+        let path = std::env::temp_dir().join(format!("ps-crashlog-rotate-small-test-{}", std::process::id()));
+        fs::write(&path, "short log, well under any reasonable cap\n").unwrap();
+        let before = fs::read_to_string(&path).unwrap();
+
+        rotate_log_file(&path, 256 * 1024);
+
+        let after = fs::read_to_string(&path).unwrap();
+        assert_eq!(before, after, "a file under the cap must not be rewritten at all");
+        let _ = fs::remove_file(&path);
+    }
+
+    // A line carrying a Windows user-profile path -- exactly what an unremapped
+    // panic location from a dependency crate bakes in -- must be removed by the
+    // cleanup; every other line must survive untouched.
+    #[test]
+    fn strip_user_path_lines_removes_only_the_lines_that_carry_one() {
+        let path = std::env::temp_dir().join(format!("ps-crashlog-scrub-test-{}", std::process::id()));
+        let contents = "\
+[t=1 v1.0] a clean line with no path in it at all\n\
+[t=2 v1.0] panicked at C:\\Users\\example\\.cargo\\registry\\src\\index.crates.io\\somecrate-1.2.3\\src\\lib.rs:42\n\
+[t=3 v1.0] another clean line, describing an ordinary failure\n";
+        fs::write(&path, contents).unwrap();
+
+        strip_user_path_lines(&path);
+
+        let cleaned = fs::read_to_string(&path).unwrap();
+        assert!(!cleaned.to_ascii_lowercase().contains(r"\users\"), "the user-path line must be gone: {cleaned:?}");
+        assert!(cleaned.contains("a clean line with no path in it at all"), "an unrelated line must survive");
+        assert!(cleaned.contains("another clean line, describing an ordinary failure"), "an unrelated line must survive");
+        let _ = fs::remove_file(&path);
+    }
+
+    // A file with nothing to remove must not be rewritten at all -- the healthy,
+    // common case should cost one read and nothing else.
+    #[test]
+    fn strip_user_path_lines_leaves_a_clean_file_untouched() {
+        let path = std::env::temp_dir().join(format!("ps-crashlog-scrub-clean-test-{}", std::process::id()));
+        fs::write(&path, "nothing here reveals anyone's account name\n").unwrap();
+        let before = fs::read_to_string(&path).unwrap();
+
+        strip_user_path_lines(&path);
+
+        let after = fs::read_to_string(&path).unwrap();
+        assert_eq!(before, after, "a clean file must not be rewritten");
+        let _ = fs::remove_file(&path);
     }
 
     // A plaintext-fallback value whose own text happens to start with the literal
