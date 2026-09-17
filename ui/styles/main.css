@@ -377,6 +377,14 @@ body.noflag-showJournal #journal-btn { display: none; }
 }
 .view-group-item:not(.on) .view-group-item-name { color: var(--muted); }
 .view-group-item.on .view-group-item-name { font-weight: 600; }
+/* A tile dragged onto a row of an opened group names the view it will land in, so
+   the row has to light up the way the tab itself does. Flat accent rather than the
+   tab's merge scrim: a list entry is not a folder that swallows what is dropped on
+   it, it is only the target of the move. Specificity has to clear the popover's own
+   `.ctx button:hover`, which is why these three carry the `.ctx` in front. */
+.ctx .view-group-item.tab-drop { background: var(--accent); }
+.ctx .view-group-item.tab-drop .view-group-item-name { color: var(--accent-fg); }
+.ctx .view-group-item.tab-drop .view-group-out { opacity: 0; }
 .view-group-dot { flex: 0 0 9px; width: 9px; height: 9px; border-radius: 50%; }
 .view-group-out {
   flex: 0 0 auto;
