@@ -137,6 +137,7 @@ DEPENDENCIES = {
     "dragOutModifier": "dragOut",
     "dragOutInvert": "dragOut",
     "viewDropHoverMs": "dragToView",
+    "tileHotkeyBadgeOpacity": "tileHotkeyBadge",
     "tooltipWidth": "tilePreview",
     "tooltipDelayMs": "tooltipDelay",
     "tooltipTimeoutMs": "tooltipTimeout",
