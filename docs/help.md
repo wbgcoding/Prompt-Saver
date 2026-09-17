@@ -319,6 +319,15 @@ the history is mirrored into settings, so it survives a restart too.
 
 ### Rotating tiles
 
+Not the same as chaining (see Copying below): rotation changes the text inside
+ONE tile from copy to copy, chaining copies several DIFFERENT tiles together
+as one text.
+
+| I want... | use... |
+| --- | --- |
+| several wordings of the same prompt | rotation |
+| several different prompts, one after another | chaining |
+
 A tile can hold a list of texts instead of one — each copy serves the next entry,
 in order or shuffled without repeats, instead of always the same text. On by
 default; the per-tile switch sits under Advanced options in the editor.
@@ -346,10 +355,12 @@ fast too often pauses the session with a toast instead of looping.
 
 ### Copying
 
-- Chaining — click several tiles in a row, they combine into one clipboard copy.
-  Hovering a text tile also shows a small chain icon next to its selection
-  checkbox that starts a chain with that tile as the first entry directly —
-  switchable off on its own in the expert menu.
+- Chaining: not the same as rotation (see Rotating tiles above). Several
+  DIFFERENT tiles copied together as one text, rather than one tile changing
+  what it holds. Click several tiles in a row, they combine into one clipboard
+  copy. Hovering a text tile also shows a small chain icon next to its
+  selection checkbox that starts a chain with that tile as the first entry
+  directly, switchable off on its own in the expert menu.
 - Per-tile hotkeys — copy a specific tile from anywhere, without opening the app
 - Drag-out — hold the modifier key and drag a tile onto another window to paste
   directly, no clipboard round-trip. An expert switch swaps the two gestures, so a
@@ -369,6 +380,8 @@ a colliding hotkey drops the losing one instead of failing the import.
 "All hotkeys", next to the global hotkey field in Settings, lists every hotkey —
 global and per-tile — in one searchable, live-rebindable list, so rebinding or
 clearing one no longer means opening that tile's editor.
+
+A tile with its own hotkey shows a small keyboard symbol.
 
 ### Clipboard watcher
 
@@ -419,12 +432,17 @@ privacy-leaning media tiles.
 
 ## Always on top
 
-### Floating buttons & folders
+### Floating buttons
 
-Floating buttons are small always-on-top copy buttons that sit outside the main
-window, over whatever app is in use. Pill folders and grid folders (both on by
-default) merge several of them, or several grid tiles, into one expandable group
-the same way — a tile belongs to only one grid folder at a time.
+Small always-on-top copy buttons that sit outside the main window, over
+whatever app is in use.
+
+### Folders
+
+One gesture works in three places: drop one onto another to gather it into a
+folder. A view tab dropped onto another view tab makes a group tab. A floating
+button dropped onto another makes a pill folder. A tile dropped onto another
+tile makes a grid folder, and belongs to only one grid folder at a time.
 
 ### Tray
 
@@ -515,7 +533,9 @@ it has run for the guess to mean something — both switchable off.
 ### Data maintenance
 
 Duplicate finder, trash (with its own retention setting), CSV/TXT export, and
-full backup export/import — reached from the expert menu's data group.
+full backup export/import — reached from the expert menu's data group. The
+duplicate finder also has a shortcut in the settings dialog, next to import
+and export, so it does not take opening the expert menu to find it.
 
 ### Trash & restoring tiles
 
@@ -825,6 +845,14 @@ vorübergehend aus, oder die Prüfung lässt sich ganz abschalten.
 **Farbpipette & Auswahlverlauf** — Pixel als Hex/RGB/HSL kopieren; die letzten
 Auswahlen überstehen einen Neustart. Standardmäßig aus.
 
+**Rotation und Kette:** zwei verschiedene Dinge. Rotation ändert den Text
+EINER Kachel, Kette kopiert MEHRERE verschiedene Kacheln zusammen.
+
+| Ich will... | nutze... |
+| --- | --- |
+| verschiedene Formulierungen desselben Prompts | Rotation |
+| mehrere verschiedene Prompts hintereinander | Kette |
+
 **Wechselnde Kacheln** — eine Kachel trägt eine Liste von Texten, jede Kopie
 liefert den nächsten Eintrag (Reihenfolge oder Zufall). Standardmäßig an; der
 Schalter pro Kachel sitzt im Editor unter Erweiterte Optionen. Ein Badge auf
@@ -840,18 +868,26 @@ Sitzung abgefragt, dieselben Werte gelten für jeden Eintrag. Fünf
 Experteneinstellungen regeln Zeitlimit und Erkennungsfenster; zu schnelles,
 zu häufiges Einfügen pausiert die Sitzung mit einem Hinweis statt zu wiederholen.
 
-**Kopieren** — Verketten (auch direkt über ein Kettensymbol an der Kachel,
-einzeln abschaltbar), Hotkeys pro Kachel, Herausziehen (mit oder, per Schalter,
-ohne Modifikatortaste), automatisches Einfügen.
+**Kopieren** — Verketten (mehrere verschiedene Kacheln als ein Text, anders als
+Rotation oben; auch direkt über ein Kettensymbol an der Kachel, einzeln
+abschaltbar), Hotkeys pro Kachel, Herausziehen (mit oder, per Schalter, ohne
+Modifikatortaste), automatisches Einfügen.
 
 **Hotkeys** — ein globaler Hotkey öffnet den Schnellstarter (Standard
 Strg+Alt+P), ein eigener Hotkey pro Kachel kopiert (und fügt optional ein). Bei
 einer Kollision gewinnt der App-Hotkey, sonst die erste Kachel in der Liste.
 "Alle Hotkeys" neben dem globalen Feld listet jeden Hotkey durchsuchbar auf und
-belegt jede Zeile direkt um, ohne den jeweiligen Editor zu öffnen.
+belegt jede Zeile direkt um, ohne den jeweiligen Editor zu öffnen. Eine Kachel
+mit eigenem Hotkey zeigt ein kleines Tastatursymbol.
 
-**Schwebende Buttons & Ordner** — Pillen-Ordner und Raster-Ordner (beide aus);
-eine Kachel gehört immer nur zu einem Raster-Ordner gleichzeitig.
+**Schwebende Buttons:** kleine, immer sichtbare Kopier-Buttons außerhalb des
+Hauptfensters, über jeder anderen App.
+
+**Ordner:** eine Geste an drei Stellen, ein Ziehen auf ein anderes fasst es zu
+einem Ordner zusammen. Ein Ansichts-Reiter auf einen anderen ergibt einen
+Gruppen-Reiter. Ein schwebender Button auf einen anderen ergibt einen
+Pillen-Ordner. Eine Kachel auf eine andere ergibt einen Raster-Ordner, und
+gehört immer nur zu einem Raster-Ordner gleichzeitig.
 
 **Taskleistenmenü** — Zuletzt kopiert, Favoriten. Erscheint als abgerundetes,
 zum Thema passendes Fenster statt des einfachen Windows-Menüs; im Expertenmenü
@@ -920,7 +956,9 @@ Lange Vorgänge (Export, Umwandlung, ffmpeg-Download, Sicherung, Import) füllen
 das Taskleistensymbol und zeigen ab einer eingestellten Schwelle „noch etwa …" —
 beides abschaltbar.
 
-**Datenwartung** — Duplikatfinder, Papierkorb, Import/Export.
+**Datenwartung** — Duplikatfinder, Papierkorb, Import/Export. Der Duplikatfinder
+hat zusätzlich eine Abkürzung im Einstellungsdialog, direkt neben Import und
+Export, damit man dafür nicht erst das Expertenmenü öffnen muss.
 
 **Papierkorb & Kacheln wiederherstellen** — gelöschte Kacheln landen zuerst im
 Papierkorb (Aufbewahrung in Tagen, 0 = für immer). Wiederherstellen legt in die

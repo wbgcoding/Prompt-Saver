@@ -7,7 +7,7 @@ import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults 
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
-import { DRAG_OUT_MODS, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
+import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 import { createColorPop } from "./colorpop.js";
 import { snapMove } from "./snap.js";
@@ -205,6 +205,9 @@ const ICON_UP =
   '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 15l6-6 6 6"/></svg>';
 const ICON_DOWN =
   '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>';
+// A prompt's own hotkey, shown as a small always-visible tile badge.
+const ICON_KEYBOARD =
+  '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="currentColor" d="M5.5 9h1.6v1.6H5.5V9Zm3.2 0h1.6v1.6H8.7V9Zm3.2 0h1.6v1.6h-1.6V9Zm3.2 0h1.6v1.6h-1.6V9Zm3.2 0h1.6v1.6h-1.6V9ZM5.5 12.2h1.6v1.6H5.5v-1.6Zm3.2 0h1.6v1.6H8.7v-1.6Zm3.2 0h1.6v1.6h-1.6v-1.6Zm3.2 0h1.6v1.6h-1.6v-1.6Zm3.2 0h1.6v1.6h-1.6v-1.6ZM5.5 15.4h11.6V17H5.5v-1.6Z"/></svg>';
 
 // Icon markup handed out as ready-made nodes. Assigning the same SVG string to
 // innerHTML re-parses it every time, which a list of hundreds of rows pays for
@@ -1090,6 +1093,7 @@ const FLAG_LABELS = {
   tooltipDelay: "flagTooltipDelay",
   tooltipTimeout: "flagTooltipTimeout",
   typeBadges: "flagTypeBadges",
+  tileHotkeyBadge: "flagTileHotkeyBadge",
   captions: "flagCaptions",
   copyBubble: "flagCopyBubble",
   videoControls: "flagVideoControls",
@@ -1623,6 +1627,9 @@ const EXPERT_VALUES = {
   // Dim strength for the "dim unhovered / dim media" toggles (lower = dimmer).
   tilesHoverOpacity: { label: "valTilesHoverOpacity", min: 10, max: 90, step: 5, def: 45, unit: "%", gate: "tilesHoverDim" },
   mediaHoverOpacity: { label: "valMediaHoverOpacity", min: 10, max: 95, step: 5, def: 80, unit: "%", gate: "mediaHoverDim" },
+  // Default matches the type badge's own fixed dim level (0.4) so a hotkey
+  // badge reads the same as every other passive tile badge out of the box.
+  tileHotkeyBadgeOpacity: { label: "valTileHotkeyBadgeOpacity", min: 10, max: 100, step: 5, def: 40, unit: "%", gate: "tileHotkeyBadge" },
   // Rounded-media corner radius (paired with the roundMedia toggle).
   mediaRadius: { label: "valMediaRadius", min: 0, max: 24, step: 1, def: 8, unit: "px", gate: "roundMedia" },
   // Prompt version history: versions kept per prompt.
@@ -2011,7 +2018,7 @@ const EXPERT_TABS = [
   { title: "expTabTiles", groups: [
     // Split by what a setting actually does: acting on a tile, the hover tooltip,
     // and pure looks. One 26-entry blob made everything hard to find.
-    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale"], values: ["hoverLift", "dragThreshold", "viewDropHoverMs"] },
+    { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "dragThreshold", "viewDropHoverMs", "tileHotkeyBadgeOpacity"] },
     { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipDelay", "tooltipTimeout", "tileTimeTip"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
     { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow"], values: ["tileRadius", "tileBorderWidth"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
@@ -2148,6 +2155,7 @@ function applyValues() {
   root.setProperty("--blur-media", `${val("mediaBlur")}px`);
   root.setProperty("--dim-unhovered", val("tilesHoverOpacity") / 100);
   root.setProperty("--dim-media", val("mediaHoverOpacity") / 100);
+  root.setProperty("--hotkey-badge-opacity", val("tileHotkeyBadgeOpacity") / 100);
   root.setProperty("--media-radius", `${val("mediaRadius")}px`);
   root.setProperty("--tag-chip-px", `${val("tagChipPx")}px`);
   root.setProperty("--hl-font-px", `${val("hlFontPx")}px`);
@@ -2221,7 +2229,7 @@ const EXPERT_TIPS = [
   "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax",
   "helpTips", "helpHighlight", "firstRunTour",
   // Tiles / copying
-  "tilePreview", "tileMenu", "typeBadges", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "autoPasteEnter", "hideWindowOnCopy",
+  "tilePreview", "tileMenu", "typeBadges", "tileHotkeyBadge", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "autoPasteEnter", "hideWindowOnCopy",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
   "tooltipDelay", "tooltipTimeout", "iconTooltips",
   "dragToView", "viewDropHoverMs",
@@ -2318,7 +2326,7 @@ async function resetOneExpertValue(kind, key, after) {
 // rotatingPrompts/rotateBadge gate a tile's own rotate-badge element -- without
 // a full rebuild here, an already-open grid keeps showing (or hiding) it until some
 // unrelated re-render happens to catch up.
-const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip", "tileTimeTip", "rotatingPrompts", "rotateBadge"]);
+const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip", "tileTimeTip", "rotatingPrompts", "rotateBadge", "tileHotkeyBadge"]);
 
 function flagRow(key) {
   const row = document.createElement("label");
@@ -4090,7 +4098,7 @@ function viewTabEl(v) {
       { label: t("editViewTitle"), run: () => openViewModal(v) },
       { label: t("duplicate"), run: () => duplicateView(v) },
     ];
-    if (groupsOn()) items.push({ label: t("viewGroupNew"), run: () => newViewGroup([v.id], v.name) });
+    if (groupsOn()) items.push({ label: t("viewGroupNew"), icon: FOLDER_SVG, run: () => newViewGroup([v.id], v.name) });
     openMiniMenu(items, e.clientX, e.clientY);
   });
   makeTabDraggable(btn, v.id, false);
@@ -4163,7 +4171,7 @@ function groupTabEl(g, views) {
     openMiniMenu([
       { label: t("viewGroupRename"), run: () => renameViewGroup(g) },
       { label: t("viewGroupColor"), run: () => pickViewGroupColor(g, btn) },
-      { label: t("viewGroupDissolve"), danger: true, run: () => dissolveViewGroup(g) },
+      { label: t("viewGroupDissolve"), icon: FOLDER_SVG, danger: true, run: () => dissolveViewGroup(g) },
     ], e.clientX, e.clientY);
   });
   // A folder tab is a drag source too: dropped on a loose tab it swallows that view,
@@ -4244,8 +4252,19 @@ function openMiniMenu(items, x, y) {
     const b = document.createElement("button");
     b.type = "button";
     b.setAttribute("role", "menuitem");
-    if (it.danger) b.className = "danger";
-    b.textContent = it.label;
+    b.className = it.danger ? "danger" : "";
+    // The shared folder glyph on a "group into a folder" / "ungroup" entry --
+    // same markup wherever one of the three folder kinds offers it.
+    if (it.icon) {
+      b.classList.add("has-icon");
+      const ic = document.createElement("span");
+      ic.className = "menu-icon";
+      ic.innerHTML = it.icon;
+      b.appendChild(ic);
+    }
+    const lbl = document.createElement("span");
+    lbl.textContent = it.label;
+    b.appendChild(lbl);
     b.addEventListener("click", () => { closeMiniMenu(); it.run(); });
     miniMenu.appendChild(b);
   }
@@ -4773,8 +4792,6 @@ const CLEAR_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="
 // password prompt.
 const TAKEOVER_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7.5" ry="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4.5 5.5v13c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-13M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/></svg>';
 const LOCK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.6" fill="currentColor"/></svg>';
-// A folder for the pill-folder rename dialog.
-const FOLDER_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.2l2 2.4h8.8A1.5 1.5 0 0 1 21 8.9v9.6a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5Z"/></svg>';
 // Reveal toggle for password fields (backup settings + the restore prompt).
 const EYE_SVG ='<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
 function wireClear(el) {
@@ -5408,6 +5425,21 @@ function buildTile(p) {
     badge.className = "tile-type";
     badge.innerHTML = typeIcon;
     tile.appendChild(badge);
+  }
+
+  // A prompt's own hotkey (set in the editor's Advanced options) is otherwise
+  // invisible until it is used — pure information, so unlike the chain-start
+  // button above it stays visible all the time, not just on hover. Sits right
+  // of the type badge/checkbox slot rather than inside it, so it never swaps
+  // out with either on hover or selection.
+  if (p.hotkey && promptHotkeysOn() && flag("tileHotkeyBadge")) {
+    const hkBadge = document.createElement("span");
+    hkBadge.className = "tile-hotkey-badge";
+    const hkLabel = t("tileHotkeyBadgeTitle").replace("{accel}", prettyAccel(p.hotkey));
+    hkBadge.title = hkLabel;
+    hkBadge.setAttribute("aria-label", hkLabel);
+    hkBadge.innerHTML = ICON_KEYBOARD;
+    tile.appendChild(hkBadge);
   }
 
   // Rotating prompt — "next entry" position pill, bottom-left (a rotating
@@ -6103,7 +6135,7 @@ function buildFolderTile(f) {
     openMiniMenu([
       { label: t("tileFolderRename"), run: () => renameTileFolder(f) },
       { label: t("tileFolderColor"), run: () => pickTileFolderColor(f, tile) },
-      { label: t("tileFolderDissolve"), danger: true, run: () => dissolveTileFolder(f) },
+      { label: t("tileFolderDissolve"), icon: FOLDER_SVG, danger: true, run: () => dissolveTileFolder(f) },
     ], e.clientX, e.clientY);
   });
   // Same drag machine as a tile — only what a press means differs (open, not copy).
@@ -8814,8 +8846,16 @@ async function startElevatedCapsScan(kind) {
   try {
     await invoke(LANG_CMDS[kind].elevate);
   } catch (e) {
-    // A launch failure also gets the notice+retry pair, not a dead end.
-    renderLangsRetry(kind, String(e) === "ocr-elevate-cancelled" ? t("ocrElevateCancelled") : String(e));
+    // A launch failure also gets the notice+retry pair, not a dead end --
+    // except when the account cannot elevate at all: that gets its own
+    // explanation instead, with no retry button, because trying again can
+    // never succeed.
+    const err = String(e);
+    if (err === "ocr-elevate-no-rights") {
+      renderLangsRetry(kind, `${t("capNeedsAdmin")} ${t("capNeedsAdminWhat")}`, null, true);
+    } else {
+      renderLangsRetry(kind, err === "ocr-elevate-cancelled" ? t("ocrElevateCancelled") : err);
+    }
     return;
   }
   st.elevRunning = true;
@@ -8859,8 +8899,10 @@ function renderLangsLoading(kind) {
 // longer replace the body with text only and strand the user without a way
 // to try again. `details` is the raw PowerShell/DISM text behind a
 // translated reason like `message` -- shown collapsed so it never crowds out
-// the actual instruction, but never silently dropped either.
-function renderLangsRetry(kind, message, details) {
+// the actual instruction, but never silently dropped either. `noRetry` drops
+// the button entirely: set when the account can never elevate, where another
+// attempt cannot succeed and offering one would just be misleading.
+function renderLangsRetry(kind, message, details, noRetry) {
   if (langDialogKind !== kind) return;
   const body = $("ocr-langs-body");
   body.innerHTML = "";
@@ -8880,6 +8922,7 @@ function renderLangsRetry(kind, message, details) {
     disc.appendChild(pre);
     body.appendChild(disc);
   }
+  if (noRetry) return;
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "ghost-btn";
@@ -8934,11 +8977,14 @@ function langRow(kind, cap) {
   if (note) {
     const hint = document.createElement("span");
     hint.className = "ocr-lang-note";
-    // A string is the backend's own reason (a real install failure); `true` is
-    // the calm "you declined the rights prompt" case, which gets its own text.
-    hint.textContent = typeof note === "string" ? note : t("ocrElevateCancelled");
+    // "no-rights" is the account-can-never-elevate case, its own text below;
+    // any other string is the backend's own reason (a real install failure);
+    // `true` is the calm "you declined the rights prompt" case.
+    hint.textContent =
+      note === "no-rights" ? `${t("capNeedsAdmin")} ${t("capNeedsAdminWhat")}` : typeof note === "string" ? note : t("ocrElevateCancelled");
     actions.appendChild(hint);
   }
+  if (note === "no-rights") return row; // a retry can never succeed here -- no download button
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "ghost-btn";
@@ -8978,9 +9024,13 @@ async function startLangInstall(kind, cap) {
     await invoke(LANG_CMDS[kind].install, { name: cap.name });
   } catch (e) {
     delete st.installPending[cap.name];
-    // A declined UAC prompt is not an error: a calm inline
-    // note on the row, no error tone, the row stays "not installed".
-    if (String(e) === "ocr-elevate-cancelled") st.installErrors[cap.name] = true;
+    // A declined UAC prompt is not an error: a calm inline note on the row,
+    // no error tone, the row stays "not installed". An account that cannot
+    // elevate at all gets its own note instead, and no download button --
+    // clicking it again can never work.
+    const err = String(e);
+    if (err === "ocr-elevate-no-rights") st.installErrors[cap.name] = "no-rights";
+    else if (err === "ocr-elevate-cancelled") st.installErrors[cap.name] = true;
     else errToast(e);
     // Every branch above just deleted installPending -- the row rendered disabled
     // ("Installing...") right before the await must be repainted regardless of
@@ -16499,6 +16549,7 @@ function bind() {
   $("reset-settings").addEventListener("click", resetSettings);
   $("delete-data").addEventListener("click", deleteData);
   $("settings-backup-btn").addEventListener("click", openBackups);
+  $("settings-dupes-btn").addEventListener("click", openDupes);
   $("backup-close").addEventListener("click", closeBackups);
   $("backup-modal").addEventListener("pointerdown", (e) => {
     if (e.target === $("backup-modal")) closeBackups();

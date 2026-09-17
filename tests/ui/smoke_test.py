@@ -10143,6 +10143,321 @@ WRITE_FAIL_PROBE = """
 """
 
 
+# 375: pill folders, grid folders and view groups are three separate
+# mechanisms, but the "take it apart" menu entry must read and look the same
+# in all of them. Its own boot, same reasoning as SEAL_PROBE above: the
+# fixture already carries one grid folder and one view group by default, and
+# nothing later in the main sweep needs either left standing.
+FOLDER_WORDING_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const beat = setInterval(() => {
+    document.documentElement.style.setProperty('--wording-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && cm.classList.contains('hidden'); i++) await sleep(100);
+    if (!cm.classList.contains('hidden')) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+
+    const readDissolve = (menu) => {
+      const btn = menu ? menu.querySelector('button.danger') : null;
+      const icon = btn ? btn.querySelector('.menu-icon') : null;
+      return btn ? { label: btn.textContent.trim(), icon: icon ? icon.innerHTML : null } : null;
+    };
+
+    let gridDissolve = null;
+    const fTile = document.querySelector('.tile.folder-tile');
+    if (!fTile) {
+      errs.push('375: no grid folder in the fixture to compare');
+    } else {
+      fTile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(150);
+      gridDissolve = readDissolve(document.querySelector('.tab-menu:not(.hidden)'));
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+      await sleep(120);
+      if (!gridDissolve) errs.push('375: the grid folder context menu has no ungroup option');
+    }
+
+    let groupDissolve = null;
+    const groupTab = [...document.querySelectorAll('#views .view-btn')].find(b => b.dataset.groupId);
+    if (!groupTab) {
+      errs.push('375: no view group in the fixture to compare');
+    } else {
+      groupTab.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(150);
+      groupDissolve = readDissolve(document.querySelector('.tab-menu:not(.hidden)'));
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+      await sleep(120);
+      if (!groupDissolve) errs.push('375: the view group context menu has no ungroup option');
+    }
+
+    if (gridDissolve && groupDissolve) {
+      if (gridDissolve.label !== groupDissolve.label) {
+        errs.push('375: the grid folder and view group ungroup entries read differently ("' +
+          gridDissolve.label + '" vs "' + groupDissolve.label + '")');
+      }
+      if (!gridDissolve.icon || gridDissolve.icon !== groupDissolve.icon) {
+        errs.push('375: the grid folder and view group ungroup entries do not share the same icon markup');
+      }
+    }
+  } catch (e) { errs.push('375 probe: ' + e.message); }
+  clearInterval(beat);
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
+# 376: the small keyboard badge on a tile whose prompt carries its own hotkey.
+# Its own boot, same reasoning as the probes above -- the fixture's p0 already
+# carries a hotkey and nothing later in the main sweep needs it still bound.
+TILE_HOTKEY_BADGE_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const beat = setInterval(() => {
+    document.documentElement.style.setProperty('--hk-badge-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && cm.classList.contains('hidden'); i++) await sleep(100);
+    if (!cm.classList.contains('hidden')) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+
+    const badgeCount = (id) => document.querySelectorAll('.tile[data-id="' + id + '"] .tile-hotkey-badge').length;
+
+    const withHotkey = badgeCount('p0');
+    if (withHotkey !== 1) errs.push('376: prompt p0 has a hotkey but shows ' + withHotkey + ' badge(s) instead of 1');
+    const withoutHotkey = badgeCount('p1');
+    if (withoutHotkey !== 0) errs.push('376: prompt p1 has no hotkey but shows ' + withoutHotkey + ' badge(s)');
+
+    const badge = document.querySelector('.tile[data-id="p0"] .tile-hotkey-badge');
+    const title = badge ? (badge.getAttribute('title') || '') : '';
+    if (!title || title === 'tileHotkeyBadgeTitle' || !title.includes('9')) {
+      errs.push('376: the hotkey badge title reads "' + title + '" instead of the formatted combination');
+    }
+    if (badge && badge.getAttribute('aria-label') !== title) {
+      errs.push('376: the hotkey badge title and aria-label do not match');
+    }
+    if (badge && (badge.tabIndex >= 0 || badge.tagName === 'BUTTON' || badge.tagName === 'A')) {
+      errs.push('376: the hotkey badge is focusable or clickable, it should be pure information');
+    }
+
+    // Switching the flag off must remove the badge live, not just after reload.
+    document.getElementById('gear').click();
+    await sleep(200);
+    document.getElementById('expert-open').click();
+    await sleep(300);
+    let row = null;
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click();
+      await sleep(80);
+      row = [...document.querySelectorAll('#expert-flags .switch-field')]
+        .find(r => (r.querySelector('span') || {}).textContent === 'Hotkey badge');
+      if (row) break;
+    }
+    const cb = row && row.querySelector('input.switch');
+    if (!cb) {
+      errs.push('376: no expert-menu switch found for the hotkey badge');
+    } else {
+      if (!cb.checked) errs.push('376: the hotkey badge flag does not ship on');
+      cb.checked = false;
+      cb.dispatchEvent(new Event('change'));
+      await sleep(300);
+      const left = badgeCount('p0');
+      if (left !== 0) errs.push('376: switching the flag off left ' + left + ' badge(s) on the tile');
+    }
+  } catch (e) { errs.push('376 probe: ' + e.message); }
+  clearInterval(beat);
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+CAP_NEEDS_ADMIN_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const beat = setInterval(() => {
+    document.documentElement.style.setProperty('--cap-admin-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && cm.classList.contains('hidden'); i++) await sleep(100);
+    if (!cm.classList.contains('hidden')) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+
+    // A machine that refuses even the read-only listing shows the elevate
+    // button first -- clicking it is what actually attempts the UAC prompt,
+    // where the two distinct outcomes (378) diverge.
+    window.__OCR_CAPS_ELEV__ = true;
+
+    document.getElementById('gear').click();
+    await sleep(200);
+    document.getElementById('expert-open').click();
+    await sleep(300);
+    let openBtn = null;
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click();
+      await sleep(80);
+      openBtn = document.querySelector('.expert-action[data-action="ocr-langs-open"]');
+      if (openBtn) break;
+    }
+    if (!openBtn) {
+      errs.push('378: OCR "manage languages" action not found in the expert menu');
+    } else {
+      const runScenario = async (errorCode, expectRetry) => {
+        window.__OCR_ELEV_ERROR__ = errorCode;
+        openBtn.click();
+        await sleep(150);
+        const modal = document.getElementById('ocr-langs-modal');
+        if (!modal || modal.classList.contains('hidden')) {
+          errs.push('378 (' + errorCode + '): OCR langs modal did not open');
+          return;
+        }
+        const elevBtn = document.querySelector('#ocr-langs-body .ghost-btn');
+        if (!elevBtn) {
+          errs.push('378 (' + errorCode + '): no elevate button on the initial "needs elevation" notice');
+        } else {
+          elevBtn.click();
+          await sleep(100);
+          const okBtn = document.getElementById('confirm-ok');
+          if (!okBtn || okBtn.offsetParent === null) {
+            errs.push('378 (' + errorCode + '): elevation button did not explain itself first');
+          } else {
+            okBtn.click();
+            await sleep(200);
+            const hint = document.querySelector('#ocr-langs-body .hint');
+            if (!hint || !hint.textContent.trim()) {
+              errs.push('378 (' + errorCode + '): no message shown after the elevation attempt failed');
+            }
+            const retryBtn = document.querySelector('#ocr-langs-body .ghost-btn');
+            if (expectRetry && !retryBtn) {
+              errs.push('378 (' + errorCode + '): retry button missing for a transient failure');
+            }
+            if (!expectRetry && retryBtn) {
+              errs.push('378 (' + errorCode + '): retry button shown even though this account can never elevate');
+            }
+          }
+        }
+        document.getElementById('ocr-langs-close-x').click();
+        await sleep(100);
+      };
+
+      // The refused case: this account can never elevate -- no retry button.
+      await runScenario('ocr-elevate-no-rights', false);
+      // The transient case: a real declined/failed attempt -- retry stays.
+      await runScenario('ocr-elevate-cancelled', true);
+    }
+    window.__OCR_CAPS_ELEV__ = false;
+    window.__OCR_ELEV_ERROR__ = null;
+  } catch (e) { errs.push('378 probe: ' + e.message); }
+  clearInterval(beat);
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+SETTINGS_DUPES_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const beat = setInterval(() => {
+    document.documentElement.style.setProperty('--dup-settings-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
+  const visible = (el) => !!el && getComputedStyle(el).display !== 'none';
+  // The row lives on whichever expert tab "expGroupData" lands on -- found
+  // fresh every time, since leaving and re-entering the expert page rebuilds it.
+  const findDupCheckbox = async () => {
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click();
+      await sleep(80);
+      const row = [...document.querySelectorAll('#expert-flags .switch-field')]
+        .find(r => (r.querySelector('span') || {}).textContent === 'Duplicate finder');
+      if (row) return row.querySelector('input.switch');
+    }
+    return null;
+  };
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && cm.classList.contains('hidden'); i++) await sleep(100);
+    if (!cm.classList.contains('hidden')) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+
+    document.getElementById('gear').click();
+    await sleep(200);
+
+    const dupBtn = document.getElementById('settings-dupes-btn');
+    if (!visible(dupBtn)) {
+      errs.push('379: the settings dialog "Find duplicates" entry is not visible while dupFinder ships on');
+    } else {
+      dupBtn.click();
+      await sleep(150);
+      const modal = document.getElementById('dupes-modal');
+      if (!modal || modal.classList.contains('hidden')) {
+        errs.push('379: clicking the settings dialog entry did not open the duplicate finder');
+      }
+      document.getElementById('dupes-close').click();
+      await sleep(100);
+    }
+
+    document.getElementById('expert-open').click();
+    await sleep(300);
+    let cb = await findDupCheckbox();
+    if (!cb) {
+      errs.push('379: no expert-menu switch found for the duplicate finder flag');
+    } else {
+      if (!cb.checked) errs.push('379: the duplicate finder flag does not ship on');
+      cb.checked = false;
+      cb.dispatchEvent(new Event('change'));
+      await sleep(200);
+      document.getElementById('expert-back').click();
+      await sleep(150);
+      if (visible(document.getElementById('settings-dupes-btn'))) {
+        errs.push('379: the settings dialog entry stayed visible after switching dupFinder off');
+      }
+
+      // Back on, so nothing else in this isolated boot is left changed.
+      document.getElementById('expert-open').click();
+      await sleep(300);
+      cb = await findDupCheckbox();
+      if (cb) {
+        cb.checked = true;
+        cb.dispatchEvent(new Event('change'));
+        await sleep(200);
+      }
+      document.getElementById('expert-back').click();
+      await sleep(150);
+      if (!visible(document.getElementById('settings-dupes-btn'))) {
+        errs.push('379: the settings dialog entry did not come back after switching dupFinder on again');
+      }
+    }
+  } catch (e) { errs.push('379 probe: ' + e.message); }
+  clearInterval(beat);
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 def unescape(s):
     for a, b in (("&quot;", '"'), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
         s = s.replace(a, b)
@@ -10478,6 +10793,102 @@ def main():
             failed += len(errs)
             if not errs:
                 print("   ok")
+
+        # 375: the grid-folder and view-group "ungroup" menu entries must read
+        # and look the same. Its own boot, same reasoning as the pair above.
+        side = tmp / "ui" / "folder-wording.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", FOLDER_WORDING_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-folder-wording'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- folder/group ungroup wording")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # 376: the tile hotkey badge, its wording and the live flag toggle.
+        side = tmp / "ui" / "tile-hotkey-badge.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", TILE_HOTKEY_BADGE_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-tile-hotkey-badge'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- tile hotkey badge")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # 378: an elevation attempt refused because the account can never
+        # elevate gets its own message and no retry button; a real transient
+        # refusal keeps its retry button.
+        side = tmp / "ui" / "cap-needs-admin.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", CAP_NEEDS_ADMIN_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-cap-needs-admin'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- OCR/voice elevation: no admin rights vs transient failure")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # 379: the duplicate finder's settings-dialog entry follows dupFinder
+        # and opens the same modal as the expert action.
+        side = tmp / "ui" / "settings-dupes-entry.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", SETTINGS_DUPES_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-settings-dupes-entry'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- duplicate finder entry in the settings dialog")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
 
         print("PASS" if not failed else f"{failed} problem(s)")
         return 1 if failed else 0

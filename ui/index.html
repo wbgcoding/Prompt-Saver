@@ -50,7 +50,7 @@
         <span id="clip-badge" class="clip-badge">0</span>
       </button>
       <!-- Prompt chaining, sitting just left of the window/app controls -->
-      <button id="chain-btn" class="icon-btn chain-toggle" type="button" aria-pressed="false" data-i18n-title="chainTooltip" data-i18n-aria="chainTooltip">
+      <button id="chain-btn" class="icon-btn chain-toggle" type="button" aria-pressed="false" data-i18n-title="chainVsRotateHint" data-i18n-aria="chainTooltip">
         <!-- Off: broken link (bar split). Active: joined link (solid bar). First click
              outlines the button, second click fills it with the accent colour. -->
         <svg class="chain-icon chain-open" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
@@ -368,7 +368,7 @@
                plain textarea above into a list of variants one copy at a time serves
                through. The entry list itself (#modal-rotate-list) stays inline in the
                main body — only this on/off switch is tucked away here. -->
-          <label id="modal-rotate-toggle-row" class="field switch-field modal-rotate-toggle modal-advanced-sub hidden">
+          <label id="modal-rotate-toggle-row" class="field switch-field modal-rotate-toggle modal-advanced-sub hidden" data-i18n-title="rotateVsChainHint">
             <span data-i18n="rotateToggle">Rotating texts</span>
             <input type="checkbox" id="modal-rotate-switch" class="switch" />
           </label>
@@ -917,6 +917,12 @@
           <button id="settings-backup-btn" class="ghost-btn" data-i18n="settingsBackupBtn" data-i18n-title="tipSettingsBackup">Backup manager</button>
           <button id="export-all" class="ghost-btn" data-i18n="backupSave">Save backup</button>
           <button id="import-all" class="ghost-btn" data-i18n="backupImport">Import backup</button>
+        </div>
+        <!-- The duplicate finder's only other entry point is the expert menu,
+             which a normal user never opens -- this is the same openDupes()
+             the expert action already uses, not a second implementation. -->
+        <div class="export-row">
+          <button id="settings-dupes-btn" class="ghost-btn" data-i18n="dupTitle">Find duplicates</button>
         </div>
       </div>
       <!-- Two columns like the toggle grid above: check + version left, switch right. -->

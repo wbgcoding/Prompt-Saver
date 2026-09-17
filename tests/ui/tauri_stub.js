@@ -515,7 +515,14 @@ const RESULTS = {
   },
   // The elevated listing: launching it arms the result, the next poll hands the
   // list over -- the same two-step the real backend does through the UAC prompt.
-  ocr_capabilities_elevate: () => { window.__OCR_CAPS_ELEV_DONE__ = true; return null; },
+  // A probe sets window.__OCR_ELEV_ERROR__ to "ocr-elevate-no-rights" or
+  // "ocr-elevate-cancelled" to play the two ways the elevation itself can fail
+  // (378), instead of the launch succeeding.
+  ocr_capabilities_elevate: () => {
+    if (window.__OCR_ELEV_ERROR__) throw window.__OCR_ELEV_ERROR__;
+    window.__OCR_CAPS_ELEV_DONE__ = true;
+    return null;
+  },
   ocr_capabilities_elevated_result: () => (window.__OCR_CAPS_ELEV_DONE__ ? window.__OCR_CAPS_TEST__ || [] : null),
   // 230: same shape as the speech_install_* pair below -- the elevated launch
   // itself resolves right away, the result poller (3s ticks) is what a probe

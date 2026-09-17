@@ -824,6 +824,23 @@ body.drag-active .cell.drag-over {
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.65));
 }
 
+/* Hotkey badge: sits right of the type-badge/checkbox slot (never inside it,
+   so it never swaps out with either on hover or selection) and, unlike them,
+   stays visible the whole time -- it is information, not a control. */
+.tile-hotkey-badge {
+  position: absolute;
+  top: 6px;
+  left: 26px;
+  z-index: 3;
+  display: flex;
+  opacity: var(--hotkey-badge-opacity, 0.4);
+  pointer-events: none;
+}
+.tile.has-image .tile-hotkey-badge {
+  color: #fff;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.65));
+}
+
 /* Rotating-prompt "next entry" pill, bottom-left — free corner on a text tile
    (media caption/bar live bottom-right/full-width, never on a rotating prompt). */
 .tile-rotate-badge {
@@ -1558,6 +1575,7 @@ body.library-front #modal.overlay { z-index: 67; }
 .noflag-screenshot #snip-btn { display: none; }
 .noflag-colorPicker #picker-btn { display: none; }
 .noflag-screenRecord #record-btn { display: none; }
+.noflag-dupFinder #settings-dupes-btn { display: none; }
 /* OCR ships on -- a default-on flag only ever sets noflag-<key>, never flag-<key>,
    so both entry points hide via noflag-ocr. */
 .noflag-ocr #ocr-btn,
@@ -4094,6 +4112,11 @@ body.drag-over::after {
 .ctx button.danger:hover { color: var(--danger); }
 .ctx button.confirm,
 .ctx button.confirm:hover { background: var(--danger); color: #fff; }
+/* The shared folder glyph on a "group into a folder" / ungroup entry -- same
+   16px slot the pill folder's own menu uses for it. */
+.ctx button.has-icon { display: flex; align-items: center; gap: 8px; }
+.ctx button .menu-icon { flex: 0 0 16px; width: 16px; height: 16px; }
+.ctx button .menu-icon svg { width: 100%; height: 100%; display: block; }
 
 /* Right-click toolbar menu (enable/disable the top-bar tools). */
 .toolbar-menu { min-width: 232px; z-index: 90; max-height: min(72vh, 460px); overflow-y: auto; }

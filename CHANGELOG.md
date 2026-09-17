@@ -62,7 +62,8 @@ the video editor and the introduction tour ship on).
 - **Per-prompt hotkeys** — give a prompt its own global key combination that
   copies it from anywhere, even with the app in the tray, and optionally pastes
   it straight away. Conflicts with the app hotkey or another prompt are refused
-  in the editor.
+  in the editor. A tile with its own hotkey carries a small keyboard badge, on
+  by default.
 - **Drag-out** — hold Ctrl and drag a tile, a library row or a floating button
   into any other app to drop its text there. The key is switchable, and a second
   switch swaps the two gestures so a plain drag leaves the app and the key moves
@@ -908,6 +909,12 @@ the video editor and the introduction tour ship on).
 - The error log no longer collects noise from the test suite, and trimming it
   keeps the newest entries instead of deleting the whole file once it passes
   its size limit.
+- **An account that can never install language packs kept being offered a
+  "try again" that could not work.** On a locked-down machine, installing a
+  text-recognition or dictation language pack now says plainly that only an
+  administrator can do it, with no retry button in that case; a real one-off
+  failure still gets to retry. The repeated PowerShell error this used to
+  write to the crash log on every check is now logged once per session.
 
 ### Security
 
