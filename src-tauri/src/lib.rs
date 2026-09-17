@@ -15068,6 +15068,7 @@ mod ocr {
     use std::collections::HashMap;
     use std::os::windows::process::CommandExt;
     use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Mutex, OnceLock};
     use windows::core::{HSTRING, PCWSTR};
     use windows::Globalization::Language;
@@ -15348,6 +15349,26 @@ mod ocr {
         }
     }
 
+    // Whether this kind's listing failure has already reached the crash log
+    // this session -- a machine that always refuses the unelevated query would
+    // otherwise write the same multi-line PowerShell/DISM text on every poll.
+    fn caps_log_once(kind: CapKind) -> &'static AtomicBool {
+        static OCR: OnceLock<AtomicBool> = OnceLock::new();
+        static SPEECH: OnceLock<AtomicBool> = OnceLock::new();
+        match kind {
+            CapKind::Ocr => OCR.get_or_init(|| AtomicBool::new(false)),
+            CapKind::Speech => SPEECH.get_or_init(|| AtomicBool::new(false)),
+        }
+    }
+
+    // PowerShell/DISM output for this failure is often several lines of banner
+    // text ahead of the one line that actually says what happened -- the crash
+    // log gets just that first line; the frontend's details disclosure still
+    // gets the raw text untouched via caps_elevation_error.
+    pub(super) fn strip_ps_banner(raw: &str) -> &str {
+        raw.lines().next().unwrap_or(raw).trim()
+    }
+
     // The set most recently returned by `capabilities()` doubles as the
     // install allowlist (see install_language) -- a name that was never
     // actually enumerated is rejected even if it happens to match the naming
@@ -15398,7 +15419,13 @@ mod ocr {
             logargs = dism_log_args(kind),
         );
         run_powershell_command(&script).and_then(|output| caps_from_json(kind, &output)).map_err(|raw| {
-            super::append_crash_log(&format!("ocr caps listing failed ({}): {}", kind.slug(), raw));
+            if !caps_log_once(kind).swap(true, Ordering::Relaxed) {
+                super::append_crash_log(&format!(
+                    "ocr caps listing failed ({}): {}",
+                    kind.slug(),
+                    strip_ps_banner(&raw)
+                ));
+            }
             caps_elevation_error(&raw)
         })
     }
@@ -15619,14 +15646,76 @@ mod ocr {
             let _ = fs::remove_file(script_path);
             // SE_ERR_ACCESSDENIED (5) is what ShellExecuteW returns when the user
             // declines the UAC prompt; ERROR_CANCELLED (1223) shows up on some
-            // Windows versions for the same outcome. Both are "no admin rights
-            // given", not a real failure (no error tone, no hung state).
+            // Windows versions for the same outcome. Neither is a real failure on
+            // its own -- what it MEANS differs by account, so the token's own
+            // elevation type decides which of the two distinct outcomes this is.
             if code == 5 || code == 1223 {
-                return Err("ocr-elevate-cancelled".to_string());
+                return Err(match classify_elevation_refusal(account_can_elevate()) {
+                    ElevationRefusal::NoAdminRights => "ocr-elevate-no-rights".to_string(),
+                    ElevationRefusal::Cancelled => "ocr-elevate-cancelled".to_string(),
+                });
             }
             return Err(format!("could not start the elevated process (ShellExecuteW code {})", code));
         }
         Ok(())
+    }
+
+    // Whether "runas" can ever succeed for the account running this process --
+    // never by string-matching a localised Windows message, which varies by
+    // machine and language. `TokenElevationTypeLimited` is a split-token
+    // administrator (UAC on): the consent prompt can succeed. `Full` means the
+    // process is already elevated. `Default` means no split token exists at
+    // all, which is either a genuine standard account (a real "no" -- a UAC
+    // credential prompt with no admin password to give it can never complete)
+    // or an administrator running with UAC turned off entirely, so membership
+    // in the Administrators group is the only thing that tells the two apart.
+    fn account_can_elevate() -> bool {
+        use windows::Win32::Foundation::CloseHandle;
+        use windows::Win32::Security::{
+            GetTokenInformation, TokenElevationType, TOKEN_ELEVATION_TYPE, TOKEN_QUERY,
+        };
+        use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+        use windows::Win32::UI::Shell::IsUserAnAdmin;
+        unsafe {
+            let mut token = windows::Win32::Foundation::HANDLE::default();
+            if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).is_err() {
+                return true; // probe failed for an unrelated reason -- never claim "no rights" on that
+            }
+            let mut kind = TOKEN_ELEVATION_TYPE::default();
+            let mut ret_len = 0u32;
+            let queried = GetTokenInformation(
+                token,
+                TokenElevationType,
+                Some(&mut kind as *mut _ as *mut _),
+                std::mem::size_of::<TOKEN_ELEVATION_TYPE>() as u32,
+                &mut ret_len,
+            )
+            .is_ok();
+            let _ = CloseHandle(token);
+            if !queried {
+                return true;
+            }
+            match kind.0 {
+                3 => true,                    // TokenElevationTypeLimited -- split-token admin
+                2 => true,                    // TokenElevationTypeFull -- already elevated
+                _ => IsUserAnAdmin().as_bool(), // TokenElevationTypeDefault -- membership decides
+            }
+        }
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    pub(super) enum ElevationRefusal {
+        // This account can never complete "runas", so a retry cannot help.
+        NoAdminRights,
+        // Elevation is possible for this account; this attempt was refused or
+        // failed once, and trying again may succeed.
+        Cancelled,
+    }
+    // Pure decision, kept separate from the token probe above so it is
+    // unit-testable without touching Windows: given the same refused/cancelled
+    // ShellExecuteW outcome, which of the two distinct results the user sees.
+    pub(super) fn classify_elevation_refusal(can_elevate: bool) -> ElevationRefusal {
+        if can_elevate { ElevationRefusal::Cancelled } else { ElevationRefusal::NoAdminRights }
     }
 
     // DISM unconditionally writes a log to %WINDIR%\Logs\DISM at startup,
@@ -29713,6 +29802,28 @@ mod tests {
         let wrapped = ocr::caps_elevation_error("Der Zugriff auf den Pfad wurde verweigert.");
         assert!(wrapped.starts_with("ocr-caps-need-elevation|"));
         assert!(wrapped.ends_with("Der Zugriff auf den Pfad wurde verweigert."));
+    }
+
+    // A split-token admin (UAC on, TokenElevationTypeLimited) or an already
+    // elevated process (TokenElevationTypeFull) can retry with a real chance of
+    // success; a standard account with no split token at all cannot, no matter
+    // how many times the prompt is shown.
+    #[cfg(windows)]
+    #[test]
+    fn classify_elevation_refusal_matches_whether_the_account_can_elevate() {
+        assert_eq!(ocr::classify_elevation_refusal(true), ocr::ElevationRefusal::Cancelled);
+        assert_eq!(ocr::classify_elevation_refusal(false), ocr::ElevationRefusal::NoAdminRights);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn strip_ps_banner_keeps_only_the_first_line() {
+        assert_eq!(ocr::strip_ps_banner("  Access is denied.  "), "Access is denied.");
+        assert_eq!(
+            ocr::strip_ps_banner("Get-WindowsCapability : Access is denied.\nAt line:1 char:1\n+ ..."),
+            "Get-WindowsCapability : Access is denied."
+        );
+        assert_eq!(ocr::strip_ps_banner(""), "");
     }
 
     #[test]

@@ -71,6 +71,10 @@ windows = { version = "0.58", features = [
   # before it is ever run. Win32_Security_Cryptography is needed for the
   # WINTRUST_DATA struct itself, not just the WinTrust function bindings.
   "Win32_Security_WinTrust", "Win32_Security_Cryptography",
+  # Telling "this account can never elevate" from "the UAC prompt was just
+  # declined" (GetTokenInformation/TokenElevationType) for the OCR/voice
+  # language-pack elevation path above.
+  "Win32_Security",
   # 191: local-time recording filenames (GetLocalTime) -- kept on the pinned
   # 0.58 windows crate rather than pulled from windows-capture's own 0.62, so
   # this one call does not cross the version boundary noted below.

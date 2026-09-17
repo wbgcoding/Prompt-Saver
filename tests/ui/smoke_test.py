@@ -10269,6 +10269,94 @@ TILE_HOTKEY_BADGE_PROBE = """
 </script>
 """
 
+CAP_NEEDS_ADMIN_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const beat = setInterval(() => {
+    document.documentElement.style.setProperty('--cap-admin-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && cm.classList.contains('hidden'); i++) await sleep(100);
+    if (!cm.classList.contains('hidden')) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+
+    // A machine that refuses even the read-only listing shows the elevate
+    // button first -- clicking it is what actually attempts the UAC prompt,
+    // where the two distinct outcomes (378) diverge.
+    window.__OCR_CAPS_ELEV__ = true;
+
+    document.getElementById('gear').click();
+    await sleep(200);
+    document.getElementById('expert-open').click();
+    await sleep(300);
+    let openBtn = null;
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      tb.click();
+      await sleep(80);
+      openBtn = document.querySelector('.expert-action[data-action="ocr-langs-open"]');
+      if (openBtn) break;
+    }
+    if (!openBtn) {
+      errs.push('378: OCR "manage languages" action not found in the expert menu');
+    } else {
+      const runScenario = async (errorCode, expectRetry) => {
+        window.__OCR_ELEV_ERROR__ = errorCode;
+        openBtn.click();
+        await sleep(150);
+        const modal = document.getElementById('ocr-langs-modal');
+        if (!modal || modal.classList.contains('hidden')) {
+          errs.push('378 (' + errorCode + '): OCR langs modal did not open');
+          return;
+        }
+        const elevBtn = document.querySelector('#ocr-langs-body .ghost-btn');
+        if (!elevBtn) {
+          errs.push('378 (' + errorCode + '): no elevate button on the initial "needs elevation" notice');
+        } else {
+          elevBtn.click();
+          await sleep(100);
+          const okBtn = document.getElementById('confirm-ok');
+          if (!okBtn || okBtn.offsetParent === null) {
+            errs.push('378 (' + errorCode + '): elevation button did not explain itself first');
+          } else {
+            okBtn.click();
+            await sleep(200);
+            const hint = document.querySelector('#ocr-langs-body .hint');
+            if (!hint || !hint.textContent.trim()) {
+              errs.push('378 (' + errorCode + '): no message shown after the elevation attempt failed');
+            }
+            const retryBtn = document.querySelector('#ocr-langs-body .ghost-btn');
+            if (expectRetry && !retryBtn) {
+              errs.push('378 (' + errorCode + '): retry button missing for a transient failure');
+            }
+            if (!expectRetry && retryBtn) {
+              errs.push('378 (' + errorCode + '): retry button shown even though this account can never elevate');
+            }
+          }
+        }
+        document.getElementById('ocr-langs-close-x').click();
+        await sleep(100);
+      };
+
+      // The refused case: this account can never elevate -- no retry button.
+      await runScenario('ocr-elevate-no-rights', false);
+      // The transient case: a real declined/failed attempt -- retry stays.
+      await runScenario('ocr-elevate-cancelled', true);
+    }
+    window.__OCR_CAPS_ELEV__ = false;
+    window.__OCR_ELEV_ERROR__ = null;
+  } catch (e) { errs.push('378 probe: ' + e.message); }
+  clearInterval(beat);
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
 
 def unescape(s):
     for a, b in (("&quot;", '"'), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
@@ -10647,6 +10735,31 @@ def main():
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- tile hotkey badge")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # 378: an elevation attempt refused because the account can never
+        # elevate gets its own message and no retry button; a real transient
+        # refusal keeps its retry button.
+        side = tmp / "ui" / "cap-needs-admin.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", CAP_NEEDS_ADMIN_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-cap-needs-admin'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- OCR/voice elevation: no admin rights vs transient failure")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

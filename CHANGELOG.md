@@ -902,6 +902,12 @@ the video editor and the introduction tour ship on).
   language the app started in, never the current one** — a screen reader kept
   reading the old language after switching, and in the video editor read a raw
   internal name instead of a translation from the very first launch.
+- **An account that can never install language packs kept being offered a
+  "try again" that could not work.** On a locked-down machine, installing a
+  text-recognition or dictation language pack now says plainly that only an
+  administrator can do it, with no retry button in that case; a real one-off
+  failure still gets to retry. The repeated PowerShell error this used to
+  write to the crash log on every check is now logged once per session.
 
 ### Security
 

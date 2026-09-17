@@ -8846,8 +8846,16 @@ async function startElevatedCapsScan(kind) {
   try {
     await invoke(LANG_CMDS[kind].elevate);
   } catch (e) {
-    // A launch failure also gets the notice+retry pair, not a dead end.
-    renderLangsRetry(kind, String(e) === "ocr-elevate-cancelled" ? t("ocrElevateCancelled") : String(e));
+    // A launch failure also gets the notice+retry pair, not a dead end --
+    // except when the account cannot elevate at all: that gets its own
+    // explanation instead, with no retry button, because trying again can
+    // never succeed.
+    const err = String(e);
+    if (err === "ocr-elevate-no-rights") {
+      renderLangsRetry(kind, `${t("capNeedsAdmin")} ${t("capNeedsAdminWhat")}`, null, true);
+    } else {
+      renderLangsRetry(kind, err === "ocr-elevate-cancelled" ? t("ocrElevateCancelled") : err);
+    }
     return;
   }
   st.elevRunning = true;
@@ -8891,8 +8899,10 @@ function renderLangsLoading(kind) {
 // longer replace the body with text only and strand the user without a way
 // to try again. `details` is the raw PowerShell/DISM text behind a
 // translated reason like `message` -- shown collapsed so it never crowds out
-// the actual instruction, but never silently dropped either.
-function renderLangsRetry(kind, message, details) {
+// the actual instruction, but never silently dropped either. `noRetry` drops
+// the button entirely: set when the account can never elevate, where another
+// attempt cannot succeed and offering one would just be misleading.
+function renderLangsRetry(kind, message, details, noRetry) {
   if (langDialogKind !== kind) return;
   const body = $("ocr-langs-body");
   body.innerHTML = "";
@@ -8912,6 +8922,7 @@ function renderLangsRetry(kind, message, details) {
     disc.appendChild(pre);
     body.appendChild(disc);
   }
+  if (noRetry) return;
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "ghost-btn";
@@ -8966,11 +8977,14 @@ function langRow(kind, cap) {
   if (note) {
     const hint = document.createElement("span");
     hint.className = "ocr-lang-note";
-    // A string is the backend's own reason (a real install failure); `true` is
-    // the calm "you declined the rights prompt" case, which gets its own text.
-    hint.textContent = typeof note === "string" ? note : t("ocrElevateCancelled");
+    // "no-rights" is the account-can-never-elevate case, its own text below;
+    // any other string is the backend's own reason (a real install failure);
+    // `true` is the calm "you declined the rights prompt" case.
+    hint.textContent =
+      note === "no-rights" ? `${t("capNeedsAdmin")} ${t("capNeedsAdminWhat")}` : typeof note === "string" ? note : t("ocrElevateCancelled");
     actions.appendChild(hint);
   }
+  if (note === "no-rights") return row; // a retry can never succeed here -- no download button
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "ghost-btn";
@@ -9010,9 +9024,13 @@ async function startLangInstall(kind, cap) {
     await invoke(LANG_CMDS[kind].install, { name: cap.name });
   } catch (e) {
     delete st.installPending[cap.name];
-    // A declined UAC prompt is not an error: a calm inline
-    // note on the row, no error tone, the row stays "not installed".
-    if (String(e) === "ocr-elevate-cancelled") st.installErrors[cap.name] = true;
+    // A declined UAC prompt is not an error: a calm inline note on the row,
+    // no error tone, the row stays "not installed". An account that cannot
+    // elevate at all gets its own note instead, and no download button --
+    // clicking it again can never work.
+    const err = String(e);
+    if (err === "ocr-elevate-no-rights") st.installErrors[cap.name] = "no-rights";
+    else if (err === "ocr-elevate-cancelled") st.installErrors[cap.name] = true;
     else errToast(e);
     // Every branch above just deleted installPending -- the row rendered disabled
     // ("Installing...") right before the await must be repainted regardless of
