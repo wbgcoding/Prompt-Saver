@@ -9767,6 +9767,7 @@ DRAG_VIEW_PROBE = """
   const tabFor = (id) => document.querySelector('.view-btn[data-view-id="' + id + '"]');
   const groupTab = () => document.querySelector('.view-btn[data-group-id]');
   const tileEl = (id) => document.querySelector('#grid .tile[data-id="' + id + '"]');
+  const selectTile = (id) => { const btn = tileEl(id) && tileEl(id).querySelector('.tile-select'); if (btn) btn.click(); };
   const centre = (el) => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
   // "notes"/"archive" are grouped -- no standalone tab of their own to click,
   // only reachable through the folder tab's own popover.
@@ -9938,6 +9939,79 @@ DRAG_VIEW_PROBE = """
           errs.push('dropping a tile on its own view\\'s tab called the backend anyway');
         }
         if (!tileEl('p3')) errs.push('dropping a tile on its own view removed it');
+      }
+
+      // ---- a multi-select drag moves every selected tile together, not just --
+      // ---- the one the drag started on; Ctrl copies the whole selection too --
+      selectTile('p5');
+      selectTile('p7');
+      const homeTileP5 = tileEl('p5');
+      if (!homeTileP5 || !tileEl('p7')) {
+        errs.push('fixture tiles "p5"/"p7" are missing from "home" for the multi-select move check');
+      } else {
+        window.__SMOKE_ARGS__.length = 0;
+        await dragTileTo(homeTileP5, ...centre(groupTab()));
+        await sleep(750); // past the default 600 ms hover-open delay
+        const popMulti1 = document.querySelector('.view-group-pop');
+        const notesRowMulti = popMulti1 && popMulti1.querySelector('.view-group-item[data-view-id="notes"]');
+        if (!notesRowMulti) {
+          errs.push('the opened group popover has no row for "notes" (multi-select move)');
+        } else {
+          const [nx2, ny2] = centre(notesRowMulti);
+          ptr('pointermove', nx2, ny2, window);
+          await sleep(80);
+          await endDrag(nx2, ny2);
+          const moveIds = callsFor('batch_prompts')
+            .filter(a => a && a.action === 'moveView' && a.viewId === 'notes')
+            .flatMap(a => a.ids || []);
+          if (!(moveIds.includes('p5') && moveIds.includes('p7'))) {
+            errs.push('dragging one of two selected tiles did not move both of them: ' + JSON.stringify(moveIds));
+          }
+          if (tileEl('p5') || tileEl('p7')) {
+            errs.push('a multi-select move left a selected tile behind in the source view');
+          }
+          await switchToGroupedView('notes');
+          if (!tileEl('p5') || !tileEl('p7')) {
+            errs.push('a multi-select move did not place both selected tiles in the target view');
+          }
+          tabFor('home').click();
+          await sleep(200);
+        }
+      }
+      selectTile('p9');
+      selectTile('p3');
+      const homeTileP9 = tileEl('p9');
+      if (!homeTileP9 || !tileEl('p3')) {
+        errs.push('fixture tiles "p9"/"p3" are missing from "home" for the multi-select copy check');
+      } else {
+        window.__SMOKE_ARGS__.length = 0;
+        await dragTileTo(homeTileP9, ...centre(groupTab()));
+        await sleep(750);
+        const popMulti2 = document.querySelector('.view-group-pop');
+        const archiveRowMulti = popMulti2 && popMulti2.querySelector('.view-group-item[data-view-id="archive"]');
+        if (!archiveRowMulti) {
+          errs.push('the opened group popover has no row for "archive" (multi-select copy)');
+        } else {
+          const [ax2, ay2] = centre(archiveRowMulti);
+          ptr('pointermove', ax2, ay2, window, { ctrlKey: true });
+          await sleep(80);
+          await endDrag(ax2, ay2, true);
+          const copyIds = callsFor('batch_prompts')
+            .filter(a => a && a.action === 'addView' && a.viewId === 'archive')
+            .flatMap(a => a.ids || []);
+          if (!(copyIds.includes('p9') && copyIds.includes('p3'))) {
+            errs.push('Ctrl-dragging one of two selected tiles did not copy both of them: ' + JSON.stringify(copyIds));
+          }
+          if (!tileEl('p9') || !tileEl('p3')) {
+            errs.push('a multi-select copy removed a selected tile from the source view');
+          }
+          await switchToGroupedView('archive');
+          if (!tileEl('p9') || !tileEl('p3')) {
+            errs.push('a multi-select copy did not place both selected tiles in the target view');
+          }
+          tabFor('home').click();
+          await sleep(200);
+        }
       }
     }
   } catch (e) { errs.push('probe: ' + e.message); }
