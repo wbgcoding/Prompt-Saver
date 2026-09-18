@@ -209,6 +209,11 @@ const ICON_EDIT =
   '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 20h4L18.5 9.5a2 2 0 0 0-2.8-2.8L5 17.2V20Zm9.5-12.5 3 3"/></svg>';
 const ICON_TRASH =
   '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13M10 11v6M14 11v6"/></svg>';
+// Marks a placeholder fill-in field whose empty state is only a SUGGESTED
+// fixed value (shown as the field's placeholder text, never inserted on its
+// own), distinct from the plain "remembered" state.
+const ICON_PIN =
+  '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z"/></svg>';
 // The original path (M8 7 3 12l5 5M3 12h11a5 5 0 0 1 0 10h-4) was not
 // centered in its 24x24 viewBox (its true bounds sit low and to the left),
 // which read as an off-center glyph in the toast's centered icon badge even
@@ -1452,6 +1457,12 @@ const OPT_FLAG_LABELS = {
   // other tag-aware path already handles it. Browsing hides it; searching still
   // finds it, and the library toggle brings it back into view.
   archiveTag: "flagArchiveTag",
+  // A maintained list of name/value pairs (expert menu, empty by default) that
+  // the fill-in dialog SUGGESTS for a matching placeholder name, one tier below
+  // a remembered last input and above the text's own {#{name=default}#}. Kept
+  // apart from varDefaults on purpose -- a deliberately maintained value must
+  // never be mistaken for whatever happened to be typed in last.
+  varFixed: "flagVarFixed",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
@@ -2091,8 +2102,12 @@ const EXPERT_TABS = [
     // Everything that puts new content into the app.
     { title: "expGroupInput", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, { key: "attachTextPreview", gate: "fileAttach" }, "pasteMedia", "dragDrop"], values: ["attachPreviewKb"] },
     { title: "expGroupViews", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }], values: ["viewBorder", "viewGroupMaxRows"] },
-    // Placeholders, from the grammar to where the app asks for them.
-    { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
+    // Placeholders, from the grammar to where the app asks for them. varFixed
+    // (a hand-maintained name/value list, empty by default, only ever
+    // SUGGESTED in the fill-in dialog) stays in this same group rather than
+    // its own -- its gate parent promptVars lives here, and a gated flag has
+    // to sit with its parent.
+    { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }, { key: "varFixed", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"], varFixedList: true },
     // The editor: what it shows beside the text box. Preview and highlighter belong together — the
     // highlighter only ever paints inside the preview.
     { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, { key: "copyFormatted", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard", "editorDraft"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen", "editorDraftSecs"], dropdowns: ["counterUnits"] },
@@ -2310,7 +2325,7 @@ function applyValues() {
 // convention tip<Key>. Self-explanatory settings are deliberately left out.
 const EXPERT_TIPS = [
   // General / creating
-  "storeFiles", "attachTextPreview", "attachPreviewKb", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "varPopupWindow",
+  "storeFiles", "attachTextPreview", "attachPreviewKb", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "varPopupWindow", "varFixed",
   "lengthCounter", "promptHistory", "historyDiff", "diffWordCap", "historyPreviewLen", "editorMonospace",
   "promptNotes", "notesInTooltip", "notesTipLen",
   "mdPreview", "mdMaxChars", "codeHighlight", "codeAutoDetect", "hlFontPx", "hlMaxChars", "copyFormatted",
@@ -3703,12 +3718,17 @@ function renderExpert() {
       // its own per-swatch compare; an action is a button, not a value) — "only
       // changed" drops both rather than showing them unconditionally.
       const palette = !expertOnlyChanged && group.palette && (!searching || groupHit || i18nHit("expGroupColors", q));
+      // Same reasoning as palette above: a hand-maintained name/value list has
+      // no single "default" to diff against, and it means nothing while the
+      // flag it sits under is off, so it never shows on its own.
+      const varFixedList = !expertOnlyChanged && group.varFixedList && flag("varFixed") &&
+        (!searching || groupHit || i18nHit("expGroupVarFixed", q));
       // Bespoke, same reasoning as palette above: one hex string per key, no
       // single "default" the generic isRowChanged diff machinery could reuse.
       const colors = expertOnlyChanged ? [] : (group.colors || [])
         .filter((k) => gateOpen(EXPERT_COLORS[k]?.gate) && (!searching || groupHit || settingHit(k, EXPERT_COLORS[k]?.label, q)));
       const actions = expertOnlyChanged ? [] : (group.actions || []).filter((a) => gateOpen(a.gate) && (!searching || groupHit || i18nHit(a.label, q)));
-      if (globalView && !flags.length && !values.length && !selects.length && !dropdowns.length && !paths.length && !palette && !colors.length && !actions.length) continue;
+      if (globalView && !flags.length && !values.length && !selects.length && !dropdowns.length && !paths.length && !palette && !varFixedList && !colors.length && !actions.length) continue;
       shown++;
       // Categories collapse on click (persisted); scanning every tab always shows them.
       const isCollapsed = !globalView && collapsed.has(group.title);
@@ -3793,6 +3813,7 @@ function renderExpert() {
         emitExpertRows(roots, sec, actionById, 0);
       }
       if (palette) sec.appendChild(paletteRow());
+      if (varFixedList) sec.appendChild(varFixedListRow());
       for (const key of colors) sec.appendChild(colorRow(key));
       box.appendChild(sec);
     }
@@ -7167,6 +7188,116 @@ function saveRememberedVars(next, prev) {
   invoke("set_ui_text", { key: "varDefaults", value: json }).catch(() => {});
 }
 
+// Fixed placeholder values, kept by variable NAME (expert: varFixed) --
+// maintained BY HAND in the expert menu (add/change/delete), never written by
+// a fill-in dialog itself. Kept apart from varDefaults on purpose: a
+// deliberately maintained value must never be confused with whatever the
+// user happened to type in last time.
+function readFixedVars() {
+  try { return JSON.parse(settings.ui_texts?.varFixed || "{}"); } catch (_) { return {}; }
+}
+function saveFixedVars(next) {
+  const json = JSON.stringify(next);
+  if (json === (settings.ui_texts?.varFixed || "{}")) return;
+  settings.ui_texts = { ...(settings.ui_texts || {}), varFixed: json };
+  invoke("set_ui_text", { key: "varFixed", value: json }).catch(() => {});
+}
+
+// The expert menu's own list editor for varFixed: one row per fixed value
+// (name, its value, a delete button) plus an add row. Empty by default.
+function varFixedListRow() {
+  const wrap = document.createElement("div");
+  wrap.className = "field var-fixed-field";
+  // The switch above only carries the on/off label -- this list is its own
+  // widget, so it gets its own small heading rather than relying on that.
+  const heading = document.createElement("div");
+  heading.className = "var-fixed-heading";
+  heading.textContent = t("expGroupVarFixed");
+  wrap.appendChild(heading);
+  const fixed = readFixedVars();
+  const names = Object.keys(fixed).sort((a, b) => a.localeCompare(b));
+  const list = document.createElement("div");
+  list.className = "var-fixed-list";
+  for (const name of names) {
+    const row = document.createElement("div");
+    row.className = "var-fixed-row";
+    const nameEl = document.createElement("span");
+    nameEl.className = "var-fixed-name";
+    nameEl.textContent = name; // textContent: a variable name is never markup
+    const valueEl = document.createElement("input");
+    valueEl.type = "text";
+    valueEl.className = "modal-input var-fixed-value";
+    valueEl.value = fixed[name];
+    valueEl.addEventListener("change", () => {
+      const next = { ...readFixedVars() };
+      const v = valueEl.value.trim();
+      if (v) next[name] = v; else delete next[name]; // cleared value = removed row
+      saveFixedVars(next);
+      renderExpert();
+    });
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "icon-btn var-fixed-del";
+    del.title = t("varFixedRemove");
+    del.setAttribute("aria-label", t("varFixedRemove"));
+    putIcon(del, ICON_TRASH);
+    del.addEventListener("click", () => {
+      const next = { ...readFixedVars() };
+      delete next[name];
+      saveFixedVars(next);
+      renderExpert();
+    });
+    row.append(nameEl, valueEl, del);
+    list.appendChild(row);
+  }
+  wrap.appendChild(list);
+  if (!names.length) {
+    const hint = document.createElement("div");
+    hint.className = "hint var-fixed-empty";
+    hint.textContent = t("varFixedEmpty");
+    wrap.appendChild(hint);
+  }
+  const addRow = document.createElement("div");
+  addRow.className = "var-fixed-add";
+  const addName = document.createElement("input");
+  addName.type = "text";
+  addName.className = "modal-input var-fixed-add-name";
+  addName.placeholder = t("varFixedNamePh");
+  const addValue = document.createElement("input");
+  addValue.type = "text";
+  addValue.className = "modal-input var-fixed-add-value";
+  addValue.placeholder = t("varFixedValuePh");
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "ghost-btn var-fixed-add-btn";
+  addBtn.textContent = t("varFixedAdd");
+  const commitAdd = () => {
+    const name = cleanVarPart(addName.value);
+    const value = addValue.value.trim();
+    if (!name || !value) { (name ? addValue : addName).focus(); return; }
+    saveFixedVars({ ...readFixedVars(), [name]: value });
+    renderExpert();
+  };
+  addBtn.addEventListener("click", commitAdd);
+  for (const el of [addName, addValue]) {
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); commitAdd(); } });
+  }
+  addRow.append(addName, addValue, addBtn);
+  wrap.appendChild(addRow);
+  return wrap;
+}
+
+// Small marker next to a fill-in field whose starting state came from the
+// fixed-value list, so it reads as "on file for this name", not just an
+// ordinary placeholder or default.
+function fixedMarker() {
+  const el = document.createElement("span");
+  el.className = "var-fixed-marker";
+  el.title = t("fixedValueHint");
+  putIcon(el, ICON_PIN);
+  return el;
+}
+
 // Fill-in dialog shown when copying a prompt that holds {#{placeholders}#}.
 // `vars` are raw tokens; resolves a {token: value} map, or null when cancelled.
 let varsCleanup = null;
@@ -7180,6 +7311,12 @@ function promptVarsDialog(vars) {
   const useRemember = flag("varDefaults");
   const keepChoice = flag("choiceRemember");
   const remembered = readRememberedVars();
+  // Fixed values (expert: varFixed) are the tier between a remembered input
+  // and the text's own default -- a plain text field only ever SUGGESTS one,
+  // as its placeholder, never inserted into the value the user has to
+  // actively clear first.
+  const useFixed = flag("varFixed");
+  const fixedVars = useFixed ? readFixedVars() : {};
   const rows = vars.map((token) => {
     const { name, options, default: def } = parseVar(token);
     const label = document.createElement("label");
@@ -7199,27 +7336,40 @@ function promptVarsDialog(vars) {
       }
       const last = keepChoice ? remembered[name] : null;
       const usedLast = options.includes(last);
-      // Remembered pick wins over the text's own default -- it is the more
-      // recent decision.
-      control.value = usedLast ? last : (def && options.includes(def) ? def : options[0]);
-      // Says outright that this pick came from last time, not just the checkbox
-      // state (there is none for a choice variable — it remembers silently).
+      const fixedPick = name in fixedVars ? fixedVars[name] : null;
+      const usedFixed = !usedLast && options.includes(fixedPick);
+      // Remembered pick wins over a fixed value, which wins over the text's
+      // own default -- each one the more recent/deliberate decision.
+      control.value = usedLast ? last : usedFixed ? fixedPick : (def && options.includes(def) ? def : options[0]);
+      // Says outright where this pick came from, not just the checkbox state
+      // (there is none for a choice variable — it remembers silently).
+      let markFixed = false;
       if (usedLast) control.title = t("rememberedValueHint");
+      else if (usedFixed) { control.title = t("fixedValueHint"); markFixed = true; }
       // A single option is a fixed value: still shown, but nothing to choose.
       if (options.length === 1) control.disabled = true;
       else attachSelectPicker(control); // themed popup, 8 rows then scroll
       label.append(span, control);
+      if (markFixed) label.appendChild(fixedMarker());
     } else {
       control = document.createElement("input");
       control.className = "modal-input";
       control.type = "text";
+      let markFixed = false;
       if (useRemember && name in remembered) {
         control.value = remembered[name];
         control.title = t("rememberedValueHint"); // Says so, not just a checked box
+      } else if (useFixed && name in fixedVars) {
+        // A suggestion, never inserted -- shown as the placeholder, so a
+        // field left untouched stays genuinely empty.
+        control.placeholder = fixedVars[name];
+        control.title = t("fixedValueHint");
+        markFixed = true;
       } else if (def) {
         control.value = def;
       }
       label.append(span, control);
+      if (markFixed) label.appendChild(fixedMarker());
       if (useRemember) {
         const rem = document.createElement("label");
         rem.className = "vars-remember";
@@ -7437,19 +7587,37 @@ async function promptVarsWindow(tokens) {
   const useRemember = flag("varDefaults");
   const keepChoice = flag("choiceRemember");
   const remembered = readRememberedVars();
+  // Fixed values (expert: varFixed) sit between a remembered pick and the
+  // text's own default. A plain text field only ever SUGGESTS one, as its
+  // placeholder -- vars.js never inserts it into the value on its own.
+  const useFixed = flag("varFixed");
+  const fixedVars = useFixed ? readFixedVars() : {};
   const rows = tokens.map((token) => {
     const { name, options, default: def } = parseVar(token);
     const last = remembered[name];
+    if (options.length) {
+      const usedLast = keepChoice && options.includes(last);
+      const usedFixed = !usedLast && options.includes(fixedVars[name]);
+      return {
+        token,
+        name,
+        options,
+        value: usedLast ? last : usedFixed ? fixedVars[name] : (def && options.includes(def) ? def : options[0]),
+        remember: false,
+        fixed: usedFixed,
+        placeholder: "",
+      };
+    }
+    const usedRemember = useRemember && name in remembered;
+    const usedFixed = !usedRemember && useFixed && name in fixedVars;
     return {
       token,
       name,
       options,
-      // Remembered pick/value wins over the text's own default everywhere --
-      // it is the more recent decision.
-      value: options.length
-        ? (keepChoice && options.includes(last) ? last : (def && options.includes(def) ? def : options[0]))
-        : (useRemember && name in remembered ? String(last) : (def || "")),
-      remember: !options.length && useRemember && name in remembered,
+      value: usedRemember ? String(last) : usedFixed ? "" : (def || ""),
+      remember: usedRemember,
+      fixed: usedFixed,
+      placeholder: usedFixed ? fixedVars[name] : "",
     };
   });
   const payload = {
@@ -7459,8 +7627,9 @@ async function promptVarsWindow(tokens) {
     ok: t("varsCopy"),
     cancel: t("cancel"),
     rememberLabel: t("rememberValue"),
+    fixedHint: t("fixedValueHint"),
     askRemember: useRemember,
-    rows: rows.map(({ name, options, value, remember }) => ({ name, options, value, remember })),
+    rows: rows.map(({ name, options, value, remember, fixed, placeholder }) => ({ name, options, value, remember, fixed, placeholder })),
   };
   // A second hotkey while a window is still open cancels the older copy — one
   // pending question at a time, or two answers would race for one clipboard.

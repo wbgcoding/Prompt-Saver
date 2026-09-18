@@ -54,6 +54,7 @@ DEPENDENCIES = {
     "choiceVars": "promptVars",
     "choiceRemember": "choiceVars",
     "varPopupWindow": "promptVars",
+    "varFixed": "promptVars",
     "dateStyle": "dynVars",
     "timeStyle": "dynVars",
     "counterUnits": "lengthCounter",

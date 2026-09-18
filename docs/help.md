@@ -45,6 +45,11 @@ before the finished text reaches the clipboard.
 - Remember choices — the popup pre-fills the last answer for that tile
 - Popup in its own window — useful with the floating buttons, where the main
   window may be hidden
+- Fixed values (off by default, expert menu): a maintained list of name and
+  value pairs the popup suggests for a matching placeholder, one step below a
+  remembered last input and above the text's own default. Shown only as the
+  field's placeholder text, marked with a small pin, never inserted until it
+  is typed or picked.
 
 ### The editor
 
@@ -767,7 +772,10 @@ Ziehen & Ablegen.
 
 **Variablen & Platzhalter** — `{#{Name}#}` im Text öffnet beim Kopieren ein Popup
 für jeden Wert. Dynamische Platzhalter (`{#{date}#}`, `{#{time}#}`,
-`{#{clipboard}#}`) füllen sich selbst.
+`{#{clipboard}#}`) füllen sich selbst. Feste Werte (im Experten-Menü, aus)
+schlagen für einen passenden Namen eine gepflegte Liste von Werten vor, nur
+als Platzhaltertext im Feld, mit einer kleinen Stecknadel markiert, nie
+eingesetzt, bevor er getippt oder übernommen wird.
 
 **Der Editor** — Markdown-Vorschau, Syntax-Hervorhebung, Versionsverlauf, private
 Notizen (Markdown-Vorschau und Notizen standardmäßig aus). Bei einer Datei-Kachel

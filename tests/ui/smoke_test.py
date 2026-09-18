@@ -11881,6 +11881,155 @@ RETENTION_PANEL_PROBE = """
 </script>
 """
 
+# 444: fixed values for recurring placeholders -- the expert-menu list (add,
+# edit shows in the row, delete), the empty-state hint, and the fill-in
+# dialog's marker + placeholder-only suggestion (never silently inserted).
+VAR_FIXED_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && cm.classList.contains('hidden'); i++) await sleep(100);
+    if (!cm.classList.contains('hidden')) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+
+    document.getElementById('gear').click();
+    await sleep(150);
+    document.getElementById('expert-open').click();
+    await sleep(200);
+
+    const rowByLabel = async (label) => {
+      const hit = () => [...document.querySelectorAll('#expert-flags .switch-field')]
+        .find(r => ((r.querySelector('span') || {}).textContent || '').includes(label));
+      if (hit()) return hit();
+      for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+        tb.click();
+        await sleep(200);
+        if (hit()) return hit();
+      }
+      return null;
+    };
+    const flagRow = await rowByLabel('Suggest fixed values for placeholders');
+    if (!flagRow) {
+      errs.push('444: the fixed-value flag is missing from the expert menu');
+    } else {
+      flagRow.querySelector('input.switch').click();
+      await sleep(150);
+      // The flag is not a gate for anything else, so force a redraw the same
+      // way switching tabs already does, instead of relying on one.
+      const activeTab = document.querySelector('#expert-tabs-bar .expert-tab.active');
+      if (activeTab) { activeTab.click(); await sleep(150); }
+
+      let field = document.querySelector('.var-fixed-field');
+      if (!field) errs.push('444: the fixed-value list did not appear once the flag was on');
+      if (field && !field.querySelector('.var-fixed-empty')) {
+        errs.push('444: the empty-state hint is missing before any fixed value exists');
+      }
+
+      if (field) {
+        field.querySelector('.var-fixed-add-name').value = 'topic';
+        field.querySelector('.var-fixed-add-value').value = 'coffee';
+        field.querySelector('.var-fixed-add-btn').click();
+        await sleep(150);
+        field = document.querySelector('.var-fixed-field');
+        const rows = field ? [...field.querySelectorAll('.var-fixed-row')] : [];
+        if (rows.length !== 1) {
+          errs.push('444: adding a fixed value did not produce exactly one row, found ' + rows.length);
+        } else {
+          const nameText = rows[0].querySelector('.var-fixed-name').textContent;
+          if (nameText !== 'topic') errs.push('444: the added row shows the wrong name: ' + nameText);
+          const valueInput = rows[0].querySelector('.var-fixed-value');
+          if (!valueInput || valueInput.value !== 'coffee') {
+            errs.push('444: the added row does not carry the expected value: ' + (valueInput && valueInput.value));
+          }
+        }
+        if (field && field.querySelector('.var-fixed-empty')) {
+          errs.push('444: the empty-state hint is still shown although a fixed value exists');
+        }
+        if (!(window.__SMOKE_CALLS__ || []).includes('set_ui_text')) {
+          errs.push('444: adding a fixed value never persisted it');
+        }
+
+        if (rows.length === 1) {
+          rows[0].querySelector('.var-fixed-del').click();
+          await sleep(150);
+          field = document.querySelector('.var-fixed-field');
+          const rowsAfter = field ? field.querySelectorAll('.var-fixed-row').length : -1;
+          if (rowsAfter !== 0) errs.push('444: deleting the fixed value did not remove its row, found ' + rowsAfter);
+          if (!field || !field.querySelector('.var-fixed-empty')) {
+            errs.push('444: the empty-state hint did not come back after the only fixed value was deleted');
+          }
+        }
+
+        // Put one back for the fill-in dialog check below.
+        field = document.querySelector('.var-fixed-field');
+        if (field) {
+          field.querySelector('.var-fixed-add-name').value = 'topic';
+          field.querySelector('.var-fixed-add-value').value = 'coffee';
+          field.querySelector('.var-fixed-add-btn').click();
+          await sleep(150);
+        }
+      }
+    }
+
+    document.getElementById('expert-back').click();
+    await sleep(100);
+    document.getElementById('settings').classList.add('hidden');
+
+    // A prompt with an unresolved placeholder must offer the fixed value as a
+    // placeholder-only suggestion, marked, never inserted into the value.
+    // The stub seeds the grid with its own fixture prompts, so the new one
+    // has to be found by diffing tile ids, not by picking the first tile.
+    const idsBefore = new Set([...document.querySelectorAll('#grid .tile')].map(el => el.dataset.id));
+    const inputEl = document.getElementById('input');
+    const saveBtn = document.getElementById('save');
+    inputEl.value = 'Say hi to {#{topic}#}.';
+    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    saveBtn.click();
+    await sleep(200);
+    const nameField = document.getElementById('modal-name');
+    nameField.value = 'Fixed value test prompt';
+    nameField.dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('modal-confirm').click();
+    await sleep(300);
+
+    const tile = [...document.querySelectorAll('#grid .tile')].find(el => !idsBefore.has(el.dataset.id));
+    if (!tile) {
+      errs.push('444: the new prompt with a placeholder did not appear on the grid');
+    } else {
+      for (const type of ['pointerdown', 'pointerup', 'click']) {
+        tile.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 1 }));
+      }
+      await sleep(400);
+      if (document.getElementById('vars-modal').classList.contains('hidden')) {
+        errs.push('444: copying a prompt with a placeholder did not open the fill-in dialog');
+      } else {
+        const field2 = document.querySelectorAll('#vars-fields .field')[0];
+        const control = field2 && field2.querySelector('input[type=text]');
+        if (!control) {
+          errs.push('444: the fill-in dialog has no text field for the placeholder');
+        } else {
+          if (control.value) errs.push('444: the fixed value was inserted instead of only suggested, got: ' + control.value);
+          if (control.placeholder !== 'coffee') errs.push('444: the field placeholder does not carry the fixed value, got: ' + control.placeholder);
+        }
+        if (!field2 || !field2.querySelector('.var-fixed-marker')) {
+          errs.push('444: the fixed-value marker is missing next to the field');
+        }
+        document.getElementById('vars-close').click();
+        await sleep(150);
+      }
+    }
+  } catch (e) { errs.push('444 probe: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
 
 def unescape(s):
     for a, b in (("&quot;", '"'), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
@@ -12500,6 +12649,30 @@ def main():
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- editor draft: crash recovery offered once, decline discards it")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # 444: fixed values for recurring placeholders -- expert-menu list
+        # (add/edit/delete) and the fill-in dialog's marker + suggestion.
+        side = tmp / "ui" / "var-fixed.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", VAR_FIXED_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-var-fixed'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- fixed placeholder values: list editor and fill-in suggestion")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

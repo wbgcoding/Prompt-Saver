@@ -24581,6 +24581,133 @@ fn split_variants(joined: &str) -> (String, Vec<String>) {
     (text, parts.map(unescape).collect())
 }
 
+// ---- Static placeholder resolution (export, Markdown sync) ----
+// A background write (export, the Markdown sync folder) can never show the
+// fill-in dialog, so it resolves the same priority the dialog itself offers,
+// minus the one interactive step: a remembered value, then a fixed value
+// (the maintained name/value list stored under ui_texts.varFixed), then the text's own
+// {#{name=default}#} default, then blank. Never the raw {#{...}#} syntax --
+// that would leak the app's own placeholder markup into a plain export or
+// someone else's Markdown folder. A dynamic name (/date\, /uuid\, ...) is
+// left exactly as written: its value only means something at the moment of
+// copy, and a background write has no such moment.
+fn parse_ui_text_map(settings: &Settings, key: &str) -> HashMap<String, String> {
+    settings
+        .ui_texts
+        .get(key)
+        .and_then(|s| serde_json::from_str::<HashMap<String, String>>(s).ok())
+        .unwrap_or_default()
+}
+
+// Same token shape as the frontend's VAR_RE: `{#{` + a body with no `}` or
+// newline, at most 200 characters, + `}#}`. Returns (start, end, trimmed
+// body) triples in source order, char-indexed and non-overlapping.
+fn find_var_tokens(text: &str) -> Vec<(usize, usize, String)> {
+    let chars: Vec<char> = text.chars().collect();
+    let n = chars.len();
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i + 3 <= n {
+        if chars[i] == '{' && chars.get(i + 1) == Some(&'#') && chars.get(i + 2) == Some(&'{') {
+            let body_start = i + 3;
+            let mut j = body_start;
+            let mut found_end = None;
+            while j < n && j - body_start <= 200 {
+                if chars.get(j) == Some(&'}') && chars.get(j + 1) == Some(&'#') && chars.get(j + 2) == Some(&'}') {
+                    found_end = Some(j);
+                    break;
+                }
+                if chars[j] == '}' || chars[j] == '\n' {
+                    break;
+                }
+                j += 1;
+            }
+            if let Some(end) = found_end {
+                let body: String = chars[body_start..end].iter().collect();
+                out.push((i, end + 3, body.trim().to_string()));
+                i = end + 3;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    out
+}
+
+// name, options (the choice list, empty for a plain variable) and default --
+// same split rule as the frontend's parseVar: a bar starts the option list,
+// an equals sign before it (or before the whole token with no bar) sets the
+// default. A bar with no usable options after it falls back to a plain
+// variable, same as parseVar.
+fn parse_var_token(token: &str) -> (String, Vec<String>, String) {
+    let raw = token.trim();
+    let (name_part, options): (&str, Vec<String>) = match raw.find('|') {
+        Some(bar) => {
+            let opts: Vec<String> = raw[bar + 1..]
+                .split(',')
+                .map(|o| o.trim().to_string())
+                .filter(|o| !o.is_empty())
+                .collect();
+            (&raw[..bar], opts)
+        }
+        None => (raw, Vec::new()),
+    };
+    let (name, default) = match name_part.find('=') {
+        Some(eq) => (name_part[..eq].trim().to_string(), name_part[eq + 1..].trim().to_string()),
+        None => (name_part.trim().to_string(), String::new()),
+    };
+    if name.is_empty() || (options.is_empty() && raw.contains('|')) {
+        (raw.to_string(), Vec::new(), String::new())
+    } else {
+        (name, options, default)
+    }
+}
+
+// A name written as /name\ is a reserved dynamic variable (date, uuid, the
+// clipboard, ...), meaningful only at the moment of copy.
+fn is_dyn_var_name(name: &str) -> bool {
+    name.len() > 2 && name.starts_with('/') && name.ends_with('\\')
+}
+
+fn resolve_static_vars(text: &str, remembered: &HashMap<String, String>, fixed: &HashMap<String, String>) -> String {
+    let tokens = find_var_tokens(text);
+    if tokens.is_empty() {
+        return text.to_string();
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut cursor = 0usize;
+    for (start, end, body) in tokens {
+        out.extend(chars[cursor..start].iter().copied());
+        let (name, options, default) = parse_var_token(&body);
+        if name.is_empty() || is_dyn_var_name(&name) {
+            out.extend(chars[start..end].iter().copied()); // left exactly as written
+        } else if options.is_empty() {
+            let value = remembered.get(&name).cloned().or_else(|| fixed.get(&name).cloned()).unwrap_or(default);
+            out.push_str(&value);
+        } else {
+            let remembered_pick = remembered.get(&name).cloned().filter(|v| options.contains(v));
+            let fixed_pick = fixed.get(&name).cloned().filter(|v| options.contains(v));
+            let default_pick = if options.contains(&default) { Some(default.clone()) } else { None };
+            let pick = remembered_pick.or(fixed_pick).or(default_pick).unwrap_or_else(|| options[0].clone());
+            out.push_str(&pick);
+        }
+        cursor = end;
+    }
+    out.extend(chars[cursor..].iter().copied());
+    out
+}
+
+// Resolves a prompt's own text AND every rotating-entry variant the same way,
+// for a caller that is about to export or sync it, never the live prompt
+// itself.
+fn resolved_for_export(p: &Prompt, remembered: &HashMap<String, String>, fixed: &HashMap<String, String>) -> Prompt {
+    let mut rp = p.clone();
+    rp.text = resolve_static_vars(&rp.text, remembered, fixed);
+    rp.variants = rp.variants.iter().map(|v| resolve_static_vars(v, remembered, fixed)).collect();
+    rp
+}
+
 // Export the prompt library only (incl. images/files) — never app settings,
 // views or grid layout, so importing elsewhere can't clobber the user's setup.
 fn to_csv(prompts: &[Prompt]) -> String {
@@ -24806,13 +24933,29 @@ async fn export_prompts(app: AppHandle, state: State<'_, Db>, format: String, id
             }
             _ => store.prompts.clone(),
         };
+        // A placeholder is a fill-in-at-copy-time thing; an export has no copy
+        // moment to fill it in at, so it gets resolved here instead of leaving
+        // the raw {#{...}#} syntax in the exported file. Each source is only
+        // consulted while its own flag is on, same as the fill-in dialog --
+        // varDefaults ships on, varFixed ships off.
+        let remembered = if store.settings.ui_flags.get("varDefaults") != Some(&false) {
+            parse_ui_text_map(&store.settings, "varDefaults")
+        } else {
+            HashMap::new()
+        };
+        let fixed = if store.settings.ui_flags.get("varFixed") == Some(&true) {
+            parse_ui_text_map(&store.settings, "varFixed")
+        } else {
+            HashMap::new()
+        };
+        let resolved: Vec<Prompt> = selected.iter().map(|p| resolved_for_export(p, &remembered, &fixed)).collect();
         let content = match format.as_str() {
-            "csv" => to_csv(&selected),
-            "txt" => to_txt(&selected),
-            "json" => to_json(&selected),
+            "csv" => to_csv(&resolved),
+            "txt" => to_txt(&resolved),
+            "json" => to_json(&resolved),
             _ => return Err("unsupported-export-format".to_string()),
         };
-        (content, selected.len())
+        (content, resolved.len())
     };
     let file = file_dialog(&app)
         .set_file_name(format!("{}.{}", brand::ITEM_PLURAL, format))
@@ -38081,6 +38224,83 @@ mod tests {
             !body.contains("Err(format!("),
             "export_prompts must never build its error via string interpolation again (it must stay the stable, non-localized-text-free code)"
         );
+    }
+
+    #[test]
+    fn find_var_tokens_finds_a_plain_a_default_and_a_choice_token() {
+        let text = "Hi {#{name}#}, order {#{item=widget}#} in {#{size|S,M,L}#} please.";
+        let tokens = find_var_tokens(text);
+        let bodies: Vec<&str> = tokens.iter().map(|(_, _, b)| b.as_str()).collect();
+        assert_eq!(bodies, vec!["name", "item=widget", "size|S,M,L"]);
+    }
+
+    #[test]
+    fn parse_var_token_splits_name_default_and_options() {
+        assert_eq!(parse_var_token("name"), ("name".to_string(), vec![], "".to_string()));
+        assert_eq!(parse_var_token("item=widget"), ("item".to_string(), vec![], "widget".to_string()));
+        assert_eq!(
+            parse_var_token("size|S,M,L"),
+            ("size".to_string(), vec!["S".to_string(), "M".to_string(), "L".to_string()], "".to_string())
+        );
+        assert_eq!(
+            parse_var_token("size=M|S,M,L"),
+            ("size".to_string(), vec!["S".to_string(), "M".to_string(), "L".to_string()], "M".to_string())
+        );
+        // A bar with nothing usable after it is a plain variable, whole token as its name.
+        assert_eq!(parse_var_token("weird|"), ("weird|".to_string(), vec![], "".to_string()));
+    }
+
+    // The Abnahme case: the same priority chain the fill-in dialog offers,
+    // minus the interactive last step, checked across all four sources in one
+    // pass -- a remembered value beats a fixed value beats the text's own
+    // default beats blank.
+    #[test]
+    fn resolve_static_vars_priority_is_remembered_then_fixed_then_default_then_blank() {
+        let remembered: HashMap<String, String> = [("a".to_string(), "from-remembered".to_string())].into_iter().collect();
+        let fixed: HashMap<String, String> =
+            [("a".to_string(), "from-fixed".to_string()), ("b".to_string(), "from-fixed".to_string())].into_iter().collect();
+        // a: remembered AND fixed AND a default -- remembered wins.
+        assert_eq!(resolve_static_vars("{#{a=from-default}#}", &remembered, &fixed), "from-remembered");
+        // b: fixed AND a default, no remembered value -- fixed wins.
+        assert_eq!(resolve_static_vars("{#{b=from-default}#}", &remembered, &fixed), "from-fixed");
+        // c: only a default, no remembered or fixed value -- the default wins.
+        assert_eq!(resolve_static_vars("{#{c=from-default}#}", &remembered, &fixed), "from-default");
+        // d: nothing anywhere -- blank, never the raw placeholder.
+        assert_eq!(resolve_static_vars("{#{d}#}", &remembered, &fixed), "");
+    }
+
+    #[test]
+    fn resolve_static_vars_choice_variable_follows_the_same_priority_chain() {
+        let remembered: HashMap<String, String> = [("size".to_string(), "M".to_string())].into_iter().collect();
+        let fixed: HashMap<String, String> = [("size".to_string(), "L".to_string())].into_iter().collect();
+        assert_eq!(resolve_static_vars("{#{size|S,M,L}#}", &remembered, &fixed), "M", "a remembered pick wins when it is a real option");
+        let fixed_only: HashMap<String, String> = fixed.clone();
+        assert_eq!(resolve_static_vars("{#{size|S,M,L}#}", &HashMap::new(), &fixed_only), "L", "falls to the fixed value next");
+        assert_eq!(resolve_static_vars("{#{size=S|S,M,L}#}", &HashMap::new(), &HashMap::new()), "S", "then the text's own default");
+        assert_eq!(resolve_static_vars("{#{size|S,M,L}#}", &HashMap::new(), &HashMap::new()), "S", "and finally the first option");
+    }
+
+    #[test]
+    fn resolve_static_vars_leaves_a_dynamic_name_and_an_unresolved_gap_untouched() {
+        let remembered: HashMap<String, String> = HashMap::new();
+        let fixed: HashMap<String, String> = HashMap::new();
+        // A reserved dynamic name only means something at the moment of copy --
+        // a background write has no such moment, so it is left exactly as written.
+        assert_eq!(resolve_static_vars("Today is {#{/date\\}#}.", &remembered, &fixed), "Today is {#{/date\\}#}.");
+    }
+
+    #[test]
+    fn resolved_for_export_resolves_the_text_and_every_rotating_variant() {
+        let remembered: HashMap<String, String> = [("name".to_string(), "Ben".to_string())].into_iter().collect();
+        let fixed: HashMap<String, String> = HashMap::new();
+        let mut p = test_prompt("p1");
+        p.text = "Hi {#{name}#}".to_string();
+        p.variants = vec!["Bye {#{name}#}".to_string(), "no placeholder here".to_string()];
+        let resolved = resolved_for_export(&p, &remembered, &fixed);
+        assert_eq!(resolved.text, "Hi Ben");
+        assert_eq!(resolved.variants, vec!["Bye Ben".to_string(), "no placeholder here".to_string()]);
+        // The live prompt itself must never be mutated by an export/sync pass.
+        assert_eq!(p.text, "Hi {#{name}#}");
     }
 
     // An exported theme file never carries the internal id, so importing it on

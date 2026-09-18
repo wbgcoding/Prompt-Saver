@@ -618,12 +618,26 @@ body.vars-body {
   flex-direction: column;
   gap: 3px;
 }
+.vars-name-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
 .vars-name {
   font-size: 12px;
   opacity: 0.75;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Marks a field whose placeholder came from the fixed-value list,
+   never silently inserted into the value itself. */
+.vars-fixed-marker {
+  display: inline-flex;
+  flex: 0 0 auto;
+  opacity: 0.65;
+  color: var(--pill-bg, var(--menu-fg));
 }
 .vars-input {
   width: 100%;
