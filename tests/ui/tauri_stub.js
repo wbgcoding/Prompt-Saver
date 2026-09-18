@@ -636,6 +636,7 @@ const RESULTS = {
     { name: "2026-07-24_09-05-00", size: 654321, prompts: null, items: [] },
   ],
   recent_copies: () => PROMPTS.slice(0, 4).map((p, i) => ({ id: p.id, ts: 1750000000 + i, rowid: i + 1 })),
+  restore_copy_history: () => null,
   delete_copy_entry: () => true,
   // 2: the fixture library is never empty, so the real seeding never actually
   // triggers (matches the backend's own "already has prompts" guard) — the mock
@@ -647,7 +648,10 @@ const RESULTS = {
     SETTINGS.example_prompt_seeds = {};
     return null;
   },
-  clip_inbox_list: () => [],
+  // 434: one fixture row, so the "clear then undo" round trip has something
+  // real to snapshot and replay instead of a no-op on an empty list.
+  clip_inbox_list: () => [{ id: 1, ts: 1750000000, text: "Smoke clip inbox item" }],
+  restore_clip_inbox: () => null,
   // P31: two snapshots for p6, each one word off from the next, so the diff
   // view has something real to highlight (list_versions is newest-first).
   // 79: two snapshots for p10 (the rotating prompt) with different variant lists,

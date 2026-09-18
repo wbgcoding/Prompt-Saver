@@ -10504,6 +10504,53 @@ async fn clear_copy_history(app: AppHandle, state: State<'_, Db>) -> Result<(), 
     Ok(())
 }
 
+// One row as sent back by the frontend's own pre-clear snapshot (recent_copies
+// already returns the same shape, just with an extra rowid the frontend drops).
+#[derive(Deserialize)]
+struct CopyLogRow {
+    ts: u64,
+    id: String,
+}
+
+// The plain insert loop behind restore_copy_history, kept apart from the
+// command so it can be exercised with a bare in-memory connection.
+fn db_restore_copy_log(conn: &Connection, rows: &[CopyLogRow]) -> rusqlite::Result<()> {
+    for row in rows {
+        conn.execute("INSERT INTO copy_log(ts, id) VALUES(?1, ?2)", params![row.ts as i64, row.id])?;
+    }
+    Ok(())
+}
+
+// Undo for "clear copy history": writes the row-level log and the two counter
+// maps back. The frontend is the one holding the snapshot (it read it through
+// recent_copies before calling clear_copy_history), so this only ever replays
+// what genuinely existed a moment ago, through the same insert clause a live
+// copy uses -- never a raw table swap.
+#[tauri::command]
+async fn restore_copy_history(
+    app: AppHandle,
+    state: State<'_, Db>,
+    entries: Vec<CopyLogRow>,
+    usage: HashMap<String, u32>,
+    last_used: HashMap<String, u64>,
+) -> Result<(), String> {
+    {
+        let mut store = lock(&state);
+        store.settings.usage = usage;
+        store.settings.last_used = last_used;
+        save_settings(&app, &store.settings);
+    }
+    let Some(conn) = db_conn(&app) else {
+        return Err("history-failed".into());
+    };
+    if db_restore_copy_log(&conn, &entries).is_err() {
+        append_crash_log("restore_copy_history: a row could not be reinserted");
+        return Err("history-failed".into());
+    }
+    rebuild_tray(&app);
+    Ok(())
+}
+
 // Newest copy-history entries for the journal (own table; capped for the UI).
 // Async: the grouped query scans the table, so keep it off the UI thread.
 #[tauri::command]
@@ -11977,6 +12024,32 @@ async fn clip_inbox_clear(app: AppHandle) -> Result<(), String> {
     if !ok {
         append_crash_log("clip_inbox_clear: clip_inbox could not be cleared");
         return Err("delete-incomplete".into());
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+struct ClipRestoreItem {
+    ts: u64,
+    text: String,
+}
+
+// Undo for "clear clipboard inbox": re-inserts the rows the frontend snapshotted
+// (through the existing clip_inbox_list) before calling clip_inbox_clear, oldest
+// first, through db_add_clip -- the same capped insert a live watcher hit uses,
+// so a restore right after the cap changed still ends up with a valid inbox
+// instead of one longer than the setting now allows.
+#[tauri::command]
+async fn restore_clip_inbox(app: AppHandle, state: State<'_, Db>, items: Vec<ClipRestoreItem>) -> Result<(), String> {
+    let cap = lock(&state).settings.ui_values.get("clipInboxMax").copied().unwrap_or(50.0).clamp(10.0, 200.0) as usize;
+    let Some(conn) = db_conn(&app) else {
+        return Err("history-failed".into());
+    };
+    for item in &items {
+        if db_add_clip(&conn, item.ts, &item.text, cap).is_err() {
+            append_crash_log("restore_clip_inbox: an item could not be reinserted");
+            return Err("history-failed".into());
+        }
     }
     Ok(())
 }
@@ -26123,6 +26196,7 @@ pub fn run() {
             clip_inbox_list,
             clip_inbox_dismiss,
             clip_inbox_clear,
+            restore_clip_inbox,
             purge_clip_inbox_from_backups,
             stat_file,
             save_edit_state,
@@ -26179,6 +26253,7 @@ pub fn run() {
             clipboard_text,
             record_copy,
             clear_copy_history,
+            restore_copy_history,
             recent_copies,
             delete_copy_entry,
             toggle_floating,
@@ -35119,6 +35194,38 @@ mod tests {
         }
         let n: i64 = conn.query_row("SELECT COUNT(*) FROM copy_log", [], |r| r.get(0)).unwrap();
         assert!(n <= 5, "cap exceeded after gaps: {n}");
+    }
+
+    #[test]
+    fn restore_copy_history_reinserts_every_snapshotted_row() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE copy_log(ts INTEGER NOT NULL, id TEXT NOT NULL);").unwrap();
+        let rows = vec![
+            CopyLogRow { ts: 10, id: "a".into() },
+            CopyLogRow { ts: 20, id: "b".into() },
+        ];
+        db_restore_copy_log(&conn, &rows).unwrap();
+        // db_recent_copies orders by rowid DESC -- the later insert (b) comes first,
+        // same order the journal would have shown it in before the clear.
+        let restored: Vec<String> = db_recent_copies(&conn, 10, false).into_iter().map(|e| e.id).collect();
+        assert_eq!(restored, ["b", "a"]);
+    }
+
+    #[test]
+    fn restore_clip_inbox_keeps_the_newest_within_the_cap() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);",
+        )
+        .unwrap();
+        // Five snapshotted rows, oldest first -- the order restore_clip_inbox
+        // feeds them in after the frontend reverses clip_inbox_list's own
+        // newest-first listing -- capped at 3 like a real clipInboxMax setting.
+        for i in 0..5u64 {
+            db_add_clip(&conn, i, &format!("t{i}"), 3).unwrap();
+        }
+        let texts: Vec<String> = db_list_clips(&conn).into_iter().map(|c| c.text).collect();
+        assert_eq!(texts, ["t4", "t3", "t2"]);
     }
 
     #[test]

@@ -555,6 +555,16 @@ active view's first free cell — not necessarily its original view or cell — 
 does not bring back a floating button, folder membership, or hotkey it had before
 deletion; those need setting up again.
 
+### Undo
+
+A few actions outside the tile trash carry their own one-step Undo button on the
+confirmation message: deleting a view, clearing the copy history, clearing the
+clipboard inbox, deleting a tag, and a batch delete or batch tag change in the
+library. There is only ever one undo waiting — a later destructive action
+replaces it, and the button disappears once the message itself does. Turn it
+off in the expert menu if you would rather the message stayed a plain
+confirmation.
+
 ### Duplicate finder
 
 Flags tiles that are textually very similar, by a similarity score rather than
@@ -991,6 +1001,14 @@ Export, damit man dafür nicht erst das Expertenmenü öffnen muss.
 Papierkorb (Aufbewahrung in Tagen, 0 = für immer). Wiederherstellen legt in die
 erste freie Zelle der aktiven Ansicht, nicht zwingend an den Originalplatz, und
 ohne Pille, Ordner-Mitgliedschaft oder Hotkey von vorher.
+
+**Rückgängig** — einige Aktionen außerhalb des Kachel-Papierkorbs tragen einen
+eigenen Rückgängig-Knopf direkt auf der Meldung: eine Ansicht löschen, den
+Kopierverlauf leeren, den Zwischenablage-Eingang leeren, einen Tag löschen, und
+eine Sammellöschung oder Sammeländerung von Tags in der Bibliothek. Es wartet
+immer nur eine einzige Rücknahme — eine spätere zerstörende Aktion ersetzt sie,
+und der Knopf verschwindet mit der Meldung selbst. Im Expertenmenü lässt sich
+das abschalten, dann bleibt die Meldung eine reine Bestätigung.
 
 **Duplikatfinder** — findet textlich sehr ähnliche Kacheln nach
 Ähnlichkeitswert, keine exakte Übereinstimmung nötig, löscht nichts von sich

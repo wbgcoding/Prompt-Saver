@@ -60,6 +60,10 @@ PROBE = """
 <script>
 (async () => {
   const out = { errors: [], overflow: [], tabs: [], rawKeys: [], layout: [] };
+  // 434: an uncaught exception anywhere below used to kill the whole probe
+  // silently ("no probe result", nothing runs) -- wrapping the walk means a
+  // real regression shows up as a reported error instead of a bare timeout.
+  try {
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const click = async (id) => { const e = document.getElementById(id); if (e) { e.click(); await sleep(200); } };
   // A name or body that looks like markup must render as literal text everywhere
@@ -636,6 +640,40 @@ PROBE = """
                 delBtn.click(); await sleep(50);
                 delBtn.click(); await sleep(300);
               }
+              // 434: the deleted view offers an Undo button — click it and prove the
+              // view (name, member) really comes back, not just a bare empty tab.
+              const viewUndoToast = document.getElementById('toast');
+              const viewUndoBtn = viewUndoToast.querySelector('.toast-btn');
+              if (!viewUndoToast.classList.contains('actionable') || !viewUndoBtn) {
+                out.errors.push('434: deleting a view did not offer an undo toast');
+              } else {
+                viewUndoBtn.click();
+                await sleep(300);
+                const tabsRestored = [...document.querySelectorAll('#views .view-btn:not(.view-add-top)')];
+                if (tabsRestored.length !== tabCountBefore + 1) {
+                  out.errors.push('434: undoing a deleted view did not bring the tab back');
+                } else if (!tabsRestored.some(b => (b.querySelector('span') || {}).textContent === 'Home (copy)')) {
+                  out.errors.push('434: the restored view lost its name');
+                }
+                if (viewUndoToast.classList.contains('show')) {
+                  out.errors.push('434: the view-undo toast is still showing after being clicked');
+                }
+                // Delete it again for real (no undo this time) so the tab bar ends
+                // this check exactly where later view-count assertions expect it.
+                const restoredTab = tabsRestored.find(b => (b.querySelector('span') || {}).textContent === 'Home (copy)');
+                if (restoredTab) {
+                  restoredTab.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+                  await sleep(150);
+                  const editItem2 = menuItem('Edit view');
+                  if (editItem2) editItem2.click();
+                  await sleep(200);
+                  const delBtn2 = document.getElementById('view-modal-delete');
+                  if (delBtn2 && !delBtn2.classList.contains('hidden')) {
+                    delBtn2.click(); await sleep(50);
+                    delBtn2.click(); await sleep(300);
+                  }
+                }
+              }
               const tabsFinal = document.querySelectorAll('#views .view-btn:not(.view-add-top)').length;
               if (tabsFinal !== tabCountBefore) {
                 out.errors.push('cleanup after the duplicate-view check left an extra tab behind');
@@ -867,6 +905,44 @@ PROBE = """
           const stillShown = [...document.querySelectorAll('#library-list .tag-chip')].some((c) => c.textContent === 'MergeSrcTmp');
           if (stillShown) out.errors.push('423: a library row still shows the merged-away tag');
         }
+        // 434: deleting a tag offers an Undo button, and clicking it re-adds the
+        // tag text to every prompt that had it. Uses the same disposable
+        // "MergeDstTmp" tag the merge check above just produced.
+        const dstRow = rowFor('MergeDstTmp');
+        const delBtn = dstRow?.querySelectorAll('.ghost-btn')[2];
+        if (!dstRow || !delBtn) {
+          out.errors.push('434: the tag manager has no Delete button for "MergeDstTmp"');
+        } else {
+          delBtn.click();
+          await sleep(150);
+          document.getElementById('confirm-ok').click();
+          await sleep(250);
+          if (rowFor('MergeDstTmp')) out.errors.push('434: "MergeDstTmp" is still listed after deleting it');
+          const tagUndoToast = document.getElementById('toast');
+          const tagUndoBtn = tagUndoToast.querySelector('.toast-btn');
+          if (!tagUndoToast.classList.contains('actionable') || !tagUndoBtn) {
+            out.errors.push('434: deleting a tag did not offer an undo toast');
+          } else {
+            tagUndoBtn.click();
+            await sleep(300);
+            if (!rowFor('MergeDstTmp')) out.errors.push('434: undoing a deleted tag did not bring it back');
+            const chipBack = [...document.querySelectorAll('#library-list .tag-chip')].some((c) => c.textContent === 'MergeDstTmp');
+            if (!chipBack) out.errors.push('434: undoing a deleted tag did not restore it on the prompt row');
+            if (tagUndoToast.classList.contains('show')) {
+              out.errors.push('434: the tag-undo toast is still showing after being clicked');
+            }
+            // Delete it again for real (no undo) so the tag list ends this
+            // check the way it started, minus the disposable merge source.
+            const dstRow2 = rowFor('MergeDstTmp');
+            const delBtn2 = dstRow2?.querySelectorAll('.ghost-btn')[2];
+            if (delBtn2) {
+              delBtn2.click();
+              await sleep(150);
+              document.getElementById('confirm-ok').click();
+              await sleep(250);
+            }
+          }
+        }
       }
       await click('tag-modal-close');
     }
@@ -1007,6 +1083,26 @@ PROBE = """
           if (!rows.length || !rows.every((el) => el.textContent.includes('Smoke422'))) {
             out.errors.push('422: adding a tag to the selection did not show it on every selected row');
           }
+          // 434: undo the batch tag-add — the toast's Undo button inverts it
+          // through the same batch_prompts command, tag-remove this time.
+          const addUndoToast = document.getElementById('toast');
+          const addUndoBtn = addUndoToast.querySelector('.toast-btn');
+          if (!addUndoToast.classList.contains('actionable') || !addUndoBtn) {
+            out.errors.push('434: a batch tag-add did not offer an undo toast');
+          } else {
+            addUndoBtn.click();
+            await sleep(200);
+            const rowsAfterUndo = [...document.querySelectorAll('.lib-item')].filter((el) => selectedIds.includes(el.dataset.id));
+            if (rowsAfterUndo.some((el) => el.textContent.includes('Smoke422'))) {
+              out.errors.push('434: undoing a batch tag-add left the tag showing on a row');
+            }
+          }
+          // Add it back so the tag-remove half below has something to remove.
+          addBtn.click();
+          await sleep(150);
+          document.getElementById('confirm-input').value = 'Smoke422';
+          document.getElementById('confirm-ok').click();
+          await sleep(150);
           removeBtn.click();
           await sleep(150);
           document.getElementById('confirm-input').value = 'Smoke422';
@@ -1015,6 +1111,65 @@ PROBE = """
           const rows2 = [...document.querySelectorAll('.lib-item')].filter((el) => selectedIds.includes(el.dataset.id));
           if (rows2.some((el) => el.textContent.includes('Smoke422'))) {
             out.errors.push('422: removing the tag left it showing on a row');
+          }
+          // 434: undo the batch tag-remove — inverted back to tag-add, then
+          // removed again for real (no undo) so the fixture ends up clean.
+          const rmUndoToast = document.getElementById('toast');
+          const rmUndoBtn = rmUndoToast.querySelector('.toast-btn');
+          if (!rmUndoToast.classList.contains('actionable') || !rmUndoBtn) {
+            out.errors.push('434: a batch tag-remove did not offer an undo toast');
+          } else {
+            rmUndoBtn.click();
+            await sleep(200);
+            const rowsRestored = [...document.querySelectorAll('.lib-item')].filter((el) => selectedIds.includes(el.dataset.id));
+            if (!rowsRestored.length || !rowsRestored.every((el) => el.textContent.includes('Smoke422'))) {
+              out.errors.push('434: undoing a batch tag-remove did not bring the tag back');
+            }
+            removeBtn.click();
+            await sleep(150);
+            document.getElementById('confirm-input').value = 'Smoke422';
+            document.getElementById('confirm-ok').click();
+            await sleep(150);
+            const rowsFinal = [...document.querySelectorAll('.lib-item')].filter((el) => selectedIds.includes(el.dataset.id));
+            if (rowsFinal.some((el) => el.textContent.includes('Smoke422'))) {
+              out.errors.push('434: the fixture still carries "Smoke422" after the batch tag undo checks');
+            }
+          }
+        }
+      }
+      // 434: batch delete offers an Undo button too — restore_prompt per id
+      // through the same trash-restore path a single trash row uses. Narrowed
+      // to one fixture prompt (p8, otherwise unreferenced past this point) so
+      // this does not disturb the rest of the fixture library.
+      {
+        document.getElementById('lib-batch-none').click();
+        await sleep(100);
+        const p8Row = document.querySelector('.lib-item[data-id="p8"]');
+        if (!p8Row) {
+          out.errors.push('434: fixture prompt p8 is missing for the batch-delete-undo check');
+        } else {
+          p8Row.click();
+          await sleep(100);
+          const delBatchBtn = document.getElementById('lib-batch-delete');
+          delBatchBtn.click(); await sleep(50);
+          delBatchBtn.click(); await sleep(250);
+          if (document.querySelector('.lib-item[data-id="p8"]')) {
+            out.errors.push('434: batch delete did not remove p8 from the library list');
+          }
+          const delUndoToast = document.getElementById('toast');
+          const delUndoBtn = delUndoToast.querySelector('.toast-btn');
+          if (!delUndoToast.classList.contains('actionable') || !delUndoBtn) {
+            out.errors.push('434: a batch delete did not offer an undo toast');
+          } else {
+            window.__SMOKE_ARGS__ = [];
+            delUndoBtn.click();
+            await sleep(300);
+            if (!window.__SMOKE_ARGS__.some(([cmd, args]) => cmd === 'restore_prompt' && args && args.id === 'p8')) {
+              out.errors.push('434: undoing a batch delete did not call restore_prompt for p8');
+            }
+            if (!document.querySelector('.lib-item[data-id="p8"]')) {
+              out.errors.push('434: undoing a batch delete did not bring p8 back to the library list');
+            }
           }
         }
       }
@@ -1070,6 +1225,89 @@ PROBE = """
             out.errors.push('deleting a history entry did not refetch the journal');
           }
         }
+      }
+    }
+    // 434: clearing the whole copy history offers an Undo button, and clicking
+    // it replays the row-level log (through restore_copy_history) plus the two
+    // counter maps -- not just an empty confirmation.
+    {
+      const clearBtn = document.getElementById('journal-clear');
+      if (!clearBtn) {
+        out.errors.push('434: the journal has no clear-history button');
+      } else {
+        window.__SMOKE_ARGS__ = [];
+        clearBtn.click();
+        await sleep(150);
+        const cm = document.getElementById('confirm-modal');
+        if (cm && !cm.classList.contains('hidden')) {
+          document.getElementById('confirm-ok').click();
+          await sleep(200);
+        }
+        if (!window.__SMOKE_ARGS__.some(([cmd]) => cmd === 'clear_copy_history')) {
+          out.errors.push('434: clearing the history did not call clear_copy_history');
+        }
+        const histUndoToast = document.getElementById('toast');
+        const histUndoBtn = histUndoToast.querySelector('.toast-btn');
+        if (!histUndoToast.classList.contains('actionable') || !histUndoBtn) {
+          out.errors.push('434: clearing the copy history did not offer an undo toast');
+        } else {
+          window.__SMOKE_ARGS__ = [];
+          histUndoBtn.click();
+          await sleep(250);
+          const restoreCall = window.__SMOKE_ARGS__.find(([cmd]) => cmd === 'restore_copy_history');
+          if (!restoreCall || !Array.isArray(restoreCall[1].entries) || !restoreCall[1].entries.length) {
+            out.errors.push('434: undoing a cleared history did not replay any rows');
+          }
+          if (histUndoToast.classList.contains('show')) {
+            out.errors.push('434: the history-undo toast is still showing after being clicked');
+          }
+        }
+      }
+    }
+    // 434: clearing the clipboard inbox offers an Undo button that replays the
+    // snapshotted rows through restore_clip_inbox. The toolbar icon itself is
+    // gated on the (default-off) clipWatcher/pausedIcons flags -- unrelated to
+    // this check, so it is just unhidden here instead of toggling either flag.
+    {
+      const clipBtn = document.getElementById('clip-btn');
+      clipBtn.classList.remove('hidden');
+      window.__SMOKE_ARGS__ = [];
+      clipBtn.click();
+      await sleep(200);
+      const clipModal = document.getElementById('clip-modal');
+      if (!clipModal || clipModal.classList.contains('hidden')) {
+        out.errors.push('434: the clipboard inbox button did not open its modal');
+      } else {
+        const clipClearBtn = document.getElementById('clip-clear');
+        if (!clipClearBtn) {
+          out.errors.push('434: the clipboard inbox has no clear-all button');
+        } else {
+          window.__SMOKE_ARGS__ = [];
+          clipClearBtn.click();
+          await sleep(200);
+          if (!window.__SMOKE_ARGS__.some(([cmd]) => cmd === 'clip_inbox_clear')) {
+            out.errors.push('434: clearing the clipboard inbox did not call clip_inbox_clear');
+          }
+          const clipUndoToast = document.getElementById('toast');
+          const clipUndoBtn = clipUndoToast.querySelector('.toast-btn');
+          if (!clipUndoToast.classList.contains('actionable') || !clipUndoBtn) {
+            out.errors.push('434: clearing the clipboard inbox did not offer an undo toast');
+          } else {
+            window.__SMOKE_ARGS__ = [];
+            clipUndoBtn.click();
+            await sleep(250);
+            // The fixture's clip_inbox_list is empty, so an empty replay is the
+            // correct outcome here -- the call itself still has to happen.
+            if (!window.__SMOKE_ARGS__.some(([cmd]) => cmd === 'restore_clip_inbox')) {
+              out.errors.push('434: undoing a cleared clipboard inbox did not call restore_clip_inbox');
+            }
+            if (clipUndoToast.classList.contains('show')) {
+              out.errors.push('434: the clip-inbox-undo toast is still showing after being clicked');
+            }
+          }
+        }
+        document.getElementById('clip-close')?.click();
+        await sleep(150);
       }
     }
     // 105: the copy-history tag filter -- same picking logic as the library's own
@@ -7714,6 +7952,9 @@ PROBE = """
     if (/^(flag|val|tip|exp|stat|backup|help)[A-Z][A-Za-z]+$/.test(txt)) out.rawKeys.push(txt);
   }
   out.errors.push(...(window.__SMOKE_ERRORS__ || []));
+  } catch (e) {
+    out.errors.push('UNCAUGHT: ' + (e && e.message) + (e && e.stack ? ' | ' + String(e.stack).split(String.fromCharCode(10)).slice(0, 3).join(' <- ') : ''));
+  }
   const pre = document.createElement('pre');
   pre.id = 'SMOKE';
   pre.textContent = JSON.stringify(out);
@@ -10933,10 +11174,13 @@ def main():
                  # prompt-editor-to-lightbox round trip, then to 154s once the
                  # editor-scale check added its own draw/resize/undo round trip,
                  # then to 172s once the sync-folder check added three full
-                 # question-and-answer rounds, each with its own tab walk.
+                 # question-and-answer rounds, each with its own tab walk, then
+                 # to 220s once the undo-toast checks (434) added six of their
+                 # own round trips (view delete, tag delete, copy history,
+                 # clipboard inbox, batch delete, batch tag add/remove).
                  # The window has to hold the iframe plus Chrome's own frame.
                  f"--window-size={max(w + 30, 520)},{h + 140}",
-                 "--virtual-time-budget=172000", "--dump-dom",
+                 "--virtual-time-budget=220000", "--dump-dom",
                  wrapper.as_uri()],
                 # The dumped DOM carries all 20 languages; without an explicit
                 # codec Windows decodes it as cp1252 and the reader thread dies,
@@ -10991,7 +11235,7 @@ def main():
                  # its own group-survives-the-split probe, itself two full walks.
                  # Kept equal to the English sweep's own budget just above, since
                  # this runs the exact same probe script and had fallen behind it.
-                 "--virtual-time-budget=172000", "--dump-dom",
+                 "--virtual-time-budget=220000", "--dump-dom",
                  wrapper.as_uri()],
                 capture_output=True, text=True, encoding="utf-8", errors="replace",
                 timeout=240)

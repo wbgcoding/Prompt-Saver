@@ -138,6 +138,10 @@ let libSelected = new Set();
 let libLastId = null;          // anchor for shift-click range select
 let libDisplayOrder = [];      // ids in current display order (for range select)
 let gridDirty = false;         // batch ops changed prompts; rebuild grid on library close
+// Single-slot undo for a destructive action outside the editors (which have their
+// own undo stack already). A new destructive action always replaces whatever was
+// pending — there is no history, just the one most recent thing.
+let pendingUndo = null; // { restore }
 // Grid bulk selection — its own Set, independent of the library's libSelected.
 // Folder tiles are excluded: a folder stands for several prompts, and "select,
 // then recolor/move/delete" has no single obvious meaning for the group itself.
@@ -693,6 +697,27 @@ const ERROR_MSG_KEYS = {
 function errToast(err) {
   const s = String(err);
   toast(ERROR_MSG_KEYS[s] ? t(ERROR_MSG_KEYS[s]) : s);
+}
+
+// Runs the pending undo, if any, and clears the slot first so a restore that
+// itself triggers another destructive action cannot re-arm on top of itself.
+async function runPendingUndo() {
+  const slot = pendingUndo;
+  if (!slot) return;
+  pendingUndo = null;
+  try {
+    await slot.restore();
+  } catch (err) {
+    errToast(err);
+  }
+}
+// Shows `msg` with an Undo button wired to `restore` — unless the undoToast
+// feature is off, in which case it is a plain toast and nothing is armed (an
+// off switch must mean nothing is kept around to undo, not just a hidden button).
+function undoToast(msg, restore) {
+  if (!flag("undoToast")) { toast(msg); return; }
+  pendingUndo = { restore };
+  toast(msg, { label: t("undo"), onClick: runPendingUndo }, "", null, val("undoToastMs"));
 }
 
 function autoGrow(el) {
@@ -1296,6 +1321,10 @@ const FLAG_LABELS = {
   // Only matters once clipWatcher (itself off by default) is on -- ships ON so a
   // guessed password never has to be manually turned away in the first place.
   clipSkipSecrets: "flagClipSkipSecrets",
+  // An Undo button on the toast after a destructive action outside the editors
+  // (delete a view, clear copy history, clear the clipboard inbox, delete a tag,
+  // batch delete, batch tag add/remove). Ships ON.
+  undoToast: "flagUndoToast",
 };
 const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -1735,6 +1764,8 @@ const EXPERT_VALUES = {
   etaMinPct: { label: "valEtaMinPct", min: 0, max: 50, step: 1, def: 10, unit: "%", gate: "etaShow" },
   etaMinSecs: { label: "valEtaMinSecs", min: 0, max: 120, step: 5, def: 20, unit: "s", gate: "etaShow" },
   bgDoneKeepMin: { label: "bgDoneKeepMin", min: 1, max: 120, step: 1, def: 10, unit: "min" },
+  // How long the Undo button on a destructive-action toast stays clickable.
+  undoToastMs: { label: "valUndoToastMs", min: 2000, max: 20000, step: 500, def: 8000, unit: "ms", gate: "undoToast" },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -2065,7 +2096,7 @@ const EXPERT_TABS = [
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken"], values: ["dupThreshold", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "videoClipTtlMin", "errorLogKeepKb"], selects: ["trashRetentionDays"],
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken", "undoToast"], values: ["dupThreshold", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "videoClipTtlMin", "errorLogKeepKb", "undoToastMs"], selects: ["trashRetentionDays"],
       actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }] },
   ] },
 ];
@@ -2266,6 +2297,7 @@ const EXPERT_TIPS = [
   "dupFinder", "clipWatcher", "backupGfs", "backupBeforeReset", "backupBeforeDelete", "disarmMs",
   "recSweepBroken", "recBrokenGraceMin", "recSweepEveryMin", "videoClipTtlMin",
   "usageStats", "promptSync", "syncDir", "syncPollSecs", "syncFailMax", "clipSkipSecrets",
+  "undoToast", "undoToastMs",
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "kbFocusFadeMs", "snipPreviewVh",
   "historyPerPrompt", "dupThreshold", "clipMinChars", "clipInboxMax", "clipSecretMinLen", "historyMax",
@@ -4633,6 +4665,26 @@ function openViewModal(view) {
 function closeViewModal() {
   viewModal.root.classList.add("hidden");
   viewModalId = null;
+}
+
+// Undo for a deleted view — rebuilt through the normal view commands (a new id,
+// never the old one) rather than writing the View struct back whole, so members
+// and layouts stay in lockstep the same way any other view mutation keeps them.
+// The per-size layout arrangement itself is not restored, only membership and the
+// current grid size — the members reflow into free cells, same as a resize would.
+async function restoreDeletedView(deleted, reactivateId) {
+  settings = await invoke("add_view", { name: deleted.name, color: deleted.color || "" });
+  const newId = settings.active_view;
+  settings = await invoke("set_view_grid", { id: newId, cols: deleted.cols, rows: deleted.rows });
+  if (deleted.members && deleted.members.length) {
+    settings = await invoke("batch_prompts", { ids: deleted.members, action: "addView", color: null, favorite: null, viewId: newId });
+  }
+  if (reactivateId && settings.views.some((v) => v.id === reactivateId)) {
+    settings = await invoke("set_active_view", { id: reactivateId });
+  }
+  renderViews();
+  await renderGrid(true);
+  if (!libraryEl.classList.contains("hidden")) renderLibrary();
 }
 
 async function confirmViewModal() {
@@ -10248,6 +10300,16 @@ async function markClipSeen(items) {
   settings.ui_values = { ...(settings.ui_values || {}), clipSeenId: top };
   try { await invoke("set_ui_value", { key: "clipSeenId", value: top }); } catch (_) {}
 }
+// Undo for "clear clipboard inbox" — re-inserts the rows clip_inbox_clear just
+// removed, oldest first, through the same capped insert path a new watcher hit uses.
+async function restoreClipInbox(items) {
+  if (!items || !items.length) return;
+  try {
+    await invoke("restore_clip_inbox", { items: [...items].reverse().map((it) => ({ ts: it.ts, text: it.text })) });
+  } catch (err) { errToast(err); return; }
+  await refreshClipInbox();
+}
+
 async function refreshClipInbox() {
   if (!optFlag("clipWatcher")) { clipCount = 0; updateClipBadge(); return; }
   let items = [];
@@ -11313,6 +11375,29 @@ function closeTagManager() {
   closeTagPop();
 }
 
+// Undo for a deleted tag: re-adds the tag text to every prompt that had it and
+// restores its color, through the same batch/tag-color commands the rest of the
+// tag UI uses — the same "rewrite through the store, not prompt by prompt" rule
+// as the tag manager's own refresh().
+async function restoreDeletedTag(name, ids, color) {
+  const idset = new Set(ids);
+  if (ids.length) {
+    try {
+      settings = await invoke("batch_prompts", { ids, action: "tag-add", tag: name, color: null, favorite: null, viewId: null });
+    } catch (err) { errToast(err); return; }
+    const key = tagKey(name);
+    for (const p of prompts) {
+      if (idset.has(p.id) && !(p.tags || []).some((x) => tagKey(x) === key)) p.tags = [...(p.tags || []), name];
+    }
+  }
+  if (color) {
+    try { settings = await invoke("set_tag_color", { name, color }); } catch (err) { errToast(err); }
+  }
+  await renderGrid();
+  renderTagManager();
+  renderLibrary();
+}
+
 function renderTagManager() {
   const list = $("tag-modal-list");
   if (!list) return;
@@ -11407,10 +11492,15 @@ function renderTagManager() {
         confirmLabel: t("delete"),
       });
       if (!ok) return;
+      const key = tagKey(name);
+      const hadIds = prompts.filter((p) => (p.tags || []).some((x) => tagKey(x) === key)).map((p) => p.id);
+      const color = tagColor(name);
       try { settings = await invoke("delete_tag", { name }); }
       catch (err) { errToast(err); return; }
-      libTags.delete(tagKey(name));
+      libTags.delete(key);
+      for (const p of prompts) p.tags = (p.tags || []).filter((x) => tagKey(x) !== key);
       await refresh();
+      undoToast(t("tagDeletedToast").replace("{name}", name), () => restoreDeletedTag(name, hadIds, color));
     });
     row.append(dot, label, count, rename, merge, del);
     list.appendChild(row);
@@ -12711,6 +12801,43 @@ async function doBatch(action, extra = {}) {
   updateBatchBar();
   return true;
 }
+
+// Undo for a batch tag add/remove: only the ids the original action actually
+// touched, inverted, so a prompt that already carried the tag before the batch
+// (never "changed") is left alone by the undo too.
+async function restoreBatchTag(inverseAction, ids, tag) {
+  if (!ids.length) return;
+  try {
+    settings = await invoke("batch_prompts", { ids, action: inverseAction, color: null, favorite: null, viewId: null, tag });
+  } catch (err) { errToast(err); return; }
+  const key = tagKey(tag);
+  const idset = new Set(ids);
+  for (const p of prompts) {
+    if (!idset.has(p.id)) continue;
+    if (inverseAction === "tag-add" && !(p.tags || []).some((x) => tagKey(x) === key)) p.tags = [...(p.tags || []), tag];
+    else if (inverseAction === "tag-remove") p.tags = (p.tags || []).filter((x) => tagKey(x) !== key);
+  }
+  gridDirty = true;
+  renderLibrary();
+}
+
+// Undo for a batch delete: every deleted prompt went to the trash, not gone for
+// good, so restoring is just restore_prompt per id — the same command and the
+// same "lands in the active view, nothing else app-level comes back" behaviour
+// a single trash restore already has.
+async function restoreBatchDelete(ids) {
+  for (const id of ids) {
+    try {
+      const st = await invoke("restore_prompt", { id });
+      prompts = st.prompts;
+      settings = st.settings;
+    } catch (err) { errToast(err); }
+  }
+  gridDirty = true;
+  await renderGrid(true);
+  if (!libraryEl.classList.contains("hidden")) renderLibrary();
+}
+
 async function batchExport(format) {
   const ids = [...libSelected];
   if (!ids.length) return;
@@ -12927,6 +13054,21 @@ async function loadJournal() {
   const grouped = flag("historyGrouped");
   journalLog = await invoke("recent_copies", { limit: val("journalLimit"), grouped }).catch(() => []);
   renderJournal();
+}
+
+// Undo for "clear copy history" — writes the row-level log back plus the two
+// counter maps clear_copy_history wipes alongside it.
+async function restoreCopyHistory(rows, usage, lastUsed) {
+  try {
+    await invoke("restore_copy_history", {
+      entries: rows.map((r) => ({ ts: r.ts, id: r.id })),
+      usage,
+      lastUsed,
+    });
+  } catch (err) { errToast(err); return; }
+  settings.usage = usage;
+  settings.last_used = lastUsed;
+  await loadJournal();
 }
 
 // Same bar as the library's (renderTagBar) -- only the extra
@@ -16781,8 +16923,10 @@ function bind() {
     const tag = (raw || "").trim();
     if (!tag) return;
     const key = tagKey(tag);
-    const changed = prompts.filter((p) => libSelected.has(p.id) && !(p.tags || []).some((x) => tagKey(x) === key)).length;
-    if (await doBatch("tag-add", { tag })) toast(t("batchTagAddDone").replace("{n}", String(changed)));
+    const changedIds = prompts.filter((p) => libSelected.has(p.id) && !(p.tags || []).some((x) => tagKey(x) === key)).map((p) => p.id);
+    if (await doBatch("tag-add", { tag })) {
+      undoToast(t("batchTagAddDone").replace("{n}", String(changedIds.length)), () => restoreBatchTag("tag-remove", changedIds, tag));
+    }
   });
   $("lib-batch-tag-remove").addEventListener("click", async () => {
     const n = libSelected.size;
@@ -16797,8 +16941,10 @@ function bind() {
     const tag = (raw || "").trim();
     if (!tag) return;
     const key = tagKey(tag);
-    const changed = prompts.filter((p) => libSelected.has(p.id) && (p.tags || []).some((x) => tagKey(x) === key)).length;
-    if (await doBatch("tag-remove", { tag })) toast(t("batchTagRemoveDone").replace("{n}", String(changed)));
+    const changedIds = prompts.filter((p) => libSelected.has(p.id) && (p.tags || []).some((x) => tagKey(x) === key)).map((p) => p.id);
+    if (await doBatch("tag-remove", { tag })) {
+      undoToast(t("batchTagRemoveDone").replace("{n}", String(changedIds.length)), () => restoreBatchTag("tag-add", changedIds, tag));
+    }
   });
   // Only meaningful at exactly two selected (updateBatchBar disables it
   // otherwise) -- opens the same compare view a tile's own context menu does.
@@ -16810,8 +16956,11 @@ function bind() {
   $("lib-batch-delete").addEventListener("click", (e) => {
     const n = libSelected.size;
     if (!n) return;
+    const ids = [...libSelected];
     armDelete(e.currentTarget, t("batchDeleteConfirm").replace("{n}", String(n)), async () => {
-      if (await doBatch("delete")) toast(t("batchDeleteDone").replace("{n}", String(n)));
+      if (await doBatch("delete")) {
+        undoToast(t("batchDeleteDone").replace("{n}", String(n)), () => restoreBatchDelete(ids));
+      }
     });
   });
   // Esc leaves selection mode before it closes the library (capture beats the overlay).
@@ -16873,7 +17022,12 @@ function bind() {
   });
   $("clip-close").addEventListener("click", () => $("clip-modal").classList.add("hidden"));
   $("clip-modal").addEventListener("pointerdown", (e) => { if (e.target === $("clip-modal")) $("clip-modal").classList.add("hidden"); });
-  $("clip-clear").addEventListener("click", async () => { await invoke("clip_inbox_clear").catch((e) => errToast(e)); refreshClipInbox(); });
+  $("clip-clear").addEventListener("click", async () => {
+    const items = await invoke("clip_inbox_list").catch(() => []);
+    await invoke("clip_inbox_clear").catch((e) => errToast(e));
+    refreshClipInbox();
+    undoToast(t("clipInboxClearedToast"), () => restoreClipInbox(items));
+  });
   // Emergency wipe: clears the live inbox AND scrubs clip_inbox rows out of every
   // rotating backup snapshot. Irreversible and touches every backup, so it asks
   // twice — the second dialog spells out that it cannot be undone.
@@ -16995,10 +17149,18 @@ function bind() {
       });
       if (!ok) return;
     }
+    // Snapshot everything clear_copy_history is about to wipe, so Undo can
+    // write it all back: the row-level log (reused via the same call the
+    // journal itself uses to fill its list) plus the two counter maps.
+    let rows = [];
+    try { rows = await invoke("recent_copies", { limit: 1000000, grouped: false }); } catch { /* best effort */ }
+    const usage = { ...(settings.usage || {}) };
+    const lastUsed = { ...(settings.last_used || {}) };
     await invoke("clear_copy_history").catch((e) => errToast(e));
     settings.usage = {};
     settings.last_used = {};
     await loadJournal();
+    undoToast(t("historyClearedToast"), () => restoreCopyHistory(rows, usage, lastUsed));
   });
   $("settings-close").addEventListener("click", hideSettings);
   // pointerdown (not click): selecting text that ends outside an input must not close.
@@ -17023,6 +17185,11 @@ function bind() {
       setTimeout(() => disarmButton(viewModal.delete, t("delete")), DISARM_MS);
       return;
     }
+    // Snapshot before the delete call — `settings` is only replaced once it
+    // resolves, so the pre-delete view is still sitting in the current list.
+    const deleted = settings.views.find((v) => v.id === viewModalId);
+    const wasActive = settings.active_view === viewModalId;
+    const prevActive = settings.active_view;
     try {
       settings = await invoke("delete_view", { id: viewModalId });
     } catch (err) {
@@ -17032,6 +17199,9 @@ function bind() {
     closeViewModal();
     renderViews();
     await renderGrid(true);
+    if (deleted) {
+      undoToast(t("viewDeletedToast").replace("{name}", deleted.name), () => restoreDeletedView(deleted, wasActive ? null : prevActive));
+    }
   });
 
   $("opt-minimize").addEventListener("change", (e) => {

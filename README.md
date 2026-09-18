@@ -37,6 +37,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Private notes** | A notes field per prompt for context you keep but never copy — searchable, shown in the tooltip |
 | **Favorites** | Star prompts for a live favorites view |
 | **Batch editing** | Multi-select in the library to recolor, favorite, move between views, export or delete in one go |
+| **Undo** | Deleting a view, clearing the copy history, clearing the clipboard inbox, deleting a tag, or a batch delete or tag change offers an Undo button right on the confirmation |
 | **Duplicate finder** | Finds near-identical prompts, shows them side by side, keeps the one you pick |
 
 ### ⚡ Copy
