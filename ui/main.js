@@ -4479,7 +4479,7 @@ async function dropTilesOnView(ids, targetViewId, fromViewId, copy) {
   } catch (e) {
     const m = String(e).match(/view-full:(\d+)/);
     if (m) toast(t("viewDropFull").replace("{name}", viewById(targetViewId)?.name || "").replace("{n}", m[1]));
-    else errToast(e);
+    else toast(String(e) === "save-failed" ? t("persistFailed") : String(e));
     return;
   }
   closeViewGroupPop();

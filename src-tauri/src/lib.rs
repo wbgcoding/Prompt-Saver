@@ -5392,6 +5392,108 @@ fn strip_ids_from_view(view: &mut View, ids: &[String]) {
     view.members.retain(|m| !ids.contains(m));
 }
 
+// Mutation + save core shared by batch_prompts' "addView", "removeView" and
+// "moveView" actions -- kept free of AppHandle so the rollback below can be
+// proven in a unit test. `save` commits `settings` exactly like save_settings
+// does in production and reports whether it landed; on `false` this restores
+// `settings.views` to what it held before the mutation and reports
+// "save-failed", the same contract batch_prompts already gives its other
+// actions for a failed write. A missing view is a silent no-op, matching what
+// the inline arms did before this was pulled out.
+fn apply_view_batch_action(
+    settings: &mut Settings,
+    action: &str,
+    ids: &[String],
+    view_id: &str,
+    from_view_id: &str,
+    mut save: impl FnMut(&Settings) -> bool,
+) -> Result<(), String> {
+    match action {
+        "addView" | "removeView" => {
+            // A grid folder occupies a cell via `tile_folders`, deliberately outside
+            // `view.layouts` (it is not a layout entry, it is the folder's own `cell`
+            // field) -- read it before `views` is borrowed mutably below.
+            let folder_cells: std::collections::HashSet<(u32, u32)> = settings
+                .tile_folders
+                .iter()
+                .filter(|f| f.view_id == view_id)
+                .map(|f| (f.cell[0], f.cell[1]))
+                .collect();
+            let Some(vidx) = settings.views.iter().position(|v| v.id == view_id) else {
+                return Ok(());
+            };
+            let before = settings.views.clone();
+            let (cols, rows) = (settings.views[vidx].cols, settings.views[vidx].rows);
+            let key = grid_key(cols, rows);
+            let layout = settings.views[vidx].layouts.entry(key).or_default();
+            if action == "removeView" {
+                for id in ids {
+                    layout.remove(id);
+                }
+                settings.views[vidx].members.retain(|m| !ids.contains(m));
+            } else {
+                if !place_ids_in_view(layout, ids, cols, rows, &folder_cells) {
+                    let deficit = view_capacity_deficit(layout, ids, cols, rows, &folder_cells);
+                    return Err(format!("view-full:{deficit}"));
+                }
+                for id in ids {
+                    if !settings.views[vidx].members.iter().any(|m| m == id) {
+                        settings.views[vidx].members.push(id.clone());
+                    }
+                }
+            }
+            if !save(settings) {
+                settings.views = before;
+                return Err("save-failed".into());
+            }
+            Ok(())
+        }
+        // doGridMove used to call addView then removeView as two separate
+        // IPC round-trips (two separate saves) - a crash between them left the
+        // prompt placed in both views. Both layouts now change in the SAME
+        // in-memory settings before the single save below, so a failure (or a
+        // crash) can only ever be seen before or after the whole move, never
+        // mid-way.
+        "moveView" => {
+            let folder_cells: std::collections::HashSet<(u32, u32)> = settings
+                .tile_folders
+                .iter()
+                .filter(|f| f.view_id == view_id)
+                .map(|f| (f.cell[0], f.cell[1]))
+                .collect();
+            let to_idx = settings.views.iter().position(|v| v.id == view_id);
+            let from_idx = settings.views.iter().position(|v| v.id == from_view_id);
+            let (Some(to_idx), Some(from_idx)) = (to_idx, from_idx) else {
+                return Ok(());
+            };
+            let before = settings.views.clone();
+            let (cols, rows) = (settings.views[to_idx].cols, settings.views[to_idx].rows);
+            let key = grid_key(cols, rows);
+            let layout = settings.views[to_idx].layouts.entry(key).or_default();
+            // All-or-nothing - only drop the source placement once the
+            // target has durably accepted every id.
+            if !place_ids_in_view(layout, ids, cols, rows, &folder_cells) {
+                let deficit = view_capacity_deficit(layout, ids, cols, rows, &folder_cells);
+                return Err(format!("view-full:{deficit}"));
+            }
+            for id in ids {
+                if !settings.views[to_idx].members.iter().any(|m| m == id) {
+                    settings.views[to_idx].members.push(id.clone());
+                }
+            }
+            if to_idx != from_idx {
+                strip_ids_from_view(&mut settings.views[from_idx], ids);
+            }
+            if !save(settings) {
+                settings.views = before;
+                return Err("save-failed".into());
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
 // "Store files" opt-in flag (off by default).
 fn store_files_enabled(store: &Store) -> bool {
     store.settings.ui_flags.get("storeFiles").copied().unwrap_or(false)
@@ -6494,78 +6596,18 @@ async fn batch_prompts(
         }
         "addView" | "removeView" => {
             let vid = view_id.unwrap_or_default();
-            // A grid folder occupies a cell via `tile_folders`, deliberately outside
-            // `view.layouts` (it is not a layout entry, it is the folder's own `cell`
-            // field) -- read it before `view` is borrowed mutably below, since both
-            // can't happen at once.
-            let folder_cells: std::collections::HashSet<(u32, u32)> = store
-                .settings
-                .tile_folders
-                .iter()
-                .filter(|f| f.view_id == vid)
-                .map(|f| (f.cell[0], f.cell[1]))
-                .collect();
-            if let Some(view) = store.settings.views.iter_mut().find(|v| v.id == vid) {
-                let (cols, rows) = (view.cols, view.rows);
-                let key = grid_key(cols, rows);
-                let layout = view.layouts.entry(key).or_default();
-                if action == "removeView" {
-                    for id in &ids {
-                        layout.remove(id);
-                    }
-                    view.members.retain(|m| !ids.contains(m));
-                } else {
-                    if !place_ids_in_view(layout, &ids, cols, rows, &folder_cells) {
-                        let deficit = view_capacity_deficit(layout, &ids, cols, rows, &folder_cells);
-                        return Err(format!("view-full:{deficit}"));
-                    }
-                    for id in &ids {
-                        if !view.members.iter().any(|m| m == id) {
-                            view.members.push(id.clone());
-                        }
-                    }
-                }
-                save_settings(&app, &store.settings);
-            }
+            apply_view_batch_action(&mut store.settings, &action, &ids, &vid, "", |s| save_settings(&app, s))?;
         }
         // doGridMove used to call addView then removeView as two separate
         // IPC round-trips (two separate save_settings) - a crash between them left
         // the prompt placed in both views. Both layouts now change in the SAME
-        // in-memory settings before the single save_settings below, so a failure
-        // (or a crash) can only ever be seen before or after the whole move, never
+        // in-memory settings before the single save below, so a failure (or a
+        // crash) can only ever be seen before or after the whole move, never
         // mid-way.
         "moveView" => {
             let to_id = view_id.unwrap_or_default();
             let from_id = from_view_id.unwrap_or_default();
-            let folder_cells: std::collections::HashSet<(u32, u32)> = store
-                .settings
-                .tile_folders
-                .iter()
-                .filter(|f| f.view_id == to_id)
-                .map(|f| (f.cell[0], f.cell[1]))
-                .collect();
-            let to_idx = store.settings.views.iter().position(|v| v.id == to_id);
-            let from_idx = store.settings.views.iter().position(|v| v.id == from_id);
-            if let (Some(to_idx), Some(from_idx)) = (to_idx, from_idx) {
-                let (cols, rows) = (store.settings.views[to_idx].cols, store.settings.views[to_idx].rows);
-                let key = grid_key(cols, rows);
-                let layout = store.settings.views[to_idx].layouts.entry(key).or_default();
-                // All-or-nothing - only drop the source placement once the
-                // target has durably accepted every id.
-                if !place_ids_in_view(layout, &ids, cols, rows, &folder_cells) {
-                    let deficit = view_capacity_deficit(layout, &ids, cols, rows, &folder_cells);
-                    return Err(format!("view-full:{deficit}"));
-                }
-                for id in &ids {
-                    if !store.settings.views[to_idx].members.iter().any(|m| m == id) {
-                        store.settings.views[to_idx].members.push(id.clone());
-                    }
-                }
-                if to_idx != from_idx {
-                    strip_ids_from_view(&mut store.settings.views[from_idx], &ids);
-                }
-                save_settings(&app, &store.settings);
-            }
+            apply_view_batch_action(&mut store.settings, &action, &ids, &to_id, &from_id, |s| save_settings(&app, s))?;
         }
         // Adding a tag a prompt already carries, or removing one it never had, is
         // not an error -- both just leave that prompt untouched. Casing follows
@@ -35291,6 +35333,75 @@ mod tests {
         assert_eq!(other_view.members, other_before.members);
         assert_eq!(other_view.layouts, other_before.layouts);
         assert_eq!(to_view.layouts[&grid_key(2, 1)].get("a"), Some(&[0, 0]));
+    }
+
+    #[test]
+    fn moveview_action_rolls_back_the_move_when_save_fails() {
+        // A failed write must never leave the in-memory move standing -- the disk
+        // would show the old placement after a restart while the running app kept
+        // showing the new one until then, exactly the drift 477 closes.
+        let mut settings = Settings::default();
+        let mut from_view = test_view("home");
+        from_view.cols = 2;
+        from_view.rows = 1;
+        from_view.members = vec!["a".to_string()];
+        from_view.layouts.insert(grid_key(2, 1), HashMap::from([("a".to_string(), [0, 0])]));
+        let mut to_view = test_view("work");
+        to_view.cols = 2;
+        to_view.rows = 1;
+        settings.views = vec![from_view, to_view];
+        let before_from_members = settings.views[0].members.clone();
+        let before_from_layouts = settings.views[0].layouts.clone();
+        let before_to_members = settings.views[1].members.clone();
+        let before_to_layouts = settings.views[1].layouts.clone();
+
+        let ids: Vec<String> = vec!["a".to_string()];
+        let result = apply_view_batch_action(&mut settings, "moveView", &ids, "work", "home", |_s| false);
+        assert_eq!(result, Err("save-failed".to_string()));
+        assert_eq!(settings.views[0].members, before_from_members, "the source view's members must be untouched");
+        assert_eq!(settings.views[0].layouts, before_from_layouts, "the source view's layout must be untouched");
+        assert_eq!(settings.views[1].members, before_to_members, "the target view's members must be untouched");
+        assert_eq!(settings.views[1].layouts, before_to_layouts, "the target view's layout must be untouched");
+    }
+
+    #[test]
+    fn moveview_action_saves_and_keeps_the_move_when_the_write_succeeds() {
+        let mut settings = Settings::default();
+        let mut from_view = test_view("home");
+        from_view.cols = 2;
+        from_view.rows = 1;
+        from_view.members = vec!["a".to_string()];
+        from_view.layouts.insert(grid_key(2, 1), HashMap::from([("a".to_string(), [0, 0])]));
+        let mut to_view = test_view("work");
+        to_view.cols = 2;
+        to_view.rows = 1;
+        settings.views = vec![from_view, to_view];
+
+        let ids: Vec<String> = vec!["a".to_string()];
+        let mut saved = false;
+        let result =
+            apply_view_batch_action(&mut settings, "moveView", &ids, "work", "home", |_s| { saved = true; true });
+        assert!(result.is_ok());
+        assert!(saved, "a successful move must still call through to save");
+        assert!(settings.views[0].members.is_empty());
+        assert_eq!(settings.views[1].members, vec!["a".to_string()]);
+    }
+
+    #[test]
+    fn addview_action_rolls_back_the_placement_when_save_fails() {
+        let mut settings = Settings::default();
+        let mut view = test_view("work");
+        view.cols = 2;
+        view.rows = 1;
+        settings.views = vec![view];
+        let before_members = settings.views[0].members.clone();
+        let before_layouts = settings.views[0].layouts.clone();
+
+        let ids: Vec<String> = vec!["a".to_string()];
+        let result = apply_view_batch_action(&mut settings, "addView", &ids, "work", "", |_s| false);
+        assert_eq!(result, Err("save-failed".to_string()));
+        assert_eq!(settings.views[0].members, before_members, "the view's members must be untouched");
+        assert_eq!(settings.views[0].layouts, before_layouts, "the view's layout must be untouched");
     }
 
     // `members` decides who belongs to a view, `layouts` only where they
