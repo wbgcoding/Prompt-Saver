@@ -409,6 +409,15 @@ the video editor and the introduction tour ship on).
   Markdown text, so Word, Outlook or a browser shows the formatting while a
   plain text field still gets exactly the Markdown source a normal copy
   would have given it.
+- **An overview of everything that is kept.** The statistics and backups window
+  gains one row per kind of kept data: the trash, the copy history, the
+  clipboard inbox, recordings, discarded recordings, temporary exports and edit
+  states. Each row shows how much it holds and how long it is kept, jumps
+  straight to the setting that governs it, and can clean it up on the spot.
+  Kept recordings gained a retention window of their own, off by default.
+- **The video editor's limit on extra video sources is adjustable.** It used to
+  be a fixed eight; it is now a number in the expert menu, from one to
+  thirty-two, and still eight unless changed.
 
 ### Improved
 
