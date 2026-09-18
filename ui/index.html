@@ -574,7 +574,13 @@
         </div>
       </div>
       <div id="library-search" class="library-search">
-        <input id="library-q" class="modal-input" type="text" data-i18n-ph="searchPh" data-i18n-aria="searchPh" data-i18n-title="tipSearchExclude" />
+        <!-- Saved searches: one-click chips above the field, only shown once at
+             least one search is saved (feature-gated via body.noflag-savedSearches). -->
+        <div id="library-saved-searches" class="lib-saved-searches"></div>
+        <div class="lib-q-wrap">
+          <input id="library-q" class="modal-input" type="text" data-i18n-ph="searchPh" data-i18n-aria="searchPh" data-i18n-title="tipSearchExclude" />
+          <button id="library-search-save" type="button" class="icon-btn lib-search-save" data-i18n-title="saveSearchAction" data-i18n-aria="saveSearchAction">☆</button>
+        </div>
         <!-- Type chips are additive (several at once); the colours sit on the same
              line, exactly as in the copy history. -->
         <div class="journal-filters">

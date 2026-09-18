@@ -1069,6 +1069,125 @@ PROBE = """
         }
       }
     }
+    // 436: saved searches keep a query, its active tag filters and the current
+    // sort together as one chip. Saving, applying, the cap, renaming and
+    // deleting are all self-contained here and end with the list empty again.
+    {
+      const saveBtn436 = document.getElementById('library-search-save');
+      const firstTagChip436 = document.querySelector('#library-tagbar .tag-chip.tag-filter');
+      if (!saveBtn436 || !firstTagChip436) {
+        out.errors.push('436: the search-save button or a tag filter chip is missing');
+      } else {
+        // Every tag toggle rebuilds #library-tagbar from scratch, so a chip
+        // reference from before that rebuild is stale -- always look it back
+        // up by its name instead of holding onto the DOM node.
+        const tagName436 = firstTagChip436.textContent;
+        const findTagChip436 = () => [...document.querySelectorAll('#library-tagbar .tag-chip.tag-filter')].find((c) => c.textContent === tagName436);
+        q.value = 'zzsaved436';
+        q.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(250);
+        findTagChip436().click();
+        await sleep(150);
+        const sortSel436 = document.getElementById('library-sort');
+        const sortBefore436 = sortSel436.value;
+        const altSort436 = [...sortSel436.options].map((o) => o.value).find((v) => v !== sortBefore436);
+        if (altSort436) {
+          sortSel436.value = altSort436;
+          sortSel436.dispatchEvent(new Event('change', { bubbles: true }));
+          await sleep(150);
+        }
+        saveBtn436.click();
+        await sleep(200);
+        document.getElementById('confirm-input').value = 'SmokeSaved1';
+        document.getElementById('confirm-ok').click();
+        await sleep(250);
+        const chipsOf436 = () => [...document.querySelectorAll('#library-saved-searches .lib-saved-search-chip')];
+        if (!chipsOf436().some((c) => c.textContent === 'SmokeSaved1')) {
+          out.errors.push('436: saving a search did not add a chip for it');
+        }
+        // Forget the search, then bring it back with one click.
+        q.value = '';
+        q.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(200);
+        findTagChip436().click(); // deselect
+        await sleep(150);
+        if (altSort436) { sortSel436.value = sortBefore436; sortSel436.dispatchEvent(new Event('change', { bubbles: true })); await sleep(150); }
+        const savedChip436 = chipsOf436().find((c) => c.textContent === 'SmokeSaved1');
+        savedChip436?.click();
+        await sleep(250);
+        if (q.value !== 'zzsaved436') out.errors.push('436: clicking a saved search did not restore the query text');
+        if (!findTagChip436()?.classList.contains('active')) out.errors.push('436: clicking a saved search did not restore its tag filter');
+        if (altSort436 && sortSel436.value !== altSort436) out.errors.push('436: clicking a saved search did not restore its sort');
+        // Leave the tag filter the way this block found it, so later checks see
+        // the full, unfiltered library list again.
+        findTagChip436()?.click();
+        await sleep(150);
+        // Persists across closing and reopening the library.
+        await click('library-close');
+        await sleep(150);
+        await click('library-btn');
+        await sleep(250);
+        if (!chipsOf436().some((c) => c.textContent === 'SmokeSaved1')) {
+          out.errors.push('436: a saved search did not survive closing and reopening the library');
+        }
+        // The cap: 4 more reach the default limit of 5, a 6th is refused and
+        // names the oldest one instead of silently dropping it.
+        for (let i = 2; i <= 5; i++) {
+          saveBtn436.click();
+          await sleep(200);
+          document.getElementById('confirm-input').value = 'SmokeSaved' + i;
+          document.getElementById('confirm-ok').click();
+          await sleep(200);
+        }
+        if (chipsOf436().length !== 5) {
+          out.errors.push('436: expected exactly 5 saved searches at the cap, found ' + chipsOf436().length);
+        }
+        const toastBefore436 = document.getElementById('toast').textContent;
+        saveBtn436.click();
+        await sleep(200);
+        const dialogOpen436 = !document.getElementById('confirm-modal').classList.contains('hidden');
+        if (dialogOpen436) {
+          out.errors.push('436: saving past the cap opened a dialog instead of being refused up front');
+          document.getElementById('confirm-cancel').click();
+          await sleep(150);
+        } else {
+          const toastAfter436 = document.getElementById('toast').textContent;
+          if (toastAfter436 === toastBefore436 || !toastAfter436.includes('SmokeSaved1')) {
+            out.errors.push('436: the at-cap message did not name the oldest saved search');
+          }
+        }
+        if (chipsOf436().length !== 5) out.errors.push('436: a refused save past the cap changed the saved search count');
+        // Rename, then delete, through the same right-click dialog.
+        const renameTarget436 = chipsOf436().find((c) => c.textContent === 'SmokeSaved2');
+        if (!renameTarget436) {
+          out.errors.push('436: "SmokeSaved2" is missing before the rename check');
+        } else {
+          renameTarget436.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }));
+          await sleep(150);
+          document.getElementById('confirm-input').value = 'SmokeRenamed436';
+          document.getElementById('confirm-ok').click();
+          await sleep(250);
+          if (!chipsOf436().some((c) => c.textContent === 'SmokeRenamed436')) {
+            out.errors.push('436: renaming a saved search did not change its chip label');
+          }
+          if (chipsOf436().some((c) => c.textContent === 'SmokeSaved2')) {
+            out.errors.push('436: the old name is still shown after renaming a saved search');
+          }
+        }
+        // Clean up every chip this block created, through its own delete path,
+        // so later checks see an empty saved-search row again.
+        let guard436 = 0;
+        while (chipsOf436().length && guard436 < 10) {
+          const c = chipsOf436()[0];
+          c.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }));
+          await sleep(150);
+          document.getElementById('confirm-alt').click();
+          await sleep(200);
+          guard436++;
+        }
+        if (chipsOf436().length) out.errors.push('436: deleting saved searches did not empty the list again');
+      }
+    }
     // P25: the 2 most-used tags across the fixture (Work, Draft) are offered as
     // one-click chips on an untagged prompt, and vanish once actually added.
     {

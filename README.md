@@ -32,6 +32,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Grid & views** | Free placement on a per-view grid (1×1 up to 20×20), drag tiles anywhere, drop on an occupied cell to swap. Up to 20 named views, each with its own size and layout. Drop a tile on a view tab to move it into that view, Ctrl to copy it there instead; hovering a collapsed view group opens it |
 | **Library** | Every saved prompt in one searchable list — copy, edit, drag onto the grid, filter by color or type |
 | **Search & sort** | Typo-tolerant search ("promt" still finds "prompt"), sorted by most used or recently used |
+| **Saved searches** | Star a query, its tag filters and sort to bring it back with one click from a chip above the search field |
 | **Tags** | Label prompts with your own colored tags and narrow the library down to any combination of them |
 | **Archive** | Set a prompt aside without deleting it — hidden from the library and grid, still findable by search and included in export and backups |
 | **View groups** | Drag one view tab onto another to collect them into a folder tab with a member popover |

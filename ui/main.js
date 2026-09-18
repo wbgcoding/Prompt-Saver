@@ -1148,6 +1148,7 @@ const FLAG_LABELS = {
   historyGrouped: "flagHistoryGrouped",
   librarySearch: "flagLibrarySearch",
   searchSuggest: "flagSearchSuggest",
+  savedSearches: "flagSavedSearches",
   colorFilter: "flagColorFilter",
   closeAfterCopy: "flagCloseAfterCopy",
   libraryCloseToggle: "flagLibraryCloseToggle",
@@ -1540,6 +1541,7 @@ const EXPERT_VALUES = {
   libraryWidth: { label: "valLibraryWidth", min: 520, max: 1400, step: 20, def: 900, unit: "px" },
   // How many recent search terms the suggestions dropdown keeps + shows.
   searchRecentMax: { label: "valSearchRecentMax", min: 1, max: 20, step: 1, def: 8, unit: "", gate: "searchSuggest" },
+  savedSearchMax: { label: "valSavedSearchMax", min: 3, max: 10, step: 1, def: 5, unit: "", gate: "savedSearches" },
   // How long the library search waits after the last keystroke before it re-filters.
   searchDebounceMs: { label: "valSearchDebounceMs", min: 0, max: 600, step: 10, def: 120, unit: "ms", gate: "librarySearch" },
   // Caps the recognized text kept per picture, so a screenshot of a wall of
@@ -2085,7 +2087,7 @@ const EXPERT_TABS = [
     { title: "expGroupLimits", values: ["maxViews", "gridMax", "previewLen", "nameMaxLen"] },
   ] },
   { title: "expTabLibrary", groups: [
-    { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "ocrIndex", "archiveTag"], values: ["searchRecentMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs", "ocrIndexMaxChars"], dropdowns: ["fuzzyMaxTypos"] },
+    { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "savedSearches", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "ocrIndex", "archiveTag"], values: ["searchRecentMax", "savedSearchMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs", "ocrIndexMaxChars"], dropdowns: ["fuzzyMaxTypos"] },
     { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx", "tagPopCols"], dropdowns: ["tagFilterMode", "tagSort"] },
     // Everything that records or shows copy history lives with the history view.
     { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", { key: "journalTagFilter", gate: "tags" }, "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalLimit", "journalWidth"], selects: ["historyDays"] },
@@ -2307,7 +2309,7 @@ const EXPERT_TIPS = [
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "kbFocusFadeMs", "snipPreviewVh",
   "historyPerPrompt", "dupThreshold", "clipMinChars", "clipInboxMax", "clipSecretMinLen", "historyMax",
-  "journalLimit", "previewLen", "nameMaxLen", "searchRecentMax", "maxViews", "gridMax",
+  "journalLimit", "previewLen", "nameMaxLen", "searchRecentMax", "savedSearchMax", "maxViews", "gridMax",
   "viewBorder", "statsTopN", "viewGroups", "viewGroupMaxRows", "multiViewPrompt",
   "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
 ];
@@ -12281,9 +12283,8 @@ async function ensureArchiveTagName() {
   const name = archiveTagName();
   if (txt("archiveTag")) return name;
   if (!archiveTagEnsuring) {
-    archiveTagEnsuring = invoke("set_ui_text", { key: "archiveTag", value: name })
-      .then((s) => { settings = s; })
-      .catch((err) => errToast(err));
+    settings.ui_texts = { ...(settings.ui_texts || {}), archiveTag: name };
+    archiveTagEnsuring = invoke("set_ui_text", { key: "archiveTag", value: name }).catch((err) => errToast(err));
   }
   await archiveTagEnsuring;
   return name;
@@ -12304,6 +12305,127 @@ function libMatches(p) {
   // toggle is on; typing an actual query still finds it, the list is only quieter.
   if (flag("archiveTag") && !libQuery.trim() && !libShowArchive && isArchived(p)) return false;
   return libSearchScore(p).score > 0;
+}
+
+// Saved searches: query text, active tag filters and sort, kept together as one
+// JSON blob in a single settings slot -- no new backend concept needed, the
+// generic set_ui_text command already persists any string.
+function loadSavedSearches() {
+  try {
+    const list = JSON.parse(txt("savedSearches") || "[]");
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+async function persistSavedSearches(list) {
+  const value = JSON.stringify(list);
+  settings.ui_texts = { ...(settings.ui_texts || {}), savedSearches: value };
+  await invoke("set_ui_text", { key: "savedSearches", value }).catch((err) => errToast(err));
+}
+// A long query would blow up the chip row, so the suggested name is a plain
+// truncation of it -- still editable in the same dialog before it is saved.
+function suggestedSearchName(query) {
+  const s = query.trim();
+  return s.length > 40 ? s.slice(0, 40).trim() + "…" : s;
+}
+function renderSavedSearches() {
+  const bar = $("library-saved-searches");
+  if (!bar) return;
+  bar.innerHTML = "";
+  if (!flag("savedSearches")) return;
+  const list = loadSavedSearches();
+  list.forEach((entry, i) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "tag-chip lib-saved-search-chip";
+    chip.draggable = true;
+    chip.title = entry.query || entry.name;
+    const label = document.createElement("span");
+    label.className = "tag-chip-label";
+    label.textContent = entry.name;
+    chip.appendChild(label);
+    chip.addEventListener("click", () => applySavedSearch(entry));
+    chip.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      editSavedSearch(i);
+    });
+    chip.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/plain", String(i));
+      e.dataTransfer.effectAllowed = "move";
+    });
+    chip.addEventListener("dragover", (e) => { e.preventDefault(); chip.classList.add("drag-over"); });
+    chip.addEventListener("dragleave", () => chip.classList.remove("drag-over"));
+    chip.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      chip.classList.remove("drag-over");
+      const from = parseInt(e.dataTransfer.getData("text/plain"), 10);
+      if (!Number.isFinite(from) || from === i) return;
+      const cur = loadSavedSearches();
+      const [moved] = cur.splice(from, 1);
+      cur.splice(i, 0, moved);
+      await persistSavedSearches(cur);
+      renderSavedSearches();
+    });
+    bar.appendChild(chip);
+  });
+}
+function applySavedSearch(entry) {
+  libQuery = entry.query || "";
+  $("library-q").value = libQuery;
+  libTags.clear();
+  for (const k of entry.tags || []) libTags.add(k);
+  if (entry.sort && $("library-sort")) {
+    $("library-sort").value = entry.sort;
+    settings.ui_texts = { ...(settings.ui_texts || {}), librarySort: entry.sort };
+    invoke("set_ui_text", { key: "librarySort", value: entry.sort }).catch((err) => errToast(err));
+  }
+  renderTagFilter();
+  renderLibrary();
+}
+async function saveSavedSearch() {
+  const list = loadSavedSearches();
+  const max = val("savedSearchMax");
+  if (list.length >= max) {
+    const oldest = list[0];
+    toast(t("savedSearchLimitToast").replace("{max}", String(max)).replace("{name}", oldest ? oldest.name : ""));
+    return;
+  }
+  const suggested = suggestedSearchName(libQuery);
+  const name = await confirmDialog({
+    title: t("savedSearchSaveTitle"),
+    confirmLabel: t("save"),
+    input: { type: "text", value: suggested, placeholder: t("savedSearchNamePh") },
+    danger: false,
+  });
+  if (!name) return;
+  const entry = { name: name.trim() || suggested, query: libQuery, tags: [...libTags], sort: txt("librarySort") || "" };
+  list.push(entry);
+  await persistSavedSearches(list);
+  renderSavedSearches();
+}
+async function editSavedSearch(index) {
+  const list = loadSavedSearches();
+  const entry = list[index];
+  if (!entry) return;
+  const answer = await confirmDialog({
+    title: t("savedSearchEditTitle"),
+    message: t("savedSearchEditMsg"),
+    confirmLabel: t("save"),
+    altLabel: t("delete"),
+    input: { type: "text", value: entry.name },
+    danger: false,
+  });
+  if (answer === null || answer === false) return;
+  if (answer === "alt") {
+    list.splice(index, 1);
+  } else {
+    const name = answer.trim();
+    if (name) entry.name = name;
+  }
+  await persistSavedSearches(list);
+  renderSavedSearches();
 }
 
 // Selected tag chips narrow the list, combined with search and the other
@@ -12435,6 +12557,7 @@ function renderLibrary() {
   _libObs = makeVideoObserver();
   _activeVidObs = _libObs;
   renderTagFilter();
+  renderSavedSearches();
   const anyLibFilter = flag("librarySearch") || flag("libraryTypeFilter") || flag("colorFilter") || flag("favorites") || tagsOn();
   $("library-search").classList.toggle("hidden", !prompts.length || !anyLibFilter);
   if (!prompts.length) {
@@ -16935,6 +17058,7 @@ function bind() {
     refreshImageHitsDebounced();
   });
   wireSearchSuggest($("library-q"), "recentSearchLib");
+  $("library-search-save").addEventListener("click", () => saveSavedSearch());
   $("library-sort").addEventListener("change", (e) => {
     settings.ui_texts = { ...(settings.ui_texts || {}), librarySort: e.target.value };
     invoke("set_ui_text", { key: "librarySort", value: e.target.value }).catch((err) => errToast(err));

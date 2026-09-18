@@ -1603,6 +1603,8 @@ body:not(.flag-voiceHotkey) #voice-hotkey-row { display: none; }
 .noflag-pinButton #pin-top { display: none; }
 .noflag-tags #grid-tag-btn { display: none; }
 .noflag-librarySearch #library-q { display: none; }
+.noflag-savedSearches #library-search-save,
+.noflag-savedSearches #library-saved-searches { display: none; }
 /* Hide only the type chips, so the favorites chip can stay when it is on. */
 .noflag-libraryTypeFilter #library-types .lib-type[data-type] { display: none; }
 .noflag-favorites #library-fav { display: none; }
@@ -3832,6 +3834,25 @@ body.drag-over::after {
 /* Show-archive filter chip: same idea, its own neutral accent. */
 .lib-archive-chip { color: var(--muted); }
 .lib-archive-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* Saved searches: a star inside the search field saves the current query, tag
+   filters and sort; the row of chips above only exists while at least one is
+   saved (renderSavedSearches leaves it empty otherwise). */
+.lib-q-wrap { position: relative; }
+.lib-q-wrap .modal-input { width: 100%; padding-right: 30px; }
+.lib-search-save {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  color: var(--muted);
+}
+.lib-search-save:hover { color: #f5b301; }
+.lib-saved-searches { display: flex; flex-wrap: wrap; gap: 6px; }
+.lib-saved-searches:empty { display: none; }
+.lib-saved-search-chip { cursor: pointer; }
+.lib-saved-search-chip.drag-over { border-color: var(--accent); }
 /* Delete sits at the far right of a row and is the only destructive one there. */
 .lib-item .lib-delete {
   align-self: center;

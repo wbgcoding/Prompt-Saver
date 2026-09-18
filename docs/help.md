@@ -403,7 +403,11 @@ per-entry delete, and usage statistics including a 14-day activity chart.
 The library lists every tile as a searchable, filterable list — fuzzy search,
 smart sort (most-used / most-recent), and type/colour filters. Type -word to
 exclude matches, or tag:word / var:word to search only tags or placeholder
-names.
+names. A star next to the search field saves the current query, tag filters
+and sort as a chip shown above the field; click it to bring the whole search
+back. Right-click a saved search to rename or delete it, or drag it to
+reorder the row. Up to five can be saved at once by default, adjustable in
+the expert menu.
 
 ### Tags
 
@@ -943,7 +947,10 @@ System.
 **Aussehen & Themes** — sieben mitgelieferte Themes, optionaler Theme-Editor.
 
 **Bibliothek & Suche** — unscharfe Suche, intelligente Sortierung, Filter,
-`tag:`/`var:`-Suchpräfixe (mit `-` auch verneint).
+`tag:`/`var:`-Suchpräfixe (mit `-` auch verneint). Ein Stern neben dem Suchfeld
+speichert Anfrage, Tag-Filter und Sortierung als Kachel darüber; Rechtsklick
+bietet Umbenennen und Löschen, Ziehen sortiert die Zeile um. Standardmäßig
+höchstens fünf, im Experten-Menü einstellbar.
 
 **Tags** — freie Schlagwörter, UND/ODER-Filter.
 
