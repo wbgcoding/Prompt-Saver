@@ -831,6 +831,18 @@ const RESULTS = {
     if (!p) return null;
     if (a.hotkey !== undefined) p.hotkey = a.hotkey;
     if (a.hotkeyPaste !== undefined) p.hotkey_paste = a.hotkeyPaste;
+    // 410: the free compare view's "take" actions go through this same command --
+    // mirrors the real backend, which always overwrites name/text/colour/variants/
+    // rotate mode and only touches image/show/copy when the caller sends them.
+    if (a.name !== undefined) p.name = a.name;
+    if (a.text !== undefined) p.text = a.text;
+    if (a.color !== undefined) p.color = a.color;
+    if (a.variants !== undefined) p.variants = a.variants;
+    if (a.rotateMode !== undefined) p.rotate_mode = a.rotateMode;
+    if (a.rotateAuto !== undefined) p.rotate_auto = a.rotateAuto;
+    if (a.image !== undefined) p.image = a.image;
+    if (a.showImage !== undefined) p.show_image = a.showImage;
+    if (a.copyImage !== undefined) p.copy_image = a.copyImage;
     return p;
   },
   set_active_view: (a) => {
