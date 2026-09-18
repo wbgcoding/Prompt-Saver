@@ -35374,30 +35374,69 @@ mod tests {
 
     #[test]
     fn moving_between_views_places_in_the_target_and_strips_the_source() {
-        // The exact two-step sequence batch_prompts's "moveView" arm runs: place
-        // into the target first (all-or-nothing), only then strip the source --
-        // proves "moved" means gone from one view and present in the other.
+        // Goes through batch_prompts's actual "moveView" core (apply_view_batch_action),
+        // not place_ids_in_view/strip_ids_from_view called directly -- a regression
+        // in the core's save handling or its folder-membership accounting now fails
+        // this test too, not just its own dedicated ones. Proves "moved" means gone
+        // from one view, present in the other, and durably saved.
+        let mut settings = Settings::default();
         let mut from_view = test_view("home");
         from_view.cols = 2;
         from_view.rows = 1;
         from_view.members = vec!["a".to_string()];
         from_view.layouts.insert(grid_key(2, 1), HashMap::from([("a".to_string(), [0, 0])]));
-
         let mut to_view = test_view("work");
         to_view.cols = 2;
         to_view.rows = 1;
-        let ids: Vec<String> = vec!["a".to_string()];
-        let to_layout = to_view.layouts.entry(grid_key(2, 1)).or_default();
-        assert!(place_ids_in_view(
-            to_layout, &ids, 2, 1, &std::collections::HashSet::new(), &std::collections::HashSet::new()
-        ));
-        to_view.members.push("a".to_string());
-        strip_ids_from_view(&mut from_view, &ids);
+        settings.views = vec![from_view, to_view];
 
-        assert!(from_view.members.is_empty());
-        assert!(!from_view.layouts[&grid_key(2, 1)].contains_key("a"));
-        assert_eq!(to_view.members, vec!["a".to_string()]);
-        assert_eq!(to_view.layouts[&grid_key(2, 1)].get("a"), Some(&[0, 0]));
+        let ids: Vec<String> = vec!["a".to_string()];
+        let mut saved = false;
+        let result = apply_view_batch_action(&mut settings, "moveView", &ids, "work", "home", |_s| {
+            saved = true;
+            true
+        });
+
+        assert!(result.is_ok());
+        assert!(saved, "a successful move must call through to save");
+        assert!(settings.views[0].members.is_empty());
+        assert!(!settings.views[0].layouts[&grid_key(2, 1)].contains_key("a"));
+        assert_eq!(settings.views[1].members, vec!["a".to_string()]);
+        assert_eq!(settings.views[1].layouts[&grid_key(2, 1)].get("a"), Some(&[0, 0]));
+    }
+
+    #[test]
+    fn moveview_action_treats_an_existing_folder_member_as_already_placed() {
+        // Same folder-membership case as place_ids_in_view's own tests, run
+        // through the real "moveView" core this time: a 1x1 target whose only
+        // cell a folder occupies, moving in an id the folder already lists as
+        // a member -- must succeed (not view-full) and never grow a second
+        // layout entry for it.
+        let mut settings = Settings::default();
+        let mut from_view = test_view("home");
+        from_view.members = vec!["a".to_string()];
+        let mut to_view = test_view("work");
+        to_view.cols = 1;
+        to_view.rows = 1;
+        settings.views = vec![from_view, to_view];
+        settings.tile_folders.push(TileFolder {
+            id: "tf1".to_string(),
+            name: "Drafts".to_string(),
+            color: String::new(),
+            view_id: "work".to_string(),
+            cell: [0, 0],
+            members: vec!["a".to_string()],
+        });
+
+        let ids: Vec<String> = vec!["a".to_string()];
+        let result = apply_view_batch_action(&mut settings, "moveView", &ids, "work", "home", |_s| true);
+
+        assert!(result.is_ok(), "a target whose only cell a folder occupies must not report view-full: {result:?}");
+        assert!(settings.views[0].members.is_empty(), "the source view must lose the moved id");
+        assert!(
+            settings.views[1].layouts.values().all(|l| !l.contains_key("a")),
+            "an id already placed via a folder must never also get a layout entry"
+        );
     }
 
     #[test]

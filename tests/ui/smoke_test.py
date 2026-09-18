@@ -10228,6 +10228,9 @@ FOLDER_WORDING_PROBE = """
 <script>
 (async () => {
   const errs = [];
+  // Declared here, not inside the try below, so the final report line can
+  // still read gridDissolve even if the try block threw partway through.
+  let gridDissolve = null;
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const beat = setInterval(() => {
     document.documentElement.style.setProperty('--wording-tick', String(Date.now()));
@@ -10244,7 +10247,6 @@ FOLDER_WORDING_PROBE = """
       return btn ? { label: btn.textContent.trim(), icon: icon ? icon.innerHTML : null } : null;
     };
 
-    let gridDissolve = null;
     const fTile = document.querySelector('.tile.folder-tile');
     if (!fTile) {
       errs.push('375: no grid folder in the fixture to compare');
@@ -10283,8 +10285,62 @@ FOLDER_WORDING_PROBE = """
   clearInterval(beat);
   const pre = document.createElement('pre');
   pre.id = 'SMOKE';
-  pre.textContent = JSON.stringify(errs);
+  // gridDissolve travels out too -- 483 uses it as the pill folder's own
+  // expectation, since the pill boots as a separate page and cannot read this
+  // window's DOM directly.
+  pre.textContent = JSON.stringify({ errs, gridDissolve });
   document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
+# 483: the pill folder window's own "ungroup" entry, checked against the grid
+# folder's reading that FOLDER_WORDING_PROBE captured above -- 375 asked for one
+# language and one icon across all three folder kinds, but the wording probe
+# above never looked at this window, so it could drift without any test
+# noticing.
+PILL_WORDING_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const beat = setInterval(() => {
+    document.documentElement.style.setProperty('--pill-wording-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
+  const until = async (fn) => { for (let i = 0; i < 80 && !fn(); i++) await sleep(100); return fn(); };
+  try {
+    const ready = await until(() => document.getElementById('fname').textContent !== '');
+    if (!ready) errs.push('the folder window never rendered its state');
+    // The label/icon are filled in by the window's own async translation load
+    // (applyTexts), separate from the state fetch fname above waits on -- wait
+    // for that to land before opening the menu, or the button reads empty.
+    const textsReady = await until(() => !!document.getElementById('menu-dissolve').querySelector('.menu-label'));
+    if (!textsReady) errs.push('the folder window never applied its own translations');
+    document.getElementById('icon').dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+    );
+    await sleep(150);
+    const btn = document.getElementById('menu-dissolve');
+    const icon = btn ? btn.querySelector('.menu-icon') : null;
+    const label = btn ? btn.querySelector('.menu-label') : null;
+    if (!btn || !label || label.textContent.trim() === '') {
+      errs.push('the pill folder has no ungroup entry in its context menu');
+    }
+    const pillDissolve = btn ? { label: label ? label.textContent.trim() : '', icon: icon ? icon.innerHTML : null } : null;
+    const pre = document.createElement('pre');
+    pre.id = 'SMOKE';
+    pre.textContent = JSON.stringify({ errs, pillDissolve });
+    document.body.appendChild(pre);
+  } catch (e) {
+    errs.push('483 pill wording probe: ' + e.message);
+    const pre = document.createElement('pre');
+    pre.id = 'SMOKE';
+    pre.textContent = JSON.stringify({ errs, pillDissolve: null });
+    document.body.appendChild(pre);
+  }
+  clearInterval(beat);
 })();
 </script>
 """
@@ -10870,8 +10926,11 @@ def main():
             if not errs:
                 print("   ok")
 
-        # 375: the grid-folder and view-group "ungroup" menu entries must read
-        # and look the same. Its own boot, same reasoning as the pair above.
+        # 375/483: the grid-folder, view-group AND pill-folder "ungroup" menu
+        # entries must all read and look the same -- two separate boots (the
+        # pill is its own window, same reasoning as the FOLDER_PROBE run
+        # above), then the pill's reading is checked against the grid
+        # folder's here in Python since the two never share a page.
         side = tmp / "ui" / "folder-wording.html"
         side.write_text(
             (REPO / "ui" / "index.html").read_text(encoding="utf-8")
@@ -10885,8 +10944,42 @@ def main():
              "--dump-dom", side.as_uri()],
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=180)
-        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
-        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        m = re.search(r'<pre id="SMOKE">(\{.*?\})</pre>', proc.stdout, re.S)
+        result = json.loads(unescape(m.group(1))) if m else {"errs": ["no probe result"], "gridDissolve": None}
+        errs = list(result.get("errs") or [])
+        grid_dissolve = result.get("gridDissolve")
+
+        # Written as "folder.html" itself, not a differently-named copy: the
+        # window reads its own filename off location.pathname to decide it is
+        # the folder window (same as the FOLDER_PROBE boot above), so a
+        # renamed file would load the wrong fixture.
+        side = tmp / "ui" / "folder.html"
+        side.write_text(
+            (REPO / "ui" / "folder.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", PILL_WORDING_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-pill-wording'}", "--allow-file-access-from-files",
+             "--window-size=520,420", "--virtual-time-budget=15000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\{.*?\})</pre>', proc.stdout, re.S)
+        pill_result = json.loads(unescape(m.group(1))) if m else {"errs": ["no probe result"], "pillDissolve": None}
+        errs.extend(pill_result.get("errs") or [])
+        pill_dissolve = pill_result.get("pillDissolve")
+
+        if grid_dissolve and pill_dissolve:
+            if grid_dissolve.get("label") != pill_dissolve.get("label"):
+                errs.append(
+                    '483: the pill folder and grid folder ungroup entries read differently ("' +
+                    str(pill_dissolve.get("label")) + '" vs "' + str(grid_dissolve.get("label")) + '")'
+                )
+            if not pill_dissolve.get("icon") or pill_dissolve.get("icon") != grid_dissolve.get("icon"):
+                errs.append("483: the pill folder and grid folder ungroup entries do not share the same icon markup")
+
         print("-- folder/group ungroup wording")
         for e in errs:
             print(f"   FAIL: {e}")
