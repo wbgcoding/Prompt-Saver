@@ -5330,22 +5330,36 @@ fn first_free_cell_excluding(view: &View, extra: &[[u32; 2]]) -> Option<[u32; 2]
 // every id, nothing is placed and `layout` is left exactly as it was, so a caller
 // that already removed these ids from somewhere else can react to the failure
 // instead of stranding them.
+// `folder_members` are ids already living inside a grid folder of this view --
+// they need no cell of their own, so they never count against the need and
+// never get a layout entry. A stray layout entry left over for one of them
+// (e.g. from before it joined the folder) is dropped once there is room to
+// process the batch, so an old, inconsistent save heals itself here instead of
+// quietly wasting a cell the grid never shows as occupied.
 fn place_ids_in_view(
     layout: &mut std::collections::HashMap<String, [u32; 2]>,
     ids: &[String],
     cols: u32,
     rows: u32,
     extra_occupied: &std::collections::HashSet<(u32, u32)>,
+    folder_members: &std::collections::HashSet<String>,
 ) -> bool {
     let mut occupied: std::collections::HashSet<(u32, u32)> =
         layout.values().map(|c| (c[0], c[1])).collect();
     occupied.extend(extra_occupied.iter().copied());
-    let need = ids.iter().filter(|id| !layout.contains_key(id.as_str())).count();
+    let need = ids
+        .iter()
+        .filter(|id| !folder_members.contains(id.as_str()) && !layout.contains_key(id.as_str()))
+        .count();
     let free = (cols as usize * rows as usize).saturating_sub(occupied.len());
     if need > free {
         return false;
     }
     for id in ids {
+        if folder_members.contains(id.as_str()) {
+            layout.remove(id.as_str());
+            continue;
+        }
         if layout.contains_key(id) {
             continue;
         }
@@ -5370,11 +5384,15 @@ fn view_capacity_deficit(
     cols: u32,
     rows: u32,
     extra_occupied: &std::collections::HashSet<(u32, u32)>,
+    folder_members: &std::collections::HashSet<String>,
 ) -> usize {
     let mut occupied: std::collections::HashSet<(u32, u32)> =
         layout.values().map(|c| (c[0], c[1])).collect();
     occupied.extend(extra_occupied.iter().copied());
-    let need = ids.iter().filter(|id| !layout.contains_key(id.as_str())).count();
+    let need = ids
+        .iter()
+        .filter(|id| !folder_members.contains(id.as_str()) && !layout.contains_key(id.as_str()))
+        .count();
     let free = (cols as usize * rows as usize).saturating_sub(occupied.len());
     need.saturating_sub(free)
 }
@@ -5419,6 +5437,7 @@ fn apply_view_batch_action(
                 .filter(|f| f.view_id == view_id)
                 .map(|f| (f.cell[0], f.cell[1]))
                 .collect();
+            let folder_members = folder_members_in_view(settings, view_id);
             let Some(vidx) = settings.views.iter().position(|v| v.id == view_id) else {
                 return Ok(());
             };
@@ -5432,8 +5451,8 @@ fn apply_view_batch_action(
                 }
                 settings.views[vidx].members.retain(|m| !ids.contains(m));
             } else {
-                if !place_ids_in_view(layout, ids, cols, rows, &folder_cells) {
-                    let deficit = view_capacity_deficit(layout, ids, cols, rows, &folder_cells);
+                if !place_ids_in_view(layout, ids, cols, rows, &folder_cells, &folder_members) {
+                    let deficit = view_capacity_deficit(layout, ids, cols, rows, &folder_cells, &folder_members);
                     return Err(format!("view-full:{deficit}"));
                 }
                 for id in ids {
@@ -5461,6 +5480,7 @@ fn apply_view_batch_action(
                 .filter(|f| f.view_id == view_id)
                 .map(|f| (f.cell[0], f.cell[1]))
                 .collect();
+            let folder_members = folder_members_in_view(settings, view_id);
             let to_idx = settings.views.iter().position(|v| v.id == view_id);
             let from_idx = settings.views.iter().position(|v| v.id == from_view_id);
             let (Some(to_idx), Some(from_idx)) = (to_idx, from_idx) else {
@@ -5472,8 +5492,8 @@ fn apply_view_batch_action(
             let layout = settings.views[to_idx].layouts.entry(key).or_default();
             // All-or-nothing - only drop the source placement once the
             // target has durably accepted every id.
-            if !place_ids_in_view(layout, ids, cols, rows, &folder_cells) {
-                let deficit = view_capacity_deficit(layout, ids, cols, rows, &folder_cells);
+            if !place_ids_in_view(layout, ids, cols, rows, &folder_cells, &folder_members) {
+                let deficit = view_capacity_deficit(layout, ids, cols, rows, &folder_cells, &folder_members);
                 return Err(format!("view-full:{deficit}"));
             }
             for id in ids {
@@ -25708,6 +25728,19 @@ fn folder_cells_in_view(settings: &Settings, view_id: &str) -> Vec<[u32; 2]> {
     settings.tile_folders.iter().filter(|f| f.view_id == view_id).map(|f| f.cell).collect()
 }
 
+// Every id already living inside one of this view's grid folders -- these sit
+// on the folder's own cell (see folder_cells_in_view), never in the view's own
+// layout, so place_ids_in_view/view_capacity_deficit must not count them as
+// needing a cell of their own.
+fn folder_members_in_view(settings: &Settings, view_id: &str) -> std::collections::HashSet<String> {
+    settings
+        .tile_folders
+        .iter()
+        .filter(|f| f.view_id == view_id)
+        .flat_map(|f| f.members.iter().cloned())
+        .collect()
+}
+
 // The exact incoming cell wins when nothing ELSE sits there yet on THIS machine;
 // otherwise the first free cell stands in, the same fallback a brand-new tile
 // gets today. `prompt_id`'s OWN existing entry at that cell never counts as a
@@ -35219,7 +35252,9 @@ mod tests {
         // 2x1 grid, "a" already on [0,0].
         let mut layout = HashMap::from([("a".to_string(), [0, 0])]);
         let ids: Vec<String> = vec!["a".to_string(), "b".to_string()];
-        assert!(place_ids_in_view(&mut layout, &ids, 2, 1, &std::collections::HashSet::new()));
+        assert!(place_ids_in_view(
+            &mut layout, &ids, 2, 1, &std::collections::HashSet::new(), &std::collections::HashSet::new()
+        ));
         assert_eq!(layout.get("a"), Some(&[0, 0])); // untouched, was already placed
         assert_eq!(layout.get("b"), Some(&[1, 0]));
     }
@@ -35232,7 +35267,9 @@ mod tests {
         let mut layout = HashMap::from([("a".to_string(), [0, 0])]);
         let before = layout.clone();
         let ids: Vec<String> = vec!["b".to_string(), "c".to_string()]; // only 1 free cell for 2 ids
-        assert!(!place_ids_in_view(&mut layout, &ids, 2, 1, &std::collections::HashSet::new()));
+        assert!(!place_ids_in_view(
+            &mut layout, &ids, 2, 1, &std::collections::HashSet::new(), &std::collections::HashSet::new()
+        ));
         assert_eq!(layout, before);
     }
 
@@ -35244,8 +35281,33 @@ mod tests {
         let mut layout: HashMap<String, [u32; 2]> = HashMap::new();
         let folder_cells = std::collections::HashSet::from([(0u32, 0u32)]);
         let ids: Vec<String> = vec!["a".to_string()];
-        assert!(place_ids_in_view(&mut layout, &ids, 2, 1, &folder_cells));
+        assert!(place_ids_in_view(&mut layout, &ids, 2, 1, &folder_cells, &std::collections::HashSet::new()));
         assert_eq!(layout.get("a"), Some(&[1, 0])); // [0,0] was the folder's, must be skipped
+    }
+
+    #[test]
+    fn place_ids_in_view_skips_ids_already_placed_in_a_folder() {
+        // "a" lives in a grid folder of this view -- it needs no cell of its own
+        // and must not eat the view's only free one, or a full target would
+        // wrongly refuse a move that has nothing left to place.
+        let mut layout: HashMap<String, [u32; 2]> = HashMap::new();
+        let folder_cells = std::collections::HashSet::from([(0u32, 0u32)]); // the folder's own cell
+        let folder_members = std::collections::HashSet::from(["a".to_string()]);
+        let ids: Vec<String> = vec!["a".to_string()];
+        assert!(place_ids_in_view(&mut layout, &ids, 1, 1, &folder_cells, &folder_members));
+        assert!(layout.is_empty(), "a folder member must never get a layout entry of its own");
+    }
+
+    #[test]
+    fn place_ids_in_view_heals_a_stray_layout_entry_for_a_folder_member() {
+        // Old data: "a" already sits in a folder AND still carries a leftover
+        // layout entry from before it joined -- that entry must be dropped, not
+        // left behind occupying a cell the grid never shows as taken.
+        let mut layout = HashMap::from([("a".to_string(), [1, 0])]);
+        let folder_members = std::collections::HashSet::from(["a".to_string()]);
+        let ids: Vec<String> = vec!["a".to_string()];
+        assert!(place_ids_in_view(&mut layout, &ids, 2, 1, &std::collections::HashSet::new(), &folder_members));
+        assert!(layout.get("a").is_none(), "the stray entry for a folder member must be removed");
     }
 
     #[test]
@@ -35254,13 +35316,39 @@ mod tests {
         let layout = HashMap::from([("a".to_string(), [0, 0])]);
         let ids: Vec<String> = vec!["a".to_string(), "b".to_string(), "c".to_string()];
         // "a" is already there and doesn't count against the need.
-        assert_eq!(view_capacity_deficit(&layout, &ids, 2, 1, &std::collections::HashSet::new()), 1);
+        assert_eq!(
+            view_capacity_deficit(
+                &layout, &ids, 2, 1, &std::collections::HashSet::new(), &std::collections::HashSet::new()
+            ),
+            1
+        );
         // A folder cell shrinks the free count the same way it does in place_ids_in_view.
         let folder_cells = std::collections::HashSet::from([(1u32, 0u32)]);
         let empty: HashMap<String, [u32; 2]> = HashMap::new();
         let one_id: Vec<String> = vec!["z".to_string()];
-        assert_eq!(view_capacity_deficit(&empty, &one_id, 1, 1, &std::collections::HashSet::new()), 0);
-        assert_eq!(view_capacity_deficit(&layout, &vec!["b".to_string()], 2, 1, &folder_cells), 1);
+        assert_eq!(
+            view_capacity_deficit(
+                &empty, &one_id, 1, 1, &std::collections::HashSet::new(), &std::collections::HashSet::new()
+            ),
+            0
+        );
+        assert_eq!(
+            view_capacity_deficit(
+                &layout, &["b".to_string()], 2, 1, &folder_cells, &std::collections::HashSet::new()
+            ),
+            1
+        );
+    }
+
+    #[test]
+    fn view_capacity_deficit_does_not_count_an_id_already_placed_in_a_folder() {
+        // A 1x1 target whose only cell the folder itself occupies: the deficit
+        // for an id already sitting in that folder must be 0, not 1, or a full
+        // target would refuse a move that has nothing left to place.
+        let empty: HashMap<String, [u32; 2]> = HashMap::new();
+        let folder_cells = std::collections::HashSet::from([(0u32, 0u32)]);
+        let folder_members = std::collections::HashSet::from(["a".to_string()]);
+        assert_eq!(view_capacity_deficit(&empty, &["a".to_string()], 1, 1, &folder_cells, &folder_members), 0);
     }
 
     #[test]
@@ -35300,7 +35388,9 @@ mod tests {
         to_view.rows = 1;
         let ids: Vec<String> = vec!["a".to_string()];
         let to_layout = to_view.layouts.entry(grid_key(2, 1)).or_default();
-        assert!(place_ids_in_view(to_layout, &ids, 2, 1, &std::collections::HashSet::new()));
+        assert!(place_ids_in_view(
+            to_layout, &ids, 2, 1, &std::collections::HashSet::new(), &std::collections::HashSet::new()
+        ));
         to_view.members.push("a".to_string());
         strip_ids_from_view(&mut from_view, &ids);
 
@@ -35325,7 +35415,9 @@ mod tests {
         to_view.rows = 1;
         let ids: Vec<String> = vec!["a".to_string()];
         let to_layout = to_view.layouts.entry(grid_key(2, 1)).or_default();
-        assert!(place_ids_in_view(to_layout, &ids, 2, 1, &std::collections::HashSet::new()));
+        assert!(place_ids_in_view(
+            to_layout, &ids, 2, 1, &std::collections::HashSet::new(), &std::collections::HashSet::new()
+        ));
         to_view.members.push("a".to_string());
 
         // The source view was never touched -- View has no PartialEq of its own,
