@@ -279,6 +279,14 @@
         <button type="button" id="modal-replace-file" class="ghost-btn" data-i18n="replaceImage">Replace</button>
       </div>
       <p id="modal-file-hint" class="modal-hint hidden" data-i18n="fileHint">Only the file path is saved.</p>
+      <!-- Plain-text preview for a txt/md/json/csv attachment, next to the
+           image/PDF preview above. Never rendered as markup, even for a .md
+           file -- textContent only. -->
+      <div id="modal-text-attach-preview" class="modal-text-attach-preview hidden">
+        <pre id="modal-text-attach-content" class="modal-text-attach-content"></pre>
+        <p id="modal-text-attach-truncated" class="modal-hint hidden" data-i18n="attachPreviewTruncated">Shortened, the file continues past this point.</p>
+        <p id="modal-text-attach-unreadable" class="modal-hint hidden" data-i18n="attachPreviewUnreadable">Not readable as text.</p>
+      </div>
       <!-- Variable helper. Collapsed by default: it is a reference, not part
            of writing a prompt, and open it would push the textarea down every time.
            Each hint sits directly under the control it explains. -->

@@ -3731,6 +3731,28 @@ PROBE = """
       const cmHist7b = document.getElementById('confirm-modal');
       if (!cmHist7b.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
     }
+    // 466: a text attachment (txt/md/json/csv) previews its start right in the
+    // editor, and injected markup in it must show up literally, never rendered.
+    window.__ATTACH_TEXT_FIXTURES__ = window.__ATTACH_TEXT_FIXTURES__ || {};
+    window.__ATTACH_TEXT_FIXTURES__['C:\\\\Notes\\\\brief.txt'] = { text: XSS_TEXT, truncated: false, readable: true };
+    if (!await openEditor('p11')) {
+      out.errors.push('466: the text-attachment prompt did not open in the editor');
+    } else {
+      await sleep(150);
+      const box = document.getElementById('modal-text-attach-preview');
+      const content = document.getElementById('modal-text-attach-content');
+      if (!box || box.classList.contains('hidden')) {
+        out.errors.push('466: the attachment text preview did not show for a .txt attachment');
+      } else if (!content || content.textContent !== XSS_TEXT) {
+        out.errors.push('466: the attachment preview text does not match the file content');
+      } else if (content.querySelector('img') || content.querySelector('script')) {
+        out.errors.push('466: injected markup in a text attachment was rendered as an element');
+      }
+      await click('modal-close-x');
+      await sleep(200);
+      const cmAttach = document.getElementById('confirm-modal');
+      if (!cmAttach.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+    }
     // Duplicates: its own dialog, reachable only from the expert menu, and the last
     // window of the main surface that no scan had ever opened. Its group (147) lives
     // in the "System & data" tab, not whatever tab was last active.

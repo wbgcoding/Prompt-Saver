@@ -58,6 +58,11 @@ image shown above the file row is only that tile's preview — the attached file
 below it is a separate thing, and copying the tile puts the file's path on the
 clipboard, never the picture.
 
+A plain text, Markdown, JSON or CSV attachment shows its own start right below
+the file row (switchable off in the expert menu, how many kilobytes it reads
+is adjustable there too). It always shows as plain text, never rendered, so a
+Markdown file with real formatting in it still shows its raw source.
+
 ### The grid
 
 The main window's grid is a free-placement board of tiles — up to 20×20 cells by
@@ -735,6 +740,10 @@ für jeden Wert. Dynamische Platzhalter (`{#{date}#}`, `{#{time}#}`,
 Notizen (Markdown-Vorschau und Notizen standardmäßig aus). Bei einer Datei-Kachel
 mit eigenem Vorschaubild: das Bild über der Dateizeile ist nur die Kachel-Vorschau,
 der Anhang darunter ist eine eigene Sache, kopiert wird immer nur der Dateipfad.
+Ein Anhang als reiner Text, Markdown, JSON oder CSV zeigt seinen Anfang direkt
+unter der Dateizeile (im Experten-Menü abschaltbar, dort auch einstellbar, wie
+viele Kilobyte gelesen werden). Immer als reiner Text, nie ausgeführt, also
+zeigt eine Markdown-Datei mit echter Formatierung trotzdem ihren rohen Quelltext.
 
 **Das Raster** — freie Platzierung, standardmäßig bis 20×20 Zellen (im
 Experten-Menü bis 200×200 einstellbar), eigenes Layout je Ansicht. Eine Kachel

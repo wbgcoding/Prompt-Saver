@@ -398,6 +398,11 @@ the video editor and the introduction tour ship on).
   list beside it names the tools nobody has touched yet. Counted only while
   usage statistics are on, stays on this computer, and is included in the
   statistics export.
+- **Text preview for attachments.** A plain text, Markdown, JSON or CSV file
+  attached to a prompt now previews its start right in the editor, below the
+  file row, always as plain text and never rendered as markup. How many
+  kilobytes it reads is adjustable in the expert menu, where the feature can
+  also be switched off.
 
 ### Improved
 

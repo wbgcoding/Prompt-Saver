@@ -288,6 +288,13 @@ const RESULTS = {
   }),
   current_theme: () => "dark",
   theme_vars: () => ({ accent: "#ff00aa" }),
+  // A probe sets window.__ATTACH_TEXT_FIXTURES__[path] to {text, truncated,
+  // readable} before opening the attachment; an unlisted path reads as
+  // unreadable, same as a real missing/binary file would.
+  attachment_text_preview: (a) => {
+    const fixtures = window.__ATTACH_TEXT_FIXTURES__ || {};
+    return fixtures[a && a.path] || { text: "", truncated: false, readable: false };
+  },
   // Off by default (every existing pill/folder probe boots unparked);
   // window.__FLOAT_PARKED__ lets a probe flip a specific boot to true.
   is_float_parked: () => window.__FLOAT_PARKED__ === true,

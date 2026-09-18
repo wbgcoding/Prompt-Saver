@@ -2837,6 +2837,28 @@ select.modal-input { padding-right: 30px; }
 }
 /* Page number field, only shown for a PDF attachment. */
 .pdf-page-input { flex: 0 0 auto; width: 52px; padding: 3px 6px; font-size: 12px; text-align: center; }
+
+/* Plain-text preview for a txt/md/json/csv attachment. Fixed-width font,
+   scrolls instead of growing the dialog past a comfortable height. */
+.modal-text-attach-preview {
+  margin-top: 4px;
+}
+.modal-text-attach-content {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.modal-text-attach-preview .modal-hint { margin-top: 4px; }
 /* Caption text + its size select side by side. */
 .caption-row {
   display: flex;

@@ -5432,6 +5432,83 @@ async fn pdf_preview(app: AppHandle, path: String, page: Option<u32>) -> Option<
     .flatten()
 }
 
+// The four text attachment kinds a text preview is offered for. One list, one
+// place, so the frontend extension check and the backend command never drift
+// apart.
+const TEXT_PREVIEW_EXT: [&str; 4] = ["txt", "md", "json", "csv"];
+
+fn is_text_preview_ext(path: &str) -> bool {
+    std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| TEXT_PREVIEW_EXT.iter().any(|ext| ext.eq_ignore_ascii_case(e)))
+        .unwrap_or(false)
+}
+
+// Reads up to `max` bytes of a file. Unlike read_file_capped (which fails the
+// whole read once the file is longer than the limit), this keeps the leading
+// slice and reports separately whether the file continues past it -- exactly
+// what a preview needs: something to show plus a truncation notice, never a
+// hard error just because the attachment is long.
+fn read_bytes_preview(path: &std::path::Path, max: u64) -> Result<(Vec<u8>, bool), String> {
+    use std::io::Read;
+    let file = fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut buf = Vec::new();
+    file.take(max + 1).read_to_end(&mut buf).map_err(|e| e.to_string())?;
+    let truncated = buf.len() as u64 > max;
+    if truncated {
+        buf.truncate(max as usize);
+    }
+    Ok((buf, truncated))
+}
+
+// Decodes a byte slice as UTF-8 text for the preview. A cut made at an
+// arbitrary byte offset can land inside a multi-byte character; that shows up
+// as a `Utf8Error` with no `error_len()` (an incomplete trailing sequence, not
+// a real encoding fault), and is trimmed back to the last full character
+// instead of being reported as unreadable. Any other UTF-8 error means the
+// file itself is not text, and is never guessed at -- a wrong guess would
+// show the wrong thing with total confidence.
+fn decode_text_preview(mut buf: Vec<u8>) -> Option<String> {
+    match std::str::from_utf8(&buf) {
+        Ok(s) => Some(s.to_string()),
+        Err(e) if e.error_len().is_none() => {
+            buf.truncate(e.valid_up_to());
+            String::from_utf8(buf).ok()
+        }
+        Err(_) => None,
+    }
+}
+
+#[derive(Serialize)]
+struct AttachTextPreview {
+    text: String,
+    truncated: bool,
+    readable: bool,
+}
+
+// Plain-text preview for a .txt/.md/.json/.csv attachment. Reads
+// with a size cap so an oversized file cannot stall the UI, and never renders
+// the text as markup -- the caller puts it into the DOM as plain text, one way
+// for all four formats.
+#[tauri::command]
+async fn attachment_text_preview(path: String, max_kb: u32) -> Result<AttachTextPreview, String> {
+    if !is_text_preview_ext(&path) {
+        return Err("not a text attachment".into());
+    }
+    let max = (max_kb.clamp(1, 64) as u64) * 1024;
+    tauri::async_runtime::spawn_blocking(move || -> Result<AttachTextPreview, String> {
+        let p = std::path::Path::new(&path);
+        let (bytes, truncated) = read_bytes_preview(p, max)?;
+        match decode_text_preview(bytes) {
+            Some(text) => Ok(AttachTextPreview { text, truncated, readable: true }),
+            None => Ok(AttachTextPreview { text: String::new(), truncated: false, readable: false }),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // IDs of prompts whose attached file OR media icon is gone. Still directly
 // invokable for a one-off "I just fixed/replaced a file, recheck now" refresh
 // (main.js after an edit, floating.js whenever a pill's prompt data reloads) -
@@ -26698,6 +26775,7 @@ pub fn run() {
             capture_region,
             capture_window,
             pdf_preview,
+            attachment_text_preview,
             set_autostart,
             set_start_minimized,
             export_prompts,
@@ -35905,6 +35983,74 @@ mod tests {
         assert_eq!(read_text_capped(&p, 64).unwrap().len(), 64);
         assert!(read_text_capped(&p, 63).is_none());
 
+        let _ = fs::remove_file(&p);
+    }
+
+    #[test]
+    fn attach_preview_extensions_match_the_four_text_kinds() {
+        for ext in ["a.txt", "a.md", "a.json", "a.csv", "A.TXT", "a.Md"] {
+            assert!(is_text_preview_ext(ext), "{ext:?} should be a text preview kind");
+        }
+        for ext in ["a.pdf", "a.png", "a.docx", "a", "a.txtx"] {
+            assert!(!is_text_preview_ext(ext), "{ext:?} must not be a text preview kind");
+        }
+    }
+
+    #[test]
+    fn a_short_attachment_reads_whole_with_no_truncation() {
+        let p = std::env::temp_dir().join("attach_preview_short.txt");
+        fs::write(&p, "hello attachment").unwrap();
+        let (bytes, truncated) = read_bytes_preview(&p, 8 * 1024).unwrap();
+        assert!(!truncated);
+        assert_eq!(decode_text_preview(bytes).unwrap(), "hello attachment");
+        let _ = fs::remove_file(&p);
+    }
+
+    #[test]
+    fn an_attachment_over_the_limit_is_cut_and_flagged() {
+        let p = std::env::temp_dir().join("attach_preview_long.txt");
+        fs::write(&p, vec![b'a'; 5000]).unwrap();
+        let (bytes, truncated) = read_bytes_preview(&p, 1024).unwrap();
+        assert!(truncated);
+        let text = decode_text_preview(bytes).unwrap();
+        assert_eq!(text.len(), 1024);
+        let _ = fs::remove_file(&p);
+    }
+
+    #[test]
+    fn an_empty_attachment_previews_as_empty_not_truncated() {
+        let p = std::env::temp_dir().join("attach_preview_empty.txt");
+        fs::write(&p, "").unwrap();
+        let (bytes, truncated) = read_bytes_preview(&p, 1024).unwrap();
+        assert!(!truncated);
+        assert_eq!(decode_text_preview(bytes).unwrap(), "");
+        let _ = fs::remove_file(&p);
+    }
+
+    #[test]
+    fn a_cut_made_inside_a_multibyte_character_trims_back_cleanly() {
+        // Three-byte characters throughout (the euro sign); the cap is set to
+        // land one byte into the second one.
+        let text = "e".repeat(10) + "\u{20AC}\u{20AC}\u{20AC}\u{20AC}"; // e's then euro signs
+        let p = std::env::temp_dir().join("attach_preview_multibyte.txt");
+        fs::write(&p, &text).unwrap();
+        // 10 ascii bytes + one whole euro sign (3 bytes) + 1 byte into the next.
+        let (bytes, truncated) = read_bytes_preview(&p, 14).unwrap();
+        assert!(truncated);
+        let decoded = decode_text_preview(bytes).unwrap();
+        assert!(std::str::from_utf8(decoded.as_bytes()).is_ok());
+        assert_eq!(decoded, "e".repeat(10) + "\u{20AC}");
+        let _ = fs::remove_file(&p);
+    }
+
+    #[test]
+    fn a_non_utf8_attachment_is_reported_unreadable_not_guessed() {
+        // Latin-1 bytes that are not valid UTF-8 (0xE9 alone is a lone
+        // continuation-style byte with no valid lead byte before it).
+        let p = std::env::temp_dir().join("attach_preview_binary.txt");
+        fs::write(&p, [0x48u8, 0x65, 0xE9, 0x6C, 0x6C, 0x6F]).unwrap();
+        let (bytes, _truncated) = read_bytes_preview(&p, 1024).unwrap();
+        assert!(decode_text_preview(bytes).is_none());
         let _ = fs::remove_file(&p);
     }
 

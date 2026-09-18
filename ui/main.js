@@ -53,6 +53,10 @@ const modal = {
   fileName: $("modal-file-name"),
   pdfPage: $("modal-pdf-page"),
   replaceFile: $("modal-replace-file"),
+  textAttachPreview: $("modal-text-attach-preview"),
+  textAttachContent: $("modal-text-attach-content"),
+  textAttachTruncated: $("modal-text-attach-truncated"),
+  textAttachUnreadable: $("modal-text-attach-unreadable"),
   fontSel: $("modal-font"),
   sizeSel: $("modal-size"),
   textBar: $("modal-text-bar"),
@@ -1336,6 +1340,9 @@ const FLAG_LABELS = {
   // (delete a view, clear copy history, clear the clipboard inbox, delete a tag,
   // batch delete, batch tag add/remove). Ships ON.
   undoToast: "flagUndoToast",
+  // Plain-text preview (txt/md/json/csv) for a file attachment, next to the
+  // existing image/PDF preview. Ships ON.
+  attachTextPreview: "flagAttachTextPreview",
 };
 const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -1487,6 +1494,7 @@ const EXPERT_VALUES = {
   toastMs: { label: "valToastMs", min: 800, max: 10000, step: 100, def: 1400, unit: "ms" },
   previewLen: { label: "valPreviewLen", min: 0, max: 4000, step: 20, def: 600, unit: "" },
   viewBorder: { label: "valViewBorder", min: 1, max: 12, step: 1, def: 3, unit: "px", gate: "multiView" },
+  attachPreviewKb: { label: "valAttachPreviewKb", min: 1, max: 64, step: 1, def: 8, unit: "KB", gate: "attachTextPreview" },
   // Floating-button opacity (%). Floored at 20% so the pill never vanishes.
   floatOpacity: { label: "valFloatOpacity", min: 20, max: 100, step: 5, def: 100, unit: "%", gate: "floating" },
   // How close two floating buttons must be on drop to merge, and how wide the
@@ -2043,7 +2051,7 @@ const EXPERT_DROPDOWNS = {
 const EXPERT_TABS = [
   { title: "expTabFeatures", groups: [
     // Everything that puts new content into the app.
-    { title: "expGroupInput", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, "pasteMedia", "dragDrop"] },
+    { title: "expGroupInput", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, { key: "attachTextPreview", gate: "fileAttach" }, "pasteMedia", "dragDrop"], values: ["attachPreviewKb"] },
     { title: "expGroupViews", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }], values: ["viewBorder", "viewGroupMaxRows"] },
     // Placeholders, from the grammar to where the app asks for them.
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
@@ -2264,7 +2272,7 @@ function applyValues() {
 // convention tip<Key>. Self-explanatory settings are deliberately left out.
 const EXPERT_TIPS = [
   // General / creating
-  "storeFiles", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "varPopupWindow",
+  "storeFiles", "attachTextPreview", "attachPreviewKb", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "varPopupWindow",
   "lengthCounter", "promptHistory", "historyDiff", "diffWordCap", "historyPreviewLen", "editorMonospace",
   "promptNotes", "notesInTooltip", "notesTipLen",
   "mdPreview", "mdMaxChars", "codeHighlight", "codeAutoDetect", "hlFontPx", "hlMaxChars",
@@ -10521,6 +10529,7 @@ function syncModalImageUi(mode) {
   } else {
     modal.pdfPage.classList.add("hidden");
   }
+  renderAttachTextPreview(filePath);
 }
 
 // ---- Rotating prompts (editor) ----
@@ -10663,6 +10672,41 @@ async function loadFilePreview(path, page = 0) {
   }
   if (!IMAGE_EXT.test(path)) return "";
   return (await invoke("load_image_file", { path }).catch(() => "")) || "";
+}
+
+// The four text attachment kinds a plain-text preview is offered for,
+// alongside the image/PDF preview above. Matches TEXT_PREVIEW_EXT in lib.rs
+// -- one list of kinds, kept in agreement on both sides by hand since the two
+// cannot share a source at build time.
+const TEXT_PREVIEW_EXT = /\.(txt|md|json|csv)$/i;
+
+// Fills the attachment's plain-text preview box, or hides it. `textContent`
+// only, never innerHTML -- the four formats this covers (txt/md/json/csv) are
+// shown as literal text, not rendered as markup, even a .md file with real
+// Markdown syntax in it.
+async function renderAttachTextPreview(path) {
+  const box = modal.textAttachPreview;
+  if (!box) return;
+  const eligible = !!path && flag("attachTextPreview") && TEXT_PREVIEW_EXT.test(path);
+  box.classList.toggle("hidden", !eligible);
+  if (!eligible) return;
+  const session = modalSession;
+  modal.textAttachContent.textContent = "";
+  modal.textAttachTruncated.classList.add("hidden");
+  modal.textAttachUnreadable.classList.add("hidden");
+  let result;
+  try {
+    result = await invoke("attachment_text_preview", { path, maxKb: Math.round(val("attachPreviewKb")) });
+  } catch (_) {
+    return; // not a text-preview extension after all, or the file vanished mid-read
+  }
+  if (session !== modalSession || modalState?.filePath !== path) return; // a later modal already took over
+  if (!result || !result.readable) {
+    modal.textAttachUnreadable.classList.remove("hidden");
+    return;
+  }
+  modal.textAttachContent.textContent = result.text;
+  modal.textAttachTruncated.classList.toggle("hidden", !result.truncated);
 }
 
 // Build a file-attach prompt from a path. Image, gif, video and PDF
