@@ -8,8 +8,26 @@
   --fg: #1a1a1a;
   --muted: #666d7a;
   --border: #e3e3e7;
+  /* A form control's own outline needs WCAG's stronger non-text ratio (3:1),
+     which --border (tuned as a barely-there card separator) does not clear on
+     its own -- every input/select/switch border draws from this token instead. */
+  --control-border: #838386;
   --accent: #2563eb;
   --accent-fg: #ffffff;
+  /* A small, normal-size label painted in --accent-fg on an --accent fill
+     (a selected tab, a selected step chip) needs the stronger 4.5:1 text
+     ratio, which the theme's own headline accent does not always clear on
+     its own against white -- this is the same hue, nudged just dark enough
+     to carry small text, while every large-scale or decorative use of
+     --accent (borders, big buttons, rings) is untouched. Themes whose
+     accent already clears 4.5:1 leave this as a plain alias. */
+  --accent-strong: var(--accent);
+  /* The opposite pull from --accent-strong: small text painted directly in
+     --accent (a status label, a "here" marker) against the page's own
+     surface, not against a fill of itself. A dark theme's accent needs
+     lightening here, not darkening, to stay legible on a dark panel --
+     the two tokens diverge in a dark theme and coincide in a light one. */
+  --accent-text: var(--accent);
   --danger: #dc2626;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   --radius: 10px;
@@ -48,8 +66,11 @@
   --fg: #f3f3f3;
   --muted: #9ca3af;
   --border: #38383d;
+  --control-border: #7d7d80;
   --accent: #3b82f6;
   --accent-fg: #ffffff;
+  --accent-strong: #3472d9;
+  --accent-text: #5895f7;
   --danger: #f15757;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   --hl-cmt: #8b949e;
@@ -67,6 +88,7 @@
   --fg: #c9d1d9;
   --muted: #8b949e;
   --border: #30363d;
+  --control-border: #6f767d;
   --accent: #3fb950;
   --accent-fg: #06150b;
   --danger: #f85149;
@@ -89,8 +111,11 @@
   --fg: #ede9fe;
   --muted: #a78bda;
   --border: #3b2a63;
+  --control-border: #746895;
   --accent: #a855f7;
   --accent-fg: #ffffff;
+  --accent-strong: #9a4ee2;
+  --accent-text: #ad5ff7;
   --danger: #fb7185;
   --shadow: 0 8px 28px rgba(168, 85, 247, 0.35);
   --hl-cmt: #9179c4;
@@ -108,8 +133,11 @@
   --fg: #0c4a6e;
   --muted: #5e6d82;
   --border: #bae6fd;
+  --control-border: #5389a8;
   --accent: #0284c7;
   --accent-fg: #ffffff;
+  --accent-strong: #027bba;
+  --accent-text: #0271ab;
   --danger: #dc2626;
   --shadow: 0 8px 24px rgba(2, 132, 199, 0.15);
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235e6d82' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
@@ -122,8 +150,10 @@
   --fg: #e0e7ff;
   --muted: #8383a4;
   --border: #2e2e4a;
+  --control-border: #6b6e88;
   --accent: #ff2d78;
   --accent-fg: #ffffff;
+  --accent-strong: #dd2768;
   --danger: #ff5d5d;
   --shadow: 0 8px 28px rgba(255, 45, 120, 0.35);
   --hl-cmt: #6f6f96;
@@ -141,6 +171,7 @@
   --fg: #111111;
   --muted: #6c6c6c;
   --border: #dddddd;
+  --control-border: #838383;
   --accent: #111111;
   --accent-fg: #ffffff;
   --danger: #b91c1c;
@@ -265,8 +296,8 @@ body.noflag-showJournal #journal-btn { display: none; }
 }
 .view-btn:hover { border-color: var(--accent); color: var(--fg); }
 .view-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
   color: var(--accent-fg);
 }
 /* Per-view tab colour: a thicker tinted ring (thickness set in expert menu). */
@@ -277,7 +308,7 @@ body.noflag-showJournal #journal-btn { display: none; }
 .view-btn.colored.active {
   background: var(--view-color);
   border-color: var(--view-color);
-  color: #fff;
+  color: var(--view-ink, #fff);
   box-shadow: none;
 }
 /* The grid itself outlined in the active view's color (expert opt, off
@@ -1251,7 +1282,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   font: inherit;
   color: var(--fg);
   background: var(--surface-2);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 8px;
   outline: none;
   transition: border-color var(--transition);
@@ -1264,7 +1295,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   padding: 10px 18px;
   border: none;
   border-radius: var(--radius);
-  background: var(--accent);
+  background: var(--accent-strong);
   color: var(--accent-fg);
   font: inherit;
   font-weight: 600;
@@ -2301,7 +2332,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   cursor: pointer;
 }
 .expert-tab:hover { border-color: var(--accent); }
-.expert-tab.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.expert-tab.active { background: var(--accent-strong); color: var(--accent-fg); border-color: var(--accent-strong); }
 
 /* Appearance scales — CSS zoom on their own elements (1 = unchanged, the default).
    UI scale is the exception: it drives the WebView's native zoom from Rust instead. */
@@ -2727,7 +2758,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
      background-image to none, which clobbers a select's --select-chevron
      (class beats the plain `select` tag selector on specificity). */
   background-color: var(--surface-2);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 8px;
   outline: none;
   transition: border-color var(--transition);
@@ -2919,7 +2950,7 @@ select.modal-input { padding-right: 30px; }
   min-width: 0;
   padding: 4px 6px;
   text-align: center;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 6px;
   background: var(--surface);
   color: var(--fg);
@@ -3638,12 +3669,12 @@ body.drag-over::after {
 .update-version {
   flex: 0 0 calc((100% - 20px) / 3); /* same column width as #about-btn/#update-btn beside it */
   background: none; border: none; padding: 0;
-  color: var(--muted); font: inherit; font-size: 13px; font-weight: 600;
+  color: var(--fg); font: inherit; font-size: 13px; font-weight: 600;
   cursor: pointer; text-align: center; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
 }
-.update-version:hover { color: var(--fg); text-decoration: underline; }
-.update-version.update-avail { color: var(--accent); }
+.update-version:hover { text-decoration: underline; }
+.update-version.update-avail { color: var(--accent-text); }
 
 /* ---- Prompt library ---- */
 /* One wide column by default (read more of each prompt); the header toggle sets the
@@ -3857,7 +3888,7 @@ body.drag-over::after {
    global `select` rule already draws survives. */
 .batch-view-select {
   padding: 8px 30px 8px 14px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius);
   background-color: transparent;
   color: var(--fg);
@@ -4103,7 +4134,7 @@ body.drag-over::after {
   flex: 0 0 auto;
   border-radius: 11px;
   background: var(--surface-2);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   position: relative;
   cursor: pointer;
   outline: none;

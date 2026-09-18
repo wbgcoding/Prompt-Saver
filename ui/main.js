@@ -4106,6 +4106,7 @@ function viewTabEl(v) {
   if (v.color) {
     btn.classList.add("colored");
     btn.style.setProperty("--view-color", v.color);
+    btn.style.setProperty("--view-ink", readableInk(v.color));
   }
   // The name lives in its own span so the merge preview can shrink it back into the
   // tab the way a folder tab's spans already do.
@@ -5458,6 +5459,7 @@ function buildTile(p) {
     tile.classList.add("tinted");
     tile.style.background = p.color;
     tile.style.borderColor = p.color;
+    tile.style.color = readableInk(p.color);
   }
 
   const name = document.createElement("span");
@@ -6108,6 +6110,7 @@ function pickTileFolderColor(f, anchor) {
       tile.classList.toggle("tinted", !!hex);
       tile.style.background = hex;
       tile.style.borderColor = hex;
+      tile.style.color = hex ? readableInk(hex) : "";
     }
     clearTimeout(folderColorTimer);
     // Re-read the folder on write: the settings object was replaced in between.
@@ -6157,6 +6160,7 @@ function buildFolderTile(f) {
     tile.classList.add("tinted");
     tile.style.background = f.color;
     tile.style.borderColor = f.color;
+    tile.style.color = readableInk(f.color);
   }
   const mini = document.createElement("span");
   mini.className = "folder-mini";
@@ -6164,7 +6168,10 @@ function buildFolderTile(f) {
   for (const p of members.slice(0, 4)) {
     const face = document.createElement("span");
     face.className = "folder-mini-cell";
-    if (p.color) face.style.background = p.color;
+    if (p.color) {
+      face.style.background = p.color;
+      face.style.color = readableInk(p.color);
+    }
     const faceImg = imageOf(p);
     if (faceImg) {
       const img = document.createElement("img");

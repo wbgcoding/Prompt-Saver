@@ -299,15 +299,15 @@ body.video-body {
   border: 1px solid var(--border);
   border-radius: 8px 8px 0 0;
   background: transparent;
-  color: var(--muted);
+  color: var(--fg);
   font: inherit;
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
   transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
-.ve-tab:hover { color: var(--fg); border-color: var(--accent); }
-.ve-tab.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.ve-tab:hover { border-color: var(--accent); }
+.ve-tab.active { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--accent-fg); }
 .ve-panels { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 10px; }
 .ve-panel { display: flex; flex-direction: column; gap: 10px; }
 .ve-h { margin: 6px 0 0; font-size: 12px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; color: var(--muted); }
@@ -321,7 +321,7 @@ body.video-body {
 .ve-timefield { font-variant-numeric: tabular-nums; }
 .ve-steps { display: flex; flex-wrap: wrap; gap: 4px; }
 .ve-step { padding: 4px 8px; font-size: 12px; }
-.ve-step.sel { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.ve-step.sel { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--accent-fg); }
 /* A switched-off group stays visible but plainly inert — a control the user
    cannot act on must never look like one they can. */
 .ve-off { opacity: 0.45; }
