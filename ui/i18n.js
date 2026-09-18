@@ -1844,6 +1844,9 @@ export const I18N = {
     editStateRestoreMsg: "This recording has unfinished changes waiting from last time ({count}). Continue editing, or start fresh?",
     editStateRestoreContinue: "Continue editing",
     editStateRestoreDiscard: "Start fresh",
+    historyRestoreAsNew: "Save as new entry",
+    historyRestoreAsNewSuffix: "(version from {date})",
+    historyRestoredAsNew: "New entry created",
   },
   de: {
     settings: "Einstellungen",
@@ -3684,6 +3687,9 @@ export const I18N = {
     editStateRestoreMsg: "Für diese Aufnahme liegen unfertige Änderungen von letztem Mal bereit ({count}). Weiterbearbeiten oder neu beginnen?",
     editStateRestoreContinue: "Weiterbearbeiten",
     editStateRestoreDiscard: "Neu beginnen",
+    historyRestoreAsNew: "Als neuen Eintrag anlegen",
+    historyRestoreAsNewSuffix: "(Fassung vom {date})",
+    historyRestoredAsNew: "Neuer Eintrag angelegt",
   },
   es: {
     flagChainPrompts: "Encadenar prompts",
@@ -5524,6 +5530,9 @@ export const I18N = {
     settingsAreaLibrary: "Biblioteca",
     settingsAreaBackup: "Copias de seguridad",
     settingsAreaToolbar: "Barra de herramientas",
+    historyRestoreAsNew: "Guardar como nueva entrada",
+    historyRestoreAsNewSuffix: "(versión del {date})",
+    historyRestoredAsNew: "Nueva entrada creada",
   },
   it: {
     flagChainPrompts: "Concatenazione prompt",
@@ -7364,6 +7373,9 @@ export const I18N = {
     settingsAreaLibrary: "Libreria",
     settingsAreaBackup: "Backup",
     settingsAreaToolbar: "Barra degli strumenti",
+    historyRestoreAsNew: "Salva come nuova voce",
+    historyRestoreAsNewSuffix: "(versione del {date})",
+    historyRestoredAsNew: "Nuova voce creata",
   },
   pt: {
     flagChainPrompts: "Encadear prompts",
@@ -9204,6 +9216,9 @@ export const I18N = {
     settingsAreaLibrary: "Biblioteca",
     settingsAreaBackup: "Cópias de segurança",
     settingsAreaToolbar: "Barra de ferramentas",
+    historyRestoreAsNew: "Salvar como nova entrada",
+    historyRestoreAsNewSuffix: "(versão de {date})",
+    historyRestoredAsNew: "Nova entrada criada",
   },
   pl: {
     flagChainPrompts: "Łączenie promptów",
@@ -11055,6 +11070,9 @@ export const I18N = {
     settingsAreaLibrary: "Biblioteka",
     settingsAreaBackup: "Kopie zapasowe",
     settingsAreaToolbar: "Pasek narzędzi",
+    historyRestoreAsNew: "Zapisz jako nowy wpis",
+    historyRestoreAsNewSuffix: "(wersja z {date})",
+    historyRestoredAsNew: "Utworzono nowy wpis",
   },
   zh: {
     flagChainPrompts: "提示词链接",
@@ -12895,6 +12913,9 @@ export const I18N = {
     settingsAreaLibrary: "库",
     settingsAreaBackup: "备份",
     settingsAreaToolbar: "工具栏",
+    historyRestoreAsNew: "另存为新条目",
+    historyRestoreAsNewSuffix: "(来自 {date} 的版本)",
+    historyRestoredAsNew: "已创建新条目",
   },
   ja: {
     flagChainPrompts: "プロンプト連結",
@@ -14735,6 +14756,9 @@ export const I18N = {
     settingsAreaLibrary: "ライブラリ",
     settingsAreaBackup: "バックアップ",
     settingsAreaToolbar: "ツールバー",
+    historyRestoreAsNew: "新しいエントリとして保存",
+    historyRestoreAsNewSuffix: "({date} のバージョン)",
+    historyRestoredAsNew: "新しいエントリが作成されました",
   },
   nl: {
     flagChainPrompts: "Prompts koppelen",
@@ -16575,6 +16599,9 @@ export const I18N = {
     settingsAreaLibrary: "Bibliotheek",
     settingsAreaBackup: "Back-ups",
     settingsAreaToolbar: "Werkbalk",
+    historyRestoreAsNew: "Opslaan als nieuw item",
+    historyRestoreAsNewSuffix: "(versie van {date})",
+    historyRestoredAsNew: "Nieuw item aangemaakt",
   },
   tr: {
     flagChainPrompts: "Komut zincirleme",
@@ -18415,6 +18442,9 @@ export const I18N = {
     settingsAreaLibrary: "Kitaplık",
     settingsAreaBackup: "Yedekler",
     settingsAreaToolbar: "Araç çubuğu",
+    historyRestoreAsNew: "Yeni kayıt olarak kaydet",
+    historyRestoreAsNewSuffix: "({date} sürümü)",
+    historyRestoredAsNew: "Yeni kayıt oluşturuldu",
   },
   ro: {
     flagChainPrompts: "Înlănțuire prompturi",
@@ -20255,6 +20285,9 @@ export const I18N = {
     settingsAreaLibrary: "Bibliotecă",
     settingsAreaBackup: "Copii de rezervă",
     settingsAreaToolbar: "Bară de instrumente",
+    historyRestoreAsNew: "Salvează ca intrare nouă",
+    historyRestoreAsNewSuffix: "(versiunea din {date})",
+    historyRestoredAsNew: "Intrare nouă creată",
   },
 };
 

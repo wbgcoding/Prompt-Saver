@@ -694,6 +694,39 @@ const RESULTS = {
     const p = PROMPTS.find((x) => x.id === (a && a.id)) || PROMPTS[0];
     return { ...p, image: STUB_IMAGES.get(p.id) || "" };
   },
+  // 408: "Save as new entry" -- looks the version id up against the same P31/79
+  // fixtures list_versions already hands out, then pushes a genuinely new prompt
+  // onto the shared PROMPTS array so a following get_state actually shows it.
+  restore_version_as_new: (a) => {
+    const byId = {
+      1: { pid: "p6", name: "Prompt 7", text: "Example draft text number 7.", variants: [] },
+      2: { pid: "p6", name: "Prompt 7", text: "Example draft body number 7.", variants: [] },
+      3: { pid: "p10", name: "Prompt eleven (old name)", text: "Example prompt body number 11, first entry.", variants: [] },
+      4: {
+        pid: "p10", name: "Prompt 11",
+        text: "Example prompt body number 11, second entry.",
+        variants: ["Example prompt body number 11, third entry."],
+      },
+    };
+    const v = byId[a && a.versionId];
+    const source = v && PROMPTS.find((p) => p.id === v.pid);
+    if (!v || !source) return null;
+    const suffix = (a && a.suffix) || "";
+    const created = {
+      ...source,
+      id: "restored-" + a.versionId,
+      name: suffix ? v.name + " " + suffix : v.name,
+      text: v.text,
+      variants: v.variants,
+      favorite: false,
+      tags: [],
+      notes: "",
+      hotkey: "",
+      hotkey_paste: "",
+    };
+    PROMPTS.push(created);
+    return created;
+  },
   // 91: trash — restore/purge mutate the shared TRASH/PROMPTS fixtures so the dialog
   // reflects real effects, the way batch_prompts already mirrors "color" onto PROMPTS.
   list_trash: () => JSON.parse(JSON.stringify(TRASH)),

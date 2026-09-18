@@ -3158,6 +3158,41 @@ PROBE = """
       const cmHist = document.getElementById('confirm-modal');
       if (!cmHist.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
     }
+    // 408: "Save as new entry" leaves the original prompt alone and adds the
+    // snapshot's content as its own new entry instead, closing the editor and
+    // showing it selected so the user sees what happened.
+    if (!await openEditor('p6')) {
+      out.errors.push('408: the version-history prompt did not open in the editor');
+    } else {
+      document.getElementById('modal-advanced-head').click();
+      await sleep(250);
+      const rows408 = [...document.querySelectorAll('#modal-history-body .hist-row')];
+      if (rows408.length !== 2) {
+        out.errors.push('408: the history panel shows ' + rows408.length + ' versions instead of 2');
+      } else {
+        const restoreNewBtn = rows408[0].querySelector('.hist-restore-new');
+        if (!restoreNewBtn) {
+          out.errors.push('408: the newest version row has no "save as new entry" button');
+        } else {
+          restoreNewBtn.click();
+          await sleep(400);
+          if (!document.getElementById('modal').classList.contains('hidden')) {
+            out.errors.push('408: the editor stayed open after saving the version as a new entry');
+          }
+          const toastEl408 = document.getElementById('toast');
+          if ((toastEl408.textContent || '').trim() !== 'New entry created') {
+            out.errors.push('408: no "new entry created" toast after saving the version as new: ' + toastEl408.textContent);
+          }
+          await click('library-btn');
+          const expectedName = 'Prompt 7 (version from';
+          const hit = [...document.querySelectorAll('#library-list .lib-name')].some(e => e.textContent.startsWith(expectedName));
+          if (!hit) {
+            out.errors.push('408: no new library entry named like "' + expectedName + '…" after saving the version as new');
+          }
+          await click('library-close');
+        }
+      }
+    }
     // 79: version history for a rotating prompt shows every entry, numbered, each
     // with its own diff, an entry-count chip on the row, and a name-change line
     // wherever the snapshot's name differs from what it became next.

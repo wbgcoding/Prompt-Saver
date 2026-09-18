@@ -8238,7 +8238,32 @@ async function loadHistory(id) {
         toast(s === "save-failed" || s === "snapshot-failed" ? t("persistFailed") : s);
       }
     });
-    head.append(expand, restore);
+    // Keeps the current entry untouched and adds the snapshot as a separate one
+    // instead, for comparing them side by side rather than losing whichever
+    // version restore_version would have overwritten.
+    const restoreNew = document.createElement("button");
+    restoreNew.type = "button";
+    restoreNew.className = "ghost-btn hist-restore-new";
+    restoreNew.textContent = t("historyRestoreAsNew");
+    restoreNew.addEventListener("click", async () => {
+      try {
+        const suffix = t("historyRestoreAsNewSuffix").replace("{date}", new Date(v.ts * 1000).toLocaleString(LANG));
+        const created = await invoke("restore_version_as_new", { versionId: v.id, suffix });
+        // Same staleness guard as the restore button above: the editor may have
+        // moved on while this invoke was in flight.
+        if (modalState?.id !== id) return;
+        if (created) {
+          closeModal();
+          await renderGrid();
+          focusTile(created.id); // "gets selected after creation" -- see what happened
+          toast(t("historyRestoredAsNew"));
+        }
+      } catch (err) {
+        const s = String(err);
+        toast(s === "save-failed" ? t("persistFailed") : s);
+      }
+    });
+    head.append(expand, restore, restoreNew);
     const full = document.createElement("div");
     full.className = "hist-full hidden";
     // Building this (word-diffing every entry) is expensive at long prompts /

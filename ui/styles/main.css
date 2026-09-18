@@ -3014,7 +3014,7 @@ select.modal-input { padding-right: 30px; }
 .hist-expand:hover { color: var(--fg); background: var(--surface-2); }
 .hist-expand svg { transition: transform var(--transition); }
 .hist-row.open .hist-expand svg { transform: rotate(180deg); }
-.hist-restore { flex: 0 0 auto; padding: 3px 8px; font-size: 12px; }
+.hist-restore, .hist-restore-new { flex: 0 0 auto; padding: 3px 8px; font-size: 12px; }
 /* Chip beside the preview when a snapshot carries rotation entries, so the row
    itself hints there is more than one text before the user even expands it. */
 .hist-entries { flex: 0 0 auto; font-size: 10.5px; color: var(--muted); background: var(--surface-2); border-radius: 999px; padding: 1px 6px; }
