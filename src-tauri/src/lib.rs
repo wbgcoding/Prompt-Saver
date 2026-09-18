@@ -6481,11 +6481,11 @@ async fn restore_version(app: AppHandle, state: State<'_, Db>, version_id: i64) 
 }
 
 // The prompt "restore as new" builds from a version snapshot. Name and text/variants
-// come from the version itself; colour and image come from the CURRENT prompt instead,
-// because prompt_versions never stored them (see PromptVersion) — there is nothing
-// "older" to restore for either one. Everything else starts fresh, the same as any
-// other new entry, so this stays a small addition next to add_prompt rather than a
-// second copy of its whole field list.
+// come from the version itself; colour, image and tags come from the CURRENT prompt
+// instead, because prompt_versions never stored them (see PromptVersion) — there is
+// nothing "older" to restore for any of the three. Everything else starts fresh, the
+// same as any other new entry, so this stays a small addition next to add_prompt
+// rather than a second copy of its whole field list.
 fn build_restored_prompt(source: &Prompt, version_name: &str, version_text: String, version_variants: Vec<String>, suffix: &str) -> Prompt {
     let variants = sanitize_variants(version_variants);
     let rotate_mode = sanitize_rotate_mode(String::new(), &variants);
@@ -6507,13 +6507,20 @@ fn build_restored_prompt(source: &Prompt, version_name: &str, version_text: Stri
         font: String::new(),
         font_size: 0,
         favorite: false,
-        tags: Vec::new(),
+        tags: source.tags.clone(),
         notes: String::new(),
         hotkey: String::new(),
         hotkey_paste: String::new(),
         variants,
         rotate_mode,
         rotate_auto: false,
+        // No attachment is carried over either (file_path/icon_path above), so
+        // there is nothing for any of these to describe.
+        media_duration_ms: 0,
+        media_width: 0,
+        media_height: 0,
+        media_size_bytes: 0,
+        image_text: String::new(),
     }
 }
 
@@ -35736,9 +35743,9 @@ mod tests {
         assert_eq!(created.variants, variants);
         assert_eq!(created.color, source.color, "the colour marker comes from the current prompt, not the version");
         assert_eq!(created.image, source.image, "the image comes from the current prompt, not the version");
+        assert_eq!(created.tags, source.tags, "tags come from the current prompt too, the version never stored them");
         assert_ne!(created.id, source.id);
         assert!(!created.favorite, "a restored-as-new copy starts unstarred like any other new entry");
-        assert!(created.tags.is_empty());
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
             "CREATE TABLE prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '');",

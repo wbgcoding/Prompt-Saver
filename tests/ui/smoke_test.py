@@ -10911,7 +10911,9 @@ def main():
                  # from 134s once the Capture tab split (372) added a 7th expert
                  # tab -- lengthening every existing tab walk by one click -- plus
                  # its own group-survives-the-split probe, itself two full walks.
-                 "--virtual-time-budget=148000", "--dump-dom",
+                 # Kept equal to the English sweep's own budget just above, since
+                 # this runs the exact same probe script and had fallen behind it.
+                 "--virtual-time-budget=172000", "--dump-dom",
                  wrapper.as_uri()],
                 capture_output=True, text=True, encoding="utf-8", errors="replace",
                 timeout=240)
