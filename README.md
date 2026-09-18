@@ -90,7 +90,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 
 | | |
 |---|---|
-| **Backups** | Rotating local snapshots, compressed and encrypted, on a schedule you can change or switch off. Diagnostics, a restore list, usage statistics (exportable as CSV, TXT or JSON) and a storage breakdown (database, attachments, screenshots, recordings, backups, temporary files, error log, each with its own folder) live in their own window |
+| **Backups** | Rotating local snapshots, compressed and encrypted, on a schedule you can change or switch off. Diagnostics, a restore list, usage statistics (exportable as CSV, TXT or JSON, including which tools get used most) and a storage breakdown (database, attachments, screenshots, recordings, backups, temporary files, error log, each with its own folder) live in their own window |
 | **Smart retention** | Keep a plain number of snapshots, or a number per day, week, month and year |
 | **Backup password** | Optional — protects new backup files with a key derived from your password |
 | **Version history** | Every prompt keeps its earlier versions; preview and restore any of them |

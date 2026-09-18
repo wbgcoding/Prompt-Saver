@@ -8386,6 +8386,108 @@ struct UsageStats {
     per_view: Vec<ViewCount>,
     daily: Vec<DayCount>, // last 14 UTC days, oldest first, zero-filled
     history_on: bool,
+    tools: Vec<ToolBar>,       // most-used tools, name = the bare tool key (frontend translates it)
+    tools_never_used: Vec<String>, // tool keys with a zero counter
+}
+
+#[derive(Serialize)]
+struct ToolBar {
+    name: String,
+    count: u32,
+    last_used: u64,
+}
+
+// ---- Most-used tools ----
+// The functions this counts, each counted in the
+// SAME usage/last_used maps a prompt copy uses (see record_tool_usage below),
+// under a key namespace no real prompt id can ever collide with -- prompt ids
+// come from gen_id(), never the fixed "tool:" prefix. This array is also the
+// single source of truth a test checks the counted keys against, so a new
+// tool call site can never silently go uncounted without a test noticing.
+const TOOL_KEYS: [&str; 13] = [
+    "screenshot",
+    "screenshot_editor",
+    "ocr",
+    "recording_start",
+    "video_editor",
+    "video_export",
+    "dictation",
+    "color_pick",
+    "chain",
+    "rotation_advance",
+    "folder_create",
+    "duplicate_finder",
+    "backup_create",
+];
+
+fn tool_usage_key(tool: &str) -> String {
+    format!("tool:{tool}")
+}
+
+// Same "must be explicitly turned on" reading as the frontend's own shipsOn:
+// an opt-in flag defaults to off, so only an explicit `true` counts as on.
+fn tool_usage_enabled(settings: &Settings) -> bool {
+    settings.ui_flags.get("usageStats") == Some(&true)
+}
+
+// The actual increment, split out from the command below so it is directly
+// testable without a mock Tauri runtime (State<'_, Db>' cannot be constructed
+// in a unit test, same reasoning as export_prompts elsewhere in this file).
+fn apply_tool_usage(settings: &mut Settings, tool: &str) {
+    let key = tool_usage_key(tool);
+    let slot = settings.usage.entry(key.clone()).or_insert(0);
+    *slot += 1;
+    settings.last_used.insert(key, now_secs());
+}
+
+// Record one use of a tool -- called by the UI right after the action
+// succeeds. Off the moment usage statistics are off: unlike record_copy's
+// usage/last_used (always collected, only copyHistory's own row log is a
+// privacy toggle), this counter set exists purely for the dashboard and has
+// no other purpose, so nothing about it should survive the switch being off.
+#[tauri::command]
+async fn record_tool_usage(state: State<'_, Db>, tool: String) -> Result<(), String> {
+    if !TOOL_KEYS.contains(&tool.as_str()) {
+        return Err("unknown-tool".to_string());
+    }
+    let mut store = lock(&state);
+    if !tool_usage_enabled(&store.settings) {
+        return Ok(());
+    }
+    apply_tool_usage(&mut store.settings, &tool);
+    save_settings_soon();
+    Ok(())
+}
+
+// (top-N ToolBars, never-used tool keys) from the same usage/last_used maps
+// usage_stats already reads for prompts -- top_n mirrors the dashboard's own
+// "how many rows" field, the never-used list is always complete (it is short
+// by definition: at most 13 entries).
+fn tool_usage_stats(usage: &HashMap<String, u32>, last_used: &HashMap<String, u64>, top_n: usize) -> (Vec<ToolBar>, Vec<String>) {
+    let mut used: Vec<(&str, u32, u64)> = TOOL_KEYS
+        .iter()
+        .filter_map(|k| {
+            let n = usage.get(&tool_usage_key(k)).copied().unwrap_or(0);
+            if n > 0 {
+                let lu = last_used.get(&tool_usage_key(k)).copied().unwrap_or(0);
+                Some((*k, n, lu))
+            } else {
+                None
+            }
+        })
+        .collect();
+    used.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
+    let tools: Vec<ToolBar> = used
+        .into_iter()
+        .take(top_n)
+        .map(|(k, n, lu)| ToolBar { name: k.to_string(), count: n, last_used: lu })
+        .collect();
+    let never_used: Vec<String> = TOOL_KEYS
+        .iter()
+        .filter(|k| usage.get(&tool_usage_key(k)).copied().unwrap_or(0) == 0)
+        .map(|k| k.to_string())
+        .collect();
+    (tools, never_used)
 }
 
 // Coarse type of a prompt for the statistics breakdown.
@@ -8502,6 +8604,7 @@ async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Resu
         })
         .collect();
     let history_on = store.settings.ui_flags.get("copyHistory") != Some(&false);
+    let (tools, tools_never_used) = tool_usage_stats(usage, last_used, top_n);
     Ok(UsageStats {
         total_prompts,
         total_copies,
@@ -8518,6 +8621,8 @@ async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Resu
         top,
         never_used,
         per_view,
+        tools,
+        tools_never_used,
         daily,
         history_on,
     })
@@ -8621,12 +8726,23 @@ fn stats_to_json(entries: &[StatsExportEntry], daily: &[DayCount], tools: &[Stat
 #[tauri::command]
 async fn export_stats(app: AppHandle, state: State<'_, Db>, format: String) -> Result<usize, String> {
     let daily = db_conn(&app).map(|c| db_daily_copies(&c, 14)).unwrap_or_default();
-    let entries = {
+    let (entries, tools) = {
         let store = lock(&state);
-        stats_export_entries(&store)
+        let entries = stats_export_entries(&store);
+        // Every tool, not just the dashboard's top-N -- same "the export holds
+        // everything, the dashboard only shows the top slice" rule the entries
+        // above already follow.
+        let tools: Vec<StatsExportEntry> = TOOL_KEYS
+            .iter()
+            .map(|k| StatsExportEntry {
+                name: (*k).to_string(),
+                copies: store.settings.usage.get(&tool_usage_key(k)).copied().unwrap_or(0),
+                last_used: store.settings.last_used.get(&tool_usage_key(k)).copied().unwrap_or(0),
+            })
+            .collect();
+        (entries, tools)
     };
     let count = entries.len();
-    let tools: Vec<StatsExportEntry> = Vec::new(); // populated once per-tool usage counters exist
     let content = match format.as_str() {
         "csv" => stats_to_csv(&entries, &daily, &tools),
         "txt" => stats_to_txt(&entries, &daily, &tools),
@@ -25996,6 +26112,7 @@ pub fn run() {
             export_stats,
             storage_breakdown,
             open_storage_folder,
+            record_tool_usage,
             find_duplicates,
             ignore_dups,
             list_backups,
@@ -36337,6 +36454,87 @@ mod tests {
         assert_eq!(parsed["entries"][0]["copies"], 5);
         assert_eq!(parsed["daily"][0]["count"], 4);
         assert_eq!(parsed["tools"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn apply_tool_usage_increments_exactly_once_per_call() {
+        let mut settings = Settings::default();
+        apply_tool_usage(&mut settings, "screenshot");
+        assert_eq!(settings.usage.get(&tool_usage_key("screenshot")), Some(&1));
+        apply_tool_usage(&mut settings, "screenshot");
+        assert_eq!(settings.usage.get(&tool_usage_key("screenshot")), Some(&2), "a second use must add exactly one, not reset or double-count");
+        // A different tool has its own counter, untouched by the one above.
+        assert_eq!(settings.usage.get(&tool_usage_key("chain")), None);
+        assert!(settings.last_used.get(&tool_usage_key("screenshot")).copied().unwrap_or(0) > 0);
+    }
+
+    #[test]
+    fn tool_usage_enabled_defaults_to_off_and_needs_an_explicit_true() {
+        let settings = Settings::default();
+        assert!(!tool_usage_enabled(&settings), "usage statistics must default to off, same as the frontend's own shipsOn reading");
+        let mut on = Settings::default();
+        on.ui_flags.insert("usageStats".into(), true);
+        assert!(tool_usage_enabled(&on));
+        let mut explicit_off = Settings::default();
+        explicit_off.ui_flags.insert("usageStats".into(), false);
+        assert!(!tool_usage_enabled(&explicit_off));
+    }
+
+    #[test]
+    fn tool_usage_stats_never_used_list_holds_exactly_the_uncounted_keys() {
+        let mut usage: HashMap<String, u32> = HashMap::new();
+        usage.insert(tool_usage_key("screenshot"), 3);
+        usage.insert(tool_usage_key("chain"), 1);
+        let last_used: HashMap<String, u64> = HashMap::new();
+        let (tools, never_used) = tool_usage_stats(&usage, &last_used, 10);
+        assert_eq!(tools.len(), 2);
+        let counted: std::collections::HashSet<&str> = ["screenshot", "chain"].into_iter().collect();
+        for key in TOOL_KEYS {
+            assert_eq!(never_used.contains(&key.to_string()), !counted.contains(key), "key {key} must be in never_used iff it has no counter");
+        }
+        assert_eq!(never_used.len(), TOOL_KEYS.len() - 2);
+    }
+
+    #[test]
+    fn tool_usage_stats_orders_by_count_and_respects_top_n() {
+        let mut usage: HashMap<String, u32> = HashMap::new();
+        usage.insert(tool_usage_key("dictation"), 2);
+        usage.insert(tool_usage_key("backup_create"), 9);
+        usage.insert(tool_usage_key("ocr"), 5);
+        let mut last_used: HashMap<String, u64> = HashMap::new();
+        last_used.insert(tool_usage_key("backup_create"), 1700000500);
+        let (tools, _) = tool_usage_stats(&usage, &last_used, 2);
+        assert_eq!(tools.len(), 2, "top_n must cap the list");
+        assert_eq!(tools[0].name, "backup_create");
+        assert_eq!(tools[0].count, 9);
+        assert_eq!(tools[0].last_used, 1700000500);
+        assert_eq!(tools[1].name, "ocr");
+    }
+
+    // Checks the count points against the same list the dashboard reads, so a
+    // tool call site can never quietly go uninstrumented: every TOOL_KEYS
+    // entry must appear as a real record_tool_usage call somewhere in the
+    // frontend, whether through the main window's helper or a direct call
+    // from a window of its own.
+    #[test]
+    fn every_tool_key_has_a_matching_frontend_call_site() {
+        // Most tools are counted from the main window through the recordToolUsage(key)
+        // helper, but a few live in windows or shared modules of their own (the video
+        // editor, the shared colour popup) and call record_tool_usage directly.
+        let src = [
+            include_str!("../../ui/main.js"),
+            include_str!("../../ui/video.js"),
+            include_str!("../../ui/colorpop.js"),
+        ]
+        .join("\n");
+        for key in TOOL_KEYS {
+            let via_helper = format!("recordToolUsage(\"{key}\")");
+            let via_invoke = format!("tool: \"{key}\"");
+            assert!(
+                src.contains(&via_helper) || src.contains(&via_invoke),
+                "TOOL_KEYS has \"{key}\" but no frontend file has a record_tool_usage call for it"
+            );
+        }
     }
 
     // export_prompts is a #[tauri::command] async fn (AppHandle + State<'_, Db>)

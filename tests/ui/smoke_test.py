@@ -5021,6 +5021,22 @@ PROBE = """
           out.errors.push('414: the storage section has no "measure again" button');
         }
       }
+      // 415: most-used tools rubric -- one row per counted tool, a short
+      // "never used" list, and the sentence saying none of it leaves the
+      // computer, matching the mocked usage_stats fixture (2 tools, 2 never used).
+      {
+        const toolRows = document.querySelectorAll('#stats-panel .stat-tool-views .stat-view-row');
+        if (toolRows.length !== 2) {
+          out.errors.push('415: the most-used tools list does not show 2 rows (found ' + toolRows.length + ')');
+        }
+        const neverUsed = document.querySelectorAll('#stats-panel .stat-tool-never');
+        if (neverUsed.length !== 2) {
+          out.errors.push('415: the tools never-used list does not show 2 entries (found ' + neverUsed.length + ')');
+        }
+        if (!document.querySelector('#stats-panel .stat-local-only')) {
+          out.errors.push('415: the "stays on this computer" note is missing from the tools rubric');
+        }
+      }
       if (!document.querySelector('#stats-panel .stat-overview-split')) {
         out.errors.push('the overview is not split from the per-view list');
       }

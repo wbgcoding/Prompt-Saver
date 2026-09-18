@@ -1163,6 +1163,11 @@ const RESULTS = {
       count: [0, 3, 1, 0, 5, 2, 4, 0, 1, 6, 2, 3, 1, 4][i],
     })),
     history_on: true,
+    tools: [
+      { name: "screenshot", count: 14, last_used: 1750000000 },
+      { name: "ocr", count: 3, last_used: 1749900000 },
+    ],
+    tools_never_used: ["chain", "duplicate_finder"],
   }),
   export_stats: () => 12,
   storage_breakdown: () => ({

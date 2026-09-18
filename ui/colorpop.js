@@ -66,6 +66,7 @@ export function createColorPop() {
     render(false); // show the current color without re-triggering the pick
     onPick = pick;
     placePopover(el, anchor.getBoundingClientRect(), 6);
+    window.__TAURI__.core.invoke("record_tool_usage", { tool: "color_pick" }).catch(() => {});
   }
 
   function close() {

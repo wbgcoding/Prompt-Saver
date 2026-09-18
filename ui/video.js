@@ -2899,6 +2899,7 @@ async function startExport(toClipboard) {
   setProgress(0);
   try {
     await invoke("export_video", { req: request });
+    invoke("record_tool_usage", { tool: "video_export" }).catch(() => {});
     VE.dirty = false;
     // A finished export means nothing here is "unfinished" any more -- clear the
     // remembered row so reopening this recording later never offers to restore

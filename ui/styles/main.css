@@ -3092,6 +3092,12 @@ select.modal-input { padding-right: 30px; }
   max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .stat-cleanup-item:hover { border-color: var(--accent); color: var(--fg); }
+/* Most-used tools' own "never used" chips are not clickable (there is no
+   prompt to jump to for a tool), unlike the plain stat-cleanup-item they
+   otherwise look identical to. */
+.stat-tool-never { cursor: default; }
+.stat-tool-never:hover { border-color: var(--border); color: var(--muted); }
+.stat-local-only { font-size: 11px; color: var(--muted); margin-top: 4px; }
 .stat-views { display: flex; flex-direction: column; gap: 4px; }
 .stat-view-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; padding: 3px 2px; }
 /* Overview keeps two thirds of the width, the per-view breakdown the last third. */

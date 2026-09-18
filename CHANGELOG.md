@@ -367,6 +367,14 @@ the video editor and the introduction tour ship on).
   use, with a total at the top and a button to open a listed folder. Measured
   once and cached; a button re-measures. Independent of the usage-statistics
   switch, since storage use and usage tracking are two different things.
+- **Most-used tools in the statistics.** A new rubric next to the entry
+  statistics counts how often each tool gets used: screenshots, the
+  screenshot editor, text recognition, screen recording, the video editor and
+  its export, dictation, the color picker, chaining, rotating prompts,
+  creating a grid folder, the duplicate finder and making a backup. A short
+  list beside it names the tools nobody has touched yet. Counted only while
+  usage statistics are on, stays on this computer, and is included in the
+  statistics export.
 
 ### Improved
 

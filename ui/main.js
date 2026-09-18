@@ -4702,7 +4702,11 @@ function chainText() {
 function pushChainClipboard(commitId) {
   if (!chainSel.length) return;
   invoke("copy_text", { text: chainText() })
-    .then((ok) => { if (ok && commitId) invoke("rotation_commit", { id: commitId }).catch(() => {}); })
+    .then((ok) => {
+      if (!ok) return;
+      recordToolUsage("chain");
+      if (commitId) invoke("rotation_commit", { id: commitId }).catch(() => {});
+    })
     .catch((e) => errToast(e));
 }
 
@@ -5726,6 +5730,7 @@ function armDragOut(el, e, getPrompt) {
       if (p && (p.variants || []).length) {
         if (ev.dataTransfer.dropEffect !== "none" && dragRotationPeek.has(p.id)) {
           invoke("rotation_commit", { id: p.id }).catch(() => {});
+          recordToolUsage("rotation_advance");
         }
         dragRotationPeek.delete(p.id);
       }
@@ -6076,7 +6081,10 @@ async function newTileFolder(targetId, dropId, cell) {
     { id: "", view_id: view.id },
     { name: String(name).trim(), cell, members: [targetId, dropId] }
   );
-  if (ok) await renderGrid(true);
+  if (ok) {
+    recordToolUsage("folder_create");
+    await renderGrid(true);
+  }
 }
 
 async function renameTileFolder(f) {
@@ -7219,7 +7227,7 @@ async function copyTextWithVars(p, el, paste = false) {
     recordCopy(p.id);
     // A failed peek already fell back to p.text above -- only a successful peek may
     // be followed by a commit (copyResolved's own rule).
-    if (rotating && peek) invoke("rotation_commit", { id: p.id }).catch(() => {});
+    if (rotating && peek) { invoke("rotation_commit", { id: p.id }).catch(() => {}); recordToolUsage("rotation_advance"); }
     if (paste || (quickSecond && flag("autoPaste"))) await autoPasteNow(el);
     maybeCloseOnCopy();
   }
@@ -7396,7 +7404,7 @@ async function copyOutsideApp(p, paste) {
   }
   if (await invoke("copy_text", { text }).catch((e) => { errToast(e); return false; })) {
     recordCopy(p.id);
-    if (rotating && peek) invoke("rotation_commit", { id: p.id }).catch(() => {});
+    if (rotating && peek) { invoke("rotation_commit", { id: p.id }).catch(() => {}); recordToolUsage("rotation_advance"); }
     if (paste) await autoPasteNow(null);
   }
 }
@@ -8441,6 +8449,30 @@ function numRow(labelKey, key, min, max, onSet, extraClass, after) {
 // worth of i18n keys, not two.
 const PROMPT_TYPE_LABELS = { text: "statTypeText", image: "filterImage", video: "filterVideo", pdf: "filterPdf", file: "filterFile" };
 
+// Label key per tool-usage counter, in the same order the backend's TOOL_KEYS
+// lists them.
+const STATS_TOOL_LABELS = {
+  screenshot: "statsToolScreenshot",
+  screenshot_editor: "statsToolScreenshotEditor",
+  ocr: "statsToolOcr",
+  recording_start: "statsToolRecordingStart",
+  video_editor: "statsToolVideoEditor",
+  video_export: "statsToolVideoExport",
+  dictation: "statsToolDictation",
+  color_pick: "statsToolColorPick",
+  chain: "statsToolChain",
+  rotation_advance: "statsToolRotationAdvance",
+  folder_create: "statsToolFolderCreate",
+  duplicate_finder: "statsToolDuplicateFinder",
+  backup_create: "statsToolBackupCreate",
+};
+// Fire-and-forget: a missed count is not worth interrupting or even toasting
+// over, and the backend itself already counts nothing while statistics are
+// off, so there is no client-side gate to duplicate here.
+function recordToolUsage(tool) {
+  invoke("record_tool_usage", { tool }).catch(() => {});
+}
+
 async function renderStatsPanel(body) {
   // Feature toggle + (when on) the top-N field share one row.
   const on = flag("usageStats");
@@ -8643,6 +8675,40 @@ async function renderStatsPanel(body) {
     }
     body.appendChild(list);
   }
+  // Most-used tools: same shape as the entries above (list,
+  // count, last used, capped by statsTopN), plus a short "never used" list of
+  // its own. That second list is the actual point of the rubric, since it is
+  // the one place that shows which of the seven expert tabs nobody touches.
+  if (s.tools.length || s.tools_never_used.length) {
+    const note = document.createElement("div");
+    note.className = "stat-local-only";
+    note.textContent = t("statsLocalOnly");
+    body.appendChild(note);
+  }
+  if (s.tools.length) {
+    body.appendChild(statSection(t("statsTools")));
+    const list = document.createElement("div"); list.className = "stat-views stat-tool-views";
+    for (const tool of s.tools) {
+      const row = document.createElement("div"); row.className = "stat-view-row";
+      const name = document.createElement("span"); name.textContent = t(STATS_TOOL_LABELS[tool.name] || tool.name);
+      const info = document.createElement("span"); info.className = "stat-view-count";
+      info.textContent = tool.last_used ? `${nf(tool.count)} · ${new Date(tool.last_used * 1000).toLocaleDateString(LANG)}` : nf(tool.count);
+      row.append(name, info);
+      list.appendChild(row);
+    }
+    body.appendChild(list);
+  }
+  if (s.tools_never_used.length) {
+    body.appendChild(statSection(t("statsToolsNever")));
+    const list = document.createElement("div"); list.className = "stat-cleanup";
+    for (const key of s.tools_never_used) {
+      const item = document.createElement("span");
+      item.className = "stat-cleanup-item stat-tool-never";
+      item.textContent = t(STATS_TOOL_LABELS[key] || key);
+      list.appendChild(item);
+    }
+    body.appendChild(list);
+  }
   wireClearButtons(root); // clear-X on the top-N field
 }
 function jumpToPrompt(name) {
@@ -8675,6 +8741,7 @@ async function scanDupes() {
   let groups;
   try { groups = await invoke("find_duplicates", { threshold: Math.round(val("dupThreshold")) }); }
   catch (e) { errToast(e); body.innerHTML = ""; return; }
+  recordToolUsage("duplicate_finder");
   body.innerHTML = "";
   if (!groups.length) {
     const e = document.createElement("div");
@@ -9503,6 +9570,7 @@ async function startVoice(target, btn) {
     routeVoiceError(e);
     return;
   }
+  recordToolUsage("dictation");
   const { id, lang } = res;
   // A cancel that happened while this call was in flight (voice_start's own
   // spawn_blocking round trip is not instant) has to stop the session it
@@ -9869,8 +9937,11 @@ async function renderBackupPanel(body) {
 
   const nowBtn = document.createElement("button"); nowBtn.type = "button"; nowBtn.className = "ghost-btn backup-now-btn"; nowBtn.textContent = t("backupNow");
   nowBtn.addEventListener("click", async () => {
-    try { await withTaskbarBusy("backup", () => invoke("create_backup", { keep: Math.round(val("backupKeep")) })); toast(t("backupDone")); }
-    catch (e) { errToast(e); }
+    try {
+      await withTaskbarBusy("backup", () => invoke("create_backup", { keep: Math.round(val("backupKeep")) }));
+      recordToolUsage("backup_create");
+      toast(t("backupDone"));
+    } catch (e) { errToast(e); }
     await saveUiState("backupListOpen", true); // reveal the fresh backup right away
     renderBackupPanel(body);
   });
@@ -12674,7 +12745,7 @@ async function copyResolved(p) {
     // A failed peek already fell back to p.text above — committing anyway would
     // advance whatever the pointer's REAL position is, not the entry we actually
     // just copied. Only a successful peek may be followed by a commit.
-    if (ok && peek) invoke("rotation_commit", { id: p.id }).catch(() => {});
+    if (ok && peek) { invoke("rotation_commit", { id: p.id }).catch(() => {}); recordToolUsage("rotation_advance"); }
     return ok;
   }
   if (varTokens(p).length) {
@@ -13866,7 +13937,9 @@ function bind() {
       openImageFileInEditor(res);
     } else if (res.kind === "video") {
       toast(t("openedCopyNote"));
-      await invoke("open_video_editor", { srcPath: res.copied_path, originDir: res.origin_dir }).catch((e) => errToast(e));
+      await invoke("open_video_editor", { srcPath: res.copied_path, originDir: res.origin_dir })
+        .then(() => recordToolUsage("video_editor"))
+        .catch((e) => errToast(e));
     }
   }
   // Driven by the recording state, not by the click -- set on a
@@ -13906,6 +13979,7 @@ function bind() {
     const startNow = async () => {
       try {
         await invoke("start_recording", { targetKind: kind, targetId, regionX, regionY, regionW, regionH });
+        recordToolUsage("recording_start");
         setRecordBtnState("recording");
         await invoke("show_rec_bar", { targetKind: kind, id: targetId });
       } catch (err) { errToast(err); }
@@ -14219,6 +14293,7 @@ function bind() {
     if (!pendingRecPath) return;
     try {
       await invoke("open_video_editor", { srcPath: pendingRecPath });
+      recordToolUsage("video_editor");
       recSavedOrAttached = true;
     } catch (err) {
       errToast(err);
@@ -15981,6 +16056,7 @@ function bind() {
       onCancel?.();
     };
     img.onload = () => {
+      recordToolUsage("screenshot_editor");
       SE.img = img;
       SE.w = img.naturalWidth;
       SE.h = img.naturalHeight;
@@ -16257,6 +16333,7 @@ function bind() {
   listen("snip-captured", (e) => {
     pendingSnip = e.payload?.data_url || "";
     if (!pendingSnip) return;
+    recordToolUsage("screenshot");
     pendingSnipPath = e.payload?.path || "";
     pendingSnipName = e.payload?.name || "";
     pendingSnipOriginDir = "";
@@ -16400,6 +16477,7 @@ function bind() {
     if (!pendingSnip) return;
     try {
       showOcrResult(await invoke("ocr_image_data", { dataUrl: pendingSnip, ...ocrSettings() }));
+      recordToolUsage("ocr");
     } catch (err) { ocrErrToast(err); }
   });
   // (b) standalone composer button -- small menu (Screenshot / From image file).
@@ -16413,6 +16491,7 @@ function bind() {
           if (!path) return;
           try {
             showOcrResult(await invoke("ocr_image", { path, ...ocrSettings() }));
+            recordToolUsage("ocr");
           } catch (err) { ocrErrToast(err); }
         },
       },
@@ -17158,7 +17237,11 @@ function bind() {
       await editPrompt(id);
     } else if (act === "editVideo") {
       const p = prompts.find((x) => x.id === id);
-      if (p?.file_path) await invoke("open_video_editor", { srcPath: p.file_path }).catch((e) => errToast(e));
+      if (p?.file_path) {
+        await invoke("open_video_editor", { srcPath: p.file_path })
+          .then(() => recordToolUsage("video_editor"))
+          .catch((e) => errToast(e));
+      }
     } else if (act === "duplicate") {
       await duplicatePrompt(id);
     } else if (act === "compareWith") {

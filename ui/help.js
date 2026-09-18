@@ -286,7 +286,7 @@ export const HELP_CONTENT = {
         "Restore from the snapshot list, choosing data only, settings only, or both.",
       ],
       whatHappens:
-        "Retention tiers — daily, weekly, monthly, yearly — thin out older snapshots automatically instead of keeping every one forever. A backup is either whole or absent; a failed one leaves nothing behind. The same window also has a usage-statistics section — totals, a 14-day activity chart, most-used tiles — unrelated to the backups themselves.",
+        "Retention tiers — daily, weekly, monthly, yearly — thin out older snapshots automatically instead of keeping every one forever. A backup is either whole or absent; a failed one leaves nothing behind. The same window also has a usage-statistics section — totals, a 14-day activity chart, most-used tiles, most-used tools with a list of the ones never touched — unrelated to the backups themselves, plus a storage breakdown of what is taking up disk space.",
       settings: [
         "Interval, retention tiers, password, restore scope — Backup manager (its own window, opened from Settings)",
         "Usage statistics, how many tiles it lists — same window, below the backups",
@@ -895,7 +895,7 @@ export const HELP_CONTENT = {
         "Aus der Snapshot-Liste wiederherstellen und dabei nur Daten, nur Einstellungen oder beides wählen.",
       ],
       whatHappens:
-        "Aufbewahrungsstufen — täglich, wöchentlich, monatlich, jährlich — dünnen ältere Snapshots automatisch aus, statt jeden für immer zu behalten. Ein Backup ist entweder vollständig oder gar nicht vorhanden; ein fehlgeschlagenes hinterlässt nichts. Dasselbe Fenster enthält außerdem eine Nutzungsstatistik — Gesamtzahlen, ein 14-Tage-Diagramm, meistgenutzte Kacheln — unabhängig von den Backups selbst.",
+        "Aufbewahrungsstufen — täglich, wöchentlich, monatlich, jährlich — dünnen ältere Snapshots automatisch aus, statt jeden für immer zu behalten. Ein Backup ist entweder vollständig oder gar nicht vorhanden; ein fehlgeschlagenes hinterlässt nichts. Dasselbe Fenster enthält außerdem eine Nutzungsstatistik — Gesamtzahlen, ein 14-Tage-Diagramm, meistgenutzte Kacheln, meistgenutzte Werkzeuge mit einer Liste der nie benutzten — unabhängig von den Backups selbst, dazu einen Speicherüberblick, was auf der Festplatte wie viel Platz belegt.",
       settings: [
         "Intervall, Aufbewahrungsstufen, Passwort, Wiederherstellungsumfang — Backup-Manager (eigenes Fenster, geöffnet aus Einstellungen)",
         "Nutzungsstatistiken, wie viele Kacheln dort gelistet werden — selbes Fenster, unter den Backups",

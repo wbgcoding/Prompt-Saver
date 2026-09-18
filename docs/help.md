@@ -666,7 +666,10 @@ usage-statistics section (totals, a 14-day activity chart, most-used tiles),
 unrelated to the backups themselves, with its own button to export the
 statistics as CSV, TXT or JSON, and a storage section that shows how much disk
 space the database, attachments, screenshots, recordings, backups, temporary
-files and the error log each use, with a button to open a listed folder.
+files and the error log each use, with a button to open a listed folder. The
+usage statistics also list the most-used tools, screenshots through backups,
+with a short list of the ones never used, all counted locally and included in
+the export.
 
 ---
 
@@ -1071,7 +1074,10 @@ unabhängig von den Backups selbst, mit einem eigenen Knopf, um die Statistik
 als CSV, TXT oder JSON zu exportieren, sowie ein Speicherbereich, der zeigt,
 wie viel Platz Datenbank, Anhänge, Bildschirmfotos, Aufnahmen, Sicherungen,
 temporäre Dateien und das Fehlerprotokoll jeweils belegen, mit einem Knopf,
-um einen aufgeführten Ordner zu öffnen.
+um einen aufgeführten Ordner zu öffnen. Die Nutzungsstatistik listet außerdem
+die meistgenutzten Werkzeuge auf, von Bildschirmfotos bis Sicherungen, mit
+einer kurzen Liste der noch nie benutzten. Alles wird rein lokal gezählt und
+ist im Export enthalten.
 
 **Eigenständig: Schnellstarter** — Strg+Alt+P, unscharfe Suche, sofortiges Kopieren.
 
