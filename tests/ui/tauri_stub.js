@@ -503,6 +503,11 @@ const RESULTS = {
     SETTINGS.theme = "custom:" + id;
     return JSON.parse(JSON.stringify(SETTINGS));
   },
+  // image_text never reaches the frontend, so this is the only way a search
+  // hit inside a picture's recognized text can ever come back -- stubbed to
+  // answer one fixed query with a fixture id nothing's name or body contains,
+  // so a probe can prove the badge without a real OCR engine.
+  search_image_text: (a) => (a && String(a.query || "").toLowerCase() === "lighthouse") ? ["p4"] : [],
   app_version: () => "0.0.0",
   current_data_dir: () => "C:\\Data",
   // Sealed unless a page says otherwise, so the default walk sees the healthy

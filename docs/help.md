@@ -496,6 +496,13 @@ library/history/pin buttons, multiple views, and view groups.
 Excludes the window from screen capture (on by default), blurs tiles/media until
 hovered, hides tile names, dims unhovered tiles.
 
+An optional, off-by-default setting reads text out of an attached picture so
+the library search can find it too, and a hit found only there carries a
+"found in image" badge. The recognized text is kept only for that search: it never
+appears anywhere in the app, is never exported and never synchronized, and is
+capped in length so a screenshot of a wall of text cannot inflate the
+database. Removing or replacing the picture clears it immediately.
+
 The screen-capture exclusion needs Windows 10 version 2004 (build 19041) or
 newer; on an older Windows it is silently ignored and the window is captured
 like any other.
@@ -926,7 +933,15 @@ sobald sie zum ersten Mal angezeigt werden. Das Hauptraster bleibt unverändert.
 **Werkzeugleiste** — welche Buttons Kopf- und Composer-Leiste zeigen.
 
 **Datenschutz** — Bildschirmaufnahme-Ausschluss (an), Weichzeichnen, Namen
-verbergen, Abdunkeln. Der Bildschirmaufnahme-Ausschluss braucht Windows 10 ab
+verbergen, Abdunkeln. Eine optionale, standardmäßig ausgeschaltete Einstellung
+liest Text aus einem angehängten Bild, damit die Bibliothekssuche ihn auch
+findet, und ein Treffer nur dort trägt die Kennzeichnung "im Bild gefunden". Der
+erkannte Text dient ausschließlich dieser Suche: Er erscheint nirgends in der
+App, wird nie exportiert und nie synchronisiert, und ist in der Länge
+begrenzt, damit ein Screenshot voller Text die Datenbank nicht aufbläht.
+Entfernen oder Ersetzen des Bilds löscht ihn sofort.
+
+Der Bildschirmaufnahme-Ausschluss braucht Windows 10 ab
 Version 2004 (Build 19041); auf einem älteren Windows wird er still ignoriert
 und das Fenster wie jedes andere aufgenommen. Alles in der Datenbank ist mit
 der kontogebundenen

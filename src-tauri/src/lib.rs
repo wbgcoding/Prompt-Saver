@@ -1718,6 +1718,12 @@ struct Prompt {
     // Size in bytes of the attached file (file_path/icon_path), 0 = unknown.
     #[serde(default)]
     media_size_bytes: u64,
+    // Text recognized in the attached picture, a search index and nothing
+    // else: never shown, exported or synchronized. Empty unless ocrIndex was
+    // on when the picture was attached. Cleared the moment the picture is
+    // removed or replaced.
+    #[serde(default)]
+    image_text: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Default)]
@@ -5956,13 +5962,20 @@ async fn add_prompt(
             Some(p) => probe_media_meta(ffprobe_search_path(&app).as_deref(), Path::new(p)),
             None => (0, 0, 0, 0),
         };
+        let image_value = image.unwrap_or_default();
+        // Read once and indexed once, right here, on purpose: a search index that
+        // costs an OCR pass on every render would be exactly the defect this is
+        // meant not to be.
+        let ocr_index_on = store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false);
+        let max_chars = ocr_index_max_chars(&store.settings);
+        let image_text = resolved_image_text(&image_value, ocr_index_on, |img| ocr_index_text(img, max_chars));
         let prompt = Prompt {
             id: gen_id(),
             trashed_at: 0,
             name,
             text,
             color,
-            image: image.unwrap_or_default(),
+            image: image_value,
             show_image: show_image.unwrap_or(false),
             copy_image: copy_image.unwrap_or(false),
             file_path: fp,
@@ -5984,6 +5997,7 @@ async fn add_prompt(
             media_width,
             media_height,
             media_size_bytes,
+            image_text,
         };
         // A grid folder owns its cell OUTSIDE view.layouts, and the renderer gives a
         // folder priority — so a cell handed out without excluding them saves fine and
@@ -6077,6 +6091,9 @@ async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, examples: Ve
                 media_width: 0,
                 media_height: 0,
                 media_size_bytes: 0,
+                // Onboarding examples are never OCR-indexed -- ocrIndex ships off,
+                // and seeding runs before the user has ever seen the switch.
+                image_text: String::new(),
             };
             let view = store.settings.active_view_mut();
             if let Some(cell) = first_free_cell(view) {
@@ -6254,6 +6271,8 @@ async fn update_prompt(
         // split into disjoint field borrows) -- only actually run if the
         // attachment turns out to have changed.
         let ffprobe = ffprobe_search_path(&app);
+        let ocr_index_on = store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false);
+        let ocr_max_chars = ocr_index_max_chars(&store.settings);
         // Read history settings before the mutable prompt borrow (a MutexGuard
         // can't be split into disjoint field borrows).
         let hist_on = history_enabled(&store.settings);
@@ -6272,7 +6291,15 @@ async fn update_prompt(
                 p.variants = variants;
                 p.rotate_mode = rotate_mode;
                 if let Some(auto) = rotate_auto { p.rotate_auto = sanitize_rotate_auto(auto, &p.variants); }
+                // Same rule as the attachment path above: only a real change to the
+                // picture re-indexes it. Cleared the moment the picture is gone,
+                // re-run (only while ocrIndex is on) the moment it is replaced --
+                // an old picture's leftover text must never survive under a new one.
+                let image_changed = image.as_deref().is_some_and(|v| v != p.image);
                 p.image = merge_image(&p.image, image);
+                if image_changed {
+                    p.image_text = resolved_image_text(&p.image, ocr_index_on, |img| ocr_index_text(img, ocr_max_chars));
+                }
                 if let Some(si) = show_image { p.show_image = si; }
                 if let Some(ci) = copy_image { p.copy_image = ci; }
                 // A real change to either path re-measures the attachment -- a save
@@ -8117,12 +8144,15 @@ impl From<&Prompt> for SlimPrompt {
     fn from(p: &Prompt) -> Self {
         // Destructured rather than read field by field on purpose: a field added to
         // `Prompt` later breaks this line until someone decides whether the window
-        // needs it, instead of silently never arriving there.
+        // needs it, instead of silently never arriving there. image_text is the one
+        // deliberate exception, bound to `_`: it is a search index, never handed to
+        // the frontend at all.
         let Prompt {
             id, name, text, color, image, show_image, copy_image, file_path, pdf_page,
             icon_path, caption, caption_size, font, font_size, favorite, tags, notes,
             hotkey, hotkey_paste, trashed_at, variants, rotate_mode, rotate_auto,
             media_duration_ms, media_width, media_height, media_size_bytes,
+            image_text: _,
         } = p;
         SlimPrompt {
             id: id.clone(),
@@ -14836,6 +14866,145 @@ async fn ocr_image_data(data_url: String, upscale_under_px: u32, join_lines: boo
     }
 }
 
+// Default matches the spec's own default (20000): long enough for a real
+// screenshot of text, short enough that a photo of a wall of text cannot
+// inflate the database.
+fn ocr_index_max_chars(settings: &Settings) -> usize {
+    settings.ui_values.get("ocrIndexMaxChars").copied().unwrap_or(20000.0).max(0.0) as usize
+}
+
+// The cap itself, split out from ocr_index_text below so it is testable
+// without a real OCR engine: char-safe (never splits a multi-byte character),
+// which `.chars().take(n)` already guarantees.
+fn cap_ocr_text(text: &str, max_chars: usize) -> String {
+    text.chars().take(max_chars).collect()
+}
+
+// Text recognized in an attached picture, for the search index only (never
+// shown, exported or synchronized). Always auto-picks the recognition
+// language rather than reading the interactive OCR feature's own language
+// setting: indexing runs silently
+// with ocrIndex switched on, whether or not the OCR text-recognition feature
+// itself is even turned on. A picture that cannot be decoded, an engine with
+// no language pack installed, or a blank result all come back as "", the
+// same "nothing to index" outcome a caller cannot tell apart from an error
+// and does not need to.
+fn ocr_index_text(data_url: &str, max_chars: usize) -> String {
+    if data_url.is_empty() || !data_url_within_limit(data_url, MAX_OCR_IMAGE_BYTES) {
+        return String::new();
+    }
+    let bytes = data_url_bytes(data_url);
+    let Some(img) = decode_image_mem(&bytes) else { return String::new() };
+    #[cfg(windows)]
+    let text = ocr::recognize_crop(img.to_rgba8(), 480, true, "auto", true).map(|r| r.text).unwrap_or_default();
+    #[cfg(not(windows))]
+    let text = { let _ = img; String::new() };
+    cap_ocr_text(&text, max_chars)
+}
+
+// The decision behind "attach fills the field only while ocrIndex is on,
+// removing the picture always empties it" -- pulled out of
+// add_prompt/update_prompt as its own pure function so the gating is
+// provable without a real OCR engine or a running app: `recognize` is called
+// at most once, only for a non-empty picture with the switch on, and its
+// result is what a test controls instead of Windows.Media.Ocr.
+fn resolved_image_text(new_image: &str, ocr_index_on: bool, recognize: impl FnOnce(&str) -> String) -> String {
+    if new_image.is_empty() || !ocr_index_on {
+        String::new()
+    } else {
+        recognize(new_image)
+    }
+}
+
+// Ids whose recognized picture text contains `query` -- pulled out of the
+// command below as its own pure function so it is testable without a running
+// app. This is the only way image_text is ever read back out: it never
+// crosses into the frontend at all (see SlimPrompt's From impl), so the
+// plain-text search every other field goes through client-side asks the
+// backend for this one field alone.
+fn image_text_matches(prompts: &[Prompt], ocr_index_on: bool, query: &str) -> Vec<String> {
+    if !ocr_index_on {
+        return Vec::new();
+    }
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return Vec::new();
+    }
+    prompts
+        .iter()
+        .filter(|p| !p.image_text.is_empty() && p.image_text.to_lowercase().contains(&q))
+        .map(|p| p.id.clone())
+        .collect()
+}
+
+#[tauri::command]
+fn search_image_text(state: State<Db>, query: String) -> Vec<String> {
+    let store = lock(&state);
+    let ocr_index_on = store.settings.ui_flags.get("ocrIndex").copied().unwrap_or(false);
+    image_text_matches(&store.prompts, ocr_index_on, &query)
+}
+
+// Set by cancel_ocr_index_backfill, polled between pictures in the loop below.
+static OCR_INDEX_CANCEL: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+fn cancel_ocr_index_backfill() {
+    OCR_INDEX_CANCEL.store(true, Ordering::SeqCst);
+}
+
+// The expert-menu "read existing pictures" action: every prompt that carries
+// a picture but no index text yet, read once, one at a time -- a single
+// sequential pass, never a flood of parallel OCR calls. Progress and
+// cancellation go through the same shared background-jobs registry
+// push_bg_op already gives export/convert/the ffmpeg download, so this needs
+// no progress UI of its own.
+#[tauri::command]
+async fn ocr_index_backfill(app: AppHandle, state: State<'_, Db>) -> Result<usize, String> {
+    OCR_INDEX_CANCEL.store(false, Ordering::SeqCst);
+    let (ids, max_chars) = {
+        let store = lock(&state);
+        let ids: Vec<String> = store
+            .prompts
+            .iter()
+            .filter(|p| !p.image.is_empty() && p.image_text.is_empty())
+            .map(|p| p.id.clone())
+            .collect();
+        (ids, ocr_index_max_chars(&store.settings))
+    };
+    let total = ids.len();
+    push_bg_op(&app, "ocr-index", "ocr-index", if total == 0 { "done" } else { "running" }, Some(0), None);
+    let mut done = 0usize;
+    for id in ids {
+        if OCR_INDEX_CANCEL.load(Ordering::SeqCst) {
+            push_bg_op(&app, "ocr-index", "ocr-index", "error", None, None);
+            return Ok(done);
+        }
+        let image = {
+            let store = lock(&state);
+            store.prompts.iter().find(|p| p.id == id).map(|p| p.image.clone())
+        };
+        if let Some(image) = image {
+            if !image.is_empty() {
+                let text = tauri::async_runtime::spawn_blocking(move || ocr_index_text(&image, max_chars))
+                    .await
+                    .map_err(|e| e.to_string())?;
+                if !text.is_empty() {
+                    let mut store = lock(&state);
+                    if let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) {
+                        p.image_text = text;
+                    }
+                    save_prompts(&app, &store);
+                }
+            }
+        }
+        done += 1;
+        let pct = ((done * 100) / total.max(1)) as u32;
+        push_bg_op(&app, "ocr-index", "ocr-index", "running", Some(pct), None);
+    }
+    push_bg_op(&app, "ocr-index", "ocr-index", "done", None, None);
+    Ok(done)
+}
+
 // List recognition-language capabilities. Usually no elevated rights are
 // needed (Microsoft's own docs agree), but some Windows builds throw
 // ERROR_ELEVATION_REQUIRED even for this read-only query -- see the HResult
@@ -20294,6 +20463,7 @@ fn cancel_all_bg_ops() {
     cancel_all_exports();
     cancel_recording_convert();
     cancel_ffmpeg_download();
+    cancel_ocr_index_backfill();
 }
 
 // Reveals the folder for a path already recorded as some job's own `target` --
@@ -23461,6 +23631,10 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String, hash
             media_width: 0,
             media_height: 0,
             media_size_bytes: 0,
+            // Never exported, so never imported either -- the OCR backfill
+            // action picks up any picture this entry carries, same as an
+            // ordinary pre-existing entry.
+            image_text: String::new(),
         };
         store.prompts.push(prompt);
         count += 1;
@@ -25560,6 +25734,9 @@ pub fn run() {
             ocr_languages,
             ocr_image,
             ocr_image_data,
+            search_image_text,
+            ocr_index_backfill,
+            cancel_ocr_index_backfill,
             ocr_capabilities,
             ocr_capabilities_elevate,
             ocr_capabilities_elevated_result,
@@ -26786,6 +26963,7 @@ fn sync_blank_prompt(id: String) -> Prompt {
         media_width: 0,
         media_height: 0,
         media_size_bytes: 0,
+        image_text: String::new(),
     }
 }
 
@@ -29805,6 +29983,18 @@ mod tests {
         assert!(json.contains("\"has_image\":true"));
     }
 
+    // image_text is a search index, never shown -- proven the same way the
+    // picture bytes above are: the frontend's own state payload must not
+    // carry it at all, not even the field name.
+    #[test]
+    fn slim_prompt_never_carries_image_text() {
+        let mut p = prompt_with_image();
+        p.image_text = "invoice total due friday".into();
+        let json = serde_json::to_string(&SlimPrompt::from(&p)).unwrap();
+        assert!(!json.contains("invoice"), "OCR-recognized text leaked into the state payload: {json}");
+        assert!(!json.contains("image_text"), "the state payload still has an image_text field: {json}");
+    }
+
     #[test]
     fn slim_prompt_image_rev_is_stable_and_changes_with_the_image() {
         let p = prompt_with_image();
@@ -30439,6 +30629,65 @@ mod tests {
         assert!(!data_url_within_limit(&one_over, 10));
     }
 
+    // ---- Image search text ----
+
+    #[test]
+    fn ocr_index_max_chars_reads_the_expert_value_and_falls_back_to_the_spec_default() {
+        let mut settings: Settings = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
+        assert_eq!(ocr_index_max_chars(&settings), 20000);
+        settings.ui_values.insert("ocrIndexMaxChars".into(), 5.0);
+        assert_eq!(ocr_index_max_chars(&settings), 5);
+    }
+
+    #[test]
+    fn cap_ocr_text_cuts_by_character_not_by_byte() {
+        // "café" is 4 chars but 5 bytes in UTF-8 -- a byte-based cut would
+        // split the "é" and produce invalid UTF-8 (or panic).
+        assert_eq!(cap_ocr_text("café", 4), "café");
+        assert_eq!(cap_ocr_text("café", 3), "caf");
+        assert_eq!(cap_ocr_text("hi", 10), "hi");
+    }
+
+    #[test]
+    fn resolved_image_text_only_recognizes_a_non_empty_picture_with_the_switch_on() {
+        let calls = std::cell::Cell::new(0);
+        let recognize = |img: &str| { calls.set(calls.get() + 1); format!("seen:{img}") };
+        // Switch off: never even calls the recognizer, whatever the picture.
+        assert_eq!(resolved_image_text("data:image/png;base64,AAA", false, recognize), "");
+        assert_eq!(calls.get(), 0);
+        // Picture removed: empties the field and never calls the recognizer either.
+        assert_eq!(resolved_image_text("", true, recognize), "");
+        assert_eq!(calls.get(), 0);
+        // Switch on, a real picture: calls the recognizer exactly once and keeps
+        // whatever it returns.
+        assert_eq!(resolved_image_text("data:image/png;base64,AAA", true, recognize), "seen:data:image/png;base64,AAA");
+        assert_eq!(calls.get(), 1);
+    }
+
+    fn image_text_prompt(id: &str, image_text: &str) -> Prompt {
+        let mut p = test_prompt(id);
+        p.image_text = image_text.into();
+        p
+    }
+
+    #[test]
+    fn image_text_matches_is_empty_with_the_switch_off_even_for_a_real_hit() {
+        let prompts = vec![image_text_prompt("a", "invoice total due friday")];
+        assert!(image_text_matches(&prompts, false, "invoice").is_empty());
+    }
+
+    #[test]
+    fn image_text_matches_finds_a_case_insensitive_substring_and_skips_empty_queries() {
+        let prompts = vec![
+            image_text_prompt("a", "Invoice Total Due Friday"),
+            image_text_prompt("b", "just a landscape photo, no text"),
+            image_text_prompt("c", ""),
+        ];
+        assert_eq!(image_text_matches(&prompts, true, "invoice"), vec!["a".to_string()]);
+        assert!(image_text_matches(&prompts, true, "   ").is_empty(), "a blank query must match nothing, not everything");
+        assert!(image_text_matches(&prompts, true, "zzz-no-such-word").is_empty());
+    }
+
     // import_prompts refuses a file that changed since preview_import hashed
     // it (the real gate is a one-line `!=` compare in import_prompts itself,
     // which needs a live AppHandle to exercise directly — this proves the
@@ -30601,6 +30850,17 @@ mod tests {
         // Re-serializing the round-tripped prompt must be byte-identical — otherwise
         // sync_write_all()'s "only write if content differs" guard would loop forever.
         assert_eq!(prompt_to_md(&updated, &SyncPlacement::default()), content);
+    }
+
+    // image_text is a search index, never synchronized: the
+    // Markdown mirror writes a fixed set of named fields, so a value that is
+    // simply never mentioned there cannot leak into the file on disk.
+    #[test]
+    fn md_sync_never_carries_image_text() {
+        let mut p = sync_test_prompt();
+        p.image_text = "invoice total due friday".into();
+        let content = prompt_to_md(&p, &SyncPlacement::default());
+        assert!(!content.contains("invoice"), "OCR-recognized text leaked into the synced file: {content}");
     }
 
     #[test]
@@ -34361,6 +34621,7 @@ mod tests {
                 media_width: 0,
                 media_height: 0,
                 media_size_bytes: 0,
+                image_text: String::new(),
             },
             Prompt {
                 id: "p2".into(),
@@ -34390,6 +34651,7 @@ mod tests {
                 media_width: 0,
                 media_height: 0,
                 media_size_bytes: 0,
+                image_text: String::new(),
             },
         ]
     }
@@ -35205,6 +35467,18 @@ mod tests {
         assert_eq!(p2.caption, "Mein Untertitel");
         assert_eq!(p2.caption_size, 18);
         assert!(!p2.favorite);
+    }
+
+    // image_text is a search index, never exported: ExportPrompt
+    // simply has no such field, proven here the same way slim_prompt's own
+    // safety tests prove it for the state payload and the picture bytes.
+    #[test]
+    fn json_export_never_carries_image_text() {
+        let mut prompts = sample_prompts();
+        prompts[0].image_text = "invoice total due friday".into();
+        let out = to_json(&prompts);
+        assert!(!out.contains("invoice"), "OCR-recognized text leaked into the export: {out}");
+        assert!(!out.contains("image_text"), "the export still has an image_text field: {out}");
     }
 
     #[test]

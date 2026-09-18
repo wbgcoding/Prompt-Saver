@@ -342,6 +342,13 @@ the video editor and the introduction tour ship on).
   size show in the tooltip; an attachment from before this feature picks
   these up in the background the first time it is shown. The main grid is
   unchanged.
+- **Search can look inside an attached picture** (expert menu, off by
+  default). Recognized text is never shown anywhere, never exported and
+  never synchronized; it exists only to be searched, ranks below a match on
+  the name or the prompt body, and a hit found only there carries a "found
+  in image" badge. Turning the setting on adds an action that reads every
+  existing picture once, in the background, with progress and a cancel
+  button.
 
 ### Improved
 

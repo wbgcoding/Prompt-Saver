@@ -7449,6 +7449,66 @@ PROBE = """
         out.errors.push('MediaMeta: the main grid tile must never show the duration badge');
       }
     }
+    {
+      // Search can look inside a picture's recognized text, but only while
+      // the switch is on, and only as the very last resort. "lighthouse" is
+      // in no prompt's name or body, so a hit can only have come from the
+      // stubbed search_image_text (fixture id p4), and while the switch is
+      // still off (the shipped default) the same query must match nothing at
+      // all, exactly as it would have before this feature existed.
+      // An earlier probe leaves the UI language switched to German; this one
+      // reads English labels, so it switches back first.
+      const langSelOcr = document.getElementById('lang-select');
+      if (langSelOcr && langSelOcr.value !== 'en') {
+        langSelOcr.value = 'en';
+        langSelOcr.dispatchEvent(new Event('change'));
+        await sleep(100);
+      }
+      await click('library-btn');
+      const oq = document.getElementById('library-q');
+      oq.value = 'lighthouse';
+      oq.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(300);
+      const offHits = document.querySelectorAll('#library-list .lib-item').length;
+      if (offHits !== 0) {
+        out.errors.push('OcrIndex: "lighthouse" matched ' + offHits + ' prompts with the switch off (default), expected 0');
+      }
+      await click('library-close');
+      const ocrRow = () => {
+        for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+          tb.click();
+          const hit = [...document.querySelectorAll('#expert-flags .switch-field')]
+            .find(r => ((r.querySelector('span') || {}).textContent || '').includes('Index text inside attached pictures for search'));
+          if (hit) return hit;
+        }
+        return null;
+      };
+      document.getElementById('settings').classList.remove('hidden');
+      await click('expert-open');
+      const ocrSwitch = ocrRow();
+      if (!ocrSwitch) {
+        out.errors.push('OcrIndex: the setting is missing from the expert menu');
+      } else {
+        ocrSwitch.querySelector('input.switch').click();
+      }
+      await click('expert-back');
+      document.getElementById('settings').classList.add('hidden');
+      await click('library-btn');
+      const oq2 = document.getElementById('library-q');
+      oq2.value = 'lighthouse';
+      oq2.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(300);
+      const onRow = document.querySelector('.lib-item[data-id="p4"]');
+      if (!onRow) {
+        out.errors.push('OcrIndex: "lighthouse" found no row for the image-text fixture (p4) with the switch on');
+      } else {
+        const tag = onRow.querySelector('.lib-image-hit-tag');
+        if (!tag || !tag.textContent.trim()) {
+          out.errors.push('OcrIndex: the library row has no "found in image" badge');
+        }
+      }
+      await click('library-close');
+    }
   } catch (e) { out.errors.push('probe: ' + e.message); }
   for (const el of document.querySelectorAll('.overlay *, #expert-flags *')) {
     const r = el.getBoundingClientRect();

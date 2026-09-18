@@ -254,8 +254,8 @@ export const HELP_CONTENT = {
         "Turn on tile or media blur, hidden tile names, or dim-unhovered in the expert menu, as needed.",
       ],
       whatHappens:
-        "Screen-capture exclusion makes the window invisible to screenshot and recording tools, including its own — so if a capture comes out empty, check this setting first.",
-      settings: ["Exclude from screen capture, blur tiles or media, hide names, dim unhovered tiles — Expert menu → System & data → Privacy"],
+        "Screen-capture exclusion makes the window invisible to screenshot and recording tools, including its own — so if a capture comes out empty, check this setting first. An optional, off-by-default setting reads text out of an attached picture so the library search can find it too; a hit found only there carries a \"found in image\" badge, so it never looks like a random match. That recognized text stays out of the app otherwise: it is never shown, never exported, never synchronized, and its length is capped. Removing or replacing the picture clears it right away.",
+      settings: ["Exclude from screen capture, blur tiles or media, hide names, dim unhovered tiles — Expert menu → System & data → Privacy", "Index text inside attached pictures for search, image text length limit: Expert menu → Library & History → Library"],
       tip: "Screen-capture exclusion ships on — turn it off for normal screenshots or recordings of this window.",
     },
     {
@@ -863,8 +863,8 @@ export const HELP_CONTENT = {
         "Bei Bedarf Unschärfe für Kacheln oder Medien, versteckte Namen oder abgedunkelte inaktive Elemente im Experten-Menü aktivieren.",
       ],
       whatHappens:
-        "Der Ausschluss von Bildschirmaufnahmen macht das Fenster für Screenshot- und Aufnahmeprogramme unsichtbar, auch für die eigenen — bleibt eine Aufnahme also leer, zuerst diese Einstellung prüfen.",
-      settings: ["Von Bildschirmaufnahmen ausschließen, Kacheln oder Medien unscharf machen, Namen verbergen, ungehoverte Kacheln abdunkeln — Experten-Menü → System & Daten → Datenschutz"],
+        "Der Ausschluss von Bildschirmaufnahmen macht das Fenster für Screenshot- und Aufnahmeprogramme unsichtbar, auch für die eigenen — bleibt eine Aufnahme also leer, zuerst diese Einstellung prüfen. Eine optionale, standardmäßig ausgeschaltete Einstellung liest Text aus einem angehängten Bild, damit die Bibliothekssuche ihn auch findet; ein Treffer nur dort trägt die Kennzeichnung \"im Bild gefunden\", damit er nie wie ein zufälliger Treffer wirkt. Dieser erkannte Text bleibt sonst außerhalb der App: nirgends angezeigt, nie exportiert, nie synchronisiert, und in der Länge begrenzt. Entfernen oder Ersetzen des Bilds löscht ihn sofort.",
+      settings: ["Von Bildschirmaufnahmen ausschließen, Kacheln oder Medien unscharf machen, Namen verbergen, ungehoverte Kacheln abdunkeln — Experten-Menü → System & Daten → Datenschutz", "Text in angehängten Bildern für die Suche erfassen, Bildtext-Grenze: Experten-Menü → Bibliothek & Verlauf → Bibliothek"],
       tip: "Der Ausschluss von Bildschirmaufnahmen ist standardmäßig an — für normale Screenshots oder Aufnahmen dieses Fensters ausschalten.",
     },
     {

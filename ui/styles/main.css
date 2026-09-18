@@ -3873,6 +3873,18 @@ body.drag-over::after {
   font-size: 10px;
   line-height: 1.5;
 }
+/* Names a search hit that only came from the picture's recognized text.
+   Nothing in the visible name/body itself contains the query, so this is the
+   only thing telling the user why the row showed up. */
+.lib-image-hit-tag {
+  align-self: flex-start;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
 
 /* Library search box + type filter chips */
 .library-search { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }

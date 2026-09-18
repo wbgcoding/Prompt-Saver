@@ -119,6 +119,12 @@ let modalSaving = false; // re-entry guard, a double-click/double-Enter must not
 let ctxId = null;
 let drag = null;
 let libQuery = ""; // prompt library search text
+// Ids whose recognized image text matched the last query sent to
+// search_image_text, and the (trimmed, lowercased) query they were fetched
+// for -- image_text itself never reaches the frontend, so this is the only
+// trace of a hit computeLibSearchScore ever sees.
+let imageHitIds = new Set();
+let imageHitQuery = "";
 // Type filters are ADDITIVE and identical in both windows: an empty set means every
 // type, each chip toggles its own, and the pick is stored per window.
 const libTypes = new Set();
@@ -730,17 +736,19 @@ const BG_OP_CANCEL_CMD = {
   export: "cancel_export",
   convert: "cancel_recording_convert",
   "ffmpeg-download": "cancel_ffmpeg_download",
+  "ocr-index": "cancel_ocr_index_backfill",
 };
 function bgKindNoun(kind) {
   if (kind === "export") return t("bgKindExport");
   if (kind === "convert") return t("bgKindConvert");
+  if (kind === "ocr-index") return t("bgKindOcrIndex");
   return t("bgKindDownload");
 }
-// The three progress strings ("Converting… {s}s (click to cancel)", etc.) all
+// The four progress strings ("Converting… {s}s (click to cancel)", etc.) all
 // start with the same short present-tense phrase this popover needs -- reusing
-// them here avoids a fourth near-duplicate translation for every language.
+// them here avoids a fifth near-duplicate translation for every language.
 function bgOpLabel(kind) {
-  const key = kind === "export" ? "veExporting" : kind === "convert" ? "recConverting" : "ffmpegDownloading";
+  const key = kind === "export" ? "veExporting" : kind === "convert" ? "recConverting" : kind === "ocr-index" ? "ocrIndexBackfilling" : "ffmpegDownloading";
   const s = t(key);
   const i = s.indexOf("{");
   return (i >= 0 ? s.slice(0, i) : s).trim();
@@ -1316,6 +1324,10 @@ const OPT_FLAG_LABELS = {
   tileTextShadow: "flagTileTextShadow",
   // Library/search extras
   searchAutofocus: "flagSearchAutofocus",
+  // Reads text out of an attached picture and adds it to the library search,
+  // lowest priority behind the name and the prompt body. Ships off: text
+  // recognition costs time and reads a picture the user may not expect read.
+  ocrIndex: "flagOcrIndex",
   // Appearance extras
   compactTiles: "flagCompactTiles",
   tileGradient: "flagTileGradient",
@@ -1496,6 +1508,9 @@ const EXPERT_VALUES = {
   searchRecentMax: { label: "valSearchRecentMax", min: 1, max: 20, step: 1, def: 8, unit: "", gate: "searchSuggest" },
   // How long the library search waits after the last keystroke before it re-filters.
   searchDebounceMs: { label: "valSearchDebounceMs", min: 0, max: 600, step: 10, def: 120, unit: "ms", gate: "librarySearch" },
+  // Caps the recognized text kept per picture, so a screenshot of a wall of
+  // text cannot inflate the database.
+  ocrIndexMaxChars: { label: "valOcrIndexMaxChars", min: 500, max: 100000, step: 500, def: 20000, unit: "", gate: "ocrIndex" },
   // Tile geometry.
   tileRadius: { label: "valTileRadius", min: 0, max: 30, step: 1, def: 10, unit: "px" },
   tileBorderWidth: { label: "valTileBorderWidth", min: 0, max: 6, step: 1, def: 1, unit: "px" },
@@ -2034,7 +2049,7 @@ const EXPERT_TABS = [
     { title: "expGroupLimits", values: ["maxViews", "gridMax", "previewLen", "nameMaxLen"] },
   ] },
   { title: "expTabLibrary", groups: [
-    { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle"], values: ["searchRecentMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs"], dropdowns: ["fuzzyMaxTypos"] },
+    { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "ocrIndex"], values: ["searchRecentMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs", "ocrIndexMaxChars"], dropdowns: ["fuzzyMaxTypos"] },
     { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx", "tagPopCols"], dropdowns: ["tagFilterMode", "tagSort"] },
     // Everything that records or shows copy history lives with the history view.
     { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", { key: "journalTagFilter", gate: "tags" }, "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalLimit", "journalWidth"], selects: ["historyDays"] },
@@ -2051,7 +2066,7 @@ const EXPERT_TABS = [
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
     { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken"], values: ["dupThreshold", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "videoClipTtlMin", "errorLogKeepKb"], selects: ["trashRetentionDays"],
-      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }] },
+      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }] },
   ] },
 ];
 
@@ -2242,7 +2257,7 @@ const EXPERT_TIPS = [
   "customThemes", "customThemeMax",
   "dragThreshold", "composerMaxH", "popoverPad", "toastWidth", "toastPos", "modalMaxVh",
   // Library / privacy
-  "mediaMeta", "mediaMetaBackfill",
+  "mediaMeta", "mediaMetaBackfill", "ocrIndex", "ocrIndexMaxChars",
   "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus", "libraryCloseToggle", "searchDebounceMs",
   "tags", "tagChipPx", "tagFilterMode", "tagPopCols", "tagSort",
   "allowScreenshot", "copyHistory", "historyTimestamps", "historyGrouped", "journalWidth",
@@ -8796,6 +8811,16 @@ EXPERT_ACTIONS["settings-import"] = async () => {
     errToast(e);
   }
 };
+// Reads every picture that has none yet, one at a time -- progress, the
+// running badge and cancel all come from the shared background-jobs popover
+// (see BG_OP_CANCEL_CMD/bgOpLabel above), so this only has to start the job.
+EXPERT_ACTIONS["ocr-index-backfill"] = async () => {
+  try {
+    await invoke("ocr_index_backfill");
+  } catch (e) {
+    errToast(e);
+  }
+};
 
 // ---- OCR + voice language pack management, one shared dialog ----
 // #ocr-langs-modal serves both OCR and voice dictation language packs -- same
@@ -11709,7 +11734,33 @@ function computeLibSearchScore(p) {
       if (s > best) { best = s; bestEntry = entry >= 0 ? entry : 0; }
     }
   }
-  return { score: best, fuzzy: best > 0, entryIndex: bestEntry };
+  if (best) return { score: best, fuzzy: true, entryIndex: bestEntry };
+  // Last resort: text recognized inside an attached picture. Only reached
+  // when nothing else -- not even a typo-tolerant match -- found this prompt,
+  // so it never outranks a real match on the name, the body, a tag or a note.
+  if (optFlag("ocrIndex") && imageHitQuery === rawInput && imageHitIds.has(p.id)) {
+    return { score: 90, fuzzy: false, entryIndex: 0, fromImage: true };
+  }
+  return { score: 0, fuzzy: false, entryIndex: 0 };
+}
+// The only place image_text is ever read back: a backend lookup, since the
+// state payload never carries it. Fired once per query change (never inside
+// computeLibSearchScore itself, which runs several times per prompt per
+// render) and cached in imageHitIds/imageHitQuery until the query changes
+// again. A stubbed or failing call just means no image hits, never a search
+// that throws.
+async function refreshImageHits(rawInput) {
+  if (!optFlag("ocrIndex") || !rawInput) {
+    imageHitIds = new Set();
+    imageHitQuery = rawInput;
+    return;
+  }
+  let ids = [];
+  try { ids = (await invoke("search_image_text", { query: rawInput })) || []; } catch { ids = []; }
+  imageHitIds = new Set(ids);
+  imageHitQuery = rawInput;
+  libScoreCache.clear();
+  renderLibrary();
 }
 // Split into alphanumeric tokens (Unicode-aware).
 function fuzzyTokens(s) {
@@ -11937,6 +11988,14 @@ function renderLibrary() {
       tag.className = "lib-rotate-tag";
       tag.textContent = `${hitEntry + 1}/${1 + p.variants.length}`;
       body.appendChild(tag);
+    }
+    // Otherwise this hit would look like a random match, since nothing in
+    // the visible name or body actually contains the query.
+    if (libQuery.trim() && libSearchScore(p).fromImage) {
+      const imgTag = document.createElement("span");
+      imgTag.className = "lib-image-hit-tag";
+      imgTag.textContent = t("libFoundInImage");
+      body.appendChild(imgTag);
     }
     body.appendChild(text);
     if (tagsOn() && (p.tags || []).length) {
@@ -16264,7 +16323,12 @@ function bind() {
     syncLibraryToggle();
   });
   const renderLibraryDebounced = debounced(renderLibrary, () => val("searchDebounceMs"));
-  $("library-q").addEventListener("input", (e) => { libQuery = e.target.value; renderLibraryDebounced(); });
+  const refreshImageHitsDebounced = debounced(() => refreshImageHits(libQuery.trim().toLowerCase()), () => val("searchDebounceMs"));
+  $("library-q").addEventListener("input", (e) => {
+    libQuery = e.target.value;
+    renderLibraryDebounced();
+    refreshImageHitsDebounced();
+  });
   wireSearchSuggest($("library-q"), "recentSearchLib");
   $("library-sort").addEventListener("change", (e) => {
     settings.ui_texts = { ...(settings.ui_texts || {}), librarySort: e.target.value };
