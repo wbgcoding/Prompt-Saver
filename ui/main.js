@@ -8500,7 +8500,7 @@ async function renderStatsPanel(body) {
   exportBtn.type = "button";
   exportBtn.id = "stats-export-btn";
   exportBtn.className = "ghost-btn";
-  exportBtn.textContent = t("statExportBtn");
+  exportBtn.textContent = t("statsExport");
   exportBtn.addEventListener("click", () => runStatsExport(exportSelect.value));
   exportRow.append(exportSelect, exportBtn);
   body.appendChild(exportRow);
@@ -9763,7 +9763,7 @@ async function renderStoragePanel(root, force) {
   root.innerHTML = "";
   const panel = document.createElement("div");
   panel.className = "stats-panel-body";
-  const head = collapsibleHead(t("storageSection"), panel, "storagePanelOpen");
+  const head = collapsibleHead(t("storageTitle"), panel, "storagePanelOpen");
   head.classList.add("backup-split"); // divider from the usage section above
   root.append(head, panel);
   const body = panel;
@@ -9774,10 +9774,10 @@ async function renderStoragePanel(root, force) {
   totalWrap.className = "storage-total-wrap";
   const totalEl = document.createElement("span");
   totalEl.className = "storage-total";
-  totalEl.textContent = `${t("storageTotalLabel")}: ${fmtBytes(data.total_bytes)}`;
+  totalEl.textContent = `${t("storageTotal")}: ${fmtBytes(data.total_bytes)}`;
   const measuredEl = document.createElement("span");
   measuredEl.className = "storage-measured";
-  measuredEl.textContent = t("storageMeasuredAt").replace("{date}", new Date(data.measured_at * 1000).toLocaleString(LANG));
+  measuredEl.textContent = t("storageMeasured").replace("{when}", new Date(data.measured_at * 1000).toLocaleString(LANG));
   totalWrap.append(totalEl, measuredEl);
   const remeasureBtn = document.createElement("button");
   remeasureBtn.type = "button";
@@ -13249,11 +13249,11 @@ async function runExport(format) {
 }
 
 // Same shape as runExport, fed by the statistics dashboard's own format
-// select + button instead of the settings export row.
+// select + button instead of the settings export row. No success toast, same
+// as runExport: the save dialog closing is confirmation enough.
 async function runStatsExport(format) {
   try {
-    const n = await withDialog(() => invoke("export_stats", { format }));
-    toast(t("statExportDone").replace("{n}", String(n)));
+    await withDialog(() => invoke("export_stats", { format }));
   } catch (err) {
     if (String(err) !== "canceled") toast(t("exportFailed"));
   }
