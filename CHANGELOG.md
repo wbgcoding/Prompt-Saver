@@ -418,6 +418,11 @@ the video editor and the introduction tour ship on).
 - **The video editor's limit on extra video sources is adjustable.** It used to
   be a fixed eight; it is now a number in the expert menu, from one to
   thirty-two, and still eight unless changed.
+- **Recent messages.** An error that shows as a toast and then vanishes is now
+  also kept in a short list, reachable from the expert menu's data group: time,
+  what happened and where, with the original text available for the ones the
+  app translates. Copy the whole list or clear it from the same window. On by
+  default, how many it keeps is adjustable, and switching it off keeps nothing.
 
 ### Improved
 

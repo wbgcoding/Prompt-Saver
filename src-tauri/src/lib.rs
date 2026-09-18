@@ -21066,6 +21066,11 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     let is_sync_enable = key == "promptSync" && enabled; // Prompt-folders-as-Markdown
     // Turning either gate off must not leave a session silently running.
     let end_auto_session = !enabled && (key == "rotatingPrompts" || key == "rotateAuto");
+    // "Off" means the list is empty, not just paused -- clear whatever is
+    // already collected the moment the switch goes off.
+    if key == "errorLog" && !enabled {
+        ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    }
     // The activation work below (a full backup, then one file per prompt) takes
     // as long as the library is large. It runs on a SNAPSHOT taken under a short
     // lock rather than with the lock held, the way spawn_sync_write_all already
@@ -25943,6 +25948,95 @@ fn scrub_user_paths_from_crash_log() {
     strip_user_path_lines(&crash_log_path());
 }
 
+// ---------- Recent messages ----------
+// A ring buffer of the errors shown to the user, so one that flashed by in a
+// toast can still be found afterwards. Filled from exactly one place --
+// `errToast` on the frontend, which is what every failed command and background
+// event already funnels through -- never from the crash log, or the same line
+// would show up twice.
+#[derive(Clone, serde::Serialize)]
+struct ErrorLogEntry {
+    ts: u64,
+    text: String,
+    origin: String,
+    raw: Option<String>,
+}
+
+const ERROR_LOG_MAX_DEFAULT: usize = 100;
+const ERROR_LOG_MAX_MIN: usize = 20;
+const ERROR_LOG_MAX_CAP: usize = 500;
+static ERROR_LOG: Mutex<Vec<ErrorLogEntry>> = Mutex::new(Vec::new());
+
+fn error_log_enabled(settings: &Settings) -> bool {
+    settings.ui_flags.get("errorLog") != Some(&false) // on by default
+}
+
+fn error_log_max(settings: &Settings) -> usize {
+    settings
+        .ui_values
+        .get("errorLogMax")
+        .copied()
+        .filter(|v| v.is_finite())
+        .unwrap_or(ERROR_LOG_MAX_DEFAULT as f64)
+        .clamp(ERROR_LOG_MAX_MIN as f64, ERROR_LOG_MAX_CAP as f64) as usize
+}
+
+// Same privacy bar as the crash log (`scrub_log_line`): a path collapses to its
+// file name. Nothing here is expected to carry prompt content today -- no
+// caller passes any -- but a stray long string is treated as if it might and
+// collapsed to a short stand-in rather than written out in full, so a future
+// call site cannot leak one by accident.
+const ERROR_LOG_TEXT_MAX_CHARS: usize = 160;
+
+fn scrub_error_log_text(s: &str) -> String {
+    let path_clean = scrub_log_line(s);
+    if path_clean.chars().count() > ERROR_LOG_TEXT_MAX_CHARS {
+        let id: String = path_clean.chars().take(8).collect();
+        format!("<{id}...>")
+    } else {
+        path_clean
+    }
+}
+
+// Newest first; anything past `max` is dropped from the old end.
+fn record_error_log(text: &str, origin: &str, raw: Option<&str>, max: usize) {
+    let mut log = ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner());
+    let ts = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    log.insert(
+        0,
+        ErrorLogEntry {
+            ts,
+            text: scrub_error_log_text(text),
+            origin: origin.to_string(),
+            raw: raw.map(scrub_error_log_text),
+        },
+    );
+    log.truncate(max);
+}
+
+// Called from `errToast` for every error message shown to the user. Silently a
+// no-op while the switch is off -- the buffer is also cleared the moment it is
+// switched off (see `set_ui_flag`), so "off" always means an empty list, not
+// just a paused one.
+#[tauri::command]
+fn log_error(state: State<'_, Db>, text: String, origin: String, raw: Option<String>) {
+    let settings = lock(&state).settings.clone();
+    if !error_log_enabled(&settings) {
+        return;
+    }
+    record_error_log(&text, &origin, raw.as_deref(), error_log_max(&settings));
+}
+
+#[tauri::command]
+fn list_error_log() -> Vec<ErrorLogEntry> {
+    ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+#[tauri::command]
+fn clear_error_log() {
+    ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
+}
+
 // ---------- App entry ----------
 
 // WebView2 runtime is the only external requirement; offer the official
@@ -26917,6 +27011,9 @@ pub fn run() {
             restore_prompt,
             purge_prompt,
             empty_trash,
+            log_error,
+            list_error_log,
+            clear_error_log,
             list_versions,
             last_edited_map,
             restore_version,
@@ -34893,6 +34990,42 @@ mod tests {
 
         let redirected = fs::read_to_string(crash_log_path()).unwrap_or_default();
         assert!(redirected.contains(&msg), "a path-free message must reach the log exactly as written: {redirected}");
+    }
+
+    // record_error_log/ERROR_LOG is a shared static -- serialise against other
+    // tests touching it, same reasoning as SEAL_TEST_LOCK above.
+    static ERROR_LOG_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn record_error_log_keeps_the_cap_and_drops_the_oldest() {
+        let _guard = ERROR_LOG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        for i in 0..7 {
+            record_error_log(&format!("message {i}"), "test", None, 5);
+        }
+        let log = ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(log.len(), 5, "the buffer must never grow past the configured cap");
+        assert_eq!(log.first().unwrap().text, "message 6", "the newest entry must be first");
+        assert_eq!(log.last().unwrap().text, "message 2", "the oldest entries beyond the cap must have been dropped");
+    }
+
+    #[test]
+    fn scrub_error_log_text_shortens_a_path_to_its_file_name() {
+        let msg = r"could not open D:\Projects\ClientData\secret-notes.txt";
+        let clean = scrub_error_log_text(msg);
+        assert!(clean.contains("secret-notes.txt"), "the file name must survive the scrub: {clean}");
+        assert!(!clean.contains(r"D:\Projects\ClientData"), "the folder part of the path must not survive: {clean}");
+    }
+
+    #[test]
+    fn scrub_error_log_text_never_writes_a_long_text_whole() {
+        // Stands in for prompt content that ended up interpolated into a
+        // message -- no call site does this today, but the scrub must hold even
+        // if one someday does.
+        let long_text = "a".repeat(400);
+        let clean = scrub_error_log_text(&long_text);
+        assert!(clean.len() < long_text.len(), "a long text must be collapsed, never written out whole: {clean}");
+        assert!(!clean.contains(&long_text), "the original long text must never appear verbatim in the log");
     }
 
     // A log grown past the cap must keep its newest lines and lose only the

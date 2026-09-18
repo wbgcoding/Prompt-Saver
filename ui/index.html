@@ -543,6 +543,25 @@
     </div>
   </div>
 
+  <!-- Recent error messages: the expert menu's "errorLog" ring buffer -->
+  <div id="error-log-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 class="modal-title" data-i18n="errorLogTitle">Recent messages</h2>
+        <div class="modal-head-actions">
+          <button id="error-log-copy" type="button" class="head-toggle" data-i18n="errorLogCopyAll">Copy all</button>
+          <button id="error-log-clear" type="button" class="head-toggle" data-i18n="clearAll">Clear all</button>
+          <button id="error-log-close" class="icon-btn" data-i18n-aria="close">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div id="error-log-body" class="clip-list"></div>
+    </div>
+  </div>
+
   <!-- Backups: settings, diagnostics and the restore list (opened from settings) -->
   <div id="backup-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal">

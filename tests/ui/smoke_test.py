@@ -1578,6 +1578,66 @@ PROBE = """
       }
     }
     await click('journal-close');
+    // 439: recent-messages window -- reachable from the expert menu, shows an
+    // error toast's own text, "copy all" puts it on the clipboard, "clear"
+    // empties the list and the empty state says so.
+    {
+      window.__SMOKE_CALLS__ = [];
+      window.__SMOKE_ARGS__ = [];
+      const probeMsg = 'smoke-test probe message 439';
+      // errToast itself is module-scoped and unreachable from here; invoke the
+      // same command it calls (log_error) so the window/copy/clear probes below
+      // exercise the real path an error toast feeds.
+      await window.__TAURI__.core.invoke('log_error', { text: probeMsg, origin: 'smoke-test', raw: null });
+      await sleep(150);
+      document.getElementById('settings').classList.remove('hidden');
+      await sleep(50);
+      const findErrorLogBtn = () => document.querySelector('.expert-action[data-action="error-log-open"]');
+      await click('expert-open');
+      let errorLogBtn = findErrorLogBtn();
+      for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+        if (errorLogBtn) break;
+        tb.click();
+        await sleep(150);
+        errorLogBtn = findErrorLogBtn();
+      }
+      if (!errorLogBtn) {
+        out.errors.push('439: error-log-open expert action not found in any tab');
+      } else {
+        errorLogBtn.click();
+        await sleep(150);
+        const modalEl = document.getElementById('error-log-modal');
+        if (!modalEl || modalEl.classList.contains('hidden')) {
+          out.errors.push('439: recent messages did not open from the expert-menu action');
+        } else {
+          mustReach('recent messages', '#error-log-modal .modal-head-actions > button');
+          const body = document.getElementById('error-log-body');
+          if (!body || !body.textContent.includes(probeMsg)) {
+            out.errors.push('439: recent messages does not show the error just shown in a toast');
+          }
+          document.getElementById('error-log-copy').click();
+          await sleep(150);
+          const copyCall = window.__SMOKE_ARGS__.find(([cmd]) => cmd === 'copy_text');
+          if (!copyCall || !copyCall[1].text.includes(probeMsg)) {
+            out.errors.push('439: copy all did not put the shown message on the clipboard');
+          }
+          document.getElementById('error-log-clear').click();
+          await sleep(150);
+          if (!window.__SMOKE_CALLS__.includes('clear_error_log')) {
+            out.errors.push('439: clear did not call clear_error_log');
+          }
+          if (!body.textContent.trim()) {
+            out.errors.push('439: recent messages shows no text once cleared');
+          } else if (body.textContent.includes(probeMsg)) {
+            out.errors.push('439: the cleared message is still shown');
+          }
+        }
+        document.getElementById('error-log-close').click();
+        await sleep(100);
+      }
+      document.getElementById('settings').classList.add('hidden');
+      await sleep(50);
+    }
     const tile = document.querySelector('#grid .tile');
     if (tile) { tile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })); await sleep(150); }
     document.body.click(); // dismiss the context menu

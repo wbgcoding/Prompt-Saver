@@ -703,7 +703,28 @@ const ERROR_MSG_KEYS = {
 };
 function errToast(err) {
   const s = String(err);
-  toast(ERROR_MSG_KEYS[s] ? t(ERROR_MSG_KEYS[s]) : s);
+  const known = ERROR_MSG_KEYS[s];
+  const msg = known ? t(known) : s;
+  // The raw, untranslated string is only worth keeping when it differs from
+  // what the user actually saw -- an unmapped error is already its own raw text.
+  logErrorLogEntry(msg, known ? s : null);
+  toast(msg);
+}
+
+// Best-effort label for which part of the app an error most likely belongs to,
+// read from what is on screen right now rather than tagging each of errToast's
+// many call sites individually.
+function currentErrorOrigin() {
+  const openModal = document.querySelector(".overlay:not(.hidden)[id]");
+  if (openModal) return openModal.id;
+  if (!$("settings-expert").classList.contains("hidden")) return "settings-expert";
+  return "main";
+}
+
+// Fire-and-forget: a failure to log the log itself must never show another
+// error (recursing back into errToast) or block the toast the user is waiting on.
+function logErrorLogEntry(text, raw) {
+  invoke("log_error", { text, origin: currentErrorOrigin(), raw }).catch(() => {});
 }
 
 // Runs the pending undo, if any, and clears the slot first so a restore that
@@ -1347,6 +1368,10 @@ const FLAG_LABELS = {
   // A second copy entry that puts both the Markdown text and its rendered
   // form on the clipboard, for apps that read CF_HTML. Ships ON.
   copyFormatted: "flagCopyFormatted",
+  // Keeps a ring buffer of the last error messages shown, reachable from the
+  // expert menu's "Recent messages" action. Off means the list stays empty and
+  // nothing is collected. Ships ON.
+  errorLog: "flagErrorLog",
 };
 const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -1806,6 +1831,8 @@ const EXPERT_VALUES = {
   bgDoneKeepMin: { label: "bgDoneKeepMin", min: 1, max: 120, step: 1, def: 10, unit: "min" },
   // How long the Undo button on a destructive-action toast stays clickable.
   undoToastMs: { label: "valUndoToastMs", min: 2000, max: 20000, step: 500, def: 8000, unit: "ms", gate: "undoToast" },
+  // How many recent error messages the ring buffer keeps.
+  errorLogMax: { label: "valErrorLogMax", min: 20, max: 500, step: 10, def: 100, unit: "", gate: "errorLog" },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -2142,8 +2169,8 @@ const EXPERT_TABS = [
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken", "undoToast"], values: ["dupThreshold", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "videoClipTtlMin", "errorLogKeepKb", "undoToastMs"], selects: ["trashRetentionDays", "recordingRetentionDays"],
-      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }, { id: "float-recall", label: "floatRecallAction", gate: "floating" }] },
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken", "undoToast", "errorLog"], values: ["dupThreshold", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "videoClipTtlMin", "errorLogKeepKb", "undoToastMs", "errorLogMax"], selects: ["trashRetentionDays", "recordingRetentionDays"],
+      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }, { id: "float-recall", label: "floatRecallAction", gate: "floating" }, { id: "error-log-open", label: "errorLogAction" }] },
   ] },
 ];
 
@@ -2344,6 +2371,7 @@ const EXPERT_TIPS = [
   "recSweepBroken", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "videoClipTtlMin",
   "usageStats", "promptSync", "syncDir", "syncPollSecs", "syncFailMax", "clipSkipSecrets",
   "undoToast", "undoToastMs",
+  "errorLog", "errorLogMax",
   "archiveTag",
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "kbFocusFadeMs", "snipPreviewVh",
@@ -9257,6 +9285,73 @@ async function emptyTrashAll() {
   renderTrashList();
 }
 EXPERT_ACTIONS["trash-open"] = openTrash;
+
+// ---- Recent messages (error log) ----
+// The `errorLog` ring buffer, filled from errToast. Reloaded fresh every time
+// the window opens rather than kept live -- it is a look-back tool, not
+// something that needs to update while open.
+let errorLogList = [];
+async function openErrorLog() {
+  $("error-log-modal").classList.remove("hidden");
+  try { errorLogList = await invoke("list_error_log"); } catch (e) { errToast(e); errorLogList = []; }
+  renderErrorLogList();
+}
+function renderErrorLogList() {
+  const body = $("error-log-body");
+  body.innerHTML = "";
+  if (!flag("errorLog")) {
+    const e = document.createElement("div");
+    e.className = "hint";
+    e.textContent = t("errorLogOff");
+    body.appendChild(e);
+    return;
+  }
+  if (!errorLogList.length) {
+    const e = document.createElement("div");
+    e.className = "hint";
+    e.textContent = t("errorLogEmpty");
+    body.appendChild(e);
+    return;
+  }
+  for (const entry of errorLogList) {
+    const row = document.createElement("div");
+    row.className = "clip-row";
+    const head = document.createElement("span");
+    head.className = "clip-time";
+    head.textContent = `${new Date(entry.ts * 1000).toLocaleString(LANG)} · ${entry.origin}`;
+    const prev = document.createElement("div");
+    prev.className = "clip-preview";
+    prev.textContent = entry.text;
+    row.append(head, prev);
+    if (entry.raw && entry.raw !== entry.text) {
+      const actions = document.createElement("div");
+      actions.className = "clip-actions";
+      const toggle = document.createElement("button");
+      toggle.type = "button"; toggle.className = "ghost-btn"; toggle.textContent = t("errorLogDetails");
+      const raw = document.createElement("div");
+      raw.className = "clip-preview hidden";
+      raw.textContent = entry.raw;
+      toggle.addEventListener("click", () => raw.classList.toggle("hidden"));
+      actions.appendChild(toggle);
+      row.append(actions, raw);
+    }
+    body.appendChild(row);
+  }
+}
+async function copyErrorLogAll() {
+  if (!errorLogList.length) return;
+  const text = errorLogList
+    .map((e) => `${new Date(e.ts * 1000).toLocaleString(LANG)} · ${e.origin} · ${e.text}${e.raw && e.raw !== e.text ? ` (${e.raw})` : ""}`)
+    .join("\n");
+  try { await invoke("copy_text", { text }); toast(t("copied")); } catch (e) { errToast(e); }
+}
+async function clearErrorLogAll() {
+  if (!errorLogList.length) return;
+  try { await invoke("clear_error_log"); } catch (e) { errToast(e); return; }
+  errorLogList = [];
+  renderErrorLogList();
+}
+EXPERT_ACTIONS["error-log-open"] = openErrorLog;
 // Runs the same sweep on demand -- unlike the silent background sweep,
 // an explicit click always gets an answer, even "nothing to clean up".
 EXPERT_ACTIONS["rec-sweep-now"] = async () => {
@@ -17596,6 +17691,10 @@ function bind() {
   $("trash-close").addEventListener("click", () => $("trash-modal").classList.add("hidden"));
   $("trash-modal").addEventListener("pointerdown", (e) => { if (e.target === $("trash-modal")) $("trash-modal").classList.add("hidden"); });
   $("trash-clear").addEventListener("click", () => emptyTrashAll());
+  $("error-log-close").addEventListener("click", () => $("error-log-modal").classList.add("hidden"));
+  $("error-log-modal").addEventListener("pointerdown", (e) => { if (e.target === $("error-log-modal")) $("error-log-modal").classList.add("hidden"); });
+  $("error-log-copy").addEventListener("click", () => copyErrorLogAll());
+  $("error-log-clear").addEventListener("click", () => clearErrorLogAll());
   // Clipboard inbox.
   $("clip-btn").addEventListener("click", openClipInbox);
   // Pause/resume collecting straight from the inbox — same switch as the expert one.

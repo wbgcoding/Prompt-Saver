@@ -160,6 +160,10 @@ const TRASH = [
   { id: "t3", name: "Third trashed prompt", text: "Body three.", trashed_at: 1750000200, color: "", tags: [], notes: "", hotkey: "", file_path: "" },
 ];
 
+// 439: recent-messages ring buffer, newest first (mirrors the real backend's
+// insert-at-front, filled only through the log_error stub below).
+const ERROR_LOG = [];
+
 const SETTINGS = {
   theme: "dark", language: "en", floating: {}, float_scale: {}, video_prefs: {},
   window: null, minimize_to_tray: false, autostart: false, start_minimized: false,
@@ -784,6 +788,18 @@ const RESULTS = {
     return JSON.parse(JSON.stringify(TRASH));
   },
   empty_trash: () => { TRASH.length = 0; return []; },
+  // 439: recent-messages ring buffer. Mirrors the real command's "off means
+  // nothing is collected" behaviour off the same ui_flags/ui_values SETTINGS
+  // set_ui_flag/set_ui_value already write to.
+  log_error: (a) => {
+    if (SETTINGS.ui_flags.errorLog === false) return null;
+    ERROR_LOG.unshift({ ts: Math.floor(Date.now() / 1000), text: (a && a.text) || "", origin: (a && a.origin) || "", raw: (a && a.raw) || null });
+    const max = SETTINGS.ui_values.errorLogMax || 100;
+    ERROR_LOG.length = Math.min(ERROR_LOG.length, max);
+    return null;
+  },
+  list_error_log: () => JSON.parse(JSON.stringify(ERROR_LOG)),
+  clear_error_log: () => { ERROR_LOG.length = 0; return null; },
   // F8/P11: shared by the library's and the grid's bulk toolbars. The caller
   // (doBatch/doGridBatch) already mirrors "delete"/"color" onto its own local
   // prompts array, so this only needs to track the call and hand back settings.
