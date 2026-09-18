@@ -2529,13 +2529,19 @@ fn is_portable() -> bool {
 // or invalid it falls back to the canonical dir, so data is never lost.
 fn data_dir(app: &AppHandle) -> PathBuf {
     let base = default_data_dir(app);
-    if let Ok(s) = fs::read_to_string(base.join("datapath")) {
+    let resolved = if let Ok(s) = fs::read_to_string(base.join("datapath")) {
         let p = PathBuf::from(s.trim());
         if !s.trim().is_empty() && p.is_dir() {
-            return p;
+            p
+        } else {
+            base
         }
-    }
-    base
+    } else {
+        base
+    };
+    // Recorded for `append_crash_log`'s scrubbing, see `LAST_KNOWN_DATA_DIR`.
+    *LAST_KNOWN_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(resolved.clone());
+    resolved
 }
 
 // The store's JSON files (prompts.json / settings.json — the DB-write fallback and the
@@ -23991,32 +23997,135 @@ fn append_crash_log(msg: &str) {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
+    let clean = scrub_log_line(msg);
     use std::io::Write;
     if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
-        let _ = writeln!(f, "[t={} v{}] {}", secs, env!("CARGO_PKG_VERSION"), msg);
+        let _ = writeln!(f, "[t={} v{}] {}", secs, env!("CARGO_PKG_VERSION"), clean);
     }
 }
 
-// Rewrites `path` without any line that carries a Windows user-profile path.
-// Matched structurally (`\Users\` as a path segment, case-insensitive) rather
-// than against today's own account name, see `scrub_user_paths_from_crash_log`
-// for why. Its own function, taking an explicit path, for the same testability
-// reason as `rotate_log_file` above.
+// The data and sync folders `append_crash_log`'s ~50 call sites have no `AppHandle`
+// to resolve on the spot: `data_dir` and `sync_dir_path` record whatever they last
+// resolved here instead, as a side effect, so a log line can be scrubbed without
+// adding an `AppHandle` parameter to every one of those call sites.
+static LAST_KNOWN_DATA_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
+static LAST_KNOWN_SYNC_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+// Every folder this build knows the identity of, longest path first so a folder
+// nested inside another (the sync folder inside the data folder, the data folder
+// inside the user profile) is matched by its own, more specific placeholder before
+// the outer one gets a chance to eat part of it.
+fn known_path_placeholders() -> Vec<(PathBuf, &'static str)> {
+    let mut out: Vec<(PathBuf, &'static str)> = Vec::new();
+    if let Some(p) = LAST_KNOWN_SYNC_DIR.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+        out.push((p, "<sync>"));
+    }
+    if let Some(p) = LAST_KNOWN_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+        out.push((p, "<data>"));
+    }
+    if let Some(exe_dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.to_path_buf())) {
+        out.push((exe_dir, "<app>"));
+    }
+    out.push((std::env::temp_dir(), "<temp>"));
+    if let Some(home) = std::env::var_os("USERPROFILE").map(PathBuf::from) {
+        out.push((home, "<user>"));
+    }
+    out.sort_by_key(|(p, _)| std::cmp::Reverse(p.as_os_str().len()));
+    out
+}
+
+// Case-insensitive substring replace that keeps byte offsets valid across the
+// swap: ASCII-only lowercasing never changes a string's byte length, so the
+// indices found against the lowercased copy still cut the original in the right
+// place.
+fn replace_case_insensitive(haystack: &str, needle: &str, replacement: &str) -> String {
+    if needle.is_empty() {
+        return haystack.to_string();
+    }
+    let lower_needle = needle.to_ascii_lowercase();
+    let mut lower_rest = haystack.to_ascii_lowercase();
+    let mut rest = haystack;
+    let mut out = String::with_capacity(haystack.len());
+    while let Some(idx) = lower_rest.find(&lower_needle) {
+        out.push_str(&rest[..idx]);
+        out.push_str(replacement);
+        rest = &rest[idx + needle.len()..];
+        lower_rest = lower_rest[idx + needle.len()..].to_string();
+    }
+    out.push_str(rest);
+    out
+}
+
+// Swaps every folder this build recognises for its placeholder, tried both with
+// backslashes and with the forward slashes a cross-platform crate's own error text
+// sometimes uses in place of them.
+fn replace_known_dirs(line: &str, dirs: &[(PathBuf, &'static str)]) -> String {
+    let mut out = line.to_string();
+    for (dir, placeholder) in dirs {
+        let win = dir.to_string_lossy().into_owned();
+        if win.is_empty() {
+            continue;
+        }
+        out = replace_case_insensitive(&out, &win, placeholder);
+        let alt = win.replace('\\', "/");
+        if alt != win {
+            out = replace_case_insensitive(&out, &alt, placeholder);
+        }
+    }
+    out
+}
+
+// Whether `s` is shaped like a filesystem path worth shortening: drive-rooted
+// (`D:\...`), a UNC share (`\\server\...`), or Unix-style with at least two
+// segments (`/mnt/data/...`), and it actually carries a separator beyond that
+// root so a bare `C:` or `/` is left alone.
+fn looks_like_a_path(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    let drive_rooted = bytes.len() > 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/');
+    let unc = s.starts_with(r"\\") && s.len() > 2;
+    let unix_like = s.starts_with('/') && s.matches('/').count() >= 2;
+    drive_rooted || unc || unix_like
+}
+
+// Last, structural line of defence for `append_crash_log`: any drive-rooted,
+// UNC or Unix-style path that slipped past the named placeholders above (a data
+// or sync folder the user pointed the app at that this run never resolved, for
+// one) is cut down to its file name rather than left whole in the log.
+fn shorten_stray_paths(line: &str) -> String {
+    line.split(' ')
+        .map(|word| {
+            let trimmed = word.trim_end_matches(|c: char| ".,;:)]}\"'".contains(c));
+            let suffix = &word[trimmed.len()..];
+            if looks_like_a_path(trimmed) {
+                let name = trimmed.rsplit(['\\', '/']).find(|s| !s.is_empty()).unwrap_or(trimmed);
+                format!("{name}{suffix}")
+            } else {
+                word.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+// One line's worth of cleanup for the crash log: named folders first (readable
+// placeholders for the ones this build actually knows), then a structural
+// catch-all for anything shaped like a path that is not one of them. Shared by
+// `append_crash_log`, which scrubs as it writes, and `strip_user_path_lines`,
+// which re-applies it once to whatever an older build already wrote.
+fn scrub_log_line(line: &str) -> String {
+    shorten_stray_paths(&replace_known_dirs(line, &known_path_placeholders()))
+}
+
+// Rewrites `path` with every line run through `scrub_log_line`, replacing a path
+// in place rather than deleting the line it is on -- the rest of that line is
+// still a real, useful diagnostic. Its own function, taking an explicit path, for
+// the same testability reason as `rotate_log_file` above.
 fn strip_user_path_lines(path: &Path) {
     let Ok(text) = fs::read_to_string(path) else { return };
-    let has_user_path = |line: &str| {
-        let lower = line.to_ascii_lowercase();
-        lower.contains(r"\users\") || lower.contains("/users/")
-    };
-    if !text.lines().any(has_user_path) {
-        return;
+    let cleaned: String = text.lines().map(|line| format!("{}\n", scrub_log_line(line))).collect();
+    if cleaned != text {
+        let _ = fs::write(path, cleaned);
     }
-    let cleaned: String = text
-        .lines()
-        .filter(|line| !has_user_path(line))
-        .map(|line| format!("{line}\n"))
-        .collect();
-    let _ = fs::write(path, cleaned);
 }
 
 // One-time cleanup: an older build's crash log can carry the BUILD MACHINE's own
@@ -25308,11 +25417,10 @@ const SYNC_LEGACY_MARK: &str = "syncDirLegacyChecked";
 
 fn sync_dir_path(app: &AppHandle, settings: &Settings) -> PathBuf {
     let custom = settings.ui_texts.get("syncDir").cloned().unwrap_or_default();
-    if custom.is_empty() {
-        sync_default_dir(app)
-    } else {
-        PathBuf::from(custom)
-    }
+    let resolved = if custom.is_empty() { sync_default_dir(app) } else { PathBuf::from(custom) };
+    // Recorded for `append_crash_log`'s scrubbing, see `LAST_KNOWN_SYNC_DIR`.
+    *LAST_KNOWN_SYNC_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(resolved.clone());
+    resolved
 }
 
 // Whether a folder holds at least one file this feature could have written. Used
@@ -32568,6 +32676,64 @@ mod tests {
         assert!(redirected.contains(MARKER), "the message must land in the redirected file instead");
     }
 
+    // A data folder outside the profile (a custom location the user picked, or any
+    // other drive-rooted path this run never resolved to a known folder) is never
+    // a folder the named placeholders recognise -- the structural catch-all must
+    // still keep it out of the log, down to just the file name.
+    #[test]
+    fn append_crash_log_scrubs_a_path_outside_any_known_folder() {
+        const MARKER: &str = "PROBE-crash-log-scrub-outside-profile";
+        append_crash_log(&format!(r"{MARKER}: could not read D:\Privat\Kunde\x.png"));
+
+        // Checked as a whole-file substring rather than a reconstructed "line":
+        // dozens of other tests append to this same shared redirected file at the
+        // same time, so only a contiguous match proves anything here.
+        let redirected = fs::read_to_string(crash_log_path()).unwrap_or_default();
+        assert!(!redirected.contains(r"D:\Privat\Kunde"), "an unrecognised drive path must never reach the log");
+        assert!(
+            redirected.contains(&format!("{MARKER}: could not read x.png")),
+            "the file name itself may stay, only the folder must go: {redirected}"
+        );
+    }
+
+    // The configured sync folder is exactly the kind of user-data folder this
+    // point exists for: a full path most users will not pick from inside their
+    // profile. It must come out replaced by its own readable placeholder, not
+    // merely shortened.
+    #[test]
+    fn append_crash_log_scrubs_the_configured_sync_folder() {
+        const MARKER: &str = "PROBE-crash-log-scrub-sync-folder";
+        let sync_dir = PathBuf::from(r"E:\CloudSync\PromptFolders");
+        let prior = LAST_KNOWN_SYNC_DIR.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        *LAST_KNOWN_SYNC_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(sync_dir.clone());
+
+        append_crash_log(&format!("{MARKER}: the sync folder could not be created: {}", sync_dir.display()));
+
+        *LAST_KNOWN_SYNC_DIR.lock().unwrap_or_else(|e| e.into_inner()) = prior;
+
+        let redirected = fs::read_to_string(crash_log_path()).unwrap_or_default();
+        assert!(
+            !redirected.to_ascii_lowercase().contains("cloudsync"),
+            "the sync folder path must never reach the log"
+        );
+        assert!(
+            redirected.contains(&format!("{MARKER}: the sync folder could not be created: <sync>")),
+            "the named sync placeholder must take its place: {redirected}"
+        );
+    }
+
+    // A message that never carried a path must reach the log exactly as written --
+    // scrubbing must never mangle ordinary text.
+    #[test]
+    fn append_crash_log_leaves_a_message_without_any_path_unchanged() {
+        const MARKER: &str = "PROBE-crash-log-scrub-no-path";
+        let msg = format!("{MARKER}: persist failed, no path involved at all");
+        append_crash_log(&msg);
+
+        let redirected = fs::read_to_string(crash_log_path()).unwrap_or_default();
+        assert!(redirected.contains(&msg), "a path-free message must reach the log exactly as written: {redirected}");
+    }
+
     // A log grown past the cap must keep its newest lines and lose only the
     // oldest -- deleting the whole file (the old behaviour) would throw away the
     // real failure a user just hit along with everything before it. Runs against
@@ -32621,10 +32787,10 @@ mod tests {
     }
 
     // A line carrying a Windows user-profile path -- exactly what an unremapped
-    // panic location from a dependency crate bakes in -- must be removed by the
-    // cleanup; every other line must survive untouched.
+    // panic location from a dependency crate bakes in -- keeps its other content;
+    // only the path on it is replaced, the line as a whole is never deleted.
     #[test]
-    fn strip_user_path_lines_removes_only_the_lines_that_carry_one() {
+    fn strip_user_path_lines_replaces_the_path_but_keeps_the_line() {
         let path = std::env::temp_dir().join(format!("ps-crashlog-scrub-test-{}", std::process::id()));
         let contents = "\
 [t=1 v1.0] a clean line with no path in it at all\n\
@@ -32635,7 +32801,10 @@ mod tests {
         strip_user_path_lines(&path);
 
         let cleaned = fs::read_to_string(&path).unwrap();
-        assert!(!cleaned.to_ascii_lowercase().contains(r"\users\"), "the user-path line must be gone: {cleaned:?}");
+        assert!(!cleaned.to_ascii_lowercase().contains(r"\users\"), "the profile path must be gone: {cleaned:?}");
+        assert_eq!(cleaned.lines().count(), 3, "the line must stay, only the path on it is replaced: {cleaned:?}");
+        assert!(cleaned.contains("panicked at"), "the rest of the panic line must survive: {cleaned:?}");
+        assert!(cleaned.contains("lib.rs:42"), "the file name and line number must survive: {cleaned:?}");
         assert!(cleaned.contains("a clean line with no path in it at all"), "an unrelated line must survive");
         assert!(cleaned.contains("another clean line, describing an ordinary failure"), "an unrelated line must survive");
         let _ = fs::remove_file(&path);
