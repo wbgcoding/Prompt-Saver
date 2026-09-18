@@ -288,6 +288,10 @@ const RESULTS = {
   }),
   current_theme: () => "dark",
   theme_vars: () => ({ accent: "#ff00aa" }),
+  // Off by default (every existing pill/folder probe boots unparked);
+  // window.__FLOAT_PARKED__ lets a probe flip a specific boot to true.
+  is_float_parked: () => window.__FLOAT_PARKED__ === true,
+  float_recall: () => null,
   // Recording control bar's poll target -- a fixed fixture so the probe can
   // assert the timer/size labels render from it.
   // show_size/size_eta_secs mirror what rec_bar_size_state would compute

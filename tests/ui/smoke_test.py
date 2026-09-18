@@ -10816,6 +10816,75 @@ SETTINGS_DUPES_PROBE = """
 </script>
 """
 
+# 411: the parked marker on a pill/folder whose saved screen is gone. Its own
+# boot (window.__FLOAT_PARKED__ = true), same reasoning as the store-sealing
+# and drag-view fixtures above: is_float_parked is only ever asked once at
+# boot, a state the main sweep's default fixture never sets up.
+PARKED_BADGE_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const until = async (fn) => { for (let i = 0; i < 80 && !fn(); i++) await sleep(50); return fn(); };
+  try {
+    // Not the badge's title: like every other pill/folder label, it waits on
+    // the lazily imported translations, which never resolve under this
+    // harness's virtual clock (see FLOAT_PROBE above) -- visibility alone,
+    // set straight from the boot-time is_float_parked call, is what this checks.
+    const badge = document.getElementById('parked-badge');
+    await until(() => !badge.classList.contains('hidden'));
+    if (badge.classList.contains('hidden')) {
+      errs.push('411: the parked marker never appeared on a button whose screen is gone');
+    }
+  } catch (e) { errs.push('411 probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+# 411: the float-recall expert action reaches the backend. Its own boot (a
+# plain index.html start is enough; the action does not depend on any pill or
+# folder actually being parked, only on the floating feature being on, which
+# ships on by default).
+FLOAT_RECALL_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const click = async (id) => { const e = document.getElementById(id); if (e) { e.click(); await sleep(200); } };
+  const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
+  try {
+    document.getElementById('settings').classList.remove('hidden');
+    await sleep(50);
+    const findBtn = () => document.querySelector('.expert-action[data-action="float-recall"]');
+    await click('expert-open');
+    let btn = findBtn();
+    for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+      if (btn) break;
+      tb.click();
+      await sleep(150);
+      btn = findBtn();
+    }
+    if (!btn) {
+      errs.push('411: float-recall expert action not found in any tab');
+    } else {
+      calls().length = 0;
+      btn.click();
+      await sleep(150);
+      if (!calls().includes('float_recall')) errs.push('411: clicking the recall action never called float_recall');
+    }
+  } catch (e) { errs.push('411 probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
 # 404: the "whats new" toast on startup, the window it opens (with an
 # injected script tag that must render as text, never run), the same window
 # reopened current-version-only from the About dialog, and its GitHub refresh.
@@ -11402,6 +11471,58 @@ def main():
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- whats new: toast, window, About entry, GitHub refresh")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # 411: the parked marker, once on the pill and once on the folder icon --
+        # both windows read the same window.__FLOAT_PARKED__ fixture off the
+        # stub, so one probe body covers both boots.
+        for name, size in (("floating.html", (240, 60)), ("folder.html", (520, 420))):
+            w, h = size
+            side = tmp / "ui" / f"parked-{name}"
+            side.write_text(
+                (REPO / "ui" / name).read_text(encoding="utf-8")
+                .replace("<script",
+                         '<script>window.__FLOAT_PARKED__ = true;</script>\n'
+                         '<script src="tauri_stub.js"></script>\n<script', 1)
+                .replace("</body>", PARKED_BADGE_PROBE + "</body>"),
+                encoding="utf-8")
+            proc = subprocess.run(
+                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+                 f"--user-data-dir={tmp / ('profile-parked-%s' % name)}", "--allow-file-access-from-files",
+                 f"--window-size={w},{h}", "--virtual-time-budget=15000",
+                 "--dump-dom", side.as_uri()],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=180)
+            m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+            errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+            print(f"-- parked marker ({name})")
+            for e in errs:
+                print(f"   FAIL: {e}")
+            failed += len(errs)
+            if not errs:
+                print("   ok")
+
+        # 411: the float-recall expert action.
+        side = tmp / "ui" / "float-recall.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", FLOAT_RECALL_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-float-recall'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- float-recall expert action")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

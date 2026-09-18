@@ -557,6 +557,25 @@ body.menu-open .pill { flex: 0 0 auto; }
 /* Folder members render the badge without an initial "hidden" class (unlike the
    pill, which toggles it explicitly) — empty until primeMemberRotate's peek lands. */
 .rotate-badge:empty { display: none; }
+
+/* Parked marker: a button (or folder icon) whose saved position's screen is
+   not connected right now. Deliberately subtle (a small dot, opposite corner
+   from the rotate badge) -- the pill still opened and still works, this only
+   explains why it is sitting on the main screen instead of where it was left.
+   A title on the badge itself (not the whole pill/icon) gives it a native
+   tooltip without displacing the pill's own name tooltip. */
+.parked-badge {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  z-index: 5;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
 /* Member menu: laid over the open grid, never wider than the popover it sits in. */
 .member-menu { z-index: 12; width: auto; min-width: 150px; }
 

@@ -24,6 +24,7 @@ const folderId = appWin.label.replace(/^folder-/, "");
 const iconEl = document.getElementById("icon");
 const previewEl = document.getElementById("preview");
 const nameEl = document.getElementById("fname");
+const parkedBadge = document.getElementById("parked-badge");
 const popEl = document.getElementById("pop");
 const gridEl = document.getElementById("grid");
 const menuEl = document.getElementById("menu");
@@ -367,6 +368,7 @@ async function applyTexts(s) {
   TXT = Object.fromEntries(
     Object.entries(i18n.FLOAT_TXT[lang]).map(([k, v]) => [k, applyTerms(v, lang)]));
   document.getElementById("size-label").textContent = TXT.size;
+  parkedBadge.title = TXT.parked;
   document.getElementById("menu-rename").textContent = TXT.rename;
   document.getElementById("menu-hide").textContent = TXT.hideForNow;
   // The same folder glyph the grid-folder and view-group "ungroup" menu
@@ -760,4 +762,8 @@ appWin.onScaleChanged(() => {
   // lazily so the window opens fast) land a moment later and only relabel.
   applySettings().catch(() => {});
   await loadState().catch(() => {});
+  // Same one-shot check as the pill: fresh at every open, never kept live.
+  invoke("is_float_parked", { id: folderId }).then((parked) => {
+    parkedBadge.classList.toggle("hidden", !parked);
+  }).catch(() => {});
 })();

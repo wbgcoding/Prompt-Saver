@@ -1092,6 +1092,10 @@ const FLAG_LABELS = {
   multiView: "flagMultiView",
   quickGrid: "flagQuickGrid",
   floating: "flagFloating",
+  // A saved position whose screen is gone gets parked on the main screen
+  // instead of dropped into the void; off falls back to the old plain
+  // clamp-to-work-area behaviour.
+  floatPark: "flagFloatPark",
   barToggles: "flagBarToggles",
   barToggleBoth: "flagBarToggleBoth",
   tileMenu: "flagTileMenu",
@@ -1464,6 +1468,10 @@ const EXPERT_VALUES = {
   pillBorderW: { label: "valPillBorderW", min: 0, max: 12, step: 1, def: 5, unit: "px", gate: "floating" },
   pillRingFrac: { label: "valPillRingFrac", min: 5, max: 40, step: 1, def: 18, unit: "%", gate: "floating" },
   pillMenuGap: { label: "valPillMenuGap", min: 0, max: 20, step: 1, def: 6, unit: "px", gate: "floating" },
+  // 0 = off (never clears the parked view, only the position keeps living in
+  // settings either way). Above 0, a button parked this many hours loses only
+  // its view -- the same "hide for now" mechanism -- never the saved entry.
+  floatParkCleanupH: { label: "valFloatParkCleanupH", min: 0, max: 168, step: 1, def: 0, unit: "h", gate: "floating" },
   // Pill folders: how much a pill grows for the merge-target hint, and the open
   // folder popover's own tile size / gap / padding.
   pillMergeGrow: { label: "valPillMergeGrow", min: 0, max: 50, step: 1, def: 12, unit: "%", gate: "pillFolders" },
@@ -2004,7 +2012,7 @@ const EXPERT_TABS = [
     // Everything that happens between a click and the clipboard.
     { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyBubble", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
     // Floating buttons and the two kinds of folder they can form.
-    { title: "expGroupFolders", flags: ["floating", { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap", "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
+    { title: "expGroupFolders", flags: ["floating", { key: "floatPark", gate: "floating" }, { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap", "floatParkCleanupH", "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
     // The quick-copy sections of the tray menu, each with its own entry count.
     { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs"], values: ["trayRecentN", "trayFavN", "trayLabelMax"] },
     // The watcher that collects what you copy elsewhere.
@@ -2069,7 +2077,7 @@ const EXPERT_TABS = [
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
     { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken"], values: ["dupThreshold", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "videoClipTtlMin", "errorLogKeepKb"], selects: ["trashRetentionDays"],
-      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }] },
+      actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }, { id: "float-recall", label: "floatRecallAction", gate: "floating" }] },
   ] },
 ];
 
@@ -2242,7 +2250,7 @@ const EXPERT_TIPS = [
   "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "trayLabelMax",
   "checkUpdateOnStart", "showUpdates", "updateCheckH", "whatsNew", "importExport", "toolbarHoverDim", "keyboardNav", "allowMultipleInstances",
   "taskbarProgress", "etaShow",
-  "headerSeparators", "floating",
+  "headerSeparators", "floating", "floatPark", "floatParkCleanupH",
   "pillFolders", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap",
   "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap",
   "folderGridCols",
@@ -8985,6 +8993,17 @@ EXPERT_ACTIONS["rec-sweep-now"] = async () => {
   try {
     const [count, bytes] = await invoke("sweep_recordings_now");
     toast(count > 0 ? t("recSweepDone").replace("{n}", String(count)).replace("{v}", fmtBytes(bytes)) : t("recSweepNothing"));
+  } catch (e) {
+    errToast(e);
+  }
+};
+// The parking notion's own escape hatch: every floating/folder position moves
+// back onto the main screen, valid ones included, and forgets every stored
+// screen identity -- for when nothing about the current placement is trusted
+// any more.
+EXPERT_ACTIONS["float-recall"] = async () => {
+  try {
+    await invoke("float_recall");
   } catch (e) {
     errToast(e);
   }
@@ -17508,6 +17527,11 @@ function bind() {
   // being told -- the tile context menu's pin/unpin label then kept reading a
   // stale settings.floating and could re-open a pill the label said to remove.
   listen("floating-pin-changed", (e) => cacheFloatingState(e.payload.id, e.payload.pinned));
+  // floatParkCleanupH hid a parked button's view (never its saved entry) --
+  // point at the recall action, the one place that brings it back.
+  listen("float-park-cleaned-up", () => {
+    toast(t("floatParkCleanedUp"), { label: t("floatRecallAction"), onClick: () => EXPERT_ACTIONS["float-recall"]?.() });
+  });
   // A copy recorded from a pill, the folder window or the tray never touched
   // this window's own settings.usage/last_used mirror -- "most used"/"recently
   // used" library sort silently froze at whatever it read at the last full

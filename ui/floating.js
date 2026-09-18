@@ -25,6 +25,7 @@ const label = document.getElementById("label");
 const menu = document.getElementById("menu");
 const resizeEl = document.getElementById("resize");
 const rzCatch = document.getElementById("rz-catch");
+const parkedBadge = document.getElementById("parked-badge");
 
 let scale = 1;
 let tileSize = 0; // global text size setting (0 = auto)
@@ -209,6 +210,7 @@ async function applyTexts(s) {
   closeBtn.title = t.close;
   closeBtn.setAttribute("aria-label", t.close);
   document.getElementById("file-error").textContent = t.missing;
+  parkedBadge.title = t.parked;
   mediaBar.setLabels({
     play: t.mediaPlay, pause: t.mediaPause,
     loopOn: t.mediaLoopOn, loopOff: t.mediaLoopOff,
@@ -987,4 +989,10 @@ appWin.onScaleChanged(() => {
   } catch (_) {}
   applySettings().catch(() => {});
   loadName().catch(() => {});
+  // Checked once at boot, not kept live: the window only ever opens freshly
+  // placed (parked or on its own remembered spot), so nothing changes this
+  // mid-session short of the float-recall action, which closes and reopens it.
+  invoke("is_float_parked", { id: promptId }).then((parked) => {
+    parkedBadge.classList.toggle("hidden", !parked);
+  }).catch(() => {});
 })();

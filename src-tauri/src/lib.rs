@@ -1726,10 +1726,20 @@ struct Prompt {
     image_text: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Default)]
+// A saved floating window position, plus the identity of the screen it was
+// on when it was last placed there -- name, resolution and its offset in
+// the virtual desktop, next to the coordinates. Coordinates alone cannot
+// tell a screen that came back from a different one that merely landed on
+// the same spot; `screen` is what lets a parked pill find its way home.
+// Empty on anything saved before this field existed, which is read as
+// "unknown" rather than "no screen", so an ordinary upgrade never parks a
+// button nothing has actually moved (see resolve_float_spot).
+#[derive(Serialize, Deserialize, Clone, Default)]
 struct Pos {
     x: i32,
     y: i32,
+    #[serde(default)]
+    screen: String,
 }
 
 // Saved main-window geometry (physical pixels). Validated against monitors on load.
@@ -4253,10 +4263,12 @@ fn default_pos(app: &AppHandle, index: usize) -> Pos {
         .and_then(|w| w.primary_monitor().ok().flatten())
         .map(|m| {
             let p = m.position();
-            Pos { x: p.x + 24, y: p.y + 24 }
+            Pos { x: p.x + 24, y: p.y + 24, ..Default::default() }
         })
-        .unwrap_or(Pos { x: 24, y: 24 });
-    Pos { x: base.x + off, y: base.y + off }
+        .unwrap_or(Pos { x: 24, y: 24, ..Default::default() });
+    let x = base.x + off;
+    let y = base.y + off;
+    Pos { x, y, screen: screen_id_at(app, x, y) }
 }
 
 // One range for floating-button size, shared by the writer, the reader and the UI.
@@ -4322,32 +4334,47 @@ fn file_dialog(app: &AppHandle) -> rfd::FileDialog {
     file_dialog_for(app, "main")
 }
 
-fn open_floating(app: &AppHandle, prompt: &Prompt) {
+// `taken` collects the box this pill actually lands in (real or parked) so
+// the next call in the same sync_float_windows pass fans its own park spot
+// out from this one instead of landing on top of it.
+fn open_floating(app: &AppHandle, prompt: &Prompt, taken: &mut Vec<Rect>) {
     let label = flabel(&prompt.id);
     if app.get_webview_window(&label).is_some() {
         return;
     }
 
     // Never call Tauri window APIs while holding the Db lock (deadlock risk).
-    let (saved, scale, count, excluded) = {
+    let (saved, scale, count, excluded, park_on) = {
         let state: State<Db> = app.state();
         let store = lock(&state);
         (
-            store.settings.floating.get(&prompt.id).copied(),
+            store.settings.floating.get(&prompt.id).cloned(),
             float_scale_of(&store.settings, &prompt.id),
             store.settings.floating.len(),
             capture_excluded(&store.settings),
+            store.settings.ui_flags.get("floatPark") != Some(&false),
         )
     };
+    let is_new = saved.is_none();
     let pos = saved.unwrap_or_else(|| default_pos(app, count));
-    if saved.is_none() {
+    if is_new {
         let state: State<Db> = app.state();
         let mut store = lock(&state);
-        store.settings.floating.insert(prompt.id.clone(), pos);
+        store.settings.floating.insert(prompt.id.clone(), pos.clone());
         save_settings(app, &store.settings);
     }
 
     let (pw, ph) = pill_dims(is_image_prompt(prompt), scale);
+    let (x, y, parked) = if park_on {
+        resolve_float_spot(&pos, pw, ph, &screen_snapshot(app), taken)
+    } else {
+        let work = work_rect_at(app, pos.x as f64, pos.y as f64);
+        let (x, y) = clamp_to_work(work, pw, ph, pos.x as f64, pos.y as f64);
+        (x, y, false)
+    };
+    taken.push(Rect { x, y, w: pw, h: ph });
+    mark_parked(app, &prompt.id, parked);
+
     let win = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("floating.html".into()))
         .title(&prompt.name)
         .inner_size(pw, ph)
@@ -4364,7 +4391,7 @@ fn open_floating(app: &AppHandle, prompt: &Prompt) {
         // rectangle behind the rounded pill (mirrors apply_window_bg for main).
         let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
         set_capture_exclusion(&win, excluded);
-        let _ = win.set_position(PhysicalPosition::new(pos.x, pos.y));
+        let _ = win.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
         let _ = win.show();
 
         let app2 = app.clone();
@@ -4373,13 +4400,18 @@ fn open_floating(app: &AppHandle, prompt: &Prompt) {
             WindowEvent::Moved(p) => {
                 // Fires for every pixel during a drag — never block the move
                 // loop on a busy store; the next event carries the position.
+                // A drag is the user placing the pill themselves, so it
+                // always becomes the new real position AND ends parking --
+                // there is nothing left to return to once they have moved it.
+                let screen = screen_id_at(&app2, p.x, p.y);
                 if let Some(state) = app2.try_state::<Db>() {
                     if let Ok(mut store) = state.try_lock() {
                         if store.settings.floating.contains_key(&pid) {
-                            store.settings.floating.insert(pid.clone(), Pos { x: p.x, y: p.y });
+                            store.settings.floating.insert(pid.clone(), Pos { x: p.x, y: p.y, screen });
                         }
                     }
                 }
+                mark_parked(&app2, &pid, false);
             }
             WindowEvent::Destroyed => {
                 if let Some(state) = app2.try_state::<Db>() {
@@ -4641,6 +4673,101 @@ fn spread_free_positions(wishes: &[Rect], taken: &[Rect], work: Rect) -> Vec<(f6
     out
 }
 
+// A screen's identity: its name, resolution and offset in the virtual
+// desktop, hashed down to a short stable string. Two screens with the same
+// dimensions at the same virtual-desktop position but a different name
+// (a different physical monitor happening to land where an old one used to
+// be) must never compare equal, which is exactly why the name is part of
+// the hash and the position/size alone are not.
+fn screen_identity(name: &str, x: i32, y: i32, w: i32, h: i32) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    name.hash(&mut hasher);
+    (x, y, w, h).hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
+// One monitor as the pure, testable functions below need it: its identity
+// plus its bounds. `tauri::Monitor` cannot be built outside a real window,
+// so every live caller reduces its real monitor list to this shape first --
+// which is also what lets resolve_float_spot below be unit-tested with a
+// mocked screen list instead of a real one.
+type ScreenRect = (String, i32, i32, i32, i32); // (identity, x, y, width, height)
+
+fn screen_snapshot(app: &AppHandle) -> Vec<ScreenRect> {
+    app.get_webview_window("main")
+        .and_then(|w| w.available_monitors().ok())
+        .unwrap_or_default()
+        .iter()
+        .map(|m| {
+            let p = m.position();
+            let s = m.size();
+            let name = m.name().cloned().unwrap_or_default();
+            (screen_identity(&name, p.x, p.y, s.width as i32, s.height as i32), p.x, p.y, s.width as i32, s.height as i32)
+        })
+        .collect()
+}
+
+// The identity of whichever current screen contains (x, y), or empty if
+// none does (point off every monitor, which a live cursor/window position
+// should not normally be, but a probe failure must never panic).
+fn screen_id_at(app: &AppHandle, x: i32, y: i32) -> String {
+    screen_snapshot(app)
+        .into_iter()
+        .find(|(_, sx, sy, sw, sh)| x >= *sx && x < sx + sw && y >= *sy && y < sy + sh)
+        .map(|(id, ..)| id)
+        .unwrap_or_default()
+}
+
+// Where a saved floating position actually ends up today: unchanged if its
+// screen is still there, parked on the main screen (the first entry of
+// `screens`, always the primary monitor -- see screen_snapshot's caller)
+// otherwise. NEVER mutates `pos` -- the caller keeps the stored position and
+// screen id exactly as saved and only places the window at the returned
+// point, so a screen that comes back finds its pill exactly where it left
+// it. `taken` is every other window's current box, so several pills parked
+// in the same pass fan out instead of stacking.
+//
+// A `pos.screen` of "" (saved before this field existed) falls back to
+// plain coordinate containment -- today's behaviour -- so an ordinary
+// upgrade never parks a button nothing has actually moved. Once a screen id
+// is recorded, only that exact screen coming back counts as "still home";
+// a different monitor that happens to cover the same point does not (a
+// different identity with the same dimensions parks, per spec).
+fn resolve_float_spot(pos: &Pos, w: f64, h: f64, screens: &[ScreenRect], taken: &[Rect]) -> (f64, f64, bool) {
+    if screens.is_empty() {
+        // A failed monitor probe must never look like "every screen is gone".
+        return (pos.x as f64, pos.y as f64, false);
+    }
+    let still_home = screens.iter().any(|(id, sx, sy, sw, sh)| {
+        let on_this_one = pos.x >= *sx && pos.x < sx + sw && pos.y >= *sy && pos.y < sy + sh;
+        on_this_one && (pos.screen.is_empty() || *id == pos.screen)
+    });
+    if still_home {
+        return (pos.x as f64, pos.y as f64, false);
+    }
+    let (mx, my, mw, mh) = (screens[0].1, screens[0].2, screens[0].3, screens[0].4);
+    let work = Rect { x: mx as f64, y: my as f64, w: mw as f64, h: mh as f64 };
+    let wish = Rect { x: work.x, y: work.y, w, h };
+    let (x, y) = spread_free_positions(std::slice::from_ref(&wish), taken, work)
+        .into_iter()
+        .next()
+        .unwrap_or((work.x, work.y));
+    (x, y, true)
+}
+
+// Which parked ids have been parked longer than `cleanup_h` hours -- pure so
+// the cleanup rule is testable without a real clock. `cleanup_h <= 0` is the
+// switch's off position (the default): nothing ever ages out, matching
+// floatParkCleanupH's own "0 = off" convention.
+fn ids_past_park_cleanup(parked: &HashMap<String, std::time::Duration>, cleanup_h: f64) -> Vec<String> {
+    if cleanup_h <= 0.0 {
+        return Vec::new();
+    }
+    let limit = std::time::Duration::from_secs_f64(cleanup_h * 3600.0);
+    parked.iter().filter(|(_, age)| **age >= limit).map(|(id, _)| id.clone()).collect()
+}
+
 // Bring the folder list back to its invariants: only real prompt ids, no prompt in two
 // folders (the first folder listing it wins), a sane scale, and no folder left with
 // fewer than two members — that one dissolves, and its pill simply reappears at the
@@ -4714,6 +4841,39 @@ struct FolderExpand(Mutex<HashMap<String, Rect>>);
 // permanent Remove/Dissolve). In memory only, like FolderExpand above — cleared
 // on restart, never written to settings.
 struct HiddenFloats(Mutex<std::collections::HashSet<String>>);
+
+// A pill/folder currently parked (its saved screen is not among today's
+// monitors), and when this run of the app first noticed. In memory only --
+// the parked MARKER and the cleanup clock both reset on restart, never the
+// underlying position or screen id in Settings, which nothing here ever
+// touches. Presence in the map is what floating.js/folder.js ask for to
+// show the "off a screen that is not here right now" marker; the age is
+// what the floatParkCleanupH sweep compares against its own setting.
+struct ParkedFloats(Mutex<HashMap<String, std::time::Instant>>);
+
+// Records or clears one id's parked state. A fresh park keeps its own
+// first-seen instant if it was already parked, so re-syncing a still-parked
+// window (any other settings change re-runs sync_float_windows) never resets
+// its own cleanup clock.
+fn mark_parked(app: &AppHandle, id: &str, parked: bool) {
+    if let Some(state) = app.try_state::<ParkedFloats>() {
+        let mut map = state.0.lock().unwrap_or_else(|e| e.into_inner());
+        if parked {
+            map.entry(id.to_string()).or_insert_with(std::time::Instant::now);
+        } else {
+            map.remove(id);
+        }
+    }
+}
+
+// Whether a pill/folder is parked right now -- floating.js/folder.js ask this
+// once on boot to decide whether to show the marker.
+#[tauri::command]
+fn is_float_parked(app: AppHandle, id: String) -> bool {
+    app.try_state::<ParkedFloats>()
+        .map(|s| s.0.lock().unwrap_or_else(|e| e.into_inner()).contains_key(&id))
+        .unwrap_or(false)
+}
 
 fn folder_expansion(app: &AppHandle, id: &str) -> Option<Rect> {
     let state = app.try_state::<FolderExpand>()?;
@@ -4834,18 +4994,28 @@ fn folder_box(scale: f64) -> f64 {
 
 // One folder window, built exactly like a pill: frameless, transparent, always on top,
 // out of the taskbar and out of other apps' screen captures.
-fn open_folder_window(app: &AppHandle, folder: &FloatFolder) {
+fn open_folder_window(app: &AppHandle, folder: &FloatFolder, taken: &mut Vec<Rect>) {
     let label = folder_label(&folder.id);
     if app.get_webview_window(&label).is_some() {
         return;
     }
     // Never call Tauri window APIs while holding the Db lock (deadlock risk).
-    let excluded = {
+    let (excluded, park_on) = {
         let state: State<Db> = app.state();
         let store = lock(&state);
-        capture_excluded(&store.settings)
+        (capture_excluded(&store.settings), store.settings.ui_flags.get("floatPark") != Some(&false))
     };
     let side = folder_box(folder.scale);
+    let (x, y, parked) = if park_on {
+        resolve_float_spot(&folder.pos, side, side, &screen_snapshot(app), taken)
+    } else {
+        let work = work_rect_at(app, folder.pos.x as f64, folder.pos.y as f64);
+        let (x, y) = clamp_to_work(work, side, side, folder.pos.x as f64, folder.pos.y as f64);
+        (x, y, false)
+    };
+    taken.push(Rect { x, y, w: side, h: side });
+    mark_parked(app, &folder.id, parked);
+
     let win = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("folder.html".into()))
         .title(&folder.name)
         .inner_size(side, side)
@@ -4860,7 +5030,7 @@ fn open_folder_window(app: &AppHandle, folder: &FloatFolder) {
     if let Ok(win) = win {
         let _ = win.set_background_color(Some(tauri::webview::Color(0, 0, 0, 0)));
         set_capture_exclusion(&win, excluded);
-        let _ = win.set_position(PhysicalPosition::new(folder.pos.x, folder.pos.y));
+        let _ = win.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
         let _ = win.show();
 
         let app2 = app.clone();
@@ -4868,19 +5038,22 @@ fn open_folder_window(app: &AppHandle, folder: &FloatFolder) {
         win.on_window_event(move |event| match event {
             WindowEvent::Moved(p) => {
                 // While the folder is open the window origin is NOT the icon, so the
-                // stored position follows the icon, not the grown box.
+                // stored position follows the icon, not the grown box. A drag is the
+                // user placing the folder themselves, so it always becomes the new
+                // real position AND ends parking.
                 let off = folder_expansion(&app2, &fid).unwrap_or(Rect { x: 0.0, y: 0.0, w: 0.0, h: 0.0 });
+                let icon_x = p.x + off.x.round() as i32;
+                let icon_y = p.y + off.y.round() as i32;
+                let screen = screen_id_at(&app2, icon_x, icon_y);
                 if let Some(state) = app2.try_state::<Db>() {
                     // Fires for every pixel of a drag — never block the move loop.
                     if let Ok(mut store) = state.try_lock() {
                         if let Some(f) = store.settings.float_folders.iter_mut().find(|f| f.id == fid) {
-                            f.pos = Pos {
-                                x: p.x + off.x.round() as i32,
-                                y: p.y + off.y.round() as i32,
-                            };
+                            f.pos = Pos { x: icon_x, y: icon_y, screen };
                         }
                     }
                 }
+                mark_parked(&app2, &fid, false);
             }
             WindowEvent::Destroyed => {
                 set_folder_expansion(&app2, &fid, None);
@@ -4936,11 +5109,14 @@ fn sync_float_windows(app: &AppHandle) {
             let _ = win.close();
         }
     }
+    // Every box already on screen, so a pill/folder opened below (parked or
+    // not) fans out around what is already there instead of landing on it.
+    let mut taken: Vec<Rect> = app.webview_windows().values().filter_map(window_rect).collect();
     for prompt in &pills {
-        open_floating(app, prompt); // returns early when the window already exists
+        open_floating(app, prompt, &mut taken); // returns early when the window already exists
     }
     for folder in &folders {
-        open_folder_window(app, folder);
+        open_folder_window(app, folder, &mut taken);
     }
     // Whatever changed the plan also changed what an open folder shows.
     for label in app.webview_windows().keys() {
@@ -10070,6 +10246,58 @@ async fn delete_copy_entry(app: AppHandle, rowid: i64) -> bool {
         .unwrap_or(false)
 }
 
+// Expert action "Bring every floating window back to the main screen": the
+// emergency exit once a run of monitor changes has left positions and screen
+// identities not worth untangling by hand. Every pill and folder, parked or
+// not, gets a fresh spread-out spot on the main screen and forgets its old
+// screen identity -- there is nothing left to return to after this runs.
+#[tauri::command]
+async fn float_recall(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
+    {
+        let mut store = lock(&state);
+        let screens = screen_snapshot(&app);
+        let (main_id, mx, my, mw, mh) = screens
+            .first()
+            .cloned()
+            .unwrap_or((String::new(), 0, 0, 1920, 1080));
+        let work = Rect { x: mx as f64, y: my as f64, w: mw as f64, h: mh as f64 };
+
+        let mut wishes: Vec<Rect> = Vec::new();
+        let mut pill_ids: Vec<String> = store.settings.floating.keys().cloned().collect();
+        pill_ids.sort(); // stable fan-out order across runs
+        for id in &pill_ids {
+            let scale = float_scale_of(&store.settings, id);
+            let (w, h) = match store.prompts.iter().find(|p| &p.id == id) {
+                Some(p) => pill_dims(is_image_prompt(p), scale),
+                None => pill_dims(false, scale),
+            };
+            wishes.push(Rect { x: work.x, y: work.y, w, h });
+        }
+        for folder in &store.settings.float_folders {
+            wishes.push(Rect { x: work.x, y: work.y, w: folder_box(folder.scale), h: folder_box(folder.scale) });
+        }
+        let spots = spread_free_positions(&wishes, &[], work);
+
+        for (id, (x, y)) in pill_ids.iter().zip(spots.iter()) {
+            store.settings.floating.insert(
+                id.clone(),
+                Pos { x: x.round() as i32, y: y.round() as i32, screen: main_id.clone() },
+            );
+        }
+        for (folder, (x, y)) in store.settings.float_folders.iter_mut().zip(spots.iter().skip(pill_ids.len())) {
+            folder.pos = Pos { x: x.round() as i32, y: y.round() as i32, screen: main_id.clone() };
+        }
+
+        save_settings(&app, &store.settings);
+    }
+    if let Some(state) = app.try_state::<ParkedFloats>() {
+        state.0.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    }
+    sync_float_windows(&app);
+    notify_float_settings(&app);
+    Ok(())
+}
+
 // "Hide for now" — a pill or folder id (both flat strings from different id
 // spaces, never colliding), dismissed until the app restarts. NOT the permanent
 // unpin (toggle_floating/dissolve_float_folder) — the entry in settings.floating
@@ -10132,7 +10360,8 @@ async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: String) -> Re
                 if let Some(hs) = app.try_state::<HiddenFloats>() {
                     hs.0.lock().unwrap_or_else(|e| e.into_inner()).remove(&id);
                 }
-                open_floating(&app, &p);
+                let mut taken: Vec<Rect> = app.webview_windows().values().filter_map(window_rect).collect();
+                open_floating(&app, &p, &mut taken);
                 let _ = app.emit_to("main", "floating-pin-changed", serde_json::json!({ "id": id, "pinned": true }));
                 Ok(true)
             }
@@ -11949,7 +12178,7 @@ async fn float_folder_drop(app: AppHandle, state: State<'_, Db>, id: String) -> 
         Some(FloatFolder {
             id: gen_id(),
             name: String::new(),
-            pos: Pos { x: x.round() as i32, y: y.round() as i32 },
+            pos: Pos { x: x.round() as i32, y: y.round() as i32, ..Default::default() },
             scale,
             members: vec![key.to_string(), id.clone()],
         })
@@ -12081,7 +12310,7 @@ async fn collapse_float_folder(app: AppHandle, state: State<'_, Db>, id: String)
     // ended up rather than where the folder was opened.
     let mut store = lock(&state);
     if let Some(folder) = store.settings.float_folders.iter_mut().find(|f| f.id == id) {
-        folder.pos = Pos { x: icon.x.round() as i32, y: icon.y.round() as i32 };
+        folder.pos = Pos { x: icon.x.round() as i32, y: icon.y.round() as i32, ..Default::default() };
     }
     save_settings(&app, &store.settings);
     Ok(())
@@ -12105,7 +12334,7 @@ async fn set_float_folder_scale(
             .find(|f| f.id == id)
             .map(|f| {
                 f.scale = scale;
-                f.pos
+                f.pos.clone()
             });
         match found {
             Some(p) => {
@@ -12191,7 +12420,7 @@ async fn dissolve_float_folder(app: AppHandle, state: State<'_, Db>, id: String)
             .filter_map(|mid| {
                 let prompt = store.prompts.iter().find(|p| &p.id == mid)?;
                 let (w, h) = pill_dims(is_image_prompt(prompt), float_scale_of(&store.settings, mid));
-                let pos = store.settings.floating.get(mid).copied().unwrap_or(folder.pos);
+                let pos = store.settings.floating.get(mid).cloned().unwrap_or_else(|| folder.pos.clone());
                 Some((
                     mid.clone(),
                     Rect { x: pos.x as f64, y: pos.y as f64, w: w * dpi, h: h * dpi },
@@ -12225,7 +12454,7 @@ async fn dissolve_float_folder(app: AppHandle, state: State<'_, Db>, id: String)
             store
                 .settings
                 .floating
-                .insert(mid.clone(), Pos { x: x.round() as i32, y: y.round() as i32 });
+                .insert(mid.clone(), Pos { x: x.round() as i32, y: y.round() as i32, ..Default::default() });
         }
         save_settings(&app, &store.settings);
     }
@@ -12283,7 +12512,7 @@ async fn remove_folder_member(
         store
             .settings
             .floating
-            .insert(id, Pos { x: nx.round() as i32, y: ny.round() as i32 });
+            .insert(id, Pos { x: nx.round() as i32, y: ny.round() as i32, ..Default::default() });
         let ids: Vec<String> = store.prompts.iter().map(|p| p.id.clone()).collect();
         normalize_float_folders(&mut store.settings.float_folders, &ids);
         save_settings(&app, &store.settings);
@@ -24415,49 +24644,6 @@ fn point_on_monitor(monitors: &[tauri::Monitor], x: i32, y: i32) -> bool {
     })
 }
 
-// Same point-on-monitor test as above, but over plain (x, y, width, height) tuples
-// instead of tauri::Monitor — that type can't be constructed outside a real window,
-// so this is the only form `prune_offscreen_floats` below can actually unit-test.
-fn point_in_monitor_rects(monitors: &[(i32, i32, i32, i32)], x: i32, y: i32) -> bool {
-    monitors.iter().any(|&(mx, my, mw, mh)| x >= mx && x < mx + mw && y >= my && y < my + mh)
-}
-
-// A floating pill/folder whose saved anchor point (its stored x/y — no width or
-// height is tracked) sits on NO monitor at all is unreachable forever — drop it. No
-// margin: a pill dragged mostly off an edge but with its origin corner still on some
-// monitor counts as "hanging over the edge" and stays, exactly what the request asked
-// for. A folder's members never carry their own `floating` entry while grouped (same
-// invariant as grid folders), but removing an absent key is a harmless no-op either
-// way. Returns whether anything changed, so the caller only re-saves settings when it
-// actually pruned something.
-fn prune_offscreen_floats(monitors: &[(i32, i32, i32, i32)], settings: &mut Settings) -> bool {
-    if monitors.is_empty() {
-        return false; // a failed monitor probe must never look like "nothing is on-screen"
-    }
-    let gone_pills: Vec<String> = settings
-        .floating
-        .iter()
-        .filter(|(_, pos)| !point_in_monitor_rects(monitors, pos.x, pos.y))
-        .map(|(id, _)| id.clone())
-        .collect();
-    for id in &gone_pills {
-        settings.floating.remove(id);
-    }
-    let before = settings.float_folders.len();
-    let mut freed_members = Vec::new();
-    settings.float_folders.retain(|f| {
-        let gone = !point_in_monitor_rects(monitors, f.pos.x, f.pos.y);
-        if gone {
-            freed_members.extend(f.members.iter().cloned());
-        }
-        !gone
-    });
-    for id in &freed_members {
-        settings.floating.remove(id);
-    }
-    !gone_pills.is_empty() || settings.float_folders.len() != before
-}
-
 // NOTE: WindowGeom.width/height are LOGICAL pixels (DPI-independent) — a
 // physically stored size grew by the monitor's scale factor on every start.
 // Position stays physical (global desktop coordinates).
@@ -25330,6 +25516,7 @@ pub fn run() {
             app.manage(HotkeyTargets(Mutex::new(Vec::new())));
             app.manage(FolderExpand(Mutex::new(HashMap::new())));
             app.manage(HiddenFloats(Mutex::new(std::collections::HashSet::new())));
+            app.manage(ParkedFloats(Mutex::new(HashMap::new())));
             app.manage(DragHint(Mutex::new((0, None)))); // live merge highlight
             app.manage(VarPrompt::new()); // standalone fill-in window
             app.manage(VideoEditorPending::new()); // video editor's pending target path
@@ -25437,6 +25624,55 @@ pub fn run() {
                 });
             }
 
+            // A pill/folder parked long enough (floatParkCleanupH, default 0/off)
+            // loses only its view -- exactly the existing "hide for now" mechanism,
+            // never the entry in settings.floating/float_folders and never its
+            // screen id, so it is still there (and still returns on its own) the
+            // moment that screen comes back.
+            {
+                let h = handle.clone();
+                scheduler::register_periodic("float-park-cleanup", Duration::from_secs(60), Duration::from_secs(60), move || {
+                    let cleanup_h = h
+                        .try_state::<Db>()
+                        .map(|s| {
+                            s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("floatParkCleanupH").copied().unwrap_or(0.0)
+                        })
+                        .unwrap_or(0.0);
+                    if cleanup_h <= 0.0 {
+                        return;
+                    }
+                    let expired = h
+                        .try_state::<ParkedFloats>()
+                        .map(|s| {
+                            let map = s.0.lock().unwrap_or_else(|e| e.into_inner());
+                            let now = std::time::Instant::now();
+                            let ages: HashMap<String, Duration> =
+                                map.iter().map(|(id, at)| (id.clone(), now.saturating_duration_since(*at))).collect();
+                            ids_past_park_cleanup(&ages, cleanup_h)
+                        })
+                        .unwrap_or_default();
+                    if expired.is_empty() {
+                        return;
+                    }
+                    if let Some(hidden) = h.try_state::<HiddenFloats>() {
+                        let mut hs = hidden.0.lock().unwrap_or_else(|e| e.into_inner());
+                        for id in &expired {
+                            hs.insert(id.clone());
+                        }
+                    }
+                    if let Some(parked) = h.try_state::<ParkedFloats>() {
+                        let mut pf = parked.0.lock().unwrap_or_else(|e| e.into_inner());
+                        for id in &expired {
+                            pf.remove(id);
+                        }
+                    }
+                    sync_float_windows(&h);
+                    for id in &expired {
+                        let _ = h.emit_to("main", "float-park-cleaned-up", serde_json::json!({ "id": id }));
+                    }
+                });
+            }
+
             // Re-arm the app hotkey plus every prompt accelerator. Each
             // registration is a round trip to the main thread, so this runs on a
             // worker — the first paint never waits for it, however many prompts
@@ -25462,28 +25698,11 @@ pub fn run() {
                 if let Ok(hwnd) = main.hwnd() {
                     sessionend::hook(&handle, hwnd.0 as isize);
                 }
-                // Drop any pill/folder left fully off-screen, e.g. by an unplugged
-                // second monitor. Before sync_float_windows() below, which never even
-                // creates a window for something no longer in `floating`/`float_folders`.
-                {
-                    let mons: Vec<(i32, i32, i32, i32)> = main
-                        .available_monitors()
-                        .unwrap_or_default()
-                        .iter()
-                        .map(|m| {
-                            let p = m.position();
-                            let s = m.size();
-                            (p.x, p.y, s.width as i32, s.height as i32)
-                        })
-                        .collect();
-                    let state = handle.state::<Db>();
-                    let mut store = lock(&state);
-                    if prune_offscreen_floats(&mons, &mut store.settings) {
-                        let settings = store.settings.clone();
-                        drop(store);
-                        save_settings(&handle, &settings);
-                    }
-                }
+                // A pill/folder left fully off-screen by an unplugged monitor is
+                // never dropped here any more -- sync_float_windows() below (via
+                // open_floating/open_folder_window) parks it on the main screen
+                // instead, keeping its real position and screen id untouched so
+                // it returns on its own once that screen is back.
                 if on_top {
                     let _ = main.set_always_on_top(true);
                 }
@@ -25855,6 +26074,8 @@ pub fn run() {
             delete_copy_entry,
             toggle_floating,
             hide_float_for_now,
+            float_recall,
+            is_float_parked,
             set_float_scale,
             resize_float_pill,
             resize_float_media,
@@ -26652,7 +26873,7 @@ fn sync_join_float_folder(settings: &mut Settings, prompt_id: &str, name: &str) 
         None => settings.float_folders.push(FloatFolder {
             id: gen_id(),
             name,
-            pos: Pos { x: 100, y: 100 },
+            pos: Pos { x: 100, y: 100, ..Default::default() },
             scale: default_folder_scale(),
             members: vec![prompt_id.to_string()],
         }),
@@ -31136,7 +31357,7 @@ mod tests {
         settings.float_folders.push(FloatFolder {
             id: "ff1".into(),
             name: "Pills".into(),
-            pos: Pos { x: 0, y: 0 },
+            pos: Pos { x: 0, y: 0, ..Default::default() },
             scale: 1.0,
             members: vec!["p1".to_string(), "p2".to_string()],
         });
@@ -31227,7 +31448,7 @@ mod tests {
     #[test]
     fn apply_md_placement_joins_an_existing_floating_pill_to_a_pill_folder() {
         let mut settings = Settings::default();
-        settings.floating.insert("p1".to_string(), Pos { x: 10, y: 10 });
+        settings.floating.insert("p1".to_string(), Pos { x: 10, y: 10, ..Default::default() });
         let fields = HashMap::from([("float_folder".to_string(), "Pills".to_string())]);
         let (grid_placed, folders_touched) = apply_md_placement(&mut settings, "p1", &fields);
         assert!(!grid_placed, "no grid fields were supplied, so the caller should still fall back for the grid");
@@ -31314,11 +31535,11 @@ mod tests {
     #[test]
     fn apply_md_placement_leaves_a_float_folder_on_an_explicit_empty_field() {
         let mut settings = Settings::default();
-        settings.floating.insert("p1".to_string(), Pos { x: 0, y: 0 });
+        settings.floating.insert("p1".to_string(), Pos { x: 0, y: 0, ..Default::default() });
         settings.float_folders.push(FloatFolder {
             id: "ff1".into(),
             name: "Pills".into(),
-            pos: Pos { x: 0, y: 0 },
+            pos: Pos { x: 0, y: 0, ..Default::default() },
             scale: 1.0,
             members: vec!["p1".to_string(), "p2".to_string()],
         });
@@ -31420,7 +31641,7 @@ mod tests {
         let mut folders = vec![FloatFolder {
             id: "f1".into(),
             name: "Team".into(),
-            pos: Pos { x: 0, y: 0 },
+            pos: Pos { x: 0, y: 0, ..Default::default() },
             scale: 1.0,
             members: vec!["p1".to_string()],
         }];
@@ -31429,7 +31650,7 @@ mod tests {
         let mut general = vec![FloatFolder {
             id: "f2".into(),
             name: "Team".into(),
-            pos: Pos { x: 0, y: 0 },
+            pos: Pos { x: 0, y: 0, ..Default::default() },
             scale: 1.0,
             members: vec!["p1".to_string()],
         }];
@@ -36771,54 +36992,79 @@ mod tests {
     }
 
     #[test]
-    fn prune_offscreen_floats_drops_only_what_has_no_monitor_at_all() {
-        let monitors = [(0, 0, 1920, 1080)];
-        let mut settings = Settings::default();
-        settings.floating.insert("on-screen".to_string(), Pos { x: 100, y: 100 });
-        settings.floating.insert("edge".to_string(), Pos { x: 1910, y: 100 }); // 10px still on
-        settings.floating.insert("gone".to_string(), Pos { x: 5000, y: 5000 }); // unplugged monitor
-        settings.float_folders.push(FloatFolder {
-            id: "f-on".to_string(),
-            name: String::new(),
-            pos: Pos { x: 200, y: 200 },
-            scale: 1.0,
-            members: vec!["m1".to_string()],
-        });
-        settings.float_folders.push(FloatFolder {
-            id: "f-gone".to_string(),
-            name: String::new(),
-            pos: Pos { x: -9000, y: -9000 },
-            scale: 1.0,
-            members: vec!["m2".to_string(), "m3".to_string()],
-        });
-        settings.floating.insert("m2".to_string(), Pos { x: -9000, y: -9000 });
-
-        let changed = prune_offscreen_floats(&monitors, &mut settings);
-
-        assert!(changed);
-        assert!(settings.floating.contains_key("on-screen"));
-        assert!(settings.floating.contains_key("edge"));
-        assert!(!settings.floating.contains_key("gone"));
-        assert_eq!(settings.float_folders.len(), 1);
-        assert_eq!(settings.float_folders[0].id, "f-on");
-        assert!(!settings.floating.contains_key("m2")); // dropped with its folder
+    fn screen_identity_differs_by_name_even_at_the_same_bounds() {
+        let a = screen_identity("Dell-1", 1920, 0, 1920, 1080);
+        let b = screen_identity("Dell-2", 1920, 0, 1920, 1080);
+        assert_ne!(a, b);
+        assert_eq!(a, screen_identity("Dell-1", 1920, 0, 1920, 1080));
     }
 
     #[test]
-    fn prune_offscreen_floats_touches_nothing_when_all_on_screen() {
-        let monitors = [(0, 0, 1920, 1080)];
-        let mut settings = Settings::default();
-        settings.floating.insert("a".to_string(), Pos { x: 50, y: 50 });
-        assert!(!prune_offscreen_floats(&monitors, &mut settings));
-        assert!(settings.floating.contains_key("a"));
+    fn resolve_float_spot_parks_a_position_outside_every_current_screen() {
+        let screens = vec![("main".to_string(), 0, 0, 1920, 1080)];
+        let pos = Pos { x: 5000, y: 5000, screen: "gone-monitor".to_string() };
+        let (x, y, parked) = resolve_float_spot(&pos, 200.0, 80.0, &screens, &[]);
+        assert!(parked);
+        // Landed inside the main screen's work area, not at the stale coordinates.
+        assert!(x >= 0.0 && x + 200.0 <= 1920.0);
+        assert!(y >= 0.0 && y + 80.0 <= 1080.0);
+        // The stored position itself is never touched by resolving a spot for it.
+        assert_eq!((pos.x, pos.y, pos.screen.as_str()), (5000, 5000, "gone-monitor"));
     }
 
     #[test]
-    fn prune_offscreen_floats_never_deletes_on_a_failed_monitor_probe() {
-        let mut settings = Settings::default();
-        settings.floating.insert("a".to_string(), Pos { x: 5000, y: 5000 });
-        assert!(!prune_offscreen_floats(&[], &mut settings));
-        assert!(settings.floating.contains_key("a"));
+    fn resolve_float_spot_returns_home_once_the_same_screen_identity_reappears() {
+        let screens = vec![("dell-1".to_string(), 1920, 0, 1920, 1080)];
+        let pos = Pos { x: 2500, y: 100, screen: "dell-1".to_string() };
+        let (x, y, parked) = resolve_float_spot(&pos, 200.0, 80.0, &screens, &[]);
+        assert!(!parked);
+        assert_eq!((x, y), (2500.0, 100.0));
+    }
+
+    #[test]
+    fn resolve_float_spot_stays_parked_for_a_different_identity_at_the_same_bounds() {
+        // A second monitor with the exact dimensions and position of the one the
+        // pill used to live on, but a different name -- not the screen it left.
+        let screens = vec![("dell-3".to_string(), 1920, 0, 1920, 1080)];
+        let pos = Pos { x: 2500, y: 100, screen: "dell-1".to_string() };
+        let (_, _, parked) = resolve_float_spot(&pos, 200.0, 80.0, &screens, &[]);
+        assert!(parked);
+    }
+
+    #[test]
+    fn resolve_float_spot_trusts_plain_coordinates_for_a_position_saved_before_screen_ids() {
+        // Empty `screen` (upgraded from an older save) falls back to today's
+        // coordinate check, so an ordinary upgrade never parks a button that
+        // has not actually moved.
+        let screens = vec![("dell-1".to_string(), 0, 0, 1920, 1080)];
+        let pos = Pos { x: 100, y: 100, screen: String::new() };
+        let (x, y, parked) = resolve_float_spot(&pos, 200.0, 80.0, &screens, &[]);
+        assert!(!parked);
+        assert_eq!((x, y), (100.0, 100.0));
+    }
+
+    #[test]
+    fn resolve_float_spot_never_parks_on_a_failed_monitor_probe() {
+        let pos = Pos { x: 5000, y: 5000, screen: "dell-1".to_string() };
+        let (x, y, parked) = resolve_float_spot(&pos, 200.0, 80.0, &[], &[]);
+        assert!(!parked);
+        assert_eq!((x, y), (5000.0, 5000.0));
+    }
+
+    #[test]
+    fn ids_past_park_cleanup_is_off_at_zero_hours() {
+        let mut parked = HashMap::new();
+        parked.insert("a".to_string(), std::time::Duration::from_secs(999_999));
+        assert!(ids_past_park_cleanup(&parked, 0.0).is_empty());
+    }
+
+    #[test]
+    fn ids_past_park_cleanup_only_returns_what_is_actually_past_its_hours() {
+        let mut parked = HashMap::new();
+        parked.insert("old".to_string(), std::time::Duration::from_secs(3 * 3600 + 1));
+        parked.insert("young".to_string(), std::time::Duration::from_secs(3600));
+        let expired = ids_past_park_cleanup(&parked, 3.0);
+        assert_eq!(expired, vec!["old".to_string()]);
     }
 
     fn test_tile_folder(id: &str, view_id: &str, cell: [u32; 2], members: &[&str]) -> TileFolder {
@@ -37435,7 +37681,7 @@ mod tests {
         FloatFolder {
             id: id.into(),
             name: String::new(),
-            pos: Pos { x: 100, y: 100 },
+            pos: Pos { x: 100, y: 100, ..Default::default() },
             scale: 1.0,
             members: members.iter().map(|s| s.to_string()).collect(),
         }
@@ -37563,7 +37809,7 @@ mod tests {
     fn the_window_plan_follows_the_feature_flag() {
         let mut settings = Settings::default();
         for id in ["a", "b", "c"] {
-            settings.floating.insert(id.to_string(), Pos { x: 0, y: 0 });
+            settings.floating.insert(id.to_string(), Pos { x: 0, y: 0, ..Default::default() });
         }
         settings.float_folders = vec![folder_of("f1", &["a", "b"])];
         let known = ids(&["a", "b", "c"]);
