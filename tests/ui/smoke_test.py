@@ -10341,6 +10341,13 @@ CAP_NEEDS_ADMIN_PROBE = """
             const hint = document.querySelector('#ocr-langs-body .hint');
             if (!hint || !hint.textContent.trim()) {
               errs.push('378 (' + errorCode + '): no message shown after the elevation attempt failed');
+            } else {
+              const wantsText = expectRetry
+                ? 'An administrator has to allow this. Ask someone with administrator rights to run the installation, then try again.'
+                : 'Language pack installation is blocked on this computer.';
+              if (!hint.textContent.includes(wantsText)) {
+                errs.push('482 (' + errorCode + '): message does not match the decided wording, got: ' + hint.textContent);
+              }
             }
             const retryBtn = document.querySelector('#ocr-langs-body .ghost-btn');
             if (expectRetry && !retryBtn) {

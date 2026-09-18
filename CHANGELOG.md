@@ -915,6 +915,11 @@ the video editor and the introduction tour ship on).
   administrator can do it, with no retry button in that case; a real one-off
   failure still gets to retry. The repeated PowerShell error this used to
   write to the crash log on every check is now logged once per session.
+- **A declined admin prompt for a language pack install was treated as final
+  too often.** Windows still lets a different administrator's password
+  complete the same prompt, so a one-off decline now offers "try again"; only
+  a computer whose policy blocks the prompt outright shows the "blocked"
+  message with no retry button.
 
 ### Security
 

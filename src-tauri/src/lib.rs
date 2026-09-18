@@ -15661,12 +15661,17 @@ mod ocr {
             // SE_ERR_ACCESSDENIED (5) is what ShellExecuteW returns when the user
             // declines the UAC prompt; ERROR_CANCELLED (1223) shows up on some
             // Windows versions for the same outcome. Neither is a real failure on
-            // its own -- what it MEANS differs by account, so the token's own
-            // elevation type decides which of the two distinct outcomes this is.
+            // its own -- what it MEANS differs by policy, not by whether this
+            // particular account happens to be an administrator (Windows still
+            // lets the credential prompt take a DIFFERENT admin's password).
+            // The wire strings keep their original names for the frontend's own
+            // dispatch on them (ui/main.js), even though "no-rights" now means
+            // "Group Policy denies the prompt outright" rather than "this
+            // account has none".
             if code == 5 || code == 1223 {
-                return Err(match classify_elevation_refusal(account_can_elevate()) {
-                    ElevationRefusal::NoAdminRights => "ocr-elevate-no-rights".to_string(),
-                    ElevationRefusal::Cancelled => "ocr-elevate-cancelled".to_string(),
+                return Err(match classify_elevation_refusal(elevation_denied_by_policy()) {
+                    ElevationRefusal::PolicyBlocked => "ocr-elevate-no-rights".to_string(),
+                    ElevationRefusal::Retryable => "ocr-elevate-cancelled".to_string(),
                 });
             }
             return Err(format!("could not start the elevated process (ShellExecuteW code {})", code));
@@ -15674,15 +15679,17 @@ mod ocr {
         Ok(())
     }
 
-    // Whether "runas" can ever succeed for the account running this process --
-    // never by string-matching a localised Windows message, which varies by
-    // machine and language. `TokenElevationTypeLimited` is a split-token
-    // administrator (UAC on): the consent prompt can succeed. `Full` means the
-    // process is already elevated. `Default` means no split token exists at
-    // all, which is either a genuine standard account (a real "no" -- a UAC
-    // credential prompt with no admin password to give it can never complete)
-    // or an administrator running with UAC turned off entirely, so membership
-    // in the Administrators group is the only thing that tells the two apart.
+    // Whether THIS account's own token can complete "runas" without anyone
+    // else's help -- never by string-matching a localised Windows message,
+    // which varies by machine and language. `TokenElevationTypeLimited` is a
+    // split-token administrator (UAC on): the consent prompt can succeed.
+    // `Full` means the process is already elevated. `Default` means no split
+    // token exists at all: either a standard account or an administrator
+    // running with UAC turned off entirely, so membership in the
+    // Administrators group is the only thing that tells the two apart. A
+    // `false` here does NOT mean elevation can never succeed at all -- the
+    // credential prompt Windows shows a standard account still takes a
+    // DIFFERENT administrator's password, see `elevation_denied_by_policy`.
     fn account_can_elevate() -> bool {
         use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::Security::{
@@ -15717,19 +15724,45 @@ mod ocr {
         }
     }
 
+    // Whether Group Policy denies the elevation prompt outright for this
+    // account: "User Account Control: Behavior of the elevation prompt for
+    // standard users" set to "Automatically deny elevation requests"
+    // (`ConsentPromptBehaviorUser` = 0) skips the credential dialog entirely,
+    // so there is no prompt left for even a different administrator's
+    // password to complete -- the one case a retry genuinely cannot fix. Only
+    // meaningful for an account that cannot elevate itself: an administrator's
+    // own consent prompt is governed by a different key
+    // (`ConsentPromptBehaviorAdmin`) and is never denied outright by this one.
+    // Missing key or unreadable = not policy-denied, same as the key being
+    // absent entirely (the out-of-the-box default).
+    fn elevation_denied_by_policy() -> bool {
+        if account_can_elevate() {
+            return false;
+        }
+        winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE)
+            .open_subkey(r"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System")
+            .and_then(|k| k.get_value::<u32, _>("ConsentPromptBehaviorUser"))
+            .map(|v| v == 0)
+            .unwrap_or(false)
+    }
+
     #[derive(Debug, PartialEq, Eq)]
     pub(super) enum ElevationRefusal {
-        // This account can never complete "runas", so a retry cannot help.
-        NoAdminRights,
-        // Elevation is possible for this account; this attempt was refused or
-        // failed once, and trying again may succeed.
-        Cancelled,
+        // Group Policy denies the elevation prompt outright: no dialog will
+        // ever appear for this account, so a retry cannot help.
+        PolicyBlocked,
+        // The dialog itself was declined or cancelled this time. Windows lets
+        // its credential prompt take a DIFFERENT administrator's password, so
+        // even an account that cannot elevate itself may still succeed next
+        // time -- trying again may succeed.
+        Retryable,
     }
-    // Pure decision, kept separate from the token probe above so it is
-    // unit-testable without touching Windows: given the same refused/cancelled
-    // ShellExecuteW outcome, which of the two distinct results the user sees.
-    pub(super) fn classify_elevation_refusal(can_elevate: bool) -> ElevationRefusal {
-        if can_elevate { ElevationRefusal::Cancelled } else { ElevationRefusal::NoAdminRights }
+    // Pure decision, kept separate from the registry/token probes above so it
+    // is unit-testable without touching Windows: given the same
+    // refused/cancelled ShellExecuteW outcome, which of the two distinct
+    // results the user sees.
+    pub(super) fn classify_elevation_refusal(denied_by_policy: bool) -> ElevationRefusal {
+        if denied_by_policy { ElevationRefusal::PolicyBlocked } else { ElevationRefusal::Retryable }
     }
 
     // DISM unconditionally writes a log to %WINDIR%\Logs\DISM at startup,
@@ -30084,15 +30117,21 @@ mod tests {
         assert!(wrapped.ends_with("Der Zugriff auf den Pfad wurde verweigert."));
     }
 
-    // A split-token admin (UAC on, TokenElevationTypeLimited) or an already
-    // elevated process (TokenElevationTypeFull) can retry with a real chance of
-    // success; a standard account with no split token at all cannot, no matter
-    // how many times the prompt is shown.
+    // A cancelled or declined elevation dialog is always worth a retry --
+    // Windows lets that same credential prompt take a DIFFERENT
+    // administrator's password next time, so this account's own rights are
+    // not the last word. Only a Group Policy that denies the prompt outright
+    // (no dialog ever shown, to anyone) is genuinely final.
     #[cfg(windows)]
     #[test]
-    fn classify_elevation_refusal_matches_whether_the_account_can_elevate() {
-        assert_eq!(ocr::classify_elevation_refusal(true), ocr::ElevationRefusal::Cancelled);
-        assert_eq!(ocr::classify_elevation_refusal(false), ocr::ElevationRefusal::NoAdminRights);
+    fn classify_elevation_refusal_treats_a_decline_as_retryable() {
+        assert_eq!(ocr::classify_elevation_refusal(false), ocr::ElevationRefusal::Retryable);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn classify_elevation_refusal_treats_a_policy_denial_as_final() {
+        assert_eq!(ocr::classify_elevation_refusal(true), ocr::ElevationRefusal::PolicyBlocked);
     }
 
     #[cfg(windows)]
