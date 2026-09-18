@@ -663,7 +663,8 @@ Encrypted, compressed snapshots of the entire library and settings, on an
 automatic schedule with smart GFS-style retention tiers, and a restore that can
 target data only, settings only, or both. The same window also has a
 usage-statistics section (totals, a 14-day activity chart, most-used tiles),
-unrelated to the backups themselves.
+unrelated to the backups themselves, with its own button to export the
+statistics as CSV, TXT or JSON.
 
 ---
 
@@ -1064,7 +1065,8 @@ vermutlich schon.
 **Eigenständig: Backup-Manager** — verschlüsselte Backups, GFS-Aufbewahrung,
 gezieltes Wiederherstellen. Im selben Fenster außerdem eine
 Nutzungsstatistik (Summen, 14-Tage-Diagramm, meistgenutzte Kacheln) —
-unabhängig von den Backups selbst.
+unabhängig von den Backups selbst, mit einem eigenen Knopf, um die Statistik
+als CSV, TXT oder JSON zu exportieren.
 
 **Eigenständig: Schnellstarter** — Strg+Alt+P, unscharfe Suche, sofortiges Kopieren.
 

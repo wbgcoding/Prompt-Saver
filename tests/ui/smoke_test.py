@@ -4967,18 +4967,31 @@ PROBE = """
           }
         };
         checkTopN('statistics on');
+        // 407: the "export statistics" button rides the same on/off switch as
+        // the rest of the dashboard: present while statistics are recorded,
+        // gone the moment they are switched off (an export of nothing would
+        // just be a header row).
+        if (!document.getElementById('stats-export-btn')) {
+          out.errors.push('407: the statistics export button is missing while statistics are on');
+        }
         const findToggle = () => document.querySelector('#stats-panel .stats-head-row .switch-field input');
         const findRow = () => document.querySelector('#stats-panel .stats-topn-row');
         const waitFor = async (fn) => { for (let i = 0; i < 40 && !fn(); i++) await sleep(50); return fn(); };
         if (findToggle()) {
           findToggle().click();
           await waitFor(() => !findRow()); // re-render dropped the row while off
+          if (document.getElementById('stats-export-btn')) {
+            out.errors.push('407: the statistics export button is still there with statistics off');
+          }
           const t2 = findToggle(); // 104: a fresh node -- the click above rebuilt the panel
           if (t2) {
             t2.click(); // back on: statistics stays on for the rest of the walk
             await waitFor(() => !!findRow());
           }
           checkTopN('statistics re-enabled');
+          if (!document.getElementById('stats-export-btn')) {
+            out.errors.push('407: the statistics export button did not come back with statistics re-enabled');
+          }
         }
       }
       if (!document.querySelector('#stats-panel .stat-overview-split')) {

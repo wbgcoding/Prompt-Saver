@@ -8480,6 +8480,31 @@ async function renderStatsPanel(body) {
   }
   body.appendChild(headRow);
   if (!on) return;
+  // Statistics export: same format select + save-dialog shape as
+  // the settings dialog's prompt export, placed here instead because this is
+  // where the data is actually on screen. Only exists while the switch above
+  // is on: exporting nothing would just be a header row, which confuses more
+  // than it helps.
+  const exportRow = document.createElement("div");
+  exportRow.className = "export-row stats-export-row";
+  const exportSelect = document.createElement("select");
+  exportSelect.id = "stats-export-format";
+  exportSelect.className = "batch-view-select";
+  exportSelect.setAttribute("aria-label", t("exportFormatLabel"));
+  for (const fmt of ["csv", "txt", "json"]) {
+    const opt = document.createElement("option");
+    opt.value = fmt;
+    opt.textContent = t(fmt === "csv" ? "exportCsv" : fmt === "txt" ? "exportTxt" : "exportJson");
+    exportSelect.appendChild(opt);
+  }
+  const exportBtn = document.createElement("button");
+  exportBtn.type = "button";
+  exportBtn.id = "stats-export-btn";
+  exportBtn.className = "ghost-btn";
+  exportBtn.textContent = t("statExportBtn");
+  exportBtn.addEventListener("click", () => runStatsExport(exportSelect.value));
+  exportRow.append(exportSelect, exportBtn);
+  body.appendChild(exportRow);
   const nf = (n) => Number(n).toLocaleString(LANG);
   const nf1 = (n) => Number(n).toLocaleString(LANG, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const cards = document.createElement("div");
@@ -13137,6 +13162,17 @@ async function openJournal() {
 async function runExport(format) {
   try {
     await withDialog(() => invoke("export_prompts", { format }));
+  } catch (err) {
+    if (String(err) !== "canceled") toast(t("exportFailed"));
+  }
+}
+
+// Same shape as runExport, fed by the statistics dashboard's own format
+// select + button instead of the settings export row.
+async function runStatsExport(format) {
+  try {
+    const n = await withDialog(() => invoke("export_stats", { format }));
+    toast(t("statExportDone").replace("{n}", String(n)));
   } catch (err) {
     if (String(err) !== "canceled") toast(t("exportFailed"));
   }

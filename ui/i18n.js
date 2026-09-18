@@ -1866,6 +1866,8 @@ export const I18N = {
     compareTakeRight: "Take right",
     compareTaken: "Entry updated",
     compareMissing: "One of the two entries is gone",
+    statExportBtn: "Export statistics",
+    statExportDone: "Exported statistics for {n} entries",
   },
   de: {
     settings: "Einstellungen",
@@ -3728,6 +3730,8 @@ export const I18N = {
     compareTakeRight: "Nach rechts übernehmen",
     compareTaken: "Eintrag übernommen",
     compareMissing: "Einer der beiden Einträge ist nicht mehr vorhanden",
+    statExportBtn: "Statistik exportieren",
+    statExportDone: "Statistik für {n} Einträge exportiert",
   },
   es: {
     flagChainPrompts: "Encadenar prompts",
@@ -5590,6 +5594,8 @@ export const I18N = {
     compareTakeRight: "Usar el derecho",
     compareTaken: "Entrada actualizada",
     compareMissing: "Una de las dos entradas ha desaparecido",
+    statExportBtn: "Exportar estadísticas",
+    statExportDone: "Estadísticas exportadas para {n} entradas",
   },
   it: {
     flagChainPrompts: "Concatenazione prompt",
@@ -7452,6 +7458,8 @@ export const I18N = {
     compareTakeRight: "Usa destra",
     compareTaken: "Voce aggiornata",
     compareMissing: "Una delle due voci è scomparsa",
+    statExportBtn: "Esporta statistiche",
+    statExportDone: "Statistiche esportate per {n} voci",
   },
   pt: {
     flagChainPrompts: "Encadear prompts",
@@ -9314,6 +9322,8 @@ export const I18N = {
     compareTakeRight: "Usar a direita",
     compareTaken: "Entrada atualizada",
     compareMissing: "Uma das duas entradas desapareceu",
+    statExportBtn: "Exportar estatísticas",
+    statExportDone: "Estatísticas exportadas para {n} itens",
   },
   pl: {
     flagChainPrompts: "Łączenie promptów",
@@ -11187,6 +11197,8 @@ export const I18N = {
     compareTakeRight: "Wybierz prawy",
     compareTaken: "Wpis zaktualizowany",
     compareMissing: "Brak jednego z dwóch wpisów",
+    statExportBtn: "Eksportuj statystyki",
+    statExportDone: "Wyeksportowano statystyki dla {n} pozycji",
   },
   zh: {
     flagChainPrompts: "提示词链接",
@@ -13049,6 +13061,8 @@ export const I18N = {
     compareTakeRight: "采用右侧",
     compareTaken: "条目已更新",
     compareMissing: "两个条目之一已丢失",
+    statExportBtn: "导出统计数据",
+    statExportDone: "已导出 {n} 个条目的统计数据",
   },
   ja: {
     flagChainPrompts: "プロンプト連結",
@@ -14911,6 +14925,8 @@ export const I18N = {
     compareTakeRight: "右を採用",
     compareTaken: "エントリが更新されました",
     compareMissing: "2つのエントリのいずれかが失われています",
+    statExportBtn: "統計をエクスポート",
+    statExportDone: "{n} 件の統計をエクスポートしました",
   },
   nl: {
     flagChainPrompts: "Prompts koppelen",
@@ -16773,6 +16789,8 @@ export const I18N = {
     compareTakeRight: "Neem rechts",
     compareTaken: "Item bijgewerkt",
     compareMissing: "Een van de twee items is verdwenen",
+    statExportBtn: "Statistieken exporteren",
+    statExportDone: "Statistieken voor {n} items geëxporteerd",
   },
   tr: {
     flagChainPrompts: "Komut zincirleme",
@@ -18635,6 +18653,8 @@ export const I18N = {
     compareTakeRight: "Sağı al",
     compareTaken: "Kayıt güncellendi",
     compareMissing: "İki kayıttan biri eksik",
+    statExportBtn: "İstatistikleri dışa aktar",
+    statExportDone: "{n} öge için istatistikler dışa aktarıldı",
   },
   ro: {
     flagChainPrompts: "Înlănțuire prompturi",
@@ -20497,6 +20517,8 @@ export const I18N = {
     compareTakeRight: "Alege dreapta",
     compareTaken: "Intrare actualizată",
     compareMissing: "Una dintre cele două intrări lipsește",
+    statExportBtn: "Exportă statisticile",
+    statExportDone: "Statistici exportate pentru {n} intrări",
   },
 };
 

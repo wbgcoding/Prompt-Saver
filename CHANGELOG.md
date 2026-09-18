@@ -357,6 +357,10 @@ the video editor and the introduction tour ship on).
   choose "Compare with" on a tile, to see both next to each other with the
   differences highlighted, and take either side's text over into the other.
   The duplicate finder uses the same highlighting for its pairs.
+- **Export the usage statistics.** A button next to the statistics themselves
+  saves them as CSV, TXT or JSON: per-entry copy counts and last-used dates,
+  plus the daily activity chart. Only there while statistics are being
+  recorded.
 
 ### Improved
 

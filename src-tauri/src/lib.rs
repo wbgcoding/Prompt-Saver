@@ -8523,6 +8523,129 @@ async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Resu
     })
 }
 
+// ---- Usage statistics export ----
+// One row per prompt (not just the dashboard's top-N) plus the same daily
+// counts the dashboard charts. A name/tag counter is not a substitute for a
+// spreadsheet someone can sort and filter on their own. `last_used`/`ts` stay
+// raw unix seconds: the dashboard already formats them through Intl on the JS
+// side, and duplicating a calendar calculation here for a plain text export
+// would be a second place to get the leap-year math wrong.
+#[derive(Serialize)]
+struct StatsExportEntry {
+    name: String,
+    copies: u32,
+    last_used: u64,
+}
+
+// Tool-usage rows join this export once per-tool usage counters exist; an
+// empty slice until then keeps the JSON shape stable across both features.
+fn stats_export_entries(store: &Store) -> Vec<StatsExportEntry> {
+    let usage = &store.settings.usage;
+    let last_used = &store.settings.last_used;
+    let name_of = |p: &Prompt| -> String {
+        if !p.name.is_empty() {
+            p.name.clone()
+        } else if !p.text.is_empty() {
+            p.text.chars().take(40).collect()
+        } else {
+            p.id.clone()
+        }
+    };
+    let mut entries: Vec<StatsExportEntry> = store
+        .prompts
+        .iter()
+        .map(|p| StatsExportEntry {
+            name: name_of(p),
+            copies: usage.get(&p.id).copied().unwrap_or(0),
+            last_used: last_used.get(&p.id).copied().unwrap_or(0),
+        })
+        .collect();
+    entries.sort_by(|a, b| b.copies.cmp(&a.copies).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    entries
+}
+
+fn stats_to_csv(entries: &[StatsExportEntry], daily: &[DayCount], tools: &[StatsExportEntry]) -> String {
+    let mut rows = vec![csv_row(&["name", "copies", "last_used"])];
+    for e in entries {
+        rows.push(csv_row(&[&e.name, &e.copies.to_string(), &e.last_used.to_string()]));
+    }
+    rows.push(String::new());
+    rows.push(csv_row(&["date_ts", "copies"]));
+    for d in daily {
+        rows.push(csv_row(&[&d.ts.to_string(), &d.count.to_string()]));
+    }
+    if !tools.is_empty() {
+        rows.push(String::new());
+        rows.push(csv_row(&["tool", "uses", "last_used"]));
+        for t in tools {
+            rows.push(csv_row(&[&t.name, &t.copies.to_string(), &t.last_used.to_string()]));
+        }
+    }
+    rows.join("\r\n")
+}
+
+fn stats_to_txt(entries: &[StatsExportEntry], daily: &[DayCount], tools: &[StatsExportEntry]) -> String {
+    use std::fmt::Write;
+    let mut out = String::from("Prompts\n=======\n");
+    for e in entries {
+        let _ = writeln!(out, "{}: {} copies, last used {}", e.name, e.copies, e.last_used);
+    }
+    out.push_str("\nDaily copies\n============\n");
+    for d in daily {
+        let _ = writeln!(out, "{}: {}", d.ts, d.count);
+    }
+    if !tools.is_empty() {
+        out.push_str("\nTool usage\n==========\n");
+        for t in tools {
+            let _ = writeln!(out, "{}: {} uses, last used {}", t.name, t.copies, t.last_used);
+        }
+    }
+    out
+}
+
+fn stats_to_json(entries: &[StatsExportEntry], daily: &[DayCount], tools: &[StatsExportEntry]) -> String {
+    #[derive(Serialize)]
+    struct StatsExport<'a> {
+        version: u32,
+        entries: &'a [StatsExportEntry],
+        daily: &'a [DayCount],
+        tools: &'a [StatsExportEntry],
+    }
+    serde_json::to_string_pretty(&StatsExport { version: 1, entries, daily, tools }).unwrap_or_default()
+}
+
+// Same shape as export_prompts (format select -> save dialog), fed from the
+// statistics dashboard's own button instead of the settings export row.
+// The dashboard is where the data is on screen, so the "export it" action
+// stays next to it rather than in an unrelated dialog.
+#[tauri::command]
+async fn export_stats(app: AppHandle, state: State<'_, Db>, format: String) -> Result<usize, String> {
+    let daily = db_conn(&app).map(|c| db_daily_copies(&c, 14)).unwrap_or_default();
+    let entries = {
+        let store = lock(&state);
+        stats_export_entries(&store)
+    };
+    let count = entries.len();
+    let tools: Vec<StatsExportEntry> = Vec::new(); // populated once per-tool usage counters exist
+    let content = match format.as_str() {
+        "csv" => stats_to_csv(&entries, &daily, &tools),
+        "txt" => stats_to_txt(&entries, &daily, &tools),
+        "json" => stats_to_json(&entries, &daily, &tools),
+        _ => return Err("unsupported-export-format".to_string()),
+    };
+    let file = file_dialog(&app)
+        .set_file_name(format!("usage-stats.{format}"))
+        .add_filter(format.to_uppercase(), &[format.as_str()])
+        .save_file();
+    match file {
+        Some(path) => {
+            fs::write(&path, content).map_err(|e| e.to_string())?;
+            Ok(count)
+        }
+        None => Err("canceled".to_string()),
+    }
+}
+
 // ---- Duplicate finder ----
 #[derive(Serialize)]
 struct DupMember {
@@ -25646,6 +25769,7 @@ pub fn run() {
             restore_version,
             restore_version_as_new,
             usage_stats,
+            export_stats,
             find_duplicates,
             ignore_dups,
             list_backups,
@@ -35863,6 +35987,62 @@ mod tests {
         assert_eq!(data.prompts[0].name, "=cmd|'/c calc'!A1");
         assert_eq!(data.prompts[0].text, "-1 to 5 scale");
         assert_eq!(data.prompts[0].notes, "@mention someone");
+    }
+
+    #[test]
+    fn stats_export_entries_sorts_by_copies_and_carries_last_used() {
+        let mut a = test_prompt("a");
+        a.name = "Alpha".into();
+        let mut b = test_prompt("b");
+        b.name = "Beta".into();
+        let mut store = Store {
+            prompts: vec![a, b],
+            trash: Vec::new(),
+            settings: Settings::default(),
+            prompts_locked: false,
+            written: Default::default(),
+        };
+        store.settings.usage.insert("b".into(), 9);
+        store.settings.usage.insert("a".into(), 2);
+        store.settings.last_used.insert("b".into(), 1700000200);
+        store.settings.last_used.insert("a".into(), 1700000100);
+        let entries = stats_export_entries(&store);
+        // most-copied first; a prompt never copied still appears (0, not dropped).
+        assert_eq!(entries[0].name, "Beta");
+        assert_eq!(entries[0].copies, 9);
+        assert_eq!(entries[0].last_used, 1700000200);
+        assert_eq!(entries[1].name, "Alpha");
+        assert_eq!(entries[1].copies, 2);
+        assert_eq!(entries[1].last_used, 1700000100);
+    }
+
+    // The statistics export reuses csv_row/csv_cell, but this asserts the
+    // guarantee directly against the stats formatter -- a semicolon or a quote
+    // in a prompt name must not shift or break the row it sits in.
+    #[test]
+    fn stats_csv_export_escapes_semicolons_and_quotes_in_names() {
+        let entries = vec![StatsExportEntry { name: "Weird;\"Name\"".into(), copies: 3, last_used: 100 }];
+        let csv = stats_to_csv(&entries, &[], &[]);
+        let rows = parse_csv(&csv);
+        assert_eq!(rows[1][0], "Weird;\"Name\"");
+        assert_eq!(rows[1][1], "3");
+        assert_eq!(rows[1][2], "100");
+    }
+
+    #[test]
+    fn stats_txt_and_json_export_carry_the_same_entries_and_daily_counts() {
+        let entries = vec![StatsExportEntry { name: "Mail".into(), copies: 5, last_used: 42 }];
+        let daily = vec![DayCount { ts: 1700000000, count: 4 }];
+        let txt = stats_to_txt(&entries, &daily, &[]);
+        assert!(txt.contains("Mail: 5 copies, last used 42"));
+        assert!(txt.contains("1700000000: 4"));
+        let json = stats_to_json(&entries, &daily, &[]);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["version"], 1);
+        assert_eq!(parsed["entries"][0]["name"], "Mail");
+        assert_eq!(parsed["entries"][0]["copies"], 5);
+        assert_eq!(parsed["daily"][0]["count"], 4);
+        assert_eq!(parsed["tools"].as_array().unwrap().len(), 0);
     }
 
     // export_prompts is a #[tauri::command] async fn (AppHandle + State<'_, Db>)
