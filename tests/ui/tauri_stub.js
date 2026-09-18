@@ -1204,6 +1204,23 @@ const RESULTS = {
     measured_at: 1750000000,
   }),
   open_storage_folder: () => null,
+  retention_overview: () => ({
+    items: [
+      { key: "trash", count: 3, bytes: 12000 },
+      { key: "copyHistory", count: 40, bytes: 400 },
+      { key: "clipInbox", count: 1, bytes: 20 },
+      { key: "recordings", count: 2, bytes: 5000000 },
+      { key: "discardedRecordings", count: 0, bytes: 0 },
+      { key: "tempExports", count: 1, bytes: 40000 },
+      { key: "editStates", count: 2, bytes: 15000 },
+    ],
+    measured_at: 1750000000,
+  }),
+  sweep_trash_now: () => [3, 12000],
+  trim_copy_history_now: () => [40, 400],
+  sweep_clip_export_temp_now: () => [1, 40000],
+  sweep_edit_states_now: () => 2,
+  sweep_discarded_recordings_now: () => [0, 0],
 };
 
 // What main.js sends to vars.html: one free-text row with the remember switch and

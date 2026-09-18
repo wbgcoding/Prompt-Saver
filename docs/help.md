@@ -705,6 +705,14 @@ usage statistics also list the most-used tools, screenshots through backups,
 with a short list of the ones never used, all counted locally and included in
 the export.
 
+A retention section lists one row per kind of data this app keeps around on
+its own — trash, copy history, the clipboard inbox, recordings, discarded
+recordings, temporary exports, and unfinished-edit states — with how much is
+there right now, how long it is kept, a button to clean it up on the spot, and
+a button that jumps straight to the matching expert-menu setting. The numbers
+are measured in the background and labelled with when that happened, the same
+way the storage section above already works, not recalculated on every open.
+
 ---
 
 ## Hilfe (Deutsch)
@@ -1137,7 +1145,14 @@ temporäre Dateien und das Fehlerprotokoll jeweils belegen, mit einem Knopf,
 um einen aufgeführten Ordner zu öffnen. Die Nutzungsstatistik listet außerdem
 die meistgenutzten Werkzeuge auf, von Bildschirmfotos bis Sicherungen, mit
 einer kurzen Liste der noch nie benutzten. Alles wird rein lokal gezählt und
-ist im Export enthalten.
+ist im Export enthalten. Ein Aufbewahrungsbereich listet eine Zeile je Art
+von Daten, die diese App selbst aufhebt — Papierkorb, Kopierverlauf,
+Zwischenablage-Eingang, Aufnahmen, verworfene Aufnahmen, temporäre Exporte
+und unfertige Bearbeitungsstände — mit dem aktuellen Stand, wie lange er
+bleibt, einem Knopf zum sofortigen Aufräumen und einem Knopf, der direkt zur
+zugehörigen Einstellung im Experten-Menü springt. Die Zahlen werden im
+Hintergrund ermittelt und mit dem Zeitpunkt der Messung beschriftet, genau
+wie beim Speicherbereich darüber, nicht bei jedem Öffnen neu berechnet.
 
 **Eigenständig: Schnellstarter** — Strg+Alt+P, unscharfe Suche, sofortiges Kopieren.
 

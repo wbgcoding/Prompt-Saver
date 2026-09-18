@@ -1660,6 +1660,12 @@ const EXPERT_VALUES = {
   // the background sweep for it (and for merely-undecided recordings) runs.
   recBrokenGraceMin: { label: "valRecBrokenGraceMin", min: 1, max: 60, step: 1, def: 5, unit: "min", gate: "recSweepBroken" },
   recSweepEveryMin: { label: "valRecSweepEveryMin", min: 5, max: 1440, step: 5, def: 60, unit: "min", gate: "recSweepBroken" },
+  // How long a discarded recording sits in its "verworfen" trash before the
+  // background sweep removes it for good -- already enforced, this row
+  // just makes the value visible and changeable for the first time. Not
+  // gated on recSweepBroken: the backend runs this sweep unconditionally,
+  // gating the row the same way would hide a control that still works.
+  recDiscardKeepH: { label: "valRecDiscardKeepH", min: 0, max: 720, step: 1, def: 24, unit: "h", zeroLabel: "retentionForever" },
   // How long a video editor "Copy to clipboard" export's throwaway temp
   // file survives before the background sweep deletes it (also cleared at
   // the next app start regardless).
@@ -1798,6 +1804,12 @@ const EXPERT_SELECTS = {
   // How long a deleted prompt sits in the trash before it is purged automatically.
   // No feature gate — trash is not optional, delete always goes through it.
   trashRetentionDays: { label: "valTrashRetentionDays", options: [0, 7, 30, 90, 365], def: 30, unit: "d", zeroLabel: "retentionForever" },
+  // How long a KEPT recording may age before an unreferenced one becomes fair
+  // game for the same sweep that already handles undecided/broken files.
+  // Off by default (0), same "0 = forever" convention, so nothing changes for
+  // anyone who never opens this row -- a referenced recording never qualifies
+  // regardless of this value.
+  recordingRetentionDays: { label: "valRecordingRetentionDays", options: [0, 7, 30, 90, 365], def: 0, unit: "d", zeroLabel: "retentionForever" },
   // How often the background thread checks for a new release.
   updateCheckH: { label: "valUpdateCheckH", options: [6, 12, 24, 48, 168], def: 24, unit: "h", gate: "showUpdates" },
 };
@@ -2118,7 +2130,7 @@ const EXPERT_TABS = [
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken", "undoToast"], values: ["dupThreshold", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "videoClipTtlMin", "errorLogKeepKb", "undoToastMs"], selects: ["trashRetentionDays"],
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken", "undoToast"], values: ["dupThreshold", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "videoClipTtlMin", "errorLogKeepKb", "undoToastMs"], selects: ["trashRetentionDays", "recordingRetentionDays"],
       actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }, { id: "float-recall", label: "floatRecallAction", gate: "floating" }] },
   ] },
 ];
@@ -2317,7 +2329,7 @@ const EXPERT_TIPS = [
   "dedupCopyLog", "cleanupFiles", "blurTilesUntilHover",
   // Tools / data
   "dupFinder", "clipWatcher", "backupGfs", "backupBeforeReset", "backupBeforeDelete", "disarmMs",
-  "recSweepBroken", "recBrokenGraceMin", "recSweepEveryMin", "videoClipTtlMin",
+  "recSweepBroken", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "videoClipTtlMin",
   "usageStats", "promptSync", "syncDir", "syncPollSecs", "syncFailMax", "clipSkipSecrets",
   "undoToast", "undoToastMs",
   "archiveTag",
@@ -2509,6 +2521,9 @@ function valueRow(key) {
   const fmt = (v) => v === 0 && cfg.zeroLabel ? t(cfg.zeroLabel) : `${v}${cfg.unit}`;
   const row = document.createElement("div");
   row.className = "field value-field";
+  // A stable hook a caller elsewhere (the retention overview's jump-to-setting
+  // button, so far) can scroll to and flash without re-deriving DOM structure.
+  row.dataset.settingRow = key;
   withTip(row, key);
   const head = document.createElement("div");
   head.className = "value-head";
@@ -2566,6 +2581,7 @@ function selectRow(key) {
   const cur = Number.isFinite(settings.ui_values?.[key]) ? settings.ui_values[key] : cfg.def;
   const row = document.createElement("div");
   row.className = "field value-field expert-dropdown-row"; // label left of the dropdown
+  row.dataset.settingRow = key; // same jump-to-setting hook as valueRow
   withTip(row, key);
   const head = document.createElement("div");
   head.className = "value-head";
@@ -2641,6 +2657,7 @@ function dropdownRow(key) {
   const cfg = EXPERT_DROPDOWNS[key];
   const row = document.createElement("div");
   row.className = "field value-field expert-dropdown-row"; // label left of the dropdown
+  row.dataset.settingRow = key; // same jump-to-setting hook as valueRow
   withTip(row, key);
   const head = document.createElement("div");
   head.className = "value-head";
@@ -3379,6 +3396,34 @@ async function openSettingsDirectoryEntry(entry) {
     renderStatsPanel($("stats-panel"));
   }
   flashSettingsRow(settingsDirectoryTarget(entry));
+}
+
+// Which EXPERT_TABS tab a value/select key lives in, so a caller outside the
+// expert menu (the retention overview, so far) can open the right tab
+// before flashing the row -- unlike SETTINGS_DIRECTORY above, which is only
+// for settings OUTSIDE the expert menu, this walks EXPERT_TABS itself.
+function expertTabIndexOf(key, kind) {
+  for (let i = 0; i < EXPERT_TABS.length; i++) {
+    for (const g of EXPERT_TABS[i].groups) {
+      if ((g[kind] || []).includes(key)) return i;
+    }
+  }
+  return 0;
+}
+
+// A click on the retention overview's "go to setting" button: close the
+// backup window, open the expert menu on the right tab (query and "only
+// changed" cleared so the row cannot be filtered out of view), then scroll
+// it into view and flash it -- same shape as openSettingsDirectoryEntry
+// above, for a setting the expert search already owns.
+function jumpToExpertSetting(key, kind) {
+  closeBackups();
+  settingsEl.classList.remove("hidden");
+  expertTab = expertTabIndexOf(key, kind);
+  expertQuery = "";
+  expertOnlyChanged = false;
+  showExpertPage(true);
+  flashSettingsRow(document.querySelector(`#settings-expert [data-setting-row="${key}"]`));
 }
 
 function foreignHitRow(entry) {
@@ -9883,6 +9928,7 @@ function openBackups() {
   $("backup-modal").classList.remove("hidden");
   renderStatsPanel($("stats-panel"));
   renderStoragePanel($("storage-panel"));
+  renderRetentionPanel($("retention-panel"));
   renderBackupPanel($("backup-panel"));
 }
 function closeBackups() {
@@ -9983,6 +10029,138 @@ async function renderStoragePanel(root, force) {
     list.appendChild(row);
   }
   body.appendChild(list);
+}
+
+// One row per kept-data category, in the fixed order the spec names
+// them. Each entry names its own value/select key (for the retention wording
+// AND the jump-to-setting button, which needs to know which EXPERT_TABS list
+// the key lives in) and its own on-demand cleanup action. Language is the
+// only thing normalized across rows (same order: what, how much, how long);
+// each category keeps its own existing way of counting -- days for trash/
+// recordings/discarded recordings/edit states, a plain count for copy
+// history/the clipboard inbox, minutes for temporary exports -- because that
+// is what each one already measured correctly before this row existed.
+const RETENTION_ROWS = [
+  { key: "trash", nameKey: "trashTitle", settingKey: "trashRetentionDays", settingKind: "selects", wording: "days" },
+  { key: "copyHistory", nameKey: "retentionCatCopyHistory", settingKey: "historyMax", settingKind: "values", wording: "count" },
+  { key: "clipInbox", nameKey: "flagClipWatcher", settingKey: "clipInboxMax", settingKind: "values", wording: "count" },
+  { key: "recordings", nameKey: "storageKeyRecordings", settingKey: "recordingRetentionDays", settingKind: "selects", wording: "days" },
+  { key: "discardedRecordings", nameKey: "storageKeyDiscardedRecordings", settingKey: "recDiscardKeepH", settingKind: "values", wording: "hours" },
+  { key: "tempExports", nameKey: "retentionCatTempExports", settingKey: "videoClipTtlMin", settingKind: "values", wording: "minutes" },
+  { key: "editStates", nameKey: "storageKeyEditStates", settingKey: "editStateKeepDays", settingKind: "values", wording: "days" },
+];
+
+// "0 means unlimited" always says so in words (retentionForever), never a
+// bare "0d" -- the one exception is temporary exports, whose minutes value
+// has no off state (min 5) so it never needs the zero case at all.
+function retentionKeepText(row) {
+  const n = val(row.settingKey);
+  if (row.wording === "count") return t("retentionKeepsCount").replace("{n}", n);
+  if (row.wording === "minutes") return t("retentionKeepsMinutes").replace("{n}", n);
+  if (n <= 0) return t("retentionForever");
+  return t(row.wording === "hours" ? "retentionKeepsHours" : "retentionKeepsDays").replace("{n}", n);
+}
+
+async function retentionCleanupResult(promise, nothingKey) {
+  try {
+    const [n, bytes] = await promise;
+    toast(n > 0 ? t("retentionCleanupDone").replace("{n}", String(n)).replace("{v}", fmtBytes(bytes)) : t(nothingKey));
+  } catch (e) {
+    errToast(e);
+  }
+}
+
+// One backend action per row -- several already existed for their own
+// button elsewhere (discarded recordings, temporary exports); trash and copy
+// history get a new on-demand command each, since neither had one before.
+// The clipboard inbox reuses the SAME full clear its own panel already
+// offers: it is always kept at its cap on every insert, so there is nothing
+// "expired" to sweep, and building a second, fake "clean up" that only ever
+// removes zero items would be worse than being honest about that. Recordings
+// opens the existing preview-then-confirm cleanup dialog instead of a silent
+// delete, the same safety bar that dialog already holds everywhere else it
+// is reached from.
+const RETENTION_CLEANUP = {
+  trash: () => retentionCleanupResult(invoke("sweep_trash_now"), "recSweepNothing"),
+  copyHistory: () => retentionCleanupResult(invoke("trim_copy_history_now"), "recSweepNothing"),
+  clipInbox: async () => {
+    const items = await invoke("clip_inbox_list").catch(() => []);
+    if (!items.length) { toast(t("recSweepNothing")); return; }
+    await invoke("clip_inbox_clear").catch((e) => { errToast(e); return; });
+    undoToast(t("clipInboxClearedToast"), () => restoreClipInbox(items));
+  },
+  recordings: () => { closeBackups(); openVideoCleanup(EXPERT_PATHS.recordingDir.get()); },
+  discardedRecordings: () => retentionCleanupResult(invoke("sweep_discarded_recordings_now"), "recSweepNothing"),
+  tempExports: () => retentionCleanupResult(invoke("sweep_clip_export_temp_now"), "recSweepNothing"),
+  editStates: async () => {
+    try {
+      const n = await invoke("sweep_edit_states_now");
+      toast(n > 0 ? t("retentionCleanupDoneCount").replace("{n}", String(n)) : t("recSweepNothing"));
+    } catch (e) { errToast(e); }
+  },
+};
+
+async function renderRetentionPanel(root, force) {
+  let data;
+  try { data = await invoke("retention_overview", { force: !!force }); }
+  catch (e) { errToast(e); return; }
+  const byKey = Object.fromEntries(data.items.map((i) => [i.key, i]));
+  root.innerHTML = "";
+  const panel = document.createElement("div");
+  panel.className = "stats-panel-body";
+  const head = collapsibleHead(t("retentionSectionTitle"), panel, "retentionPanelOpen");
+  head.classList.add("backup-split");
+  root.append(head, panel);
+
+  const measuredEl = document.createElement("span");
+  measuredEl.className = "storage-measured";
+  measuredEl.textContent = t("storageMeasured").replace("{when}", new Date(data.measured_at * 1000).toLocaleString(LANG));
+  panel.appendChild(measuredEl);
+
+  const list = document.createElement("div");
+  list.className = "storage-list";
+  for (const row of RETENTION_ROWS) {
+    const item = byKey[row.key] || { count: 0, bytes: 0 };
+    const wrap = document.createElement("div");
+    wrap.dataset.settingRow = `retention-${row.key}`;
+
+    const top = document.createElement("div");
+    top.className = "storage-row";
+    const name = document.createElement("span");
+    name.className = "storage-name";
+    name.textContent = t(row.nameKey);
+    const amount = document.createElement("span");
+    amount.className = "storage-size";
+    amount.textContent = t("retentionAmount").replace("{n}", String(item.count)).replace("{size}", fmtBytes(item.bytes));
+    top.append(name, amount);
+
+    const bottom = document.createElement("div");
+    bottom.className = "path-video-stats";
+    const keep = document.createElement("span");
+    keep.textContent = retentionKeepText(row);
+    const btns = document.createElement("div");
+    btns.className = "import-preview-actions";
+    const jumpBtn = document.createElement("button");
+    jumpBtn.type = "button";
+    jumpBtn.className = "ghost-btn";
+    jumpBtn.textContent = t("retentionJumpToSetting");
+    jumpBtn.addEventListener("click", () => jumpToExpertSetting(row.settingKey, row.settingKind));
+    const cleanBtn = document.createElement("button");
+    cleanBtn.type = "button";
+    cleanBtn.className = "ghost-btn";
+    cleanBtn.textContent = t("recSweepNowAction"); // same wording as the discarded-recordings action elsewhere
+    cleanBtn.disabled = item.count === 0 && row.key !== "recordings";
+    cleanBtn.addEventListener("click", async () => {
+      await RETENTION_CLEANUP[row.key]();
+      if (row.key !== "recordings") renderRetentionPanel(root, true);
+    });
+    btns.append(jumpBtn, cleanBtn);
+    bottom.append(keep, btns);
+
+    wrap.append(top, bottom);
+    list.appendChild(wrap);
+  }
+  panel.appendChild(list);
 }
 
 async function renderBackupPanel(body) {

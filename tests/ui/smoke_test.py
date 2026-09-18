@@ -11576,6 +11576,97 @@ EXTRA_CLIPS_MAX_PROBE = """
 </script>
 """
 
+# 413: the statistics/backups window's retention overview -- one row per
+# kept-data category, in the fixed order the spec names, each with an amount,
+# how long it is kept, a jump-to-setting button and a cleanup button.
+RETENTION_PANEL_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const waitFor = async (pred, tries) => {
+    for (let i = 0; i < tries; i++) { if (pred()) return true; await sleep(100); }
+    return pred();
+  };
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && cm.classList.contains('hidden'); i++) await sleep(100);
+    if (!cm.classList.contains('hidden')) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+
+    document.getElementById('gear').click();
+    await sleep(150);
+    document.getElementById('settings-backup-btn').click();
+    await sleep(300);
+    if (document.getElementById('backup-modal').classList.contains('hidden')) {
+      errs.push('413: the backups dialog did not open');
+    }
+
+    const order = ['trash', 'copyHistory', 'clipInbox', 'recordings', 'discardedRecordings', 'tempExports', 'editStates'];
+    const rows = [...document.querySelectorAll('#retention-panel [data-setting-row^="retention-"]')];
+    const gotOrder = rows.map((r) => r.dataset.settingRow.replace('retention-', ''));
+    if (gotOrder.join(',') !== order.join(',')) {
+      errs.push('413: the retention rows are not in the spec order, got: ' + gotOrder.join(','));
+    }
+
+    const trashRow = document.querySelector('#retention-panel [data-setting-row="retention-trash"]');
+    const trashAmount = trashRow && trashRow.querySelector('.storage-size');
+    if (!trashAmount || !trashAmount.textContent.includes('3')) {
+      errs.push('413: the trash row amount does not show the stubbed count of three: ' + (trashAmount && trashAmount.textContent));
+    }
+    if (/^retention[A-Z][A-Za-z]+$/.test((trashAmount && trashAmount.textContent || '').trim())) {
+      errs.push('413: the trash row amount rendered a raw i18n key: ' + trashAmount.textContent);
+    }
+
+    const discardedRow = document.querySelector('#retention-panel [data-setting-row="retention-discardedRecordings"]');
+    const discardedCleanBtn = discardedRow && discardedRow.querySelectorAll('.import-preview-actions button')[1];
+    if (!discardedCleanBtn || !discardedCleanBtn.disabled) {
+      errs.push('413: the discarded-recordings cleanup button should be disabled when its count is zero');
+    }
+
+    // Jump-to-setting from the trash row must land on trashRetentionDays,
+    // in the expert menu, flashed.
+    const trashJumpBtn = trashRow.querySelectorAll('.import-preview-actions button')[0];
+    trashJumpBtn.click();
+    await sleep(250);
+    if (document.getElementById('backup-modal').classList.contains('hidden') !== true) {
+      errs.push('413: jumping to a setting did not close the backups dialog behind it');
+    }
+    if (document.getElementById('settings').classList.contains('hidden')) {
+      errs.push('413: jumping to a setting did not open the settings dialog');
+    }
+    const flashedTarget = document.querySelector('#settings-expert [data-setting-row="trashRetentionDays"]');
+    if (!flashedTarget) {
+      errs.push('413: the jump target trashRetentionDays is not present in the expert menu DOM');
+    } else if (!flashedTarget.classList.contains('settings-search-hit')) {
+      errs.push('413: the jump target was not flashed');
+    }
+
+    // Back to the panel for the cleanup-button round trip.
+    document.getElementById('gear').click();
+    await sleep(150);
+    document.getElementById('settings-backup-btn').click();
+    await sleep(300);
+    const trashRow2 = document.querySelector('#retention-panel [data-setting-row="retention-trash"]');
+    const trashCleanBtn = trashRow2.querySelectorAll('.import-preview-actions button')[1];
+    trashCleanBtn.click();
+    await sleep(250);
+    const toastEl = document.getElementById('toast');
+    if (!toastEl.classList.contains('show') || !toastEl.textContent.includes('3')) {
+      errs.push('413: the cleanup toast did not report the stubbed removed count of three: ' + toastEl.textContent);
+    }
+    if (/^retention[A-Z][A-Za-z]+$/.test((toastEl.textContent || '').trim())) {
+      errs.push('413: the cleanup toast rendered a raw i18n key: ' + toastEl.textContent);
+    }
+  } catch (e) { errs.push('413 probe: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
 
 def unescape(s):
     for a, b in (("&quot;", '"'), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
@@ -12145,6 +12236,31 @@ def main():
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- video editor extra-source limit as an expert value")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # 413: the retention overview in the statistics/backups window -- row
+        # order, amount wording, jump-to-setting and a cleanup button's round
+        # trip. Its own boot, same reasoning as the other backups-dialog runs.
+        side = tmp / "ui" / "retention-panel.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", RETENTION_PANEL_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-retention-panel'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- retention overview in the statistics/backups window")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

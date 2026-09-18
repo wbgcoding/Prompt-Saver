@@ -5868,26 +5868,36 @@ fn recording_is_broken(path: &std::path::Path) -> bool {
     path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("mp4")) && !mp4_has_moov(path)
 }
 
-fn sweep_stale_recordings(app: &AppHandle, referenced: &std::collections::HashSet<String>, broken_sweep_on: bool, broken_grace: Duration) -> (u32, u64) {
-    sweep_stale_recordings_in(&data_dir(app).join("recordings"), referenced, &[], broken_sweep_on, broken_grace)
+fn sweep_stale_recordings(
+    app: &AppHandle,
+    referenced: &std::collections::HashSet<String>,
+    broken_sweep_on: bool,
+    broken_grace: Duration,
+    retention_age: Option<Duration>,
+) -> (u32, u64) {
+    sweep_stale_recordings_in(&data_dir(app).join("recordings"), referenced, &[], broken_sweep_on, broken_grace, retention_age)
 }
 
 // Split out from sweep_stale_recordings so the actual sweep logic is testable
 // against a plain tempdir -- no AppHandle needed, same split as
-// convert_recording/convert_recording_blocking above. Two independent reasons
-// to remove a file: it is old AND nobody has decided on it yet, or it is a
-// broken (moov-less) mp4 past a much shorter grace period -- either way every
-// path in `protected` (the currently recording session's own output + mic
-// sidecar, plus the video editor's currently open source + its own sidecar,
-// if any) is excluded unconditionally, never by age or state, because
-// deleting a file mid-capture or out from under an open editor would be a
-// far worse bug than the one this sweep exists to fix.
+// convert_recording/convert_recording_blocking above. Three independent
+// reasons to remove a file: it is old AND nobody has decided on it yet, it is
+// a broken (moov-less) mp4 past a much shorter grace period, or it is past
+// the retention window (off by default) -- either way every path in
+// `protected` (the currently recording session's own output + mic sidecar,
+// plus the video editor's currently open source + its own sidecar, if any)
+// is excluded unconditionally, never by age or state, because deleting a
+// file mid-capture or out from under an open editor would be a far worse bug
+// than the one this sweep exists to fix. The retention window only ever
+// touches an UNREFERENCED file, same as the other two reasons -- a recording
+// still attached to a saved prompt is never a candidate, no matter its age.
 fn sweep_stale_recordings_in(
     dir: &Path,
     referenced: &std::collections::HashSet<String>,
     protected: &[PathBuf],
     broken_sweep_on: bool,
     broken_grace: Duration,
+    retention_age: Option<Duration>,
 ) -> (u32, u64) {
     let Ok(entries) = fs::read_dir(dir) else { return (0, 0) };
     let norm = |s: &str| s.replace('/', "\\").to_lowercase();
@@ -5907,7 +5917,8 @@ fn sweep_stale_recordings_in(
         let age = meta.modified().ok().and_then(|t| SystemTime::now().duration_since(t).ok());
         let stale_undecided = !is_referenced && age.is_some_and(|a| a >= STALE_TEMP_FILE_AGE);
         let broken = broken_sweep_on && !is_referenced && age.is_some_and(|a| a >= broken_grace) && recording_is_broken(&path);
-        if stale_undecided || broken {
+        let aged_out = !is_referenced && retention_age.is_some_and(|r| age.is_some_and(|a| a >= r));
+        if stale_undecided || broken || aged_out {
             let size = meta.len();
             if fs::remove_file(&path).is_ok() {
                 count += 1;
@@ -5939,6 +5950,22 @@ fn recording_sweep_grace(app: &AppHandle) -> (bool, Duration) {
         .unwrap_or((true, Duration::from_secs(5 * 60)))
 }
 
+// How long a KEPT recording (referenced or not) is allowed to age before
+// an unreferenced one becomes fair game for the sweep above -- 0 (the
+// shipped default) disables this leg entirely, same "0 = forever" convention
+// as trashRetentionDays.
+fn recording_retention_age(app: &AppHandle) -> Option<Duration> {
+    let days = app
+        .try_state::<Db>()
+        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.ui_values.get("recordingRetentionDays").copied().unwrap_or(0.0))
+        .unwrap_or(0.0);
+    if days <= 0.0 {
+        None
+    } else {
+        Some(Duration::from_secs(days as u64 * 86_400))
+    }
+}
+
 // Driven by recSweepEveryMin (default 60, 5-1440) -- clamped the same way
 // lang_check_interval clamps its own expert value, and re-read every round so
 // a changed interval takes effect without a restart.
@@ -5966,8 +5993,14 @@ fn sweep_recordings_now_result(app: &AppHandle) -> (u32, u64) {
     let Some(state) = app.try_state::<Db>() else { return (0, 0) };
     let referenced = orphan_referenced_set(&lock(&state));
     let (broken_on, grace) = recording_sweep_grace(app);
-    let (mut count, mut bytes) =
-        sweep_stale_recordings_in(&data_dir(app).join("recordings"), &referenced, &protected_recording_paths(app), broken_on, grace);
+    let (mut count, mut bytes) = sweep_stale_recordings_in(
+        &data_dir(app).join("recordings"),
+        &referenced,
+        &protected_recording_paths(app),
+        broken_on,
+        grace,
+        recording_retention_age(app),
+    );
     let (c, b) = sweep_discarded_recordings(app);
     count += c;
     bytes += b;
@@ -6002,6 +6035,15 @@ fn sweep_discarded_recordings(app: &AppHandle) -> (u32, u64) {
         bytes += b;
     }
     (count, bytes)
+}
+
+// The discarded-recordings row's own on-demand trigger. sweep_recordings_now
+// below answers for the recordings row instead -- it also runs this same
+// sweep as part of its combined total, so a dedicated command here keeps the
+// two rows from double-reporting or clearing each other's numbers.
+#[tauri::command]
+fn sweep_discarded_recordings_now(app: AppHandle) -> (u32, u64) {
+    sweep_discarded_recordings(&app)
 }
 
 fn discarded_stale_in(dir: &Path, age: Duration) -> (u32, u64) {
@@ -7197,6 +7239,36 @@ fn sweep_trash(app: &AppHandle, store: &mut Store) {
             sweep_orphan_files(app, &referenced);
         }
     }
+}
+
+// The trash row's on-demand trigger -- the same rule sweep_trash
+// applies at startup, but explicit and always answered (even "nothing to
+// clean up"), same reasoning as sweep_recordings_now's own manual button.
+// A live click carries none of the "long-idle app surprise-purges the trash"
+// risk the startup-only comment above warns about, since the user asked for
+// this exact sweep right now.
+#[tauri::command]
+fn sweep_trash_now(app: AppHandle, state: State<'_, Db>) -> (u32, u64) {
+    let mut store = lock(&state);
+    let Some(max_age) = trash_retention_secs(&store.settings) else {
+        return (0, 0);
+    };
+    let stale = stale_trash_ids(&store.trash, max_age, now_secs());
+    if stale.is_empty() {
+        return (0, 0);
+    }
+    let stale_paths: Vec<String> = store
+        .trash
+        .iter()
+        .filter(|p| stale.contains(&p.id))
+        .map(|p| p.file_path.clone())
+        .collect();
+    let (_, bytes) = attachments_bytes(&stale_paths);
+    let count = stale.len() as u32;
+    if let Some(referenced) = purge_ids(&app, &mut store, &stale) {
+        sweep_orphan_files(&app, &referenced);
+    }
+    (count, bytes)
 }
 
 // Factory reset: wipe all prompts AND all settings (views, theme, window,
@@ -9176,6 +9248,86 @@ fn open_storage_folder(path: String) -> Result<(), String> {
     open_explorer_at(&path)
 }
 
+// One row per kept-data category (trash, copy history, clipboard inbox,
+// recordings, discarded recordings, temporary exports, edit states) for the
+// statistics/backups window's own overview -- distinct from StorageBreakdown
+// above, which is disk USAGE grouped by folder; this is RETENTION grouped by
+// what a setting actually governs. Deliberately reuses the same counting each
+// category already had (video_folder_stats_in for the two recording rows,
+// the same SQL every other command in this file already runs against
+// copy_log/clip_inbox/edit_state) rather than inventing a second way to
+// measure the same folder or table.
+#[derive(Serialize, Clone)]
+struct RetentionItem {
+    key: String,
+    count: u64,
+    bytes: u64,
+}
+
+#[derive(Serialize, Clone)]
+struct RetentionOverview {
+    items: Vec<RetentionItem>,
+    measured_at: u64,
+}
+
+static RETENTION_CACHE: Mutex<Option<RetentionOverview>> = Mutex::new(None);
+
+#[tauri::command]
+async fn retention_overview(app: AppHandle, state: State<'_, Db>, force: bool) -> Result<RetentionOverview, String> {
+    if !force {
+        if let Some(cached) = RETENTION_CACHE.lock().unwrap().clone() {
+            return Ok(cached);
+        }
+    }
+    let (trash_count, trash_bytes, recording_custom) = {
+        let store = lock(&state);
+        let trash_paths: Vec<String> = store.trash.iter().map(|p| p.file_path.clone()).collect();
+        let (_, bytes) = attachments_bytes(&trash_paths);
+        (store.trash.len() as u64, bytes, store.settings.ui_texts.get("recordingDir").cloned().unwrap_or_default())
+    };
+    let (copy_count, copy_bytes) = db_conn(&app)
+        .map(|c| {
+            c.query_row("SELECT COUNT(*), COALESCE(SUM(LENGTH(id)), 0) FROM copy_log", [], |r| {
+                Ok((r.get::<_, i64>(0)? as u64, r.get::<_, i64>(1)? as u64))
+            })
+            .unwrap_or((0, 0))
+        })
+        .unwrap_or((0, 0));
+    let (clip_count, clip_bytes) = db_conn(&app)
+        .map(|c| {
+            c.query_row("SELECT COUNT(*), COALESCE(SUM(LENGTH(text)), 0) FROM clip_inbox", [], |r| {
+                Ok((r.get::<_, i64>(0)? as u64, r.get::<_, i64>(1)? as u64))
+            })
+            .unwrap_or((0, 0))
+        })
+        .unwrap_or((0, 0));
+    let rec_dir = recording_dir(&recording_custom);
+    let (rec_count, rec_bytes) = video_folder_stats_in(&rec_dir);
+    let (discarded_count, discarded_bytes) = video_folder_stats_in(&rec_dir.join("verworfen"));
+    let (temp_count, temp_bytes) = clip_export_temp_stats();
+    let (edit_count, edit_bytes) = db_conn(&app)
+        .map(|c| {
+            let count = c.query_row("SELECT COUNT(*) FROM edit_state", [], |r| r.get::<_, i64>(0)).unwrap_or(0) as u64;
+            let bytes = c
+                .query_row("SELECT COALESCE(SUM(LENGTH(ops)), 0) FROM edit_state", [], |r| r.get::<_, i64>(0))
+                .unwrap_or(0) as u64;
+            (count, bytes)
+        })
+        .unwrap_or((0, 0));
+    let items = vec![
+        RetentionItem { key: "trash".into(), count: trash_count, bytes: trash_bytes },
+        RetentionItem { key: "copyHistory".into(), count: copy_count, bytes: copy_bytes },
+        RetentionItem { key: "clipInbox".into(), count: clip_count, bytes: clip_bytes },
+        RetentionItem { key: "recordings".into(), count: rec_count, bytes: rec_bytes },
+        RetentionItem { key: "discardedRecordings".into(), count: discarded_count, bytes: discarded_bytes },
+        RetentionItem { key: "tempExports".into(), count: temp_count, bytes: temp_bytes },
+        RetentionItem { key: "editStates".into(), count: edit_count, bytes: edit_bytes },
+    ];
+    let fresh = RetentionOverview { items, measured_at: now_secs() };
+    *RETENTION_CACHE.lock().unwrap() = Some(fresh.clone());
+    Ok(fresh)
+}
+
 // ---- Duplicate finder ----
 #[derive(Serialize)]
 struct DupMember {
@@ -10609,6 +10761,28 @@ fn prune_history(settings: &mut Settings) {
         let now = now_secs();
         settings.copy_log.retain(|e| now.saturating_sub(e.ts) <= max_age);
     }
+}
+
+// The copy-history row's on-demand trigger. db_trim_copy already runs
+// after every insert, but only against the cap/cutoff live at THAT moment --
+// lowering historyMax or historyDays does not retroactively trim until the
+// next copy, so this exists to apply whatever the settings say right now.
+// Row count before/after (never a byte estimate stored nowhere -- copy_log
+// only ever holds a prompt id and a timestamp) is the honest "size" figure.
+#[tauri::command]
+fn trim_copy_history_now(app: AppHandle, state: State<'_, Db>) -> (u32, u64) {
+    let Some(conn) = db_conn(&app) else { return (0, 0) };
+    let (cap, cutoff) = { history_cap_and_cutoff(&lock(&state).settings) };
+    let before: (i64, i64) = conn
+        .query_row("SELECT COUNT(*), COALESCE(SUM(LENGTH(id)), 0) FROM copy_log", [], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap_or((0, 0));
+    if db_trim_copy(&conn, cap, cutoff).is_err() {
+        return (0, 0);
+    }
+    let after: (i64, i64) = conn
+        .query_row("SELECT COUNT(*), COALESCE(SUM(LENGTH(id)), 0) FROM copy_log", [], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap_or(before);
+    ((before.0 - after.0).max(0) as u32, (before.1 - after.1).max(0) as u64)
 }
 
 // Record a copy in the history + usage stats (called by the UI after any copy).
@@ -12428,6 +12602,17 @@ fn sweep_edit_state_tick(app: &AppHandle) {
     sweep_edit_state_conn(&conn, |p| std::path::Path::new(p).exists(), edit_state_keep_days(app));
 }
 
+// The edit-states row's on-demand trigger -- runs the same rule the
+// periodic tick applies, so a click always removes exactly what the next
+// silent tick would have. No byte figure: sweep_edit_state_conn only ever
+// reports a row count, and this reuses it unchanged rather than risking its
+// own tested return shape for a "nice to have" number.
+#[tauri::command]
+fn sweep_edit_states_now(app: AppHandle) -> u32 {
+    let Some(conn) = db_conn(&app) else { return 0 };
+    sweep_edit_state_conn(&conn, |p| std::path::Path::new(p).exists(), edit_state_keep_days(&app)) as u32
+}
+
 // Emergency purge: something sensitive (a password) ended up in the clipboard inbox
 // and may be sitting inside one or more ROTATING SNAPSHOTS too, DPAPI-sealed but
 // still on disk. clip_inbox_clear only ever touched the live DB — this walks every
@@ -13323,29 +13508,67 @@ fn sweep_stale_temp_files() {
 // sweep_stale_temp_files because its max age is user-configurable
 // (videoClipTtlMin, default one hour) rather than the fixed
 // STALE_TEMP_FILE_AGE every other class above uses.
-fn sweep_clip_export_temp(age: Duration) {
+// (count, bytes) removed -- the temporary-exports row's cleanup button
+// reports what this actually did, same reasoning as sweep_recordings_now's
+// own on-demand result.
+fn sweep_clip_export_temp(age: Duration) -> (u32, u64) {
     let dir = std::env::temp_dir().join(brand::TEMP_DIR);
     let prefix = format!("{}-clipexport-", brand::TEMP_PREFIX);
-    let Ok(entries) = fs::read_dir(&dir) else { return };
+    let Ok(entries) = fs::read_dir(&dir) else { return (0, 0) };
+    let mut count = 0u32;
+    let mut bytes = 0u64;
     for e in entries.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
         if !name.starts_with(&prefix) {
             continue;
         }
-        let stale = e
-            .metadata()
-            .and_then(|m| m.modified())
+        let Ok(meta) = e.metadata() else { continue };
+        let stale = meta
+            .modified()
             .and_then(|t| SystemTime::now().duration_since(t).map_err(std::io::Error::other))
             .is_ok_and(|a| a >= age);
         if stale {
-            let _ = fs::remove_file(e.path());
+            let size = meta.len();
+            if fs::remove_file(e.path()).is_ok() {
+                count += 1;
+                bytes += size;
+            }
         }
     }
+    (count, bytes)
+}
+
+// The overview row's amount readout for the same folder sweep_clip_export_temp cleans --
+// every "-clipexport-" file regardless of age, so the overview row can show
+// what is there right now, not just what the next sweep would remove.
+fn clip_export_temp_stats() -> (u64, u64) {
+    let dir = std::env::temp_dir().join(brand::TEMP_DIR);
+    let prefix = format!("{}-clipexport-", brand::TEMP_PREFIX);
+    let Ok(entries) = fs::read_dir(&dir) else { return (0, 0) };
+    let mut count = 0u64;
+    let mut bytes = 0u64;
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if !name.starts_with(&prefix) {
+            continue;
+        }
+        if let Ok(meta) = e.metadata() {
+            count += 1;
+            bytes += meta.len();
+        }
+    }
+    (count, bytes)
 }
 
 fn clip_export_ttl_from(settings: &Settings) -> Duration {
     let min = settings.ui_values.get("videoClipTtlMin").copied().unwrap_or(60.0).max(1.0);
     Duration::from_secs((min * 60.0) as u64)
+}
+
+// The temporary-exports row's on-demand trigger.
+#[tauri::command]
+fn sweep_clip_export_temp_now(app: AppHandle) -> (u32, u64) {
+    sweep_clip_export_temp(clip_export_ttl(&app))
 }
 
 // Reads the live expert setting so the periodic sweep always uses whatever
@@ -26035,7 +26258,9 @@ pub fn run() {
                 let referenced = orphan_referenced_set(&store);
                 let broken_on = store.settings.ui_flags.get("recSweepBroken") != Some(&false);
                 let grace_min = store.settings.ui_values.get("recBrokenGraceMin").copied().unwrap_or(5.0).max(0.0);
-                let (count, bytes) = sweep_stale_recordings(&handle, &referenced, broken_on, Duration::from_secs((grace_min * 60.0) as u64));
+                let retention_days = store.settings.ui_values.get("recordingRetentionDays").copied().unwrap_or(0.0);
+                let retention_age = (retention_days > 0.0).then(|| Duration::from_secs(retention_days as u64 * 86_400));
+                let (count, bytes) = sweep_stale_recordings(&handle, &referenced, broken_on, Duration::from_secs((grace_min * 60.0) as u64), retention_age);
                 if count > 0 {
                     append_crash_log(&format!("startup recording sweep: removed {count} file(s), {bytes} bytes"));
                     *PENDING_SWEEP_NOTICE.lock().unwrap_or_else(|e| e.into_inner()) = Some((count, bytes));
@@ -26522,7 +26747,7 @@ pub fn run() {
                     "clip-export-sweep",
                     Duration::from_secs(CLIP_EXPORT_SWEEP_SECS),
                     Duration::from_secs(CLIP_EXPORT_SWEEP_SECS),
-                    move || sweep_clip_export_temp(clip_export_ttl(&h)),
+                    move || { sweep_clip_export_temp(clip_export_ttl(&h)); },
                 );
             }
 
@@ -26558,6 +26783,12 @@ pub fn run() {
             export_stats,
             storage_breakdown,
             open_storage_folder,
+            retention_overview,
+            sweep_trash_now,
+            trim_copy_history_now,
+            sweep_clip_export_temp_now,
+            sweep_edit_states_now,
+            sweep_discarded_recordings_now,
             record_tool_usage,
             find_duplicates,
             ignore_dups,
@@ -33183,12 +33414,38 @@ mod tests {
         backdate(&fresh, Duration::from_secs(5));
         backdate(&unrelated, age + Duration::from_secs(5));
 
-        sweep_clip_export_temp(age);
+        let (count, bytes) = sweep_clip_export_temp(age);
 
         assert!(!stale.exists(), "a clip-export file older than the given age must be swept");
         assert!(fresh.exists(), "a clip-export file younger than the given age must survive");
         assert!(unrelated.exists(), "a differently-prefixed file must never be touched by this sweep");
+        assert_eq!(count, 1, "the swept count must report exactly the one stale file");
+        assert_eq!(bytes, 3, "the swept bytes must report that one file's own size");
         let _ = fs::remove_file(&fresh);
+        let _ = fs::remove_file(&unrelated);
+    }
+
+    // The overview row's amount readout counts every clip-export file
+    // regardless of age -- unlike the sweep above, a fresh file still counts.
+    #[test]
+    fn clip_export_temp_stats_counts_every_clip_export_file_regardless_of_age() {
+        let dir = std::env::temp_dir().join(brand::TEMP_DIR);
+        fs::create_dir_all(&dir).unwrap();
+        let pid = std::process::id();
+        let old = dir.join(format!("{}-clipexport-{}-statsold.mp4", brand::TEMP_PREFIX, pid));
+        let young = dir.join(format!("{}-clipexport-{}-statsyoung.mp4", brand::TEMP_PREFIX, pid));
+        let unrelated = dir.join(format!("{}-ocr-{}-statsunrelated.png", brand::TEMP_PREFIX, pid));
+        fs::write(&old, b"mp4data").unwrap();
+        fs::write(&young, b"mp4").unwrap();
+        fs::write(&unrelated, b"png").unwrap();
+        backdate(&old, Duration::from_secs(999_999));
+
+        let (count, bytes) = clip_export_temp_stats();
+
+        assert!(count >= 2, "both clip-export files must be counted regardless of age, got {count}");
+        assert!(bytes >= 10, "bytes must sum both clip-export files own sizes, got {bytes}");
+        let _ = fs::remove_file(&old);
+        let _ = fs::remove_file(&young);
         let _ = fs::remove_file(&unrelated);
     }
 
@@ -33517,11 +33774,56 @@ mod tests {
 
         let mut wanted = std::collections::HashSet::new();
         wanted.insert(referenced.to_string_lossy().replace('/', "\\").to_lowercase());
-        sweep_stale_recordings_in(&dir, &wanted, &[], true, Duration::from_secs(300));
+        sweep_stale_recordings_in(&dir, &wanted, &[], true, Duration::from_secs(300), None);
 
         assert!(!abandoned.exists(), "an old, unreferenced recording must be swept");
         assert!(fresh.exists(), "a fresh recording (menu possibly still open) must survive");
         assert!(referenced.exists(), "a recording a prompt still references must survive however old");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // recordingRetentionDays, off by default (None), lets a kept but
+    // unreferenced recording age well past STALE_TEMP_FILE_AGE untouched --
+    // once a caller passes a retention window, an unreferenced file past it is
+    // swept even though it is nowhere near that fixed constant, and a
+    // REFERENCED file survives regardless of how far past the window it is.
+    #[test]
+    fn sweep_stale_recordings_in_retention_age_only_removes_unreferenced_files_past_it() {
+        let dir = std::env::temp_dir().join(format!("ps-test-rec-retention-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let old_unreferenced = dir.join("2026-09-04_07-00-00.mp4");
+        let old_referenced = dir.join("2026-09-04_07-30-00.mp4");
+        let young_unreferenced = dir.join("2026-09-04_07-45-00.mp4");
+        fs::write(&old_unreferenced, b"video").unwrap();
+        fs::write(&old_referenced, b"video").unwrap();
+        fs::write(&young_unreferenced, b"video").unwrap();
+        // Both ages stay well under STALE_TEMP_FILE_AGE (one hour), and the
+        // broken-file sweep is off below -- none of these three plain (not a
+        // real mp4) files can be swept for any reason other than retention,
+        // which is exactly what this test means to isolate.
+        backdate(&old_unreferenced, Duration::from_secs(45 * 60));
+        backdate(&old_referenced, Duration::from_secs(45 * 60));
+        backdate(&young_unreferenced, Duration::from_secs(10 * 60));
+
+        let mut referenced = std::collections::HashSet::new();
+        referenced.insert(old_referenced.to_string_lossy().replace('/', "\\").to_lowercase());
+
+        // Off (None): nothing here is anywhere near STALE_TEMP_FILE_AGE, and
+        // broken_sweep_on is false, so all three survive.
+        let (count_off, _) = sweep_stale_recordings_in(&dir, &referenced, &[], false, Duration::from_secs(600), None);
+        assert_eq!(count_off, 0, "retention off must not remove anything by age alone");
+        assert!(old_unreferenced.exists());
+
+        // On, at thirty minutes: only the old, unreferenced file is past it.
+        let (count_on, bytes_on) =
+            sweep_stale_recordings_in(&dir, &referenced, &[], false, Duration::from_secs(600), Some(Duration::from_secs(30 * 60)));
+        assert_eq!(count_on, 1);
+        assert!(bytes_on > 0);
+        assert!(!old_unreferenced.exists(), "an old, unreferenced recording past the retention window must be swept");
+        assert!(old_referenced.exists(), "a recording a prompt still references must survive however old");
+        assert!(young_unreferenced.exists(), "a recording under the retention window must survive");
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -33654,7 +33956,7 @@ mod tests {
 
         let mut referenced = std::collections::HashSet::new();
         referenced.insert(video.to_string_lossy().replace('/', "\\").to_lowercase());
-        let (count, _bytes) = sweep_stale_recordings_in(&dir, &referenced, &[], true, Duration::from_secs(60));
+        let (count, _bytes) = sweep_stale_recordings_in(&dir, &referenced, &[], true, Duration::from_secs(60), None);
 
         assert_eq!(count, 0, "neither the referenced mp4 nor its sidecar may be swept");
         assert!(video.exists());
@@ -33683,7 +33985,7 @@ mod tests {
 
         let empty = std::collections::HashSet::new();
         let protected = [active.clone(), active_sidecar.clone(), editor_src.clone(), editor_sidecar.clone()];
-        let (count, bytes) = sweep_stale_recordings_in(&dir, &empty, &protected, true, Duration::from_secs(60));
+        let (count, bytes) = sweep_stale_recordings_in(&dir, &empty, &protected, true, Duration::from_secs(60), None);
 
         assert_eq!(count, 0);
         assert_eq!(bytes, 0);
@@ -33706,7 +34008,7 @@ mod tests {
         backdate(&active, Duration::from_secs(3600));
 
         let empty = std::collections::HashSet::new();
-        let (count, bytes) = sweep_stale_recordings_in(&dir, &empty, &[active.clone()], true, Duration::from_secs(60));
+        let (count, bytes) = sweep_stale_recordings_in(&dir, &empty, &[active.clone()], true, Duration::from_secs(60), None);
 
         assert_eq!(count, 0);
         assert_eq!(bytes, 0);
@@ -33733,7 +34035,7 @@ mod tests {
         backdate(&healthy_young, Duration::from_secs(10 * 60));
 
         let empty = std::collections::HashSet::new();
-        let (count, bytes) = sweep_stale_recordings_in(&dir, &empty, &[], true, Duration::from_secs(5 * 60));
+        let (count, bytes) = sweep_stale_recordings_in(&dir, &empty, &[], true, Duration::from_secs(5 * 60), None);
 
         assert_eq!(count, 1);
         assert!(bytes > 0);
