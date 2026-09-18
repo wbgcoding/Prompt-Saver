@@ -1805,6 +1805,9 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .tile-tip-len { margin-top: 5px; font-size: 11px; color: var(--muted); }
 /* Last-copied/last-edited lines -- one per line, muted like the length readout. */
 .tile-tip-times { margin-top: 5px; font-size: 11px; color: var(--muted); white-space: pre-line; }
+/* Resolution + file size -- same weight as the timestamps line above it,
+   library/history rows only. */
+.tile-tip-media { margin-top: 5px; font-size: 11px; color: var(--muted); }
 /* Rotating-prompt line — accent-coloured, so it reads as live state rather
    than static metadata like the length readout next to it. */
 .tile-tip-rotate { margin-top: 5px; font-size: 11px; color: var(--accent); }
@@ -1819,6 +1822,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .tile-tip-body:empty,
 .tile-tip-len:empty,
 .tile-tip-times:empty,
+.tile-tip-media:empty,
 .tile-tip-notes:empty,
 .tile-tip-rotate:empty,
 .tile-tip-hint:empty { display: none; }
@@ -3739,6 +3743,26 @@ body.drag-over::after {
   object-fit: cover;
   flex: 0 0 auto;
   align-self: center;
+  pointer-events: none;
+}
+/* Duration badge overlay: library/history only -- wraps thumbEl's own element
+   without changing its own sizing rules above. */
+.lib-thumb-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-self: center;
+}
+.lib-thumb-duration {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 9px;
+  line-height: 1.4;
   pointer-events: none;
 }
 .lib-item .lib-add,

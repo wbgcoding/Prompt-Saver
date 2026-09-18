@@ -428,7 +428,10 @@ corners, bold/uppercase/monospace text — behaviour and pure looks, all adjusta
 ### Media
 
 Video controls, autoplay, mute, loop, plus grayscale/dim-until-hovered looks for
-privacy-leaning media tiles.
+privacy-leaning media tiles. The library and copy history also show a video's
+length on its thumbnail and its resolution and file size in the tooltip; older
+attachments pick this up in the background the first time they are shown. The
+main grid stays as it always was.
 
 ## Always on top
 
@@ -915,7 +918,10 @@ System.
 **Kopierverlauf** — Protokoll, Gruppierung, Aufbewahrung, Einzeleintrag löschen,
 Statistik mit 14-Tage-Diagramm.
 
-**Medien** — Video-Steuerung, Graustufen/Abdunkeln.
+**Medien** — Video-Steuerung, Graustufen/Abdunkeln. Bibliothek und Kopierverlauf
+zeigen außerdem die Länge eines Videos auf seinem Vorschaubild sowie Auflösung
+und Dateigröße in der Kurzhilfe; ältere Anhänge holen das im Hintergrund nach,
+sobald sie zum ersten Mal angezeigt werden. Das Hauptraster bleibt unverändert.
 
 **Werkzeugleiste** — welche Buttons Kopf- und Composer-Leiste zeigen.
 

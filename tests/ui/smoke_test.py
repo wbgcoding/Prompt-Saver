@@ -7425,6 +7425,30 @@ PROBE = """
         }
       }
     }
+    {
+      // A video attachment's duration/resolution/size, measured once and stored
+      // on the fixture prompt (p2), shows a duration badge on its library
+      // thumbnail and a resolution/size line in its tooltip -- and shows neither
+      // on the same entry's main grid tile, which stays exactly as before.
+      await click('library-btn');
+      const mmRow = document.querySelector('.lib-item[data-id="p2"]');
+      if (!mmRow) {
+        out.errors.push('MediaMeta: library row for the video fixture (p2) is missing');
+      } else {
+        const badge = mmRow.querySelector('.lib-thumb-duration');
+        if (!badge || badge.textContent.trim() !== '1:15') {
+          out.errors.push('MediaMeta: library duration badge missing or wrong (' + (badge && badge.textContent) + ')');
+        }
+        if (mmRow.dataset.tipMedia !== '1280×720 · 5.0 MB') {
+          out.errors.push('MediaMeta: library tooltip is missing the resolution/size line (' + mmRow.dataset.tipMedia + ')');
+        }
+      }
+      await click('library-close');
+      const mmTile = document.querySelector('.tile[data-id="p2"]');
+      if (mmTile && mmTile.querySelector('.lib-thumb-duration')) {
+        out.errors.push('MediaMeta: the main grid tile must never show the duration badge');
+      }
+    }
   } catch (e) { out.errors.push('probe: ' + e.message); }
   for (const el of document.querySelectorAll('.overlay *, #expert-flags *')) {
     const r = el.getBoundingClientRect();

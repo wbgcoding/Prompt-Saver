@@ -337,6 +337,11 @@ the video editor and the introduction tour ship on).
   is never mistaken for the edit. In the video editor this only hides
   overlays, since fades and the export resolution were never shown in the
   live preview to begin with, and the current cuts stay in effect.
+- **Video length, resolution and file size in the library and copy history.**
+  A duration badge sits on a video's thumbnail, and its resolution and file
+  size show in the tooltip; an attachment from before this feature picks
+  these up in the background the first time it is shown. The main grid is
+  unchanged.
 
 ### Improved
 

@@ -110,6 +110,15 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   // carries the stored preview image below also gets a file here, so there is one
   // fixture where both sit side by side and the preview/attachment hint can fire.
   file_path: i === 9 || i === 11 ? "C:\\Notes\\brief.txt" : "",
+  // 400: a video attachment (icon_path, never file_path -- see the Prompt struct
+  // comment) with its duration/resolution/size already measured, the way a real
+  // attach stores them once. Lets the library/history badge + tooltip probe run
+  // without depending on the backfill round trip through a real ffprobe.
+  icon_path: i === 2 ? "C:\\Recordings\\ps-smoke-clip.mp4" : "",
+  media_duration_ms: i === 2 ? 75000 : 0,
+  media_width: i === 2 ? 1280 : 0,
+  media_height: i === 2 ? 720 : 0,
+  media_size_bytes: i === 2 ? 5242880 : 0,
   // 79: one rotating prompt, so the version-history probe can open an editor that
   // actually has more than one entry (list_versions below gives it real snapshots).
   variants: i === 10 ? ["Example prompt body number 11, second entry.", "Example prompt body number 11, third entry."] : [],

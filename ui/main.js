@@ -1100,6 +1100,10 @@ const FLAG_LABELS = {
   videoAutoplay: "flagVideoAutoplay",
   videoMuted: "flagVideoMuted",
   videoLoop: "flagVideoLoop",
+  // Duration badge + resolution/size tooltip line in the library and copy
+  // history -- the main grid tile never reads either field.
+  mediaMeta: "flagMediaMeta",
+  mediaMetaBackfill: "flagMediaMetaBackfill",
   animations: "flagAnimations",
   pinButton: "flagPinButton",
   pasteMedia: "flagPasteMedia",
@@ -2036,7 +2040,7 @@ const EXPERT_TABS = [
     { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", { key: "journalTagFilter", gate: "tags" }, "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalLimit", "journalWidth"], selects: ["historyDays"] },
   ] },
   { title: "expTabMedia", groups: [
-    { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "grayscaleMedia", "mediaHoverDim", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaHoverOpacity", "mediaRadius"] },
+    { title: "expGroupMedia", flags: ["videoControls", "videoAutoplay", "videoMuted", "videoLoop", "mediaMeta", "mediaMetaBackfill", "grayscaleMedia", "mediaHoverDim", "mediaBorder", "roundMedia"], values: ["videoVolume", "mediaHoverOpacity", "mediaRadius"] },
   ] },
   { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
@@ -2238,6 +2242,7 @@ const EXPERT_TIPS = [
   "customThemes", "customThemeMax",
   "dragThreshold", "composerMaxH", "popoverPad", "toastWidth", "toastPos", "modalMaxVh",
   // Library / privacy
+  "mediaMeta", "mediaMetaBackfill",
   "smartSort", "fuzzySearch", "batchOps", "searchSuggest", "searchAutofocus", "libraryCloseToggle", "searchDebounceMs",
   "tags", "tagChipPx", "tagFilterMode", "tagPopCols", "tagSort",
   "allowScreenshot", "copyHistory", "historyTimestamps", "historyGrouped", "journalWidth",
@@ -4869,12 +4874,13 @@ function wireTooltips() {
   tipEl = document.createElement("div");
   tipEl.className = "tile-tip";
   tipEl.setAttribute("role", "tooltip");
-  tipEl.innerHTML = '<div class="tile-tip-name"></div><div class="tile-tip-body"></div><div class="tile-tip-len"></div><div class="tile-tip-times"></div><div class="tile-tip-notes"></div><div class="tile-tip-rotate"></div><div class="tile-tip-hint"></div>';
+  tipEl.innerHTML = '<div class="tile-tip-name"></div><div class="tile-tip-body"></div><div class="tile-tip-len"></div><div class="tile-tip-times"></div><div class="tile-tip-media"></div><div class="tile-tip-notes"></div><div class="tile-tip-rotate"></div><div class="tile-tip-hint"></div>';
   document.body.appendChild(tipEl);
   const nameEl = tipEl.querySelector(".tile-tip-name");
   const bodyEl = tipEl.querySelector(".tile-tip-body");
   const lenEl = tipEl.querySelector(".tile-tip-len");
   const timesEl = tipEl.querySelector(".tile-tip-times");
+  const mediaEl = tipEl.querySelector(".tile-tip-media");
   const notesEl = tipEl.querySelector(".tile-tip-notes");
   const rotateEl = tipEl.querySelector(".tile-tip-rotate");
   const hintEl = tipEl.querySelector(".tile-tip-hint");
@@ -4905,6 +4911,7 @@ function wireTooltips() {
     // Read regardless of rich/plain -- a library row's plain "Copy" tooltip
     // carries these same two lines, just without the rest of the rich box.
     timesEl.textContent = el.dataset.tipTimes || "";
+    mediaEl.textContent = el.dataset.tipMedia || "";
     if (rich) {
       nameEl.textContent = name;
       fillVarHighlighted(bodyEl, el.dataset.tipBody || "");
@@ -11507,6 +11514,62 @@ function thumbEl(p, cache) {
   return el;
 }
 
+// ---- Media metadata: duration badge + resolution/size tooltip ----
+// Library and copy history only, by explicit request -- buildTile (the main
+// grid's own thumbEl caller) never wraps its thumbnail with this and never
+// reads media_duration_ms/media_width/media_height/media_size_bytes.
+
+const mediaDurationLabel = (ms) => {
+  const s = Math.round(ms / 1000);
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, "0")}`;
+};
+
+// Wraps a library/history thumbnail with its duration badge when the entry
+// carries a measured video length. Returns the thumb unchanged otherwise, so a
+// caller can always write `row.append(mediaThumb(p, thumbEl(p, cache)), body)`.
+function mediaThumb(p, thumb) {
+  if (!flag("mediaMeta") || !p.media_duration_ms) return thumb;
+  const wrap = document.createElement("span");
+  wrap.className = "lib-thumb-wrap";
+  const badge = document.createElement("span");
+  badge.className = "lib-thumb-duration";
+  badge.textContent = mediaDurationLabel(p.media_duration_ms);
+  wrap.append(thumb, badge);
+  return wrap;
+}
+
+// Resolution + file size line for the library/history tooltip. "" = nothing to
+// add -- a value that could not be measured shows nothing, never a placeholder.
+function mediaTipLine(p) {
+  if (!flag("mediaMeta")) return "";
+  const parts = [];
+  if (p.media_width && p.media_height) parts.push(`${p.media_width}×${p.media_height}`);
+  if (p.media_size_bytes) parts.push(fmtBytes(p.media_size_bytes));
+  return parts.join(" · ");
+}
+
+// The one-time catch-up for a row that has never been measured, or whose first
+// measurement failed: fires at most once per id per session and never blocks
+// the render -- the backend call is fire-and-forget, and the panel only
+// re-renders once it actually comes back with something to show.
+const mediaMetaBackfilled = new Set();
+function maybeBackfillMediaMeta(p, rerender) {
+  if (!flag("mediaMetaBackfill") || mediaMetaBackfilled.has(p.id)) return;
+  if (p.media_duration_ms || p.media_width || p.media_size_bytes) return; // already measured
+  if (!p.file_path && !p.icon_path) return; // nothing to measure
+  mediaMetaBackfilled.add(p.id);
+  invoke("backfill_media_meta", { id: p.id })
+    .then((updated) => {
+      if (!updated) return;
+      const idx = prompts.findIndex((x) => x.id === p.id);
+      if (idx === -1) return;
+      prompts[idx] = { ...prompts[idx], ...updated };
+      rerender();
+    })
+    .catch(() => {}); // best-effort -- a failed catch-up just tries again next session
+}
+
 // ---- Additive type filters, shared by the library and the copy history ----
 // Nothing picked = every type. "All" clears the set, every other chip toggles itself,
 // so PDF and File can be shown together. The pick is stored per window.
@@ -11850,6 +11913,8 @@ function renderLibrary() {
     row.title = libSelectMode ? "" : t("copy");
     const rowTimes = tileTimeLines(p.id);
     if (rowTimes) row.dataset.tipTimes = rowTimes;
+    const rowMedia = mediaTipLine(p);
+    if (rowMedia) row.dataset.tipMedia = rowMedia;
 
     const body = document.createElement("span");
     body.className = "lib-body";
@@ -11882,7 +11947,8 @@ function renderLibrary() {
     }
 
     // Per-type preview: video plays inline, image/gif as a thumbnail, else a dot.
-    row.append(thumbEl(p, libThumbCache), body);
+    row.append(mediaThumb(p, thumbEl(p, libThumbCache)), body);
+    maybeBackfillMediaMeta(p, renderLibrary);
 
     // The library's own way to reach an editor: right-click an image/video/gif
     // attachment for "Open a file in the editor", working on a copy exactly
@@ -12285,6 +12351,8 @@ function journalRow(p, meta, onClick) {
   row.type = "button";
   row.className = "lib-item journal-item";
   row.title = t("copy");
+  const rowMedia = mediaTipLine(p);
+  if (rowMedia) row.dataset.tipMedia = rowMedia;
   const body = document.createElement("span");
   body.className = "lib-body";
   const head = document.createElement("span");
@@ -12325,7 +12393,8 @@ function journalRow(p, meta, onClick) {
     sub.append(l, r);
     body.append(sub);
   }
-  row.append(thumbEl(p, journalThumbCache), body);
+  row.append(mediaThumb(p, thumbEl(p, journalThumbCache)), body);
+  maybeBackfillMediaMeta(p, renderJournal);
   row.addEventListener("click", onClick);
   // Edit straight from the history — same icon/pattern as the library row.
   const edit = document.createElement("span");

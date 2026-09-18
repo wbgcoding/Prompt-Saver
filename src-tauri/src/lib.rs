@@ -1704,6 +1704,20 @@ struct Prompt {
     // nächsten Eintrag vor. Ohne variants bedeutungslos (wie rotate_mode).
     #[serde(default)]
     rotate_auto: bool,
+    // Duration of an attached video, measured once when the attachment is set
+    // (probe_media_meta) and never on every render. 0 = never measured, or the
+    // file has no video stream. Read by the library/history thumbnail badge
+    // only -- the main grid tile never reads this field.
+    #[serde(default)]
+    media_duration_ms: u64,
+    // Pixel width/height of an attached video or still image, 0 = unknown.
+    #[serde(default)]
+    media_width: u32,
+    #[serde(default)]
+    media_height: u32,
+    // Size in bytes of the attached file (file_path/icon_path), 0 = unknown.
+    #[serde(default)]
+    media_size_bytes: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Default)]
@@ -5936,6 +5950,12 @@ async fn add_prompt(
             fp = store_attached_file(&app, &fp);
             ip = store_attached_file(&app, &ip);
         }
+        // Measured once, right here, never again on a render.
+        let media_source = if !fp.is_empty() { Some(fp.as_str()) } else if !ip.is_empty() { Some(ip.as_str()) } else { None };
+        let (media_duration_ms, media_width, media_height, media_size_bytes) = match media_source {
+            Some(p) => probe_media_meta(ffprobe_search_path(&app).as_deref(), Path::new(p)),
+            None => (0, 0, 0, 0),
+        };
         let prompt = Prompt {
             id: gen_id(),
             trashed_at: 0,
@@ -5960,6 +5980,10 @@ async fn add_prompt(
             variants,
             rotate_mode,
             rotate_auto,
+            media_duration_ms,
+            media_width,
+            media_height,
+            media_size_bytes,
         };
         // A grid folder owns its cell OUTSIDE view.layouts, and the renderer gives a
         // folder priority — so a cell handed out without excluding them saves fine and
@@ -6049,6 +6073,10 @@ async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, examples: Ve
                 variants: Vec::new(),
                 rotate_mode: String::new(),
                 rotate_auto: false,
+                media_duration_ms: 0,
+                media_width: 0,
+                media_height: 0,
+                media_size_bytes: 0,
             };
             let view = store.settings.active_view_mut();
             if let Some(cell) = first_free_cell(view) {
@@ -6222,6 +6250,10 @@ async fn update_prompt(
         };
         let file_path = file_path.map(|p| if store_files { store_attached_file(&app, &p) } else { p });
         let icon_path = icon_path.map(|p| if store_files { store_attached_file(&app, &p) } else { p });
+        // Read before the mutable prompt borrow below (a MutexGuard can't be
+        // split into disjoint field borrows) -- only actually run if the
+        // attachment turns out to have changed.
+        let ffprobe = ffprobe_search_path(&app);
         // Read history settings before the mutable prompt borrow (a MutexGuard
         // can't be split into disjoint field borrows).
         let hist_on = history_enabled(&store.settings);
@@ -6243,9 +6275,25 @@ async fn update_prompt(
                 p.image = merge_image(&p.image, image);
                 if let Some(si) = show_image { p.show_image = si; }
                 if let Some(ci) = copy_image { p.copy_image = ci; }
+                // A real change to either path re-measures the attachment -- a save
+                // that never touched it (every other field edit) must not re-run
+                // ffprobe/image::image_dimensions on every keystroke-triggered save.
+                let attachment_changed = file_path.as_deref().is_some_and(|v| v != p.file_path)
+                    || icon_path.as_deref().is_some_and(|v| v != p.icon_path);
                 if let Some(fp) = file_path { p.file_path = fp; }
                 if let Some(pp) = pdf_page { p.pdf_page = pp; }
                 if let Some(ip) = icon_path { p.icon_path = ip; }
+                if attachment_changed {
+                    let media_source = if !p.file_path.is_empty() { Some(p.file_path.as_str()) } else if !p.icon_path.is_empty() { Some(p.icon_path.as_str()) } else { None };
+                    let (d, w, h, sz) = match media_source {
+                        Some(mp) => probe_media_meta(ffprobe.as_deref(), Path::new(mp)),
+                        None => (0, 0, 0, 0),
+                    };
+                    p.media_duration_ms = d;
+                    p.media_width = w;
+                    p.media_height = h;
+                    p.media_size_bytes = sz;
+                }
                 if let Some(c) = caption { p.caption = c; }
                 if let Some(cs) = caption_size { p.caption_size = clamp_caption_size(cs); }
                 if let Some(f) = font { p.font = f; }
@@ -8059,6 +8107,10 @@ struct SlimPrompt {
     variants: Vec<String>,
     rotate_mode: String,
     rotate_auto: bool,
+    media_duration_ms: u64,
+    media_width: u32,
+    media_height: u32,
+    media_size_bytes: u64,
 }
 
 impl From<&Prompt> for SlimPrompt {
@@ -8070,6 +8122,7 @@ impl From<&Prompt> for SlimPrompt {
             id, name, text, color, image, show_image, copy_image, file_path, pdf_page,
             icon_path, caption, caption_size, font, font_size, favorite, tags, notes,
             hotkey, hotkey_paste, trashed_at, variants, rotate_mode, rotate_auto,
+            media_duration_ms, media_width, media_height, media_size_bytes,
         } = p;
         SlimPrompt {
             id: id.clone(),
@@ -8098,6 +8151,10 @@ impl From<&Prompt> for SlimPrompt {
             variants: variants.clone(),
             rotate_mode: rotate_mode.clone(),
             rotate_auto: *rotate_auto,
+            media_duration_ms: *media_duration_ms,
+            media_width: *media_width,
+            media_height: *media_height,
+            media_size_bytes: *media_size_bytes,
         }
     }
 }
@@ -21137,6 +21194,78 @@ fn probe_recording_blocking(ffprobe: &Path, src: &Path) -> Result<RecordingProbe
     })
 }
 
+// Duration/width/height/size for a media attachment (file_path or icon_path),
+// measured once when the attachment is set and stored on the Prompt -- never
+// recomputed on every render. A still image goes through the
+// `image` crate (already a dependency), a video through ffprobe the same way
+// probe_recording_blocking does. Nothing here returns an error: a value that
+// could not be determined comes back as 0, which the caller and the frontend
+// both already treat as "unknown, show nothing" rather than a placeholder.
+fn probe_media_meta(ffprobe: Option<&Path>, path: &Path) -> (u64, u32, u32, u64) {
+    let size = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+    if let Ok(img) = image::image_dimensions(path) {
+        return (0, img.0, img.1, size);
+    }
+    if let Some(ffprobe) = ffprobe {
+        if let Ok(p) = probe_recording_blocking(ffprobe, path) {
+            return (p.duration_ms, p.width, p.height, size);
+        }
+    }
+    (0, 0, 0, size)
+}
+
+// The one-time catch-up for an entry that has never been measured, or whose
+// first measurement failed (the source briefly locked, a network drive asleep): the
+// library/history call this the first time such a row is actually shown, never
+// during the render itself, so a long list is never held up waiting on ffprobe.
+// A no-op (Ok(None), nothing saved) when the entry already carries a
+// measurement, has no video/image attachment, or still cannot be read.
+#[tauri::command]
+async fn backfill_media_meta(app: AppHandle, state: State<'_, Db>, id: String) -> Result<Option<Prompt>, String> {
+    let media_path = {
+        let store = lock(&state);
+        if !store.settings.ui_flags.get("mediaMetaBackfill").copied().unwrap_or(true) {
+            return Ok(None);
+        }
+        match store.prompts.iter().find(|p| p.id == id) {
+            Some(p) if p.media_duration_ms == 0 && p.media_width == 0 && p.media_size_bytes == 0 => {
+                if !p.file_path.is_empty() {
+                    Some(p.file_path.clone())
+                } else if !p.icon_path.is_empty() {
+                    Some(p.icon_path.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    };
+    let Some(media_path) = media_path else { return Ok(None) };
+    let ffprobe = ffprobe_search_path(&app);
+    let (duration_ms, width, height, size) =
+        tauri::async_runtime::spawn_blocking(move || probe_media_meta(ffprobe.as_deref(), Path::new(&media_path)))
+            .await
+            .map_err(|e| e.to_string())?;
+    if duration_ms == 0 && width == 0 && size == 0 {
+        return Ok(None); // still unreadable -- nothing changed, nothing to save
+    }
+    let mut store = lock(&state);
+    let updated = match store.prompts.iter_mut().find(|p| p.id == id) {
+        Some(p) => {
+            p.media_duration_ms = duration_ms;
+            p.media_width = width;
+            p.media_height = height;
+            p.media_size_bytes = size;
+            Some(p.clone())
+        }
+        None => None,
+    };
+    if updated.is_some() {
+        save_prompts(&app, &store);
+    }
+    Ok(updated)
+}
+
 // Consolidates a recording's mic sidecar (see mic_sidecar_video_path / the
 // recording engine's mic_wav_writer_loop) into a genuine second AAC track,
 // once, the first time the editor opens a recording that still has one.
@@ -23324,6 +23453,14 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String, hash
             // A CSV/TXT file never carries the auto-session state either — it is a
             // per-machine live behaviour, not portable prompt content.
             rotate_auto: false,
+            // Never measured here -- an imported attachment path is often not even
+            // reachable yet (different machine). The library backfill picks it up
+            // the first time this row is shown, same as any other pre-existing
+            // entry that has never been measured.
+            media_duration_ms: 0,
+            media_width: 0,
+            media_height: 0,
+            media_size_bytes: 0,
         };
         store.prompts.push(prompt);
         count += 1;
@@ -25237,6 +25374,7 @@ pub fn run() {
             dismiss_example_prompts,
             example_prompts_pending,
             update_prompt,
+            backfill_media_meta,
             set_favorite,
             delete_prompt,
             batch_prompts,
@@ -26644,6 +26782,10 @@ fn sync_blank_prompt(id: String) -> Prompt {
         variants: Vec::new(),
         rotate_mode: String::new(),
         rotate_auto: false,
+        media_duration_ms: 0,
+        media_width: 0,
+        media_height: 0,
+        media_size_bytes: 0,
     }
 }
 
@@ -28080,6 +28222,62 @@ mod tests {
         let probe = probe_recording_blocking(&ffprobe, &src).expect("probe should succeed");
         assert_eq!(probe.mic_sidecar, Some(sidecar.to_string_lossy().to_string()));
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ---- probe_media_meta: duration/size/resolution stored on a media attachment ----
+
+    #[test]
+    fn probe_media_meta_reads_a_real_images_dimensions_and_size() {
+        let dir = std::env::temp_dir().join(format!("ps-mediameta-img-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("pic.png");
+        let img = image::RgbImage::from_pixel(12, 8, image::Rgb([10, 20, 30]));
+        image::DynamicImage::ImageRgb8(img).save_with_format(&path, image::ImageFormat::Png).unwrap();
+        let expected_size = fs::metadata(&path).unwrap().len();
+        let (duration_ms, width, height, size) = probe_media_meta(None, &path);
+        assert_eq!(duration_ms, 0, "a still image has no duration");
+        assert_eq!((width, height), (12, 8));
+        assert_eq!(size, expected_size);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn probe_media_meta_reads_a_real_videos_duration_and_dimensions() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-mediameta-vid-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let src = make_test_mp4(&ffmpeg, &dir, "src.mp4", 2, "64x48");
+        let expected_size = fs::metadata(&src).unwrap().len();
+        let (duration_ms, width, height, size) = probe_media_meta(Some(&ffprobe), &src);
+        assert!((1500..=3000).contains(&duration_ms), "duration_ms was {duration_ms}");
+        assert_eq!((width, height), (64, 48));
+        assert_eq!(size, expected_size);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // A file that is neither a real image nor a readable video must come back as
+    // zeros, never an error and never a panic -- probe_media_meta has no Result
+    // to bubble one through, on purpose (a caller stores "never measured" for
+    // whatever field could not be read, not a whole failed attach).
+    #[test]
+    fn probe_media_meta_on_an_unreadable_file_returns_zeros_not_an_error() {
+        let dir = std::env::temp_dir().join(format!("ps-mediameta-broken-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("broken.mp4");
+        fs::write(&path, b"not media at all").unwrap();
+        let expected_size = fs::metadata(&path).unwrap().len();
+        let (duration_ms, width, height, size) = probe_media_meta(None, &path);
+        assert_eq!((duration_ms, width, height), (0, 0, 0));
+        assert_eq!(size, expected_size, "the file's own size is filesystem metadata, not a measurement that can fail");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn probe_media_meta_on_a_missing_file_returns_all_zeros() {
+        let path = std::env::temp_dir().join(format!("ps-mediameta-missing-{}.mp4", std::process::id()));
+        let (duration_ms, width, height, size) = probe_media_meta(None, &path);
+        assert_eq!((duration_ms, width, height, size), (0, 0, 0, 0));
     }
 
     #[test]
@@ -34159,6 +34357,10 @@ mod tests {
                 variants: Vec::new(),
                 rotate_mode: String::new(),
                 rotate_auto: false,
+                media_duration_ms: 0,
+                media_width: 0,
+                media_height: 0,
+                media_size_bytes: 0,
             },
             Prompt {
                 id: "p2".into(),
@@ -34184,6 +34386,10 @@ mod tests {
                 variants: Vec::new(),
                 rotate_mode: String::new(),
                 rotate_auto: false,
+                media_duration_ms: 0,
+                media_width: 0,
+                media_height: 0,
+                media_size_bytes: 0,
             },
         ]
     }

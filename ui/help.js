@@ -234,8 +234,8 @@ export const HELP_CONTENT = {
         "Attach a video or image to a tile — file attach, paste, or drag and drop.",
         "Adjust playback and privacy-leaning looks in the expert menu.",
       ],
-      whatHappens: "Video settings — autoplay, mute, loop, volume — apply to every video tile; grayscale or dim-until-hovered only changes how media looks, never what gets copied.",
-      settings: ["Video controls, autoplay, mute, loop — Expert menu → Media → Media", "Grayscale, or dim until hovered — Expert menu → Media → Media", "Accent border and rounded corners around media — Expert menu → Media → Media"],
+      whatHappens: "Video settings — autoplay, mute, loop, volume — apply to every video tile; grayscale or dim-until-hovered only changes how media looks, never what gets copied. The library and copy history also show a video's length on its thumbnail, and its resolution and file size in the tooltip; the main grid never shows either.",
+      settings: ["Video controls, autoplay, mute, loop — Expert menu → Media → Media", "Grayscale, or dim until hovered — Expert menu → Media → Media", "Accent border and rounded corners around media — Expert menu → Media → Media", "Duration/resolution/size in the library and copy history: Expert menu → Media → Media", "Fill in media info for older attachments: Expert menu → Media → Media"],
     },
     {
       section: "look",
@@ -843,8 +843,8 @@ export const HELP_CONTENT = {
         "Ein Video oder Bild an eine Kachel anhängen — Dateianhang, Screenshot, Einfügen oder Ziehen und Ablegen.",
         "Wiedergabe und privatsphärefreundliche Optiken im Experten-Menü anpassen.",
       ],
-      whatHappens: "Video-Einstellungen — Autoplay, Stumm, Schleife, Lautstärke — gelten für jede Video-Kachel; Graustufen oder Abgedunkelt-bis-Hover ändert nur das Aussehen, nie den kopierten Inhalt.",
-      settings: ["Video-Steuerung, Autoplay, Stumm, Schleife — Experten-Menü → Medien → Medien", "Graustufen oder abgedunkelt bis gehovert — Experten-Menü → Medien → Medien", "Akzentrahmen und abgerundete Ecken um Medien — Experten-Menü → Medien → Medien"],
+      whatHappens: "Video-Einstellungen — Autoplay, Stumm, Schleife, Lautstärke — gelten für jede Video-Kachel; Graustufen oder Abgedunkelt-bis-Hover ändert nur das Aussehen, nie den kopierten Inhalt. Bibliothek und Kopierverlauf zeigen außerdem die Länge eines Videos auf dem Vorschaubild sowie Auflösung und Dateigröße in der Kurzhilfe; das Hauptraster zeigt keins von beidem.",
+      settings: ["Video-Steuerung, Autoplay, Stumm, Schleife — Experten-Menü → Medien → Medien", "Graustufen oder abgedunkelt bis gehovert — Experten-Menü → Medien → Medien", "Akzentrahmen und abgerundete Ecken um Medien — Experten-Menü → Medien → Medien", "Dauer/Auflösung/Größe in Bibliothek und Kopierverlauf: Experten-Menü → Medien → Medien", "Medienangaben bei älteren Anhängen nachtragen: Experten-Menü → Medien → Medien"],
     },
     {
       section: "look",
