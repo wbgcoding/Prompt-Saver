@@ -386,6 +386,27 @@ body.noflag-showJournal #journal-btn { display: none; }
 @keyframes merge-in {
   from { opacity: 0; }
 }
+/* Dropped on the outer third of a tab (or a row of an open group's own list)
+   instead of its middle -- a plain reorder, not a merge, so it gets its own
+   mark: a bar between the two tabs, not the group's border+glyph. The tab
+   strip is horizontal (a vertical bar, left/right), a group's own popover is
+   a vertical list (a horizontal bar, top/bottom) -- same mark, other axis. */
+.view-btn.tab-drop-edge, .ctx .view-group-item.tab-drop-edge {
+  position: relative;
+}
+.view-btn.tab-drop-edge::after, .ctx .view-group-item.tab-drop-edge::after {
+  content: "";
+  position: absolute;
+  border-radius: 1px;
+  background: var(--accent);
+  z-index: 1;
+}
+.view-btn.tab-drop-edge::after { top: 3px; bottom: 3px; width: 2px; }
+.view-btn.tab-drop-edge.tab-drop-before::after { left: -1px; }
+.view-btn.tab-drop-edge.tab-drop-after::after { right: -1px; }
+.ctx .view-group-item.tab-drop-edge::after { left: 4px; right: 4px; height: 2px; }
+.ctx .view-group-item.tab-drop-edge.tab-drop-before::after { top: -1px; }
+.ctx .view-group-item.tab-drop-edge.tab-drop-after::after { bottom: -1px; }
 .view-group-pop {
   min-width: 210px;
   z-index: 90;
@@ -4306,6 +4327,11 @@ body.drag-over::after {
   cursor: pointer;
 }
 .ctx button:hover { background: var(--surface-2); }
+/* A menu entry that has nothing to do here (move left at the first tab, move
+   right at the last) stays visible rather than vanishing -- the two entries
+   would otherwise jump around as a tab nears either end. */
+.ctx button:disabled { color: var(--muted); cursor: default; opacity: 0.5; }
+.ctx button:disabled:hover { background: transparent; }
 /* Unchecked, this row has no leading icon and reads flush with every other
    entry; the checkmark's 16px slot (and the gap in front of it) only opens up
    once it is actually set, instead of being reserved all the time. */

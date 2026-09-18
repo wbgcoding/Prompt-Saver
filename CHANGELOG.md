@@ -423,6 +423,13 @@ the video editor and the introduction tour ship on).
   what happened and where, with the original text available for the ones the
   app translates. Copy the whole list or clear it from the same window. On by
   default, how many it keeps is adjustable, and switching it off keeps nothing.
+- **Reordering view tabs.** A tab's right-click menu gets "move further left"
+  and "move further right", greyed out at either end. Dragging works too: drop
+  a tab in the middle of another to group them as before, drop it on the outer
+  edge to move it there instead, with its own marker (a border for grouping, a
+  bar between tabs for moving) so the two are never confused. A tab inside an
+  open group moves within that group the same way. How wide that outer edge
+  is, is adjustable in the expert menu.
 
 ### Improved
 

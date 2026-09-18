@@ -8098,6 +8098,36 @@ fn set_view_color(app: AppHandle, state: State<Db>, id: String, color: String) -
     store.settings.clone()
 }
 
+// The tab bar's order, and a group's own member order, are both nothing
+// but `settings.views`' own order (groupViews on the frontend filters that
+// same array; it is never sorted separately) -- so reordering either one is
+// one generic reshuffle of this Vec, never a merge/group operation, and it
+// can never touch a View's own fields (`members`/`layouts` ride along
+// untouched with their View no matter where it moves to).
+// `order` is the caller's desired full id sequence. An id in `order` that no
+// longer exists is skipped; a view left out of `order` (a stale caller, or
+// one added by another window mid-drag) keeps its old relative order,
+// appended after everything the caller did name -- a mismatch can reorder
+// less than intended but can never drop a view.
+fn reorder_views_by_id(mut views: Vec<View>, order: &[String]) -> Vec<View> {
+    let mut reordered: Vec<View> = Vec::with_capacity(views.len());
+    for id in order {
+        if let Some(pos) = views.iter().position(|v| &v.id == id) {
+            reordered.push(views.remove(pos));
+        }
+    }
+    reordered.append(&mut views);
+    reordered
+}
+
+#[tauri::command]
+fn reorder_views(app: AppHandle, state: State<Db>, order: Vec<String>) -> Settings {
+    let mut store = lock(&state);
+    store.settings.views = reorder_views_by_id(std::mem::take(&mut store.settings.views), &order);
+    save_settings(&app, &store.settings);
+    store.settings.clone()
+}
+
 // Recolor saved data when the global palette changes: every prompt/view whose
 // color equals an old palette hex is moved to the new one (pairs = [[old,new],...]).
 #[tauri::command]
@@ -27060,6 +27090,7 @@ pub fn run() {
             add_view,
             rename_view,
             set_view_color,
+            reorder_views,
             remap_colors,
             delete_view,
             set_active_view,
@@ -38054,6 +38085,44 @@ mod tests {
             color: String::new(),
             members: Vec::new(),
         }
+    }
+
+    #[test]
+    fn reorder_views_by_id_moves_a_view_to_a_new_position() {
+        let views = vec![test_view("a"), test_view("b"), test_view("c")];
+        // "c" moved to the front, same as dropping its tab before "a"'s.
+        let order: Vec<String> = ["c", "a", "b"].iter().map(|s| s.to_string()).collect();
+        let out = reorder_views_by_id(views, &order);
+        let ids: Vec<&str> = out.iter().map(|v| v.id.as_str()).collect();
+        assert_eq!(ids, ["c", "a", "b"]);
+    }
+
+    #[test]
+    fn reorder_views_by_id_keeps_a_view_missing_from_order() {
+        // A stale caller that only named two of three views must still get all
+        // three back -- the third keeps its old relative place instead of vanishing.
+        let views = vec![test_view("a"), test_view("b"), test_view("c")];
+        let order: Vec<String> = ["c", "a"].iter().map(|s| s.to_string()).collect();
+        let out = reorder_views_by_id(views, &order);
+        let ids: Vec<&str> = out.iter().map(|v| v.id.as_str()).collect();
+        assert_eq!(ids, ["c", "a", "b"], "the view left out of order must still be present");
+    }
+
+    #[test]
+    fn reorder_views_by_id_ignores_an_unknown_id_and_never_touches_members() {
+        // A view's own data (its membership list here) rides along with it
+        // untouched -- reordering is a pure array shuffle, never a rebuild.
+        let mut a = test_view("a");
+        a.members = vec!["p1".to_string(), "p2".to_string()];
+        let mut b = test_view("b");
+        b.members = vec!["p3".to_string()];
+        let views = vec![a, b];
+        let order: Vec<String> = ["ghost", "b", "a"].iter().map(|s| s.to_string()).collect();
+        let out = reorder_views_by_id(views, &order);
+        let ids: Vec<&str> = out.iter().map(|v| v.id.as_str()).collect();
+        assert_eq!(ids, ["b", "a"], "an id not among the views must be skipped, not inserted");
+        assert_eq!(out[0].members, vec!["p3".to_string()]);
+        assert_eq!(out[1].members, vec!["p1".to_string(), "p2".to_string()]);
     }
 
     #[test]

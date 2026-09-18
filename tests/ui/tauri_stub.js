@@ -920,6 +920,20 @@ const RESULTS = {
     if (view) view.color = (a && a.color) || "";
     return clone();
   },
+  // 440: a pure reorder of SETTINGS.views by id -- mirrors reorder_views_by_id.
+  // An id missing from `order` keeps its old relative place instead of vanishing.
+  reorder_views: (a) => {
+    const order = (a && a.order) || [];
+    const byId = new Map(SETTINGS.views.map((v) => [v.id, v]));
+    const out = [];
+    for (const id of order) {
+      const v = byId.get(id);
+      if (v) { out.push(v); byId.delete(id); }
+    }
+    for (const v of SETTINGS.views) { if (byId.has(v.id)) out.push(v); }
+    SETTINGS.views = out;
+    return clone();
+  },
   // Mirror of the backend's rebuild_view_layout (point 419): membership never
   // changes here, only where a member sits. Keeps whatever still fits at the new
   // size, then seats the rest in the first free cell - one left without room

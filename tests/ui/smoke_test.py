@@ -4080,7 +4080,8 @@ PROBE = """
         await sleep(200);
         const menu = document.querySelector('.tab-menu:not(.hidden)');
         const items = menu ? menu.querySelectorAll('button').length : 0;
-        if (items !== 3) out.errors.push('the group menu has ' + items + ' entries instead of 3');
+        // Rename, colour, move left, move right, dissolve.
+        if (items !== 5) out.errors.push('the group menu has ' + items + ' entries instead of 5');
         document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
         await sleep(150);
       }
@@ -4124,15 +4125,99 @@ PROBE = """
               tb.textContent.trim().slice(0, 12) + '"');
           }
         }
+        // 440: reordering -- both context-menu entries, then an edge-zone drag,
+        // tested while the bar is still in its pristine shape (two loose tabs
+        // plus the "Docs" folder tab), before the merge probes below start
+        // consuming tabs into groups.
+        {
+          const groupRowNames = () => [...document.querySelectorAll('.view-group-pop .view-group-item .view-group-item-name')].map(n => n.textContent.trim());
+          const openPop = async () => { groupTab().click(); await sleep(250); };
+          const before = groupTab() ? (await openPop(), groupRowNames()) : [];
+          document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+          await sleep(150);
+          const homeTab = viewTabs().find(b => b.dataset.viewId === loose[0].dataset.viewId);
+          homeTab.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+          await sleep(200);
+          // Item order is fixed regardless of language: edit, duplicate, move
+          // left, move right, then (only with viewGroups on) "new group".
+          const menuBtns = [...document.querySelectorAll('.tab-menu:not(.hidden) button')];
+          const leftBtn = menuBtns[2];
+          const rightBtn = menuBtns[3];
+          if (menuBtns.length < 4) {
+            out.errors.push('a loose tab menu has no move-left/move-right entries');
+          } else {
+            if (!leftBtn.disabled) out.errors.push('move-left is not disabled on the first tab');
+            if (rightBtn.disabled) out.errors.push('move-right is disabled although another tab follows');
+            {
+              rightBtn.click();
+              await sleep(250);
+              if (viewTabs()[1]?.dataset.viewId !== loose[0].dataset.viewId) {
+                out.errors.push('move-right on the first tab did not move it one place over');
+              }
+              // Move it back so the tab bar's shape below matches what the rest of
+              // this probe (and the merge tests right after it) still expect.
+              const movedTab = viewTabs().find(b => b.dataset.viewId === loose[0].dataset.viewId);
+              movedTab?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+              await sleep(200);
+              const backBtn = [...document.querySelectorAll('.tab-menu:not(.hidden) button')][2];
+              backBtn?.click();
+              await sleep(250);
+            }
+          }
+          // The drop on the outer edge of a tab: always a reorder, never a merge.
+          calls().length = 0;
+          const grp = groupTab();
+          const grpId = grp?.dataset.groupId;
+          const firstLoose = viewTabs().find(b => b.dataset.viewId);
+          if (grp && firstLoose) {
+            const r = firstLoose.getBoundingClientRect();
+            const gx = grp.getBoundingClientRect();
+            tabPtr('pointerdown', gx.left + gx.width / 2, gx.top + gx.height / 2, grp);
+            tabPtr('pointermove', gx.left + gx.width / 2 + 8, gx.top + gx.height / 2);
+            await sleep(80);
+            // The outer-left edge of the target loose tab, well inside the
+            // viewTabEdgeZone -- must read as "reorder", not "group".
+            tabPtr('pointermove', r.left + 3, r.top + r.height / 2);
+            await sleep(80);
+            const edgeMark = document.querySelector('.tab-drop-edge');
+            if (!edgeMark) out.errors.push('dragging onto a tab edge shows no reorder mark');
+            tabPtr('pointerup', r.left + 3, r.top + r.height / 2);
+            await sleep(300);
+            if (calls().includes('save_view_group')) {
+              out.errors.push('dropping on the edge of a tab merged instead of reordering');
+            }
+            if (!calls().includes('reorder_views')) {
+              out.errors.push('dropping on the edge of a tab did not reorder the tab bar');
+            } else if (viewTabs()[0]?.dataset.groupId !== grpId) {
+              out.errors.push('the folder tab dropped before the first loose tab is not first afterwards');
+            }
+          }
+          // Bestandsprüfung: the group dragged around above must still hold the
+          // same members it started with.
+          const gAfter = groupTab();
+          const after = gAfter ? (await openPop(), groupRowNames()) : [];
+          document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+          await sleep(150);
+          if (before.length && (after.length !== before.length || before.some(n => !after.includes(n)))) {
+            out.errors.push('reordering tabs lost a view from its group (' + before.join(',') + ' vs ' + after.join(',') + ')');
+          }
+        }
+        // The reorder probe above re-rendered the tab bar at least once, which
+        // replaces every tab element -- `loose` still names the right views by
+        // id, but its two DOM nodes are stale, so this re-reads them fresh
+        // rather than feeding dragTab() a pair of detached (0,0) elements.
+        const looseNow = viewTabs().filter(b => b.dataset.viewId);
         calls().length = 0;
-        if (!await dragTab(loose[0], loose[1])) out.errors.push('a view tab dropped on another marked no target');
+        if (looseNow.length < 2 || !await dragTab(looseNow[0], looseNow[1])) {
+          out.errors.push('a view tab dropped on another marked no target');
+        }
         if (document.getElementById('confirm-modal').classList.contains('hidden')) {
           out.errors.push('merging two view tabs did not ask for a group name');
         } else {
           await click('confirm-ok');
           await sleep(250);
           if (!calls().includes('save_view_group')) out.errors.push('merging two view tabs saved no group');
-          if (viewTabs().some(b => b.dataset.viewId === loose[0].dataset.viewId)) {
+          if (viewTabs().some(b => b.dataset.viewId === looseNow[0]?.dataset.viewId)) {
             out.errors.push('a merged view still has its own tab');
           }
         }
