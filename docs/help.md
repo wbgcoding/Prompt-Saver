@@ -486,6 +486,12 @@ Windows popup; the expert menu can switch back to the plain system menu if the
 custom one ever misbehaves on your setup. The expert menu also caps how long a
 prompt name may get before it is cut off with an ellipsis in that menu.
 
+A search field at the top of that menu filters as you type, across every
+prompt rather than just the favourites and recents already shown. Arrow keys
+pick a result, Enter copies it the same way a click does, and the field clears
+itself back to the normal selection once emptied. It ships on, and the expert
+menu caps how many matches it lists at once.
+
 ### Standalone: Quick launcher
 
 A small always-on-top popup (default hotkey Ctrl+Alt+P) with fuzzy search across

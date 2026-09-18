@@ -1250,6 +1250,9 @@ const FLAG_LABELS = {
   tags: "flagTags",                     // tags + library tag filter
   pillFolders: "flagPillFolders",       // merge floating buttons into folders
   trayFavs: "flagTrayFavs",             // favourites section in the tray menu
+  // Filter row at the top of the custom tray menu, searching every prompt
+  // rather than only the shown favourites/recents.
+  traySearch: "flagTraySearch",
   // Checks at launch, but only while the normal auto-update setting is on.
   checkUpdateOnStart: "flagCheckUpdateOnStart",
   // The one-time toast after an update; the "what's new" window itself stays
@@ -1766,6 +1769,8 @@ const EXPERT_VALUES = {
   // no OR-gate exists, and gating a shared row on either lone sub-flag is an
   // approximation either way.
   trayLabelMax: { label: "valTrayLabelMax", min: 20, max: 80, step: 5, def: 40, unit: "", gate: "trayRecent" },
+  // How many matches the tray menu's filter row shows at once.
+  trayMenuMax: { label: "valTrayMenuMax", min: 3, max: 20, step: 1, def: 8, unit: "", gate: "traySearch" },
   // How often the Markdown-sync folder is re-scanned for outside edits.
   syncPollSecs: { label: "valSyncPollSecs", min: 2, max: 30, step: 1, def: 5, unit: "s", gate: "promptSync" },
   // Failed rounds in a row (an unreachable folder) before the sync pauses itself.
@@ -2080,7 +2085,7 @@ const EXPERT_TABS = [
     // Floating buttons and the two kinds of folder they can form.
     { title: "expGroupFolders", flags: ["floating", { key: "floatPark", gate: "floating" }, { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap", "floatParkCleanupH", "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
     // The quick-copy sections of the tray menu, each with its own entry count.
-    { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs"], values: ["trayRecentN", "trayFavN", "trayLabelMax"] },
+    { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs", "traySearch"], values: ["trayRecentN", "trayFavN", "trayLabelMax", "trayMenuMax"] },
     // The watcher that collects what you copy elsewhere.
     { title: "expGroupClipboard", flags: ["clipWatcher", { key: "clipSkipSecrets", gate: "clipWatcher" }], values: ["clipMinChars", "clipInboxMax", "clipSecretMinLen"] },
     // Prompt folders as Markdown (beta): mirrors text-only prompts as .md files.
@@ -2313,7 +2318,7 @@ const EXPERT_TIPS = [
   "voice", "voiceInterim", "voicePunct", "voiceAutoCaps", "voiceAutoStop", "voiceAutoStopSec", "voiceMaxMin",
   "voiceLangCacheH", "voiceLang", "voiceInsert", "voiceOnlineOk", "voiceAutoPickLang", "voiceLangAutoUpdate",
   "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH", "voiceHotkey", "voiceHotkeyTarget",
-  "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "trayLabelMax",
+  "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "trayLabelMax", "traySearch", "trayMenuMax",
   "checkUpdateOnStart", "showUpdates", "updateCheckH", "whatsNew", "importExport", "toolbarHoverDim", "keyboardNav", "allowMultipleInstances",
   "taskbarProgress", "etaShow",
   "headerSeparators", "floating", "floatPark", "floatParkCleanupH",

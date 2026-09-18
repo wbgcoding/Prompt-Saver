@@ -11,7 +11,10 @@
        All content and activation come from the backend (tray_window_plan /
        tray_window_activate) -- this file only draws rows and handles keyboard,
        mouse and focus; it never decides what an entry copies. -->
-  <div id="card" class="tray-menu-card"></div>
+  <div id="card" class="tray-menu-card">
+    <input id="tray-search" class="tray-menu-search" type="text" autocomplete="off" spellcheck="false" hidden />
+    <div id="rows"></div>
+  </div>
 
   <script type="module" src="tray.js"></script>
 </body>

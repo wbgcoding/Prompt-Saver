@@ -8948,10 +8948,36 @@ TRAY_PROBE = """
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
     await sleep(30);
     if (!rows()[0].classList.contains('active')) errs.push('ArrowUp did not move the highlight back to row 0');
+    // Point 441: the filter row at the very top. Reaches a prompt the fixed
+    // favorites/recents selection above never showed, replaces that fixed
+    // selection while something is typed (no headers), leaves the window
+    // itself unresized, and restores the fixed selection once cleared again.
+    const field = document.getElementById('tray-search');
+    if (!field || field.hidden) errs.push('the search field is missing or hidden while traySearch is on');
+    const startW = window.innerWidth, startH = window.innerHeight;
+    field.value = 'alpha';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(150);
+    const searchHit = rows().find((r) => r.dataset.id === 'tray-copy-p4');
+    if (!searchHit) errs.push('typing did not surface a prompt outside the fixed favorites/recents selection');
+    if (document.querySelectorAll('#card .tray-menu-head').length) errs.push('a search result list must not draw the fixed section headers');
+    if (window.innerWidth !== startW || window.innerHeight !== startH) errs.push('the window resized while searching');
+    if (!rows()[0].classList.contains('active')) errs.push('the first search result is not highlighted');
+    field.value = '';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(30);
+    if (rows().length !== 5) errs.push('clearing the field did not restore the fixed selection, found ' + rows().length + ' rows');
+    if (document.querySelectorAll('#card .tray-menu-head').length !== 2) errs.push('clearing the field did not restore the section headers');
+    // Search again, then Enter -- proves the filter row's own hit runs through
+    // the exact same activation as a plain click (tray_window_activate), same
+    // as the fixed selection already used above.
+    field.value = 'alpha';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(150);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await sleep(30);
-    if (window.__TRAY_ACTIVATED__ !== 'tray-copy-p1') {
-      errs.push('Enter did not activate the highlighted row: ' + window.__TRAY_ACTIVATED__);
+    if (window.__TRAY_ACTIVATED__ !== 'tray-copy-p4') {
+      errs.push('Enter on a search result did not go through tray_window_activate: ' + window.__TRAY_ACTIVATED__);
     }
     // Same "one action ever" guard the launcher and vars windows use: a stray
     // Escape after a real activation must never ALSO fire tray_window_close.

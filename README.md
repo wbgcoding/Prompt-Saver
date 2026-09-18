@@ -54,7 +54,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Self-filling** | `date`, `time`, `weekday`, `clipboard` and `uuid` fill themselves in, no dialog, in your language |
 | **Rotating prompts** | Give a prompt a list of texts instead of one — each copy serves the next entry, in order or shuffled, with a small badge showing where you are |
 | **Prompt hotkeys** | Give a prompt its own global key combination that copies — and optionally pastes — from any app, with a small keyboard badge on its tile |
-| **Tray menu** | Copy a recent or favorite prompt straight from the tray, without opening the window |
+| **Tray menu** | Copy a recent or favorite prompt straight from the tray, without opening the window; a filter field at the top searches every prompt as you type |
 | **Drag-out** | Ctrl-drag a tile, library row or floating button into any other app to drop its text |
 | **Button folders** | Drag one floating button onto another and they merge into a folder that opens in place |
 | **Chaining** | Combine several prompts into one clipboard entry |

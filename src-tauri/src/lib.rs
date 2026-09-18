@@ -1003,6 +1003,18 @@ fn tray_label_max(settings: &Settings) -> usize {
     settings.ui_values.get("trayLabelMax").copied().unwrap_or(TRAY_LABEL_MAX as f64).clamp(20.0, 80.0) as usize
 }
 
+// Whether the tray menu's filter row is drawn at all.
+fn tray_search_on(settings: &Settings) -> bool {
+    settings.ui_flags.get("traySearch") != Some(&false) // on by default
+}
+
+// How many matches the filter row may show at once. Same clamp pattern as
+// tray_label_max: an absent or out-of-range stored value falls back to the
+// shipped default instead of reaching the search list unclamped.
+fn tray_search_max(settings: &Settings) -> usize {
+    settings.ui_values.get("trayMenuMax").copied().unwrap_or(8.0).clamp(3.0, 20.0) as usize
+}
+
 // Menu text for a prompt. Control characters (a pasted newline lands in the name)
 // collapse to spaces, `&` is doubled because a Win32 menu reads a single one as a
 // mnemonic, and the cut counts CHARACTERS — a byte cut would split a multi-byte
@@ -1126,6 +1138,40 @@ fn tray_plan(
         }
     }
     out
+}
+
+// The filter row's own list: unlike tray_plan (favourites then recents, capped
+// per section) this searches EVERY prompt regardless of favourite/recent status,
+// scored the way the library ranks a plain-text search -- a name hit outranks a
+// body hit, ties broken by name. Blank query = no results (the fixed favourites/
+// recents selection stays on screen instead).
+fn tray_search_entries(prompts: &[Prompt], query: &str, cap: usize, label_max: usize) -> Vec<TrayEntry> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return Vec::new();
+    }
+    let mut hits: Vec<(u8, &Prompt)> = prompts
+        .iter()
+        .filter_map(|p| {
+            let score = if p.name.to_lowercase().contains(&q) {
+                2u8
+            } else if p.text.to_lowercase().contains(&q) {
+                1u8
+            } else {
+                0u8
+            };
+            if score > 0 {
+                Some((score, p))
+            } else {
+                None
+            }
+        })
+        .collect();
+    hits.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.name.to_lowercase().cmp(&b.1.name.to_lowercase())));
+    hits.truncate(cap);
+    hits.into_iter()
+        .map(|(_, p)| TrayEntry { id: tray_item_id(&p.id), label: tray_label(&p.name, label_max), kind: tray_kind(p), color: p.color.clone() })
+        .collect()
 }
 
 // ---------- menu icons ----------
@@ -1452,6 +1498,11 @@ struct TrayWinPlan {
     sections: Vec<TrayWinSection>,
     show_label: String,
     quit_label: String,
+    // Whether the search row at the top of the menu is drawn at all (traySearch,
+    // default on) -- tray_window_logical_height only reserves a row for it when
+    // this is true, so an unrelated off switch never grows the window for nothing.
+    search_on: bool,
+    search_ph: String,
 }
 
 fn tray_kind_str(kind: TrayKind) -> &'static str {
@@ -1471,7 +1522,7 @@ fn build_tray_win_plan(app: &AppHandle) -> TrayWinPlan {
     let state: State<Db> = match app.try_state::<Db>() {
         Some(s) => s,
         None => {
-            return TrayWinPlan { rec_entries: Vec::new(), sections: Vec::new(), show_label: String::new(), quit_label: String::new() };
+            return TrayWinPlan { rec_entries: Vec::new(), sections: Vec::new(), show_label: String::new(), quit_label: String::new(), search_on: false, search_ph: String::new() };
         }
     };
     let store = lock(&state);
@@ -1482,6 +1533,7 @@ fn build_tray_win_plan(app: &AppHandle) -> TrayWinPlan {
     let (recent_title, favs_title) = tray_section_labels(lang);
     let rec_entries_on = store.settings.ui_flags.get("screenRecord") != Some(&false)
         && store.settings.ui_flags.get("recTrayEntries") != Some(&false);
+    let search_on = tray_search_on(&store.settings);
     drop(store);
     let rec_entries = if rec_entries_on {
         match recording_phase(app) {
@@ -1511,13 +1563,23 @@ fn build_tray_win_plan(app: &AppHandle) -> TrayWinPlan {
                 .collect(),
         })
         .collect();
-    TrayWinPlan { rec_entries, sections, show_label: open_label.to_string(), quit_label: quit_label.to_string() }
+    TrayWinPlan {
+        rec_entries,
+        sections,
+        show_label: open_label.to_string(),
+        quit_label: quit_label.to_string(),
+        search_on,
+        search_ph: tray_search_placeholder(lang).to_string(),
+    }
 }
 
 // Pure, so the row/header/separator arithmetic stays testable without an app
 // handle -- mirrors tray_plan's own reasoning for why it takes plain data.
 fn tray_window_logical_height(plan: &TrayWinPlan) -> f64 {
     let mut logical_h = TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H; // show + quit always present
+    if plan.search_on {
+        logical_h += TRAY_WIN_ROW_H; // the filter row at the very top
+    }
     if !plan.rec_entries.is_empty() {
         logical_h += plan.rec_entries.len() as f64 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H;
     }
@@ -1603,6 +1665,28 @@ fn tray_window_close(app: AppHandle) {
     if let Some(win) = app.get_webview_window(TRAY_WIN_LABEL) {
         let _ = win.close();
     }
+}
+
+// The filter row's live results, replacing the fixed favourites/recents sections
+// while something is typed (ui/tray.js swaps them back once the field is empty).
+// An empty query or the flag being off both return nothing on purpose -- the
+// caller treats "no rows" as "show the fixed selection instead".
+#[tauri::command]
+fn tray_window_search(app: AppHandle, query: String) -> Vec<TrayWinEntry> {
+    let state: State<Db> = match app.try_state::<Db>() {
+        Some(s) => s,
+        None => return Vec::new(),
+    };
+    let store = lock(&state);
+    if !tray_search_on(&store.settings) {
+        return Vec::new();
+    }
+    let cap = tray_search_max(&store.settings);
+    let label_max = tray_label_max(&store.settings);
+    let hits = tray_search_entries(&store.prompts, &query, cap, label_max);
+    hits.into_iter()
+        .map(|e| TrayWinEntry { id: e.id, label: e.label, kind: tray_kind_str(e.kind).to_string(), color: e.color })
+        .collect()
 }
 
 // A result picked in the quick-launcher runs the very same activation the tray
@@ -2295,6 +2379,25 @@ fn tray_section_labels(lang: &str) -> (&'static str, &'static str) {
         "tr" => ("Son kullanılanlar", "Favoriler"),
         "ro" => ("Utilizate recent", "Favorite"),
         _ => ("Recently used", "Favorites"),
+    }
+}
+
+// Placeholder text of the tray menu's own filter row -- same reasoning as
+// tray_labels above: the tray window is a webview, but its text still lives
+// here so every tray string is translated in one place.
+fn tray_search_placeholder(lang: &str) -> &'static str {
+    match lang {
+        "de" => "Suchen…",
+        "es" => "Buscar…",
+        "it" => "Cerca…",
+        "pt" => "Pesquisar…",
+        "pl" => "Szukaj…",
+        "zh" => "搜索…",
+        "ja" => "検索…",
+        "nl" => "Zoeken…",
+        "tr" => "Ara…",
+        "ro" => "Caută…",
+        _ => "Search…",
     }
 }
 
@@ -26989,6 +27092,7 @@ pub fn run() {
             tray_window_plan,
             tray_window_activate,
             tray_window_close,
+            tray_window_search,
             copy_prompt,
             rotation_peek,
             rotation_commit,
@@ -38755,6 +38859,47 @@ mod tests {
     }
 
     #[test]
+    fn tray_search_defaults_on_with_a_clamped_menu_max() {
+        let s = Settings::default();
+        assert!(tray_search_on(&s), "the filter row ships on");
+        assert_eq!(tray_search_max(&s), 8);
+
+        let mut off = Settings::default();
+        off.ui_flags.insert("traySearch".into(), false);
+        assert!(!tray_search_on(&off));
+
+        let mut clamped_hi = Settings::default();
+        clamped_hi.ui_values.insert("trayMenuMax".into(), 999.0);
+        assert_eq!(tray_search_max(&clamped_hi), 20);
+
+        let mut clamped_lo = Settings::default();
+        clamped_lo.ui_values.insert("trayMenuMax".into(), 0.0);
+        assert_eq!(tray_search_max(&clamped_lo), 3);
+    }
+
+    #[test]
+    fn tray_search_ranks_a_name_hit_above_a_body_hit_and_respects_the_cap() {
+        let name_hit = tray_prompt("1", "Alpha project", false);
+        let mut body_hit = tray_prompt("2", "Zzz", false);
+        body_hit.text = "notes mentioning alpha inside the body".into();
+        let mut no_hit = tray_prompt("3", "Beta", false);
+        no_hit.text = "nothing relevant here".into();
+        let prompts = vec![name_hit.clone(), body_hit.clone(), no_hit.clone()];
+
+        let hits = tray_search_entries(&prompts, "alpha", 10, TRAY_LABEL_MAX);
+        assert_eq!(tray_names(&hits), vec!["Alpha project", "Zzz"], "a name match must outrank a body-only match");
+
+        let capped = tray_search_entries(&prompts, "a", 1, TRAY_LABEL_MAX); // "a" is in every name/body above
+        assert_eq!(capped.len(), 1, "the cap must be respected even when more prompts match");
+    }
+
+    #[test]
+    fn tray_search_is_empty_for_a_blank_query() {
+        let prompts = vec![tray_prompt("1", "Alpha", false)];
+        assert!(tray_search_entries(&prompts, "   ", 10, TRAY_LABEL_MAX).is_empty());
+    }
+
+    #[test]
     fn zoom_min_size_grows_with_zoom_and_shrinks_back() {
         let big_screen = (10_000, 10_000);
         assert_eq!(zoom_min_size(1.0, big_screen), (680, 460));
@@ -38908,7 +39053,7 @@ mod tests {
     fn tray_window_height_accounts_for_every_row_header_and_separator() {
         let entry = |id: &str| TrayWinEntry { id: id.into(), label: id.into(), kind: "text".into(), color: String::new() };
         // No sections at all: just the two terminal rows, plus the card's own padding.
-        let empty = TrayWinPlan { rec_entries: Vec::new(), sections: Vec::new(), show_label: "Show".into(), quit_label: "Quit".into() };
+        let empty = TrayWinPlan { rec_entries: Vec::new(), sections: Vec::new(), show_label: "Show".into(), quit_label: "Quit".into(), search_on: false, search_ph: String::new() };
         assert_eq!(tray_window_logical_height(&empty), TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H);
 
         // One section, two entries: its own header, both rows, and the one separator
@@ -38918,6 +39063,8 @@ mod tests {
             sections: vec![TrayWinSection { title: "Favorites".into(), entries: vec![entry("a"), entry("b")] }],
             show_label: "Show".into(),
             quit_label: "Quit".into(),
+            search_on: false,
+            search_ph: String::new(),
         };
         let want_one = TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H + TRAY_WIN_HEAD_H + 2.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H;
         assert_eq!(tray_window_logical_height(&one_section), want_one);
@@ -38932,12 +39079,36 @@ mod tests {
             ],
             show_label: "Show".into(),
             quit_label: "Quit".into(),
+            search_on: false,
+            search_ph: String::new(),
         };
         let want_two = TRAY_WIN_CHROME
             + 2.0 * TRAY_WIN_ROW_H // show + quit
             + (TRAY_WIN_HEAD_H + 1.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H) // 1-entry section
             + (TRAY_WIN_HEAD_H + 3.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H); // 3-entry section
         assert_eq!(tray_window_logical_height(&two_sections), want_two);
+    }
+
+    #[test]
+    fn tray_window_height_adds_one_row_for_search_when_on() {
+        // search_on toggles ONE extra row (the filter field), on top of whatever
+        // sections/rec_entries already contribute -- proven here against the
+        // otherwise-identical plan so a future change to the row math cannot
+        // silently forget the search row.
+        let base = TrayWinPlan {
+            rec_entries: Vec::new(),
+            sections: vec![TrayWinSection { title: "Favorites".into(), entries: vec![TrayWinEntry { id: "a".into(), label: "a".into(), kind: "text".into(), color: String::new() }] }],
+            show_label: "Show".into(),
+            quit_label: "Quit".into(),
+            search_on: false,
+            search_ph: String::new(),
+        };
+        let with_search = TrayWinPlan { search_on: true, ..base.clone() };
+        assert_eq!(
+            tray_window_logical_height(&with_search) - tray_window_logical_height(&base),
+            TRAY_WIN_ROW_H,
+            "turning the search row on must add exactly one row of height, no more"
+        );
     }
 
     #[test]
@@ -38953,6 +39124,8 @@ mod tests {
             ],
             show_label: "Show".into(),
             quit_label: "Quit".into(),
+            search_on: false,
+            search_ph: String::new(),
         };
         let dpi = 1.5;
         let uncapped = tray_window_logical_height(&full) * dpi;

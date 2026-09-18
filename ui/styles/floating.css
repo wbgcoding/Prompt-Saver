@@ -801,6 +801,21 @@ body.tray-menu-body {
   overflow-y: auto;
   overflow-x: hidden;
 }
+.tray-menu-search {
+  flex: 0 0 30px;
+  box-sizing: border-box;
+  margin: 0 10px 6px;
+  padding: 0 8px;
+  border: none;
+  border-bottom: 1px solid var(--menu-line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--menu-fg);
+  font: inherit;
+  font-size: 13px;
+}
+.tray-menu-search:focus { outline: none; border-bottom-color: var(--pill-bg, var(--menu-fg)); }
+.tray-menu-search::placeholder { color: var(--menu-fg); opacity: 0.5; }
 .tray-menu-head {
   flex: 0 0 22px;
   box-sizing: border-box;
