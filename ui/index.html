@@ -493,6 +493,26 @@
     </div>
   </div>
 
+  <!-- Compare view: any two entries side by side, shared by the library's/tile's
+       free "Compare" action -- the duplicate finder above keeps its own inline
+       columns for a found pair. -->
+  <div id="compare-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 class="modal-title" data-i18n="compareBtn">Compare</h2>
+        <div class="modal-head-actions">
+          <button id="compare-close" class="icon-btn" data-i18n-aria="close">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div id="compare-body" class="dup-cols compare-cols"></div>
+      <div id="compare-actions" class="dup-actions compare-actions"></div>
+    </div>
+  </div>
+
   <!-- Trash — everything delete_prompt/batch_prompts("delete") moved out of the grid -->
   <div id="trash-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal">
@@ -591,6 +611,9 @@
           <option value="json" data-i18n="exportJson">JSON export</option>
         </select>
         <button id="lib-batch-export" type="button" class="ghost-btn" data-i18n="exportBtn">Export</button>
+        <!-- Compares the two selected entries -- only meaningful at exactly two
+             selected, updateBatchBar disables it otherwise. -->
+        <button id="lib-batch-compare" type="button" class="ghost-btn" data-i18n="compareBtn">Compare</button>
         <button id="lib-batch-delete" type="button" class="ghost-btn danger-btn" data-i18n="delete">Delete</button>
       </div>
     </div>
@@ -1307,6 +1330,8 @@
          video editor instead of the normal text editor. -->
     <button data-act="editVideo" role="menuitem" class="hidden" data-i18n="editVideo">Edit video</button>
     <button data-act="duplicate" role="menuitem" data-i18n="duplicate">Duplicate</button>
+    <!-- Picks the second entry to compare through the library's own selection mode. -->
+    <button data-act="compareWith" role="menuitem" data-i18n="compareWithMenu">Compare with…</button>
     <button data-act="hide" role="menuitem" data-i18n="hideInView">Hide in this view</button>
     <!-- Hidden unless multiViewPrompt is on and there is another view to place this into. -->
     <button data-act="views" role="menuitem" data-i18n="alsoShowIn">Also show in…</button>

@@ -6480,6 +6480,84 @@ async fn restore_version(app: AppHandle, state: State<'_, Db>, version_id: i64) 
     Ok(restored)
 }
 
+// The prompt "restore as new" builds from a version snapshot. Name and text/variants
+// come from the version itself; colour and image come from the CURRENT prompt instead,
+// because prompt_versions never stored them (see PromptVersion) — there is nothing
+// "older" to restore for either one. Everything else starts fresh, the same as any
+// other new entry, so this stays a small addition next to add_prompt rather than a
+// second copy of its whole field list.
+fn build_restored_prompt(source: &Prompt, version_name: &str, version_text: String, version_variants: Vec<String>, suffix: &str) -> Prompt {
+    let variants = sanitize_variants(version_variants);
+    let rotate_mode = sanitize_rotate_mode(String::new(), &variants);
+    let name = if suffix.is_empty() { version_name.to_string() } else { format!("{version_name} {suffix}") };
+    Prompt {
+        id: gen_id(),
+        trashed_at: 0,
+        name,
+        text: version_text,
+        color: source.color.clone(),
+        image: source.image.clone(),
+        show_image: source.show_image,
+        copy_image: source.copy_image,
+        file_path: String::new(),
+        pdf_page: 0,
+        icon_path: String::new(),
+        caption: String::new(),
+        caption_size: 0,
+        font: String::new(),
+        font_size: 0,
+        favorite: false,
+        tags: Vec::new(),
+        notes: String::new(),
+        hotkey: String::new(),
+        hotkey_paste: String::new(),
+        variants,
+        rotate_mode,
+        rotate_auto: false,
+    }
+}
+
+// Keeps a version snapshot AND the current entry: unlike restore_version (which
+// overwrites), this adds a brand-new entry so the two can be compared side by side.
+// The whole thing is one backend command, not a form the frontend prefills and the
+// user then has to save by hand, so it reuses add_prompt's own grid-placement path
+// and never fires an event add_prompt itself would not.
+#[tauri::command]
+async fn restore_version_as_new(app: AppHandle, state: State<'_, Db>, version_id: i64, suffix: String) -> Result<Option<Prompt>, String> {
+    let created = {
+        let mut store = lock(&state);
+        let record = match db_conn(&app).and_then(|c| db_get_version(&c, version_id)) {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+        let (pid, name, text, variants) = record;
+        let Some(source) = store.prompts.iter().find(|p| p.id == pid).cloned() else {
+            return Ok(None);
+        };
+        let prompt = build_restored_prompt(&source, &name, text, variants, &suffix);
+        // Same placement as add_prompt: next free cell of the active view, which in
+        // practice is the view the user was looking at when they opened this
+        // prompt's history — landing the copy right where the original lives.
+        let folder_cells = active_view_folder_cells(&store.settings);
+        let view = store.settings.active_view_mut();
+        if let Some(cell) = first_free_cell_excluding(view, &folder_cells) {
+            let key = grid_key(view.cols, view.rows);
+            view.layouts.entry(key).or_default().insert(prompt.id.clone(), cell);
+        }
+        view.members.push(prompt.id.clone());
+        store.prompts.push(prompt.clone());
+        if !save_prompts(&app, &store) {
+            store.prompts.pop();
+            store.settings.active_view_mut().members.retain(|m| *m != prompt.id);
+            return Err("save-failed".into());
+        }
+        save_settings(&app, &store.settings);
+        prompt
+    };
+    rebuild_tray(&app);
+    Ok(Some(created))
+}
+
 // Star / unstar a prompt in the library.
 #[tauri::command]
 fn set_favorite(app: AppHandle, state: State<Db>, id: String, favorite: bool) -> Result<(), String> {
@@ -25559,6 +25637,7 @@ pub fn run() {
             list_versions,
             last_edited_map,
             restore_version,
+            restore_version_as_new,
             usage_stats,
             find_duplicates,
             ignore_dups,
@@ -35639,6 +35718,33 @@ mod tests {
         assert_eq!(name, "Name");
         assert_eq!(text, "Entry one");
         assert_eq!(restored_variants, variants);
+    }
+
+    #[test]
+    fn restore_version_as_new_keeps_the_source_and_starts_fresh_history() {
+        let mut source = sample_prompts().remove(0);
+        source.color = "#112233".to_string();
+        source.image = "data:image/png;base64,AAA".to_string();
+        source.favorite = true;
+        source.tags = vec!["work".to_string()];
+        let original_text = source.text.clone();
+        let variants = vec!["Second".to_string()];
+        let created = build_restored_prompt(&source, "Old name", "Old text".to_string(), variants.clone(), "(from 2026-01-01)");
+        assert_eq!(source.text, original_text, "building the copy must never touch the source prompt");
+        assert_eq!(created.name, "Old name (from 2026-01-01)");
+        assert_eq!(created.text, "Old text");
+        assert_eq!(created.variants, variants);
+        assert_eq!(created.color, source.color, "the colour marker comes from the current prompt, not the version");
+        assert_eq!(created.image, source.image, "the image comes from the current prompt, not the version");
+        assert_ne!(created.id, source.id);
+        assert!(!created.favorite, "a restored-as-new copy starts unstarred like any other new entry");
+        assert!(created.tags.is_empty());
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '');",
+        )
+        .unwrap();
+        assert!(db_list_versions(&conn, &created.id).is_empty(), "a restored-as-new entry starts with no history of its own");
     }
 
     #[test]

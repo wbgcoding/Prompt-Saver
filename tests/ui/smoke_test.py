@@ -3158,6 +3158,41 @@ PROBE = """
       const cmHist = document.getElementById('confirm-modal');
       if (!cmHist.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
     }
+    // 408: "Save as new entry" leaves the original prompt alone and adds the
+    // snapshot's content as its own new entry instead, closing the editor and
+    // showing it selected so the user sees what happened.
+    if (!await openEditor('p6')) {
+      out.errors.push('408: the version-history prompt did not open in the editor');
+    } else {
+      document.getElementById('modal-advanced-head').click();
+      await sleep(250);
+      const rows408 = [...document.querySelectorAll('#modal-history-body .hist-row')];
+      if (rows408.length !== 2) {
+        out.errors.push('408: the history panel shows ' + rows408.length + ' versions instead of 2');
+      } else {
+        const restoreNewBtn = rows408[0].querySelector('.hist-restore-new');
+        if (!restoreNewBtn) {
+          out.errors.push('408: the newest version row has no "save as new entry" button');
+        } else {
+          restoreNewBtn.click();
+          await sleep(400);
+          if (!document.getElementById('modal').classList.contains('hidden')) {
+            out.errors.push('408: the editor stayed open after saving the version as a new entry');
+          }
+          const toastEl408 = document.getElementById('toast');
+          if ((toastEl408.textContent || '').trim() !== 'New entry created') {
+            out.errors.push('408: no "new entry created" toast after saving the version as new: ' + toastEl408.textContent);
+          }
+          await click('library-btn');
+          const expectedName = 'Prompt 7 (version from';
+          const hit = [...document.querySelectorAll('#library-list .lib-name')].some(e => e.textContent.startsWith(expectedName));
+          if (!hit) {
+            out.errors.push('408: no new library entry named like "' + expectedName + '…" after saving the version as new');
+          }
+          await click('library-close');
+        }
+      }
+    }
     // 79: version history for a rotating prompt shows every entry, numbered, each
     // with its own diff, an entry-count chip on the row, and a name-change line
     // wherever the snapshot's name differs from what it became next.
@@ -3263,6 +3298,12 @@ PROBE = """
         if (document.querySelectorAll('#dupes-body .dup-col').length !== 2) {
           out.errors.push('a duplicate group does not show both of its entries');
         }
+        // A found pair now shares the same word-diff engine as the free compare
+        // view -- its two columns must highlight what differs, not just show
+        // plain text side by side.
+        if (!document.querySelector('#dupes-body .dup-col .diff-add, #dupes-body .dup-col .diff-del')) {
+          out.errors.push('a duplicate pair does not highlight its word differences');
+        }
         layoutScan('duplicates');
         mustReach('duplicates', '#dupes-body .dup-keep, #dupes-modal .modal-head-actions > button');
         await click('dupes-close');
@@ -3272,6 +3313,79 @@ PROBE = """
     await click('expert-back');
     document.getElementById('settings').classList.add('hidden');
     await sleep(150);
+    // Compare view detached from the duplicate finder: the library's own
+    // selection reaches it too, for two entries the finder never flagged.
+    await click('library-btn');
+    document.getElementById('library-select-btn').click();
+    await sleep(150);
+    document.querySelector('#library-list .lib-item[data-id="p0"]')?.click();
+    document.querySelector('#library-list .lib-item[data-id="p2"]')?.click();
+    await sleep(150);
+    const cmpBtn = document.getElementById('lib-batch-compare');
+    if (!cmpBtn || cmpBtn.disabled) {
+      out.errors.push('the library compare button is not enabled with exactly two entries selected');
+    } else {
+      cmpBtn.click();
+      await sleep(300);
+      const cmpModal = document.getElementById('compare-modal');
+      if (cmpModal.classList.contains('hidden')) {
+        out.errors.push('the compare view did not open for two selected entries');
+      } else {
+        const cmpCols = document.querySelectorAll('#compare-body .compare-col');
+        if (cmpCols.length !== 2) {
+          out.errors.push('the compare view does not show both entries: ' + cmpCols.length + ' columns');
+        }
+        if (!document.querySelector('#compare-body .diff-add, #compare-body .diff-del')) {
+          out.errors.push('the compare view does not highlight the word differences between the two entries');
+        }
+        layoutScan('compare view');
+        mustReach('compare view', '#compare-actions button');
+        // Position, not text, so this still finds the button under the Italian
+        // pass below (takeLeft, takeRight, close, in that fixed append order).
+        const takeRightBtn = document.querySelectorAll('#compare-actions button')[1];
+        if (!takeRightBtn) {
+          out.errors.push('the compare view has no "take right" action');
+        } else {
+          const leftId = 'p0', rightId = 'p2';
+          const leftText = PROMPTS.find(p => p.id === leftId).text;
+          takeRightBtn.click();
+          await sleep(300);
+          if (!document.getElementById('compare-modal').classList.contains('hidden')) {
+            out.errors.push('the compare view stayed open after taking a side');
+          }
+          // "Take right" pushes the LEFT entry's content onto the right one.
+          if (PROMPTS.find(p => p.id === rightId).text !== leftText) {
+            out.errors.push('"take right" did not overwrite the right entry with the left one\\'s text');
+          }
+        }
+      }
+    }
+    document.getElementById('library-select-btn').classList.contains('active') && document.getElementById('library-select-btn').click();
+    await click('library-close');
+    // The same view, reached from a tile's own context menu instead: picks the
+    // first entry, then the library's normal selection is how the second is chosen.
+    const tile3 = [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === 'p3');
+    if (!tile3) {
+      out.errors.push('no tile found to test "compare with" from its context menu');
+    } else {
+      tile3.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(200);
+      const cmpWithBtn = document.querySelector('#ctx [data-act="compareWith"]');
+      if (!cmpWithBtn) {
+        out.errors.push('the tile context menu has no "compare with" action');
+      } else {
+        cmpWithBtn.click();
+        await sleep(300);
+        if (document.getElementById('library').classList.contains('hidden')) {
+          out.errors.push('"compare with" did not open the library to pick a second entry');
+        }
+        if (!document.querySelector('#library-list .lib-item[data-id="p3"]')?.classList.contains('lib-selected')) {
+          out.errors.push('"compare with" did not pre-select the entry it was opened from');
+        }
+        document.getElementById('library-select-btn').classList.contains('active') && document.getElementById('library-select-btn').click();
+        await click('library-close');
+      }
+    }
     // The colour picker must fit the window at ANY size: it may neither scroll (the
     // knob would be out of reach) nor spill (the hex field gets cut off).
     if (await openEditor('p1')) {

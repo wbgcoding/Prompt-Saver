@@ -708,6 +708,39 @@ const RESULTS = {
     const p = PROMPTS.find((x) => x.id === (a && a.id)) || PROMPTS[0];
     return { ...p, image: STUB_IMAGES.get(p.id) || "" };
   },
+  // 408: "Save as new entry" -- looks the version id up against the same P31/79
+  // fixtures list_versions already hands out, then pushes a genuinely new prompt
+  // onto the shared PROMPTS array so a following get_state actually shows it.
+  restore_version_as_new: (a) => {
+    const byId = {
+      1: { pid: "p6", name: "Prompt 7", text: "Example draft text number 7.", variants: [] },
+      2: { pid: "p6", name: "Prompt 7", text: "Example draft body number 7.", variants: [] },
+      3: { pid: "p10", name: "Prompt eleven (old name)", text: "Example prompt body number 11, first entry.", variants: [] },
+      4: {
+        pid: "p10", name: "Prompt 11",
+        text: "Example prompt body number 11, second entry.",
+        variants: ["Example prompt body number 11, third entry."],
+      },
+    };
+    const v = byId[a && a.versionId];
+    const source = v && PROMPTS.find((p) => p.id === v.pid);
+    if (!v || !source) return null;
+    const suffix = (a && a.suffix) || "";
+    const created = {
+      ...source,
+      id: "restored-" + a.versionId,
+      name: suffix ? v.name + " " + suffix : v.name,
+      text: v.text,
+      variants: v.variants,
+      favorite: false,
+      tags: [],
+      notes: "",
+      hotkey: "",
+      hotkey_paste: "",
+    };
+    PROMPTS.push(created);
+    return created;
+  },
   // 91: trash — restore/purge mutate the shared TRASH/PROMPTS fixtures so the dialog
   // reflects real effects, the way batch_prompts already mirrors "color" onto PROMPTS.
   list_trash: () => JSON.parse(JSON.stringify(TRASH)),
@@ -812,6 +845,18 @@ const RESULTS = {
     if (!p) return null;
     if (a.hotkey !== undefined) p.hotkey = a.hotkey;
     if (a.hotkeyPaste !== undefined) p.hotkey_paste = a.hotkeyPaste;
+    // 410: the free compare view's "take" actions go through this same command --
+    // mirrors the real backend, which always overwrites name/text/colour/variants/
+    // rotate mode and only touches image/show/copy when the caller sends them.
+    if (a.name !== undefined) p.name = a.name;
+    if (a.text !== undefined) p.text = a.text;
+    if (a.color !== undefined) p.color = a.color;
+    if (a.variants !== undefined) p.variants = a.variants;
+    if (a.rotateMode !== undefined) p.rotate_mode = a.rotateMode;
+    if (a.rotateAuto !== undefined) p.rotate_auto = a.rotateAuto;
+    if (a.image !== undefined) p.image = a.image;
+    if (a.showImage !== undefined) p.show_image = a.showImage;
+    if (a.copyImage !== undefined) p.copy_image = a.copyImage;
     return p;
   },
   set_active_view: (a) => {

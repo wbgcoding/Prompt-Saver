@@ -3018,7 +3018,7 @@ select.modal-input { padding-right: 30px; }
 .hist-expand:hover { color: var(--fg); background: var(--surface-2); }
 .hist-expand svg { transition: transform var(--transition); }
 .hist-row.open .hist-expand svg { transform: rotate(180deg); }
-.hist-restore { flex: 0 0 auto; padding: 3px 8px; font-size: 12px; }
+.hist-restore, .hist-restore-new { flex: 0 0 auto; padding: 3px 8px; font-size: 12px; }
 /* Chip beside the preview when a snapshot carries rotation entries, so the row
    itself hints there is more than one text before the user even expands it. */
 .hist-entries { flex: 0 0 auto; font-size: 10.5px; color: var(--muted); background: var(--surface-2); border-radius: 999px; padding: 1px 6px; }
@@ -3143,9 +3143,20 @@ select.modal-input { padding-right: 30px; }
 .dup-col { display: flex; flex-direction: column; gap: 4px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 .dup-name { font-size: 13px; font-weight: 600; color: var(--fg); }
 .dup-meta { font-size: 11px; color: var(--muted); }
-.dup-text { font-size: 12px; color: var(--fg); white-space: pre-wrap; max-height: 120px; overflow-y: auto; opacity: 0.85; }
+/* flow-root, not the plain block a div defaults to: a diff-highlighted line packs
+   several inline spans with no gap between them, and a block box's own layout
+   scan treats any two element children of a block as stacked rows -- flow-root
+   keeps the same visual flow while reading as its own kind of box instead. */
+.dup-text { display: flow-root; font-size: 12px; color: var(--fg); white-space: pre-wrap; max-height: 120px; overflow-y: auto; opacity: 0.85; }
 .dup-keep { align-self: flex-start; padding: 3px 10px; font-size: 12px; }
 .dup-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+/* The free compare view reuses .dup-cols/.dup-col/.dup-actions above (same
+   layout, same word-diff engine) and only adds its own head/image bits. */
+.compare-cols { padding: 12px; }
+.compare-col-head { display: flex; align-items: center; gap: 6px; }
+.compare-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--border); flex: 0 0 auto; }
+.compare-image { max-width: 100%; max-height: 120px; object-fit: contain; border-radius: 6px; }
+.compare-actions { gap: 8px; }
 
 /* Backups & restore. */
 /* Date/time diagnostic card: date over time, no comma, a touch larger for legibility. */
