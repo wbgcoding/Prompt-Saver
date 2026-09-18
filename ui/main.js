@@ -121,6 +121,8 @@ let modalSession = 0;
 let modalOpener = null;
 let modalInitial = ""; // snapshot of the open modal's content (unsaved-change guard)
 let modalSaving = false; // re-entry guard, a double-click/double-Enter must not fire two saves
+let draftTimer = null; // editor-draft autosave tick, armed by openModal, disarmed by closeModal
+let draftLastSaved = null; // fingerprint of the last written draft, so an unchanged tick skips the write
 let ctxId = null;
 let drag = null;
 let libQuery = ""; // prompt library search text
@@ -1354,6 +1356,10 @@ const FLAG_LABELS = {
   // A second copy entry that puts both the Markdown text and its rendered
   // form on the clipboard, for apps that read CF_HTML. Ships ON.
   copyFormatted: "flagCopyFormatted",
+  // Autosaves the open editor's text every editorDraftSecs seconds so a crash
+  // or a closed window never loses unsaved work; offers to restore the draft
+  // once, at the next start. Ships ON.
+  editorDraft: "flagEditorDraft",
 };
 const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -1737,6 +1743,8 @@ const EXPERT_VALUES = {
   // rather than dupFinder since the hint is the more commonly-hit path (it
   // fires on every save); no OR-gate exists for a row two flags both use.
   similarThreshold: { label: "valSimilarThreshold", min: 70, max: 99, step: 1, def: 85, unit: "%", gate: "similarHint" },
+  // How often the open editor writes its autosave draft.
+  editorDraftSecs: { label: "valEditorDraftSecs", min: 2, max: 30, step: 1, def: 5, unit: "s", gate: "editorDraft" },
   // How long a confirm button (delete etc.) stays armed before it auto-resets.
   disarmMs: { label: "valDisarmMs", min: 1000, max: 10000, step: 500, def: 3000, unit: "ms" },
   // Matches append_crash_log's own pre-existing hardcoded rotation cap (256 KB).
@@ -2087,7 +2095,7 @@ const EXPERT_TABS = [
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
     // The editor: what it shows beside the text box. Preview and highlighter belong together — the
     // highlighter only ever paints inside the preview.
-    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, { key: "copyFormatted", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen"], dropdowns: ["counterUnits"] },
+    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, { key: "copyFormatted", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard", "editorDraft"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen", "editorDraftSecs"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
     { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyBubble", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
     // Floating buttons and the two kinds of folder they can form.
@@ -2316,7 +2324,7 @@ const EXPERT_TIPS = [
   "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veOvColor", "veOvFont",
   "veDefaultPanel", "videoExportDir", "veExtraClipsMax",
   "numFieldWheel", "zoomStepPct", "zoomMaxPct", "errorLogKeepKb", "veOvDupOffsetPx", "editSnapTolerancePx",
-  "editStateKeep", "editStateSaveSecs", "editStateKeepDays", "editorOpenMaxMb",
+  "editStateKeep", "editStateSaveSecs", "editStateKeepDays", "editorOpenMaxMb", "editorDraft", "editorDraftSecs",
   "snipQuality", "snipSaveQuality", "snipDelayMs",
   "snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx",
   "snipArrowHeadScale", "snipDefaultColor", "snipTextPx", "snipTextOutlinePx", "snipPixelBlock", "snipSpotlightDim",
@@ -7599,6 +7607,51 @@ function maybeCloseOnCopy() {
   try { window.__TAURI__?.window?.getCurrentWindow?.()?.hide?.().catch?.(() => {}); } catch { /* no-op */ }
 }
 
+// ---- Editor draft autosave ----
+// Only the text side (name/text/variants) ever gets drafted -- an attached
+// image is never re-derived from a crash draft, it stays with the prompt
+// itself. One row on the backend (id "current"), since only one editor can be
+// open at a time; the fingerprint check below is what keeps an unchanged tick
+// from writing that row over and over while the user reads rather than types.
+function draftEditorFields() {
+  if (!modalState) return null;
+  const rotating = rotationUiOn();
+  const hasVariants = rotationActive();
+  const entries = rotating
+    ? modalState.rotateEntries
+    : hasVariants
+      ? [modal.text.value, ...modalState.rotateEntries.slice(1)]
+      : [modal.text.value];
+  const promptId = modalState.mode === "edit" ? modalState.id : "neu";
+  return { promptId, name: modal.name.value, text: entries[0] || "", variants: JSON.stringify(entries.slice(1)) };
+}
+
+async function saveDraftNow() {
+  const fields = draftEditorFields();
+  if (!fields) return;
+  const fp = JSON.stringify(fields);
+  if (fp === draftLastSaved) return; // nothing changed since the last write
+  draftLastSaved = fp;
+  try {
+    await invoke("save_editor_draft", fields);
+  } catch (_) {
+    draftLastSaved = null; // let the next tick retry a failed write
+  }
+}
+
+function armDraftAutosave() {
+  if (draftTimer) { clearInterval(draftTimer); draftTimer = null; }
+  draftLastSaved = null;
+  if (!flag("editorDraft")) return;
+  const secs = Math.min(30, Math.max(2, val("editorDraftSecs") || 5));
+  draftTimer = setInterval(saveDraftNow, secs * 1000);
+}
+
+function disarmDraftAutosave() {
+  if (draftTimer) { clearInterval(draftTimer); draftTimer = null; }
+  draftLastSaved = null;
+}
+
 function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", pdfPage = 0, iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", variants = [], rotateMode = "", rotateAuto = false, title, targetCell }) {
   modalSession++;
   modalOpener = document.activeElement;
@@ -7641,6 +7694,7 @@ function openModal({ mode, id, name = "", text = "", color = "", image = "", sho
   modal.root.classList.remove("hidden");
   syncModalImageUi(mode);
   modalInitial = modalSnapshot();
+  armDraftAutosave();
   modal.name.focus();
   modal.name.select();
 }
@@ -11020,6 +11074,11 @@ function closeModal() {
   closeTagPop();
   modal.root.classList.add("hidden");
   modal.video.removeAttribute("src"); // stop a playing preview
+  // An orderly close -- save or deliberate cancel/discard, every caller funnels
+  // through here -- drops the autosave draft right away rather than leaving it
+  // for the boot-time recovery check to find and offer back for nothing.
+  disarmDraftAutosave();
+  if (modalState) invoke("discard_editor_draft").catch(() => {});
   modalState = null;
   modalInitial = "";
   // A tile the editor was opened from can be gone by the time it closes (the
@@ -19042,6 +19101,40 @@ async function maybeOpenFirstRunTour(sealWarned) {
   await openTour({ firstRun: true });
 }
 
+// A crash draft from a previous session, asked about exactly once at the next
+// start (never again on later editor opens this same session). "No" removes
+// it right away rather than leaving it to resurface on the next launch too.
+async function maybeOfferEditorDraftRecovery() {
+  if (!flag("editorDraft")) return;
+  let draft = null;
+  try { draft = await invoke("load_editor_draft"); } catch (_) { return; }
+  if (!draft) return;
+  const when = new Date(draft.updatedAt * 1000).toLocaleString();
+  const preview = (draft.name || draft.text || "").split("\n").slice(0, 2).join(" ").trim().slice(0, 140);
+  const restore = await confirmDialog({
+    title: t("draftRecoverTitle"),
+    message: t("draftRecoverBody").replace("{time}", when).replace("{preview}", preview),
+    confirmLabel: t("draftRecoverRestore"),
+    cancelLabel: t("draftRecoverDiscard"),
+    danger: false,
+  });
+  if (!restore) {
+    await invoke("discard_editor_draft").catch(() => {});
+    return;
+  }
+  let variants = [];
+  try { variants = JSON.parse(draft.variants || "[]"); } catch (_) { variants = []; }
+  if (draft.promptId && draft.promptId !== "neu") {
+    let p = null;
+    try { p = await invoke("get_prompt", { id: draft.promptId }); } catch (_) { p = null; }
+    if (p) {
+      openModal({ ...promptToModal(p), mode: "edit", id: draft.promptId, name: draft.name, text: draft.text, variants: variants.length ? variants : (p.variants || []) });
+      return;
+    }
+  }
+  openModal({ mode: "create", name: draft.name, text: draft.text, variants, title: t("nameModalTitle") });
+}
+
 // ---- Init ----
 // Re-read settings from the backend and apply the global, order-sensitive parts
 // (palette, language, sizing, theme). Shared by init() and reloadEverything() so a
@@ -19186,6 +19279,7 @@ async function init() {
         const sealWarned = await warnStoreUnsealed();
         await warnSettingsWriteFailed();
         await maybeOpenFirstRunTour(sealWarned);
+        await maybeOfferEditorDraftRecovery();
       });
     };
     setTimeout(reveal, 1500);

@@ -11639,6 +11639,79 @@ window.__WHATS_NEW_FIXTURE__ = {
 </script>
 """
 
+# 443: a crash draft found at the next start offers to restore it exactly
+# once; declining discards it right away, and a later ordinary editor open
+# must never ask about it again (the offer is a one-time boot check, not tied
+# to openModal).
+EDITOR_DRAFT_PROBE = """
+<script>
+window.__EDITOR_DRAFT_FIXTURE__ = {
+  promptId: "neu",
+  name: "",
+  text: "Recovered body text that should show up in the preview.",
+  variants: "[]",
+  updatedAt: Math.floor(Date.now() / 1000) - 120,
+};
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
+  try {
+    const cm = document.getElementById('confirm-modal');
+    // Earlier boot dialogs (the store-takeover offer, an unsealed-store
+    // warning) can show first -- dismiss whichever of those come up until the
+    // recovery question itself, identified by its own title, appears.
+    let shown = false;
+    for (let i = 0; i < 60 && !shown; i++) {
+      await sleep(300);
+      if (cm.classList.contains('hidden')) continue;
+      const title = document.getElementById('confirm-title').textContent;
+      if (/restore/i.test(title)) { shown = true; break; }
+      document.getElementById('confirm-cancel').click();
+    }
+    if (!shown) {
+      errs.push('443: no recovery question appeared for a found draft');
+    } else {
+      const title = document.getElementById('confirm-title').textContent.trim();
+      const msg = document.getElementById('confirm-msg').textContent.trim();
+      if (!/restore/i.test(title)) errs.push('443: recovery dialog title does not read as a restore question: ' + title);
+      if (!msg.includes('Recovered body text')) errs.push('443: recovery dialog does not preview the draft text: ' + msg);
+      const loadCalls = calls().filter((c) => c === 'load_editor_draft').length;
+      if (loadCalls !== 1) errs.push('443: load_editor_draft was called ' + loadCalls + ' times at boot, expected exactly once');
+
+      document.getElementById('confirm-cancel').click(); // decline the restore
+      await sleep(200);
+      if (!cm.classList.contains('hidden')) errs.push('443: declining the recovery question left it open');
+      if (!calls().includes('discard_editor_draft')) errs.push('443: declining the recovery question never discarded the draft');
+
+      // An ordinary editor open right afterward must never ask again.
+      const input = document.getElementById('input');
+      const save = document.getElementById('save');
+      input.value = 'A fresh prompt typed after declining the draft.';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      save.click();
+      await sleep(200);
+      const modal = document.getElementById('modal');
+      if (modal.classList.contains('hidden')) errs.push('443: the editor did not open for the fresh prompt');
+      if (!cm.classList.contains('hidden')) errs.push('443: opening the editor normally re-asked the recovery question');
+      document.getElementById('modal-close-x').click();
+      await sleep(200);
+      if (!cm.classList.contains('hidden')) {
+        // The ordinary discard-confirmation for a still-open create modal --
+        // unrelated to the recovery question, just closing it out cleanly.
+        document.getElementById('confirm-ok').click();
+        await sleep(150);
+      }
+    }
+  } catch (e) { errs.push('443 probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
 # 475: the extra-video-source limit used to be a fixed constant; it is now an
 # expert value the smoke run can dial down and prove the "add a video" flow
 # actually reads.
@@ -12402,6 +12475,31 @@ def main():
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- retention overview in the statistics/backups window")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # 443: editor draft autosave -- a crash draft found at boot, the
+        # one-time recovery question, declining it, and a later ordinary
+        # editor open never re-asking.
+        side = tmp / "ui" / "editor-draft.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", EDITOR_DRAFT_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-editor-draft'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- editor draft: crash recovery offered once, decline discards it")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

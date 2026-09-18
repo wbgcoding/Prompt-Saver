@@ -715,6 +715,12 @@ const RESULTS = {
   similar_to_saved: () => window.__SIMILAR_HINT_FIXTURE__
     ? { id: window.__SIMILAR_HINT_FIXTURE__.id, name: window.__SIMILAR_HINT_FIXTURE__.name }
     : null,
+  // 443: window.__EDITOR_DRAFT_FIXTURE__ lets one probe supply a crash draft
+  // for the boot-time recovery question; every other boot must see none, so
+  // the ordinary startup chain never shows the restore dialog by surprise.
+  load_editor_draft: () => window.__EDITOR_DRAFT_FIXTURE__ || null,
+  save_editor_draft: () => null,
+  discard_editor_draft: () => null,
   // A release body in the shape GitHub delivers it, so the changelog popup has real
   // Markdown to render (heading, wrapped paragraph, table, bullets, bold, code, link).
   check_update: () => ({

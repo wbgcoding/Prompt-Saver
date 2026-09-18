@@ -3007,7 +3007,8 @@ fn db_conn_init_schema(conn: &Connection) -> bool {
              CREATE TABLE IF NOT EXISTS prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '');
              CREATE INDEX IF NOT EXISTS idx_pv_prompt ON prompt_versions(prompt_id);
              CREATE TABLE IF NOT EXISTS clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);
-             CREATE TABLE IF NOT EXISTS edit_state(id TEXT PRIMARY KEY, kind TEXT NOT NULL, target TEXT NOT NULL, size INTEGER NOT NULL, mtime INTEGER NOT NULL, ops TEXT NOT NULL, updated_at INTEGER NOT NULL);",
+             CREATE TABLE IF NOT EXISTS edit_state(id TEXT PRIMARY KEY, kind TEXT NOT NULL, target TEXT NOT NULL, size INTEGER NOT NULL, mtime INTEGER NOT NULL, ops TEXT NOT NULL, updated_at INTEGER NOT NULL);
+             CREATE TABLE IF NOT EXISTS editor_drafts(id TEXT PRIMARY KEY, prompt_id TEXT NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);",
         )
         .is_err()
     {
@@ -7054,6 +7055,9 @@ async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Resu
         rearm_hotkeys(&app); // A deleted prompt gives its accelerator back
         rebuild_tray(&app);
         sync_float_windows(&app); // A folder left with one member dissolves
+        if let Some(conn) = db_conn(&app) {
+            discard_editor_draft_if(&conn, |t| t == id);
+        }
     }
     Ok(changed)
 }
@@ -7134,6 +7138,9 @@ async fn batch_prompts(
                     return Err("save-failed".into());
                 }
                 save_settings(&app, &store.settings);
+                if let Some(conn) = db_conn(&app) {
+                    discard_editor_draft_if(&conn, |t| idset.contains(t));
+                }
             }
         }
         "favorite" => {
@@ -12889,6 +12896,79 @@ async fn discard_edit_state(app: AppHandle, kind: String, target: String) -> Res
     let id = format!("{kind}:{target}");
     conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+// ---- Editor draft autosave ----
+// A single row (id = "current"), because only one prompt editor modal is ever
+// open at a time -- no need for a table keyed per entry. prompt_id is the target
+// entry's id for an edit, or "neu" for a still-unsaved new entry, matching the
+// modal's own "create" mode having no real id yet. Only the text side is
+// drafted (name/text/variants); an attached image is never re-derived from a
+// crash draft, it stays with the prompt itself.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct EditorDraft {
+    prompt_id: String,
+    name: String,
+    text: String,
+    variants: String,
+    updated_at: i64,
+}
+
+#[tauri::command]
+async fn save_editor_draft(app: AppHandle, prompt_id: String, name: String, text: String, variants: String) -> Result<(), String> {
+    let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
+    let updated_at = (now_ms() / 1000) as i64;
+    conn.execute(
+        "INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current',?1,?2,?3,?4,?5)
+         ON CONFLICT(id) DO UPDATE SET prompt_id=excluded.prompt_id, name=excluded.name, text=excluded.text, variants=excluded.variants, updated_at=excluded.updated_at",
+        params![prompt_id, name, text, variants, updated_at],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn load_editor_draft(app: AppHandle) -> Result<Option<EditorDraft>, String> {
+    let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
+    let draft = conn
+        .query_row(
+            "SELECT prompt_id, name, text, variants, updated_at FROM editor_drafts WHERE id = 'current'",
+            [],
+            |r| {
+                Ok(EditorDraft {
+                    prompt_id: r.get(0)?,
+                    name: r.get(1)?,
+                    text: r.get(2)?,
+                    variants: r.get(3)?,
+                    updated_at: r.get(4)?,
+                })
+            },
+        )
+        .ok();
+    Ok(draft)
+}
+
+#[tauri::command]
+async fn discard_editor_draft(app: AppHandle) -> Result<(), String> {
+    let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
+    conn.execute("DELETE FROM editor_drafts WHERE id = 'current'", []).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// Shared by delete_prompt and batch_prompts's "delete" branch: a draft outlives
+// the modal that wrote it, so it must not outlive the entry it belongs to
+// either. `matches` decides on the draft's own prompt_id, so a single-delete and
+// a batch-delete can both reuse this without building a one-off HashSet lookup.
+fn discard_editor_draft_if(conn: &Connection, matches: impl Fn(&str) -> bool) {
+    let target: Option<String> = conn
+        .query_row("SELECT prompt_id FROM editor_drafts WHERE id = 'current'", [], |r| r.get(0))
+        .ok();
+    if let Some(target) = target {
+        if matches(&target) {
+            let _ = conn.execute("DELETE FROM editor_drafts WHERE id = 'current'", []);
+        }
+    }
 }
 
 // Periodic cleanup for edit_state, run through the existing job scheduler rather
@@ -27143,6 +27223,9 @@ pub fn run() {
             save_edit_state,
             load_edit_state,
             discard_edit_state,
+            save_editor_draft,
+            load_editor_draft,
+            discard_editor_draft,
             open_repo,
             set_ui_zoom,
             delete_all_data,
@@ -34803,6 +34886,85 @@ mod tests {
         conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]).unwrap();
         let count: i64 = conn.query_row("SELECT COUNT(*) FROM edit_state", [], |r| r.get(0)).unwrap();
         assert_eq!(count, 0, "discard removes the row outright");
+    }
+
+    fn editor_drafts_test_conn() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE editor_drafts(id TEXT PRIMARY KEY, prompt_id TEXT NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);",
+        )
+        .unwrap();
+        conn
+    }
+
+    // Same upsert SQL as save_editor_draft, run directly against a bare
+    // in-memory connection - the async command itself only exists to fetch its
+    // own AppHandle-bound connection, no test harness for that here (same
+    // reasoning as the edit_state roundtrip test right above).
+    #[test]
+    fn editor_draft_write_then_overwrite_keeps_a_single_current_row() {
+        let conn = editor_drafts_test_conn();
+        let upsert = "INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current',?1,?2,?3,?4,?5)
+             ON CONFLICT(id) DO UPDATE SET prompt_id=excluded.prompt_id, name=excluded.name, text=excluded.text, variants=excluded.variants, updated_at=excluded.updated_at";
+        conn.execute(upsert, params!["neu", "First", "Hello", "[]", 100i64]).unwrap();
+        conn.execute(upsert, params!["p1", "First edited", "Hello there", "[]", 200i64]).unwrap();
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM editor_drafts", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 1, "a second write overwrites the single current row, it never accumulates rows");
+        let (prompt_id, name, text): (String, String, String) = conn
+            .query_row("SELECT prompt_id, name, text FROM editor_drafts WHERE id = 'current'", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .unwrap();
+        assert_eq!((prompt_id.as_str(), name.as_str(), text.as_str()), ("p1", "First edited", "Hello there"));
+    }
+
+    #[test]
+    fn editor_draft_delete_removes_the_row_the_same_way_a_save_does() {
+        let conn = editor_drafts_test_conn();
+        conn.execute(
+            "INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current','p1','A','B','[]',100)",
+            [],
+        )
+        .unwrap();
+        conn.execute("DELETE FROM editor_drafts WHERE id = 'current'", []).unwrap();
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM editor_drafts", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0, "an orderly close, save or discard alike, must leave no draft behind");
+    }
+
+    #[test]
+    fn discard_editor_draft_if_removes_the_row_only_when_its_own_entry_matches() {
+        let conn = editor_drafts_test_conn();
+        conn.execute(
+            "INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current','p1','A','B','[]',100)",
+            [],
+        )
+        .unwrap();
+        discard_editor_draft_if(&conn, |t| t == "p2"); // an unrelated prompt was deleted
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM editor_drafts", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 1, "a draft for a different entry must survive an unrelated delete");
+        discard_editor_draft_if(&conn, |t| t == "p1"); // its own entry was deleted
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM editor_drafts", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0, "the draft disappears once the entry it belongs to is gone");
+    }
+
+    #[test]
+    fn discard_editor_draft_if_covers_a_batch_delete_set_too() {
+        let conn = editor_drafts_test_conn();
+        conn.execute(
+            "INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current','p3','A','B','[]',100)",
+            [],
+        )
+        .unwrap();
+        let ids: std::collections::HashSet<&str> = ["p1", "p2", "p3"].into_iter().collect();
+        discard_editor_draft_if(&conn, |t| ids.contains(t));
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM editor_drafts", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0, "batch_prompts's delete branch matches on the same idset a single delete uses a plain equality for");
+    }
+
+    #[test]
+    fn discard_editor_draft_if_is_a_no_op_when_no_draft_exists() {
+        let conn = editor_drafts_test_conn();
+        discard_editor_draft_if(&conn, |_| true); // nothing to delete, must not panic or error
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM editor_drafts", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0);
     }
 
     #[test]

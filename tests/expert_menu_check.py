@@ -180,6 +180,7 @@ DEPENDENCIES = {
     "viewGroupMaxRows": "viewGroups",
     "dupImportCheck": "dupFinder",
     "similarThreshold": "similarHint",
+    "editorDraftSecs": "editorDraft",
     "clipMinChars": "clipWatcher",
     "clipInboxMax": "clipWatcher",
     # Backups + statistics (rendered outside the expert menu, gate still required)

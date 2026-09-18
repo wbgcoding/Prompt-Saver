@@ -63,6 +63,12 @@ the file row (switchable off in the expert menu, how many kilobytes it reads
 is adjustable there too). It always shows as plain text, never rendered, so a
 Markdown file with real formatting in it still shows its raw source.
 
+The open editor saves its own text as a draft every few seconds (on by
+default, the interval adjustable in the expert menu), so a crash or a closed
+window never loses unsaved work. Only the text is drafted, never an attached
+image, and a save or a cancel removes the draft right away. If a draft is
+still there the next time the app starts, it asks once whether to restore it.
+
 ### The grid
 
 The main window's grid is a free-placement board of tiles — up to 20×20 cells by
@@ -771,6 +777,13 @@ Ein Anhang als reiner Text, Markdown, JSON oder CSV zeigt seinen Anfang direkt
 unter der Dateizeile (im Experten-Menü abschaltbar, dort auch einstellbar, wie
 viele Kilobyte gelesen werden). Immer als reiner Text, nie ausgeführt, also
 zeigt eine Markdown-Datei mit echter Formatierung trotzdem ihren rohen Quelltext.
+
+Der offene Editor sichert seinen Text alle paar Sekunden als Entwurf (standardmäßig
+an, der Abstand im Experten-Menü einstellbar), damit ein Absturz oder ein
+geschlossenes Fenster nie ungesicherte Arbeit verliert. Gesichert wird nur der
+Text, nie ein angehängtes Bild, und Speichern oder Abbrechen entfernt den
+Entwurf sofort wieder. Ist beim nächsten Start noch ein Entwurf vorhanden, wird
+einmal gefragt, ob er wiederhergestellt werden soll.
 
 **Das Raster** — freie Platzierung, standardmäßig bis 20×20 Zellen (im
 Experten-Menü bis 200×200 einstellbar), eigenes Layout je Ansicht. Eine Kachel

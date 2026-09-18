@@ -99,6 +99,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Smart retention** | Keep a plain number of snapshots, or a number per day, week, month and year |
 | **Backup password** | Optional — protects new backup files with a key derived from your password |
 | **Version history** | Every prompt keeps its earlier versions; preview and restore any of them |
+| **Editor draft autosave** | The open editor saves its text every few seconds so a crash or a closed window never loses unsaved work; a save or cancel removes the draft, and the next start asks once whether to restore one it still finds |
 | **Import / export** | One backup file with prompts, views, layouts, colors, styles and language. Plain CSV/TXT export for the texts alone |
 | **Careful resets** | "Delete data" and "Reset settings" are separate, both guarded, both with an optional safety backup |
 
