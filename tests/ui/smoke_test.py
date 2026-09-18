@@ -10028,6 +10028,82 @@ DRAG_VIEW_PROBE = """
           await sleep(200);
         }
       }
+
+      // ---- 479: a second view-tab drop attempted while the first is still open
+      // must be refused outright -- letting it through is how a tile used to end
+      // up placed in the first target AND stripped by the second's stale source.
+      window.__SMOKE_ARGS__.length = 0;
+      window.__BATCH_PROMPTS_GATE__ = [];
+      const raceTileA = tileEl('p0');
+      const raceTileB = tileEl('p3');
+      const gtRace = groupTab();
+      if (!raceTileA || !raceTileB || !gtRace) {
+        errs.push('missing fixture tile or the folder tab for the overlapping-drop check');
+      } else {
+        await dragTileTo(raceTileA, ...centre(gtRace));
+        await sleep(750);
+        const popRace1 = document.querySelector('.view-group-pop');
+        const notesRowRace = popRace1 && popRace1.querySelector('.view-group-item[data-view-id="notes"]');
+        if (!notesRowRace) {
+          errs.push('the opened group popover has no row for "notes" (overlapping-drop check)');
+        } else {
+          const [rnx, rny] = centre(notesRowRace);
+          ptr('pointermove', rnx, rny, window);
+          await sleep(80);
+          await endDrag(rnx, rny);
+          if (window.__BATCH_PROMPTS_GATE__.length !== 1) {
+            errs.push('the first view-tab drop did not reach the backend as expected');
+          }
+          // The first call's own answer is still held open on purpose -- a
+          // second drop attempted right now is exactly the race 479 closes.
+          await dragTileTo(raceTileB, ...centre(gtRace));
+          await sleep(750);
+          const popRace2 = document.querySelector('.view-group-pop');
+          const archiveRowRace = popRace2 && popRace2.querySelector('.view-group-item[data-view-id="archive"]');
+          if (archiveRowRace) {
+            const [rax, ray] = centre(archiveRowRace);
+            ptr('pointermove', rax, ray, window);
+            await sleep(80);
+            await endDrag(rax, ray);
+          }
+          if (window.__BATCH_PROMPTS_GATE__.length !== 1) {
+            errs.push('a second view-tab drop reached the backend while the first was still open');
+          }
+          if (!tileEl('p3')) errs.push('a refused second drop moved the tile out of "home" anyway');
+          window.__BATCH_PROMPTS_GATE__[0](); // let the first (only) call's answer land
+          await sleep(300);
+          if (tileEl('p0')) errs.push('the accepted first drop never moved the tile out of "home"');
+          await switchToGroupedView('notes');
+          if (!tileEl('p0')) errs.push('the accepted first drop is missing from its target view');
+          tabFor('home').click();
+          await sleep(200);
+          if (tileEl('p0')) errs.push('the moved tile ended up in two views at once');
+        }
+      }
+
+      // ---- 479: a stale response (dispatched before a later one, but answered
+      // after it) must never overwrite what the later one already applied.
+      window.__BATCH_PROMPTS_GATE__ = [];
+      const staleTileA = tileEl('p9');
+      const staleTileB = tileEl('p1');
+      if (!staleTileA || !staleTileB || typeof window.__runViewMutation !== 'function') {
+        errs.push('missing fixture tile or the exposed view-mutation core for the stale-response check');
+      } else {
+        const callA = window.__runViewMutation(['p9'], 'archive', 'home', false, window.__nextViewMutationSeq());
+        const callB = window.__runViewMutation(['p1'], 'notes', 'home', false, window.__nextViewMutationSeq());
+        if (window.__BATCH_PROMPTS_GATE__.length !== 2) {
+          errs.push('the stale-response check did not reach the backend twice as expected');
+        } else {
+          window.__BATCH_PROMPTS_GATE__[1](); // the later call answers first
+          await callB;
+          if (tileEl('p1')) errs.push('the later view move did not remove the tile from "home"');
+          window.__BATCH_PROMPTS_GATE__[0](); // the earlier call answers last -- must be discarded
+          await callA;
+          if (tileEl('p1')) {
+            errs.push('a stale response brought a tile back into "home" after a newer move already removed it');
+          }
+        }
+      }
     }
   } catch (e) { errs.push('probe: ' + e.message); }
   clearInterval(beat);

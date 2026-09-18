@@ -4467,25 +4467,58 @@ function updateViewDropHover(x, y, copy) {
   }
 }
 
+// Serialises view-tab drops: two dragged onto a tab back to back used to both
+// reach the backend, the slower one landing after the faster one already
+// rendered, so its stale source view rode along and left the tile in both
+// views. While one drop's round trip is still open, a second is dropped here
+// instead of sent -- the tile it was carrying simply stays where it was,
+// nothing to undo.
+let viewDropBusy = false;
+// Bumped once per accepted drop; a response is only applied while it still
+// carries the newest number, so a call whose answer arrives out of order can
+// never overwrite whatever a later one already put on screen.
+let viewMutationSeq = 0;
+
 // One invoke moves or copies the dragged id(s) into `targetViewId`, then
 // re-renders whatever the source view's grid shows now. A rejected drop (the
 // target is full) leaves both views untouched -- batch_prompts is all-or-nothing.
-async function dropTilesOnView(ids, targetViewId, fromViewId, copy) {
+// Split from dropTilesOnView so the UI test suite can call it directly with two
+// overlapping, independently-resolved invocations and prove the ordering rule
+// above without racing real timers.
+async function runViewMutation(ids, targetViewId, fromViewId, copy, mySeq) {
+  let result;
   try {
-    settings = await invoke("batch_prompts", {
+    result = await invoke("batch_prompts", {
       ids, action: copy ? "addView" : "moveView",
       color: null, favorite: null, viewId: targetViewId, fromViewId,
     });
   } catch (e) {
+    if (mySeq !== viewMutationSeq) return; // superseded meanwhile -- its own toast would be stale too
     const m = String(e).match(/view-full:(\d+)/);
     if (m) toast(t("viewDropFull").replace("{name}", viewById(targetViewId)?.name || "").replace("{n}", m[1]));
     else toast(String(e) === "save-failed" ? t("persistFailed") : String(e));
     return;
   }
+  if (mySeq !== viewMutationSeq) return; // a later drop already applied; this answer is stale
+  settings = result;
   closeViewGroupPop();
   clearGridSelection();
   await renderGrid(true);
 }
+
+async function dropTilesOnView(ids, targetViewId, fromViewId, copy) {
+  if (viewDropBusy) return;
+  viewDropBusy = true;
+  try {
+    await runViewMutation(ids, targetViewId, fromViewId, copy, ++viewMutationSeq);
+  } finally {
+    viewDropBusy = false;
+  }
+}
+// Exercised directly by the UI test suite to prove the sequence-number rule
+// without needing two real drags to race in wall-clock time.
+window.__runViewMutation = runViewMutation;
+window.__nextViewMutationSeq = () => ++viewMutationSeq;
 
 window.addEventListener("pointermove", (e) => {
   if (!tabDrag) return;

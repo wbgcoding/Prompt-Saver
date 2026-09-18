@@ -1155,7 +1155,21 @@ window.__TAURI__ = {
       (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []).push(cmd);
       (window.__SMOKE_ARGS__ = window.__SMOKE_ARGS__ || []).push([cmd, args]);
       const fn = RESULTS[cmd];
-      return fn ? fn(args) : null;
+      // Runs the handler (mutating the shared fixtures) in real call order right
+      // away, same as the backend would under its own mutex -- only handing the
+      // OUTCOME back to the caller is what a probe can reorder or delay below, so
+      // a "response B arrives before response A" race can be built on purpose.
+      let outcome;
+      try {
+        outcome = { ok: true, value: fn ? fn(args) : null };
+      } catch (e) {
+        outcome = { ok: false, error: e };
+      }
+      if (cmd === "batch_prompts" && Array.isArray(window.__BATCH_PROMPTS_GATE__)) {
+        await new Promise((resolve) => window.__BATCH_PROMPTS_GATE__.push(resolve));
+      }
+      if (!outcome.ok) throw outcome.error;
+      return outcome.value;
     },
     // Real Tauri turns a filesystem path into a loadable "asset://..." URL --
     // the stub just needs SOMETHING stable so a <video>/<img> src assignment
