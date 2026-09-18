@@ -105,6 +105,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Runs in the background** | Optional minimize-to-tray, autostart at login, global hotkey |
 | **Guided first run** | A short walkthrough on first launch covering the basics, with a step to turn on the screenshot editor, color picker, OCR or voice dictation right there; reopen it anytime from Settings |
 | **Auto updates** | Checks for a new version on start (switchable off) with one-click install, verified against a published checksum |
+| **What's new** | A small notice after an update lists what changed since the version you last saw, from a list shipped with the app; reopen the current version's list anytime from the About dialog |
 | **100 % local** | A single local database, sealed with Windows' own per-account encryption so no other account on the PC can read it. On the rare machine where Windows refuses to encrypt (a damaged user profile), saving keeps working in readable form rather than losing the data — and the app says so on startup and permanently in the privacy settings, until the next successful save seals it again. No account, no telemetry, no network traffic except the update check and, only if video export needs ffmpeg and it isn't already present, a one-time optional download you explicitly approve |
 | **Small** | ~8 MB installer (Rust / Tauri), using the Windows WebView2 runtime |
 
