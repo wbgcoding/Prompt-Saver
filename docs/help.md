@@ -403,12 +403,30 @@ per-entry delete, and usage statistics including a 14-day activity chart.
 The library lists every tile as a searchable, filterable list — fuzzy search,
 smart sort (most-used / most-recent), and type/colour filters. Type -word to
 exclude matches, or tag:word / var:word to search only tags or placeholder
-names.
+names. A star next to the search field saves the current query, tag filters
+and sort as a chip shown above the field; click it to bring the whole search
+back. Right-click a saved search to rename or delete it, or drag it to
+reorder the row. Up to five can be saved at once by default, adjustable in
+the expert menu. A toggle next to the type filter switches the list to
+tiles: a big preview picture with the name below, nothing else. Click,
+double-click, the right-click menu and multi-select all work the same as in
+the list, it is the same selection drawn differently. The toggle remembers
+its last choice per type filter, so switching to "only images" brings tiles
+back on its own next time.
 
 ### Tags
 
 Free-form labels assigned to tiles; filter the library or the grid down to a set
 of tags, matching any or all of them.
+
+### Archive
+
+Off by default in the expert menu. Marks a tile as archived instead of deleting
+it: it disappears from the library list and the grid, but export, backup and
+search still treat it like any other tile — a query still finds it. A toggle
+above the library list brings archived tiles back into view. Archive or
+unarchive a tile from its right-click menu, or several at once from the
+library's batch bar.
 
 ### Favourites
 
@@ -554,6 +572,16 @@ Retention is in days (0 means keep forever). Restoring places the tile in the
 active view's first free cell — not necessarily its original view or cell — and
 does not bring back a floating button, folder membership, or hotkey it had before
 deletion; those need setting up again.
+
+### Undo
+
+A few actions outside the tile trash carry their own one-step Undo button on the
+confirmation message: deleting a view, clearing the copy history, clearing the
+clipboard inbox, deleting a tag, and a batch delete or batch tag change in the
+library. There is only ever one undo waiting — a later destructive action
+replaces it, and the button disappears once the message itself does. Turn it
+off in the expert menu if you would rather the message stayed a plain
+confirmation.
 
 ### Duplicate finder
 
@@ -929,9 +957,22 @@ System.
 **Aussehen & Themes** — sieben mitgelieferte Themes, optionaler Theme-Editor.
 
 **Bibliothek & Suche** — unscharfe Suche, intelligente Sortierung, Filter,
-`tag:`/`var:`-Suchpräfixe (mit `-` auch verneint).
+`tag:`/`var:`-Suchpräfixe (mit `-` auch verneint). Ein Stern neben dem Suchfeld
+speichert Anfrage, Tag-Filter und Sortierung als Kachel darüber; Rechtsklick
+bietet Umbenennen und Löschen, Ziehen sortiert die Zeile um. Standardmäßig
+höchstens fünf, im Experten-Menü einstellbar. Ein Umschalter neben dem
+Typfilter stellt die Liste als Kacheln dar: großes Vorschaubild, Name
+darunter, sonst nichts. Klick, Doppelklick, Rechtsklickmenü und
+Mehrfachauswahl verhalten sich genau wie in der Liste. Der Umschalter merkt
+sich seinen Stand je Filter.
 
 **Tags** — freie Schlagwörter, UND/ODER-Filter.
+
+**Archiv** — Standardmäßig aus. Markiert eine Kachel als archiviert statt sie zu
+löschen; sie verschwindet aus Bibliothek und Raster, bleibt aber über Suche,
+Export und Sicherung erreichbar. Ein Schalter über der Liste holt archivierte
+Kacheln zurück; archivieren/entarchivieren geht per Rechtsklickmenü oder aus
+der Sammelleiste der Bibliothek.
 
 **Kopierverlauf** — Protokoll, Gruppierung, Aufbewahrung, Einzeleintrag löschen,
 Statistik mit 14-Tage-Diagramm.
@@ -996,6 +1037,14 @@ Export, damit man dafür nicht erst das Expertenmenü öffnen muss.
 Papierkorb (Aufbewahrung in Tagen, 0 = für immer). Wiederherstellen legt in die
 erste freie Zelle der aktiven Ansicht, nicht zwingend an den Originalplatz, und
 ohne Pille, Ordner-Mitgliedschaft oder Hotkey von vorher.
+
+**Rückgängig** — einige Aktionen außerhalb des Kachel-Papierkorbs tragen einen
+eigenen Rückgängig-Knopf direkt auf der Meldung: eine Ansicht löschen, den
+Kopierverlauf leeren, den Zwischenablage-Eingang leeren, einen Tag löschen, und
+eine Sammellöschung oder Sammeländerung von Tags in der Bibliothek. Es wartet
+immer nur eine einzige Rücknahme — eine spätere zerstörende Aktion ersetzt sie,
+und der Knopf verschwindet mit der Meldung selbst. Im Expertenmenü lässt sich
+das abschalten, dann bleibt die Meldung eine reine Bestätigung.
 
 **Duplikatfinder** — findet textlich sehr ähnliche Kacheln nach
 Ähnlichkeitswert, keine exakte Übereinstimmung nötig, löscht nichts von sich

@@ -574,7 +574,13 @@
         </div>
       </div>
       <div id="library-search" class="library-search">
-        <input id="library-q" class="modal-input" type="text" data-i18n-ph="searchPh" data-i18n-aria="searchPh" data-i18n-title="tipSearchExclude" />
+        <!-- Saved searches: one-click chips above the field, only shown once at
+             least one search is saved (feature-gated via body.noflag-savedSearches). -->
+        <div id="library-saved-searches" class="lib-saved-searches"></div>
+        <div class="lib-q-wrap">
+          <input id="library-q" class="modal-input" type="text" data-i18n-ph="searchPh" data-i18n-aria="searchPh" data-i18n-title="tipSearchExclude" />
+          <button id="library-search-save" type="button" class="icon-btn lib-search-save" data-i18n-title="saveSearchAction" data-i18n-aria="saveSearchAction">☆</button>
+        </div>
         <!-- Type chips are additive (several at once); the colours sit on the same
              line, exactly as in the copy history. -->
         <div class="journal-filters">
@@ -585,8 +591,10 @@
             <button type="button" class="lib-type" data-type="pdf" data-i18n="filterPdf">PDF</button>
             <button type="button" class="lib-type" data-type="file" data-i18n="filterFile">File</button>
             <button id="library-fav" type="button" class="lib-type lib-fav-chip" data-i18n-title="favoritesOnly" data-i18n-aria="favoritesOnly">★</button>
+            <button id="library-archive" type="button" class="lib-type lib-archive-chip" data-i18n-title="showArchiveToggle" data-i18n-aria="showArchiveToggle">🗄</button>
           </div>
           <div id="library-colors" class="lib-colors" data-i18n-title="filterColor"></div>
+          <button id="library-view-toggle" type="button" class="icon-btn lib-view-toggle" data-i18n-title="libraryTilesToggle" data-i18n-aria="libraryTilesToggle">▦</button>
         </div>
         <!-- Tag filter chips + manager button (feature-gated via body.flag-tags) -->
         <div id="library-tagbar" class="lib-tagbar"></div>
@@ -606,6 +614,8 @@
         <button id="lib-batch-removeview" type="button" class="ghost-btn" data-i18n="batchRemoveView">Remove</button>
         <button id="lib-batch-tag-add" type="button" class="ghost-btn" data-i18n="batchTagAdd">Add tag</button>
         <button id="lib-batch-tag-remove" type="button" class="ghost-btn" data-i18n="batchTagRemove">Remove tag</button>
+        <button id="lib-batch-archive" type="button" class="ghost-btn" data-i18n="archiveAction">Archive</button>
+        <button id="lib-batch-unarchive" type="button" class="ghost-btn" data-i18n="unarchiveAction">Unarchive</button>
         <span class="lib-batch-sep" aria-hidden="true"></span>
         <select id="lib-batch-format" class="batch-view-select" data-i18n-aria="exportFormatLabel">
           <option value="csv" data-i18n="exportCsv">CSV export</option>
@@ -1359,6 +1369,9 @@
     <button data-act="views" role="menuitem" data-i18n="alsoShowIn">Also show in…</button>
     <!-- Label set in openCtx() -- it names the action ("Show"/"Remove"), not a state-less "Toggle". -->
     <button data-act="pin" role="menuitem"></button>
+    <!-- Only shown when the archive feature is on (openCtx toggles .hidden); label
+         set there too ("Archive"/"Unarchive", it names the action, not a state). -->
+    <button data-act="archive" role="menuitem" class="hidden"></button>
     <!-- Only shown when this prompt actually rotates AND both auto gates are
          on (openCtx toggles .hidden) — never a greyed-out entry for a case where it
          cannot do anything. -->
