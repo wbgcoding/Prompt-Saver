@@ -3295,17 +3295,39 @@ PROBE = """
         if (!document.querySelectorAll('#dupes-body .dup-group').length) {
           out.errors.push('the duplicates dialog shows no group for a reported duplicate');
         }
-        if (document.querySelectorAll('#dupes-body .dup-col').length !== 2) {
-          out.errors.push('a duplicate group does not show both of its entries');
-        }
-        // A found pair now shares the same word-diff engine as the free compare
-        // view -- its two columns must highlight what differs, not just show
-        // plain text side by side.
-        if (!document.querySelector('#dupes-body .dup-col .diff-add, #dupes-body .dup-col .diff-del')) {
-          out.errors.push('a duplicate pair does not highlight its word differences');
-        }
         layoutScan('duplicates');
-        mustReach('duplicates', '#dupes-body .dup-keep, #dupes-modal .modal-head-actions > button');
+        mustReach('duplicates', '#dupes-body .dup-group button, #dupes-modal .modal-head-actions > button');
+        // The group is now just a summary card -- its own "Compare" button opens
+        // the SAME view the library's/tile's free compare uses, this time with
+        // the finder's own "keep one side" actions instead of "take left/right".
+        const groupCompareBtn = document.querySelector('#dupes-body .dup-group .dup-actions button');
+        if (!groupCompareBtn) {
+          out.errors.push('a duplicate group has no way to open the compare view');
+        } else {
+          groupCompareBtn.click();
+          await sleep(300);
+          const cmpModal = document.getElementById('compare-modal');
+          if (cmpModal.classList.contains('hidden')) {
+            out.errors.push('the duplicate group did not open the compare view');
+          } else {
+            if (document.querySelectorAll('#compare-body .dup-col').length !== 2) {
+              out.errors.push('the compare view does not show both entries of the duplicate pair');
+            }
+            // A found pair shares the same word-diff engine as the free compare
+            // view -- its two columns must highlight what differs, not just show
+            // plain text side by side.
+            if (!document.querySelector('#compare-body .diff-add, #compare-body .diff-del')) {
+              out.errors.push('a duplicate pair does not highlight its word differences');
+            }
+            if (document.querySelectorAll('#compare-actions .dup-keep').length !== 2) {
+              out.errors.push('the compare view opened from the duplicate finder is missing its "keep one side" actions');
+            }
+            layoutScan('duplicates compare view');
+            mustReach('duplicates compare view', '#compare-actions button');
+          }
+          await click('compare-close');
+          await sleep(200);
+        }
         await click('dupes-close');
         await sleep(200);
       }

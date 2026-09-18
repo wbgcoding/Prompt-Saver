@@ -8637,6 +8637,10 @@ async function openDupes() {
   $("dupes-modal").classList.remove("hidden");
   await scanDupes();
 }
+// A found group is now only a summary card -- name list plus score -- with a
+// "Compare" button that opens the SAME view the library's/tile's free compare
+// uses (openCompareView below), passing this group along so that view shows
+// the finder's own "keep one side" actions instead of "take left/right".
 async function scanDupes() {
   const body = $("dupes-body");
   body.innerHTML = "";
@@ -8665,37 +8669,18 @@ async function scanDupes() {
     score.textContent = `${Math.round(g.score * 100)}%`;
     head.appendChild(score);
     card.appendChild(head);
-    const cols = document.createElement("div");
-    cols.className = "dup-cols";
-    // A pair here reuses the same word-diff engine as the free compare view
-    // below (openCompareView, via splitDiffSides), so the two columns highlight
-    // their differences instead of showing plain text.
-    const pairSides = g.members.length === 2 ? splitDiffSides(g.members[0].text, g.members[1].text) : null;
-    g.members.forEach((m, idx) => {
-      const col = document.createElement("div");
-      col.className = "dup-col";
-      const name = document.createElement("div");
-      name.className = "dup-name";
-      name.textContent = m.name;
-      const meta = document.createElement("div");
-      meta.className = "dup-meta";
-      meta.textContent = `${t("dupUsage")}: ${m.usage.toLocaleString(LANG)}` + (m.views.length ? ` · ${m.views.join(", ")}` : "");
-      const txt = document.createElement("div");
-      txt.className = "dup-text";
-      const side = pairSides ? (idx === 0 ? pairSides.left : pairSides.right) : null;
-      if (side) renderDiffInto(txt, side);
-      else txt.textContent = m.text;
-      const keep = document.createElement("button");
-      keep.type = "button";
-      keep.className = "ghost-btn dup-keep";
-      keep.textContent = t("dupKeep");
-      keep.addEventListener("click", () => keepOneDup(g, m.id));
-      col.append(name, meta, txt, keep);
-      cols.appendChild(col);
-    });
-    card.appendChild(cols);
+    const names = document.createElement("div");
+    names.className = "dup-names";
+    names.textContent = g.members.map((m) => m.name).join(" · ");
+    card.appendChild(names);
     const actions = document.createElement("div");
     actions.className = "dup-actions";
+    const compare = document.createElement("button");
+    compare.type = "button";
+    compare.className = "ghost-btn";
+    compare.textContent = t("compareBtn");
+    compare.addEventListener("click", () => openCompareView(g.members.map((m) => m.id), g));
+    actions.appendChild(compare);
     const ignore = document.createElement("button");
     ignore.type = "button";
     ignore.className = "ghost-btn";
@@ -8709,6 +8694,9 @@ async function scanDupes() {
     body.appendChild(card);
   }
 }
+// Deletes every OTHER member of the group, keeping only `keepId` -- reachable
+// exclusively from inside the compare view now (one such button per column,
+// see renderCompareView), never from the group card directly.
 async function keepOneDup(group, keepId) {
   const remove = group.members.filter((m) => m.id !== keepId).map((m) => m.id);
   if (!remove.length) return;
@@ -8719,26 +8707,24 @@ async function keepOneDup(group, keepId) {
     settings = await invoke("batch_prompts", { ids: remove, action: "delete", color: null, favorite: null, viewId: null });
     prompts = prompts.filter((p) => !gone.has(p.id));
   } catch (e) { toast(String(e) === "save-failed" ? t("persistFailed") : String(e)); return; }
+  closeCompareView();
   renderViews();
   await renderGrid(true);
   scanDupes();
 }
 
 // ---- Compare view ----
-// Detached from the duplicate finder: it now takes any two prompt ids, reached
-// either from the library (select exactly two, then "Compare") or from a
-// tile's own context menu ("Compare with…", picking the second one through the
-// library's own selection -- the "existing entry search"). The duplicate
-// finder above keeps its own inline columns; this is the same comparison for
-// two entries that were never flagged as duplicates at all.
+// Detached from the duplicate finder: it now takes any set of prompt ids
+// (normally two, from the library's own selection or a tile's "Compare
+// with…"), fetching each fresh via get_prompt instead of trusting whatever a
+// caller already had cached. The duplicate finder calls this SAME view for a
+// found group -- there is no second one -- passing the group along so the
+// finder's own "keep one side" buttons show here instead of "take left/right".
 let compareState = null;
-async function openCompareView(leftId, rightId) {
-  const [left, right] = await Promise.all([
-    invoke("get_prompt", { id: leftId }).catch(() => null),
-    invoke("get_prompt", { id: rightId }).catch(() => null),
-  ]);
-  if (!left || !right) { toast(t("compareMissing")); return; }
-  compareState = { left, right };
+async function openCompareView(ids, dupGroup = null) {
+  const fetched = await Promise.all(ids.map((id) => invoke("get_prompt", { id }).catch(() => null)));
+  if (fetched.some((p) => !p)) { toast(t("compareMissing")); return; }
+  compareState = { ids, prompts: fetched, dupGroup };
   renderCompareView();
   $("compare-modal").classList.remove("hidden");
 }
@@ -8751,79 +8737,111 @@ function closeCompareView() {
 const compareEntryList = (p) => ((p.variants || []).length ? [p.text || "", ...p.variants] : [p.text || ""]);
 function renderCompareView() {
   if (!compareState) return;
-  const { left, right } = compareState;
+  const { prompts: ps, dupGroup } = compareState;
   const body = $("compare-body");
   body.innerHTML = "";
-  const sides = [
-    { p: left, entries: compareEntryList(left), other: compareEntryList(right), del: "diff-del" },
-    { p: right, entries: compareEntryList(right), other: compareEntryList(left), del: "diff-add" },
-  ];
-  sides.forEach((side, idx) => {
+  // Word-diff highlighting only makes sense between exactly two entries -- a
+  // duplicate group of three or more (rare, but the finder's own pairwise
+  // matching can produce one) falls back to plain text per column instead of
+  // guessing which other column each one should be diffed against.
+  const entries = ps.map(compareEntryList);
+  ps.forEach((p, idx) => {
     const col = document.createElement("div");
     col.className = "dup-col compare-col";
     const head = document.createElement("div");
     head.className = "compare-col-head";
     const swatch = document.createElement("span");
     swatch.className = "compare-swatch";
-    swatch.style.background = side.p.color || "transparent";
+    swatch.style.background = p.color || "transparent";
     const name = document.createElement("div");
     name.className = "dup-name";
-    name.textContent = side.p.name;
+    name.textContent = p.name;
     head.append(swatch, name);
     col.appendChild(head);
-    if (side.p.image) {
+    if (p.image) {
       const img = document.createElement("img");
       img.className = "compare-image";
-      img.src = side.p.image;
+      img.src = p.image;
       img.alt = "";
       col.appendChild(img);
     }
     const meta = document.createElement("div");
     meta.className = "dup-meta";
-    const ts = flag("promptHistory") ? lastEdited[side.p.id] : null;
+    const ts = flag("promptHistory") ? lastEdited[p.id] : null;
     meta.textContent = ts ? new Date(ts * 1000).toLocaleString(LANG, { dateStyle: "short", timeStyle: "short" }) : "";
     col.appendChild(meta);
     const txt = document.createElement("div");
     txt.className = "dup-text";
-    const maxLen = Math.max(side.entries.length, side.other.length);
-    for (let i = 0; i < maxLen; i++) {
-      const block = document.createElement("div");
-      const hasMine = i < side.entries.length;
-      const hasOther = i < side.other.length;
-      if (!hasMine) continue; // this side simply has fewer entries -- nothing to show
-      if (!hasOther) {
-        const span = document.createElement("span");
-        span.className = side.del;
-        span.textContent = side.entries[i];
-        block.appendChild(span);
-      } else {
-        const split = idx === 0 ? splitDiffSides(side.entries[i], side.other[i]) : splitDiffSides(side.other[i], side.entries[i]);
-        if (split) renderDiffInto(block, idx === 0 ? split.left : split.right);
-        else block.textContent = side.entries[i]; // DIFF_WORD_CAP fallback: plain text
+    if (ps.length === 2) {
+      const mine = entries[idx], other = entries[1 - idx];
+      const del = idx === 0 ? "diff-del" : "diff-add";
+      const maxLen = Math.max(mine.length, other.length);
+      for (let i = 0; i < maxLen; i++) {
+        const block = document.createElement("div");
+        block.className = "compare-entry";
+        const hasMine = i < mine.length;
+        const hasOther = i < other.length;
+        if (!hasMine) continue; // this side simply has fewer entries -- nothing to show
+        if (!hasOther) {
+          const span = document.createElement("span");
+          span.className = del;
+          span.textContent = mine[i];
+          block.appendChild(span);
+        } else {
+          const split = idx === 0 ? splitDiffSides(mine[i], other[i]) : splitDiffSides(other[i], mine[i]);
+          if (split) renderDiffInto(block, idx === 0 ? split.left : split.right);
+          else block.textContent = mine[i]; // DIFF_WORD_CAP fallback: plain text
+        }
+        txt.appendChild(block);
       }
-      txt.appendChild(block);
+    } else {
+      txt.textContent = p.text;
     }
     col.appendChild(txt);
     body.appendChild(col);
   });
   const actions = $("compare-actions");
   actions.innerHTML = "";
-  const takeLeft = document.createElement("button");
-  takeLeft.type = "button";
-  takeLeft.className = "ghost-btn";
-  takeLeft.textContent = t("compareTakeLeft");
-  takeLeft.addEventListener("click", () => takeCompareSide(left, right));
-  const takeRight = document.createElement("button");
-  takeRight.type = "button";
-  takeRight.className = "ghost-btn";
-  takeRight.textContent = t("compareTakeRight");
-  takeRight.addEventListener("click", () => takeCompareSide(right, left));
+  if (dupGroup) {
+    // The finder's own actions: keep exactly one of the group, deleting the
+    // rest (same keepOneDup as before, just reached from here now).
+    for (const p of ps) {
+      const keep = document.createElement("button");
+      keep.type = "button";
+      keep.className = "ghost-btn dup-keep";
+      keep.textContent = t("dupKeep");
+      keep.addEventListener("click", () => keepOneDup(dupGroup, p.id));
+      actions.appendChild(keep);
+    }
+    const ignore = document.createElement("button");
+    ignore.type = "button";
+    ignore.className = "ghost-btn";
+    ignore.textContent = t("dupIgnore");
+    ignore.addEventListener("click", async () => {
+      await invoke("ignore_dups", { ids: dupGroup.members.map((m) => m.id) }).catch((e) => errToast(e));
+      closeCompareView();
+      scanDupes();
+    });
+    actions.appendChild(ignore);
+  } else {
+    const takeLeft = document.createElement("button");
+    takeLeft.type = "button";
+    takeLeft.className = "ghost-btn";
+    takeLeft.textContent = t("compareTakeLeft");
+    takeLeft.addEventListener("click", () => takeCompareSide(ps[0], ps[1]));
+    const takeRight = document.createElement("button");
+    takeRight.type = "button";
+    takeRight.className = "ghost-btn";
+    takeRight.textContent = t("compareTakeRight");
+    takeRight.addEventListener("click", () => takeCompareSide(ps[1], ps[0]));
+    actions.append(takeLeft, takeRight);
+  }
   const closeBtn = document.createElement("button");
   closeBtn.type = "button";
   closeBtn.className = "ghost-btn";
   closeBtn.textContent = t("close");
   closeBtn.addEventListener("click", closeCompareView);
-  actions.append(takeLeft, takeRight, closeBtn);
+  actions.appendChild(closeBtn);
 }
 // Overwrites `target` with `source`'s name/text/colour/image -- the normal
 // update_prompt path, so it snapshots the overwritten side into its own version
@@ -16590,8 +16608,7 @@ function bind() {
   // otherwise) -- opens the same compare view a tile's own context menu does.
   $("lib-batch-compare").addEventListener("click", () => {
     if (libSelected.size !== 2) return;
-    const [a, b] = [...libSelected];
-    openCompareView(a, b);
+    openCompareView([...libSelected]);
   });
   $("lib-batch-export").addEventListener("click", () => batchExport($("lib-batch-format").value));
   $("lib-batch-delete").addEventListener("click", (e) => {
