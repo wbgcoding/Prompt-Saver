@@ -1214,6 +1214,9 @@ const FLAG_LABELS = {
   trayFavs: "flagTrayFavs",             // favourites section in the tray menu
   // Checks at launch, but only while the normal auto-update setting is on.
   checkUpdateOnStart: "flagCheckUpdateOnStart",
+  // The one-time toast after an update; the "what's new" window itself stays
+  // reachable from About either way.
+  whatsNew: "flagWhatsNew",
   // Split from the old single autoBackupBeforeWipe so either case can be
   // switched off on its own. Both ship default on.
   backupBeforeReset: "flagBackupBeforeReset",
@@ -2061,7 +2064,7 @@ const EXPERT_TABS = [
     // Toolbar button visibility (mirrors the header right-click tool list).
     { title: "expGroupToolbar", flags: ["gridViewBorder", "pinButton", "barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "toolbarHoverDim"] },
     { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "tilesHoverDim"], values: ["tileBlur", "mediaBlur", "tilesHoverOpacity"] },
-    { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances", "taskbarProgress", "etaShow"], values: ["kbFocusFadeMs", "etaMinPct", "etaMinSecs", "bgDoneKeepMin"], selects: ["updateCheckH"], paths: ["dataDir"],
+    { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, { key: "whatsNew", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances", "taskbarProgress", "etaShow"], values: ["kbFocusFadeMs", "etaMinPct", "etaMinSecs", "bgDoneKeepMin"], selects: ["updateCheckH"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
@@ -2237,7 +2240,7 @@ const EXPERT_TIPS = [
   "voiceLangCacheH", "voiceLang", "voiceInsert", "voiceOnlineOk", "voiceAutoPickLang", "voiceLangAutoUpdate",
   "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH", "voiceHotkey", "voiceHotkeyTarget",
   "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "trayLabelMax",
-  "checkUpdateOnStart", "showUpdates", "updateCheckH", "importExport", "toolbarHoverDim", "keyboardNav", "allowMultipleInstances",
+  "checkUpdateOnStart", "showUpdates", "updateCheckH", "whatsNew", "importExport", "toolbarHoverDim", "keyboardNav", "allowMultipleInstances",
   "taskbarProgress", "etaShow",
   "headerSeparators", "floating",
   "pillFolders", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap",
@@ -17356,6 +17359,64 @@ function bind() {
       onClick: () => openUpdateModal(e.payload),
     });
   });
+
+  // ---------- what's new ----------
+  // The version boundary the currently open list was computed from, echoed
+  // back to whats_new_refresh so its GitHub fetch reproduces the same range.
+  // null means "current version only" (the About-triggered view).
+  let whatsNewSince = null;
+  const whatsNewModal = {
+    root: $("whats-new-modal"),
+    notes: $("whats-new-notes"),
+    refresh: $("whats-new-refresh"),
+    close: $("whats-new-close"),
+    ok: $("whats-new-ok"),
+  };
+  const openWhatsNewModal = (sections, since) => {
+    whatsNewSince = since ?? null;
+    const combined = (sections || []).map((s) => s.markdown).join("\n\n").trim();
+    // Every heading kept (no `version` passed to renderNotes): several
+    // sections need their own "## x.y.z" to stay tellable apart.
+    renderNotes(whatsNewModal.notes, combined || t("noChangelog"), "");
+    whatsNewModal.root.classList.remove("hidden");
+  };
+  const closeWhatsNewModal = () => whatsNewModal.root.classList.add("hidden");
+  whatsNewModal.close.addEventListener("click", closeWhatsNewModal);
+  whatsNewModal.ok.addEventListener("click", closeWhatsNewModal);
+  whatsNewModal.root.addEventListener("pointerdown", (e) => {
+    if (e.target === whatsNewModal.root) closeWhatsNewModal();
+  });
+  whatsNewModal.refresh.addEventListener("click", async () => {
+    whatsNewModal.refresh.disabled = true;
+    try {
+      const sections = await invoke("whats_new_refresh", { since: whatsNewSince });
+      const combined = (sections || []).map((s) => s.markdown).join("\n\n").trim();
+      renderNotes(whatsNewModal.notes, combined || t("noChangelog"), "");
+    } catch (err) {
+      toast(t("whatsNewRefreshFailed"));
+    }
+    whatsNewModal.refresh.disabled = false;
+  });
+  $("about-whats-new").addEventListener("click", async () => {
+    try {
+      const sections = await invoke("whats_new_current");
+      openWhatsNewModal(sections, null);
+    } catch (err) {
+      errToast(err);
+    }
+  });
+  // Startup check runs unconditionally (it is what marks the version seen);
+  // only the toast itself is gated behind the flag, per spec.
+  invoke("whats_new_check")
+    .then((result) => {
+      if (!result?.sections?.length) return;
+      if (!flag("whatsNew")) return;
+      toast(t("whatsNewToast"), {
+        label: t("whatsNewBtn"),
+        onClick: () => openWhatsNewModal(result.sections, result.since ?? null),
+      });
+    })
+    .catch(() => {});
 
   // ---------- ffmpeg ----------
   // Fetched on demand only — never on app start, never in the background.

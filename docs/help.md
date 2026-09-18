@@ -645,6 +645,11 @@ and never touches the network for it, while a portable build offers a one-time
 download only when a video feature actually needs it and only with your
 explicit consent — never automatically, never in the background.
 
+A small "what's new" notice appears once after an update, listing what
+changed since the version you last saw; its list ships with the app, so
+opening it needs no network, only its own "Update from GitHub" button does.
+Reopen the current version's list any time from the About dialog.
+
 ### Common questions
 
 - *My screenshot of this app came out empty* — the screen-capture exclusion
@@ -1053,6 +1058,11 @@ erkannt und als einmalige Migration angeboten.
 Netzwerkaktivität außer einem einmaligen WebView2-Installer-Download, falls
 die Laufzeit fehlt. Ein heruntergeladenes Update wird vor der Installation
 gegen eine veröffentlichte Prüfsumme geprüft.
+
+**Was ist neu**, eine kleine Meldung nach einem Update zeigt, was sich seit
+der zuletzt gesehenen Version geändert hat; die Liste liegt bereits im
+Programm, nur ihr Knopf „Von GitHub aktualisieren" braucht Netz. Über den
+Über-Dialog jederzeit für die laufende Version erneut aufrufbar.
 
 **Häufige Fragen** — Bildschirmaufnahme dieser App leer? Der
 Datenschutz-Ausschluss wirkt wie vorgesehen, im Experten-Menü abschaltbar. App

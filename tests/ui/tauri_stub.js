@@ -703,6 +703,16 @@ const RESULTS = {
       "- A bullet with `code` and a [link](https://example.invalid).",
     ].join("\n"),
   }),
+  // 404: nothing new by default, so an unrelated probe boot never gets a
+  // surprise startup toast sitting over its own buttons.
+  // window.__WHATS_NEW_FIXTURE__ lets one probe supply a real range.
+  whats_new_check: () => window.__WHATS_NEW_FIXTURE__ || { since: null, sections: [] },
+  whats_new_current: () => ([
+    { version: "1.2.0", markdown: "## Prompt Saver 1.2.0\n\nCurrent version only." },
+  ]),
+  whats_new_refresh: () => ([
+    { version: "1.2.0", markdown: "## Prompt Saver 1.2.0\n\nRefreshed from GitHub." },
+  ]),
   // The FULL prompt, image bytes included — the editor's one fetch when it opens.
   get_prompt: (a) => {
     const p = PROMPTS.find((x) => x.id === (a && a.id)) || PROMPTS[0];

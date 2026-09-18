@@ -1904,6 +1904,10 @@ struct Settings {
     // Update versions the user chose to skip — never offered again.
     #[serde(default)]
     skipped_versions: Vec<String>,
+    // Highest app version the "what's new" list has already shown. Empty means
+    // never shown (fresh install), see whats_new_check.
+    #[serde(default)]
+    last_seen_version: String,
     // Expert toggles: feature key -> enabled. A missing key means enabled, so
     // every feature is on by default and only explicit `false` disables it.
     #[serde(default)]
@@ -2056,6 +2060,7 @@ impl Default for Settings {
             rec_pause_hotkey: default_rec_pause_hotkey(),
             auto_update: true,
             skipped_versions: Vec::new(),
+            last_seen_version: String::new(),
             ui_flags: HashMap::new(),
             ui_values: HashMap::new(),
             ui_texts: HashMap::new(),
@@ -20088,6 +20093,140 @@ fn skip_version(app: AppHandle, state: State<Db>, version: String) {
     }
 }
 
+// The shipped changelog, baked into the binary at compile time: the "what's
+// new" window needs nothing from the network to show the current version.
+const EMBEDDED_RELEASE_NOTES: &str = include_str!("../../docs/release-notes.md");
+const RELEASE_NOTES_MAX_BYTES: u64 = 2 * 1024 * 1024;
+
+#[derive(Serialize, Clone)]
+struct WhatsNewSection {
+    version: String,
+    // Raw Markdown, including its own "## <version>" heading. The frontend
+    // renders it node by node, the same safe path the update-changelog dialog
+    // already uses, never through innerHTML.
+    markdown: String,
+}
+
+#[derive(Serialize, Clone)]
+struct WhatsNewResult {
+    sections: Vec<WhatsNewSection>,
+    // The version boundary the sections were computed from, None for "fresh
+    // install" or "current version only". Echoed back to whats_new_refresh so
+    // a GitHub refresh reproduces the exact same range.
+    since: Option<String>,
+}
+
+// Split a release-notes document on its "## " version headings. A heading's
+// version is its last whitespace-separated token, so "## Prompt Saver 2.7.0"
+// yields "2.7.0"; a heading without a trailing version-shaped token is
+// skipped rather than guessed at.
+fn parse_release_notes(text: &str) -> Vec<WhatsNewSection> {
+    let mut sections = Vec::new();
+    let mut current: Option<(String, Vec<&str>)> = None;
+    for line in text.lines() {
+        if let Some(rest) = line.strip_prefix("## ") {
+            if let Some((version, body)) = current.take() {
+                sections.push(WhatsNewSection { version, markdown: body.join("\n").trim().to_string() });
+            }
+            let version = rest.split_whitespace().last().unwrap_or("").to_string();
+            if version.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+                current = Some((version, vec![line]));
+            } else {
+                current = None; // heading without a version-shaped token, not a release section
+            }
+        } else if let Some((_, body)) = current.as_mut() {
+            body.push(line);
+        }
+    }
+    if let Some((version, body)) = current {
+        sections.push(WhatsNewSection { version, markdown: body.join("\n").trim().to_string() });
+    }
+    sections
+}
+
+// True when `a` and `b` name the same version, component-wise, like
+// version_newer, so "1.9" and "1.9.0" compare equal.
+fn version_eq(a: &str, b: &str) -> bool {
+    !version_newer(a, b) && !version_newer(b, a)
+}
+
+// The three cases the acceptance test names: unchanged version shows nothing,
+// a version jump shows every section strictly after `since` up to and
+// including `current`, and an unknown/absent `since` (fresh install, or a
+// caller that only ever wants the current entry) shows the current version
+// only.
+fn sections_for_update(all: &[WhatsNewSection], since: Option<&str>, current: &str) -> Vec<WhatsNewSection> {
+    match since {
+        Some(v) if version_eq(v, current) => Vec::new(),
+        Some(v) => all
+            .iter()
+            .filter(|s| version_newer(&s.version, v) && !version_newer(&s.version, current))
+            .cloned()
+            .collect(),
+        None => all.iter().filter(|s| version_eq(&s.version, current)).cloned().collect(),
+    }
+}
+
+// An empty stored version means "never shown" (fresh install), split out so
+// this mapping is unit-testable without an AppHandle (mirrors version_newer).
+fn whats_new_check_impl(all: &[WhatsNewSection], last_seen: &str, current: &str) -> Vec<WhatsNewSection> {
+    let since = if last_seen.is_empty() { None } else { Some(last_seen) };
+    sections_for_update(all, since, current)
+}
+
+// Startup check: what changed since the version this install last showed.
+// Marks the current version as seen immediately, regardless of whether the
+// caller ever displays the result, matching the toast, which never returns
+// once its version is marked seen.
+#[tauri::command]
+fn whats_new_check(app: AppHandle, state: State<Db>) -> WhatsNewResult {
+    let all = parse_release_notes(EMBEDDED_RELEASE_NOTES);
+    let mut store = lock(&state);
+    let since = (!store.settings.last_seen_version.is_empty()).then(|| store.settings.last_seen_version.clone());
+    let sections = whats_new_check_impl(&all, &store.settings.last_seen_version, APP_VERSION);
+    store.settings.last_seen_version = APP_VERSION.to_string();
+    save_settings(&app, &store.settings);
+    WhatsNewResult { sections, since }
+}
+
+// About dialog: always just the current version's own section, from the
+// shipped copy. Opening it never marks anything as seen.
+#[tauri::command]
+fn whats_new_current() -> Vec<WhatsNewSection> {
+    let all = parse_release_notes(EMBEDDED_RELEASE_NOTES);
+    sections_for_update(&all, None, APP_VERSION)
+}
+
+// "Update from GitHub": re-fetch release-notes.md and apply the same filter
+// the open window used (`since`, exactly as passed to whats_new_check or
+// None for the About-triggered view). Only the display changes, never the
+// shipped file.
+#[tauri::command]
+async fn whats_new_refresh(since: Option<String>) -> Result<Vec<WhatsNewSection>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let url = format!("https://raw.githubusercontent.com/{}/main/docs/release-notes.md", brand::REPO);
+        let resp = ureq::get(&url)
+            .set("User-Agent", brand::USER_AGENT)
+            .timeout(std::time::Duration::from_secs(10))
+            .call()
+            .map_err(|e| format!("download: {}", e))?;
+        let mut bytes = Vec::new();
+        use std::io::Read;
+        resp.into_reader()
+            .take(RELEASE_NOTES_MAX_BYTES)
+            .read_to_end(&mut bytes)
+            .map_err(|e| format!("read: {}", e))?;
+        if bytes.len() as u64 >= RELEASE_NOTES_MAX_BYTES {
+            return Err("release notes too large / truncated".to_string());
+        }
+        let text = String::from_utf8_lossy(&bytes).into_owned();
+        let all = parse_release_notes(&text);
+        Ok(sections_for_update(&all, since.as_deref(), APP_VERSION))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // Strictly pin an update download URL to `<repo>/releases/download/<tag>/<asset>.exe`.
 // A bare `starts_with` prefix check is not enough: the URL crate (and Windows) treat
 // `..` and `\` as path separators, so `.../releases/download/../../attacker/...` would
@@ -25761,6 +25900,9 @@ pub fn run() {
             set_ui_text,
             reset_expert,
             skip_version,
+            whats_new_check,
+            whats_new_current,
+            whats_new_refresh,
             open_snip,
             open_picker,
             open_recorder,
@@ -37994,6 +38136,70 @@ mod tests {
         let took = started.elapsed();
         assert!(stopped, "the timer thread was still running after {took:?}");
         assert!(took < Duration::from_millis(500), "shutdown took {took:?}");
+    }
+
+    fn wn_notes() -> Vec<WhatsNewSection> {
+        parse_release_notes(
+            "## Prompt Saver 1.0.0\nfirst\n\n## Prompt Saver 1.1.0\nsecond\n\n## Prompt Saver 2.0.0\nthird\n",
+        )
+    }
+
+    #[test]
+    fn parse_release_notes_splits_on_each_version_heading() {
+        let sections = wn_notes();
+        assert_eq!(sections.len(), 3);
+        assert_eq!(sections[0].version, "1.0.0");
+        assert!(sections[0].markdown.starts_with("## Prompt Saver 1.0.0"));
+        assert!(sections[0].markdown.contains("first"));
+        assert_eq!(sections[2].version, "2.0.0");
+    }
+
+    #[test]
+    fn sections_for_update_same_version_shows_nothing() {
+        let all = wn_notes();
+        assert!(sections_for_update(&all, Some("2.0.0"), "2.0.0").is_empty());
+    }
+
+    #[test]
+    fn sections_for_update_jump_shows_every_section_in_between() {
+        // Stored version is the oldest, current is the newest, expect both
+        // later sections, oldest excluded.
+        let all = wn_notes();
+        let shown = sections_for_update(&all, Some("1.0.0"), "2.0.0");
+        assert_eq!(shown.iter().map(|s| s.version.as_str()).collect::<Vec<_>>(), vec!["1.1.0", "2.0.0"]);
+    }
+
+    #[test]
+    fn sections_for_update_unknown_stored_version_shows_only_current() {
+        let all = wn_notes();
+        let shown = sections_for_update(&all, None, "1.1.0");
+        assert_eq!(shown.len(), 1);
+        assert_eq!(shown[0].version, "1.1.0");
+    }
+
+    #[test]
+    fn parse_release_notes_ignores_a_heading_without_a_version() {
+        let sections = parse_release_notes("## Prompt Saver 1.0.0\nbody\n\n## Downloads\nnot a release\n");
+        assert_eq!(sections.len(), 1);
+        assert_eq!(sections[0].version, "1.0.0");
+        // The non-version heading's text is swallowed, not attached to the
+        // previous section or promoted to one of its own.
+        assert!(!sections[0].markdown.contains("Downloads"));
+    }
+
+    #[test]
+    fn whats_new_check_impl_treats_an_empty_stored_version_as_fresh_install() {
+        let all = wn_notes();
+        let shown = whats_new_check_impl(&all, "", "1.0.0");
+        assert_eq!(shown.len(), 1);
+        assert_eq!(shown[0].version, "1.0.0");
+    }
+
+    #[test]
+    fn whats_new_check_impl_passes_a_non_empty_stored_version_through() {
+        let all = wn_notes();
+        let shown = whats_new_check_impl(&all, "1.0.0", "2.0.0");
+        assert_eq!(shown.iter().map(|s| s.version.as_str()).collect::<Vec<_>>(), vec!["1.1.0", "2.0.0"]);
     }
 }
 
