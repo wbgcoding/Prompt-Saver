@@ -35648,7 +35648,7 @@ mod tests {
         let folder_members = std::collections::HashSet::from(["a".to_string()]);
         let ids: Vec<String> = vec!["a".to_string()];
         assert!(place_ids_in_view(&mut layout, &ids, 2, 1, &std::collections::HashSet::new(), &folder_members));
-        assert!(layout.get("a").is_none(), "the stray entry for a folder member must be removed");
+        assert!(!layout.contains_key("a"), "the stray entry for a folder member must be removed");
     }
 
     #[test]
