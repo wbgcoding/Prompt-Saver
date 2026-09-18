@@ -23957,14 +23957,57 @@ fn crash_log_path() -> PathBuf {
     dir.join("error.log")
 }
 
+// A lightweight cross-process, cross-thread mutex for the crash log: an
+// exclusively-created marker file beside it. `create_new` is atomic against
+// both another thread in this process and a second instance of the app, which
+// is cheaper here than wiring up `LockFileEx`'s `OVERLAPPED` struct for a file
+// that is small and rotated rarely. Best-effort like everything else in this
+// module: a lock nobody will ever release (a stale marker left by a crash) must
+// never hang the app over a log line forever, so acquiring gives up after a
+// short wait and proceeds unlocked rather than freezing the caller.
+struct CrashLogLock {
+    lock_path: PathBuf,
+    held: bool,
+}
+
+impl CrashLogLock {
+    fn acquire(path: &Path) -> Self {
+        let lock_path = path.with_extension("log.lock");
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            match fs::OpenOptions::new().write(true).create_new(true).open(&lock_path) {
+                Ok(_) => return Self { lock_path, held: true },
+                Err(_) if std::time::Instant::now() < deadline => std::thread::sleep(Duration::from_millis(5)),
+                Err(_) => return Self { lock_path, held: false },
+            }
+        }
+    }
+}
+
+impl Drop for CrashLogLock {
+    fn drop(&mut self) {
+        if self.held {
+            let _ = fs::remove_file(&self.lock_path);
+        }
+    }
+}
+
+fn with_crash_log_lock<T>(path: &Path, f: impl FnOnce() -> T) -> T {
+    let _lock = CrashLogLock::acquire(path);
+    f()
+}
+
 // Trims `path` down to its last `cap` bytes, cutting on a line boundary so the
-// kept tail never opens on a fragment of a line whose start was just thrown away.
-// Pulled out of `append_crash_log` as its own function, taking an explicit path,
-// so a test can prove the trimming itself against a private file it owns:
-// dozens of unrelated tests append to the real crash log's redirected path at the
-// same time, and asserting exact content against that shared, moving target would
-// be a race, not a test.
-fn rotate_log_file(path: &Path, cap: usize) {
+// kept tail never opens on a fragment of a line whose start was just thrown
+// away. The kept remainder goes to a side file next to `path`, flushed and
+// synced, then swapped in with `fs::rename` -- so a crash mid-write leaves the
+// old, complete file standing rather than a half-written one, and the rename
+// itself never overlaps a concurrent append because both go through
+// `with_crash_log_lock`. Called both on its own (`rotate_log_file`, still
+// self-locking so a test can prove the trimming against a private file it owns)
+// and from inside `append_crash_log`'s own lock (`rotate_log_file_locked`, which
+// must not try to acquire the same lock twice).
+fn rotate_log_file_locked(path: &Path, cap: usize) {
     let Ok(contents) = fs::read(path) else { return };
     if contents.len() <= cap {
         return;
@@ -23975,7 +24018,40 @@ fn rotate_log_file(path: &Path, cap: usize) {
         .position(|&b| b == b'\n')
         .map(|i| cut_from + i + 1)
         .unwrap_or(contents.len());
-    let _ = fs::write(path, &contents[start..]);
+    let tmp = path.with_extension("log.tmp");
+    let Ok(mut f) = fs::File::create(&tmp) else { return };
+    use std::io::Write;
+    let wrote = f.write_all(&contents[start..]).and_then(|_| f.flush()).and_then(|_| f.sync_all());
+    drop(f);
+    if wrote.is_err() || fs::rename(&tmp, path).is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+}
+
+// Only ever called from a test now: `append_crash_log` goes through
+// `append_line_locked`, which shares its own lock across the rotation and the
+// append that follows it rather than acquiring the lock twice.
+#[cfg(test)]
+fn rotate_log_file(path: &Path, cap: usize) {
+    with_crash_log_lock(path, || rotate_log_file_locked(path, cap));
+}
+
+// One line, written under the same lock as the rotation that may precede it --
+// dozens of unrelated tests append to the real crash log's redirected path at the
+// same time, and asserting exact content against that shared, moving target
+// would be a race, not a test, so this takes an explicit path for the same
+// reason `rotate_log_file` does. Shared by `append_crash_log` and its tests.
+fn append_line_locked(path: &Path, cap: usize, line: &str) {
+    if let Some(dir) = path.parent() {
+        let _ = fs::create_dir_all(dir);
+    }
+    with_crash_log_lock(path, || {
+        rotate_log_file_locked(path, cap);
+        use std::io::Write;
+        if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(f, "{line}");
+        }
+    });
 }
 
 // Append one line to a local crash log so a hard failure on a user's machine
@@ -23988,20 +24064,13 @@ fn rotate_log_file(path: &Path, cap: usize) {
 // on failure.
 fn append_crash_log(msg: &str) {
     let path = crash_log_path();
-    if let Some(dir) = path.parent() {
-        let _ = fs::create_dir_all(dir);
-    }
     let cap = ERROR_LOG_KEEP_BYTES.load(std::sync::atomic::Ordering::Relaxed) as usize;
-    rotate_log_file(&path, cap);
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
     let clean = scrub_log_line(msg);
-    use std::io::Write;
-    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
-        let _ = writeln!(f, "[t={} v{}] {}", secs, env!("CARGO_PKG_VERSION"), clean);
-    }
+    append_line_locked(&path, cap, &format!("[t={} v{}] {}", secs, env!("CARGO_PKG_VERSION"), clean));
 }
 
 // The data and sync folders `append_crash_log`'s ~50 call sites have no `AppHandle`
@@ -32783,6 +32852,70 @@ mod tests {
 
         let after = fs::read_to_string(&path).unwrap();
         assert_eq!(before, after, "a file under the cap must not be rewritten at all");
+        let _ = fs::remove_file(&path);
+    }
+
+    // A line appended while a rotation is under way must never be lost. Proven
+    // with a real second thread rather than a mocked lock: this thread holds the
+    // crash log's own lock first (standing in for a truncation already in
+    // progress), a channel confirms the appending thread has started only once
+    // it is actually about to block on that same lock, and only then does this
+    // thread finish the truncation and let go -- so the append is genuinely
+    // serialised after it, never racing it.
+    #[test]
+    fn a_concurrent_append_during_truncation_is_never_lost() {
+        let path = std::env::temp_dir().join(format!("ps-crashlog-lock-test-{}", std::process::id()));
+        let lock_path = path.with_extension("log.lock");
+        let _ = fs::remove_file(&lock_path);
+        let lines: Vec<String> = (0..50).map(|i| format!("line {i:03} of the log before rotation")).collect();
+        let body = lines.iter().map(|l| format!("{l}\n")).collect::<String>();
+        fs::write(&path, &body).unwrap();
+        let cap = body.len() / 3;
+
+        let held = CrashLogLock::acquire(&path);
+        assert!(held.held, "the test itself must hold the real lock to stand in for a truncation in progress");
+
+        let (started_tx, started_rx) = std::sync::mpsc::channel::<()>();
+        let path2 = path.clone();
+        let appender = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            append_line_locked(&path2, usize::MAX, "line NEW appended during truncation");
+        });
+        started_rx.recv().unwrap();
+        // Give the appending thread a moment to reach the lock and start
+        // waiting on it before this thread finishes the "truncation" and lets go.
+        std::thread::sleep(Duration::from_millis(100));
+        rotate_log_file_locked(&path, cap);
+        drop(held);
+        appender.join().unwrap();
+
+        let kept = fs::read_to_string(&path).unwrap();
+        assert!(
+            kept.contains("line NEW appended during truncation"),
+            "an append that happened during a truncation must still be in the file: {kept:?}"
+        );
+        assert!(
+            !lines.first().map(|l| kept.contains(l.as_str())).unwrap_or(false),
+            "the truncation itself must still have taken effect: {kept:?}"
+        );
+
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&lock_path);
+    }
+
+    // The side file rotation writes the kept remainder to before renaming it into
+    // place must never survive the rotation, win or lose.
+    #[test]
+    fn rotate_log_file_leaves_no_side_file_behind() {
+        let path = std::env::temp_dir().join(format!("ps-crashlog-rotate-sidefile-test-{}", std::process::id()));
+        let tmp = path.with_extension("log.tmp");
+        let _ = fs::remove_file(&tmp);
+        let body: String = (0..50).map(|i| format!("line {i:03} of the log before rotation\n")).collect();
+        fs::write(&path, &body).unwrap();
+
+        rotate_log_file(&path, body.len() / 3);
+
+        assert!(!tmp.exists(), "the side file used during rotation must not be left behind");
         let _ = fs::remove_file(&path);
     }
 
