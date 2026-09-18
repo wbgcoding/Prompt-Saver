@@ -357,6 +357,29 @@ the video editor and the introduction tour ship on).
   choose "Compare with" on a tile, to see both next to each other with the
   differences highlighted, and take either side's text over into the other.
   The duplicate finder uses the same highlighting for its pairs.
+- **A notice after an update.** Once a new version has started, a small message
+  links to what changed; the full history stays reachable from the About box at
+  any time.
+- **Better contrast in every theme.** Field borders, small accent colored
+  labels, the video editor's tabs and tinted tile text now clear the contrast
+  requirement everywhere, and an automated check keeps it that way.
+- **Floating buttons remember their screen.** A pill or folder whose saved
+  screen is gone opens on the main screen, marked as parked, and returns on its
+  own once that screen is back. An expert action brings every floating window
+  back at once, and an optional cleanup can hide a long parked view, never
+  delete it.
+- **Undo right in the message.** Deleting a view, clearing the copy history or
+  the clipboard inbox, deleting a tag, and batch deletes or tag changes now
+  offer an undo button on the message that confirms them.
+- **An archive.** Set a prompt aside without deleting it: archived prompts
+  leave the library and the grid, stay findable by search, and travel with
+  exports and backups. A toggle above the library brings them back into view.
+- **Saved searches.** Keep a query with its tag filters and sort order as a
+  chip above the search field and bring the whole search back with one click.
+  Rename, delete or reorder them as you like.
+- **The library as tiles.** A toggle next to the type filter switches the
+  library to large preview tiles with the name below; clicking, double click,
+  the context menu and multi-select behave exactly as in the list.
 - **Export the usage statistics.** A button next to the statistics themselves
   saves them as CSV, TXT or JSON: per-entry copy counts and last-used dates,
   plus the daily activity chart. Only there while statistics are being
