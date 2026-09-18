@@ -88,25 +88,34 @@ export const HELP_CONTENT = {
         "Ctrl-drag a tile onto another window to drop its text directly, with no clipboard round-trip.",
       ],
       whatHappens:
-        "A short confirmation bubble or flash confirms the copy. Chaining — clicking several tiles in a row — combines them into one clipboard entry instead of overwriting each other.",
+        "A short confirmation bubble or flash confirms the copy. Chaining, clicking several tiles in a row, combines them into one clipboard entry instead of overwriting each other; hovering a text tile also shows a small chain icon next to its selection checkbox that starts a chain with that tile first. Chaining is not the same as rotation: chaining combines several different tiles, rotation changes what a single tile holds from copy to copy (see Rotating tiles).",
       settings: ["Chaining, per-tile hotkeys, auto-paste, drag-out, close-on-copy — Expert menu → Features → Copying", "Which key drags a tile out, and whether that key drags out or moves it — Expert menu → Features → Copying"],
     },
     {
       section: "alwaysOnTop",
-      title: "Floating buttons & folders",
-      whatItIs:
-        "Floating buttons are small always-on-top copy buttons outside the main window; grid folders group tiles the same way pill folders group buttons.",
+      title: "Floating buttons",
+      whatItIs: "Floating buttons are small always-on-top copy buttons that sit outside the main window, over whatever app is in use.",
       howTo: [
         "Right-click a tile, then \"Toggle floating button\", to pin it as a pill.",
         "Drag the pill to move it; right-click it for size, edit, or remove.",
-        "Drag one floating button onto another to merge them into a pill folder.",
-        "On the main grid, drag one tile onto another to group them the same way.",
+      ],
+      whatHappens: "Positions survive app restarts.",
+      settings: ["Floating buttons — Expert menu → Features → Floating buttons & folders"],
+    },
+    {
+      section: "alwaysOnTop",
+      title: "Folders",
+      whatItIs: "The same gesture groups things in three places: drop one item onto another of its own kind to gather it into a folder.",
+      howTo: [
+        "Drag one view tab onto another to make a group tab.",
+        "Drag one floating button onto another to make a pill folder.",
+        "On the main grid, drag one tile onto another to make a grid folder.",
         "Drag a member back out to free it.",
       ],
       whatHappens:
-        "Positions survive app restarts. A folder of either kind shows up to four member previews and a count; dragging a member out frees it, and the folder dissolves once one member is left. A tile belongs to only one grid folder at a time.",
-      settings: ["Pill folders, grid folders — Expert menu → Features → Floating buttons & folders"],
-      tip: "Both kinds of folder are on out of the box; switch either off in the expert menu if buttons are never grouped.",
+        "A pill or grid folder shows up to four member previews and a count, dragging a member out frees it, and it dissolves once one member is left; a tile belongs to only one grid folder at a time. A group tab instead opens the list of its views when clicked.",
+      settings: ["Pill folders, grid folders — Expert menu → Features → Floating buttons & folders", "View groups — Expert menu → Features → Views and quick grid"],
+      tip: "All three kinds are on out of the box; switch any of them off in the expert menu if items are never grouped that way.",
     },
     {
       section: "alwaysOnTop",
@@ -324,6 +333,9 @@ export const HELP_CONTENT = {
       howTo: [
         "Drag a tile to any empty cell.",
         "Drop a tile on an occupied cell to swap the two.",
+        "Drop a tile on a view tab above the grid to move it into that view instead.",
+        "Hold Ctrl while dropping on a view tab to copy the tile there, so it stays in both places.",
+        "Hover over a collapsed view group so it opens and the drop can target a view inside.",
         "Adjust the grid size with the quick columns and rows fields above it.",
       ],
       whatHappens:
@@ -344,8 +356,12 @@ export const HELP_CONTENT = {
         "If a combination is already used, the field explains why instead of accepting it silently.",
       ],
       whatHappens:
-        "A combination must include Ctrl or Alt; Shift alone, or a bare key, is refused so ordinary typing is never swallowed. The app hotkey always wins a conflict; among tiles, the first one in the list keeps a combination two tiles happen to share. Importing a backup that carries a colliding hotkey drops the losing one instead of failing the import, and the import summary says how many were dropped.",
-      settings: ["Global hotkey, all hotkeys — Settings", "Per-tile hotkeys, paste-after-copy — Expert menu → Features → Copying"],
+        "A combination must include Ctrl or Alt; Shift alone, or a bare key, is refused so ordinary typing is never swallowed. The app hotkey always wins a conflict; among tiles, the first one in the list keeps a combination two tiles happen to share. Importing a backup that carries a colliding hotkey drops the losing one instead of failing the import, and the import summary says how many were dropped. A tile with its own hotkey shows a small keyboard symbol on it.",
+      settings: [
+        "Global hotkey, all hotkeys — Settings",
+        "Per-tile hotkeys, paste-after-copy — Expert menu → Features → Copying",
+        "Hotkey badge, badge opacity — Expert menu → Buttons → Tiles & copying",
+      ],
     },
     {
       section: "system",
@@ -370,7 +386,7 @@ export const HELP_CONTENT = {
         "Keep one, or mark the pair as not a duplicate to stop it being flagged again.",
       ],
       whatHappens:
-        "Matching compares each tile's main text — its name, if it has no text — by similarity, not an exact match; the threshold controls how close counts as close enough. A rotating tile is only compared on its first entry.",
+        "Matching compares each tile's main text — its name, if it has no text — by similarity, not an exact match; the threshold controls how close counts as close enough. A rotating tile is only compared on its first entry. A shortcut in the settings dialog opens it directly too, next to import and export, so it does not take the expert menu to find.",
       settings: ["Duplicate finder, similarity threshold — Expert menu → System & data → Data & maintenance"],
     },
     {
@@ -680,25 +696,34 @@ export const HELP_CONTENT = {
         "Strg-Ziehen einer Kachel auf ein anderes Fenster legt ihren Text direkt dort ab.",
       ],
       whatHappens:
-        "Eine kurze Bestätigungsblase oder ein Aufblinken bestätigt den Kopiervorgang. Verketten — mehrere Kacheln hintereinander anklicken — fasst sie zu einem Eintrag in der Zwischenablage zusammen, statt sie zu überschreiben.",
+        "Eine kurze Bestätigungsblase oder ein Aufblinken bestätigt den Kopiervorgang. Verketten, mehrere Kacheln hintereinander anklicken, fasst sie zu einem Eintrag in der Zwischenablage zusammen, statt sie zu überschreiben; beim Überfahren einer Text-Kachel erscheint zusätzlich ein kleines Ketten-Symbol neben ihrer Auswahlbox, das direkt eine Kette mit dieser Kachel beginnt. Verketten ist nicht dasselbe wie Rotation: Verketten fasst mehrere verschiedene Kacheln zusammen, Rotation ändert, was eine einzelne Kachel von Kopie zu Kopie enthält (siehe Wechselnde Kacheln).",
       settings: ["Verketten, eigene Hotkeys pro Kachel, Auto-Paste, Drag-out, Schließen-nach-Kopieren — Experten-Menü → Funktionen → Kopieren", "Welche Taste eine Kachel herauszieht und ob diese Taste herauszieht oder sie verschiebt — Experten-Menü → Funktionen → Kopieren"],
     },
     {
       section: "alwaysOnTop",
-      title: "Schwebende Buttons & Ordner",
-      whatItIs:
-        "Schwebende Buttons sind kleine, immer im Vordergrund liegende Kopier-Buttons außerhalb des Hauptfensters; Raster-Ordner gruppieren Kacheln genauso, wie Pillen-Ordner Buttons gruppieren.",
+      title: "Schwebende Buttons",
+      whatItIs: "Schwebende Buttons sind kleine, immer im Vordergrund liegende Kopier-Buttons außerhalb des Hauptfensters, über jeder anderen App.",
       howTo: [
         "Rechtsklick auf eine Kachel, dann \"Schwebenden Button umschalten\", um sie als Pille anzuheften.",
         "Die Pille ziehen, um sie zu bewegen; Rechtsklick für Größe, Bearbeiten oder Entfernen.",
-        "Einen schwebenden Button auf einen anderen ziehen, um sie zu einem Pillen-Ordner zu verbinden.",
-        "Im Hauptfenster eine Kachel auf eine andere ziehen, um sie genauso zu gruppieren.",
+      ],
+      whatHappens: "Positionen bleiben nach Neustarts erhalten.",
+      settings: ["Schwebende Buttons — Experten-Menü → Funktionen → Schwebende Buttons & Ordner"],
+    },
+    {
+      section: "alwaysOnTop",
+      title: "Ordner",
+      whatItIs: "Dieselbe Geste gruppiert an drei Stellen: ein Element auf ein gleichartiges ziehen, um es in einen Ordner aufzunehmen.",
+      howTo: [
+        "Einen Ansichts-Tab auf einen anderen ziehen, um einen Gruppen-Tab zu bilden.",
+        "Einen schwebenden Button auf einen anderen ziehen, um einen Pillen-Ordner zu bilden.",
+        "Im Hauptfenster eine Kachel auf eine andere ziehen, um einen Raster-Ordner zu bilden.",
         "Ein Mitglied wieder herausziehen, um es freizugeben.",
       ],
       whatHappens:
-        "Positionen bleiben nach Neustarts erhalten. Ein Ordner beider Arten zeigt bis zu vier Vorschauen seiner Mitglieder und eine Anzahl; das Herausziehen eines Mitglieds gibt es frei, und der Ordner löst sich auf, sobald nur noch eines übrig ist. Eine Kachel gehört immer nur zu einem Raster-Ordner gleichzeitig.",
-      settings: ["Pillen-Ordner, Raster-Ordner — Experten-Menü → Funktionen → Schwebende Buttons & Ordner"],
-      tip: "Beide Ordnerarten sind ab Werk an; im Experten-Menü abschaltbar, wenn Buttons nie gruppiert werden.",
+        "Ein Pillen- oder Raster-Ordner zeigt bis zu vier Vorschauen seiner Mitglieder und eine Anzahl; das Herausziehen eines Mitglieds gibt es frei, und der Ordner löst sich auf, sobald nur noch eines übrig ist. Eine Kachel gehört immer nur zu einem Raster-Ordner gleichzeitig. Ein Gruppen-Tab öffnet stattdessen beim Anklicken die Liste seiner Ansichten.",
+      settings: ["Pillen-Ordner, Raster-Ordner — Experten-Menü → Funktionen → Schwebende Buttons & Ordner", "Ansichtsgruppen — Experten-Menü → Funktionen → Ansichten und Schnellraster"],
+      tip: "Alle drei Arten sind ab Werk an; jede einzeln im Experten-Menü abschaltbar, wenn Elemente so nie gruppiert werden sollen.",
     },
     {
       section: "alwaysOnTop",
@@ -917,6 +942,9 @@ export const HELP_CONTENT = {
       howTo: [
         "Eine Kachel in eine beliebige leere Zelle ziehen.",
         "Eine Kachel auf einer besetzten Zelle loslassen, um beide zu tauschen.",
+        "Eine Kachel auf einen Ansichts-Tab über dem Raster ziehen, um sie stattdessen in diese Ansicht zu verschieben.",
+        "Beim Ziehen auf einen Ansichts-Tab Strg gedrückt halten, um die Kachel dorthin zu kopieren, statt zu verschieben, sodass sie an beiden Stellen bleibt.",
+        "Über einer eingeklappten Ansichtsgruppe warten, bis sie sich öffnet, damit das Ablegen eine Ansicht darin treffen kann.",
         "Die Rastergröße mit den Schnell-Feldern für Spalten und Zeilen darüber anpassen.",
       ],
       whatHappens:
@@ -937,8 +965,12 @@ export const HELP_CONTENT = {
         "Ist eine Kombination bereits vergeben, erklärt das Feld den Grund, statt sie stillschweigend zu akzeptieren.",
       ],
       whatHappens:
-        "Eine Kombination muss Strg oder Alt enthalten; Shift allein oder eine bloße Taste wird abgelehnt, damit normales Tippen nie verschluckt wird. Der App-Hotkey gewinnt bei einem Konflikt immer; bei Kacheln behält die erste in der Liste eine geteilte Kombination. Der Import eines Backups mit kollidierendem Hotkey verwirft den verlierenden, statt den Import abzubrechen, und die Zusammenfassung nennt die Anzahl der verworfenen.",
-      settings: ["Globaler Hotkey, alle Hotkeys — Einstellungen", "Eigene Hotkeys pro Kachel, Einfügen nach Kopieren — Experten-Menü → Funktionen → Kopieren"],
+        "Eine Kombination muss Strg oder Alt enthalten; Shift allein oder eine bloße Taste wird abgelehnt, damit normales Tippen nie verschluckt wird. Der App-Hotkey gewinnt bei einem Konflikt immer; bei Kacheln behält die erste in der Liste eine geteilte Kombination. Der Import eines Backups mit kollidierendem Hotkey verwirft den verlierenden, statt den Import abzubrechen, und die Zusammenfassung nennt die Anzahl der verworfenen. Eine Kachel mit eigenem Hotkey zeigt ein kleines Tastatursymbol.",
+      settings: [
+        "Globaler Hotkey, alle Hotkeys — Einstellungen",
+        "Eigene Hotkeys pro Kachel, Einfügen nach Kopieren — Experten-Menü → Funktionen → Kopieren",
+        "Hotkey-Abzeichen, Deckkraft des Abzeichens — Experten-Menü → Buttons → Kacheln & Kopieren",
+      ],
     },
     {
       section: "system",
@@ -963,7 +995,7 @@ export const HELP_CONTENT = {
         "Eine Kachel behalten, oder das Paar als kein Duplikat markieren, damit es nicht erneut markiert wird.",
       ],
       whatHappens:
-        "Der Abgleich vergleicht den Haupttext jeder Kachel — oder ihren Namen, falls sie keinen Text hat — nach Ähnlichkeit, nicht nach exakter Übereinstimmung; der Schwellenwert steuert, wie nah als nah genug gilt. Eine rotierende Kachel wird nur nach ihrem ersten Eintrag verglichen.",
+        "Der Abgleich vergleicht den Haupttext jeder Kachel — oder ihren Namen, falls sie keinen Text hat — nach Ähnlichkeit, nicht nach exakter Übereinstimmung; der Schwellenwert steuert, wie nah als nah genug gilt. Eine rotierende Kachel wird nur nach ihrem ersten Eintrag verglichen. Eine Abkürzung im Einstellungsdialog öffnet ihn auch direkt, neben Import und Export, sodass dafür nicht erst das Experten-Menü nötig ist.",
       settings: ["Duplikat-Finder, Ähnlichkeitsschwelle — Experten-Menü → System & Daten → Daten & Wartung"],
     },
     {

@@ -2529,13 +2529,19 @@ fn is_portable() -> bool {
 // or invalid it falls back to the canonical dir, so data is never lost.
 fn data_dir(app: &AppHandle) -> PathBuf {
     let base = default_data_dir(app);
-    if let Ok(s) = fs::read_to_string(base.join("datapath")) {
+    let resolved = if let Ok(s) = fs::read_to_string(base.join("datapath")) {
         let p = PathBuf::from(s.trim());
         if !s.trim().is_empty() && p.is_dir() {
-            return p;
+            p
+        } else {
+            base
         }
-    }
-    base
+    } else {
+        base
+    };
+    // Recorded for `append_crash_log`'s scrubbing, see `LAST_KNOWN_DATA_DIR`.
+    *LAST_KNOWN_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(resolved.clone());
+    resolved
 }
 
 // The store's JSON files (prompts.json / settings.json — the DB-write fallback and the
@@ -15717,12 +15723,17 @@ mod ocr {
             // SE_ERR_ACCESSDENIED (5) is what ShellExecuteW returns when the user
             // declines the UAC prompt; ERROR_CANCELLED (1223) shows up on some
             // Windows versions for the same outcome. Neither is a real failure on
-            // its own -- what it MEANS differs by account, so the token's own
-            // elevation type decides which of the two distinct outcomes this is.
+            // its own -- what it MEANS differs by policy, not by whether this
+            // particular account happens to be an administrator (Windows still
+            // lets the credential prompt take a DIFFERENT admin's password).
+            // The wire strings keep their original names for the frontend's own
+            // dispatch on them (ui/main.js), even though "no-rights" now means
+            // "Group Policy denies the prompt outright" rather than "this
+            // account has none".
             if code == 5 || code == 1223 {
-                return Err(match classify_elevation_refusal(account_can_elevate()) {
-                    ElevationRefusal::NoAdminRights => "ocr-elevate-no-rights".to_string(),
-                    ElevationRefusal::Cancelled => "ocr-elevate-cancelled".to_string(),
+                return Err(match classify_elevation_refusal(elevation_denied_by_policy()) {
+                    ElevationRefusal::PolicyBlocked => "ocr-elevate-no-rights".to_string(),
+                    ElevationRefusal::Retryable => "ocr-elevate-cancelled".to_string(),
                 });
             }
             return Err(format!("could not start the elevated process (ShellExecuteW code {})", code));
@@ -15730,15 +15741,17 @@ mod ocr {
         Ok(())
     }
 
-    // Whether "runas" can ever succeed for the account running this process --
-    // never by string-matching a localised Windows message, which varies by
-    // machine and language. `TokenElevationTypeLimited` is a split-token
-    // administrator (UAC on): the consent prompt can succeed. `Full` means the
-    // process is already elevated. `Default` means no split token exists at
-    // all, which is either a genuine standard account (a real "no" -- a UAC
-    // credential prompt with no admin password to give it can never complete)
-    // or an administrator running with UAC turned off entirely, so membership
-    // in the Administrators group is the only thing that tells the two apart.
+    // Whether THIS account's own token can complete "runas" without anyone
+    // else's help -- never by string-matching a localised Windows message,
+    // which varies by machine and language. `TokenElevationTypeLimited` is a
+    // split-token administrator (UAC on): the consent prompt can succeed.
+    // `Full` means the process is already elevated. `Default` means no split
+    // token exists at all: either a standard account or an administrator
+    // running with UAC turned off entirely, so membership in the
+    // Administrators group is the only thing that tells the two apart. A
+    // `false` here does NOT mean elevation can never succeed at all -- the
+    // credential prompt Windows shows a standard account still takes a
+    // DIFFERENT administrator's password, see `elevation_denied_by_policy`.
     fn account_can_elevate() -> bool {
         use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::Security::{
@@ -15773,19 +15786,45 @@ mod ocr {
         }
     }
 
+    // Whether Group Policy denies the elevation prompt outright for this
+    // account: "User Account Control: Behavior of the elevation prompt for
+    // standard users" set to "Automatically deny elevation requests"
+    // (`ConsentPromptBehaviorUser` = 0) skips the credential dialog entirely,
+    // so there is no prompt left for even a different administrator's
+    // password to complete -- the one case a retry genuinely cannot fix. Only
+    // meaningful for an account that cannot elevate itself: an administrator's
+    // own consent prompt is governed by a different key
+    // (`ConsentPromptBehaviorAdmin`) and is never denied outright by this one.
+    // Missing key or unreadable = not policy-denied, same as the key being
+    // absent entirely (the out-of-the-box default).
+    fn elevation_denied_by_policy() -> bool {
+        if account_can_elevate() {
+            return false;
+        }
+        winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE)
+            .open_subkey(r"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System")
+            .and_then(|k| k.get_value::<u32, _>("ConsentPromptBehaviorUser"))
+            .map(|v| v == 0)
+            .unwrap_or(false)
+    }
+
     #[derive(Debug, PartialEq, Eq)]
     pub(super) enum ElevationRefusal {
-        // This account can never complete "runas", so a retry cannot help.
-        NoAdminRights,
-        // Elevation is possible for this account; this attempt was refused or
-        // failed once, and trying again may succeed.
-        Cancelled,
+        // Group Policy denies the elevation prompt outright: no dialog will
+        // ever appear for this account, so a retry cannot help.
+        PolicyBlocked,
+        // The dialog itself was declined or cancelled this time. Windows lets
+        // its credential prompt take a DIFFERENT administrator's password, so
+        // even an account that cannot elevate itself may still succeed next
+        // time -- trying again may succeed.
+        Retryable,
     }
-    // Pure decision, kept separate from the token probe above so it is
-    // unit-testable without touching Windows: given the same refused/cancelled
-    // ShellExecuteW outcome, which of the two distinct results the user sees.
-    pub(super) fn classify_elevation_refusal(can_elevate: bool) -> ElevationRefusal {
-        if can_elevate { ElevationRefusal::Cancelled } else { ElevationRefusal::NoAdminRights }
+    // Pure decision, kept separate from the registry/token probes above so it
+    // is unit-testable without touching Windows: given the same
+    // refused/cancelled ShellExecuteW outcome, which of the two distinct
+    // results the user sees.
+    pub(super) fn classify_elevation_refusal(denied_by_policy: bool) -> ElevationRefusal {
+        if denied_by_policy { ElevationRefusal::PolicyBlocked } else { ElevationRefusal::Retryable }
     }
 
     // DISM unconditionally writes a log to %WINDIR%\Logs\DISM at startup,
@@ -24013,14 +24052,57 @@ fn crash_log_path() -> PathBuf {
     dir.join("error.log")
 }
 
+// A lightweight cross-process, cross-thread mutex for the crash log: an
+// exclusively-created marker file beside it. `create_new` is atomic against
+// both another thread in this process and a second instance of the app, which
+// is cheaper here than wiring up `LockFileEx`'s `OVERLAPPED` struct for a file
+// that is small and rotated rarely. Best-effort like everything else in this
+// module: a lock nobody will ever release (a stale marker left by a crash) must
+// never hang the app over a log line forever, so acquiring gives up after a
+// short wait and proceeds unlocked rather than freezing the caller.
+struct CrashLogLock {
+    lock_path: PathBuf,
+    held: bool,
+}
+
+impl CrashLogLock {
+    fn acquire(path: &Path) -> Self {
+        let lock_path = path.with_extension("log.lock");
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            match fs::OpenOptions::new().write(true).create_new(true).open(&lock_path) {
+                Ok(_) => return Self { lock_path, held: true },
+                Err(_) if std::time::Instant::now() < deadline => std::thread::sleep(Duration::from_millis(5)),
+                Err(_) => return Self { lock_path, held: false },
+            }
+        }
+    }
+}
+
+impl Drop for CrashLogLock {
+    fn drop(&mut self) {
+        if self.held {
+            let _ = fs::remove_file(&self.lock_path);
+        }
+    }
+}
+
+fn with_crash_log_lock<T>(path: &Path, f: impl FnOnce() -> T) -> T {
+    let _lock = CrashLogLock::acquire(path);
+    f()
+}
+
 // Trims `path` down to its last `cap` bytes, cutting on a line boundary so the
-// kept tail never opens on a fragment of a line whose start was just thrown away.
-// Pulled out of `append_crash_log` as its own function, taking an explicit path,
-// so a test can prove the trimming itself against a private file it owns:
-// dozens of unrelated tests append to the real crash log's redirected path at the
-// same time, and asserting exact content against that shared, moving target would
-// be a race, not a test.
-fn rotate_log_file(path: &Path, cap: usize) {
+// kept tail never opens on a fragment of a line whose start was just thrown
+// away. The kept remainder goes to a side file next to `path`, flushed and
+// synced, then swapped in with `fs::rename` -- so a crash mid-write leaves the
+// old, complete file standing rather than a half-written one, and the rename
+// itself never overlaps a concurrent append because both go through
+// `with_crash_log_lock`. Called both on its own (`rotate_log_file`, still
+// self-locking so a test can prove the trimming against a private file it owns)
+// and from inside `append_crash_log`'s own lock (`rotate_log_file_locked`, which
+// must not try to acquire the same lock twice).
+fn rotate_log_file_locked(path: &Path, cap: usize) {
     let Ok(contents) = fs::read(path) else { return };
     if contents.len() <= cap {
         return;
@@ -24031,7 +24113,40 @@ fn rotate_log_file(path: &Path, cap: usize) {
         .position(|&b| b == b'\n')
         .map(|i| cut_from + i + 1)
         .unwrap_or(contents.len());
-    let _ = fs::write(path, &contents[start..]);
+    let tmp = path.with_extension("log.tmp");
+    let Ok(mut f) = fs::File::create(&tmp) else { return };
+    use std::io::Write;
+    let wrote = f.write_all(&contents[start..]).and_then(|_| f.flush()).and_then(|_| f.sync_all());
+    drop(f);
+    if wrote.is_err() || fs::rename(&tmp, path).is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+}
+
+// Only ever called from a test now: `append_crash_log` goes through
+// `append_line_locked`, which shares its own lock across the rotation and the
+// append that follows it rather than acquiring the lock twice.
+#[cfg(test)]
+fn rotate_log_file(path: &Path, cap: usize) {
+    with_crash_log_lock(path, || rotate_log_file_locked(path, cap));
+}
+
+// One line, written under the same lock as the rotation that may precede it --
+// dozens of unrelated tests append to the real crash log's redirected path at the
+// same time, and asserting exact content against that shared, moving target
+// would be a race, not a test, so this takes an explicit path for the same
+// reason `rotate_log_file` does. Shared by `append_crash_log` and its tests.
+fn append_line_locked(path: &Path, cap: usize, line: &str) {
+    if let Some(dir) = path.parent() {
+        let _ = fs::create_dir_all(dir);
+    }
+    with_crash_log_lock(path, || {
+        rotate_log_file_locked(path, cap);
+        use std::io::Write;
+        if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(f, "{line}");
+        }
+    });
 }
 
 // Append one line to a local crash log so a hard failure on a user's machine
@@ -24044,41 +24159,137 @@ fn rotate_log_file(path: &Path, cap: usize) {
 // on failure.
 fn append_crash_log(msg: &str) {
     let path = crash_log_path();
-    if let Some(dir) = path.parent() {
-        let _ = fs::create_dir_all(dir);
-    }
     let cap = ERROR_LOG_KEEP_BYTES.load(std::sync::atomic::Ordering::Relaxed) as usize;
-    rotate_log_file(&path, cap);
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    use std::io::Write;
-    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
-        let _ = writeln!(f, "[t={} v{}] {}", secs, env!("CARGO_PKG_VERSION"), msg);
-    }
+    let clean = scrub_log_line(msg);
+    append_line_locked(&path, cap, &format!("[t={} v{}] {}", secs, env!("CARGO_PKG_VERSION"), clean));
 }
 
-// Rewrites `path` without any line that carries a Windows user-profile path.
-// Matched structurally (`\Users\` as a path segment, case-insensitive) rather
-// than against today's own account name, see `scrub_user_paths_from_crash_log`
-// for why. Its own function, taking an explicit path, for the same testability
-// reason as `rotate_log_file` above.
+// The data and sync folders `append_crash_log`'s ~50 call sites have no `AppHandle`
+// to resolve on the spot: `data_dir` and `sync_dir_path` record whatever they last
+// resolved here instead, as a side effect, so a log line can be scrubbed without
+// adding an `AppHandle` parameter to every one of those call sites.
+static LAST_KNOWN_DATA_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
+static LAST_KNOWN_SYNC_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+// Every folder this build knows the identity of, longest path first so a folder
+// nested inside another (the sync folder inside the data folder, the data folder
+// inside the user profile) is matched by its own, more specific placeholder before
+// the outer one gets a chance to eat part of it.
+fn known_path_placeholders() -> Vec<(PathBuf, &'static str)> {
+    let mut out: Vec<(PathBuf, &'static str)> = Vec::new();
+    if let Some(p) = LAST_KNOWN_SYNC_DIR.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+        out.push((p, "<sync>"));
+    }
+    if let Some(p) = LAST_KNOWN_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+        out.push((p, "<data>"));
+    }
+    if let Some(exe_dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.to_path_buf())) {
+        out.push((exe_dir, "<app>"));
+    }
+    out.push((std::env::temp_dir(), "<temp>"));
+    if let Some(home) = std::env::var_os("USERPROFILE").map(PathBuf::from) {
+        out.push((home, "<user>"));
+    }
+    out.sort_by_key(|(p, _)| std::cmp::Reverse(p.as_os_str().len()));
+    out
+}
+
+// Case-insensitive substring replace that keeps byte offsets valid across the
+// swap: ASCII-only lowercasing never changes a string's byte length, so the
+// indices found against the lowercased copy still cut the original in the right
+// place.
+fn replace_case_insensitive(haystack: &str, needle: &str, replacement: &str) -> String {
+    if needle.is_empty() {
+        return haystack.to_string();
+    }
+    let lower_needle = needle.to_ascii_lowercase();
+    let mut lower_rest = haystack.to_ascii_lowercase();
+    let mut rest = haystack;
+    let mut out = String::with_capacity(haystack.len());
+    while let Some(idx) = lower_rest.find(&lower_needle) {
+        out.push_str(&rest[..idx]);
+        out.push_str(replacement);
+        rest = &rest[idx + needle.len()..];
+        lower_rest = lower_rest[idx + needle.len()..].to_string();
+    }
+    out.push_str(rest);
+    out
+}
+
+// Swaps every folder this build recognises for its placeholder, tried both with
+// backslashes and with the forward slashes a cross-platform crate's own error text
+// sometimes uses in place of them.
+fn replace_known_dirs(line: &str, dirs: &[(PathBuf, &'static str)]) -> String {
+    let mut out = line.to_string();
+    for (dir, placeholder) in dirs {
+        let win = dir.to_string_lossy().into_owned();
+        if win.is_empty() {
+            continue;
+        }
+        out = replace_case_insensitive(&out, &win, placeholder);
+        let alt = win.replace('\\', "/");
+        if alt != win {
+            out = replace_case_insensitive(&out, &alt, placeholder);
+        }
+    }
+    out
+}
+
+// Whether `s` is shaped like a filesystem path worth shortening: drive-rooted
+// (`D:\...`), a UNC share (`\\server\...`), or Unix-style with at least two
+// segments (`/mnt/data/...`), and it actually carries a separator beyond that
+// root so a bare `C:` or `/` is left alone.
+fn looks_like_a_path(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    let drive_rooted = bytes.len() > 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/');
+    let unc = s.starts_with(r"\\") && s.len() > 2;
+    let unix_like = s.starts_with('/') && s.matches('/').count() >= 2;
+    drive_rooted || unc || unix_like
+}
+
+// Last, structural line of defence for `append_crash_log`: any drive-rooted,
+// UNC or Unix-style path that slipped past the named placeholders above (a data
+// or sync folder the user pointed the app at that this run never resolved, for
+// one) is cut down to its file name rather than left whole in the log.
+fn shorten_stray_paths(line: &str) -> String {
+    line.split(' ')
+        .map(|word| {
+            let trimmed = word.trim_end_matches(|c: char| ".,;:)]}\"'".contains(c));
+            let suffix = &word[trimmed.len()..];
+            if looks_like_a_path(trimmed) {
+                let name = trimmed.rsplit(['\\', '/']).find(|s| !s.is_empty()).unwrap_or(trimmed);
+                format!("{name}{suffix}")
+            } else {
+                word.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+// One line's worth of cleanup for the crash log: named folders first (readable
+// placeholders for the ones this build actually knows), then a structural
+// catch-all for anything shaped like a path that is not one of them. Shared by
+// `append_crash_log`, which scrubs as it writes, and `strip_user_path_lines`,
+// which re-applies it once to whatever an older build already wrote.
+fn scrub_log_line(line: &str) -> String {
+    shorten_stray_paths(&replace_known_dirs(line, &known_path_placeholders()))
+}
+
+// Rewrites `path` with every line run through `scrub_log_line`, replacing a path
+// in place rather than deleting the line it is on -- the rest of that line is
+// still a real, useful diagnostic. Its own function, taking an explicit path, for
+// the same testability reason as `rotate_log_file` above.
 fn strip_user_path_lines(path: &Path) {
     let Ok(text) = fs::read_to_string(path) else { return };
-    let has_user_path = |line: &str| {
-        let lower = line.to_ascii_lowercase();
-        lower.contains(r"\users\") || lower.contains("/users/")
-    };
-    if !text.lines().any(has_user_path) {
-        return;
+    let cleaned: String = text.lines().map(|line| format!("{}\n", scrub_log_line(line))).collect();
+    if cleaned != text {
+        let _ = fs::write(path, cleaned);
     }
-    let cleaned: String = text
-        .lines()
-        .filter(|line| !has_user_path(line))
-        .map(|line| format!("{line}\n"))
-        .collect();
-    let _ = fs::write(path, cleaned);
 }
 
 // One-time cleanup: an older build's crash log can carry the BUILD MACHINE's own
@@ -25370,11 +25581,10 @@ const SYNC_LEGACY_MARK: &str = "syncDirLegacyChecked";
 
 fn sync_dir_path(app: &AppHandle, settings: &Settings) -> PathBuf {
     let custom = settings.ui_texts.get("syncDir").cloned().unwrap_or_default();
-    if custom.is_empty() {
-        sync_default_dir(app)
-    } else {
-        PathBuf::from(custom)
-    }
+    let resolved = if custom.is_empty() { sync_default_dir(app) } else { PathBuf::from(custom) };
+    // Recorded for `append_crash_log`'s scrubbing, see `LAST_KNOWN_SYNC_DIR`.
+    *LAST_KNOWN_SYNC_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(resolved.clone());
+    resolved
 }
 
 // Whether a folder holds at least one file this feature could have written. Used
@@ -29982,15 +30192,21 @@ mod tests {
         assert!(wrapped.ends_with("Der Zugriff auf den Pfad wurde verweigert."));
     }
 
-    // A split-token admin (UAC on, TokenElevationTypeLimited) or an already
-    // elevated process (TokenElevationTypeFull) can retry with a real chance of
-    // success; a standard account with no split token at all cannot, no matter
-    // how many times the prompt is shown.
+    // A cancelled or declined elevation dialog is always worth a retry --
+    // Windows lets that same credential prompt take a DIFFERENT
+    // administrator's password next time, so this account's own rights are
+    // not the last word. Only a Group Policy that denies the prompt outright
+    // (no dialog ever shown, to anyone) is genuinely final.
     #[cfg(windows)]
     #[test]
-    fn classify_elevation_refusal_matches_whether_the_account_can_elevate() {
-        assert_eq!(ocr::classify_elevation_refusal(true), ocr::ElevationRefusal::Cancelled);
-        assert_eq!(ocr::classify_elevation_refusal(false), ocr::ElevationRefusal::NoAdminRights);
+    fn classify_elevation_refusal_treats_a_decline_as_retryable() {
+        assert_eq!(ocr::classify_elevation_refusal(false), ocr::ElevationRefusal::Retryable);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn classify_elevation_refusal_treats_a_policy_denial_as_final() {
+        assert_eq!(ocr::classify_elevation_refusal(true), ocr::ElevationRefusal::PolicyBlocked);
     }
 
     #[cfg(windows)]
@@ -32643,6 +32859,64 @@ mod tests {
         assert!(redirected.contains(MARKER), "the message must land in the redirected file instead");
     }
 
+    // A data folder outside the profile (a custom location the user picked, or any
+    // other drive-rooted path this run never resolved to a known folder) is never
+    // a folder the named placeholders recognise -- the structural catch-all must
+    // still keep it out of the log, down to just the file name.
+    #[test]
+    fn append_crash_log_scrubs_a_path_outside_any_known_folder() {
+        const MARKER: &str = "PROBE-crash-log-scrub-outside-profile";
+        append_crash_log(&format!(r"{MARKER}: could not read D:\Privat\Kunde\x.png"));
+
+        // Checked as a whole-file substring rather than a reconstructed "line":
+        // dozens of other tests append to this same shared redirected file at the
+        // same time, so only a contiguous match proves anything here.
+        let redirected = fs::read_to_string(crash_log_path()).unwrap_or_default();
+        assert!(!redirected.contains(r"D:\Privat\Kunde"), "an unrecognised drive path must never reach the log");
+        assert!(
+            redirected.contains(&format!("{MARKER}: could not read x.png")),
+            "the file name itself may stay, only the folder must go: {redirected}"
+        );
+    }
+
+    // The configured sync folder is exactly the kind of user-data folder this
+    // point exists for: a full path most users will not pick from inside their
+    // profile. It must come out replaced by its own readable placeholder, not
+    // merely shortened.
+    #[test]
+    fn append_crash_log_scrubs_the_configured_sync_folder() {
+        const MARKER: &str = "PROBE-crash-log-scrub-sync-folder";
+        let sync_dir = PathBuf::from(r"E:\CloudSync\PromptFolders");
+        let prior = LAST_KNOWN_SYNC_DIR.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        *LAST_KNOWN_SYNC_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(sync_dir.clone());
+
+        append_crash_log(&format!("{MARKER}: the sync folder could not be created: {}", sync_dir.display()));
+
+        *LAST_KNOWN_SYNC_DIR.lock().unwrap_or_else(|e| e.into_inner()) = prior;
+
+        let redirected = fs::read_to_string(crash_log_path()).unwrap_or_default();
+        assert!(
+            !redirected.to_ascii_lowercase().contains("cloudsync"),
+            "the sync folder path must never reach the log"
+        );
+        assert!(
+            redirected.contains(&format!("{MARKER}: the sync folder could not be created: <sync>")),
+            "the named sync placeholder must take its place: {redirected}"
+        );
+    }
+
+    // A message that never carried a path must reach the log exactly as written --
+    // scrubbing must never mangle ordinary text.
+    #[test]
+    fn append_crash_log_leaves_a_message_without_any_path_unchanged() {
+        const MARKER: &str = "PROBE-crash-log-scrub-no-path";
+        let msg = format!("{MARKER}: persist failed, no path involved at all");
+        append_crash_log(&msg);
+
+        let redirected = fs::read_to_string(crash_log_path()).unwrap_or_default();
+        assert!(redirected.contains(&msg), "a path-free message must reach the log exactly as written: {redirected}");
+    }
+
     // A log grown past the cap must keep its newest lines and lose only the
     // oldest -- deleting the whole file (the old behaviour) would throw away the
     // real failure a user just hit along with everything before it. Runs against
@@ -32695,11 +32969,75 @@ mod tests {
         let _ = fs::remove_file(&path);
     }
 
-    // A line carrying a Windows user-profile path -- exactly what an unremapped
-    // panic location from a dependency crate bakes in -- must be removed by the
-    // cleanup; every other line must survive untouched.
+    // A line appended while a rotation is under way must never be lost. Proven
+    // with a real second thread rather than a mocked lock: this thread holds the
+    // crash log's own lock first (standing in for a truncation already in
+    // progress), a channel confirms the appending thread has started only once
+    // it is actually about to block on that same lock, and only then does this
+    // thread finish the truncation and let go -- so the append is genuinely
+    // serialised after it, never racing it.
     #[test]
-    fn strip_user_path_lines_removes_only_the_lines_that_carry_one() {
+    fn a_concurrent_append_during_truncation_is_never_lost() {
+        let path = std::env::temp_dir().join(format!("ps-crashlog-lock-test-{}", std::process::id()));
+        let lock_path = path.with_extension("log.lock");
+        let _ = fs::remove_file(&lock_path);
+        let lines: Vec<String> = (0..50).map(|i| format!("line {i:03} of the log before rotation")).collect();
+        let body = lines.iter().map(|l| format!("{l}\n")).collect::<String>();
+        fs::write(&path, &body).unwrap();
+        let cap = body.len() / 3;
+
+        let held = CrashLogLock::acquire(&path);
+        assert!(held.held, "the test itself must hold the real lock to stand in for a truncation in progress");
+
+        let (started_tx, started_rx) = std::sync::mpsc::channel::<()>();
+        let path2 = path.clone();
+        let appender = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            append_line_locked(&path2, usize::MAX, "line NEW appended during truncation");
+        });
+        started_rx.recv().unwrap();
+        // Give the appending thread a moment to reach the lock and start
+        // waiting on it before this thread finishes the "truncation" and lets go.
+        std::thread::sleep(Duration::from_millis(100));
+        rotate_log_file_locked(&path, cap);
+        drop(held);
+        appender.join().unwrap();
+
+        let kept = fs::read_to_string(&path).unwrap();
+        assert!(
+            kept.contains("line NEW appended during truncation"),
+            "an append that happened during a truncation must still be in the file: {kept:?}"
+        );
+        assert!(
+            !lines.first().map(|l| kept.contains(l.as_str())).unwrap_or(false),
+            "the truncation itself must still have taken effect: {kept:?}"
+        );
+
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&lock_path);
+    }
+
+    // The side file rotation writes the kept remainder to before renaming it into
+    // place must never survive the rotation, win or lose.
+    #[test]
+    fn rotate_log_file_leaves_no_side_file_behind() {
+        let path = std::env::temp_dir().join(format!("ps-crashlog-rotate-sidefile-test-{}", std::process::id()));
+        let tmp = path.with_extension("log.tmp");
+        let _ = fs::remove_file(&tmp);
+        let body: String = (0..50).map(|i| format!("line {i:03} of the log before rotation\n")).collect();
+        fs::write(&path, &body).unwrap();
+
+        rotate_log_file(&path, body.len() / 3);
+
+        assert!(!tmp.exists(), "the side file used during rotation must not be left behind");
+        let _ = fs::remove_file(&path);
+    }
+
+    // A line carrying a Windows user-profile path -- exactly what an unremapped
+    // panic location from a dependency crate bakes in -- keeps its other content;
+    // only the path on it is replaced, the line as a whole is never deleted.
+    #[test]
+    fn strip_user_path_lines_replaces_the_path_but_keeps_the_line() {
         let path = std::env::temp_dir().join(format!("ps-crashlog-scrub-test-{}", std::process::id()));
         let contents = "\
 [t=1 v1.0] a clean line with no path in it at all\n\
@@ -32710,7 +33048,10 @@ mod tests {
         strip_user_path_lines(&path);
 
         let cleaned = fs::read_to_string(&path).unwrap();
-        assert!(!cleaned.to_ascii_lowercase().contains(r"\users\"), "the user-path line must be gone: {cleaned:?}");
+        assert!(!cleaned.to_ascii_lowercase().contains(r"\users\"), "the profile path must be gone: {cleaned:?}");
+        assert_eq!(cleaned.lines().count(), 3, "the line must stay, only the path on it is replaced: {cleaned:?}");
+        assert!(cleaned.contains("panicked at"), "the rest of the panic line must survive: {cleaned:?}");
+        assert!(cleaned.contains("lib.rs:42"), "the file name and line number must survive: {cleaned:?}");
         assert!(cleaned.contains("a clean line with no path in it at all"), "an unrelated line must survive");
         assert!(cleaned.contains("another clean line, describing an ordinary failure"), "an unrelated line must survive");
         let _ = fs::remove_file(&path);

@@ -568,6 +568,13 @@ the video editor and the introduction tour ship on).
   behind a switched-off toggle within that category**, instead of leaving it
   stuck at its changed value where it could never be reached again without
   first turning the toggle back on.
+- Pill folders, grid folders and view-tab groups now read as the same idea
+  everywhere: one wording and one folder icon for all three, instead of each
+  kind describing itself a little differently.
+- The chain button's tooltip now explains how chaining differs from rotation,
+  so the two are easier to tell apart at a glance instead of only in the help.
+- The duplicate finder also has a shortcut in the settings dialog now, next to
+  import and export, so it does not take opening the expert menu to find it.
 
 ### Fixed
 
@@ -915,6 +922,11 @@ the video editor and the introduction tour ship on).
   administrator can do it, with no retry button in that case; a real one-off
   failure still gets to retry. The repeated PowerShell error this used to
   write to the crash log on every check is now logged once per session.
+- **A declined admin prompt for a language pack install was treated as final
+  too often.** Windows still lets a different administrator's password
+  complete the same prompt, so a one-off decline now offers "try again"; only
+  a computer whose policy blocks the prompt outright shows the "blocked"
+  message with no retry button.
 
 ### Security
 
