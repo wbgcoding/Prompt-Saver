@@ -418,6 +418,19 @@ the video editor and the introduction tour ship on).
 - **The video editor's limit on extra video sources is adjustable.** It used to
   be a fixed eight; it is now a number in the expert menu, from one to
   thirty-two, and still eight unless changed.
+- **Search from the tray menu.** The tray quick copy menu gained a filter row
+  that narrows its entries while you type, so a prompt can be found without
+  opening the window at all.
+- **A hint when a very similar prompt already exists.** Saving a new prompt
+  that closely matches one you already have shows a quiet note about it
+  instead of silently creating a near duplicate. It uses the same similarity
+  value as the duplicate finder and can be switched off.
+- **The editor keeps a draft.** Open text is saved every few seconds, and if
+  the window or the app goes away before you save, the next start offers the
+  draft back once. How often it saves is adjustable.
+- **Fixed values for recurring placeholders.** Keep a list of names and values
+  you use over and over; the fill-in dialog suggests them and never inserts one
+  on its own. The list travels with the settings export.
 - **Recent messages.** An error that shows as a toast and then vanishes is now
   also kept in a short list, reachable from the expert menu's data group: time,
   what happened and where, with the original text available for the ones the
