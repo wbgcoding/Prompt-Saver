@@ -349,6 +349,14 @@ the video editor and the introduction tour ship on).
   in image" badge. Turning the setting on adds an action that reads every
   existing picture once, in the background, with progress and a cancel
   button.
+- **Keep an old version as its own entry.** Next to "Restore", the version
+  history gets a second button that leaves the current entry untouched and
+  adds the chosen version as a new entry instead, named after the version's
+  date and selected right away.
+- **Compare two entries side by side.** Pick two entries in the library, or
+  choose "Compare with" on a tile, to see both next to each other with the
+  differences highlighted, and take either side's text over into the other.
+  The duplicate finder uses the same highlighting for its pairs.
 
 ### Improved
 
