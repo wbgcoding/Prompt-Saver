@@ -3829,6 +3829,9 @@ body.drag-over::after {
 /* Favorites filter chip in the search bar. */
 .lib-fav-chip { color: var(--muted); }
 .lib-fav-chip.active { background: #f5b301; border-color: #f5b301; color: #1a1a1a; }
+/* Show-archive filter chip: same idea, its own neutral accent. */
+.lib-archive-chip { color: var(--muted); }
+.lib-archive-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 /* Delete sits at the far right of a row and is the only destructive one there. */
 .lib-item .lib-delete {
   align-self: center;
@@ -4439,6 +4442,11 @@ body.noflag-tags #modal-tags,
 body.noflag-tags .lib-tagbar { display: none; }
 /* Private notes: the editor row only exists while the feature is on. */
 body:not(.flag-promptNotes) #modal-notes { display: none; }
+/* Archive: reserved-tag feature is opt-in, so its chip/menu/batch controls
+   only exist once it is switched on. */
+body:not(.flag-archiveTag) #library-archive,
+body:not(.flag-archiveTag) #lib-batch-archive,
+body:not(.flag-archiveTag) #lib-batch-unarchive { display: none; }
 /* A private note reads like a different kind of field, not a second
    prompt box — every .modal-input (including the prompt text) already uses
    --surface-2, so the note gets the page's own --surface instead: a quieter,

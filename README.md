@@ -33,6 +33,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Library** | Every saved prompt in one searchable list — copy, edit, drag onto the grid, filter by color or type |
 | **Search & sort** | Typo-tolerant search ("promt" still finds "prompt"), sorted by most used or recently used |
 | **Tags** | Label prompts with your own colored tags and narrow the library down to any combination of them |
+| **Archive** | Set a prompt aside without deleting it — hidden from the library and grid, still findable by search and included in export and backups |
 | **View groups** | Drag one view tab onto another to collect them into a folder tab with a member popover |
 | **Private notes** | A notes field per prompt for context you keep but never copy — searchable, shown in the tooltip |
 | **Favorites** | Star prompts for a live favorites view |

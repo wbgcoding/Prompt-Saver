@@ -585,6 +585,7 @@
             <button type="button" class="lib-type" data-type="pdf" data-i18n="filterPdf">PDF</button>
             <button type="button" class="lib-type" data-type="file" data-i18n="filterFile">File</button>
             <button id="library-fav" type="button" class="lib-type lib-fav-chip" data-i18n-title="favoritesOnly" data-i18n-aria="favoritesOnly">★</button>
+            <button id="library-archive" type="button" class="lib-type lib-archive-chip" data-i18n-title="showArchiveToggle" data-i18n-aria="showArchiveToggle">🗄</button>
           </div>
           <div id="library-colors" class="lib-colors" data-i18n-title="filterColor"></div>
         </div>
@@ -606,6 +607,8 @@
         <button id="lib-batch-removeview" type="button" class="ghost-btn" data-i18n="batchRemoveView">Remove</button>
         <button id="lib-batch-tag-add" type="button" class="ghost-btn" data-i18n="batchTagAdd">Add tag</button>
         <button id="lib-batch-tag-remove" type="button" class="ghost-btn" data-i18n="batchTagRemove">Remove tag</button>
+        <button id="lib-batch-archive" type="button" class="ghost-btn" data-i18n="archiveAction">Archive</button>
+        <button id="lib-batch-unarchive" type="button" class="ghost-btn" data-i18n="unarchiveAction">Unarchive</button>
         <span class="lib-batch-sep" aria-hidden="true"></span>
         <select id="lib-batch-format" class="batch-view-select" data-i18n-aria="exportFormatLabel">
           <option value="csv" data-i18n="exportCsv">CSV export</option>
@@ -1339,6 +1342,9 @@
     <button data-act="views" role="menuitem" data-i18n="alsoShowIn">Also show in…</button>
     <!-- Label set in openCtx() -- it names the action ("Show"/"Remove"), not a state-less "Toggle". -->
     <button data-act="pin" role="menuitem"></button>
+    <!-- Only shown when the archive feature is on (openCtx toggles .hidden); label
+         set there too ("Archive"/"Unarchive", it names the action, not a state). -->
+    <button data-act="archive" role="menuitem" class="hidden"></button>
     <!-- Only shown when this prompt actually rotates AND both auto gates are
          on (openCtx toggles .hidden) — never a greyed-out entry for a case where it
          cannot do anything. -->

@@ -1007,6 +1007,68 @@ PROBE = """
       q.dispatchEvent(new Event('input', { bubbles: true }));
       await sleep(250);
     }
+    // 435: archiving a prompt hides it from the browsing library without
+    // deleting it. The show-archive toggle brings it back, and an active
+    // search query still finds it either way -- "Prompt 12" is unused by any
+    // other check, so this block owns it start to finish and restores it.
+    {
+      const row435 = document.querySelector('#library-list .lib-item[data-id="p11"]');
+      if (!row435) {
+        out.errors.push('435: "Prompt 12" is missing from the library before the archive check');
+      } else {
+        const countBefore435 = document.getElementById('library-count').textContent;
+        row435.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 40, clientY: 40 }));
+        await sleep(150);
+        const archiveBtn435 = document.querySelector('#ctx [data-act="archive"]');
+        if (!archiveBtn435 || archiveBtn435.classList.contains('hidden')) {
+          out.errors.push('435: the archive action is missing from the library row context menu');
+        } else {
+          archiveBtn435.click();
+          await sleep(200);
+          if (document.querySelector('#library-list .lib-item[data-id="p11"]')) {
+            out.errors.push('435: an archived prompt is still shown in the library list');
+          }
+          const countAfter435 = document.getElementById('library-count').textContent;
+          const nBefore435 = parseInt(countBefore435, 10);
+          const nAfter435 = parseInt(countAfter435, 10);
+          if (!(nAfter435 < nBefore435)) {
+            out.errors.push('435: the library header count did not drop after archiving a prompt: ' + countBefore435 + ' -> ' + countAfter435);
+          }
+          // The toggle above the list brings archived prompts back into view.
+          document.getElementById('library-archive').click();
+          await sleep(200);
+          if (!document.querySelector('#library-list .lib-item[data-id="p11"]')) {
+            out.errors.push('435: the show-archived toggle did not bring the archived prompt back');
+          }
+          document.getElementById('library-archive').click();
+          await sleep(200);
+          if (document.querySelector('#library-list .lib-item[data-id="p11"]')) {
+            out.errors.push('435: turning the show-archived toggle back off did not hide it again');
+          }
+          // A search query still finds an archived prompt with the toggle off.
+          q.value = 'Prompt 12';
+          q.dispatchEvent(new Event('input', { bubbles: true }));
+          await sleep(300);
+          const row435b = document.querySelector('#library-list .lib-item[data-id="p11"]');
+          if (!row435b) {
+            out.errors.push('435: searching did not find an archived prompt');
+          } else {
+            // Unarchive it again, while search still shows it, so later checks
+            // see the fixture's original state.
+            row435b.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 40, clientY: 40 }));
+            await sleep(150);
+            const unarchiveBtn435 = document.querySelector('#ctx [data-act="archive"]');
+            if (unarchiveBtn435) { unarchiveBtn435.click(); await sleep(200); }
+          }
+          q.value = '';
+          q.dispatchEvent(new Event('input', { bubbles: true }));
+          await sleep(250);
+          if (!document.querySelector('#library-list .lib-item[data-id="p11"]')) {
+            out.errors.push('435: unarchiving did not bring "Prompt 12" back into the normal list');
+          }
+        }
+      }
+    }
     // P25: the 2 most-used tags across the fixture (Work, Draft) are offered as
     // one-click chips on an untagged prompt, and vanish once actually added.
     {

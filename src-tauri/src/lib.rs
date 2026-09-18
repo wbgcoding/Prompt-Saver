@@ -7382,6 +7382,17 @@ fn tag_key(name: &str) -> String {
     name.trim().to_lowercase()
 }
 
+// Whether a prompt carries the reserved archive tag -- a plain tag match,
+// never a separate state field, so every other tag-aware code path (search,
+// export, backup, sync) already treats an archived prompt like any other one
+// without having to know this concept exists at all.
+fn is_archived(prompt: &Prompt, archive_tag_key: Option<&str>) -> bool {
+    match archive_tag_key {
+        Some(key) => prompt.tags.iter().any(|t| tag_key(t) == key),
+        None => false,
+    }
+}
+
 // Commas separate tags in the TXT/CSV exports and control characters would break the
 // line-based TXT format, so neither may appear inside a name.
 fn tag_chars_ok(name: &str) -> bool {
@@ -8585,11 +8596,15 @@ async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Resu
         .take(top_n)
         .map(|p| StatBar { id: p.id.clone(), name: name_of(p), count: usage.get(&p.id).copied().unwrap_or(0) })
         .collect();
+    // An archived-and-unused prompt is not flagged here too -- the user
+    // already set it aside on purpose, so it does not need a second nudge.
+    let archive_tag_key = store.settings.ui_texts.get("archiveTag").map(|s| tag_key(s));
     let mut never_used: Vec<StatBar> = store
         .prompts
         .iter()
         // Never copied — not "not lately", so the list means exactly what it says.
         .filter(|p| usage.get(&p.id).copied().unwrap_or(0) == 0)
+        .filter(|p| !is_archived(p, archive_tag_key.as_deref()))
         .map(|p| StatBar { id: p.id.clone(), name: name_of(p), count: usage.get(&p.id).copied().unwrap_or(0) })
         .collect();
     never_used.truncate(top_n.max(10) * 2);
@@ -36264,6 +36279,35 @@ mod tests {
         assert_eq!(p2.caption, "Mein Untertitel");
         assert_eq!(p2.caption_size, 18);
         assert!(p2.tags.is_empty());
+    }
+
+    // An archived entry is just a prompt carrying a reserved tag -- neither
+    // export nor backup ever filters by tag, so both already carry it through
+    // unchanged. This proves that stays true rather than assuming it.
+    #[test]
+    fn an_archived_prompt_is_included_in_export_and_backup() {
+        let mut prompts = sample_prompts();
+        prompts[0].tags.push("Archive".to_string());
+        // Export: CSV and JSON both keep the tag on round trip.
+        let data = parse_csv_data(&to_csv(&prompts));
+        assert!(data.prompts[0].tags.contains(&"Archive".to_string()));
+        let json = to_json(&prompts);
+        assert!(json.contains("Archive"), "the archived prompt's tag did not make it into the JSON export");
+        // Backup: the same content survives the real encrypt/decrypt round trip
+        // backup_password_roundtrip_and_wrong_password_fails already proves is
+        // byte-exact, here specifically carrying the archive tag through it.
+        let blob = backup_encrypt(json.as_bytes(), None).expect("encrypt");
+        let restored = backup_decrypt(&blob, None).expect("decrypt").expect("psb");
+        assert_eq!(restored, json.as_bytes());
+    }
+
+    #[test]
+    fn is_archived_matches_only_the_reserved_tag_case_insensitively() {
+        let mut p = sample_prompts()[0].clone();
+        p.tags = vec!["Archive".to_string()];
+        assert!(is_archived(&p, Some("archive")));
+        assert!(!is_archived(&p, Some("something-else")));
+        assert!(!is_archived(&p, None));
     }
 
     // An entry that happens to contain the join marker itself must not be

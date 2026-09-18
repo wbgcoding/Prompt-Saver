@@ -410,6 +410,15 @@ names.
 Free-form labels assigned to tiles; filter the library or the grid down to a set
 of tags, matching any or all of them.
 
+### Archive
+
+Off by default in the expert menu. Marks a tile as archived instead of deleting
+it: it disappears from the library list and the grid, but export, backup and
+search still treat it like any other tile — a query still finds it. A toggle
+above the library list brings archived tiles back into view. Archive or
+unarchive a tile from its right-click menu, or several at once from the
+library's batch bar.
+
 ### Favourites
 
 A star marks a tile as a favourite; an optional dedicated view lists only
@@ -937,6 +946,12 @@ System.
 `tag:`/`var:`-Suchpräfixe (mit `-` auch verneint).
 
 **Tags** — freie Schlagwörter, UND/ODER-Filter.
+
+**Archiv** — Standardmäßig aus. Markiert eine Kachel als archiviert statt sie zu
+löschen; sie verschwindet aus Bibliothek und Raster, bleibt aber über Suche,
+Export und Sicherung erreichbar. Ein Schalter über der Liste holt archivierte
+Kacheln zurück; archivieren/entarchivieren geht per Rechtsklickmenü oder aus
+der Sammelleiste der Bibliothek.
 
 **Kopierverlauf** — Protokoll, Gruppierung, Aufbewahrung, Einzeleintrag löschen,
 Statistik mit 14-Tage-Diagramm.

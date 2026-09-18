@@ -130,6 +130,7 @@ let imageHitQuery = "";
 const libTypes = new Set();
 let libColor = "all"; // prompt library color filter
 let libFav = false; // prompt library "favorites only" filter
+let libShowArchive = false; // show archived prompts even while browsing (not persisted)
 const libTags = new Set(); // Selected tag filters, as lowercase tag keys
 const gridTags = new Set(); // same idea, independent selection for the grid
 // Batch operations state.
@@ -1413,6 +1414,10 @@ const OPT_FLAG_LABELS = {
   // A short synthesised beep on every successful copy, mainly for the floating
   // button (easy to miss visually) and for screen-reader users.
   copySound: "flagCopySound",
+  // Marks a prompt with a reserved tag instead of a real archived state, so every
+  // other tag-aware path already handles it. Browsing hides it; searching still
+  // finds it, and the library toggle brings it back into view.
+  archiveTag: "flagArchiveTag",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
@@ -2080,7 +2085,7 @@ const EXPERT_TABS = [
     { title: "expGroupLimits", values: ["maxViews", "gridMax", "previewLen", "nameMaxLen"] },
   ] },
   { title: "expTabLibrary", groups: [
-    { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "ocrIndex"], values: ["searchRecentMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs", "ocrIndexMaxChars"], dropdowns: ["fuzzyMaxTypos"] },
+    { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "ocrIndex", "archiveTag"], values: ["searchRecentMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs", "ocrIndexMaxChars"], dropdowns: ["fuzzyMaxTypos"] },
     { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx", "tagPopCols"], dropdowns: ["tagFilterMode", "tagSort"] },
     // Everything that records or shows copy history lives with the history view.
     { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", { key: "journalTagFilter", gate: "tags" }, "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalLimit", "journalWidth"], selects: ["historyDays"] },
@@ -2298,6 +2303,7 @@ const EXPERT_TIPS = [
   "recSweepBroken", "recBrokenGraceMin", "recSweepEveryMin", "videoClipTtlMin",
   "usageStats", "promptSync", "syncDir", "syncPollSecs", "syncFailMax", "clipSkipSecrets",
   "undoToast", "undoToastMs",
+  "archiveTag",
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "kbFocusFadeMs", "snipPreviewVh",
   "historyPerPrompt", "dupThreshold", "clipMinChars", "clipInboxMax", "clipSecretMinLen", "historyMax",
@@ -4032,6 +4038,7 @@ async function renderGrid(skipFetch = false) {
   const byCell = new Map();
   for (const p of prompts) {
     if (inFolder.has(p.id)) continue;
+    if (flag("archiveTag") && isArchived(p)) continue;
     const cell = layout[p.id];
     if (cell) byCell.set(cellKey(...cell), p);
   }
@@ -6476,6 +6483,11 @@ function openCtx(id, x, y) {
   pinBtn.classList.toggle("hidden", !flag("floating"));
   const pinned = !!settings.floating?.[id];
   pinBtn.textContent = t(pinned ? "removeFloating" : "showFloating");
+  // Archive: hidden unless the feature is on; the label names the action, not a state.
+  const archiveBtn = ctxEl.querySelector('[data-act="archive"]');
+  archiveBtn.classList.toggle("hidden", !flag("archiveTag"));
+  const archivedNow = isArchived(prompts.find((x) => x.id === id) || {});
+  archiveBtn.textContent = t(archivedNow ? "unarchiveAction" : "archiveAction");
   // In the favorites view a prompt can't be hidden/removed — unstar it instead.
   ctxEl.querySelector('[data-act="hide"]').classList.toggle("hidden", favView);
   // Nothing to place this prompt into besides the view it is already on.
@@ -12256,11 +12268,41 @@ function fuzzyWordHit(qw, vw, max) {
   return false;
 }
 
+// The archive is a reserved tag, not a new prompt field or state -- every other
+// tag-aware path (search, export, backup, sync) already carries it through
+// without needing to know this concept exists.
+function archiveTagName() {
+  return txt("archiveTag") || t("archiveTagName");
+}
+// The resolved tag text is only persisted on first real use, so a fresh install
+// never writes a setting it never needed.
+let archiveTagEnsuring = null;
+async function ensureArchiveTagName() {
+  const name = archiveTagName();
+  if (txt("archiveTag")) return name;
+  if (!archiveTagEnsuring) {
+    archiveTagEnsuring = invoke("set_ui_text", { key: "archiveTag", value: name })
+      .then((s) => { settings = s; })
+      .catch((err) => errToast(err));
+  }
+  await archiveTagEnsuring;
+  return name;
+}
+function isArchived(p) {
+  const name = txt("archiveTag");
+  if (!name) return false;
+  const key = tagKey(name);
+  return (p.tags || []).some((t2) => tagKey(t2) === key);
+}
+
 function libMatches(p) {
   if (libFav && !p.favorite) return false;
   if (!typeAllowed(libTypes, p)) return false;
   if (libColor !== "all" && (p.color || "") !== libColor) return false;
   if (!tagMatches(p)) return false;
+  // Browsing without a search query hides an archived prompt unless the show-archive
+  // toggle is on; typing an actual query still finds it, the list is only quieter.
+  if (flag("archiveTag") && !libQuery.trim() && !libShowArchive && isArchived(p)) return false;
   return libSearchScore(p).score > 0;
 }
 
@@ -12499,6 +12541,14 @@ function renderLibrary() {
         e.preventDefault();
         e.stopPropagation();
         openOpenEditorPopAt(row, p.file_path);
+      });
+    } else {
+      // Every other row gets the same actions menu a grid tile has (archive
+      // and the rest) -- a library row never had its own right-click menu before.
+      row.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openCtx(p.id, e.clientX, e.clientY);
       });
     }
 
@@ -16858,6 +16908,8 @@ function bind() {
     setLibColor("all");
     libFav = false;
     $("library-fav").classList.remove("active");
+    libShowArchive = false;
+    $("library-archive").classList.remove("active");
     // Always open in normal (non-select) mode.
     libSelectMode = false; libSelected.clear(); libLastId = null;
     $("library-select-btn").classList.remove("active");
@@ -16892,6 +16944,12 @@ function bind() {
     if (e.target.closest("#library-fav")) {
       libFav = !libFav;
       $("library-fav").classList.toggle("active", libFav);
+      renderLibrary();
+      return;
+    }
+    if (e.target.closest("#library-archive")) {
+      libShowArchive = !libShowArchive;
+      $("library-archive").classList.toggle("active", libShowArchive);
       renderLibrary();
       return;
     }
@@ -16944,6 +17002,24 @@ function bind() {
     const changedIds = prompts.filter((p) => libSelected.has(p.id) && (p.tags || []).some((x) => tagKey(x) === key)).map((p) => p.id);
     if (await doBatch("tag-remove", { tag })) {
       undoToast(t("batchTagRemoveDone").replace("{n}", String(changedIds.length)), () => restoreBatchTag("tag-add", changedIds, tag));
+    }
+  });
+  $("lib-batch-archive").addEventListener("click", async () => {
+    if (!libSelected.size) return;
+    const tag = await ensureArchiveTagName();
+    const key = tagKey(tag);
+    const changedIds = prompts.filter((p) => libSelected.has(p.id) && !(p.tags || []).some((x) => tagKey(x) === key)).map((p) => p.id);
+    if (await doBatch("tag-add", { tag })) {
+      undoToast(t("batchArchiveDone").replace("{n}", String(changedIds.length)), () => restoreBatchTag("tag-remove", changedIds, tag));
+    }
+  });
+  $("lib-batch-unarchive").addEventListener("click", async () => {
+    if (!libSelected.size) return;
+    const tag = archiveTagName();
+    const key = tagKey(tag);
+    const changedIds = prompts.filter((p) => libSelected.has(p.id) && (p.tags || []).some((x) => tagKey(x) === key)).map((p) => p.id);
+    if (await doBatch("tag-remove", { tag })) {
+      undoToast(t("batchUnarchiveDone").replace("{n}", String(changedIds.length)), () => restoreBatchTag("tag-add", changedIds, tag));
     }
   });
   // Only meaningful at exactly two selected (updateBatchBar disables it
@@ -17432,6 +17508,21 @@ function bind() {
         .catch((e) => errToast(e));
     } else if (act === "rotateAutoMenu") {
       await toggleRotateAutoDirect(id);
+    } else if (act === "archive") {
+      const p = prompts.find((x) => x.id === id);
+      if (!p) return;
+      const tag = await ensureArchiveTagName();
+      const key = tagKey(tag);
+      const already = (p.tags || []).some((x) => tagKey(x) === key);
+      try {
+        settings = await invoke("batch_prompts", {
+          ids: [id], action: already ? "tag-remove" : "tag-add",
+          color: null, favorite: null, viewId: null, tag,
+        });
+      } catch (e) { errToast(e); return; }
+      p.tags = already ? (p.tags || []).filter((x) => tagKey(x) !== key) : [...(p.tags || []), tag];
+      await renderGrid(true);
+      if (!libraryEl.classList.contains("hidden")) renderLibrary();
     }
   });
 

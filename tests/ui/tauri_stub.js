@@ -182,7 +182,7 @@ const SETTINGS = {
   // snipTextPlate: false models the same kind of existing install, from before
   // the text tool's background became a three-way choice -- its old boolean
   // setting must convert to "none" on read without the user touching anything.
-  ui_flags: { tags: true, customThemes: true, viewGroups: true, promptNotes: true, pillFolders: true, colorPicker: true, tourSeen: true, snipTextPlate: false },
+  ui_flags: { tags: true, customThemes: true, viewGroups: true, promptNotes: true, pillFolders: true, colorPicker: true, tourSeen: true, snipTextPlate: false, archiveTag: true },
   ui_values: {}, ui_texts: {}, dup_ignored: [],
   // 428: p1 also has a canned entry in last_edited_map below, so it is the one
   // fixture with BOTH a copy and an edit timestamp; p2 (untouched) has neither.
