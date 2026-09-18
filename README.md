@@ -58,6 +58,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Drag-out** | Ctrl-drag a tile, library row or floating button into any other app to drop its text |
 | **Button folders** | Drag one floating button onto another and they merge into a folder that opens in place |
 | **Chaining** | Combine several prompts into one clipboard entry |
+| **Copy formatted** | For a prompt with real Markdown syntax: a second copy that puts the rendered version on the clipboard too, so Word, Outlook or a browser shows the formatting while a plain text field still gets the Markdown source |
 | **Copy history** | A journal of recent and most-used prompts, with optional timestamps and adjustable retention |
 | **Clipboard inbox** | An optional watcher collects text you copy anywhere, so you can turn the good bits into prompts later |
 

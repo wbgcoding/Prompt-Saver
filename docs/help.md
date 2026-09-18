@@ -372,6 +372,12 @@ fast too often pauses the session with a toast instead of looping.
   plain drag leaves the app and the key moves the tile instead.
 - Auto-paste — after copying, the app switches to the last active window and
   presses paste automatically
+- Copy formatted: a second copy entry, in the tile's right-click menu and in
+  the editor, only offered for a prompt whose text actually contains Markdown
+  syntax. It puts the rendered version on the clipboard alongside the plain
+  Markdown text, so an app that reads rich text (Word, Outlook, a browser)
+  shows the formatting, while a plain text field still gets exactly the
+  Markdown source a normal copy would have given it
 
 ### Hotkeys
 
@@ -929,7 +935,11 @@ zu häufiges Einfügen pausiert die Sitzung mit einem Hinweis statt zu wiederhol
 **Kopieren** — Verketten (mehrere verschiedene Kacheln als ein Text, anders als
 Rotation oben; auch direkt über ein Kettensymbol an der Kachel, einzeln
 abschaltbar), Hotkeys pro Kachel, Herausziehen (mit oder, per Schalter, ohne
-Modifikatortaste), automatisches Einfügen.
+Modifikatortaste), automatisches Einfügen. Formatiert kopieren (im Rechtsklick
+und im Editor, nur bei Text mit echter Markdown-Syntax): legt zusätzlich zur
+Markdown-Fassung eine gerenderte Fassung in die Zwischenablage, sodass Word,
+Outlook oder ein Browser die Formatierung sehen, ein reines Textfeld aber
+weiterhin genau den Markdown-Text bekommt wie bei einer normalen Kopie.
 
 **Hotkeys** — ein globaler Hotkey öffnet den Schnellstarter (Standard
 Strg+Alt+P), ein eigener Hotkey pro Kachel kopiert (und fügt optional ein). Bei

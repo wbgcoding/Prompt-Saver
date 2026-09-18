@@ -10625,6 +10625,71 @@ async fn copy_text(state: State<'_, Db>, text: String, id: Option<String>) -> Re
     Ok(put_text(&state, id.as_deref(), &text))
 }
 
+// The CF_HTML clipboard payload, built by hand rather than through
+// clipboard-win's own header writer, so the byte math has a plain function a
+// unit test can call directly.
+// Reference: https://learn.microsoft.com/windows/win32/dataxchg/html-clipboard-format
+// Every offset is a BYTE position into this string's UTF-8 encoding (never a
+// char or UTF-16 count, which is what the format itself requires and what
+// makes a multi-byte character in the fragment worth its own test).
+const CF_HTML_BODY_HEAD: &str = "<html>\r\n<body>\r\n<!--StartFragment-->";
+const CF_HTML_BODY_FOOT: &str = "<!--EndFragment-->\r\n</body>\r\n</html>";
+
+fn cf_html_header(start_html: usize, end_html: usize, start_fragment: usize, end_fragment: usize) -> String {
+    format!(
+        "Version:0.9\r\nStartHTML:{start_html:0>10}\r\nEndHTML:{end_html:0>10}\r\nStartFragment:{start_fragment:0>10}\r\nEndFragment:{end_fragment:0>10}\r\n"
+    )
+}
+
+fn build_cf_html(fragment: &str) -> String {
+    // The header's own placeholders are fixed-width (10 digits each), so its
+    // byte length is already known before any real offset is computed.
+    let header_len = cf_html_header(0, 0, 0, 0).len();
+    let start_html = header_len;
+    let start_fragment = header_len + CF_HTML_BODY_HEAD.len();
+    let end_fragment = start_fragment + fragment.len();
+    let end_html = end_fragment + CF_HTML_BODY_FOOT.len();
+    let header = cf_html_header(start_html, end_html, start_fragment, end_fragment);
+    format!("{header}{CF_HTML_BODY_HEAD}{fragment}{CF_HTML_BODY_FOOT}")
+}
+
+// Puts both the plain Markdown text (CF_UNICODETEXT) and its rendered form
+// (CF_HTML) on the clipboard in one go, so an app that only reads CF_HTML sees
+// formatting and one that only reads plain text sees exactly what a normal
+// copy would have given it. `html` is already escaped and sanitised by the
+// caller (the same renderer the Markdown preview uses), so this never
+// inspects or trusts it beyond handing it to Windows unchanged. set_string
+// empties the clipboard and claims CF_UNICODETEXT; the CF_HTML payload is
+// then added under its own registered format WITHOUT clearing what was just
+// set; the two calls together are what makes one clipboard entry carry both.
+#[cfg(windows)]
+fn put_formatted(text: &str, html: &str) -> bool {
+    let Ok(_clip) = clipboard_win::Clipboard::new_attempts(10) else {
+        return false;
+    };
+    if clipboard_win::raw::set_string(text).is_err() {
+        return false;
+    }
+    let Some(html_fmt) = clipboard_win::formats::Html::new() else {
+        return false;
+    };
+    let payload = build_cf_html(html);
+    clipboard_win::raw::set_without_clear(html_fmt.code(), payload.as_bytes()).is_ok()
+}
+#[cfg(not(windows))]
+fn put_formatted(_text: &str, _html: &str) -> bool {
+    false
+}
+
+#[tauri::command]
+async fn copy_formatted(text: String, html: String) -> Result<bool, String> {
+    let ok = put_formatted(&text, &html);
+    if ok {
+        note_own_copy(&text);
+    }
+    Ok(ok)
+}
+
 // `{#{clipboard}#}`: the clipboard's current text for the placeholder resolver.
 // Empty when the clipboard holds no text at all (an image or file payload).
 #[tauri::command]
@@ -26700,6 +26765,7 @@ pub fn run() {
             rotation_arm_session,
             rotation_end_auto,
             copy_text,
+            copy_formatted,
             clipboard_text,
             record_copy,
             clear_copy_history,
@@ -36143,6 +36209,65 @@ mod tests {
             .collect();
         cycle.sort();
         assert_eq!(cycle, vec![0, 1, 2], "every entry exactly once per random cycle");
+    }
+
+    // The CF_HTML header's own numbers must point exactly at the fragment the
+    // header promises, byte for byte -- a reader that trusts the header over
+    // scanning for markers (most do) gets the wrong slice otherwise.
+    #[test]
+    fn cf_html_header_offsets_point_at_the_real_fragment_bytes() {
+        let payload = build_cf_html("<b>hi</b>");
+        let get = |key: &str| -> usize {
+            let line = payload.lines().find(|l| l.starts_with(key)).unwrap();
+            line[key.len()..].trim().parse().unwrap()
+        };
+        let start_html = get("StartHTML:");
+        let end_html = get("EndHTML:");
+        let start_fragment = get("StartFragment:");
+        let end_fragment = get("EndFragment:");
+
+        assert_eq!(&payload[start_html..end_html], &payload[start_html..], "EndHTML must reach the real end of the string");
+        assert_eq!(end_html, payload.len(), "EndHTML must equal the payload's own byte length");
+        assert_eq!(&payload[start_fragment..end_fragment], "<b>hi</b>", "the fragment slice must be exactly the fragment given");
+        assert!(payload[start_html..].starts_with("<html>"), "StartHTML must point at the opening tag");
+    }
+
+    // A fragment with multi-byte UTF-8 characters must not shift the offsets by
+    // character count -- they are byte positions, and a wrong count here would
+    // slice a multi-byte character in half.
+    #[test]
+    fn cf_html_offsets_are_byte_positions_not_char_counts() {
+        let fragment = "caf\u{e9} \u{20ac}100 \u{1f600}"; // café, euro sign, emoji
+        assert_eq!(fragment.chars().count(), 11);
+        assert_ne!(fragment.chars().count(), fragment.len(), "the fixture must actually contain multi-byte chars");
+        let payload = build_cf_html(fragment);
+        let get = |key: &str| -> usize {
+            let line = payload.lines().find(|l| l.starts_with(key)).unwrap();
+            line[key.len()..].trim().parse().unwrap()
+        };
+        let start_fragment = get("StartFragment:");
+        let end_fragment = get("EndFragment:");
+        assert_eq!(&payload[start_fragment..end_fragment], fragment);
+        assert!(std::str::from_utf8(payload.as_bytes()).is_ok(), "the whole payload must stay valid UTF-8");
+    }
+
+    // Real clipboard access is a single shared OS resource -- serialised so this
+    // never races another test that also opens it.
+    #[cfg(windows)]
+    static CLIPBOARD_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    // put_formatted's plain-text track must be exactly the Markdown source it was
+    // given, never the rendered HTML or a re-encoded copy of it -- an app that
+    // only reads plain text must see precisely what a normal copy would give it.
+    #[cfg(windows)]
+    #[test]
+    fn put_formatted_leaves_the_text_track_exactly_the_markdown_source() {
+        let _guard = CLIPBOARD_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let text = "plain **not** rendered";
+        let html = "<p>plain <strong>not</strong> rendered</p>";
+        assert!(put_formatted(text, html));
+        let read_back = arboard::Clipboard::new().and_then(|mut c| c.get_text()).unwrap_or_default();
+        assert_eq!(read_back, text, "the plain-text track must be exactly the Markdown source, untouched");
     }
 
     #[cfg(windows)]

@@ -46,6 +46,7 @@ const modal = {
   captionPreview: $("modal-caption-preview"),
   showImage: $("modal-show-image"),
   showText: $("modal-show-text"),
+  copyFormattedBtn: $("modal-copy-formatted"),
   replaceImg: $("modal-replace-img"),
   removeImg: $("modal-remove-img"),
   addIcon: $("modal-add-icon"),
@@ -1343,6 +1344,9 @@ const FLAG_LABELS = {
   // Plain-text preview (txt/md/json/csv) for a file attachment, next to the
   // existing image/PDF preview. Ships ON.
   attachTextPreview: "flagAttachTextPreview",
+  // A second copy entry that puts both the Markdown text and its rendered
+  // form on the clipboard, for apps that read CF_HTML. Ships ON.
+  copyFormatted: "flagCopyFormatted",
 };
 const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -2057,7 +2061,7 @@ const EXPERT_TABS = [
     { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
     // The editor: what it shows beside the text box. Preview and highlighter belong together — the
     // highlighter only ever paints inside the preview.
-    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen"], dropdowns: ["counterUnits"] },
+    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, { key: "copyFormatted", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
     { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyBubble", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
     // Floating buttons and the two kinds of folder they can form.
@@ -2275,7 +2279,7 @@ const EXPERT_TIPS = [
   "storeFiles", "attachTextPreview", "attachPreviewKb", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "varPopupWindow",
   "lengthCounter", "promptHistory", "historyDiff", "diffWordCap", "historyPreviewLen", "editorMonospace",
   "promptNotes", "notesInTooltip", "notesTipLen",
-  "mdPreview", "mdMaxChars", "codeHighlight", "codeAutoDetect", "hlFontPx", "hlMaxChars",
+  "mdPreview", "mdMaxChars", "codeHighlight", "codeAutoDetect", "hlFontPx", "hlMaxChars", "copyFormatted",
   "colorPicker", "pickerFormat", "loupeZoom", "loupeCells", "pickHistoryN", "pickSwatchPx",
   "screenRecord", "recCursor", "recCountdownS", "recFps", "recAudioSystem", "recAudioMic", "recAudioKbps", "recMicDevice",
   "recQuality", "recBitrateKbps", "recFormat", "recordingDir",
@@ -6508,6 +6512,11 @@ function openCtx(id, x, y) {
   ctxId = id;
   // Reset an armed delete confirmation from a previous open.
   disarmButton(ctxEl.querySelector('[data-act="delete"]'), t("delete"));
+  // Only a text prompt whose body actually contains Markdown syntax, same
+  // check the formatted-copy entry in the editor uses.
+  const cfPrompt = prompts.find((x) => x.id === id);
+  const cfEligible = flag("copyFormatted") && isTextPrompt(cfPrompt) && hasMarkdownSyntax(cfPrompt?.text);
+  ctxEl.querySelector('[data-act="copyFormatted"]').classList.toggle("hidden", !cfEligible);
   // Hide the floating-button action when that feature is switched off; otherwise
   // name the actual effect of a click instead of a state-less "toggle".
   const pinBtn = ctxEl.querySelector('[data-act="pin"]');
@@ -7325,6 +7334,28 @@ async function copyTextWithVars(p, el, paste = false) {
     if (rotating && peek) { invoke("rotation_commit", { id: p.id }).catch(() => {}); recordToolUsage("rotation_advance"); }
     if (paste || (quickSecond && flag("autoPaste"))) await autoPasteNow(el);
     maybeCloseOnCopy();
+  }
+}
+
+// "Copy formatted" (context menu + editor): puts the Markdown text AND its
+// rendered HTML on the clipboard in one go. Placeholders go through the same
+// resolveVars() every other copy path uses, and the HTML is built with the
+// exact same renderer the Markdown preview itself uses, so there is only ever
+// one Markdown interpretation in the app.
+async function copyFormattedPrompt(id) {
+  const p = prompts.find((x) => x.id === id);
+  if (!p) return;
+  const rotating = (p.variants || []).length > 0;
+  const peek = rotating ? await invoke("rotation_peek", { id }).catch(() => null) : null;
+  const rawText = peek ? peek.text : p.text;
+  const text = await resolveVars(rawText);
+  if (text === null) return; // the placeholder dialog was cancelled
+  const html = renderMarkdown(text);
+  const ok = await invoke("copy_formatted", { text, html }).catch((e) => { errToast(e); return false; });
+  if (ok) {
+    toast(t("copied"));
+    recordCopy(id);
+    if (rotating && peek) { invoke("rotation_commit", { id }).catch(() => {}); recordToolUsage("rotation_advance"); }
   }
 }
 
@@ -8174,6 +8205,22 @@ function renderMarkdown(text) {
   return out.join("");
 }
 
+// Whether `text` actually contains Markdown syntax, reusing the exact same
+// patterns renderMarkdown() itself reacts to (against escaped text, same as
+// there) -- so "does this look like Markdown" and "how it renders" can never
+// disagree. Gates the formatted-copy entry: no point offering it on a prompt
+// that would render as one plain paragraph anyway.
+function hasMarkdownSyntax(text) {
+  if (!text) return false;
+  const esc = mdEsc(text.replace(/\r\n?/g, "\n"));
+  const lines = esc.split("\n");
+  if (lines.some((l) => MD_FENCE.test(l) || MD_HEAD.test(l) || MD_HR.test(l) || MD_QUOTE.test(l) || MD_UL.test(l) || MD_OL.test(l))) return true;
+  MD_INLINE.lastIndex = 0;
+  const found = MD_INLINE.test(esc);
+  MD_INLINE.lastIndex = 0; // MD_INLINE is a shared /g regex -- mdInline()'s own exec loop assumes it starts at 0
+  return found;
+}
+
 // Replace layout: the rendered pane stands in for the textarea until the user clicks
 // into it. `mdEditing` is that moment — everywhere else the prompt reads as Markdown.
 let mdEditing = false;
@@ -8232,6 +8279,15 @@ function syncMdUi(textVisible, rotating = false) {
   // blank box until the next keystroke.
   clearTimeout(mdTimer);
   if (on) renderMdPreview(true);
+  if (modal.copyFormattedBtn) {
+    // Independent of `on`/`mdEditing` on purpose: if this depended on which of
+    // the two (preview vs. textarea) is showing, the button's own hidden/shown
+    // state would flip exactly when the field hands over, taking space away
+    // from one side and not the other -- the same field-jump class of bug the
+    // wrapper-hiding rule above already exists to avoid.
+    const cfShow = textVisible && !rotating && flag("copyFormatted") && hasMarkdownSyntax(modal.text.value);
+    modal.copyFormattedBtn.classList.toggle("hidden", !cfShow);
+  }
 }
 
 // Word-level diff between two texts via a classic LCS backtrack — no
@@ -14236,6 +14292,15 @@ function bind() {
     modalState.showImage = false;
     syncModalImageUi(modalState.mode);
   });
+  // Editor's own "Copy formatted" button: same resolveVars() path every other
+  // copy goes through, not the raw stored text.
+  modal.copyFormattedBtn.addEventListener("click", async () => {
+    const text = await resolveVars(modal.text.value);
+    if (text === null) return; // the placeholder dialog was cancelled
+    const html = renderMarkdown(text);
+    const ok = await invoke("copy_formatted", { text, html }).catch((e) => { errToast(e); return false; });
+    if (ok) toast(t("copied"));
+  });
   // Shared media pick: image, gif or video. Stills are stored as a preview,
   // gif/video become the icon path (shown, never copied). An image keeps the
   // prompt's copy behaviour; a gif/video icon switches copying back to text.
@@ -17749,6 +17814,8 @@ function bind() {
     closeCtx();
     if (act === "edit") {
       await editPrompt(id);
+    } else if (act === "copyFormatted") {
+      await copyFormattedPrompt(id);
     } else if (act === "editVideo") {
       const p = prompts.find((x) => x.id === id);
       if (p?.file_path) {

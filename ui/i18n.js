@@ -1946,6 +1946,9 @@ export const I18N = {
     tipAttachPreviewKb: "How much of a text attachment the preview reads, in kilobytes.",
     attachPreviewTruncated: "Shortened, the file continues past this point.",
     attachPreviewUnreadable: "Not readable as text.",
+    copyFormattedAction: "Copy formatted",
+    flagCopyFormatted: "Formatted copy",
+    tipCopyFormatted: "A second copy that puts the rendered version on the clipboard as well, for apps that read rich text, such as Word or Outlook. A plain text field still gets the Markdown text, exactly like a normal copy.",
   },
   de: {
     settings: "Einstellungen",
@@ -3888,6 +3891,9 @@ export const I18N = {
     tipAttachPreviewKb: "Wie viel von einem Textanhang die Vorschau liest, in Kilobyte.",
     attachPreviewTruncated: "Gekürzt, die Datei geht über diese Stelle hinaus.",
     attachPreviewUnreadable: "Nicht als Text lesbar.",
+    copyFormattedAction: "Formatiert kopieren",
+    flagCopyFormatted: "Formatiert kopieren",
+    tipCopyFormatted: "Ein zweiter Kopiervorgang, der zusätzlich die gerenderte Fassung in die Zwischenablage legt, für Programme, die formatierten Text lesen, etwa Word oder Outlook. Ein reines Textfeld bekommt weiterhin den Markdown Text, genau wie bei einer normalen Kopie.",
   },
   es: {
     flagChainPrompts: "Encadenar prompts",
@@ -5830,6 +5836,9 @@ export const I18N = {
     tipAttachPreviewKb: "Cuánto de un adjunto de texto lee la vista previa, en kilobytes.",
     attachPreviewTruncated: "Acortado, el archivo continúa más allá de este punto.",
     attachPreviewUnreadable: "No se puede leer como texto.",
+    copyFormattedAction: "Copiar formateado",
+    flagCopyFormatted: "Copia formateada",
+    tipCopyFormatted: "Una segunda copia que además pone la versión renderizada en el portapapeles, para programas que leen texto enriquecido, como Word u Outlook. Un campo de texto plano sigue recibiendo el texto en Markdown, igual que una copia normal.",
   },
   it: {
     flagChainPrompts: "Concatenazione prompt",
@@ -7772,6 +7781,9 @@ export const I18N = {
     tipAttachPreviewKb: "Quanto di un allegato di testo legge l'anteprima, in kilobyte.",
     attachPreviewTruncated: "Accorciato, il file continua oltre questo punto.",
     attachPreviewUnreadable: "Non leggibile come testo.",
+    copyFormattedAction: "Copia formattata",
+    flagCopyFormatted: "Copia formattata",
+    tipCopyFormatted: "Una seconda copia che mette anche la versione resa negli appunti, per i programmi che leggono testo formattato, come Word o Outlook. Un campo di testo semplice riceve comunque il testo Markdown, esattamente come una copia normale.",
   },
   pt: {
     flagChainPrompts: "Encadear prompts",
@@ -9714,6 +9726,9 @@ export const I18N = {
     tipAttachPreviewKb: "Quanto de um anexo de texto a pré-visualização lê, em kilobytes.",
     attachPreviewTruncated: "Encurtado, o arquivo continua além deste ponto.",
     attachPreviewUnreadable: "Não é possível ler como texto.",
+    copyFormattedAction: "Copiar formatado",
+    flagCopyFormatted: "Cópia formatada",
+    tipCopyFormatted: "Uma segunda cópia que também coloca a versão renderizada na área de transferência, para programas que leem texto formatado, como Word ou Outlook. Um campo de texto simples continua recebendo o texto em Markdown, exatamente como uma cópia normal.",
   },
   pl: {
     flagChainPrompts: "Łączenie promptów",
@@ -11667,6 +11682,9 @@ export const I18N = {
     tipAttachPreviewKb: "Ile z załącznika tekstowego odczytuje podgląd, w kilobajtach.",
     attachPreviewTruncated: "Skrócono, plik ciągnie się dalej poza tym miejscem.",
     attachPreviewUnreadable: "Nie można odczytać jako tekstu.",
+    copyFormattedAction: "Kopiuj sformatowane",
+    flagCopyFormatted: "Kopiowanie sformatowane",
+    tipCopyFormatted: "Drugie kopiowanie, które dodatkowo umieszcza wyrenderowaną wersję w schowku, dla programów odczytujących tekst sformatowany, na przykład Word lub Outlook. Zwykłe pole tekstowe nadal otrzymuje tekst Markdown, dokładnie jak przy zwykłym kopiowaniu.",
   },
   zh: {
     flagChainPrompts: "提示词链接",
@@ -13609,6 +13627,9 @@ export const I18N = {
     tipAttachPreviewKb: "预览读取文本附件的字节数量,单位为 KB。",
     attachPreviewTruncated: "已截断,文件内容在此之后还有更多。",
     attachPreviewUnreadable: "无法作为文本读取。",
+    copyFormattedAction: "复制为富文本",
+    flagCopyFormatted: "格式化复制",
+    tipCopyFormatted: "在复制文本的同时,把渲染后的版本也放入剪贴板,供能读取富文本的程序使用,例如 Word 或 Outlook。纯文本输入框仍然只会收到 Markdown 原文,和普通复制一样。",
   },
   ja: {
     flagChainPrompts: "プロンプト連結",
@@ -15551,6 +15572,9 @@ export const I18N = {
     tipAttachPreviewKb: "プレビューがテキスト添付ファイルを読み込む量です(キロバイト単位)。",
     attachPreviewTruncated: "短縮されています。ファイルはこの続きがあります。",
     attachPreviewUnreadable: "テキストとして読み込めません。",
+    copyFormattedAction: "書式付きでコピー",
+    flagCopyFormatted: "書式付きコピー",
+    tipCopyFormatted: "レンダリングされた形式もクリップボードに追加で置く、もう一つのコピー方法です。WordやOutlookのようにリッチテキストを読み取るアプリ向けです。プレーンテキストの欄には、通常のコピーと同じくMarkdownのテキストがそのまま入ります。",
   },
   nl: {
     flagChainPrompts: "Prompts koppelen",
@@ -17493,6 +17517,9 @@ export const I18N = {
     tipAttachPreviewKb: "Hoeveel van een tekstbijlage het voorbeeld leest, in kilobytes.",
     attachPreviewTruncated: "Ingekort, het bestand gaat verder na dit punt.",
     attachPreviewUnreadable: "Niet leesbaar als tekst.",
+    copyFormattedAction: "Opgemaakt kopiëren",
+    flagCopyFormatted: "Opgemaakt kopiëren",
+    tipCopyFormatted: "Een tweede manier van kopiëren die ook de weergegeven versie op het klembord zet, voor programma's die opgemaakte tekst lezen, zoals Word of Outlook. Een gewoon tekstveld krijgt nog steeds de Markdown tekst, net als bij een normale kopie.",
   },
   tr: {
     flagChainPrompts: "Komut zincirleme",
@@ -19435,6 +19462,9 @@ export const I18N = {
     tipAttachPreviewKb: "Önizlemenin bir metin eklentisinden ne kadar okuduğu, kilobayt cinsinden.",
     attachPreviewTruncated: "Kısaltıldı, dosya bu noktadan sonra devam ediyor.",
     attachPreviewUnreadable: "Metin olarak okunamıyor.",
+    copyFormattedAction: "Biçimlendirilmiş kopyala",
+    flagCopyFormatted: "Biçimlendirilmiş kopyalama",
+    tipCopyFormatted: "Zengin metin okuyan programlar için, Word veya Outlook gibi, işlenmiş sürümü de panoya koyan ikinci bir kopyalama yolu. Düz metin alanı yine normal kopyalamadaki gibi Markdown metnini alır.",
   },
   ro: {
     flagChainPrompts: "Înlănțuire prompturi",
@@ -21377,6 +21407,9 @@ export const I18N = {
     tipAttachPreviewKb: "Cât dintr-un atașament text citește previzualizarea, în kilobytes.",
     attachPreviewTruncated: "Scurtat, fișierul continuă după acest punct.",
     attachPreviewUnreadable: "Nu poate fi citit ca text.",
+    copyFormattedAction: "Copiere formatată",
+    flagCopyFormatted: "Copiere formatată",
+    tipCopyFormatted: "O a doua copiere care pune și versiunea randată în clipboard, pentru programe care citesc text formatat, precum Word sau Outlook. Un câmp de text simplu primește în continuare textul Markdown, exact ca la o copiere normală.",
   },
 };
 

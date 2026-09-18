@@ -403,6 +403,12 @@ the video editor and the introduction tour ship on).
   file row, always as plain text and never rendered as markup. How many
   kilobytes it reads is adjustable in the expert menu, where the feature can
   also be switched off.
+- **Copy formatted.** A second copy entry, in a tile's right-click menu and in
+  the editor, offered only for a prompt whose text actually contains Markdown
+  syntax. It puts the rendered version on the clipboard alongside the plain
+  Markdown text, so Word, Outlook or a browser shows the formatting while a
+  plain text field still gets exactly the Markdown source a normal copy
+  would have given it.
 
 ### Improved
 

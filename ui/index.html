@@ -355,6 +355,10 @@
           <div id="modal-md-preview" class="md-preview" tabindex="0" aria-live="off"
                data-i18n-title="mdClickToEdit"></div>
         </div>
+        <!-- Only shown while the rendered preview is on screen for a prompt
+             that actually contains Markdown syntax, and only while
+             copyFormatted itself is on (updateCopyFormattedBtn toggles it). -->
+        <button type="button" id="modal-copy-formatted" class="ghost-btn modal-copy-formatted hidden" data-i18n="copyFormattedAction">Copy formatted</button>
       </div>
       <!-- Live length readout (chars / words / ~tokens), expert-tunable -->
       <div id="modal-length" class="modal-length hidden" aria-hidden="true"></div>
@@ -1366,6 +1370,11 @@
   <!-- Context menu for a tile -->
   <div id="ctx" class="ctx hidden" role="menu">
     <button data-act="edit" role="menuitem" data-i18n="edit">Edit</button>
+    <!-- Only shown for a text prompt whose body actually contains Markdown
+         syntax, and only while copyFormatted itself is on (openCtx toggles
+         .hidden). Puts both the Markdown text and its rendered form on the
+         clipboard in one copy. -->
+    <button data-act="copyFormatted" role="menuitem" class="hidden" data-i18n="copyFormattedAction">Copy formatted</button>
     <!-- Only shown for a video prompt (openCtx toggles .hidden) -- opens the
          video editor instead of the normal text editor. -->
     <button data-act="editVideo" role="menuitem" class="hidden" data-i18n="editVideo">Edit video</button>
