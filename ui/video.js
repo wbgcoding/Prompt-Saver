@@ -90,6 +90,11 @@ const MAX_SILENT_DIM = 1280;
 // with applySettings() on the numFieldWheel flag instead of throwing.
 let settings = null;
 
+// The largest number of extra video sources (overlays and sections combined)
+// one project may add. This is now an expert setting (VE.extraClipsMax, see
+// applySettings); the constant here is only the fallback before settings load.
+const EXTRA_CLIPS_MAX_DEFAULT = 8;
+
 const VE = {
   src: "",
   originDir: "", // set only for a copy of a file opened for editing from outside the app
@@ -135,6 +140,7 @@ const VE = {
   etaShow: true,        // "Show remaining time" -- settings-driven, see applySettings
   etaMinPct: 10,
   etaMinSecs: 20,
+  extraClipsMax: EXTRA_CLIPS_MAX_DEFAULT, // settings-driven, see applySettings
   dirty: false,         // ops changed since the last successful export
   lastExport: "",       // path of the file the last export produced
   destOverride: null,   // a full path picked via "Save as…" or typed by hand
@@ -486,11 +492,6 @@ const overlayLabelKey = (kind) => ({
   image: "veOvImage", frame: "veOvFrame", text: "veOvText",
   pixelate: "veOvPixelate", spotlight: "veOvSpotlight", video: "veOvVideo",
 }[kind] || "veOpOverlay");
-
-// The largest number of extra video sources (overlays and sections combined)
-// one project may add -- matches the plan's own default. Not yet an expert
-// setting of its own; see the report for why.
-const EXTRA_CLIPS_MAX = 8;
 
 function extraClipCount() {
   return VE.ops.filter((o) => o.tool === "clip" || (o.tool === "overlay" && o.kind === "video")).length;
@@ -1823,13 +1824,13 @@ async function addOverlay(kind) {
 
 // ---------------------------------------------------------------- add a video
 
-// At most EXTRA_CLIPS_MAX extra sources, each checked with ffprobe once,
+// At most VE.extraClipsMax extra sources, each checked with ffprobe once,
 // right here, before the user builds anything on it -- an unreadable file is
 // rejected with the same wording an export failure already uses, never a
 // second, separate message for the same three failure shapes.
 async function pickExtraVideo() {
-  if (extraClipCount() >= EXTRA_CLIPS_MAX) {
-    toast(t("veClipLimit").replace("{n}", String(EXTRA_CLIPS_MAX)));
+  if (extraClipCount() >= VE.extraClipsMax) {
+    toast(t("veClipLimit").replace("{n}", String(VE.extraClipsMax)));
     return null;
   }
   const path = await invoke("pick_file_path").catch(() => null);
@@ -3773,6 +3774,8 @@ function applySettings(settings) {
   VE.numFieldStep = Number.isFinite(numFieldStep) && numFieldStep > 0 ? numFieldStep : 1;
   const numFieldBigStep = Number(values.numFieldBigStep);
   VE.numFieldBigStep = Number.isFinite(numFieldBigStep) && numFieldBigStep > 0 ? numFieldBigStep : 10;
+  const extraClipsMax = Number(values.veExtraClipsMax);
+  VE.extraClipsMax = Number.isFinite(extraClipsMax) ? Math.min(32, Math.max(1, Math.round(extraClipsMax))) : EXTRA_CLIPS_MAX_DEFAULT;
   const texts = settings?.ui_texts || {};
   // The user's own last export choice always wins; only a field that was never
   // touched (no persisted videoExport* value yet) opens on the expert default.

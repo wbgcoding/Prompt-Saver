@@ -11498,6 +11498,84 @@ window.__WHATS_NEW_FIXTURE__ = {
 </script>
 """
 
+# 475: the extra-video-source limit used to be a fixed constant; it is now an
+# expert value the smoke run can dial down and prove the "add a video" flow
+# actually reads.
+EXTRA_CLIPS_MAX_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, tries) => {
+    for (let i = 0; i < (tries || 60) && !fn(); i++) await sleep(50);
+    return fn();
+  };
+  try {
+    await until(() => {
+      const opsHint = document.querySelector('#ve-ops-list p');
+      return document.getElementById('ve-stage-msg').classList.contains('hidden') &&
+        document.querySelectorAll('#ve-filmstrip .ve-thumb').length > 0 && !!opsHint;
+    }, 300);
+    document.getElementById('ve-tab-overlays').click();
+    await sleep(80);
+
+    const beforeClips = document.querySelectorAll('#ve-clip-list .ve-op-row').length;
+    if (beforeClips !== 0) {
+      errs.push('475: setup: the clip list was not empty before the limit test, found ' + beforeClips);
+    }
+    await window.__TAURI__.core.invoke('set_ui_value', { key: 'veExtraClipsMax', value: 1 });
+    window.__FIRE__('settings-changed');
+    await sleep(50);
+
+    document.getElementById('ve-add-video').click();
+    await sleep(30);
+    let pickPop = document.getElementById('ve-add-video-pop');
+    if (!pickPop || pickPop.classList.contains('hidden') || pickPop.querySelectorAll('button').length !== 2) {
+      errs.push('475: lowering the limit to one still blocked the first extra source');
+    } else {
+      pickPop.querySelectorAll('button')[1].click(); // as its own section
+      await sleep(30);
+      const posButtons = pickPop.querySelectorAll('button');
+      if (pickPop.classList.contains('hidden') || posButtons.length !== 3) {
+        errs.push('475: choosing as its own section did not open the position choice');
+      } else {
+        posButtons[1].click(); // at the end
+        await sleep(30);
+      }
+    }
+    const afterFirst = document.querySelectorAll('#ve-clip-list .ve-op-row').length;
+    if (afterFirst !== 1) {
+      errs.push('475: the first extra source under a limit of one was not inserted, found ' + afterFirst + ' clip row(s)');
+    }
+
+    document.getElementById('ve-add-video').click();
+    await sleep(30);
+    pickPop = document.getElementById('ve-add-video-pop');
+    const popOpened = pickPop && !pickPop.classList.contains('hidden') && pickPop.querySelectorAll('button').length;
+    if (popOpened) {
+      errs.push('475: a second extra source was still allowed once the lowered limit of one was reached');
+    }
+    const toastEl = document.getElementById('ve-toast');
+    if (toastEl.classList.contains('hidden') || !toastEl.textContent || !toastEl.textContent.includes('1')) {
+      errs.push('475: the limit toast did not report the lowered value of one, got: ' + toastEl.textContent);
+    }
+    if (/^ve[A-Z][A-Za-z]+$/.test((toastEl.textContent || '').trim())) {
+      errs.push('475: the limit toast rendered a raw i18n key: ' + toastEl.textContent);
+    }
+    const afterSecond = document.querySelectorAll('#ve-clip-list .ve-op-row').length;
+    if (afterSecond !== 1) {
+      errs.push('475: a rejected extra source still changed the clip list, found ' + afterSecond + ' row(s)');
+    }
+  } catch (e) { errs.push('475 probe: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
 
 def unescape(s):
     for a, b in (("&quot;", '"'), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
@@ -12042,6 +12120,31 @@ def main():
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- float-recall expert action")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # 475: the video editor's extra-source limit reads its own expert value
+        # instead of a fixed constant. Its own boot, same reasoning as the
+        # restore-dialog and float-recall runs above.
+        side = tmp / "ui" / "extra-clips-max.html"
+        side.write_text(
+            (REPO / "ui" / "video.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", EXTRA_CLIPS_MAX_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-extra-clips-max'}", "--allow-file-access-from-files",
+             "--window-size=1130,860", "--virtual-time-budget=30000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- video editor extra-source limit as an expert value")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

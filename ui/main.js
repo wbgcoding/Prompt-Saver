@@ -1607,6 +1607,7 @@ const EXPERT_VALUES = {
   veOvPixelateBlock: { label: "valVeOvPixelateBlock", min: 4, max: 64, step: 2, def: 16, unit: "px", gate: "videoEditor" },
   veOvSpotlightDim: { label: "valVeOvSpotlightDim", min: 10, max: 95, step: 5, def: 60, unit: "%", gate: "videoEditor" },
   veOvImageOpacity: { label: "valVeOvImageOpacity", min: 10, max: 100, step: 5, def: 100, unit: "%", gate: "videoEditor" },
+  veExtraClipsMax: { label: "veExtraClipsMax", min: 1, max: 32, step: 1, def: 8, unit: "", gate: "videoEditor" },
   // Shared by the screenshot editor's and the video editor's own numeric
   // input fields (numberField() in floatShared.js) -- default matches that
   // component's own existing hardcoded step/bigStep, so nothing changes for
@@ -2081,7 +2082,7 @@ const EXPERT_TABS = [
     // "hotkey" branch.
     { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode"], paths: ["recordingDir"],
       actions: [{ id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recStopHotkeyLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recPauseHotkeyLabel", gate: "recPauseHotkey" }] },
-    { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor"], paths: ["videoExportDir"] },
+    { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veExtraClipsMax"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor"], paths: ["videoExportDir"] },
     // What the screenshot editor and the video editor share -- created here so
     // no setting key is ever declared in two groups (expert_menu_check.py).
     { title: "expGroupEditors", flags: ["numFieldWheel", "editStateKeep"], values: ["numFieldStep", "numFieldBigStep", "zoomStepPct", "zoomMaxPct", "editStateSaveSecs", "editStateKeepDays", "veOvDupOffsetPx", "editSnapTolerancePx", "editorOpenMaxMb"] },
@@ -2276,7 +2277,7 @@ const EXPERT_TIPS = [
   "videoEditor", "videoEditUndoMax", "veOvRemember", "videoEditSnap",
   "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veExportKbpsHigh", "veExportKbpsSmall",
   "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veOvColor", "veOvFont",
-  "veDefaultPanel", "videoExportDir",
+  "veDefaultPanel", "videoExportDir", "veExtraClipsMax",
   "numFieldWheel", "zoomStepPct", "zoomMaxPct", "errorLogKeepKb", "veOvDupOffsetPx", "editSnapTolerancePx",
   "editStateKeep", "editStateSaveSecs", "editStateKeepDays", "editorOpenMaxMb",
   "snipQuality", "snipSaveQuality", "snipDelayMs",

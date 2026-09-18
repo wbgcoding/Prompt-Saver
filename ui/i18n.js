@@ -1940,6 +1940,7 @@ export const I18N = {
     flagLibraryTiles: "Library tiles view",
     valLibraryTileSize: "Tile size",
     libraryTilesToggle: "List or tiles",
+    tipVeExtraClipsMax: "Limits how many extra video files one project can insert. A higher value means longer exports.",
   },
   de: {
     settings: "Einstellungen",
@@ -3876,6 +3877,7 @@ export const I18N = {
     flagLibraryTiles: "Kachelansicht der Bibliothek",
     valLibraryTileSize: "Kachelgröße",
     libraryTilesToggle: "Liste oder Kacheln",
+    tipVeExtraClipsMax: "Begrenzt, wie viele zusätzliche Videodateien ein Projekt einfügen kann. Ein höherer Wert bedeutet längere Exporte.",
   },
   es: {
     flagChainPrompts: "Encadenar prompts",
@@ -5812,6 +5814,7 @@ export const I18N = {
     flagLibraryTiles: "Vista de mosaicos de la biblioteca",
     valLibraryTileSize: "Tamaño del mosaico",
     libraryTilesToggle: "Lista o mosaicos",
+    tipVeExtraClipsMax: "Limita cuántos archivos de vídeo adicionales puede insertar un proyecto. Un valor más alto implica exportaciones más largas.",
   },
   it: {
     flagChainPrompts: "Concatenazione prompt",
@@ -7748,6 +7751,7 @@ export const I18N = {
     flagLibraryTiles: "Vista a riquadri della libreria",
     valLibraryTileSize: "Dimensione riquadro",
     libraryTilesToggle: "Elenco o riquadri",
+    tipVeExtraClipsMax: "Limita il numero di file video aggiuntivi che un progetto può inserire. Un valore più alto comporta esportazioni più lunghe.",
   },
   pt: {
     flagChainPrompts: "Encadear prompts",
@@ -9684,6 +9688,7 @@ export const I18N = {
     flagLibraryTiles: "Vista em blocos da biblioteca",
     valLibraryTileSize: "Tamanho do bloco",
     libraryTilesToggle: "Lista ou blocos",
+    tipVeExtraClipsMax: "Limita quantos arquivos de vídeo adicionais um projeto pode inserir. Um valor mais alto significa exportações mais longas.",
   },
   pl: {
     flagChainPrompts: "Łączenie promptów",
@@ -11631,6 +11636,7 @@ export const I18N = {
     flagLibraryTiles: "Widok kafelków biblioteki",
     valLibraryTileSize: "Rozmiar kafelka",
     libraryTilesToggle: "Lista lub kafelki",
+    tipVeExtraClipsMax: "Ogranicza liczbę dodatkowych plików wideo, które może wstawić projekt. Wyższa wartość oznacza dłuższy eksport.",
   },
   zh: {
     flagChainPrompts: "提示词链接",
@@ -13567,6 +13573,7 @@ export const I18N = {
     flagLibraryTiles: "库磁贴视图",
     valLibraryTileSize: "磁贴大小",
     libraryTilesToggle: "列表或磁贴",
+    tipVeExtraClipsMax: "限制一个项目可插入的额外视频文件数量。数值越高，导出时间越长。",
   },
   ja: {
     flagChainPrompts: "プロンプト連結",
@@ -15503,6 +15510,7 @@ export const I18N = {
     flagLibraryTiles: "ライブラリのタイル表示",
     valLibraryTileSize: "タイルのサイズ",
     libraryTilesToggle: "リストまたはタイル",
+    tipVeExtraClipsMax: "プロジェクトに追加できる動画ファイルの数を制限します。値が大きいほど、書き出しにかかる時間が長くなります。",
   },
   nl: {
     flagChainPrompts: "Prompts koppelen",
@@ -17439,6 +17447,7 @@ export const I18N = {
     flagLibraryTiles: "Tegelweergave bibliotheek",
     valLibraryTileSize: "Tegelgrootte",
     libraryTilesToggle: "Lijst of tegels",
+    tipVeExtraClipsMax: "Beperkt hoeveel extra videobestanden een project kan invoegen. Een hogere waarde betekent langere exports.",
   },
   tr: {
     flagChainPrompts: "Komut zincirleme",
@@ -19375,6 +19384,7 @@ export const I18N = {
     flagLibraryTiles: "Kütüphane kutucuk görünümü",
     valLibraryTileSize: "Kutucuk boyutu",
     libraryTilesToggle: "Liste veya kutucuklar",
+    tipVeExtraClipsMax: "Bir projenin ekleyebileceği ek video dosyası sayısını sınırlar. Daha yüksek bir değer, daha uzun dışa aktarmalar anlamına gelir.",
   },
   ro: {
     flagChainPrompts: "Înlănțuire prompturi",
@@ -21311,6 +21321,7 @@ export const I18N = {
     flagLibraryTiles: "Vizualizare dale bibliotecă",
     valLibraryTileSize: "Dimensiune dală",
     libraryTilesToggle: "Listă sau dale",
+    tipVeExtraClipsMax: "Limitează numărul de fișiere video suplimentare pe care le poate insera un proiect. O valoare mai mare înseamnă exporturi mai lungi.",
   },
 };
 

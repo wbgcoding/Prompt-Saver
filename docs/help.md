@@ -199,7 +199,8 @@ a video" offers it either as another overlay (its own rectangle, time range
 and volume, muted by default) or as a whole extra section spliced in at the
 start, the end or the current position; each extra source is checked once
 when picked and stays visibly marked as missing if it later moves or is
-deleted, up to a small fixed number per project.
+deleted, up to a limit per project (eight by default, adjustable in the
+expert menu).
 
 Both editors work the same way for their shared tools: Ctrl+Plus, Ctrl+Minus
 and Ctrl+0 zoom in, zoom out and fit the view in either one, and Ctrl+Z,
@@ -811,8 +812,8 @@ Video einfügen — „Video hinzufügen" bietet es entweder als weitere
 standardmäßig stumm) oder als ganzen zusätzlichen Abschnitt am Anfang, am
 Ende oder an der aktuellen Stelle; jede zusätzliche Quelle wird beim
 Auswählen einmal geprüft und bleibt sichtbar als fehlend markiert, falls sie
-später verschoben oder gelöscht wird, bis zu einer festen Höchstzahl je
-Projekt.
+später verschoben oder gelöscht wird, bis zu einer Höchstzahl je Projekt
+(ab Werk acht, einstellbar im Expertenmenü).
 
 Ein Rechtsklick auf eine Form (Screenshot-Editor) oder die Zeile einer
 Überlagerung (Video-Editor) öffnet ein kleines Menü zum Duplizieren oder
