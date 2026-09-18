@@ -1188,6 +1188,44 @@ PROBE = """
         if (chipsOf436().length) out.errors.push('436: deleting saved searches did not empty the list again');
       }
     }
+    // 437: the list/tiles toggle draws the very same rows differently -- a
+    // selection survives the switch either way, and neither layout scrolls
+    // the window horizontally.
+    {
+      const viewToggle437 = document.getElementById('library-view-toggle');
+      const list437 = document.getElementById('library-list');
+      if (!viewToggle437 || !list437) {
+        out.errors.push('437: the library list/tiles toggle is missing');
+      } else {
+        await click('library-select-btn');
+        document.getElementById('lib-batch-all').click();
+        await sleep(150);
+        const selectedBefore437 = document.querySelectorAll('#library-list .lib-item.lib-selected').length;
+        if (!selectedBefore437) out.errors.push('437: "select all" selected nothing before the tiles check');
+        viewToggle437.click();
+        await sleep(300);
+        if (!list437.classList.contains('lib-tiles-view')) {
+          out.errors.push('437: clicking the view toggle did not switch to tiles');
+        }
+        const selectedInTiles437 = document.querySelectorAll('#library-list .lib-item.lib-selected').length;
+        if (selectedInTiles437 !== selectedBefore437) {
+          out.errors.push('437: switching to tiles changed the selection (' + selectedBefore437 + ' -> ' + selectedInTiles437 + ')');
+        }
+        layoutScan('library tiles');
+        viewToggle437.click();
+        await sleep(300);
+        if (list437.classList.contains('lib-tiles-view')) {
+          out.errors.push('437: clicking the view toggle again did not switch back to the list');
+        }
+        const selectedBack437 = document.querySelectorAll('#library-list .lib-item.lib-selected').length;
+        if (selectedBack437 !== selectedBefore437) {
+          out.errors.push('437: switching back to the list changed the selection (' + selectedBefore437 + ' -> ' + selectedBack437 + ')');
+        }
+        document.getElementById('lib-batch-none').click();
+        await sleep(150);
+        await click('library-select-btn'); // exit select mode
+      }
+    }
     // P25: the 2 most-used tags across the fixture (Work, Draft) are offered as
     // one-click chips on an untagged prompt, and vanish once actually added.
     {

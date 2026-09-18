@@ -1605,6 +1605,7 @@ body:not(.flag-voiceHotkey) #voice-hotkey-row { display: none; }
 .noflag-librarySearch #library-q { display: none; }
 .noflag-savedSearches #library-search-save,
 .noflag-savedSearches #library-saved-searches { display: none; }
+.noflag-libraryTiles #library-view-toggle { display: none; }
 /* Hide only the type chips, so the favorites chip can stay when it is on. */
 .noflag-libraryTypeFilter #library-types .lib-type[data-type] { display: none; }
 .noflag-favorites #library-fav { display: none; }
@@ -3853,6 +3854,48 @@ body.drag-over::after {
 .lib-saved-searches:empty { display: none; }
 .lib-saved-search-chip { cursor: pointer; }
 .lib-saved-search-chip.drag-over { border-color: var(--accent); }
+/* List/tiles toggle next to the type filter. */
+.lib-view-toggle.active { background: var(--accent); color: var(--accent-fg); }
+/* Tiles: same rows, same selection and right-click behaviour -- only the layout
+   and what each one shows changes. A tile is just its picture and its name. */
+.library-list.lib-tiles-view {
+  grid-template-columns: repeat(auto-fill, minmax(var(--lib-tile-size, 140px), 1fr));
+  align-content: start;
+}
+.library-list.lib-tiles-view .lib-item {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 8px;
+  text-align: center;
+}
+.library-list.lib-tiles-view .lib-item .lib-thumb,
+.library-list.lib-tiles-view .lib-item .lib-thumb-wrap,
+.library-list.lib-tiles-view .lib-item .lib-tile-placeholder {
+  width: 100%;
+  height: var(--lib-tile-size, 140px);
+  align-self: stretch;
+}
+.library-list.lib-tiles-view .lib-item .lib-tile-placeholder {
+  border-radius: 8px;
+  width: 100%;
+  margin: 0;
+}
+.library-list.lib-tiles-view .lib-item .lib-body { width: 100%; align-items: center; }
+.library-list.lib-tiles-view .lib-item .lib-name {
+  white-space: normal;
+  overflow-wrap: break-word;
+  text-align: center;
+}
+.library-list.lib-tiles-view .lib-item .lib-text,
+.library-list.lib-tiles-view .lib-item .lib-tags,
+.library-list.lib-tiles-view .lib-item .lib-rotate-tag,
+.library-list.lib-tiles-view .lib-item .lib-image-hit-tag,
+.library-list.lib-tiles-view .lib-item .lib-add,
+.library-list.lib-tiles-view .lib-item .lib-edit,
+.library-list.lib-tiles-view .lib-item .lib-fav,
+.library-list.lib-tiles-view .lib-item .lib-delete { display: none; }
 /* Delete sits at the far right of a row and is the only destructive one there. */
 .lib-item .lib-delete {
   align-self: center;

@@ -56,6 +56,8 @@ BASE_TARGETS_MS = {
     "libraryOpen": 800,
     "viewSwitch": 800,
     "expertMenuOpen": 800,
+    # Point 437 -- same budget as a grid view switch, its own acceptance target.
+    "libraryTilesToggle": 800,
 }
 STAGE_MULTIPLIER = {1000: 1, 5000: 3, 10000: 6}
 PERF_SIZES = [1000] if os.environ.get("PERF_QUICK") else [1000, 5000, 10000]
@@ -156,6 +158,17 @@ PROBE = """
   nativeSetter.call(q, "");
   q.dispatchEvent(new Event("input", { bubbles: true }));
   await waitFor(() => rowCount() >= majority, 20000);
+
+  // 2b) Library tiles view -- same N rows, switching the whole list to a tile
+  // grid (and back), lazy-loaded thumbnails included.
+  const tilesBtn = document.getElementById("library-view-toggle");
+  t0 = performance.now();
+  tilesBtn.click();
+  await waitFor(() => document.getElementById("library-list").classList.contains("lib-tiles-view"), 15000);
+  out.timings.libraryTilesToggle = performance.now() - t0;
+  tilesBtn.click();
+  await waitFor(() => !document.getElementById("library-list").classList.contains("lib-tiles-view"), 15000);
+
   document.getElementById("library-close").click();
   await sleep(150);
 

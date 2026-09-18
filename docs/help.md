@@ -407,7 +407,12 @@ names. A star next to the search field saves the current query, tag filters
 and sort as a chip shown above the field; click it to bring the whole search
 back. Right-click a saved search to rename or delete it, or drag it to
 reorder the row. Up to five can be saved at once by default, adjustable in
-the expert menu.
+the expert menu. A toggle next to the type filter switches the list to
+tiles: a big preview picture with the name below, nothing else. Click,
+double-click, the right-click menu and multi-select all work the same as in
+the list, it is the same selection drawn differently. The toggle remembers
+its last choice per type filter, so switching to "only images" brings tiles
+back on its own next time.
 
 ### Tags
 
@@ -950,7 +955,11 @@ System.
 `tag:`/`var:`-Suchpräfixe (mit `-` auch verneint). Ein Stern neben dem Suchfeld
 speichert Anfrage, Tag-Filter und Sortierung als Kachel darüber; Rechtsklick
 bietet Umbenennen und Löschen, Ziehen sortiert die Zeile um. Standardmäßig
-höchstens fünf, im Experten-Menü einstellbar.
+höchstens fünf, im Experten-Menü einstellbar. Ein Umschalter neben dem
+Typfilter stellt die Liste als Kacheln dar: großes Vorschaubild, Name
+darunter, sonst nichts. Klick, Doppelklick, Rechtsklickmenü und
+Mehrfachauswahl verhalten sich genau wie in der Liste. Der Umschalter merkt
+sich seinen Stand je Filter.
 
 **Tags** — freie Schlagwörter, UND/ODER-Filter.
 

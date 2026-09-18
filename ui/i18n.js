@@ -1924,6 +1924,9 @@ export const I18N = {
     savedSearchLimitToast: "Already {max} saved searches. Delete \"{name}\" to save a new one.",
     savedSearchEditTitle: "Saved search",
     savedSearchEditMsg: "Rename it, or delete it.",
+    flagLibraryTiles: "Library tiles view",
+    valLibraryTileSize: "Tile size",
+    libraryTilesToggle: "List or tiles",
   },
   de: {
     settings: "Einstellungen",
@@ -3844,6 +3847,9 @@ export const I18N = {
     savedSearchLimitToast: "Bereits {max} gespeicherte Suchen. \"{name}\" löschen, um eine neue zu speichern.",
     savedSearchEditTitle: "Gespeicherte Suche",
     savedSearchEditMsg: "Umbenennen oder löschen.",
+    flagLibraryTiles: "Kachelansicht der Bibliothek",
+    valLibraryTileSize: "Kachelgröße",
+    libraryTilesToggle: "Liste oder Kacheln",
   },
   es: {
     flagChainPrompts: "Encadenar prompts",
@@ -5764,6 +5770,9 @@ export const I18N = {
     savedSearchLimitToast: "Ya hay {max} búsquedas guardadas. Elimina \"{name}\" para guardar una nueva.",
     savedSearchEditTitle: "Búsqueda guardada",
     savedSearchEditMsg: "Renombrar o eliminar.",
+    flagLibraryTiles: "Vista de mosaicos de la biblioteca",
+    valLibraryTileSize: "Tamaño del mosaico",
+    libraryTilesToggle: "Lista o mosaicos",
   },
   it: {
     flagChainPrompts: "Concatenazione prompt",
@@ -7684,6 +7693,9 @@ export const I18N = {
     savedSearchLimitToast: "Già {max} ricerche salvate. Elimina \"{name}\" per salvarne una nuova.",
     savedSearchEditTitle: "Ricerca salvata",
     savedSearchEditMsg: "Rinomina o elimina.",
+    flagLibraryTiles: "Vista a riquadri della libreria",
+    valLibraryTileSize: "Dimensione riquadro",
+    libraryTilesToggle: "Elenco o riquadri",
   },
   pt: {
     flagChainPrompts: "Encadear prompts",
@@ -9604,6 +9616,9 @@ export const I18N = {
     savedSearchLimitToast: "Já há {max} pesquisas salvas. Exclua \"{name}\" para salvar uma nova.",
     savedSearchEditTitle: "Pesquisa salva",
     savedSearchEditMsg: "Renomear ou excluir.",
+    flagLibraryTiles: "Vista em blocos da biblioteca",
+    valLibraryTileSize: "Tamanho do bloco",
+    libraryTilesToggle: "Lista ou blocos",
   },
   pl: {
     flagChainPrompts: "Łączenie promptów",
@@ -11535,6 +11550,9 @@ export const I18N = {
     savedSearchLimitToast: "Masz już {max} zapisanych wyszukiwań. Usuń \"{name}\", aby zapisać nowe.",
     savedSearchEditTitle: "Zapisane wyszukiwanie",
     savedSearchEditMsg: "Zmień nazwę lub usuń.",
+    flagLibraryTiles: "Widok kafelków biblioteki",
+    valLibraryTileSize: "Rozmiar kafelka",
+    libraryTilesToggle: "Lista lub kafelki",
   },
   zh: {
     flagChainPrompts: "提示词链接",
@@ -13455,6 +13473,9 @@ export const I18N = {
     savedSearchLimitToast: "已有 {max} 个已存搜索。请删除 \"{name}\" 以保存新搜索。",
     savedSearchEditTitle: "已存搜索",
     savedSearchEditMsg: "重命名或删除。",
+    flagLibraryTiles: "库磁贴视图",
+    valLibraryTileSize: "磁贴大小",
+    libraryTilesToggle: "列表或磁贴",
   },
   ja: {
     flagChainPrompts: "プロンプト連結",
@@ -15375,6 +15396,9 @@ export const I18N = {
     savedSearchLimitToast: "すでに {max} 件の検索が保存されています。新しく保存するには \"{name}\" を削除してください。",
     savedSearchEditTitle: "保存された検索",
     savedSearchEditMsg: "名前を変更するか、削除します。",
+    flagLibraryTiles: "ライブラリのタイル表示",
+    valLibraryTileSize: "タイルのサイズ",
+    libraryTilesToggle: "リストまたはタイル",
   },
   nl: {
     flagChainPrompts: "Prompts koppelen",
@@ -17295,6 +17319,9 @@ export const I18N = {
     savedSearchLimitToast: "Al {max} opgeslagen zoekopdrachten. Verwijder \"{name}\" om een nieuwe op te slaan.",
     savedSearchEditTitle: "Opgeslagen zoekopdracht",
     savedSearchEditMsg: "Hernoemen of verwijderen.",
+    flagLibraryTiles: "Tegelweergave bibliotheek",
+    valLibraryTileSize: "Tegelgrootte",
+    libraryTilesToggle: "Lijst of tegels",
   },
   tr: {
     flagChainPrompts: "Komut zincirleme",
@@ -19215,6 +19242,9 @@ export const I18N = {
     savedSearchLimitToast: "Zaten {max} arama kaydedilmiş. Yeni bir tane kaydetmek için \"{name}\" adlı aramayı silin.",
     savedSearchEditTitle: "Kaydedilen arama",
     savedSearchEditMsg: "Yeniden adlandır veya sil.",
+    flagLibraryTiles: "Kütüphane kutucuk görünümü",
+    valLibraryTileSize: "Kutucuk boyutu",
+    libraryTilesToggle: "Liste veya kutucuklar",
   },
   ro: {
     flagChainPrompts: "Înlănțuire prompturi",
@@ -21135,6 +21165,9 @@ export const I18N = {
     savedSearchLimitToast: "Deja {max} căutări salvate. Șterge \"{name}\" pentru a salva una nouă.",
     savedSearchEditTitle: "Căutare salvată",
     savedSearchEditMsg: "Redenumește sau șterge.",
+    flagLibraryTiles: "Vizualizare dale bibliotecă",
+    valLibraryTileSize: "Dimensiune dală",
+    libraryTilesToggle: "Listă sau dale",
   },
 };
 

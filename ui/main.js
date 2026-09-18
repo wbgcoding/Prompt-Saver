@@ -131,6 +131,7 @@ const libTypes = new Set();
 let libColor = "all"; // prompt library color filter
 let libFav = false; // prompt library "favorites only" filter
 let libShowArchive = false; // show archived prompts even while browsing (not persisted)
+let libViewMode = "list"; // "list" or "tiles" -- kept in sync with the type filter by syncLibViewMode()
 const libTags = new Set(); // Selected tag filters, as lowercase tag keys
 const gridTags = new Set(); // same idea, independent selection for the grid
 // Batch operations state.
@@ -1149,6 +1150,7 @@ const FLAG_LABELS = {
   librarySearch: "flagLibrarySearch",
   searchSuggest: "flagSearchSuggest",
   savedSearches: "flagSavedSearches",
+  libraryTiles: "flagLibraryTiles",
   colorFilter: "flagColorFilter",
   closeAfterCopy: "flagCloseAfterCopy",
   libraryCloseToggle: "flagLibraryCloseToggle",
@@ -1542,6 +1544,7 @@ const EXPERT_VALUES = {
   // How many recent search terms the suggestions dropdown keeps + shows.
   searchRecentMax: { label: "valSearchRecentMax", min: 1, max: 20, step: 1, def: 8, unit: "", gate: "searchSuggest" },
   savedSearchMax: { label: "valSavedSearchMax", min: 3, max: 10, step: 1, def: 5, unit: "", gate: "savedSearches" },
+  libraryTileSize: { label: "valLibraryTileSize", min: 80, max: 240, step: 10, def: 140, unit: "px", gate: "libraryTiles" },
   // How long the library search waits after the last keystroke before it re-filters.
   searchDebounceMs: { label: "valSearchDebounceMs", min: 0, max: 600, step: 10, def: 120, unit: "ms", gate: "librarySearch" },
   // Caps the recognized text kept per picture, so a screenshot of a wall of
@@ -2087,7 +2090,7 @@ const EXPERT_TABS = [
     { title: "expGroupLimits", values: ["maxViews", "gridMax", "previewLen", "nameMaxLen"] },
   ] },
   { title: "expTabLibrary", groups: [
-    { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "savedSearches", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "ocrIndex", "archiveTag"], values: ["searchRecentMax", "savedSearchMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs", "ocrIndexMaxChars"], dropdowns: ["fuzzyMaxTypos"] },
+    { title: "expGroupLibrary", flags: ["librarySearch", "searchSuggest", "savedSearches", "fuzzySearch", "smartSort", "batchOps", "libraryTypeFilter", "colorFilter", "searchAutofocus", "imagePreview", "libraryVideoPreview", "closeAfterCopy", "libraryCloseToggle", "ocrIndex", "archiveTag", "libraryTiles"], values: ["searchRecentMax", "savedSearchMax", "libraryCols", "libraryWidth", "libPreviewLines", "searchDebounceMs", "ocrIndexMaxChars", "libraryTileSize"], dropdowns: ["fuzzyMaxTypos"] },
     { title: "expGroupTags", flags: ["tags"], values: ["tagChipPx", "tagPopCols"], dropdowns: ["tagFilterMode", "tagSort"] },
     // Everything that records or shows copy history lives with the history view.
     { title: "expGroupJournal", flags: ["copyHistory", "historyTimestamps", "historyGrouped", "dedupCopyLog", "journalSearch", "journalTypeFilter", "journalColorFilter", { key: "journalTagFilter", gate: "tags" }, "journalRecent", "journalMostUsed", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "journalClear", "confirmClearHistory"], values: ["historyMax", "journalLimit", "journalWidth"], selects: ["historyDays"] },
@@ -12547,6 +12550,50 @@ function hideLibrary() {
   if (gridDirty) { gridDirty = false; renderGrid(true); }
 }
 
+// List/tiles toggle: remembered per active type filter, so switching to
+// "only images" and picking tiles there sticks the next time that same
+// filter is chosen, without forcing tiles everywhere else too.
+function libViewModeKey() {
+  return [...libTypes].sort().join(",") || "all";
+}
+function loadLibViewModes() {
+  try {
+    const v = JSON.parse(txt("libraryViewMode") || "{}");
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+function syncLibViewMode() {
+  libViewMode = flag("libraryTiles") ? (loadLibViewModes()[libViewModeKey()] || "list") : "list";
+}
+async function toggleLibViewMode() {
+  libViewMode = libViewMode === "tiles" ? "list" : "tiles";
+  const modes = loadLibViewModes();
+  modes[libViewModeKey()] = libViewMode;
+  const value = JSON.stringify(modes);
+  settings.ui_texts = { ...(settings.ui_texts || {}), libraryViewMode: value };
+  await invoke("set_ui_text", { key: "libraryViewMode", value }).catch((err) => errToast(err));
+  renderLibrary();
+}
+// Tiles only build their real thumbnail once scrolled into view -- otherwise a
+// library that is mostly pictures would fetch every one of them the moment it
+// opens, the exact "500 images at once" cost imageOf's own cache exists to avoid.
+let _tileImgObs = null;
+function makeTileImgObserver(root) {
+  return new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const row = entry.target;
+      _tileImgObs.unobserve(row);
+      const placeholder = row.querySelector(".lib-tile-placeholder");
+      if (!placeholder) continue;
+      const p = prompts.find((x) => x.id === row.dataset.id);
+      if (p) placeholder.replaceWith(mediaThumb(p, thumbEl(p, libThumbCache)));
+    }
+  }, { root, rootMargin: "300px" });
+}
+
 function renderLibrary() {
   const list = $("library-list");
   list.innerHTML = "";
@@ -12556,6 +12603,13 @@ function renderLibrary() {
   if (_libObs) _libObs.disconnect();
   _libObs = makeVideoObserver();
   _activeVidObs = _libObs;
+  if (_tileImgObs) _tileImgObs.disconnect();
+  const tilesMode = flag("libraryTiles") && libViewMode === "tiles";
+  _tileImgObs = tilesMode ? makeTileImgObserver(list) : null;
+  list.classList.toggle("lib-tiles-view", tilesMode);
+  list.style.setProperty("--lib-tile-size", `${val("libraryTileSize")}px`);
+  const viewToggle = $("library-view-toggle");
+  if (viewToggle) viewToggle.classList.toggle("active", tilesMode);
   renderTagFilter();
   renderSavedSearches();
   const anyLibFilter = flag("librarySearch") || flag("libraryTypeFilter") || flag("colorFilter") || flag("favorites") || tagsOn();
@@ -12651,7 +12705,18 @@ function renderLibrary() {
     }
 
     // Per-type preview: video plays inline, image/gif as a thumbnail, else a dot.
-    row.append(mediaThumb(p, thumbEl(p, libThumbCache)), body);
+    // In tiles mode a not-yet-visible row gets a plain placeholder instead --
+    // _tileImgObs swaps in the real thumbnail once it scrolls into view.
+    if (tilesMode) {
+      const placeholder = document.createElement("span");
+      placeholder.className = "lib-thumb lib-tile-placeholder dot";
+      if (p.color) placeholder.style.background = p.color;
+      row.appendChild(placeholder);
+      _tileImgObs.observe(row);
+    } else {
+      row.appendChild(mediaThumb(p, thumbEl(p, libThumbCache)));
+    }
+    row.appendChild(body);
     maybeBackfillMediaMeta(p, renderLibrary);
 
     // The library's own way to reach an editor: right-click an image/video/gif
@@ -17028,6 +17093,7 @@ function bind() {
     libTypes.clear();
     for (const type of typeFilterOf("libTypeFilter")) libTypes.add(type);
     paintTypeChips($("library-types"), libTypes);
+    syncLibViewMode();
     setLibColor("all");
     libFav = false;
     $("library-fav").classList.remove("active");
@@ -17078,8 +17144,13 @@ function bind() {
       return;
     }
     const btn = e.target.closest(".lib-type");
-    if (btn) { toggleTypeFilter(libTypes, btn.dataset.type, $("library-types"), "libTypeFilter"); renderLibrary(); }
+    if (btn) {
+      toggleTypeFilter(libTypes, btn.dataset.type, $("library-types"), "libTypeFilter");
+      syncLibViewMode();
+      renderLibrary();
+    }
   });
+  $("library-view-toggle").addEventListener("click", () => toggleLibViewMode());
   $("library-colors").addEventListener("click", (e) => {
     const btn = e.target.closest(".lib-color");
     if (btn) { setLibColor(btn.dataset.color); renderLibrary(); }
