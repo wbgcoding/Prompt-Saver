@@ -3814,6 +3814,99 @@ PROBE = """
     await click('expert-back');
     document.getElementById('settings').classList.add('hidden');
     await sleep(150);
+    // The save-time similar-prompt hint (its own switch, sharing similarThreshold
+    // with the duplicate finder above -- same System & data group). Off first:
+    // even with a fixture hit ready, saving must show nothing of the kind. Edits
+    // an EXISTING library entry rather than creating a new one -- the grid may
+    // be full of tiles the earlier parts of this sweep already placed, but the
+    // save path (and the code that fires the hint) is identical either way.
+    const findSimHintBox = () => {
+      const row = [...document.querySelectorAll('#expert-flags label.switch-field')]
+        .find((r) => r.querySelector('span')?.textContent === 'Similar-prompt hint on save');
+      return row ? row.querySelector('input[type="checkbox"]') : null;
+    };
+    const editViaLibrary = async (id, text) => {
+      await click('library-btn');
+      await sleep(150);
+      const editBtn = document.querySelector(`#library-list .lib-item[data-id="${id}"] .lib-edit`);
+      if (!editBtn) { out.errors.push('442: the library has no edit icon for ' + id); return false; }
+      editBtn.click();
+      await sleep(200);
+      document.getElementById('modal-text').value = text;
+      document.getElementById('modal-confirm').click();
+      await sleep(400);
+      return true;
+    };
+    document.getElementById('settings').classList.remove('hidden');
+    await click('expert-open');
+    let simTab = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')].find(b => /system/i.test(b.textContent));
+    if (simTab) { simTab.click(); await sleep(200); }
+    const simBoxOff = findSimHintBox();
+    if (!simBoxOff) {
+      out.errors.push('442: the expert menu has no similar-prompt-hint switch');
+    } else {
+      if (!simBoxOff.checked) out.errors.push('442: similarHint does not ship on');
+      simBoxOff.click(); // off
+      await sleep(150);
+    }
+    await click('expert-back');
+    document.getElementById('settings').classList.add('hidden');
+    await sleep(150);
+    window.__SIMILAR_HINT_FIXTURE__ = { id: 'p1', name: 'Prompt 2' };
+    if (await editViaLibrary('p2', 'Similar hint off test edit.')) {
+      if ([...document.querySelectorAll('#toast .toast-chip')].some((c) => c.textContent === 'Open')) {
+        out.errors.push('442: the hint appeared while similarHint is off');
+      }
+    }
+    // Back on, then the hint itself: message, Compare, and (on a second save)
+    // Open, since a chip click closes the toast that carried it.
+    document.getElementById('settings').classList.remove('hidden');
+    await click('expert-open');
+    simTab = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')].find(b => /system/i.test(b.textContent));
+    if (simTab) { simTab.click(); await sleep(200); }
+    findSimHintBox()?.click(); // on
+    await sleep(150);
+    await click('expert-back');
+    document.getElementById('settings').classList.add('hidden');
+    await sleep(150);
+    if (await editViaLibrary('p3', 'Similar hint on test edit, compare action.')) {
+      const toastEl = document.getElementById('toast');
+      const chips = [...toastEl.querySelectorAll('.toast-chip')];
+      if (toastEl.classList.contains('hidden') || chips.length !== 2) {
+        out.errors.push('442: the similar-prompt hint did not appear with its two actions');
+      } else {
+        if (!toastEl.textContent.includes('Prompt 2')) out.errors.push('442: the hint does not name the similar prompt');
+        const compareChip = chips.find((c) => c.textContent === 'Compare');
+        if (!compareChip) {
+          out.errors.push('442: the hint has no Compare action');
+        } else {
+          compareChip.click();
+          await sleep(300);
+          if (document.getElementById('compare-modal').classList.contains('hidden')) {
+            out.errors.push('442: Compare on the hint did not open the compare view');
+          }
+          await click('compare-close');
+          await sleep(200);
+        }
+      }
+    }
+    if (await editViaLibrary('p4', 'Similar hint on test edit, open action.')) {
+      const openChip = [...document.querySelectorAll('#toast .toast-chip')].find((c) => c.textContent === 'Open');
+      if (!openChip) {
+        out.errors.push('442: the hint has no Open action on its second appearance');
+      } else {
+        openChip.click();
+        await sleep(300);
+        if (document.getElementById('modal').classList.contains('hidden') || document.getElementById('modal-name').value !== 'Prompt 2') {
+          out.errors.push('442: Open on the hint did not open the similar prompt for editing');
+        }
+        await click('modal-close-x');
+        await sleep(200);
+        const cmAfterOpen = document.getElementById('confirm-modal');
+        if (!cmAfterOpen.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+      }
+    }
+    delete window.__SIMILAR_HINT_FIXTURE__;
     // Compare view detached from the duplicate finder: the library's own
     // selection reaches it too, for two entries the finder never flagged.
     await click('library-btn');

@@ -1221,6 +1221,10 @@ const FLAG_LABELS = {
   promptHistory: "flagPromptHistory",
   usageStats: "statsEnable",            // only ever rendered in the backups dialog
   dupFinder: "flagDupFinder",
+  // A background check after every save, naming the closest existing prompt
+  // once it clears similarThreshold (the same value the duplicate finder
+  // above uses) -- never a dialog, never holds up the save itself.
+  similarHint: "flagSimilarHint",
   dupImportCheck: "flagDupImportCheck",
   autoBackup: "flagAutoBackup",
   autoPaste: "flagAutoPaste",           // a normal setting now (default on)
@@ -1728,7 +1732,11 @@ const EXPERT_VALUES = {
   // Usage statistics: how many rows the top-N lists show.
   statsTopN: { label: "valStatsTopN", min: 5, max: 100, step: 1, def: 10, unit: "", gate: "usageStats" },
   // Duplicate finder: similarity threshold.
-  dupThreshold: { label: "valDupThreshold", min: 70, max: 100, step: 1, def: 90, unit: "%", gate: "dupFinder" },
+  // Shared by the duplicate finder above and the save-time similar-prompt hint --
+  // one number, one notion of "similar", per the spec. Gated on similarHint
+  // rather than dupFinder since the hint is the more commonly-hit path (it
+  // fires on every save); no OR-gate exists for a row two flags both use.
+  similarThreshold: { label: "valSimilarThreshold", min: 70, max: 99, step: 1, def: 85, unit: "%", gate: "similarHint" },
   // How long a confirm button (delete etc.) stays armed before it auto-resets.
   disarmMs: { label: "valDisarmMs", min: 1000, max: 10000, step: 500, def: 3000, unit: "ms" },
   // Matches append_crash_log's own pre-existing hardcoded rotation cap (256 KB).
@@ -2147,7 +2155,7 @@ const EXPERT_TABS = [
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken", "undoToast"], values: ["dupThreshold", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "videoClipTtlMin", "errorLogKeepKb", "undoToastMs"], selects: ["trashRetentionDays", "recordingRetentionDays"],
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken", "undoToast"], values: ["similarThreshold", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "videoClipTtlMin", "errorLogKeepKb", "undoToastMs"], selects: ["trashRetentionDays", "recordingRetentionDays"],
       actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }, { id: "float-recall", label: "floatRecallAction", gate: "floating" }] },
   ] },
 ];
@@ -2352,7 +2360,7 @@ const EXPERT_TIPS = [
   "archiveTag",
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "kbFocusFadeMs", "snipPreviewVh",
-  "historyPerPrompt", "dupThreshold", "clipMinChars", "clipInboxMax", "clipSecretMinLen", "historyMax",
+  "historyPerPrompt", "similarThreshold", "similarHint", "clipMinChars", "clipInboxMax", "clipSecretMinLen", "historyMax",
   "journalLimit", "previewLen", "nameMaxLen", "searchRecentMax", "savedSearchMax", "maxViews", "gridMax",
   "viewBorder", "statsTopN", "viewGroups", "viewGroupMaxRows", "multiViewPrompt",
   "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
@@ -8941,7 +8949,7 @@ async function scanDupes() {
   loading.textContent = t("dupScanning");
   body.appendChild(loading);
   let groups;
-  try { groups = await invoke("find_duplicates", { threshold: Math.round(val("dupThreshold")) }); }
+  try { groups = await invoke("find_duplicates", { threshold: Math.round(val("similarThreshold")) }); }
   catch (e) { errToast(e); body.innerHTML = ""; return; }
   recordToolUsage("duplicate_finder");
   body.innerHTML = "";
@@ -9189,11 +9197,28 @@ function startCompareWith(id) {
 async function maybeDupImportToast() {
   if (!flag("dupFinder") || !flag("dupImportCheck")) return;
   try {
-    const groups = await invoke("find_duplicates", { threshold: Math.round(val("dupThreshold")) });
+    const groups = await invoke("find_duplicates", { threshold: Math.round(val("similarThreshold")) });
     if (groups.length) toast(t("dupImportToast").replace("{n}", String(groups.length)));
   } catch (_) {}
 }
 EXPERT_ACTIONS["dupes-open"] = openDupes;
+
+// The save-time cousin of maybeDupImportToast above: runs after EVERY save
+// (create or edit, called with no await from saveModal), never holds up
+// anything, and never asks a question -- ignoring the toast loses nothing.
+// Shares similarThreshold with the duplicate finder on purpose (the spec's
+// own reasoning: one number, one notion of "similar").
+async function maybeShowSimilarHint(id) {
+  if (!flag("similarHint")) return;
+  try {
+    const hit = await invoke("similar_to_saved", { id, threshold: Math.round(val("similarThreshold")) });
+    if (!hit) return;
+    toast(t("similarHintToast").replace("{name}", hit.name), null, "", [
+      { label: t("similarHintOpen"), onClick: () => { hideToast(); editPrompt(hit.id); } },
+      { label: t("compareBtn"), onClick: () => { hideToast(); openCompareView([id, hit.id]); } },
+    ]);
+  } catch (_) {}
+}
 
 // ---- Trash ----
 // Deleting a prompt (grid tile, library row, editor, multi-select) always moves it
@@ -11293,6 +11318,10 @@ async function confirmModal() {
     renderLibrary();
   }
   if (saved && wasCreate) maybeDupImportToast();
+  // Runs for a create AND an edit, unlike maybeDupImportToast just above --
+  // fired here, after everything the save itself needed is already done, and
+  // never awaited, so a slow scan can only ever delay the hint toast.
+  if (saved) maybeShowSimilarHint(saved.id);
 }
 
 // Everything about a prompt except what identifies it and the hotkey (one accelerator,

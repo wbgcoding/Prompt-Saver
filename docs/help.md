@@ -608,6 +608,12 @@ an exact match, without deleting anything on its own. Review a flagged pair side
 by side, keep one, or mark the pair as not a duplicate to stop it being flagged
 again. A rotating tile is only compared on its first entry.
 
+The same similarity score also drives a quiet hint after saving a prompt: if an
+existing one is close enough, a message names it with a button to open it and
+another to compare the two. It never holds up the save and never asks
+anything, so ignoring it costs nothing. Both share one threshold in the expert
+menu.
+
 ### Import & export
 
 Plain CSV/TXT export for the text alone, or a full backup file with everything —
@@ -1083,6 +1089,11 @@ das abschalten, dann bleibt die Meldung eine reine Bestätigung.
 **Duplikatfinder** — findet textlich sehr ähnliche Kacheln nach
 Ähnlichkeitswert, keine exakte Übereinstimmung nötig, löscht nichts von sich
 aus. Eine wechselnde Kachel wird nur nach ihrem ersten Eintrag verglichen.
+Derselbe Ähnlichkeitswert steuert auch einen stillen Hinweis nach dem
+Speichern: gibt es einen ähnlichen vorhandenen Prompt, zeigt eine Meldung
+seinen Namen mit einem Knopf zum Öffnen und einem zum Vergleichen. Sie hält
+das Speichern nie auf und fragt nichts, wer sie ignoriert verliert nichts.
+Beide teilen sich eine Schwelle im Expertenmenü.
 
 **Import & Export** — CSV/TXT nur für den reinen Text, volle Sicherung für
 alles. Ein CSV/TXT-Import zeigt vorher eine Vorschau mit Name und

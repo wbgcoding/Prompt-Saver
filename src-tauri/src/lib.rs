@@ -9672,6 +9672,97 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
     Ok(out)
 }
 
+// ---- Similar-on-save hint ----
+// How long the after-save similarity scan may run before it gives up and
+// reports nothing rather than risk being felt as a stall. find_duplicates'
+// own O(n^2) scan above does not need a budget like this one -- that one is
+// an explicit "scan now" action the user already chose to wait for, while
+// this one runs after every ordinary save, unasked.
+const SIMILAR_HINT_BUDGET: std::time::Duration = std::time::Duration::from_millis(40);
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct SimilarHit {
+    id: String,
+    name: String,
+}
+
+// Whether two normalized lengths could possibly clear `thr` under trigram
+// Dice similarity. Dice can never exceed 2*min/(min+max), even at a perfect
+// overlap of the shorter one into the longer, so a pair whose lengths differ
+// enough is provably impossible and can be skipped before ever paying for
+// dup_trigrams on it -- the "only against entries of similar length" half of
+// the time budget.
+fn dup_length_could_match(a: usize, b: usize, thr: f64) -> bool {
+    if a == 0 || b == 0 {
+        return false;
+    }
+    let (hi, lo) = if a > b { (a, b) } else { (b, a) };
+    2.0 * lo as f64 / (hi + lo) as f64 >= thr
+}
+
+// The same trigram/Dice calculation find_duplicates uses above, run against
+// just the ONE prompt that was saved instead of every pair in the store.
+// Pure and synchronous, so it is callable straight from a unit test without a
+// Db/AppHandle; the command below only adds the store lookup around it.
+// Time-boxed (SIMILAR_HINT_BUDGET) and length-filtered, so a 10,000-entry
+// store does not turn an ordinary save into a stall -- callers run it AFTER
+// the save already returned, so even reaching the budget only delays the
+// hint, never the save itself.
+fn find_similar_prompt(target: &Prompt, others: &[&Prompt], threshold: f64) -> Option<SimilarHit> {
+    let start = std::time::Instant::now();
+    let thr = (threshold / 100.0).clamp(0.5, 1.0);
+    let base = if !target.text.is_empty() { target.text.as_str() } else { target.name.as_str() };
+    let target_norm = normalize_dup(base);
+    let target_len = target_norm.chars().count();
+    if target_len < 3 {
+        return None;
+    }
+    let target_grams = dup_trigrams(&target_norm);
+    let mut best: Option<(SimilarHit, f64)> = None;
+    for p in others {
+        if start.elapsed() > SIMILAR_HINT_BUDGET {
+            break;
+        }
+        let base = if !p.text.is_empty() { p.text.as_str() } else { p.name.as_str() };
+        let norm = normalize_dup(base);
+        let len = norm.chars().count();
+        if len < 3 || !dup_length_could_match(target_len, len, thr) {
+            continue;
+        }
+        let d = dup_dice(&target_grams, &dup_trigrams(&norm));
+        if d >= thr && best.as_ref().map_or(true, |(_, b)| d > *b) {
+            best = Some((
+                SimilarHit { id: p.id.clone(), name: if p.name.is_empty() { p.text.chars().take(40).collect() } else { p.name.clone() } },
+                d,
+            ));
+        }
+    }
+    best.map(|(hit, _)| hit)
+}
+
+// Called from the frontend right after add_prompt/update_prompt already
+// returned -- never awaited as part of saving, so a slow scan can only ever
+// delay the hint toast, not the save. A missing id (deleted again in the
+// instant between save and this call) is simply "nothing to report", not an
+// error worth surfacing.
+#[tauri::command]
+async fn similar_to_saved(state: State<'_, Db>, id: String, threshold: f64) -> Result<Option<SimilarHit>, String> {
+    // Snapshot and drop the lock before the scan, same tradeoff find_duplicates
+    // makes above and for the same reason -- this must not block every other
+    // command for the length of the (bounded, but still real) comparison.
+    let (target, others) = {
+        let store = lock(&state);
+        let Some(target) = store.prompts.iter().find(|p| p.id == id).cloned() else {
+            return Ok(None);
+        };
+        let others: Vec<Prompt> = store.prompts.iter().filter(|p| p.id != id).cloned().collect();
+        (target, others)
+    };
+    let others_ref: Vec<&Prompt> = others.iter().collect();
+    Ok(find_similar_prompt(&target, &others_ref, threshold))
+}
+
 // Mark this whole group of prompt ids as "not duplicates" (of each other).
 // One entry for the whole group instead of every pairwise combination - see the
 // dup_ignored field comment for why.
@@ -27036,6 +27127,7 @@ pub fn run() {
             sweep_discarded_recordings_now,
             record_tool_usage,
             find_duplicates,
+            similar_to_saved,
             ignore_dups,
             list_backups,
             open_backups_folder,
@@ -35762,6 +35854,71 @@ mod tests {
 
     fn test_prompt(id: &str) -> Prompt {
         serde_json::from_str(&format!(r#"{{"id":"{id}","name":"N","text":"T"}}"#)).unwrap()
+    }
+
+    #[test]
+    fn dup_length_could_match_uses_the_real_threshold_not_a_fixed_margin() {
+        // Equal lengths: the theoretical Dice ceiling is 1.0, always possible.
+        assert!(dup_length_could_match(50, 50, 0.99));
+        // A 2:1 length ratio caps Dice at 2*50/150 = 0.667 -- below a 70% floor.
+        assert!(!dup_length_could_match(50, 100, 0.70));
+        // Just inside: lengths 90 and 100 cap at 2*90/190 = 0.947, above 0.90.
+        assert!(dup_length_could_match(90, 100, 0.90));
+        assert!(!dup_length_could_match(0, 10, 0.70), "an empty side can never match");
+    }
+
+    #[test]
+    fn find_similar_prompt_crosses_the_threshold_exactly_at_the_computed_score() {
+        let mut a = test_prompt("a");
+        a.text = "Please write a short friendly email about the quarterly report".into();
+        let mut b = test_prompt("b");
+        b.text = "Please write a short friendly email about the quarterly results".into(); // one word differs
+        let mut c = test_prompt("c");
+        c.text = "Completely different content about something else entirely, not close at all".into();
+
+        // The real score between the near-duplicate pair, computed the same way
+        // find_similar_prompt does -- so "just above" and "just below" below are
+        // exact, not guessed.
+        let score = dup_dice(&dup_trigrams(&normalize_dup(&a.text)), &dup_trigrams(&normalize_dup(&b.text)));
+        assert!(score > 0.5 && score < 1.0, "fixture must be a realistic near-duplicate, got {score}");
+
+        let others = vec![&b, &c];
+        let just_below = (score * 100.0).floor() - 1.0;
+        let hit = find_similar_prompt(&a, &others, just_below);
+        assert_eq!(hit.map(|h| h.id), Some("b".to_string()), "a threshold just below the real score must still match");
+
+        let just_above = (score * 100.0).ceil() + 1.0;
+        let hit2 = find_similar_prompt(&a, &others, just_above);
+        assert!(hit2.is_none(), "a threshold just above the real score must find nothing");
+    }
+
+    #[test]
+    fn find_similar_prompt_ignores_an_unrelated_entry_and_itself() {
+        let mut a = test_prompt("a");
+        a.text = "Please write a short friendly email about the quarterly report".into();
+        let mut c = test_prompt("c");
+        c.text = "Completely different content about something else entirely, not close at all".into();
+        let hit = find_similar_prompt(&a, &[&c], 70.0);
+        assert!(hit.is_none(), "nothing above the threshold exists, so no hit should be reported");
+    }
+
+    #[test]
+    fn find_similar_prompt_stays_within_budget_at_ten_thousand_entries() {
+        let mut target = test_prompt("target");
+        target.text = "Please write a short friendly email about the quarterly report".into();
+        let others: Vec<Prompt> = (0..10_000)
+            .map(|i| {
+                let mut p = test_prompt(&format!("o{i}"));
+                p.text = format!("Unrelated filler content number {i} that shares nothing meaningful with the target text at all");
+                p
+            })
+            .collect();
+        let refs: Vec<&Prompt> = others.iter().collect();
+        let start = std::time::Instant::now();
+        let hit = find_similar_prompt(&target, &refs, 85.0);
+        let elapsed = start.elapsed();
+        assert!(hit.is_none(), "none of the filler text should cross an 85% threshold");
+        assert!(elapsed < std::time::Duration::from_millis(200), "10,000-entry scan took {elapsed:?}, must stay well under a saving-feels-slow margin");
     }
 
     #[test]

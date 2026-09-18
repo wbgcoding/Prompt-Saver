@@ -709,6 +709,12 @@ const RESULTS = {
       { id: "p1", name: PROMPTS[1].name, text: PROMPTS[1].text, usage: 3, views: ["Home", "Work"] },
     ],
   }],
+  // window.__SIMILAR_HINT_FIXTURE__ lets one probe opt into a hit; every other
+  // save the sweep makes along the way (there are many) must see nothing, or
+  // its own toast assertions elsewhere would break.
+  similar_to_saved: () => window.__SIMILAR_HINT_FIXTURE__
+    ? { id: window.__SIMILAR_HINT_FIXTURE__.id, name: window.__SIMILAR_HINT_FIXTURE__.name }
+    : null,
   // A release body in the shape GitHub delivers it, so the changelog popup has real
   // Markdown to render (heading, wrapped paragraph, table, bullets, bold, code, link).
   check_update: () => ({
