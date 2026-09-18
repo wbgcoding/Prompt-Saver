@@ -8459,7 +8459,6 @@ async function renderStatsPanel(body) {
   const panel = document.createElement("div");
   panel.className = "stats-panel-body";
   const head = collapsibleHead(t("statsSection"), panel, "statsPanelOpen");
-  head.classList.add("backup-split"); // the rule that separates it from the backups above
   root.append(head, panel);
   body = panel;
   const headRow = document.createElement("div"); headRow.className = "stats-head-row";
@@ -9715,8 +9714,9 @@ async function saveBackupSetting(kind, key, value) {
 let backupPwDraft = "";
 function openBackups() {
   $("backup-modal").classList.remove("hidden");
-  renderBackupPanel($("backup-panel"));
   renderStatsPanel($("stats-panel"));
+  renderStoragePanel($("storage-panel"));
+  renderBackupPanel($("backup-panel"));
 }
 function closeBackups() {
   $("backup-modal").classList.add("hidden");
@@ -9737,6 +9737,87 @@ async function saveUiState(key, on) {
   settings.ui_flags = { ...(settings.ui_flags || {}), [key]: on };
   await invoke("set_ui_flag", { key, enabled: on }).catch(() => {});
 }
+
+// Label key per storage-breakdown row, in the order the backend returns them.
+const STORAGE_ROW_LABELS = {
+  database: "storageKeyDatabase",
+  attachments: "storageKeyAttachments",
+  screenshots: "storageKeyScreenshots",
+  recordings: "storageKeyRecordings",
+  discarded_recordings: "storageKeyDiscardedRecordings",
+  backups: "storageKeyBackups",
+  temp_files: "storageKeyTempFiles",
+  edit_states: "storageKeyEditStates",
+  crash_log: "storageKeyCrashLog",
+};
+
+// The "Speicher" section of the statistics/backups window: how much disk space
+// the app's own data actually uses, independent of the usage-statistics switch
+// above it (storage is not usage tracking, the two must not share a toggle).
+// The backend caches the scan, so reopening this window is instant; the
+// "measure again" button is the only thing that forces a fresh walk.
+async function renderStoragePanel(root, force) {
+  let data;
+  try { data = await invoke("storage_breakdown", { force: !!force }); }
+  catch (e) { errToast(e); return; }
+  root.innerHTML = "";
+  const panel = document.createElement("div");
+  panel.className = "stats-panel-body";
+  const head = collapsibleHead(t("storageSection"), panel, "storagePanelOpen");
+  head.classList.add("backup-split"); // divider from the usage section above
+  root.append(head, panel);
+  const body = panel;
+
+  const headRow = document.createElement("div");
+  headRow.className = "storage-head-row";
+  const totalWrap = document.createElement("div");
+  totalWrap.className = "storage-total-wrap";
+  const totalEl = document.createElement("span");
+  totalEl.className = "storage-total";
+  totalEl.textContent = `${t("storageTotalLabel")}: ${fmtBytes(data.total_bytes)}`;
+  const measuredEl = document.createElement("span");
+  measuredEl.className = "storage-measured";
+  measuredEl.textContent = t("storageMeasuredAt").replace("{date}", new Date(data.measured_at * 1000).toLocaleString(LANG));
+  totalWrap.append(totalEl, measuredEl);
+  const remeasureBtn = document.createElement("button");
+  remeasureBtn.type = "button";
+  remeasureBtn.id = "storage-remeasure-btn";
+  remeasureBtn.className = "ghost-btn";
+  remeasureBtn.textContent = t("storageRemeasure");
+  remeasureBtn.addEventListener("click", () => renderStoragePanel(root, true));
+  headRow.append(totalWrap, remeasureBtn);
+  body.appendChild(headRow);
+
+  const list = document.createElement("div");
+  list.className = "storage-list";
+  for (const item of data.items) {
+    const row = document.createElement("div");
+    row.className = "storage-row";
+    row.dataset.key = item.key;
+    const name = document.createElement("span");
+    name.className = "storage-name";
+    name.textContent = t(STORAGE_ROW_LABELS[item.key] || item.key);
+    const size = document.createElement("span");
+    size.className = "storage-size";
+    if (item.denied) {
+      size.textContent = t("storageDenied");
+    } else {
+      size.textContent = item.capped ? `${fmtBytes(item.bytes)} (${t("storageCapped")})` : fmtBytes(item.bytes);
+    }
+    row.append(name, size);
+    if (item.path) {
+      const openBtn = document.createElement("button");
+      openBtn.type = "button";
+      openBtn.className = "ghost-btn storage-open-btn";
+      openBtn.textContent = t("storageOpenFolder");
+      openBtn.addEventListener("click", () => invoke("open_storage_folder", { path: item.path }).catch((e) => errToast(e)));
+      row.appendChild(openBtn);
+    }
+    list.appendChild(row);
+  }
+  body.appendChild(list);
+}
+
 async function renderBackupPanel(body) {
   // Fetch BEFORE clearing: emptying the panel and only then awaiting lets the browser
   // paint the empty state for a frame, which showed up as a visible flash on every

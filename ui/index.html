@@ -543,10 +543,12 @@
         </button>
       </div>
       <div class="backup-body">
-        <div id="backup-panel" class="expert-custom"></div>
-        <!-- The statistics heading is built by renderStatsPanel: it IS the collapse
-             head for the whole section, switch included. -->
+        <!-- Three sections in this fixed order: usage, then storage, then backups.
+             Each heading is built by its own render function and IS the collapse
+             head for its whole section, switch included where it has one. -->
         <div id="stats-panel" class="expert-custom"></div>
+        <div id="storage-panel" class="expert-custom"></div>
+        <div id="backup-panel" class="expert-custom"></div>
       </div>
     </div>
   </div>

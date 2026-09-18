@@ -664,7 +664,9 @@ automatic schedule with smart GFS-style retention tiers, and a restore that can
 target data only, settings only, or both. The same window also has a
 usage-statistics section (totals, a 14-day activity chart, most-used tiles),
 unrelated to the backups themselves, with its own button to export the
-statistics as CSV, TXT or JSON.
+statistics as CSV, TXT or JSON, and a storage section that shows how much disk
+space the database, attachments, screenshots, recordings, backups, temporary
+files and the error log each use, with a button to open a listed folder.
 
 ---
 
@@ -1066,7 +1068,10 @@ vermutlich schon.
 gezieltes Wiederherstellen. Im selben Fenster außerdem eine
 Nutzungsstatistik (Summen, 14-Tage-Diagramm, meistgenutzte Kacheln) —
 unabhängig von den Backups selbst, mit einem eigenen Knopf, um die Statistik
-als CSV, TXT oder JSON zu exportieren.
+als CSV, TXT oder JSON zu exportieren, sowie ein Speicherbereich, der zeigt,
+wie viel Platz Datenbank, Anhänge, Bildschirmfotos, Aufnahmen, Sicherungen,
+temporäre Dateien und das Fehlerprotokoll jeweils belegen, mit einem Knopf,
+um einen aufgeführten Ordner zu öffnen.
 
 **Eigenständig: Schnellstarter** — Strg+Alt+P, unscharfe Suche, sofortiges Kopieren.
 

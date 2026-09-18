@@ -3134,8 +3134,12 @@ select.modal-input { padding-right: 30px; }
 .backup-body .stat-section { margin-top: 2px; }
 .backup-body .expert-custom > .stat-section:first-child { margin-top: 0; }
 .backup-body .stat-cards { margin-top: 0; }
-/* Divider between the backup half and the statistics half. */
+/* Divider between the three sections of the statistics/backups window (usage,
+   storage, backups). Usage is first and needs none; storage's own collapsible
+   head carries this class directly, backups has no single head of its own so
+   the divider sits on its container instead. */
 .backup-split { margin: 2px 0 0; padding-top: 12px; border-top: 1px solid var(--border); border-bottom: none; }
+.backup-body > #backup-panel { margin: 2px 0 0; padding-top: 12px; border-top: 1px solid var(--border); }
 .dup-group { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--surface-2); }
 .dup-head { display: flex; justify-content: flex-end; margin-bottom: 6px; }
 .dup-score { font-size: 12px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); padding: 2px 8px; border-radius: 10px; }
@@ -3264,6 +3268,18 @@ input[type="password"]::-ms-clear { display: none; }
 .stats-head-row > .switch-field { min-width: 0; }
 .stats-head-row > .stats-topn-row { min-width: 0; justify-content: space-between; gap: 8px; }
 .stats-topn-row .modal-input { min-width: 0; width: 100%; }
+
+/* Storage section ("Speicher"): total + measured-at on the left, the
+   re-measure button on the right, then one row per storage kind below. */
+.storage-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.storage-total-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.storage-total { font-weight: 600; }
+.storage-measured { font-size: 11px; color: var(--muted); }
+.storage-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.storage-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; padding: 3px 2px; }
+.storage-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.storage-size { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; margin-left: auto; }
+.storage-open-btn { flex: 0 0 auto; }
 .stats-topn-row .clear-wrap { flex: 0 1 90px; width: auto; }
 .backup-list-head {
   width: 100%; display: flex; align-items: center; justify-content: space-between;

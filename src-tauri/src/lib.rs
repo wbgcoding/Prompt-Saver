@@ -8646,6 +8646,224 @@ async fn export_stats(app: AppHandle, state: State<'_, Db>, format: String) -> R
     }
 }
 
+// ---- Storage breakdown (statistics/backups window, "Speicher" section) ----
+// One row per storage kind the app itself writes to disk, plus the two rows a
+// retention overview adds beside these once it exists. `key` is a stable id
+// the frontend switches on; `path` is what an "open folder" button reveals,
+// left empty for a row with no single folder to point at.
+#[derive(Serialize, Clone)]
+struct StorageItem {
+    key: String,
+    path: String,
+    bytes: u64,
+    count: u64,
+    // The scan stopped at the entry cap -- the numbers above are a lower
+    // bound, not the true total. Kept apart from `denied` so the frontend can
+    // word the two situations differently.
+    capped: bool,
+    // The folder exists but could not be listed (a permissions problem) --
+    // reported as such rather than silently shown as an empty, empty-looking
+    // 0 B row.
+    denied: bool,
+}
+
+#[derive(Serialize, Clone)]
+struct StorageBreakdown {
+    items: Vec<StorageItem>,
+    total_bytes: u64,
+    measured_at: u64,
+}
+
+fn file_size_or_zero(path: &std::path::Path) -> u64 {
+    fs::metadata(path).map(|m| m.len()).unwrap_or(0)
+}
+
+// (count, bytes) of every distinct, still-existing attachment path -- two
+// prompts sharing the same file (a rotating entry's variants, say) must count
+// that file once, not twice, and a path that no longer resolves contributes
+// nothing rather than erroring the whole readout.
+fn attachments_bytes(file_paths: &[String]) -> (u64, u64) {
+    let mut seen = std::collections::HashSet::new();
+    let mut bytes = 0u64;
+    let mut count = 0u64;
+    for path in file_paths {
+        if path.is_empty() || !seen.insert(path.as_str()) {
+            continue;
+        }
+        if let Ok(meta) = fs::metadata(path) {
+            bytes += meta.len();
+            count += 1;
+        }
+    }
+    (count, bytes)
+}
+
+// (count, bytes, capped, denied) for one folder, one level deep -- matches
+// video_folder_stats_in's precedent of never descending into subfolders. The
+// scan stops once `cap` files have been counted, so a folder with millions of
+// small files cannot hang the window open. `read_dir` is injected so a
+// permissions failure can be exercised in a test without changing real ACLs.
+fn scan_dir_stats_with(
+    dir: &std::path::Path,
+    cap: usize,
+    read_dir: impl Fn(&std::path::Path) -> std::io::Result<std::fs::ReadDir>,
+) -> (u64, u64, bool, bool) {
+    let entries = match read_dir(dir) {
+        Ok(e) => e,
+        // A folder nothing has written to yet (the recordings folder before a
+        // first capture, say) is simply empty, never an error.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (0, 0, false, false),
+        Err(e) => return (0, 0, false, e.kind() == std::io::ErrorKind::PermissionDenied),
+    };
+    let mut count = 0u64;
+    let mut bytes = 0u64;
+    let mut capped = false;
+    for entry in entries.flatten() {
+        if count as usize >= cap {
+            capped = true;
+            break;
+        }
+        if let Ok(meta) = entry.metadata() {
+            if meta.is_file() {
+                count += 1;
+                bytes += meta.len();
+            }
+        }
+    }
+    (count, bytes, capped, false)
+}
+
+fn scan_dir_stats(dir: &std::path::Path, cap: usize) -> (u64, u64, bool, bool) {
+    scan_dir_stats_with(dir, cap, |p| std::fs::read_dir(p))
+}
+
+// A runaway folder (a sync target pointed at something huge, say) stops
+// counting here rather than freezing the window open while it walks on.
+const STORAGE_SCAN_CAP: usize = 20_000;
+
+#[tauri::command]
+async fn storage_breakdown(app: AppHandle, state: State<'_, Db>, force: bool) -> Result<StorageBreakdown, String> {
+    if !force {
+        if let Some(cached) = STORAGE_CACHE.lock().unwrap().clone() {
+            return Ok(cached);
+        }
+    }
+    // The edit-state byte count lives in SQLite, so it is read before the
+    // store is locked, same reasoning as usage_stats' copy_log reads.
+    let (edit_state_count, edit_state_bytes) = db_conn(&app)
+        .map(|c| {
+            let count = c.query_row("SELECT COUNT(*) FROM edit_state", [], |r| r.get::<_, i64>(0)).unwrap_or(0) as u64;
+            let bytes = c
+                .query_row("SELECT COALESCE(SUM(LENGTH(ops)), 0) FROM edit_state", [], |r| r.get::<_, i64>(0))
+                .unwrap_or(0) as u64;
+            (count, bytes)
+        })
+        .unwrap_or((0, 0));
+    let (file_paths, screenshot_custom, recording_custom) = {
+        let store = lock(&state);
+        (
+            store.prompts.iter().map(|p| p.file_path.clone()).collect::<Vec<_>>(),
+            store.settings.ui_texts.get("screenshotDir").cloned().unwrap_or_default(),
+            store.settings.ui_texts.get("recordingDir").cloned().unwrap_or_default(),
+        )
+    };
+    let dd = data_dir(&app);
+    let mut items = Vec::new();
+
+    // Database + its write-ahead log (and shared-memory file, when SQLite has
+    // one open right now).
+    {
+        let db = dd.join("data.db");
+        let wal = dd.join("data.db-wal");
+        let shm = dd.join("data.db-shm");
+        let bytes = file_size_or_zero(&db) + file_size_or_zero(&wal) + file_size_or_zero(&shm);
+        let count = [&db, &wal, &shm].iter().filter(|p| p.exists()).count() as u64;
+        items.push(StorageItem { key: "database".into(), path: db.to_string_lossy().into_owned(), bytes, count, capped: false, denied: false });
+    }
+
+    // Attachments: a prompt's file only ever keeps its original path (the
+    // import/export notes on file_path explain why), so there is no single
+    // app folder to scan -- this sums whatever those paths currently point to.
+    {
+        let (count, bytes) = attachments_bytes(&file_paths);
+        items.push(StorageItem { key: "attachments".into(), path: String::new(), bytes, count, capped: false, denied: false });
+    }
+
+    // Screenshots
+    {
+        let target = screenshot_dir(&screenshot_custom);
+        let (count, bytes, capped, denied) = scan_dir_stats(&target, STORAGE_SCAN_CAP);
+        items.push(StorageItem { key: "screenshots".into(), path: target.to_string_lossy().into_owned(), bytes, count, capped, denied });
+    }
+
+    // Recordings, plus their own "verworfen" discard trash as a separate row --
+    // the same folder the expert menu's recording-folder readout already reads.
+    {
+        let target = recording_dir(&recording_custom);
+        let (count, bytes) = video_folder_stats_in(&target);
+        items.push(StorageItem { key: "recordings".into(), path: target.to_string_lossy().into_owned(), bytes, count, capped: false, denied: false });
+        let discard = target.join("verworfen");
+        let (dcount, dbytes) = video_folder_stats_in(&discard);
+        items.push(StorageItem { key: "discarded_recordings".into(), path: discard.to_string_lossy().into_owned(), bytes: dbytes, count: dcount, capped: false, denied: false });
+    }
+
+    // Backups
+    {
+        let target = backups_dir(&app);
+        let (count, bytes, capped, denied) = scan_dir_stats(&target, STORAGE_SCAN_CAP);
+        items.push(StorageItem { key: "backups".into(), path: target.to_string_lossy().into_owned(), bytes, count, capped, denied });
+    }
+
+    // Temporary files: the scratch folder OCR, the language-pack install and
+    // the update stager all write into.
+    {
+        let target = std::env::temp_dir().join(brand::TEMP_DIR);
+        let (count, bytes, capped, denied) = scan_dir_stats(&target, STORAGE_SCAN_CAP);
+        items.push(StorageItem { key: "temp_files".into(), path: target.to_string_lossy().into_owned(), bytes, count, capped, denied });
+    }
+
+    // Edit states: `ops` is the JSON blob actually held in the database; the
+    // row's own `size` column is the edited file's size, not storage cost.
+    items.push(StorageItem {
+        key: "edit_states".into(),
+        path: String::new(),
+        bytes: edit_state_bytes,
+        count: edit_state_count,
+        capped: false,
+        denied: false,
+    });
+
+    // Error log
+    {
+        let path = crash_log_path();
+        let bytes = file_size_or_zero(&path);
+        items.push(StorageItem {
+            key: "crash_log".into(),
+            path: path.to_string_lossy().into_owned(),
+            bytes,
+            count: u64::from(path.exists()),
+            capped: false,
+            denied: false,
+        });
+    }
+
+    let total_bytes = items.iter().map(|i| i.bytes).sum();
+    let fresh = StorageBreakdown { items, total_bytes, measured_at: now_secs() };
+    *STORAGE_CACHE.lock().unwrap() = Some(fresh.clone());
+    Ok(fresh)
+}
+
+// Cached across calls -- reopening the statistics/backups window should not
+// re-walk every folder every time; the "measure again" button passes force=true.
+static STORAGE_CACHE: Mutex<Option<StorageBreakdown>> = Mutex::new(None);
+
+// Opens a storage-breakdown row's own folder -- the path travels from
+// storage_breakdown's own computation, never from anything the user typed.
+#[tauri::command]
+fn open_storage_folder(path: String) -> Result<(), String> {
+    open_explorer_at(&path)
+}
+
 // ---- Duplicate finder ----
 #[derive(Serialize)]
 struct DupMember {
@@ -20674,12 +20892,12 @@ fn cancel_all_bg_ops() {
     cancel_ocr_index_backfill();
 }
 
-// Reveals the folder for a path already recorded as some job's own `target` --
-// never a path typed or picked by anything else, so this is exactly as safe
-// as open_backups_folder's own single-fixed-argument Explorer call above.
-#[tauri::command]
-fn open_bg_op_folder(path: String) -> Result<(), String> {
-    let p = PathBuf::from(&path);
+// Opens `path` itself if it is a folder, otherwise its parent -- shared by
+// every "open folder" button whose path was computed by this app itself
+// (a job's own recorded target, a storage-breakdown row's own location),
+// never one typed or picked by the user directly.
+fn open_explorer_at(path: &str) -> Result<(), String> {
+    let p = PathBuf::from(path);
     let dir = if p.is_dir() { p } else { p.parent().map(|d| d.to_path_buf()).unwrap_or(p) };
     if !dir.is_dir() {
         return Err("folder not found".to_string());
@@ -20689,6 +20907,12 @@ fn open_bg_op_folder(path: String) -> Result<(), String> {
         .spawn()
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+// Reveals the folder for a path already recorded as some job's own `target`.
+#[tauri::command]
+fn open_bg_op_folder(path: String) -> Result<(), String> {
+    open_explorer_at(&path)
 }
 
 // Set once the main window's own confirm dialog answers "quit anyway" to a
@@ -25770,6 +25994,8 @@ pub fn run() {
             restore_version_as_new,
             usage_stats,
             export_stats,
+            storage_breakdown,
+            open_storage_folder,
             find_duplicates,
             ignore_dups,
             list_backups,
@@ -32460,6 +32686,74 @@ mod tests {
         let (count, bytes) = video_folder_stats(dir.to_string_lossy().to_string());
         assert_eq!(count, 2, "a discarded recording still occupies real disk space in this folder");
         assert_eq!(bytes, 4 + 2);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ---- Storage breakdown ("Speicher" section) ----
+
+    #[test]
+    fn scan_dir_stats_counts_files_one_level_deep_and_ignores_subfolders() {
+        let dir = std::env::temp_dir().join(format!("ps-storage-scan-{}", std::process::id()));
+        let nested = dir.join("nested");
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(dir.join("a.txt"), b"12345").unwrap();
+        fs::write(dir.join("b.txt"), b"12").unwrap();
+        fs::write(nested.join("c.txt"), b"1234567890").unwrap();
+        let (count, bytes, capped, denied) = scan_dir_stats(&dir, 100);
+        assert_eq!(count, 2, "a file in a subfolder must not be counted (one level deep only)");
+        assert_eq!(bytes, 5 + 2);
+        assert!(!capped);
+        assert!(!denied);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scan_dir_stats_stops_at_the_entry_cap() {
+        let dir = std::env::temp_dir().join(format!("ps-storage-cap-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        for i in 0..6 {
+            fs::write(dir.join(format!("f{i}.txt")), b"x").unwrap();
+        }
+        let (count, _bytes, capped, denied) = scan_dir_stats(&dir, 3);
+        assert_eq!(count, 3, "the scan must stop counting at the cap, not read every file first");
+        assert!(capped);
+        assert!(!denied);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scan_dir_stats_on_a_missing_folder_is_empty_not_denied() {
+        let dir = std::env::temp_dir().join(format!("ps-storage-missing-{}", std::process::id()));
+        assert_eq!(scan_dir_stats(&dir, 10), (0, 0, false, false));
+    }
+
+    // A permission failure is real Windows ACL behaviour this environment cannot
+    // reliably reproduce (needs elevation, and would leave a folder locked out
+    // for later tests) -- the read is injected instead, so the "must be
+    // reported, not concealed" contract is checked directly against the
+    // function's own logic.
+    #[test]
+    fn scan_dir_stats_with_reports_a_denied_folder_instead_of_hiding_it() {
+        let denied_read = |_: &std::path::Path| -> std::io::Result<std::fs::ReadDir> {
+            Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
+        };
+        let (count, bytes, capped, denied) =
+            scan_dir_stats_with(std::path::Path::new("Z:/wherever"), 10, denied_read);
+        assert_eq!((count, bytes, capped), (0, 0, false));
+        assert!(denied, "a folder that exists but cannot be listed must be reported as denied");
+    }
+
+    #[test]
+    fn attachments_bytes_counts_a_shared_file_once_and_skips_missing_ones() {
+        let dir = std::env::temp_dir().join(format!("ps-storage-attach-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("report.pdf");
+        fs::write(&f, b"1234567").unwrap();
+        let path = f.to_string_lossy().to_string();
+        let paths = vec![path.clone(), path, String::new(), "Z:/does-not-exist.pdf".to_string()];
+        let (count, bytes) = attachments_bytes(&paths);
+        assert_eq!(count, 1, "the same attachment referenced twice must be counted once");
+        assert_eq!(bytes, 7);
         let _ = fs::remove_dir_all(&dir);
     }
 

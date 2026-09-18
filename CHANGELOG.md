@@ -361,6 +361,12 @@ the video editor and the introduction tour ship on).
   saves them as CSV, TXT or JSON: per-entry copy counts and last-used dates,
   plus the daily activity chart. Only there while statistics are being
   recorded.
+- **A storage section in the statistics/backups window.** Shows how much disk
+  space the database, attachments, screenshots, recordings, discarded
+  recordings, backups, temporary files, edit states and the error log each
+  use, with a total at the top and a button to open a listed folder. Measured
+  once and cached; a button re-measures. Independent of the usage-statistics
+  switch, since storage use and usage tracking are two different things.
 
 ### Improved
 

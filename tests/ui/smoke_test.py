@@ -4864,6 +4864,10 @@ PROBE = """
       out.errors.push('the backups dialog stayed empty');
     } else if (!document.getElementById('stats-panel').children.length) {
       out.errors.push('the backups dialog has no usage statistics');
+    } else if (!document.getElementById('storage-panel').children.length) {
+      // 414: usage, storage and backups are three separate sections of the
+      // same window, in that order.
+      out.errors.push('414: the backups dialog has no storage section');
     } else if (getComputedStyle(bm).zIndex <= getComputedStyle(document.getElementById('settings')).zIndex) {
       out.errors.push('the backups dialog sits behind the settings it was opened from');
     } else {
@@ -4983,6 +4987,12 @@ PROBE = """
           if (document.getElementById('stats-export-btn')) {
             out.errors.push('407: the statistics export button is still there with statistics off');
           }
+          // 414: storage is not usage tracking and must not share its switch --
+          // the storage section stays exactly as it was while only the usage
+          // section re-renders itself off.
+          if (!document.getElementById('storage-panel').children.length) {
+            out.errors.push('414: the storage section disappeared when statistics were switched off');
+          }
           const t2 = findToggle(); // 104: a fresh node -- the click above rebuilt the panel
           if (t2) {
             t2.click(); // back on: statistics stays on for the rest of the walk
@@ -4992,6 +5002,23 @@ PROBE = """
           if (!document.getElementById('stats-export-btn')) {
             out.errors.push('407: the statistics export button did not come back with statistics re-enabled');
           }
+        }
+      }
+      // 414: the three sections appear in the fixed order usage, storage,
+      // backups, and the storage section lists every row the backend sent
+      // with a "measure again" button to force a fresh scan.
+      {
+        const sections = [...document.querySelectorAll('#backup-modal > .modal > .backup-body > div')].map((d) => d.id);
+        const order = sections.filter((id) => ['stats-panel', 'storage-panel', 'backup-panel'].includes(id));
+        if (order.join(',') !== 'stats-panel,storage-panel,backup-panel') {
+          out.errors.push('414: the three sections are not in usage/storage/backups order (' + order.join(',') + ')');
+        }
+        const rows = document.querySelectorAll('#storage-panel .storage-row');
+        if (rows.length !== 9) {
+          out.errors.push('414: the storage section does not list 9 rows (found ' + rows.length + ')');
+        }
+        if (!document.getElementById('storage-remeasure-btn')) {
+          out.errors.push('414: the storage section has no "measure again" button');
         }
       }
       if (!document.querySelector('#stats-panel .stat-overview-split')) {

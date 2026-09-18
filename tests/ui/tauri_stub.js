@@ -1164,6 +1164,23 @@ const RESULTS = {
     })),
     history_on: true,
   }),
+  export_stats: () => 12,
+  storage_breakdown: () => ({
+    items: [
+      { key: "database", path: "C:\\data\\data.db", bytes: 2500000, count: 2, capped: false, denied: false },
+      { key: "attachments", path: "", bytes: 800000, count: 3, capped: false, denied: false },
+      { key: "screenshots", path: "C:\\Pictures\\Screenshots", bytes: 1200000, count: 4, capped: false, denied: false },
+      { key: "recordings", path: "C:\\Videos\\Prompt Saver", bytes: 5000000, count: 2, capped: false, denied: false },
+      { key: "discarded_recordings", path: "C:\\Videos\\Prompt Saver\\verworfen", bytes: 0, count: 0, capped: false, denied: false },
+      { key: "backups", path: "C:\\data\\backups", bytes: 3000000, count: 5, capped: false, denied: false },
+      { key: "temp_files", path: "C:\\Temp\\prompt-saver", bytes: 40000, count: 1, capped: false, denied: false },
+      { key: "edit_states", path: "", bytes: 15000, count: 2, capped: false, denied: false },
+      { key: "crash_log", path: "C:\\data\\crash.log", bytes: 0, count: 0, capped: false, denied: false },
+    ],
+    total_bytes: 12555000,
+    measured_at: 1750000000,
+  }),
+  open_storage_folder: () => null,
 };
 
 // What main.js sends to vars.html: one free-text row with the remember switch and
