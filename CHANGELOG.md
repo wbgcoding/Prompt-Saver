@@ -568,6 +568,13 @@ the video editor and the introduction tour ship on).
   behind a switched-off toggle within that category**, instead of leaving it
   stuck at its changed value where it could never be reached again without
   first turning the toggle back on.
+- Pill folders, grid folders and view-tab groups now read as the same idea
+  everywhere: one wording and one folder icon for all three, instead of each
+  kind describing itself a little differently.
+- The chain button's tooltip now explains how chaining differs from rotation,
+  so the two are easier to tell apart at a glance instead of only in the help.
+- The duplicate finder also has a shortcut in the settings dialog now, next to
+  import and export, so it does not take opening the expert menu to find it.
 
 ### Fixed
 
