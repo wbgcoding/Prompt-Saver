@@ -45,6 +45,11 @@ before the finished text reaches the clipboard.
 - Remember choices — the popup pre-fills the last answer for that tile
 - Popup in its own window — useful with the floating buttons, where the main
   window may be hidden
+- Fixed values (off by default, expert menu): a maintained list of name and
+  value pairs the popup suggests for a matching placeholder, one step below a
+  remembered last input and above the text's own default. Shown only as the
+  field's placeholder text, marked with a small pin, never inserted until it
+  is typed or picked.
 
 ### The editor
 
@@ -62,6 +67,12 @@ A plain text, Markdown, JSON or CSV attachment shows its own start right below
 the file row (switchable off in the expert menu, how many kilobytes it reads
 is adjustable there too). It always shows as plain text, never rendered, so a
 Markdown file with real formatting in it still shows its raw source.
+
+The open editor saves its own text as a draft every few seconds (on by
+default, the interval adjustable in the expert menu), so a crash or a closed
+window never loses unsaved work. Only the text is drafted, never an attached
+image, and a save or a cancel removes the draft right away. If a draft is
+still there the next time the app starts, it asks once whether to restore it.
 
 ### The grid
 
@@ -486,6 +497,12 @@ Windows popup; the expert menu can switch back to the plain system menu if the
 custom one ever misbehaves on your setup. The expert menu also caps how long a
 prompt name may get before it is cut off with an ellipsis in that menu.
 
+A search field at the top of that menu filters as you type, across every
+prompt rather than just the favourites and recents already shown. Arrow keys
+pick a result, Enter copies it the same way a click does, and the field clears
+itself back to the normal selection once emptied. It ships on, and the expert
+menu caps how many matches it lists at once.
+
 ### Standalone: Quick launcher
 
 A small always-on-top popup (default hotkey Ctrl+Alt+P) with fuzzy search across
@@ -601,6 +618,12 @@ Flags tiles that are textually very similar, by a similarity score rather than
 an exact match, without deleting anything on its own. Review a flagged pair side
 by side, keep one, or mark the pair as not a duplicate to stop it being flagged
 again. A rotating tile is only compared on its first entry.
+
+The same similarity score also drives a quiet hint after saving a prompt: if an
+existing one is close enough, a message names it with a button to open it and
+another to compare the two. It never holds up the save and never asks
+anything, so ignoring it costs nothing. Both share one threshold in the expert
+menu.
 
 ### Import & export
 
@@ -749,7 +772,10 @@ Ziehen & Ablegen.
 
 **Variablen & Platzhalter** — `{#{Name}#}` im Text öffnet beim Kopieren ein Popup
 für jeden Wert. Dynamische Platzhalter (`{#{date}#}`, `{#{time}#}`,
-`{#{clipboard}#}`) füllen sich selbst.
+`{#{clipboard}#}`) füllen sich selbst. Feste Werte (im Experten-Menü, aus)
+schlagen für einen passenden Namen eine gepflegte Liste von Werten vor, nur
+als Platzhaltertext im Feld, mit einer kleinen Stecknadel markiert, nie
+eingesetzt, bevor er getippt oder übernommen wird.
 
 **Der Editor** — Markdown-Vorschau, Syntax-Hervorhebung, Versionsverlauf, private
 Notizen (Markdown-Vorschau und Notizen standardmäßig aus). Bei einer Datei-Kachel
@@ -759,6 +785,13 @@ Ein Anhang als reiner Text, Markdown, JSON oder CSV zeigt seinen Anfang direkt
 unter der Dateizeile (im Experten-Menü abschaltbar, dort auch einstellbar, wie
 viele Kilobyte gelesen werden). Immer als reiner Text, nie ausgeführt, also
 zeigt eine Markdown-Datei mit echter Formatierung trotzdem ihren rohen Quelltext.
+
+Der offene Editor sichert seinen Text alle paar Sekunden als Entwurf (standardmäßig
+an, der Abstand im Experten-Menü einstellbar), damit ein Absturz oder ein
+geschlossenes Fenster nie ungesicherte Arbeit verliert. Gesichert wird nur der
+Text, nie ein angehängtes Bild, und Speichern oder Abbrechen entfernt den
+Entwurf sofort wieder. Ist beim nächsten Start noch ein Entwurf vorhanden, wird
+einmal gefragt, ob er wiederhergestellt werden soll.
 
 **Das Raster** — freie Platzierung, standardmäßig bis 20×20 Zellen (im
 Experten-Menü bis 200×200 einstellbar), eigenes Layout je Ansicht. Eine Kachel
@@ -1077,6 +1110,11 @@ das abschalten, dann bleibt die Meldung eine reine Bestätigung.
 **Duplikatfinder** — findet textlich sehr ähnliche Kacheln nach
 Ähnlichkeitswert, keine exakte Übereinstimmung nötig, löscht nichts von sich
 aus. Eine wechselnde Kachel wird nur nach ihrem ersten Eintrag verglichen.
+Derselbe Ähnlichkeitswert steuert auch einen stillen Hinweis nach dem
+Speichern: gibt es einen ähnlichen vorhandenen Prompt, zeigt eine Meldung
+seinen Namen mit einem Knopf zum Öffnen und einem zum Vergleichen. Sie hält
+das Speichern nie auf und fragt nichts, wer sie ignoriert verliert nichts.
+Beide teilen sich eine Schwelle im Expertenmenü.
 
 **Import & Export** — CSV/TXT nur für den reinen Text, volle Sicherung für
 alles. Ein CSV/TXT-Import zeigt vorher eine Vorschau mit Name und

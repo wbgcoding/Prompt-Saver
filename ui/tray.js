@@ -15,10 +15,14 @@ const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
 const cardEl = document.getElementById("card");
+const rowsEl = document.getElementById("rows");
+const searchEl = document.getElementById("tray-search");
 
 let rows = []; // flattened, in visual order: { id, el }
 let active = -1;
 let closed = false;
+let basePlan = null; // the fixed favourites/recents plan, restored once the field empties
+let searchSeq = 0; // guards against an older tray_window_search reply landing last
 
 function close() {
   if (closed) return;
@@ -123,37 +127,62 @@ function addRow(id, label, icon) {
   row.addEventListener("mousedown", (e) => e.preventDefault());
   row.addEventListener("click", () => activate(id));
   row.addEventListener("mouseenter", () => setActive(rows.findIndex((r) => r.el === row)));
-  cardEl.appendChild(row);
+  rowsEl.appendChild(row);
   rows.push({ id, el: row });
 }
 
 function addHeader(text) {
+  if (!text) return; // the search-result section has no title, so it draws no bar
   const head = document.createElement("div");
   head.className = "tray-menu-head";
   head.textContent = text;
-  cardEl.appendChild(head);
+  rowsEl.appendChild(head);
 }
 
 function addSeparator() {
-  cardEl.appendChild(document.createElement("div")).className = "tray-menu-sep";
+  rowsEl.appendChild(document.createElement("div")).className = "tray-menu-sep";
+}
+
+// Draws the rows below the (always-present, never-cleared) search field: the
+// recording controls, then either the fixed favourites/recents sections or the
+// search-result list the caller passes in, then show/quit. Re-running this on
+// every keystroke is cheap -- at most a couple dozen rows.
+function renderRows(recEntries, sections, showLabel, quitLabel) {
+  rowsEl.innerHTML = "";
+  rows = [];
+  for (const entry of recEntries || []) addRow(entry.id, entry.label, null);
+  if ((recEntries || []).length) addSeparator();
+  for (const section of sections || []) {
+    const entries = section.entries || [];
+    if (!entries.length) continue;
+    addHeader(section.title);
+    for (const entry of entries) addRow(entry.id, entry.label, iconEl(entry.kind, entry.color));
+    addSeparator();
+  }
+  addRow("show", showLabel || "", null);
+  addRow("quit", quitLabel || "", null);
+  setActive(rows.length ? 0 : -1);
 }
 
 function render(plan) {
-  cardEl.innerHTML = "";
-  rows = [];
-  // Stop/Pause-Resume, no header, no icon -- same rows the tray menu itself
-  // shows while a recording runs.
-  const recEntries = plan.recEntries || [];
-  for (const entry of recEntries) addRow(entry.id, entry.label, null);
-  if (recEntries.length) addSeparator();
-  for (const section of plan.sections || []) {
-    addHeader(section.title);
-    for (const entry of section.entries || []) addRow(entry.id, entry.label, iconEl(entry.kind, entry.color));
-    addSeparator();
+  renderRows(plan.recEntries, plan.sections, plan.showLabel, plan.quitLabel);
+}
+
+// Runs on every keystroke in the search field. A blank query restores the fixed
+// favourites/recents selection; anything else asks the backend for matches over
+// EVERY prompt (not just what the fixed selection shows) and replaces the
+// sections with that flat, title-less list -- the window itself never resizes,
+// so a short result list just leaves the card less full, never taller.
+async function onSearchInput() {
+  const q = searchEl.value;
+  const seq = ++searchSeq;
+  if (!q.trim()) {
+    renderRows(basePlan.recEntries, basePlan.sections, basePlan.showLabel, basePlan.quitLabel);
+    return;
   }
-  addRow("show", plan.showLabel || "", null);
-  addRow("quit", plan.quitLabel || "", null);
-  setActive(rows.length ? 0 : -1);
+  const hits = await invoke("tray_window_search", { query: q }).catch(() => []);
+  if (seq !== searchSeq) return; // a newer keystroke already answered this
+  renderRows(basePlan.recEntries, [{ title: "", entries: hits }], basePlan.showLabel, basePlan.quitLabel);
 }
 
 document.addEventListener("keydown", (e) => {
@@ -194,10 +223,19 @@ document.body.addEventListener("mousedown", (e) => {
 });
 
 async function boot() {
-  const plan = await invoke("tray_window_plan").catch(() => ({ recEntries: [], sections: [], showLabel: "", quitLabel: "" }));
+  const plan = await invoke("tray_window_plan").catch(() => ({ recEntries: [], sections: [], showLabel: "", quitLabel: "", searchOn: false, searchPh: "" }));
   applyFloatTheme(await invoke("current_theme").catch(() => null), await invoke("theme_vars").catch(() => ({})));
   listen("theme-changed", (e) => applyFloatTheme(e.payload?.theme, e.payload?.vars));
+  basePlan = plan;
   render(plan);
+  if (plan.searchOn) {
+    searchEl.placeholder = plan.searchPh || "";
+    searchEl.hidden = false;
+    searchEl.addEventListener("input", onSearchInput);
+    searchEl.focus();
+  } else {
+    searchEl.hidden = true;
+  }
 }
 
 boot();

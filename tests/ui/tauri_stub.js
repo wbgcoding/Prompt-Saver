@@ -488,9 +488,25 @@ const RESULTS = {
     ],
     showLabel: "Open Prompt Saver",
     quitLabel: "Quit",
+    searchOn: true,
+    searchPh: "Search",
   }),
   tray_window_activate: (a) => { window.__TRAY_ACTIVATED__ = a && a.id; return null; },
   tray_window_close: () => { window.__TRAY_CLOSED__ = true; return null; },
+  // A fourth prompt that is NOT in tray_window_plan's own fixed selection above --
+  // a hit here is what proves the filter row searches every prompt, not only the
+  // favorites/recents the fixed view already shows.
+  tray_window_search: (a) => {
+    const q = ((a && a.query) || "").trim().toLowerCase();
+    if (!q) return [];
+    const all = [
+      { id: "tray-copy-p1", label: "First prompt", kind: "text", color: "" },
+      { id: "tray-copy-p2", label: "Image prompt", kind: "image", color: "#ff00aa" },
+      { id: "tray-copy-p3", label: "File prompt", kind: "file", color: "" },
+      { id: "tray-copy-p4", label: "Alpha extra", kind: "text", color: "" },
+    ];
+    return all.filter((e) => e.label.toLowerCase().includes(q));
+  },
   set_theme: () => "dark",
   // Saving hands back the settings blob with the edited theme in place.
   save_custom_theme: (a) => {
@@ -697,6 +713,18 @@ const RESULTS = {
       { id: "p1", name: PROMPTS[1].name, text: PROMPTS[1].text, usage: 3, views: ["Home", "Work"] },
     ],
   }],
+  // window.__SIMILAR_HINT_FIXTURE__ lets one probe opt into a hit; every other
+  // save the sweep makes along the way (there are many) must see nothing, or
+  // its own toast assertions elsewhere would break.
+  similar_to_saved: () => window.__SIMILAR_HINT_FIXTURE__
+    ? { id: window.__SIMILAR_HINT_FIXTURE__.id, name: window.__SIMILAR_HINT_FIXTURE__.name }
+    : null,
+  // 443: window.__EDITOR_DRAFT_FIXTURE__ lets one probe supply a crash draft
+  // for the boot-time recovery question; every other boot must see none, so
+  // the ordinary startup chain never shows the restore dialog by surprise.
+  load_editor_draft: () => window.__EDITOR_DRAFT_FIXTURE__ || null,
+  save_editor_draft: () => null,
+  discard_editor_draft: () => null,
   // A release body in the shape GitHub delivers it, so the changelog popup has real
   // Markdown to render (heading, wrapped paragraph, table, bullets, bold, code, link).
   check_update: () => ({

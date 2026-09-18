@@ -41,7 +41,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Favorites** | Star prompts for a live favorites view |
 | **Batch editing** | Multi-select in the library to recolor, favorite, move between views, export or delete in one go |
 | **Undo** | Deleting a view, clearing the copy history, clearing the clipboard inbox, deleting a tag, or a batch delete or tag change offers an Undo button right on the confirmation |
-| **Duplicate finder** | Finds near-identical prompts, shows them side by side, keeps the one you pick |
+| **Duplicate finder** | Finds near-identical prompts, shows them side by side, keeps the one you pick; the same threshold also drives a quiet "similar to..." hint right after saving a prompt |
 
 ### ⚡ Copy
 
@@ -50,11 +50,11 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **One click** | Click a tile — the text is copied, a bubble confirms it |
 | **Floating buttons** | Pin any prompt as a frameless, always-on-top pill. Drag to move, right-click for size, edit or remove; positions survive restarts |
 | **Auto-paste** | A fast second click (or Enter) copies **and** pastes into the app you were just in |
-| **Variables** | Write `{#{Name}#}` placeholders and fill them in on copy — or `{#{tone\|formal,casual}#}` for a dropdown |
+| **Variables** | Write `{#{Name}#}` placeholders and fill them in on copy — or `{#{tone\|formal,casual}#}` for a dropdown; an optional fixed-value list suggests a value for a name you use often, shown only as a placeholder |
 | **Self-filling** | `date`, `time`, `weekday`, `clipboard` and `uuid` fill themselves in, no dialog, in your language |
 | **Rotating prompts** | Give a prompt a list of texts instead of one — each copy serves the next entry, in order or shuffled, with a small badge showing where you are |
 | **Prompt hotkeys** | Give a prompt its own global key combination that copies — and optionally pastes — from any app, with a small keyboard badge on its tile |
-| **Tray menu** | Copy a recent or favorite prompt straight from the tray, without opening the window |
+| **Tray menu** | Copy a recent or favorite prompt straight from the tray, without opening the window; a filter field at the top searches every prompt as you type |
 | **Drag-out** | Ctrl-drag a tile, library row or floating button into any other app to drop its text |
 | **Button folders** | Drag one floating button onto another and they merge into a folder that opens in place |
 | **Chaining** | Combine several prompts into one clipboard entry |
@@ -99,6 +99,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Smart retention** | Keep a plain number of snapshots, or a number per day, week, month and year |
 | **Backup password** | Optional — protects new backup files with a key derived from your password |
 | **Version history** | Every prompt keeps its earlier versions; preview and restore any of them |
+| **Editor draft autosave** | The open editor saves its text every few seconds so a crash or a closed window never loses unsaved work; a save or cancel removes the draft, and the next start asks once whether to restore one it still finds |
 | **Import / export** | One backup file with prompts, views, layouts, colors, styles and language. Plain CSV/TXT export for the texts alone |
 | **Careful resets** | "Delete data" and "Reset settings" are separate, both guarded, both with an optional safety backup |
 

@@ -1003,6 +1003,18 @@ fn tray_label_max(settings: &Settings) -> usize {
     settings.ui_values.get("trayLabelMax").copied().unwrap_or(TRAY_LABEL_MAX as f64).clamp(20.0, 80.0) as usize
 }
 
+// Whether the tray menu's filter row is drawn at all.
+fn tray_search_on(settings: &Settings) -> bool {
+    settings.ui_flags.get("traySearch") != Some(&false) // on by default
+}
+
+// How many matches the filter row may show at once. Same clamp pattern as
+// tray_label_max: an absent or out-of-range stored value falls back to the
+// shipped default instead of reaching the search list unclamped.
+fn tray_search_max(settings: &Settings) -> usize {
+    settings.ui_values.get("trayMenuMax").copied().unwrap_or(8.0).clamp(3.0, 20.0) as usize
+}
+
 // Menu text for a prompt. Control characters (a pasted newline lands in the name)
 // collapse to spaces, `&` is doubled because a Win32 menu reads a single one as a
 // mnemonic, and the cut counts CHARACTERS — a byte cut would split a multi-byte
@@ -1126,6 +1138,40 @@ fn tray_plan(
         }
     }
     out
+}
+
+// The filter row's own list: unlike tray_plan (favourites then recents, capped
+// per section) this searches EVERY prompt regardless of favourite/recent status,
+// scored the way the library ranks a plain-text search -- a name hit outranks a
+// body hit, ties broken by name. Blank query = no results (the fixed favourites/
+// recents selection stays on screen instead).
+fn tray_search_entries(prompts: &[Prompt], query: &str, cap: usize, label_max: usize) -> Vec<TrayEntry> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return Vec::new();
+    }
+    let mut hits: Vec<(u8, &Prompt)> = prompts
+        .iter()
+        .filter_map(|p| {
+            let score = if p.name.to_lowercase().contains(&q) {
+                2u8
+            } else if p.text.to_lowercase().contains(&q) {
+                1u8
+            } else {
+                0u8
+            };
+            if score > 0 {
+                Some((score, p))
+            } else {
+                None
+            }
+        })
+        .collect();
+    hits.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.name.to_lowercase().cmp(&b.1.name.to_lowercase())));
+    hits.truncate(cap);
+    hits.into_iter()
+        .map(|(_, p)| TrayEntry { id: tray_item_id(&p.id), label: tray_label(&p.name, label_max), kind: tray_kind(p), color: p.color.clone() })
+        .collect()
 }
 
 // ---------- menu icons ----------
@@ -1452,6 +1498,11 @@ struct TrayWinPlan {
     sections: Vec<TrayWinSection>,
     show_label: String,
     quit_label: String,
+    // Whether the search row at the top of the menu is drawn at all (traySearch,
+    // default on) -- tray_window_logical_height only reserves a row for it when
+    // this is true, so an unrelated off switch never grows the window for nothing.
+    search_on: bool,
+    search_ph: String,
 }
 
 fn tray_kind_str(kind: TrayKind) -> &'static str {
@@ -1471,7 +1522,7 @@ fn build_tray_win_plan(app: &AppHandle) -> TrayWinPlan {
     let state: State<Db> = match app.try_state::<Db>() {
         Some(s) => s,
         None => {
-            return TrayWinPlan { rec_entries: Vec::new(), sections: Vec::new(), show_label: String::new(), quit_label: String::new() };
+            return TrayWinPlan { rec_entries: Vec::new(), sections: Vec::new(), show_label: String::new(), quit_label: String::new(), search_on: false, search_ph: String::new() };
         }
     };
     let store = lock(&state);
@@ -1482,6 +1533,7 @@ fn build_tray_win_plan(app: &AppHandle) -> TrayWinPlan {
     let (recent_title, favs_title) = tray_section_labels(lang);
     let rec_entries_on = store.settings.ui_flags.get("screenRecord") != Some(&false)
         && store.settings.ui_flags.get("recTrayEntries") != Some(&false);
+    let search_on = tray_search_on(&store.settings);
     drop(store);
     let rec_entries = if rec_entries_on {
         match recording_phase(app) {
@@ -1511,13 +1563,23 @@ fn build_tray_win_plan(app: &AppHandle) -> TrayWinPlan {
                 .collect(),
         })
         .collect();
-    TrayWinPlan { rec_entries, sections, show_label: open_label.to_string(), quit_label: quit_label.to_string() }
+    TrayWinPlan {
+        rec_entries,
+        sections,
+        show_label: open_label.to_string(),
+        quit_label: quit_label.to_string(),
+        search_on,
+        search_ph: tray_search_placeholder(lang).to_string(),
+    }
 }
 
 // Pure, so the row/header/separator arithmetic stays testable without an app
 // handle -- mirrors tray_plan's own reasoning for why it takes plain data.
 fn tray_window_logical_height(plan: &TrayWinPlan) -> f64 {
     let mut logical_h = TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H; // show + quit always present
+    if plan.search_on {
+        logical_h += TRAY_WIN_ROW_H; // the filter row at the very top
+    }
     if !plan.rec_entries.is_empty() {
         logical_h += plan.rec_entries.len() as f64 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H;
     }
@@ -1603,6 +1665,28 @@ fn tray_window_close(app: AppHandle) {
     if let Some(win) = app.get_webview_window(TRAY_WIN_LABEL) {
         let _ = win.close();
     }
+}
+
+// The filter row's live results, replacing the fixed favourites/recents sections
+// while something is typed (ui/tray.js swaps them back once the field is empty).
+// An empty query or the flag being off both return nothing on purpose -- the
+// caller treats "no rows" as "show the fixed selection instead".
+#[tauri::command]
+fn tray_window_search(app: AppHandle, query: String) -> Vec<TrayWinEntry> {
+    let state: State<Db> = match app.try_state::<Db>() {
+        Some(s) => s,
+        None => return Vec::new(),
+    };
+    let store = lock(&state);
+    if !tray_search_on(&store.settings) {
+        return Vec::new();
+    }
+    let cap = tray_search_max(&store.settings);
+    let label_max = tray_label_max(&store.settings);
+    let hits = tray_search_entries(&store.prompts, &query, cap, label_max);
+    hits.into_iter()
+        .map(|e| TrayWinEntry { id: e.id, label: e.label, kind: tray_kind_str(e.kind).to_string(), color: e.color })
+        .collect()
 }
 
 // A result picked in the quick-launcher runs the very same activation the tray
@@ -2298,6 +2382,25 @@ fn tray_section_labels(lang: &str) -> (&'static str, &'static str) {
     }
 }
 
+// Placeholder text of the tray menu's own filter row -- same reasoning as
+// tray_labels above: the tray window is a webview, but its text still lives
+// here so every tray string is translated in one place.
+fn tray_search_placeholder(lang: &str) -> &'static str {
+    match lang {
+        "de" => "Suchen…",
+        "es" => "Buscar…",
+        "it" => "Cerca…",
+        "pt" => "Pesquisar…",
+        "pl" => "Szukaj…",
+        "zh" => "搜索…",
+        "ja" => "検索…",
+        "nl" => "Zoeken…",
+        "tr" => "Ara…",
+        "ro" => "Caută…",
+        _ => "Search…",
+    }
+}
+
 // Localized default name of the auto-created start page. As long as the user
 // never renamed it, it follows the UI language (see set_language).
 fn home_name(lang: &str) -> &'static str {
@@ -2904,7 +3007,8 @@ fn db_conn_init_schema(conn: &Connection) -> bool {
              CREATE TABLE IF NOT EXISTS prompt_versions(id INTEGER PRIMARY KEY AUTOINCREMENT, prompt_id TEXT NOT NULL, ts INTEGER NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '');
              CREATE INDEX IF NOT EXISTS idx_pv_prompt ON prompt_versions(prompt_id);
              CREATE TABLE IF NOT EXISTS clip_inbox(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, text TEXT NOT NULL);
-             CREATE TABLE IF NOT EXISTS edit_state(id TEXT PRIMARY KEY, kind TEXT NOT NULL, target TEXT NOT NULL, size INTEGER NOT NULL, mtime INTEGER NOT NULL, ops TEXT NOT NULL, updated_at INTEGER NOT NULL);",
+             CREATE TABLE IF NOT EXISTS edit_state(id TEXT PRIMARY KEY, kind TEXT NOT NULL, target TEXT NOT NULL, size INTEGER NOT NULL, mtime INTEGER NOT NULL, ops TEXT NOT NULL, updated_at INTEGER NOT NULL);
+             CREATE TABLE IF NOT EXISTS editor_drafts(id TEXT PRIMARY KEY, prompt_id TEXT NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);",
         )
         .is_err()
     {
@@ -6951,6 +7055,9 @@ async fn delete_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Resu
         rearm_hotkeys(&app); // A deleted prompt gives its accelerator back
         rebuild_tray(&app);
         sync_float_windows(&app); // A folder left with one member dissolves
+        if let Some(conn) = db_conn(&app) {
+            discard_editor_draft_if(&conn, |t| t == id);
+        }
     }
     Ok(changed)
 }
@@ -7031,6 +7138,9 @@ async fn batch_prompts(
                     return Err("save-failed".into());
                 }
                 save_settings(&app, &store.settings);
+                if let Some(conn) = db_conn(&app) {
+                    discard_editor_draft_if(&conn, |t| idset.contains(t));
+                }
             }
         }
         "favorite" => {
@@ -9597,6 +9707,97 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
         .collect();
     out.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
     Ok(out)
+}
+
+// ---- Similar-on-save hint ----
+// How long the after-save similarity scan may run before it gives up and
+// reports nothing rather than risk being felt as a stall. find_duplicates'
+// own O(n^2) scan above does not need a budget like this one -- that one is
+// an explicit "scan now" action the user already chose to wait for, while
+// this one runs after every ordinary save, unasked.
+const SIMILAR_HINT_BUDGET: std::time::Duration = std::time::Duration::from_millis(40);
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct SimilarHit {
+    id: String,
+    name: String,
+}
+
+// Whether two normalized lengths could possibly clear `thr` under trigram
+// Dice similarity. Dice can never exceed 2*min/(min+max), even at a perfect
+// overlap of the shorter one into the longer, so a pair whose lengths differ
+// enough is provably impossible and can be skipped before ever paying for
+// dup_trigrams on it -- the "only against entries of similar length" half of
+// the time budget.
+fn dup_length_could_match(a: usize, b: usize, thr: f64) -> bool {
+    if a == 0 || b == 0 {
+        return false;
+    }
+    let (hi, lo) = if a > b { (a, b) } else { (b, a) };
+    2.0 * lo as f64 / (hi + lo) as f64 >= thr
+}
+
+// The same trigram/Dice calculation find_duplicates uses above, run against
+// just the ONE prompt that was saved instead of every pair in the store.
+// Pure and synchronous, so it is callable straight from a unit test without a
+// Db/AppHandle; the command below only adds the store lookup around it.
+// Time-boxed (SIMILAR_HINT_BUDGET) and length-filtered, so a 10,000-entry
+// store does not turn an ordinary save into a stall -- callers run it AFTER
+// the save already returned, so even reaching the budget only delays the
+// hint, never the save itself.
+fn find_similar_prompt(target: &Prompt, others: &[&Prompt], threshold: f64) -> Option<SimilarHit> {
+    let start = std::time::Instant::now();
+    let thr = (threshold / 100.0).clamp(0.5, 1.0);
+    let base = if !target.text.is_empty() { target.text.as_str() } else { target.name.as_str() };
+    let target_norm = normalize_dup(base);
+    let target_len = target_norm.chars().count();
+    if target_len < 3 {
+        return None;
+    }
+    let target_grams = dup_trigrams(&target_norm);
+    let mut best: Option<(SimilarHit, f64)> = None;
+    for p in others {
+        if start.elapsed() > SIMILAR_HINT_BUDGET {
+            break;
+        }
+        let base = if !p.text.is_empty() { p.text.as_str() } else { p.name.as_str() };
+        let norm = normalize_dup(base);
+        let len = norm.chars().count();
+        if len < 3 || !dup_length_could_match(target_len, len, thr) {
+            continue;
+        }
+        let d = dup_dice(&target_grams, &dup_trigrams(&norm));
+        if d >= thr && best.as_ref().map_or(true, |(_, b)| d > *b) {
+            best = Some((
+                SimilarHit { id: p.id.clone(), name: if p.name.is_empty() { p.text.chars().take(40).collect() } else { p.name.clone() } },
+                d,
+            ));
+        }
+    }
+    best.map(|(hit, _)| hit)
+}
+
+// Called from the frontend right after add_prompt/update_prompt already
+// returned -- never awaited as part of saving, so a slow scan can only ever
+// delay the hint toast, not the save. A missing id (deleted again in the
+// instant between save and this call) is simply "nothing to report", not an
+// error worth surfacing.
+#[tauri::command]
+async fn similar_to_saved(state: State<'_, Db>, id: String, threshold: f64) -> Result<Option<SimilarHit>, String> {
+    // Snapshot and drop the lock before the scan, same tradeoff find_duplicates
+    // makes above and for the same reason -- this must not block every other
+    // command for the length of the (bounded, but still real) comparison.
+    let (target, others) = {
+        let store = lock(&state);
+        let Some(target) = store.prompts.iter().find(|p| p.id == id).cloned() else {
+            return Ok(None);
+        };
+        let others: Vec<Prompt> = store.prompts.iter().filter(|p| p.id != id).cloned().collect();
+        (target, others)
+    };
+    let others_ref: Vec<&Prompt> = others.iter().collect();
+    Ok(find_similar_prompt(&target, &others_ref, threshold))
 }
 
 // Mark this whole group of prompt ids as "not duplicates" (of each other).
@@ -12725,6 +12926,79 @@ async fn discard_edit_state(app: AppHandle, kind: String, target: String) -> Res
     let id = format!("{kind}:{target}");
     conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+// ---- Editor draft autosave ----
+// A single row (id = "current"), because only one prompt editor modal is ever
+// open at a time -- no need for a table keyed per entry. prompt_id is the target
+// entry's id for an edit, or "neu" for a still-unsaved new entry, matching the
+// modal's own "create" mode having no real id yet. Only the text side is
+// drafted (name/text/variants); an attached image is never re-derived from a
+// crash draft, it stays with the prompt itself.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct EditorDraft {
+    prompt_id: String,
+    name: String,
+    text: String,
+    variants: String,
+    updated_at: i64,
+}
+
+#[tauri::command]
+async fn save_editor_draft(app: AppHandle, prompt_id: String, name: String, text: String, variants: String) -> Result<(), String> {
+    let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
+    let updated_at = (now_ms() / 1000) as i64;
+    conn.execute(
+        "INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current',?1,?2,?3,?4,?5)
+         ON CONFLICT(id) DO UPDATE SET prompt_id=excluded.prompt_id, name=excluded.name, text=excluded.text, variants=excluded.variants, updated_at=excluded.updated_at",
+        params![prompt_id, name, text, variants, updated_at],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn load_editor_draft(app: AppHandle) -> Result<Option<EditorDraft>, String> {
+    let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
+    let draft = conn
+        .query_row(
+            "SELECT prompt_id, name, text, variants, updated_at FROM editor_drafts WHERE id = 'current'",
+            [],
+            |r| {
+                Ok(EditorDraft {
+                    prompt_id: r.get(0)?,
+                    name: r.get(1)?,
+                    text: r.get(2)?,
+                    variants: r.get(3)?,
+                    updated_at: r.get(4)?,
+                })
+            },
+        )
+        .ok();
+    Ok(draft)
+}
+
+#[tauri::command]
+async fn discard_editor_draft(app: AppHandle) -> Result<(), String> {
+    let conn = db_conn(&app).ok_or_else(|| "db unavailable".to_string())?;
+    conn.execute("DELETE FROM editor_drafts WHERE id = 'current'", []).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// Shared by delete_prompt and batch_prompts's "delete" branch: a draft outlives
+// the modal that wrote it, so it must not outlive the entry it belongs to
+// either. `matches` decides on the draft's own prompt_id, so a single-delete and
+// a batch-delete can both reuse this without building a one-off HashSet lookup.
+fn discard_editor_draft_if(conn: &Connection, matches: impl Fn(&str) -> bool) {
+    let target: Option<String> = conn
+        .query_row("SELECT prompt_id FROM editor_drafts WHERE id = 'current'", [], |r| r.get(0))
+        .ok();
+    if let Some(target) = target {
+        if matches(&target) {
+            let _ = conn.execute("DELETE FROM editor_drafts WHERE id = 'current'", []);
+        }
+    }
 }
 
 // Periodic cleanup for edit_state, run through the existing job scheduler rather
@@ -24342,6 +24616,133 @@ fn split_variants(joined: &str) -> (String, Vec<String>) {
     (text, parts.map(unescape).collect())
 }
 
+// ---- Static placeholder resolution (export, Markdown sync) ----
+// A background write (export, the Markdown sync folder) can never show the
+// fill-in dialog, so it resolves the same priority the dialog itself offers,
+// minus the one interactive step: a remembered value, then a fixed value
+// (the maintained name/value list stored under ui_texts.varFixed), then the text's own
+// {#{name=default}#} default, then blank. Never the raw {#{...}#} syntax --
+// that would leak the app's own placeholder markup into a plain export or
+// someone else's Markdown folder. A dynamic name (/date\, /uuid\, ...) is
+// left exactly as written: its value only means something at the moment of
+// copy, and a background write has no such moment.
+fn parse_ui_text_map(settings: &Settings, key: &str) -> HashMap<String, String> {
+    settings
+        .ui_texts
+        .get(key)
+        .and_then(|s| serde_json::from_str::<HashMap<String, String>>(s).ok())
+        .unwrap_or_default()
+}
+
+// Same token shape as the frontend's VAR_RE: `{#{` + a body with no `}` or
+// newline, at most 200 characters, + `}#}`. Returns (start, end, trimmed
+// body) triples in source order, char-indexed and non-overlapping.
+fn find_var_tokens(text: &str) -> Vec<(usize, usize, String)> {
+    let chars: Vec<char> = text.chars().collect();
+    let n = chars.len();
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i + 3 <= n {
+        if chars[i] == '{' && chars.get(i + 1) == Some(&'#') && chars.get(i + 2) == Some(&'{') {
+            let body_start = i + 3;
+            let mut j = body_start;
+            let mut found_end = None;
+            while j < n && j - body_start <= 200 {
+                if chars.get(j) == Some(&'}') && chars.get(j + 1) == Some(&'#') && chars.get(j + 2) == Some(&'}') {
+                    found_end = Some(j);
+                    break;
+                }
+                if chars[j] == '}' || chars[j] == '\n' {
+                    break;
+                }
+                j += 1;
+            }
+            if let Some(end) = found_end {
+                let body: String = chars[body_start..end].iter().collect();
+                out.push((i, end + 3, body.trim().to_string()));
+                i = end + 3;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    out
+}
+
+// name, options (the choice list, empty for a plain variable) and default --
+// same split rule as the frontend's parseVar: a bar starts the option list,
+// an equals sign before it (or before the whole token with no bar) sets the
+// default. A bar with no usable options after it falls back to a plain
+// variable, same as parseVar.
+fn parse_var_token(token: &str) -> (String, Vec<String>, String) {
+    let raw = token.trim();
+    let (name_part, options): (&str, Vec<String>) = match raw.find('|') {
+        Some(bar) => {
+            let opts: Vec<String> = raw[bar + 1..]
+                .split(',')
+                .map(|o| o.trim().to_string())
+                .filter(|o| !o.is_empty())
+                .collect();
+            (&raw[..bar], opts)
+        }
+        None => (raw, Vec::new()),
+    };
+    let (name, default) = match name_part.find('=') {
+        Some(eq) => (name_part[..eq].trim().to_string(), name_part[eq + 1..].trim().to_string()),
+        None => (name_part.trim().to_string(), String::new()),
+    };
+    if name.is_empty() || (options.is_empty() && raw.contains('|')) {
+        (raw.to_string(), Vec::new(), String::new())
+    } else {
+        (name, options, default)
+    }
+}
+
+// A name written as /name\ is a reserved dynamic variable (date, uuid, the
+// clipboard, ...), meaningful only at the moment of copy.
+fn is_dyn_var_name(name: &str) -> bool {
+    name.len() > 2 && name.starts_with('/') && name.ends_with('\\')
+}
+
+fn resolve_static_vars(text: &str, remembered: &HashMap<String, String>, fixed: &HashMap<String, String>) -> String {
+    let tokens = find_var_tokens(text);
+    if tokens.is_empty() {
+        return text.to_string();
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut cursor = 0usize;
+    for (start, end, body) in tokens {
+        out.extend(chars[cursor..start].iter().copied());
+        let (name, options, default) = parse_var_token(&body);
+        if name.is_empty() || is_dyn_var_name(&name) {
+            out.extend(chars[start..end].iter().copied()); // left exactly as written
+        } else if options.is_empty() {
+            let value = remembered.get(&name).cloned().or_else(|| fixed.get(&name).cloned()).unwrap_or(default);
+            out.push_str(&value);
+        } else {
+            let remembered_pick = remembered.get(&name).cloned().filter(|v| options.contains(v));
+            let fixed_pick = fixed.get(&name).cloned().filter(|v| options.contains(v));
+            let default_pick = if options.contains(&default) { Some(default.clone()) } else { None };
+            let pick = remembered_pick.or(fixed_pick).or(default_pick).unwrap_or_else(|| options[0].clone());
+            out.push_str(&pick);
+        }
+        cursor = end;
+    }
+    out.extend(chars[cursor..].iter().copied());
+    out
+}
+
+// Resolves a prompt's own text AND every rotating-entry variant the same way,
+// for a caller that is about to export or sync it, never the live prompt
+// itself.
+fn resolved_for_export(p: &Prompt, remembered: &HashMap<String, String>, fixed: &HashMap<String, String>) -> Prompt {
+    let mut rp = p.clone();
+    rp.text = resolve_static_vars(&rp.text, remembered, fixed);
+    rp.variants = rp.variants.iter().map(|v| resolve_static_vars(v, remembered, fixed)).collect();
+    rp
+}
+
 // Export the prompt library only (incl. images/files) — never app settings,
 // views or grid layout, so importing elsewhere can't clobber the user's setup.
 fn to_csv(prompts: &[Prompt]) -> String {
@@ -24567,13 +24968,29 @@ async fn export_prompts(app: AppHandle, state: State<'_, Db>, format: String, id
             }
             _ => store.prompts.clone(),
         };
+        // A placeholder is a fill-in-at-copy-time thing; an export has no copy
+        // moment to fill it in at, so it gets resolved here instead of leaving
+        // the raw {#{...}#} syntax in the exported file. Each source is only
+        // consulted while its own flag is on, same as the fill-in dialog --
+        // varDefaults ships on, varFixed ships off.
+        let remembered = if store.settings.ui_flags.get("varDefaults") != Some(&false) {
+            parse_ui_text_map(&store.settings, "varDefaults")
+        } else {
+            HashMap::new()
+        };
+        let fixed = if store.settings.ui_flags.get("varFixed") == Some(&true) {
+            parse_ui_text_map(&store.settings, "varFixed")
+        } else {
+            HashMap::new()
+        };
+        let resolved: Vec<Prompt> = selected.iter().map(|p| resolved_for_export(p, &remembered, &fixed)).collect();
         let content = match format.as_str() {
-            "csv" => to_csv(&selected),
-            "txt" => to_txt(&selected),
-            "json" => to_json(&selected),
+            "csv" => to_csv(&resolved),
+            "txt" => to_txt(&resolved),
+            "json" => to_json(&resolved),
             _ => return Err("unsupported-export-format".to_string()),
         };
-        (content, selected.len())
+        (content, resolved.len())
     };
     let file = file_dialog(&app)
         .set_file_name(format!("{}.{}", brand::ITEM_PLURAL, format))
@@ -27060,6 +27477,7 @@ pub fn run() {
             sweep_discarded_recordings_now,
             record_tool_usage,
             find_duplicates,
+            similar_to_saved,
             ignore_dups,
             list_backups,
             open_backups_folder,
@@ -27075,6 +27493,9 @@ pub fn run() {
             save_edit_state,
             load_edit_state,
             discard_edit_state,
+            save_editor_draft,
+            load_editor_draft,
+            discard_editor_draft,
             open_repo,
             set_ui_zoom,
             delete_all_data,
@@ -27117,6 +27538,7 @@ pub fn run() {
             tray_window_plan,
             tray_window_activate,
             tray_window_close,
+            tray_window_search,
             copy_prompt,
             rotation_peek,
             rotation_commit,
@@ -34737,6 +35159,85 @@ mod tests {
         assert_eq!(count, 0, "discard removes the row outright");
     }
 
+    fn editor_drafts_test_conn() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE editor_drafts(id TEXT PRIMARY KEY, prompt_id TEXT NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, variants TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);",
+        )
+        .unwrap();
+        conn
+    }
+
+    // Same upsert SQL as save_editor_draft, run directly against a bare
+    // in-memory connection - the async command itself only exists to fetch its
+    // own AppHandle-bound connection, no test harness for that here (same
+    // reasoning as the edit_state roundtrip test right above).
+    #[test]
+    fn editor_draft_write_then_overwrite_keeps_a_single_current_row() {
+        let conn = editor_drafts_test_conn();
+        let upsert = "INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current',?1,?2,?3,?4,?5)
+             ON CONFLICT(id) DO UPDATE SET prompt_id=excluded.prompt_id, name=excluded.name, text=excluded.text, variants=excluded.variants, updated_at=excluded.updated_at";
+        conn.execute(upsert, params!["neu", "First", "Hello", "[]", 100i64]).unwrap();
+        conn.execute(upsert, params!["p1", "First edited", "Hello there", "[]", 200i64]).unwrap();
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM editor_drafts", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 1, "a second write overwrites the single current row, it never accumulates rows");
+        let (prompt_id, name, text): (String, String, String) = conn
+            .query_row("SELECT prompt_id, name, text FROM editor_drafts WHERE id = 'current'", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .unwrap();
+        assert_eq!((prompt_id.as_str(), name.as_str(), text.as_str()), ("p1", "First edited", "Hello there"));
+    }
+
+    #[test]
+    fn editor_draft_delete_removes_the_row_the_same_way_a_save_does() {
+        let conn = editor_drafts_test_conn();
+        conn.execute(
+            "INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current','p1','A','B','[]',100)",
+            [],
+        )
+        .unwrap();
+        conn.execute("DELETE FROM editor_drafts WHERE id = 'current'", []).unwrap();
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM editor_drafts", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0, "an orderly close, save or discard alike, must leave no draft behind");
+    }
+
+    #[test]
+    fn discard_editor_draft_if_removes_the_row_only_when_its_own_entry_matches() {
+        let conn = editor_drafts_test_conn();
+        conn.execute(
+            "INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current','p1','A','B','[]',100)",
+            [],
+        )
+        .unwrap();
+        discard_editor_draft_if(&conn, |t| t == "p2"); // an unrelated prompt was deleted
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM editor_drafts", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 1, "a draft for a different entry must survive an unrelated delete");
+        discard_editor_draft_if(&conn, |t| t == "p1"); // its own entry was deleted
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM editor_drafts", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0, "the draft disappears once the entry it belongs to is gone");
+    }
+
+    #[test]
+    fn discard_editor_draft_if_covers_a_batch_delete_set_too() {
+        let conn = editor_drafts_test_conn();
+        conn.execute(
+            "INSERT INTO editor_drafts(id, prompt_id, name, text, variants, updated_at) VALUES('current','p3','A','B','[]',100)",
+            [],
+        )
+        .unwrap();
+        let ids: std::collections::HashSet<&str> = ["p1", "p2", "p3"].into_iter().collect();
+        discard_editor_draft_if(&conn, |t| ids.contains(t));
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM editor_drafts", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0, "batch_prompts's delete branch matches on the same idset a single delete uses a plain equality for");
+    }
+
+    #[test]
+    fn discard_editor_draft_if_is_a_no_op_when_no_draft_exists() {
+        let conn = editor_drafts_test_conn();
+        discard_editor_draft_if(&conn, |_| true); // nothing to delete, must not panic or error
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM editor_drafts", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0);
+    }
+
     #[test]
     fn prompts_and_trash_write_together_or_not_at_all() {
         // The whole point of the combined write - a failure partway through must
@@ -35822,6 +36323,71 @@ mod tests {
 
     fn test_prompt(id: &str) -> Prompt {
         serde_json::from_str(&format!(r#"{{"id":"{id}","name":"N","text":"T"}}"#)).unwrap()
+    }
+
+    #[test]
+    fn dup_length_could_match_uses_the_real_threshold_not_a_fixed_margin() {
+        // Equal lengths: the theoretical Dice ceiling is 1.0, always possible.
+        assert!(dup_length_could_match(50, 50, 0.99));
+        // A 2:1 length ratio caps Dice at 2*50/150 = 0.667 -- below a 70% floor.
+        assert!(!dup_length_could_match(50, 100, 0.70));
+        // Just inside: lengths 90 and 100 cap at 2*90/190 = 0.947, above 0.90.
+        assert!(dup_length_could_match(90, 100, 0.90));
+        assert!(!dup_length_could_match(0, 10, 0.70), "an empty side can never match");
+    }
+
+    #[test]
+    fn find_similar_prompt_crosses_the_threshold_exactly_at_the_computed_score() {
+        let mut a = test_prompt("a");
+        a.text = "Please write a short friendly email about the quarterly report".into();
+        let mut b = test_prompt("b");
+        b.text = "Please write a short friendly email about the quarterly results".into(); // one word differs
+        let mut c = test_prompt("c");
+        c.text = "Completely different content about something else entirely, not close at all".into();
+
+        // The real score between the near-duplicate pair, computed the same way
+        // find_similar_prompt does -- so "just above" and "just below" below are
+        // exact, not guessed.
+        let score = dup_dice(&dup_trigrams(&normalize_dup(&a.text)), &dup_trigrams(&normalize_dup(&b.text)));
+        assert!(score > 0.5 && score < 1.0, "fixture must be a realistic near-duplicate, got {score}");
+
+        let others = vec![&b, &c];
+        let just_below = (score * 100.0).floor() - 1.0;
+        let hit = find_similar_prompt(&a, &others, just_below);
+        assert_eq!(hit.map(|h| h.id), Some("b".to_string()), "a threshold just below the real score must still match");
+
+        let just_above = (score * 100.0).ceil() + 1.0;
+        let hit2 = find_similar_prompt(&a, &others, just_above);
+        assert!(hit2.is_none(), "a threshold just above the real score must find nothing");
+    }
+
+    #[test]
+    fn find_similar_prompt_ignores_an_unrelated_entry_and_itself() {
+        let mut a = test_prompt("a");
+        a.text = "Please write a short friendly email about the quarterly report".into();
+        let mut c = test_prompt("c");
+        c.text = "Completely different content about something else entirely, not close at all".into();
+        let hit = find_similar_prompt(&a, &[&c], 70.0);
+        assert!(hit.is_none(), "nothing above the threshold exists, so no hit should be reported");
+    }
+
+    #[test]
+    fn find_similar_prompt_stays_within_budget_at_ten_thousand_entries() {
+        let mut target = test_prompt("target");
+        target.text = "Please write a short friendly email about the quarterly report".into();
+        let others: Vec<Prompt> = (0..10_000)
+            .map(|i| {
+                let mut p = test_prompt(&format!("o{i}"));
+                p.text = format!("Unrelated filler content number {i} that shares nothing meaningful with the target text at all");
+                p
+            })
+            .collect();
+        let refs: Vec<&Prompt> = others.iter().collect();
+        let start = std::time::Instant::now();
+        let hit = find_similar_prompt(&target, &refs, 85.0);
+        let elapsed = start.elapsed();
+        assert!(hit.is_none(), "none of the filler text should cross an 85% threshold");
+        assert!(elapsed < std::time::Duration::from_millis(200), "10,000-entry scan took {elapsed:?}, must stay well under a saving-feels-slow margin");
     }
 
     #[test]
@@ -37824,6 +38390,83 @@ mod tests {
         );
     }
 
+    #[test]
+    fn find_var_tokens_finds_a_plain_a_default_and_a_choice_token() {
+        let text = "Hi {#{name}#}, order {#{item=widget}#} in {#{size|S,M,L}#} please.";
+        let tokens = find_var_tokens(text);
+        let bodies: Vec<&str> = tokens.iter().map(|(_, _, b)| b.as_str()).collect();
+        assert_eq!(bodies, vec!["name", "item=widget", "size|S,M,L"]);
+    }
+
+    #[test]
+    fn parse_var_token_splits_name_default_and_options() {
+        assert_eq!(parse_var_token("name"), ("name".to_string(), vec![], "".to_string()));
+        assert_eq!(parse_var_token("item=widget"), ("item".to_string(), vec![], "widget".to_string()));
+        assert_eq!(
+            parse_var_token("size|S,M,L"),
+            ("size".to_string(), vec!["S".to_string(), "M".to_string(), "L".to_string()], "".to_string())
+        );
+        assert_eq!(
+            parse_var_token("size=M|S,M,L"),
+            ("size".to_string(), vec!["S".to_string(), "M".to_string(), "L".to_string()], "M".to_string())
+        );
+        // A bar with nothing usable after it is a plain variable, whole token as its name.
+        assert_eq!(parse_var_token("weird|"), ("weird|".to_string(), vec![], "".to_string()));
+    }
+
+    // The Abnahme case: the same priority chain the fill-in dialog offers,
+    // minus the interactive last step, checked across all four sources in one
+    // pass -- a remembered value beats a fixed value beats the text's own
+    // default beats blank.
+    #[test]
+    fn resolve_static_vars_priority_is_remembered_then_fixed_then_default_then_blank() {
+        let remembered: HashMap<String, String> = [("a".to_string(), "from-remembered".to_string())].into_iter().collect();
+        let fixed: HashMap<String, String> =
+            [("a".to_string(), "from-fixed".to_string()), ("b".to_string(), "from-fixed".to_string())].into_iter().collect();
+        // a: remembered AND fixed AND a default -- remembered wins.
+        assert_eq!(resolve_static_vars("{#{a=from-default}#}", &remembered, &fixed), "from-remembered");
+        // b: fixed AND a default, no remembered value -- fixed wins.
+        assert_eq!(resolve_static_vars("{#{b=from-default}#}", &remembered, &fixed), "from-fixed");
+        // c: only a default, no remembered or fixed value -- the default wins.
+        assert_eq!(resolve_static_vars("{#{c=from-default}#}", &remembered, &fixed), "from-default");
+        // d: nothing anywhere -- blank, never the raw placeholder.
+        assert_eq!(resolve_static_vars("{#{d}#}", &remembered, &fixed), "");
+    }
+
+    #[test]
+    fn resolve_static_vars_choice_variable_follows_the_same_priority_chain() {
+        let remembered: HashMap<String, String> = [("size".to_string(), "M".to_string())].into_iter().collect();
+        let fixed: HashMap<String, String> = [("size".to_string(), "L".to_string())].into_iter().collect();
+        assert_eq!(resolve_static_vars("{#{size|S,M,L}#}", &remembered, &fixed), "M", "a remembered pick wins when it is a real option");
+        let fixed_only: HashMap<String, String> = fixed.clone();
+        assert_eq!(resolve_static_vars("{#{size|S,M,L}#}", &HashMap::new(), &fixed_only), "L", "falls to the fixed value next");
+        assert_eq!(resolve_static_vars("{#{size=S|S,M,L}#}", &HashMap::new(), &HashMap::new()), "S", "then the text's own default");
+        assert_eq!(resolve_static_vars("{#{size|S,M,L}#}", &HashMap::new(), &HashMap::new()), "S", "and finally the first option");
+    }
+
+    #[test]
+    fn resolve_static_vars_leaves_a_dynamic_name_and_an_unresolved_gap_untouched() {
+        let remembered: HashMap<String, String> = HashMap::new();
+        let fixed: HashMap<String, String> = HashMap::new();
+        // A reserved dynamic name only means something at the moment of copy --
+        // a background write has no such moment, so it is left exactly as written.
+        assert_eq!(resolve_static_vars("Today is {#{/date\\}#}.", &remembered, &fixed), "Today is {#{/date\\}#}.");
+    }
+
+    #[test]
+    fn resolved_for_export_resolves_the_text_and_every_rotating_variant() {
+        let remembered: HashMap<String, String> = [("name".to_string(), "Ben".to_string())].into_iter().collect();
+        let fixed: HashMap<String, String> = HashMap::new();
+        let mut p = test_prompt("p1");
+        p.text = "Hi {#{name}#}".to_string();
+        p.variants = vec!["Bye {#{name}#}".to_string(), "no placeholder here".to_string()];
+        let resolved = resolved_for_export(&p, &remembered, &fixed);
+        assert_eq!(resolved.text, "Hi Ben");
+        assert_eq!(resolved.variants, vec!["Bye Ben".to_string(), "no placeholder here".to_string()]);
+        // The live prompt itself must never be mutated by an export/sync pass.
+        assert_eq!(p.text, "Hi {#{name}#}");
+    }
+
     // An exported theme file never carries the internal id, so importing it on
     // another install (or re-importing it on the same one) always creates a fresh
     // theme instead of silently colliding with -- or overwriting -- an existing one.
@@ -38957,6 +39600,47 @@ mod tests {
     }
 
     #[test]
+    fn tray_search_defaults_on_with_a_clamped_menu_max() {
+        let s = Settings::default();
+        assert!(tray_search_on(&s), "the filter row ships on");
+        assert_eq!(tray_search_max(&s), 8);
+
+        let mut off = Settings::default();
+        off.ui_flags.insert("traySearch".into(), false);
+        assert!(!tray_search_on(&off));
+
+        let mut clamped_hi = Settings::default();
+        clamped_hi.ui_values.insert("trayMenuMax".into(), 999.0);
+        assert_eq!(tray_search_max(&clamped_hi), 20);
+
+        let mut clamped_lo = Settings::default();
+        clamped_lo.ui_values.insert("trayMenuMax".into(), 0.0);
+        assert_eq!(tray_search_max(&clamped_lo), 3);
+    }
+
+    #[test]
+    fn tray_search_ranks_a_name_hit_above_a_body_hit_and_respects_the_cap() {
+        let name_hit = tray_prompt("1", "Alpha project", false);
+        let mut body_hit = tray_prompt("2", "Zzz", false);
+        body_hit.text = "notes mentioning alpha inside the body".into();
+        let mut no_hit = tray_prompt("3", "Beta", false);
+        no_hit.text = "nothing relevant here".into();
+        let prompts = vec![name_hit.clone(), body_hit.clone(), no_hit.clone()];
+
+        let hits = tray_search_entries(&prompts, "alpha", 10, TRAY_LABEL_MAX);
+        assert_eq!(tray_names(&hits), vec!["Alpha project", "Zzz"], "a name match must outrank a body-only match");
+
+        let capped = tray_search_entries(&prompts, "a", 1, TRAY_LABEL_MAX); // "a" is in every name/body above
+        assert_eq!(capped.len(), 1, "the cap must be respected even when more prompts match");
+    }
+
+    #[test]
+    fn tray_search_is_empty_for_a_blank_query() {
+        let prompts = vec![tray_prompt("1", "Alpha", false)];
+        assert!(tray_search_entries(&prompts, "   ", 10, TRAY_LABEL_MAX).is_empty());
+    }
+
+    #[test]
     fn zoom_min_size_grows_with_zoom_and_shrinks_back() {
         let big_screen = (10_000, 10_000);
         assert_eq!(zoom_min_size(1.0, big_screen), (680, 460));
@@ -39110,7 +39794,7 @@ mod tests {
     fn tray_window_height_accounts_for_every_row_header_and_separator() {
         let entry = |id: &str| TrayWinEntry { id: id.into(), label: id.into(), kind: "text".into(), color: String::new() };
         // No sections at all: just the two terminal rows, plus the card's own padding.
-        let empty = TrayWinPlan { rec_entries: Vec::new(), sections: Vec::new(), show_label: "Show".into(), quit_label: "Quit".into() };
+        let empty = TrayWinPlan { rec_entries: Vec::new(), sections: Vec::new(), show_label: "Show".into(), quit_label: "Quit".into(), search_on: false, search_ph: String::new() };
         assert_eq!(tray_window_logical_height(&empty), TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H);
 
         // One section, two entries: its own header, both rows, and the one separator
@@ -39120,6 +39804,8 @@ mod tests {
             sections: vec![TrayWinSection { title: "Favorites".into(), entries: vec![entry("a"), entry("b")] }],
             show_label: "Show".into(),
             quit_label: "Quit".into(),
+            search_on: false,
+            search_ph: String::new(),
         };
         let want_one = TRAY_WIN_CHROME + 2.0 * TRAY_WIN_ROW_H + TRAY_WIN_HEAD_H + 2.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H;
         assert_eq!(tray_window_logical_height(&one_section), want_one);
@@ -39134,12 +39820,36 @@ mod tests {
             ],
             show_label: "Show".into(),
             quit_label: "Quit".into(),
+            search_on: false,
+            search_ph: String::new(),
         };
         let want_two = TRAY_WIN_CHROME
             + 2.0 * TRAY_WIN_ROW_H // show + quit
             + (TRAY_WIN_HEAD_H + 1.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H) // 1-entry section
             + (TRAY_WIN_HEAD_H + 3.0 * TRAY_WIN_ROW_H + TRAY_WIN_SEP_H); // 3-entry section
         assert_eq!(tray_window_logical_height(&two_sections), want_two);
+    }
+
+    #[test]
+    fn tray_window_height_adds_one_row_for_search_when_on() {
+        // search_on toggles ONE extra row (the filter field), on top of whatever
+        // sections/rec_entries already contribute -- proven here against the
+        // otherwise-identical plan so a future change to the row math cannot
+        // silently forget the search row.
+        let base = TrayWinPlan {
+            rec_entries: Vec::new(),
+            sections: vec![TrayWinSection { title: "Favorites".into(), entries: vec![TrayWinEntry { id: "a".into(), label: "a".into(), kind: "text".into(), color: String::new() }] }],
+            show_label: "Show".into(),
+            quit_label: "Quit".into(),
+            search_on: false,
+            search_ph: String::new(),
+        };
+        let with_search = TrayWinPlan { search_on: true, ..base.clone() };
+        assert_eq!(
+            tray_window_logical_height(&with_search) - tray_window_logical_height(&base),
+            TRAY_WIN_ROW_H,
+            "turning the search row on must add exactly one row of height, no more"
+        );
     }
 
     #[test]
@@ -39155,6 +39865,8 @@ mod tests {
             ],
             show_label: "Show".into(),
             quit_label: "Quit".into(),
+            search_on: false,
+            search_ph: String::new(),
         };
         let dpi = 1.5;
         let uncapped = tray_window_logical_height(&full) * dpi;

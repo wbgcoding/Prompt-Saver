@@ -12,6 +12,12 @@ document.title = APP_NAME;
 
 const { invoke } = window.__TAURI__.core;
 
+// Same pin glyph main.js's ICON_PIN uses for the fixed-value marker --
+// this window has no shared icon module, so it is a one-off inline
+// copy rather than a whole import just for one small SVG.
+const FIXED_PIN_SVG =
+  '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z"/></svg>';
+
 const cardEl = document.getElementById("card");
 const titleEl = document.getElementById("title");
 const fieldsEl = document.getElementById("fields");
@@ -70,11 +76,15 @@ function buildChoice(row, options, initial) {
   return { focus: () => button.focus(), value: () => value };
 }
 
-function buildText(row, initial) {
+function buildText(row, initial, placeholder) {
   const input = document.createElement("input");
   input.type = "text";
   input.className = "vars-input";
   input.value = initial;
+  // A fixed value is only ever SUGGESTED, shown as the placeholder -- an
+  // untouched field stays genuinely empty, never silently filled from the
+  // fixed list.
+  if (placeholder) input.placeholder = placeholder;
   row.appendChild(input);
   return { focus: () => { input.focus(); input.select(); }, value: () => input.value };
 }
@@ -88,13 +98,23 @@ function render(data) {
   rows = (data.rows || []).map((spec) => {
     const row = document.createElement("label");
     row.className = "vars-row";
+    const nameRow = document.createElement("span");
+    nameRow.className = "vars-name-row";
     const name = document.createElement("span");
     name.className = "vars-name";
     name.textContent = spec.name; // textContent: a variable name is never markup
-    row.appendChild(name);
+    nameRow.appendChild(name);
+    if (spec.fixed) {
+      const marker = document.createElement("span");
+      marker.className = "vars-fixed-marker";
+      marker.title = data.fixedHint || "";
+      marker.innerHTML = FIXED_PIN_SVG;
+      nameRow.appendChild(marker);
+    }
+    row.appendChild(nameRow);
     const control = spec.options && spec.options.length
       ? buildChoice(row, spec.options, spec.value)
-      : buildText(row, spec.value || "");
+      : buildText(row, spec.value || "", spec.placeholder || "");
     let box = null;
     // The remember switch belongs to free-text rows only — a choice keeps its last
     // pick through its own setting, with no checkbox to tick.

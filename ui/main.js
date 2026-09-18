@@ -121,6 +121,8 @@ let modalSession = 0;
 let modalOpener = null;
 let modalInitial = ""; // snapshot of the open modal's content (unsaved-change guard)
 let modalSaving = false; // re-entry guard, a double-click/double-Enter must not fire two saves
+let draftTimer = null; // editor-draft autosave tick, armed by openModal, disarmed by closeModal
+let draftLastSaved = null; // fingerprint of the last written draft, so an unchanged tick skips the write
 let ctxId = null;
 let drag = null;
 let libQuery = ""; // prompt library search text
@@ -207,6 +209,11 @@ const ICON_EDIT =
   '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 20h4L18.5 9.5a2 2 0 0 0-2.8-2.8L5 17.2V20Zm9.5-12.5 3 3"/></svg>';
 const ICON_TRASH =
   '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13M10 11v6M14 11v6"/></svg>';
+// Marks a placeholder fill-in field whose empty state is only a SUGGESTED
+// fixed value (shown as the field's placeholder text, never inserted on its
+// own), distinct from the plain "remembered" state.
+const ICON_PIN =
+  '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z"/></svg>';
 // The original path (M8 7 3 12l5 5M3 12h11a5 5 0 0 1 0 10h-4) was not
 // centered in its 24x24 viewBox (its true bounds sit low and to the left),
 // which read as an off-center glyph in the toast's centered icon badge even
@@ -1242,6 +1249,10 @@ const FLAG_LABELS = {
   promptHistory: "flagPromptHistory",
   usageStats: "statsEnable",            // only ever rendered in the backups dialog
   dupFinder: "flagDupFinder",
+  // A background check after every save, naming the closest existing prompt
+  // once it clears similarThreshold (the same value the duplicate finder
+  // above uses) -- never a dialog, never holds up the save itself.
+  similarHint: "flagSimilarHint",
   dupImportCheck: "flagDupImportCheck",
   autoBackup: "flagAutoBackup",
   autoPaste: "flagAutoPaste",           // a normal setting now (default on)
@@ -1271,6 +1282,9 @@ const FLAG_LABELS = {
   tags: "flagTags",                     // tags + library tag filter
   pillFolders: "flagPillFolders",       // merge floating buttons into folders
   trayFavs: "flagTrayFavs",             // favourites section in the tray menu
+  // Filter row at the top of the custom tray menu, searching every prompt
+  // rather than only the shown favourites/recents.
+  traySearch: "flagTraySearch",
   // Checks at launch, but only while the normal auto-update setting is on.
   checkUpdateOnStart: "flagCheckUpdateOnStart",
   // The one-time toast after an update; the "what's new" window itself stays
@@ -1372,6 +1386,10 @@ const FLAG_LABELS = {
   // expert menu's "Recent messages" action. Off means the list stays empty and
   // nothing is collected. Ships ON.
   errorLog: "flagErrorLog",
+  // Autosaves the open editor's text every editorDraftSecs seconds so a crash
+  // or a closed window never loses unsaved work; offers to restore the draft
+  // once, at the next start. Ships ON.
+  editorDraft: "flagEditorDraft",
 };
 const ALL_FLAG_KEYS = Object.keys(FLAG_LABELS);
 
@@ -1464,6 +1482,12 @@ const OPT_FLAG_LABELS = {
   // other tag-aware path already handles it. Browsing hides it; searching still
   // finds it, and the library toggle brings it back into view.
   archiveTag: "flagArchiveTag",
+  // A maintained list of name/value pairs (expert menu, empty by default) that
+  // the fill-in dialog SUGGESTS for a matching placeholder name, one tier below
+  // a remembered last input and above the text's own {#{name=default}#}. Kept
+  // apart from varDefaults on purpose -- a deliberately maintained value must
+  // never be mistaken for whatever happened to be typed in last.
+  varFixed: "flagVarFixed",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
@@ -1750,7 +1774,13 @@ const EXPERT_VALUES = {
   // Usage statistics: how many rows the top-N lists show.
   statsTopN: { label: "valStatsTopN", min: 5, max: 100, step: 1, def: 10, unit: "", gate: "usageStats" },
   // Duplicate finder: similarity threshold.
-  dupThreshold: { label: "valDupThreshold", min: 70, max: 100, step: 1, def: 90, unit: "%", gate: "dupFinder" },
+  // Shared by the duplicate finder above and the save-time similar-prompt hint --
+  // one number, one notion of "similar", per the spec. Gated on similarHint
+  // rather than dupFinder since the hint is the more commonly-hit path (it
+  // fires on every save); no OR-gate exists for a row two flags both use.
+  similarThreshold: { label: "valSimilarThreshold", min: 70, max: 99, step: 1, def: 85, unit: "%", gate: "similarHint" },
+  // How often the open editor writes its autosave draft.
+  editorDraftSecs: { label: "valEditorDraftSecs", min: 2, max: 30, step: 1, def: 5, unit: "s", gate: "editorDraft" },
   // How long a confirm button (delete etc.) stays armed before it auto-resets.
   disarmMs: { label: "valDisarmMs", min: 1000, max: 10000, step: 500, def: 3000, unit: "ms" },
   // Matches append_crash_log's own pre-existing hardcoded rotation cap (256 KB).
@@ -1794,6 +1824,8 @@ const EXPERT_VALUES = {
   // no OR-gate exists, and gating a shared row on either lone sub-flag is an
   // approximation either way.
   trayLabelMax: { label: "valTrayLabelMax", min: 20, max: 80, step: 5, def: 40, unit: "", gate: "trayRecent" },
+  // How many matches the tray menu's filter row shows at once.
+  trayMenuMax: { label: "valTrayMenuMax", min: 3, max: 20, step: 1, def: 8, unit: "", gate: "traySearch" },
   // How often the Markdown-sync folder is re-scanned for outside edits.
   syncPollSecs: { label: "valSyncPollSecs", min: 2, max: 30, step: 1, def: 5, unit: "s", gate: "promptSync" },
   // Failed rounds in a row (an unreachable folder) before the sync pauses itself.
@@ -2100,17 +2132,21 @@ const EXPERT_TABS = [
     // Everything that puts new content into the app.
     { title: "expGroupInput", flags: ["fileAttach", { key: "storeFiles", gate: "fileAttach" }, { key: "cleanupFiles", gate: "storeFiles" }, { key: "attachTextPreview", gate: "fileAttach" }, "pasteMedia", "dragDrop"], values: ["attachPreviewKb"] },
     { title: "expGroupViews", flags: ["multiView", { key: "viewGroups", gate: "multiView" }, { key: "multiViewPrompt", gate: "multiView" }, "quickGrid", { key: "quickGridHoverOnly", gate: "quickGrid" }], values: ["viewBorder", "viewGroupMaxRows", "viewTabEdgeZone"] },
-    // Placeholders, from the grammar to where the app asks for them.
-    { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"] },
+    // Placeholders, from the grammar to where the app asks for them. varFixed
+    // (a hand-maintained name/value list, empty by default, only ever
+    // SUGGESTED in the fill-in dialog) stays in this same group rather than
+    // its own -- its gate parent promptVars lives here, and a gated flag has
+    // to sit with its parent.
+    { title: "expGroupVars", flags: ["promptVars", { key: "varDefaults", gate: "promptVars" }, { key: "dynVars", gate: "promptVars" }, { key: "choiceVars", gate: "promptVars" }, { key: "choiceRemember", gate: "choiceVars" }, { key: "varPopupWindow", gate: "promptVars" }, { key: "varFixed", gate: "promptVars" }], dropdowns: ["dateStyle", "timeStyle"], varFixedList: true },
     // The editor: what it shows beside the text box. Preview and highlighter belong together — the
     // highlighter only ever paints inside the preview.
-    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, { key: "copyFormatted", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen"], dropdowns: ["counterUnits"] },
+    { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, { key: "copyFormatted", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard", "editorDraft"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen", "editorDraftSecs"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
     { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyBubble", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
     // Floating buttons and the two kinds of folder they can form.
     { title: "expGroupFolders", flags: ["floating", { key: "floatPark", gate: "floating" }, { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap", "floatParkCleanupH", "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
     // The quick-copy sections of the tray menu, each with its own entry count.
-    { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs"], values: ["trayRecentN", "trayFavN", "trayLabelMax"] },
+    { title: "expGroupTray", flags: ["trayCustomMenu", "trayRecent", "trayFavs", "traySearch"], values: ["trayRecentN", "trayFavN", "trayLabelMax", "trayMenuMax"] },
     // The watcher that collects what you copy elsewhere.
     { title: "expGroupClipboard", flags: ["clipWatcher", { key: "clipSkipSecrets", gate: "clipWatcher" }], values: ["clipMinChars", "clipInboxMax", "clipSecretMinLen"] },
     // Prompt folders as Markdown (beta): mirrors text-only prompts as .md files.
@@ -2172,7 +2208,7 @@ const EXPERT_TABS = [
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken", "undoToast", "errorLog"], values: ["dupThreshold", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "videoClipTtlMin", "errorLogKeepKb", "undoToastMs", "errorLogMax"], selects: ["trashRetentionDays", "recordingRetentionDays"],
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken", "undoToast", "errorLog"], values: ["similarThreshold", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "videoClipTtlMin", "errorLogKeepKb", "undoToastMs", "errorLogMax"], selects: ["trashRetentionDays", "recordingRetentionDays"],
       actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }, { id: "float-recall", label: "floatRecallAction", gate: "floating" }, { id: "error-log-open", label: "errorLogAction" }] },
   ] },
 ];
@@ -2319,7 +2355,7 @@ function applyValues() {
 // convention tip<Key>. Self-explanatory settings are deliberately left out.
 const EXPERT_TIPS = [
   // General / creating
-  "storeFiles", "attachTextPreview", "attachPreviewKb", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "varPopupWindow",
+  "storeFiles", "attachTextPreview", "attachPreviewKb", "varDefaults", "dynVars", "choiceVars", "choiceRemember", "varPopupWindow", "varFixed",
   "lengthCounter", "promptHistory", "historyDiff", "diffWordCap", "historyPreviewLen", "editorMonospace",
   "promptNotes", "notesInTooltip", "notesTipLen",
   "mdPreview", "mdMaxChars", "codeHighlight", "codeAutoDetect", "hlFontPx", "hlMaxChars", "copyFormatted",
@@ -2333,7 +2369,7 @@ const EXPERT_TIPS = [
   "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veOvColor", "veOvFont",
   "veDefaultPanel", "videoExportDir", "veExtraClipsMax",
   "numFieldWheel", "zoomStepPct", "zoomMaxPct", "errorLogKeepKb", "veOvDupOffsetPx", "editSnapTolerancePx",
-  "editStateKeep", "editStateSaveSecs", "editStateKeepDays", "editorOpenMaxMb",
+  "editStateKeep", "editStateSaveSecs", "editStateKeepDays", "editorOpenMaxMb", "editorDraft", "editorDraftSecs",
   "snipQuality", "snipSaveQuality", "snipDelayMs",
   "snipPenPx", "snipMarkerPx", "snipLinePx", "snipArrowPx", "snipRectPx", "snipEllipsePx", "snipStepPx",
   "snipArrowHeadScale", "snipDefaultColor", "snipTextPx", "snipTextOutlinePx", "snipPixelBlock", "snipSpotlightDim",
@@ -2343,7 +2379,7 @@ const EXPERT_TIPS = [
   "voice", "voiceInterim", "voicePunct", "voiceAutoCaps", "voiceAutoStop", "voiceAutoStopSec", "voiceMaxMin",
   "voiceLangCacheH", "voiceLang", "voiceInsert", "voiceOnlineOk", "voiceAutoPickLang", "voiceLangAutoUpdate",
   "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH", "voiceHotkey", "voiceHotkeyTarget",
-  "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "trayLabelMax",
+  "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "trayLabelMax", "traySearch", "trayMenuMax",
   "checkUpdateOnStart", "showUpdates", "updateCheckH", "whatsNew", "importExport", "toolbarHoverDim", "keyboardNav", "allowMultipleInstances",
   "taskbarProgress", "etaShow",
   "headerSeparators", "floating", "floatPark", "floatParkCleanupH",
@@ -2378,7 +2414,7 @@ const EXPERT_TIPS = [
   "archiveTag",
   // Values that need a unit/behaviour explanation
   "copyCooldownMs", "dblClickMs", "autoPasteDelayMs", "kbFocusFadeMs", "snipPreviewVh",
-  "historyPerPrompt", "dupThreshold", "clipMinChars", "clipInboxMax", "clipSecretMinLen", "historyMax",
+  "historyPerPrompt", "similarThreshold", "similarHint", "clipMinChars", "clipInboxMax", "clipSecretMinLen", "historyMax",
   "journalLimit", "previewLen", "nameMaxLen", "searchRecentMax", "savedSearchMax", "maxViews", "gridMax",
   "viewBorder", "statsTopN", "viewGroups", "viewGroupMaxRows", "multiViewPrompt", "viewTabEdgeZone",
   "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
@@ -3713,12 +3749,17 @@ function renderExpert() {
       // its own per-swatch compare; an action is a button, not a value) — "only
       // changed" drops both rather than showing them unconditionally.
       const palette = !expertOnlyChanged && group.palette && (!searching || groupHit || i18nHit("expGroupColors", q));
+      // Same reasoning as palette above: a hand-maintained name/value list has
+      // no single "default" to diff against, and it means nothing while the
+      // flag it sits under is off, so it never shows on its own.
+      const varFixedList = !expertOnlyChanged && group.varFixedList && flag("varFixed") &&
+        (!searching || groupHit || i18nHit("expGroupVarFixed", q));
       // Bespoke, same reasoning as palette above: one hex string per key, no
       // single "default" the generic isRowChanged diff machinery could reuse.
       const colors = expertOnlyChanged ? [] : (group.colors || [])
         .filter((k) => gateOpen(EXPERT_COLORS[k]?.gate) && (!searching || groupHit || settingHit(k, EXPERT_COLORS[k]?.label, q)));
       const actions = expertOnlyChanged ? [] : (group.actions || []).filter((a) => gateOpen(a.gate) && (!searching || groupHit || i18nHit(a.label, q)));
-      if (globalView && !flags.length && !values.length && !selects.length && !dropdowns.length && !paths.length && !palette && !colors.length && !actions.length) continue;
+      if (globalView && !flags.length && !values.length && !selects.length && !dropdowns.length && !paths.length && !palette && !varFixedList && !colors.length && !actions.length) continue;
       shown++;
       // Categories collapse on click (persisted); scanning every tab always shows them.
       const isCollapsed = !globalView && collapsed.has(group.title);
@@ -3803,6 +3844,7 @@ function renderExpert() {
         emitExpertRows(roots, sec, actionById, 0);
       }
       if (palette) sec.appendChild(paletteRow());
+      if (varFixedList) sec.appendChild(varFixedListRow());
       for (const key of colors) sec.appendChild(colorRow(key));
       box.appendChild(sec);
     }
@@ -7313,6 +7355,116 @@ function saveRememberedVars(next, prev) {
   invoke("set_ui_text", { key: "varDefaults", value: json }).catch(() => {});
 }
 
+// Fixed placeholder values, kept by variable NAME (expert: varFixed) --
+// maintained BY HAND in the expert menu (add/change/delete), never written by
+// a fill-in dialog itself. Kept apart from varDefaults on purpose: a
+// deliberately maintained value must never be confused with whatever the
+// user happened to type in last time.
+function readFixedVars() {
+  try { return JSON.parse(settings.ui_texts?.varFixed || "{}"); } catch (_) { return {}; }
+}
+function saveFixedVars(next) {
+  const json = JSON.stringify(next);
+  if (json === (settings.ui_texts?.varFixed || "{}")) return;
+  settings.ui_texts = { ...(settings.ui_texts || {}), varFixed: json };
+  invoke("set_ui_text", { key: "varFixed", value: json }).catch(() => {});
+}
+
+// The expert menu's own list editor for varFixed: one row per fixed value
+// (name, its value, a delete button) plus an add row. Empty by default.
+function varFixedListRow() {
+  const wrap = document.createElement("div");
+  wrap.className = "field var-fixed-field";
+  // The switch above only carries the on/off label -- this list is its own
+  // widget, so it gets its own small heading rather than relying on that.
+  const heading = document.createElement("div");
+  heading.className = "var-fixed-heading";
+  heading.textContent = t("expGroupVarFixed");
+  wrap.appendChild(heading);
+  const fixed = readFixedVars();
+  const names = Object.keys(fixed).sort((a, b) => a.localeCompare(b));
+  const list = document.createElement("div");
+  list.className = "var-fixed-list";
+  for (const name of names) {
+    const row = document.createElement("div");
+    row.className = "var-fixed-row";
+    const nameEl = document.createElement("span");
+    nameEl.className = "var-fixed-name";
+    nameEl.textContent = name; // textContent: a variable name is never markup
+    const valueEl = document.createElement("input");
+    valueEl.type = "text";
+    valueEl.className = "modal-input var-fixed-value";
+    valueEl.value = fixed[name];
+    valueEl.addEventListener("change", () => {
+      const next = { ...readFixedVars() };
+      const v = valueEl.value.trim();
+      if (v) next[name] = v; else delete next[name]; // cleared value = removed row
+      saveFixedVars(next);
+      renderExpert();
+    });
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "icon-btn var-fixed-del";
+    del.title = t("varFixedRemove");
+    del.setAttribute("aria-label", t("varFixedRemove"));
+    putIcon(del, ICON_TRASH);
+    del.addEventListener("click", () => {
+      const next = { ...readFixedVars() };
+      delete next[name];
+      saveFixedVars(next);
+      renderExpert();
+    });
+    row.append(nameEl, valueEl, del);
+    list.appendChild(row);
+  }
+  wrap.appendChild(list);
+  if (!names.length) {
+    const hint = document.createElement("div");
+    hint.className = "hint var-fixed-empty";
+    hint.textContent = t("varFixedEmpty");
+    wrap.appendChild(hint);
+  }
+  const addRow = document.createElement("div");
+  addRow.className = "var-fixed-add";
+  const addName = document.createElement("input");
+  addName.type = "text";
+  addName.className = "modal-input var-fixed-add-name";
+  addName.placeholder = t("varFixedNamePh");
+  const addValue = document.createElement("input");
+  addValue.type = "text";
+  addValue.className = "modal-input var-fixed-add-value";
+  addValue.placeholder = t("varFixedValuePh");
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "ghost-btn var-fixed-add-btn";
+  addBtn.textContent = t("varFixedAdd");
+  const commitAdd = () => {
+    const name = cleanVarPart(addName.value);
+    const value = addValue.value.trim();
+    if (!name || !value) { (name ? addValue : addName).focus(); return; }
+    saveFixedVars({ ...readFixedVars(), [name]: value });
+    renderExpert();
+  };
+  addBtn.addEventListener("click", commitAdd);
+  for (const el of [addName, addValue]) {
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); commitAdd(); } });
+  }
+  addRow.append(addName, addValue, addBtn);
+  wrap.appendChild(addRow);
+  return wrap;
+}
+
+// Small marker next to a fill-in field whose starting state came from the
+// fixed-value list, so it reads as "on file for this name", not just an
+// ordinary placeholder or default.
+function fixedMarker() {
+  const el = document.createElement("span");
+  el.className = "var-fixed-marker";
+  el.title = t("fixedValueHint");
+  putIcon(el, ICON_PIN);
+  return el;
+}
+
 // Fill-in dialog shown when copying a prompt that holds {#{placeholders}#}.
 // `vars` are raw tokens; resolves a {token: value} map, or null when cancelled.
 let varsCleanup = null;
@@ -7326,6 +7478,12 @@ function promptVarsDialog(vars) {
   const useRemember = flag("varDefaults");
   const keepChoice = flag("choiceRemember");
   const remembered = readRememberedVars();
+  // Fixed values (expert: varFixed) are the tier between a remembered input
+  // and the text's own default -- a plain text field only ever SUGGESTS one,
+  // as its placeholder, never inserted into the value the user has to
+  // actively clear first.
+  const useFixed = flag("varFixed");
+  const fixedVars = useFixed ? readFixedVars() : {};
   const rows = vars.map((token) => {
     const { name, options, default: def } = parseVar(token);
     const label = document.createElement("label");
@@ -7345,27 +7503,40 @@ function promptVarsDialog(vars) {
       }
       const last = keepChoice ? remembered[name] : null;
       const usedLast = options.includes(last);
-      // Remembered pick wins over the text's own default -- it is the more
-      // recent decision.
-      control.value = usedLast ? last : (def && options.includes(def) ? def : options[0]);
-      // Says outright that this pick came from last time, not just the checkbox
-      // state (there is none for a choice variable — it remembers silently).
+      const fixedPick = name in fixedVars ? fixedVars[name] : null;
+      const usedFixed = !usedLast && options.includes(fixedPick);
+      // Remembered pick wins over a fixed value, which wins over the text's
+      // own default -- each one the more recent/deliberate decision.
+      control.value = usedLast ? last : usedFixed ? fixedPick : (def && options.includes(def) ? def : options[0]);
+      // Says outright where this pick came from, not just the checkbox state
+      // (there is none for a choice variable — it remembers silently).
+      let markFixed = false;
       if (usedLast) control.title = t("rememberedValueHint");
+      else if (usedFixed) { control.title = t("fixedValueHint"); markFixed = true; }
       // A single option is a fixed value: still shown, but nothing to choose.
       if (options.length === 1) control.disabled = true;
       else attachSelectPicker(control); // themed popup, 8 rows then scroll
       label.append(span, control);
+      if (markFixed) label.appendChild(fixedMarker());
     } else {
       control = document.createElement("input");
       control.className = "modal-input";
       control.type = "text";
+      let markFixed = false;
       if (useRemember && name in remembered) {
         control.value = remembered[name];
         control.title = t("rememberedValueHint"); // Says so, not just a checked box
+      } else if (useFixed && name in fixedVars) {
+        // A suggestion, never inserted -- shown as the placeholder, so a
+        // field left untouched stays genuinely empty.
+        control.placeholder = fixedVars[name];
+        control.title = t("fixedValueHint");
+        markFixed = true;
       } else if (def) {
         control.value = def;
       }
       label.append(span, control);
+      if (markFixed) label.appendChild(fixedMarker());
       if (useRemember) {
         const rem = document.createElement("label");
         rem.className = "vars-remember";
@@ -7583,19 +7754,37 @@ async function promptVarsWindow(tokens) {
   const useRemember = flag("varDefaults");
   const keepChoice = flag("choiceRemember");
   const remembered = readRememberedVars();
+  // Fixed values (expert: varFixed) sit between a remembered pick and the
+  // text's own default. A plain text field only ever SUGGESTS one, as its
+  // placeholder -- vars.js never inserts it into the value on its own.
+  const useFixed = flag("varFixed");
+  const fixedVars = useFixed ? readFixedVars() : {};
   const rows = tokens.map((token) => {
     const { name, options, default: def } = parseVar(token);
     const last = remembered[name];
+    if (options.length) {
+      const usedLast = keepChoice && options.includes(last);
+      const usedFixed = !usedLast && options.includes(fixedVars[name]);
+      return {
+        token,
+        name,
+        options,
+        value: usedLast ? last : usedFixed ? fixedVars[name] : (def && options.includes(def) ? def : options[0]),
+        remember: false,
+        fixed: usedFixed,
+        placeholder: "",
+      };
+    }
+    const usedRemember = useRemember && name in remembered;
+    const usedFixed = !usedRemember && useFixed && name in fixedVars;
     return {
       token,
       name,
       options,
-      // Remembered pick/value wins over the text's own default everywhere --
-      // it is the more recent decision.
-      value: options.length
-        ? (keepChoice && options.includes(last) ? last : (def && options.includes(def) ? def : options[0]))
-        : (useRemember && name in remembered ? String(last) : (def || "")),
-      remember: !options.length && useRemember && name in remembered,
+      value: usedRemember ? String(last) : usedFixed ? "" : (def || ""),
+      remember: usedRemember,
+      fixed: usedFixed,
+      placeholder: usedFixed ? fixedVars[name] : "",
     };
   });
   const payload = {
@@ -7605,8 +7794,9 @@ async function promptVarsWindow(tokens) {
     ok: t("varsCopy"),
     cancel: t("cancel"),
     rememberLabel: t("rememberValue"),
+    fixedHint: t("fixedValueHint"),
     askRemember: useRemember,
-    rows: rows.map(({ name, options, value, remember }) => ({ name, options, value, remember })),
+    rows: rows.map(({ name, options, value, remember, fixed, placeholder }) => ({ name, options, value, remember, fixed, placeholder })),
   };
   // A second hotkey while a window is still open cancels the older copy — one
   // pending question at a time, or two answers would race for one clipboard.
@@ -7753,6 +7943,51 @@ function maybeCloseOnCopy() {
   try { window.__TAURI__?.window?.getCurrentWindow?.()?.hide?.().catch?.(() => {}); } catch { /* no-op */ }
 }
 
+// ---- Editor draft autosave ----
+// Only the text side (name/text/variants) ever gets drafted -- an attached
+// image is never re-derived from a crash draft, it stays with the prompt
+// itself. One row on the backend (id "current"), since only one editor can be
+// open at a time; the fingerprint check below is what keeps an unchanged tick
+// from writing that row over and over while the user reads rather than types.
+function draftEditorFields() {
+  if (!modalState) return null;
+  const rotating = rotationUiOn();
+  const hasVariants = rotationActive();
+  const entries = rotating
+    ? modalState.rotateEntries
+    : hasVariants
+      ? [modal.text.value, ...modalState.rotateEntries.slice(1)]
+      : [modal.text.value];
+  const promptId = modalState.mode === "edit" ? modalState.id : "neu";
+  return { promptId, name: modal.name.value, text: entries[0] || "", variants: JSON.stringify(entries.slice(1)) };
+}
+
+async function saveDraftNow() {
+  const fields = draftEditorFields();
+  if (!fields) return;
+  const fp = JSON.stringify(fields);
+  if (fp === draftLastSaved) return; // nothing changed since the last write
+  draftLastSaved = fp;
+  try {
+    await invoke("save_editor_draft", fields);
+  } catch (_) {
+    draftLastSaved = null; // let the next tick retry a failed write
+  }
+}
+
+function armDraftAutosave() {
+  if (draftTimer) { clearInterval(draftTimer); draftTimer = null; }
+  draftLastSaved = null;
+  if (!flag("editorDraft")) return;
+  const secs = Math.min(30, Math.max(2, val("editorDraftSecs") || 5));
+  draftTimer = setInterval(saveDraftNow, secs * 1000);
+}
+
+function disarmDraftAutosave() {
+  if (draftTimer) { clearInterval(draftTimer); draftTimer = null; }
+  draftLastSaved = null;
+}
+
 function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", pdfPage = 0, iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", variants = [], rotateMode = "", rotateAuto = false, title, targetCell }) {
   modalSession++;
   modalOpener = document.activeElement;
@@ -7795,6 +8030,7 @@ function openModal({ mode, id, name = "", text = "", color = "", image = "", sho
   modal.root.classList.remove("hidden");
   syncModalImageUi(mode);
   modalInitial = modalSnapshot();
+  armDraftAutosave();
   modal.name.focus();
   modal.name.select();
 }
@@ -9103,7 +9339,7 @@ async function scanDupes() {
   loading.textContent = t("dupScanning");
   body.appendChild(loading);
   let groups;
-  try { groups = await invoke("find_duplicates", { threshold: Math.round(val("dupThreshold")) }); }
+  try { groups = await invoke("find_duplicates", { threshold: Math.round(val("similarThreshold")) }); }
   catch (e) { errToast(e); body.innerHTML = ""; return; }
   recordToolUsage("duplicate_finder");
   body.innerHTML = "";
@@ -9351,11 +9587,28 @@ function startCompareWith(id) {
 async function maybeDupImportToast() {
   if (!flag("dupFinder") || !flag("dupImportCheck")) return;
   try {
-    const groups = await invoke("find_duplicates", { threshold: Math.round(val("dupThreshold")) });
+    const groups = await invoke("find_duplicates", { threshold: Math.round(val("similarThreshold")) });
     if (groups.length) toast(t("dupImportToast").replace("{n}", String(groups.length)));
   } catch (_) {}
 }
 EXPERT_ACTIONS["dupes-open"] = openDupes;
+
+// The save-time cousin of maybeDupImportToast above: runs after EVERY save
+// (create or edit, called with no await from saveModal), never holds up
+// anything, and never asks a question -- ignoring the toast loses nothing.
+// Shares similarThreshold with the duplicate finder on purpose (the spec's
+// own reasoning: one number, one notion of "similar").
+async function maybeShowSimilarHint(id) {
+  if (!flag("similarHint")) return;
+  try {
+    const hit = await invoke("similar_to_saved", { id, threshold: Math.round(val("similarThreshold")) });
+    if (!hit) return;
+    toast(t("similarHintToast").replace("{name}", hit.name), null, "", [
+      { label: t("similarHintOpen"), onClick: () => { hideToast(); editPrompt(hit.id); } },
+      { label: t("compareBtn"), onClick: () => { hideToast(); openCompareView([id, hit.id]); } },
+    ]);
+  } catch (_) {}
+}
 
 // ---- Trash ----
 // Deleting a prompt (grid tile, library row, editor, multi-select) always moves it
@@ -11224,6 +11477,11 @@ function closeModal() {
   closeTagPop();
   modal.root.classList.add("hidden");
   modal.video.removeAttribute("src"); // stop a playing preview
+  // An orderly close -- save or deliberate cancel/discard, every caller funnels
+  // through here -- drops the autosave draft right away rather than leaving it
+  // for the boot-time recovery check to find and offer back for nothing.
+  disarmDraftAutosave();
+  if (modalState) invoke("discard_editor_draft").catch(() => {});
   modalState = null;
   modalInitial = "";
   // A tile the editor was opened from can be gone by the time it closes (the
@@ -11522,6 +11780,10 @@ async function confirmModal() {
     renderLibrary();
   }
   if (saved && wasCreate) maybeDupImportToast();
+  // Runs for a create AND an edit, unlike maybeDupImportToast just above --
+  // fired here, after everything the save itself needed is already done, and
+  // never awaited, so a slow scan can only ever delay the hint toast.
+  if (saved) maybeShowSimilarHint(saved.id);
 }
 
 // Everything about a prompt except what identifies it and the hotkey (one accelerator,
@@ -19246,6 +19508,40 @@ async function maybeOpenFirstRunTour(sealWarned) {
   await openTour({ firstRun: true });
 }
 
+// A crash draft from a previous session, asked about exactly once at the next
+// start (never again on later editor opens this same session). "No" removes
+// it right away rather than leaving it to resurface on the next launch too.
+async function maybeOfferEditorDraftRecovery() {
+  if (!flag("editorDraft")) return;
+  let draft = null;
+  try { draft = await invoke("load_editor_draft"); } catch (_) { return; }
+  if (!draft) return;
+  const when = new Date(draft.updatedAt * 1000).toLocaleString();
+  const preview = (draft.name || draft.text || "").split("\n").slice(0, 2).join(" ").trim().slice(0, 140);
+  const restore = await confirmDialog({
+    title: t("draftRecoverTitle"),
+    message: t("draftRecoverBody").replace("{time}", when).replace("{preview}", preview),
+    confirmLabel: t("draftRecoverRestore"),
+    cancelLabel: t("draftRecoverDiscard"),
+    danger: false,
+  });
+  if (!restore) {
+    await invoke("discard_editor_draft").catch(() => {});
+    return;
+  }
+  let variants = [];
+  try { variants = JSON.parse(draft.variants || "[]"); } catch (_) { variants = []; }
+  if (draft.promptId && draft.promptId !== "neu") {
+    let p = null;
+    try { p = await invoke("get_prompt", { id: draft.promptId }); } catch (_) { p = null; }
+    if (p) {
+      openModal({ ...promptToModal(p), mode: "edit", id: draft.promptId, name: draft.name, text: draft.text, variants: variants.length ? variants : (p.variants || []) });
+      return;
+    }
+  }
+  openModal({ mode: "create", name: draft.name, text: draft.text, variants, title: t("nameModalTitle") });
+}
+
 // ---- Init ----
 // Re-read settings from the backend and apply the global, order-sensitive parts
 // (palette, language, sizing, theme). Shared by init() and reloadEverything() so a
@@ -19390,6 +19686,7 @@ async function init() {
         const sealWarned = await warnStoreUnsealed();
         await warnSettingsWriteFailed();
         await maybeOpenFirstRunTour(sealWarned);
+        await maybeOfferEditorDraftRecovery();
       });
     };
     setTimeout(reveal, 1500);

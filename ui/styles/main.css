@@ -4221,6 +4221,38 @@ body.drag-over::after {
 .palette-swatch::-webkit-color-swatch { border: none; border-radius: 6px; }
 .palette-reset { align-self: flex-start; }
 
+/* Fixed placeholder values, the expert menu's variables group. */
+.var-fixed-field { gap: 8px; }
+.var-fixed-heading { font-size: 12px; font-weight: 600; color: var(--muted); }
+.var-fixed-list { display: flex; flex-direction: column; gap: 6px; }
+.var-fixed-row { display: flex; align-items: center; gap: 8px; }
+.var-fixed-name {
+  flex: 0 0 auto;
+  min-width: 80px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.var-fixed-value { flex: 1; min-width: 0; }
+.var-fixed-del { flex: 0 0 auto; }
+.var-fixed-add { display: flex; align-items: center; gap: 8px; }
+.var-fixed-add-name { flex: 0 0 140px; }
+.var-fixed-add-value { flex: 1; min-width: 0; }
+.var-fixed-add-btn { flex: 0 0 auto; }
+.var-fixed-empty { color: var(--muted); font-size: 12px; }
+/* Marks a fill-in field whose starting state came from the fixed-value list --
+   only ever a suggestion (the placeholder), never inserted into the value. */
+.var-fixed-marker {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-left: 4px;
+  opacity: 0.65;
+  color: var(--accent, var(--muted));
+  vertical-align: middle;
+}
+
 /* Confirm dialog (discard unsaved changes) */
 .confirm-msg { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .primary-btn.danger-confirm { background: var(--danger); color: #fff; }

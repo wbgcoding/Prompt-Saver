@@ -3874,6 +3874,99 @@ PROBE = """
     await click('expert-back');
     document.getElementById('settings').classList.add('hidden');
     await sleep(150);
+    // The save-time similar-prompt hint (its own switch, sharing similarThreshold
+    // with the duplicate finder above -- same System & data group). Off first:
+    // even with a fixture hit ready, saving must show nothing of the kind. Edits
+    // an EXISTING library entry rather than creating a new one -- the grid may
+    // be full of tiles the earlier parts of this sweep already placed, but the
+    // save path (and the code that fires the hint) is identical either way.
+    const findSimHintBox = () => {
+      const row = [...document.querySelectorAll('#expert-flags label.switch-field')]
+        .find((r) => r.querySelector('span')?.textContent === 'Similar-prompt hint on save');
+      return row ? row.querySelector('input[type="checkbox"]') : null;
+    };
+    const editViaLibrary = async (id, text) => {
+      await click('library-btn');
+      await sleep(150);
+      const editBtn = document.querySelector(`#library-list .lib-item[data-id="${id}"] .lib-edit`);
+      if (!editBtn) { out.errors.push('442: the library has no edit icon for ' + id); return false; }
+      editBtn.click();
+      await sleep(200);
+      document.getElementById('modal-text').value = text;
+      document.getElementById('modal-confirm').click();
+      await sleep(400);
+      return true;
+    };
+    document.getElementById('settings').classList.remove('hidden');
+    await click('expert-open');
+    let simTab = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')].find(b => /system/i.test(b.textContent));
+    if (simTab) { simTab.click(); await sleep(200); }
+    const simBoxOff = findSimHintBox();
+    if (!simBoxOff) {
+      out.errors.push('442: the expert menu has no similar-prompt-hint switch');
+    } else {
+      if (!simBoxOff.checked) out.errors.push('442: similarHint does not ship on');
+      simBoxOff.click(); // off
+      await sleep(150);
+    }
+    await click('expert-back');
+    document.getElementById('settings').classList.add('hidden');
+    await sleep(150);
+    window.__SIMILAR_HINT_FIXTURE__ = { id: 'p1', name: 'Prompt 2' };
+    if (await editViaLibrary('p2', 'Similar hint off test edit.')) {
+      if ([...document.querySelectorAll('#toast .toast-chip')].some((c) => c.textContent === 'Open')) {
+        out.errors.push('442: the hint appeared while similarHint is off');
+      }
+    }
+    // Back on, then the hint itself: message, Compare, and (on a second save)
+    // Open, since a chip click closes the toast that carried it.
+    document.getElementById('settings').classList.remove('hidden');
+    await click('expert-open');
+    simTab = [...document.querySelectorAll('#expert-tabs-bar .expert-tab')].find(b => /system/i.test(b.textContent));
+    if (simTab) { simTab.click(); await sleep(200); }
+    findSimHintBox()?.click(); // on
+    await sleep(150);
+    await click('expert-back');
+    document.getElementById('settings').classList.add('hidden');
+    await sleep(150);
+    if (await editViaLibrary('p3', 'Similar hint on test edit, compare action.')) {
+      const toastEl = document.getElementById('toast');
+      const chips = [...toastEl.querySelectorAll('.toast-chip')];
+      if (toastEl.classList.contains('hidden') || chips.length !== 2) {
+        out.errors.push('442: the similar-prompt hint did not appear with its two actions');
+      } else {
+        if (!toastEl.textContent.includes('Prompt 2')) out.errors.push('442: the hint does not name the similar prompt');
+        const compareChip = chips.find((c) => c.textContent === 'Compare');
+        if (!compareChip) {
+          out.errors.push('442: the hint has no Compare action');
+        } else {
+          compareChip.click();
+          await sleep(300);
+          if (document.getElementById('compare-modal').classList.contains('hidden')) {
+            out.errors.push('442: Compare on the hint did not open the compare view');
+          }
+          await click('compare-close');
+          await sleep(200);
+        }
+      }
+    }
+    if (await editViaLibrary('p4', 'Similar hint on test edit, open action.')) {
+      const openChip = [...document.querySelectorAll('#toast .toast-chip')].find((c) => c.textContent === 'Open');
+      if (!openChip) {
+        out.errors.push('442: the hint has no Open action on its second appearance');
+      } else {
+        openChip.click();
+        await sleep(300);
+        if (document.getElementById('modal').classList.contains('hidden') || document.getElementById('modal-name').value !== 'Prompt 2') {
+          out.errors.push('442: Open on the hint did not open the similar prompt for editing');
+        }
+        await click('modal-close-x');
+        await sleep(200);
+        const cmAfterOpen = document.getElementById('confirm-modal');
+        if (!cmAfterOpen.classList.contains('hidden')) { await click('confirm-ok'); await sleep(200); }
+      }
+    }
+    delete window.__SIMILAR_HINT_FIXTURE__;
     // Compare view detached from the duplicate finder: the library's own
     // selection reaches it too, for two entries the finder never flagged.
     await click('library-btn');
@@ -9093,10 +9186,36 @@ TRAY_PROBE = """
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
     await sleep(30);
     if (!rows()[0].classList.contains('active')) errs.push('ArrowUp did not move the highlight back to row 0');
+    // Point 441: the filter row at the very top. Reaches a prompt the fixed
+    // favorites/recents selection above never showed, replaces that fixed
+    // selection while something is typed (no headers), leaves the window
+    // itself unresized, and restores the fixed selection once cleared again.
+    const field = document.getElementById('tray-search');
+    if (!field || field.hidden) errs.push('the search field is missing or hidden while traySearch is on');
+    const startW = window.innerWidth, startH = window.innerHeight;
+    field.value = 'alpha';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(150);
+    const searchHit = rows().find((r) => r.dataset.id === 'tray-copy-p4');
+    if (!searchHit) errs.push('typing did not surface a prompt outside the fixed favorites/recents selection');
+    if (document.querySelectorAll('#card .tray-menu-head').length) errs.push('a search result list must not draw the fixed section headers');
+    if (window.innerWidth !== startW || window.innerHeight !== startH) errs.push('the window resized while searching');
+    if (!rows()[0].classList.contains('active')) errs.push('the first search result is not highlighted');
+    field.value = '';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(30);
+    if (rows().length !== 5) errs.push('clearing the field did not restore the fixed selection, found ' + rows().length + ' rows');
+    if (document.querySelectorAll('#card .tray-menu-head').length !== 2) errs.push('clearing the field did not restore the section headers');
+    // Search again, then Enter -- proves the filter row's own hit runs through
+    // the exact same activation as a plain click (tray_window_activate), same
+    // as the fixed selection already used above.
+    field.value = 'alpha';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(150);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await sleep(30);
-    if (window.__TRAY_ACTIVATED__ !== 'tray-copy-p1') {
-      errs.push('Enter did not activate the highlighted row: ' + window.__TRAY_ACTIVATED__);
+    if (window.__TRAY_ACTIVATED__ !== 'tray-copy-p4') {
+      errs.push('Enter on a search result did not go through tray_window_activate: ' + window.__TRAY_ACTIVATED__);
     }
     // Same "one action ever" guard the launcher and vars windows use: a stray
     // Escape after a real activation must never ALSO fire tray_window_close.
@@ -11665,6 +11784,79 @@ window.__WHATS_NEW_FIXTURE__ = {
 </script>
 """
 
+# 443: a crash draft found at the next start offers to restore it exactly
+# once; declining discards it right away, and a later ordinary editor open
+# must never ask about it again (the offer is a one-time boot check, not tied
+# to openModal).
+EDITOR_DRAFT_PROBE = """
+<script>
+window.__EDITOR_DRAFT_FIXTURE__ = {
+  promptId: "neu",
+  name: "",
+  text: "Recovered body text that should show up in the preview.",
+  variants: "[]",
+  updatedAt: Math.floor(Date.now() / 1000) - 120,
+};
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
+  try {
+    const cm = document.getElementById('confirm-modal');
+    // Earlier boot dialogs (the store-takeover offer, an unsealed-store
+    // warning) can show first -- dismiss whichever of those come up until the
+    // recovery question itself, identified by its own title, appears.
+    let shown = false;
+    for (let i = 0; i < 60 && !shown; i++) {
+      await sleep(300);
+      if (cm.classList.contains('hidden')) continue;
+      const title = document.getElementById('confirm-title').textContent;
+      if (/restore/i.test(title)) { shown = true; break; }
+      document.getElementById('confirm-cancel').click();
+    }
+    if (!shown) {
+      errs.push('443: no recovery question appeared for a found draft');
+    } else {
+      const title = document.getElementById('confirm-title').textContent.trim();
+      const msg = document.getElementById('confirm-msg').textContent.trim();
+      if (!/restore/i.test(title)) errs.push('443: recovery dialog title does not read as a restore question: ' + title);
+      if (!msg.includes('Recovered body text')) errs.push('443: recovery dialog does not preview the draft text: ' + msg);
+      const loadCalls = calls().filter((c) => c === 'load_editor_draft').length;
+      if (loadCalls !== 1) errs.push('443: load_editor_draft was called ' + loadCalls + ' times at boot, expected exactly once');
+
+      document.getElementById('confirm-cancel').click(); // decline the restore
+      await sleep(200);
+      if (!cm.classList.contains('hidden')) errs.push('443: declining the recovery question left it open');
+      if (!calls().includes('discard_editor_draft')) errs.push('443: declining the recovery question never discarded the draft');
+
+      // An ordinary editor open right afterward must never ask again.
+      const input = document.getElementById('input');
+      const save = document.getElementById('save');
+      input.value = 'A fresh prompt typed after declining the draft.';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      save.click();
+      await sleep(200);
+      const modal = document.getElementById('modal');
+      if (modal.classList.contains('hidden')) errs.push('443: the editor did not open for the fresh prompt');
+      if (!cm.classList.contains('hidden')) errs.push('443: opening the editor normally re-asked the recovery question');
+      document.getElementById('modal-close-x').click();
+      await sleep(200);
+      if (!cm.classList.contains('hidden')) {
+        // The ordinary discard-confirmation for a still-open create modal --
+        // unrelated to the recovery question, just closing it out cleanly.
+        document.getElementById('confirm-ok').click();
+        await sleep(150);
+      }
+    }
+  } catch (e) { errs.push('443 probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
 # 475: the extra-video-source limit used to be a fixed constant; it is now an
 # expert value the smoke run can dial down and prove the "add a video" flow
 # actually reads.
@@ -11825,6 +12017,155 @@ RETENTION_PANEL_PROBE = """
       errs.push('413: the cleanup toast rendered a raw i18n key: ' + toastEl.textContent);
     }
   } catch (e) { errs.push('413 probe: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+# 444: fixed values for recurring placeholders -- the expert-menu list (add,
+# edit shows in the row, delete), the empty-state hint, and the fill-in
+# dialog's marker + placeholder-only suggestion (never silently inserted).
+VAR_FIXED_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && cm.classList.contains('hidden'); i++) await sleep(100);
+    if (!cm.classList.contains('hidden')) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+
+    document.getElementById('gear').click();
+    await sleep(150);
+    document.getElementById('expert-open').click();
+    await sleep(200);
+
+    const rowByLabel = async (label) => {
+      const hit = () => [...document.querySelectorAll('#expert-flags .switch-field')]
+        .find(r => ((r.querySelector('span') || {}).textContent || '').includes(label));
+      if (hit()) return hit();
+      for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+        tb.click();
+        await sleep(200);
+        if (hit()) return hit();
+      }
+      return null;
+    };
+    const flagRow = await rowByLabel('Suggest fixed values for placeholders');
+    if (!flagRow) {
+      errs.push('444: the fixed-value flag is missing from the expert menu');
+    } else {
+      flagRow.querySelector('input.switch').click();
+      await sleep(150);
+      // The flag is not a gate for anything else, so force a redraw the same
+      // way switching tabs already does, instead of relying on one.
+      const activeTab = document.querySelector('#expert-tabs-bar .expert-tab.active');
+      if (activeTab) { activeTab.click(); await sleep(150); }
+
+      let field = document.querySelector('.var-fixed-field');
+      if (!field) errs.push('444: the fixed-value list did not appear once the flag was on');
+      if (field && !field.querySelector('.var-fixed-empty')) {
+        errs.push('444: the empty-state hint is missing before any fixed value exists');
+      }
+
+      if (field) {
+        field.querySelector('.var-fixed-add-name').value = 'topic';
+        field.querySelector('.var-fixed-add-value').value = 'coffee';
+        field.querySelector('.var-fixed-add-btn').click();
+        await sleep(150);
+        field = document.querySelector('.var-fixed-field');
+        const rows = field ? [...field.querySelectorAll('.var-fixed-row')] : [];
+        if (rows.length !== 1) {
+          errs.push('444: adding a fixed value did not produce exactly one row, found ' + rows.length);
+        } else {
+          const nameText = rows[0].querySelector('.var-fixed-name').textContent;
+          if (nameText !== 'topic') errs.push('444: the added row shows the wrong name: ' + nameText);
+          const valueInput = rows[0].querySelector('.var-fixed-value');
+          if (!valueInput || valueInput.value !== 'coffee') {
+            errs.push('444: the added row does not carry the expected value: ' + (valueInput && valueInput.value));
+          }
+        }
+        if (field && field.querySelector('.var-fixed-empty')) {
+          errs.push('444: the empty-state hint is still shown although a fixed value exists');
+        }
+        if (!(window.__SMOKE_CALLS__ || []).includes('set_ui_text')) {
+          errs.push('444: adding a fixed value never persisted it');
+        }
+
+        if (rows.length === 1) {
+          rows[0].querySelector('.var-fixed-del').click();
+          await sleep(150);
+          field = document.querySelector('.var-fixed-field');
+          const rowsAfter = field ? field.querySelectorAll('.var-fixed-row').length : -1;
+          if (rowsAfter !== 0) errs.push('444: deleting the fixed value did not remove its row, found ' + rowsAfter);
+          if (!field || !field.querySelector('.var-fixed-empty')) {
+            errs.push('444: the empty-state hint did not come back after the only fixed value was deleted');
+          }
+        }
+
+        // Put one back for the fill-in dialog check below.
+        field = document.querySelector('.var-fixed-field');
+        if (field) {
+          field.querySelector('.var-fixed-add-name').value = 'topic';
+          field.querySelector('.var-fixed-add-value').value = 'coffee';
+          field.querySelector('.var-fixed-add-btn').click();
+          await sleep(150);
+        }
+      }
+    }
+
+    document.getElementById('expert-back').click();
+    await sleep(100);
+    document.getElementById('settings').classList.add('hidden');
+
+    // A prompt with an unresolved placeholder must offer the fixed value as a
+    // placeholder-only suggestion, marked, never inserted into the value.
+    // The stub seeds the grid with its own fixture prompts, so the new one
+    // has to be found by diffing tile ids, not by picking the first tile.
+    const idsBefore = new Set([...document.querySelectorAll('#grid .tile')].map(el => el.dataset.id));
+    const inputEl = document.getElementById('input');
+    const saveBtn = document.getElementById('save');
+    inputEl.value = 'Say hi to {#{topic}#}.';
+    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    saveBtn.click();
+    await sleep(200);
+    const nameField = document.getElementById('modal-name');
+    nameField.value = 'Fixed value test prompt';
+    nameField.dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('modal-confirm').click();
+    await sleep(300);
+
+    const tile = [...document.querySelectorAll('#grid .tile')].find(el => !idsBefore.has(el.dataset.id));
+    if (!tile) {
+      errs.push('444: the new prompt with a placeholder did not appear on the grid');
+    } else {
+      for (const type of ['pointerdown', 'pointerup', 'click']) {
+        tile.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, isPrimary: true, pointerId: 1 }));
+      }
+      await sleep(400);
+      if (document.getElementById('vars-modal').classList.contains('hidden')) {
+        errs.push('444: copying a prompt with a placeholder did not open the fill-in dialog');
+      } else {
+        const field2 = document.querySelectorAll('#vars-fields .field')[0];
+        const control = field2 && field2.querySelector('input[type=text]');
+        if (!control) {
+          errs.push('444: the fill-in dialog has no text field for the placeholder');
+        } else {
+          if (control.value) errs.push('444: the fixed value was inserted instead of only suggested, got: ' + control.value);
+          if (control.placeholder !== 'coffee') errs.push('444: the field placeholder does not carry the fixed value, got: ' + control.placeholder);
+        }
+        if (!field2 || !field2.querySelector('.var-fixed-marker')) {
+          errs.push('444: the fixed-value marker is missing next to the field');
+        }
+        document.getElementById('vars-close').click();
+        await sleep(150);
+      }
+    }
+  } catch (e) { errs.push('444 probe: ' + e.message); }
   errs.push(...(window.__SMOKE_ERRORS__ || []));
   const pre = document.createElement('pre');
   pre.id = 'SMOKE';
@@ -12428,6 +12769,55 @@ def main():
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- retention overview in the statistics/backups window")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # 443: editor draft autosave -- a crash draft found at boot, the
+        # one-time recovery question, declining it, and a later ordinary
+        # editor open never re-asking.
+        side = tmp / "ui" / "editor-draft.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", EDITOR_DRAFT_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-editor-draft'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- editor draft: crash recovery offered once, decline discards it")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # 444: fixed values for recurring placeholders -- expert-menu list
+        # (add/edit/delete) and the fill-in dialog's marker + suggestion.
+        side = tmp / "ui" / "var-fixed.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", VAR_FIXED_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-var-fixed'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- fixed placeholder values: list editor and fill-in suggestion")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

@@ -54,6 +54,7 @@ DEPENDENCIES = {
     "choiceVars": "promptVars",
     "choiceRemember": "choiceVars",
     "varPopupWindow": "promptVars",
+    "varFixed": "promptVars",
     "dateStyle": "dynVars",
     "timeStyle": "dynVars",
     "counterUnits": "lengthCounter",
@@ -179,7 +180,8 @@ DEPENDENCIES = {
     "viewBorder": "multiView",
     "viewGroupMaxRows": "viewGroups",
     "dupImportCheck": "dupFinder",
-    "dupThreshold": "dupFinder",
+    "similarThreshold": "similarHint",
+    "editorDraftSecs": "editorDraft",
     "clipMinChars": "clipWatcher",
     "clipInboxMax": "clipWatcher",
     # Backups + statistics (rendered outside the expert menu, gate still required)
