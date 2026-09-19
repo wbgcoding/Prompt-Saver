@@ -64,4 +64,8 @@ function setInk(ink) {
   if (applied) applyFloatTheme(lastTheme, lastVars);
 }
 window.__TAURI__.event.listen("theme-changed", (e) => setInk(e.payload?.ink)).catch(() => {});
-window.__TAURI__.core.invoke("ink_prefs").then(setInk).catch(() => {});
+const fetchInk = () => window.__TAURI__.core.invoke("ink_prefs").then(setInk).catch(() => {});
+fetchInk();
+// A pill or folder window is told that a setting changed, but not which one --
+// re-read the rule instead of waiting for the next theme change.
+window.__TAURI__.event.listen("settings-changed", fetchInk).catch(() => {});

@@ -2609,7 +2609,7 @@ async function resetOneExpertValue(kind, key, after) {
 // rotatingPrompts/rotateBadge gate a tile's own rotate-badge element -- without
 // a full rebuild here, an already-open grid keeps showing (or hiding) it until some
 // unrelated re-render happens to catch up.
-const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip", "tileTimeTip", "rotatingPrompts", "rotateBadge", "tileHotkeyBadge"]);
+const TILE_DOM_FLAGS = new Set(["tilePreview", "captions", "promptNotes", "notesInTooltip", "tileTimeTip", "rotatingPrompts", "rotateBadge", "tileHotkeyBadge", "autoInk"]);
 
 function flagRow(key) {
   const row = document.createElement("label");
@@ -2704,9 +2704,14 @@ function flagRow(key) {
 // Almost every expert value only drives a CSS variable, so rebuilding the whole grid
 // for it threw away and recreated every tile — visible as a flash through the
 // translucent settings overlay. Only these actually change tile DOM.
-const GRID_DOM_VALUES = new Set(["previewLen", "gridMax", "notesTipLen"]);
+const GRID_DOM_VALUES = new Set(["previewLen", "gridMax", "notesTipLen", "inkThreshold"]);
 // Re-fit the tile text to the new box size without touching the DOM.
-const refreshTiles = (key) => (GRID_DOM_VALUES.has(key) ? renderGrid(true) : (fitAllTiles(), undefined));
+const refreshTiles = (key) => {
+  // A view tab paints its ink as an inline style, so it needs its own
+  // re-render -- no CSS var carries the ink rule.
+  if (key === "inkThreshold") renderViews();
+  return GRID_DOM_VALUES.has(key) ? renderGrid(true) : (fitAllTiles(), undefined);
+};
 
 // Live slider preview: reflect the value visually while dragging (CSS vars + at most
 // one refit per frame), then persist it on release.
