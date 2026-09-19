@@ -976,7 +976,9 @@ body.grid-selecting .tile-type { opacity: 0; }
   justify-content: center;
   width: 18px;
   height: 18px;
+  border: none;
   padding: 0;
+  background: none;
   color: var(--fg);
   opacity: 0;
   cursor: pointer;
