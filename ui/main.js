@@ -584,8 +584,8 @@ const TOAST_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden=
 
 // Relative luminance -> the ink that stays readable on `hex`. Switched off
 // (autoInk), the text is always white; switched on, black only above the
-// expert-tunable inkThreshold (a plain WCAG 0.179 split flipped black on
-// medium blues, which read as too dark to Ben).
+// expert-tunable inkThreshold (a plain WCAG 0.179 split flipped black text
+// onto medium colors that read as too dark for black text).
 function readableInk(hex) {
   const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ""));
   if (!m) return "#fff";
