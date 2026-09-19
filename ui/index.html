@@ -732,6 +732,13 @@
         </select>
       </div>
       <p id="video-cleanup-summary" class="modal-hint"></p>
+      <!-- A checkbox per row lets you export some of these before they
+           age out, in one go, instead of opening the full video editor once
+           per file -- All/None same as the library's own batch bar. -->
+      <div class="import-preview-list-head">
+        <button id="video-cleanup-select-all" type="button" class="ghost-btn" data-i18n="selectAll">All</button>
+        <button id="video-cleanup-select-none" type="button" class="ghost-btn" data-i18n="selectNone">None</button>
+      </div>
       <div id="video-cleanup-list" class="import-preview-list"></div>
       <!-- A discarded recording sits here, in the folder's own "verworfen"
            subfolder, until its retention window runs out -- shown only while at
@@ -742,8 +749,60 @@
         <div id="video-cleanup-discarded-list" class="import-preview-list"></div>
       </div>
       <div class="modal-actions">
+        <button id="video-cleanup-export" type="button" class="ghost-btn" data-i18n="videoCleanupExportSelected">Export selected</button>
         <button id="video-cleanup-cancel" class="ghost-btn" data-i18n="cancel">Cancel</button>
         <button id="video-cleanup-confirm" class="ghost-btn danger-btn" data-i18n="delete">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Deliberately lean, one dialog for the whole batch -- format,
+       quality, destination, nothing else. The full video editor's export
+       panel (crop, overlays, a timeline) makes no sense for several finished
+       recordings at once, so this is its own small dialog rather than
+       opening that editor once per file. -->
+  <div id="batch-export-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal modal-narrow">
+      <div class="modal-titlebar">
+        <h2 class="modal-title" data-i18n="batchExportTitle">Export selected recordings</h2>
+        <button id="batch-export-close" class="icon-btn modal-x" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <p id="batch-export-summary" class="modal-hint"></p>
+      <label class="field expert-dropdown-row">
+        <span data-i18n="veExportFormat">Format</span>
+        <select id="batch-export-format" class="modal-input">
+          <option value="mp4">MP4</option>
+          <option value="webm">WebM</option>
+          <option value="gif">GIF</option>
+          <option value="avi">AVI</option>
+          <option value="mov">MOV</option>
+          <option value="mkv">MKV</option>
+          <option value="webpanim">WebP</option>
+          <option value="apng">APNG</option>
+        </select>
+      </label>
+      <label class="field expert-dropdown-row">
+        <span data-i18n="veExportQuality">Quality</span>
+        <select id="batch-export-quality" class="modal-input">
+          <option value="high" data-i18n="veQualityHigh">High</option>
+          <option value="small" data-i18n="veQualitySmall">Small</option>
+          <option value="lossless" data-i18n="veQualityLossless">Lossless</option>
+        </select>
+      </label>
+      <div class="field">
+        <span data-i18n="batchExportDestLabel">Destination folder</span>
+        <div class="export-row">
+          <span id="batch-export-dest-out" class="ve-muted"></span>
+          <button id="batch-export-choose-dest" class="ghost-btn" type="button" data-i18n="pathChange">Change…</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="batch-export-cancel" class="ghost-btn" data-i18n="cancel">Cancel</button>
+        <button id="batch-export-start" class="primary-btn" data-i18n="exportBtn">Export</button>
       </div>
     </div>
   </div>

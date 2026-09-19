@@ -450,6 +450,11 @@ the video editor and the introduction tour ship on).
   preview lists every file with its tags, size and a checkbox, and grays out
   anything unreadable with the reason why. How deep it looks into subfolders
   and how many files it stops at are both adjustable in the expert menu.
+- **Export recordings in a batch.** The recording folder's cleanup dialog gets
+  a checkbox per file plus Select all/none; Export selected opens a small
+  dialog for format, quality and a destination folder, then encodes every
+  checked recording in one go and reports how many finished and how many
+  failed. How many export at once is adjustable in the expert menu.
 
 ### Improved
 

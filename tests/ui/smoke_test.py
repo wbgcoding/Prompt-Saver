@@ -3330,6 +3330,51 @@ PROBE = """
             if (!(summary.textContent || '').includes('3.0 MB')) {
               out.errors.push('the video cleanup summary reads "' + summary.textContent + '"');
             }
+            // A checkbox per row plus Select all/none feeds "Export
+            // selected", which opens its own small dialog for format,
+            // quality and destination, then calls the batch command with
+            // resolved source and destination paths.
+            {
+              const exportBtn = document.getElementById('video-cleanup-export');
+              if (exportBtn.disabled !== true) out.errors.push('the export-selected button starts enabled although nothing is checked');
+              document.getElementById('video-cleanup-select-all').click();
+              if (exportBtn.disabled) out.errors.push('Select all did not enable the export-selected button');
+              document.getElementById('video-cleanup-select-none').click();
+              if (!exportBtn.disabled) out.errors.push('Select none did not disable the export-selected button');
+              document.getElementById('video-cleanup-select-all').click();
+              window.__PICK_FOLDER__ = 'C:\\\\Export\\\\Out';
+              window.__BATCH_EXPORT_CALLED__ = null;
+              exportBtn.click();
+              await sleep(200);
+              const bModal = document.getElementById('batch-export-modal');
+              if (!bModal || bModal.classList.contains('hidden')) {
+                out.errors.push('Export selected did not open the batch-export dialog');
+              } else {
+                const bSummary = document.getElementById('batch-export-summary');
+                if (!(bSummary.textContent || '').includes('1')) {
+                  out.errors.push('the batch export summary does not mention the 1 selected recording');
+                }
+                document.getElementById('batch-export-choose-dest').click();
+                await sleep(150);
+                const destOut = document.getElementById('batch-export-dest-out');
+                if ((destOut.textContent || '') !== 'C:\\\\Export\\\\Out') {
+                  out.errors.push('choosing a destination folder did not show its path');
+                }
+                document.getElementById('batch-export-start').click();
+                await sleep(200);
+                if (!window.__BATCH_EXPORT_CALLED__) {
+                  out.errors.push('Start did not call export_recordings_batch');
+                } else {
+                  const items = window.__BATCH_EXPORT_CALLED__.items || [];
+                  if (items.length !== 1 || items[0].dest_path !== 'C:\\\\Export\\\\Out\\\\old-recording.mp4') {
+                    out.errors.push('export_recordings_batch got the wrong item paths: ' + JSON.stringify(items));
+                  }
+                }
+                if (!bModal.classList.contains('hidden')) out.errors.push('the batch-export dialog did not close after Start');
+                if (modal.classList.contains('hidden')) out.errors.push('the video-cleanup modal did not reopen after a batch export');
+              }
+              window.__PICK_FOLDER__ = null;
+            }
             // Changing the age re-runs the preview with the new value.
             window.__SMOKE_ARGS__ = [];
             ageSel.value = '7';

@@ -187,6 +187,13 @@ period, so a just-stopped recording that is still finalising is never
 touched; both the grace period and the check interval are adjustable in the
 expert menu, alongside a manual "clean up now" action.
 
+The same cleanup dialog can also export several finished recordings at once.
+A checkbox per file, plus Select all/none, picks which ones; "Export
+selected" opens a small dialog for format, quality and a destination folder,
+then encodes every checked recording and reports how many finished and how
+many failed. How many export at the same time is adjustable in the expert
+menu.
+
 ### Video editor
 
 On by default, reachable from a recording's own result dialog (the Edit
@@ -859,7 +866,11 @@ Umwandlung, zeigt der Dialog zuerst „Wird konvertiert…" (anklicken zum
 Abbrechen) statt einer Vorschau — eine fehlgeschlagene oder abgebrochene
 Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück.
 Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme
-automatisch und behält, was bis dahin aufgenommen wurde.
+automatisch und behält, was bis dahin aufgenommen wurde. Der
+Aufräumen-Dialog im Aufnahmeordner (Experten-Menü) kann mehrere fertige
+Aufnahmen auch in einem Rutsch exportieren: Häkchen setzen, dann Format,
+Qualität und Zielordner für alle zusammen wählen. Wie viele davon
+gleichzeitig laufen, ist im Experten-Menü einstellbar.
 
 **Screenshot- und Video-Editor** — arbeiten bei den gemeinsamen Werkzeugen
 gleich: Strg+Plus, Strg+Minus und Strg+0 zoomen in beiden hinein, heraus und

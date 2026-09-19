@@ -707,6 +707,7 @@ const ERROR_MSG_KEYS = {
   "recording-target-switch-invalid-window": "recTargetSwitchInvalidWindow",
   "recording-target-switch-timeout": "recTargetSwitchTimeout",
   "file-missing": "openFileMissing",
+  "ffmpeg-missing": "recFfmpegMissingHint",
 };
 function errToast(err) {
   const s = String(err);
@@ -856,7 +857,18 @@ function renderBgOpsPop(ops) {
         cancelBtn.type = "button";
         cancelBtn.className = "ghost-btn bg-ops-action";
         cancelBtn.textContent = t("cancel");
-        cancelBtn.addEventListener("click", () => invoke(cancelCmd).catch(() => {}));
+        cancelBtn.addEventListener("click", () => {
+          // A batch export can show several "export" rows at once, each
+          // with its own generation number riding in op.id ("export-<n>") --
+          // a plain cancel_export() would always hit the video editor's own
+          // last export instead of the specific row that was actually clicked.
+          if (op.kind === "export") {
+            const generation = Number(op.id.split("-").pop());
+            invoke("cancel_export_job", { generation }).catch(() => {});
+          } else {
+            invoke(cancelCmd).catch(() => {});
+          }
+        });
         row.appendChild(cancelBtn);
       }
     }
@@ -1716,6 +1728,10 @@ const EXPERT_VALUES = {
   recDiskWarnMb: { label: "valRecDiskWarnMb", min: 200, max: 20000, step: 100, def: 500, unit: "MB", gate: "screenRecord" },
   recMaxMin: { label: "valRecMaxMin", min: 0, max: 600, step: 5, def: 0, unit: "min", zeroLabel: "valUnlimited", gate: "screenRecord" },
   recMaxMb: { label: "valRecMaxMb", min: 0, max: 100000, step: 500, def: 0, unit: "MB", zeroLabel: "valUnlimited", gate: "screenRecord" },
+  // How many recordings the "export selected" batch dialog encodes at once --
+  // more overlaps ffmpeg calls and finishes sooner, at the cost of more CPU
+  // and disk I/O in parallel.
+  exportParallel: { label: "valExportParallel", min: 1, max: 4, step: 1, def: 1, unit: "", gate: "screenRecord" },
   // How young a moov-less (broken) recording has to be to still get a pass
   // (the post-capture menu's stop might just still be finalising) and how often
   // the background sweep for it (and for merely-undecided recordings) runs.
@@ -2174,7 +2190,7 @@ const EXPERT_TABS = [
     // The recording hotkeys render their own capture row directly (hotkeyRow())
     // instead of a button that jumps to a settings field -- see actionRow()'s
     // "hotkey" branch.
-    { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode"], paths: ["recordingDir"],
+    { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb", "exportParallel"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode"], paths: ["recordingDir"],
       actions: [{ id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recStopHotkeyLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recPauseHotkeyLabel", gate: "recPauseHotkey" }] },
     { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veExtraClipsMax"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor"], paths: ["videoExportDir"] },
     // What the screenshot editor and the video editor share -- created here so
@@ -2367,7 +2383,7 @@ const EXPERT_TIPS = [
   "screenRecord", "recCursor", "recCountdownS", "recFps", "recAudioSystem", "recAudioMic", "recAudioKbps", "recMicDevice",
   "recQuality", "recBitrateKbps", "recFormat", "recordingDir",
   "recStopHotkey", "recPauseHotkey", "recTrayEntries", "recCropNotice", "recBarSize", "recTargetSwitch",
-  "recAutoCrop", "recCanvasMode", "recCanvasMaxPx", "recMaxMin", "recMaxMb", "recDiskWarnMb",
+  "recAutoCrop", "recCanvasMode", "recCanvasMaxPx", "recMaxMin", "recMaxMb", "recDiskWarnMb", "exportParallel",
   "videoEditor", "videoEditUndoMax", "veOvRemember", "videoEditSnap",
   "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veExportKbpsHigh", "veExportKbpsSmall",
   "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veOvColor", "veOvFont",
@@ -3131,6 +3147,13 @@ async function openVideoCleanup(dir) {
   const summary = $("video-cleanup-summary");
   const list = $("video-cleanup-list");
   const confirmBtn = $("video-cleanup-confirm");
+  const selectAllBtn = $("video-cleanup-select-all");
+  const selectNoneBtn = $("video-cleanup-select-none");
+  const exportBtn = $("video-cleanup-export");
+  const checks = new Map(); // file name -> its row checkbox, rebuilt on every refresh
+  const updateExportBtn = () => {
+    exportBtn.disabled = ![...checks.values()].some((cb) => cb.checked);
+  };
   const refresh = async () => {
     const ageDays = Number(ageSel.value);
     const files = await invoke("video_folder_cleanup_preview", { dir, ageDays }).catch((e) => { errToast(e); return []; });
@@ -3140,9 +3163,15 @@ async function openVideoCleanup(dir) {
       : t("videoCleanupNone");
     confirmBtn.disabled = files.length === 0;
     list.innerHTML = "";
+    checks.clear();
     for (const f of files) {
       const row = document.createElement("div");
       row.className = "import-preview-row";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.addEventListener("change", updateExportBtn);
+      checks.set(f.name, cb);
+      row.appendChild(cb);
       const name = document.createElement("span");
       name.className = "import-preview-name";
       name.textContent = f.name;
@@ -3152,6 +3181,7 @@ async function openVideoCleanup(dir) {
       row.append(name, size);
       list.appendChild(row);
     }
+    updateExportBtn();
   };
   // The trash section: a discarded recording sitting in this same
   // folder's "verworfen" subfolder, restorable or deletable one at a time --
@@ -3199,6 +3229,16 @@ async function openVideoCleanup(dir) {
   };
   ageSel.value = "30";
   ageSel.onchange = refresh;
+  selectAllBtn.onclick = () => { for (const cb of checks.values()) cb.checked = true; updateExportBtn(); };
+  selectNoneBtn.onclick = () => { for (const cb of checks.values()) cb.checked = false; updateExportBtn(); };
+  exportBtn.onclick = async () => {
+    const names = [...checks.entries()].filter(([, cb]) => cb.checked).map(([name]) => name);
+    if (!names.length) return;
+    modal.classList.add("hidden");
+    await runBatchExportRecordings(dir, names);
+    modal.classList.remove("hidden");
+    await refresh();
+  };
   await refresh();
   await refreshDiscarded();
   modal.classList.remove("hidden");
@@ -3206,6 +3246,9 @@ async function openVideoCleanup(dir) {
     const done = (v) => {
       modal.classList.add("hidden");
       ageSel.onchange = null;
+      selectAllBtn.onclick = null;
+      selectNoneBtn.onclick = null;
+      exportBtn.onclick = null;
       confirmBtn.removeEventListener("click", onOk);
       $("video-cleanup-cancel").removeEventListener("click", onCancel);
       $("video-cleanup-close").removeEventListener("click", onCancel);
@@ -3222,6 +3265,70 @@ async function openVideoCleanup(dir) {
   const deleted = await invoke("video_folder_cleanup", { dir, ageDays }).catch((e) => { errToast(e); return 0; });
   toast(t("videoFolderCleanupDone").replace("{n}", deleted));
   refreshVideoFolderInfo(dir);
+}
+
+// One small dialog for exporting several finished recordings at once --
+// format, quality, destination, nothing else. The full video editor's export
+// panel (crop, overlays, a timeline) makes no sense for a batch of unrelated
+// files, so this never opens that editor.
+async function runBatchExportRecordings(dir, names) {
+  const modal = $("batch-export-modal");
+  const summary = $("batch-export-summary");
+  const formatSel = $("batch-export-format");
+  const qualitySel = $("batch-export-quality");
+  const destOut = $("batch-export-dest-out");
+  const chooseDestBtn = $("batch-export-choose-dest");
+  const startBtn = $("batch-export-start");
+  summary.textContent = t("batchExportSummary").replace("{n}", names.length);
+  formatSel.value = "mp4";
+  qualitySel.value = "high";
+  let destDir = "";
+  destOut.textContent = "";
+  chooseDestBtn.onclick = async () => {
+    const picked = await invoke("pick_folder").catch(() => null);
+    if (picked) { destDir = picked; destOut.textContent = destDir; }
+  };
+  modal.classList.remove("hidden");
+  const started = await new Promise((resolve) => {
+    const done = (v) => {
+      modal.classList.add("hidden");
+      chooseDestBtn.onclick = null;
+      startBtn.removeEventListener("click", onOk);
+      $("batch-export-cancel").removeEventListener("click", onCancel);
+      $("batch-export-close").removeEventListener("click", onCancel);
+      resolve(v);
+    };
+    const onOk = () => {
+      if (!destDir) { toast(t("batchExportNoDest")); return; }
+      done(true);
+    };
+    const onCancel = () => done(false);
+    startBtn.addEventListener("click", onOk);
+    $("batch-export-cancel").addEventListener("click", onCancel);
+    $("batch-export-close").addEventListener("click", onCancel);
+  });
+  if (!started) return;
+  const format = formatSel.value;
+  const losslessQuality = qualitySel.value === "lossless";
+  const videoKbps = losslessQuality ? null : (qualitySel.value === "small" ? val("veExportKbpsSmall") : val("veExportKbpsHigh"));
+  const durationsMs = await invoke("video_folder_file_durations_ms", { dir, names }).catch(() => names.map(() => 0));
+  const diskWarn = await invoke("check_export_disk_space_batch", { destDir, format, videoKbps, losslessQuality, durationsMs }).catch(() => null);
+  if (diskWarn) {
+    const msg = t("recDiskWarnExportMsg")
+      .replace("{drive}", diskWarn.drive)
+      .replace("{free}", fmtBytes(diskWarn.free_mb * 1024 * 1024))
+      .replace("{needed}", fmtBytes(diskWarn.needed_mb * 1024 * 1024));
+    const proceed = await confirmDialog({ title: t("recDiskWarnTitle"), message: msg, confirmLabel: t("recDiskWarnExportAnyway"), cancelLabel: t("cancel") });
+    if (!proceed) return;
+  }
+  const items = names.map((name, i) => ({
+    src_path: `${dir}\\${name}`,
+    dest_path: `${destDir}\\${name.replace(/\.[^.]+$/, "")}.${format}`,
+    total_ms: durationsMs[i] || 0,
+  }));
+  const outcome = await invoke("export_recordings_batch", { items, format, losslessQuality, videoKbps }).catch((e) => { errToast(e); return null; });
+  if (!outcome) return;
+  toast(t("batchExportDone").replace("{ok}", outcome.ok).replace("{failed}", outcome.failed));
 }
 
 let expertTab = 0;

@@ -24157,6 +24157,22 @@ fn video_folder_cleanup(dir: String, age_days: u32) -> usize {
     n
 }
 
+// The batch-export dialog needs each selected recording's real duration
+// to build export_recordings_batch's per-item total_ms and to sum the disk
+// space check -- reuses the same ffprobe path probe_media_meta already uses
+// for a library attachment. A file that cannot be probed (missing, corrupt)
+// comes back as 0, the same "unknown" fallback probe_media_meta uses
+// everywhere else, rather than failing the whole batch over one bad file.
+fn video_folder_file_durations_ms_impl(ffprobe: Option<&Path>, dir: &Path, names: &[String]) -> Vec<u64> {
+    names.iter().map(|name| probe_media_meta(ffprobe, &dir.join(name)).0).collect()
+}
+
+#[tauri::command]
+async fn video_folder_file_durations_ms(app: AppHandle, dir: String, names: Vec<String>) -> Vec<u64> {
+    let ffprobe = ffprobe_search_path(&app);
+    video_folder_file_durations_ms_impl(ffprobe.as_deref(), Path::new(&dir), &names)
+}
+
 // Never overwrite an existing file at the target: "<stem>.<ext>", then
 // "<stem> (2).<ext>", "<stem> (3).<ext>", etc. Shared by every 280 button
 // that writes into a folder instead of a dialog-chosen exact path.
@@ -27957,6 +27973,7 @@ pub fn run() {
             video_folder_stats,
             video_folder_cleanup_preview,
             video_folder_cleanup,
+            video_folder_file_durations_ms,
             discard_recording_file,
             list_discarded_recordings,
             restore_discarded_recording,
@@ -30616,6 +30633,23 @@ mod tests {
         let path = std::env::temp_dir().join(format!("ps-mediameta-missing-{}.mp4", std::process::id()));
         let (duration_ms, width, height, size) = probe_media_meta(None, &path);
         assert_eq!((duration_ms, width, height, size), (0, 0, 0, 0));
+    }
+
+    #[test]
+    fn video_folder_file_durations_ms_reads_each_files_real_duration_and_zeros_a_missing_one() {
+        let Some(ffmpeg) = test_ffmpeg() else { return };
+        let Some(ffprobe) = test_ffprobe() else { return };
+        let dir = std::env::temp_dir().join(format!("ps-batch-durations-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        make_test_mp4(&ffmpeg, &dir, "a.mp4", 1, "64x48");
+        make_test_mp4(&ffmpeg, &dir, "b.mp4", 2, "64x48");
+        let names = vec!["a.mp4".to_string(), "b.mp4".to_string(), "missing.mp4".to_string()];
+        let durations = video_folder_file_durations_ms_impl(Some(&ffprobe), &dir, &names);
+        assert_eq!(durations.len(), 3);
+        assert!((500..=1500).contains(&durations[0]), "a.mp4 duration was {}", durations[0]);
+        assert!((1500..=2500).contains(&durations[1]), "b.mp4 duration was {}", durations[1]);
+        assert_eq!(durations[2], 0, "a missing file must come back as 0, not an error");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -381,6 +381,13 @@ const RESULTS = {
   list_discarded_recordings: () => window.__DISCARDED_FIXTURE__ || [],
   restore_discarded_recording: () => true,
   delete_discarded_recording_now: () => true,
+  // The video-cleanup modal's "Export selected" batch flow -- one
+  // duration per file, no disk-space warning unless a probe sets
+  // window.__EXPORT_DISK_WARN__, and the batch call itself recorded on
+  // window.__BATCH_EXPORT_CALLED__ so a probe can assert its items.
+  video_folder_file_durations_ms: (a) => (a.names || []).map(() => 5000),
+  check_export_disk_space_batch: () => window.__EXPORT_DISK_WARN__ || null,
+  export_recordings_batch: (a) => { window.__BATCH_EXPORT_CALLED__ = a; return { ok: (a.items || []).length, failed: 0 }; },
   probe_recording: () => ({
     duration_ms: 600000, fps: 30, width: 1920, height: 1080,
     has_audio: true, has_mic_track: true, mic_sidecar: "",
