@@ -1,0 +1,10 @@
+Independent JPEG Group License
+
+This software is based in part on the work of the Independent JPEG Group.
+Permission is granted to use, distribute, and modify this software, in
+source or binary form, provided the copyright notices for the underlying
+code are preserved and any changes are documented, in keeping with the
+Independent JPEG Group's own long-standing distribution terms. The software
+is provided "as is" without warranty of any kind.
+
+Full text: https://ijg.org

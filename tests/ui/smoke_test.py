@@ -11997,6 +11997,63 @@ window.__WHATS_NEW_FIXTURE__ = {
 </script>
 """
 
+# 451: the About window's third-party license list -- section present, expanding
+# an entry shows its license text, and no entry (including the note-only,
+# text-less one) ever expands to a blank panel.
+LICENSES_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  try {
+    document.getElementById('gear').click();
+    await sleep(150);
+    document.getElementById('about-btn').click();
+    await sleep(150);
+    const openBtn = document.getElementById('about-licenses');
+    if (!openBtn) {
+      errs.push('451: the About dialog has no third-party licenses button');
+    } else {
+      openBtn.click();
+      await sleep(150);
+      const modal = document.getElementById('licenses-modal');
+      if (!modal || modal.classList.contains('hidden')) {
+        errs.push('451: clicking the button did not open the licenses window');
+      } else {
+        const rows = Array.from(modal.querySelectorAll('.license-row'));
+        if (rows.length !== 3) errs.push('451: expected 3 rows from the fixture, found ' + rows.length);
+        for (const row of rows) {
+          const toggle = row.querySelector('.license-row-toggle');
+          const body = row.querySelector('.license-row-body');
+          toggle.click();
+          await sleep(50);
+          if (body.classList.contains('hidden')) errs.push('451: expanding ' + toggle.textContent + ' did not reveal its panel');
+          if (!body.textContent || !body.textContent.trim()) {
+            errs.push('451: expanded panel for ' + toggle.textContent + ' is empty');
+          }
+        }
+        const mitRow = rows.find((r) => r.textContent.includes('examplecrate'));
+        if (!mitRow || !mitRow.querySelector('.license-row-text')) {
+          errs.push('451: the MIT-resolved crate does not show its license text');
+        }
+        const sqliteRow = rows.find((r) => r.textContent.includes('SQLite'));
+        if (!sqliteRow || !sqliteRow.querySelector('.license-row-body').textContent.includes('Public Domain')) {
+          errs.push('451: the no-text public-domain entry does not fall back to showing its license label');
+        }
+        document.getElementById('licenses-close').click();
+        await sleep(150);
+        if (!modal.classList.contains('hidden')) errs.push('451: the licenses window did not close');
+      }
+    }
+  } catch (e) { errs.push('451 probe: ' + e.message); }
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
 # 443: a crash draft found at the next start offers to restore it exactly
 # once; declining discards it right away, and a later ordinary editor open
 # must never ask about it again (the offer is a one-time boot check, not tied
@@ -12948,6 +13005,29 @@ def main():
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- whats new: toast, window, About entry, GitHub refresh")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # 451: third-party license list in the About window.
+        side = tmp / "ui" / "licenses.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", LICENSES_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-licenses'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- third-party license list in the About window")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

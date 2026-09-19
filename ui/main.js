@@ -19320,6 +19320,101 @@ function bind() {
     })
     .catch(() => {});
 
+  // ---------- third-party licenses ----------
+  // The list itself comes from src-tauri/build.rs (generated at build time from the
+  // real dependency manifests); this only renders whatever it returns. Fetched once
+  // and cached, since the list cannot change while the app is running.
+  let thirdPartyCache = null;
+  const licensesModal = {
+    root: $("licenses-modal"),
+    close: $("licenses-close"),
+    search: $("licenses-search"),
+    list: $("licenses-list"),
+    empty: $("licenses-empty"),
+  };
+  const closeLicensesModal = () => licensesModal.root.classList.add("hidden");
+  licensesModal.close.addEventListener("click", closeLicensesModal);
+  licensesModal.root.addEventListener("pointerdown", (e) => {
+    if (e.target === licensesModal.root) closeLicensesModal();
+  });
+  const renderLicenseEntries = (data) => {
+    licensesModal.list.textContent = "";
+    const entries = data.entries || [];
+    licensesModal.search.classList.toggle("hidden", entries.length <= 20);
+    for (const entry of entries) {
+      const row = document.createElement("div");
+      row.className = "license-row";
+      row.dataset.searchKey = `${entry.name} ${entry.license}`.toLowerCase();
+
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "license-row-toggle";
+      toggle.setAttribute("aria-expanded", "false");
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "license-row-name";
+      nameSpan.textContent = `${entry.name} ${entry.version}`;
+      const licenseSpan = document.createElement("span");
+      licenseSpan.className = "license-row-license";
+      licenseSpan.textContent = entry.license;
+      toggle.append(nameSpan, licenseSpan);
+
+      const body = document.createElement("div");
+      body.className = "license-row-body hidden";
+      if (entry.note) {
+        const note = document.createElement("p");
+        note.className = "license-row-note";
+        note.textContent = entry.note;
+        body.appendChild(note);
+      }
+      const text = entry.licenseId ? data.licenseTexts[entry.licenseId] : null;
+      if (text) {
+        const pre = document.createElement("pre");
+        pre.className = "license-row-text";
+        pre.textContent = text;
+        body.appendChild(pre);
+      } else if (!entry.note) {
+        // Public-domain style entries with neither a note nor a license text
+        // still get something visible on expand -- never a blank panel.
+        const p = document.createElement("p");
+        p.className = "license-row-note";
+        p.textContent = entry.license;
+        body.appendChild(p);
+      }
+
+      toggle.addEventListener("click", () => {
+        const open = toggle.getAttribute("aria-expanded") === "true";
+        toggle.setAttribute("aria-expanded", String(!open));
+        body.classList.toggle("hidden", open);
+      });
+
+      row.append(toggle, body);
+      licensesModal.list.appendChild(row);
+    }
+    filterLicenseRows("");
+  };
+  const filterLicenseRows = (query) => {
+    const q = query.trim().toLowerCase();
+    let visible = 0;
+    licensesModal.list.querySelectorAll(".license-row").forEach((row) => {
+      const match = !q || row.dataset.searchKey.includes(q);
+      row.classList.toggle("hidden", !match);
+      if (match) visible++;
+    });
+    licensesModal.empty.classList.toggle("hidden", visible !== 0);
+  };
+  licensesModal.search.addEventListener("input", () => filterLicenseRows(licensesModal.search.value));
+  $("about-licenses").addEventListener("click", async () => {
+    try {
+      if (!thirdPartyCache) {
+        thirdPartyCache = JSON.parse(await invoke("third_party_notices"));
+      }
+      renderLicenseEntries(thirdPartyCache);
+      licensesModal.root.classList.remove("hidden");
+    } catch (err) {
+      errToast(err);
+    }
+  });
+
   // ---------- ffmpeg ----------
   // Fetched on demand only — never on app start, never in the background.
   // Discovery (next to the exe → data folder → PATH) runs entirely on the Rust

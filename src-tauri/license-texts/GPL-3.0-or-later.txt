@@ -1,0 +1,10 @@
+GNU General Public License, version 3 or later (summary)
+
+A strong copyleft license: a work distributed under it, or any modified
+version of it, must remain free software with its source available under the
+same terms. It is a separate program invoked as its own subprocess here,
+never linked into this application, so this application's own license is not
+affected by it.
+
+This is a short summary; it is not a substitute for the full legal text:
+https://www.gnu.org/licenses/gpl-3.0.html

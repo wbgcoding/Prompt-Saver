@@ -469,6 +469,12 @@ the video editor and the introduction tour ship on).
   holds, with its own edit date, size and kind, searchable by name and
   sortable by any column, with a button to restore that single prompt
   straight from the list.
+- **Third-party licenses in the About window.** A new section lists every
+  bundled open-source component (name, version, license), generated at build
+  time from the real dependency list so it can never fall out of date; each
+  entry expands to its full license text, searchable once the list passes
+  twenty entries. The same generated list replaces the hand-maintained
+  content of THIRD-PARTY-NOTICES.md.
 
 ### Improved
 

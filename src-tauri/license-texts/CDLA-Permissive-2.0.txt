@@ -1,0 +1,10 @@
+Community Data License Agreement - Permissive - Version 2.0
+
+This is a permissive license for data and databases: the data may be used,
+modified and shared for any purpose, without payment, and without any
+obligation to share changes back. A recipient must not remove any notice of
+rights the data came with, and the data is provided without warranty of any
+kind.
+
+This is a short summary; it is not a substitute for the full legal text:
+https://cdla.dev/permissive-2-0/

@@ -1,0 +1,23 @@
+[
+  {
+    "name": "PDFium",
+    "version": "bblanchon/pdfium-binaries (pinned)",
+    "license": "BSD-3-Clause",
+    "licenseId": "BSD-3-Clause",
+    "note": "Compiled into the executable and unpacked to a temporary folder the first time a PDF preview is rendered. Source: https://github.com/bblanchon/pdfium-binaries"
+  },
+  {
+    "name": "SQLite",
+    "version": "bundled via the rusqlite crate",
+    "license": "Public Domain",
+    "licenseId": null,
+    "note": "https://www.sqlite.org/copyright.html"
+  },
+  {
+    "name": "FFmpeg",
+    "version": "9.0.1 (gyan.dev essentials build)",
+    "license": "GPL-3.0-or-later",
+    "licenseId": "GPL-3.0-or-later",
+    "note": "Runs as a separate subprocess, never linked into this executable. The installer ships ffmpeg.exe directly; the portable build is not shipped with it and instead downloads it on first need, only with your explicit consent, from https://github.com/GyanD/codexffmpeg/releases/tag/9.0.1"
+  }
+]

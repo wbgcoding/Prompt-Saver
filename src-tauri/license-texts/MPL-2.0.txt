@@ -1,0 +1,10 @@
+Mozilla Public License, version 2.0 (summary)
+
+This is a file-level, weak-copyleft license. It lets this application use the
+covered files, unmodified, in a product distributed under different terms
+(including a proprietary one). Only if a covered file itself were modified
+and distributed would the source of that changed file need to be made
+available again under MPL-2.0; no such file is modified here.
+
+This is a short summary; it is not a substitute for the full legal text:
+https://mozilla.org/MPL/2.0/

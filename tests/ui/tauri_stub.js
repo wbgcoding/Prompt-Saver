@@ -794,6 +794,22 @@ const RESULTS = {
   whats_new_refresh: () => ([
     { version: "1.2.0", markdown: "## Prompt Saver 1.2.0\n\nRefreshed from GitHub." },
   ]),
+  // 451: a small stand-in for the real, build-time generated list (src-tauri/build.rs) --
+  // one crate resolved to a bundled license text, one manual entry with a note and a
+  // text, and one with a note but no text (a public-domain style entry) so the "never a
+  // blank panel" fallback in main.js has something to cover.
+  third_party_notices: () => JSON.stringify({
+    generatedFromCrateCount: 1,
+    entries: [
+      { name: "examplecrate", version: "1.0.0", license: "MIT OR Apache-2.0", licenseId: "MIT", note: null },
+      { name: "FFmpeg", version: "9.0.1", license: "GPL-3.0-or-later", licenseId: "GPL-3.0-or-later", note: "Runs as a separate subprocess." },
+      { name: "SQLite", version: "bundled", license: "Public Domain", licenseId: null, note: null },
+    ],
+    licenseTexts: {
+      MIT: "MIT License\n\nPermission is hereby granted...",
+      "GPL-3.0-or-later": "GNU General Public License, version 3 or later (summary)...",
+    },
+  }),
   // The FULL prompt, image bytes included — the editor's one fetch when it opens.
   get_prompt: (a) => {
     const p = PROMPTS.find((x) => x.id === (a && a.id)) || PROMPTS[0];

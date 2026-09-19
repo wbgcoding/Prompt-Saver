@@ -16076,6 +16076,18 @@ fn open_repo(page: Option<String>) -> Result<(), String> {
     Ok(())
 }
 
+// The third-party license list is generated at build time (build.rs) from the real
+// dependency manifests and embedded here as a plain JSON string; the frontend parses
+// it. Regenerating THIRD-PARTY-NOTICES.md from the same source happens in build.rs
+// too, so the two never show a different list.
+static THIRD_PARTY_LICENSES_JSON: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/third_party_licenses.json"));
+
+#[tauri::command]
+fn third_party_notices() -> &'static str {
+    THIRD_PARTY_LICENSES_JSON
+}
+
 // The window's minimum logical size at a given webview zoom factor: growing the
 // 680x460 floor by the same factor keeps at least 680x460 CSS pixels visible
 // (zoom scales CSS pixels inside a fixed window frame), capped to the monitor
@@ -27917,6 +27929,7 @@ pub fn run() {
             load_editor_draft,
             discard_editor_draft,
             open_repo,
+            third_party_notices,
             set_ui_zoom,
             delete_all_data,
             reset_settings,

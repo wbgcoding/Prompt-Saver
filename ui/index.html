@@ -1242,9 +1242,32 @@
       </div>
       <div class="modal-actions">
         <button id="about-whats-new" class="ghost-btn" data-i18n="whatsNewBtn">What's new</button>
+        <button id="about-licenses" class="ghost-btn" data-i18n="aboutLicenses">Third-party licenses</button>
         <button id="about-repo" class="ghost-btn" data-i18n="aboutRepo">Project page on GitHub</button>
         <button id="about-ok" class="primary-btn" data-i18n="close">Close</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Third-party licenses: generated at build time from the real dependency
+       manifests (src-tauri/build.rs), never hand maintained here. -->
+  <div id="licenses-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal modal-narrow licenses-box">
+      <div class="modal-titlebar">
+        <h2 class="modal-title" data-i18n="licensesTitle">Third-party licenses</h2>
+        <button id="licenses-close" class="icon-btn modal-x" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <p class="licenses-intro" data-i18n="licensesIntro">
+        Prompt Saver is built with open-source components. The list below is generated from the
+        real dependency list every time the app is built.
+      </p>
+      <input id="licenses-search" class="modal-input hidden" type="text" data-i18n-ph="licensesSearchPh" />
+      <div id="licenses-list" class="licenses-list" role="list"></div>
+      <p id="licenses-empty" class="licenses-empty hidden" data-i18n="licensesEmpty">No entry matches this search.</p>
     </div>
   </div>
 
