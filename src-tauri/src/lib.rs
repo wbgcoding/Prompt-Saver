@@ -7564,8 +7564,56 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
     Ok(())
 }
 
-// Remembers that the take-over question was answered, so it is asked exactly once.
-const TAKEOVER_ASKED: &str = "takeoverAsked";
+// The answer is kept per SOURCE FOLDER (never a single global flag), so a
+// genuinely different old location is offered again even after an earlier one
+// was settled. Stored in the same free-form map the expert menu's own text
+// settings use, under a key namespace of its own.
+const TAKEOVER_DECISION_PREFIX: &str = "takeoverDecision:";
+
+fn takeover_decision_key(src: &std::path::Path) -> String {
+    format!("{TAKEOVER_DECISION_PREFIX}{}", src.display())
+}
+
+// Whether this exact old location was already settled, whichever way. Pulled
+// out of takeover_offer() (which needs an AppHandle) so the three answer paths
+// — adopt, keep separate, never answered — are testable without one.
+fn takeover_already_decided(ui_texts: &HashMap<String, String>, src: &std::path::Path) -> bool {
+    ui_texts.contains_key(&takeover_decision_key(src))
+}
+
+// Records the answer only if asked to remember it. Skipping the record on
+// `remember == false` is deliberate: closing the dialog without ticking that
+// box must leave nothing behind, so the same folder is offered again next
+// launch rather than being silently treated as settled.
+fn takeover_record_decision(ui_texts: &mut HashMap<String, String>, src: &std::path::Path, adopt: bool, remember: bool) {
+    if remember {
+        ui_texts.insert(takeover_decision_key(src), if adopt { "adopt" } else { "skip" }.to_string());
+    }
+}
+
+// The three things the offer dialog needs to say before anything is copied:
+// where the old data is, how big it is, and roughly how much is in it.
+#[derive(Serialize)]
+struct TakeoverOffer {
+    path: String,
+    size: u64,
+    // None when the database could not be opened (e.g. the other copy of the
+    // app still has it open) -- the dialog falls back to naming it unknown
+    // rather than blocking the offer on a count that is not essential to it.
+    prompts: Option<usize>,
+}
+
+// Size and prompt count of a store folder, read without staging or copying it
+// -- unlike a backup, a live store is a plain uncompressed data.db, so a
+// direct read-only COUNT(*) is enough and never touches restore's read rail.
+fn takeover_offer_info(src: &std::path::Path) -> TakeoverOffer {
+    let size = STORE_FILES.iter().filter_map(|f| fs::metadata(src.join(f)).ok()).map(|m| m.len()).sum();
+    let prompts = Connection::open(src.join("data.db"))
+        .ok()
+        .and_then(|c| c.query_row("SELECT COUNT(*) FROM prompts", [], |r| r.get::<_, i64>(0)).ok())
+        .map(|n| n as usize);
+    TakeoverOffer { path: src.display().to_string(), size, prompts }
+}
 
 // Whether the store has nothing an adoption offer would overwrite: no prompts at
 // all, or only the ones seed_example_prompts put there itself. Kept separate from
@@ -7575,32 +7623,38 @@ fn store_has_no_real_prompts(prompts: &[Prompt], example_prompt_ids: &[String]) 
 }
 
 // Portable run, own store still empty (or seeded-examples-only), an installed store
-// present elsewhere → the UI offers to adopt it. Returns the folder to name in the
-// dialog.
+// present elsewhere → the UI offers to adopt it, naming its size and prompt count
+// so the question is answerable without opening the app twice. Nothing here
+// copies or moves anything -- see takeover_apply for that, after an answer.
 #[tauri::command]
-fn takeover_offer(app: AppHandle, state: State<Db>) -> Option<String> {
+fn takeover_offer(app: AppHandle, state: State<Db>) -> Option<TakeoverOffer> {
     if !is_portable() {
         return None;
     }
     {
         let store = lock(&state);
-        if store.settings.ui_flags.get(TAKEOVER_ASKED) == Some(&true)
-            || !store_has_no_real_prompts(&store.prompts, &store.settings.example_prompt_ids)
-        {
+        if !store_has_no_real_prompts(&store.prompts, &store.settings.example_prompt_ids) {
             return None;
         }
     }
     let dir = data_dir(&app);
-    appdata_store_dir(&app, &dir).map(|p| p.display().to_string())
+    let src = appdata_store_dir(&app, &dir)?;
+    if takeover_already_decided(&lock(&state).settings.ui_texts, &src) {
+        return None;
+    }
+    Some(takeover_offer_info(&src))
 }
 
 // Answer to that question. `adopt` copies the installed store beside the exe (the
-// original stays untouched) and reloads it; either way the question is settled.
+// original stays untouched) and reloads it; either way, `remember` decides whether
+// this exact old location is settled for future launches or asked about again --
+// closing the dialog without ticking "do not ask again" must leave nothing decided.
 #[tauri::command]
-fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool) -> Result<(), String> {
+fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool, remember: bool) -> Result<(), String> {
     let dir = data_dir(&app);
+    let src = appdata_store_dir(&app, &dir);
     if adopt {
-        let src = appdata_store_dir(&app, &dir).ok_or("no-source")?;
+        let src = src.clone().ok_or("no-source")?;
         let mut landed = false;
         if let Err(e) = copy_store_files(&src, &dir, &mut landed) {
             // Whatever did arrive IS the store on disk now, while the one in memory
@@ -7632,9 +7686,13 @@ fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool) -> Result<(
         let fresh = load_store(&app);
         *lock(&state) = fresh;
     }
-    let mut store = lock(&state);
-    store.settings.ui_flags.insert(TAKEOVER_ASKED.to_string(), true);
-    save_settings(&app, &store.settings);
+    if remember {
+        if let Some(src) = src {
+            let mut store = lock(&state);
+            takeover_record_decision(&mut store.settings.ui_texts, &src, adopt, remember);
+            save_settings(&app, &store.settings);
+        }
+    }
     Ok(())
 }
 
@@ -32080,6 +32138,113 @@ mod tests {
     #[test]
     fn takeover_empty_store_counts_as_empty() {
         assert!(store_has_no_real_prompts(&[], &[]));
+    }
+
+    // ---- Takeover offer: info, and the three answer paths ----
+
+    #[test]
+    fn takeover_offer_info_reports_the_real_size_and_prompt_count() {
+        let root = std::env::temp_dir().join(format!("{}-test-takeover-offer-info", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let mut conn = full_schema_db(&root.join("data.db"), "info");
+        db_write_prompts(&mut conn, &numbered_prompts(4), &mut WrittenRows::new()).unwrap();
+        drop(conn);
+        std::fs::write(root.join("settings.json"), b"{}").unwrap();
+
+        let out = takeover_offer_info(&root);
+        assert_eq!(out.prompts, Some(4), "the count must come from the real database, not a guess");
+        let expected_size = fs::metadata(root.join("data.db")).unwrap().len() + fs::metadata(root.join("settings.json")).unwrap().len();
+        assert_eq!(out.size, expected_size, "size must be the actual bytes on disk, not an estimate");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn takeover_offer_info_names_an_unreadable_database_as_unknown_rather_than_failing() {
+        let root = std::env::temp_dir().join(format!("{}-test-takeover-offer-info-bad-db", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("data.db"), b"not a real database").unwrap();
+
+        let out = takeover_offer_info(&root);
+        assert_eq!(out.prompts, None, "a database that cannot be opened must report an unknown count, not crash or lie");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // "uebernehmen" (adopt): the copy lands, the source is untouched, and — since
+    // the same source is asked about — a remembered decision stops a second offer.
+    #[test]
+    fn takeover_decision_adopt_is_remembered_and_stops_a_future_offer() {
+        let root = std::env::temp_dir().join(format!("{}-test-takeover-decision-adopt", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        let src = root.join("src");
+        let dst = root.join("dst");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::create_dir_all(&dst).unwrap();
+        std::fs::write(src.join("data.db"), b"source content").unwrap();
+
+        let mut landed = false;
+        copy_store_files(&src, &dst, &mut landed).unwrap();
+        assert_eq!(fs::read(src.join("data.db")).unwrap(), b"source content", "adopting must never touch the original");
+        assert_eq!(fs::read(dst.join("data.db")).unwrap(), b"source content", "the copy must land before anything is settled");
+
+        let mut ui_texts: HashMap<String, String> = HashMap::new();
+        assert!(!takeover_already_decided(&ui_texts, &src), "an unanswered location must still be offered");
+        takeover_record_decision(&mut ui_texts, &src, true, true);
+        assert!(takeover_already_decided(&ui_texts, &src), "an adopted, remembered decision must stop the next offer");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // "getrennt lassen" (keep separate): nothing is copied, but the choice is
+    // still remembered for that exact source so it does not nag every launch.
+    #[test]
+    fn takeover_decision_keep_separate_is_remembered_without_copying_anything() {
+        let root = std::env::temp_dir().join(format!("{}-test-takeover-decision-skip", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        let src = root.join("src");
+        let dst = root.join("dst");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::create_dir_all(&dst).unwrap();
+        std::fs::write(src.join("data.db"), b"source content").unwrap();
+
+        let mut ui_texts: HashMap<String, String> = HashMap::new();
+        takeover_record_decision(&mut ui_texts, &src, false, true);
+
+        assert!(takeover_already_decided(&ui_texts, &src), "a remembered 'keep separate' must stop the next offer too");
+        assert_eq!(
+            ui_texts.get(&takeover_decision_key(&src)).map(String::as_str),
+            Some("skip"),
+            "the recorded answer must say skip, not be indistinguishable from adopt"
+        );
+        assert!(!dst.join("data.db").exists(), "keeping separate must never write anything into the new location");
+        assert_eq!(fs::read(src.join("data.db")).unwrap(), b"source content", "the source must stay exactly as it was");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // "keine Antwort" (no answer): nothing is recorded, so the exact same folder
+    // is offered again next launch, and neither side was ever touched.
+    #[test]
+    fn takeover_decision_no_answer_records_nothing_and_asks_again() {
+        let root = std::env::temp_dir().join(format!("{}-test-takeover-decision-none", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        let src = root.join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(src.join("data.db"), b"source content").unwrap();
+
+        let mut ui_texts: HashMap<String, String> = HashMap::new();
+        // Mirrors what takeover_apply does when the dialog closes with the
+        // "do not ask again" box left unticked -- remember == false either way.
+        takeover_record_decision(&mut ui_texts, &src, false, false);
+
+        assert!(ui_texts.is_empty(), "an unremembered answer must leave no trace at all");
+        assert!(!takeover_already_decided(&ui_texts, &src), "the same folder must still be offered on the next launch");
+        assert_eq!(fs::read(src.join("data.db")).unwrap(), b"source content", "the source must be untouched");
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

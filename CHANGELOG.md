@@ -460,6 +460,11 @@ the video editor and the introduction tour ship on).
 
 ### Improved
 
+- The offer to adopt an installed copy's data into a portable run now names its
+  size and prompt count before you decide, remembers your answer for that exact
+  location so it does not ask again every launch (a "do not ask again" box lets
+  you decline the memory instead), and shows where your prompts ended up, with a
+  button to open that folder, once you accept.
 - A long library list opens noticeably quicker. Each row draws three small icons,
   and their markup was rebuilt from scratch for every single row; it is now prepared
   once and copied per row. With 500 prompts the list is built in 45 ms instead of

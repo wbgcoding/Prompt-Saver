@@ -1172,7 +1172,7 @@ const RESULTS = {
   },
   clipboard_text: () => "CLIPTEXT",
   // Always offer the portable take-over so the dialog is exercised on every run.
-  takeover_offer: () => "C:\\Users\\Example\\AppData\\Roaming\\Example-Store",
+  takeover_offer: () => ({ path: "C:\\Users\\Example\\AppData\\Roaming\\Example-Store", size: 812345, prompts: 7 }),
   takeover_apply: () => null,
   pick_backup_file: () => "C:\\Backups\\Backup 2026-07-25.psb",
   // Refuses until a password is supplied — drives the retry prompt.

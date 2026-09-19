@@ -251,8 +251,22 @@ PROBE = """
       }
       const msg = document.getElementById('confirm-msg').textContent;
       if (!msg.includes('Example-Store')) out.errors.push('take-over dialog does not name the folder');
+      if (!msg.includes('7')) out.errors.push('take-over dialog does not name the prompt count');
       if (!/\\n/.test(msg)) out.errors.push('take-over dialog lost its line breaks');
+      // 449: a "do not ask again" box, checked by default, so an answer is
+      // remembered unless the person actively opts out of that memory.
+      const rememberCb = document.getElementById('confirm-cb-remember');
+      if (!rememberCb) {
+        out.errors.push('take-over dialog has no "do not ask again" checkbox');
+      } else if (!rememberCb.checked) {
+        out.errors.push('the "do not ask again" checkbox is not checked by default');
+      }
+      window.__SMOKE_ARGS__ = [];
       await click('confirm-cancel'); // "start empty"
+      const applyArgs = (window.__SMOKE_ARGS__ || []).find(c => c[0] === 'takeover_apply');
+      if (!applyArgs || applyArgs[1].adopt !== false || applyArgs[1].remember !== true) {
+        out.errors.push('starting empty with the box still checked must call takeover_apply with adopt false, remember true, got: ' + JSON.stringify(applyArgs && applyArgs[1]));
+      }
     }
     clearInterval(heartbeat);
     document.documentElement.style.removeProperty('--smoke-tick');

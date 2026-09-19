@@ -14863,23 +14863,46 @@ async function runImportAll() {
 // open on top of (or right after burying) this more urgent prompt; it retries next
 // launch instead, since tourSeen was never written this time.
 async function offerTakeover() {
-  const src = await invoke("takeover_offer").catch(() => null);
-  if (!src) return false;
+  const offer = await invoke("takeover_offer").catch(() => null);
+  if (!offer) return false;
+  const countText = offer.prompts != null ? t("takeoverPromptCount").replace("{n}", offer.prompts) : t("takeoverCountUnknown");
+  const details = `${fmtBytes(offer.size)}, ${countText}`;
   const adopt = await confirmDialog({
     title: t("takeoverTitle"),
-    message: t("takeoverBody").replace("{path}", src),
+    message: t("takeoverBody").replace("{path}", offer.path).replace("{details}", details),
     confirmLabel: t("takeoverAdopt"),
     cancelLabel: t("takeoverSkip"),
     icon: TAKEOVER_SVG,
     danger: false,
+    checkboxes: [{ key: "remember", label: t("takeoverRemember"), checked: true }],
+    checkboxesOptional: true,
   });
+  // Read regardless of how the dialog closed (Adopt, Skip, Escape or a
+  // background click all leave the checkbox's own DOM state behind) -- an
+  // unticked box must leave nothing recorded, so the same folder is offered
+  // again next launch instead of being silently settled.
+  const remember = $("confirm-cb-remember")?.checked !== false;
   try {
-    await invoke("takeover_apply", { adopt });
+    await invoke("takeover_apply", { adopt, remember });
   } catch (e) {
     errToast(e);
     return true;
   }
-  if (adopt) await reloadEverything();
+  if (adopt) {
+    await reloadEverything();
+    const newDir = await invoke("current_data_dir").catch(() => null);
+    if (newDir) {
+      const openIt = await confirmDialog({
+        title: t("takeoverDoneTitle"),
+        message: t("takeoverDoneBody").replace("{path}", newDir),
+        confirmLabel: t("close"),
+        altLabel: t("backupOpenFolder"),
+        oneButton: true,
+        danger: false,
+      });
+      if (openIt === "alt") await invoke("open_storage_folder", { path: newDir }).catch((e) => errToast(e));
+    }
+  }
   return true;
 }
 
