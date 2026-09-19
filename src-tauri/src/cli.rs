@@ -214,15 +214,19 @@ async fn try_forward(argv: &[String], cwd: &Path) -> Option<i32> {
 // plugin: `first_pipe_instance` makes a second app instance's attempt to
 // start a second server fail cleanly (relevant only with "allow multiple
 // instances" on), so exactly one running copy ever answers the pipe.
+// Every tokio named-pipe handle registers itself with the runtime's reactor the
+// moment it is created, so creating one on the plain setup() thread panics the
+// whole process before a window ever exists. The first server instance is
+// therefore created inside the spawned task, exactly like every later one.
 pub(crate) fn install_server(app: &AppHandle) {
     use tokio::net::windows::named_pipe::ServerOptions;
     let name = pipe_name();
-    let mut server = match ServerOptions::new().first_pipe_instance(true).create(&name) {
-        Ok(s) => s,
-        Err(_) => return, // another instance already owns the pipe; nothing to do here
-    };
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
+        let mut server = match ServerOptions::new().first_pipe_instance(true).create(&name) {
+            Ok(s) => s,
+            Err(_) => return, // another instance already owns the pipe; nothing to do here
+        };
         loop {
             if server.connect().await.is_err() {
                 return;
@@ -1828,6 +1832,39 @@ fn command_help(cmd: &str, sub: Option<&str>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- the pipe server is created inside the runtime, never beside it ----
+
+    // Pins the platform fact install_server's shape rests on: a tokio named
+    // pipe registers with the runtime reactor as it is created, so creating
+    // the first server instance on the plain setup thread takes the whole
+    // process down before any window exists. Creating it inside the spawned
+    // task is what keeps the app startable.
+    #[test]
+    fn creating_a_pipe_server_outside_a_runtime_panics_but_works_inside_one() {
+        use tokio::net::windows::named_pipe::ServerOptions;
+        let name = format!(r"\\.\pipe\prompt-saver-reactor-probe-{}", std::process::id());
+
+        let outside = {
+            let previous = std::panic::take_hook();
+            std::panic::set_hook(Box::new(|_| {})); // the panic here is the expected result
+            let name = name.clone();
+            let result = std::panic::catch_unwind(move || {
+                let _ = ServerOptions::new().first_pipe_instance(true).create(&name);
+            });
+            std::panic::set_hook(previous);
+            result
+        };
+        assert!(outside.is_err(), "a pipe server created off the runtime must panic");
+
+        let rt = tokio::runtime::Builder::new_current_thread().enable_io().build().unwrap();
+        rt.block_on(async {
+            assert!(
+                ServerOptions::new().first_pipe_instance(true).create(&name).is_ok(),
+                "inside a runtime the same call must succeed"
+            );
+        });
+    }
 
     // ---- a second launch never ends silently ----
 
