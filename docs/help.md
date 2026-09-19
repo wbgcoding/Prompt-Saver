@@ -741,6 +741,27 @@ default, sits in the expert menu next to the data folder field. This is a
 safety net, not a way to share the library across computers: for that,
 Markdown folder sync below is the built path.
 
+### Command line
+
+`prompt-saver.exe <command> ...` runs the app as a command line tool instead
+of opening its window: list, get, copy, add, edit, delete, restore prompts,
+manage tags and views, search, export, import, and create, list or restore
+backups, plus reading or writing one setting directly. If the app is already
+running, the command is handed to that copy and its answer is printed here.
+Otherwise the command runs on its own, straight against the database, and
+exits without ever opening a window. Either way only one process ever touches
+the database at a time.
+
+Every command takes `--help`. `--json` switches a command's output to
+machine readable JSON instead of plain text. Any command that changes
+something needs `--yes`, or it only prints what it would have done and
+changes nothing. The exceptions are `copy`, which only reads a prompt's text
+onto the clipboard, `backup create`, which only ever adds a new snapshot, and
+`export`, which only needs `--yes` to overwrite a file that already exists.
+Exit codes: 0 success, 1 bad invocation, 2 not
+found, 3 the store is locked or unavailable, 4 refused (missing `--yes`, or a
+value that failed validation). Full command list: `prompt-saver.exe --help`.
+
 ### Updates & security
 
 On by default, and — together with a first-run download of the Microsoft
@@ -1270,6 +1291,26 @@ andere Rechner ist vermutlich abgestürzt oder geschlossen) automatisch
 Experten-Menü neben dem Datenordner-Feld. Das ist ein Sicherheitsnetz, kein
 Weg, die Bibliothek über Computer hinweg zu teilen: dafür ist die
 Markdown-Ordnersynchronisierung weiter unten der gebaute Weg.
+
+**Befehlszeile:** `prompt-saver.exe <Befehl> ...` nutzt die App als
+Kommandozeilen-Werkzeug statt ihr Fenster zu öffnen: Kacheln auflisten, lesen,
+kopieren, anlegen, ändern, löschen, wiederherstellen, Tags und Ansichten
+verwalten, suchen, exportieren, importieren, Backups anlegen, auflisten oder
+wiederherstellen, dazu eine einzelne Einstellung lesen oder schreiben. Läuft
+die App bereits, geht der Befehl an diese laufende Kopie, und ihre Antwort
+erscheint hier. Sonst arbeitet der Befehl allein, direkt gegen die Datenbank,
+und beendet sich, ohne je ein Fenster zu zeigen. So greift immer nur ein
+Prozess auf die Datenbank zu.
+
+Jeder Befehl kennt `--help`. `--json` liefert die Ausgabe stattdessen
+maschinenlesbar. Ein Befehl, der etwas ändert, braucht `--yes`, sonst zeigt er
+nur, was er täte, und ändert nichts. Ausnahmen sind `copy`, das nur den Text
+einer Kachel in die Zwischenablage liest, `backup create`, das nur je einen
+neuen Schnappschuss hinzufügt, und `export`, das `--yes` nur zum
+Überschreiben einer bereits vorhandenen Datei braucht. Rückgabewerte: 0
+Erfolg, 1 falscher Aufruf, 2 nicht gefunden, 3 Bestand gesperrt oder nicht
+erreichbar, 4 abgelehnt (fehlendes `--yes`, oder ein Wert, der die Prüfung
+nicht bestanden hat). Vollständige Befehlsliste: `prompt-saver.exe --help`.
 
 **Updates & Sicherheit** — standardmäßig an, einzige eigene
 Netzwerkaktivität außer einem einmaligen WebView2-Installer-Download, falls

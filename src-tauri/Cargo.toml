@@ -24,7 +24,11 @@ tauri-plugin-single-instance = "2"
 # Optional global hotkey to summon the window + quick-launcher.
 tauri-plugin-global-shortcut = "2"
 # Async timer to re-assert snip overlay geometry after the per-monitor DPI settle.
-tokio = { version = "1", features = ["time"] }
+# "net" enables the named pipe that carries a second command-line launch's
+# request to the already-running instance and its answer back; "rt" is the
+# small standalone runtime that launch waits on it with, since nothing has
+# started Tauri's own runtime yet at that point.
+tokio = { version = "1", features = ["time", "net", "rt"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 arboard = "3"
@@ -89,6 +93,9 @@ windows = { version = "0.58", features = [
   "Win32_System_Threading", "Win32_Devices_FunctionDiscovery", "Win32_UI_Shell_PropertiesSystem",
   # Free-disk-space check (GetDiskFreeSpaceExW) ahead of a recording or export.
   "Win32_Storage_FileSystem",
+  # Console attach so a windowless command-line launch can print to the
+  # caller's own console instead of a subsystem:windows app going silent.
+  "Win32_System_Console",
 ] }
 # Screen recording (point 191): Windows Graphics Capture + its own Media
 # Foundation H.264/MP4 encoder, vetted against a real desktop before use.

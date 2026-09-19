@@ -116,6 +116,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Auto updates** | Checks for a new version on start (switchable off) with one-click install, verified against a published checksum |
 | **What's new** | A small notice after an update lists what changed since the version you last saw, from a list shipped with the app; reopen the current version's list anytime from the About dialog |
 | **100 % local** | A single local database, sealed with Windows' own per-account encryption so no other account on the PC can read it. On the rare machine where Windows refuses to encrypt (a damaged user profile), saving keeps working in readable form rather than losing the data — and the app says so on startup and permanently in the privacy settings, until the next successful save seals it again. No account, no telemetry, no network traffic except the update check and, only if video export needs ffmpeg and it isn't already present, a one-time optional download you explicitly approve |
+| **Command line** | `prompt-saver.exe <command> ...` for scripts: list, get, copy, add, edit, delete, restore, tags, views, search, export, import, backups, one setting. Talks to an already running copy over its own channel, or runs alone with no window otherwise. `--yes` guards every change, `--json` switches the output. Full list: `prompt-saver.exe --help` |
 | **Small** | ~8 MB installer (Rust / Tauri), using the Windows WebView2 runtime |
 
 ## Download

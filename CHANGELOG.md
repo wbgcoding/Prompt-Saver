@@ -21,6 +21,15 @@ the video editor and the introduction tour ship on).
 
 ### Added
 
+- **Command line.** `prompt-saver.exe <command> ...` runs the app as a
+  command line tool instead of opening its window: list, get, copy, add,
+  edit, delete and restore prompts, manage tags and views, search, export,
+  import, create/list/restore backups, and read or write one setting. Talks
+  to an already running copy over its own channel when there is one, or runs
+  alone against the database with no window otherwise, so exactly one
+  process ever touches it at a time. Every command takes `--help`, `--json`
+  switches its output to machine readable form, and any command that changes
+  something is refused without `--yes`. Full list: `prompt-saver.exe --help`.
 - **Tags** — label prompts with free-form, colored tags. The editor gets a chip
   row with type-ahead over existing tags and a per-chip color popover; the
   library gets a filter row above the results (multi-select, switchable between

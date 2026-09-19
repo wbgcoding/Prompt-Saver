@@ -19,6 +19,7 @@
 // blocking-call audit rather than by a lint sweep.
 
 pub mod brand;
+mod cli;
 
 use image::imageops::FilterType;
 use rusqlite::{params, Connection, Transaction};
@@ -2662,24 +2663,55 @@ fn is_portable() -> bool {
         .unwrap_or(true)
 }
 
+// Shared by data_dir() and the command line's headless resolver below: a
+// "datapath" pointer file in the canonical dir can redirect the store to a
+// user-chosen folder (expert menu); anything missing or invalid falls back to
+// the canonical dir, so data is never lost.
+fn resolve_datapath_redirect(base: PathBuf) -> PathBuf {
+    if let Ok(s) = fs::read_to_string(base.join("datapath")) {
+        let p = PathBuf::from(s.trim());
+        if !s.trim().is_empty() && p.is_dir() {
+            return p;
+        }
+    }
+    base
+}
+
 // Effective store location. A "datapath" pointer file in the canonical dir can
 // redirect the store to a user-chosen folder (expert menu); on anything missing
 // or invalid it falls back to the canonical dir, so data is never lost.
 fn data_dir(app: &AppHandle) -> PathBuf {
-    let base = default_data_dir(app);
-    let resolved = if let Ok(s) = fs::read_to_string(base.join("datapath")) {
-        let p = PathBuf::from(s.trim());
-        if !s.trim().is_empty() && p.is_dir() {
-            p
-        } else {
-            base
-        }
-    } else {
-        base
-    };
+    let resolved = resolve_datapath_redirect(default_data_dir(app));
     // Recorded for `append_crash_log`'s scrubbing, see `LAST_KNOWN_DATA_DIR`.
     *LAST_KNOWN_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(resolved.clone());
     resolved
+}
+
+// The command line's own copy of default_data_dir(): the same portable/APPDATA
+// resolution, minus the AppHandle-only fallback (app.path().app_data_dir(),
+// which default_data_dir only reaches when APPDATA itself is unset) and the
+// legacy-folder migration (a no-op the moment data.db already exists, which it
+// does for every install a command-line launch would ever find). A launch with
+// no AppHandle in reach at all -- there is no window to build one for -- can
+// still resolve the exact folder an ordinary launch would use.
+fn default_data_dir_headless() -> PathBuf {
+    if is_portable() {
+        if let Some(dir) = portable_data_dir() {
+            if fs::create_dir_all(&dir).is_ok() {
+                return dir;
+            }
+        }
+    }
+    let dir = std::env::var_os("APPDATA")
+        .map(PathBuf::from)
+        .map(|p| p.join(DATA_FOLDER))
+        .unwrap_or_else(|| std::env::temp_dir().join(DATA_FOLDER));
+    let _ = fs::create_dir_all(&dir);
+    dir
+}
+
+fn data_dir_headless() -> PathBuf {
+    resolve_datapath_redirect(default_data_dir_headless())
 }
 
 // The store's JSON files (prompts.json / settings.json — the DB-write fallback and the
@@ -3217,7 +3249,14 @@ fn db_conn_init_schema(conn: &Connection) -> bool {
 }
 
 fn db_conn(app: &AppHandle) -> Option<Connection> {
-    let conn = Connection::open(data_dir(app).join("data.db")).ok()?;
+    db_conn_at(&data_dir(app))
+}
+
+// Split out of db_conn() so the command line's headless path (no AppHandle to
+// resolve a folder from) can open the exact same connection, with the exact
+// same pragma and one-time schema init, as every other caller.
+fn db_conn_at(dir: &Path) -> Option<Connection> {
+    let conn = Connection::open(dir.join("data.db")).ok()?;
     // busy_timeout is connection-scoped (NOT persisted in the DB file, unlike
     // journal_mode below) so it must be set on every connection, but the schema
     // batch + migration probe are idempotent and only ever need to run once per
@@ -10270,8 +10309,13 @@ fn valid_backup_name(name: &str) -> bool {
         && name.chars().all(|c| c.is_ascii_digit() || c == '-' || c == '_')
 }
 fn list_backups_impl(app: &AppHandle) -> Vec<BackupInfo> {
-    let dir = backups_dir(app);
-    let mut out: Vec<BackupInfo> = fs::read_dir(&dir)
+    list_backups_impl_at(&backups_dir(app))
+}
+
+// Split out of list_backups_impl() for the command line's headless path,
+// which has a folder to list but no AppHandle to resolve one from.
+fn list_backups_impl_at(dir: &std::path::Path) -> Vec<BackupInfo> {
+    let mut out: Vec<BackupInfo> = fs::read_dir(dir)
         .into_iter()
         .flatten()
         .flatten()
@@ -10376,9 +10420,11 @@ fn backups_to_drop(names: &[String], keep: usize, gfs: Option<&GfsConfig>) -> Ve
     }
     names.iter().filter(|n| !keep_set.contains(*n)).cloned().collect()
 }
-fn rotate_backups(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) {
-    let dir = backups_dir(app);
-    let mut names: Vec<String> = fs::read_dir(&dir)
+// Split out of do_backup() so the command line's headless path can drop old
+// snapshots the same way, working from an already-resolved folder instead of
+// an AppHandle.
+fn rotate_backups_at(dir: &std::path::Path, keep: usize, gfs: Option<GfsConfig>) {
+    let mut names: Vec<String> = fs::read_dir(dir)
         .into_iter()
         .flatten()
         .flatten()
@@ -10505,7 +10551,14 @@ fn gunzip_to(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String
 }
 
 fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<String, String> {
-    let src = data_dir(app).join("data.db");
+    do_backup_at(&data_dir(app), &backups_dir(app), keep, gfs)
+}
+
+// Split out of do_backup() for the command line's headless path: identical
+// snapshot, naming and rotation logic, working from two already-resolved
+// folders instead of an AppHandle.
+fn do_backup_at(dir: &std::path::Path, root: &std::path::Path, keep: usize, gfs: Option<GfsConfig>) -> Result<String, String> {
+    let src = dir.join("data.db");
     if !src.exists() {
         return Err("no-store".into());
     }
@@ -10528,8 +10581,7 @@ fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<Str
     // fails on an existing directory, so claiming the name IS the check (no race).
     // stamp_secs() reads only the first three time fields, so the suffix leaves the
     // snapshot's age intact for rotation and the GFS tiers.
-    let root = backups_dir(app);
-    fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+    fs::create_dir_all(root).map_err(|e| e.to_string())?;
     let base = local_stamp();
     let mut name = base.clone();
     let mut folder = root.join(&name);
@@ -10583,7 +10635,7 @@ fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<Str
         let _ = fs::remove_dir_all(&folder);
         return Err(e);
     }
-    rotate_backups(app, keep.clamp(1, 50), gfs);
+    rotate_backups_at(root, keep.clamp(1, 50), gfs);
     Ok(name)
 }
 // A folder name "YYYY-MM-DD_HH-MM-SS" as seconds on a local civil timeline. Two of
@@ -27498,6 +27550,14 @@ mod scheduler {
 const SCHEDULER_STOP_WAIT_MS: u64 = 500;
 
 pub fn run() {
+    // A launch whose own arguments name one of the command line's subcommands
+    // never becomes a window at all: answered by the already-running instance
+    // over its own named pipe, or -- nothing running -- executed standalone
+    // against the store directly. Neither path needs WebView2, a Tauri app or
+    // the single-instance plugin below, so this has to run before all three.
+    if let Some(code) = cli::dispatch_from_launch_args() {
+        std::process::exit(code);
+    }
     #[cfg(windows)]
     if !ensure_webview2() {
         return;
@@ -27704,6 +27764,9 @@ pub fn run() {
                     move || rec_bar_heal_tick(&h),
                 );
             }
+
+            // Answers a second, command-line launch of this same exe -- see cli.rs.
+            cli::install_server(&handle);
 
             // "Only at startup" left a crashed recording's leftover sitting for
             // however long the app happened to stay open next -- the same flaw as any
