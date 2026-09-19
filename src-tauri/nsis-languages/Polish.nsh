@@ -25,4 +25,3 @@ LangString webview2DownloadSuccess ${LANG_POLISH} "Pomyślnie pobrano bootstrapp
 LangString webview2Downloading ${LANG_POLISH} "Pobieranie bootstrappera WebView2..."
 LangString webview2InstallError ${LANG_POLISH} "Błąd: instalacja WebView2 nie powiodła się z kodem wyjścia $1"
 LangString webview2InstallSuccess ${LANG_POLISH} "Pomyślnie zainstalowano WebView2"
-LangString deleteAppData ${LANG_POLISH} "Usuń dane aplikacji"

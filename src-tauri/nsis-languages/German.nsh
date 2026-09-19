@@ -26,4 +26,3 @@ LangString webview2DownloadSuccess ${LANG_GERMAN} "WebView2-Bootstrapper erfolgr
 LangString webview2Downloading ${LANG_GERMAN} "WebView2-Bootstrapper wird heruntergeladen..."
 LangString webview2InstallError ${LANG_GERMAN} "Fehler: Installation von WebView2 mit Exit-Code $1 fehlgeschlagen"
 LangString webview2InstallSuccess ${LANG_GERMAN} "WebView2 erfolgreich installiert"
-LangString deleteAppData ${LANG_GERMAN} "Anwendungsdaten löschen"

@@ -25,4 +25,3 @@ LangString webview2DownloadSuccess ${LANG_ROMANIAN} "Bootstrapper-ul WebView2 a 
 LangString webview2Downloading ${LANG_ROMANIAN} "Se descarcă bootstrapper-ul WebView2..."
 LangString webview2InstallError ${LANG_ROMANIAN} "Eroare: instalarea WebView2 a eșuat cu codul de ieșire $1"
 LangString webview2InstallSuccess ${LANG_ROMANIAN} "WebView2 a fost instalat cu succes"
-LangString deleteAppData ${LANG_ROMANIAN} "Șterge datele aplicației"
