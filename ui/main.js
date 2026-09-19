@@ -1508,9 +1508,14 @@ const OPT_FLAG_LABELS = {
   // apart from varDefaults on purpose -- a deliberately maintained value must
   // never be mistaken for whatever happened to be typed in last.
   varFixed: "flagVarFixed",
-  // Per-entry encryption (Vorschlag 68). Ships off: an untouched install has
-  // nothing to type a vault password for.
+  // Per-entry encryption. Ships off: an untouched install has nothing to type a
+  // vault password for.
   secretPrompts: "flagSecretPrompts",
+  // The local remote-access receiver and the promptsaver:// link
+  // scheme. Both off by default -- this is the app's one new network surface.
+  remoteApi: "flagRemoteApi",
+  remoteNetworkFilter: "flagRemoteNetworkFilter",
+  urlScheme: "flagUrlScheme",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
@@ -1901,6 +1906,10 @@ const EXPERT_VALUES = {
   undoToastMs: { label: "valUndoToastMs", min: 2000, max: 20000, step: 500, def: 8000, unit: "ms", gate: "undoToast" },
   // How many recent error messages the ring buffer keeps.
   errorLogMax: { label: "valErrorLogMax", min: 20, max: 500, step: 10, def: 100, unit: "", gate: "errorLog" },
+  // The port shows on the persistent badge while the receiver
+  // runs -- a companion program reads it from there, not from this slider.
+  remotePort: { label: "valRemotePort", min: 1024, max: 65535, step: 1, def: 51823, unit: "", gate: "remoteApi" },
+  remoteRateLimit: { label: "valRemoteRateLimit", min: 5, max: 300, step: 5, def: 60, unit: "/min", gate: "remoteApi" },
 };
 
 // Preset-or-custom numeric settings (dropdown with a free-entry option).
@@ -2243,6 +2252,11 @@ const EXPERT_TABS = [
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
     { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken", "undoToast", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "videoClipTtlMin", "errorLogKeepKb", "undoToastMs", "errorLogMax"], selects: ["trashRetentionDays", "recordingRetentionDays"],
       actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }, { id: "float-recall", label: "floatRecallAction", gate: "floating" }, { id: "error-log-open", label: "errorLogAction" }] },
+    // The only new network surface in the app, off by default.
+    // A link can only open or copy an entry; the receiver can do everything
+    // the command line can, gated by its own password and network switch.
+    { title: "expGroupRemote", flags: ["remoteApi", { key: "remoteNetworkFilter", gate: "remoteApi" }, "urlScheme"], values: ["remotePort", "remoteRateLimit"],
+      actions: [{ id: "remote-password-open", label: "remotePasswordAction", gate: "remoteApi" }, { id: "remote-ranges-open", label: "remoteRangesAction", gate: "remoteNetworkFilter" }] },
   ] },
 ];
 
@@ -2513,6 +2527,7 @@ const EXPERT_TIPS = [
   "journalLimit", "previewLen", "nameMaxLen", "searchRecentMax", "savedSearchMax", "maxViews", "gridMax",
   "viewBorder", "statsTopN", "viewGroups", "viewGroupMaxRows", "multiViewPrompt", "viewTabEdgeZone",
   "barToggles", "barToggleBoth", "quickGrid", "quickGridHoverOnly", "multiView", "journalGroupBtn", "journalRecentSort", "journalUsedSort", "libraryCols", "copySize", "copyFont", "showLibrary", "showJournal", "composerScale", "primaryScale",
+  "remoteApi", "remoteNetworkFilter", "urlScheme", "remotePort", "remoteRateLimit",
 ];
 const EXPERT_TIP_SET = new Set(EXPERT_TIPS);
 // Attach the tooltip for `key` to a rendered expert row, if one is defined.
@@ -2638,6 +2653,24 @@ function flagRow(key) {
       settings.ui_flags = { ...(settings.ui_flags || {}), [key]: !enabled };
       input.checked = !enabled;
     }
+    // Turning the receiver on may have just minted its very first password
+    // (see set_ui_flag's own remoteApi branch) -- shown here, once, in a
+    // selectable field, and never retrievable again after this.
+    if (key === "remoteApi" && enabled) {
+      const shown = await invoke("remote_api_take_shown_password").catch(() => null);
+      if (shown) {
+        await confirmDialog({
+          title: t("remotePasswordDialogTitle"),
+          message: t("remotePasswordDialogMessageNew"),
+          input: { type: "text", value: shown },
+          confirmLabel: t("close"),
+          oneButton: true,
+        });
+      }
+    }
+    // The bind address itself only changes on the next start() -- said here
+    // instead of pretending the wider reach applies immediately.
+    if (key === "remoteNetworkFilter" && enabled && optFlag("remoteApi")) toast(t("remoteApiReapplyNeeded"));
     // Read once at process start (before the builder exists) — flipping it live
     // cannot change which guard is already running.
     if (key === "allowMultipleInstances") toast(t("toastRestartNeeded"));
@@ -10193,6 +10226,54 @@ async function clearErrorLogAll() {
   renderErrorLogList();
 }
 EXPERT_ACTIONS["error-log-open"] = openErrorLog;
+
+// Regenerating replaces the stored hash, so a fresh plaintext is
+// shown exactly once, the same way turning the receiver on for the first
+// time already does (flagRow's own remoteApi branch).
+async function openRemotePasswordDialog() {
+  const ok = await confirmDialog({
+    title: t("remotePasswordDialogTitle"),
+    message: t("remotePasswordDialogMessageExisting"),
+    confirmLabel: t("remotePasswordRegenerate"),
+  });
+  if (!ok) return;
+  let fresh;
+  try {
+    fresh = await invoke("remote_api_regenerate_password");
+  } catch (e) {
+    errToast(e);
+    return;
+  }
+  await confirmDialog({
+    title: t("remotePasswordDialogTitle"),
+    message: t("remotePasswordDialogMessageNew"),
+    input: { type: "text", value: fresh },
+    confirmLabel: t("close"),
+    oneButton: true,
+  });
+}
+EXPERT_ACTIONS["remote-password-open"] = openRemotePasswordDialog;
+
+// One line or comma per address/range -- validated server-side (the same
+// CIDR check the receiver itself uses) before it is ever saved.
+async function openRemoteRangesDialog() {
+  const current = settings.ui_texts?.remoteAllowedRanges || "";
+  const value = await confirmDialog({
+    title: t("remoteRangesDialogTitle"),
+    message: t("remoteRangesDialogMessage"),
+    input: { type: "text", value: current, placeholder: "192.168.1.0/24" },
+    confirmLabel: t("save"),
+  });
+  if (value === null) return;
+  try {
+    await invoke("set_remote_allowed_ranges", { ranges: value });
+    settings.ui_texts = { ...(settings.ui_texts || {}), remoteAllowedRanges: value };
+  } catch (e) {
+    toast(t("remoteRangesInvalid").replace("{value}", String(e)));
+  }
+}
+EXPERT_ACTIONS["remote-ranges-open"] = openRemoteRangesDialog;
+
 // Runs the same sweep on demand -- unlike the silent background sweep,
 // an explicit click always gets an answer, even "nothing to clean up".
 EXPERT_ACTIONS["rec-sweep-now"] = async () => {
@@ -19874,6 +19955,21 @@ function bind() {
   listen("settings-write-recovered", () => {
     settingsWriteFailed = false;
     if (!$("settings-expert").classList.contains("hidden")) renderExpert();
+  });
+  // The one persistent, always-visible sign that the remote-access receiver
+  // is reachable at all -- shown for as long as it is actually running, with
+  // its port and an immediate off switch, never just while the setting is on.
+  function updateRemoteApiBanner(status) {
+    const running = !!status?.running;
+    $("remote-api-banner").classList.toggle("hidden", !running);
+    if (running) {
+      $("remote-api-banner-text").textContent = t("remoteApiBadge").replace("{port}", String(status.port));
+    }
+  }
+  listen("remote-api-status", (e) => updateRemoteApiBanner(e.payload));
+  invoke("remote_api_status").then(updateRemoteApiBanner).catch(() => {});
+  $("remote-api-banner-off").addEventListener("click", async () => {
+    try { await invoke("remote_api_stop_now"); } catch (e) { errToast(e); }
   });
   // Sealing broke while the app was already running. The startup question is long
   // over by then, so the backend pushes it instead of this window polling for it.
