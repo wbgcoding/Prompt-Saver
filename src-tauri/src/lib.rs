@@ -9841,6 +9841,42 @@ fn default_backup_kind() -> String {
     "text".into()
 }
 
+// One entry in a snapshot's full content list -- the fuller sibling of
+// BackupPrompt above, read on demand through the same staged/validated file a
+// restore uses rather than the small always-cached preview.
+#[derive(Serialize)]
+struct BackupContentItem {
+    id: String,
+    name: String,
+    // Its most recent edit, from prompt_versions -- None for a prompt that was
+    // only ever created, never edited (no version row is written for that).
+    date: Option<i64>,
+    chars: usize,
+    kind: String,
+}
+
+// The full picture of one snapshot, read on open rather than kept around --
+// unlike BackupInfo's cached header numbers, this is only ever fetched while the
+// content viewer for that one row is actually showing.
+#[derive(Serialize)]
+struct BackupContents {
+    entries: usize,
+    views: usize,
+    tags: usize,
+    // The newest prompt_versions timestamp anywhere in the snapshot -- None
+    // when nothing in it was ever edited (promptHistory off the whole time, or a
+    // library of untouched prompts).
+    last_change: Option<i64>,
+    // None for a snapshot made before this note existed.
+    program_version: Option<String>,
+    // Whether every row decrypted through the normal DPAPI seal -- false only on
+    // the rare machine where Windows itself refused to encrypt while this
+    // snapshot was made (see enc_str's plaintext fallback), never about a
+    // password: a local snapshot never has one.
+    encrypted: bool,
+    items: Vec<BackupContentItem>,
+}
+
 #[derive(Serialize)]
 struct BackupInfo {
     name: String,
@@ -9860,6 +9896,9 @@ struct BackupInfo {
 
 const BACKUP_COUNT_FILE: &str = "prompts.count";
 const BACKUP_NAMES_FILE: &str = "prompts.names.json";
+// The app version that made a snapshot -- missing for one made before this note
+// existed, read back as "unknown" rather than guessed from the running build.
+const BACKUP_VERSION_FILE: &str = "version.txt";
 
 // Count the prompts in a snapshot folder: the note if there is one, otherwise the
 // snapshot is unpacked to a temp file and counted (and the note written for next
@@ -10279,6 +10318,10 @@ fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<Str
     if !items.is_empty() {
         write_prompt_names(&folder.join(BACKUP_NAMES_FILE), &items);
     }
+    // The app version that made this snapshot, so the content viewer can show it
+    // later without guessing from the running build. Plain text like the count
+    // file above -- a version string is not sensitive.
+    let _ = fs::write(folder.join(BACKUP_VERSION_FILE), APP_VERSION);
     let _ = fs::remove_file(&tmp);
     if let Err(e) = packed {
         // No snapshot is better than a folder that looks like one: the list reads
@@ -10472,6 +10515,81 @@ fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: 
     })();
     let _ = conn.execute("DETACH DATABASE backup", []);
     result.map_err(|e| e.to_string())
+}
+
+// Pure core of backup_contents: everything a snapshot actually holds, read
+// from an already-open connection onto the staged file. Split out from the
+// command below so it is unit-testable against a plain fixture database,
+// without an AppHandle or a real .gz on disk (mirrors apply_import's own split
+// from import_all, and vacuum_and_check_size's from do_backup, for the same
+// reason).
+fn backup_contents_from(conn: &Connection, folder: &std::path::Path) -> BackupContents {
+    let mut written = WrittenRows::new();
+    let (prompts, settings, plaintext, _failures, _settings_unreadable) = db_load(conn, &mut written);
+    // One prompt's most recent edit each, from the same table the library's
+    // own "last edited" sort reads (see db_load's sibling, but grouped this
+    // time instead of taken as a single MAX across everything).
+    let mut dates: HashMap<String, i64> = HashMap::new();
+    if let Ok(mut stmt) = conn.prepare("SELECT prompt_id, MAX(ts) FROM prompt_versions GROUP BY prompt_id") {
+        if let Ok(rows) = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))) {
+            for row in rows.flatten() {
+                dates.insert(row.0, row.1);
+            }
+        }
+    }
+    let last_change = conn
+        .query_row("SELECT MAX(ts) FROM prompt_versions", [], |r| r.get::<_, Option<i64>>(0))
+        .unwrap_or(None);
+    let mut tag_keys: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for p in &prompts {
+        for tag in &p.tags {
+            tag_keys.insert(tag_key(tag));
+        }
+    }
+    let items = prompts
+        .iter()
+        .map(|p| BackupContentItem {
+            id: p.id.clone(),
+            name: p.name.clone(),
+            date: dates.get(&p.id).copied(),
+            chars: prompt_char_count(p),
+            kind: prompt_stat_type(p).to_string(),
+        })
+        .collect();
+    BackupContents {
+        entries: prompts.len(),
+        views: settings.as_ref().map(|s| s.views.len()).unwrap_or(0),
+        tags: tag_keys.len(),
+        last_change,
+        program_version: fs::read_to_string(folder.join(BACKUP_VERSION_FILE))
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
+        encrypted: !plaintext,
+        items,
+    }
+}
+
+// Everything a snapshot actually holds, read through the exact same staged and
+// schema-checked file restore_backup/restore_selective open -- never a second
+// path onto the raw .gz. Nothing here writes anything: the staged copy is
+// removed again once the query is done, whether it succeeded or not.
+#[tauri::command]
+async fn backup_contents(app: AppHandle, name: String) -> Result<BackupContents, String> {
+    if !valid_backup_name(&name) {
+        return Err("bad-name".into());
+    }
+    let folder = backups_dir(&app).join(&name);
+    let Some(backup_db) = backup_db_file(&folder) else {
+        return Err("missing".into());
+    };
+    let dir = data_dir(&app);
+    let staged = stage_and_validate_backup(&backup_db, &dir)?;
+    let result = Connection::open(&staged)
+        .map(|conn| backup_contents_from(&conn, &folder))
+        .map_err(|e| e.to_string());
+    let _ = fs::remove_file(&staged);
+    result
 }
 
 // Restore: snapshot the current store first (safety), then either swap the whole
@@ -27484,6 +27602,7 @@ pub fn run() {
             create_backup,
             delete_backup,
             restore_backup,
+            backup_contents,
             clip_inbox_list,
             clip_inbox_dismiss,
             clip_inbox_clear,
@@ -36247,6 +36366,84 @@ mod tests {
         let err = stage_and_validate_backup(&foreign, &root).unwrap_err();
         assert_eq!(err, "backup-schema-mismatch");
         assert!(!staged.exists(), "a rejected file must not be left staged behind");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // ---- Backup content viewer ----
+
+    #[test]
+    fn backup_contents_from_matches_the_actual_content_of_a_created_backup() {
+        let root = std::env::temp_dir().join(format!("{}-test-backup-contents-counts", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let db_path = root.join("staged.db");
+        let mut conn = full_schema_db(&db_path, "counts");
+
+        let mut prompts = numbered_prompts(3);
+        // Same tag in two different castings: the header count is distinct tags,
+        // never distinct spellings.
+        prompts[0].tags = vec!["Work".into()];
+        prompts[1].tags = vec!["work".into()];
+        prompts[2].tags = vec!["Personal".into()];
+        db_write_prompts(&mut conn, &prompts, &mut WrittenRows::new()).unwrap();
+
+        let settings = Settings { views: vec![test_view("v1"), test_view("v2")], ..Settings::default() };
+        conn.execute(
+            "INSERT INTO meta(key, value) VALUES('settings', ?1)",
+            params![enc_str(&serde_json::to_string(&settings).unwrap())],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO prompt_versions(prompt_id, ts, name, text, variants) VALUES(?1, ?2, 'N', 'T', '')",
+            params![prompts[0].id, 1_700_000_000_i64],
+        )
+        .unwrap();
+
+        let out = backup_contents_from(&conn, &root);
+        assert_eq!(out.entries, 3, "entries must count every prompt actually in the snapshot");
+        assert_eq!(out.views, 2, "views must come from the snapshot's own settings row");
+        assert_eq!(out.tags, 2, "tags must be distinct keys, not distinct castings");
+        assert_eq!(out.last_change, Some(1_700_000_000), "the newest edit anywhere must be reported");
+        assert_eq!(out.items.len(), 3, "every prompt must appear in the detail list");
+        let edited = out.items.iter().find(|i| i.id == prompts[0].id).unwrap();
+        assert_eq!(edited.date, Some(1_700_000_000), "an edited prompt must carry its own edit date");
+        let untouched = out.items.iter().find(|i| i.id == prompts[1].id).unwrap();
+        assert_eq!(untouched.date, None, "a prompt with no version row was never edited");
+
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn backup_contents_from_reports_encryption_correctly_and_incorrectly() {
+        let _guard = SEAL_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        if !sealing_is_randomised() {
+            return; // DPAPI unavailable on this machine -- nothing to prove here
+        }
+        let root = std::env::temp_dir().join(format!("{}-test-backup-contents-encrypted", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+
+        // Correct: every row sealed the normal way.
+        let sealed_path = root.join("sealed.db");
+        let mut sealed_conn = full_schema_db(&sealed_path, "sealed");
+        db_write_prompts(&mut sealed_conn, &numbered_prompts(2), &mut WrittenRows::new()).unwrap();
+        let sealed_out = backup_contents_from(&sealed_conn, &root);
+        assert!(sealed_out.encrypted, "a normally written snapshot must report itself as encrypted");
+        drop(sealed_conn);
+
+        // Incorrect: the rare fallback where DPAPI itself refused, so a row landed
+        // in plain text -- same case enc_str's own comment describes.
+        let prior_sealed = STORE_SEALED.swap(true, Ordering::Relaxed);
+        FORCE_PLAINTEXT_FALLBACK.with(|f| f.set(true));
+        let _restore = SealOverrideGuard { prior_sealed };
+        let plain_path = root.join("plain.db");
+        let mut plain_conn = full_schema_db(&plain_path, "plain");
+        db_write_prompts(&mut plain_conn, &numbered_prompts(2), &mut WrittenRows::new()).unwrap();
+        let plain_out = backup_contents_from(&plain_conn, &root);
+        assert!(!plain_out.encrypted, "a snapshot with a plaintext-fallback row must report itself as not encrypted");
+        drop(plain_conn);
 
         let _ = std::fs::remove_dir_all(&root);
     }

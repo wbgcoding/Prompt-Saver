@@ -450,6 +450,13 @@ the video editor and the introduction tour ship on).
   anything that sends data out or costs money. A dialog shows how many
   settings would change and names the ten most important before anything
   happens. A profile writes once and is never remembered as a mode.
+- **Backup content viewer.** Each snapshot's row can now open its own content:
+  entry, view and tag counts, the most recent change inside it, the program
+  version that made it, and whether its rows are sealed the normal way or
+  fell back to plain storage. Below that sits every prompt the snapshot
+  holds, with its own edit date, size and kind, searchable by name and
+  sortable by any column, with a button to restore that single prompt
+  straight from the list.
 
 ### Improved
 

@@ -756,6 +756,14 @@ a button that jumps straight to the matching expert-menu setting. The numbers
 are measured in the background and labelled with when that happened, the same
 way the storage section above already works, not recalculated on every open.
 
+Each snapshot in the list can also show its full content on demand: entry,
+view and tag counts, the most recent change inside it, the program version
+that made it, and whether its rows are sealed the normal way or fell back to
+plain storage. Below that, every prompt it holds, with its own edit date,
+size and kind, searchable by name and sortable by any column, with a button
+to restore that single prompt right from the list instead of the whole
+snapshot.
+
 ---
 
 ## Hilfe (Deutsch)
@@ -1227,7 +1235,15 @@ und unfertige Bearbeitungsstände — mit dem aktuellen Stand, wie lange er
 bleibt, einem Knopf zum sofortigen Aufräumen und einem Knopf, der direkt zur
 zugehörigen Einstellung im Experten-Menü springt. Die Zahlen werden im
 Hintergrund ermittelt und mit dem Zeitpunkt der Messung beschriftet, genau
-wie beim Speicherbereich darüber, nicht bei jedem Öffnen neu berechnet.
+wie beim Speicherbereich darüber, nicht bei jedem Öffnen neu berechnet. Zu
+jeder Sicherung in der Liste lässt sich auf Wunsch auch der volle Inhalt
+anzeigen: Anzahl der Einträge, Ansichten und Tags, die jüngste Änderung
+darin, die Programmfassung, die sie erstellt hat, und ob ihre Zeilen normal
+versiegelt sind oder auf Klartext zurückgefallen sind. Darunter jeder
+enthaltene Prompt mit eigenem Änderungsdatum, Größe und Art, durchsuchbar
+nach Namen und nach jeder Spalte sortierbar, mit einem Knopf, um genau
+diesen einen Prompt direkt aus der Liste wiederherzustellen statt der
+ganzen Sicherung.
 
 **Eigenständig: Schnellstarter** — Strg+Alt+P, unscharfe Suche, sofortiges Kopieren.
 

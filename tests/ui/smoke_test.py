@@ -6011,6 +6011,116 @@ PROBE = """
         await sleep(150);
       }
     }
+    // 448: a snapshot's content viewer shows real counts, its own list can be
+    // searched and sorted, and restoring from inside it reuses restoreBackup()
+    // rather than a second path -- same command, same confirm dialog.
+    {
+      const settleContent = async (fn) => { for (let i = 0; i < 60 && !fn(); i++) await sleep(50); return fn(); };
+      const row0 = document.querySelectorAll('#backup-panel .backup-row')[0];
+      const contentBox = document.querySelectorAll('#backup-panel .backup-content')[0];
+      const viewBtn = row0 && [...row0.querySelectorAll('button')].find(b => b.textContent.trim() === 'View content');
+      if (!row0 || !contentBox || !viewBtn) {
+        out.errors.push('the backup row has no View content button or content box');
+      } else {
+        if (!contentBox.classList.contains('hidden')) {
+          out.errors.push('a backup content box starts open instead of collapsed');
+        }
+        viewBtn.click();
+        const loaded = await settleContent(() => !contentBox.classList.contains('hidden') && contentBox.querySelector('.stat-card'));
+        if (!loaded) {
+          out.errors.push('clicking View content never revealed the stat cards');
+        } else {
+          const cardText = [...contentBox.querySelectorAll('.stat-card')].map(c => c.textContent).join(' | ');
+          if (contentBox.querySelectorAll('.stat-card').length !== 6) {
+            out.errors.push('the content viewer does not show all six stat cards: ' + cardText);
+          }
+          if (!cardText.includes('3') || !cardText.includes('2.6.0') || !cardText.includes('Yes')) {
+            out.errors.push('the stat cards do not reflect the fixture data: ' + cardText);
+          }
+          const nameOf = (r) => r.querySelector('.backup-content-cell-name').textContent;
+          const dataRows = () => [...contentBox.querySelectorAll('.backup-content-rows .backup-content-row')];
+          if (dataRows().length !== 3) {
+            out.errors.push('the content table does not list all three fixture entries: ' + dataRows().map(nameOf).join(', '));
+          }
+          const search = contentBox.querySelector('.backup-content-search');
+          search.value = 'apple';
+          search.dispatchEvent(new Event('input'));
+          await sleep(100);
+          if (dataRows().length !== 1 || nameOf(dataRows()[0]) !== 'Apple pie recipe') {
+            out.errors.push('searching apple did not narrow the list to the one matching entry: ' + dataRows().map(nameOf).join(', '));
+          }
+          search.value = '';
+          search.dispatchEvent(new Event('input'));
+          await sleep(100);
+          const nameHead = contentBox.querySelector('.backup-content-head .backup-content-cell-name');
+          if (!nameHead) {
+            out.errors.push('the content table has no clickable name column header');
+          } else {
+            // The table opens already sorted by name ascending, so the header
+            // shows as sorted before it is ever clicked.
+            let names = dataRows().map(nameOf);
+            if (names[0] !== 'Apple pie recipe' || !nameHead.classList.contains('sorted')) {
+              out.errors.push('the content table does not open sorted by name ascending: ' + names.join(', '));
+            }
+            nameHead.click(); // same column again -- flips to descending
+            await sleep(100);
+            names = dataRows().map(nameOf);
+            if (names[0] !== 'Meeting notes' || !nameHead.classList.contains('sorted-desc')) {
+              out.errors.push('sorting by name descending does not put Meeting notes first: ' + names.join(', '));
+            }
+            nameHead.click(); // back to ascending
+            await sleep(100);
+            names = dataRows().map(nameOf);
+            if (names[0] !== 'Apple pie recipe' || nameHead.classList.contains('sorted-desc')) {
+              out.errors.push('clicking name a second time did not return to ascending: ' + names.join(', '));
+            }
+          }
+          const dateHead = contentBox.querySelector('.backup-content-head .backup-content-cell-date');
+          if (dateHead) {
+            dateHead.click(); // new column -- starts ascending
+            await sleep(100);
+            let names = dataRows().map(nameOf);
+            if (names[names.length - 1] !== 'Meeting notes') {
+              out.errors.push('sorting by date ascending does not put the never-edited entry last: ' + names.join(', '));
+            }
+            dateHead.click(); // same column again -- flips to descending
+            await sleep(100);
+            names = dataRows().map(nameOf);
+            if (names[names.length - 1] !== 'Meeting notes') {
+              out.errors.push('sorting by date descending does not put the never-edited entry last: ' + names.join(', '));
+            }
+          }
+          search.value = 'no such prompt exists anywhere';
+          search.dispatchEvent(new Event('input'));
+          await sleep(100);
+          const emptyHint = contentBox.querySelector('.backup-content-empty');
+          if (dataRows().length !== 0 || !emptyHint || emptyHint.classList.contains('hidden')) {
+            out.errors.push('a search with no matches does not show the empty-list hint');
+          }
+          search.value = '';
+          search.dispatchEvent(new Event('input'));
+          await sleep(100);
+          window.__SMOKE_ARGS__ = [];
+          const contentRestoreBtn = contentBox.querySelector('.backup-content-toolbar button');
+          if (!contentRestoreBtn) {
+            out.errors.push('the content viewer toolbar has no restore button');
+          } else {
+            contentRestoreBtn.click();
+            await sleep(200);
+            if (document.getElementById('confirm-modal').classList.contains('hidden')) {
+              out.errors.push('restoring from the content viewer does not open the restore confirm dialog');
+            } else {
+              await click('confirm-ok');
+              await sleep(200);
+              const args = (window.__SMOKE_ARGS__ || []).find(c => c[0] === 'restore_backup');
+              if (!args || args[1].name !== '2026-07-25_18-30-00') {
+                out.errors.push('restoring from the content viewer targeted the wrong backup: ' + (args && args[1].name));
+              }
+            }
+          }
+        }
+      }
+    }
     await click('backup-close');
     // Restoring a password-protected backup: the prompt must appear, reject a wrong
     // password with a new message, then accept the right one and confirm the result.

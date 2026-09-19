@@ -11074,6 +11074,20 @@ async function renderBackupPanel(body) {
         });
       }
       const size = document.createElement("span"); size.className = "backup-size"; size.textContent = fmtBytes(b.size);
+      // Opens the same read rail restoring already uses (stage, validate, read),
+      // just without ever writing the result anywhere -- see backup_contents.
+      const contentBox = document.createElement("div");
+      contentBox.className = "backup-content hidden";
+      let contentLoaded = false;
+      const viewContent = document.createElement("button");
+      viewContent.type = "button"; viewContent.className = "ghost-btn"; viewContent.textContent = t("backupViewContent");
+      viewContent.addEventListener("click", async () => {
+        const opening = contentBox.classList.toggle("hidden") === false;
+        if (opening && !contentLoaded) {
+          contentLoaded = true;
+          await renderBackupContent(contentBox, b.name);
+        }
+      });
       const restore = document.createElement("button"); restore.type = "button"; restore.className = "ghost-btn"; restore.textContent = t("backupRestore");
       restore.addEventListener("click", () => restoreBackup(b.name));
       const del = document.createElement("button"); del.type = "button"; del.className = "ghost-btn danger-btn"; del.textContent = t("delete");
@@ -11083,9 +11097,10 @@ async function renderBackupPanel(body) {
         await saveUiState("backupListOpen", true); // stay in the list after delete
         renderBackupPanel(body);
       });
-      row.append(name, count, size, restore, del);
+      row.append(name, count, size, viewContent, restore, del);
       list.appendChild(row);
       if (namesBox) list.appendChild(namesBox);
+      list.appendChild(contentBox);
     }
   }
   body.append(listHead, list);
@@ -11110,6 +11125,118 @@ async function restoreBackup(name) {
   await maybeBackupBeforeWipe("delete");
   try { await withTaskbarBusy("backup", () => invoke("restore_backup", { name, keep: Math.round(val("backupKeep")), scope })); }
   catch (e) { errToast(e); } // on success the app relaunches
+}
+
+// What a single snapshot actually holds: header counts, then every entry with
+// name, date, size and kind, searchable and sortable -- restoring straight from
+// here reuses restoreBackup() above rather than a second restore path.
+async function renderBackupContent(box, name) {
+  box.innerHTML = "";
+  let data;
+  try { data = await invoke("backup_contents", { name }); }
+  catch (e) { box.textContent = String(e); return; }
+  const nf = (n) => Number(n).toLocaleString(LANG);
+  const mkCard = (l, v) => {
+    const c = document.createElement("div"); c.className = "stat-card";
+    const vv = document.createElement("div"); vv.className = "stat-val"; vv.textContent = v;
+    const ll = document.createElement("div"); ll.className = "stat-label"; ll.textContent = l;
+    c.append(vv, ll); return c;
+  };
+  const cards = document.createElement("div"); cards.className = "stat-cards backup-content-cards";
+  cards.append(
+    mkCard(t("backupContentEntries"), nf(data.entries)),
+    mkCard(t("backupContentViews"), nf(data.views)),
+    mkCard(t("backupContentTags"), nf(data.tags)),
+    mkCard(t("backupContentLastChange"), data.last_change ? new Date(data.last_change * 1000).toLocaleDateString(LANG) : "—"),
+    mkCard(t("backupContentVersion"), data.program_version || "—"),
+    mkCard(t("backupContentEncrypted"), data.encrypted ? t("backupContentEncryptedYes") : t("backupContentEncryptedNo")),
+  );
+  box.appendChild(cards);
+
+  const toolbar = document.createElement("div"); toolbar.className = "backup-content-toolbar";
+  const search = document.createElement("input");
+  search.type = "text"; search.className = "modal-input backup-content-search";
+  search.placeholder = t("backupContentSearch");
+  const restoreBtn = document.createElement("button");
+  restoreBtn.type = "button"; restoreBtn.className = "ghost-btn"; restoreBtn.textContent = t("backupRestore");
+  restoreBtn.addEventListener("click", () => restoreBackup(name));
+  toolbar.append(search, restoreBtn);
+  box.appendChild(toolbar);
+
+  const table = document.createElement("div"); table.className = "backup-content-table";
+  const head = document.createElement("div"); head.className = "backup-content-row backup-content-head";
+  const cols = [
+    ["name", t("backupContentColName")],
+    ["date", t("backupContentColDate")],
+    ["chars", t("backupContentColSize")],
+    ["kind", t("backupContentColKind")],
+  ];
+  let sortKey = "name";
+  let sortDir = 1;
+  const headBtns = {};
+  for (const [key, label] of cols) {
+    const cell = document.createElement("button");
+    cell.type = "button"; cell.className = `backup-content-col-btn backup-content-cell-${key}`;
+    cell.textContent = label;
+    cell.addEventListener("click", () => {
+      if (sortKey === key) sortDir = -sortDir; else { sortKey = key; sortDir = 1; }
+      renderRows();
+    });
+    headBtns[key] = cell;
+    head.appendChild(cell);
+  }
+  table.appendChild(head);
+  const rowsBox = document.createElement("div"); rowsBox.className = "backup-content-rows";
+  table.appendChild(rowsBox);
+  const emptyHint = document.createElement("div"); emptyHint.className = "hint backup-content-empty hidden";
+  emptyHint.textContent = t("backupContentNoMatch");
+  table.appendChild(emptyHint);
+  box.appendChild(table);
+
+  function renderRows() {
+    for (const [key, cell] of Object.entries(headBtns)) {
+      cell.classList.toggle("sorted", key === sortKey);
+      cell.classList.toggle("sorted-desc", key === sortKey && sortDir === -1);
+    }
+    const q = search.value.trim().toLowerCase();
+    const items = data.items
+      .filter((it) => !q || it.name.toLowerCase().includes(q))
+      .slice()
+      .sort((a, b) => {
+        if (sortKey === "name" || sortKey === "kind") {
+          const av = (a[sortKey] || "").toLowerCase();
+          const bv = (b[sortKey] || "").toLowerCase();
+          if (av < bv) return -1 * sortDir;
+          if (av > bv) return 1 * sortDir;
+          return 0;
+        }
+        // A never-edited entry has no date and always sorts to the very end,
+        // in either direction -- the same rule the library's own "last
+        // edited" sort already uses, just not tied to one fixed direction.
+        const av = a[sortKey];
+        const bv = b[sortKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (av < bv) return -1 * sortDir;
+        if (av > bv) return 1 * sortDir;
+        return 0;
+      });
+    rowsBox.innerHTML = "";
+    emptyHint.classList.toggle("hidden", items.length > 0);
+    for (const it of items) {
+      const row = document.createElement("div"); row.className = "backup-content-row";
+      const nm = document.createElement("span"); nm.className = "backup-content-cell-name"; nm.textContent = it.name;
+      const dt = document.createElement("span"); dt.className = "backup-content-cell-date";
+      dt.textContent = it.date ? new Date(it.date * 1000).toLocaleDateString(LANG) : "—";
+      const sz = document.createElement("span"); sz.className = "backup-content-cell-chars"; sz.textContent = it.chars ? nf(it.chars) : "—";
+      const kd = document.createElement("span"); kd.className = "backup-content-cell-kind"; kd.textContent = t(PROMPT_TYPE_LABELS[it.kind] || it.kind);
+      row.append(nm, dt, sz, kd);
+      rowsBox.appendChild(row);
+    }
+  }
+  search.addEventListener("input", renderRows);
+  renderRows();
 }
 
 // ---- Clipboard inbox ----
