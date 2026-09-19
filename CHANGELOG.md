@@ -514,6 +514,10 @@ the video editor and the introduction tour ship on).
 
 ### Improved
 
+- Text on tiles, folders, view tabs, messages and floating buttons only turns
+  black on genuinely light colors now; a medium color that used to flip to black
+  text keeps white text instead. Both the automatic choice and the brightness
+  cutoff are expert-menu settings.
 - The offer to adopt an installed copy's data into a portable run now names its
   size and prompt count before you decide, remembers your answer for that exact
   location so it does not ask again every launch (a "do not ask again" box lets

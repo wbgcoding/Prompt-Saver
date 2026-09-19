@@ -4731,9 +4731,26 @@ fn theme_vars_of(settings: &Settings) -> HashMap<String, String> {
 }
 
 #[derive(Serialize, Clone)]
+struct InkPrefs {
+    auto: bool,
+    threshold: f64,
+}
+
+// Expert-tunable ink rule for text on coloured areas (tiles, folders, view tabs,
+// toasts, floating pills): same clamp pattern as tray_label_max, an absent or
+// out-of-range stored value falls back to the shipped default.
+fn ink_prefs_of(settings: &Settings) -> InkPrefs {
+    InkPrefs {
+        auto: settings.ui_flags.get("autoInk") != Some(&false), // on by default
+        threshold: settings.ui_values.get("inkThreshold").copied().unwrap_or(60.0).clamp(20.0, 90.0),
+    }
+}
+
+#[derive(Serialize, Clone)]
 struct ThemeState {
     theme: String,
     vars: HashMap<String, String>,
+    ink: InkPrefs,
 }
 
 // Apply the active theme everywhere: native window background, main window and
@@ -4743,7 +4760,8 @@ fn push_theme(app: &AppHandle, settings: &Settings) -> String {
     let effective = effective_theme(app, &base);
     let vars = theme_vars_of(settings);
     apply_window_bg(app, &effective, vars.get("bg").map(|s| s.as_str()));
-    let _ = app.emit("theme-changed", ThemeState { theme: effective.clone(), vars });
+    let ink = ink_prefs_of(settings);
+    let _ = app.emit("theme-changed", ThemeState { theme: effective.clone(), vars, ink });
     effective
 }
 
@@ -11277,6 +11295,13 @@ fn current_theme(app: AppHandle, state: State<Db>) -> String {
 #[tauri::command]
 fn theme_vars(state: State<Db>) -> HashMap<String, String> {
     theme_vars_of(&lock(&state).settings)
+}
+
+// The ink rule a satellite window fetches once at load, before the first
+// theme-changed event arrives.
+#[tauri::command]
+fn ink_prefs(state: State<Db>) -> InkPrefs {
+    ink_prefs_of(&lock(&state).settings)
 }
 
 #[tauri::command]
@@ -28835,6 +28860,7 @@ pub fn run() {
             launcher_items,
             current_theme,
             theme_vars,
+            ink_prefs,
             set_theme,
             save_custom_theme,
             delete_custom_theme,
@@ -42000,6 +42026,26 @@ mod tests {
         let word = "x".repeat(60);
         assert_eq!(tray_label(&word, 20).chars().count(), 20);
         assert_eq!(tray_label(&word, 80).chars().count(), 60); // fits under 80, untouched
+    }
+
+    #[test]
+    fn ink_prefs_default_on_with_a_clamped_threshold() {
+        let s = Settings::default();
+        let prefs = ink_prefs_of(&s);
+        assert!(prefs.auto, "the automatic ink rule ships on");
+        assert_eq!(prefs.threshold, 60.0);
+
+        let mut off = Settings::default();
+        off.ui_flags.insert("autoInk".into(), false);
+        assert!(!ink_prefs_of(&off).auto);
+
+        let mut clamped_hi = Settings::default();
+        clamped_hi.ui_values.insert("inkThreshold".into(), 999.0);
+        assert_eq!(ink_prefs_of(&clamped_hi).threshold, 90.0);
+
+        let mut clamped_lo = Settings::default();
+        clamped_lo.ui_values.insert("inkThreshold".into(), 0.0);
+        assert_eq!(ink_prefs_of(&clamped_lo).threshold, 20.0);
     }
 
     #[test]

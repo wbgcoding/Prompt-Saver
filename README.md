@@ -87,6 +87,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **8 themes** | Light, dark and system (live OS detection), plus Programmer, Neon Violet, Ocean, Cyberpunk and Black & White — or build your own in the theme editor |
 | **Custom themes** | Build your own on top of any built-in one — a color per value, grouped and previewed live |
 | **Colors & fonts** | Tint tiles and pills from a palette or a color picker; 20 fonts, per prompt if you like |
+| **Readable text on color** | Tile, folder, view-tab and message text picks black or white automatically from the color underneath; switch it off or move the brightness cutoff in the expert menu |
 | **Auto-fit text** | Tile text grows to fill the button, or pick a fixed size |
 | **Scaling** | Separate size control for UI, popups, icons and buttons — from 50 % up |
 | **Distraction-free** | Hide the top and bottom bars; the grid takes over the freed space |

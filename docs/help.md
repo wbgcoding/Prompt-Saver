@@ -478,6 +478,9 @@ several views. View groups turn views into tabs instead of a dropdown.
 
 Tile menu, drag-to-reorder, hover lift, type badges, shadows, gradients, rounded
 corners, bold/uppercase/monospace text — behaviour and pure looks, all adjustable.
+Tile, folder, view-tab and message text on a coloured area picks black or white
+automatically; the expert menu can switch this off (always white) or move the
+brightness cutoff where black text starts.
 
 ### Media
 
@@ -1127,7 +1130,10 @@ einstellbar: die maximale Länge eines Eintragsnamens.
 **Zwischenablage-Überwachung** — aus, protokolliert bei Bedarf alles Kopierte im
 System.
 
-**Kachel-Verhalten & -Aussehen** — Menü, Umsortieren, Hover-Anhebung, Optik.
+**Kachel-Verhalten & -Aussehen** — Menü, Umsortieren, Hover-Anhebung, Optik. Die
+Schrift auf Kacheln, Ordnern, Ansichts-Reitern und Meldungen wählt automatisch
+Schwarz oder Weiß; im Expertenmenü lässt sich das abschalten (immer Weiß) oder
+die Helligkeitsschwelle für Schwarz verschieben.
 
 **Tooltips** — Verzögerung, Ausblenden, Breite.
 

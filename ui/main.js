@@ -582,14 +582,18 @@ function hideToast() {
 // Default toast icon (checkmark badge). Static, developer-controlled SVG.
 const TOAST_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
 
-// Relative luminance -> the ink that stays readable on `hex` (WCAG's 0.179 split).
+// Relative luminance -> the ink that stays readable on `hex`. Switched off
+// (autoInk), the text is always white; switched on, black only above the
+// expert-tunable inkThreshold (a plain WCAG 0.179 split flipped black on
+// medium blues, which read as too dark to Ben).
 function readableInk(hex) {
   const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ""));
   if (!m) return "#fff";
+  if (!flag("autoInk")) return "#fff";
   const n = parseInt(m[1], 16);
   const lin = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
   const l = 0.2126 * lin(((n >> 16) & 255) / 255) + 0.7152 * lin(((n >> 8) & 255) / 255) + 0.0722 * lin((n & 255) / 255);
-  return l > 0.179 ? "#000" : "#fff";
+  return l > val("inkThreshold") / 100 ? "#000" : "#fff";
 }
 
 // Optional action: { label, onClick } adds a button and keeps the toast longer.
@@ -1242,6 +1246,7 @@ const FLAG_LABELS = {
   favViewButton: "flagFavViewButton",
   favViewReorder: "flagFavViewReorder",
   tileShadow: "flagTileShadow",
+  autoInk: "expAutoInk",
   tilePressScale: "flagTilePressScale",
   tileHoverLift: "flagTileHoverLift",
   copyFlash: "flagCopyFlash",
@@ -1851,6 +1856,8 @@ const EXPERT_VALUES = {
   customThemeMax: { label: "valCustomThemeMax", min: 1, max: 20, step: 1, def: 8, unit: "", gate: "customThemes" },
   // How many views a group popover lists before it starts scrolling.
   viewGroupMaxRows: { label: "valViewGroupMaxRows", min: 4, max: 12, step: 1, def: 8, unit: "", gate: "viewGroups" },
+  // Relative-luminance cutoff (/100) above which readableInk() picks black text.
+  inkThreshold: { label: "valInkThreshold", min: 20, max: 90, step: 5, def: 60, unit: "%", gate: "autoInk" },
   // How much of a tab's outer edge counts as "drop here to reorder" rather than
   // "drop here to group" -- a wider tab needs a wider zone to stay easy to aim at.
   viewTabEdgeZone: { label: "valViewTabEdgeZone", min: 15, max: 45, step: 1, def: 33, unit: "%", gate: "multiView" },
@@ -2224,7 +2231,7 @@ const EXPERT_TABS = [
     // and pure looks. One 26-entry blob made everything hard to find.
     { title: "expGroupTiles", flags: ["tileMenu", "tileReorder", "dragToView", "tileHover", { key: "tileHoverLift", gate: "tileHover" }, "tilePressScale", "tileHotkeyBadge"], values: ["hoverLift", "dragThreshold", "viewDropHoverMs", "tileHotkeyBadgeOpacity"] },
     { title: "expGroupTooltips", flags: ["tilePreview", "iconTooltips", "tooltipDelay", "tooltipTimeout", "tileTimeTip"], values: ["tooltipWidth", "tooltipDelayMs", "tooltipTimeoutMs"] },
-    { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow"], values: ["tileRadius", "tileBorderWidth"] },
+    { title: "expGroupTileLook", flags: ["tileShadow", "typeBadges", "captions", "compactTiles", "tileGradient", "gridLines", "uppercaseTiles", "boldTileNames", "monospaceTiles", "italicTiles", "tileTextShadow", "autoInk"], values: ["tileRadius", "tileBorderWidth", "inkThreshold"] },
     { title: "expGroupFavorites", flags: ["favorites", { key: "favViewButton", gate: "favorites" }, { key: "favViewReorder", gate: "favViewButton" }], values: ["favStarSize", "favMaxCols"] },
   ] },
   { title: "expTabAppearance", groups: [
@@ -2504,7 +2511,7 @@ const EXPERT_TIPS = [
   "tooltipDelay", "tooltipTimeout", "iconTooltips",
   "dragToView", "viewDropHoverMs",
   // Appearance
-  "hideScrollbars", "gridLines", "pausedIcons",
+  "hideScrollbars", "gridLines", "pausedIcons", "autoInk", "inkThreshold",
   "customThemes", "customThemeMax",
   "dragThreshold", "composerMaxH", "popoverPad", "toastWidth", "toastPos", "modalMaxVh",
   // Library / privacy
