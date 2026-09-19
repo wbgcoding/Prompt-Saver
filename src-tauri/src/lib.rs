@@ -30491,14 +30491,20 @@ mod tests {
     #[test]
     fn free_space_bytes_walks_up_to_the_nearest_existing_ancestor() {
         // A destination folder that does not exist yet (a fresh recordings or
-        // export folder) must still resolve to its real drive's free space --
-        // proven here by getting the exact same figure as the real ancestor
-        // directory two levels up.
+        // export folder) must still resolve to its real drive's free space,
+        // proven here by matching the real ancestor directory two levels up.
+        // The two figures are read a moment apart and the volume keeps being
+        // written to, so they are compared within a tolerance: a different
+        // volume would be off by far more than a gigabyte.
         let base = std::env::temp_dir();
         let base_free = free_space_bytes(&base).expect("free space on an existing dir");
         let missing = base.join("prompt-saver-disk-check-probe").join("deeper");
         let missing_free = free_space_bytes(&missing).expect("free space on a missing nested path");
-        assert_eq!(base_free, missing_free);
+        let drift = base_free.abs_diff(missing_free);
+        assert!(
+            drift < 1024 * 1024 * 1024,
+            "missing path resolved to a different volume: {base_free} vs {missing_free}"
+        );
     }
 
     #[test]
