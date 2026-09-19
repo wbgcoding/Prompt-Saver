@@ -101,6 +101,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Version history** | Every prompt keeps its earlier versions; preview and restore any of them |
 | **Editor draft autosave** | The open editor saves its text every few seconds so a crash or a closed window never loses unsaved work; a save or cancel removes the draft, and the next start asks once whether to restore one it still finds |
 | **Import / export** | One backup file with prompts, views, layouts, colors, styles and language. Plain CSV/TXT export for the texts alone |
+| **Import from a folder** | Turns a folder of .md/.txt files into tiles, one per file, read only; subfolders become tags and a short first line becomes the note |
 | **Careful resets** | "Delete data" and "Reset settings" are separate, both guarded, both with an optional safety backup |
 
 ### ⚙️ Under the hood

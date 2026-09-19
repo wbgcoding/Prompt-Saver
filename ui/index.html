@@ -685,6 +685,33 @@
     </div>
   </div>
 
+  <!-- Same construction as the plain import preview above, plus the extra
+       columns (tags, size, a checkbox per row) a whole folder needs. -->
+  <div id="import-folder-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal modal-narrow">
+      <div class="modal-titlebar">
+        <h2 class="modal-title" data-i18n="importFolderTitle">Import from a folder</h2>
+        <button id="import-folder-close" class="icon-btn modal-x" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <p class="modal-hint" data-i18n="importFolderRules">A file name (without its extension) becomes the name. A short first line becomes the note, and the rest continues as the text. Each subfolder becomes a tag, one per level. A file containing the rotation separator becomes a rotating entry.</p>
+      <p class="modal-hint" data-i18n="importFolderReadOnly">Files are only read here, never moved or deleted.</p>
+      <p id="import-folder-summary" class="modal-hint"></p>
+      <div class="import-preview-list-head">
+        <button id="import-folder-select-all" type="button" class="ghost-btn" data-i18n="selectAll">All</button>
+        <button id="import-folder-select-none" type="button" class="ghost-btn" data-i18n="selectNone">None</button>
+      </div>
+      <div id="import-folder-list" class="import-preview-list"></div>
+      <div class="modal-actions">
+        <button id="import-folder-cancel" class="ghost-btn" data-i18n="cancel">Cancel</button>
+        <button id="import-folder-confirm" class="primary-btn" data-i18n="importConfirm">Import</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Preview + confirm for the video-folder cleanup action, before it deletes anything -->
   <div id="video-cleanup-modal" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="modal modal-narrow">
@@ -974,6 +1001,7 @@
       <div id="impexp-field" class="field">
         <div class="export-row">
           <button id="import-btn" class="ghost-btn" data-i18n="import">Import prompts</button>
+          <button id="import-folder-btn" class="ghost-btn" data-i18n="importFolderBtn" data-i18n-title="tipImportFolder">Import from a folder</button>
           <select id="export-format" class="batch-view-select" data-i18n-aria="exportFormatLabel">
             <option value="csv" data-i18n="exportCsv">CSV export</option>
             <option value="txt" data-i18n="exportTxt">TXT export</option>

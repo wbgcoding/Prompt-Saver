@@ -634,6 +634,16 @@ duplicate — before anything is written; a full backup restores directly. If
 the file changes after the preview is shown, confirming the import is refused
 rather than importing something different from what was previewed.
 
+"Import from a folder" turns a folder of `.md`/`.txt` files into tiles, one per
+file, without touching the original files at all. The file name becomes the
+tile's name. A short first line becomes the note, with the rest carrying on as
+the text. Each subfolder becomes a tag, one per level. A file that already
+contains the rotation separator becomes a rotating tile. The preview lists
+every file with its tags, size, and a checkbox, and grays out anything that
+could not be read (too large or not plain text) with the reason why. How deep
+into subfolders it looks and how many files it stops at are both expert-menu
+settings.
+
 ### Markdown folder sync (beta)
 
 An optional, off-by-default mirror that writes every text tile as its own
@@ -1121,6 +1131,16 @@ alles. Ein CSV/TXT-Import zeigt vorher eine Vorschau mit Name und
 Duplikat-Kennzeichnung; eine volle Sicherung stellt direkt wieder her. Ändert
 sich die Datei nach der Vorschau, wird der Import verweigert statt etwas
 anderes zu importieren als angezeigt.
+
+**Aus einem Ordner importieren** macht aus einem Ordner voller `.md`/`.txt`-
+Dateien Kacheln, eine je Datei, ohne die Originaldateien anzurühren. Der
+Dateiname wird der Name der Kachel. Eine kurze erste Zeile wird die Notiz, der
+Rest wird der Text. Jeder Unterordner wird ein Tag, einer je Ebene. Eine Datei,
+die den Rotationstrenner schon enthält, wird eine rotierende Kachel. Die
+Vorschau listet jede Datei mit ihren Tags, ihrer Größe und einem Häkchen und
+graut aus, was nicht gelesen werden konnte (zu groß oder kein reiner Text),
+mit dem Grund dafür. Wie tief in Unterordner gesucht wird und bei wie vielen
+Dateien Schluss ist, sind beides Einstellungen im Expertenmenü.
 
 **Markdown-Ordner-Sync (Beta)** — spiegelt jede Text-Kachel als lesbare
 `.md`-Datei in einem gewählten Ordner, inklusive Ansicht, Rasterzelle und

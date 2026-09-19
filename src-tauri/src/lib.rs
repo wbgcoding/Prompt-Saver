@@ -25373,39 +25373,23 @@ async fn preview_import(app: AppHandle, state: State<'_, Db>) -> Result<ImportPr
     Ok(ImportPreview { path: path.to_string_lossy().to_string(), hash, items })
 }
 
-// Async: parsing + persisting an import stays off the UI thread. `path` comes
-// from a prior preview_import call — never a fresh file dialog here, so
-// confirming a preview can never silently import a DIFFERENT file. `hash` is
-// that same preview's digest of the file it showed; a mismatch here means the
-// file changed after the preview was shown, and the import is refused rather
-// than importing content the user never actually saw.
-#[tauri::command]
-async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String, hash: String) -> Result<usize, String> {
-    let bytes = read_file_capped(std::path::Path::new(&path), MAX_IMPORT_BYTES)?;
-    if import_file_hash(&bytes) != hash {
-        return Err("import-changed".to_string());
-    }
-    let data = parse_import_bytes(&bytes, std::path::Path::new(&path))?;
-
-    // Prompts-only import: never touch app settings, views or layout, even if an
-    // older export file still carries those blocks (they are parsed but ignored).
-    // Imported prompts are appended, but an entry identical to one already present
-    // is skipped so the original is kept (no duplicate buttons).
-    let mut store = lock(&state);
+// Shared by import_prompts and import_folder_files: builds a real Prompt for
+// each parsed item and appends it, skipping one that is an exact duplicate of
+// one already present (so the original is kept, no duplicate buttons). A
+// malformed tag or note on one item never aborts the whole batch.
+fn append_imported_prompts(store: &mut Store, items: Vec<ImportedPrompt>) -> usize {
     let mut seen: std::collections::HashSet<String> = store
         .prompts
         .iter()
         .map(|p| import_sig(&p.name, &p.text, &p.file_path, &p.image, p.copy_image))
         .collect();
     let mut count = 0usize;
-    let before_len = store.prompts.len(); // everything imported is appended after this
     // Grows while importing so tags introduced by the file itself also settle on one casing.
     let mut known = canonical_tags(&store.prompts);
-    for item in data.prompts {
+    for item in items {
         if !seen.insert(import_sig(&item.name, &item.text, &item.file_path, &item.image, item.copy_image)) {
             continue; // duplicate of an existing (or earlier imported) prompt
         }
-        // A malformed tag in an imported file must not abort the whole import.
         let tags = sanitize_tags(item.tags, &known).unwrap_or_default();
         for t in &tags {
             known.entry(tag_key(t)).or_insert_with(|| t.clone());
@@ -25460,8 +25444,251 @@ async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String, hash
         store.prompts.push(prompt);
         count += 1;
     }
+    count
+}
+
+// Async: parsing + persisting an import stays off the UI thread. `path` comes
+// from a prior preview_import call — never a fresh file dialog here, so
+// confirming a preview can never silently import a DIFFERENT file. `hash` is
+// that same preview's digest of the file it showed; a mismatch here means the
+// file changed after the preview was shown, and the import is refused rather
+// than importing content the user never actually saw.
+#[tauri::command]
+async fn import_prompts(app: AppHandle, state: State<'_, Db>, path: String, hash: String) -> Result<usize, String> {
+    let bytes = read_file_capped(std::path::Path::new(&path), MAX_IMPORT_BYTES)?;
+    if import_file_hash(&bytes) != hash {
+        return Err("import-changed".to_string());
+    }
+    let data = parse_import_bytes(&bytes, std::path::Path::new(&path))?;
+
+    // Prompts-only import: never touch app settings, views or layout, even if an
+    // older export file still carries those blocks (they are parsed but ignored).
+    let mut store = lock(&state);
+    let before_len = store.prompts.len(); // everything imported is appended after this
+    let count = append_imported_prompts(&mut store, data.prompts);
     // A failed save must not report N prompts imported for a write that never
     // reached disk — an appended tail is trivial to roll back exactly.
+    if !save_prompts(&app, &store) {
+        store.prompts.truncate(before_len);
+        return Err("save-failed".into());
+    }
+    let settings = store.settings.clone();
+    drop(store);
+    push_theme(&app, &settings);
+    rebuild_tray(&app);
+    Ok(count)
+}
+
+// ---- Import from a folder of .md/.txt files ----
+// Read-only: nothing here ever moves or deletes a source file. `importFolderDepth`
+// (ui_values, 1-5, default 3) counts the picked folder itself as depth 1, so 1
+// means "this folder only" and 3 means two levels of subfolders below it are
+// also scanned; a subfolder past the limit is left out entirely, never partially.
+// A file past `importFolderMax` (ui_values, default 500) is left out the same
+// way, by stopping the scan rather than filtering the result afterwards, so
+// nothing skipped this way could later be picked by name and still get in.
+const IMPORT_FOLDER_EXTS: [&str; 2] = ["md", "txt"];
+// A file bigger than this is almost certainly not a hand-written note; treated
+// the same as an unreadable one (grayed out with a reason, never imported).
+const MAX_IMPORT_FOLDER_FILE_BYTES: u64 = 2 * 1024 * 1024;
+// The first line becomes the standalone note only while it stays this short --
+// past this length it clearly already IS the body, not a one-line summary.
+const IMPORT_FOLDER_NOTE_MAX_CHARS: usize = 120;
+
+fn import_folder_depth_setting(store: &Store) -> u32 {
+    store.settings.ui_values.get("importFolderDepth").copied().unwrap_or(3.0).clamp(1.0, 5.0) as u32
+}
+
+fn import_folder_max_setting(store: &Store) -> usize {
+    store.settings.ui_values.get("importFolderMax").copied().unwrap_or(500.0).max(1.0) as usize
+}
+
+fn is_import_folder_file(path: &Path) -> bool {
+    path.is_file()
+        && path
+            .extension()
+            .map(|e| IMPORT_FOLDER_EXTS.contains(&e.to_string_lossy().to_lowercase().as_str()))
+            .unwrap_or(false)
+}
+
+// One file the scan found, already telling the frontend whether it CAN be
+// imported and why not otherwise -- the same read that decides this also
+// measures its size, so preview and confirm can never disagree about it.
+#[derive(Serialize, Clone)]
+struct FolderImportEntry {
+    rel_path: String,
+    name: String,
+    tags: Vec<String>,
+    size: u64,
+    readable: bool,
+    skip_reason: String,
+}
+
+#[derive(Serialize)]
+struct FolderImportPreview {
+    dir: String,
+    items: Vec<FolderImportEntry>,
+    truncated: bool,
+}
+
+// Depth-first, alphabetical so the same folder always previews in the same
+// order. `depth` counts `dir` itself as 0 (the picked folder); recursion into
+// a child only happens while the CHILD's own depth still fits inside
+// `max_depth`, so a folder past the limit contributes no file at all, not
+// just the ones further down inside it.
+fn walk_import_folder(dir: &Path, depth: u32, max_depth: u32, max_files: usize, out: &mut Vec<PathBuf>) {
+    if out.len() >= max_files {
+        return;
+    }
+    let Ok(read) = fs::read_dir(dir) else { return };
+    let mut entries: Vec<_> = read.flatten().collect();
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        if out.len() >= max_files {
+            return;
+        }
+        let path = entry.path();
+        if path.is_dir() {
+            if depth + 1 >= max_depth {
+                continue; // too deep -- left out whole, not just truncated
+            }
+            walk_import_folder(&path, depth + 1, max_depth, max_files, out);
+        } else if is_import_folder_file(&path) {
+            out.push(path);
+        }
+    }
+}
+
+// One tag per subfolder level between `base` and the file, in order --
+// `base` itself never becomes a tag.
+fn import_folder_tags(base: &Path, path: &Path) -> Vec<String> {
+    path.parent()
+        .and_then(|p| p.strip_prefix(base).ok())
+        .map(|rel| rel.components().filter_map(|c| c.as_os_str().to_str()).map(|s| s.to_string()).collect())
+        .unwrap_or_default()
+}
+
+fn import_folder_rel_path(base: &Path, path: &Path) -> String {
+    path.strip_prefix(base).unwrap_or(path).to_string_lossy().replace('\\', "/")
+}
+
+// The first line becomes the standalone note when it is short and something
+// follows it; the rest of the file becomes the prompt text. A first line
+// already long, or a file with nothing after it, stays the whole text with no
+// note extracted -- a one-line file has no "rest" to separate it from.
+fn split_folder_note(content: &str) -> (String, String) {
+    let content = content.replace("\r\n", "\n");
+    let mut lines = content.splitn(2, '\n');
+    let first = lines.next().unwrap_or("");
+    let rest = lines.next();
+    match rest {
+        Some(rest) if !rest.trim().is_empty() && first.chars().count() <= IMPORT_FOLDER_NOTE_MAX_CHARS => {
+            (rest.to_string(), first.trim().to_string())
+        }
+        _ => (content, String::new()),
+    }
+}
+
+// Checks readability the same way the confirm step will actually read the
+// file (size cap, then UTF-8), so a file shown as importable here can never
+// turn out unreadable at confirm time on the same, unchanged disk state.
+fn read_import_folder_file(path: &Path) -> Result<String, &'static str> {
+    let meta = fs::metadata(path).map_err(|_| "read-error")?;
+    if meta.len() > MAX_IMPORT_FOLDER_FILE_BYTES {
+        return Err("too-large");
+    }
+    let bytes = fs::read(path).map_err(|_| "read-error")?;
+    String::from_utf8(bytes).map_err(|_| "bad-encoding")
+}
+
+fn scan_import_folder(base: &Path, max_depth: u32, max_files: usize) -> (Vec<FolderImportEntry>, bool) {
+    let mut paths = Vec::new();
+    // One extra slot so the scan can tell "exactly max_files" and "more than
+    // max_files" apart; the extra entry is dropped again right below.
+    walk_import_folder(base, 0, max_depth, max_files + 1, &mut paths);
+    let truncated = paths.len() > max_files;
+    paths.truncate(max_files);
+    let items = paths
+        .into_iter()
+        .map(|path| {
+            let rel_path = import_folder_rel_path(base, &path);
+            let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| rel_path.clone());
+            let tags = import_folder_tags(base, &path);
+            let size = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+            let (readable, skip_reason) = match read_import_folder_file(&path) {
+                Ok(_) => (true, String::new()),
+                Err(reason) => (false, reason.to_string()),
+            };
+            FolderImportEntry { rel_path, name, tags, size, readable, skip_reason }
+        })
+        .collect();
+    (items, truncated)
+}
+
+// Opens the folder picker itself (like preview_import opens its file picker),
+// then scans it read-only with the current importFolderDepth/importFolderMax
+// settings. Never touches the store -- what actually gets imported is decided
+// later, by which checkboxes import_folder_files is called with.
+#[tauri::command]
+async fn preview_import_folder(app: AppHandle, state: State<'_, Db>) -> Result<FolderImportPreview, String> {
+    let Some(dir) = file_dialog(&app).pick_folder() else {
+        return Err("canceled".to_string());
+    };
+    let (max_depth, max_files) = {
+        let store = lock(&state);
+        (import_folder_depth_setting(&store), import_folder_max_setting(&store))
+    };
+    let (items, truncated) = scan_import_folder(&dir, max_depth, max_files);
+    Ok(FolderImportPreview { dir: dir.to_string_lossy().to_string(), items, truncated })
+}
+
+// Confirm step: re-reads exactly the checked files, by the preview's own
+// relPath resolved fresh against `dir`, and imports each as its own prompt.
+// A file gone or turned unreadable since the preview is silently skipped
+// rather than failing the whole batch -- there is no single content hash for
+// a folder of independent files the way preview_import has for one file, so
+// "reviewed, then acted on" is enforced per file instead of for the whole set.
+#[tauri::command]
+async fn import_folder_files(app: AppHandle, state: State<'_, Db>, dir: String, rel_paths: Vec<String>) -> Result<usize, String> {
+    let base = Path::new(&dir);
+    let mut items = Vec::new();
+    for rel in rel_paths {
+        let path = base.join(&rel);
+        let Ok(content) = read_import_folder_file(&path) else { continue };
+        let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        if name.is_empty() {
+            continue;
+        }
+        let tags = import_folder_tags(base, &path);
+        // The rotation split runs FIRST, on the whole file -- the note is only
+        // ever pulled off entry 0 (the plain text), never off a later variant,
+        // so a short line right after the separator is never mistaken for it.
+        let (raw_text, variants) = split_variants(&content);
+        let (text, note) = split_folder_note(&raw_text);
+        items.push(ImportedPrompt {
+            name,
+            text,
+            color: String::new(),
+            font: String::new(),
+            font_size: 0,
+            file_path: String::new(),
+            pdf_page: 0,
+            icon_path: String::new(),
+            caption: String::new(),
+            caption_size: 0,
+            show_image: false,
+            copy_image: false,
+            image: String::new(),
+            tags,
+            notes: note,
+            variants,
+            rotate_mode: String::new(),
+            favorite: false,
+        });
+    }
+    let mut store = lock(&state);
+    let before_len = store.prompts.len();
+    let count = append_imported_prompts(&mut store, items);
     if !save_prompts(&app, &store) {
         store.prompts.truncate(before_len);
         return Err("save-failed".into());
@@ -27628,6 +27855,8 @@ pub fn run() {
             export_prompts,
             preview_import,
             import_prompts,
+            preview_import_folder,
+            import_folder_files,
             export_all,
             import_all,
             pick_backup_file,
@@ -34193,6 +34422,154 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("ps-video-folder-missing-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir); // guarantee it really does not exist
         assert_eq!(video_folder_stats(dir.to_string_lossy().to_string()), (0, 0));
+    }
+
+    // ---- Folder import ----
+
+    #[test]
+    fn scan_import_folder_turns_subfolders_into_tags_and_reads_only_md_and_txt() {
+        let dir = std::env::temp_dir().join(format!("ps-import-folder-tags-{}", std::process::id()));
+        let sub = dir.join("Work").join("Clients");
+        fs::create_dir_all(&sub).unwrap();
+        fs::write(sub.join("Note.txt"), b"Hello").unwrap();
+        fs::write(dir.join("Top.md"), b"Top level").unwrap();
+        fs::write(dir.join("ignored.jpg"), b"not text").unwrap();
+        let (items, truncated) = scan_import_folder(&dir, 5, 500);
+        assert!(!truncated);
+        assert_eq!(items.len(), 2, "only the two text files count, never the image");
+        let nested = items.iter().find(|i| i.name == "Note").unwrap();
+        assert_eq!(nested.tags, vec!["Work".to_string(), "Clients".to_string()]);
+        let top = items.iter().find(|i| i.name == "Top").unwrap();
+        assert!(top.tags.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn split_folder_note_extracts_a_short_first_line_and_keeps_a_long_one_as_text() {
+        let (text, note) = split_folder_note("Shopping list\nMilk\nEggs");
+        assert_eq!(note, "Shopping list");
+        assert_eq!(text, "Milk\nEggs");
+        let long_first = "x".repeat(IMPORT_FOLDER_NOTE_MAX_CHARS + 1);
+        let (text2, note2) = split_folder_note(&format!("{long_first}\nrest"));
+        assert!(note2.is_empty());
+        assert_eq!(text2, format!("{long_first}\nrest"));
+        // A one-line file has no "rest" left to separate the note from.
+        let (text3, note3) = split_folder_note("Just one line");
+        assert!(note3.is_empty());
+        assert_eq!(text3, "Just one line");
+    }
+
+    #[test]
+    fn import_folder_files_reads_a_rotation_separator_into_variants() {
+        let dir = std::env::temp_dir().join(format!("ps-import-folder-rotate-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("Greeting.txt"), format!("Hi{VARIANT_SEP}Hello{VARIANT_SEP}Hey")).unwrap();
+        let content = read_import_folder_file(&dir.join("Greeting.txt")).unwrap();
+        let (raw_text, variants) = split_variants(&content);
+        let (text, note) = split_folder_note(&raw_text);
+        assert!(note.is_empty());
+        assert_eq!(text, "Hi");
+        assert_eq!(variants, vec!["Hello".to_string(), "Hey".to_string()]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scan_import_folder_leaves_out_a_folder_past_the_depth_limit_entirely() {
+        let dir = std::env::temp_dir().join(format!("ps-import-folder-depth-{}", std::process::id()));
+        let deep = dir.join("a").join("b").join("c");
+        fs::create_dir_all(&deep).unwrap();
+        fs::write(dir.join("a").join("shallow.txt"), b"shallow").unwrap();
+        fs::write(deep.join("deep.txt"), b"deep").unwrap();
+        // depth 2 = the base folder plus one level of subfolders -- "a" is
+        // included, "a/b" is already past the limit and never descended into.
+        let (items, _) = scan_import_folder(&dir, 2, 500);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].name, "shallow");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scan_import_folder_stops_at_the_maximum_and_reports_truncation() {
+        let dir = std::env::temp_dir().join(format!("ps-import-folder-max-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        for i in 0..5 {
+            fs::write(dir.join(format!("n{i}.txt")), b"x").unwrap();
+        }
+        let (items, truncated) = scan_import_folder(&dir, 5, 3);
+        assert_eq!(items.len(), 3);
+        assert!(truncated);
+        let (items2, truncated2) = scan_import_folder(&dir, 5, 5);
+        assert_eq!(items2.len(), 5);
+        assert!(!truncated2);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scan_import_folder_marks_an_oversized_or_binary_file_unreadable_with_a_reason() {
+        let dir = std::env::temp_dir().join(format!("ps-import-folder-oversize-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let huge = vec![b'a'; (MAX_IMPORT_FOLDER_FILE_BYTES + 1) as usize];
+        fs::write(dir.join("huge.txt"), &huge).unwrap();
+        fs::write(dir.join("bad.txt"), [0xff, 0xfe, 0x00]).unwrap();
+        fs::write(dir.join("ok.txt"), b"fine").unwrap();
+        let (items, _) = scan_import_folder(&dir, 5, 500);
+        let huge_item = items.iter().find(|i| i.name == "huge").unwrap();
+        assert!(!huge_item.readable);
+        assert_eq!(huge_item.skip_reason, "too-large");
+        let bad_item = items.iter().find(|i| i.name == "bad").unwrap();
+        assert!(!bad_item.readable);
+        assert_eq!(bad_item.skip_reason, "bad-encoding");
+        let ok_item = items.iter().find(|i| i.name == "ok").unwrap();
+        assert!(ok_item.readable);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn import_folder_files_appends_a_prompt_with_tags_note_and_variants() {
+        let dir = std::env::temp_dir().join(format!("ps-import-folder-confirm-{}", std::process::id()));
+        let sub = dir.join("Recipes");
+        fs::create_dir_all(&sub).unwrap();
+        fs::write(sub.join("Cake.txt"), format!("A short title\nFlour, sugar, eggs{VARIANT_SEP}Butter, sugar, eggs")).unwrap();
+        let mut store = Store {
+            prompts: Vec::new(),
+            trash: Vec::new(),
+            settings: Settings::default(),
+            prompts_locked: false,
+            written: Default::default(),
+        };
+        let path = sub.join("Cake.txt");
+        let content = read_import_folder_file(&path).unwrap();
+        let tags = import_folder_tags(&dir, &path);
+        let (raw_text, variants) = split_variants(&content);
+        let (text, note) = split_folder_note(&raw_text);
+        let items = vec![ImportedPrompt {
+            name: "Cake".to_string(),
+            text,
+            color: String::new(),
+            font: String::new(),
+            font_size: 0,
+            file_path: String::new(),
+            pdf_page: 0,
+            icon_path: String::new(),
+            caption: String::new(),
+            caption_size: 0,
+            show_image: false,
+            copy_image: false,
+            image: String::new(),
+            tags,
+            notes: note,
+            variants,
+            rotate_mode: String::new(),
+            favorite: false,
+        }];
+        let count = append_imported_prompts(&mut store, items);
+        assert_eq!(count, 1);
+        let p = &store.prompts[0];
+        assert_eq!(p.tags, vec!["Recipes".to_string()]);
+        assert_eq!(p.notes, "A short title");
+        assert_eq!(p.text, "Flour, sugar, eggs");
+        assert_eq!(p.variants, vec!["Butter, sugar, eggs".to_string()]);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     // ---- Discard trash ----

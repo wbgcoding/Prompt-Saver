@@ -3193,6 +3193,50 @@ PROBE = """
         }
       }
     }
+    // 446: import from a folder -- tags/size/a checkbox per row, an unreadable
+    // file grayed out with its reason, and the "off by default" checkbox is
+    // never touched here (cancel only, same reasoning as the import preview above).
+    {
+      const folderBtn = document.getElementById('import-folder-btn');
+      if (!folderBtn) {
+        out.errors.push('the settings page has no import-from-folder button');
+      } else {
+        folderBtn.click();
+        await sleep(300);
+        const modal = document.getElementById('import-folder-modal');
+        if (!modal || modal.classList.contains('hidden')) {
+          out.errors.push('the folder import preview did not open');
+        } else {
+          const rows = [...document.querySelectorAll('#import-folder-list .import-preview-row')];
+          if (rows.length !== 3) out.errors.push('the folder import preview lists ' + rows.length + ' rows, expected 3');
+          const badRows = rows.filter(r => r.classList.contains('dup'));
+          if (badRows.length !== 1) out.errors.push('the folder import preview marks ' + badRows.length + ' rows unreadable, expected 1');
+          if (badRows.length && badRows[0].querySelector('input[type=checkbox]')) {
+            out.errors.push('an unreadable folder-import row still has a checkbox');
+          }
+          if (badRows.length && !badRows[0].querySelector('.import-preview-badge')) {
+            out.errors.push('an unreadable folder-import row has no reason badge');
+          }
+          const goodRows = rows.filter(r => !r.classList.contains('dup'));
+          const checked = goodRows.filter(r => (r.querySelector('input[type=checkbox]') || {}).checked);
+          if (checked.length !== goodRows.length) out.errors.push('a readable folder-import row does not start checked');
+          const tagged = goodRows.find(r => (r.querySelector('.import-preview-name') || {}).textContent === 'Meeting');
+          if (!tagged || !tagged.querySelector('.import-preview-badge')) {
+            out.errors.push('a folder-import row from a subfolder shows no tag badge');
+          }
+          document.getElementById('import-folder-select-none').click();
+          await sleep(100);
+          const confirmBtn = document.getElementById('import-folder-confirm');
+          if (!confirmBtn.disabled) out.errors.push('the folder import confirm button stays enabled with none selected');
+          document.getElementById('import-folder-select-all').click();
+          await sleep(100);
+          if (confirmBtn.disabled) out.errors.push('the folder import confirm button stays disabled after selecting all');
+          document.getElementById('import-folder-cancel').click();
+          await sleep(200);
+          if (!modal.classList.contains('hidden')) out.errors.push('canceling the folder import did not close it');
+        }
+      }
+    }
     // 339: settings export control -- one "Export" button plus a CSV/TXT/JSON
     // format select (replaces the old two hard-coded CSV/TXT buttons).
     {

@@ -443,6 +443,13 @@ the video editor and the introduction tour ship on).
   bar between tabs for moving) so the two are never confused. A tab inside an
   open group moves within that group the same way. How wide that outer edge
   is, is adjustable in the expert menu.
+- **Import from a folder.** Turns a folder of .md/.txt files into tiles, one
+  per file, read only, nothing is ever moved or deleted. The file name becomes
+  the name, a short first line becomes the note, each subfolder becomes a tag,
+  and a file already using the rotation separator becomes a rotating tile. A
+  preview lists every file with its tags, size and a checkbox, and grays out
+  anything unreadable with the reason why. How deep it looks into subfolders
+  and how many files it stops at are both adjustable in the expert menu.
 
 ### Improved
 

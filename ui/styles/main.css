@@ -4827,6 +4827,8 @@ button.tag-chip:hover { border-color: var(--accent); }
    apart, not the two buttons apart from each other. */
 .import-preview-actions { flex: 0 0 auto; display: flex; gap: 6px; }
 .import-preview-actions .ghost-btn { padding: 3px 8px; font-size: 12px; }
+/* Select all/none above a checkbox-per-row preview (the folder import). */
+.import-preview-list-head { display: flex; gap: 8px; margin-bottom: 4px; }
 
 /* ---- Custom themes ---- */
 /* The editor button sits right of the theme dropdown, which gives up the width. */

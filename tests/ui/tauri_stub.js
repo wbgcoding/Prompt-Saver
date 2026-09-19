@@ -659,6 +659,21 @@ const RESULTS = {
     if (!a || !a.hash) throw new Error("import_prompts stub called without hash");
     return 2; // New A + New C from the preview fixture above
   },
+  // 446: a folder import picks a folder, then previews every .md/.txt file
+  // found in it -- one plain note, one in a tagged subfolder, one too big to read.
+  preview_import_folder: () => ({
+    dir: "C:\\fake\\notes",
+    truncated: false,
+    items: [
+      { rel_path: "Idea.txt", name: "Idea", tags: [], size: 42, readable: true, skip_reason: "" },
+      { rel_path: "Work\\Meeting.md", name: "Meeting", tags: ["Work"], size: 128, readable: true, skip_reason: "" },
+      { rel_path: "huge.txt", name: "huge", tags: [], size: 99999999, readable: false, skip_reason: "too-large" },
+    ],
+  }),
+  import_folder_files: (a) => {
+    if (!a || !Array.isArray(a.relPaths)) throw new Error("import_folder_files stub called without relPaths");
+    return a.relPaths.length;
+  },
   list_backups: () => [
     { name: "2026-07-25_18-30-00", size: 812345, prompts: 12, items: [
       { name: "Draft reply", chars: 214, kind: "text" },

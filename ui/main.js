@@ -1779,6 +1779,10 @@ const EXPERT_VALUES = {
   // rather than dupFinder since the hint is the more commonly-hit path (it
   // fires on every save); no OR-gate exists for a row two flags both use.
   similarThreshold: { label: "valSimilarThreshold", min: 70, max: 99, step: 1, def: 85, unit: "%", gate: "similarHint" },
+  // Import from a folder: how many subfolder levels to scan (1 = the picked
+  // folder only) and how many files to stop at.
+  importFolderDepth: { label: "valImportFolderDepth", min: 1, max: 5, step: 1, def: 3, unit: "", gate: "importExport" },
+  importFolderMax: { label: "valImportFolderMax", min: 10, max: 2000, step: 10, def: 500, unit: "", gate: "importExport" },
   // How often the open editor writes its autosave draft.
   editorDraftSecs: { label: "valEditorDraftSecs", min: 2, max: 30, step: 1, def: 5, unit: "s", gate: "editorDraft" },
   // How long a confirm button (delete etc.) stays armed before it auto-resets.
@@ -2208,7 +2212,7 @@ const EXPERT_TABS = [
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
-    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken", "undoToast", "errorLog"], values: ["similarThreshold", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "videoClipTtlMin", "errorLogKeepKb", "undoToastMs", "errorLogMax"], selects: ["trashRetentionDays", "recordingRetentionDays"],
+    { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken", "undoToast", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "videoClipTtlMin", "errorLogKeepKb", "undoToastMs", "errorLogMax"], selects: ["trashRetentionDays", "recordingRetentionDays"],
       actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }, { id: "float-recall", label: "floatRecallAction", gate: "floating" }, { id: "error-log-open", label: "errorLogAction" }] },
   ] },
 ];
@@ -14607,6 +14611,110 @@ async function runImport() {
   }
 }
 
+// Maps the backend's plain skip-reason codes to their translated row badge.
+const IMPORT_FOLDER_REASON_KEY = {
+  "too-large": "importFolderReasonTooLarge",
+  "bad-encoding": "importFolderReasonBadEncoding",
+  "read-error": "importFolderReasonReadError",
+};
+
+// Same "review, then confirm" shape as runImportPreview, but for a whole
+// folder of .md/.txt files instead of one export file: every readable item
+// starts checked (a folder import is opt-out, not opt-in, since picking the
+// folder at all already means "these are the notes I want"), tags/size/a
+// per-row checkbox are shown, and an unreadable file is grayed out with why
+// rather than silently dropped.
+async function runImportFolder() {
+  let preview;
+  try {
+    preview = await withDialog(() => invoke("preview_import_folder"));
+  } catch (err) {
+    if (String(err) !== "canceled") toast(t("importFolderFailed"));
+    return;
+  }
+  if (!preview) return;
+  const modal = $("import-folder-modal");
+  const list = $("import-folder-list");
+  const summary = $("import-folder-summary");
+  const confirmBtn = $("import-folder-confirm");
+  const checks = new Map(); // relPath -> checkbox, readable items only
+  const updateSummary = () => {
+    const n = [...checks.values()].filter((cb) => cb.checked).length;
+    let text = t("importFolderSummary").replace("{n}", n).replace("{total}", preview.items.length);
+    if (preview.truncated) text += " " + t("importFolderTruncated");
+    summary.textContent = text;
+    confirmBtn.disabled = n === 0;
+  };
+  list.innerHTML = "";
+  for (const item of preview.items) {
+    const row = document.createElement("div");
+    row.className = "import-preview-row" + (item.readable ? "" : " dup");
+    if (item.readable) {
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = true;
+      cb.addEventListener("change", updateSummary);
+      checks.set(item.rel_path, cb);
+      row.appendChild(cb);
+    }
+    const name = document.createElement("span");
+    name.className = "import-preview-name";
+    name.textContent = item.name;
+    row.appendChild(name);
+    for (const tag of item.tags) {
+      const tagBadge = document.createElement("span");
+      tagBadge.className = "import-preview-badge";
+      tagBadge.textContent = tag;
+      row.appendChild(tagBadge);
+    }
+    const sizeBadge = document.createElement("span");
+    sizeBadge.className = "import-preview-badge";
+    sizeBadge.textContent = fmtBytes(item.size);
+    row.appendChild(sizeBadge);
+    if (!item.readable) {
+      const reasonBadge = document.createElement("span");
+      reasonBadge.className = "import-preview-badge";
+      reasonBadge.textContent = t(IMPORT_FOLDER_REASON_KEY[item.skip_reason] || "importFolderReasonReadError");
+      row.appendChild(reasonBadge);
+    }
+    list.appendChild(row);
+  }
+  updateSummary();
+  modal.classList.remove("hidden");
+  const confirmed = await new Promise((resolve) => {
+    const done = (v) => {
+      modal.classList.add("hidden");
+      confirmBtn.removeEventListener("click", onOk);
+      $("import-folder-cancel").removeEventListener("click", onCancel);
+      $("import-folder-close").removeEventListener("click", onCancel);
+      $("import-folder-select-all").removeEventListener("click", onAll);
+      $("import-folder-select-none").removeEventListener("click", onNone);
+      resolve(v);
+    };
+    const onOk = () => done(true);
+    const onCancel = () => done(false);
+    const onAll = () => { for (const cb of checks.values()) cb.checked = true; updateSummary(); };
+    const onNone = () => { for (const cb of checks.values()) cb.checked = false; updateSummary(); };
+    confirmBtn.addEventListener("click", onOk);
+    $("import-folder-cancel").addEventListener("click", onCancel);
+    $("import-folder-close").addEventListener("click", onCancel);
+    $("import-folder-select-all").addEventListener("click", onAll);
+    $("import-folder-select-none").addEventListener("click", onNone);
+  });
+  if (!confirmed) return;
+  const relPaths = [...checks.entries()].filter(([, cb]) => cb.checked).map(([rel]) => rel);
+  if (!relPaths.length) return;
+  try {
+    const count = await withTaskbarBusy("import", () => invoke("import_folder_files", { dir: preview.dir, relPaths }));
+    if (count == null) return;
+    await renderGrid(true);
+    toast(t("imported").replace("{n}", count.toLocaleString(LANG)));
+    maybeDupImportToast();
+  } catch {
+    toast(t("importFolderFailed"));
+  }
+}
+
 // "Everything" backup: prompts + all settings in one JSON file.
 async function runExportAll() {
   try {
@@ -18388,6 +18496,7 @@ function bind() {
   $("hotkeys-search").addEventListener("input", renderHotkeysList);
 
   $("import-btn").addEventListener("click", runImport);
+  $("import-folder-btn").addEventListener("click", runImportFolder);
   $("export-btn").addEventListener("click", () => runExport($("export-format").value));
   $("import-all").addEventListener("click", runImportAll);
   $("export-all").addEventListener("click", runExportAll);
