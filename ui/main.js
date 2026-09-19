@@ -38,6 +38,7 @@ const modal = {
   confirm: $("modal-confirm"),
   delete: $("modal-delete"),
   fav: $("modal-fav"),
+  secret: $("modal-secret"),
   imgWrap: $("modal-img-wrap"),
   img: $("modal-img"),
   video: $("modal-video"),
@@ -1507,6 +1508,9 @@ const OPT_FLAG_LABELS = {
   // apart from varDefaults on purpose -- a deliberately maintained value must
   // never be mistaken for whatever happened to be typed in last.
   varFixed: "flagVarFixed",
+  // Per-entry encryption (Vorschlag 68). Ships off: an untouched install has
+  // nothing to type a vault password for.
+  secretPrompts: "flagSecretPrompts",
 };
 const OPT_FLAG_KEYS = Object.keys(OPT_FLAG_LABELS);
 const isOptFlag = (key) => key in OPT_FLAG_LABELS;
@@ -1830,6 +1834,8 @@ const EXPERT_VALUES = {
   clipMinChars: { label: "valClipMin", min: 1, max: 100, step: 1, def: 3, unit: "", gate: "clipWatcher" },
   clipInboxMax: { label: "valClipMax", min: 10, max: 200, step: 10, def: 50, unit: "", gate: "clipWatcher" },
   clipSecretMinLen: { label: "valClipSecretMinLen", min: 4, max: 32, step: 1, def: 8, unit: "", gate: "clipSkipSecrets" },
+  // Confidential-entry vault: how long an unlocked session stays unlocked. 0 = until quit.
+  secretTimeoutMin: { label: "valSecretTimeoutMin", min: 0, max: 240, step: 5, def: 0, unit: "min", gate: "secretPrompts" },
   // Keyboard grid focus fades this long after the window loses focus.
   kbFocusFadeMs: { label: "valKbFocusFade", min: 500, max: 10000, step: 500, def: 2000, unit: "ms", gate: "keyboardNav" },
   // Tag chip text size (editor, library filter row, manager).
@@ -2230,7 +2236,7 @@ const EXPERT_TABS = [
   { title: "expTabSystem", groups: [
     // Toolbar button visibility (mirrors the header right-click tool list).
     { title: "expGroupToolbar", flags: ["gridViewBorder", "pinButton", "barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "toolbarHoverDim"] },
-    { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "tilesHoverDim"], values: ["tileBlur", "mediaBlur", "tilesHoverOpacity"] },
+    { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "tilesHoverDim", "secretPrompts"], values: ["tileBlur", "mediaBlur", "tilesHoverOpacity", "secretTimeoutMin"] },
     { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, { key: "whatsNew", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances", "dataDirLock", "taskbarProgress", "etaShow"], values: ["kbFocusFadeMs", "etaMinPct", "etaMinSecs", "bgDoneKeepMin"], selects: ["updateCheckH"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
@@ -2497,6 +2503,7 @@ const EXPERT_TIPS = [
   "dupFinder", "clipWatcher", "backupGfs", "backupBeforeReset", "backupBeforeDelete", "disarmMs",
   "recSweepBroken", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "videoClipTtlMin",
   "usageStats", "promptSync", "syncDir", "syncPollSecs", "syncFailMax", "clipSkipSecrets",
+  "secretPrompts", "secretTimeoutMin",
   "undoToast", "undoToastMs",
   "errorLog", "errorLogMax",
   "archiveTag",
@@ -3788,6 +3795,13 @@ const EXPERT_NOTICES = {
     when: () => !storeSealed,
     title: "storeUnsealedRow",
     body: "storeUnsealedRowNote",
+    // Leads to the one control that actually reacts to this warning: turning
+    // individual entries confidential encrypts them with their own password,
+    // independent of whatever DPAPI is doing for the rest of the store. The
+    // button sits next to the notice, not inside it -- the notice row itself
+    // stays plain text with no control of its own, as the rule for notices
+    // requires (see noticeActionRow).
+    action: { label: "storeUnsealedAction", run: () => jumpToExpertSetting("secretPrompts", "flags") },
   },
   settingsLocked: {
     when: () => settingsLocked,
@@ -3826,6 +3840,21 @@ function noticeRow(id) {
   text.append(head, body);
   row.append(icon, text);
   return row;
+}
+
+// A notice stays a notice with no control inside it (smoke_test.py checks the
+// row itself carries no input/button/select of any kind) -- but the group MAY
+// place a plain button right after it, pointing at the one setting that
+// actually addresses it. storeUnsealed is the first to use this.
+function noticeActionRow(id) {
+  const def = EXPERT_NOTICES[id];
+  if (!def?.action) return null;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "ghost-btn expert-notice-action";
+  btn.textContent = t(def.action.label);
+  btn.addEventListener("click", () => def.action.run());
+  return btn;
 }
 
 function actionRow(a) {
@@ -4043,7 +4072,10 @@ function renderExpert() {
       // State first, settings after — and nothing at all while the state does not
       // hold, so a healthy install sees no placeholder where a notice would go.
       for (const id of group.notices || []) {
-        if (EXPERT_NOTICES[id]?.when()) sec.appendChild(noticeRow(id));
+        if (!EXPERT_NOTICES[id]?.when()) continue;
+        sec.appendChild(noticeRow(id));
+        const actionBtn = noticeActionRow(id);
+        if (actionBtn) sec.appendChild(actionBtn);
       }
       const actionById = new Map(actions.map((a) => [a.id, a]));
       if (searching) {
@@ -6007,6 +6039,22 @@ function buildTile(p) {
   // A tag filter dims what does not match instead of hiding it — the cell
   // stays occupied, so drag/reorder/grid geometry never has to treat it as empty.
   if (gridTags.size && !tagMatches(p, gridTags)) tile.classList.add("tile-dimmed");
+  // Confidential and no vault key right now: the name is redacted behind a bar
+  // and a small lock badge replaces the usual type badge -- text/variants are
+  // already blank in `p` itself (see slim_prompts on the backend), so nothing
+  // here ever has the real text to accidentally show.
+  if (p.locked) {
+    tile.classList.add("tile-locked");
+    const lock = document.createElement("span");
+    lock.className = "tile-lock-badge";
+    lock.title = t("editorSecretLabel");
+    lock.setAttribute("aria-label", t("editorSecretLabel"));
+    lock.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">'
+      + '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M7 10.5V7a5 5 0 0 1 10 0v3.5"/>'
+      + '<rect x="5" y="10.5" width="14" height="9.5" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>'
+      + '</svg>';
+    tile.appendChild(lock);
+  }
   // Bulk-selection checkbox. Its own pointerdown/click stop propagation so a
   // press here can never arm the tile's reorder drag or start a copy.
   const selBtn = document.createElement("button");
@@ -8302,7 +8350,7 @@ function disarmDraftAutosave() {
   draftLastSaved = null;
 }
 
-function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", pdfPage = 0, iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", variants = [], rotateMode = "", rotateAuto = false, title, targetCell }) {
+function openModal({ mode, id, name = "", text = "", color = "", image = "", showImage = false, copyImage = false, filePath = "", pdfPage = 0, iconPath = "", caption = "", captionSize = 0, font = "", fontSize = 0, favorite = false, tags = [], notes = "", hotkey = "", hotkeyPaste = "", variants = [], rotateMode = "", rotateAuto = false, secret = false, locked = false, title, targetCell }) {
   modalSession++;
   modalOpener = document.activeElement;
   modalState = {
@@ -8316,10 +8364,16 @@ function openModal({ mode, id, name = "", text = "", color = "", image = "", sho
     rotateEntries: variants.length ? [text, ...variants] : [],
     rotateMode,
     rotateAuto: !!rotateAuto,
+    // Confidential-entry state. Toggling it is its own immediate backend action
+    // (set_prompt_secret), never part of the regular save -- see
+    // onModalSecretToggle, which is the only place that changes this in memory.
+    secret: !!secret,
+    locked: !!locked,
   };
   modal.title.textContent = title;
   modal.fav.classList.toggle("active", !!favorite);
   modal.fav.setAttribute("aria-pressed", String(!!favorite));
+  updateSecretToggleUi(mode, !!secret, !!copyImage, filePath);
   modal.name.value = name;
   modal.text.value = text;
   mdEditing = false; // every prompt opens rendered; a click on the pane starts editing
@@ -8347,6 +8401,87 @@ function openModal({ mode, id, name = "", text = "", color = "", image = "", sho
   armDraftAutosave();
   modal.name.focus();
   modal.name.select();
+}
+
+// ---- Confidential entries (Vorschlag 68) ----
+// Marking a prompt confidential only ever applies to a saved, plain text
+// entry -- an image/file prompt has nothing in `text` worth encrypting, and a
+// brand-new "create" draft has no id yet for set_prompt_secret to act on.
+function updateSecretToggleUi(mode, secret, copyImage, filePath) {
+  const eligible = mode === "edit" && flag("secretPrompts") && !copyImage && !filePath;
+  modal.secret.classList.toggle("hidden", !eligible);
+  modal.secret.classList.toggle("active", !!secret);
+  modal.secret.setAttribute("aria-pressed", String(!!secret));
+}
+
+// Ensures the vault has a live session key, asking to set one up on first use
+// or to unlock it otherwise. Returns false on cancel or a wrong password --
+// the caller must not proceed with anything that needs the key.
+async function ensureSecretVaultUnlocked() {
+  const status = await invoke("secret_vault_status").catch(() => null);
+  if (!status) return false;
+  if (status.unlocked) return true;
+  const pw = await confirmDialog(
+    status.configured
+      ? {
+          title: t("secretUnlockTitle"),
+          message: t("secretUnlockMsg"),
+          confirmLabel: t("secretUnlockConfirmBtn"),
+          input: { type: "password", placeholder: t("secretPasswordPh") },
+          danger: false,
+        }
+      : {
+          title: t("secretSetupTitle"),
+          message: t("secretSetupMsg"),
+          confirmLabel: t("secretSetupConfirmBtn"),
+          input: { type: "password", placeholder: t("secretPasswordPh") },
+          checkboxes: [{ key: "understand", label: t("secretSetupConfirm"), checked: false }],
+          danger: false,
+        }
+  );
+  if (!pw) return false;
+  try {
+    await invoke("secret_vault_unlock", { password: pw });
+    return true;
+  } catch (e) {
+    toast(t("secretWrongPassword"));
+    return false;
+  }
+}
+
+// The one click handler for the editor's confidential toggle, on or off alike
+// -- both directions re-encrypt/decrypt the STORED text with the vault key
+// (set_prompt_secret), so any unsaved edit in the field must be saved first or
+// this would silently discard it.
+async function onModalSecretToggle() {
+  if (!modalState || modalState.mode !== "edit") return;
+  if (modalSnapshot() !== modalInitial) {
+    toast(t("secretNeedsSaveFirst"));
+    return;
+  }
+  const id = modalState.id;
+  const next = !modalState.secret;
+  if (!(await ensureSecretVaultUnlocked())) return;
+  try {
+    await invoke("set_prompt_secret", { id, secret: next });
+  } catch (e) {
+    toast(String(e) === "secret-locked" ? t("secretWrongPassword") : String(e));
+    return;
+  }
+  modalState.secret = next;
+  updateSecretToggleUi(modalState.mode, next, modalState.copyImage, modalState.filePath);
+  await renderGrid();
+  if (next) {
+    // The field now holds ciphertext at rest -- closing avoids the editor
+    // resaving the plain text it still shows over that.
+    closeModal();
+  } else {
+    const fresh = prompts.find((x) => x.id === id);
+    if (fresh) {
+      modal.text.value = fresh.text;
+      modalInitial = modalSnapshot();
+    }
+  }
 }
 
 // ---- Per-prompt hotkey (editor row) ----
@@ -12257,6 +12392,10 @@ function promptToModal(p) {
     variants: p.variants || [],
     rotateMode: p.rotate_mode || "",
     rotateAuto: p.rotate_auto || false,
+    // get_prompt already refuses a locked confidential entry outright, so by
+    // the time this runs `secret` (if true) always means "decrypted, editable
+    // text below" -- never leftover ciphertext.
+    secret: p.secret || false,
     title: p.file_path
       ? t(kind === "video" ? "videoEditTitle" : kind ? "imageEditTitle" : "fileEditTitle")
       : p.copy_image ? t("imageEditTitle") : t("editModalTitle"),
@@ -12268,16 +12407,23 @@ async function duplicatePrompt(id) {
   try {
     p = await invoke("get_prompt", { id });
   } catch (err) {
-    errToast(err);
-    return;
+    if (String(err) === "secret-locked" && (await ensureSecretVaultUnlocked())) {
+      p = await invoke("get_prompt", { id }).catch((e2) => { errToast(e2); return null; });
+    } else {
+      if (String(err) !== "secret-locked") errToast(err);
+      return;
+    }
   }
   if (!p) return;
-  // A copy starts unstarred and unbound: one accelerator belongs to one prompt.
+  // A copy starts unstarred, unbound and not confidential: one accelerator
+  // belongs to one prompt, and turning the copy confidential again is its own
+  // deliberate action, not something a duplicate inherits.
   openModal({
     ...promptToModal(p),
     mode: "create",
     name: `${p.name} (${t("duplicateSuffix")})`,
     favorite: false,
+    secret: false,
     hotkey: "",
     hotkeyPaste: "",
   });
@@ -12288,8 +12434,15 @@ async function editPrompt(id) {
   try {
     p = await invoke("get_prompt", { id });
   } catch (err) {
-    errToast(err);
-    return;
+    // A confidential entry the vault has no key for right now -- ask for it,
+    // exactly the same first-access moment a copy would ask for it, then
+    // retry the same fetch once instead of just refusing.
+    if (String(err) === "secret-locked" && (await ensureSecretVaultUnlocked())) {
+      p = await invoke("get_prompt", { id }).catch((e2) => { errToast(e2); return null; });
+    } else {
+      if (String(err) !== "secret-locked") errToast(err);
+      return;
+    }
   }
   if (p) {
     openModal({ ...promptToModal(p), mode: "edit", id });
@@ -14321,11 +14474,31 @@ async function restoreBatchDelete(ids) {
   if (!libraryEl.classList.contains("hidden")) renderLibrary();
 }
 
+// Asked only when the export set actually holds a confidential entry, so a
+// store with none never sees this step. `null` means the whole export was
+// cancelled here (never reaches export_prompts); otherwise a plain boolean,
+// default false ("aus") matching the OK button/Enter key.
+async function confirmSecretExport(idFilter) {
+  const n = prompts.filter((p) => p.secret && (!idFilter || idFilter.has(p.id))).length;
+  if (!n) return false;
+  const choice = await confirmDialog({
+    title: t("secretExportTitle"),
+    message: t("secretExportMsg").replace("{n}", String(n)),
+    confirmLabel: t("secretExportExclude"),
+    altLabel: t("secretExportInclude"),
+    danger: false,
+  });
+  if (choice === false) return null; // Cancel: abort the export entirely
+  return choice === "alt";
+}
+
 async function batchExport(format) {
   const ids = [...libSelected];
   if (!ids.length) return;
+  const includeSecrets = await confirmSecretExport(new Set(ids));
+  if (includeSecrets === null) return;
   try {
-    const n = await invoke("export_prompts", { format, ids });
+    const n = await invoke("export_prompts", { format, ids, includeSecrets });
     toast(t("exportDone").replace("{n}", String(n)));
   } catch (e) {
     if (String(e) !== "canceled") errToast(e);
@@ -14337,6 +14510,17 @@ async function batchExport(format) {
 // failed or the user cancelled. The single copy entry point for every path that
 // does not run the dialog's own double-click handling (grid, library, journal).
 async function copyResolved(p) {
+  // Confidential and the vault has no key right now: ask for it before doing
+  // anything else, the same first-access moment the spec describes for a
+  // click on a locked tile. A cancelled/wrong-password prompt just fails the
+  // copy, same as any other cancelled copy.
+  if (p.locked) {
+    if (!(await ensureSecretVaultUnlocked())) return false;
+    await renderGrid(); // pulls the now-decrypted text into `prompts`
+    const fresh = prompts.find((x) => x.id === p.id);
+    if (!fresh || fresh.locked) return false;
+    p = fresh;
+  }
   // Rotating prompt — peek the entry copy_prompt would use, resolve variables
   // on THAT text (fixes {#{...}#} tokens, if any, in it), then commit only once the
   // copy actually reaches the clipboard, so a cancelled variable dialog never
@@ -14937,8 +15121,10 @@ async function openJournal() {
 
 // ---- Settings actions ----
 async function runExport(format) {
+  const includeSecrets = await confirmSecretExport(null);
+  if (includeSecrets === null) return;
   try {
-    await withDialog(() => invoke("export_prompts", { format }));
+    await withDialog(() => invoke("export_prompts", { format, includeSecrets }));
   } catch (err) {
     if (String(err) !== "canceled") toast(t("exportFailed"));
   }
@@ -15354,6 +15540,7 @@ function bind() {
     const on = modal.fav.classList.toggle("active");
     modal.fav.setAttribute("aria-pressed", String(on));
   });
+  modal.secret.addEventListener("click", onModalSecretToggle);
   // Rotating prompts.
   modal.rotateSwitch.addEventListener("change", async () => {
     if (modal.rotateSwitch.checked) {

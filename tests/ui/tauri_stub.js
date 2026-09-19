@@ -136,6 +136,39 @@ const PROMPTS = Array.from({ length: 12 }, (_, i) => ({
   show_image: i === 11,
 }));
 
+// 458: one confidential fixture, added only for the dedicated secret-vault probe
+// so every other case keeps seeing exactly the twelve plain prompts above.
+// SECRET_REAL_TEXT is what get_state/get_prompt hand back once unlocked; while
+// locked they show "" the same way the real backend's slim_prompts blanks it.
+const SECRET_REAL_TEXT = "REAL_TEXT_MARKER";
+let SECRET_UNLOCKED = false;
+let SECRET_CONFIGURED = false;
+let SECRET_PASSWORD = null;
+if (window.__SECRET_TEST__) {
+  PROMPTS.push({
+    id: "psecret", name: "Confidential prompt", text: SECRET_REAL_TEXT, color: "#a855f7",
+    favorite: false, tags: [], notes: "", hotkey: "", hotkey_paste: "", file_path: "",
+    pdf_page: 0, icon_path: "", caption: "", caption_size: 0, font: "", font_size: 0,
+    media_duration_ms: 0, media_width: 0, media_height: 0, media_size_bytes: 0,
+    variants: [], rotate_mode: "", rotate_auto: false, has_image: false, image_rev: 0,
+    show_image: false, secret: true,
+  });
+  // Simulates a vault set up in an earlier session: the probe can then exercise
+  // the plain unlock dialog (and a wrong password) instead of first-time setup.
+  if (window.__SECRET_PRECONFIGURED__) {
+    SECRET_CONFIGURED = true;
+    SECRET_PASSWORD = "right";
+  }
+}
+// Presents a prompt the way the real backend's slim_prompts does: blanked
+// text/variants and locked:true with no session key, the real values once the
+// vault has been unlocked. Returns non-secret prompts unchanged.
+function presentPrompt(p) {
+  if (!p.secret) return p;
+  const locked = !SECRET_UNLOCKED;
+  return { ...p, text: locked ? "" : p.text, variants: locked ? [] : (p.variants || []), locked };
+}
+
 // A valid 1x1 PNG — enough for an <img> to accept and for a probe to compare.
 const STUB_IMAGE = "data:image/png;base64," +
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -186,7 +219,17 @@ const SETTINGS = {
   // snipTextPlate: false models the same kind of existing install, from before
   // the text tool's background became a three-way choice -- its old boolean
   // setting must convert to "none" on read without the user touching anything.
-  ui_flags: { tags: true, customThemes: true, viewGroups: true, promptNotes: true, pillFolders: true, colorPicker: true, tourSeen: true, snipTextPlate: false, archiveTag: true },
+  ui_flags: {
+    tags: true, customThemes: true, viewGroups: true, promptNotes: true, pillFolders: true,
+    colorPicker: true, tourSeen: true, snipTextPlate: false, archiveTag: true,
+    // 458: off by default like the real flag -- the dedicated secret-vault probe
+    // turns it on to reach the editor's confidential toggle. It also turns
+    // autoPaste off there: two clicks close together on the same still-locked
+    // tile must each open the password dialog, not be read as the unrelated
+    // copy-then-paste double-click gesture.
+    secretPrompts: !!window.__SECRET_TEST__,
+    ...(window.__SECRET_TEST__ ? { autoPaste: false } : {}),
+  },
   ui_values: {}, ui_texts: {}, dup_ignored: [],
   // 428: p1 also has a canned entry in last_edited_map below, so it is the one
   // fixture with BOTH a copy and an edit timestamp; p2 (untouched) has neither.
@@ -199,7 +242,13 @@ const SETTINGS = {
   // more - home carries every prompt (matches the fully-packed 4x3 LAYOUT plus
   // the folder members below), the other three views start empty.
   views: [
-    { id: "home", name: "Home", cols: 4, rows: 3, layouts: { "4x3": LAYOUT }, color: "", members: PROMPTS.map((p) => p.id) },
+    // 458: the secret-vault probe's extra "psecret" fixture needs a 13th cell,
+    // so its own boot alone grows the fully-packed grid by one row rather than
+    // disturbing the 4x3 fixture every other probe relies on.
+    (() => {
+      const rows = window.__SECRET_TEST__ ? 4 : 3;
+      return { id: "home", name: "Home", cols: 4, rows, layouts: { [`4x${rows}`]: LAYOUT }, color: "", members: PROMPTS.map((p) => p.id) };
+    })(),
     { id: "work", name: "Work", cols: 4, rows: 3, layouts: {}, color: "#ef4444", members: [] },
     { id: "notes", name: "Notes", cols: 4, rows: 3, layouts: {}, color: "", members: [] },
     { id: "archive", name: "Archive", cols: 4, rows: 3, layouts: {}, color: "", members: [] },
@@ -279,7 +328,31 @@ const RESULTS = {
   set_ui_value: (a) => { SETTINGS.ui_values[a.key] = a.value; return null; },
   set_ui_text: (a) => { SETTINGS.ui_texts[a.key] = a.value; return null; },
   get_settings: () => JSON.parse(JSON.stringify(SETTINGS)),
-  get_state: () => ({ prompts: PROMPTS, settings: JSON.parse(JSON.stringify(SETTINGS)) }),
+  get_state: () => ({ prompts: PROMPTS.map(presentPrompt), settings: JSON.parse(JSON.stringify(SETTINGS)) }),
+  // 458: the single in-memory session key model -- unlock/lock/status only,
+  // never a real Argon2/AES round trip (that is the Rust unit tests' job).
+  secret_vault_status: () => ({ unlocked: SECRET_UNLOCKED, configured: SECRET_CONFIGURED }),
+  secret_vault_unlock: (a) => {
+    const pw = a && a.password;
+    if (!pw) throw new Error("password-required");
+    if (!SECRET_CONFIGURED) {
+      SECRET_PASSWORD = pw;
+      SECRET_CONFIGURED = true;
+      SECRET_UNLOCKED = true;
+      return null;
+    }
+    if (pw !== SECRET_PASSWORD) throw "wrong-password";
+    SECRET_UNLOCKED = true;
+    return null;
+  },
+  secret_vault_lock: () => { SECRET_UNLOCKED = false; return null; },
+  set_prompt_secret: (a) => {
+    const p = PROMPTS.find((x) => x.id === (a && a.id));
+    if (!p) throw new Error("not-found");
+    if (a.secret && !SECRET_UNLOCKED) throw "secret-locked";
+    p.secret = !!a.secret;
+    return null;
+  },
   prompt_image: (a) => {
     window.__PROMPT_IMAGE_CALLS__++;
     return STUB_IMAGES.get(a && a.id) || "";
@@ -822,6 +895,7 @@ const RESULTS = {
   // The FULL prompt, image bytes included — the editor's one fetch when it opens.
   get_prompt: (a) => {
     const p = PROMPTS.find((x) => x.id === (a && a.id)) || PROMPTS[0];
+    if (p.secret && !SECRET_UNLOCKED) throw "secret-locked";
     return { ...p, image: STUB_IMAGES.get(p.id) || "" };
   },
   // 408: "Save as new entry" -- looks the version id up against the same P31/79
@@ -1176,6 +1250,7 @@ const RESULTS = {
   // not re-proven here) — enough to exercise the peek→copy→commit wiring for real.
   copy_prompt: (a) => {
     const p = PROMPTS.find((x) => x.id === (a && a.id));
+    if (p && p.secret && !SECRET_UNLOCKED) throw "secret-locked";
     if (p) {
       const total = 1 + (p.variants || []).length;
       const idx = (ROTATE_POS.get(p.id) || 0) % total;

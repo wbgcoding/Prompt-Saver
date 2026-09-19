@@ -578,6 +578,18 @@ now, not a tip. Repair the Windows profile (or sign in on a healthy account) and
 the next save that succeeds seals everything again by itself; nothing needs to be
 re-entered.
 
+A single prompt can be marked confidential from its editor (off by default).
+Its text and any variants are then encrypted with a vault password, asked
+once per session the first time a confidential prompt is opened or copied,
+and forgotten again on quit or after an idle timeout set in the expert menu
+(default: only on quit). Forgetting the vault password means those entries
+are lost for good: there is no recovery, and the setup dialog says so before
+it lets you continue. While the vault is locked, a confidential tile shows a
+redacted bar instead of its name, does not copy, and is left out of search.
+It is also left out of Markdown sync, and out of a plain export by default;
+exporting offers a choice to keep it encrypted instead, and a full backup
+always keeps it encrypted.
+
 Separately, if the saved settings themselves turn out to be unreadable or
 corrupted on disk (extremely rare), the app shows defaults instead of guessing
 and refuses to save any settings change until this is resolved — the original,
@@ -1150,6 +1162,21 @@ Diese Zeile hat bewusst keinen Schalter — sie beschreibt, was gerade auf der
 Festplatte liegt. Ist das Windows-Profil repariert, verschlüsselt der nächste
 erfolgreiche Speichervorgang wieder alles von selbst; nichts muss neu erfasst
 werden.
+
+Ein einzelner Prompt lässt sich im Editor als vertraulich markieren
+(standardmäßig aus). Sein Text und seine Varianten werden dann mit einem
+Tresor-Passwort verschlüsselt, das einmal je Sitzung abgefragt wird, sobald
+zum ersten Mal ein vertraulicher Prompt geöffnet oder kopiert wird, und beim
+Beenden oder nach einer im Experten-Menü einstellbaren Ruhezeit wieder
+vergessen wird (Vorgabe: erst beim Beenden). Ein vergessenes Tresor-Passwort
+bedeutet den endgültigen Verlust dieser Einträge: Es gibt keine
+Wiederherstellung, und der Einrichtungsdialog sagt das, bevor er weitermachen
+lässt. Solange der Tresor gesperrt ist, zeigt eine vertrauliche Kachel einen
+abgedeckten Balken statt ihres Namens, kopiert nicht und bleibt bei der Suche
+außen vor. Sie bleibt auch bei der Markdown-Synchronisierung außen vor und
+wird bei einem einfachen Export standardmäßig ausgelassen; der Export bietet
+stattdessen die Wahl, sie verschlüsselt zu behalten, und eine vollständige
+Sicherung behält sie immer verschlüsselt.
 
 Getrennt davon: Sollten die gespeicherten Einstellungen selbst auf der
 Festplatte unlesbar oder beschädigt sein (sehr selten), zeigt die App

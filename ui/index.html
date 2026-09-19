@@ -231,6 +231,16 @@
           </svg>
         </button>
         <button type="button" id="modal-fav" class="modal-fav-star" aria-pressed="false" data-i18n-title="favoriteToggle" data-i18n-aria="favoriteToggle">★</button>
+        <!-- Marks the saved prompt confidential (its text/variants get encrypted
+             with the vault password). Hidden unless the feature flag is on, the
+             prompt already exists and it is a plain text prompt -- see
+             updateSecretToggle in main.js. -->
+        <button type="button" id="modal-secret" class="modal-secret-toggle hidden" aria-pressed="false" data-i18n-title="editorSecretLabel" data-i18n-aria="editorSecretLabel">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M7 10.5V7a5 5 0 0 1 10 0v3.5"/>
+            <rect x="5" y="10.5" width="14" height="9.5" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+          </svg>
+        </button>
       </div>
       <!-- Private note, full width, no heading: never copied, gated on promptNotes.
            The gate's display:none sits on this wrapper, not the textarea, so an

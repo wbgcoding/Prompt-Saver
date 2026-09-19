@@ -984,6 +984,7 @@ fn cmd_add(store: &mut Store, name: &str, text: &str, tags: &[String], favorite:
         media_height: 0,
         media_size_bytes: 0,
         image_text: String::new(),
+        secret: false,
     };
     let id = prompt.id.clone();
     store.prompts.push(prompt);
@@ -1636,6 +1637,7 @@ mod tests {
             media_height: 0,
             media_size_bytes: 0,
             image_text: String::new(),
+            secret: false,
         }
     }
 

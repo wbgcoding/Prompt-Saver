@@ -1155,6 +1155,16 @@ the video editor and the introduction tour ship on).
   the rest of the session, but a dialog says it will be lost on restart, and a
   permanent warning row stays in the privacy settings for as long as the next
   save keeps failing — clearing itself the moment one succeeds again.
+- **A single prompt can now be marked confidential.** Its text and any
+  variants are then encrypted with a vault password, asked once per session
+  the first time a confidential prompt is opened or copied, and forgotten
+  again on quit or after an idle timeout you can set (default: only on quit).
+  Forgetting that password means those entries are lost for good, with no
+  recovery, and the setup dialog says so before it lets you continue. A
+  locked confidential prompt shows a redacted bar instead of its name, does
+  not copy, and stays out of search, Markdown sync, and a plain export by
+  default; export can keep it encrypted instead, and a full backup always
+  does. Uses the same encryption as encrypted backups, with its own password.
 
 ### Removed
 

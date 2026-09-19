@@ -1154,9 +1154,13 @@ fn tray_search_entries(prompts: &[Prompt], query: &str, cap: usize, label_max: u
     let mut hits: Vec<(u8, &Prompt)> = prompts
         .iter()
         .filter_map(|p| {
+            // A confidential entry's `text` field holds ciphertext here, never the
+            // plain text and never the session key to open it -- so a body match
+            // would only ever compare the query against gibberish. The name stays
+            // plain and searchable either way.
             let score = if p.name.to_lowercase().contains(&q) {
                 2u8
-            } else if p.text.to_lowercase().contains(&q) {
+            } else if !p.secret && p.text.to_lowercase().contains(&q) {
                 1u8
             } else {
                 0u8
@@ -1809,6 +1813,13 @@ struct Prompt {
     // removed or replaced.
     #[serde(default)]
     image_text: String,
+    // Marked confidential: `text` and every entry of `variants` above hold
+    // AES-GCM ciphertext (see secret_encrypt) instead of plain text, gated by
+    // the session vault password (secret_vault_unlock). Name, tags and image
+    // stay plain either way, or the library grid could not draw the tile at
+    // all while locked.
+    #[serde(default)]
+    secret: bool,
 }
 
 // A saved floating window position, plus the identity of the screen it was
@@ -5902,9 +5913,26 @@ fn start_missing_files_poll(app: AppHandle) {
 // ---------- Prompt commands ----------
 
 // Async: clones one prompt that may carry a large base64 image — off the UI thread.
+// The editor, duplicate and draft-recovery paths all call this expecting the
+// real, editable text -- never ciphertext -- so a confidential entry is
+// decrypted here with the session key, or the call is refused outright while
+// the vault is locked rather than handing back gibberish a save could then
+// overwrite the real ciphertext with.
 #[tauri::command]
 async fn get_prompt(state: State<'_, Db>, id: String) -> Result<Option<Prompt>, String> {
-    Ok(lock(&state).prompts.iter().find(|p| p.id == id).cloned())
+    let store = lock(&state);
+    let Some(p) = store.prompts.iter().find(|p| p.id == id) else {
+        return Ok(None);
+    };
+    if !p.secret {
+        return Ok(Some(p.clone()));
+    }
+    let key = secret_session_key(secret_timeout_min(&store.settings));
+    let (text, variants) = reveal_secret_text(p, key)?;
+    let mut plain = p.clone();
+    plain.text = text;
+    plain.variants = variants;
+    Ok(Some(plain))
 }
 
 // First free [col,row] in row-major order; None if the grid is full.
@@ -6637,6 +6665,7 @@ async fn add_prompt(
             media_height,
             media_size_bytes,
             image_text,
+            secret: false,
         };
         // A grid folder owns its cell OUTSIDE view.layouts, and the renderer gives a
         // folder priority — so a cell handed out without excluding them saves fine and
@@ -6733,6 +6762,7 @@ async fn seed_example_prompts(app: AppHandle, state: State<'_, Db>, examples: Ve
                 // Onboarding examples are never OCR-indexed -- ocrIndex ships off,
                 // and seeding runs before the user has ever seen the switch.
                 image_text: String::new(),
+                secret: false,
             };
             let view = store.settings.active_view_mut();
             if let Some(cell) = first_free_cell(view) {
@@ -6916,6 +6946,10 @@ async fn update_prompt(
         // can't be split into disjoint field borrows).
         let hist_on = history_enabled(&store.settings);
         let hist_cap = history_cap(&store.settings);
+        // Same "read before the mutable prompt borrow" rule as ffprobe/ocr/hist
+        // above -- needed below to re-encrypt a confidential entry's edited text
+        // instead of overwriting its ciphertext with the editor's plain value.
+        let secret_key = secret_session_key(secret_timeout_min(&store.settings));
         let found = store.prompts.iter_mut().find(|p| p.id == id);
         match found {
             Some(p) => {
@@ -6924,6 +6958,20 @@ async fn update_prompt(
                 // had taken (they would silently revert on the next restart). Also
                 // doubles as the version-history snapshot source below.
                 let original = p.clone();
+                // A confidential entry's text/variants must never land in storage
+                // as whatever the editor sent -- that is the plain text while
+                // unlocked, so it is re-encrypted here before it touches p; while
+                // locked there is no key to encrypt with, so the whole save is
+                // refused rather than silently discarding the real ciphertext.
+                let (text, variants) = if p.secret {
+                    let Some(key) = secret_key else {
+                        return Err("secret-locked".to_string());
+                    };
+                    let enc_variants = variants.iter().map(|v| secret_encrypt(v, &key)).collect();
+                    (secret_encrypt(&text, &key), enc_variants)
+                } else {
+                    (text, variants)
+                };
                 p.name = name;
                 p.text = text;
                 p.color = color;
@@ -7075,6 +7123,8 @@ async fn restore_version(app: AppHandle, state: State<'_, Db>, version_id: i64) 
         };
         let (pid, name, text, variants) = record;
         let cap = history_cap(&store.settings);
+        // Same "read before the mutable prompt borrow" rule as update_prompt.
+        let secret_key = secret_session_key(secret_timeout_min(&store.settings));
         if let Some(p) = store.prompts.iter_mut().find(|p| p.id == pid) {
             let original = p.clone();
             // 35a: the undo snapshot of the CURRENT state must itself succeed before
@@ -7087,6 +7137,21 @@ async fn restore_version(app: AppHandle, state: State<'_, Db>, version_id: i64) 
             if !snapshot_ok {
                 return Err("snapshot-failed".into());
             }
+            // A snapshot taken before the entry ever became confidential holds
+            // plain text; one taken afterwards holds ciphertext already readable
+            // with the current vault key. Either way the entry stays confidential
+            // after a restore, so a plain-text snapshot is encrypted here instead
+            // of landing on disk as-is, and an already-ciphertext one is kept
+            // rather than encrypted a second time.
+            let (text, variants) = if p.secret {
+                let Some(key) = secret_key else {
+                    return Err("secret-locked".to_string());
+                };
+                let variants = variants.iter().map(|v| secret_encrypt_if_plain(v, &key)).collect();
+                (secret_encrypt_if_plain(&text, &key), variants)
+            } else {
+                (text, variants)
+            };
             p.name = name;
             p.text = text;
             // The restored list is our own history, but re-validate anyway (a
@@ -7160,6 +7225,12 @@ fn build_restored_prompt(source: &Prompt, version_name: &str, version_text: Stri
         media_height: 0,
         media_size_bytes: 0,
         image_text: String::new(),
+        // "Restore as new" always starts a fresh, non-confidential entry -- the
+        // snapshot's own text may or may not still be readable ciphertext
+        // depending on when it was taken, and carrying `secret` over without the
+        // vault key to match it would leave a confidential-flagged entry holding
+        // whatever that old text literally was.
+        secret: false,
     }
 }
 
@@ -7543,7 +7614,8 @@ async fn restore_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Res
             return Err("save-failed".into());
         }
         save_settings(&app, &store.settings);
-        (AppState { prompts: slim_prompts(&store.prompts), settings: store.settings.clone() }, true)
+        let secret_key = secret_session_key(secret_timeout_min(&store.settings));
+        (AppState { prompts: slim_prompts(&store.prompts, secret_key), settings: store.settings.clone() }, true)
     };
     if restored {
         rearm_hotkeys(&app); // The restored prompt's own hotkey, if any, is free again to re-claim
@@ -8997,6 +9069,13 @@ struct SlimPrompt {
     media_width: u32,
     media_height: u32,
     media_size_bytes: u64,
+    // Mirrors Prompt.secret. `text`/`variants` above already carry the ciphertext
+    // (locked) or the session-decrypted plain text (unlocked) — see slim_prompts.
+    secret: bool,
+    // True while `secret` is true and the session vault is not unlocked. The
+    // window shows the locked bar and refuses to copy exactly when this is true;
+    // never persisted, computed fresh on every slim_prompts() call.
+    locked: bool,
 }
 
 impl From<&Prompt> for SlimPrompt {
@@ -9011,7 +9090,7 @@ impl From<&Prompt> for SlimPrompt {
             icon_path, caption, caption_size, font, font_size, favorite, tags, notes,
             hotkey, hotkey_paste, trashed_at, variants, rotate_mode, rotate_auto,
             media_duration_ms, media_width, media_height, media_size_bytes,
-            image_text: _,
+            image_text: _, secret,
         } = p;
         SlimPrompt {
             id: id.clone(),
@@ -9044,12 +9123,46 @@ impl From<&Prompt> for SlimPrompt {
             media_width: *media_width,
             media_height: *media_height,
             media_size_bytes: *media_size_bytes,
+            secret: *secret,
+            locked: false,
         }
     }
 }
 
-fn slim_prompts(prompts: &[Prompt]) -> Vec<SlimPrompt> {
-    prompts.iter().map(SlimPrompt::from).collect()
+// `secret_key` is the already-checked, already-timeout-tested session key (see
+// secret_session_key) — None means locked (no key, or the timeout expired).
+// A confidential prompt's ciphertext never reaches the frontend while locked:
+// text/variants are blanked instead of sent as-is, so a locked entry cannot be
+// searched, previewed or copied from the window's own JSON state. Unlocked, the
+// real text is decrypted here and flows exactly like any other prompt from that
+// point on (search finds it, the tile copies it) — nothing else needs to know
+// the entry was ever confidential.
+fn slim_prompts(prompts: &[Prompt], secret_key: Option<[u8; 32]>) -> Vec<SlimPrompt> {
+    prompts
+        .iter()
+        .map(|p| {
+            let mut s = SlimPrompt::from(p);
+            if p.secret {
+                match secret_key {
+                    Some(key) => {
+                        s.text = secret_decrypt(&p.text, &key).unwrap_or_default();
+                        s.variants = p
+                            .variants
+                            .iter()
+                            .map(|v| secret_decrypt(v, &key).unwrap_or_default())
+                            .collect();
+                        s.locked = false;
+                    }
+                    None => {
+                        s.text = String::new();
+                        s.variants = Vec::new();
+                        s.locked = true;
+                    }
+                }
+            }
+            s
+        })
+        .collect()
 }
 
 // Prompts + settings in one IPC roundtrip (renderGrid hot path).
@@ -9064,8 +9177,9 @@ struct AppState {
 #[tauri::command]
 async fn get_state(state: State<'_, Db>) -> Result<AppState, String> {
     let store = lock(&state);
+    let secret_key = secret_session_key(secret_timeout_min(&store.settings));
     Ok(AppState {
-        prompts: slim_prompts(&store.prompts),
+        prompts: slim_prompts(&store.prompts, secret_key),
         settings: store.settings.clone(),
     })
 }
@@ -9104,15 +9218,17 @@ struct LauncherState {
 #[tauri::command]
 async fn launcher_items(state: State<'_, Db>) -> Result<LauncherState, String> {
     let store = lock(&state);
+    let key = secret_session_key(secret_timeout_min(&store.settings));
     Ok(LauncherState {
         prompts: store
             .prompts
             .iter()
-            .map(|p| LauncherItem {
-                id: p.id.clone(),
-                name: p.name.clone(),
-                text: p.text.clone(),
-                color: p.color.clone(),
+            .filter_map(|p| {
+                // Same rule as the library search: a confidential entry with no key
+                // available drops out of the list entirely, rather than showing its
+                // ciphertext as if it were the real body.
+                let text = if p.secret { reveal_secret_text(p, key).ok()?.0 } else { p.text.clone() };
+                Some(LauncherItem { id: p.id.clone(), name: p.name.clone(), text, color: p.color.clone() })
             })
             .collect(),
         language: store.settings.language.clone(),
@@ -9918,6 +10034,11 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
     // turn this already-O(n^2) scan into O(n^2 * entries).
     let items: Vec<(&Prompt, String)> = prompts
         .iter()
+        // A confidential entry's stored text is ciphertext, never a real body to
+        // compare -- same reason the library search skips it, this scan does too
+        // rather than group entries by coincidental ciphertext similarity or show
+        // the ciphertext in a match's preview.
+        .filter(|p| !p.secret)
         .map(|p| {
             let base = if !p.text.is_empty() { p.text.as_str() } else { p.name.as_str() };
             (p, normalize_dup(base))
@@ -11270,7 +11391,17 @@ async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result
             Some(p) if !p.file_path.is_empty() => CopyPayload::File(p.file_path.clone()),
             // rotation_next() itself falls back to p.text when there is nothing
             // to rotate, so a plain prompt goes through this exact same branch.
-            Some(p) => CopyPayload::Text(rotation_next(p, &store.settings).2),
+            // A confidential entry is decrypted here with the session key, or the
+            // copy is refused outright while the vault is locked -- ciphertext
+            // must never reach the clipboard as if it were the real text.
+            Some(p) => {
+                let key = secret_session_key(secret_timeout_min(&store.settings));
+                let (text, variants) = reveal_secret_text(p, key)?;
+                let mut plain = p.clone();
+                plain.text = text;
+                plain.variants = variants;
+                CopyPayload::Text(rotation_next(&plain, &store.settings).2)
+            }
             None => CopyPayload::Missing,
         }
     };
@@ -11317,8 +11448,15 @@ struct RotationPeek {
 fn rotation_peek(state: State<Db>, id: String) -> Option<RotationPeek> {
     let store = lock(&state);
     let p = store.prompts.iter().find(|p| p.id == id)?;
-    let (index, pos, text) = rotation_next(p, &store.settings);
-    Some(RotationPeek { index, pos, total: rotation_total(p), text })
+    // A locked confidential entry has no peek at all -- the "next" badge simply
+    // does not show rather than reveal ciphertext or the wrong text.
+    let key = secret_session_key(secret_timeout_min(&store.settings));
+    let (text, variants) = reveal_secret_text(p, key).ok()?;
+    let mut plain = p.clone();
+    plain.text = text;
+    plain.variants = variants;
+    let (index, pos, text) = rotation_next(&plain, &store.settings);
+    Some(RotationPeek { index, pos, total: rotation_total(&plain), text })
 }
 
 // Every window's tile/pill/folder-member badge stays live off ONE event, fired
@@ -11338,10 +11476,19 @@ fn emit_rotation_changed(app: &AppHandle, p: &Prompt, settings: &Settings) {
     if p.variants.is_empty() {
         return;
     }
-    let (index, pos, text) = rotation_next(p, settings);
+    // Same rule as rotation_peek: a locked confidential entry emits nothing
+    // rather than send ciphertext through a window event.
+    let key = secret_session_key(secret_timeout_min(settings));
+    let Ok((text, variants)) = reveal_secret_text(p, key) else {
+        return;
+    };
+    let mut plain = p.clone();
+    plain.text = text;
+    plain.variants = variants;
+    let (index, pos, text) = rotation_next(&plain, settings);
     let _ = app.emit(
         "rotation-changed",
-        RotationChanged { id: p.id.clone(), index, pos, total: rotation_total(p), text },
+        RotationChanged { id: plain.id.clone(), index, pos, total: rotation_total(&plain), text },
     );
 }
 
@@ -25413,9 +25560,28 @@ fn parse_json_data(content: &str) -> Result<ImportData, String> {
     Ok(data)
 }
 
+// A confidential entry's fate in a one-shot export: `true` keeps it, ciphertext
+// and all -- the receiving end needs the same vault password to ever read it
+// again -- `false` (the default, matching a fresh install's "aus") drops it from
+// the export entirely rather than silently shipping ciphertext nobody asked for.
+// Pure and unit-testable apart from export_prompts' own file-dialog/format side effects.
+fn filter_export_secrets(prompts: Vec<Prompt>, include_secrets: bool) -> Vec<Prompt> {
+    if include_secrets {
+        prompts
+    } else {
+        prompts.into_iter().filter(|p| !p.secret).collect()
+    }
+}
+
 // Async: building the export (base64 images) + writing it stays off the UI thread.
 #[tauri::command]
-async fn export_prompts(app: AppHandle, state: State<'_, Db>, format: String, ids: Option<Vec<String>>) -> Result<usize, String> {
+async fn export_prompts(
+    app: AppHandle,
+    state: State<'_, Db>,
+    format: String,
+    ids: Option<Vec<String>>,
+    include_secrets: Option<bool>,
+) -> Result<usize, String> {
     let (content, count) = {
         let store = lock(&state);
         // An explicit id list exports only the selection; otherwise everything.
@@ -25426,6 +25592,7 @@ async fn export_prompts(app: AppHandle, state: State<'_, Db>, format: String, id
             }
             _ => store.prompts.clone(),
         };
+        let selected = filter_export_secrets(selected, include_secrets.unwrap_or(false));
         // A placeholder is a fill-in-at-copy-time thing; an export has no copy
         // moment to fill it in at, so it gets resolved here instead of leaving
         // the raw {#{...}#} syntax in the exported file. Each source is only
@@ -25898,6 +26065,11 @@ fn append_imported_prompts(store: &mut Store, items: Vec<ImportedPrompt>) -> usi
             // action picks up any picture this entry carries, same as an
             // ordinary pre-existing entry.
             image_text: String::new(),
+            // A confidential flag never round-trips through an import file
+            // (the exporter either drops the entry or leaves it sealed and
+            // unreadable as plain fields) -- an imported row always starts
+            // out of the vault.
+            secret: false,
         };
         store.prompts.push(prompt);
         count += 1;
@@ -26305,6 +26477,260 @@ fn backup_decrypt(data: &[u8], password: Option<&str>) -> Result<Option<Vec<u8>>
             }
         })?;
     Ok(Some(if packed { inflate(&body)? } else { body }))
+}
+
+// ---------- Confidential entries (per-prompt encryption) ----------
+// Same derivation and cipher as the encrypted backups above (Argon2id + AES-256-GCM),
+// with its own pepper, salt and verification value — this feature has nothing to do
+// with a backup password and must not accept one as a substitute. Format: b"PSE1" |
+// nonce(12) | AES-256-GCM ciphertext, base64. No compression: a prompt's text is far
+// too small for it to matter, and it would only add a length side channel.
+const SECRET_MAGIC: &[u8; 4] = b"PSE1";
+const SECRET_PEPPER: &[u8] = b"prompt-saver::secret::pepper::v1";
+const SECRET_PW_MAX: usize = 128;
+// ui_texts slots: the vault's own salt and a ciphertext of a known marker, used to
+// check a password before trusting it — never the password itself, and never
+// DPAPI-sealed on top, since neither value is a secret on its own.
+const SECRET_SALT_KEY: &str = "secretVaultSalt";
+const SECRET_VERIFY_KEY: &str = "secretVaultVerify";
+const SECRET_VERIFY_MARKER: &str = "prompt-saver-secret-vault-ok";
+
+fn secret_derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32], String> {
+    use argon2::Argon2;
+    let mut input = Vec::with_capacity(password.len() + SECRET_PEPPER.len());
+    input.extend_from_slice(password.as_bytes());
+    input.extend_from_slice(SECRET_PEPPER);
+    let mut key = [0u8; 32];
+    Argon2::default()
+        .hash_password_into(&input, salt, &mut key)
+        .map_err(|e| e.to_string())?;
+    Ok(key)
+}
+
+fn secret_encrypt(plain: &str, key: &[u8; 32]) -> String {
+    use aes_gcm::aead::{Aead, KeyInit};
+    use aes_gcm::{Aes256Gcm, Key, Nonce};
+    use rand::RngCore;
+    let mut nonce = [0u8; 12];
+    rand::rngs::OsRng.fill_bytes(&mut nonce);
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+    let ct = cipher
+        .encrypt(Nonce::from_slice(&nonce), plain.as_bytes())
+        .unwrap_or_default();
+    let mut out = Vec::with_capacity(SECRET_MAGIC.len() + nonce.len() + ct.len());
+    out.extend_from_slice(SECRET_MAGIC);
+    out.extend_from_slice(&nonce);
+    out.extend_from_slice(&ct);
+    base64_encode(&out)
+}
+
+// Wrong password and corrupt ciphertext fail the exact same way (AEAD tag
+// mismatch) — there is no separate "wrong password" code path to get subtly
+// wrong, the cipher itself is the check.
+fn secret_decrypt(stored: &str, key: &[u8; 32]) -> Result<String, String> {
+    use aes_gcm::aead::{Aead, KeyInit};
+    use aes_gcm::{Aes256Gcm, Key, Nonce};
+    let raw = base64_decode(stored);
+    if raw.len() < SECRET_MAGIC.len() + 12 || &raw[0..4] != SECRET_MAGIC {
+        return Err("corrupt-secret".to_string());
+    }
+    let nonce = &raw[4..16];
+    let ct = &raw[16..];
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+    let pt = cipher
+        .decrypt(Nonce::from_slice(nonce), ct)
+        .map_err(|_| "wrong-password".to_string())?;
+    String::from_utf8(pt).map_err(|_| "corrupt-secret".to_string())
+}
+
+// Resolves a prompt's copyable text and variants: passed through unchanged for
+// a plain prompt, decrypted with the session key for a confidential one, or
+// refused outright with "secret-locked" when the vault has no key right now.
+// This is the one place a confidential entry's real text is allowed to exist
+// in memory again -- every copy, peek and rotation-changed path goes through
+// it instead of reading Prompt.text/variants directly, so none of them can
+// hand ciphertext to the clipboard or an event payload by mistake.
+fn reveal_secret_text(p: &Prompt, key: Option<[u8; 32]>) -> Result<(String, Vec<String>), String> {
+    if !p.secret {
+        return Ok((p.text.clone(), p.variants.clone()));
+    }
+    let Some(key) = key else {
+        return Err("secret-locked".to_string());
+    };
+    let text = secret_decrypt(&p.text, &key)?;
+    let mut variants = Vec::with_capacity(p.variants.len());
+    for v in &p.variants {
+        variants.push(secret_decrypt(v, &key)?);
+    }
+    Ok((text, variants))
+}
+
+// A version-history snapshot taken before an entry became confidential holds
+// plain text; one taken afterwards holds ciphertext already readable with the
+// current vault key. Used when restoring a snapshot into an entry that is
+// confidential right now: keeps an already-encrypted value as-is instead of
+// encrypting it a second time, and encrypts a plain one so it never lands on
+// disk unencrypted under a confidential entry.
+fn secret_encrypt_if_plain(value: &str, key: &[u8; 32]) -> String {
+    if secret_decrypt(value, key).is_ok() {
+        value.to_string()
+    } else {
+        secret_encrypt(value, key)
+    }
+}
+
+// One derived key for the whole running session, forgotten on quit (never
+// written anywhere) and on an idle timeout (secretTimeoutMin, 0 = never until
+// quit). Every confidential entry shares this one key; nothing about it is
+// per-entry, matching "own salt, own verification value" for the FEATURE, not
+// for each prompt.
+struct SecretSession {
+    key: [u8; 32],
+    unlocked_at: std::time::Instant,
+}
+static SECRET_SESSION: Mutex<Option<SecretSession>> = Mutex::new(None);
+
+fn secret_timeout_min(settings: &Settings) -> u32 {
+    settings
+        .ui_values
+        .get("secretTimeoutMin")
+        .copied()
+        .unwrap_or(0.0)
+        .clamp(0.0, 240.0) as u32
+}
+
+// None means locked: no session yet, or the idle timeout already elapsed. A
+// timeout of 0 means "until quit" and is never checked here.
+fn secret_session_key(timeout_min: u32) -> Option<[u8; 32]> {
+    let mut guard = SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(sess) = guard.as_ref() {
+        if timeout_min > 0 && sess.unlocked_at.elapsed().as_secs() >= (timeout_min as u64) * 60 {
+            *guard = None;
+            return None;
+        }
+        return Some(sess.key);
+    }
+    None
+}
+
+#[derive(Serialize)]
+struct SecretVaultStatus {
+    configured: bool,
+    unlocked: bool,
+}
+
+#[tauri::command]
+fn secret_vault_status(state: State<Db>) -> SecretVaultStatus {
+    let store = lock(&state);
+    let configured = !store
+        .settings
+        .ui_texts
+        .get(SECRET_SALT_KEY)
+        .map(|s| s.is_empty())
+        .unwrap_or(true);
+    SecretVaultStatus {
+        configured,
+        unlocked: secret_session_key(secret_timeout_min(&store.settings)).is_some(),
+    }
+}
+
+// First call ever (no salt stored yet) sets the password up as the vault's
+// password. Every later call verifies against the stored salt/marker instead —
+// there is no way to change it short of turning secretPrompts off, which is a
+// deliberate consequence of "forgetting it means total loss", never a shortcut
+// around that promise.
+#[tauri::command]
+async fn secret_vault_unlock(app: AppHandle, state: State<'_, Db>, password: String) -> Result<AppState, String> {
+    if password.is_empty() || password.len() > SECRET_PW_MAX {
+        return Err("invalid-password".to_string());
+    }
+    let (salt_b64, verify_b64) = {
+        let store = lock(&state);
+        (
+            store.settings.ui_texts.get(SECRET_SALT_KEY).cloned().unwrap_or_default(),
+            store.settings.ui_texts.get(SECRET_VERIFY_KEY).cloned().unwrap_or_default(),
+        )
+    };
+    let key = if salt_b64.is_empty() {
+        use rand::RngCore;
+        let mut salt = [0u8; 16];
+        rand::rngs::OsRng.fill_bytes(&mut salt);
+        let key = secret_derive_key(&password, &salt)?;
+        let verify = secret_encrypt(SECRET_VERIFY_MARKER, &key);
+        let mut store = lock(&state);
+        store.settings.ui_texts.insert(SECRET_SALT_KEY.to_string(), base64_encode(&salt));
+        store.settings.ui_texts.insert(SECRET_VERIFY_KEY.to_string(), verify);
+        save_settings(&app, &store.settings);
+        key
+    } else {
+        let salt = base64_decode(&salt_b64);
+        if salt.is_empty() {
+            return Err("corrupt-vault".to_string());
+        }
+        let key = secret_derive_key(&password, &salt)?;
+        secret_decrypt(&verify_b64, &key).map_err(|_| "wrong-password".to_string())?;
+        key
+    };
+    *SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner()) = Some(SecretSession {
+        key,
+        unlocked_at: std::time::Instant::now(),
+    });
+    let store = lock(&state);
+    let secret_key = secret_session_key(secret_timeout_min(&store.settings));
+    Ok(AppState {
+        prompts: slim_prompts(&store.prompts, secret_key),
+        settings: store.settings.clone(),
+    })
+}
+
+// Explicit re-lock (settings menu action) — the automatic paths (quit, idle
+// timeout) never call this; they simply stop having a session at all.
+#[tauri::command]
+async fn secret_vault_lock(state: State<'_, Db>) -> Result<AppState, String> {
+    *SECRET_SESSION.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    let store = lock(&state);
+    Ok(AppState {
+        prompts: slim_prompts(&store.prompts, None),
+        settings: store.settings.clone(),
+    })
+}
+
+// Turns one prompt's confidential flag on or off, encrypting/decrypting its text
+// and every variant with the current session key. Requires an unlocked session
+// either way -- turning it OFF still needs the key to recover the plain text, so
+// there is no path that leaves a prompt's `secret` flag lying about what its own
+// text field holds.
+#[tauri::command]
+async fn set_prompt_secret(app: AppHandle, state: State<'_, Db>, id: String, secret: bool) -> Result<AppState, String> {
+    let timeout = { lock(&state).settings.ui_values.get("secretTimeoutMin").copied().unwrap_or(0.0).clamp(0.0, 240.0) as u32 };
+    let Some(key) = secret_session_key(timeout) else {
+        return Err("locked".to_string());
+    };
+    let mut store = lock(&state);
+    let Some(p) = store.prompts.iter_mut().find(|p| p.id == id) else {
+        return Err("not-found".to_string());
+    };
+    if secret && !p.secret {
+        p.text = secret_encrypt(&p.text, &key);
+        p.variants = p.variants.iter().map(|v| secret_encrypt(v, &key)).collect();
+        p.secret = true;
+    } else if !secret && p.secret {
+        p.text = secret_decrypt(&p.text, &key)?;
+        let mut plain = Vec::with_capacity(p.variants.len());
+        for v in &p.variants {
+            plain.push(secret_decrypt(v, &key)?);
+        }
+        p.variants = plain;
+        p.secret = false;
+    }
+    if !save_prompts(&app, &store) {
+        return Err("save-failed".to_string());
+    }
+    let secret_key = secret_session_key(timeout);
+    Ok(AppState {
+        prompts: slim_prompts(&store.prompts, secret_key),
+        settings: store.settings.clone(),
+    })
 }
 
 // Store (DPAPI-sealed) or clear the optional backup password. Never returned in clear.
@@ -28236,6 +28662,10 @@ pub fn run() {
             get_settings,
             get_state,
             prompt_image,
+            secret_vault_status,
+            secret_vault_unlock,
+            secret_vault_lock,
+            set_prompt_secret,
             launcher_items,
             current_theme,
             theme_vars,
@@ -28591,8 +29021,14 @@ fn sync_adopt_legacy_dir(settings: &mut Settings, legacy: &Path) -> Option<Strin
 // A prompt whose id is not a plain, filename-safe token stays out entirely: the id
 // becomes the FILE NAME here, and ids can arrive from an imported backup, i.e. from
 // outside this app.
+// A confidential entry never leaves an unencrypted trace outside the app, and
+// the Markdown sync folder is a plain text file with no dialog moment to ask
+// "encrypted or left out" the way a one-shot export has — so it is always left
+// out, never written encrypted. An entry that was already synced and is later
+// marked confidential drops out of `wanted` the same way a deleted prompt does,
+// so sync_sweep_orphans removes the stale plaintext file on the next sync.
 fn sync_eligible(p: &Prompt) -> bool {
-    sync_safe_id(&p.id)
+    sync_safe_id(&p.id) && !p.secret
 }
 
 // Refused rather than escaped: the id is also how the inbound half finds the prompt
@@ -29612,6 +30048,9 @@ fn sync_blank_prompt(id: String) -> Prompt {
         media_height: 0,
         media_size_bytes: 0,
         image_text: String::new(),
+        // The Markdown mirror never carries a confidential entry at all (see
+        // sync_eligible), so a blank starting point is always non-confidential.
+        secret: false,
     }
 }
 
@@ -35973,6 +36412,154 @@ mod tests {
         assert!(backup_decrypt(&fixed, None).is_ok(), "fixed-key backup opens silently");
     }
 
+    // ---------- Confidential entries ----------
+
+    #[test]
+    fn secret_encrypt_then_decrypt_round_trips() {
+        let key = secret_derive_key("correct horse", b"0123456789abcdef").expect("derive");
+        let plain = "the real, sensitive text of this prompt";
+        let ct = secret_encrypt(plain, &key);
+        assert_ne!(ct, plain, "ciphertext must not equal the plain text");
+        assert!(!ct.contains(plain), "ciphertext must not contain the plain text as a substring");
+        assert_eq!(secret_decrypt(&ct, &key).expect("decrypt"), plain);
+    }
+
+    #[test]
+    fn secret_decrypt_with_wrong_password_fails_cleanly_without_touching_the_entry() {
+        let salt = b"0123456789abcdef";
+        let right_key = secret_derive_key("right password", salt).expect("derive");
+        let wrong_key = secret_derive_key("wrong password", salt).expect("derive");
+        let plain = "do not leak this";
+        let ct = secret_encrypt(plain, &right_key);
+        let err = secret_decrypt(&ct, &wrong_key).unwrap_err();
+        assert_eq!(err, "wrong-password");
+        // The stored ciphertext itself is untouched by the failed attempt and
+        // still opens with the real key -- a wrong password never destroys it.
+        assert_eq!(secret_decrypt(&ct, &right_key).expect("decrypt"), plain);
+    }
+
+    #[test]
+    fn secret_derive_key_is_deterministic_and_password_sensitive() {
+        let salt = b"0123456789abcdef";
+        let a1 = secret_derive_key("same password", salt).expect("derive");
+        let a2 = secret_derive_key("same password", salt).expect("derive");
+        let b = secret_derive_key("different password", salt).expect("derive");
+        assert_eq!(a1, a2, "same password + salt must derive the same key every time");
+        assert_ne!(a1, b, "a different password must derive a different key");
+    }
+
+    #[test]
+    fn reveal_secret_text_passes_through_a_plain_prompt_unchanged() {
+        let mut p = test_prompt("a");
+        p.text = "plain text, never encrypted".into();
+        let (text, variants) = reveal_secret_text(&p, None).expect("plain prompt never needs a key");
+        assert_eq!(text, p.text);
+        assert!(variants.is_empty());
+    }
+
+    #[test]
+    fn reveal_secret_text_refuses_a_confidential_prompt_with_no_key() {
+        let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
+        let mut p = test_prompt("a");
+        p.secret = true;
+        p.text = secret_encrypt("the real text", &key);
+        let err = reveal_secret_text(&p, None).unwrap_err();
+        assert_eq!(err, "secret-locked");
+    }
+
+    #[test]
+    fn reveal_secret_text_decrypts_a_confidential_prompt_and_its_variants_when_unlocked() {
+        let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
+        let mut p = test_prompt("a");
+        p.secret = true;
+        p.text = secret_encrypt("main entry", &key);
+        p.variants = vec![secret_encrypt("entry two", &key), secret_encrypt("entry three", &key)];
+        let (text, variants) = reveal_secret_text(&p, Some(key)).expect("decrypt");
+        assert_eq!(text, "main entry");
+        assert_eq!(variants, vec!["entry two".to_string(), "entry three".to_string()]);
+    }
+
+    #[test]
+    fn secret_encrypt_if_plain_never_double_encrypts_an_already_sealed_value() {
+        let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
+        let plain = "a version-history snapshot from before this entry was confidential";
+        // A snapshot taken while NOT yet confidential: plain text, must be encrypted.
+        let sealed_once = secret_encrypt_if_plain(plain, &key);
+        assert_ne!(sealed_once, plain);
+        assert_eq!(secret_decrypt(&sealed_once, &key).expect("decrypt"), plain);
+        // A snapshot taken while ALREADY confidential: already ciphertext, must be
+        // kept exactly as-is rather than encrypted a second time (which would make
+        // it decrypt back to the ciphertext string, not the original text).
+        let already_sealed = secret_encrypt("already confidential text", &key);
+        let kept = secret_encrypt_if_plain(&already_sealed, &key);
+        assert_eq!(kept, already_sealed, "must not double-encrypt");
+        assert_eq!(secret_decrypt(&kept, &key).expect("decrypt"), "already confidential text");
+    }
+
+    #[test]
+    fn a_confidential_prompt_never_serializes_its_plain_text_to_disk() {
+        // save_prompts ultimately serializes the same Prompt struct this builds --
+        // this proves the plain text is nowhere in that serialized form once the
+        // entry is confidential, only the ciphertext (and the unrelated name).
+        let key = secret_derive_key("vault password", b"0123456789abcdef").expect("derive");
+        let secret_value = "the confidential text nobody but the vault password should reveal";
+        let mut p = test_prompt("a");
+        p.name = "Ordinary visible name".into();
+        p.secret = true;
+        p.text = secret_encrypt(secret_value, &key);
+        let json = serde_json::to_string(&p).expect("serialize");
+        assert!(!json.contains(secret_value), "plain text must never appear in the serialized prompt");
+        assert!(json.contains(&p.name), "the name stays plain on purpose");
+        assert!(json.contains("\"secret\":true"));
+    }
+
+    #[test]
+    fn export_filter_keeps_or_drops_confidential_prompts_on_request() {
+        let mut open = test_prompt("open");
+        open.secret = false;
+        let mut locked = test_prompt("locked");
+        locked.secret = true;
+        let prompts = vec![open.clone(), locked.clone()];
+
+        let excluded = filter_export_secrets(prompts.clone(), false);
+        assert_eq!(excluded.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), vec!["open"]);
+
+        let included = filter_export_secrets(prompts, true);
+        assert_eq!(included.len(), 2, "both choices must be honoured, including keeping it");
+    }
+
+    #[test]
+    fn tray_search_never_matches_a_confidential_prompt_s_ciphertext_body() {
+        let key = secret_derive_key("pw", b"0123456789abcdef").expect("derive");
+        let mut hidden = test_prompt("hidden");
+        hidden.name = "Unrelated name".into();
+        hidden.secret = true;
+        hidden.text = secret_encrypt("super secret meeting notes", &key);
+        let mut visible = test_prompt("visible");
+        visible.name = "Other prompt".into();
+        visible.text = "super secret meeting notes but not confidential".into();
+        let prompts = vec![hidden.clone(), visible.clone()];
+
+        // Body query matches the plain prompt only -- never the confidential one,
+        // whose stored text is ciphertext and must never be searched.
+        let hits = tray_search_entries(&prompts, "meeting notes", 10, 40);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].id, tray_item_id(&visible.id));
+
+        // The confidential prompt's own NAME still matches -- only its body is excluded.
+        let name_hits = tray_search_entries(&prompts, "unrelated", 10, 40);
+        assert_eq!(name_hits.len(), 1);
+        assert_eq!(name_hits[0].id, tray_item_id(&hidden.id));
+    }
+
+    #[test]
+    fn markdown_sync_never_picks_up_a_confidential_prompt() {
+        let mut p = test_prompt("a");
+        assert!(sync_eligible(&p), "a plain prompt with a safe id is eligible");
+        p.secret = true;
+        assert!(!sync_eligible(&p), "a confidential prompt must never be synced as plain text");
+    }
+
     #[test]
     fn reset_settings_leaves_a_usable_state() {
         // reset_settings replaces the settings with Settings::default() + migrate().
@@ -38160,6 +38747,7 @@ mod tests {
                 media_height: 0,
                 media_size_bytes: 0,
                 image_text: String::new(),
+                secret: false,
             },
             Prompt {
                 id: "p2".into(),
@@ -38190,6 +38778,7 @@ mod tests {
                 media_height: 0,
                 media_size_bytes: 0,
                 image_text: String::new(),
+                secret: false,
             },
         ]
     }

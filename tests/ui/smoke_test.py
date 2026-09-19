@@ -11095,6 +11095,118 @@ SEAL_PROBE = """
 """
 
 
+# 458: a confidential entry, both while locked and after unlocking it with the
+# right password (plus a wrong one in between). Its own boot -- window.__SECRET_TEST__
+# adds one confidential fixture (id "psecret") and turns the secretPrompts flag on,
+# window.__SECRET_PRECONFIGURED__ makes the stub vault act already set up from an
+# earlier session, so this probe exercises the plain unlock dialog rather than
+# first-time setup (see tauri_stub.js).
+SECRET_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const beat = setInterval(() => {
+    document.documentElement.style.setProperty('--secret-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
+  const visible = (el) => !!el && !el.classList.contains('hidden');
+  const clickTile = (el) => {
+    const r = el.getBoundingClientRect();
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: x, clientY: y }));
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, clientX: x, clientY: y }));
+  };
+  // Excludes every <script> (this probe's own source text literally names the
+  // marker it is looking for) so the check only ever sees rendered content.
+  const bodyHasLeaked = () => {
+    const clone = document.body.cloneNode(true);
+    clone.querySelectorAll('script').forEach((s) => s.remove());
+    return clone.textContent.includes('REAL_TEXT_MARKER') || clone.innerHTML.includes('REAL_TEXT_MARKER');
+  };
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && !visible(cm); i++) await sleep(100);
+    if (visible(cm)) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+
+    // ---- Balken: a locked confidential tile shows a bar, never the real text ----
+    const tile = document.querySelector('.tile[data-id=\\"psecret\\"]');
+    if (!tile) {
+      errs.push('the confidential prompt has no tile at all');
+    } else {
+      if (!tile.classList.contains('tile-locked')) errs.push('a locked confidential tile carries no tile-locked class');
+      if (!tile.querySelector('.tile-lock-badge')) errs.push('a locked confidential tile shows no lock badge');
+    }
+    if (bodyHasLeaked()) {
+      errs.push('the confidential prompt\\'s real text is present in the DOM while locked');
+    }
+
+    // ---- Sperre + Passwortfrage: clicking a locked tile asks for the password ----
+    if (tile) {
+      clickTile(tile);
+      let asked = false;
+      for (let i = 0; i < 40; i++) { if (visible(cm)) { asked = true; break; } await sleep(50); }
+      if (!asked) {
+        errs.push('clicking a locked confidential tile opened no password dialog');
+      } else {
+        const title = document.getElementById('confirm-title').textContent.trim();
+        const msg = document.getElementById('confirm-msg').textContent.trim();
+        const row = document.getElementById('confirm-input-row');
+        const field = document.getElementById('confirm-input');
+        if (!title || /^secretUnlock/.test(title)) errs.push('the unlock dialog title is empty or a raw i18n key: ' + title);
+        if (!msg || /^secretUnlock/.test(msg)) errs.push('the unlock dialog message is empty or a raw i18n key: ' + msg);
+        if (!visible(row)) errs.push('the unlock dialog has no password field');
+        if (field.type !== 'password') errs.push('the unlock field is not masked: type=' + field.type);
+        if (document.getElementById('confirm-checkbox-row') && visible(document.getElementById('confirm-checkbox-row'))) {
+          errs.push('the plain unlock dialog also shows the first-time setup checkbox');
+        }
+
+        // A wrong password must fail cleanly: no copy, tile stays locked, no reopened
+        // dialog forced on the user (a fresh click may ask again, this one may not).
+        field.value = 'nope';
+        document.getElementById('confirm-ok').click();
+        await sleep(300);
+        if (visible(cm)) errs.push('the dialog is still open after answering a wrong password');
+        if (!tile.classList.contains('tile-locked')) errs.push('a wrong password unlocked the tile anyway');
+        if (bodyHasLeaked()) {
+          errs.push('a wrong password leaked the real text into the DOM');
+        }
+        if ((window.__SMOKE_CALLS__ || []).includes('copy_text')) {
+          errs.push('a wrong password still let the entry reach the clipboard');
+        }
+
+        // The right password unlocks it and the click that started this now goes
+        // through as a real copy.
+        clickTile(tile);
+        asked = false;
+        for (let i = 0; i < 40; i++) { if (visible(cm)) { asked = true; break; } await sleep(50); }
+        if (!asked) {
+          errs.push('a second click on the still-locked tile did not ask again');
+        } else {
+          document.getElementById('confirm-input').value = 'right';
+          document.getElementById('confirm-ok').click();
+          await sleep(400);
+          const freshTile = document.querySelector('.tile[data-id=\\"psecret\\"]');
+          if (!freshTile || freshTile.classList.contains('tile-locked')) {
+            errs.push('the right password did not unlock the tile');
+          }
+          if (window.__LAST_COPY__ !== 'REAL_TEXT_MARKER') {
+            errs.push('unlocking did not copy the real text: ' + JSON.stringify(window.__LAST_COPY__));
+          }
+        }
+      }
+    }
+  } catch (e) { errs.push('probe: ' + e.message); }
+  clearInterval(beat);
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # 420: dragging a grid tile onto a view tab. Its own boot, same reasoning as
 # SEAL_PROBE above: the fixture's "work" view is shrunk to its own single cell
 # (window.__DRAG_VIEW_TEST__, see tauri_stub.js) so one placement fills it,
@@ -12991,6 +13103,33 @@ def main():
             failed += len(errs)
             if not errs:
                 print("   ok")
+
+        # 458: a confidential entry, locked then unlocked -- its own boot, same
+        # reasoning as the store-sealing pair above (the fixture needs its own
+        # dedicated prompt and a vault state the main sweep never sets up).
+        side = tmp / "ui" / "secret.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script",
+                     '<script>window.__SECRET_TEST__ = true; window.__SECRET_PRECONFIGURED__ = true;</script>\n'
+                     '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", SECRET_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-secret'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- confidential prompt: locked bar, password prompt, unlock")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
 
         # 276: the settings-write-failure notice, both ways round -- same reasoning
         # as the store-sealing pair above (its own boot, since the startup dialog
