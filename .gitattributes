@@ -4,4 +4,8 @@
 # even when nothing about the brand changed.
 src-tauri/src/brand.rs text eol=lf
 ui/brand.js text eol=lf
+
+# Same story for the third-party notice list: src-tauri/build.rs regenerates it
+# from the real dependency manifests on every build, always as LF.
+THIRD-PARTY-NOTICES.md text eol=lf
 graphify-out/graph.json merge=graphify
