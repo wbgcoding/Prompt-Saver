@@ -11454,6 +11454,75 @@ WRITE_FAIL_PROBE = """
 """
 
 
+# The data-folder lock: while another machine's lock is fresh, the app opens
+# read-only and says so in a persistent line in the window itself, not only in
+# the expert menu -- a user who never opens the expert menu still has to see
+# it. Same two-boot shape as the settings-write-failure pair above.
+DATA_DIR_READONLY_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const readOnly = window.__DATA_DIR_READONLY__ === true;
+  const which = readOnly ? 'read-only: ' : 'writable: ';
+  const beat = setInterval(() => {
+    document.documentElement.style.setProperty('--ddro-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
+  const visible = (el) => !!el && !el.classList.contains('hidden');
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && !visible(cm); i++) await sleep(100);
+    if (visible(cm)) {
+      document.getElementById('confirm-cancel').click();
+      await sleep(300);
+    }
+    // ---- the persistent line in the window itself --------------------------
+    for (let i = 0; i < 40; i++) {
+      const b = document.getElementById('data-dir-readonly-banner');
+      if (readOnly ? visible(b) : true) break;
+      await sleep(50);
+    }
+    const banner = document.getElementById('data-dir-readonly-banner');
+    if (readOnly) {
+      if (!visible(banner)) {
+        errs.push(which + 'no persistent banner shown although the folder is read-only');
+      } else {
+        const text = document.getElementById('data-dir-readonly-text').textContent.trim();
+        if (!text) errs.push(which + 'the banner is empty');
+        if (/dataDirReadOnly/.test(text)) errs.push(which + 'the banner renders a raw i18n key: ' + text);
+        if (!text.includes('OTHER-PC')) errs.push(which + 'the banner does not name the other machine: ' + text);
+      }
+    } else if (visible(banner)) {
+      errs.push(which + 'the banner is shown although this machine owns the lock');
+    }
+    // ---- the permanent record in the settings dialog ------------------------
+    document.getElementById('gear').click();
+    await sleep(200);
+    document.getElementById('expert-open').click();
+    await sleep(300);
+    const tabs = [...document.querySelectorAll('.expert-tab')];
+    if (!tabs.length) errs.push(which + 'the expert menu shows no tabs');
+    tabs[tabs.length - 1].click(); // the system tab, which holds this notice
+    await sleep(300);
+    const box = document.getElementById('expert-flags');
+    const notice = box.querySelector('.expert-notice[data-notice="dataDirReadOnly"]');
+    if (readOnly && !notice) {
+      errs.push(which + 'the system group carries no read-only warning row');
+    } else if (!readOnly && notice) {
+      errs.push(which + 'a read-only warning row is shown although this machine owns the lock');
+    }
+  } catch (e) { errs.push(which + 'probe: ' + e.message); }
+  clearInterval(beat);
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # 375: pill folders, grid folders and view groups are three separate
 # mechanisms, but the "take it apart" menu entry must read and look the same
 # in all of them. Its own boot, same reasoning as SEAL_PROBE above: the
@@ -12849,6 +12918,37 @@ def main():
             m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
             errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
             print(f"-- settings write ({tag})")
+            for e in errs:
+                print(f"   FAIL: {e}")
+            failed += len(errs)
+            if not errs:
+                print("   ok")
+
+        # The data-folder lock: a fresh foreign lock opens the store read-only
+        # and says so in a persistent line, same two-boot shape as the pair above.
+        for ro in (True, False):
+            tag = "read-only" if ro else "writable"
+            side = tmp / "ui" / f"ddlock-{tag}.html"
+            extra = (
+                f'<script>window.__DATA_DIR_READONLY__ = {str(ro).lower()};'
+                f'window.__DATA_DIR_OTHER_HOST__ = "OTHER-PC";</script>\n'
+                '<script src="tauri_stub.js"></script>\n<script'
+            )
+            side.write_text(
+                (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+                .replace("<script", extra, 1)
+                .replace("</body>", DATA_DIR_READONLY_PROBE + "</body>"),
+                encoding="utf-8")
+            proc = subprocess.run(
+                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+                 f"--user-data-dir={tmp / ('profile-ddlock-%s' % tag)}", "--allow-file-access-from-files",
+                 "--window-size=1000,780", "--virtual-time-budget=45000",
+                 "--dump-dom", side.as_uri()],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=180)
+            m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+            errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+            print(f"-- data folder lock ({tag})")
             for e in errs:
                 print(f"   FAIL: {e}")
             failed += len(errs)

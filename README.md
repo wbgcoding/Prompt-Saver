@@ -104,6 +104,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 | **Import / export** | One backup file with prompts, views, layouts, colors, styles and language. Plain CSV/TXT export for the texts alone |
 | **Import from a folder** | Turns a folder of .md/.txt files into tiles, one per file, read only; subfolders become tags and a short first line becomes the note |
 | **Careful resets** | "Delete data" and "Reset settings" are separate, both guarded, both with an optional safety backup |
+| **Data folder lock** | Pointing the data folder at a synced folder (OneDrive, Dropbox, Google Drive, iCloud Drive, Nextcloud) shows a one-time warning about the risk of two computers writing to the same database at once. A small lock file then guards it: a second computer that finds another machine's fresh lock opens read-only instead and says so, until that lock frees up or goes stale and is taken over automatically |
 
 ### ⚙️ Under the hood
 

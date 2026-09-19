@@ -3933,6 +3933,22 @@ body.drag-over::after {
   font-size: 12.5px;
   flex: 0 0 auto;
 }
+/* The persistent read-only line -- same shape as examples-banner, but coloured
+   like the other write-safety warnings (expert-notice) since this one means
+   saves are silently not happening rather than just being informational. */
+.data-dir-readonly-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--danger);
+  font-size: 12.5px;
+  flex: 0 0 auto;
+}
 .lib-item .dot {
   width: 10px;
   height: 10px;

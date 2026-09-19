@@ -1475,6 +1475,12 @@ const OPT_FLAG_LABELS = {
   // windows can run side by side. Read once at launch, before settings normally
   // load — toggling it needs a restart to take effect (flagRow() toasts that).
   allowMultipleInstances: "flagAllowMultipleInstances",
+  // Off = today's behaviour: the data folder is written to unconditionally,
+  // whatever it holds. On (shipped) = a lock file next to the database refuses
+  // writes for as long as another machine's lock on the same (typically synced)
+  // folder is still fresh -- see acquire_data_dir_lock/DATA_DIR_READONLY in
+  // lib.rs.
+  dataDirLock: "flagDataDirLock",
   // Off keeps the historical "one placement" guarantee (adding elsewhere moves
   // it there); on lets a prompt sit in several views at once, sharing the same data.
   multiViewPrompt: "flagMultiViewPrompt",
@@ -2224,7 +2230,7 @@ const EXPERT_TABS = [
     // Toolbar button visibility (mirrors the header right-click tool list).
     { title: "expGroupToolbar", flags: ["gridViewBorder", "pinButton", "barToggles", { key: "barToggleBoth", gate: "barToggles" }, "showLibrary", "showJournal", "showLogo", "showTitle", "pausedIcons", "headerSeparators", "toolbarHoverDim"] },
     { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "tilesHoverDim"], values: ["tileBlur", "mediaBlur", "tilesHoverOpacity"] },
-    { title: "expGroupSystem", flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, { key: "whatsNew", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances", "taskbarProgress", "etaShow"], values: ["kbFocusFadeMs", "etaMinPct", "etaMinSecs", "bgDoneKeepMin"], selects: ["updateCheckH"], paths: ["dataDir"],
+    { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, { key: "whatsNew", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances", "dataDirLock", "taskbarProgress", "etaShow"], values: ["kbFocusFadeMs", "etaMinPct", "etaMinSecs", "bgDoneKeepMin"], selects: ["updateCheckH"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
     { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
@@ -2462,7 +2468,7 @@ const EXPERT_TIPS = [
   "voiceLangCheckH", "voiceLangNoticeMs", "voiceLangSnoozeH", "voiceHotkey", "voiceHotkeyTarget",
   "trayCustomMenu", "trayRecent", "trayFavs", "trayRecentN", "trayFavN", "trayLabelMax", "traySearch", "trayMenuMax",
   "checkUpdateOnStart", "showUpdates", "updateCheckH", "whatsNew", "importExport", "toolbarHoverDim", "keyboardNav", "allowMultipleInstances",
-  "taskbarProgress", "etaShow",
+  "taskbarProgress", "etaShow", "dataDir", "dataDirLock",
   "headerSeparators", "floating", "floatPark", "floatParkCleanupH",
   "pillFolders", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap",
   "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap",
@@ -2932,6 +2938,55 @@ async function refreshSettingsLocked() {
 // (not settingsLocked) this can flip at any time mid-session, so the live
 // state comes from the existing "persist-failed" event rather than a poll.
 let settingsWriteFailed = false;
+
+// ---- Data folder lock -----------------------------------------------------
+// Whether another machine's fresh lock on the data folder is making this
+// process read-only, and which machine that is. Decided once at load (or right
+// after set_data_dir points at a new folder), like settingsLocked, nothing
+// here changes on its own mid-session, so a poll at those two moments is
+// enough; there is no push event for it.
+let dataDirLockStatus = { readOnly: false, otherHost: null };
+async function refreshDataDirLock() {
+  dataDirLockStatus = (await invoke("data_dir_lock_status").catch(() => null)) || { readOnly: false, otherHost: null };
+  renderDataDirReadOnlyBanner();
+  if (!$("settings-expert").classList.contains("hidden")) renderExpert();
+}
+// The persistent line in the window itself -- deliberately NOT only the
+// expert-menu notice below, since a user who never opens the expert menu
+// still has to know their edits are not being saved right now.
+function renderDataDirReadOnlyBanner() {
+  const banner = $("data-dir-readonly-banner");
+  if (!banner) return;
+  if (!dataDirLockStatus.readOnly) { banner.classList.add("hidden"); return; }
+  $("data-dir-readonly-text").textContent = t("dataDirReadOnlyBanner").replace("{host}", dataDirLockStatus.otherHost || "?");
+  banner.classList.remove("hidden");
+}
+// Told once per session: the folder's sync risk does not change mid-session on
+// its own (only changing it does, which confirmSyncFolderChoice below warns
+// about separately, right before committing to the new folder).
+let dataDirSyncWarnedThisSession = false;
+async function warnDataDirSyncFolder() {
+  if (dataDirSyncWarnedThisSession) return;
+  dataDirSyncWarnedThisSession = true;
+  const provider = await invoke("current_data_dir_sync_hint").catch(() => null);
+  if (!provider) return;
+  await infoDialog(t("dataDirSyncTitle"), t("dataDirSyncMsg").replace("{provider}", provider), ICON_WARN);
+}
+// Asked right before committing to a newly picked data folder.
+// Returns true when the folder is fine as-is or the user chose to use it anyway;
+// false cancels the change before set_data_dir is ever called.
+async function confirmSyncFolderChoice(dir) {
+  const provider = await invoke("path_sync_folder_hint", { path: dir }).catch(() => null);
+  if (!provider) return true;
+  return await confirmDialog({
+    title: t("dataDirSyncTitle"),
+    message: t("dataDirSyncMsg").replace("{provider}", provider),
+    confirmLabel: t("dataDirSyncContinue"),
+    cancelLabel: t("cancel"),
+    icon: ICON_WARN,
+  });
+}
+
 const EXPERT_PATHS = {
   screenshotDir: {
     label: "valScreenshotDir",
@@ -2980,10 +3035,12 @@ const EXPERT_PATHS = {
     change: async () => {
       const dir = await invoke("pick_folder").catch(() => null);
       if (!dir) return;
+      if (!(await confirmSyncFolderChoice(dir))) return;
       let oldPath;
       try { oldPath = await invoke("set_data_dir", { dir }); } catch (e) { errToast(e); return; }
       currentDataDir = dir;
       renderExpert();
+      refreshDataDirLock(); // the new folder may already carry another machine's fresh lock
       // Offer to delete the old data (default = keep). Message notes the restart.
       if (oldPath && oldPath !== dir) {
         const del = await confirmDialog({
@@ -3741,6 +3798,14 @@ const EXPERT_NOTICES = {
     title: "settingsWriteFailedRow",
     body: "settingsWriteFailedRowNote",
   },
+  dataDirReadOnly: {
+    when: () => dataDirLockStatus.readOnly,
+    title: "dataDirReadOnlyRow",
+    // The only notice whose text needs a value filled in -- noticeRow() below
+    // fills {host} for every notice, a no-op for the others since none of
+    // their strings contain that token.
+    body: "dataDirReadOnlyRowNote",
+  },
 };
 
 function noticeRow(id) {
@@ -3756,7 +3821,7 @@ function noticeRow(id) {
   const head = document.createElement("strong");
   head.textContent = t(def.title);
   const body = document.createElement("span");
-  body.textContent = t(def.body);
+  body.textContent = t(def.body).replace("{host}", dataDirLockStatus.otherHost || "?");
   text.append(head, body);
   row.append(icon, text);
   return row;
@@ -19532,6 +19597,13 @@ function bind() {
       toast(t("persistFailed"));
     }
   });
+  // Every write path lib.rs gates on the data-folder lock (save_prompts,
+  // save_prompts_and_trash, save_trash, write_settings_now) emits this same
+  // event on refusal -- one toast, the same wording every time, instead of
+  // each action failing quietly in its own different way.
+  listen("data-dir-readonly-write-blocked", (e) => {
+    toast(t("dataDirReadOnlyToast").replace("{host}", e.payload || dataDirLockStatus.otherHost || "?"));
+  });
   // The disk problem that caused the above went away and a later settings write
   // reached it again -- the notice does not need to survive that, so it comes
   // straight back down (the dialog itself still stays told-once for the session).
@@ -20146,6 +20218,7 @@ async function init() {
     // user about it straight away, so it has to be known before the window appears.
     storeSealed = (await invoke("store_sealed").catch(() => true)) !== false;
     refreshSettingsLocked();
+    refreshDataDirLock();
     // Not awaited: only a write that failed before this window was even listening
     // (an early migration write, say) could already be true here -- everything
     // after boot arrives live through the "persist-failed" event instead. The
@@ -20210,6 +20283,7 @@ async function init() {
         // and the tour is retried next launch (tourSeen is only written by it).
         const sealWarned = await warnStoreUnsealed();
         await warnSettingsWriteFailed();
+        await warnDataDirSyncFolder();
         await maybeOpenFirstRunTour(sealWarned);
         await maybeOfferEditorDraftRecovery();
       });
