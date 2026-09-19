@@ -728,6 +728,19 @@ right next to the exe, so the whole thing stays on a USB stick or synced folder
 as one unit. Moving between the two is detected automatically and offered as a
 one-time migration.
 
+A folder that syncs across two computers (OneDrive, Dropbox, Google Drive,
+iCloud Drive, Nextcloud) needs care: two machines saving to the same database
+file at once can corrupt it. Pointing the data folder at one shows a one-time
+warning explaining that risk. A small lock file next to the database then
+tracks which computer is using it, refreshed every 30 seconds; a second
+computer that finds a fresh lock from another machine opens everything
+read-only instead and says so with a permanent banner, so nothing is silently
+lost, while a lock nobody has refreshed for a while (the other computer likely
+crashed or closed) is taken over automatically. The switch for this, on by
+default, sits in the expert menu next to the data folder field. This is a
+safety net, not a way to share the library across computers: for that,
+Markdown folder sync below is the built path.
+
 ### Updates & security
 
 On by default, and — together with a first-run download of the Microsoft
@@ -1242,6 +1255,21 @@ Profil schreibt einmal und bleibt danach kein eigener Zustand.
 WAL-Datei). Installiert: unter AppData, im Experten-Menü einsehbar und
 änderbar. Portabel: direkt neben der exe. Der Wechsel zwischen beiden wird
 erkannt und als einmalige Migration angeboten.
+
+Ein Ordner, der zwischen zwei Computern synchronisiert wird (OneDrive,
+Dropbox, Google Drive, iCloud Drive, Nextcloud), braucht Vorsicht: Schreiben
+zwei Rechner gleichzeitig in dieselbe Datenbankdatei, kann sie beschädigt
+werden. Wird der Datenordner auf einen solchen gesetzt, erscheint einmalig
+eine Warnung dazu. Eine kleine Sperrdatei neben der Datenbank hält dann fest,
+welcher Computer sie gerade verwendet, alle 30 Sekunden aufgefrischt; findet
+ein zweiter Computer eine frische Sperre eines anderen Rechners, öffnet er
+alles nur lesend und zeigt das dauerhaft in einer Kopfzeile, damit nichts
+still verloren geht, während eine länger nicht aufgefrischte Sperre (der
+andere Rechner ist vermutlich abgestürzt oder geschlossen) automatisch
+übernommen wird. Der zugehörige Schalter, standardmäßig an, liegt im
+Experten-Menü neben dem Datenordner-Feld. Das ist ein Sicherheitsnetz, kein
+Weg, die Bibliothek über Computer hinweg zu teilen: dafür ist die
+Markdown-Ordnersynchronisierung weiter unten der gebaute Weg.
 
 **Updates & Sicherheit** — standardmäßig an, einzige eigene
 Netzwerkaktivität außer einem einmaligen WebView2-Installer-Download, falls

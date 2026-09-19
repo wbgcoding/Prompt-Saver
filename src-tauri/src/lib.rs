@@ -2967,6 +2967,182 @@ fn settings_write_failed() -> bool {
     SETTINGS_WRITE_FAILED.load(Ordering::Relaxed)
 }
 
+// ---- Data folder lock ------------------------------------------------------
+// The data folder can be pointed at a synchronised folder (OneDrive, Dropbox,
+// Google Drive, iCloud Drive, Nextcloud), and the worst case for a SQLite file
+// under one of those is a corrupted database once two machines write to it at
+// close to the same time. `tauri_plugin_single_instance` already rules out a
+// second process on the SAME machine; this only has to rule out a second one on
+// a DIFFERENT machine sharing the same synced file.
+//
+// A small lock file (host name, process id, last-seen timestamp) sits beside
+// the database, refreshed every DATA_DIR_LOCK_REFRESH_SECS by the scheduler job
+// registered in run(). A machine that finds another host's lock fresh opens the
+// store read-only for the rest of the session and says so in the window (a
+// dedicated persistent line, not the shared expert-menu notice list, since a
+// user who never opens the expert menu still has to know their edits are not
+// being saved). A lock older than three missed refreshes is taken over without
+// asking: the alternative is a crash on one machine locking every other one out
+// permanently. This mirrors the settings write-lock (`SETTINGS_LOCKED`) as its
+// model -- a process-global flag rather than a `Store` field, because the save
+// functions below are the one choke point every prompt/settings write already
+// funnels through, the same way the prompts_locked valve already gates every
+// diff write path.
+const DATA_DIR_LOCK_FILE: &str = "datadir.lock.json";
+const DATA_DIR_LOCK_REFRESH_SECS: u64 = 30;
+// Three missed refreshes: long enough that one slow tick under load is never
+// mistaken for a crash, short enough that a real crash does not lock the other
+// machine out of its own data for long.
+const DATA_DIR_LOCK_STALE_SECS: u64 = DATA_DIR_LOCK_REFRESH_SECS * 3;
+
+#[derive(Serialize, Deserialize, Clone)]
+struct DataDirLockInfo {
+    host: String,
+    pid: u32,
+    seen: u64,
+}
+
+fn unix_now() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+// Windows always sets COMPUTERNAME for the logged-in session; a missing value
+// (never observed in practice) falls back to a label that still reads sensibly
+// in the read-only banner rather than an empty string.
+fn local_host_name() -> String {
+    std::env::var("COMPUTERNAME").ok().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| "this computer".to_string())
+}
+
+fn data_dir_lock_path(dir: &Path) -> PathBuf {
+    dir.join(DATA_DIR_LOCK_FILE)
+}
+
+fn read_data_dir_lock(path: &Path) -> Option<DataDirLockInfo> {
+    serde_json::from_str(&fs::read_to_string(path).ok()?).ok()
+}
+
+fn write_data_dir_lock(path: &Path, info: &DataDirLockInfo) -> bool {
+    serde_json::to_string(info).is_ok_and(|json| fs::write(path, json).is_ok())
+}
+
+// A lock naming THIS machine is never "foreign", whatever its pid or age -- a
+// crash-and-restart on the same computer is not the two-machine case this
+// guards against, and the single-instance plugin already rules out a genuine
+// second process here.
+fn lock_is_ours(existing: &DataDirLockInfo) -> bool {
+    existing.host == local_host_name()
+}
+
+fn lock_is_stale(existing: &DataDirLockInfo) -> bool {
+    unix_now().saturating_sub(existing.seen) >= DATA_DIR_LOCK_STALE_SECS
+}
+
+static DATA_DIR_READONLY: AtomicBool = AtomicBool::new(false);
+static DATA_DIR_LOCK_HOST: Mutex<Option<String>> = Mutex::new(None);
+
+// Decides read-only vs. owned for `dir` and, if owned, claims it. Called once at
+// load_store() and again after set_data_dir() points the app at a different
+// folder. The `dataDirLock` toggle (default on) skips all of this when off,
+// restoring today's behaviour with no lock file and no read-only state.
+fn acquire_data_dir_lock(dir: &Path, enabled: bool) {
+    if !enabled {
+        DATA_DIR_READONLY.store(false, Ordering::Relaxed);
+        *DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        return;
+    }
+    let path = data_dir_lock_path(dir);
+    let existing = read_data_dir_lock(&path);
+    let foreign_and_fresh = existing.as_ref().is_some_and(|e| !lock_is_ours(e) && !lock_is_stale(e));
+    if foreign_and_fresh {
+        DATA_DIR_READONLY.store(true, Ordering::Relaxed);
+        *DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()) = existing.map(|e| e.host);
+        return;
+    }
+    DATA_DIR_READONLY.store(false, Ordering::Relaxed);
+    *DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    write_data_dir_lock(&path, &DataDirLockInfo { host: local_host_name(), pid: std::process::id(), seen: unix_now() });
+}
+
+// The scheduler tick (see "data-dir-lock" in run()). A read-only process must
+// never touch this file -- it belongs to the other machine's session, and
+// overwriting it would erase the very lock this process is refusing to ignore.
+fn refresh_data_dir_lock(dir: &Path) {
+    if DATA_DIR_READONLY.load(Ordering::Relaxed) {
+        return;
+    }
+    write_data_dir_lock(&data_dir_lock_path(dir), &DataDirLockInfo { host: local_host_name(), pid: std::process::id(), seen: unix_now() });
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DataDirLockStatus {
+    read_only: bool,
+    other_host: Option<String>,
+}
+
+// Polled once at startup (init(), the same shape as store_sealed/settings_locked)
+// to fill in the persistent read-only banner before the first render.
+#[tauri::command]
+fn data_dir_lock_status() -> DataDirLockStatus {
+    DataDirLockStatus {
+        read_only: DATA_DIR_READONLY.load(Ordering::Relaxed),
+        other_host: DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+    }
+}
+
+// The single choke point save_prompts/save_prompts_and_trash/save_trash/
+// write_settings_now all call first: real refusal, not a silent no-op -- every
+// blocked write emits the same event with the same host name, so the window
+// can show the same clear message no matter which action triggered it.
+fn data_dir_write_blocked(app: &AppHandle) -> bool {
+    if !DATA_DIR_READONLY.load(Ordering::Relaxed) {
+        return false;
+    }
+    let host = DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let _ = app.emit("data-dir-readonly-write-blocked", host);
+    true
+}
+
+// Known synchronised-folder conventions: the environment variable a client
+// publishes when it has one (more reliable than a folder name a business tenant
+// can rename in Explorer without moving the actual sync root), then the folder
+// name itself. Returns the provider's display name, or None for an ordinary
+// local folder.
+fn sync_folder_hint(path: &Path) -> Option<&'static str> {
+    let lower = path.to_string_lossy().to_lowercase();
+    for var in ["OneDriveCommercial", "OneDriveConsumer", "OneDrive"] {
+        if let Some(root) = std::env::var_os(var) {
+            let root_lower = root.to_string_lossy().to_lowercase();
+            if !root_lower.is_empty() && lower.starts_with(&root_lower) {
+                return Some("OneDrive");
+            }
+        }
+    }
+    const MARKERS: &[(&str, &str)] = &[
+        ("onedrive", "OneDrive"),
+        ("dropbox", "Dropbox"),
+        ("google drive", "Google Drive"),
+        ("googledrive", "Google Drive"),
+        ("icloud drive", "iCloud Drive"),
+        ("icloud", "iCloud Drive"),
+        ("nextcloud", "Nextcloud"),
+    ];
+    MARKERS.iter().find(|(marker, _)| lower.contains(marker)).map(|(_, name)| *name)
+}
+
+// Used both when picking a new data folder (before set_data_dir commits to it)
+// and at startup against the folder already in use, so the same warning applies
+// whichever way a sync folder ends up configured.
+#[tauri::command]
+fn path_sync_folder_hint(path: String) -> Option<String> {
+    sync_folder_hint(Path::new(&path)).map(str::to_string)
+}
+
+#[tauri::command]
+fn current_data_dir_sync_hint(app: AppHandle) -> Option<String> {
+    sync_folder_hint(&data_dir(&app)).map(str::to_string)
+}
+
 // Decrypt a stored value. Legacy (un-prefixed) values pass through for migration; an
 // undecryptable prefixed value (e.g. another Windows account) yields "" so the row is
 // skipped rather than fed garbage to the JSON parser.
@@ -3608,6 +3784,9 @@ fn db_list_clips(conn: &Connection) -> Vec<ClipItem> {
 // attachment file) must skip that step when this is false, or the deletion can
 // outlive the very change that made the file orphaned.
 fn save_prompts(app: &AppHandle, store: &Store) -> bool {
+    if data_dir_write_blocked(app) {
+        return false;
+    }
     // Safety valve: if some rows failed to decrypt at load, the in-memory list is a
     // SUBSET of what's on disk. Rewriting the table (DELETE + re-INSERT) would delete
     // the unreadable rows permanently — so we refuse to persist prompt changes at all
@@ -3642,6 +3821,9 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
 }
 
 fn save_trash(app: &AppHandle, store: &Store) -> bool {
+    if data_dir_write_blocked(app) {
+        return false;
+    }
     // Same lock as save_prompts: an unreadable-row situation must never trigger a
     // destructive rewrite of a second table either.
     if store.prompts_locked {
@@ -3662,6 +3844,9 @@ fn save_trash(app: &AppHandle, store: &Store) -> bool {
 // restore_prompt - see db_write_prompts_and_trash for why the two tables can no
 // longer be saved as two separate commits for a single move.
 fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
+    if data_dir_write_blocked(app) {
+        return false;
+    }
     if store.prompts_locked {
         return false;
     }
@@ -3696,6 +3881,9 @@ fn save_settings(app: &AppHandle, settings: &Settings) -> bool {
 // The write itself, without the "cancel a collected write" step — the collecting
 // path below calls this one so it does not clear its own mark twice.
 fn write_settings_now(app: &AppHandle, settings: &Settings) -> bool {
+    if data_dir_write_blocked(app) {
+        return false;
+    }
     // Safety valve: the row on disk is present but unreadable, so the in-memory
     // Settings is a default, not what is actually stored. Rewriting now would
     // permanently destroy the real (corrupt but recoverable-by-hand) row.
@@ -4073,6 +4261,7 @@ fn load_store(app: &AppHandle) -> Store {
             prompts_locked: decrypt_fails > 0,
             written: std::cell::RefCell::new(written),
         };
+        acquire_data_dir_lock(&dir, data_dir_lock_enabled(&store.settings));
         // Never let an existing install see the first-run tour -- a store
         // this is discovered for is, by definition, not the one that will ever
         // write the flag itself via the tour's own Finish/Skip.
@@ -4092,12 +4281,19 @@ fn load_store(app: &AppHandle) -> Store {
     }
     // Fallback: DB unavailable → read the JSON files directly.
     let mut store = load_store_from_json(&dir);
+    acquire_data_dir_lock(&dir, data_dir_lock_enabled(&store.settings));
     if tour_should_be_marked_seen(!store.prompts.is_empty(), store.settings.examples_seeded) {
         store.settings.ui_flags.entry("tourSeen".to_string()).or_insert(true);
     }
     store.normalize_folders();
     sweep_trash(app, &mut store); // no-op here (fallback path never loads trash), kept for symmetry
     store
+}
+
+// The `dataDirLock` toggle (default on) -- same "absent/true = on, explicit
+// false = off" convention as colorPicker and the other default-on flags.
+fn data_dir_lock_enabled(settings: &Settings) -> bool {
+    settings.ui_flags.get("dataDirLock") != Some(&false)
 }
 
 // What a launch can still recover when the database cannot be opened at all.
@@ -15579,6 +15775,12 @@ async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: String) -> Resu
     // what the old folder's rows hashed to.
     let mut rebind = || lock(&state).forget_written_rows();
     move_store_dir(&current, &new, &default_data_dir(&app), &mut flush, &mut rebind)?;
+    // The lock decision was made for the folder just left; re-run it for the one
+    // just entered, exactly like a fresh load_store() would, so a move into (or
+    // out of) a folder someone else already holds a fresh lock on takes effect
+    // immediately instead of waiting for the next restart.
+    let enabled = data_dir_lock_enabled(&lock(&state).settings);
+    acquire_data_dir_lock(&new, enabled);
     Ok(old)
 }
 
@@ -16074,6 +16276,18 @@ fn open_repo(page: Option<String>) -> Result<(), String> {
     }
     cmd.spawn().map_err(|e| e.to_string())?;
     Ok(())
+}
+
+// The third-party license list is generated at build time (build.rs) from the real
+// dependency manifests and embedded here as a plain JSON string; the frontend parses
+// it. Regenerating THIRD-PARTY-NOTICES.md from the same source happens in build.rs
+// too, so the two never show a different list.
+static THIRD_PARTY_LICENSES_JSON: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/third_party_licenses.json"));
+
+#[tauri::command]
+fn third_party_notices() -> &'static str {
+    THIRD_PARTY_LICENSES_JSON
 }
 
 // The window's minimum logical size at a given webview zoom factor: growing the
@@ -27466,6 +27680,19 @@ pub fn run() {
                 );
             }
 
+            // Keeps our own data-folder lock fresh for as long as this process
+            // owns it -- a no-op while read-only or while the dataDirLock
+            // toggle is off, see refresh_data_dir_lock/acquire_data_dir_lock.
+            {
+                let h = handle.clone();
+                scheduler::register_periodic(
+                    "data-dir-lock",
+                    Duration::from_secs(DATA_DIR_LOCK_REFRESH_SECS),
+                    Duration::from_secs(DATA_DIR_LOCK_REFRESH_SECS),
+                    move || refresh_data_dir_lock(&data_dir(&h)),
+                );
+            }
+
             // Self-heal a rec-bar window that exists but somehow ended up
             // invisible while its recording is still running -- see rec_bar_heal_tick.
             {
@@ -27917,6 +28144,7 @@ pub fn run() {
             load_editor_draft,
             discard_editor_draft,
             open_repo,
+            third_party_notices,
             set_ui_zoom,
             delete_all_data,
             reset_settings,
@@ -28081,6 +28309,9 @@ pub fn run() {
             store_sealed,
             settings_locked,
             settings_write_failed,
+            data_dir_lock_status,
+            path_sync_folder_hint,
+            current_data_dir_sync_hint,
             set_data_dir,
             delete_data_dir,
             paste_into_previous,
@@ -36565,6 +36796,189 @@ mod tests {
         SETTINGS_WRITE_FAILED.store(false, Ordering::Relaxed);
         assert!(!settings_write_failed());
         SETTINGS_WRITE_FAILED.store(before, Ordering::Relaxed);
+    }
+
+    // ---- Data folder lock --------------------------------------------------
+
+    fn ddlock_test_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("ps-ddlock-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    // These tests all read and write the same two globals with real filesystem
+    // I/O in between, so the default parallel test runner can interleave them.
+    // Serialize just this group, the same way BG_OPS_TEST_LOCK and
+    // REC_CONVERT_TEST_LOCK already do for their own shared state.
+    static DDLOCK_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    // Saves/restores the two globals the way settings_locked_command_reports_the_flag
+    // does for SETTINGS_LOCKED -- these tests are the only ones in the suite that
+    // touch them, but the same courtesy avoids surprising a future one.
+    struct DdlockGuard {
+        _serial: std::sync::MutexGuard<'static, ()>,
+        was_readonly: bool,
+        was_host: Option<String>,
+    }
+    impl DdlockGuard {
+        fn capture() -> Self {
+            Self {
+                _serial: DDLOCK_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner()),
+                was_readonly: DATA_DIR_READONLY.load(Ordering::Relaxed),
+                was_host: DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+            }
+        }
+    }
+    impl Drop for DdlockGuard {
+        fn drop(&mut self) {
+            DATA_DIR_READONLY.store(self.was_readonly, Ordering::Relaxed);
+            *DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()) = self.was_host.clone();
+        }
+    }
+
+    #[test]
+    fn acquire_data_dir_lock_reads_a_fresh_foreign_lock_as_read_only() {
+        let _g = DdlockGuard::capture();
+        let dir = ddlock_test_dir("fresh-foreign");
+        write_data_dir_lock(
+            &data_dir_lock_path(&dir),
+            &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 999, seen: unix_now() },
+        );
+        acquire_data_dir_lock(&dir, true);
+        assert!(DATA_DIR_READONLY.load(Ordering::Relaxed), "a fresh foreign lock must open the store read-only");
+        assert_eq!(
+            DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()).as_deref(),
+            Some("OTHER-PC"),
+            "the read-only banner needs the other machine's name"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn acquire_data_dir_lock_takes_over_a_stale_foreign_lock_without_asking() {
+        let _g = DdlockGuard::capture();
+        let dir = ddlock_test_dir("stale-foreign");
+        let path = data_dir_lock_path(&dir);
+        let stale_seen = unix_now().saturating_sub(DATA_DIR_LOCK_STALE_SECS + 10);
+        write_data_dir_lock(&path, &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 999, seen: stale_seen });
+        acquire_data_dir_lock(&dir, true);
+        assert!(!DATA_DIR_READONLY.load(Ordering::Relaxed), "a lock nobody has refreshed in three rounds must be reclaimed, not obeyed");
+        assert!(DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()).is_none());
+        let claimed = read_data_dir_lock(&path).expect("acquiring the lock must write a fresh one");
+        assert_eq!(claimed.host, local_host_name(), "the reclaimed lock must now name this machine");
+        assert!(unix_now().saturating_sub(claimed.seen) < 5, "the reclaimed lock must carry a current timestamp");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn acquire_data_dir_lock_never_treats_its_own_hostname_as_foreign() {
+        let _g = DdlockGuard::capture();
+        let dir = ddlock_test_dir("own-host");
+        // Same host, different (long-gone) pid and a timestamp that would count as
+        // stale too -- neither should matter: a crash-and-restart on THIS machine
+        // is not the two-machine case this guards against, and single-instance
+        // already rules out a second live process here.
+        write_data_dir_lock(
+            &data_dir_lock_path(&dir),
+            &DataDirLockInfo { host: local_host_name(), pid: 424_242, seen: unix_now().saturating_sub(DATA_DIR_LOCK_STALE_SECS + 999) },
+        );
+        acquire_data_dir_lock(&dir, true);
+        assert!(!DATA_DIR_READONLY.load(Ordering::Relaxed), "this machine's own old lock must never lock this machine out");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn acquire_data_dir_lock_does_nothing_while_the_toggle_is_off() {
+        let _g = DdlockGuard::capture();
+        let dir = ddlock_test_dir("toggle-off");
+        write_data_dir_lock(
+            &data_dir_lock_path(&dir),
+            &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 1, seen: unix_now() },
+        );
+        acquire_data_dir_lock(&dir, false);
+        assert!(!DATA_DIR_READONLY.load(Ordering::Relaxed), "dataDirLock off must restore today's behaviour: no read-only state");
+        assert!(DATA_DIR_LOCK_HOST.lock().unwrap_or_else(|e| e.into_inner()).is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn refresh_data_dir_lock_keeps_an_owned_lock_fresh() {
+        let _g = DdlockGuard::capture();
+        let dir = ddlock_test_dir("owned-refresh");
+        acquire_data_dir_lock(&dir, true); // claims it -- no prior lock file
+        assert!(!DATA_DIR_READONLY.load(Ordering::Relaxed));
+        let path = data_dir_lock_path(&dir);
+        // Back-date the file the way a real clock tick would leave it just before
+        // the next scheduler round is due.
+        write_data_dir_lock(&path, &DataDirLockInfo { host: local_host_name(), pid: std::process::id(), seen: unix_now() - 25 });
+        refresh_data_dir_lock(&dir);
+        let refreshed = read_data_dir_lock(&path).expect("refresh must not delete the lock file");
+        assert!(unix_now().saturating_sub(refreshed.seen) < 5, "a round while owned must bring the timestamp back to now");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn refresh_data_dir_lock_never_touches_a_foreign_lock_while_read_only() {
+        let _g = DdlockGuard::capture();
+        let dir = ddlock_test_dir("readonly-refresh");
+        let path = data_dir_lock_path(&dir);
+        let foreign_seen = unix_now();
+        write_data_dir_lock(&path, &DataDirLockInfo { host: "OTHER-PC".to_string(), pid: 1, seen: foreign_seen });
+        acquire_data_dir_lock(&dir, true); // becomes read-only against the fresh foreign lock
+        assert!(DATA_DIR_READONLY.load(Ordering::Relaxed));
+        refresh_data_dir_lock(&dir); // must be a no-op: this file is not ours to touch
+        let after = read_data_dir_lock(&path).expect("a read-only round must not delete the other machine's lock");
+        assert_eq!(after.host, "OTHER-PC");
+        assert_eq!(after.seen, foreign_seen, "a read-only process must never rewrite the lock it does not own");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // Eight paths: one for each provider's folder-name convention, one OneDrive
+    // path recognised only through its environment variable (business tenants
+    // rename the visible folder), and two ordinary local paths that must stay
+    // unrecognised.
+    #[test]
+    fn sync_folder_hint_recognises_known_cloud_folders_and_rejects_plain_ones() {
+        assert_eq!(sync_folder_hint(Path::new(r"D:\Sync\OneDrive\PromptSaver")), Some("OneDrive"));
+        assert_eq!(sync_folder_hint(Path::new(r"D:\Sync\Dropbox\PromptSaver")), Some("Dropbox"));
+        assert_eq!(sync_folder_hint(Path::new(r"D:\Sync\Google Drive\PromptSaver")), Some("Google Drive"));
+        assert_eq!(sync_folder_hint(Path::new(r"D:\Sync\GoogleDrive\PromptSaver")), Some("Google Drive"));
+        assert_eq!(sync_folder_hint(Path::new(r"D:\Sync\iCloudDrive\PromptSaver")), Some("iCloud Drive"));
+        assert_eq!(sync_folder_hint(Path::new(r"D:\Sync\Nextcloud\PromptSaver")), Some("Nextcloud"));
+        assert_eq!(sync_folder_hint(Path::new(r"D:\Data\PromptSaver")), None);
+        assert_eq!(sync_folder_hint(Path::new(r"D:\Backups\PromptSaver")), None);
+
+        // The env-var path: a business tenant's OneDrive root is often renamed in
+        // Explorer (e.g. "BGCoding") with nothing resembling "onedrive" in the
+        // visible name, so only the environment variable catches it.
+        let guard = EnvVarGuard::set("OneDrive", r"D:\Company\BGCoding");
+        assert_eq!(sync_folder_hint(Path::new(r"D:\Company\BGCoding\PromptSaver")), Some("OneDrive"));
+        drop(guard);
+    }
+
+    // Minimal set/restore-on-drop wrapper -- std::env::set_var is unsafe to call
+    // concurrently with a read elsewhere in the same process, but nothing else
+    // in this suite reads OneDrive/OneDriveConsumer/OneDriveCommercial, and the
+    // restore on Drop keeps a panic from leaking the override into later tests.
+    struct EnvVarGuard {
+        key: &'static str,
+        prior: Option<String>,
+    }
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            let prior = std::env::var(key).ok();
+            unsafe { std::env::set_var(key, value) };
+            Self { key, prior }
+        }
+    }
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            match &self.prior {
+                Some(v) => unsafe { std::env::set_var(self.key, v) },
+                None => unsafe { std::env::remove_var(self.key) },
+            }
+        }
     }
 
     #[test]

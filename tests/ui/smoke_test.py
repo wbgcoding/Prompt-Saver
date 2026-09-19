@@ -11551,6 +11551,75 @@ WRITE_FAIL_PROBE = """
 """
 
 
+# The data-folder lock: while another machine's lock is fresh, the app opens
+# read-only and says so in a persistent line in the window itself, not only in
+# the expert menu -- a user who never opens the expert menu still has to see
+# it. Same two-boot shape as the settings-write-failure pair above.
+DATA_DIR_READONLY_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const readOnly = window.__DATA_DIR_READONLY__ === true;
+  const which = readOnly ? 'read-only: ' : 'writable: ';
+  const beat = setInterval(() => {
+    document.documentElement.style.setProperty('--ddro-tick', String(Date.now()));
+    document.body.getBoundingClientRect();
+  }, 40);
+  const visible = (el) => !!el && !el.classList.contains('hidden');
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && !visible(cm); i++) await sleep(100);
+    if (visible(cm)) {
+      document.getElementById('confirm-cancel').click();
+      await sleep(300);
+    }
+    // ---- the persistent line in the window itself --------------------------
+    for (let i = 0; i < 40; i++) {
+      const b = document.getElementById('data-dir-readonly-banner');
+      if (readOnly ? visible(b) : true) break;
+      await sleep(50);
+    }
+    const banner = document.getElementById('data-dir-readonly-banner');
+    if (readOnly) {
+      if (!visible(banner)) {
+        errs.push(which + 'no persistent banner shown although the folder is read-only');
+      } else {
+        const text = document.getElementById('data-dir-readonly-text').textContent.trim();
+        if (!text) errs.push(which + 'the banner is empty');
+        if (/dataDirReadOnly/.test(text)) errs.push(which + 'the banner renders a raw i18n key: ' + text);
+        if (!text.includes('OTHER-PC')) errs.push(which + 'the banner does not name the other machine: ' + text);
+      }
+    } else if (visible(banner)) {
+      errs.push(which + 'the banner is shown although this machine owns the lock');
+    }
+    // ---- the permanent record in the settings dialog ------------------------
+    document.getElementById('gear').click();
+    await sleep(200);
+    document.getElementById('expert-open').click();
+    await sleep(300);
+    const tabs = [...document.querySelectorAll('.expert-tab')];
+    if (!tabs.length) errs.push(which + 'the expert menu shows no tabs');
+    tabs[tabs.length - 1].click(); // the system tab, which holds this notice
+    await sleep(300);
+    const box = document.getElementById('expert-flags');
+    const notice = box.querySelector('.expert-notice[data-notice="dataDirReadOnly"]');
+    if (readOnly && !notice) {
+      errs.push(which + 'the system group carries no read-only warning row');
+    } else if (!readOnly && notice) {
+      errs.push(which + 'a read-only warning row is shown although this machine owns the lock');
+    }
+  } catch (e) { errs.push(which + 'probe: ' + e.message); }
+  clearInterval(beat);
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+
 # 375: pill folders, grid folders and view groups are three separate
 # mechanisms, but the "take it apart" menu entry must read and look the same
 # in all of them. Its own boot, same reasoning as SEAL_PROBE above: the
@@ -12086,6 +12155,63 @@ window.__WHATS_NEW_FIXTURE__ = {
     }
   } catch (e) { errs.push('404 probe: ' + e.message); }
   clearInterval(beat);
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
+# 451: the About window's third-party license list -- section present, expanding
+# an entry shows its license text, and no entry (including the note-only,
+# text-less one) ever expands to a blank panel.
+LICENSES_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  try {
+    document.getElementById('gear').click();
+    await sleep(150);
+    document.getElementById('about-btn').click();
+    await sleep(150);
+    const openBtn = document.getElementById('about-licenses');
+    if (!openBtn) {
+      errs.push('451: the About dialog has no third-party licenses button');
+    } else {
+      openBtn.click();
+      await sleep(150);
+      const modal = document.getElementById('licenses-modal');
+      if (!modal || modal.classList.contains('hidden')) {
+        errs.push('451: clicking the button did not open the licenses window');
+      } else {
+        const rows = Array.from(modal.querySelectorAll('.license-row'));
+        if (rows.length !== 3) errs.push('451: expected 3 rows from the fixture, found ' + rows.length);
+        for (const row of rows) {
+          const toggle = row.querySelector('.license-row-toggle');
+          const body = row.querySelector('.license-row-body');
+          toggle.click();
+          await sleep(50);
+          if (body.classList.contains('hidden')) errs.push('451: expanding ' + toggle.textContent + ' did not reveal its panel');
+          if (!body.textContent || !body.textContent.trim()) {
+            errs.push('451: expanded panel for ' + toggle.textContent + ' is empty');
+          }
+        }
+        const mitRow = rows.find((r) => r.textContent.includes('examplecrate'));
+        if (!mitRow || !mitRow.querySelector('.license-row-text')) {
+          errs.push('451: the MIT-resolved crate does not show its license text');
+        }
+        const sqliteRow = rows.find((r) => r.textContent.includes('SQLite'));
+        if (!sqliteRow || !sqliteRow.querySelector('.license-row-body').textContent.includes('Public Domain')) {
+          errs.push('451: the no-text public-domain entry does not fall back to showing its license label');
+        }
+        document.getElementById('licenses-close').click();
+        await sleep(150);
+        if (!modal.classList.contains('hidden')) errs.push('451: the licenses window did not close');
+      }
+    }
+  } catch (e) { errs.push('451 probe: ' + e.message); }
   const pre = document.createElement('pre');
   pre.id = 'SMOKE';
   pre.textContent = JSON.stringify(errs);
@@ -12895,6 +13021,37 @@ def main():
             if not errs:
                 print("   ok")
 
+        # The data-folder lock: a fresh foreign lock opens the store read-only
+        # and says so in a persistent line, same two-boot shape as the pair above.
+        for ro in (True, False):
+            tag = "read-only" if ro else "writable"
+            side = tmp / "ui" / f"ddlock-{tag}.html"
+            extra = (
+                f'<script>window.__DATA_DIR_READONLY__ = {str(ro).lower()};'
+                f'window.__DATA_DIR_OTHER_HOST__ = "OTHER-PC";</script>\n'
+                '<script src="tauri_stub.js"></script>\n<script'
+            )
+            side.write_text(
+                (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+                .replace("<script", extra, 1)
+                .replace("</body>", DATA_DIR_READONLY_PROBE + "</body>"),
+                encoding="utf-8")
+            proc = subprocess.run(
+                [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+                 f"--user-data-dir={tmp / ('profile-ddlock-%s' % tag)}", "--allow-file-access-from-files",
+                 "--window-size=1000,780", "--virtual-time-budget=45000",
+                 "--dump-dom", side.as_uri()],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=180)
+            m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+            errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+            print(f"-- data folder lock ({tag})")
+            for e in errs:
+                print(f"   FAIL: {e}")
+            failed += len(errs)
+            if not errs:
+                print("   ok")
+
         # 375/483: the grid-folder, view-group AND pill-folder "ungroup" menu
         # entries must all read and look the same -- two separate boots (the
         # pill is its own window, same reasoning as the FOLDER_PROBE run
@@ -13045,6 +13202,29 @@ def main():
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- whats new: toast, window, About entry, GitHub refresh")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # 451: third-party license list in the About window.
+        side = tmp / "ui" / "licenses.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", LICENSES_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-licenses'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- third-party license list in the About window")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

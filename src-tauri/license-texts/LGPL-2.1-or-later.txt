@@ -1,0 +1,10 @@
+GNU Lesser General Public License, version 2.1 or later (summary)
+
+A weak copyleft license aimed at libraries: it lets a library be linked into
+a program under different license terms, while changes to the library itself
+must stay available under the same terms. The affected dependencies here
+offer this license only as an alternative and are used under their
+permissive MIT/Apache-2.0 option instead.
+
+This is a short summary; it is not a substitute for the full legal text:
+https://www.gnu.org/licenses/lgpl-2.1.html

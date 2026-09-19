@@ -1,0 +1,10 @@
+CC0 1.0 Universal (Public Domain Dedication)
+
+The person who associated a work with this deed has dedicated the work to the
+public domain by waiving all of their rights to the work worldwide under
+copyright law, including all related and neighboring rights, to the extent
+allowed by law. The work can be copied, modified, distributed and used, even
+for commercial purposes, all without asking permission.
+
+This is a short summary; it is not a substitute for the full legal text:
+https://creativecommons.org/publicdomain/zero/1.0/legalcode

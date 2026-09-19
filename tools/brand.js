@@ -361,15 +361,15 @@ function stampBuildFiles(root, b) {
   bat = sub(bat, /^set "APP_SLUG=.*"$/m, `set "APP_SLUG=${b.slug}"`, "build.bat APP_SLUG");
   write(batPath, bat);
 
-  // The uninstaller wipes the store folder, which is brand-specific.
+  // The data folder page and the uninstaller's delete step both read this one
+  // define, so a single stamp here keeps them from drifting apart.
   const nsiPath = path.join(root, "src-tauri", "installer.nsi");
   let nsi = read(nsiPath);
-  // Only the literal folder line — the sibling `${BUNDLEID}` lines stay untouched.
   nsi = sub(
     nsi,
-    /^(    RmDir \/r "\$APPDATA\\)[^"${}]+(")$/m,
+    /^(!define DATAFOLDER ")[^"${}]+(")$/m,
     `$1${b.dataFolder}$2`,
-    "installer.nsi store folder"
+    "installer.nsi data folder"
   );
   nsi = sub(
     nsi,

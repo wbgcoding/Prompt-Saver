@@ -2470,6 +2470,48 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
    from each button to its nearest modal edge comes out equal. */
 .about-box .modal-actions { justify-content: center; }
 .about-box .modal-actions > button { flex: 0 1 auto; min-width: 100px; }
+/* Third-party license list: wider than a plain confirm dialog since every row
+   carries a name, a version and a license id side by side. */
+#licenses-modal .modal { width: min(640px, 94vw); }
+.licenses-intro { margin: 0; color: var(--muted); font-size: 13px; }
+.licenses-list { display: flex; flex-direction: column; gap: 4px; }
+.license-row-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2, transparent);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.license-row-toggle[aria-expanded="true"] { border-color: var(--accent); }
+.license-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.license-row-license { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
+.license-row-body { padding: 8px 10px 4px; }
+.license-row-note { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+/* Selectable and copyable on purpose -- several bundled licenses require the
+   text to travel with the app, which means a user has to be able to copy it. */
+.license-row-text {
+  margin: 0;
+  padding: 10px;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2, transparent);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+.licenses-empty { margin: 0; text-align: center; color: var(--muted); font-size: 13px; }
 /* The box takes the height of whatever the release brought — a two-line note stays
    two lines tall, a long one scrolls instead of pushing the buttons off screen. */
 .update-notes {
@@ -3941,6 +3983,22 @@ body.drag-over::after {
   border-radius: 10px;
   background: var(--surface-2);
   color: var(--muted);
+  font-size: 12.5px;
+  flex: 0 0 auto;
+}
+/* The persistent read-only line -- same shape as examples-banner, but coloured
+   like the other write-safety warnings (expert-notice) since this one means
+   saves are silently not happening rather than just being informational. */
+.data-dir-readonly-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--danger);
   font-size: 12.5px;
   flex: 0 0 auto;
 }

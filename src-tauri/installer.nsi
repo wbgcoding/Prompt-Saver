@@ -66,6 +66,11 @@ ${StrLoc}
 ; Must match brand::AUTOSTART_KEY (src-tauri/src/brand.rs) — the app writes the Run
 ; value under this name, not ${PRODUCTNAME}. Stamped by tools/brand.js on rebrand.
 !define AUTOSTARTKEY "PromptSaver"
+; Must match brand::DATA_FOLDER (src-tauri/src/brand.rs), the folder under
+; %APPDATA% that holds the database and settings. Stamped by tools/brand.js on
+; rebrand. The uninstall data page and the delete step both read this one
+; define instead of each spelling the folder name out separately.
+!define DATAFOLDER "Prompt-Saver"
 
 Var PassiveMode
 Var UpdateMode
@@ -515,45 +520,74 @@ FunctionEnd
 
 ; Uninstaller Pages
 ; 1. Confirm uninstall page
-Var DeleteAppDataCheckbox
-Var DeleteAppDataCheckboxState
-!define /ifndef WS_EX_LAYOUTRTL         0x00400000
-!define MUI_PAGE_CUSTOMFUNCTION_SHOW un.ConfirmShow
-Function un.ConfirmShow ; Add add a `Delete app data` check box
-  ; $1 inner dialog HWND
-  ; $2 window DPI
-  ; $3 style
-  ; $4 x
-  ; $5 y
-  ; $6 width
-  ; $7 height
-  FindWindow $1 "#32770" "" $HWNDPARENT ; Find inner dialog
-  System::Call "user32::GetDpiForWindow(p r1) i .r2"
-  ${If} $(^RTL) = 1
-    StrCpy $3 "${__NSD_CheckBox_EXSTYLE} | ${WS_EX_LAYOUTRTL}"
-    IntOp $4 50 * $2
-  ${Else}
-    StrCpy $3 "${__NSD_CheckBox_EXSTYLE}"
-    IntOp $4 0 * $2
-  ${EndIf}
-  IntOp $5 100 * $2
-  IntOp $6 400 * $2
-  IntOp $7 25 * $2
-  IntOp $4 $4 / 96
-  IntOp $5 $5 / 96
-  IntOp $6 $6 / 96
-  IntOp $7 $7 / 96
-  System::Call 'user32::CreateWindowEx(i r3, w "${__NSD_CheckBox_CLASS}", w "$(deleteAppData)", i ${__NSD_CheckBox_STYLE}, i r4, i r5, i r6, i r7, p r1, i0, i0, i0) i .s'
-  Pop $DeleteAppDataCheckbox
-  SendMessage $HWNDPARENT ${WM_GETFONT} 0 0 $1
-  SendMessage $DeleteAppDataCheckbox ${WM_SETFONT} $1 1
-FunctionEnd
-!define MUI_PAGE_CUSTOMFUNCTION_LEAVE un.ConfirmLeave
-Function un.ConfirmLeave
-  SendMessage $DeleteAppDataCheckbox ${BM_GETCHECK} 0 0 $DeleteAppDataCheckboxState
-FunctionEnd
 !define MUI_PAGE_CUSTOMFUNCTION_PRE un.SkipIfPassive
 !insertmacro MUI_UNPAGE_CONFIRM
+
+; 1b. Data folder page: ask whether the saved prompts and settings stay or go.
+; Default selection is always "keep". A passive uninstall skips this page the
+; same way it skips the confirm page above, so an unattended run never deletes
+; data without being told to.
+Var DataDirPath
+Var DataSizeStr
+Var KeepDataRadio
+Var DeleteDataRadio
+Var DeleteDataState
+UninstPage custom un.PageData un.PageDataLeave
+
+Function un.FormatSizeKB
+  ; In: $0 holds a size in KB. Out: $0 holds a short readable string.
+  ${If} $0 < 1024
+    StrCpy $0 "$0 KB"
+  ${ElseIf} $0 < 1048576
+    IntOp $1 $0 / 1024
+    IntOp $2 $0 % 1024
+    IntOp $2 $2 * 10
+    IntOp $2 $2 / 1024
+    StrCpy $0 "$1.$2 MB"
+  ${Else}
+    IntOp $1 $0 / 1048576
+    IntOp $2 $0 % 1048576
+    IntOp $2 $2 * 10
+    IntOp $2 $2 / 1048576
+    StrCpy $0 "$1.$2 GB"
+  ${EndIf}
+FunctionEnd
+
+Function un.PageData
+  ${IfThen} $PassiveMode = 1 ${|} Abort ${|}
+  SetShellVarContext current
+  ; Same define the delete step below uses, so the two never drift apart.
+  StrCpy $DataDirPath "$APPDATA\${DATAFOLDER}"
+
+  StrCpy $0 "0"
+  ${If} ${FileExists} "$DataDirPath\*.*"
+    ${GetSize} "$DataDirPath" "/S=0K" $0 $1 $2
+  ${EndIf}
+  Call un.FormatSizeKB
+  StrCpy $DataSizeStr $0
+
+  !insertmacro MUI_HEADER_TEXT "$(dataDirTitle)" "$(dataDirSubtitle)"
+  nsDialogs::Create 1018
+  Pop $0
+  ${NSD_CreateLabel} 0 0 100% 24u "$(dataDirQuestion)"
+  Pop $0
+
+  ${NSD_CreateRadioButton} 10u 30u -10u 12u "$(dataDirKeep)"
+  Pop $KeepDataRadio
+  ${NSD_CreateRadioButton} 10u 46u -10u 12u "$(dataDirDelete)"
+  Pop $DeleteDataRadio
+  ; Keep is the standing default; only an explicit choice below changes it.
+  SendMessage $KeepDataRadio ${BM_SETCHECK} ${BST_CHECKED} 0
+
+  ${NSD_CreateLabel} 10u 66u -10u 30u "$(dataDirFolderLabel) $DataDirPath ($DataSizeStr)"
+  Pop $0
+
+  nsDialogs::Show
+FunctionEnd
+
+Function un.PageDataLeave
+  ${NSD_GetState} $DeleteDataRadio $DeleteDataState
+FunctionEnd
 
 ; 2. Uninstalling Page
 !insertmacro MUI_UNPAGE_INSTFILES
@@ -688,6 +722,129 @@ LangString dirTitle ${LANG_ROMANIAN} "Alegeți locația"
 LangString dirInfo ${LANG_ROMANIAN} "Selectați folderul de instalare:"
 LangString portableCheck ${LANG_ROMANIAN} "Instalare portabilă"
 LangString portableInfo ${LANG_ROMANIAN} "Modul portabil nu creează scurtături sau intrări de registru - aplicația este doar plasată în folderul ales."
+
+; Data folder page strings (uninstaller): keep or delete the saved prompts and
+; settings. Default selection is always "keep" (un.PageData).
+LangString dataDirTitle ${LANG_ENGLISH} "Your data"
+LangString dataDirSubtitle ${LANG_ENGLISH} "Choose what happens to your saved prompts and settings"
+LangString dataDirQuestion ${LANG_ENGLISH} "Keep your saved prompts and settings, or delete them as well?"
+LangString dataDirKeep ${LANG_ENGLISH} "Keep my data (recommended)"
+LangString dataDirDelete ${LANG_ENGLISH} "Delete my data too"
+LangString dataDirFolderLabel ${LANG_ENGLISH} "Folder:"
+LangString dataDirTitle ${LANG_GERMAN} "Ihre Daten"
+LangString dataDirSubtitle ${LANG_GERMAN} "Wählen Sie, was mit Ihren gespeicherten Prompts und Einstellungen geschieht"
+LangString dataDirQuestion ${LANG_GERMAN} "Gespeicherte Prompts und Einstellungen behalten oder ebenfalls löschen?"
+LangString dataDirKeep ${LANG_GERMAN} "Daten behalten (empfohlen)"
+LangString dataDirDelete ${LANG_GERMAN} "Daten ebenfalls löschen"
+LangString dataDirFolderLabel ${LANG_GERMAN} "Ordner:"
+LangString dataDirTitle ${LANG_SPANISH} "Sus datos"
+LangString dataDirSubtitle ${LANG_SPANISH} "Elija qué ocurre con sus prompts y ajustes guardados"
+LangString dataDirQuestion ${LANG_SPANISH} "¿Conservar los prompts y ajustes guardados, o eliminarlos también?"
+LangString dataDirKeep ${LANG_SPANISH} "Conservar mis datos (recomendado)"
+LangString dataDirDelete ${LANG_SPANISH} "Eliminar también mis datos"
+LangString dataDirFolderLabel ${LANG_SPANISH} "Carpeta:"
+LangString dataDirTitle ${LANG_FRENCH} "Vos données"
+LangString dataDirSubtitle ${LANG_FRENCH} "Choisissez ce qu'il advient de vos prompts et paramètres enregistrés"
+LangString dataDirQuestion ${LANG_FRENCH} "Conserver les prompts et paramètres enregistrés, ou les supprimer aussi ?"
+LangString dataDirKeep ${LANG_FRENCH} "Conserver mes données (recommandé)"
+LangString dataDirDelete ${LANG_FRENCH} "Supprimer aussi mes données"
+LangString dataDirFolderLabel ${LANG_FRENCH} "Dossier :"
+LangString dataDirTitle ${LANG_ITALIAN} "I tuoi dati"
+LangString dataDirSubtitle ${LANG_ITALIAN} "Scegli cosa succede ai prompt e alle impostazioni salvate"
+LangString dataDirQuestion ${LANG_ITALIAN} "Mantenere i prompt e le impostazioni salvate, oppure eliminarli anche?"
+LangString dataDirKeep ${LANG_ITALIAN} "Mantieni i miei dati (consigliato)"
+LangString dataDirDelete ${LANG_ITALIAN} "Elimina anche i miei dati"
+LangString dataDirFolderLabel ${LANG_ITALIAN} "Cartella:"
+LangString dataDirTitle ${LANG_PORTUGUESEBR} "Seus dados"
+LangString dataDirSubtitle ${LANG_PORTUGUESEBR} "Escolha o que acontece com os prompts e configurações salvos"
+LangString dataDirQuestion ${LANG_PORTUGUESEBR} "Manter os prompts e configurações salvos, ou excluí-los também?"
+LangString dataDirKeep ${LANG_PORTUGUESEBR} "Manter meus dados (recomendado)"
+LangString dataDirDelete ${LANG_PORTUGUESEBR} "Excluir meus dados também"
+LangString dataDirFolderLabel ${LANG_PORTUGUESEBR} "Pasta:"
+LangString dataDirTitle ${LANG_POLISH} "Twoje dane"
+LangString dataDirSubtitle ${LANG_POLISH} "Wybierz, co ma się stać z zapisanymi promptami i ustawieniami"
+LangString dataDirQuestion ${LANG_POLISH} "Zachować zapisane prompty i ustawienia, czy również je usunąć?"
+LangString dataDirKeep ${LANG_POLISH} "Zachowaj moje dane (zalecane)"
+LangString dataDirDelete ${LANG_POLISH} "Usuń również moje dane"
+LangString dataDirFolderLabel ${LANG_POLISH} "Folder:"
+LangString dataDirTitle ${LANG_RUSSIAN} "Ваши данные"
+LangString dataDirSubtitle ${LANG_RUSSIAN} "Выберите, что сделать с сохранёнными запросами и настройками"
+LangString dataDirQuestion ${LANG_RUSSIAN} "Сохранить запросы и настройки, или удалить их тоже?"
+LangString dataDirKeep ${LANG_RUSSIAN} "Сохранить мои данные (рекомендуется)"
+LangString dataDirDelete ${LANG_RUSSIAN} "Удалить мои данные тоже"
+LangString dataDirFolderLabel ${LANG_RUSSIAN} "Папка:"
+LangString dataDirTitle ${LANG_SIMPCHINESE} "您的数据"
+LangString dataDirSubtitle ${LANG_SIMPCHINESE} "选择如何处理已保存的提示词和设置"
+LangString dataDirQuestion ${LANG_SIMPCHINESE} "保留已保存的提示词和设置，还是一并删除？"
+LangString dataDirKeep ${LANG_SIMPCHINESE} "保留我的数据（推荐）"
+LangString dataDirDelete ${LANG_SIMPCHINESE} "同时删除我的数据"
+LangString dataDirFolderLabel ${LANG_SIMPCHINESE} "文件夹："
+LangString dataDirTitle ${LANG_JAPANESE} "データについて"
+LangString dataDirSubtitle ${LANG_JAPANESE} "保存したプロンプトと設定をどうするか選択してください"
+LangString dataDirQuestion ${LANG_JAPANESE} "保存したプロンプトと設定を残しますか、それとも削除しますか？"
+LangString dataDirKeep ${LANG_JAPANESE} "データを残す（推奨）"
+LangString dataDirDelete ${LANG_JAPANESE} "データも削除する"
+LangString dataDirFolderLabel ${LANG_JAPANESE} "フォルダー:"
+LangString dataDirTitle ${LANG_DUTCH} "Uw gegevens"
+LangString dataDirSubtitle ${LANG_DUTCH} "Kies wat er met uw opgeslagen prompts en instellingen gebeurt"
+LangString dataDirQuestion ${LANG_DUTCH} "Opgeslagen prompts en instellingen behouden, of ook verwijderen?"
+LangString dataDirKeep ${LANG_DUTCH} "Mijn gegevens behouden (aanbevolen)"
+LangString dataDirDelete ${LANG_DUTCH} "Mijn gegevens ook verwijderen"
+LangString dataDirFolderLabel ${LANG_DUTCH} "Map:"
+LangString dataDirTitle ${LANG_TURKISH} "Verileriniz"
+LangString dataDirSubtitle ${LANG_TURKISH} "Kaydedilen istemler ve ayarlara ne olacağını seçin"
+LangString dataDirQuestion ${LANG_TURKISH} "Kaydedilen istemler ve ayarlar korunsun mu, yoksa silinsin mi?"
+LangString dataDirKeep ${LANG_TURKISH} "Verilerimi koru (önerilen)"
+LangString dataDirDelete ${LANG_TURKISH} "Verilerimi de sil"
+LangString dataDirFolderLabel ${LANG_TURKISH} "Klasör:"
+LangString dataDirTitle ${LANG_KOREAN} "내 데이터"
+LangString dataDirSubtitle ${LANG_KOREAN} "저장된 프롬프트와 설정을 어떻게 할지 선택하세요"
+LangString dataDirQuestion ${LANG_KOREAN} "저장된 프롬프트와 설정을 유지할까요, 아니면 함께 삭제할까요?"
+LangString dataDirKeep ${LANG_KOREAN} "데이터 유지 (권장)"
+LangString dataDirDelete ${LANG_KOREAN} "데이터도 함께 삭제"
+LangString dataDirFolderLabel ${LANG_KOREAN} "폴더:"
+LangString dataDirTitle ${LANG_HINDI} "आपका डेटा"
+LangString dataDirSubtitle ${LANG_HINDI} "चुनें कि सहेजे गए प्रॉम्प्ट और सेटिंग्स का क्या होगा"
+LangString dataDirQuestion ${LANG_HINDI} "सहेजे गए प्रॉम्प्ट और सेटिंग्स रखें, या उन्हें भी हटा दें?"
+LangString dataDirKeep ${LANG_HINDI} "मेरा डेटा रखें (अनुशंसित)"
+LangString dataDirDelete ${LANG_HINDI} "मेरा डेटा भी हटाएं"
+LangString dataDirFolderLabel ${LANG_HINDI} "फ़ोल्डर:"
+LangString dataDirTitle ${LANG_INDONESIAN} "Data Anda"
+LangString dataDirSubtitle ${LANG_INDONESIAN} "Pilih apa yang terjadi pada prompt dan pengaturan yang tersimpan"
+LangString dataDirQuestion ${LANG_INDONESIAN} "Simpan prompt dan pengaturan yang tersimpan, atau hapus juga?"
+LangString dataDirKeep ${LANG_INDONESIAN} "Simpan data saya (disarankan)"
+LangString dataDirDelete ${LANG_INDONESIAN} "Hapus data saya juga"
+LangString dataDirFolderLabel ${LANG_INDONESIAN} "Folder:"
+LangString dataDirTitle ${LANG_VIETNAMESE} "Dữ liệu của bạn"
+LangString dataDirSubtitle ${LANG_VIETNAMESE} "Chọn điều gì xảy ra với các prompt và cài đặt đã lưu"
+LangString dataDirQuestion ${LANG_VIETNAMESE} "Giữ lại các prompt và cài đặt đã lưu, hay xóa luôn?"
+LangString dataDirKeep ${LANG_VIETNAMESE} "Giữ dữ liệu của tôi (khuyên dùng)"
+LangString dataDirDelete ${LANG_VIETNAMESE} "Xóa luôn dữ liệu của tôi"
+LangString dataDirFolderLabel ${LANG_VIETNAMESE} "Thư mục:"
+LangString dataDirTitle ${LANG_CZECH} "Vaše data"
+LangString dataDirSubtitle ${LANG_CZECH} "Vyberte, co se stane s uloženými prompty a nastavením"
+LangString dataDirQuestion ${LANG_CZECH} "Zachovat uložené prompty a nastavení, nebo je také smazat?"
+LangString dataDirKeep ${LANG_CZECH} "Zachovat má data (doporučeno)"
+LangString dataDirDelete ${LANG_CZECH} "Smazat i má data"
+LangString dataDirFolderLabel ${LANG_CZECH} "Složka:"
+LangString dataDirTitle ${LANG_UKRAINIAN} "Ваші дані"
+LangString dataDirSubtitle ${LANG_UKRAINIAN} "Виберіть, що станеться зі збереженими запитами та налаштуваннями"
+LangString dataDirQuestion ${LANG_UKRAINIAN} "Зберегти збережені запити та налаштування, чи видалити їх також?"
+LangString dataDirKeep ${LANG_UKRAINIAN} "Зберегти мої дані (рекомендовано)"
+LangString dataDirDelete ${LANG_UKRAINIAN} "Видалити також мої дані"
+LangString dataDirFolderLabel ${LANG_UKRAINIAN} "Папка:"
+LangString dataDirTitle ${LANG_SWEDISH} "Din data"
+LangString dataDirSubtitle ${LANG_SWEDISH} "Välj vad som ska hända med sparade promptar och inställningar"
+LangString dataDirQuestion ${LANG_SWEDISH} "Behåll sparade promptar och inställningar, eller ta bort dem också?"
+LangString dataDirKeep ${LANG_SWEDISH} "Behåll min data (rekommenderas)"
+LangString dataDirDelete ${LANG_SWEDISH} "Ta bort min data också"
+LangString dataDirFolderLabel ${LANG_SWEDISH} "Mapp:"
+LangString dataDirTitle ${LANG_ROMANIAN} "Datele dumneavoastră"
+LangString dataDirSubtitle ${LANG_ROMANIAN} "Alegeți ce se întâmplă cu prompturile și setările salvate"
+LangString dataDirQuestion ${LANG_ROMANIAN} "Păstrați prompturile și setările salvate, sau le ștergeți și pe acestea?"
+LangString dataDirKeep ${LANG_ROMANIAN} "Păstrează datele mele (recomandat)"
+LangString dataDirDelete ${LANG_ROMANIAN} "Șterge și datele mele"
+LangString dataDirFolderLabel ${LANG_ROMANIAN} "Folder:"
 
 ; 95: header shown while the previous version is silently removed during an
 ; upgrade/reinstall (reinst_uninstall) -- the window itself stays visible and
@@ -1108,9 +1265,8 @@ Section Uninstall
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${AUTOSTARTKEY}"
   ${EndIf}
 
-  ; Delete app data if the checkbox is selected
-  ; and if not updating
-  ${If} $DeleteAppDataCheckboxState = 1
+  ; Delete the data folder if that was chosen on the data page, and if not updating
+  ${If} $DeleteDataState = 1
   ${AndIf} $UpdateMode <> 1
     ; Clear the install location $INSTDIR from registry
     DeleteRegKey SHCTX "${MANUPRODUCTKEY}"
@@ -1122,9 +1278,11 @@ Section Uninstall
     DeleteRegKey /ifempty HKCU "${MANUKEY}"
 
     SetShellVarContext current
-    ; Canonical store (matches DATA_FOLDER in src/brand.rs); legacy bundle-id dirs kept
-    ; for older installs. A store relocated via the expert menu is not reachable.
-    RmDir /r "$APPDATA\Prompt-Saver"
+    ; Canonical store, the same ${DATAFOLDER} the data page just measured; legacy
+    ; bundle-id dirs kept for older installs. A store relocated via the expert
+    ; menu is not reachable, and only this named folder is ever removed, never
+    ; its parent.
+    RmDir /r "$APPDATA\${DATAFOLDER}"
     RmDir /r "$APPDATA\${BUNDLEID}"
     RmDir /r "$LOCALAPPDATA\${BUNDLEID}"
   ${EndIf}

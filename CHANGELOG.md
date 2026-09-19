@@ -475,6 +475,20 @@ the video editor and the introduction tour ship on).
   nothing earlier in the chain answers a placeholder it needs. Drag a row to
   reorder the chain right there. Switchable off on its own in the expert
   menu.
+- **Third-party licenses in the About window.** A new section lists every
+  bundled open-source component (name, version, license), generated at build
+  time from the real dependency list so it can never fall out of date; each
+  entry expands to its full license text, searchable once the list passes
+  twenty entries. The same generated list replaces the hand-maintained
+  content of THIRD-PARTY-NOTICES.md.
+- **Data folder lock.** Pointing the data folder at a synced folder (OneDrive,
+  Dropbox, Google Drive, iCloud Drive, Nextcloud) now shows a one-time warning
+  about the risk of two computers writing to the same database at once. A
+  small lock file next to the database tracks which computer is using it: a
+  second computer that finds another machine's fresh lock opens everything
+  read-only instead and says so with a permanent banner, while a lock nobody
+  has refreshed for a while is taken over automatically instead of leaving
+  anyone locked out. Switchable off in the expert menu, on by default.
 
 ### Improved
 
