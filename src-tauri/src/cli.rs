@@ -13,13 +13,14 @@
 // launch-side dispatcher sit at the top.
 
 use crate::{
-    acquire_data_dir_lock, append_imported_prompts, backup_db_file, canonical_tags, data_dir,
-    data_dir_headless, data_dir_lock_enabled, db_conn_at, db_load, db_load_trash, db_write_prompts,
-    db_write_prompts_and_trash, db_write_settings, do_backup_at, gen_id, gfs_from_settings,
-    list_backups_impl_at, lock, migrate_prompts, parse_import_bytes, parse_ui_text_map,
-    read_file_capped, resolved_for_export, restore_selective, sanitize_notes, sanitize_tags,
-    stage_and_validate_backup, tag_key, to_csv, to_json, to_txt, valid_backup_name, valid_scope,
-    valid_tag_color, valid_tag_name, Db, Prompt, Store, WrittenRows, MAX_IMPORT_BYTES,
+    acquire_data_dir_lock, append_crash_log, append_imported_prompts, backup_db_file, canonical_tags,
+    data_dir, data_dir_headless, data_dir_lock_enabled, db_conn_at, db_load, db_load_trash,
+    db_write_prompts, db_write_prompts_and_trash, db_write_settings, do_backup_at, gen_id,
+    gfs_from_settings, list_backups_impl_at, lock, migrate_prompts, parse_import_bytes,
+    parse_ui_text_map, read_file_capped, resolved_for_export, restore_selective, sanitize_notes,
+    sanitize_tags, show_main, stage_and_validate_backup, tag_key, to_csv, to_json, to_txt,
+    valid_backup_name, valid_scope, valid_tag_color, valid_tag_name, Db, Prompt, Store,
+    WrittenRows, MAX_IMPORT_BYTES,
 };
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -243,10 +244,208 @@ pub(crate) fn install_server(app: &AppHandle) {
 async fn handle_connection(mut pipe: tokio::net::windows::named_pipe::NamedPipeServer, app: AppHandle) {
     let Ok(req_bytes) = read_frame(&mut pipe, MAX_FRAME_BYTES).await else { return };
     let Ok(req) = serde_json::from_slice::<PipeRequest>(&req_bytes) else { return };
+    if req.argv == [SHOW_PING.to_string()] {
+        respond_to_show_ping(&mut pipe, &app).await;
+        return;
+    }
     let (code, stdout, stderr) = run_in_process(&app, req.argv, PathBuf::from(req.cwd)).await;
     let resp = PipeResponse { code, stdout, stderr };
     if let Ok(bytes) = serde_json::to_vec(&resp) {
         let _ = write_frame(&mut pipe, &bytes).await;
+    }
+}
+
+// A second GUI launch's way of proving this instance is not just accepting
+// connections but genuinely alive: the response only goes out once show_main
+// has actually run on the main thread, not as soon as the closure is queued
+// (queuing always succeeds even when the main thread itself is wedged -- see
+// the tray-window comment above on the same hazard).
+async fn respond_to_show_ping(pipe: &mut tokio::net::windows::named_pipe::NamedPipeServer, app: &AppHandle) {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let app2 = app.clone();
+    if app
+        .run_on_main_thread(move || {
+            show_main(&app2);
+            let _ = tx.send(());
+        })
+        .is_ok()
+    {
+        let _ = rx.await; // no timeout here -- the launch-side ping enforces its own
+    }
+    let resp = PipeResponse { code: 0, stdout: String::new(), stderr: String::new() };
+    if let Ok(bytes) = serde_json::to_vec(&resp) {
+        let _ = write_frame(pipe, &bytes).await;
+    }
+}
+
+// ---------- Second-launch handshake (a plain GUI start, not a CLI command) ----------
+//
+// A second launch that is not a CLI command and not a promptsaver:// link
+// pings the same pipe a CLI launch uses instead of trusting the
+// single-instance plugin's own unconditional forward-and-exit -- see run()'s
+// own comment on why. `argv` is the launch's raw arguments (already known not
+// to look like a CLI command by the time run() calls this) so a deep link
+// stays on the plugin's existing path unchanged.
+
+const SHOW_PING: &str = "\0show-ping\0"; // never a valid subcommand, path or link
+const SECOND_LAUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(1500);
+
+pub(crate) enum LaunchDecision {
+    // Nothing is listening -- this launch is the primary instance.
+    Primary,
+    // The running instance answered (or this is a case left to the
+    // single-instance plugin, e.g. a deep link) -- this launch is done.
+    HandedOff,
+    // The running instance did not answer in time and was taken over --
+    // this launch continues on as the new primary instance.
+    TookOver,
+}
+
+pub(crate) fn resolve_second_launch(argv: &[String]) -> LaunchDecision {
+    // A deep link still needs the plugin's own forwarding (it hands the URL
+    // itself to remote::handle_launch_url, which this ping knows nothing
+    // about), so it is deliberately left on the existing path.
+    if argv.iter().any(|a| a.starts_with("promptsaver://")) {
+        return LaunchDecision::HandedOff;
+    }
+    let Ok(rt) = tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build() else {
+        return LaunchDecision::HandedOff; // could not even try -- behave as before
+    };
+    rt.block_on(resolve_second_launch_async())
+}
+
+async fn resolve_second_launch_async() -> LaunchDecision {
+    use tokio::net::windows::named_pipe::ClientOptions;
+    let name = pipe_name();
+    let deadline = std::time::Instant::now() + SECOND_LAUNCH_TIMEOUT;
+    let mut client = loop {
+        match ClientOptions::new().open(&name) {
+            Ok(c) => break c,
+            Err(e) if e.raw_os_error() == Some(ERROR_PIPE_BUSY) => {
+                if std::time::Instant::now() >= deadline {
+                    return LaunchDecision::HandedOff; // busy the whole window -- do not guess further
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+            Err(_) => return LaunchDecision::Primary, // nobody is listening
+        }
+    };
+    let req = PipeRequest { argv: vec![SHOW_PING.to_string()], cwd: String::new() };
+    let Ok(bytes) = serde_json::to_vec(&req) else { return LaunchDecision::HandedOff };
+    let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+    let roundtrip = async {
+        write_frame(&mut client, &bytes).await.ok()?;
+        read_frame(&mut client, MAX_FRAME_BYTES).await.ok()
+    };
+    let answered = tokio::time::timeout(remaining, roundtrip).await.ok().flatten().is_some();
+    if answered {
+        return LaunchDecision::HandedOff;
+    }
+    // Connected, but never answered -- a genuinely hung instance (show_main
+    // rebuilding a merely-missing window is handled entirely on the other
+    // side; getting here means the main thread itself never ran the ping).
+    let Some(pid) = named_pipe_server_pid(&client) else { return LaunchDecision::HandedOff };
+    let (same_user, same_exe) = process_identity_check(pid);
+    if should_take_over_hung_instance(false, same_user, same_exe) {
+        terminate_process(pid);
+        append_crash_log(&format!("second launch: took over a hung running instance (pid {pid})"));
+        LaunchDecision::TookOver
+    } else {
+        LaunchDecision::HandedOff
+    }
+}
+
+// Pure decision, independent of the pipe/timeout machinery above: whether a
+// second launch that failed to reach the running instance in time may end it
+// and continue as the primary instance itself. Never crosses a user or
+// executable boundary -- a hung process belonging to someone else, or to a
+// different build entirely, is left alone.
+fn should_take_over_hung_instance(answered_in_time: bool, same_user: bool, same_exe_path: bool) -> bool {
+    !answered_in_time && same_user && same_exe_path
+}
+
+// GetNamedPipeServerProcessId (Win32_System_Pipes) is not part of this
+// project's enabled `windows` crate feature set, so this one call stays a
+// direct kernel32 binding, the same pattern lib.rs already uses for a few
+// user32/kernel32 calls it needs without pulling in a whole extra feature.
+fn named_pipe_server_pid(client: &tokio::net::windows::named_pipe::NamedPipeClient) -> Option<u32> {
+    use std::os::windows::io::AsRawHandle;
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetNamedPipeServerProcessId(pipe: isize, id: *mut u32) -> i32;
+    }
+    let mut pid = 0u32;
+    let ok = unsafe { GetNamedPipeServerProcessId(client.as_raw_handle() as isize, &mut pid) != 0 };
+    (ok && pid != 0).then_some(pid)
+}
+
+// (same_user, same_exe_path) for the process behind `pid`. Either half
+// defaults to false on any failure to query it -- an unknown answer is never
+// treated as a match.
+fn process_identity_check(pid: u32) -> (bool, bool) {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::Security::{EqualSid, GetTokenInformation, TokenUser, PSID, TOKEN_QUERY};
+    use windows::Win32::System::Threading::{
+        GetCurrentProcess, OpenProcess, OpenProcessToken, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
+        PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    // The Sid field of a queried TOKEN_USER points into its own info buffer,
+    // so the buffer has to outlive every use of the pointer -- returned
+    // together rather than as a bare PSID a caller could dangle.
+    unsafe fn token_user_sid(token: windows::Win32::Foundation::HANDLE) -> Option<(Vec<u8>, PSID)> {
+        let mut needed = 0u32;
+        let _ = unsafe { GetTokenInformation(token, TokenUser, None, 0, &mut needed) };
+        if needed == 0 {
+            return None;
+        }
+        let mut buf = vec![0u8; needed as usize];
+        unsafe { GetTokenInformation(token, TokenUser, Some(buf.as_mut_ptr().cast()), needed, &mut needed).ok()? };
+        let sid = unsafe { (*buf.as_ptr().cast::<windows::Win32::Security::TOKEN_USER>()).User.Sid };
+        Some((buf, sid))
+    }
+
+    unsafe {
+        let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
+            return (false, false);
+        };
+
+        let mut name_buf = [0u16; 1024];
+        let mut name_len = name_buf.len() as u32;
+        let same_exe = QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, windows::core::PWSTR(name_buf.as_mut_ptr()), &mut name_len).is_ok()
+            && std::env::current_exe().is_ok_and(|mine| {
+                String::from_utf16_lossy(&name_buf[..name_len as usize]).eq_ignore_ascii_case(&mine.to_string_lossy())
+            });
+
+        let same_user = (|| -> Option<bool> {
+            let mut their_token = windows::Win32::Foundation::HANDLE::default();
+            OpenProcessToken(process, TOKEN_QUERY, &mut their_token).ok()?;
+            let their_sid = token_user_sid(their_token);
+            let _ = CloseHandle(their_token);
+            let (_their_buf, their_sid) = their_sid?;
+
+            let mut my_token = windows::Win32::Foundation::HANDLE::default();
+            OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut my_token).ok()?;
+            let my_sid = token_user_sid(my_token);
+            let _ = CloseHandle(my_token);
+            let (_my_buf, my_sid) = my_sid?;
+
+            Some(EqualSid(their_sid, my_sid).is_ok())
+        })()
+        .unwrap_or(false);
+
+        let _ = CloseHandle(process);
+        (same_user, same_exe)
+    }
+}
+
+fn terminate_process(pid: u32) {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+    unsafe {
+        if let Ok(process) = OpenProcess(PROCESS_TERMINATE, false, pid) {
+            let _ = TerminateProcess(process, 1);
+            let _ = CloseHandle(process);
+        }
     }
 }
 
@@ -1629,6 +1828,29 @@ fn command_help(cmd: &str, sub: Option<&str>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- a second launch never ends silently ----
+
+    #[test]
+    fn a_running_instance_that_answers_in_time_is_never_taken_over() {
+        assert!(!should_take_over_hung_instance(true, true, true));
+    }
+
+    #[test]
+    fn a_silent_running_instance_is_taken_over_after_the_timeout() {
+        assert!(should_take_over_hung_instance(false, true, true));
+    }
+
+    #[test]
+    fn a_different_executable_path_is_never_taken_over() {
+        assert!(!should_take_over_hung_instance(false, true, false));
+        assert!(!should_take_over_hung_instance(false, false, false));
+    }
+
+    #[test]
+    fn a_different_user_is_never_taken_over_even_at_the_same_path() {
+        assert!(!should_take_over_hung_instance(false, false, true));
+    }
 
     // A directory under the system temp folder, unique per test, removed on
     // drop -- the CLI's own store lives in a real folder (portable/APPDATA

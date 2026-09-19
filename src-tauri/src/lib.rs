@@ -47,23 +47,193 @@ use tauri::{
 // Routed through resolve_geometry() (the same validation the startup path
 // uses) instead of trusting the saved geometry raw -- a monitor unplugged
 // while the app sat minimized in the tray must not be able to restore the
-// window off every remaining screen.
+// window off every remaining screen. A window that is simply gone (the process
+// kept running with zero top-level windows, the never-comes-back state a
+// crashed-out webview or a bug can leave behind) is rebuilt first instead of
+// leaving the call a silent no-op.
 fn show_main(app: &AppHandle) {
-    if let Some(win) = app.get_webview_window("main") {
-        if let Some(state) = app.try_state::<Db>() {
-            let geom = state
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .settings
-                .window;
-            let g = resolve_geometry(&win, geom);
-            let _ = win.set_size(tauri::LogicalSize::new(g.width, g.height));
-            let _ = win.set_position(PhysicalPosition::new(g.x, g.y));
-        }
-        let _ = win.show();
-        let _ = win.unminimize();
-        let _ = win.set_focus();
+    let win = show_main_seam(app.get_webview_window("main"), || build_main_window(app));
+    let Some(win) = win else { return };
+    if let Some(state) = app.try_state::<Db>() {
+        let geom = state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .settings
+            .window;
+        let g = resolve_geometry(&win, geom);
+        let _ = win.set_size(tauri::LogicalSize::new(g.width, g.height));
+        let _ = win.set_position(PhysicalPosition::new(g.x, g.y));
     }
+    let _ = win.show();
+    let _ = win.unminimize();
+    let _ = win.set_focus();
+}
+
+// The decision `show_main` runs on: reuse the window it already has, or ask
+// for a fresh one. Pulled apart from `show_main` itself so a test can hand it
+// a counter instead of a real window and prove the missing case actually
+// triggers a build rather than doing nothing (the bug this whole point fixes).
+fn show_main_seam<W>(existing: Option<W>, build: impl FnOnce() -> tauri::Result<W>) -> Option<W> {
+    match existing {
+        Some(w) => Some(w),
+        None => match build() {
+            Ok(w) => Some(w),
+            Err(e) => {
+                append_crash_log(&format!("show_main: could not rebuild the main window: {e}"));
+                None
+            }
+        },
+    }
+}
+
+// The one place the main window is built and wired up -- used by setup() for
+// the window Tauri already created from tauri.conf.json at normal startup, and
+// by show_main() to replace one that was destroyed out from under a process
+// that kept running. Same label, same starting geometry, same decorations and
+// the same event handlers either way, so a rebuilt window behaves exactly like
+// the one the app started with.
+fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+    let win = match app.get_webview_window("main") {
+        Some(w) => w,
+        None => WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+            .title(brand::DISPLAY_NAME)
+            .inner_size(880.0, 600.0)
+            .min_inner_size(f64::from(MAIN_WIN_MIN_W), f64::from(MAIN_WIN_MIN_H))
+            .resizable(true)
+            .decorations(false)
+            .transparent(true)
+            .visible(false)
+            .build()?,
+    };
+    let excluded = app
+        .try_state::<Db>()
+        .map(|s| capture_excluded(&lock(&s).settings))
+        .unwrap_or(false);
+    set_capture_exclusion(&win, excluded);
+    #[cfg(windows)]
+    if let Ok(hwnd) = win.hwnd() {
+        sessionend::hook(app, hwnd.0 as isize);
+    }
+    let handle2 = app.clone();
+    win.on_window_event(move |event| match event {
+        WindowEvent::Moved(p) => {
+            if p.x > -30000 && p.y > -30000 {
+                update_geom(&handle2, |g| {
+                    g.x = p.x;
+                    g.y = p.y;
+                });
+            }
+        }
+        WindowEvent::Resized(s) => {
+            if s.width > 0 && s.height > 0 {
+                // Store LOGICAL pixels — physical values re-scaled
+                // by the monitor factor on every start.
+                let scale = handle2
+                    .get_webview_window("main")
+                    .and_then(|w| w.scale_factor().ok())
+                    .unwrap_or(1.0);
+                let logical = s.to_logical::<f64>(scale);
+                update_geom(&handle2, |g| {
+                    g.width = logical.width.round() as u32;
+                    g.height = logical.height.round() as u32;
+                });
+            }
+        }
+        WindowEvent::ThemeChanged(_) => {
+            if let Some(state) = handle2.try_state::<Db>() {
+                let settings = state
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .settings
+                    .clone();
+                // Only the "system" preference follows the OS; a custom
+                // theme always inherits a fixed built-in base.
+                if settings.theme == "system" {
+                    push_theme(&handle2, &settings);
+                }
+            }
+        }
+        WindowEvent::CloseRequested { api, .. } => {
+            // Portable always closes fully; installed honours the tray setting.
+            let minimize = !is_portable()
+                && handle2
+                    .try_state::<Db>()
+                    .map(|s| {
+                        s.lock().unwrap_or_else(|e| e.into_inner())
+                            .settings
+                            .minimize_to_tray
+                    })
+                    .unwrap_or(false);
+            if minimize {
+                api.prevent_close();
+                // A hidden window never keeps listening.
+                voice_shutdown(&handle2);
+                // The very first time, explain that the tray menu
+                // still copies while hidden — JS shows it, then hides
+                // itself once dismissed. Every later close hides at once.
+                let first_time = handle2
+                    .try_state::<Db>()
+                    .map(|s| {
+                        !s.lock().unwrap_or_else(|e| e.into_inner())
+                            .settings
+                            .seen_tray_hint
+                    })
+                    .unwrap_or(false);
+                if first_time {
+                    if let Some(state) = handle2.try_state::<Db>() {
+                        let mut store = state.lock().unwrap_or_else(|e| e.into_inner());
+                        store.settings.seen_tray_hint = true;
+                        save_settings(&handle2, &store.settings);
+                    }
+                    let _ = handle2.emit_to("main", "first-tray-hide", ());
+                } else if let Some(w) = handle2.get_webview_window("main") {
+                    let _ = w.hide();
+                }
+            } else {
+                // Never vanish while an export, conversion, ffmpeg
+                // download, backup or import is still going --
+                // request_app_quit asks the main window first,
+                // exactly once per quit attempt (QUIT_CONFIRMED
+                // short-circuits the second CloseRequested that
+                // confirm_quit_with_running_ops itself triggers).
+                api.prevent_close();
+                request_app_quit(&handle2);
+            }
+        }
+        WindowEvent::Destroyed => {
+            if let Some(state) = handle2.try_state::<Db>() {
+                let store = state.lock().unwrap_or_else(|e| e.into_inner());
+                save_settings(&handle2, &store.settings);
+            }
+            voice_shutdown(&handle2);
+            // No process without a main window: end this one right away, and
+            // back that up with a watchdog in case exit() itself never
+            // completes (a stuck shutdown handler, for instance) -- the same
+            // silent-zombie shape the bug this guards against started from.
+            handle2.exit(0);
+            let deadline = SystemTime::now() + WATCHDOG_GRACE;
+            std::thread::spawn(move || loop {
+                if watchdog_deadline_reached(SystemTime::now(), deadline) {
+                    append_crash_log("watchdog: forced the process to end after the main window closed");
+                    std::process::exit(0);
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            });
+        }
+        _ => {}
+    });
+    Ok(win)
+}
+
+// How long the Destroyed-event watchdog gives handle.exit(0) to actually end
+// the process before forcing it.
+const WATCHDOG_GRACE: Duration = Duration::from_secs(5);
+
+// Pure decision for the watchdog thread above -- kept apart from the sleep
+// loop so a test can drive it with fixed instants instead of a real 5-second
+// wait.
+fn watchdog_deadline_reached(now: SystemTime, deadline: SystemTime) -> bool {
+    now >= deadline
 }
 
 // Global-hotkey action — open the standalone quick-launcher (fuzzy search,
@@ -28026,6 +28196,24 @@ pub fn run() {
     if let Some(code) = cli::dispatch_from_launch_args() {
         std::process::exit(code);
     }
+    // A plain second launch (double-click, autostart, the tray shortcut --
+    // anything that is not one of the subcommands above and not a
+    // promptsaver:// link) settles here instead of trusting the
+    // single-instance plugin below to notice on its own: that plugin forwards
+    // and exits unconditionally, with no way to tell "the running instance
+    // brought up a window" from "the running instance is hung and never will"
+    // -- exactly how prompt-saver.exe was once found running with zero
+    // top-level windows and no way back short of killing it by hand. This
+    // pings the same pipe cli.rs answers CLI commands on, with its own short
+    // timeout, and only falls through to the plugin's mutex-based detection
+    // for cases it deliberately leaves alone (a deep link, or nothing
+    // listening at all).
+    if !early_allow_multiple_instances() {
+        let argv: Vec<String> = std::env::args().skip(1).collect();
+        if let cli::LaunchDecision::HandedOff = cli::resolve_second_launch(&argv) {
+            std::process::exit(0);
+        }
+    }
     #[cfg(windows)]
     if !ensure_webview2() {
         return;
@@ -28131,7 +28319,6 @@ pub fn run() {
             let autostart = store.settings.autostart;
             let start_min = store.settings.start_minimized;
             let on_top = store.settings.always_on_top;
-            let capture_excl = capture_excluded(&store.settings);
             let backup_start_delay_s = store
                 .settings
                 .ui_values
@@ -28344,17 +28531,11 @@ pub fn run() {
             // Launched by autostart with --minimized: stay in the tray.
             let start_hidden = std::env::args().any(|a| a == "--minimized");
 
-            if let Some(main) = app.get_webview_window("main") {
+            // Capture exclusion is re-read fresh from Db state inside build_main_window itself.
+            if let Ok(main) = build_main_window(&handle) {
                 let geom = resolve_geometry(&main, saved_geom);
                 let _ = main.set_size(tauri::LogicalSize::new(geom.width, geom.height));
                 let _ = main.set_position(PhysicalPosition::new(geom.x, geom.y));
-                set_capture_exclusion(&main, capture_excl);
-                // Logging off or shutting down Windows ends the process without any
-                // of the app's own exit paths running — see mod sessionend.
-                #[cfg(windows)]
-                if let Ok(hwnd) = main.hwnd() {
-                    sessionend::hook(&handle, hwnd.0 as isize);
-                }
                 // A pill/folder left fully off-screen by an unplugged monitor is
                 // never dropped here any more -- sync_float_windows() below (via
                 // open_floating/open_folder_window) parks it on the main screen
@@ -28390,102 +28571,10 @@ pub fn run() {
                 if let Some(state) = handle.try_state::<Db>() {
                     state.lock().unwrap_or_else(|e| e.into_inner()).settings.window = Some(geom);
                 }
-
-                let handle2 = handle.clone();
-                main.on_window_event(move |event| match event {
-                    WindowEvent::Moved(p) => {
-                        if p.x > -30000 && p.y > -30000 {
-                            update_geom(&handle2, |g| {
-                                g.x = p.x;
-                                g.y = p.y;
-                            });
-                        }
-                    }
-                    WindowEvent::Resized(s) => {
-                        if s.width > 0 && s.height > 0 {
-                            // Store LOGICAL pixels — physical values re-scaled
-                            // by the monitor factor on every start.
-                            let scale = handle2
-                                .get_webview_window("main")
-                                .and_then(|w| w.scale_factor().ok())
-                                .unwrap_or(1.0);
-                            let logical = s.to_logical::<f64>(scale);
-                            update_geom(&handle2, |g| {
-                                g.width = logical.width.round() as u32;
-                                g.height = logical.height.round() as u32;
-                            });
-                        }
-                    }
-                    WindowEvent::ThemeChanged(_) => {
-                        if let Some(state) = handle2.try_state::<Db>() {
-                            let settings = state
-                                .lock()
-                                .unwrap_or_else(|e| e.into_inner())
-                                .settings
-                                .clone();
-                            // Only the "system" preference follows the OS; a custom
-                            // theme always inherits a fixed built-in base.
-                            if settings.theme == "system" {
-                                push_theme(&handle2, &settings);
-                            }
-                        }
-                    }
-                    WindowEvent::CloseRequested { api, .. } => {
-                        // Portable always closes fully; installed honours the tray setting.
-                        let minimize = !is_portable()
-                            && handle2
-                                .try_state::<Db>()
-                                .map(|s| {
-                                    s.lock().unwrap_or_else(|e| e.into_inner())
-                                        .settings
-                                        .minimize_to_tray
-                                })
-                                .unwrap_or(false);
-                        if minimize {
-                            api.prevent_close();
-                            // A hidden window never keeps listening.
-                            voice_shutdown(&handle2);
-                            // The very first time, explain that the tray menu
-                            // still copies while hidden — JS shows it, then hides
-                            // itself once dismissed. Every later close hides at once.
-                            let first_time = handle2
-                                .try_state::<Db>()
-                                .map(|s| {
-                                    !s.lock().unwrap_or_else(|e| e.into_inner())
-                                        .settings
-                                        .seen_tray_hint
-                                })
-                                .unwrap_or(false);
-                            if first_time {
-                                if let Some(state) = handle2.try_state::<Db>() {
-                                    let mut store = state.lock().unwrap_or_else(|e| e.into_inner());
-                                    store.settings.seen_tray_hint = true;
-                                    save_settings(&handle2, &store.settings);
-                                }
-                                let _ = handle2.emit_to("main", "first-tray-hide", ());
-                            } else if let Some(w) = handle2.get_webview_window("main") {
-                                let _ = w.hide();
-                            }
-                        } else {
-                            // Never vanish while an export, conversion, ffmpeg
-                            // download, backup or import is still going --
-                            // request_app_quit asks the main window first,
-                            // exactly once per quit attempt (QUIT_CONFIRMED
-                            // short-circuits the second CloseRequested that
-                            // confirm_quit_with_running_ops itself triggers).
-                            api.prevent_close();
-                            request_app_quit(&handle2);
-                        }
-                    }
-                    WindowEvent::Destroyed => {
-                        if let Some(state) = handle2.try_state::<Db>() {
-                            let store = state.lock().unwrap_or_else(|e| e.into_inner());
-                            save_settings(&handle2, &store.settings);
-                        }
-                        voice_shutdown(&handle2);
-                    }
-                    _ => {}
-                });
+                // Event wiring (Moved/Resized/ThemeChanged/CloseRequested/Destroyed)
+                // already happened inside build_main_window -- the single place
+                // that registers it, whether this is the window Tauri just created
+                // from tauri.conf.json or one rebuilt after the process outlived it.
             }
 
             // System tray: left-click or "Open" restores; "Quit" exits for real.
@@ -30585,6 +30674,46 @@ fn start_sync_poll(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- a start always brings up a window ----
+
+    #[test]
+    fn show_main_rebuilds_the_main_window_when_it_is_gone() {
+        let mut builds = 0;
+        let win = show_main_seam(None::<()>, || {
+            builds += 1;
+            Ok(())
+        });
+        assert_eq!(builds, 1, "a missing window must trigger exactly one rebuild");
+        assert!(win.is_some());
+    }
+
+    #[test]
+    fn show_main_never_rebuilds_a_window_that_is_already_there() {
+        let mut builds = 0;
+        let win = show_main_seam(Some(()), || {
+            builds += 1;
+            Ok(())
+        });
+        assert_eq!(builds, 0, "an existing window must never be rebuilt");
+        assert!(win.is_some());
+    }
+
+    #[test]
+    fn show_main_seam_gives_up_quietly_when_the_rebuild_itself_fails() {
+        let win = show_main_seam(None::<()>, || {
+            Err(tauri::Error::AssetNotFound("test".into()))
+        });
+        assert!(win.is_none());
+    }
+
+    #[test]
+    fn a_destroyed_main_window_ends_the_process() {
+        let deadline = UNIX_EPOCH + Duration::from_secs(100);
+        assert!(!watchdog_deadline_reached(UNIX_EPOCH + Duration::from_secs(99), deadline), "must not fire before the grace period is up");
+        assert!(watchdog_deadline_reached(UNIX_EPOCH + Duration::from_secs(100), deadline), "must fire right at the deadline");
+        assert!(watchdog_deadline_reached(UNIX_EPOCH + Duration::from_secs(200), deadline), "must fire well past the deadline too");
+    }
 
     // ---- ffmpeg errors in plain language: real log snippets, one per key ----
 
