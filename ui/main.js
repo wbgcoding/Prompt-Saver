@@ -5402,6 +5402,11 @@ function renderChainOverview() {
   title.className = "chain-ov-title";
   title.textContent = t("chainOverviewTitle");
   bar.appendChild(title);
+  // Rows get their own wrapping row instead of sharing the column with the
+  // title above, so the steps flow left to right and wrap as a block.
+  const list = document.createElement("div");
+  list.className = "chain-ov-list";
+  bar.appendChild(list);
   chainSel.forEach((id, i) => {
     const p = prompts.find((x) => x.id === id);
     const info = report[i] || { needs: [], fills: [], missing: [] };
@@ -5456,7 +5461,7 @@ function renderChainOverview() {
       chainSel.splice(i, 0, moved);
       refreshChainUi();
     });
-    bar.append(row);
+    list.append(row);
   });
 }
 

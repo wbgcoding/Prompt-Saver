@@ -521,6 +521,9 @@ the video editor and the introduction tour ship on).
 - The chain-start button on a tile no longer draws its own box; it keeps its
   size and picks up a drop shadow instead, so it stays out of the way on a
   plain tile and still reads clearly over a photo or screenshot tile.
+- The chain overview's steps now flow left to right and wrap instead of
+  stacking one per line, so a long chain takes far less vertical space; dragging
+  a step to reorder it still works across a wrapped line.
 - The offer to adopt an installed copy's data into a portable run now names its
   size and prompt count before you decide, remembers your answer for that exact
   location so it does not ask again every launch (a "do not ask again" box lets

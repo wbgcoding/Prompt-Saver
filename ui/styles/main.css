@@ -1771,8 +1771,16 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   flex: 0 0 auto;
 }
 .chain-ov-title { font-size: 12px; font-weight: 700; color: var(--muted); }
+/* The steps' own container: flows them left to right and wraps, instead of
+   the title's column sharing space with a full-width stack of rows. */
+.chain-ov-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 .chain-ov-row {
   display: flex;
+  flex: 0 1 auto;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
