@@ -260,17 +260,20 @@ async fn handle_connection(mut pipe: tokio::net::windows::named_pipe::NamedPipeS
 }
 
 // A second GUI launch's way of proving this instance is not just accepting
-// connections but genuinely alive: the response only goes out once show_main
-// has actually run on the main thread, not as soon as the closure is queued
-// (queuing always succeeds even when the main thread itself is wedged -- see
-// the tray-window comment above on the same hazard).
+// connections but genuinely alive: the answer is sent from inside the main
+// thread's own closure, not as soon as the closure is queued (queuing always
+// succeeds even when the main thread itself is wedged -- see the tray-window
+// comment above on the same hazard). It is sent BEFORE show_main does its
+// work, because raising a window -- and rebuilding a missing one, webview and
+// all -- can easily outlast the launch side's patience, and a slow window is
+// not a hung process. Reaching the closure at all is the liveness proof.
 async fn respond_to_show_ping(pipe: &mut tokio::net::windows::named_pipe::NamedPipeServer, app: &AppHandle) {
     let (tx, rx) = tokio::sync::oneshot::channel();
     let app2 = app.clone();
     if app
         .run_on_main_thread(move || {
-            show_main(&app2);
             let _ = tx.send(());
+            show_main(&app2);
         })
         .is_ok()
     {
@@ -321,41 +324,60 @@ pub(crate) fn resolve_second_launch(argv: &[String]) -> LaunchDecision {
 async fn resolve_second_launch_async() -> LaunchDecision {
     use tokio::net::windows::named_pipe::ClientOptions;
     let name = pipe_name();
-    let deadline = std::time::Instant::now() + SECOND_LAUNCH_TIMEOUT;
+    // Only two outcomes end this launch: a clear answer (hand off) or a proven
+    // hang that was ended (take over). Everything else -- a busy pipe, a
+    // connection that breaks under us, a process that cannot be identified --
+    // falls through to Primary and lets the single-instance plugin decide
+    // exactly as it did before this handshake existed. Exiting on a doubt is
+    // what leaves the user with no window at all.
+    let connect_deadline = std::time::Instant::now() + SECOND_LAUNCH_TIMEOUT;
     let mut client = loop {
         match ClientOptions::new().open(&name) {
             Ok(c) => break c,
             Err(e) if e.raw_os_error() == Some(ERROR_PIPE_BUSY) => {
-                if std::time::Instant::now() >= deadline {
-                    return LaunchDecision::HandedOff; // busy the whole window -- do not guess further
+                if std::time::Instant::now() >= connect_deadline {
+                    return LaunchDecision::Primary; // busy the whole window -- do not guess
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(20)).await;
             }
             Err(_) => return LaunchDecision::Primary, // nobody is listening
         }
     };
+    // The pid is read off the still-connected handle, before anything can end
+    // the server and let Windows hand the number to someone else.
+    let server_pid = named_pipe_server_pid(&client);
     let req = PipeRequest { argv: vec![SHOW_PING.to_string()], cwd: String::new() };
-    let Ok(bytes) = serde_json::to_vec(&req) else { return LaunchDecision::HandedOff };
-    let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+    let Ok(bytes) = serde_json::to_vec(&req) else { return LaunchDecision::Primary };
+    // Its own full budget: time already spent waiting for a busy pipe must not
+    // shrink the window the running instance gets to prove it is alive.
     let roundtrip = async {
         write_frame(&mut client, &bytes).await.ok()?;
         read_frame(&mut client, MAX_FRAME_BYTES).await.ok()
     };
-    let answered = tokio::time::timeout(remaining, roundtrip).await.ok().flatten().is_some();
+    let answered = tokio::time::timeout(SECOND_LAUNCH_TIMEOUT, roundtrip).await.ok().flatten().is_some();
     if answered {
         return LaunchDecision::HandedOff;
     }
-    // Connected, but never answered -- a genuinely hung instance (show_main
-    // rebuilding a merely-missing window is handled entirely on the other
-    // side; getting here means the main thread itself never ran the ping).
-    let Some(pid) = named_pipe_server_pid(&client) else { return LaunchDecision::HandedOff };
+    // Connected, but the main thread never even reached the answer -- a
+    // genuinely wedged instance (the answer goes out before show_main does any
+    // work, so a slow or rebuilding window never looks like a hang here).
+    let Some(pid) = server_pid else { return LaunchDecision::Primary };
     let (same_user, same_exe) = process_identity_check(pid);
     if should_take_over_hung_instance(false, same_user, same_exe) {
-        terminate_process(pid);
-        append_crash_log(&format!("second launch: took over a hung running instance (pid {pid})"));
-        LaunchDecision::TookOver
+        // Terminate and WAIT: TerminateProcess only asks. Racing ahead while
+        // the old process still holds the single-instance mutex, the data-dir
+        // lock and the pipe would end this launch without a window after all.
+        let ended = terminate_process(pid);
+        append_crash_log(&format!(
+            "second launch: took over a hung running instance (pid {pid}, ended={ended})"
+        ));
+        if ended {
+            LaunchDecision::TookOver
+        } else {
+            LaunchDecision::Primary // could not confirm it is gone -- let the plugin decide
+        }
     } else {
-        LaunchDecision::HandedOff
+        LaunchDecision::Primary
     }
 }
 
@@ -442,14 +464,23 @@ fn process_identity_check(pid: u32) -> (bool, bool) {
     }
 }
 
-fn terminate_process(pid: u32) {
-    use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+// Ends `pid` and waits for it to be really gone. `true` only when the process
+// has exited: the caller may not touch the mutex, the data-dir lock or the
+// pipe the old instance still owns until then.
+fn terminate_process(pid: u32) -> bool {
+    use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows::Win32::System::Threading::{
+        OpenProcess, TerminateProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
+    };
+    const EXIT_WAIT_MS: u32 = 3000;
     unsafe {
-        if let Ok(process) = OpenProcess(PROCESS_TERMINATE, false, pid) {
-            let _ = TerminateProcess(process, 1);
-            let _ = CloseHandle(process);
-        }
+        let Ok(process) = OpenProcess(PROCESS_TERMINATE | PROCESS_SYNCHRONIZE, false, pid) else {
+            return false;
+        };
+        let asked = TerminateProcess(process, 1).is_ok();
+        let gone = asked && WaitForSingleObject(process, EXIT_WAIT_MS) == WAIT_OBJECT_0;
+        let _ = CloseHandle(process);
+        gone
     }
 }
 
@@ -1887,6 +1918,39 @@ mod tests {
     #[test]
     fn a_different_user_is_never_taken_over_even_at_the_same_path() {
         assert!(!should_take_over_hung_instance(false, false, true));
+    }
+
+    // The Win32 half of the same decision, against real processes: without
+    // this, a failing token or image-name query would silently turn every
+    // takeover into a no-op while the pure tests above stayed green.
+    #[test]
+    fn process_identity_check_recognises_this_process_and_rejects_a_foreign_exe() {
+        let (same_user, same_exe) = process_identity_check(std::process::id());
+        assert!(same_user, "this process must count as the same user");
+        assert!(same_exe, "this process must count as the same executable");
+
+        let mut child = std::process::Command::new("cmd.exe")
+            .args(["/c", "ping -n 20 127.0.0.1 >nul"])
+            .spawn()
+            .expect("a child process to compare against");
+        let (child_user, child_exe) = process_identity_check(child.id());
+        let _ = child.kill();
+        let _ = child.wait();
+        assert!(child_user, "a child started by this test runs as the same user");
+        assert!(!child_exe, "a different executable must never count as the same one");
+    }
+
+    #[test]
+    fn terminating_a_process_waits_until_it_is_really_gone() {
+        let mut child = std::process::Command::new("cmd.exe")
+            .args(["/c", "ping -n 60 127.0.0.1 >nul"])
+            .spawn()
+            .expect("a child process to end");
+        let pid = child.id();
+        assert!(terminate_process(pid), "the child must be reported as ended");
+        // Reported gone means gone: the handle is signalled, so a wait here
+        // returns at once instead of blocking for the ping's remaining minute.
+        assert!(child.try_wait().expect("wait").is_some(), "the process must already be reaped");
     }
 
     // A directory under the system temp folder, unique per test, removed on

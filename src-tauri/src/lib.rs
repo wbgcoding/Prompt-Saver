@@ -105,11 +105,22 @@ fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
             .visible(false)
             .build()?,
     };
-    let excluded = app
+    let settings = app
         .try_state::<Db>()
-        .map(|s| capture_excluded(&lock(&s).settings))
-        .unwrap_or(false);
-    set_capture_exclusion(&win, excluded);
+        .map(|s| lock(&s).settings.clone())
+        .unwrap_or_default();
+    set_capture_exclusion(&win, capture_excluded(&settings));
+    if settings.always_on_top {
+        let _ = win.set_always_on_top(true);
+    }
+    // Without this the frameless, transparent window shows through until the
+    // frontend paints -- a rebuilt window has to arrive dressed the same way
+    // the one created at startup does.
+    {
+        let eff = effective_theme(app, &theme_base_of(&settings, &settings.theme));
+        let vars = theme_vars_of(&settings);
+        apply_window_bg(app, &eff, vars.get("bg").map(|s| s.as_str()));
+    }
     #[cfg(windows)]
     if let Ok(hwnd) = win.hwnd() {
         sessionend::hook(app, hwnd.0 as isize);
@@ -212,10 +223,19 @@ fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
             // silent-zombie shape the bug this guards against started from.
             handle2.exit(0);
             let deadline = SystemTime::now() + WATCHDOG_GRACE;
+            let hard_deadline = SystemTime::now() + WATCHDOG_JOB_GRACE;
             std::thread::spawn(move || loop {
                 if watchdog_deadline_reached(SystemTime::now(), deadline) {
-                    append_crash_log("watchdog: forced the process to end after the main window closed");
-                    std::process::exit(0);
+                    // A finishing export, conversion or backup is given the
+                    // longer grace: killing it here would leave a half-written
+                    // file behind, which is worse than a few more seconds of a
+                    // windowless process.
+                    let busy = bg_ops_running_count() > 0
+                        && !watchdog_deadline_reached(SystemTime::now(), hard_deadline);
+                    if !busy {
+                        append_crash_log("watchdog: forced the process to end after the main window closed");
+                        std::process::exit(0);
+                    }
                 }
                 std::thread::sleep(Duration::from_millis(200));
             });
@@ -228,6 +248,10 @@ fn build_main_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
 // How long the Destroyed-event watchdog gives handle.exit(0) to actually end
 // the process before forcing it.
 const WATCHDOG_GRACE: Duration = Duration::from_secs(5);
+
+// The longer ceiling used while a background job is still finishing, so the
+// forced exit never truncates an export, conversion or backup mid-write.
+const WATCHDOG_JOB_GRACE: Duration = Duration::from_secs(120);
 
 // Pure decision for the watchdog thread above -- kept apart from the sleep
 // loop so a test can drive it with fixed instants instead of a real 5-second
@@ -28318,7 +28342,6 @@ pub fn run() {
             let saved_geom = store.settings.window;
             let autostart = store.settings.autostart;
             let start_min = store.settings.start_minimized;
-            let on_top = store.settings.always_on_top;
             let backup_start_delay_s = store
                 .settings
                 .ui_values
@@ -28541,18 +28564,9 @@ pub fn run() {
                 // open_floating/open_folder_window) parks it on the main screen
                 // instead, keeping its real position and screen id untouched so
                 // it returns on its own once that screen is back.
-                if on_top {
-                    let _ = main.set_always_on_top(true);
-                }
-                {
-                    let settings = handle
-                        .try_state::<Db>()
-                        .map(|s| s.lock().unwrap_or_else(|e| e.into_inner()).settings.clone())
-                        .unwrap_or_default();
-                    let eff = effective_theme(&handle, &theme_base_of(&settings, &settings.theme));
-                    let vars = theme_vars_of(&settings);
-                    apply_window_bg(&handle, &eff, vars.get("bg").map(|s| s.as_str()));
-                }
+                // Always-on-top and the window background are applied inside
+                // build_main_window, so a rebuilt window arrives dressed the
+                // same way this one does.
                 // The window is revealed by the frontend (show_main_window) once
                 // the first layout pass is done — no visible text re-sizing.
                 // Safety net: show after 1.5s even if the frontend never calls.
