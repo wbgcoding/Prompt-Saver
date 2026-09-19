@@ -1617,6 +1617,10 @@ body.library-front #modal.overlay { z-index: 67; }
   text-wrap: balance;
 }
 .expert-hint svg { flex: 0 0 auto; }
+/* Three one-click profiles, ahead of the tabs and not one of their own — a
+   profile writes its changed flags and is gone, never a state of its own. */
+.expert-presets { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.expert-presets-label { font-size: 12px; font-weight: 600; color: var(--muted); }
 /* A state a group is currently in, sitting above that group's settings. It exists
    only while the state holds, so it never leaves a gap behind when it is gone. */
 .expert-notice {
@@ -2633,6 +2637,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   flex: 1 1 auto; min-height: 0;
 }
 #settings-expert > .expert-top,
+#settings-expert > .expert-presets,
 #settings-expert > .expert-filter-row,
 #settings-expert > #expert-tabs-bar { flex: 0 0 auto; }
 /* A floor, not 0: on a short window the tab bar + search alone filled the dialog and

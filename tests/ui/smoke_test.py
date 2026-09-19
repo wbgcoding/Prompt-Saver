@@ -12175,6 +12175,74 @@ VAR_FIXED_PROBE = """
 </script>
 """
 
+EXPERT_PRESET_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && cm.classList.contains('hidden'); i++) await sleep(100);
+    if (!cm.classList.contains('hidden')) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+
+    document.getElementById('gear').click();
+    await sleep(150);
+    document.getElementById('expert-open').click();
+    await sleep(200);
+
+    const setFlagCalls = () => (window.__SMOKE_CALLS__ || []).filter((c) => c === 'set_ui_flag').length;
+    const before = setFlagCalls();
+    const quietBtn = document.getElementById('expert-preset-quiet');
+    if (!quietBtn) {
+      errs.push('447: the Quiet preset button is missing from the expert menu');
+    } else {
+      quietBtn.click();
+      await sleep(200);
+      if (cm.classList.contains('hidden')) {
+        errs.push('447: applying a preset did not open the confirmation dialog');
+      } else {
+        const msg = document.getElementById('confirm-msg').textContent;
+        const m = msg.match(/:\\s*(\\d+)/);
+        const claimed = m ? parseInt(m[1], 10) : -1;
+        if (claimed <= 0) errs.push('447: the confirmation dialog names no changed-setting count, got: ' + msg);
+        document.getElementById('confirm-ok').click();
+        await sleep(300);
+        const actual = setFlagCalls() - before;
+        if (actual !== claimed) {
+          errs.push('447: the dialog said ' + claimed + ' settings would change, but ' + actual + ' actually did');
+        }
+        for (const id of ['expert-preset-quiet', 'expert-preset-standard', 'expert-preset-full']) {
+          const btn = document.getElementById(id);
+          if (btn && (btn.classList.contains('active') || btn.getAttribute('aria-pressed') === 'true')) {
+            errs.push('447: ' + id + ' stayed marked as the active profile after applying');
+          }
+        }
+        // Nothing left to change: re-applying the same profile must report that
+        // instead of reopening an empty confirmation dialog.
+        quietBtn.click();
+        await sleep(200);
+        if (!cm.classList.contains('hidden')) {
+          errs.push('447: re-applying an already-applied preset opened a confirmation dialog again');
+          document.getElementById('confirm-cancel').click();
+          await sleep(150);
+        } else {
+          const toastMsg = document.querySelector('#toast .toast-msg');
+          if (!toastMsg || !toastMsg.textContent) {
+            errs.push('447: re-applying an already-applied preset gave no feedback at all');
+          }
+        }
+      }
+    }
+  } catch (e) { errs.push('447 probe: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
 
 def unescape(s):
     for a, b in (("&quot;", '"'), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
@@ -12818,6 +12886,31 @@ def main():
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- fixed placeholder values: list editor and fill-in suggestion")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # 447: expert-menu quick profiles -- applying one asks first, the count
+        # in that dialog matches the number of settings actually written, and
+        # no profile stays marked as active once it is done.
+        side = tmp / "ui" / "expert-preset.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", EXPERT_PRESET_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-expert-preset'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- expert menu quick profiles: change count and no lasting marker")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)

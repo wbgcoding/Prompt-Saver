@@ -504,6 +504,44 @@ for key in sorted(declared):
         elif s.group(1) not in en_keys:
             problems.append(f"notices: '{key}' points at '{s.group(1)}', which has no string")
 
+# ---- expert-menu quick profiles (447) ------------------------------------------
+# Quiet turns a curated list of alert-style flags off; Full turns on every flag
+# except a curated exclusion list; Standard reaches every flag by construction
+# (each one's own shipped default). A key that only exists because of a rename or
+# a typo would silently do nothing, so both curated lists are checked against the
+# real flag set, and the construction that makes Standard cover everything is
+# checked too, so a setting can never end up reachable by none of the three.
+quiet_m = re.search(r'const EXPERT_PRESET_QUIET\s*=\s*\[([^\]]*)\]', SRC)
+full_exclude_m = re.search(r'const EXPERT_PRESET_FULL_EXCLUDE\s*=\s*\[([^\]]*)\]', SRC)
+if not quiet_m:
+    problems.append("presets: EXPERT_PRESET_QUIET not found")
+if not full_exclude_m:
+    problems.append("presets: EXPERT_PRESET_FULL_EXCLUDE not found")
+if quiet_m and full_exclude_m:
+    quiet_keys = re.findall(r'"([^"]+)"', quiet_m.group(1))
+    full_exclude_keys = re.findall(r'"([^"]+)"', full_exclude_m.group(1))
+    if not quiet_keys:
+        problems.append("presets: EXPERT_PRESET_QUIET is empty")
+    if not full_exclude_keys:
+        problems.append("presets: EXPERT_PRESET_FULL_EXCLUDE is empty")
+    for key in quiet_keys:
+        if key not in all_flags:
+            problems.append(f"presets: EXPERT_PRESET_QUIET names '{key}', which is not a known flag")
+    for key in full_exclude_keys:
+        if key not in all_flags:
+            problems.append(f"presets: EXPERT_PRESET_FULL_EXCLUDE names '{key}', which is not a known flag")
+    # Standard has to be built from the SAME two lists (ALL_FLAG_KEYS/OPT_FLAG_KEYS),
+    # not a separately hand-kept list, or a new flag could land in FLAG_LABELS /
+    # OPT_FLAG_LABELS without ever being reachable through the profile that is
+    # supposed to reach everything.
+    if not re.search(r'const ALL_EXPERT_FLAG_KEYS\s*=\s*\[\s*\.\.\.ALL_FLAG_KEYS\s*,\s*\.\.\.OPT_FLAG_KEYS\s*\]', SRC):
+        problems.append("presets: ALL_EXPERT_FLAG_KEYS is not built from ALL_FLAG_KEYS + OPT_FLAG_KEYS — "
+                        "a setting could end up in none of the three profiles")
+    target_fn = block("function expertPresetTarget", "{", "}")
+    for needed in ("EXPERT_PRESET_QUIET", "EXPERT_PRESET_FULL_EXCLUDE", "ALL_EXPERT_FLAG_KEYS", "shipsOn"):
+        if needed not in target_fn:
+            problems.append(f"presets: expertPresetTarget() no longer uses {needed}")
+
 for p in problems:
     print("FAIL", p)
 print("PASS" if not problems else f"{len(problems)} problem(s)")

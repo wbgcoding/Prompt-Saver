@@ -2222,6 +2222,67 @@ const FLAG_GATES = Object.fromEntries(
     .map((f) => [f.key, f.gate])
 );
 
+// Three ready-made profiles at the top of the expert menu, above the tabs and
+// not one of their own. Applying one writes each changed flag through the
+// normal set_ui_flag path and is done -- no profile stays remembered as a mode,
+// so Standard stays the one lasting default and nothing here ever explains why
+// a flag is the way it is.
+//
+// Alert-style flags only (a sound, a flash, a toast that appears on its own).
+// Recordings and dictation are left alone here on purpose -- no rec*/voice* key.
+const EXPERT_PRESET_QUIET = ["copyBubble", "copyFlash", "copySound", "undoToast", "whatsNew", "similarHint", "dupImportCheck", "taskbarProgress"];
+// Left out of "All on" because they send something outward or cost time/money
+// rather than simply turning a feature on: image-text search reads a picture the
+// user may not expect read, and online dictation sends audio to Microsoft.
+const EXPERT_PRESET_FULL_EXCLUDE = ["ocrIndex", "voiceOnlineOk"];
+const ALL_EXPERT_FLAG_KEYS = [...ALL_FLAG_KEYS, ...OPT_FLAG_KEYS];
+
+// key -> target value for one profile. "standard" reaches every current and
+// future flag by construction (each one's own shipped default), so the tests
+// only need to watch the two curated lists above for a stale or missing key.
+function expertPresetTarget(name) {
+  if (name === "quiet") return Object.fromEntries(EXPERT_PRESET_QUIET.map((k) => [k, false]));
+  if (name === "full") {
+    return Object.fromEntries(ALL_EXPERT_FLAG_KEYS.filter((k) => !EXPERT_PRESET_FULL_EXCLUDE.includes(k)).map((k) => [k, true]));
+  }
+  return Object.fromEntries(ALL_EXPERT_FLAG_KEYS.map((k) => [k, shipsOn(k)]));
+}
+const EXPERT_PRESET_TITLES = { quiet: "expertPresetQuiet", standard: "expertPresetStandard", full: "expertPresetFull" };
+
+// Applies one of the three profiles above: shows how many flags actually differ
+// from the profile before touching anything, names the first ten, and only
+// writes on confirmation -- each write goes through set_ui_flag, the same path
+// a manual toggle uses, so a feature's own activation work (backups, tray
+// rebuilds, hotkey registration) always runs exactly as it would by hand.
+async function applyExpertPreset(name) {
+  const target = expertPresetTarget(name);
+  const changed = Object.entries(target).filter(([k, v]) => flag(k) !== v).map(([k]) => k);
+  if (!changed.length) { toast(t("expertPresetNoChange")); return; }
+  const label = (k) => t(FLAG_LABELS[k] || OPT_FLAG_LABELS[k] || k);
+  const named = changed.slice(0, 10).map(label);
+  const message = `${t("expertPresetChangeCount")}: ${changed.length}\n${named.join("\n")}${changed.length > named.length ? "\n…" : ""}`;
+  const ok = await confirmDialog({
+    title: t(EXPERT_PRESET_TITLES[name]),
+    message,
+    confirmLabel: t(EXPERT_PRESET_TITLES[name]),
+    danger: false,
+  });
+  if (!ok) return;
+  for (const key of changed) {
+    const enabled = target[key];
+    settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
+    try { await invoke("set_ui_flag", { key, enabled }); } catch (e) { errToast(e); }
+  }
+  // Same refresh sequence as resetExpertGroup()/onResetExpert(): local state is
+  // already current from the loop above, so this only has to repaint -- renderExpert()
+  // last, so its own row list reflects the flags this just changed.
+  applyFlags();
+  renderViews();
+  await renderGrid(true);
+  fitAllTiles();
+  renderExpert();
+}
+
 const flag = (key) => (settings.ui_flags?.[key] ?? shipsOn(key)) !== false;
 const val = (key) => {
   const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key]; // selects live in ui_values too
@@ -17847,6 +17908,9 @@ function bind() {
     disarmButton(btn, t("expertReset"));
     onResetExpert();
   });
+  $("expert-preset-quiet").addEventListener("click", () => applyExpertPreset("quiet"));
+  $("expert-preset-standard").addEventListener("click", () => applyExpertPreset("standard"));
+  $("expert-preset-full").addEventListener("click", () => applyExpertPreset("full"));
 
   // Quick grid-size control (top-right of the layout, active view).
   const applyQuickGrid = async () => {

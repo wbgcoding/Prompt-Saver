@@ -107,7 +107,7 @@ A tiny, fully offline prompt manager for Windows. No account, no cloud, no telem
 
 | | |
 |---|---|
-| **Expert menu** | Six tabs with an on/off switch for every feature and a parameter for everything adjustable. Settings that are not self-explanatory carry a tooltip |
+| **Expert menu** | Seven tabs with an on/off switch for every feature and a parameter for everything adjustable. Settings that are not self-explanatory carry a tooltip. Three quick profiles above the tabs (Quiet, Standard, All on) show how many settings would change before applying |
 | **Runs in the background** | Optional minimize-to-tray, autostart at login, global hotkey |
 | **Guided first run** | A short walkthrough on first launch covering the basics, with a step to turn on the screenshot editor, color picker, OCR or voice dictation right there; reopen it anytime from Settings |
 | **Auto updates** | Checks for a new version on start (switchable off) with one-click install, verified against a published checksum |

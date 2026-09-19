@@ -443,6 +443,13 @@ the video editor and the introduction tour ship on).
   bar between tabs for moving) so the two are never confused. A tab inside an
   open group moves within that group the same way. How wide that outer edge
   is, is adjustable in the expert menu.
+- **Quick profiles for the expert menu.** Three one-click profiles sit above
+  the tabs: Quiet turns off everything that sounds, flashes or pops up a
+  notice; Standard puts every setting back to its shipped default; All on
+  switches on every feature, without touching anything destructive or
+  anything that sends data out or costs money. A dialog shows how many
+  settings would change and names the ten most important before anything
+  happens. A profile writes once and is never remembered as a mode.
 
 ### Improved
 
