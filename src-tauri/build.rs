@@ -71,7 +71,7 @@ const LICENSE_PREFERENCE: &[&str] = &[
 // Splits an SPDX-style expression ("MIT OR Apache-2.0", "MIT/Apache-2.0", a bare
 // id, or one with a "WITH ..." exception clause) into the plain ids it offers.
 fn split_license_expression(expr: &str) -> Vec<String> {
-    expr.split(|c| c == '/')
+    expr.split('/')
         .flat_map(|part| part.split(" OR "))
         .flat_map(|part| part.split(" AND "))
         .map(|part| {
