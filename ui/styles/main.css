@@ -976,14 +976,12 @@ body.grid-selecting .tile-type { opacity: 0; }
   justify-content: center;
   width: 18px;
   height: 18px;
-  border: 1px solid var(--border);
   padding: 0;
-  border-radius: 5px;
-  background: var(--surface);
   color: var(--fg);
   opacity: 0;
   cursor: pointer;
   transition: opacity var(--transition);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
 }
 .tile-chain-start > svg { display: block; width: 100%; height: 100%; }
 body.flag-chainStartAlwaysVisible .tile-chain-start { opacity: 0.65; }
@@ -996,9 +994,9 @@ body.chain-mode .tile-chain-start { opacity: 0; pointer-events: none; }
    entirely, not merely inert -- main.js also skips building the element. */
 body.noflag-chainPrompts .tile-chain-start,
 body.noflag-chainQuickStart .tile-chain-start { display: none; }
-/* Legibility over a photo/screenshot tile: at less than full opacity the
-   plain --text icon on --surface can wash out, the same problem
-   .tile.has-image .tile-type already solves the same way. */
+/* Legibility over a photo/screenshot tile: the icon carries no box of its own
+   (dropped in favour of the drop-shadow above), so on a light photo it can
+   still wash out without its own white fill and a stronger shadow to match. */
 .tile.has-image .tile-chain-start {
   color: #fff;
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.65));

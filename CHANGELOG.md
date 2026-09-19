@@ -518,6 +518,9 @@ the video editor and the introduction tour ship on).
   black on genuinely light colors now; a medium color that used to flip to black
   text keeps white text instead. Both the automatic choice and the brightness
   cutoff are expert-menu settings.
+- The chain-start button on a tile no longer draws its own box; it keeps its
+  size and picks up a drop shadow instead, so it stays out of the way on a
+  plain tile and still reads clearly over a photo or screenshot tile.
 - The offer to adopt an installed copy's data into a portable run now names its
   size and prompt count before you decide, remembers your answer for that exact
   location so it does not ask again every launch (a "do not ask again" box lets
