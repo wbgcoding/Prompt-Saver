@@ -2242,6 +2242,67 @@ const FLAG_GATES = Object.fromEntries(
     .map((f) => [f.key, f.gate])
 );
 
+// Three ready-made profiles at the top of the expert menu, above the tabs and
+// not one of their own. Applying one writes each changed flag through the
+// normal set_ui_flag path and is done -- no profile stays remembered as a mode,
+// so Standard stays the one lasting default and nothing here ever explains why
+// a flag is the way it is.
+//
+// Alert-style flags only (a sound, a flash, a toast that appears on its own).
+// Recordings and dictation are left alone here on purpose -- no rec*/voice* key.
+const EXPERT_PRESET_QUIET = ["copyBubble", "copyFlash", "copySound", "undoToast", "whatsNew", "similarHint", "dupImportCheck", "taskbarProgress"];
+// Left out of "All on" because they send something outward or cost time/money
+// rather than simply turning a feature on: image-text search reads a picture the
+// user may not expect read, and online dictation sends audio to Microsoft.
+const EXPERT_PRESET_FULL_EXCLUDE = ["ocrIndex", "voiceOnlineOk"];
+const ALL_EXPERT_FLAG_KEYS = [...ALL_FLAG_KEYS, ...OPT_FLAG_KEYS];
+
+// key -> target value for one profile. "standard" reaches every current and
+// future flag by construction (each one's own shipped default), so the tests
+// only need to watch the two curated lists above for a stale or missing key.
+function expertPresetTarget(name) {
+  if (name === "quiet") return Object.fromEntries(EXPERT_PRESET_QUIET.map((k) => [k, false]));
+  if (name === "full") {
+    return Object.fromEntries(ALL_EXPERT_FLAG_KEYS.filter((k) => !EXPERT_PRESET_FULL_EXCLUDE.includes(k)).map((k) => [k, true]));
+  }
+  return Object.fromEntries(ALL_EXPERT_FLAG_KEYS.map((k) => [k, shipsOn(k)]));
+}
+const EXPERT_PRESET_TITLES = { quiet: "expertPresetQuiet", standard: "expertPresetStandard", full: "expertPresetFull" };
+
+// Applies one of the three profiles above: shows how many flags actually differ
+// from the profile before touching anything, names the first ten, and only
+// writes on confirmation -- each write goes through set_ui_flag, the same path
+// a manual toggle uses, so a feature's own activation work (backups, tray
+// rebuilds, hotkey registration) always runs exactly as it would by hand.
+async function applyExpertPreset(name) {
+  const target = expertPresetTarget(name);
+  const changed = Object.entries(target).filter(([k, v]) => flag(k) !== v).map(([k]) => k);
+  if (!changed.length) { toast(t("expertPresetNoChange")); return; }
+  const label = (k) => t(FLAG_LABELS[k] || OPT_FLAG_LABELS[k] || k);
+  const named = changed.slice(0, 10).map(label);
+  const message = `${t("expertPresetChangeCount")}: ${changed.length}\n${named.join("\n")}${changed.length > named.length ? "\n…" : ""}`;
+  const ok = await confirmDialog({
+    title: t(EXPERT_PRESET_TITLES[name]),
+    message,
+    confirmLabel: t(EXPERT_PRESET_TITLES[name]),
+    danger: false,
+  });
+  if (!ok) return;
+  for (const key of changed) {
+    const enabled = target[key];
+    settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
+    try { await invoke("set_ui_flag", { key, enabled }); } catch (e) { errToast(e); }
+  }
+  // Same refresh sequence as resetExpertGroup()/onResetExpert(): local state is
+  // already current from the loop above, so this only has to repaint -- renderExpert()
+  // last, so its own row list reflects the flags this just changed.
+  applyFlags();
+  renderViews();
+  await renderGrid(true);
+  fitAllTiles();
+  renderExpert();
+}
+
 const flag = (key) => (settings.ui_flags?.[key] ?? shipsOn(key)) !== false;
 const val = (key) => {
   const cfg = EXPERT_VALUES[key] || EXPERT_SELECTS[key]; // selects live in ui_values too
@@ -11124,6 +11185,20 @@ async function renderBackupPanel(body) {
         });
       }
       const size = document.createElement("span"); size.className = "backup-size"; size.textContent = fmtBytes(b.size);
+      // Opens the same read rail restoring already uses (stage, validate, read),
+      // just without ever writing the result anywhere -- see backup_contents.
+      const contentBox = document.createElement("div");
+      contentBox.className = "backup-content hidden";
+      let contentLoaded = false;
+      const viewContent = document.createElement("button");
+      viewContent.type = "button"; viewContent.className = "ghost-btn"; viewContent.textContent = t("backupViewContent");
+      viewContent.addEventListener("click", async () => {
+        const opening = contentBox.classList.toggle("hidden") === false;
+        if (opening && !contentLoaded) {
+          contentLoaded = true;
+          await renderBackupContent(contentBox, b.name);
+        }
+      });
       const restore = document.createElement("button"); restore.type = "button"; restore.className = "ghost-btn"; restore.textContent = t("backupRestore");
       restore.addEventListener("click", () => restoreBackup(b.name));
       const del = document.createElement("button"); del.type = "button"; del.className = "ghost-btn danger-btn"; del.textContent = t("delete");
@@ -11133,9 +11208,10 @@ async function renderBackupPanel(body) {
         await saveUiState("backupListOpen", true); // stay in the list after delete
         renderBackupPanel(body);
       });
-      row.append(name, count, size, restore, del);
+      row.append(name, count, size, viewContent, restore, del);
       list.appendChild(row);
       if (namesBox) list.appendChild(namesBox);
+      list.appendChild(contentBox);
     }
   }
   body.append(listHead, list);
@@ -11160,6 +11236,118 @@ async function restoreBackup(name) {
   await maybeBackupBeforeWipe("delete");
   try { await withTaskbarBusy("backup", () => invoke("restore_backup", { name, keep: Math.round(val("backupKeep")), scope })); }
   catch (e) { errToast(e); } // on success the app relaunches
+}
+
+// What a single snapshot actually holds: header counts, then every entry with
+// name, date, size and kind, searchable and sortable -- restoring straight from
+// here reuses restoreBackup() above rather than a second restore path.
+async function renderBackupContent(box, name) {
+  box.innerHTML = "";
+  let data;
+  try { data = await invoke("backup_contents", { name }); }
+  catch (e) { box.textContent = String(e); return; }
+  const nf = (n) => Number(n).toLocaleString(LANG);
+  const mkCard = (l, v) => {
+    const c = document.createElement("div"); c.className = "stat-card";
+    const vv = document.createElement("div"); vv.className = "stat-val"; vv.textContent = v;
+    const ll = document.createElement("div"); ll.className = "stat-label"; ll.textContent = l;
+    c.append(vv, ll); return c;
+  };
+  const cards = document.createElement("div"); cards.className = "stat-cards backup-content-cards";
+  cards.append(
+    mkCard(t("backupContentEntries"), nf(data.entries)),
+    mkCard(t("backupContentViews"), nf(data.views)),
+    mkCard(t("backupContentTags"), nf(data.tags)),
+    mkCard(t("backupContentLastChange"), data.last_change ? new Date(data.last_change * 1000).toLocaleDateString(LANG) : "—"),
+    mkCard(t("backupContentVersion"), data.program_version || "—"),
+    mkCard(t("backupContentEncrypted"), data.encrypted ? t("backupContentEncryptedYes") : t("backupContentEncryptedNo")),
+  );
+  box.appendChild(cards);
+
+  const toolbar = document.createElement("div"); toolbar.className = "backup-content-toolbar";
+  const search = document.createElement("input");
+  search.type = "text"; search.className = "modal-input backup-content-search";
+  search.placeholder = t("backupContentSearch");
+  const restoreBtn = document.createElement("button");
+  restoreBtn.type = "button"; restoreBtn.className = "ghost-btn"; restoreBtn.textContent = t("backupRestore");
+  restoreBtn.addEventListener("click", () => restoreBackup(name));
+  toolbar.append(search, restoreBtn);
+  box.appendChild(toolbar);
+
+  const table = document.createElement("div"); table.className = "backup-content-table";
+  const head = document.createElement("div"); head.className = "backup-content-row backup-content-head";
+  const cols = [
+    ["name", t("backupContentColName")],
+    ["date", t("backupContentColDate")],
+    ["chars", t("backupContentColSize")],
+    ["kind", t("backupContentColKind")],
+  ];
+  let sortKey = "name";
+  let sortDir = 1;
+  const headBtns = {};
+  for (const [key, label] of cols) {
+    const cell = document.createElement("button");
+    cell.type = "button"; cell.className = `backup-content-col-btn backup-content-cell-${key}`;
+    cell.textContent = label;
+    cell.addEventListener("click", () => {
+      if (sortKey === key) sortDir = -sortDir; else { sortKey = key; sortDir = 1; }
+      renderRows();
+    });
+    headBtns[key] = cell;
+    head.appendChild(cell);
+  }
+  table.appendChild(head);
+  const rowsBox = document.createElement("div"); rowsBox.className = "backup-content-rows";
+  table.appendChild(rowsBox);
+  const emptyHint = document.createElement("div"); emptyHint.className = "hint backup-content-empty hidden";
+  emptyHint.textContent = t("backupContentNoMatch");
+  table.appendChild(emptyHint);
+  box.appendChild(table);
+
+  function renderRows() {
+    for (const [key, cell] of Object.entries(headBtns)) {
+      cell.classList.toggle("sorted", key === sortKey);
+      cell.classList.toggle("sorted-desc", key === sortKey && sortDir === -1);
+    }
+    const q = search.value.trim().toLowerCase();
+    const items = data.items
+      .filter((it) => !q || it.name.toLowerCase().includes(q))
+      .slice()
+      .sort((a, b) => {
+        if (sortKey === "name" || sortKey === "kind") {
+          const av = (a[sortKey] || "").toLowerCase();
+          const bv = (b[sortKey] || "").toLowerCase();
+          if (av < bv) return -1 * sortDir;
+          if (av > bv) return 1 * sortDir;
+          return 0;
+        }
+        // A never-edited entry has no date and always sorts to the very end,
+        // in either direction -- the same rule the library's own "last
+        // edited" sort already uses, just not tied to one fixed direction.
+        const av = a[sortKey];
+        const bv = b[sortKey];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (av < bv) return -1 * sortDir;
+        if (av > bv) return 1 * sortDir;
+        return 0;
+      });
+    rowsBox.innerHTML = "";
+    emptyHint.classList.toggle("hidden", items.length > 0);
+    for (const it of items) {
+      const row = document.createElement("div"); row.className = "backup-content-row";
+      const nm = document.createElement("span"); nm.className = "backup-content-cell-name"; nm.textContent = it.name;
+      const dt = document.createElement("span"); dt.className = "backup-content-cell-date";
+      dt.textContent = it.date ? new Date(it.date * 1000).toLocaleDateString(LANG) : "—";
+      const sz = document.createElement("span"); sz.className = "backup-content-cell-chars"; sz.textContent = it.chars ? nf(it.chars) : "—";
+      const kd = document.createElement("span"); kd.className = "backup-content-cell-kind"; kd.textContent = t(PROMPT_TYPE_LABELS[it.kind] || it.kind);
+      row.append(nm, dt, sz, kd);
+      rowsBox.appendChild(row);
+    }
+  }
+  search.addEventListener("input", renderRows);
+  renderRows();
 }
 
 // ---- Clipboard inbox ----
@@ -14890,23 +15078,46 @@ async function runImportAll() {
 // open on top of (or right after burying) this more urgent prompt; it retries next
 // launch instead, since tourSeen was never written this time.
 async function offerTakeover() {
-  const src = await invoke("takeover_offer").catch(() => null);
-  if (!src) return false;
+  const offer = await invoke("takeover_offer").catch(() => null);
+  if (!offer) return false;
+  const countText = offer.prompts != null ? t("takeoverPromptCount").replace("{n}", offer.prompts) : t("takeoverCountUnknown");
+  const details = `${fmtBytes(offer.size)}, ${countText}`;
   const adopt = await confirmDialog({
     title: t("takeoverTitle"),
-    message: t("takeoverBody").replace("{path}", src),
+    message: t("takeoverBody").replace("{path}", offer.path).replace("{details}", details),
     confirmLabel: t("takeoverAdopt"),
     cancelLabel: t("takeoverSkip"),
     icon: TAKEOVER_SVG,
     danger: false,
+    checkboxes: [{ key: "remember", label: t("takeoverRemember"), checked: true }],
+    checkboxesOptional: true,
   });
+  // Read regardless of how the dialog closed (Adopt, Skip, Escape or a
+  // background click all leave the checkbox's own DOM state behind) -- an
+  // unticked box must leave nothing recorded, so the same folder is offered
+  // again next launch instead of being silently settled.
+  const remember = $("confirm-cb-remember")?.checked !== false;
   try {
-    await invoke("takeover_apply", { adopt });
+    await invoke("takeover_apply", { adopt, remember });
   } catch (e) {
     errToast(e);
     return true;
   }
-  if (adopt) await reloadEverything();
+  if (adopt) {
+    await reloadEverything();
+    const newDir = await invoke("current_data_dir").catch(() => null);
+    if (newDir) {
+      const openIt = await confirmDialog({
+        title: t("takeoverDoneTitle"),
+        message: t("takeoverDoneBody").replace("{path}", newDir),
+        confirmLabel: t("close"),
+        altLabel: t("backupOpenFolder"),
+        oneButton: true,
+        danger: false,
+      });
+      if (openIt === "alt") await invoke("open_storage_folder", { path: newDir }).catch((e) => errToast(e));
+    }
+  }
   return true;
 }
 
@@ -18062,6 +18273,9 @@ function bind() {
     disarmButton(btn, t("expertReset"));
     onResetExpert();
   });
+  $("expert-preset-quiet").addEventListener("click", () => applyExpertPreset("quiet"));
+  $("expert-preset-standard").addEventListener("click", () => applyExpertPreset("standard"));
+  $("expert-preset-full").addEventListener("click", () => applyExpertPreset("full"));
 
   // Quick grid-size control (top-right of the layout, active view).
   const applyQuickGrid = async () => {

@@ -700,6 +700,15 @@ right underneath once it's on. The search box scans every tab at once; a feature
 that ships switched off carries a small dot badge. Reset works at three levels:
 one value's own undo icon, a whole group's reset, or everything at once.
 
+Three quick profiles sit above the tabs: **Quiet** turns off everything that
+sounds, flashes or pops up a notice (recordings and dictation are untouched),
+**Standard** puts every setting back to its shipped default, and **All on**
+switches on every feature without touching anything destructive or anything
+that sends data out or costs money (image-text search, online dictation).
+Before anything changes, a dialog shows how many settings would change and
+names the ten most important. A profile only writes those settings once; it
+is never remembered as a mode you are "in".
+
 ### Keyboard-only use
 
 Arrow keys move a focus ring across the grid; Enter or Space copies whichever
@@ -763,6 +772,14 @@ there right now, how long it is kept, a button to clean it up on the spot, and
 a button that jumps straight to the matching expert-menu setting. The numbers
 are measured in the background and labelled with when that happened, the same
 way the storage section above already works, not recalculated on every open.
+
+Each snapshot in the list can also show its full content on demand: entry,
+view and tag counts, the most recent change inside it, the program version
+that made it, and whether its rows are sealed the normal way or fell back to
+plain storage. Below that, every prompt it holds, with its own edit date,
+size and kind, searchable by name and sortable by any column, with a button
+to restore that single prompt right from the list instead of the whole
+snapshot.
 
 ---
 
@@ -1198,6 +1215,15 @@ direkt darunter. Die Suche durchsucht alle Tabs auf einmal; ausgeschaltete
 Funktionen tragen ein kleines Punkt-Abzeichen. Zurücksetzen auf drei Ebenen:
 ein Wert, eine ganze Gruppe, oder alles auf einmal.
 
+Drei Schnellprofile stehen über den Tabs: **Ruhig** schaltet alles ab, was
+tönt, blinkt oder eine Meldung zeigt (Aufnahmen und Diktat bleiben unberührt),
+**Standard** stellt jede Einstellung auf ihre Vorgabe zurück, und **Alles an**
+schaltet jede Funktion ein, ohne etwas Zerstörerisches zu verändern und ohne
+etwas einzuschalten, das Daten nach außen gibt oder Kosten verursacht
+(Bildtext-Suche, Online-Spracherkennung). Vor jeder Änderung zeigt ein Dialog,
+wie viele Einstellungen sich ändern, und nennt die zehn wichtigsten davon. Ein
+Profil schreibt einmal und bleibt danach kein eigener Zustand.
+
 **Tastaturbedienung** — Pfeiltasten bewegen einen Fokusring über das Raster
 (an), Enter oder Leertaste kopiert die fokussierte Kachel.
 
@@ -1240,7 +1266,15 @@ und unfertige Bearbeitungsstände — mit dem aktuellen Stand, wie lange er
 bleibt, einem Knopf zum sofortigen Aufräumen und einem Knopf, der direkt zur
 zugehörigen Einstellung im Experten-Menü springt. Die Zahlen werden im
 Hintergrund ermittelt und mit dem Zeitpunkt der Messung beschriftet, genau
-wie beim Speicherbereich darüber, nicht bei jedem Öffnen neu berechnet.
+wie beim Speicherbereich darüber, nicht bei jedem Öffnen neu berechnet. Zu
+jeder Sicherung in der Liste lässt sich auf Wunsch auch der volle Inhalt
+anzeigen: Anzahl der Einträge, Ansichten und Tags, die jüngste Änderung
+darin, die Programmfassung, die sie erstellt hat, und ob ihre Zeilen normal
+versiegelt sind oder auf Klartext zurückgefallen sind. Darunter jeder
+enthaltene Prompt mit eigenem Änderungsdatum, Größe und Art, durchsuchbar
+nach Namen und nach jeder Spalte sortierbar, mit einem Knopf, um genau
+diesen einen Prompt direkt aus der Liste wiederherzustellen statt der
+ganzen Sicherung.
 
 **Eigenständig: Schnellstarter** — Strg+Alt+P, unscharfe Suche, sofortiges Kopieren.
 

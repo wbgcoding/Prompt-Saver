@@ -455,9 +455,28 @@ the video editor and the introduction tour ship on).
   dialog for format, quality and a destination folder, then encodes every
   checked recording in one go and reports how many finished and how many
   failed. How many export at once is adjustable in the expert menu.
+- **Quick profiles for the expert menu.** Three one-click profiles sit above
+  the tabs: Quiet turns off everything that sounds, flashes or pops up a
+  notice; Standard puts every setting back to its shipped default; All on
+  switches on every feature, without touching anything destructive or
+  anything that sends data out or costs money. A dialog shows how many
+  settings would change and names the ten most important before anything
+  happens. A profile writes once and is never remembered as a mode.
+- **Backup content viewer.** Each snapshot's row can now open its own content:
+  entry, view and tag counts, the most recent change inside it, the program
+  version that made it, and whether its rows are sealed the normal way or
+  fell back to plain storage. Below that sits every prompt the snapshot
+  holds, with its own edit date, size and kind, searchable by name and
+  sortable by any column, with a button to restore that single prompt
+  straight from the list.
 
 ### Improved
 
+- The offer to adopt an installed copy's data into a portable run now names its
+  size and prompt count before you decide, remembers your answer for that exact
+  location so it does not ask again every launch (a "do not ask again" box lets
+  you decline the memory instead), and shows where your prompts ended up, with a
+  button to open that folder, once you accept.
 - A long library list opens noticeably quicker. Each row draws three small icons,
   and their markup was rebuilt from scratch for every single row; it is now prepared
   once and copied per row. With 500 prompts the list is built in 45 ms instead of

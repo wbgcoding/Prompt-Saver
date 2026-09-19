@@ -688,6 +688,18 @@ const RESULTS = {
     ] },
     { name: "2026-07-24_09-05-00", size: 654321, prompts: null, items: [] },
   ],
+  // Three entries so search narrows the list and sorting by name actually
+  // moves a row: alphabetically Apple, Draft, Meeting, but Meeting was never
+  // edited (date null) and must sort to the end regardless of direction.
+  backup_contents: () => ({
+    entries: 3, views: 1, tags: 2, last_change: 1700000000,
+    program_version: "2.6.0", encrypted: true,
+    items: [
+      { id: "p1", name: "Draft reply", date: 1700000000, chars: 214, kind: "text" },
+      { id: "p2", name: "Meeting notes", date: null, chars: 0, kind: "text" },
+      { id: "p3", name: "Apple pie recipe", date: 1690000000, chars: 512, kind: "text" },
+    ],
+  }),
   recent_copies: () => PROMPTS.slice(0, 4).map((p, i) => ({ id: p.id, ts: 1750000000 + i, rowid: i + 1 })),
   restore_copy_history: () => null,
   delete_copy_entry: () => true,
@@ -1182,7 +1194,7 @@ const RESULTS = {
   },
   clipboard_text: () => "CLIPTEXT",
   // Always offer the portable take-over so the dialog is exercised on every run.
-  takeover_offer: () => "C:\\Users\\Example\\AppData\\Roaming\\Example-Store",
+  takeover_offer: () => ({ path: "C:\\Users\\Example\\AppData\\Roaming\\Example-Store", size: 812345, prompts: 7 }),
   takeover_apply: () => null,
   pick_backup_file: () => "C:\\Backups\\Backup 2026-07-25.psb",
   // Refuses until a password is supplied — drives the retry prompt.

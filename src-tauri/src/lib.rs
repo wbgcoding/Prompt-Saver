@@ -7564,8 +7564,56 @@ async fn reset_settings(app: AppHandle, state: State<'_, Db>) -> Result<(), Stri
     Ok(())
 }
 
-// Remembers that the take-over question was answered, so it is asked exactly once.
-const TAKEOVER_ASKED: &str = "takeoverAsked";
+// The answer is kept per SOURCE FOLDER (never a single global flag), so a
+// genuinely different old location is offered again even after an earlier one
+// was settled. Stored in the same free-form map the expert menu's own text
+// settings use, under a key namespace of its own.
+const TAKEOVER_DECISION_PREFIX: &str = "takeoverDecision:";
+
+fn takeover_decision_key(src: &std::path::Path) -> String {
+    format!("{TAKEOVER_DECISION_PREFIX}{}", src.display())
+}
+
+// Whether this exact old location was already settled, whichever way. Pulled
+// out of takeover_offer() (which needs an AppHandle) so the three answer paths
+// — adopt, keep separate, never answered — are testable without one.
+fn takeover_already_decided(ui_texts: &HashMap<String, String>, src: &std::path::Path) -> bool {
+    ui_texts.contains_key(&takeover_decision_key(src))
+}
+
+// Records the answer only if asked to remember it. Skipping the record on
+// `remember == false` is deliberate: closing the dialog without ticking that
+// box must leave nothing behind, so the same folder is offered again next
+// launch rather than being silently treated as settled.
+fn takeover_record_decision(ui_texts: &mut HashMap<String, String>, src: &std::path::Path, adopt: bool, remember: bool) {
+    if remember {
+        ui_texts.insert(takeover_decision_key(src), if adopt { "adopt" } else { "skip" }.to_string());
+    }
+}
+
+// The three things the offer dialog needs to say before anything is copied:
+// where the old data is, how big it is, and roughly how much is in it.
+#[derive(Serialize)]
+struct TakeoverOffer {
+    path: String,
+    size: u64,
+    // None when the database could not be opened (e.g. the other copy of the
+    // app still has it open) -- the dialog falls back to naming it unknown
+    // rather than blocking the offer on a count that is not essential to it.
+    prompts: Option<usize>,
+}
+
+// Size and prompt count of a store folder, read without staging or copying it
+// -- unlike a backup, a live store is a plain uncompressed data.db, so a
+// direct read-only COUNT(*) is enough and never touches restore's read rail.
+fn takeover_offer_info(src: &std::path::Path) -> TakeoverOffer {
+    let size = STORE_FILES.iter().filter_map(|f| fs::metadata(src.join(f)).ok()).map(|m| m.len()).sum();
+    let prompts = Connection::open(src.join("data.db"))
+        .ok()
+        .and_then(|c| c.query_row("SELECT COUNT(*) FROM prompts", [], |r| r.get::<_, i64>(0)).ok())
+        .map(|n| n as usize);
+    TakeoverOffer { path: src.display().to_string(), size, prompts }
+}
 
 // Whether the store has nothing an adoption offer would overwrite: no prompts at
 // all, or only the ones seed_example_prompts put there itself. Kept separate from
@@ -7575,32 +7623,38 @@ fn store_has_no_real_prompts(prompts: &[Prompt], example_prompt_ids: &[String]) 
 }
 
 // Portable run, own store still empty (or seeded-examples-only), an installed store
-// present elsewhere → the UI offers to adopt it. Returns the folder to name in the
-// dialog.
+// present elsewhere → the UI offers to adopt it, naming its size and prompt count
+// so the question is answerable without opening the app twice. Nothing here
+// copies or moves anything -- see takeover_apply for that, after an answer.
 #[tauri::command]
-fn takeover_offer(app: AppHandle, state: State<Db>) -> Option<String> {
+fn takeover_offer(app: AppHandle, state: State<Db>) -> Option<TakeoverOffer> {
     if !is_portable() {
         return None;
     }
     {
         let store = lock(&state);
-        if store.settings.ui_flags.get(TAKEOVER_ASKED) == Some(&true)
-            || !store_has_no_real_prompts(&store.prompts, &store.settings.example_prompt_ids)
-        {
+        if !store_has_no_real_prompts(&store.prompts, &store.settings.example_prompt_ids) {
             return None;
         }
     }
     let dir = data_dir(&app);
-    appdata_store_dir(&app, &dir).map(|p| p.display().to_string())
+    let src = appdata_store_dir(&app, &dir)?;
+    if takeover_already_decided(&lock(&state).settings.ui_texts, &src) {
+        return None;
+    }
+    Some(takeover_offer_info(&src))
 }
 
 // Answer to that question. `adopt` copies the installed store beside the exe (the
-// original stays untouched) and reloads it; either way the question is settled.
+// original stays untouched) and reloads it; either way, `remember` decides whether
+// this exact old location is settled for future launches or asked about again --
+// closing the dialog without ticking "do not ask again" must leave nothing decided.
 #[tauri::command]
-fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool) -> Result<(), String> {
+fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool, remember: bool) -> Result<(), String> {
     let dir = data_dir(&app);
+    let src = appdata_store_dir(&app, &dir);
     if adopt {
-        let src = appdata_store_dir(&app, &dir).ok_or("no-source")?;
+        let src = src.clone().ok_or("no-source")?;
         let mut landed = false;
         if let Err(e) = copy_store_files(&src, &dir, &mut landed) {
             // Whatever did arrive IS the store on disk now, while the one in memory
@@ -7632,9 +7686,13 @@ fn takeover_apply(app: AppHandle, state: State<'_, Db>, adopt: bool) -> Result<(
         let fresh = load_store(&app);
         *lock(&state) = fresh;
     }
-    let mut store = lock(&state);
-    store.settings.ui_flags.insert(TAKEOVER_ASKED.to_string(), true);
-    save_settings(&app, &store.settings);
+    if remember {
+        if let Some(src) = src {
+            let mut store = lock(&state);
+            takeover_record_decision(&mut store.settings.ui_texts, &src, adopt, remember);
+            save_settings(&app, &store.settings);
+        }
+    }
     Ok(())
 }
 
@@ -9841,6 +9899,42 @@ fn default_backup_kind() -> String {
     "text".into()
 }
 
+// One entry in a snapshot's full content list -- the fuller sibling of
+// BackupPrompt above, read on demand through the same staged/validated file a
+// restore uses rather than the small always-cached preview.
+#[derive(Serialize)]
+struct BackupContentItem {
+    id: String,
+    name: String,
+    // Its most recent edit, from prompt_versions -- None for a prompt that was
+    // only ever created, never edited (no version row is written for that).
+    date: Option<i64>,
+    chars: usize,
+    kind: String,
+}
+
+// The full picture of one snapshot, read on open rather than kept around --
+// unlike BackupInfo's cached header numbers, this is only ever fetched while the
+// content viewer for that one row is actually showing.
+#[derive(Serialize)]
+struct BackupContents {
+    entries: usize,
+    views: usize,
+    tags: usize,
+    // The newest prompt_versions timestamp anywhere in the snapshot -- None
+    // when nothing in it was ever edited (promptHistory off the whole time, or a
+    // library of untouched prompts).
+    last_change: Option<i64>,
+    // None for a snapshot made before this note existed.
+    program_version: Option<String>,
+    // Whether every row decrypted through the normal DPAPI seal -- false only on
+    // the rare machine where Windows itself refused to encrypt while this
+    // snapshot was made (see enc_str's plaintext fallback), never about a
+    // password: a local snapshot never has one.
+    encrypted: bool,
+    items: Vec<BackupContentItem>,
+}
+
 #[derive(Serialize)]
 struct BackupInfo {
     name: String,
@@ -9860,6 +9954,9 @@ struct BackupInfo {
 
 const BACKUP_COUNT_FILE: &str = "prompts.count";
 const BACKUP_NAMES_FILE: &str = "prompts.names.json";
+// The app version that made a snapshot -- missing for one made before this note
+// existed, read back as "unknown" rather than guessed from the running build.
+const BACKUP_VERSION_FILE: &str = "version.txt";
 
 // Count the prompts in a snapshot folder: the note if there is one, otherwise the
 // snapshot is unpacked to a temp file and counted (and the note written for next
@@ -10279,6 +10376,10 @@ fn do_backup(app: &AppHandle, keep: usize, gfs: Option<GfsConfig>) -> Result<Str
     if !items.is_empty() {
         write_prompt_names(&folder.join(BACKUP_NAMES_FILE), &items);
     }
+    // The app version that made this snapshot, so the content viewer can show it
+    // later without guessing from the running build. Plain text like the count
+    // file above -- a version string is not sensitive.
+    let _ = fs::write(folder.join(BACKUP_VERSION_FILE), APP_VERSION);
     let _ = fs::remove_file(&tmp);
     if let Err(e) = packed {
         // No snapshot is better than a folder that looks like one: the list reads
@@ -10472,6 +10573,81 @@ fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: 
     })();
     let _ = conn.execute("DETACH DATABASE backup", []);
     result.map_err(|e| e.to_string())
+}
+
+// Pure core of backup_contents: everything a snapshot actually holds, read
+// from an already-open connection onto the staged file. Split out from the
+// command below so it is unit-testable against a plain fixture database,
+// without an AppHandle or a real .gz on disk (mirrors apply_import's own split
+// from import_all, and vacuum_and_check_size's from do_backup, for the same
+// reason).
+fn backup_contents_from(conn: &Connection, folder: &std::path::Path) -> BackupContents {
+    let mut written = WrittenRows::new();
+    let (prompts, settings, plaintext, _failures, _settings_unreadable) = db_load(conn, &mut written);
+    // One prompt's most recent edit each, from the same table the library's
+    // own "last edited" sort reads (see db_load's sibling, but grouped this
+    // time instead of taken as a single MAX across everything).
+    let mut dates: HashMap<String, i64> = HashMap::new();
+    if let Ok(mut stmt) = conn.prepare("SELECT prompt_id, MAX(ts) FROM prompt_versions GROUP BY prompt_id") {
+        if let Ok(rows) = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))) {
+            for row in rows.flatten() {
+                dates.insert(row.0, row.1);
+            }
+        }
+    }
+    let last_change = conn
+        .query_row("SELECT MAX(ts) FROM prompt_versions", [], |r| r.get::<_, Option<i64>>(0))
+        .unwrap_or(None);
+    let mut tag_keys: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for p in &prompts {
+        for tag in &p.tags {
+            tag_keys.insert(tag_key(tag));
+        }
+    }
+    let items = prompts
+        .iter()
+        .map(|p| BackupContentItem {
+            id: p.id.clone(),
+            name: p.name.clone(),
+            date: dates.get(&p.id).copied(),
+            chars: prompt_char_count(p),
+            kind: prompt_stat_type(p).to_string(),
+        })
+        .collect();
+    BackupContents {
+        entries: prompts.len(),
+        views: settings.as_ref().map(|s| s.views.len()).unwrap_or(0),
+        tags: tag_keys.len(),
+        last_change,
+        program_version: fs::read_to_string(folder.join(BACKUP_VERSION_FILE))
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
+        encrypted: !plaintext,
+        items,
+    }
+}
+
+// Everything a snapshot actually holds, read through the exact same staged and
+// schema-checked file restore_backup/restore_selective open -- never a second
+// path onto the raw .gz. Nothing here writes anything: the staged copy is
+// removed again once the query is done, whether it succeeded or not.
+#[tauri::command]
+async fn backup_contents(app: AppHandle, name: String) -> Result<BackupContents, String> {
+    if !valid_backup_name(&name) {
+        return Err("bad-name".into());
+    }
+    let folder = backups_dir(&app).join(&name);
+    let Some(backup_db) = backup_db_file(&folder) else {
+        return Err("missing".into());
+    };
+    let dir = data_dir(&app);
+    let staged = stage_and_validate_backup(&backup_db, &dir)?;
+    let result = Connection::open(&staged)
+        .map(|conn| backup_contents_from(&conn, &folder))
+        .map_err(|e| e.to_string());
+    let _ = fs::remove_file(&staged);
+    result
 }
 
 // Restore: snapshot the current store first (safety), then either swap the whole
@@ -27727,6 +27903,7 @@ pub fn run() {
             create_backup,
             delete_backup,
             restore_backup,
+            backup_contents,
             clip_inbox_list,
             clip_inbox_dismiss,
             clip_inbox_clear,
@@ -32226,6 +32403,113 @@ mod tests {
         assert!(store_has_no_real_prompts(&[], &[]));
     }
 
+    // ---- Takeover offer: info, and the three answer paths ----
+
+    #[test]
+    fn takeover_offer_info_reports_the_real_size_and_prompt_count() {
+        let root = std::env::temp_dir().join(format!("{}-test-takeover-offer-info", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let mut conn = full_schema_db(&root.join("data.db"), "info");
+        db_write_prompts(&mut conn, &numbered_prompts(4), &mut WrittenRows::new()).unwrap();
+        drop(conn);
+        std::fs::write(root.join("settings.json"), b"{}").unwrap();
+
+        let out = takeover_offer_info(&root);
+        assert_eq!(out.prompts, Some(4), "the count must come from the real database, not a guess");
+        let expected_size = fs::metadata(root.join("data.db")).unwrap().len() + fs::metadata(root.join("settings.json")).unwrap().len();
+        assert_eq!(out.size, expected_size, "size must be the actual bytes on disk, not an estimate");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn takeover_offer_info_names_an_unreadable_database_as_unknown_rather_than_failing() {
+        let root = std::env::temp_dir().join(format!("{}-test-takeover-offer-info-bad-db", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("data.db"), b"not a real database").unwrap();
+
+        let out = takeover_offer_info(&root);
+        assert_eq!(out.prompts, None, "a database that cannot be opened must report an unknown count, not crash or lie");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // "uebernehmen" (adopt): the copy lands, the source is untouched, and — since
+    // the same source is asked about — a remembered decision stops a second offer.
+    #[test]
+    fn takeover_decision_adopt_is_remembered_and_stops_a_future_offer() {
+        let root = std::env::temp_dir().join(format!("{}-test-takeover-decision-adopt", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        let src = root.join("src");
+        let dst = root.join("dst");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::create_dir_all(&dst).unwrap();
+        std::fs::write(src.join("data.db"), b"source content").unwrap();
+
+        let mut landed = false;
+        copy_store_files(&src, &dst, &mut landed).unwrap();
+        assert_eq!(fs::read(src.join("data.db")).unwrap(), b"source content", "adopting must never touch the original");
+        assert_eq!(fs::read(dst.join("data.db")).unwrap(), b"source content", "the copy must land before anything is settled");
+
+        let mut ui_texts: HashMap<String, String> = HashMap::new();
+        assert!(!takeover_already_decided(&ui_texts, &src), "an unanswered location must still be offered");
+        takeover_record_decision(&mut ui_texts, &src, true, true);
+        assert!(takeover_already_decided(&ui_texts, &src), "an adopted, remembered decision must stop the next offer");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // "getrennt lassen" (keep separate): nothing is copied, but the choice is
+    // still remembered for that exact source so it does not nag every launch.
+    #[test]
+    fn takeover_decision_keep_separate_is_remembered_without_copying_anything() {
+        let root = std::env::temp_dir().join(format!("{}-test-takeover-decision-skip", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        let src = root.join("src");
+        let dst = root.join("dst");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::create_dir_all(&dst).unwrap();
+        std::fs::write(src.join("data.db"), b"source content").unwrap();
+
+        let mut ui_texts: HashMap<String, String> = HashMap::new();
+        takeover_record_decision(&mut ui_texts, &src, false, true);
+
+        assert!(takeover_already_decided(&ui_texts, &src), "a remembered 'keep separate' must stop the next offer too");
+        assert_eq!(
+            ui_texts.get(&takeover_decision_key(&src)).map(String::as_str),
+            Some("skip"),
+            "the recorded answer must say skip, not be indistinguishable from adopt"
+        );
+        assert!(!dst.join("data.db").exists(), "keeping separate must never write anything into the new location");
+        assert_eq!(fs::read(src.join("data.db")).unwrap(), b"source content", "the source must stay exactly as it was");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // "keine Antwort" (no answer): nothing is recorded, so the exact same folder
+    // is offered again next launch, and neither side was ever touched.
+    #[test]
+    fn takeover_decision_no_answer_records_nothing_and_asks_again() {
+        let root = std::env::temp_dir().join(format!("{}-test-takeover-decision-none", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        let src = root.join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(src.join("data.db"), b"source content").unwrap();
+
+        let mut ui_texts: HashMap<String, String> = HashMap::new();
+        // Mirrors what takeover_apply does when the dialog closes with the
+        // "do not ask again" box left unticked -- remember == false either way.
+        takeover_record_decision(&mut ui_texts, &src, false, false);
+
+        assert!(ui_texts.is_empty(), "an unremembered answer must leave no trace at all");
+        assert!(!takeover_already_decided(&ui_texts, &src), "the same folder must still be offered on the next launch");
+        assert_eq!(fs::read(src.join("data.db")).unwrap(), b"source content", "the source must be untouched");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn slim_prompt_without_an_image_reports_no_revision() {
         let mut p = prompt_with_image();
@@ -36658,6 +36942,84 @@ mod tests {
         let err = stage_and_validate_backup(&foreign, &root).unwrap_err();
         assert_eq!(err, "backup-schema-mismatch");
         assert!(!staged.exists(), "a rejected file must not be left staged behind");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // ---- Backup content viewer ----
+
+    #[test]
+    fn backup_contents_from_matches_the_actual_content_of_a_created_backup() {
+        let root = std::env::temp_dir().join(format!("{}-test-backup-contents-counts", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let db_path = root.join("staged.db");
+        let mut conn = full_schema_db(&db_path, "counts");
+
+        let mut prompts = numbered_prompts(3);
+        // Same tag in two different castings: the header count is distinct tags,
+        // never distinct spellings.
+        prompts[0].tags = vec!["Work".into()];
+        prompts[1].tags = vec!["work".into()];
+        prompts[2].tags = vec!["Personal".into()];
+        db_write_prompts(&mut conn, &prompts, &mut WrittenRows::new()).unwrap();
+
+        let settings = Settings { views: vec![test_view("v1"), test_view("v2")], ..Settings::default() };
+        conn.execute(
+            "INSERT INTO meta(key, value) VALUES('settings', ?1)",
+            params![enc_str(&serde_json::to_string(&settings).unwrap())],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO prompt_versions(prompt_id, ts, name, text, variants) VALUES(?1, ?2, 'N', 'T', '')",
+            params![prompts[0].id, 1_700_000_000_i64],
+        )
+        .unwrap();
+
+        let out = backup_contents_from(&conn, &root);
+        assert_eq!(out.entries, 3, "entries must count every prompt actually in the snapshot");
+        assert_eq!(out.views, 2, "views must come from the snapshot's own settings row");
+        assert_eq!(out.tags, 2, "tags must be distinct keys, not distinct castings");
+        assert_eq!(out.last_change, Some(1_700_000_000), "the newest edit anywhere must be reported");
+        assert_eq!(out.items.len(), 3, "every prompt must appear in the detail list");
+        let edited = out.items.iter().find(|i| i.id == prompts[0].id).unwrap();
+        assert_eq!(edited.date, Some(1_700_000_000), "an edited prompt must carry its own edit date");
+        let untouched = out.items.iter().find(|i| i.id == prompts[1].id).unwrap();
+        assert_eq!(untouched.date, None, "a prompt with no version row was never edited");
+
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn backup_contents_from_reports_encryption_correctly_and_incorrectly() {
+        let _guard = SEAL_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        if !sealing_is_randomised() {
+            return; // DPAPI unavailable on this machine -- nothing to prove here
+        }
+        let root = std::env::temp_dir().join(format!("{}-test-backup-contents-encrypted", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+
+        // Correct: every row sealed the normal way.
+        let sealed_path = root.join("sealed.db");
+        let mut sealed_conn = full_schema_db(&sealed_path, "sealed");
+        db_write_prompts(&mut sealed_conn, &numbered_prompts(2), &mut WrittenRows::new()).unwrap();
+        let sealed_out = backup_contents_from(&sealed_conn, &root);
+        assert!(sealed_out.encrypted, "a normally written snapshot must report itself as encrypted");
+        drop(sealed_conn);
+
+        // Incorrect: the rare fallback where DPAPI itself refused, so a row landed
+        // in plain text -- same case enc_str's own comment describes.
+        let prior_sealed = STORE_SEALED.swap(true, Ordering::Relaxed);
+        FORCE_PLAINTEXT_FALLBACK.with(|f| f.set(true));
+        let _restore = SealOverrideGuard { prior_sealed };
+        let plain_path = root.join("plain.db");
+        let mut plain_conn = full_schema_db(&plain_path, "plain");
+        db_write_prompts(&mut plain_conn, &numbered_prompts(2), &mut WrittenRows::new()).unwrap();
+        let plain_out = backup_contents_from(&plain_conn, &root);
+        assert!(!plain_out.encrypted, "a snapshot with a plaintext-fallback row must report itself as not encrypted");
+        drop(plain_conn);
 
         let _ = std::fs::remove_dir_all(&root);
     }

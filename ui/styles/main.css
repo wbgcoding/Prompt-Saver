@@ -1617,6 +1617,10 @@ body.library-front #modal.overlay { z-index: 67; }
   text-wrap: balance;
 }
 .expert-hint svg { flex: 0 0 auto; }
+/* Three one-click profiles, ahead of the tabs and not one of their own — a
+   profile writes its changed flags and is gone, never a state of its own. */
+.expert-presets { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.expert-presets-label { font-size: 12px; font-weight: 600; color: var(--muted); }
 /* A state a group is currently in, sitting above that group's settings. It exists
    only while the state holds, so it never leaves a gap behind when it is gone. */
 .expert-notice {
@@ -2633,6 +2637,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   flex: 1 1 auto; min-height: 0;
 }
 #settings-expert > .expert-top,
+#settings-expert > .expert-presets,
 #settings-expert > .expert-filter-row,
 #settings-expert > #expert-tabs-bar { flex: 0 0 auto; }
 /* A floor, not 0: on a short window the tab bar + search alone filled the dialog and
@@ -3407,6 +3412,48 @@ input[type="password"]::-ms-clear { display: none; }
   flex: 0 0 auto; min-width: 48px; text-align: right; color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+/* The full content viewer opened per backup row: header counts (reuses
+   .stat-cards), a search + restore toolbar, then a sortable detail table. */
+.backup-content {
+  margin: -6px 0 0; padding: 10px; display: flex; flex-direction: column; gap: 8px;
+  border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px;
+}
+.backup-content-cards { margin: 0; }
+.backup-content-toolbar { display: flex; align-items: center; gap: 8px; }
+.backup-content-search { flex: 1 1 auto; min-width: 0; }
+.backup-content-table {
+  display: flex; flex-direction: column; max-height: 280px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 6px;
+}
+.backup-content-row {
+  display: flex; align-items: center; gap: 8px; padding: 4px 8px;
+  font-size: 12px; border-bottom: 1px solid var(--border);
+}
+.backup-content-row:last-child { border-bottom: none; }
+.backup-content-head { position: sticky; top: 0; background: var(--surface); z-index: 1; padding: 0; }
+.backup-content-col-btn {
+  flex: 1 1 auto; text-align: left; background: none; border: none; color: var(--muted);
+  font: inherit; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.02em; padding: 6px 8px; cursor: pointer;
+}
+.backup-content-col-btn.backup-content-cell-date,
+.backup-content-col-btn.backup-content-cell-chars,
+.backup-content-col-btn.backup-content-cell-kind { flex: 0 0 auto; min-width: 84px; text-align: right; }
+.backup-content-col-btn:hover, .backup-content-col-btn.sorted { color: var(--fg); }
+.backup-content-col-btn.sorted::after { content: " \25B2"; }
+.backup-content-col-btn.sorted.sorted-desc::after { content: " \25BC"; }
+.backup-content-cell-name {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; color: var(--fg);
+}
+.backup-content-cell-date, .backup-content-cell-chars {
+  flex: 0 0 auto; min-width: 84px; text-align: right; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.backup-content-cell-kind {
+  flex: 0 0 auto; min-width: 84px; text-align: right; color: var(--muted);
+}
+.backup-content-empty { padding: 10px; text-align: center; }
 
 /* Background jobs (header button + popover). */
 .bg-ops-btn { position: relative; }

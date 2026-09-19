@@ -251,8 +251,22 @@ PROBE = """
       }
       const msg = document.getElementById('confirm-msg').textContent;
       if (!msg.includes('Example-Store')) out.errors.push('take-over dialog does not name the folder');
+      if (!msg.includes('7')) out.errors.push('take-over dialog does not name the prompt count');
       if (!/\\n/.test(msg)) out.errors.push('take-over dialog lost its line breaks');
+      // 449: a "do not ask again" box, checked by default, so an answer is
+      // remembered unless the person actively opts out of that memory.
+      const rememberCb = document.getElementById('confirm-cb-remember');
+      if (!rememberCb) {
+        out.errors.push('take-over dialog has no "do not ask again" checkbox');
+      } else if (!rememberCb.checked) {
+        out.errors.push('the "do not ask again" checkbox is not checked by default');
+      }
+      window.__SMOKE_ARGS__ = [];
       await click('confirm-cancel'); // "start empty"
+      const applyArgs = (window.__SMOKE_ARGS__ || []).find(c => c[0] === 'takeover_apply');
+      if (!applyArgs || applyArgs[1].adopt !== false || applyArgs[1].remember !== true) {
+        out.errors.push('starting empty with the box still checked must call takeover_apply with adopt false, remember true, got: ' + JSON.stringify(applyArgs && applyArgs[1]));
+      }
     }
     clearInterval(heartbeat);
     document.documentElement.style.removeProperty('--smoke-tick');
@@ -6098,6 +6112,116 @@ PROBE = """
         }
         document.getElementById('confirm-cancel').click();
         await sleep(150);
+      }
+    }
+    // 448: a snapshot's content viewer shows real counts, its own list can be
+    // searched and sorted, and restoring from inside it reuses restoreBackup()
+    // rather than a second path -- same command, same confirm dialog.
+    {
+      const settleContent = async (fn) => { for (let i = 0; i < 60 && !fn(); i++) await sleep(50); return fn(); };
+      const row0 = document.querySelectorAll('#backup-panel .backup-row')[0];
+      const contentBox = document.querySelectorAll('#backup-panel .backup-content')[0];
+      const viewBtn = row0 && [...row0.querySelectorAll('button')].find(b => b.textContent.trim() === 'View content');
+      if (!row0 || !contentBox || !viewBtn) {
+        out.errors.push('the backup row has no View content button or content box');
+      } else {
+        if (!contentBox.classList.contains('hidden')) {
+          out.errors.push('a backup content box starts open instead of collapsed');
+        }
+        viewBtn.click();
+        const loaded = await settleContent(() => !contentBox.classList.contains('hidden') && contentBox.querySelector('.stat-card'));
+        if (!loaded) {
+          out.errors.push('clicking View content never revealed the stat cards');
+        } else {
+          const cardText = [...contentBox.querySelectorAll('.stat-card')].map(c => c.textContent).join(' | ');
+          if (contentBox.querySelectorAll('.stat-card').length !== 6) {
+            out.errors.push('the content viewer does not show all six stat cards: ' + cardText);
+          }
+          if (!cardText.includes('3') || !cardText.includes('2.6.0') || !cardText.includes('Yes')) {
+            out.errors.push('the stat cards do not reflect the fixture data: ' + cardText);
+          }
+          const nameOf = (r) => r.querySelector('.backup-content-cell-name').textContent;
+          const dataRows = () => [...contentBox.querySelectorAll('.backup-content-rows .backup-content-row')];
+          if (dataRows().length !== 3) {
+            out.errors.push('the content table does not list all three fixture entries: ' + dataRows().map(nameOf).join(', '));
+          }
+          const search = contentBox.querySelector('.backup-content-search');
+          search.value = 'apple';
+          search.dispatchEvent(new Event('input'));
+          await sleep(100);
+          if (dataRows().length !== 1 || nameOf(dataRows()[0]) !== 'Apple pie recipe') {
+            out.errors.push('searching apple did not narrow the list to the one matching entry: ' + dataRows().map(nameOf).join(', '));
+          }
+          search.value = '';
+          search.dispatchEvent(new Event('input'));
+          await sleep(100);
+          const nameHead = contentBox.querySelector('.backup-content-head .backup-content-cell-name');
+          if (!nameHead) {
+            out.errors.push('the content table has no clickable name column header');
+          } else {
+            // The table opens already sorted by name ascending, so the header
+            // shows as sorted before it is ever clicked.
+            let names = dataRows().map(nameOf);
+            if (names[0] !== 'Apple pie recipe' || !nameHead.classList.contains('sorted')) {
+              out.errors.push('the content table does not open sorted by name ascending: ' + names.join(', '));
+            }
+            nameHead.click(); // same column again -- flips to descending
+            await sleep(100);
+            names = dataRows().map(nameOf);
+            if (names[0] !== 'Meeting notes' || !nameHead.classList.contains('sorted-desc')) {
+              out.errors.push('sorting by name descending does not put Meeting notes first: ' + names.join(', '));
+            }
+            nameHead.click(); // back to ascending
+            await sleep(100);
+            names = dataRows().map(nameOf);
+            if (names[0] !== 'Apple pie recipe' || nameHead.classList.contains('sorted-desc')) {
+              out.errors.push('clicking name a second time did not return to ascending: ' + names.join(', '));
+            }
+          }
+          const dateHead = contentBox.querySelector('.backup-content-head .backup-content-cell-date');
+          if (dateHead) {
+            dateHead.click(); // new column -- starts ascending
+            await sleep(100);
+            let names = dataRows().map(nameOf);
+            if (names[names.length - 1] !== 'Meeting notes') {
+              out.errors.push('sorting by date ascending does not put the never-edited entry last: ' + names.join(', '));
+            }
+            dateHead.click(); // same column again -- flips to descending
+            await sleep(100);
+            names = dataRows().map(nameOf);
+            if (names[names.length - 1] !== 'Meeting notes') {
+              out.errors.push('sorting by date descending does not put the never-edited entry last: ' + names.join(', '));
+            }
+          }
+          search.value = 'no such prompt exists anywhere';
+          search.dispatchEvent(new Event('input'));
+          await sleep(100);
+          const emptyHint = contentBox.querySelector('.backup-content-empty');
+          if (dataRows().length !== 0 || !emptyHint || emptyHint.classList.contains('hidden')) {
+            out.errors.push('a search with no matches does not show the empty-list hint');
+          }
+          search.value = '';
+          search.dispatchEvent(new Event('input'));
+          await sleep(100);
+          window.__SMOKE_ARGS__ = [];
+          const contentRestoreBtn = contentBox.querySelector('.backup-content-toolbar button');
+          if (!contentRestoreBtn) {
+            out.errors.push('the content viewer toolbar has no restore button');
+          } else {
+            contentRestoreBtn.click();
+            await sleep(200);
+            if (document.getElementById('confirm-modal').classList.contains('hidden')) {
+              out.errors.push('restoring from the content viewer does not open the restore confirm dialog');
+            } else {
+              await click('confirm-ok');
+              await sleep(200);
+              const args = (window.__SMOKE_ARGS__ || []).find(c => c[0] === 'restore_backup');
+              if (!args || args[1].name !== '2026-07-25_18-30-00') {
+                out.errors.push('restoring from the content viewer targeted the wrong backup: ' + (args && args[1].name));
+              }
+            }
+          }
+        }
       }
     }
     await click('backup-close');
@@ -12264,6 +12388,74 @@ VAR_FIXED_PROBE = """
 </script>
 """
 
+EXPERT_PRESET_PROBE = """
+<script>
+(async () => {
+  const errs = [];
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  try {
+    const cm = document.getElementById('confirm-modal');
+    for (let i = 0; i < 80 && cm.classList.contains('hidden'); i++) await sleep(100);
+    if (!cm.classList.contains('hidden')) { document.getElementById('confirm-cancel').click(); await sleep(300); }
+
+    document.getElementById('gear').click();
+    await sleep(150);
+    document.getElementById('expert-open').click();
+    await sleep(200);
+
+    const setFlagCalls = () => (window.__SMOKE_CALLS__ || []).filter((c) => c === 'set_ui_flag').length;
+    const before = setFlagCalls();
+    const quietBtn = document.getElementById('expert-preset-quiet');
+    if (!quietBtn) {
+      errs.push('447: the Quiet preset button is missing from the expert menu');
+    } else {
+      quietBtn.click();
+      await sleep(200);
+      if (cm.classList.contains('hidden')) {
+        errs.push('447: applying a preset did not open the confirmation dialog');
+      } else {
+        const msg = document.getElementById('confirm-msg').textContent;
+        const m = msg.match(/:\\s*(\\d+)/);
+        const claimed = m ? parseInt(m[1], 10) : -1;
+        if (claimed <= 0) errs.push('447: the confirmation dialog names no changed-setting count, got: ' + msg);
+        document.getElementById('confirm-ok').click();
+        await sleep(300);
+        const actual = setFlagCalls() - before;
+        if (actual !== claimed) {
+          errs.push('447: the dialog said ' + claimed + ' settings would change, but ' + actual + ' actually did');
+        }
+        for (const id of ['expert-preset-quiet', 'expert-preset-standard', 'expert-preset-full']) {
+          const btn = document.getElementById(id);
+          if (btn && (btn.classList.contains('active') || btn.getAttribute('aria-pressed') === 'true')) {
+            errs.push('447: ' + id + ' stayed marked as the active profile after applying');
+          }
+        }
+        // Nothing left to change: re-applying the same profile must report that
+        // instead of reopening an empty confirmation dialog.
+        quietBtn.click();
+        await sleep(200);
+        if (!cm.classList.contains('hidden')) {
+          errs.push('447: re-applying an already-applied preset opened a confirmation dialog again');
+          document.getElementById('confirm-cancel').click();
+          await sleep(150);
+        } else {
+          const toastMsg = document.querySelector('#toast .toast-msg');
+          if (!toastMsg || !toastMsg.textContent) {
+            errs.push('447: re-applying an already-applied preset gave no feedback at all');
+          }
+        }
+      }
+    }
+  } catch (e) { errs.push('447 probe: ' + e.message); }
+  errs.push(...(window.__SMOKE_ERRORS__ || []));
+  const pre = document.createElement('pre');
+  pre.id = 'SMOKE';
+  pre.textContent = JSON.stringify(errs);
+  document.body.appendChild(pre);
+})();
+</script>
+"""
+
 
 def unescape(s):
     for a, b in (("&quot;", '"'), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
@@ -12907,6 +13099,31 @@ def main():
         m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
         errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
         print("-- fixed placeholder values: list editor and fill-in suggestion")
+        for e in errs:
+            print(f"   FAIL: {e}")
+        failed += len(errs)
+        if not errs:
+            print("   ok")
+
+        # 447: expert-menu quick profiles -- applying one asks first, the count
+        # in that dialog matches the number of settings actually written, and
+        # no profile stays marked as active once it is done.
+        side = tmp / "ui" / "expert-preset.html"
+        side.write_text(
+            (REPO / "ui" / "index.html").read_text(encoding="utf-8")
+            .replace("<script", '<script src="tauri_stub.js"></script>\n<script', 1)
+            .replace("</body>", EXPERT_PRESET_PROBE + "</body>"),
+            encoding="utf-8")
+        proc = subprocess.run(
+            [browser, "--headless=new", "--disable-gpu", "--no-first-run",
+             f"--user-data-dir={tmp / 'profile-expert-preset'}", "--allow-file-access-from-files",
+             "--window-size=1000,780", "--virtual-time-budget=45000",
+             "--dump-dom", side.as_uri()],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180)
+        m = re.search(r'<pre id="SMOKE">(\[.*?\])</pre>', proc.stdout, re.S)
+        errs = json.loads(unescape(m.group(1))) if m else ["no probe result"]
+        print("-- expert menu quick profiles: change count and no lasting marker")
         for e in errs:
             print(f"   FAIL: {e}")
         failed += len(errs)
