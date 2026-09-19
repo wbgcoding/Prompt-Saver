@@ -1234,6 +1234,7 @@ const FLAG_LABELS = {
   confirmClearHistory: "flagConfirmClearHistory",
   chainLock: "flagChainLock",
   chainQuickStart: "flagChainQuickStart",
+  chainVarCheck: "flagChainVarCheck",
   favorites: "flagFavorites",
   keyboardNav: "flagKeyboardNav",
   varDefaults: "flagVarDefaults",
@@ -2162,7 +2163,7 @@ const EXPERT_TABS = [
     // highlighter only ever paints inside the preview.
     { title: "expGroupEditor", flags: ["mdPreview", { key: "codeHighlight", gate: "mdPreview" }, { key: "codeAutoDetect", gate: "mdPreview" }, { key: "copyFormatted", gate: "mdPreview" }, "lengthCounter", "promptHistory", { key: "historyDiff", gate: "promptHistory" }, "promptNotes", { key: "notesInTooltip", gate: "promptNotes" }, "editorMonospace", "confirmDiscard", "editorDraft"], values: ["hlFontPx", "historyPerPrompt", "notesTipLen", "mdMaxChars", "hlMaxChars", "diffWordCap", "historyPreviewLen", "editorDraftSecs"], dropdowns: ["counterUnits"] },
     // Everything that happens between a click and the clipboard.
-    { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyBubble", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
+    { title: "expGroupCopy", flags: ["chainPrompts", { key: "chainLock", gate: "chainPrompts" }, { key: "chainQuickStart", gate: "chainPrompts" }, { key: "chainStartAlwaysVisible", gate: "chainQuickStart" }, { key: "chainVarCheck", gate: "chainPrompts" }, "promptHotkeys", { key: "promptHotkeyPaste", gate: "promptHotkeys" }, "dragOut", { key: "dragOutInvert", gate: "dragOut" }, { key: "autoPasteEnter", gate: "autoPaste" }, "hideWindowOnCopy", "copyBubble", "copyFlash", "copySound"], values: ["copyCooldownMs", "autoPasteDelayMs", "dblClickMs", "bubbleMs", "copySoundVolume"], dropdowns: ["dragOutModifier", "copySize", "copyFont"] },
     // Floating buttons and the two kinds of folder they can form.
     { title: "expGroupFolders", flags: ["floating", { key: "floatPark", gate: "floating" }, { key: "pillFolders", gate: "floating" }, "tileFolders"], values: ["floatOpacity", "pillFontSize", "pillTextMinW", "pillBorderW", "pillRingFrac", "pillMenuGap", "floatParkCleanupH", "pillMergeRadius", "pillMergeGrow", "pillFolderTileSize", "pillFolderTileGap", "pillFolderPad", "pillFolderPopGap", "folderGridCols", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols"] },
     // The quick-copy sections of the tray menu, each with its own entry count.
@@ -2472,7 +2473,7 @@ const EXPERT_TIPS = [
   "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax",
   "helpTips", "helpHighlight", "firstRunTour",
   // Tiles / copying
-  "tilePreview", "tileMenu", "typeBadges", "tileHotkeyBadge", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "autoPasteEnter", "hideWindowOnCopy",
+  "tilePreview", "tileMenu", "typeBadges", "tileHotkeyBadge", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "chainVarCheck", "autoPasteEnter", "hideWindowOnCopy",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
   "tooltipDelay", "tooltipTimeout", "iconTooltips",
   "dragToView", "viewDropHoverMs",
@@ -5244,6 +5245,82 @@ function refreshChainUi() {
     const p = prompts.find((x) => x.id === tile.dataset.id);
     if (p) applyChainToTile(tile, p);
   }
+  renderChainOverview();
+}
+
+// The chain overview strip: one row per picked step, in pick order, with the
+// placeholders it needs and the reserved names it fills, from chainVarReport()
+// (ui/chainvars.js). Visibility beyond "at least one pick" is a CSS gate on
+// the chainVarCheck flag (.noflag-chainVarCheck below), same as #chain-btn
+// itself is gated on chainPrompts, so a live flag flip needs no extra wiring
+// here -- applyFlags() already redraws the body classes on every change.
+function renderChainOverview() {
+  const bar = $("chain-overview");
+  if (!bar) return;
+  bar.classList.toggle("hidden", !(chainMode && chainSel.length > 0));
+  if (!(chainMode && chainSel.length > 0)) { bar.innerHTML = ""; return; }
+  const report = chainVarReport(chainSel.map((id) => (prompts.find((x) => x.id === id) || {}).text || ""));
+  bar.innerHTML = "";
+  const title = document.createElement("div");
+  title.className = "chain-ov-title";
+  title.textContent = t("chainOverviewTitle");
+  bar.appendChild(title);
+  chainSel.forEach((id, i) => {
+    const p = prompts.find((x) => x.id === id);
+    const info = report[i] || { needs: [], fills: [], missing: [] };
+    const row = document.createElement("div");
+    row.className = "chain-ov-row";
+    row.classList.toggle("chain-ov-missing", info.missing.length > 0);
+    row.draggable = true;
+    const num = document.createElement("span");
+    num.className = "chain-ov-num";
+    num.textContent = String(i + 1);
+    row.append(num);
+    const name = document.createElement("span");
+    name.className = "chain-ov-name";
+    name.textContent = p ? p.name || "" : "";
+    row.append(name);
+    const badges = document.createElement("span");
+    badges.className = "chain-ov-badges";
+    const addBadges = (labelKey, names, cls) => {
+      if (!names.length) return;
+      const lbl = document.createElement("span");
+      lbl.className = "chain-ov-label";
+      lbl.textContent = t(labelKey) + ":";
+      badges.append(lbl);
+      for (const n of names) {
+        const b = document.createElement("span");
+        b.className = `chain-ov-badge ${cls}`;
+        b.textContent = n;
+        badges.append(b);
+      }
+    };
+    addBadges("chainNeeds", info.needs, "chain-ov-needs");
+    addBadges("chainFills", info.fills, "chain-ov-fills");
+    row.append(badges);
+    if (info.missing.length) {
+      const miss = document.createElement("span");
+      miss.className = "chain-ov-missing-note";
+      miss.textContent = `${t("chainMissing")} ${info.missing.join(", ")}`;
+      row.append(miss);
+    }
+    row.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/plain", String(i));
+      e.dataTransfer.effectAllowed = "move";
+    });
+    row.addEventListener("dragover", (e) => { e.preventDefault(); row.classList.add("drag-over"); });
+    row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+    row.addEventListener("drop", (e) => {
+      e.preventDefault();
+      row.classList.remove("drag-over");
+      const from = parseInt(e.dataTransfer.getData("text/plain"), 10);
+      if (!Number.isFinite(from) || from === i) return;
+      const [moved] = chainSel.splice(from, 1);
+      chainSel.splice(i, 0, moved);
+      refreshChainUi();
+    });
+    bar.append(row);
+  });
 }
 
 // A rotating/variable prompt's pick goes through an await (peek, var fill)

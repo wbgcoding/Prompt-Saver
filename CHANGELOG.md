@@ -469,6 +469,12 @@ the video editor and the introduction tour ship on).
   holds, with its own edit date, size and kind, searchable by name and
   sortable by any column, with a button to restore that single prompt
   straight from the list.
+- **Chain overview strip.** While chaining, a strip above the grid lists the
+  picked steps in order, with small marks for the placeholders each step
+  needs and the reserved names it fills by itself; a step turns red when
+  nothing earlier in the chain answers a placeholder it needs. Drag a row to
+  reorder the chain right there. Switchable off on its own in the expert
+  menu.
 
 ### Improved
 

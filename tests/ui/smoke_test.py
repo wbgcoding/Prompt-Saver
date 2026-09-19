@@ -1997,6 +1997,103 @@ PROBE = """
         out.errors.push('the counter placeholder did not count up: ' + window.__LAST_COPY__);
       }
     }
+    // 445: the chain overview strip -- appears once a chain has a pick, marks a
+    // step red when it needs a placeholder nothing earlier in the chain fills,
+    // recomputes after a drag reorder, and disappears with its own switch off.
+    {
+      const findGridTile = (id) => [...document.querySelectorAll('#grid .tile')].find(e => (e.dataset.id || '') === id);
+      const findExpertRow = async (label) => {
+        const hit = () => [...document.querySelectorAll('#expert-flags .switch-field')]
+          .find(r => ((r.querySelector('span') || {}).textContent || '').includes(label));
+        if (hit()) return hit();
+        for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
+          tb.click();
+          await sleep(200);
+          if (hit()) return hit();
+        }
+        return null;
+      };
+      for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
+      const p0Tile = findGridTile('p0');
+      const startBtn = p0Tile && p0Tile.querySelector('.tile-chain-start');
+      if (!startBtn) {
+        out.errors.push('445: fixture tile p0 has no chain-start button to begin the chain with');
+      } else {
+        startBtn.click();
+        await sleep(150);
+        // p3: dynamic placeholders only -- self-filling, no dialog, no ask badges.
+        if (!await clickTile('p3')) out.errors.push('445: could not pick p3 into the chain');
+        // p1: two manual placeholders -- opens the fill-in dialog, nothing fills them yet.
+        if (!await clickTile('p1')) {
+          out.errors.push('445: could not pick p1 into the chain');
+        } else {
+          const fields = document.querySelectorAll('#vars-fields input[type=text]');
+          fields.forEach((f) => { f.value = 'x'; });
+          await click('vars-ok');
+          await sleep(250);
+        }
+        const bar = document.getElementById('chain-overview');
+        if (!bar || bar.classList.contains('hidden')) {
+          out.errors.push('445: the chain overview strip did not appear for a running chain');
+        } else {
+          let rows = [...bar.querySelectorAll('.chain-ov-row')];
+          if (rows.length !== 3) {
+            out.errors.push('445: the overview shows ' + rows.length + ' rows instead of 3');
+          } else {
+            const [row0, row1, row2] = rows;
+            if (row0.classList.contains('chain-ov-missing') || row1.classList.contains('chain-ov-missing')) {
+              out.errors.push('445: a step with no unmet placeholder was marked red');
+            }
+            if (!row2.classList.contains('chain-ov-missing')) {
+              out.errors.push('445: the step needing Text/Language was not marked red');
+            }
+            if (!row2.querySelector('.chain-ov-missing-note')) {
+              out.errors.push('445: the red row names no missing placeholder');
+            }
+            if (!row1.querySelector('.chain-ov-badge.chain-ov-fills')) {
+              out.errors.push('445: the reserved-name step shows no fills badge');
+            }
+            if (!row2.querySelector('.chain-ov-badge.chain-ov-needs')) {
+              out.errors.push('445: the manual-placeholder step shows no needs badge');
+            }
+            // Drag the red (3rd) row onto the 1st row and drop -- the strip must
+            // recompute in place, not leave the red mark stuck at the old position.
+            const dt = new DataTransfer();
+            row2.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: dt }));
+            row0.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+            row0.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+            await sleep(150);
+            rows = [...bar.querySelectorAll('.chain-ov-row')];
+            if (!rows[0] || !rows[0].classList.contains('chain-ov-missing')) {
+              out.errors.push('445: dragging the red row to the front did not recompute the strip');
+            }
+          }
+        }
+        // The switch turns the whole strip off, even mid-chain.
+        document.getElementById('settings').classList.remove('hidden');
+        await click('expert-open');
+        const varCheckRow = await findExpertRow('Show what each chain step needs');
+        if (!varCheckRow) {
+          out.errors.push('445: the chain overview switch is missing from the expert menu');
+        } else {
+          const sw = varCheckRow.querySelector('input.switch');
+          sw.click();
+          await sleep(200);
+          if (getComputedStyle(bar).display !== 'none') {
+            out.errors.push('445: turning the switch off left the strip visible');
+          }
+          sw.click();
+          await sleep(200);
+          if (getComputedStyle(bar).display === 'none') {
+            out.errors.push('445: turning the switch back on did not restore the strip');
+          }
+        }
+        await click('expert-back');
+        document.getElementById('settings').classList.add('hidden');
+      }
+      for (let i = 0; i < 3 && document.body.classList.contains('chain-mode'); i++) await click('chain-btn');
+      await sleep(150);
+    }
     // F13: a mixed prompt asks only for the manual variable and offers the choice
     // as a themed dropdown; the pick lands in the copied text.
     window.__LAST_COPY__ = undefined;

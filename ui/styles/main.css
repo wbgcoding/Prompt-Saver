@@ -1761,8 +1761,61 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
 }
 
+/* Chain overview strip: sits above the grid, same slot pattern as the batch bar. */
+.chain-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 8px 2px 10px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.chain-ov-title { font-size: 12px; font-weight: 700; color: var(--muted); }
+.chain-ov-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  cursor: grab;
+}
+.chain-ov-row.drag-over { border-color: var(--accent); }
+.chain-ov-row.chain-ov-missing { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--surface-2)); }
+.chain-ov-num {
+  min-width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 11px;
+  font-weight: 800;
+}
+.chain-ov-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.chain-ov-badges { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.chain-ov-label { font-size: 11px; color: var(--muted); }
+.chain-ov-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.chain-ov-badge.chain-ov-needs { color: var(--fg); }
+.chain-ov-badge.chain-ov-fills { border-color: var(--accent); color: var(--accent-text); }
+.chain-ov-missing-note { font-size: 11px; color: var(--danger); font-weight: 600; }
+
 /* Expert toggles that hide whole sections / controls. */
 .noflag-chainPrompts #chain-btn { display: none; }
+.noflag-chainVarCheck #chain-overview { display: none; }
 .noflag-showUpdates #updates-field { display: none; }
 .noflag-importExport #impexp-field { display: none; }
 /* Opt-in visual toggles (off by default; `flag-<key>` present only when on). */

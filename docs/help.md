@@ -385,6 +385,12 @@ fast too often pauses the session with a toast instead of looping.
   copy. Hovering a text tile also shows a small chain icon next to its
   selection checkbox that starts a chain with that tile as the first entry
   directly, switchable off on its own in the expert menu.
+- Chain overview: while chaining, a strip above the grid lists the picked
+  steps in order, with small marks for the placeholders each step needs and
+  the reserved names it fills by itself. A step turns red when nothing
+  earlier in the chain answers a placeholder it needs, though the chain can
+  still be started. Drag a row to reorder the chain right there. Switchable
+  off on its own in the expert menu.
 - Per-tile hotkeys — copy a specific tile from anywhere, without opening the app
 - Drag-out — hold the modifier key and drag a tile onto another window to paste
   directly, no clipboard round-trip. An expert switch swaps the two gestures, so a
@@ -1014,7 +1020,12 @@ zu häufiges Einfügen pausiert die Sitzung mit einem Hinweis statt zu wiederhol
 
 **Kopieren** — Verketten (mehrere verschiedene Kacheln als ein Text, anders als
 Rotation oben; auch direkt über ein Kettensymbol an der Kachel, einzeln
-abschaltbar), Hotkeys pro Kachel, Herausziehen (mit oder, per Schalter, ohne
+abschaltbar). Beim Verketten zeigt eine Leiste über dem Raster die gewählten
+Schritte der Reihe nach, mit Marken für die Platzhalter, die jeder Schritt
+braucht und die er selbst füllt; ein Schritt ohne Antwort aus einem früheren
+Schritt wird rot markiert, lässt sich aber trotzdem starten. Die Zeilen lassen
+sich per Ziehen umsortieren, die Leiste selbst ist einzeln abschaltbar.
+Hotkeys pro Kachel, Herausziehen (mit oder, per Schalter, ohne
 Modifikatortaste), automatisches Einfügen. Formatiert kopieren (im Rechtsklick
 und im Editor, nur bei Text mit echter Markdown-Syntax): legt zusätzlich zur
 Markdown-Fassung eine gerenderte Fassung in die Zwischenablage, sodass Word,

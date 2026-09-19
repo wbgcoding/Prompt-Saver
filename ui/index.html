@@ -124,6 +124,10 @@
   </button>
 
   <section class="grid-wrap">
+    <!-- Chain overview: one row per picked step while chaining, showing what
+         each needs and fills; built entirely from JS, hidden until a chain
+         actually has a pick and the chainVarCheck switch is on. -->
+    <div id="chain-overview" class="chain-overview hidden"></div>
     <!-- Bulk toolbar, visible only once at least one tile is checked -->
     <div id="grid-batch-bar" class="lib-batch-bar grid-batch-bar hidden">
       <span id="grid-batch-count" class="lib-batch-count"></span>
@@ -1529,6 +1533,7 @@
   <div id="toast" class="toast hidden"></div>
   <script src="voice.js"></script>
   <script src="search.js"></script>
+  <script src="chainvars.js"></script>
   <script type="module" src="main.js"></script>
 </body>
 </html>
