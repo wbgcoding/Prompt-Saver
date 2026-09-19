@@ -30,6 +30,19 @@ the video editor and the introduction tour ship on).
   process ever touches it at a time. Every command takes `--help`, `--json`
   switches its output to machine readable form, and any command that changes
   something is refused without `--yes`. Full list: `prompt-saver.exe --help`.
+- **Remote access and promptsaver:// links.** Two switches, both off by
+  default. A `promptsaver://open/<id>` link brings the window to that
+  prompt, and `promptsaver://copy/<id>` copies it; a link can never delete
+  or change anything, an unknown id does nothing, and the first open and the
+  first copy each ask for confirmation once. The remote access receiver
+  exposes the same commands as the command line to another program on this
+  computer, loopback only unless a separate network switch opens it to
+  address ranges you configure. It refuses to start without a password,
+  generated and shown once when you turn it on; ten wrong attempts lock out
+  the caller for ten minutes. Every request is capped in size, rate limited,
+  logged without the password, and a locked prompt stays locked here too. A
+  banner stays on screen with the port number and its own off switch while
+  the receiver runs.
 - **Tags** — label prompts with free-form, colored tags. The editor gets a chip
   row with type-ahead over existing tags and a per-chip color popover; the
   library gets a filter row above the results (multi-select, switchable between

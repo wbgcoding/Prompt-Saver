@@ -1,0 +1,1199 @@
+// promptsaver:// links and the local remote-access receiver.
+//
+// Both give another program, or a clicked link, a way to reach this app
+// without a real command line. Neither implements its own copy of the
+// command set: a link's "copy" and every remote-receiver request run
+// through cli::run_in_process, the exact function an already-running
+// instance's own command-line pipe uses (see cli.rs). A store-side rule
+// added there later -- a locked entry, a disabled command, a new validation
+// -- protects the URL scheme and the receiver automatically, with nothing in
+// this file aware of it. "open" is the one new action, because putting the
+// real window in front of the user was never something the headless CLI
+// needed.
+//
+// Both are off by default and stay off until a setting turns them on: the
+// receiver additionally refuses to start at all without a password already
+// set (see `start`), and a link's first "open" and first "copy" each ask for
+// a one-time, native confirmation before ever acting.
+
+use crate::{data_dir, error_log_enabled, error_log_max, lock, record_error_log, save_settings, show_main, Db, Settings};
+use rand::RngCore;
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+use tauri::{AppHandle, Emitter, Manager, State};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::Notify;
+
+// ---------- Settings ----------
+
+const DEFAULT_PORT: u16 = 51823;
+const DEFAULT_RATE_LIMIT: f64 = 60.0;
+const MAX_BODY_BYTES: usize = 1_000_000; // 1 MB, the spec's own cap
+const MAX_HEAD_BYTES: usize = 16 * 1024; // request line + headers only
+const MAX_ARGV_LEN: usize = 64;
+const READ_TIMEOUT: Duration = Duration::from_secs(10);
+const FAIL_LOCKOUT_THRESHOLD: u32 = 10;
+const FAIL_LOCKOUT_SECS: u64 = 10 * 60;
+const RATE_WINDOW_SECS: u64 = 60;
+const SCHEME_NAME: &str = "promptsaver";
+
+fn remote_api_enabled(settings: &Settings) -> bool {
+    settings.ui_flags.get("remoteApi") == Some(&true)
+}
+fn network_filter_enabled(settings: &Settings) -> bool {
+    settings.ui_flags.get("remoteNetworkFilter") == Some(&true)
+}
+pub(crate) fn url_scheme_enabled(settings: &Settings) -> bool {
+    settings.ui_flags.get("urlScheme") == Some(&true)
+}
+fn remote_port(settings: &Settings) -> u16 {
+    settings
+        .ui_values
+        .get("remotePort")
+        .copied()
+        .filter(|v| v.is_finite())
+        .map(|v| v.clamp(1024.0, 65535.0) as u16)
+        .unwrap_or(DEFAULT_PORT)
+}
+fn remote_rate_limit(settings: &Settings) -> u32 {
+    settings
+        .ui_values
+        .get("remoteRateLimit")
+        .copied()
+        .filter(|v| v.is_finite())
+        .map(|v| v.clamp(1.0, 100_000.0))
+        .unwrap_or(DEFAULT_RATE_LIMIT) as u32
+}
+fn split_ranges(s: &str) -> Vec<String> {
+    s.split(|c: char| c == ',' || c.is_whitespace()).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect()
+}
+fn allowed_ranges(settings: &Settings) -> Vec<String> {
+    settings.ui_texts.get("remoteAllowedRanges").map(|s| split_ranges(s)).unwrap_or_default()
+}
+fn password_hash_hex(settings: &Settings) -> Option<String> {
+    settings.ui_texts.get("remotePasswordHash").filter(|s| !s.is_empty()).cloned()
+}
+
+fn log_remote(settings: &Settings, origin: &str, text: &str) {
+    if error_log_enabled(settings) {
+        record_error_log(text, origin, None, error_log_max(settings));
+    }
+}
+
+// ---------- Password: generate, hash, compare ----------
+
+fn to_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+fn from_hex(s: &str) -> Option<Vec<u8>> {
+    if s.len() % 2 != 0 || !s.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok()).collect()
+}
+
+// 24 random bytes -- long enough that guessing it is not the weak point of
+// anything else here, short enough to type by hand if the copy ever fails.
+pub(crate) fn generate_password() -> String {
+    let mut buf = [0u8; 24];
+    rand::thread_rng().fill_bytes(&mut buf);
+    to_hex(&buf)
+}
+
+// Only the hash is ever persisted; the plaintext exists only in memory, for
+// as long as it takes the caller to show it once (see `stash_shown_password`).
+pub(crate) fn hash_password(password: &str) -> String {
+    to_hex(&Sha256::digest(password.as_bytes()))
+}
+
+// Both sides are hashed to a fixed 32 bytes first specifically so a length
+// mismatch (which WOULD be a fast, non-constant check) can never happen on
+// real input -- only on a corrupt stored hash, never on anything an attacker
+// controls.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+fn verify_password(candidate: &str, stored_hash_hex: &str) -> bool {
+    let candidate_hash = Sha256::digest(candidate.as_bytes());
+    match from_hex(stored_hash_hex) {
+        Some(stored) => constant_time_eq(&candidate_hash, &stored),
+        None => false,
+    }
+}
+
+// A freshly generated (or regenerated) password is shown to the user exactly
+// once, through this one-shot slot -- never logged, never returned from a
+// settings getter, never put in a URL.
+static LAST_SHOWN_PASSWORD: Mutex<Option<String>> = Mutex::new(None);
+
+pub(crate) fn stash_shown_password(password: String) {
+    *LAST_SHOWN_PASSWORD.lock().unwrap_or_else(|e| e.into_inner()) = Some(password);
+}
+
+#[tauri::command]
+pub(crate) fn remote_api_take_shown_password() -> Option<String> {
+    LAST_SHOWN_PASSWORD.lock().unwrap_or_else(|e| e.into_inner()).take()
+}
+
+#[tauri::command]
+pub(crate) fn remote_api_regenerate_password(app: AppHandle, state: State<Db>) -> Result<String, String> {
+    let password = generate_password();
+    let hash = hash_password(&password);
+    {
+        let mut store = lock(&state);
+        if !remote_api_enabled(&store.settings) {
+            return Err("remote access is off".to_string());
+        }
+        store.settings.ui_texts.insert("remotePasswordHash".to_string(), hash);
+        save_settings(&app, &store.settings);
+    }
+    Ok(password)
+}
+
+#[tauri::command]
+pub(crate) fn set_remote_allowed_ranges(app: AppHandle, state: State<Db>, ranges: String) -> Result<(), String> {
+    validate_range_syntax(&ranges)?;
+    let mut store = lock(&state);
+    store.settings.ui_texts.insert("remoteAllowedRanges".to_string(), ranges);
+    save_settings(&app, &store.settings);
+    Ok(())
+}
+
+// ---------- IPv4 CIDR matching ----------
+
+fn parse_ipv4_cidr(s: &str) -> Option<(u32, u32)> {
+    let (addr_part, prefix_part) = match s.split_once('/') {
+        Some(parts) => parts,
+        None => (s, "32"),
+    };
+    let addr: Ipv4Addr = addr_part.trim().parse().ok()?;
+    let prefix: u32 = prefix_part.trim().parse().ok()?;
+    if prefix > 32 {
+        return None;
+    }
+    Some((u32::from(addr), prefix))
+}
+
+fn ipv4_in_cidr(ip: Ipv4Addr, network: u32, prefix: u32) -> bool {
+    let mask = if prefix == 0 { 0 } else { u32::MAX << (32 - prefix) };
+    (u32::from(ip) & mask) == (network & mask)
+}
+
+// Loopback is always allowed (that is the receiver's default, and its
+// fallback the instant the network switch goes back off). Anything else
+// needs the switch on AND a matching range -- IPv6 ranges are not supported
+// by the filter, so an IPv6 peer that is not loopback never matches, fail
+// closed rather than guess.
+pub(crate) fn peer_allowed(peer: IpAddr, filter_on: bool, ranges: &[String]) -> bool {
+    if peer.is_loopback() {
+        return true;
+    }
+    if !filter_on {
+        return false;
+    }
+    match peer {
+        IpAddr::V4(v4) => ranges.iter().any(|r| parse_ipv4_cidr(r).is_some_and(|(net, prefix)| ipv4_in_cidr(v4, net, prefix))),
+        IpAddr::V6(_) => false,
+    }
+}
+
+pub(crate) fn validate_range_syntax(s: &str) -> Result<(), String> {
+    for part in split_ranges(s) {
+        if parse_ipv4_cidr(&part).is_none() {
+            return Err(format!("not a valid address or range: {part}"));
+        }
+    }
+    Ok(())
+}
+
+// ---------- Per-peer rate limit + failed-password lockout ----------
+
+struct PeerState {
+    window_start: Instant,
+    count_in_window: u32,
+    fail_count: u32,
+    locked_until: Option<Instant>,
+}
+impl Default for PeerState {
+    fn default() -> Self {
+        PeerState { window_start: Instant::now(), count_in_window: 0, fail_count: 0, locked_until: None }
+    }
+}
+
+pub(crate) struct RemoteGuard {
+    peers: Mutex<HashMap<IpAddr, PeerState>>,
+}
+impl RemoteGuard {
+    fn new() -> Self {
+        RemoteGuard { peers: Mutex::new(HashMap::new()) }
+    }
+
+    // true while this peer is still serving out an earlier lockout.
+    fn locked(&self, ip: IpAddr) -> bool {
+        let mut peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
+        let entry = peers.entry(ip).or_default();
+        match entry.locked_until {
+            Some(until) if Instant::now() < until => true,
+            Some(_) => {
+                entry.locked_until = None;
+                entry.fail_count = 0;
+                false
+            }
+            None => false,
+        }
+    }
+
+    // true = still within the per-minute allowance for this peer (and it was
+    // just counted); false = the request is over the limit.
+    fn check_rate(&self, ip: IpAddr, limit: u32) -> bool {
+        let mut peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
+        let entry = peers.entry(ip).or_default();
+        if entry.window_start.elapsed() >= Duration::from_secs(RATE_WINDOW_SECS) {
+            entry.window_start = Instant::now();
+            entry.count_in_window = 0;
+        }
+        entry.count_in_window += 1;
+        entry.count_in_window <= limit.max(1)
+    }
+
+    // Returns true exactly when this failure is the one that just triggered
+    // the lockout (so the caller can log the distinction).
+    fn record_auth_failure(&self, ip: IpAddr) -> bool {
+        let mut peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
+        let entry = peers.entry(ip).or_default();
+        entry.fail_count += 1;
+        if entry.fail_count >= FAIL_LOCKOUT_THRESHOLD {
+            entry.locked_until = Some(Instant::now() + Duration::from_secs(FAIL_LOCKOUT_SECS));
+            entry.fail_count = 0;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn record_auth_success(&self, ip: IpAddr) {
+        let mut peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
+        let entry = peers.entry(ip).or_default();
+        entry.fail_count = 0;
+        entry.locked_until = None;
+    }
+}
+
+// ---------- Managed state: the running receiver, if any ----------
+
+pub(crate) struct RemoteApiState {
+    running: AtomicBool,
+    port: AtomicU16,
+    // Bumped by every start()/stop() so an old accept loop that is still
+    // winding down can tell it is no longer the current one and must not
+    // overwrite what a newer start already put in `running`/`port`.
+    generation: AtomicU64,
+    guard: Arc<RemoteGuard>,
+    shutdown: Arc<Notify>,
+}
+impl RemoteApiState {
+    pub(crate) fn new() -> Self {
+        RemoteApiState {
+            running: AtomicBool::new(false),
+            port: AtomicU16::new(0),
+            generation: AtomicU64::new(0),
+            guard: Arc::new(RemoteGuard::new()),
+            shutdown: Arc::new(Notify::new()),
+        }
+    }
+}
+
+#[tauri::command]
+pub(crate) fn remote_api_status(app: AppHandle) -> serde_json::Value {
+    let state: State<RemoteApiState> = app.state();
+    serde_json::json!({
+        "running": state.running.load(Ordering::SeqCst),
+        "port": state.port.load(Ordering::SeqCst),
+    })
+}
+
+#[tauri::command]
+pub(crate) fn remote_api_stop_now(app: AppHandle, state: State<Db>) {
+    {
+        let mut store = lock(&state);
+        store.settings.ui_flags.insert("remoteApi".to_string(), false);
+        save_settings(&app, &store.settings);
+    }
+    stop(&app);
+}
+
+// Starts the receiver if the setting is on and a password already exists;
+// otherwise leaves it not running. This is the ONE place that rule is
+// enforced, so every caller (boot, the expert-menu switch, a future one)
+// gets it for free just by calling start() instead of binding a socket
+// itself.
+pub(crate) fn start(app: AppHandle) {
+    let settings = {
+        let db: State<Db> = app.state();
+        let guard = lock(&db);
+        guard.settings.clone()
+    };
+    if !remote_api_enabled(&settings) {
+        return;
+    }
+    let Some(_hash) = password_hash_hex(&settings) else {
+        log_remote(&settings, "remoteApi", "remote access could not start: no password is set");
+        return;
+    };
+    let state: State<RemoteApiState> = app.state();
+    if state.running.swap(true, Ordering::SeqCst) {
+        return; // already running
+    }
+    let my_gen = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
+    let port = remote_port(&settings);
+    // Only the bind address is fixed for the lifetime of this run; the peer
+    // allow-list itself is re-read fresh on every connection (see
+    // handle_connection), so narrowing it back to loopback-only takes effect
+    // immediately without a restart. Widening it (turning the network switch
+    // ON) needs a restart, the same way changing the port does -- both
+    // change what the OS socket itself is bound to.
+    let bind_ip = if network_filter_enabled(&settings) { Ipv4Addr::UNSPECIFIED } else { Ipv4Addr::LOCALHOST };
+    let addr = SocketAddr::from((bind_ip, port));
+    let guard = state.guard.clone();
+    let shutdown = state.shutdown.clone();
+    let app2 = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let listener = match TcpListener::bind(addr).await {
+            Ok(l) => l,
+            Err(e) => {
+                let state: State<RemoteApiState> = app2.state();
+                if state.generation.load(Ordering::SeqCst) == my_gen {
+                    state.running.store(false, Ordering::SeqCst);
+                }
+                record_error_log(&format!("remote access could not bind its port: {e}"), "remoteApi", None, 100);
+                return;
+            }
+        };
+        let bound_port = listener.local_addr().map(|a| a.port()).unwrap_or(port);
+        {
+            let state: State<RemoteApiState> = app2.state();
+            state.port.store(bound_port, Ordering::SeqCst);
+        }
+        let _ = app2.emit("remote-api-status", serde_json::json!({"running": true, "port": bound_port}));
+        loop {
+            tokio::select! {
+                _ = shutdown.notified() => break,
+                accepted = listener.accept() => {
+                    match accepted {
+                        Ok((stream, peer)) => {
+                            let app3 = app2.clone();
+                            let guard2 = guard.clone();
+                            tauri::async_runtime::spawn(async move { handle_connection(stream, peer, app3, guard2).await });
+                        }
+                        Err(_) => continue,
+                    }
+                }
+            }
+        }
+        let state: State<RemoteApiState> = app2.state();
+        if state.generation.load(Ordering::SeqCst) == my_gen {
+            state.running.store(false, Ordering::SeqCst);
+            state.port.store(0, Ordering::SeqCst);
+        }
+        let _ = app2.emit("remote-api-status", serde_json::json!({"running": false, "port": 0}));
+    });
+}
+
+pub(crate) fn stop(app: &AppHandle) {
+    let state: State<RemoteApiState> = app.state();
+    state.generation.fetch_add(1, Ordering::SeqCst);
+    state.running.store(false, Ordering::SeqCst);
+    state.shutdown.notify_one();
+}
+
+// ---------- The wire protocol ----------
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RemoteRequest {
+    argv: Vec<String>,
+}
+
+struct HttpRequest {
+    method: String,
+    path: String,
+    headers: HashMap<String, String>,
+    body: Vec<u8>,
+}
+
+// Deliberately not a general HTTP/1.1 implementation: one request per
+// connection, Content-Length only (no chunked transfer, no keep-alive). That
+// is everything a local companion client needs, and it is a much smaller
+// surface to get right than a real HTTP server would be.
+async fn read_request(stream: &mut TcpStream) -> Result<HttpRequest, u16> {
+    let deadline = tokio::time::sleep(READ_TIMEOUT);
+    tokio::pin!(deadline);
+    let mut head = Vec::new();
+    let mut chunk = [0u8; 512];
+    loop {
+        if let Some(pos) = find_subslice(&head, b"\r\n\r\n") {
+            let rest = head.split_off(pos + 4);
+            return finish_request(stream, head, rest, &mut deadline).await;
+        }
+        if head.len() > MAX_HEAD_BYTES {
+            return Err(431);
+        }
+        let n = tokio::select! {
+            r = stream.read(&mut chunk) => r.map_err(|_| 400u16)?,
+            () = &mut deadline => return Err(408),
+        };
+        if n == 0 {
+            return Err(400);
+        }
+        head.extend_from_slice(&chunk[..n]);
+    }
+}
+
+fn find_subslice(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    hay.windows(needle.len()).position(|w| w == needle)
+}
+
+async fn finish_request(
+    stream: &mut TcpStream,
+    head: Vec<u8>,
+    mut body: Vec<u8>,
+    deadline: &mut (impl std::future::Future<Output = ()> + Unpin),
+) -> Result<HttpRequest, u16> {
+    let head_str = std::str::from_utf8(&head).map_err(|_| 400u16)?;
+    let mut lines = head_str.split("\r\n");
+    let request_line = lines.next().ok_or(400u16)?;
+    let mut parts = request_line.split_whitespace();
+    let method = parts.next().ok_or(400u16)?.to_string();
+    let path = parts.next().ok_or(400u16)?.to_string();
+    let mut headers = HashMap::new();
+    for line in lines {
+        if line.is_empty() {
+            continue;
+        }
+        let (name, value) = line.split_once(':').ok_or(400u16)?;
+        headers.insert(name.trim().to_ascii_lowercase(), value.trim().to_string());
+    }
+    let content_length: usize = match headers.get("content-length") {
+        Some(v) => v.parse().map_err(|_| 400u16)?,
+        None => 0,
+    };
+    if content_length > MAX_BODY_BYTES {
+        return Err(413);
+    }
+    if body.len() > content_length {
+        body.truncate(content_length); // no pipelining: anything past this request is never read
+    }
+    while body.len() < content_length {
+        let mut buf = vec![0u8; (content_length - body.len()).min(65536)];
+        let n = tokio::select! {
+            r = stream.read(&mut buf) => r.map_err(|_| 400u16)?,
+            () = &mut *deadline => return Err(408),
+        };
+        if n == 0 {
+            return Err(400);
+        }
+        body.extend_from_slice(&buf[..n]);
+    }
+    Ok(HttpRequest { method, path, headers, body })
+}
+
+fn status_text(status: u16) -> &'static str {
+    match status {
+        200 => "OK",
+        400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
+        404 => "Not Found",
+        405 => "Method Not Allowed",
+        408 => "Request Timeout",
+        413 => "Payload Too Large",
+        429 => "Too Many Requests",
+        431 => "Request Header Fields Too Large",
+        _ => "Error",
+    }
+}
+
+// No Access-Control-* header is ever sent -- a browser page that ignores the
+// Origin/Referer refusal below and tries anyway still cannot read the
+// response, because nothing here ever opts it in.
+async fn write_response(stream: &mut TcpStream, status: u16, body: &[u8]) {
+    let head = format!(
+        "HTTP/1.1 {status} {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        status_text(status),
+        body.len()
+    );
+    let _ = stream.write_all(head.as_bytes()).await;
+    let _ = stream.write_all(body).await;
+    let _ = stream.shutdown().await;
+}
+
+fn json_err(msg: &str) -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({"error": msg})).unwrap_or_default()
+}
+
+// The request-shape checks that need no app state and no password: method,
+// path, and the cross-site headers a browser adds on its own and a genuine
+// caller never sends. Pulled out of handle_connection so each one has a
+// direct test instead of only being reachable through a live connection.
+enum ShapeRejection {
+    Method,
+    Path,
+    CrossSite,
+}
+
+fn reject_request_shape(req: &HttpRequest) -> Option<ShapeRejection> {
+    if req.method != "POST" {
+        return Some(ShapeRejection::Method);
+    }
+    if req.path != "/api" {
+        return Some(ShapeRejection::Path);
+    }
+    // No permissive CORS header is ever sent (see write_response), and this
+    // is the other half of refusing a web page outright: a browser attaches
+    // Origin or Referer on its own, a same-machine or same-LAN caller never
+    // does, so either header's mere presence is refused before the password
+    // is even checked.
+    if req.headers.contains_key("origin") || req.headers.contains_key("referer") {
+        return Some(ShapeRejection::CrossSite);
+    }
+    None
+}
+
+async fn handle_connection(mut stream: TcpStream, peer: SocketAddr, app: AppHandle, guard: Arc<RemoteGuard>) {
+    let ip = peer.ip();
+    let settings = {
+        let state: State<Db> = app.state();
+        let guard = lock(&state);
+        guard.settings.clone()
+    };
+    // Checked before a single byte of the actual request is read -- an
+    // address outside the loopback default (or outside the configured
+    // ranges, with the network switch on) never gets that far.
+    if !peer_allowed(ip, network_filter_enabled(&settings), &allowed_ranges(&settings)) {
+        log_remote(&settings, "remoteApi", "remote access: refused a connection from a disallowed address");
+        return;
+    }
+    if guard.locked(ip) {
+        log_remote(&settings, "remoteApi", "remote access: refused a locked-out address");
+        write_response(&mut stream, 403, &json_err("locked out")).await;
+        return;
+    }
+    if !guard.check_rate(ip, remote_rate_limit(&settings)) {
+        log_remote(&settings, "remoteApi", "remote access: rate limit exceeded");
+        write_response(&mut stream, 429, &json_err("rate limit exceeded")).await;
+        return;
+    }
+    let req = match read_request(&mut stream).await {
+        Ok(r) => r,
+        Err(status) => {
+            log_remote(&settings, "remoteApi", "remote access: malformed or oversized request");
+            write_response(&mut stream, status, &json_err("bad request")).await;
+            return;
+        }
+    };
+    if let Some(rejection) = reject_request_shape(&req) {
+        let (status, log_msg, body_msg) = match rejection {
+            ShapeRejection::Method => (405, "remote access: method not allowed", "method not allowed"),
+            ShapeRejection::Path => (404, "remote access: unknown path", "not found"),
+            ShapeRejection::CrossSite => (403, "remote access: refused a browser-originated request", "cross-site requests are refused"),
+        };
+        log_remote(&settings, "remoteApi", log_msg);
+        write_response(&mut stream, status, &json_err(body_msg)).await;
+        return;
+    }
+    let Some(stored_hash) = password_hash_hex(&settings) else {
+        log_remote(&settings, "remoteApi", "remote access: no password is configured");
+        write_response(&mut stream, 401, &json_err("unauthorized")).await;
+        return;
+    };
+    let supplied = req.headers.get("x-promptsaver-password").cloned().unwrap_or_default();
+    if supplied.is_empty() || !verify_password(&supplied, &stored_hash) {
+        let just_locked = guard.record_auth_failure(ip);
+        log_remote(
+            &settings,
+            "remoteApi",
+            if just_locked { "remote access: wrong password, address now locked out" } else { "remote access: wrong password" },
+        );
+        write_response(&mut stream, 401, &json_err("unauthorized")).await;
+        return;
+    }
+    guard.record_auth_success(ip);
+    let argv = match serde_json::from_slice::<RemoteRequest>(&req.body) {
+        Ok(r) if !r.argv.is_empty() && r.argv.len() <= MAX_ARGV_LEN => r.argv,
+        _ => {
+            log_remote(&settings, "remoteApi", "remote access: malformed command body");
+            write_response(&mut stream, 400, &json_err("malformed command body")).await;
+            return;
+        }
+    };
+    let cmd_name = argv[0].clone();
+    let dir = data_dir(&app);
+    if let Err(msg) = crate::cli::confine_path_arg(&argv, &dir) {
+        log_remote(&settings, "remoteApi", &format!("remote access: {cmd_name} -> refused (path escapes the data folder)"));
+        let body = serde_json::to_vec(&serde_json::json!({"code": 4, "stdout": "", "stderr": msg})).unwrap_or_default();
+        write_response(&mut stream, 200, &body).await;
+        return;
+    }
+    let (code, stdout, stderr) = crate::cli::run_in_process(&app, argv, dir).await;
+    log_remote(&settings, "remoteApi", &format!("remote access: {cmd_name} -> exit {code}"));
+    let body = serde_json::to_vec(&serde_json::json!({"code": code, "stdout": stdout, "stderr": stderr})).unwrap_or_default();
+    write_response(&mut stream, 200, &body).await;
+}
+
+// ---------- promptsaver:// links ----------
+
+enum SchemeAction {
+    Open(String),
+    Copy(String),
+}
+
+// `promptsaver://open/<id>` or `promptsaver://copy/<id>` only -- no other
+// verb, no query string, no extra path segment. Anything else, including an
+// id that fails the same pattern the CLI and the receiver already enforce,
+// is not a link this app recognizes.
+fn parse_scheme_url(raw: &str) -> Option<SchemeAction> {
+    let rest = raw.strip_prefix("promptsaver://")?;
+    let (kind, id) = rest.split_once('/')?;
+    if id.is_empty() || id.contains('/') || id.contains('?') || id.contains('#') {
+        return None;
+    }
+    if !crate::cli::valid_id(id) {
+        return None;
+    }
+    match kind {
+        "open" => Some(SchemeAction::Open(id.to_string())),
+        "copy" => Some(SchemeAction::Copy(id.to_string())),
+        _ => None,
+    }
+}
+
+// A registered protocol's target always arrives as its own whole argv entry
+// (Windows does not glue it to anything else), so this only ever has to find
+// one, never assemble it from parts.
+pub(crate) fn find_scheme_arg(args: &[String]) -> Option<&str> {
+    args.iter().map(String::as_str).find(|a| a.starts_with("promptsaver://"))
+}
+
+pub(crate) fn is_copy_link(url: &str) -> bool {
+    matches!(parse_scheme_url(url), Some(SchemeAction::Copy(_)))
+}
+
+pub(crate) fn handle_launch_url(app: &AppHandle, url: &str) {
+    let settings = {
+        let state: State<Db> = app.state();
+        let guard = lock(&state);
+        guard.settings.clone()
+    };
+    let Some(action) = parse_scheme_url(url) else {
+        log_remote(&settings, "urlScheme", "a promptsaver:// link had an unrecognized shape");
+        return;
+    };
+    if !url_scheme_enabled(&settings) {
+        return; // off by default -- refused quietly, never a toast/dialog either
+    }
+    match action {
+        SchemeAction::Open(id) => handle_open(app, &settings, id),
+        SchemeAction::Copy(id) => handle_copy(app, &settings, id),
+    }
+}
+
+// A flag that is missing means "never asked yet" -- ask once (a native
+// dialog, so this works even before any window is showing), remember the
+// answer either way, and never ask again for that kind of link.
+fn consent(app: &AppHandle, settings: &Settings, flag_key: &str, kind: &str) -> bool {
+    if let Some(v) = settings.ui_flags.get(flag_key) {
+        return *v;
+    }
+    let lang = crate::resolve_lang(&settings.language);
+    let allowed = confirm_native(lang, kind);
+    let state: State<Db> = app.state();
+    let mut store = lock(&state);
+    store.settings.ui_flags.insert(flag_key.to_string(), allowed);
+    save_settings(app, &store.settings);
+    allowed
+}
+
+fn handle_open(app: &AppHandle, settings: &Settings, id: String) {
+    let exists = {
+        let state: State<Db> = app.state();
+        let guard = lock(&state);
+        guard.prompts.iter().any(|p| p.id == id)
+    };
+    if !exists {
+        // Fails quietly: no dialog, no window, and above all no new entry --
+        // a link naming an id that does not exist must never create one.
+        log_remote(settings, "urlScheme", "a promptsaver://open link named an id that does not exist");
+        return;
+    }
+    if !consent(app, settings, "urlSchemeOpenAllowed", "open") {
+        return;
+    }
+    // Reuses the exact path a normal in-app "edit" click takes (see
+    // edit_prompt_request) -- a locked entry's own unlock screen, once that
+    // exists, is already reached this same way, so this link cannot bypass
+    // it by construction.
+    show_main(app);
+    let _ = app.emit("edit-prompt", id);
+}
+
+fn handle_copy(app: &AppHandle, settings: &Settings, id: String) {
+    if !consent(app, settings, "urlSchemeCopyAllowed", "copy") {
+        return;
+    }
+    let app2 = app.clone();
+    let dir = data_dir(app);
+    let settings2 = settings.clone();
+    tauri::async_runtime::spawn(async move {
+        let (code, _stdout, _stderr) = crate::cli::run_in_process(&app2, vec!["copy".to_string(), id], dir).await;
+        log_remote(&settings2, "urlScheme", &format!("promptsaver://copy -> exit {code}"));
+    });
+}
+
+// A plain Yes/No native dialog -- rfd is already a dependency (file/folder
+// pickers, the WebView2 offer) and this works even when no window exists
+// yet, which a webview confirm() cannot.
+fn confirm_native(lang: &str, kind: &str) -> bool {
+    let (title, msg) = scheme_consent_texts(lang, kind);
+    rfd::MessageDialog::new().set_level(rfd::MessageLevel::Info).set_title(&title).set_description(&msg).set_buttons(rfd::MessageButtons::YesNo).show()
+        == rfd::MessageDialogResult::Yes
+}
+
+// Native-dialog strings live here, the same way tray_labels()/webview2_dialog()
+// already do for other pre-webview text, rather than in ui/i18n.js -- this
+// dialog can fire before any webview page has loaded.
+fn scheme_consent_texts(lang: &str, kind: &str) -> (String, String) {
+    let app = crate::brand::DISPLAY_NAME;
+    let (title, open_msg, copy_msg): (&str, &str, &str) = match lang {
+        "de" => (
+            "Verknüpfung zulassen?",
+            "Ein Link außerhalb von {app} möchte einen Eintrag im Fenster öffnen. Zulassen? Diese Frage erscheint nur beim ersten Mal.",
+            "Ein Link außerhalb von {app} möchte einen Eintrag in die Zwischenablage kopieren. Zulassen? Diese Frage erscheint nur beim ersten Mal.",
+        ),
+        "es" => (
+            "¿Permitir el enlace?",
+            "Un enlace externo quiere abrir una entrada en la ventana de {app}. ¿Permitirlo? Esto solo se pregunta la primera vez.",
+            "Un enlace externo quiere copiar una entrada al portapapeles de {app}. ¿Permitirlo? Esto solo se pregunta la primera vez.",
+        ),
+        "it" => (
+            "Consentire il link?",
+            "Un link esterno vuole aprire una voce nella finestra di {app}. Consentirlo? Viene chiesto solo la prima volta.",
+            "Un link esterno vuole copiare una voce negli appunti da {app}. Consentirlo? Viene chiesto solo la prima volta.",
+        ),
+        "pt" => (
+            "Permitir a ligação?",
+            "Uma ligação externa quer abrir uma entrada na janela do {app}. Permitir? Isto só é perguntado da primeira vez.",
+            "Uma ligação externa quer copiar uma entrada para a área de transferência do {app}. Permitir? Isto só é perguntado da primeira vez.",
+        ),
+        "pl" => (
+            "Zezwolić na odnośnik?",
+            "Zewnętrzny odnośnik chce otworzyć wpis w oknie {app}. Zezwolić? To pytanie pojawia się tylko raz.",
+            "Zewnętrzny odnośnik chce skopiować wpis do schowka z {app}. Zezwolić? To pytanie pojawia się tylko raz.",
+        ),
+        "zh" => (
+            "允许此链接吗？",
+            "一个外部链接想要在 {app} 窗口中打开一个条目。是否允许？此询问仅出现一次。",
+            "一个外部链接想要将一个条目复制到剪贴板（{app}）。是否允许？此询问仅出现一次。",
+        ),
+        "ja" => (
+            "リンクを許可しますか?",
+            "外部のリンクが {app} のウィンドウで項目を開こうとしています。許可しますか? この確認は最初の一回だけです。",
+            "外部のリンクが {app} から項目をクリップボードにコピーしようとしています。許可しますか? この確認は最初の一回だけです。",
+        ),
+        "nl" => (
+            "Koppeling toestaan?",
+            "Een externe koppeling wil een item openen in het venster van {app}. Toestaan? Dit wordt maar één keer gevraagd.",
+            "Een externe koppeling wil een item kopiëren naar het klembord vanuit {app}. Toestaan? Dit wordt maar één keer gevraagd.",
+        ),
+        "tr" => (
+            "Bağlantıya izin verilsin mi?",
+            "Harici bir bağlantı {app} penceresinde bir girdiyi açmak istiyor. İzin verilsin mi? Bu yalnızca ilk seferde sorulur.",
+            "Harici bir bağlantı {app} panosuna bir girdiyi kopyalamak istiyor. İzin verilsin mi? Bu yalnızca ilk seferde sorulur.",
+        ),
+        "ro" => (
+            "Permiți linkul?",
+            "Un link extern dorește să deschidă o intrare în fereastra {app}. Permiți? Această întrebare apare o singură dată.",
+            "Un link extern dorește să copieze o intrare în clipboard din {app}. Permiți? Această întrebare apare o singură dată.",
+        ),
+        _ => (
+            "Allow this link?",
+            "A link outside {app} wants to open an entry in the window. Allow it? This is asked only the first time.",
+            "A link outside {app} wants to copy an entry to the clipboard from {app}. Allow it? This is asked only the first time.",
+        ),
+    };
+    let msg = if kind == "open" { open_msg } else { copy_msg };
+    (title.replace("{app}", app), msg.replace("{app}", app))
+}
+
+// ---------- promptsaver:// registry registration ----------
+//
+// HKCU\Software\Classes needs no elevation and takes precedence over any
+// machine-wide entry for the signed-in user, so this covers the portable
+// build (no installer to do it at setup time) and the installed one alike.
+
+#[cfg(windows)]
+pub(crate) fn apply_url_scheme_registration(enabled: bool) -> Result<(), String> {
+    use winreg::enums::HKEY_CURRENT_USER;
+    use winreg::RegKey;
+    let classes = RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags("Software\\Classes", winreg::enums::KEY_ALL_ACCESS).map_err(|e| e.to_string())?;
+    if enabled {
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let (proto, _) = classes.create_subkey(SCHEME_NAME).map_err(|e| e.to_string())?;
+        proto.set_value("", &format!("URL:{} Protocol", crate::brand::DISPLAY_NAME)).map_err(|e| e.to_string())?;
+        proto.set_value("URL Protocol", &"").map_err(|e| e.to_string())?;
+        let (command, _) = proto.create_subkey("shell\\open\\command").map_err(|e| e.to_string())?;
+        command.set_value("", &format!("\"{}\" \"%1\"", exe.display())).map_err(|e| e.to_string())?;
+        Ok(())
+    } else {
+        match classes.delete_subkey_all(SCHEME_NAME) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+}
+#[cfg(not(windows))]
+pub(crate) fn apply_url_scheme_registration(_enabled: bool) -> Result<(), String> {
+    Err("the address scheme is only supported on Windows".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::Ipv4Addr;
+
+    // ---- password ----
+
+    #[test]
+    fn password_hash_round_trips_and_verifies() {
+        let pw = generate_password();
+        assert_eq!(pw.len(), 48); // 24 bytes, hex-encoded
+        let hash = hash_password(&pw);
+        assert!(verify_password(&pw, &hash));
+    }
+
+    #[test]
+    fn wrong_password_is_rejected() {
+        let hash = hash_password("correct horse battery staple");
+        assert!(!verify_password("wrong password entirely", &hash));
+        // Same length as the real one -- proves the check is not merely a
+        // length shortcut.
+        assert!(!verify_password("correct horse battery staplf", &hash));
+    }
+
+    #[test]
+    fn nothing_verifies_against_an_empty_stored_hash() {
+        // A receiver with no password configured has nothing to compare
+        // against; the caller (handle_connection) refuses before ever
+        // calling verify_password, but the function itself must also never
+        // treat an empty stored value as a match for anything.
+        assert!(!verify_password("anything", ""));
+        assert!(!verify_password("", ""));
+    }
+
+    #[test]
+    fn constant_time_eq_rejects_different_lengths_without_panic() {
+        assert!(!constant_time_eq(b"short", b"a bit longer"));
+    }
+
+    // ---- CIDR / network filter ----
+
+    #[test]
+    fn loopback_is_always_allowed() {
+        assert!(peer_allowed(IpAddr::V4(Ipv4Addr::LOCALHOST), false, &[]));
+        assert!(peer_allowed(IpAddr::V4(Ipv4Addr::LOCALHOST), true, &[]));
+        assert!(peer_allowed("::1".parse().unwrap(), false, &[]));
+    }
+
+    #[test]
+    fn outside_address_is_refused_when_filter_is_off() {
+        // TEST-NET-3 (RFC 5737) -- a real, non-loopback address standing in
+        // for "somewhere outside this machine", never dialled for real.
+        let outside = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 5));
+        assert!(!peer_allowed(outside, false, &["203.0.113.0/24".to_string()]));
+    }
+
+    #[test]
+    fn outside_address_in_range_is_allowed_only_with_filter_on() {
+        let peer = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 42));
+        let ranges = vec!["192.168.1.0/24".to_string()];
+        assert!(!peer_allowed(peer, false, &ranges));
+        assert!(peer_allowed(peer, true, &ranges));
+    }
+
+    #[test]
+    fn address_outside_every_configured_range_is_refused() {
+        let peer = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5));
+        let ranges = vec!["192.168.1.0/24".to_string()];
+        assert!(!peer_allowed(peer, true, &ranges));
+    }
+
+    #[test]
+    fn ipv6_peer_never_matches_the_ipv4_only_filter() {
+        let peer: IpAddr = "2001:db8::1".parse().unwrap();
+        assert!(!peer_allowed(peer, true, &["0.0.0.0/0".to_string()]));
+    }
+
+    #[test]
+    fn cidr_prefix_zero_matches_everything_v4() {
+        let peer = IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8));
+        assert!(peer_allowed(peer, true, &["0.0.0.0/0".to_string()]));
+    }
+
+    #[test]
+    fn range_syntax_validation_rejects_garbage() {
+        assert!(validate_range_syntax("192.168.1.0/24, 10.0.0.0/8").is_ok());
+        assert!(validate_range_syntax("not-an-address").is_err());
+        assert!(validate_range_syntax("192.168.1.0/99").is_err());
+        assert!(validate_range_syntax("300.1.1.1/24").is_err());
+    }
+
+    // ---- rate limit + lockout ----
+
+    #[test]
+    fn rate_limit_admits_up_to_the_cap_then_rejects() {
+        let guard = RemoteGuard::new();
+        let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        for _ in 0..5 {
+            assert!(guard.check_rate(ip, 5));
+        }
+        assert!(!guard.check_rate(ip, 5));
+    }
+
+    #[test]
+    fn ten_failures_lock_the_address_out() {
+        let guard = RemoteGuard::new();
+        let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        assert!(!guard.locked(ip));
+        let mut triggered = false;
+        for _ in 0..10 {
+            triggered = guard.record_auth_failure(ip);
+        }
+        assert!(triggered, "the tenth failure must be the one that reports the lockout");
+        assert!(guard.locked(ip));
+    }
+
+    #[test]
+    fn a_success_clears_the_failure_count() {
+        let guard = RemoteGuard::new();
+        let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        for _ in 0..9 {
+            guard.record_auth_failure(ip);
+        }
+        guard.record_auth_success(ip);
+        // Nine more failures after a success must not reach the lockout --
+        // the counter really was reset, not merely paused.
+        let mut triggered = false;
+        for _ in 0..9 {
+            triggered = guard.record_auth_failure(ip);
+        }
+        assert!(!triggered);
+        assert!(!guard.locked(ip));
+    }
+
+    #[test]
+    fn concurrent_rate_checks_never_lose_a_count() {
+        // Proves the shared counter is not racy under real concurrency: N
+        // tasks each register exactly one request, and the guard's own
+        // bookkeeping must show exactly N counted, no more, no fewer.
+        let guard = Arc::new(RemoteGuard::new());
+        let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        let n = 200u32;
+        let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(4).build().unwrap();
+        let admitted = rt.block_on(async {
+            let mut handles = Vec::new();
+            for _ in 0..n {
+                let g = guard.clone();
+                handles.push(tokio::spawn(async move { g.check_rate(ip, n) }));
+            }
+            let mut admitted = 0u32;
+            for h in handles {
+                if h.await.unwrap() {
+                    admitted += 1;
+                }
+            }
+            admitted
+        });
+        assert_eq!(admitted, n, "every one of the N concurrent requests should have been counted exactly once");
+    }
+
+    // ---- promptsaver:// link parsing ----
+
+    #[test]
+    fn parses_open_and_copy_links() {
+        assert!(matches!(parse_scheme_url("promptsaver://open/abc123"), Some(SchemeAction::Open(id)) if id == "abc123"));
+        assert!(matches!(parse_scheme_url("promptsaver://copy/abc123"), Some(SchemeAction::Copy(id)) if id == "abc123"));
+    }
+
+    #[test]
+    fn rejects_unknown_verb_and_write_style_links() {
+        assert!(parse_scheme_url("promptsaver://delete/abc123").is_none());
+        assert!(parse_scheme_url("promptsaver://edit/abc123").is_none());
+        assert!(parse_scheme_url("promptsaver://open/").is_none());
+        assert!(parse_scheme_url("promptsaver://open").is_none());
+    }
+
+    #[test]
+    fn rejects_a_path_smuggled_into_the_id() {
+        assert!(parse_scheme_url("promptsaver://open/../../etc/passwd").is_none());
+        assert!(parse_scheme_url("promptsaver://open/abc/def").is_none());
+        assert!(parse_scheme_url("promptsaver://open/abc?x=1").is_none());
+    }
+
+    #[test]
+    fn rejects_ids_outside_the_shared_id_pattern() {
+        assert!(parse_scheme_url("promptsaver://open/abc def").is_none());
+        assert!(parse_scheme_url("promptsaver://open/abc;drop").is_none());
+    }
+
+    #[test]
+    fn is_copy_link_only_true_for_copy() {
+        assert!(is_copy_link("promptsaver://copy/abc123"));
+        assert!(!is_copy_link("promptsaver://open/abc123"));
+        assert!(!is_copy_link("not-a-link"));
+    }
+
+    #[test]
+    fn find_scheme_arg_locates_the_url_among_other_args() {
+        let args = vec!["--minimized".to_string(), "promptsaver://open/abc123".to_string()];
+        assert_eq!(find_scheme_arg(&args), Some("promptsaver://open/abc123"));
+        assert_eq!(find_scheme_arg(&["--minimized".to_string()]), None);
+    }
+
+    // ---- request-shape rejection (method, path, cross-site headers) ----
+
+    fn shape_req(method: &str, path: &str, headers: &[(&str, &str)]) -> HttpRequest {
+        HttpRequest {
+            method: method.to_string(),
+            path: path.to_string(),
+            headers: headers.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            body: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_well_formed_request_passes_the_shape_check() {
+        assert!(reject_request_shape(&shape_req("POST", "/api", &[])).is_none());
+    }
+
+    #[test]
+    fn a_non_post_method_is_rejected() {
+        assert!(matches!(reject_request_shape(&shape_req("GET", "/api", &[])), Some(ShapeRejection::Method)));
+    }
+
+    #[test]
+    fn a_path_other_than_api_is_rejected() {
+        assert!(matches!(reject_request_shape(&shape_req("POST", "/", &[])), Some(ShapeRejection::Path)));
+    }
+
+    #[test]
+    fn a_request_carrying_an_origin_header_is_refused() {
+        let req = shape_req("POST", "/api", &[("origin", "https://evil.example")]);
+        assert!(matches!(reject_request_shape(&req), Some(ShapeRejection::CrossSite)));
+    }
+
+    #[test]
+    fn a_request_carrying_a_referer_header_is_refused() {
+        let req = shape_req("POST", "/api", &[("referer", "https://evil.example/page")]);
+        assert!(matches!(reject_request_shape(&req), Some(ShapeRejection::CrossSite)));
+    }
+
+    // ---- refuses to start without a password ----
+
+    #[test]
+    fn no_stored_password_hash_means_password_hash_hex_returns_none() {
+        // This is the exact condition start() checks before it ever binds a
+        // socket -- proving it here proves the receiver cannot come up
+        // without a password on record.
+        let settings = Settings::default();
+        assert!(password_hash_hex(&settings).is_none());
+    }
+
+    #[test]
+    fn an_empty_stored_password_hash_also_means_no_password() {
+        let mut settings = Settings::default();
+        settings.ui_texts.insert("remotePasswordHash".to_string(), String::new());
+        assert!(password_hash_hex(&settings).is_none());
+    }
+
+    #[test]
+    fn a_real_stored_hash_is_found() {
+        let mut settings = Settings::default();
+        settings.ui_texts.insert("remotePasswordHash".to_string(), hash_password("correct horse battery staple"));
+        assert!(password_hash_hex(&settings).is_some());
+    }
+
+    // ---- an id shaped like a SQL injection attempt never reaches the store ----
+
+    #[test]
+    fn a_sql_injection_shaped_id_fails_the_shared_id_pattern() {
+        assert!(!crate::cli::valid_id("abc'; DROP TABLE prompts;--"));
+        assert!(!crate::cli::valid_id("' OR '1'='1"));
+        assert!(parse_scheme_url("promptsaver://open/' OR '1'='1").is_none());
+        assert!(parse_scheme_url("promptsaver://copy/abc';DROP TABLE prompts;--").is_none());
+    }
+
+    // ---- HTTP framing ----
+
+    #[tokio::test]
+    async fn oversized_body_is_rejected_without_reading_it_all() {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            read_request(&mut stream).await
+        });
+        let mut client = TcpStream::connect(addr).await.unwrap();
+        let head = format!("POST /api HTTP/1.1\r\nContent-Length: {}\r\n\r\n", MAX_BODY_BYTES + 1);
+        client.write_all(head.as_bytes()).await.unwrap();
+        let result = server.await.unwrap();
+        assert_eq!(result.err(), Some(413));
+    }
+
+    #[tokio::test]
+    async fn well_formed_request_round_trips() {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            read_request(&mut stream).await
+        });
+        let mut client = TcpStream::connect(addr).await.unwrap();
+        let body = br#"{"argv":["list"]}"#;
+        let head = format!(
+            "POST /api HTTP/1.1\r\nContent-Length: {}\r\nX-Promptsaver-Password: x\r\n\r\n",
+            body.len()
+        );
+        client.write_all(head.as_bytes()).await.unwrap();
+        client.write_all(body).await.unwrap();
+        let req = server.await.unwrap().unwrap();
+        assert_eq!(req.method, "POST");
+        assert_eq!(req.path, "/api");
+        assert_eq!(req.headers.get("x-promptsaver-password").map(String::as_str), Some("x"));
+        assert_eq!(req.body, body);
+    }
+
+    #[test]
+    fn wire_body_rejects_unknown_fields() {
+        let bad = br#"{"argv":["list"],"extra":true}"#;
+        assert!(serde_json::from_slice::<RemoteRequest>(bad).is_err());
+    }
+
+    #[test]
+    fn wire_body_requires_argv() {
+        let bad = br#"{}"#;
+        assert!(serde_json::from_slice::<RemoteRequest>(bad).is_err());
+    }
+}

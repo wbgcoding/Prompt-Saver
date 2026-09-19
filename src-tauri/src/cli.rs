@@ -290,7 +290,10 @@ fn usage_err(msg: impl Into<String>) -> String {
 // A prompt/view identifier: permissive enough to match every id this or an
 // older build ever minted (see gen_id), narrow enough to reject anything that
 // could not possibly be one -- a stray path, a flag, control characters.
-fn valid_id(s: &str) -> bool {
+// pub(crate): also the id check for a promptsaver:// link and the remote
+// receiver, so all three entry points reject the same malformed ids the
+// same way.
+pub(crate) fn valid_id(s: &str) -> bool {
     !s.is_empty() && s.len() <= 128 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
@@ -1517,6 +1520,51 @@ pub(crate) async fn run_in_process(app: &AppHandle, argv: Vec<String>, cwd: Path
     (outcome.code, outcome.stdout, outcome.stderr)
 }
 
+// ---------- Remote-caller path confinement ----------
+//
+// A command line launch resolves `export`/`import` against the CALLER's own
+// working directory (see resolve_path_arg) because a trusted local user is
+// the one typing it. The remote receiver and a promptsaver:// link have no
+// such trusted caller behind them, so the same two commands are confined to
+// the data folder there: parsed here, in the one module that already owns
+// `Cmd`/`parse`, rather than duplicating a second copy of the command
+// grammar next to it.
+pub(crate) fn confine_path_arg(argv: &[String], base_dir: &Path) -> Result<(), String> {
+    let cmd = match parse(argv) {
+        Ok(Parsed::Run(cmd)) => cmd,
+        // A bad or --help invocation is reported by the real dispatch right
+        // after this call; nothing here needs to duplicate that message.
+        _ => return Ok(()),
+    };
+    let raw = match &cmd {
+        Cmd::Export { path, .. } | Cmd::Import { path, .. } => path.clone(),
+        _ => return Ok(()),
+    };
+    let resolved = resolve_path_arg(base_dir, &raw);
+    // Export's target file usually does not exist yet -- confine its parent
+    // directory instead, the same way a shell would resolve a not-yet-created
+    // path. An import's source must already exist, so this equally covers it.
+    let check_dir = if resolved.exists() {
+        resolved.clone()
+    } else {
+        match resolved.parent() {
+            Some(p) => p.to_path_buf(),
+            None => return Err("refused: the path escapes the data folder".to_string()),
+        }
+    };
+    let canon_target = check_dir
+        .canonicalize()
+        .map_err(|_| "refused: the path does not resolve inside the data folder".to_string())?;
+    let canon_base = base_dir
+        .canonicalize()
+        .map_err(|_| "the data folder could not be resolved".to_string())?;
+    if canon_target.starts_with(&canon_base) {
+        Ok(())
+    } else {
+        Err("refused: the path escapes the data folder".to_string())
+    }
+}
+
 // ---------- Help text ----------
 
 fn top_level_help() -> String {
@@ -2231,5 +2279,58 @@ mod tests {
             let err = read_frame(&mut b, 10).await.unwrap_err();
             assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
         });
+    }
+
+    // ---- remote-caller path confinement ----
+
+    #[test]
+    fn export_inside_the_data_folder_is_allowed() {
+        let dir = TempDir::new("confine-ok");
+        let argv = args(&["export", "out.json", "--yes"]);
+        assert!(confine_path_arg(&argv, dir.path()).is_ok());
+    }
+
+    #[test]
+    fn export_escaping_the_data_folder_via_dotdot_is_refused() {
+        let dir = TempDir::new("confine-escape");
+        std::fs::create_dir_all(dir.path().join("sub")).unwrap();
+        let argv = args(&["export", "../outside.json", "--yes"]);
+        let inner = dir.path().join("sub");
+        assert!(confine_path_arg(&argv, &inner).is_err());
+    }
+
+    #[test]
+    fn export_with_an_absolute_path_outside_the_data_folder_is_refused() {
+        let dir = TempDir::new("confine-abs");
+        let outside = TempDir::new("confine-abs-outside");
+        let abs = outside.path().join("out.json");
+        let argv = args(&["export", abs.to_str().unwrap(), "--yes"]);
+        assert!(confine_path_arg(&argv, dir.path()).is_err());
+    }
+
+    #[test]
+    fn import_from_inside_the_data_folder_is_allowed() {
+        let dir = TempDir::new("confine-import-ok");
+        let file = dir.path().join("in.json");
+        std::fs::write(&file, "[]").unwrap();
+        let argv = args(&["import", "in.json", "--yes"]);
+        assert!(confine_path_arg(&argv, dir.path()).is_ok());
+    }
+
+    #[test]
+    fn import_escaping_the_data_folder_is_refused() {
+        let dir = TempDir::new("confine-import-escape");
+        let outside = TempDir::new("confine-import-outside");
+        let file = outside.path().join("in.json");
+        std::fs::write(&file, "[]").unwrap();
+        let argv = args(&["import", file.to_str().unwrap(), "--yes"]);
+        assert!(confine_path_arg(&argv, dir.path()).is_err());
+    }
+
+    #[test]
+    fn a_non_path_command_is_never_confined() {
+        let dir = TempDir::new("confine-noop");
+        assert!(confine_path_arg(&args(&["list"]), dir.path()).is_ok());
+        assert!(confine_path_arg(&args(&["get", "p1"]), dir.path()).is_ok());
     }
 }

@@ -2,7 +2,7 @@
 
 This file is generated at build time from the real dependency manifests (`cargo metadata` for the Rust crates, plus the hand-maintained non-Rust parts) so it can never drift from what actually ships. Do not edit it by hand; edit `src-tauri/third-party-manual.json` or the crate dependencies instead, then rebuild. The same list is shown in the app itself, in About > Third-party licenses.
 
-663 components are listed below, sorted by name.
+664 components are listed below, sorted by name.
 
 | Name | Version | License |
 |---|---|---|
@@ -476,6 +476,7 @@ This file is generated at build time from the real dependency manifests (`cargo 
 | tinyvec | 1.12.0 | Zlib OR Apache-2.0 OR MIT |
 | tinyvec_macros | 0.1.1 | MIT OR Apache-2.0 OR Zlib |
 | tokio | 1.53.1 | MIT |
+| tokio-macros | 2.7.1 | MIT |
 | tokio-util | 0.7.19 | MIT |
 | toml | 0.8.2 | MIT OR Apache-2.0 |
 | toml | 0.9.12+spec-1.1.0 | MIT OR Apache-2.0 |

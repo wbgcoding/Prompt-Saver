@@ -1,5 +1,9 @@
 // Application backend (Tauri v2). Local SQLite storage, clipboard, import/export,
-// multiple views, frameless floating quick-copy windows. No network, 100% offline.
+// multiple views, frameless floating quick-copy windows. No network by default:
+// the only outbound calls are the switchable update check and, only when
+// WebView2 itself is missing, its consented runtime download. The one inbound
+// exception is the local remote-access receiver (remote.rs) -- off by default,
+// password-protected, loopback-only unless its own separate switch is on.
 
 // clippy::pedantic and clippy::nursery were run once as a deliberately
 // stricter pass, not adopted as standing lints. Together they raised ~1080
@@ -20,6 +24,7 @@
 
 pub mod brand;
 mod cli;
+mod remote;
 
 use image::imageops::FilterType;
 use rusqlite::{params, Connection, Transaction};
@@ -21810,6 +21815,8 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     let is_tray = key == "trayRecent" || key == "trayFavs" || key == TRAY_CUSTOM_MENU_KEY;
     let is_folders = key == "pillFolders";
     let is_sync_enable = key == "promptSync" && enabled; // Prompt-folders-as-Markdown
+    let is_remote_toggle = key == "remoteApi";
+    let is_url_scheme_toggle = key == "urlScheme";
     // Turning either gate off must not leave a session silently running.
     let end_auto_session = !enabled && (key == "rotatingPrompts" || key == "rotateAuto");
     // "Off" means the list is empty, not just paused -- clear whatever is
@@ -21895,6 +21902,39 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     if is_folders {
         let handle = app.clone();
         tauri::async_runtime::spawn(async move { sync_float_windows(&handle) });
+    }
+    // Turning the receiver on mints a password the very first time (never
+    // overwrites one already set, e.g. by a later regenerate) and starts it;
+    // start() itself is the one place that refuses to bind without a
+    // password, so nothing here has to re-check that. Turning it off stops it.
+    if is_remote_toggle {
+        if enabled {
+            let needs_password = {
+                let store = lock(&state);
+                store.settings.ui_texts.get("remotePasswordHash").map(String::is_empty).unwrap_or(true)
+            };
+            if needs_password {
+                let password = remote::generate_password();
+                let hash = remote::hash_password(&password);
+                let mut store = lock(&state);
+                store.settings.ui_texts.insert("remotePasswordHash".to_string(), hash);
+                save_settings(&app, &store.settings);
+                remote::stash_shown_password(password);
+            }
+            remote::start(app.clone());
+        } else {
+            remote::stop(&app);
+        }
+    }
+    // Best-effort: a registry write can fail (locked-down profile, odd ACLs)
+    // without the switch itself failing, the same tolerance apply_autostart's
+    // own caller does not need because that path already returns Result -- this
+    // one is folded into the same command as every other flag, so it logs
+    // instead of turning set_ui_flag itself into a hard error for everyone else.
+    if is_url_scheme_toggle {
+        if let Err(e) = remote::apply_url_scheme_registration(enabled) {
+            append_crash_log(&format!("promptsaver:// registration failed: {e}"));
+        }
     }
     notify_float_settings(&app);
     Ok(())
@@ -27082,10 +27122,12 @@ fn scrub_user_paths_from_crash_log() {
 
 // ---------- Recent messages ----------
 // A ring buffer of the errors shown to the user, so one that flashed by in a
-// toast can still be found afterwards. Filled from exactly one place --
-// `errToast` on the frontend, which is what every failed command and background
-// event already funnels through -- never from the crash log, or the same line
-// would show up twice.
+// toast can still be found afterwards. Filled from `errToast` on the frontend,
+// which is what every failed command and background event already funnels
+// through -- never from the crash log, or the same line would show up twice.
+// The one other caller is the remote-access receiver and promptsaver:// links
+// (remote.rs), which record every access here directly, on purpose, so a
+// silent read or write from outside this window still leaves a visible trace.
 #[derive(Clone, serde::Serialize)]
 struct ErrorLogEntry {
     ts: u64,
@@ -27578,8 +27620,19 @@ pub fn run() {
     // directly for exactly this reason). A second launch, when the plugin IS
     // attached, closes itself and focuses the first instance.
     if !early_allow_multiple_instances() {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            show_main(app);
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // A promptsaver:// link relaunching this already-running instance
+            // takes the exact same route a second command-line launch does --
+            // handled here instead of stealing the window's focus first for a
+            // link whose whole point is to copy quietly in the background.
+            let scheme_url = remote::find_scheme_arg(&args).map(str::to_string);
+            let is_copy_link = scheme_url.as_deref().is_some_and(remote::is_copy_link);
+            if let Some(url) = &scheme_url {
+                remote::handle_launch_url(app, url);
+            }
+            if !is_copy_link {
+                show_main(app);
+            }
         }));
     }
     builder
@@ -27675,6 +27728,16 @@ pub fn run() {
             app.manage(SyncWriteQueue(Mutex::new(SyncWriteState::default())));
             app.manage(VoiceState(Mutex::new(None), std::sync::atomic::AtomicBool::new(false))); // live dictation session
             app.manage(RecordingState(Mutex::new(None))); // live screen-recording session
+            app.manage(remote::RemoteApiState::new());
+            // Same "never starts without a password" rule start() enforces on
+            // every caller; harmless to call unconditionally at every boot.
+            remote::start(handle.clone());
+            // A promptsaver:// link that started this very process (the app was
+            // not already running yet) takes the same route the single-instance
+            // plugin above gives a SECOND launch's own copy of the same link.
+            if let Some(url) = std::env::args().skip(1).find(|a| a.starts_with("promptsaver://")) {
+                remote::handle_launch_url(&handle, &url);
+            }
 
             // Auto-paste: start tracking the last external foreground window.
             #[cfg(windows)]
@@ -28312,6 +28375,11 @@ pub fn run() {
             set_ui_value,
             set_ui_text,
             reset_expert,
+            remote::remote_api_take_shown_password,
+            remote::remote_api_regenerate_password,
+            remote::remote_api_status,
+            remote::remote_api_stop_now,
+            remote::set_remote_allowed_ranges,
             skip_version,
             whats_new_check,
             whats_new_current,

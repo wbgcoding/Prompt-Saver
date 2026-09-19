@@ -97,7 +97,8 @@
         "promptem": "wpisem",
         "promptowi": "wpisowi",
         "Prompt": "Wpis",
-        "promptami": "wpisami"
+        "promptami": "wpisami",
+        "promptsaver": "promptsaver"
       },
       "ro": {
         "prompt": "intrare",
@@ -108,7 +109,8 @@
         "promptului": "intrării",
         "Prompturile": "Intrările",
         "Promptul": "Intrarea",
-        "prompturilor": "intrărilor"
+        "prompturilor": "intrărilor",
+        "promptsaver": "promptsaver"
       },
       "tr": {
         "istem": "kayıt",

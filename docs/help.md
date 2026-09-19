@@ -762,6 +762,31 @@ Exit codes: 0 success, 1 bad invocation, 2 not
 found, 3 the store is locked or unavailable, 4 refused (missing `--yes`, or a
 value that failed validation). Full command list: `prompt-saver.exe --help`.
 
+### Remote access & links
+
+Two switches in the expert menu, both off by default, that give the app a
+second and third way to be reached, next to the window and the command line.
+
+`promptsaver://open/<id>` brings the window to that entry, and
+`promptsaver://copy/<id>` copies it, exactly like the copy button would. A
+link can never delete or change anything, and an id that does not exist just
+does nothing. The first open and the first copy each ask for confirmation
+once; after that, links work without asking again. Registering the link type
+with Windows needs no separate installer step and no admin rights.
+
+The remote access receiver exposes the same commands as the command line to
+another program on this computer, or, once the network switch is turned on
+too, to the address ranges you list there. It refuses to start without a
+password, which is generated the moment you turn it on and shown exactly
+once: copy it somewhere safe, because the app only ever keeps it in a form
+it cannot read back. A wrong password ten times in a row locks that caller
+out for ten minutes. Every request needs the password, is capped in size,
+counted against a per minute limit, and logged (command and outcome, never
+the password or the full request) in the same log the app already keeps for
+its own errors. A locked entry stays locked here too, the same as everywhere
+else in the app. While the receiver is running, a banner stays on screen
+with its port number and its own off button.
+
 ### Updates & security
 
 On by default, and — together with a first-run download of the Microsoft
@@ -1311,6 +1336,23 @@ neuen Schnappschuss hinzufügt, und `export`, das `--yes` nur zum
 Erfolg, 1 falscher Aufruf, 2 nicht gefunden, 3 Bestand gesperrt oder nicht
 erreichbar, 4 abgelehnt (fehlendes `--yes`, oder ein Wert, der die Prüfung
 nicht bestanden hat). Vollständige Befehlsliste: `prompt-saver.exe --help`.
+
+**Fernzugriff & Links**: zwei Schalter im Experten-Menü, beide
+standardmäßig aus. `promptsaver://open/<id>` holt eine Kachel ins geöffnete
+Fenster, `promptsaver://copy/<id>` kopiert sie, genau wie der Kopieren-Knopf.
+Ein Link kann nie etwas löschen oder ändern, eine unbekannte id tut einfach
+nichts, und das erste Öffnen sowie das erste Kopieren fragen je einmal nach
+Bestätigung. Der zweite Schalter startet eine lokale Schnittstelle, die
+dieselben Befehle wie die Kommandozeile für ein anderes Programm auf diesem
+Rechner öffnet, und, nur wenn ein dritter Schalter das ausdrücklich erlaubt,
+auch für die dort eingetragenen Adressbereiche. Sie startet nie ohne
+Passwort: eines wird beim Einschalten erzeugt und einmalig angezeigt, danach
+lässt es sich nicht mehr auslesen. Zehn falsche Versuche sperren den Aufrufer
+zehn Minuten. Jede Anfrage braucht das Passwort, ist in ihrer Größe begrenzt,
+zählt gegen ein Limit pro Minute und wird protokolliert, ohne das Passwort
+oder den vollen Inhalt. Eine gesperrte Kachel bleibt auch hier gesperrt. Eine
+Anzeige bleibt sichtbar, solange die Schnittstelle läuft, mit Portnummer und
+eigenem Ausschalter.
 
 **Updates & Sicherheit** — standardmäßig an, einzige eigene
 Netzwerkaktivität außer einem einmaligen WebView2-Installer-Download, falls
