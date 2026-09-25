@@ -738,19 +738,39 @@ fn trigger_rec_stop_hotkey(app: &AppHandle) {
 #[cfg(not(windows))]
 fn trigger_rec_stop_hotkey(_app: &AppHandle) {}
 
+// The one place that actually pauses/resumes a session -- the recbar
+// buttons, the global hotkey and the tray menu item all end up here, so
+// there is exactly one spot that can forget to also pause/resume the key
+// overlay capture (see keylog::pause/resume) instead of three.
+#[cfg(windows)]
+fn do_pause_recording(session: &mut recording::RecSession) {
+    recording::pause(session);
+    session.phase = RecPhase::Paused;
+    // The key-overlay capture used to keep running straight through a pause
+    // -- this drops every key struck while paused and freezes the
+    // active-recording clock keys are timed against, the same freeze-on-pause
+    // behaviour RecordClock already gives the video track.
+    keylog::pause();
+}
+
+#[cfg(windows)]
+fn do_resume_recording(session: &mut recording::RecSession) {
+    recording::resume(session);
+    session.phase = RecPhase::Recording;
+    keylog::resume();
+}
+
 #[cfg(windows)]
 fn trigger_rec_pause_hotkey(app: &AppHandle) {
     let toggled = if let Some(rstate) = app.try_state::<RecordingState>() {
         let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
         match guard.as_mut() {
             Some(session) if rec_can_pause(session.phase) => {
-                recording::pause(session);
-                session.phase = RecPhase::Paused;
+                do_pause_recording(session);
                 true
             }
             Some(session) if rec_can_resume(session.phase) => {
-                recording::resume(session);
-                session.phase = RecPhase::Recording;
+                do_resume_recording(session);
                 true
             }
             _ => false,
@@ -22896,14 +22916,7 @@ fn pause_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<
         if !rec_can_pause(session.phase) {
             return Err("not recording".to_string());
         }
-        recording::pause(session);
-        session.phase = RecPhase::Paused;
-        // The key-overlay capture used to keep running straight
-        // through a pause -- this drops every key struck while paused and
-        // freezes the active-recording clock keys are timed against, the
-        // same freeze-on-pause behaviour RecordClock already gives the video
-        // track.
-        keylog::pause();
+        do_pause_recording(session);
     }
     apply_tray_menu(&app); // the tray's Pause row switches to Resume
     Ok(())
@@ -22924,9 +22937,7 @@ fn resume_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result
         if !rec_can_resume(session.phase) {
             return Err("not paused".to_string());
         }
-        recording::resume(session);
-        session.phase = RecPhase::Recording;
-        keylog::resume();
+        do_resume_recording(session);
     }
     apply_tray_menu(&app); // the tray's Resume row switches back to Pause
     Ok(())
