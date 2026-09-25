@@ -1330,7 +1330,7 @@ const FLAG_LABELS = {
   // custom window ever misbehaves on some setup.
   trayCustomMenu: "flagTrayCustomMenu",
   trayRecent: "flagTrayRecent",         // "recently used" section in the tray menu
-  colorPicker: "flagColorPicker",       // pipette: pick a screen colour to the clipboard
+  colorPicker: "flagColorPicker",       // pipette; pick a screen colour to the clipboard
   // Windows Media.Ocr text recognition (screenshot / image file -> editable text).
   // Ships ON; the button hides itself when Windows has no recognizer at all.
   ocr: "flagOcr",
