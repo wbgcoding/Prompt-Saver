@@ -1292,7 +1292,7 @@ const FLAG_LABELS = {
   cleanupFiles: "flagCleanupFiles",
   // A text prompt can hold a list of variants instead of one text; each
   // copy serves the next entry (in order, or shuffled without repeats). Default
-  // on since 33: shipped default off at 32's original release.
+  // on since 33; shipped default off at 32's original release.
   rotatingPrompts: "flagRotatingPrompts",
   // Sub-toggle of rotatingPrompts, itself also default on.
   rotateBadge: "flagRotateBadge",

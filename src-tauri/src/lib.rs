@@ -7256,7 +7256,7 @@ async fn update_prompt(
     variants: Vec<String>,
     rotate_mode: String,
     // Option, unlike variants/rotate_mode: added in 90, the editor UI wiring
-    // (frontend) lands only in 92: an interim caller that omits it must not
+    // (frontend) lands only in 92; an interim caller that omits it must not
     // reset an unrelated field, so a missing value keeps the prompt's own.
     rotate_auto: Option<bool>,
 ) -> Result<Option<Prompt>, String> {
