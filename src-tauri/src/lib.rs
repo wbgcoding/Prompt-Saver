@@ -21046,6 +21046,7 @@ mod keylog {
     use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
     use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED};
     use windows::Win32::System::Threading::GetCurrentThreadId;
+    use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
     use windows::Win32::UI::Accessibility::{
         CUIAutomation, IUIAutomation, IUIAutomation2, IUIAutomationElement, IUIAutomationFocusChangedEventHandler,
         IUIAutomationFocusChangedEventHandler_Impl, IUIAutomationTextPattern, IUIAutomationValuePattern, UIA_DocumentControlTypeId,
@@ -21612,6 +21613,28 @@ mod keylog {
         MODIFIERS.get_or_init(|| Mutex::new(ModifierState::default()))
     }
 
+    // A synthetic (SendInput) modifier press or release must never update the
+    // tracked state: an injected Ctrl-down with no matching real key on the
+    // keyboard would otherwise let a script hold a modifier "on" in this
+    // hook's eyes forever, or mask a real modifier's own up.
+    fn should_track_modifier_event(injected: bool) -> bool {
+        !injected
+    }
+
+    // NEW-1: the tracked state alone can go stale -- a key-up the hook never
+    // saw (the matching window was elevated under UIPI, or the up happened
+    // on the secure desktop during Win+L) leaves `tracked` stuck true with
+    // no event ever able to clear it. Confirmed here against the live
+    // keyboard state (GetAsyncKeyState) before either is trusted: only
+    // "tracked says held AND the hardware says held right now" counts as
+    // held. Both sides fail closed -- `tracked` starts false and only a real
+    // down sets it, and `async_down` defaults to false wherever the OS call
+    // cannot be made (see the only caller, in hook_proc) -- so any doubt
+    // resolves to "not held", never to a shortcut being wrongly kept.
+    fn confirm_modifier(tracked: bool, async_down: bool) -> bool {
+        tracked && async_down
+    }
+
     // Bounds how many raw keys can sit in the channel between the hook
     // thread and the consumer before the hook starts dropping them. A
     // bounded `SyncSender` paired with `try_send` (never `send`) means the
@@ -21641,22 +21664,30 @@ mod keylog {
                 let injected = (info.flags.0 & LLKHF_INJECTED.0) != 0;
                 let t_ms = mono_ms();
                 // Update the shared modifier state (if this event IS one of
-                // Ctrl/Alt/Win) before snapshotting it, so this key's own
-                // down/up is already reflected -- and so a companion key
-                // arriving right after sees it too.
-                let (ctrl, alt, win) = {
+                // Ctrl/Alt/Win, and is not itself injected -- see
+                // should_track_modifier_event) before snapshotting it, so
+                // this key's own down/up is already reflected -- and so a
+                // companion key arriving right after sees it too.
+                let (tracked_ctrl, tracked_alt, tracked_win) = {
                     let mut state = modifiers_slot().lock().unwrap_or_else(|e| e.into_inner());
-                    if is_ctrl_vk(info.vkCode) {
-                        state.ctrl = down;
-                    }
-                    if is_alt_vk(info.vkCode) {
-                        state.alt = down;
-                    }
-                    if is_win_vk(info.vkCode) {
-                        state.win = down;
+                    if should_track_modifier_event(injected) {
+                        if is_ctrl_vk(info.vkCode) {
+                            state.ctrl = down;
+                        }
+                        if is_alt_vk(info.vkCode) {
+                            state.alt = down;
+                        }
+                        if is_win_vk(info.vkCode) {
+                            state.win = down;
+                        }
                     }
                     (state.ctrl, state.alt, state.win)
                 };
+                // NEW-1: confirmed against the live keyboard, not trusted on
+                // the tracked state alone -- see confirm_modifier.
+                let ctrl = confirm_modifier(tracked_ctrl, GetAsyncKeyState(VK_CONTROL as i32) < 0);
+                let alt = confirm_modifier(tracked_alt, GetAsyncKeyState(VK_MENU as i32) < 0);
+                let win = confirm_modifier(tracked_win, GetAsyncKeyState(VK_LWIN as i32) < 0 || GetAsyncKeyState(VK_RWIN as i32) < 0);
                 if let Ok(guard) = raw_tx_slot().lock() {
                     if let Some(tx) = guard.as_ref() {
                         // try_send: this callback must never block, a full
@@ -22590,6 +22621,37 @@ mod keylog {
             ledger.push_check(0, FieldClass::NonText);
             ledger.push_check(400, FieldClass::NonText);
             assert!(!verdict_at_stop(&ledger, 50, false, 0x41, false, false, false), "a real, already-completed answer is not thrown away just because the capture is stopping");
+        }
+
+        // --- NEW-1: a modifier the hook tracked as held must still be
+        // confirmed against the live keyboard before it can keep a key.
+
+        #[test]
+        fn a_tracked_modifier_with_no_live_confirmation_is_not_held() {
+            // The stale-Alt scenario: Alt got tracked "down" but its up
+            // happened on an elevated window or the secure desktop, so the
+            // hook never saw it -- GetAsyncKeyState now says it is actually
+            // up, and that must win.
+            assert!(!confirm_modifier(true, false), "a stale tracked modifier with no live confirmation must resolve to not held");
+        }
+
+        #[test]
+        fn a_tracked_and_live_modifier_is_held() {
+            assert!(confirm_modifier(true, true), "a modifier both tracked and live must still count as held");
+        }
+
+        #[test]
+        fn an_untracked_modifier_is_never_held_even_if_live_state_is_stale() {
+            // GetAsyncKeyState alone is not trusted either -- both sides
+            // must agree, so a false tracked state always wins to "not
+            // held" regardless of what the live read says.
+            assert!(!confirm_modifier(false, true));
+        }
+
+        #[test]
+        fn an_injected_modifier_event_is_never_tracked() {
+            assert!(!should_track_modifier_event(true), "a synthetic modifier press must never update the tracked state");
+            assert!(should_track_modifier_event(false), "a real modifier press must still be tracked");
         }
 
         // --- Text-context filtering: a Text-classified field keeps

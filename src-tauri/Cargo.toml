@@ -106,6 +106,11 @@ windows = { version = "0.58", features = [
   # (WH_KEYBOARD_LL lives in Win32_UI_WindowsAndMessaging, already above) plus
   # UI Automation's IsPassword property, the primary password-field signal.
   "Win32_UI_Accessibility",
+  # GetAsyncKeyState: confirms the hook's own tracked Ctrl/Alt/Win state
+  # against the live keyboard so a key-up the hook never saw (an elevated
+  # window or the secure desktop swallowing it) cannot leave a modifier
+  # stuck "held" forever.
+  "Win32_UI_Input_KeyboardAndMouse",
   # Lets keylog implement IUIAutomationFocusChangedEventHandler (the
   # #[implement] macro) so a focus change invalidates the password check
   # immediately instead of relying on a per-HWND cache.
