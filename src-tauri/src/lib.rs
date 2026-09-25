@@ -6746,6 +6746,8 @@ fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
     let mut out = Vec::new();
     if let Some(p) = active_recording_path(app) {
         out.push(p.with_extension("mic.wav"));
+        #[cfg(windows)]
+        out.push(keylog::sidecar_path(&p)); // the key-overlay sidecar, same lifetime as the mic one
         out.push(p);
     }
     if let Some(state) = app.try_state::<VideoEditorPending>() {
@@ -6753,6 +6755,8 @@ fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
         if !src.is_empty() {
             let src = PathBuf::from(src);
             out.push(src.with_extension("mic.wav"));
+            #[cfg(windows)]
+            out.push(keylog::sidecar_path(&src));
             out.push(src);
         }
     }
@@ -20304,6 +20308,396 @@ struct RecordingContinuedPayload {
     gap_ms: u64,
 }
 
+// System-wide key capture for the recording's "keys" overlay. Only
+// active while a recording is running AND the keyOverlay setting is on -- the
+// low-level keyboard hook this installs exists nowhere else in the process,
+// and comes down the instant the recording stops, is cancelled, or the
+// process itself ends (a hook is thread/process-scoped in Windows, so a
+// crash already removes it for free). Privacy: only a virtual-key id, its
+// down/up edge and a timestamp relative to the recording's start are ever
+// stored -- never a character, never the focused element's text, never a
+// window title. A focused password field (UI Automation's IsPassword as the
+// primary signal, the classic ES_PASSWORD edit style as a second one, any
+// detection failure treated as a password field) produces a gap instead of
+// events for as long as it stays focused.
+#[cfg(windows)]
+mod keylog {
+    use super::now_ms;
+    use serde::{Deserialize, Serialize};
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::sync::mpsc::{channel, Receiver, Sender};
+    use std::sync::{Mutex, OnceLock};
+    use std::thread::{self, JoinHandle};
+    use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED};
+    use windows::Win32::System::Threading::GetCurrentThreadId;
+    use windows::Win32::UI::Accessibility::{CUIAutomation, IUIAutomation};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CallNextHookEx, GetForegroundWindow, GetGUIThreadInfo, GetMessageW, GetWindowLongW, GetWindowThreadProcessId,
+        PostThreadMessageW, SetWindowsHookExW, UnhookWindowsHookEx, ES_PASSWORD, GUITHREADINFO, GWL_STYLE, KBDLLHOOKSTRUCT,
+        MSG, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
+    };
+
+    #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+    pub struct KeyEvent {
+        pub vk: u32,
+        pub down: bool,
+        pub t_ms: u64,
+    }
+
+    #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+    pub struct Gap {
+        pub start_ms: u64,
+        pub end_ms: u64,
+    }
+
+    #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+    pub struct KeySidecar {
+        pub events: Vec<KeyEvent>,
+        pub gaps: Vec<Gap>,
+        // The `keyOverlayHoldMs` setting as it stood when this recording
+        // started, carried along so the editor's default preset render
+        // matches what was configured at capture time without a second
+        // settings lookup. `#[serde(default)]` so an older sidecar (before
+        // this field existed) still deserializes.
+        #[serde(default = "default_hold_ms")]
+        pub hold_ms: u32,
+    }
+
+    fn default_hold_ms() -> u32 {
+        400
+    }
+
+    // Pure state machine turning a raw (vk, down, t_ms, password-at-that-
+    // instant) stream into the stored sidecar shape. Deliberately free of any
+    // Windows API so it is directly unit-testable without a real hook or a
+    // real focused control.
+    #[derive(Default)]
+    struct Recorder {
+        sidecar: KeySidecar,
+        in_gap: bool,
+    }
+
+    impl Recorder {
+        fn record(&mut self, vk: u32, down: bool, t_ms: u64, password: bool) {
+            if password {
+                if self.in_gap {
+                    if let Some(last) = self.sidecar.gaps.last_mut() {
+                        last.end_ms = t_ms;
+                    }
+                } else {
+                    self.sidecar.gaps.push(Gap { start_ms: t_ms, end_ms: t_ms });
+                    self.in_gap = true;
+                }
+            } else {
+                self.in_gap = false;
+                self.sidecar.events.push(KeyEvent { vk, down, t_ms });
+            }
+        }
+    }
+
+    struct RawKey {
+        vk: u32,
+        down: bool,
+        t_ms: u64,
+    }
+
+    // The hook callback is a bare extern "system" fn -- it cannot capture a
+    // closure, so the channel it feeds has to be a process-global. Read once
+    // per event and cloned immediately, never held across the send: the
+    // callback must return quickly.
+    static RAW_TX: OnceLock<Mutex<Option<Sender<RawKey>>>> = OnceLock::new();
+
+    fn raw_tx_slot() -> &'static Mutex<Option<Sender<RawKey>>> {
+        RAW_TX.get_or_init(|| Mutex::new(None))
+    }
+
+    unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+        if code >= 0 {
+            let msg = wparam.0 as u32;
+            if matches!(msg, WM_KEYDOWN | WM_KEYUP | WM_SYSKEYDOWN | WM_SYSKEYUP) {
+                let info = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
+                let down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
+                let t_ms = now_ms();
+                if let Ok(guard) = raw_tx_slot().lock() {
+                    if let Some(tx) = guard.as_ref() {
+                        let _ = tx.send(RawKey { vk: info.vkCode, down, t_ms });
+                    }
+                }
+            }
+        }
+        CallNextHookEx(None, code, wparam, lparam)
+    }
+
+    fn hook_thread_main(ready_tx: Sender<Result<u32, String>>) {
+        unsafe {
+            let hook = match SetWindowsHookExW(WH_KEYBOARD_LL, Some(hook_proc), None, 0) {
+                Ok(h) => h,
+                Err(e) => {
+                    let _ = ready_tx.send(Err(e.to_string()));
+                    return;
+                }
+            };
+            let tid = GetCurrentThreadId();
+            let _ = ready_tx.send(Ok(tid));
+            // WH_KEYBOARD_LL only ever fires while its installing thread pumps
+            // a message loop -- this loop exists to keep that true and to
+            // notice the WM_QUIT stop() posts to unwind it.
+            let mut msg = MSG::default();
+            while GetMessageW(&mut msg, None, 0, 0).as_bool() {}
+            let _ = UnhookWindowsHookEx(hook);
+        }
+    }
+
+    struct FocusCache {
+        hwnd: isize,
+        password: bool,
+    }
+
+    fn focused_password(cache: &mut Option<FocusCache>, uia: &Option<IUIAutomation>) -> bool {
+        let fg = unsafe { GetForegroundWindow() };
+        let mut gti = GUITHREADINFO { cbSize: std::mem::size_of::<GUITHREADINFO>() as u32, ..Default::default() };
+        let tid = unsafe { GetWindowThreadProcessId(fg, None) };
+        let focus_hwnd = if unsafe { GetGUIThreadInfo(tid, &mut gti) }.is_ok() && !gti.hwndFocus.is_invalid() {
+            gti.hwndFocus
+        } else {
+            fg
+        };
+        let key = focus_hwnd.0 as isize;
+        if let Some(c) = cache {
+            if c.hwnd == key {
+                return c.password;
+            }
+        }
+        let password = detect_password(focus_hwnd, uia);
+        *cache = Some(FocusCache { hwnd: key, password });
+        password
+    }
+
+    // FAIL CLOSED throughout: any doubt (UI Automation unreachable, the call
+    // erroring, no focused window at all) is treated as a password field.
+    // Never record anything while in doubt.
+    fn detect_password(hwnd: HWND, uia: &Option<IUIAutomation>) -> bool {
+        let uia_password = uia.as_ref().and_then(|uia| unsafe { uia.GetFocusedElement() }.ok()).and_then(|el| unsafe { el.CurrentIsPassword() }.ok());
+        match uia_password {
+            None => return true, // UI Automation unreachable -- doubt means password.
+            Some(b) if b.as_bool() => return true,
+            Some(_) => {}
+        }
+        // UI Automation says no, but some legacy edit controls never expose
+        // Password through it -- the classic style is the second signal.
+        if hwnd.0.is_null() {
+            return true;
+        }
+        (unsafe { GetWindowLongW(hwnd, GWL_STYLE) } & ES_PASSWORD) != 0
+    }
+
+    fn consumer_thread_main(rx: Receiver<RawKey>, start_abs_ms: u64) -> KeySidecar {
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        }
+        let uia: Option<IUIAutomation> = unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) }.ok();
+        let mut cache: Option<FocusCache> = None;
+        let mut rec = Recorder::default();
+        while let Ok(raw) = rx.recv() {
+            let password = focused_password(&mut cache, &uia);
+            let t_ms = raw.t_ms.saturating_sub(start_abs_ms);
+            rec.record(raw.vk, raw.down, t_ms, password);
+        }
+        unsafe {
+            CoUninitialize();
+        }
+        rec.sidecar
+    }
+
+    pub struct KeyCapture {
+        hook_thread: JoinHandle<()>,
+        consumer_thread: JoinHandle<KeySidecar>,
+        thread_id: u32,
+        hold_ms: u32,
+    }
+
+    fn start(hold_ms: u32) -> Option<KeyCapture> {
+        let (raw_tx, raw_rx) = channel::<RawKey>();
+        *raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner()) = Some(raw_tx);
+        let start_abs_ms = now_ms();
+        let (ready_tx, ready_rx) = channel::<Result<u32, String>>();
+        let hook_thread = thread::Builder::new().name("key-overlay-hook".into()).spawn(move || hook_thread_main(ready_tx)).ok()?;
+        let thread_id = match ready_rx.recv() {
+            Ok(Ok(tid)) => tid,
+            _ => {
+                let _ = hook_thread.join();
+                return None;
+            }
+        };
+        let consumer_thread = thread::Builder::new()
+            .name("key-overlay-consumer".into())
+            .spawn(move || consumer_thread_main(raw_rx, start_abs_ms))
+            .ok()?;
+        Some(KeyCapture { hook_thread, consumer_thread, thread_id, hold_ms })
+    }
+
+    fn stop(capture: KeyCapture) -> KeySidecar {
+        unsafe {
+            let _ = PostThreadMessageW(capture.thread_id, WM_QUIT, WPARAM(0), LPARAM(0));
+        }
+        let _ = capture.hook_thread.join();
+        // Dropping the sender (clearing the slot) closes the channel, which
+        // ends the consumer thread's recv() loop so it returns the finished
+        // sidecar below.
+        *raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
+        let mut sidecar = capture.consumer_thread.join().unwrap_or_default();
+        sidecar.hold_ms = capture.hold_ms;
+        sidecar
+    }
+
+    pub fn sidecar_path(output_path: &Path) -> PathBuf {
+        output_path.with_extension("keys.json")
+    }
+
+    fn write_sidecar(output_path: &Path, sidecar: &KeySidecar) {
+        if let Ok(json) = serde_json::to_string(sidecar) {
+            let _ = fs::write(sidecar_path(output_path), json);
+        }
+    }
+
+    static CAPTURE: OnceLock<Mutex<Option<KeyCapture>>> = OnceLock::new();
+
+    fn slot() -> &'static Mutex<Option<KeyCapture>> {
+        CAPTURE.get_or_init(|| Mutex::new(None))
+    }
+
+    pub fn enabled(flags: &std::collections::HashMap<String, bool>) -> bool {
+        flags.get("keyOverlay") == Some(&true)
+    }
+
+    pub fn hold_ms(values: &std::collections::HashMap<String, f64>) -> u32 {
+        values.get("keyOverlayHoldMs").copied().unwrap_or(400.0).clamp(100.0, 2000.0) as u32
+    }
+
+    // Never a second hook: a capture already running for this process is left
+    // alone rather than layering a new one on top.
+    pub fn maybe_start(is_enabled: bool, hold_ms: u32) {
+        if !is_enabled {
+            return;
+        }
+        let mut guard = slot().lock().unwrap_or_else(|e| e.into_inner());
+        if guard.is_some() {
+            return;
+        }
+        *guard = start(hold_ms);
+    }
+
+    pub fn maybe_stop_and_write(output_path: &Path) {
+        let capture = slot().lock().unwrap_or_else(|e| e.into_inner()).take();
+        if let Some(capture) = capture {
+            let sidecar = stop(capture);
+            write_sidecar(output_path, &sidecar);
+        }
+    }
+
+    // A cancelled/discarded take never gets a sidecar file at all.
+    pub fn discard() {
+        let capture = slot().lock().unwrap_or_else(|e| e.into_inner()).take();
+        if let Some(capture) = capture {
+            let _ = stop(capture);
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn recorder_stores_identifiers_with_timestamps_only() {
+            let mut rec = Recorder::default();
+            rec.record(0x41, true, 0, false);
+            rec.record(0x41, false, 120, false);
+            assert_eq!(
+                rec.sidecar.events,
+                vec![KeyEvent { vk: 0x41, down: true, t_ms: 0 }, KeyEvent { vk: 0x41, down: false, t_ms: 120 }]
+            );
+            assert!(rec.sidecar.gaps.is_empty());
+        }
+
+        #[test]
+        fn a_password_field_produces_a_gap_instead_of_events() {
+            let mut rec = Recorder::default();
+            rec.record(0x41, true, 0, false);
+            rec.record(0x42, true, 100, true); // focus moves into a password field
+            rec.record(0x42, false, 150, true);
+            rec.record(0x43, true, 400, false); // focus leaves it again
+            assert_eq!(rec.sidecar.events.len(), 2);
+            assert_eq!(rec.sidecar.gaps, vec![Gap { start_ms: 100, end_ms: 150 }]);
+        }
+
+        #[test]
+        fn back_to_back_password_periods_extend_one_gap_rather_than_opening_a_new_one() {
+            let mut rec = Recorder::default();
+            rec.record(0x41, true, 0, true);
+            rec.record(0x41, false, 10, true);
+            rec.record(0x42, true, 20, true);
+            assert_eq!(rec.sidecar.gaps, vec![Gap { start_ms: 0, end_ms: 20 }]);
+        }
+
+        #[test]
+        fn a_recording_entirely_in_a_password_field_writes_no_events_at_all() {
+            let mut rec = Recorder::default();
+            rec.record(0x41, true, 0, true);
+            rec.record(0x41, false, 50, true);
+            assert!(rec.sidecar.events.is_empty());
+            assert_eq!(rec.sidecar.gaps, vec![Gap { start_ms: 0, end_ms: 50 }]);
+        }
+
+        #[test]
+        fn the_switch_off_default_never_starts_a_capture() {
+            let flags = std::collections::HashMap::new();
+            assert!(!enabled(&flags)); // absent -- "aus" is the shipped default
+            maybe_start(enabled(&flags), 400);
+            assert!(slot().lock().unwrap().is_none());
+        }
+
+        #[test]
+        fn hold_ms_clamps_into_the_documented_range() {
+            let mut values = std::collections::HashMap::new();
+            values.insert("keyOverlayHoldMs".to_string(), 5000.0);
+            assert_eq!(hold_ms(&values), 2000);
+            values.insert("keyOverlayHoldMs".to_string(), 1.0);
+            assert_eq!(hold_ms(&values), 100);
+            assert_eq!(hold_ms(&std::collections::HashMap::new()), 400);
+        }
+
+        #[test]
+        fn the_sidecar_shape_carries_no_text_field_at_all() {
+            // KeyEvent has exactly three fields (vk, down, t_ms) and Gap two
+            // (start_ms, end_ms) -- neither has anywhere a character, a typed
+            // string, or a window title could land. Serializing a sample and
+            // checking the key set is a belt-and-braces proof of that shape.
+            let sidecar = KeySidecar {
+                events: vec![KeyEvent { vk: 0x41, down: true, t_ms: 0 }],
+                gaps: vec![Gap { start_ms: 10, end_ms: 20 }],
+                hold_ms: 400,
+            };
+            let json = serde_json::to_value(&sidecar).unwrap();
+            let event = &json["events"][0];
+            let mut keys: Vec<&str> = event.as_object().unwrap().keys().map(|s| s.as_str()).collect();
+            keys.sort();
+            assert_eq!(keys, vec!["down", "t_ms", "vk"]);
+            let gap = &json["gaps"][0];
+            let mut gap_keys: Vec<&str> = gap.as_object().unwrap().keys().map(|s| s.as_str()).collect();
+            gap_keys.sort();
+            assert_eq!(gap_keys, vec!["end_ms", "start_ms"]);
+        }
+
+        #[test]
+        fn sidecar_path_sits_next_to_the_recording_as_its_own_extension() {
+            let p = sidecar_path(Path::new("C:/data/recordings/rec-1.mp4"));
+            assert_eq!(p, PathBuf::from("C:/data/recordings/rec-1.keys.json"));
+        }
+    }
+}
+
 #[cfg(windows)]
 mod recording {
     use super::{
@@ -21566,6 +21960,12 @@ async fn start_recording(
     }
     let target = resolve_recording_target(&target_kind, target_id, region_x, region_y, region_w, region_h)?;
     let (show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb) = resolve_recording_settings(&db);
+    // Read once, before the blocking capture start -- keyOverlay's
+    // default is off, so the common case installs no hook at all.
+    let (key_overlay_on, key_overlay_hold_ms) = {
+        let g = db.lock().unwrap_or_else(|e| e.into_inner());
+        (keylog::enabled(&g.settings.ui_flags), keylog::hold_ms(&g.settings.ui_values))
+    };
     let dir = data_dir(&app).join("recordings");
     let session = tauri::async_runtime::spawn_blocking(move || {
         let out_path = recording::new_output_path(&dir)?;
@@ -21574,6 +21974,7 @@ async fn start_recording(
     .await
     .map_err(|e| e.to_string())??;
     *rstate.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(session);
+    keylog::maybe_start(key_overlay_on, key_overlay_hold_ms);
     // A fresh recording never inherits an earlier chain's already-closed
     // parts -- only finish_and_continue_recording ever adds to this list.
     REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner()).clear();
@@ -21770,7 +22171,8 @@ async fn finish_and_continue_recording(
             Err(start_err) => {
                 // This file becomes the take's final one after all -- same
                 // crop/result path a real stop uses, with every earlier part
-                // folded in.
+                // folded in. Same for the key-overlay sidecar.
+                keylog::maybe_stop_and_write(&path);
                 if needs_crop {
                     let mut pending = PENDING_REC_CROP.lock().unwrap_or_else(|e| e.into_inner());
                     *pending = Some((path.clone(), crop_rect.unwrap()));
@@ -21913,6 +22315,9 @@ fn stop_recording_now(app: &AppHandle) -> Result<RecordingStoppedPayload, String
         s
     };
     let (path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size, resize_crop_at_ms) = recording::stop(session)?;
+    // Stops the key-overlay hook (if it was running at all) and writes
+    // its sidecar next to this recording.
+    keylog::maybe_stop_and_write(&path);
     // A crop is only worth running when the union of every placed frame is
     // strictly smaller than the canvas it was placed on -- a window that
     // used the whole canvas leaves nothing to trim.
@@ -21980,6 +22385,8 @@ async fn cancel_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> 
     };
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
         recording::cancel(session)?;
+        // A cancelled take never gets a key-overlay sidecar either.
+        keylog::discard();
         // A cancel discards the WHOLE take, not just its current file -- every
         // earlier part a "finish and continue" chain already closed goes with
         // it. Every interim crop still running against one of those files is
@@ -25075,15 +25482,28 @@ fn move_file(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()
 // logged, not propagated.
 fn move_mic_sidecar_alongside(old_video: &std::path::Path, new_video: &std::path::Path) {
     let old_sidecar = old_video.with_extension("mic.wav");
-    if !old_sidecar.is_file() {
-        return;
+    if old_sidecar.is_file() {
+        let new_sidecar = new_video.with_extension("mic.wav");
+        if old_sidecar != new_sidecar {
+            if let Err(e) = move_file(&old_sidecar, &new_sidecar) {
+                eprintln!("failed to relocate mic sidecar: {e}");
+            }
+        }
     }
-    let new_sidecar = new_video.with_extension("mic.wav");
-    if old_sidecar == new_sidecar {
-        return;
-    }
-    if let Err(e) = move_file(&old_sidecar, &new_sidecar) {
-        eprintln!("failed to relocate mic sidecar: {e}");
+    // The key-overlay sidecar (if this take ever wrote one) travels
+    // the same way, for the same reason -- Save/Save As/Copy relocate the
+    // video file and would otherwise orphan it at the old path.
+    #[cfg(windows)]
+    {
+        let old_keys = keylog::sidecar_path(old_video);
+        if old_keys.is_file() {
+            let new_keys = keylog::sidecar_path(new_video);
+            if old_keys != new_keys {
+                if let Err(e) = move_file(&old_keys, &new_keys) {
+                    eprintln!("failed to relocate key-overlay sidecar: {e}");
+                }
+            }
+        }
     }
 }
 
@@ -25258,13 +25678,20 @@ fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::Path) -> Opt
     fs::create_dir_all(&trash).ok()?;
     let dest = trash.join(name);
     move_file(path, &dest).ok()?;
-    // A discarded recording takes its mic sidecar (if any) with it --
-    // best-effort, since most recordings have none.
+    // A discarded recording takes its mic and key-overlay sidecars (if any)
+    // with it -- best-effort, since most recordings have neither.
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
         if ext.eq_ignore_ascii_case("mp4") {
             let sidecar = path.with_extension("mic.wav");
             if sidecar.is_file() {
                 let _ = move_file(&sidecar, &dest.with_extension("mic.wav"));
+            }
+            #[cfg(windows)]
+            {
+                let keys = keylog::sidecar_path(path);
+                if keys.is_file() {
+                    let _ = move_file(&keys, &keylog::sidecar_path(&dest));
+                }
             }
         }
     }

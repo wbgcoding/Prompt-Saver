@@ -98,6 +98,10 @@ windows = { version = "0.58", features = [
   # Console attach so a windowless command-line launch can print to the
   # caller's own console instead of a subsystem:windows app going silent.
   "Win32_System_Console",
+  # 463: system-wide low-level keyboard hook for the key-overlay capture
+  # (WH_KEYBOARD_LL lives in Win32_UI_WindowsAndMessaging, already above) plus
+  # UI Automation's IsPassword property, the primary password-field signal.
+  "Win32_UI_Accessibility",
 ] }
 # Screen recording (point 191): Windows Graphics Capture + its own Media
 # Foundation H.264/MP4 encoder, vetted against a real desktop before use.
