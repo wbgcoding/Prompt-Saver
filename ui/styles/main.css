@@ -1775,7 +1775,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
   flex-direction: column;
   gap: 6px;
   margin: 0 0 8px;
-  padding: 8px 2px 10px;
+  padding: 2px 2px 10px;
   border-bottom: 1px solid var(--border);
   flex: 0 0 auto;
 }

@@ -2042,6 +2042,14 @@ PROBE = """
         if (!bar || bar.classList.contains('hidden')) {
           out.errors.push('445: the chain overview strip did not appear for a running chain');
         } else {
+          const ovTitle = bar.querySelector('.chain-ov-title');
+          if (ovTitle && ovTitle.getBoundingClientRect().top - bar.getBoundingClientRect().top > 3) {
+            out.errors.push('445: the chain overview keeps extra space above its title');
+          }
+          const firstTile = document.querySelector('#grid .tile');
+          if (firstTile && bar.getBoundingClientRect().bottom > firstTile.getBoundingClientRect().top) {
+            out.errors.push('445: the chain overview overlaps the grid below it');
+          }
           let rows = [...bar.querySelectorAll('.chain-ov-row')];
           if (rows.length !== 3) {
             out.errors.push('445: the overview shows ' + rows.length + ' rows instead of 3');

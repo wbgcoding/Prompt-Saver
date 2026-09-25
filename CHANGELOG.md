@@ -1121,6 +1121,8 @@ the video editor and the introduction tour ship on).
   whichever of those sat underneath it instead of the compare view itself.
   It now always stacks above the dialog it was opened from, and both Tab and
   Escape reach it first.
+- **The chain overview strip kept extra space above its title.** The padding
+  above the steps is trimmed to match the space it already kept below them.
 
 ### Security
 
