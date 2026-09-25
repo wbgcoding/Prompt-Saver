@@ -12141,19 +12141,26 @@ PARKED_BADGE_PROBE = """
 # 411: the float-recall expert action reaches the backend. Its own boot (a
 # plain index.html start is enough; the action does not depend on any pill or
 # folder actually being parked, only on the floating feature being on, which
-# ships on by default).
+# ships on by default). expert-open's click handler only attaches once init()'s
+# async settings fetch resolves; a fixed short wait can lose that race under
+# load, so the open is retried instead of assumed.
 FLOAT_RECALL_PROBE = """
 <script>
 (async () => {
   const errs = [];
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-  const click = async (id) => { const e = document.getElementById(id); if (e) { e.click(); await sleep(200); } };
   const calls = () => (window.__SMOKE_CALLS__ = window.__SMOKE_CALLS__ || []);
   try {
     document.getElementById('settings').classList.remove('hidden');
     await sleep(50);
     const findBtn = () => document.querySelector('.expert-action[data-action="float-recall"]');
-    await click('expert-open');
+    let opened = false;
+    for (let i = 0; i < 40 && !opened; i++) {
+      document.getElementById('expert-open').click();
+      await sleep(100);
+      opened = !document.getElementById('settings-expert').classList.contains('hidden');
+    }
+    if (!opened) errs.push('411: the expert menu never opened');
     let btn = findBtn();
     for (const tb of [...document.querySelectorAll('#expert-tabs-bar .expert-tab')]) {
       if (btn) break;
