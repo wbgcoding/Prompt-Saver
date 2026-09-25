@@ -12041,7 +12041,7 @@ fn history_max_age(settings: &Settings) -> Option<u64> {
 }
 
 // History length is an expert value (default 100, ceiling COPY_HISTORY_MAX), paired
-// with the retention-window cutoff — the two limits `db_trim_copy` always applies
+// with the retention-window cutoff: the two limits `db_trim_copy` always applies
 // together. One place for both, so startup trimming and live recording can't drift.
 fn history_cap_and_cutoff(settings: &Settings) -> (usize, Option<u64>) {
     let cap = settings
@@ -12113,7 +12113,7 @@ async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String) -> Result
             store.settings.last_used.insert(id.clone(), ts);
         }
         let (cap, cutoff) = history_cap_and_cutoff(&store.settings);
-        // Usage count + "last used" stamp only — collected, see SETTINGS_QUIET_MS.
+        // Usage count + "last used" stamp only: collected, see SETTINGS_QUIET_MS.
         // The history row itself still goes into its own table below, untouched.
         save_settings_soon();
         // The main window's own settings.usage/last_used mirror is only ever
@@ -12128,7 +12128,7 @@ async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String) -> Result
         );
         (CopyEntry { id, ts }, cap, cutoff, dedup)
     };
-    // The history itself lives in its own table — appended outside the lock so a
+    // The history itself lives in its own table: appended outside the lock so a
     // huge log never blocks other DB work and never bloats the settings blob.
     if let Some(conn) = db_conn(&app) {
         if dedup {
@@ -12136,7 +12136,7 @@ async fn record_copy(app: AppHandle, state: State<'_, Db>, id: String) -> Result
                 .query_row("SELECT id FROM copy_log ORDER BY rowid DESC LIMIT 1", [], |r| r.get(0))
                 .ok();
             if last.as_deref() == Some(entry.id.as_str()) {
-                return Ok(()); // identical consecutive copy — don't add another row
+                return Ok(()); // identical consecutive copy: don't add another row
             }
         }
         // An insert failure used to be swallowed here and still report success,
@@ -12229,7 +12229,7 @@ async fn recent_copies(app: AppHandle, limit: usize, grouped: bool) -> Vec<Journ
         .unwrap_or_default()
 }
 
-// Remove one journal entry by its exact row — never "all copies of this
+// Remove one journal entry by its exact row: never "all copies of this
 // prompt", so it behaves the same in grouped and ungrouped view.
 #[tauri::command]
 async fn delete_copy_entry(app: AppHandle, rowid: i64) -> bool {
@@ -12290,9 +12290,9 @@ async fn float_recall(app: AppHandle, state: State<'_, Db>) -> Result<(), String
     Ok(())
 }
 
-// "Hide for now" — a pill or folder id (both flat strings from different id
+// "Hide for now": a pill or folder id (both flat strings from different id
 // spaces, never colliding), dismissed until the app restarts. NOT the permanent
-// unpin (toggle_floating/dissolve_float_folder) — the entry in settings.floating
+// unpin (toggle_floating/dissolve_float_folder): the entry in settings.floating
 // / float_folders stays untouched, so it comes right back on the next launch.
 #[tauri::command]
 async fn hide_float_for_now(app: AppHandle, id: String) {
@@ -12345,7 +12345,7 @@ async fn toggle_floating(app: AppHandle, state: State<'_, Db>, id: String) -> Re
         };
         match prompt {
             Some(p) => {
-                // HiddenFloats is never cleared anywhere else — re-pinning a pill
+                // HiddenFloats is never cleared anywhere else: re-pinning a pill
                 // that was previously "hidden until restart" must take it out, or the
                 // next sync_float_windows (triggered by literally any other settings
                 // change) immediately closes it again.
@@ -12969,7 +12969,7 @@ fn auto_cfg(settings: &Settings) -> AutoCfg {
 }
 
 // "Did this WM_RENDERFORMAT answer a real Ctrl+V / right-click-Paste, or just a
-// clipboard-history spy / our own read?" Pure and table-tested (cargo test --lib) —
+// clipboard-history spy / our own read?" Pure and table-tested (cargo test --lib):
 // the Win32 plumbing around it is only provable on a real VM run.
 #[cfg(windows)]
 fn counts_as_paste(now: u32, armed_at: u32, last_paste: u32, last_input: u32, self_read: bool, cfg: &AutoCfg) -> bool {
@@ -13045,7 +13045,7 @@ fn looks_like_password(text: &str, min_len: usize) -> bool {
 // registers/unregisters the listener with no leaked handle.
 // The SAME window also carries the auto-advance delayed-rendering session (Strg+V
 // AND right-click-Paste both end up requesting CF_UNICODETEXT, which is the one thing
-// Windows tells us about) — deliberately one window, one thread for the whole session.
+// Windows tells us about): deliberately one window, one thread for the whole session.
 #[cfg(windows)]
 mod clipwatch {
     use super::{db_add_clip, db_conn, lock, now_secs, text_hash, Db};
@@ -13063,7 +13063,7 @@ mod clipwatch {
     static LAST_INSERTED: AtomicU64 = AtomicU64::new(0);
 
     // Auto-advance session state. All ticks are GetTickCount() units (u32,
-    // wraps every ~49.7 days — every comparison below uses wrapping_sub for that
+    // wraps every ~49.7 days: every comparison below uses wrapping_sub for that
     // reason). SELF_READ brackets our OWN clipboard_text()/on_clipboard_update()
     // reads so they can never be mistaken for a real paste. OWN_EMPTY brackets our
     // own EmptyClipboard calls so WM_DESTROYCLIPBOARD can tell "we re-armed" from
@@ -13170,7 +13170,7 @@ mod clipwatch {
         unsafe { GetTickCount() }
     }
 
-    // GetLastInputInfo failing (returning 0) reads as "ancient" rather than "just now" — the
+    // GetLastInputInfo failing (returning 0) reads as "ancient" rather than "just now": the
     // input-recency gate in counts_as_paste must fail closed, not open, if Windows
     // ever can't answer.
     fn last_input_tick() -> u32 {
@@ -13221,7 +13221,7 @@ mod clipwatch {
 
     fn on_clipboard_update() {
         // Our own delayed-rendering promise is never inbox material, and reading
-        // it here would itself trigger WM_RENDERFORMAT — without this the collector
+        // it here would itself trigger WM_RENDERFORMAT: without this the collector
         // would render its own promise on every update.
         if unsafe { GetClipboardOwner() } == WATCHER_HWND.load(Ordering::Acquire) {
             return;
@@ -13267,7 +13267,7 @@ mod clipwatch {
                 }
             }
         }
-        // Text only — image/file clipboard payloads are ignored. Bracketed with
+        // Text only: image/file clipboard payloads are ignored. Bracketed with
         // SELF_READ in case ownership changed between the guard above and here.
         SELF_READ.store(true, Ordering::Release);
         let read = arboard::Clipboard::new().and_then(|mut c| c.get_text());
@@ -13296,7 +13296,7 @@ mod clipwatch {
 
     // Writes `text` as CF_UNICODETEXT into whatever clipboard bracket is
     // currently open (the caller decides who opened it). Ownership of the
-    // GMEM_MOVEABLE block passes to Windows only when SetClipboardData SUCCEEDS —
+    // GMEM_MOVEABLE block passes to Windows only when SetClipboardData SUCCEEDS:
     // on every other way out of here the block is still ours and has to be freed,
     // or a rotating prompt on auto-advance leaks one per paste.
     unsafe fn set_unicode_text(text: &str) {
@@ -13332,15 +13332,15 @@ mod clipwatch {
     }
 
     // (Re-)claim ownership and promise CF_UNICODETEXT without delivering real
-    // data yet — used both for the very first arm (is_first) and every re-arm after
+    // data yet: used both for the very first arm (is_first) and every re-arm after
     // a render. Must run on the window thread (posted here, never called directly).
     fn open_and_promise(hwnd: isize, is_first: bool) {
         let opened = unsafe { OpenClipboard(hwnd) != 0 };
         if !opened {
-            // Another app has the clipboard open right now — do not spin, end the
+            // Another app has the clipboard open right now: do not spin, end the
             // session either way. On the very first arm nothing has ever reached the
             // real clipboard yet (the promise itself is what failed), so fall back to
-            // a plain untracked write instead of leaving a "successful" copy empty —
+            // a plain untracked write instead of leaving a "successful" copy empty:
             // same fallback `arm()` already uses when the watcher thread is not even
             // running. A re-arm failure keeps the text already delivered by the last
             // render as-is, but must still tell the UI the session is gone, or the
@@ -13377,7 +13377,7 @@ mod clipwatch {
         }
     }
 
-    // Answers WM_RENDERFORMAT — the pasting app already has the clipboard open,
+    // Answers WM_RENDERFORMAT: the pasting app already has the clipboard open,
     // so this delivers directly (no Open/CloseClipboard) then judges, off the clock,
     // whether that render was a real paste and whether to keep tracking.
     fn handle_render_format() {
@@ -13422,7 +13422,7 @@ mod clipwatch {
                         session.uncounted_rearms = 0;
                         rearm = true;
                     }
-                    _ => {} // prompt gone or turned off mid-session — end quietly
+                    _ => {} // prompt gone or turned off mid-session: end quietly
                 }
             } else if !timed_out {
                 session.uncounted_rearms += 1;
@@ -13454,7 +13454,7 @@ mod clipwatch {
         }
     }
 
-    // WM_RENDERALLFORMATS — Windows asking us to render everything we still owe
+    // WM_RENDERALLFORMATS: Windows asking us to render everything we still owe
     // before the owner window (or the whole process) goes away. Unlike RENDERFORMAT
     // we must open the clipboard ourselves, and this never counts as a paste.
     fn handle_render_all(hwnd: isize) {
@@ -13472,7 +13472,7 @@ mod clipwatch {
         }
     }
 
-    // WM_DESTROYCLIPBOARD — someone else just called EmptyClipboard. Our own
+    // WM_DESTROYCLIPBOARD: someone else just called EmptyClipboard. Our own
     // re-arm does that too, so OWN_EMPTY tells the two apart; only a real foreign
     // takeover ends the session here.
     fn handle_destroy_clipboard() {
@@ -13487,7 +13487,7 @@ mod clipwatch {
 
     // Force-end the session for `id` (the tile's Auto switch flipped off, or
     // the prompt was deleted/edited out of eligibility) without waiting for a paste.
-    // Delivers the last armed text as real data — never leaves a dangling promise.
+    // Delivers the last armed text as real data: never leaves a dangling promise.
     fn handle_app_end() {
         let ended = SESSION.lock().unwrap_or_else(|e| e.into_inner()).take();
         let Some(session) = ended else { return };
@@ -13533,7 +13533,7 @@ mod clipwatch {
         if hwnd != 0 {
             unsafe { PostMessageW(hwnd, WM_APP_ARM, 0, 0) };
         } else {
-            // The message window is not running — fall back to a normal, untracked
+            // The message window is not running: fall back to a normal, untracked
             // copy rather than silently dropping the text.
             *SESSION.lock().unwrap_or_else(|e| e.into_inner()) = None;
             let _ = arboard::Clipboard::new().and_then(|mut c| c.set_text(text.to_string()));
@@ -13541,7 +13541,7 @@ mod clipwatch {
     }
 
     // The tile menu / editor toggle flips Auto off, or the prompt no longer
-    // qualifies — end its session immediately if it is the one currently running.
+    // qualifies: end its session immediately if it is the one currently running.
     pub fn end_if(id: &str) {
         let matches = SESSION.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|s| s.id == id).unwrap_or(false);
         if !matches {
@@ -13553,7 +13553,7 @@ mod clipwatch {
         }
     }
 
-    // The global rotatingPrompts/rotateAuto feature switch flipped off — end
+    // The global rotatingPrompts/rotateAuto feature switch flipped off: end
     // whatever session happens to be running, regardless of its id.
     pub fn end_any() {
         let running = SESSION.lock().unwrap_or_else(|e| e.into_inner()).is_some();
@@ -13637,7 +13637,7 @@ mod clipwatch {
             AddClipboardFormatListener(hwnd);
             WATCHER_HWND.store(hwnd, Ordering::Release);
             // stop() may have fired before the window existed (its PostMessage would
-            // have been lost) — tear down now instead of blocking on GetMessageW forever.
+            // have been lost): tear down now instead of blocking on GetMessageW forever.
             if WATCHER_STOP.load(Ordering::Acquire) {
                 RemoveClipboardFormatListener(hwnd);
                 DestroyWindow(hwnd);
@@ -13674,8 +13674,8 @@ mod clipwatch {
 // Windows tells a top-level window its session is ending and then takes the
 // process down: no window close, no app exit event, nothing else of ours runs
 // after it. The collected counter writes have to land right there. The clipboard
-// watcher's window cannot do it — that one is message-only, and Windows never
-// sends session messages to those — so the main window's own window procedure is
+// watcher's window cannot do it: that one is message-only, and Windows never
+// sends session messages to those: so the main window's own window procedure is
 // chained instead: this one answers the two session messages and hands every
 // other message straight on to the original.
 #[cfg(windows)]
@@ -13715,7 +13715,7 @@ mod sessionend {
             return 0;
         }
         // Everything else, including the session messages, is answered by the
-        // original procedure — this hook only ever adds the flush.
+        // original procedure: this hook only ever adds the flush.
         CallWindowProcW(prev, hwnd, msg, w, l)
     }
 
@@ -13732,7 +13732,7 @@ mod sessionend {
         #[allow(clippy::fn_to_numeric_cast)]
         let ours = wndproc as WndProc as isize;
         let prev = unsafe { SetWindowLongPtrW(hwnd, GWLP_WNDPROC, ours) };
-        // A failed swap returns 0 and leaves the original in place — nothing to undo.
+        // A failed swap returns 0 and leaves the original in place: nothing to undo.
         PREV_PROC.store(prev, Ordering::Release);
     }
 }
@@ -14006,13 +14006,13 @@ fn sweep_edit_states_now(app: AppHandle) -> u32 {
 
 // Emergency purge: something sensitive (a password) ended up in the clipboard inbox
 // and may be sitting inside one or more ROTATING SNAPSHOTS too, DPAPI-sealed but
-// still on disk. clip_inbox_clear only ever touched the live DB — this walks every
+// still on disk. clip_inbox_clear only ever touched the live DB: this walks every
 // backup folder, opens its snapshot, deletes clip_inbox rows if any, and VACUUMs so
 // the bytes are actually overwritten (a bare DELETE leaves them in SQLite's free
 // pages until something else reuses that space). Returns how many snapshots had
 // something to remove, for the confirmation toast.
 #[tauri::command]
-// Returns (purged, failed). This is an emergency privacy wipe — a snapshot this
+// Returns (purged, failed). This is an emergency privacy wipe: a snapshot this
 // could not even open, or a scrub that could not be confirmed written back, must
 // never be folded into "nothing to purge here"; the caller has to be able to
 // tell the user which backups may still hold what they just tried to erase.
@@ -14107,7 +14107,7 @@ async fn set_float_bounds(
             // OPT-IN, and only the pill menu asks for it: that placement picks a side
             // that fits and falls back to "below" when none does, which used to push
             // the buttons off the screen edge. Every other caller has already worked
-            // out the exact box it wants — a live edge-resize computes the origin from
+            // out the exact box it wants: a live edge-resize computes the origin from
             // the size it is about to set, so clamping it here moved the window out
             // from under the cursor on every frame near a screen edge.
             let (x, y) = if clamp.unwrap_or(false) {
@@ -14199,12 +14199,12 @@ fn hit_label(hit: &str) -> String {
 }
 
 // Live merge feedback while a pill is dragged. The OS move loop owns the pointer, so
-// no webview sees the motion — the backend polls the dragged window instead and lights
+// no webview sees the motion: the backend polls the dragged window instead and lights
 // up the window that would swallow it. (generation, currently lit window label)
 struct DragHint(Mutex<(u64, Option<String>)>);
 
 const HINT_TICK_MS: u64 = 70;
-const HINT_MAX_TICKS: u32 = 700; // ~50 s guard — no drag runs longer
+const HINT_MAX_TICKS: u32 = 700; // ~50 s guard: no drag runs longer
 
 // Move the highlight, telling the old target to drop it. Emits only on a change.
 fn light_hint(app: &AppHandle, label: Option<String>) {
@@ -14266,7 +14266,7 @@ async fn float_drag_hint(app: AppHandle, state: State<'_, Db>, id: String, activ
 }
 
 // A pill was dropped after a drag: did it land on another pill or on a folder? The
-// check has to run HERE — the pills are separate OS windows, so only the backend knows
+// check has to run HERE: the pills are separate OS windows, so only the backend knows
 // where they all are. Called ONCE per drag END, never while dragging.
 #[tauri::command]
 async fn float_folder_drop(app: AppHandle, state: State<'_, Db>, id: String) -> Result<bool, String> {
@@ -14310,8 +14310,8 @@ async fn float_folder_drop(app: AppHandle, state: State<'_, Db>, id: String) -> 
             let store = lock(&state);
             float_scale_of(&store.settings, key)
         };
-        // The new folder takes the target pill's place — centred on it, so it lands
-        // where the user aimed — and its icon size mirrors that pill's size.
+        // The new folder takes the target pill's place: centred on it, so it lands
+        // where the user aimed: and its icon size mirrors that pill's size.
         let target = targets
             .iter()
             .find(|(t, _)| t == &hit)
@@ -14390,7 +14390,7 @@ struct FolderGeom {
     height: f64,
 }
 
-// Open the folder by growing its OWN window around the icon — no second window is
+// Open the folder by growing its OWN window around the icon: no second window is
 // ever spawned, so z-order and focus stay exactly as simple as a single pill's. The
 // popover size comes in as logical pixels (what the webview measured) and is scaled
 // with THIS window's factor, so the same call is correct on a second monitor at a
@@ -14521,7 +14521,7 @@ fn rename_float_folder(app: AppHandle, state: State<Db>, id: String, name: Strin
 }
 
 // A folder window has no themed dialog of its own, so the rename is asked for in the
-// MAIN window (confirmDialog) and applied from there — never a native message box.
+// MAIN window (confirmDialog) and applied from there: never a native message box.
 #[tauri::command]
 async fn folder_rename_request(app: AppHandle, state: State<'_, Db>, id: String) -> Result<(), String> {
     let name = {
@@ -14544,7 +14544,7 @@ async fn folder_rename_request(app: AppHandle, state: State<'_, Db>, id: String)
 }
 
 // Dissolve a folder: every member goes back to being a free pill. Nothing is deleted.
-// Each one asks for the position it kept all along, but they are fanned apart first —
+// Each one asks for the position it kept all along, but they are fanned apart first:
 // merging put them on top of each other, so restoring the wishes unchanged would leave
 // a stack that looks like a single pill.
 #[tauri::command]
@@ -14575,7 +14575,7 @@ async fn dissolve_float_folder(app: AppHandle, state: State<'_, Db>, id: String)
             .collect();
         (members, folder.pos)
     };
-    // Pills and folders already on screen are obstacles — this folder's own window is
+    // Pills and folders already on screen are obstacles: this folder's own window is
     // about to close, so it is not one.
     let taken: Vec<Rect> = app
         .webview_windows()
@@ -14668,7 +14668,7 @@ async fn remove_folder_member(
 }
 
 // Persist the per-prompt video player state (volume, mute, loop).
-// Async: can fire while scrubbing — keep the settings write off the UI thread.
+// Async: can fire while scrubbing; keep the settings write off the UI thread.
 #[tauri::command]
 async fn set_video_prefs(app: AppHandle, state: State<'_, Db>, id: String, volume: u32, muted: bool, looped: bool) -> Result<(), String> {
     let mut store = lock(&state);
@@ -14687,7 +14687,7 @@ async fn set_video_prefs(app: AppHandle, state: State<'_, Db>, id: String, volum
 
 // One frozen monitor: its capture plus its global physical origin and size.
 // image is Arc'd so the background JPEG encode and the stored capture share one
-// buffer instead of each owning an ~80 MB copy of the frozen desktop — every
+// buffer instead of each owning an ~80 MB copy of the frozen desktop: every
 // reader (crop_rgb/crop_rgba/sample_frozen) only ever borrows it.
 struct MonitorCap {
     image: Arc<image::RgbaImage>,
@@ -14717,8 +14717,8 @@ struct SnipModeState(Mutex<SnipMode>);
 struct SnipPreview(Arc<Mutex<Option<Option<SnipBg>>>>);
 
 // True while a snip session is on screen (between open_snip and capture/cancel).
-// The overlay window itself is kept alive and reused, so this flag — not the
-// window's existence — is what tells open_snip a snip is already in progress.
+// The overlay window itself is kept alive and reused, so this flag: not the
+// window's existence: is what tells open_snip a snip is already in progress.
 static SNIP_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 // The running session is a colour pick (loupe overlay) rather than a region
@@ -14734,7 +14734,7 @@ static REC_SWITCH_PICK: AtomicBool = AtomicBool::new(false);
 // End the current snip session: HIDE (never close) the reusable overlay so its
 // warm WebView2 survives for the next snip, bring the app's own windows back, and
 // drop the temp preview. Closing the overlay is what forced every snip to pay the
-// full WebView2 cold-start — keeping it alive is the whole speed win.
+// full WebView2 cold-start: keeping it alive is the whole speed win.
 fn close_all_snip(app: &AppHandle) {
     for (label, win) in app.webview_windows() {
         if label.starts_with("snip-") {
@@ -14753,10 +14753,10 @@ fn close_all_snip(app: &AppHandle) {
     }
 }
 
-// Hide (or restore) the app's own windows — the main window and floating pills —
+// Hide (or restore) the app's own windows (the main window and floating pills)
 // around a snip, so a screenshot never contains the app itself (this also
 // reveals whatever the main window was covering, e.g. Task Manager).
-// Returns whether any matching window was visible beforehand — begin_capture
+// Returns whether any matching window was visible beforehand: begin_capture
 // uses this on the hide path to skip its post-hide settle delay when there was
 // nothing on screen to hide in the first place.
 fn set_app_windows_hidden(app: &AppHandle, hidden: bool) -> bool {
@@ -14764,7 +14764,7 @@ fn set_app_windows_hidden(app: &AppHandle, hidden: bool) -> bool {
     for (label, win) in app.webview_windows() {
         // A folder window is always-on-top exactly like a pill, and every other
         // caller that hides float- windows for a screenshot already pairs it with
-        // folder- (2924, 4662, 4700, 8009) — missing it here left an open folder
+        // folder- (2924, 4662, 4700, 8009): missing it here left an open folder
         // sitting in the snip capture.
         if label == "main" || label.starts_with("float-") || label.starts_with("folder-") {
             if hidden {
@@ -14776,7 +14776,7 @@ fn set_app_windows_hidden(app: &AppHandle, hidden: bool) -> bool {
                 let _ = win.show();
                 // Bring the main window back to the front (and out of any minimized
                 // state) so finishing/cancelling a snip never leaves it hidden behind
-                // other windows — which reads as the app having minimized itself.
+                // other windows: which reads as the app having minimized itself.
                 if label == "main" {
                     let _ = win.unminimize();
                     let _ = win.set_focus();
@@ -14788,7 +14788,7 @@ fn set_app_windows_hidden(app: &AppHandle, hidden: bool) -> bool {
 }
 
 // Hide (or re-show) only the snip overlay(s). Used by the window-capture
-// workaround, which needs to grab the LIVE desktop — the overlay (showing the
+// workaround, which needs to grab the LIVE desktop: the overlay (showing the
 // frozen image) would otherwise be what gets captured.
 fn set_snip_overlay_hidden(app: &AppHandle, hidden: bool) {
     for (label, win) in app.webview_windows() {
@@ -14799,7 +14799,7 @@ fn set_snip_overlay_hidden(app: &AppHandle, hidden: bool) {
 }
 
 // The snip preview JPEG is written to a temp file and shown via the asset
-// protocol — far quicker than passing a multi-MB base64 data URL through IPC and
+// protocol: far quicker than passing a multi-MB base64 data URL through IPC and
 // decoding it in the overlay. A rotating name avoids any stale webview cache.
 static SNIP_PREVIEW_SEQ: AtomicU64 = AtomicU64::new(0);
 static SNIP_PREVIEW_FILE: Mutex<Option<PathBuf>> = Mutex::new(None);
@@ -14819,14 +14819,14 @@ fn write_snip_preview(jpeg: &[u8]) -> Option<String> {
 }
 
 // Crash-mid-session leftovers in the OS temp dir are never cleaned by anything
-// else — the snip preview only ever deletes its own immediate predecessor (that
+// else: the snip preview only ever deletes its own immediate predecessor (that
 // bookkeeping is in-memory only, lost on a crash or a plain restart), and
 // update.cmd deletes the installer + itself but never its own staging folder.
 // Swept at startup and then on a slow cadence, since these are rare leftovers
 // from an abnormal exit, not a live resource any running instance still needs.
 // A snip preview lives only for the few minutes between taking a screenshot and
 // saving/discarding it, so anything older than this was abandoned (a crash, a
-// kill) rather than in active use — well short of catching a file another,
+// kill) rather than in active use: well short of catching a file another,
 // concurrently running instance ("Allow multiple instances") is using right now.
 const STALE_TEMP_FILE_AGE: Duration = Duration::from_secs(3600);
 // How often the sweep repeats while the app keeps running.
