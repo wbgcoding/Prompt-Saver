@@ -268,7 +268,7 @@ $("ve-export-error-copy").addEventListener("click", () => {
   invoke("copy_text", { text: $("ve-export-error-raw").textContent }).then(() => toast(t("copied"))).catch(() => {});
 });
 
-// Accepts "mm:ss.mmm", "ss.mmm" and a bare number of seconds — whichever the
+// Accepts "mm:ss.mmm", "ss.mmm" and a bare number of seconds: whichever the
 // user happens to type. Anything unreadable returns null so the caller can keep
 // the previous value instead of jumping to zero.
 function parseTime(text) {
@@ -1161,7 +1161,7 @@ function renderRects() {
     layer.appendChild(el);
   }
 
-  // A text overlay has a point, not a rectangle — it gets a draggable label chip
+  // A text overlay has a point, not a rectangle: it gets a draggable label chip
   // showing roughly where the line will start.
   if (selected && selected.kind === "text") {
     const chip = document.createElement("div");
@@ -2507,7 +2507,7 @@ function renderOverlayEditor() {
 
 // A path inside a filter option passes two parsing levels, and only one spelling
 // survives both: wrapped in single quotes with exactly ONE backslash before the
-// drive colon. Checked against the shipped ffmpeg build — unquoted, unescaped and
+// drive colon. Checked against the shipped ffmpeg build; unquoted, unescaped and
 // double-escaped all fail with "Invalid argument". The caller supplies the quotes.
 function ffPath(path) {
   return String(path).replace(/\\/g, "/").replace(/:/g, "\\:");
@@ -2568,7 +2568,7 @@ function videoOverlayLoopArg(op) {
   return count > 0 ? `:loop=${count}` : "";
 }
 
-// atempo only accepts 0.5–2.0 per stage, so a larger factor is split across
+// atempo only accepts 0.5-2.0 per stage, so a larger factor is split across
 // several stages that multiply back to the requested rate.
 function atempoChain(rate) {
   const stages = [];
@@ -2857,7 +2857,7 @@ function buildVideoChain() {
   // Speed comes before the overlays because their `enable` ranges are already
   // expressed on the sped-up output timeline. The crop comes AFTER them: every
   // overlay position is a coordinate in the SOURCE frame, which is the frame the
-  // preview shows them on — cropping first would shift each one by the crop
+  // preview shows them on: cropping first would shift each one by the crop
   // offset and push anything near an edge out of the picture entirely.
   if (speed && Math.abs(speed.rate - 1) > 0.001) chain(`setpts=PTS/${speed.rate}`);
 
@@ -2933,7 +2933,7 @@ function buildVideoChain() {
   if (silentFormat) chain(`scale='min(iw,${MAX_SILENT_DIM})':'min(ih,${MAX_SILENT_DIM})':force_original_aspect_ratio=decrease`);
 
   if (gif) {
-    // Palette generation and use in the SAME graph — two ffmpeg runs would mean
+    // Palette generation and use in the SAME graph: two ffmpeg runs would mean
     // an intermediate file for nothing.
     const g0 = label(), g1 = label(), pal = label();
     parts.push(`[${cur}]fps=15,split[${g0}][${g1}]`);
@@ -3047,7 +3047,7 @@ function buildAudioChain() {
   return parts.join(";");
 }
 
-// A pure trim with nothing else touched can be copied instead of re-encoded —
+// A pure trim with nothing else touched can be copied instead of re-encoded:
 // instant, and bit-identical to the source.
 function isLosslessCopy() {
   // mp4, mov and mkv can all carry an h264/aac stream untouched; the other
@@ -3672,7 +3672,7 @@ function applyPreset(format, quality, downscale) {
   persistExportSettings();
   updateExportNote();
 }
-// Presets only fill the manual controls — there is no second export path.
+// Presets only fill the manual controls; there is no second export path.
 $("ve-preset-same").addEventListener("click", () => applyPreset("mp4", "high", ""));
 $("ve-preset-small").addEventListener("click", () => applyPreset("mp4", "small", "720"));
 $("ve-preset-gif").addEventListener("click", () => applyPreset("gif", "small", "480"));
@@ -4032,7 +4032,7 @@ async function loadRecording(path, originDir, overlayPath) {
 
   // A mic recording arrives as a sidecar WAV next to the mp4; the editor
   // consolidates the two the first time it opens that recording, so from then on
-  // there is one file with two audio tracks. Failing here is not fatal — only the
+  // there is one file with two audio tracks. Failing here is not fatal; only the
   // mic controls stay off.
   if (probe && probe.mic_sidecar) {
     try {
@@ -4261,7 +4261,7 @@ function applySettings(settings) {
   renderScalePresets();
   // The recording is PULLED, not pushed: a push would race the webview's first
   // frame, which is why the placeholder window does the same. The
-  // "video-editor-load" event covers the other case — opening a second recording
+  // "video-editor-load" event covers the other case: opening a second recording
   // into a window that is already up.
   let path = "";
   let originDir = "";

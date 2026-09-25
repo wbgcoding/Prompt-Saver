@@ -3,7 +3,7 @@
 // region across any monitors or click a window.
 //
 // Coordinates are mapped by RATIO against the displayed frozen image, never via
-// the window scale factor — so the mapping is pixel-exact on any DPI mix.
+// the window scale factor: so the mapping is pixel-exact on any DPI mix.
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
@@ -62,7 +62,7 @@ let cur = null; // picked point, in stitched-image physical pixels
 let curPicked = false; // true once `cur` reflects a real aim, not just the seed
 // Last 5 picked colours as #rrggbb, newest first. Owned by the BACKEND
 // (pick_color records what it really copied) and handed over with every session in
-// snip_background.pick_history — the page keeps no history state of its own, so a
+// snip_background.pick_history: the page keeps no history state of its own, so a
 // hidden or reloaded overlay webview cannot lose it.
 let pickHistory = [];
 
@@ -94,7 +94,7 @@ hint.textContent = T.hint;
 // a fresh one was the slow part). beginSession() runs once on first load and
 // again on every "snip-begin" the backend fires for a reused window.
 let i18nLoaded = false;
-// beginSession()'s reveal fallback — module-scoped so resetSession() can cancel a
+// beginSession()'s reveal fallback: module-scoped so resetSession() can cancel a
 // still-pending timer from a session that got replaced before it fired (the window
 // is reused across snips), instead of it firing snip_present into the next one.
 let revealTimer = 0;
@@ -150,7 +150,7 @@ async function beginSession() {
     pickZoom = clampZoom(Number(b.pick_zoom) || 4);
     readZoom.textContent = `${pickZoom}×`;
     pickFmt = b.pick_format || "hex";
-    // Must stay odd — one cell has to be exactly the picked pixel.
+    // Must stay odd: one cell has to be exactly the picked pixel.
     loupeCells = 2 * Math.floor((Number(b.pick_cells) || 15) / 2) + 1;
     pickHistory = Array.isArray(b.pick_history) ? b.pick_history : [];
     renderHistory(); // the picks made earlier in this app run
@@ -159,7 +159,7 @@ async function beginSession() {
     noDim();
     // Start on the middle of the desktop so the first patch is already on its way
     // before the overlay is even shown; the very next pointer move corrects it.
-    // `curPicked` stays false until the user really aims somewhere — a click without
+    // `curPicked` stays false until the user really aims somewhere: a click without
     // any pointer movement must take the colour under the CURSOR, not this seed.
     setCur(Math.floor(FULL_W / 2), Math.floor(FULL_H / 2));
     curPicked = false;
@@ -180,7 +180,7 @@ async function beginSession() {
   bg.onerror = present;
   bg.src = b.is_file ? convertFileSrc(b.src) : b.src;
   revealTimer = setTimeout(present, 500);
-  // Hover highlight loads in the background — it must not gate the overlay. The
+  // Hover highlight loads in the background: it must not gate the overlay. The
   // picker has no window selection, so it never pays for the enumeration.
   if (!pickMode) {
     invoke("snip_windows", { index: IDX })
@@ -206,7 +206,7 @@ async function beginSession() {
 }
 
 // Begin now only if a snip is already in flight (cold-build path); otherwise stay
-// idle — the window may be a startup pre-warm. Reused snips arrive via "snip-begin".
+// idle: the window may be a startup pre-warm. Reused snips arrive via "snip-begin".
 invoke("snip_should_begin").then((go) => { if (go) beginSession().catch(() => {}); }).catch(() => {});
 listen("snip-begin", () => beginSession().catch(() => {}));
 
@@ -305,7 +305,7 @@ function tileRectFor(cx, cy) {
 }
 
 // True once the cursor is close enough to an edge of the cached patch that the loupe
-// could run past it. An edge that IS the desktop edge never counts — there is nothing
+// could run past it. An edge that IS the desktop edge never counts: there is nothing
 // further to fetch there, so a cursor parked in a corner must not refetch forever.
 function tileStale() {
   if (!tile) return true;
@@ -337,7 +337,7 @@ async function ensureTile() {
 }
 
 // One pixel of the frozen desktop, in stitched physical px. Null when it is outside
-// the desktop OR simply not in the cached patch yet — the picker must never report a
+// the desktop OR simply not in the cached patch yet: the picker must never report a
 // neighbour, a clamped edge or a stale value as if it were the real pixel.
 function pixelAt(x, y) {
   if (!tile || x < tile.x || y < tile.y || x >= tile.x + tile.w || y >= tile.y + tile.h) return null;
@@ -356,7 +356,7 @@ const hexToRgb = (s) => {
 
 // Mirror of the backend's rgb_to_hsl (rounded ints; grey has no hue, red is 0°).
 // The readout has to be identical to what the click will copy, and it cannot ask
-// the backend per pointer move — so the same rounding lives on both sides.
+// the backend per pointer move: so the same rounding lives on both sides.
 function rgbToHsl(r, g, b) {
   const rf = r / 255, gf = g / 255, bf = b / 255;
   const max = Math.max(rf, gf, bf), min = Math.min(rf, gf, bf);
@@ -389,7 +389,7 @@ function setCur(x, y) {
   queueLoupe();
 }
 
-// At most one redraw per frame — pointer moves and held arrow keys both fire far
+// At most one redraw per frame: pointer moves and held arrow keys both fire far
 // faster than the screen refreshes. The timer is a backstop: this overlay is shown
 // from a parked webview whose frame production can still be paused for a moment,
 // and a loupe that never paints would leave the picker looking dead. Whichever
@@ -466,14 +466,14 @@ function drawLoupe() {
   swatch.style.background = hex;
   readMain.textContent = formatColor(pickFmt, c[0], c[1], c[2]);
   // Second line: hex is the one notation everyone recognises, so show it whenever
-  // the chosen format is something else — and rgb() when hex is the format.
+  // the chosen format is something else, and rgb() when hex is the format.
   readAlt.textContent = pickFmt === "hex" ? `rgb(${c[0]},${c[1]},${c[2]})` : hex;
   loupeLive = true;
   placeLoupe();
 }
 
 // ---- Zoom ----
-// The magnification is an expert setting, but nobody looks there mid-pick — so the
+// The magnification is an expert setting, but nobody looks there mid-pick: so the
 // overlay owns it too: wheel, or + / - for anyone without one. The last value is
 // written back to loupeZoom (debounced), so the next pick starts where this one ended
 // and the expert slider stays the single source of truth.
@@ -527,7 +527,7 @@ function placeLoupe() {
   loupe.style.top = `${Math.max(6, ly)}px`;
 }
 
-// Render the last-5 strip. Rebuilt from scratch on every change — 5 buttons is
+// Render the last-5 strip. Rebuilt from scratch on every change: 5 buttons is
 // cheap, no need for incremental diffing.
 function renderHistory() {
   historyEl.innerHTML = "";
@@ -547,21 +547,21 @@ function renderHistory() {
     btn.addEventListener("mouseup", async (e) => {
       e.stopPropagation();
       try {
-        // Check the return value too — a resolved false (write rejected) must
+        // Check the return value too: a resolved false (write rejected) must
         // not flash "copied" any more than a thrown error would.
         const ok = await invoke("copy_text", { text: formatColor(pickFmt, r, g, b) });
         if (ok) {
           btn.classList.add("copied");
           setTimeout(() => btn.classList.remove("copied"), 250);
         }
-      } catch { /* clipboard write failed — nothing to show inside this overlay */ }
+      } catch { /* clipboard write failed: nothing to show inside this overlay */ }
     });
     historyEl.appendChild(btn);
   }
 }
 
 // Copy the picked colour. The backend re-samples the frozen image at this exact
-// pixel and owns the clipboard write — nothing is stored as a prompt or in the
+// pixel and owns the clipboard write: nothing is stored as a prompt or in the
 // copy history.
 async function pickHere() {
   if (pickBusy || !cur) return;
@@ -595,7 +595,7 @@ function windowAt(cssX, cssY) {
   return null;
 }
 
-// Process at most once per frame — mousemove fires far faster than the screen
+// Process at most once per frame: mousemove fires far faster than the screen
 // refreshes, so coalescing keeps the overlay smooth on large desktops.
 let lastMove = null, moveRaf = 0;
 function onMove() {
@@ -725,7 +725,7 @@ window.addEventListener("mouseup", async (e) => {
   }
 });
 
-// Arrow keys nudge the picked pixel by exactly one PHYSICAL pixel — the precision
+// Arrow keys nudge the picked pixel by exactly one PHYSICAL pixel: the precision
 // the mouse cannot give on a scaled monitor. The OS cursor is hidden while picking,
 // so the crosshair we draw is the only pointer and it follows the keys.
 const NUDGE = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
