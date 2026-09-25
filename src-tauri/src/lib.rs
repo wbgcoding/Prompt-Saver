@@ -20851,10 +20851,29 @@ mod keylog {
         // SETTLE_MS or later) to actually speak for a key struck at `t`.
         // None means no such check exists YET: the caller must keep
         // waiting for one, never assume "probably fine" just because time
-        // is short.
+        // is short. `checks` stays sorted by start time (see push_check),
+        // so the earliest qualifying one is found with a binary search
+        // instead of a linear scan.
         fn qualifying_check(&self, t: u64) -> Option<(u64, bool)> {
             let need = t.saturating_add(SETTLE_MS);
-            self.checks.iter().copied().find(|(start, _)| *start >= need)
+            let idx = self.checks.partition_point(|(start, _)| *start < need);
+            self.checks.get(idx).copied()
+        }
+
+        // Drops every check and arrival that can no longer matter to any
+        // key still pending or yet to arrive: `qualifying_check` never
+        // looks at anything before a key's own SETTLE_MS deadline, and
+        // `window_is_dirty`/`in_blind_window` never look earlier than
+        // GUARD_MS before a key's own timestamp -- so nothing older than
+        // the oldest still-pending key minus GUARD_MS can ever be read
+        // again. Without this a capture running for the length of a whole
+        // recording keeps every focus change and every scheduled check it
+        // ever saw, and every single verdict scans all of it.
+        fn prune(&mut self, cutoff_ms: u64) {
+            let ci = self.checks.partition_point(|(t, _)| *t < cutoff_ms);
+            self.checks.drain(0..ci);
+            let ai = self.arrivals.partition_point(|t| *t < cutoff_ms);
+            self.arrivals.drain(0..ai);
         }
 
         // Whether a "password" check, or a focus-change arrival, lies
@@ -21262,6 +21281,10 @@ mod keylog {
                 Err(RecvTimeoutError::Disconnected) => break,
             }
             resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger);
+            // Nothing before the oldest still-pending key's own GUARD_MS
+            // lookback can ever be read again -- see Ledger::prune.
+            let prune_before = pending.front().map(|k| k.t_ms).unwrap_or_else(mono_ms).saturating_sub(GUARD_MS);
+            ledger.lock().unwrap_or_else(|e| e.into_inner()).prune(prune_before);
         }
         // The channel is gone -- stop() already uninstalled the hook and no
         // further check will ever run, so nothing still pending gets to
@@ -21712,6 +21735,33 @@ mod keylog {
             ledger.gap_everything();
             assert_eq!(verdict(&ledger, 50, false), Some(true), "once the handler failed to register, nothing gets recorded again");
             assert_eq!(verdict(&ledger, 1_000_000, false), Some(true), "including any key far later, however clean its own checks look");
+        }
+
+        #[test]
+        fn pruning_drops_only_entries_no_pending_or_future_key_could_ever_need_again() {
+            let mut ledger = Ledger::default();
+            ledger.push_check(0, false); // ancient, long since resolved
+            ledger.push_arrival(50); // ancient focus change, long since resolved
+            ledger.push_check(50, true);
+            // One key already resolved by a qualifying check, one still
+            // waiting on its own.
+            let resolved_key = 5_000;
+            ledger.push_check(resolved_key + SETTLE_MS, false);
+            let pending_key = 5_200;
+            let before_resolved = verdict(&ledger, resolved_key, false);
+            let before_pending = verdict(&ledger, pending_key, false);
+            let checks_before = ledger.checks.len();
+            let arrivals_before = ledger.arrivals.len();
+
+            // The oldest still-pending key is `pending_key` -- the consumer
+            // prunes to pending_key - GUARD_MS, exactly as the loop in
+            // consumer_thread_main does every iteration.
+            ledger.prune(pending_key.saturating_sub(GUARD_MS));
+
+            assert!(ledger.checks.len() < checks_before, "the ancient entries must actually be gone");
+            assert!(ledger.arrivals.len() < arrivals_before, "the ancient arrival must actually be gone");
+            assert_eq!(verdict(&ledger, resolved_key, false), before_resolved, "pruning must never change an already-settled verdict");
+            assert_eq!(verdict(&ledger, pending_key, false), before_pending, "pruning must never change a still-pending verdict either");
         }
 
         // --- ActiveClock: pause drops events, and offsets use the
