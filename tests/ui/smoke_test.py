@@ -7197,6 +7197,27 @@ PROBE = """
           await sleep(100);
           if (!undoBtn.disabled) out.errors.push('screenshot editor: undo stayed enabled after undoing the only stroke');
         }
+        {
+          const shortcutsBtn = document.getElementById('snip-edit-shortcuts');
+          const shortcutsModal = document.getElementById('shortcuts-modal');
+          if (!shortcutsBtn || !onScreen(shortcutsBtn) || !canHit(shortcutsBtn)) {
+            out.errors.push('screenshot editor: shortcuts overview button is missing, hidden, or not clickable');
+          } else {
+            shortcutsBtn.click();
+            await sleep(50);
+            if (shortcutsModal.classList.contains('hidden')) {
+              out.errors.push('screenshot editor: shortcuts overview did not open');
+            } else {
+              const rows = shortcutsModal.querySelectorAll('.shortcuts-row');
+              if (rows.length === 0) out.errors.push('screenshot editor: shortcuts overview opened with no rows');
+              document.getElementById('shortcuts-modal-close').click();
+              await sleep(50);
+              if (!shortcutsModal.classList.contains('hidden')) {
+                out.errors.push('screenshot editor: shortcuts overview did not close');
+              }
+            }
+          }
+        }
         // 179: the overlay's own titlebar (move) and resize grip (resize) -- the
         // overlay covers the whole frameless main window, so without these there
         // is no way to move or resize it while it is open.
@@ -10025,6 +10046,27 @@ VIDEO_PROBE = """
     await sleep(30);
     if (document.getElementById('ve-mute-mic').classList.contains('ve-muted-btn')) {
       errs.push('clicking the mic mute button must mix the mic track back in');
+    }
+    {
+      const shortcutsBtn = document.getElementById('ve-shortcuts');
+      const shortcutsModal = document.getElementById('shortcuts-modal');
+      if (!shortcutsBtn || !hitTestable(shortcutsBtn)) {
+        errs.push('video editor: shortcuts overview button is missing, hidden, or not clickable');
+      } else {
+        shortcutsBtn.click();
+        await sleep(50);
+        if (shortcutsModal.classList.contains('hidden')) {
+          errs.push('video editor: shortcuts overview did not open');
+        } else {
+          const rows = shortcutsModal.querySelectorAll('.shortcuts-row');
+          if (rows.length === 0) errs.push('video editor: shortcuts overview opened with no rows');
+          document.getElementById('shortcuts-modal-close').click();
+          await sleep(50);
+          if (!shortcutsModal.classList.contains('hidden')) {
+            errs.push('video editor: shortcuts overview did not close');
+          }
+        }
+      }
     }
     rawKeyCheck('edit tab');
     sideScan(errs, 'edit tab');
