@@ -21514,6 +21514,15 @@ mod keylog {
         ctrl: bool,
         alt: bool,
         win: bool,
+        // Set after arrival, by the consumer's own focus
+        // poll, when this key's own timestamp falls inside a span the poll
+        // cannot vouch for (a detected focus change, or the poll itself
+        // running late enough to mean the consumer was stuck) -- see
+        // mark_forced_gaps. Once set this key gaps unconditionally,
+        // bypassing the ledger-based verdict entirely, because the span
+        // that made it suspect can be far wider than any single arrival's
+        // own blind window.
+        forced_gap: bool,
     }
 
     // Tab, Shift+Tab (same VK code as Tab -- the shift state never changes
@@ -21751,7 +21760,7 @@ mod keylog {
                     if let Some(tx) = guard.as_ref() {
                         // try_send: this callback must never block, a full
                         // channel just means the newest event is dropped.
-                        let _ = tx.try_send(RawKey { vk: info.vkCode, scan: info.scanCode, extended, down, t_ms, injected, ctrl, alt, win });
+                        let _ = tx.try_send(RawKey { vk: info.vkCode, scan: info.scanCode, extended, down, t_ms, injected, ctrl, alt, win, forced_gap: false });
                     }
                 }
             }
@@ -22032,6 +22041,40 @@ mod keylog {
         !pending_is_empty && now >= next_poll_due
     }
 
+    // A poll running this much later than its own scheduled
+    // deadline means the consumer thread was stuck somewhere in between --
+    // a slow UI Automation call (up to UIA_TIMEOUT_MS) is the only thing on
+    // this thread that can block for any real length of time. Treated as
+    // "unknown for the whole stalled span", same as an actually-detected
+    // identity change, because a long enough stall can hide a focus change
+    // focus_identity_changed itself would otherwise have caught on time --
+    // an A -> B -> A flip landing entirely inside the stall still compares
+    // as "unchanged" at the two endpoints the poll actually got to read.
+    fn poll_overran(now: u64, next_poll_due: u64) -> bool {
+        now.saturating_sub(next_poll_due) > FOCUS_POLL_MS
+    }
+
+    // Whether a key's own timestamp falls inside a span this
+    // poll cannot vouch for, widened by GUARD_MS on both sides the same way
+    // every other blind window here is -- used to mark still-pending keys
+    // forced_gap (see mark_forced_gaps) rather than trust a single point-in
+    // -time arrival to cover a span that can be far wider than SETTLE_MS.
+    fn key_in_widened_span(t_ms: u64, span_from: u64, span_to: u64) -> bool {
+        t_ms >= span_from.saturating_sub(GUARD_MS) && t_ms <= span_to.saturating_add(GUARD_MS)
+    }
+
+    // Marks every still-pending key whose own timestamp falls inside
+    // [span_from, span_to] (already widened by GUARD_MS) forced_gap -- see
+    // RawKey's own doc. Called once per poll tick that could not vouch for
+    // the whole interval since the last one it confirmed unchanged.
+    fn mark_forced_gaps(pending: &mut VecDeque<RawKey>, span_from: u64, span_to: u64) {
+        for raw in pending.iter_mut() {
+            if key_in_widened_span(raw.t_ms, span_from, span_to) {
+                raw.forced_gap = true;
+            }
+        }
+    }
+
     // Resolves as many keys at the FRONT of `pending` as the ledger's
     // current state allows, in order, and stops at the first one `verdict`
     // cannot decide yet. FIFO is safe here: a later key always needs an
@@ -22045,7 +22088,7 @@ mod keylog {
             // switch instant is only known once finish_and_continue_recording
             // actually runs) -- checked fresh on every resolution pass, not
             // only once at push time.
-            let v = if past_cutoff(front.t_ms, cutoff_ms) {
+            let v = if front.forced_gap || past_cutoff(front.t_ms, cutoff_ms) {
                 Some(Verdict::Gap)
             } else {
                 let guard = ledger.lock().unwrap_or_else(|e| e.into_inner());
@@ -22242,14 +22285,32 @@ mod keylog {
             // with.
             if focus_poll_due(pending.is_empty(), now, next_poll_due) {
                 let cur = focus_identity(&uia);
-                if focus_identity_changed(&uia, &last_focus, &cur) {
-                    // NEW-4: stamped at `last_focus_at`, the last instant
-                    // this focus was actually confirmed unchanged, not at
-                    // `mono_ms()` here -- the real change could have
-                    // happened anywhere in between, and the earlier instant
-                    // is the fail-closed choice (it only ever widens the
-                    // blind window, never narrows it).
-                    ledger.lock().unwrap_or_else(|e| e.into_inner()).push_arrival(last_focus_at);
+                let changed = focus_identity_changed(&uia, &last_focus, &cur);
+                // A stalled poll is treated exactly like a
+                // detected change -- see poll_overran's own doc for why a
+                // stall alone, with no change ever actually observed, is
+                // still not safe to treat as "confirmed unchanged".
+                let stalled = poll_overran(now, next_poll_due);
+                if changed || stalled {
+                    // The real change (or, if only stalled, whatever this
+                    // poll simply could not see) could have happened
+                    // ANYWHERE in (last_focus_at, now], not just at one of
+                    // the two endpoints -- a slow classify_checked or a
+                    // stuck UI Automation call can make that span far wider
+                    // than SETTLE_MS/GUARD_MS could ever cover from a
+                    // single point arrival. Every key still pending inside
+                    // the span, widened by GUARD_MS on both sides, is
+                    // marked to gap outright regardless of what the
+                    // ledger's own verdict would otherwise say, and both
+                    // ends are also recorded as ordinary arrivals for
+                    // whatever key is still to come.
+                    // mark_forced_gaps widens by GUARD_MS on both sides
+                    // itself (key_in_widened_span) -- the raw endpoints go
+                    // in here unwidened, or the span would double-widen.
+                    mark_forced_gaps(&mut pending, last_focus_at, now);
+                    let mut guard = ledger.lock().unwrap_or_else(|e| e.into_inner());
+                    guard.push_arrival(last_focus_at);
+                    guard.push_arrival(now);
                 }
                 last_focus = cur;
                 last_focus_at = now;
@@ -22269,9 +22330,12 @@ mod keylog {
         // still honors a qualifying check that already completed in time,
         // but never starts a new one.
         for raw in pending {
-            let ledger = ledger.lock().unwrap_or_else(|e| e.into_inner());
-            let gap = verdict_at_stop(&ledger, raw.t_ms, raw.injected, KeyId { vk: raw.vk, scan: raw.scan, extended: raw.extended }, raw.ctrl, raw.alt, raw.win);
-            drop(ledger);
+            let gap = if raw.forced_gap {
+                true
+            } else {
+                let ledger = ledger.lock().unwrap_or_else(|e| e.into_inner());
+                verdict_at_stop(&ledger, raw.t_ms, raw.injected, KeyId { vk: raw.vk, scan: raw.scan, extended: raw.extended }, raw.ctrl, raw.alt, raw.win)
+            };
             let t_ms = clock.lock().unwrap_or_else(|e| e.into_inner()).active_ms(raw.t_ms);
             rec.record(raw.vk, raw.scan, raw.down, t_ms, gap);
         }
@@ -22973,6 +23037,91 @@ mod keylog {
             // still Password (see is_password_field's own fail-closed rule)
             // and not reported as invalidated.
             assert_eq!(classify_checked(&None), (FieldClass::Password, false));
+        }
+
+        #[test]
+        fn a_late_detected_focus_change_after_a_stall_gaps_the_key_typed_during_it() {
+            // A settle check that (falsely, from the stall's point of view)
+            // reports the OLD field as still non-text, arriving well after
+            // the key below -- this is the "later check sees the button
+            // field, stable" false negative this closes. On its
+            // own this stale check would satisfy `verdict`'s Allow branch.
+            let mut ledger = Ledger::default();
+            ledger.push_check(1600, FieldClass::NonText);
+            assert_eq!(verdict(&ledger, 1200, false), Some(Verdict::Allow));
+
+            let mut pending: VecDeque<RawKey> = VecDeque::new();
+            pending.push_back(RawKey {
+                vk: 0x41,
+                scan: 0,
+                extended: false,
+                down: true,
+                t_ms: 1200,
+                injected: false,
+                ctrl: false,
+                alt: false,
+                win: false,
+                forced_gap: false,
+            });
+
+            // The poll last confirmed focus unchanged at 1000, then stalled
+            // in a slow UI Automation call and only got to detect the real
+            // change (or simply ran late enough to count as one) at 2000 --
+            // the key above landed inside that whole stalled span, which is
+            // exactly what mark_forced_gaps and the poll block's own
+            // push_arrival pair are meant to cover.
+            mark_forced_gaps(&mut pending, 1000, 2000);
+            ledger.push_arrival(1000);
+            ledger.push_arrival(2000);
+
+            let mut rec = Recorder::default();
+            let clock = Mutex::new(ActiveClock::new(0));
+            let cutoff: Mutex<Option<u64>> = Mutex::new(None);
+            let ledger = Mutex::new(ledger);
+            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger);
+
+            assert!(pending.is_empty());
+            assert!(rec.sidecar.events.is_empty());
+            assert_eq!(rec.sidecar.gaps, vec![Gap { start_ms: 1200, end_ms: 1200 }]);
+        }
+
+        #[test]
+        fn a_poll_that_overran_its_deadline_counts_as_a_stall_even_with_no_detected_change() {
+            assert!(!poll_overran(1049, 1000)); // 49ms late -- still within FOCUS_POLL_MS
+            assert!(!poll_overran(1050, 1000)); // exactly FOCUS_POLL_MS late -- not yet over
+            assert!(poll_overran(1051, 1000)); // over by more than one full poll interval
+        }
+
+        #[test]
+        fn key_in_widened_span_covers_guard_ms_on_both_sides_of_the_span() {
+            assert!(!key_in_widened_span(699, 1000, 2000)); // just outside, even widened
+            assert!(key_in_widened_span(700, 1000, 2000)); // span start - GUARD_MS
+            assert!(key_in_widened_span(1500, 1000, 2000)); // inside the span itself
+            assert!(key_in_widened_span(2300, 1000, 2000)); // span end + GUARD_MS
+            assert!(!key_in_widened_span(2301, 1000, 2000)); // just outside, even widened
+        }
+
+        #[test]
+        fn mark_forced_gaps_only_touches_keys_inside_the_widened_span() {
+            let mut pending: VecDeque<RawKey> = VecDeque::new();
+            let make = |t_ms: u64| RawKey {
+                vk: 0x41,
+                scan: 0,
+                extended: false,
+                down: true,
+                t_ms,
+                injected: false,
+                ctrl: false,
+                alt: false,
+                win: false,
+                forced_gap: false,
+            };
+            pending.push_back(make(500)); // before the widened span
+            pending.push_back(make(1500)); // inside
+            pending.push_back(make(2500)); // after the widened span
+            mark_forced_gaps(&mut pending, 1000, 2000);
+            let flags: Vec<bool> = pending.iter().map(|k| k.forced_gap).collect();
+            assert_eq!(flags, vec![false, true, false]);
         }
 
         #[test]
