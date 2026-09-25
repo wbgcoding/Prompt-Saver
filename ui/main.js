@@ -9988,21 +9988,22 @@ function renderCompareView() {
       txt.textContent = p.text;
     }
     col.appendChild(txt);
+    if (dupGroup) {
+      const keep = document.createElement("button");
+      keep.type = "button";
+      keep.className = "ghost-btn dup-keep";
+      keep.textContent = t("dupKeep");
+      keep.addEventListener("click", () => keepOneDup(dupGroup, p.id));
+      col.appendChild(keep);
+    }
     body.appendChild(col);
   });
   const actions = $("compare-actions");
   actions.innerHTML = "";
   if (dupGroup) {
     // The finder's own actions: keep exactly one of the group, deleting the
-    // rest (same keepOneDup as before, just reached from here now).
-    for (const p of ps) {
-      const keep = document.createElement("button");
-      keep.type = "button";
-      keep.className = "ghost-btn dup-keep";
-      keep.textContent = t("dupKeep");
-      keep.addEventListener("click", () => keepOneDup(dupGroup, p.id));
-      actions.appendChild(keep);
-    }
+    // rest (same keepOneDup as before, just reached from here now). Each
+    // column now carries its own keep button; only "ignore" stays here.
     const ignore = document.createElement("button");
     ignore.type = "button";
     ignore.className = "ghost-btn";

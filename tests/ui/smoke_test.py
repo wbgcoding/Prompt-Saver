@@ -4058,11 +4058,14 @@ PROBE = """
             if (!document.querySelector('#compare-body .diff-add, #compare-body .diff-del')) {
               out.errors.push('a duplicate pair does not highlight its word differences');
             }
-            if (document.querySelectorAll('#compare-actions .dup-keep').length !== 2) {
-              out.errors.push('the compare view opened from the duplicate finder is missing its "keep one side" actions');
+            if ([...document.querySelectorAll('#compare-body .dup-col')].some((col) => col.querySelectorAll('.dup-keep').length !== 1)) {
+              out.errors.push('the compare view opened from the duplicate finder is missing a per-column "keep this one" action');
+            }
+            if (document.querySelectorAll('#compare-actions .dup-keep').length !== 0) {
+              out.errors.push('the compare view opened from the duplicate finder still has "keep one side" actions in the action bar');
             }
             layoutScan('duplicates compare view');
-            mustReach('duplicates compare view', '#compare-actions button');
+            mustReach('duplicates compare view', '#compare-actions button, #compare-body .dup-keep');
             if (!(Number(getComputedStyle(cmpModal).zIndex) > Number(getComputedStyle(dm).zIndex))) {
               out.errors.push('the compare view opens behind the duplicates dialog');
             }

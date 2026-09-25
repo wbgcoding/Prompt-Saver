@@ -3408,6 +3408,9 @@ select.modal-input { padding-right: 30px; }
 .compare-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--border); flex: 0 0 auto; }
 .compare-image { max-width: 100%; max-height: 120px; object-fit: contain; border-radius: 6px; }
 .compare-actions { gap: 8px; }
+/* Each column's own keep button sits at the column's foot, so buttons in
+   columns of different text length still line up. */
+.compare-col .dup-keep { margin-top: auto; }
 /* Same flow-root reasoning as .dup-text above, one level down: each rotation
    entry is its own block (stacked on purpose), but a block's OWN diff spans
    must not be read as further stacked rows by the layout scan either. */
