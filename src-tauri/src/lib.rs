@@ -21801,7 +21801,7 @@ mod keylog {
     // checks, so there is exactly one code path deciding a field's class no
     // matter which of the two triggered it.
     fn classify_focused_field(uia: &Option<IUIAutomation>) -> FieldClass {
-        classify_field(focused_hwnd(), uia)
+        classify_identity(&focus_identity(uia))
     }
 
     // A focus "identity" cheap enough to poll every FOCUS_POLL_MS while keys
@@ -21836,9 +21836,11 @@ mod keylog {
 
     // FAIL CLOSED throughout: any doubt (UI Automation unreachable, the call
     // erroring, no focused window at all) is treated as a password field.
-    // Never record anything while in doubt.
-    fn is_password_field(hwnd: HWND, uia: &Option<IUIAutomation>) -> bool {
-        let uia_password = uia.as_ref().and_then(|uia| unsafe { uia.GetFocusedElement() }.ok()).and_then(|el| unsafe { el.CurrentIsPassword() }.ok());
+    // Never record anything while in doubt. Takes the focused element
+    // ALREADY fetched by the caller (see classify_identity) rather than
+    // fetching its own -- see NEW-4.
+    fn is_password_field(hwnd: HWND, el: Option<&IUIAutomationElement>) -> bool {
+        let uia_password = el.and_then(|el| unsafe { el.CurrentIsPassword() }.ok());
         match uia_password {
             None => return true, // UI Automation unreachable -- doubt means password.
             Some(b) if b.as_bool() => return true,
@@ -21885,9 +21887,10 @@ mod keylog {
             || control_type == UIA_ThumbControlTypeId
     }
 
-    fn is_confidently_non_text(uia: &Option<IUIAutomation>) -> bool {
-        let Some(uia) = uia else { return false };
-        let Ok(el) = (unsafe { uia.GetFocusedElement() }) else { return false };
+    // Takes the focused element ALREADY fetched by the caller (see
+    // classify_identity) rather than fetching its own -- see NEW-4.
+    fn is_confidently_non_text(el: Option<&IUIAutomationElement>) -> bool {
+        let Some(el) = el else { return false };
         let Ok(control_type) = (unsafe { el.CurrentControlType() }) else { return false };
         if !is_non_text_control_type(control_type) {
             return false;
@@ -21909,21 +21912,48 @@ mod keylog {
         true
     }
 
-    // The full classification: FieldClass::Password takes priority over
-    // everything (the existing, unchanged `is_password_field` fail-closed
-    // rule), then FieldClass::NonText only on a positive, confident
-    // non-text classification, and FieldClass::Text for anything else at
-    // all -- see `is_confidently_non_text`'s own doc for why doubt lands
-    // here rather than in the narrower NonText tier.
-    fn classify_field(hwnd: HWND, uia: &Option<IUIAutomation>) -> FieldClass {
-        if is_password_field(hwnd, uia) {
+    // The full classification, given an identity ALREADY fetched once by
+    // the caller (see focus_identity) -- NEW-4: is_password_field and
+    // is_confidently_non_text used to each call GetFocusedElement
+    // independently, so a focus change landing between the two reads could
+    // hand them two different elements without either read itself failing.
+    // FieldClass::Password takes priority over everything (the existing,
+    // unchanged `is_password_field` fail-closed rule), then
+    // FieldClass::NonText only on a positive, confident non-text
+    // classification, and FieldClass::Text for anything else at all -- see
+    // `is_confidently_non_text`'s own doc for why doubt lands here rather
+    // than in the narrower NonText tier.
+    fn classify_identity(identity: &(HWND, Option<IUIAutomationElement>)) -> FieldClass {
+        let (hwnd, el) = identity;
+        if is_password_field(*hwnd, el.as_ref()) {
             return FieldClass::Password;
         }
-        if is_confidently_non_text(uia) {
+        if is_confidently_non_text(el.as_ref()) {
             FieldClass::NonText
         } else {
             FieldClass::Text
         }
+    }
+
+    // NEW-4: a check is stamped as having STARTED at some instant, but
+    // GetFocusedElement and the CurrentIsPassword/CurrentControlType/
+    // GetCurrentPatternAs reads that follow are not guaranteed fast --
+    // any of them can block up to UIA_TIMEOUT_MS. If the focused identity
+    // changed between the first read (before classify_identity) and the
+    // last (after it), the element(s) this check actually queried may
+    // already belong to the field the user left, not the one now focused,
+    // and nothing it concluded can be trusted. That is treated exactly
+    // like any other doubt: forced to FieldClass::Password, the same
+    // fail-closed answer as a confirmed password field -- and the caller
+    // is told so (the returned bool) so it can also push an arrival at the
+    // check's own start instant, opening a real blind window around it
+    // the same as a genuine focus-changed event would.
+    fn classify_checked(uia: &Option<IUIAutomation>) -> (FieldClass, bool) {
+        let before = focus_identity(uia);
+        let class = classify_identity(&before);
+        let after = focus_identity(uia);
+        let changed = focus_identity_changed(uia, &before, &after);
+        (if changed { FieldClass::Password } else { class }, changed)
     }
 
     // The UI Automation focus-changed event's own handler object: the OS
@@ -22101,6 +22131,14 @@ mod keylog {
         // any key can possibly be pending, so the very first poll compares
         // against a real baseline rather than an assumed one.
         let mut last_focus = focus_identity(&uia);
+        // NEW-4: the instant `last_focus` was last confirmed unchanged --
+        // when the poll below detects a change, the real change could have
+        // happened anywhere between this instant and now, so the arrival is
+        // stamped here (the last known-good moment), not at whenever this
+        // tick's own (possibly slow) GetFocusedElement call returns. Starts
+        // alongside `last_focus` for the same reason: the first poll needs
+        // a real baseline, not an assumed one.
+        let mut last_focus_at = mono_ms();
         // The next absolute instant the focus poll is due, tracked
         // independently of whatever wakes the loop up -- see the
         // unconditional check/poll block below for why this has to be an
@@ -22177,8 +22215,22 @@ mod keylog {
             // nothing was watching in between.
             let now = mono_ms();
             if settle_check_due(pending.front().map(|front| front.t_ms), now) {
-                let class = classify_focused_field(&uia);
-                ledger.lock().unwrap_or_else(|e| e.into_inner()).push_check(now, class);
+                // NEW-4: classify_checked fetches the focused element ONCE
+                // and confirms the identity has not moved on between before
+                // and after -- a plain classify_focused_field here would
+                // still be stamped as having started at `now` while its own
+                // reads (which can block up to UIA_TIMEOUT_MS) run later,
+                // so a focus change landing in that gap used to go
+                // completely unseen by this check. A confirmed change is
+                // recorded as an extra arrival at `now` too (the check's own
+                // start), opening a real blind window around it exactly
+                // like a genuine focus-changed event would.
+                let (class, invalidated) = classify_checked(&uia);
+                let mut guard = ledger.lock().unwrap_or_else(|e| e.into_inner());
+                guard.push_check(now, class);
+                if invalidated {
+                    guard.push_arrival(now);
+                }
             }
             // The ~50ms focus poll: while any key is still waiting on a
             // verdict, check whether the focused HWND or element has moved
@@ -22191,9 +22243,16 @@ mod keylog {
             if focus_poll_due(pending.is_empty(), now, next_poll_due) {
                 let cur = focus_identity(&uia);
                 if focus_identity_changed(&uia, &last_focus, &cur) {
-                    ledger.lock().unwrap_or_else(|e| e.into_inner()).push_arrival(mono_ms());
+                    // NEW-4: stamped at `last_focus_at`, the last instant
+                    // this focus was actually confirmed unchanged, not at
+                    // `mono_ms()` here -- the real change could have
+                    // happened anywhere in between, and the earlier instant
+                    // is the fail-closed choice (it only ever widens the
+                    // blind window, never narrows it).
+                    ledger.lock().unwrap_or_else(|e| e.into_inner()).push_arrival(last_focus_at);
                 }
                 last_focus = cur;
+                last_focus_at = now;
                 next_poll_due = now.saturating_add(FOCUS_POLL_MS);
             }
             resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger);
@@ -22862,6 +22921,58 @@ mod keylog {
                 resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x41, scan: 0x1E, extended: false }, false, false, false),
                 "a PuTTY-like Pane/Custom window's typed letters must be gapped, not recorded"
             );
+        }
+
+        // --- NEW-4: a check's own reads (GetFocusedElement and the
+        // properties queried on it) must never be trusted once the focused
+        // identity has moved on since the check started.
+
+        #[test]
+        fn a_changed_hwnd_is_a_changed_identity_even_with_no_element_on_either_side() {
+            let a = (HWND(1 as *mut std::ffi::c_void), None);
+            let b = (HWND(2 as *mut std::ffi::c_void), None);
+            assert!(focus_identity_changed(&None, &a, &b), "a different HWND alone is enough, no UIA object needed to see it");
+        }
+
+        #[test]
+        fn the_same_hwnd_with_no_element_on_either_side_is_not_a_changed_identity() {
+            let a = (HWND(1 as *mut std::ffi::c_void), None);
+            let b = (HWND(1 as *mut std::ffi::c_void), None);
+            assert!(!focus_identity_changed(&None, &a, &b));
+        }
+
+        #[test]
+        fn is_password_field_fails_closed_with_no_element_to_query() {
+            // NEW-4: takes the caller's already-fetched element now, rather
+            // than fetching its own -- a missing element (UIA unavailable,
+            // or the fetch itself failed) must still resolve to the same
+            // fail-closed Password answer as before.
+            assert!(is_password_field(HWND(1 as *mut std::ffi::c_void), None));
+        }
+
+        #[test]
+        fn is_confidently_non_text_fails_closed_with_no_element_to_query() {
+            assert!(!is_confidently_non_text(None), "no element to positively classify means Text, never NonText");
+        }
+
+        #[test]
+        fn classify_identity_is_password_when_the_shared_element_is_missing() {
+            let identity = (HWND(1 as *mut std::ffi::c_void), None);
+            assert_eq!(classify_identity(&identity), FieldClass::Password);
+        }
+
+        #[test]
+        fn classify_checked_fails_closed_and_reports_no_change_with_no_uia_object() {
+            // With no UI Automation object at all, focus_identity never
+            // touches a live element (see focus_identity), so the only
+            // thing that could make classify_checked see a "changed"
+            // identity between its own before/after reads is the real
+            // foreground HWND itself moving in the instant between two
+            // back-to-back calls -- not expected inside a test process, so
+            // this exercises the ordinary fail-closed path deterministically:
+            // still Password (see is_password_field's own fail-closed rule)
+            // and not reported as invalidated.
+            assert_eq!(classify_checked(&None), (FieldClass::Password, false));
         }
 
         #[test]
