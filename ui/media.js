@@ -144,7 +144,7 @@ export function buildMediaBar(video, { onChange, labels } = {}) {
   vol.min = 0;
   vol.max = 100;
   vol.value = 100;
-  // While the slider is held, the popup must not close — even if the cursor
+  // While the slider is held, the popup must not close, even if the cursor
   // leaves it. Released: CSS :hover takes over again (closes unless on it).
   vol.addEventListener("pointerdown", () => {
     soundWrap.classList.add("dragging");
@@ -171,7 +171,7 @@ export function buildMediaBar(video, { onChange, labels } = {}) {
       soundWrap.classList.add("below");
   });
 
-  // Keep icon, slider and loop button in sync with the video element — also
+  // Keep icon, slider and loop button in sync with the video element, also
   // when a saved state is applied from the outside (applyVideoPrefs).
   const syncSound = () => {
     soundBtn.innerHTML = video.muted ? ICON_MUTED : ICON_SOUND;
@@ -185,7 +185,7 @@ export function buildMediaBar(video, { onChange, labels } = {}) {
     nameBtn(loopBtn, video.loop ? L.loopOn : L.loopOff);
   });
 
-  // Re-applies every label from the current L — called now with whatever the
+  // Re-applies every label from the current L, called now with whatever the
   // caller passed synchronously, and again via setLabels once a window whose
   // translations load asynchronously (the floating pill) has them ready.
   const applyLabels = () => {
@@ -194,7 +194,7 @@ export function buildMediaBar(video, { onChange, labels } = {}) {
     nameBtn(soundBtn, video.muted ? L.unmute : L.mute);
   };
   bar.setLabels = (newLabels) => { L = newLabels; applyLabels(); };
-  // mkBtn(ICON_PAUSE) above assumes autoplay always wins the race — wrong when
+  // mkBtn(ICON_PAUSE) above assumes autoplay always wins the race; wrong when
   // flag("videoAutoplay") is off, so re-sync the glyph itself to the real state
   // now instead of leaving it stuck on pause until the next play/pause event.
   playBtn.innerHTML = video.paused ? ICON_PLAY : ICON_PAUSE;

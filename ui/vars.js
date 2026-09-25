@@ -32,7 +32,7 @@ let answered = false;
 function answer(values) {
   if (answered) return;
   answered = true;
-  // If the call itself fails (backend not ready, IPC hiccup), un-stick the guard —
+  // If the call itself fails (backend not ready, IPC hiccup), un-stick the guard:
   // otherwise this window can never answer again and just sits there forever.
   invoke("var_window_result", { values }).catch(() => { answered = false; });
 }
@@ -44,7 +44,7 @@ const confirm = () =>
   }));
 
 // Choice variables get a listbox built in this window instead of a native <select>:
-// an OS dropdown is its own window, and opening one would blur this one — which is
+// an OS dropdown is its own window, and opening one would blur this one, which is
 // exactly the gesture that cancels.
 function buildChoice(row, options, initial) {
   let value = options.includes(initial) ? initial : options[0];
@@ -116,7 +116,7 @@ function render(data) {
       ? buildChoice(row, spec.options, spec.value)
       : buildText(row, spec.value || "", spec.placeholder || "");
     let box = null;
-    // The remember switch belongs to free-text rows only — a choice keeps its last
+    // The remember switch belongs to free-text rows only: a choice keeps its last
     // pick through its own setting, with no checkbox to tick.
     if (data.askRemember && !(spec.options && spec.options.length)) {
       const keep = document.createElement("label");
@@ -141,7 +141,7 @@ document.addEventListener("keydown", (e) => {
   // the open list) must reach that control's OWN native activation (open the list,
   // or pick the focused item) instead of being hijacked into an immediate confirm
   // with whatever value was already selected before. A single-option choice has no
-  // list to open at all (buildChoice only toggles it past options.length > 1) — its
+  // list to open at all (buildChoice only toggles it past options.length > 1); its
   // button's native Enter activation is then a no-op, so Enter must fall through to
   // confirm() there same as any other row, or it does nothing at all.
   else if (e.key === "Enter") {
@@ -156,7 +156,7 @@ document.addEventListener("keydown", (e) => {
 });
 okEl.addEventListener("click", confirm);
 cancelEl.addEventListener("click", () => answer(null));
-// Clicking away means "not now" — the window never lingers over another app. The
+// Clicking away means "not now": the window never lingers over another app. The
 // grace period covers the hand-off: the backend shows the window and only then takes
 // the focus, and a blur fired in between would cancel before anything was on screen.
 const OPENED_AT = Date.now();
@@ -169,7 +169,7 @@ document.body.addEventListener("mousedown", (e) => {
   if (!cardEl.contains(e.target)) answer(null);
 });
 // A click elsewhere in the card (a different row, say) left any other open
-// choice list standing open — nothing ever closed one except picking an item or
+// choice list standing open: nothing ever closed one except picking an item or
 // clicking its own button again.
 cardEl.addEventListener("mousedown", (e) => {
   for (const list of cardEl.querySelectorAll(".vars-choice-list:not(.hidden)")) {

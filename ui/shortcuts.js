@@ -7,8 +7,8 @@
 // literal character, so the label stays correct on a non-US layout (a German
 // keyboard's "Z" and "Y" swap places, but KeyZ/KeyY do not move). The
 // modifier names are never translated except "Ctrl", which becomes "Strg" in
-// German — the one abbreviation the app already used before this table
-// existed.
+// German (the one abbreviation the app already used before this table
+// existed).
 //
 // scopes: "snipEditor" (the screenshot editor overlay in the main window),
 // "videoEditor" (the video editor window), "mainWindow" (the main window

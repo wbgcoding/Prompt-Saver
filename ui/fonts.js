@@ -7,7 +7,7 @@ export function fitText(el, maxW, maxH, cap = 96) {
   el.style.fontSize = "";
   if (!(maxW > 0) || !el.textContent) return;
   el.style.fontSize = `${cap}px`;
-  // Measure the text itself via a Range — robust inside centered flex/overflow
+  // Measure the text itself via a Range, robust inside centered flex/overflow
   // containers where scrollWidth under-reports.
   const range = document.createRange();
   range.selectNodeContents(el);

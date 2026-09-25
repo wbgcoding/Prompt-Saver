@@ -4,8 +4,8 @@
 //
 // Why a substitution instead of {item} placeholders in every string: the word is
 // inflected in half the languages we ship, so a single token could not carry the
-// case. A form table is the translator's job and leaves the source texts untouched
-// — with no table (this brand) nothing runs at all.
+// case. A form table is the translator's job and leaves the source texts untouched:
+// with no table (this brand) nothing runs at all.
 import { TERMS } from "./brand.js";
 
 const cache = new Map();
@@ -24,8 +24,8 @@ function ruleFor(lang) {
   return rule;
 }
 
-// Apply the brand's vocabulary to one finished string. A no-op — same string object
-// — for a brand without a table, which is the case that has to stay free.
+// Apply the brand's vocabulary to one finished string. A no-op (same string object)
+// for a brand without a table, which is the case that has to stay free.
 export function applyTerms(text, lang) {
   const rule = ruleFor(lang);
   if (!rule) return text;
