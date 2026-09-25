@@ -7,6 +7,7 @@
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
 import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
+import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw } from "./shortcuts.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { createColorPop } from "./colorpop.js";
@@ -188,12 +189,20 @@ function t(key) {
   return applyTermsFn(String(raw).replaceAll("{app}", APP_NAME), LANG);
 }
 
+// Same binding trick main.js uses: shortcuts.js has no i18n state of its own,
+// so every call here is closed over this window's own t()/LANG.
+const withShortcut = (el, action) => withShortcutRaw(el, action, t, LANG);
+const shortcutRows = (scope) => rowsForScopeRaw(scope, t, LANG);
+
 function applyI18n() {
   if (!TXT_READY) return;
   document.documentElement.lang = LANG;
   document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll("[data-i18n-ph]").forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
-  document.querySelectorAll("[data-i18n-title]").forEach((el) => { el.title = t(el.dataset.i18nTitle); });
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    if (el.dataset.shortcut) withShortcut(el, el.dataset.shortcut);
+    else el.title = t(el.dataset.i18nTitle);
+  });
   document.querySelectorAll("[data-i18n-aria]").forEach((el) => { el.setAttribute("aria-label", t(el.dataset.i18nAria)); });
   renderOps();
   renderOverlayList();
@@ -320,6 +329,33 @@ function closeConfirm(answer) {
   // the next Tab starting from nowhere.
   if (prev && prev.isConnected && typeof prev.focus === "function") prev.focus();
   resolve(answer);
+}
+
+// The "?" overview -- same modal/modal-narrow/modal-titlebar shell as
+// ve-confirm above, filled straight from SHORTCUTS.
+let shortcutsModalOpener = null;
+function openShortcutsModal(scope) {
+  shortcutsModalOpener = document.activeElement;
+  const list = $("shortcuts-modal-list");
+  list.innerHTML = "";
+  for (const row of shortcutRows(scope)) {
+    const r = document.createElement("div");
+    r.className = "shortcuts-row";
+    const desc = document.createElement("span");
+    desc.className = "shortcuts-row-desc";
+    desc.textContent = row.desc;
+    const keys = document.createElement("span");
+    keys.className = "shortcuts-row-keys";
+    keys.textContent = row.keys;
+    r.append(desc, keys);
+    list.appendChild(r);
+  }
+  $("shortcuts-modal").classList.remove("hidden");
+}
+function closeShortcutsModal() {
+  $("shortcuts-modal").classList.add("hidden");
+  if (shortcutsModalOpener?.isConnected && typeof shortcutsModalOpener.focus === "function") shortcutsModalOpener.focus();
+  shortcutsModalOpener = null;
 }
 
 // Keeps Tab inside the open dialog instead of letting it walk the editor behind it.
@@ -3291,6 +3327,9 @@ for (const tab of document.querySelectorAll(".ve-tab")) {
 }
 
 $("ve-close").addEventListener("click", () => closeWindow());
+$("ve-shortcuts").addEventListener("click", () => openShortcutsModal("videoEditor"));
+$("shortcuts-modal-close").addEventListener("click", closeShortcutsModal);
+$("shortcuts-modal").addEventListener("pointerdown", (e) => { if (e.target === $("shortcuts-modal")) closeShortcutsModal(); });
 $("ve-undo").addEventListener("click", undo);
 $("ve-redo").addEventListener("click", redo);
 $("ve-play").addEventListener("click", togglePlay);
@@ -3663,6 +3702,11 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { e.preventDefault(); closeConfirm(false); }
     else if (e.key === "Tab") trapTabWithin($("ve-confirm"), e);
     else if (e.key === "Enter") { e.preventDefault(); closeConfirm(true); }
+    return;
+  }
+  if (!$("shortcuts-modal").classList.contains("hidden")) {
+    if (e.key === "Escape") { e.preventDefault(); closeShortcutsModal(); }
+    else if (e.key === "Tab") trapTabWithin($("shortcuts-modal"), e);
     return;
   }
   if (!colorPop.classList.contains("hidden")) {
