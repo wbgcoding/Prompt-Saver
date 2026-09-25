@@ -1278,6 +1278,9 @@ the video editor and the introduction tour ship on).
   the expert menu.
 - The three export format entries now just read "CSV", "TXT" and "JSON",
   each already sitting next to its own export button.
+- **Chaining moved from the Copying group to Tiles & copying in the expert
+  menu**, next to the other tile settings, so the chain icon on a tile is
+  easier to find. No setting was removed or renamed, only regrouped.
 
 ## 2.6.3 (2026-07-26)
 
