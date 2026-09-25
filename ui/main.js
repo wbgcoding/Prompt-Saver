@@ -16580,10 +16580,20 @@ function bind() {
     btn.classList.toggle("is-paused", state === "paused");
   }
   async function syncRecordBtnFromStatus() {
+    // Skipped while the window is hidden (minimized to tray) -- the button
+    // it updates is not visible either, so there is nothing to resync until
+    // the window is shown again, which re-applies the real state on its own.
+    if (document.hidden) return;
     const status = await invoke("recording_status").catch(() => null);
     setRecordBtnState(!status ? "idle" : status.paused ? "paused" : "recording");
   }
   setInterval(syncRecordBtnFromStatus, 5000);
+  // Catches up the moment the window is shown again instead of waiting out
+  // the rest of the 5s poll interval for a state change that happened while
+  // hidden.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) syncRecordBtnFromStatus();
+  });
   listen("recording-cancelled", () => setRecordBtnState("idle"));
   let recCountdownTimer = 0;
   function cancelRecCountdown() {
