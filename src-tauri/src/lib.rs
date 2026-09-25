@@ -3282,17 +3282,21 @@ fn lock_is_stale(existing: &DataDirLockInfo) -> bool {
 static DATA_DIR_READONLY: AtomicBool = AtomicBool::new(false);
 static DATA_DIR_LOCK_HOST: Mutex<Option<String>> = Mutex::new(None);
 
-// Set by disable_demo_mode() once it has flushed the pending demo settings to
-// the (still-demo) data dir and is about to flip the "datapath" redirect back
-// to the real one and call app.restart(). Between that flip and the process
-// actually exiting, the exit's own RunEvent::Exit flush (or a 250ms
-// settings_flush_tick landing in the same window) must not be allowed to
-// write anything: at that point db_conn()/data_dir() already resolve to the
-// REAL store, and a write there would overwrite real settings with demo ones
-// (views, sample folder, demoMode=true). Never cleared explicitly -- the
-// process the flip belongs to is about to be replaced by app.restart(), and
-// the fresh process starts with the default `false` again.
-static DEMO_EXIT_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+// Set by enable_demo_mode()/disable_demo_mode() once each has flushed
+// whatever it needs to flush and is about to flip the "datapath" redirect
+// (to the demo folder, or back to the real one) and call app.restart().
+// Between that flip and the process actually exiting, the exit's own
+// RunEvent::Exit flush (or a 250ms settings_flush_tick landing in the same
+// window) -- or, on the enable side, any ordinary command still in flight --
+// must not be allowed to write anything: at that point db_conn()/data_dir()
+// already resolve to the OTHER store than the one just flushed, and a write
+// there would land real data in the demo store (or demo data in the real
+// one). Reset to false on a failed flip (see both commands' own Err paths) --
+// left on, every save in the process would silently fail forever even though
+// the switch never actually completed. On success it is never cleared
+// explicitly: the process it belongs to is about to be replaced by
+// app.restart(), and the fresh process starts with the default `false` again.
+static DEMO_TRANSITION_LOCKED: AtomicBool = AtomicBool::new(false);
 
 // Decides read-only vs. owned for `dir` and, if owned, claims it. Called once at
 // load_store() and again after set_data_dir() points the app at a different
@@ -3352,7 +3356,7 @@ fn data_dir_write_blocked(app: &AppHandle) -> bool {
     // No event emitted here (unlike the readonly case below): the window is
     // already on its way down for app.restart(), and this is not a condition
     // the user needs a banner about.
-    if DEMO_EXIT_IN_PROGRESS.load(Ordering::Relaxed) {
+    if DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed) {
         return true;
     }
     if !DATA_DIR_READONLY.load(Ordering::Relaxed) {
@@ -3477,6 +3481,20 @@ fn db_conn_init_schema(conn: &Connection) -> bool {
 }
 
 fn db_conn(app: &AppHandle) -> Option<Connection> {
+    // The single choke point EVERY writer goes through, not just the four that
+    // also call data_dir_write_blocked() (save_prompts/save_trash/
+    // save_prompts_and_trash/write_settings_now): db_conn(app) is also called
+    // directly by save_editor_draft, save_edit_state, record_copy's copy_log
+    // append, version snapshots and more, none of which check that flag
+    // themselves. Checking it here instead of (or in addition to) each call
+    // site means enable_demo_mode's/disable_demo_mode's DEMO_TRANSITION_LOCKED
+    // window blocks every one of them, not only the ones already funneled through
+    // data_dir_write_blocked. None here reads exactly like "DB unavailable" to
+    // every existing caller, which already handles it (an error result, or a
+    // JSON-fallback path that goes through data_dir_write_blocked itself).
+    if DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed) {
+        return None;
+    }
     db_conn_at(&data_dir(app))
 }
 
@@ -4046,6 +4064,31 @@ fn db_list_clips(conn: &Connection) -> Vec<ClipItem> {
     out
 }
 
+// The other half of load_store()'s relative -> absolute resolution for
+// `file_path` (see its own comment): reversed right before anything is
+// persisted or exported, so a demo prompt's attachment is never baked into a
+// saved row, a promptSync .md file or an export as an absolute path
+// containing the Windows account name. Only ever touches a path whose PARENT
+// is exactly the live data dir -- the one load_store() itself would have
+// joined on -- so a real attachment (never placed directly inside the data
+// dir by the file picker) is never touched. Every caller of db_write_prompts/
+// db_write_prompts_and_trash, sync_write_all_impl and export_prompts must run
+// its prompts through this first.
+fn strip_data_dir_prefix<'a>(dir: &Path, prompts: &'a [Prompt]) -> std::borrow::Cow<'a, [Prompt]> {
+    if !prompts.iter().any(|p| !p.file_path.is_empty() && Path::new(&p.file_path).parent() == Some(dir)) {
+        return std::borrow::Cow::Borrowed(prompts);
+    }
+    let mut out = prompts.to_vec();
+    for p in out.iter_mut() {
+        if Path::new(&p.file_path).parent() == Some(dir) {
+            if let Some(name) = Path::new(&p.file_path).file_name() {
+                p.file_path = name.to_string_lossy().to_string();
+            }
+        }
+    }
+    std::borrow::Cow::Owned(out)
+}
+
 // Returns whether the prompts made it to durable storage (DB or JSON fallback) —
 // callers that follow a save with a destructive step (deleting an orphaned
 // attachment file) must skip that step when this is false, or the deletion can
@@ -4061,13 +4104,15 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
     if store.prompts_locked {
         return false;
     }
+    let dir = data_dir(app);
+    let prompts = strip_data_dir_prefix(&dir, &store.prompts);
     if let Some(mut conn) = db_conn(app) {
         // The map is only advanced by a committed write, so a failure here leaves it
         // describing exactly what the (rolled-back) table still holds — the JSON
         // fallback below must not touch it either, or the row would count as saved.
         let ok = {
             let mut written = store.written.borrow_mut();
-            db_write_prompts(&mut conn, &store.prompts, &mut written).is_ok()
+            db_write_prompts(&mut conn, &prompts, &mut written).is_ok()
         };
         if ok {
             spawn_sync_write_all(app, store); // Prompt-folders-as-Markdown: no-op unless the feature is on
@@ -4078,7 +4123,7 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
     // DB write on next launch, so a fallback here is not itself data loss. If even
     // this fails (disk full / permission), the change really is lost — leave a
     // diagnosable trace instead of failing silently.
-    if !write_sealed_json(&data_dir(app).join("prompts.json"), &store.prompts) {
+    if !write_sealed_json(&dir.join("prompts.json"), &prompts) {
         append_crash_log("persist failed: prompts could not be written to the database or the JSON fallback");
         let _ = app.emit("persist-failed", "prompts");
         return false;
@@ -4096,9 +4141,11 @@ fn save_trash(app: &AppHandle, store: &Store) -> bool {
     if store.prompts_locked {
         return false;
     }
+    let dir = data_dir(app);
+    let trash = strip_data_dir_prefix(&dir, &store.trash);
     if let Some(mut conn) = db_conn(app) {
         let mut written = store.written.borrow_mut();
-        if db_write_trash(&mut conn, &store.trash, &mut written).is_ok() {
+        if db_write_trash(&mut conn, &trash, &mut written).is_ok() {
             return true;
         }
     }
@@ -4117,10 +4164,13 @@ fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
     if store.prompts_locked {
         return false;
     }
+    let dir = data_dir(app);
+    let prompts = strip_data_dir_prefix(&dir, &store.prompts);
+    let trash = strip_data_dir_prefix(&dir, &store.trash);
     if let Some(mut conn) = db_conn(app) {
         let ok = {
             let mut written = store.written.borrow_mut();
-            db_write_prompts_and_trash(&mut conn, &store.prompts, &store.trash, &mut written).is_ok()
+            db_write_prompts_and_trash(&mut conn, &prompts, &trash, &mut written).is_ok()
         };
         if ok {
             spawn_sync_write_all(app, store); // Prompt-folders-as-Markdown mirrors prompts, same as save_prompts
@@ -16460,8 +16510,30 @@ fn build_demo_store(dir: &Path, ffmpeg: Option<&Path>) -> Result<(), String> {
     if dir.is_dir() && !dir.join(DEMO_MARKER_FILE).is_file() {
         return Err("a folder already exists at the demo data path and was not created by demo mode; refusing to touch it".to_string());
     }
-    let _ = fs::remove_dir_all(dir);
+    // Delete every entry EXCEPT the marker, one at a time, rather than
+    // remove_dir_all(dir) on the whole folder -- a locked file (data.db held
+    // open by something else) fails one removal and leaves the rest, but a
+    // whole-folder remove_dir_all can fail after already having deleted the
+    // marker along with everything else it managed to remove, leaving a
+    // folder that still exists but no longer carries proof this app made it
+    // -- the guard above would then refuse every later enable forever.
+    // Best-effort per entry: a failure here does not abort the whole rebuild,
+    // it just leaves a stray file that db_write_prompts/db_write_settings
+    // below overwrite anyway (data.db) or that is harmless either way.
+    if dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                if entry.file_name().to_str() == Some(DEMO_MARKER_FILE) {
+                    continue;
+                }
+                let path = entry.path();
+                let _ = if path.is_dir() { fs::remove_dir_all(&path) } else { fs::remove_file(&path) };
+            }
+        }
+    }
     fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    // Written unconditionally, independent of whatever the cleanup above did
+    // or did not manage to remove -- see the comment above it.
     fs::write(dir.join(DEMO_MARKER_FILE), b"").map_err(|e| e.to_string())?;
     // Not db_conn_at(): its schema-init guard runs only once per process (see
     // its own comment), which is exactly right for the app's single real
@@ -16483,10 +16555,12 @@ fn build_demo_store(dir: &Path, ffmpeg: Option<&Path>) -> Result<(), String> {
 // Points `canonical`'s "datapath" redirect at the demo subfolder, after
 // rebuilding it fresh, first saving whatever the redirect held before (a
 // custom folder, or none) so `exit_demo_mode` can put it back exactly.
-fn enter_demo_mode(canonical: &Path, ffmpeg: Option<&Path>) -> Result<PathBuf, String> {
-    fs::create_dir_all(canonical).map_err(|e| e.to_string())?;
-    let demo = canonical.join(DEMO_SUBFOLDER);
-    build_demo_store(&demo, ffmpeg)?;
+// Points `canonical`'s "datapath" redirect at `demo`, first saving whatever
+// the redirect held before (a custom folder, or none) so exit_demo_mode can
+// put it back exactly. Split out of enter_demo_mode so a caller can build the
+// sample store (build_demo_store, possibly running ffmpeg) well before ever
+// touching the redirect -- see enable_demo_mode's own comment.
+fn flip_pointer_to_demo(canonical: &Path, demo: &Path) -> Result<(), String> {
     let pointer = canonical.join("datapath");
     let backup = canonical.join(DEMO_POINTER_BACKUP);
     // Never overwrite an existing backup: one is already there only when a
@@ -16507,7 +16581,76 @@ fn enter_demo_mode(canonical: &Path, ffmpeg: Option<&Path>) -> Result<PathBuf, S
         }
     }
     fs::write(&pointer, demo.to_string_lossy().as_bytes()).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// Test-only convenience (build + flip together, the shape a caller with
+// nothing else going on wants). enable_demo_mode itself calls
+// build_demo_store and flip_pointer_to_demo separately instead, with the
+// store lock and DEMO_TRANSITION_LOCKED sitting in between them.
+#[cfg(test)]
+fn enter_demo_mode(canonical: &Path, ffmpeg: Option<&Path>) -> Result<PathBuf, String> {
+    fs::create_dir_all(canonical).map_err(|e| e.to_string())?;
+    let demo = canonical.join(DEMO_SUBFOLDER);
+    build_demo_store(&demo, ffmpeg)?;
+    flip_pointer_to_demo(canonical, &demo)?;
     Ok(demo)
+}
+
+// ---- A real second running instance, not the allowMultipleInstances flag ----
+//
+// enable_demo_mode/disable_demo_mode used to refuse based on the
+// allowMultipleInstances setting alone -- but that flag lives INSIDE the very
+// store being switched (it can be read back from the demo data.db after a
+// redirect flip, or flipped by another instance mid-session), so it is not
+// trustworthy evidence that a second process is not, right now, also holding
+// this data dir open. Instead, every process registers its own pid in
+// `instances/` under the CANONICAL (never redirected) data dir at startup and
+// removes it again on a clean exit; checking for another LIVE pid there is
+// real evidence, independent of anything either process's Settings currently
+// says.
+fn instances_dir(canonical: &Path) -> PathBuf {
+    canonical.join("instances")
+}
+
+fn register_running_instance(canonical: &Path) {
+    let dir = instances_dir(canonical);
+    let _ = fs::create_dir_all(&dir);
+    let _ = fs::write(dir.join(std::process::id().to_string()), b"");
+}
+
+fn unregister_running_instance(canonical: &Path) {
+    let _ = fs::remove_file(instances_dir(canonical).join(std::process::id().to_string()));
+}
+
+// pid_is_alive() itself is shared with promptSync's own lock file (see
+// pid_from_lock/sync_lock_acquire below) -- same liveness probe, different
+// registry.
+
+// True when some OTHER process currently has this same install's canonical
+// data dir registered. Prunes any stale marker (a pid that is no longer
+// alive -- a crash, or task-killed process that never reached RunEvent::Exit)
+// it comes across along the way.
+fn other_instance_running(canonical: &Path) -> bool {
+    let Ok(entries) = fs::read_dir(instances_dir(canonical)) else {
+        return false;
+    };
+    let me = std::process::id();
+    let mut found = false;
+    for entry in entries.flatten() {
+        let Some(pid) = entry.file_name().to_str().and_then(|s| s.parse::<u32>().ok()) else {
+            continue;
+        };
+        if pid == me {
+            continue;
+        }
+        if pid_is_alive(pid) {
+            found = true;
+        } else {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+    found
 }
 
 // Restores whatever `canonical`'s redirect held before demo mode. The demo
@@ -16546,26 +16689,43 @@ fn exit_demo_mode(canonical: &Path) -> Result<(), String> {
 // lost, then never touched again by anything below.
 #[tauri::command]
 async fn enable_demo_mode(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
+    let canonical = default_data_dir(&app);
+    // A real second process (see other_instance_running's own comment), not
+    // the allowMultipleInstances setting: that flag lives inside the very
+    // store this is about to switch, so it is not trustworthy evidence either
+    // way.
+    if other_instance_running(&canonical) {
+        return Err("demo-mode-multiple-instances".to_string());
+    }
+    // Build the sample store BEFORE the store lock or the redirect are
+    // touched at all: this can run ffmpeg and take real wall-clock time, and
+    // must never sit in front of anything blocked while it does (a second
+    // review finding: the old order flipped the redirect first, so an
+    // ordinary write racing the still-running build landed in the freshly
+    // rebuilt demo store instead of the real one it was meant for).
+    let ffmpeg = ffmpeg_search_path(&app);
+    let demo = canonical.join(DEMO_SUBFOLDER);
+    build_demo_store(&demo, ffmpeg.as_deref())?;
     {
         let store = lock(&state);
-        // With multiple instances allowed, a second running instance keeps
-        // resolving data_dir()/db_conn() fresh on every write of its own; once
-        // this redirect flips, that other instance's ordinary writes would land
-        // in the sample store instead of the real one (and be wiped on the next
-        // demo rebuild). Detecting a SPECIFIC other process cheaply is not
-        // available here, so this refuses demo mode for the whole setting
-        // instead: with it off (the default), the single-instance plugin
-        // already guarantees no such second writer can exist.
-        if store.settings.ui_flags.get("allowMultipleInstances").copied().unwrap_or(false) {
-            return Err("demo-mode-multiple-instances".to_string());
-        }
         if !store.prompts_locked {
             save_prompts(&app, &store);
         }
         save_settings(&app, &store.settings);
+        // Block every further store write for the rest of this process before
+        // the redirect flips below -- the same guard disable_demo_mode uses in
+        // reverse (db_conn() checks it directly), so nothing racing the flip
+        // can land a real write into the demo store just built, or clobber its
+        // own demoMode=true.
+        DEMO_TRANSITION_LOCKED.store(true, Ordering::Relaxed);
     }
-    let ffmpeg = ffmpeg_search_path(&app);
-    enter_demo_mode(&default_data_dir(&app), ffmpeg.as_deref())?;
+    // On failure the flag must come back off: left on, every save in this
+    // process would silently fail forever even though demo mode never
+    // actually turned on (a second review finding).
+    if let Err(e) = flip_pointer_to_demo(&canonical, &demo) {
+        DEMO_TRANSITION_LOCKED.store(false, Ordering::Relaxed);
+        return Err(e);
+    }
     app.restart();
 }
 
@@ -16574,24 +16734,33 @@ async fn enable_demo_mode(app: AppHandle, state: State<'_, Db>) -> Result<(), St
 // folder is not deleted, only abandoned until the next enable overwrites it.
 #[tauri::command]
 async fn disable_demo_mode(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
+    let canonical = default_data_dir(&app);
+    if other_instance_running(&canonical) {
+        return Err("demo-mode-multiple-instances".to_string());
+    }
     {
         let store = lock(&state);
-        if store.settings.ui_flags.get("allowMultipleInstances").copied().unwrap_or(false) {
-            return Err("demo-mode-multiple-instances".to_string());
-        }
         // Flush whatever demo-session settings are still only collected in memory
         // to disk NOW, under the store lock and while the "datapath" redirect
         // still points at the demo folder -- so they land in the demo store, not
         // the real one. Then block every further store write for the rest of
-        // this (about to be replaced) process: exit_demo_mode below flips the
-        // redirect back to the real store, and after that point RunEvent::Exit's
-        // own flush (app.restart() below triggers it) or the 250ms
-        // settings_flush_tick must not be allowed to write demo settings
+        // this (about to be replaced) process: db_conn() itself refuses while
+        // this is set, which covers every writer, not only the four that also
+        // call data_dir_write_blocked() (a second review finding). exit_demo_mode
+        // below flips the redirect back to the real store, and after that point
+        // RunEvent::Exit's own flush (app.restart() below triggers it) or the
+        // 250ms settings_flush_tick must not be allowed to write demo settings
         // (views, sample folder, demoMode=true) over the real ones.
         flush_settings(&app, &store.settings);
-        DEMO_EXIT_IN_PROGRESS.store(true, Ordering::Relaxed);
+        DEMO_TRANSITION_LOCKED.store(true, Ordering::Relaxed);
     }
-    exit_demo_mode(&default_data_dir(&app))?;
+    // Same reasoning as enable_demo_mode's own Err path above: left on after a
+    // failed exit, the app stays in demo mode with every save silently
+    // refused forever.
+    if let Err(e) = exit_demo_mode(&canonical) {
+        DEMO_TRANSITION_LOCKED.store(false, Ordering::Relaxed);
+        return Err(e);
+    }
     app.restart();
 }
 
@@ -22550,6 +22719,20 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     if key == "errorLog" && !enabled {
         ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
+    // Turning this ON while demo mode is active is exactly the condition
+    // enable_demo_mode/disable_demo_mode's own real-instance check exists to
+    // prevent (second review, finding 4): a second process that starts once
+    // this is allowed would keep resolving the redirect per write like the
+    // first, so once either flips it, the other's ordinary writes land in
+    // whichever store it does not belong in. Defense in depth alongside that
+    // check, not a replacement for it -- this one is a settings read, not
+    // proof of anything actually running.
+    if key == "allowMultipleInstances" && enabled {
+        let store = lock(&state);
+        if store.settings.ui_flags.get("demoMode").copied().unwrap_or(false) {
+            return Err("demo-mode-active".to_string());
+        }
+    }
     // The activation work below (a full backup, then one file per prompt) takes
     // as long as the library is large. It runs on a SNAPSHOT taken under a short
     // lock rather than with the lock held, the way spawn_sync_write_all already
@@ -26228,6 +26411,9 @@ async fn export_prompts(
             HashMap::new()
         };
         let resolved: Vec<Prompt> = selected.iter().map(|p| resolved_for_export(p, &remembered, &fixed)).collect();
+        // See strip_data_dir_prefix's own comment: an exported file must never
+        // carry an absolute demo-dir path either.
+        let resolved = strip_data_dir_prefix(&data_dir(&app), &resolved).into_owned();
         let content = match format.as_str() {
             "csv" => to_csv(&resolved),
             "txt" => to_txt(&resolved),
@@ -28696,6 +28882,12 @@ pub fn run() {
                     }));
             }
             sweep_stale_temp_files(); // crash/abnormal-exit leftovers from a previous run
+            // Registered in the CANONICAL dir (never the "datapath" redirect,
+            // which demo mode itself flips) so enable_demo_mode/
+            // disable_demo_mode can tell a real second running instance apart
+            // from the allowMultipleInstances setting -- see
+            // other_instance_running's own comment.
+            register_running_instance(&default_data_dir(&handle));
             let store = load_store(&handle);
             // A one-off pass over whatever the log already holds -- see its own
             // comment for why this cannot just check today's own account name.
@@ -29459,6 +29651,11 @@ pub fn run() {
                 // Backstop for every way out of the app: whatever counter state was
                 // still being collected goes to disk before the process does.
                 flush_settings_now(app);
+                // Matches register_running_instance() in setup() above -- an
+                // orderly exit un-registers this pid immediately; a crash or
+                // task-kill leaves it for other_instance_running() to prune
+                // opportunistically the next time anything checks.
+                unregister_running_instance(&default_data_dir(app));
                 // The timer thread is normally parked for hours; tell it to leave
                 // rather than tearing the process down around a sleeping thread.
                 scheduler::shutdown(Duration::from_millis(SCHEDULER_STOP_WAIT_MS));
@@ -30421,6 +30618,10 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
     if !sync_enabled(settings) {
         return 0;
     }
+    // See strip_data_dir_prefix's own comment: an attachment reference written
+    // to a synced .md file must never carry an absolute demo-dir path either.
+    let prompts = strip_data_dir_prefix(&data_dir(app), prompts);
+    let prompts = prompts.as_ref();
     let dir = sync_dir_path(app, settings);
     if let Err(e) = fs::create_dir_all(&dir) {
         append_crash_log(&format!("prompt-sync: the sync folder could not be created: {e}"));
@@ -38675,22 +38876,69 @@ mod tests {
         let _ = std::fs::remove_dir_all(&canonical);
     }
 
-    // The other half of finding 1: DEMO_EXIT_IN_PROGRESS is the flag
-    // data_dir_write_blocked() checks first (before the DATA_DIR_READONLY
-    // case), the same choke point save_prompts/save_trash/
-    // save_prompts_and_trash/write_settings_now all already call -- this reads
-    // it back exactly like settings_locked_command_reports_the_flag and
-    // settings_write_failed_command_reports_the_flag do for their own flags
-    // (data_dir_write_blocked itself needs a real AppHandle, which no unit
-    // test in this file constructs).
+    // The other half of finding 1: DEMO_TRANSITION_LOCKED is the flag
+    // data_dir_write_blocked() AND db_conn() both check first (the second
+    // review's own point: db_conn() is the actual single choke point, not
+    // just the four functions that also call data_dir_write_blocked()) --
+    // this reads it back exactly like settings_locked_command_reports_the_flag
+    // and settings_write_failed_command_reports_the_flag do for their own
+    // flags (db_conn/data_dir_write_blocked themselves need a real AppHandle,
+    // which no unit test in this file constructs).
     #[test]
-    fn demo_exit_in_progress_flag_round_trips() {
-        let before = DEMO_EXIT_IN_PROGRESS.load(Ordering::Relaxed);
-        DEMO_EXIT_IN_PROGRESS.store(true, Ordering::Relaxed);
-        assert!(DEMO_EXIT_IN_PROGRESS.load(Ordering::Relaxed));
-        DEMO_EXIT_IN_PROGRESS.store(false, Ordering::Relaxed);
-        assert!(!DEMO_EXIT_IN_PROGRESS.load(Ordering::Relaxed));
-        DEMO_EXIT_IN_PROGRESS.store(before, Ordering::Relaxed);
+    fn demo_transition_locked_flag_round_trips() {
+        let before = DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed);
+        DEMO_TRANSITION_LOCKED.store(true, Ordering::Relaxed);
+        assert!(DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed));
+        DEMO_TRANSITION_LOCKED.store(false, Ordering::Relaxed);
+        assert!(!DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed));
+        DEMO_TRANSITION_LOCKED.store(before, Ordering::Relaxed);
+    }
+
+    // Finding 4 (second review): other_instance_running() must be real
+    // evidence of a second live process, not the allowMultipleInstances
+    // setting. Uses this test binary's own pid (always alive) as the "other"
+    // instance and a definitely-dead one (a huge pid unlikely to exist, plus
+    // this process's own pid is excluded so it can never see itself).
+    #[test]
+    #[cfg(windows)]
+    fn other_instance_running_detects_a_live_pid_and_prunes_a_dead_one() {
+        let canonical = std::env::temp_dir().join(format!("{}-test-instance-registry", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&canonical);
+        assert!(!other_instance_running(&canonical), "an empty/missing registry has nothing to find");
+
+        register_running_instance(&canonical);
+        assert!(
+            !other_instance_running(&canonical),
+            "a process must never count itself as a second instance"
+        );
+
+        // A pid some other real process on this machine holds right now --
+        // this test process's own parent-independent liveness stand-in: use
+        // std::process::id() of a spawned short-lived child so it is
+        // definitely alive and definitely not `me`.
+        let mut child = std::process::Command::new("cmd").args(["/C", "ping -n 3 127.0.0.1 >NUL"]).spawn().unwrap();
+        let other_pid = child.id();
+        std::fs::write(instances_dir(&canonical).join(other_pid.to_string()), b"").unwrap();
+        assert!(other_instance_running(&canonical), "a different LIVE pid must be detected");
+
+        // An obviously stale entry (not a real pid on this machine) must be
+        // pruned rather than perma-blocking every future enable/disable.
+        std::fs::write(instances_dir(&canonical).join("999999999"), b"").unwrap();
+        let _ = other_instance_running(&canonical); // one pass to prune it
+        assert!(
+            !instances_dir(&canonical).join("999999999").exists(),
+            "a dead pid's marker must be pruned opportunistically"
+        );
+
+        let _ = child.kill();
+        let _ = child.wait();
+        unregister_running_instance(&canonical);
+        assert!(
+            !instances_dir(&canonical).join(std::process::id().to_string()).exists(),
+            "unregister must remove this process's own marker"
+        );
+
+        let _ = std::fs::remove_dir_all(&canonical);
     }
 
     // Finding 2 (HIGH, portable mode): build_demo_store must never delete a
@@ -38727,6 +38975,39 @@ mod tests {
         build_demo_store(&dir, None).unwrap();
         assert!(!dir.join("left-over.txt").exists(), "a marked folder must still be wiped and rebuilt");
         assert!(dir.join(DEMO_MARKER_FILE).is_file(), "the rebuild must leave the marker in place");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // Finding 3 (N3, second review): a locked file elsewhere in the folder
+    // (data.db held open by something else) must never cost the marker its
+    // life -- the old order (remove_dir_all the whole folder, including the
+    // marker, THEN fail on the locked file) could leave a folder that still
+    // exists but no longer carries proof this app made it, refusing every
+    // later enable forever.
+    #[test]
+    #[cfg(windows)]
+    fn build_demo_store_keeps_its_marker_when_a_file_is_locked() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let dir = std::env::temp_dir().join(format!("{}-test-demo-locked-file", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&dir);
+        build_demo_store(&dir, None).unwrap();
+
+        // share_mode(0) denies every other handle -- including this same
+        // process's own attempt to remove or reopen it -- any access at all.
+        let locked = std::fs::OpenOptions::new().read(true).share_mode(0).open(dir.join("data.db")).unwrap();
+
+        // The rebuild's own data.db step will fail while this handle is open;
+        // what matters here is only that the marker survives it regardless.
+        let _ = build_demo_store(&dir, None);
+        assert!(
+            dir.join(DEMO_MARKER_FILE).is_file(),
+            "the marker must survive a locked file elsewhere in the folder"
+        );
+
+        drop(locked);
+        // Once unlocked, a later enable must not be refused forever either.
+        assert!(build_demo_store(&dir, None).is_ok(), "a retry once the lock clears must succeed");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -38818,6 +39099,63 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // The other half of finding 5 (second review): load_store() resolves the
+    // demo attachment's relative file_path to a real absolute path in memory
+    // so the UI can actually use it -- but the very next unrelated save must
+    // never bake that absolute path back into the database. strip_data_dir_prefix
+    // is what save_prompts (and save_trash/save_prompts_and_trash) run every
+    // prompt through first for exactly this reason: a full round trip
+    // (relative on disk -> absolute in memory, simulating load_store's own
+    // resolution loop -> stripped again before persisting) must land back on
+    // the same relative value it started from, not the resolved one.
+    #[test]
+    fn strip_data_dir_prefix_reverses_load_stores_own_resolution() {
+        let dir = std::env::temp_dir().join(format!("{}-test-demo-strip-prefix", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&dir);
+        build_demo_store(&dir, None).unwrap();
+
+        let conn = db_conn_at(&dir).unwrap();
+        let mut written = WrittenRows::new();
+        let (mut prompts, ..) = db_load(&conn, &mut written);
+        let original = prompts.iter().find(|p| p.id == "demo-attachment").unwrap().file_path.clone();
+        assert!(Path::new(&original).is_relative(), "sanity: db_load must still hand back the relative row");
+
+        // Mirror load_store()'s own resolution loop.
+        for p in prompts.iter_mut() {
+            if !p.file_path.is_empty() && Path::new(&p.file_path).is_relative() {
+                p.file_path = dir.join(&p.file_path).to_string_lossy().to_string();
+            }
+        }
+        let resolved = prompts.iter().find(|p| p.id == "demo-attachment").unwrap().file_path.clone();
+        assert!(Path::new(&resolved).is_absolute(), "sanity: the in-memory copy must now be absolute");
+
+        // What save_prompts runs the resolved prompts through right before
+        // db_write_prompts/write_sealed_json ever see them.
+        let stripped = strip_data_dir_prefix(&dir, &prompts);
+        let round_tripped = stripped.iter().find(|p| p.id == "demo-attachment").unwrap().file_path.clone();
+        assert_eq!(
+            round_tripped, original,
+            "a save made after load_store()'s own resolution must never persist the absolute path"
+        );
+        assert!(
+            Path::new(&round_tripped).is_relative(),
+            "the persisted value must be relative again: {round_tripped}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // A real (non-demo) attachment's absolute path, whose parent is NOT the
+    // data dir, must never be touched by strip_data_dir_prefix -- it is
+    // already exactly what the file picker produced.
+    #[test]
+    fn strip_data_dir_prefix_leaves_an_unrelated_absolute_path_alone() {
+        let dir = std::env::temp_dir().join(format!("{}-test-strip-prefix-unrelated", brand::SLUG));
+        let real = Prompt { file_path: "C:\\Users\\someone\\Documents\\report.pdf".to_string(), ..test_prompt("real") };
+        let out = strip_data_dir_prefix(&dir, std::slice::from_ref(&real));
+        assert_eq!(out[0].file_path, real.file_path);
     }
 
     // Adopting an installed store copies its files one by one. If the database
