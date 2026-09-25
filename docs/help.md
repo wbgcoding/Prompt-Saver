@@ -802,6 +802,13 @@ its own errors. A locked entry stays locked here too, the same as everywhere
 else in the app. While the receiver is running, a banner stays on screen
 with its port number and its own off button.
 
+For a script or another program driving either of these two, `prompt-saver
+describe` prints the full command list as JSON, and
+[docs/automation.md](automation.md) has the complete reference: every
+command's arguments and JSON response shape, the error codes, the link
+scheme, and worked examples, so nothing needs to be worked out by trial and
+error.
+
 ### Updates & security
 
 On by default, and — together with a first-run download of the Microsoft
@@ -1386,6 +1393,13 @@ zählt gegen ein Limit pro Minute und wird protokolliert, ohne das Passwort
 oder den vollen Inhalt. Eine gesperrte Kachel bleibt auch hier gesperrt. Eine
 Anzeige bleibt sichtbar, solange die Schnittstelle läuft, mit Portnummer und
 eigenem Ausschalter.
+
+Für ein Skript oder ein anderes Programm, das eines der beiden steuert, gibt
+`prompt-saver describe` die vollständige Befehlsliste als JSON aus, und
+[docs/automation.md](automation.md) (englisch, wie der Rest des Verzeichnisses)
+ist die vollständige Referenz: jeder Befehl mit seinen Argumenten und der Form
+seiner JSON-Antwort, die Fehlercodes, das Link-Schema und durchgerechnete
+Beispiele, nichts davon muss durch Ausprobieren herausgefunden werden.
 
 **Updates & Sicherheit** — standardmäßig an, einzige eigene
 Netzwerkaktivität außer einem einmaligen WebView2-Installer-Download, falls

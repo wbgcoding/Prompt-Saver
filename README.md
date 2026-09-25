@@ -152,6 +152,13 @@ Full version history: [CHANGELOG.md](CHANGELOG.md)
 | Backups | **Backup manager** in the settings: schedule, retention, password, restore list and statistics |
 | Help | **Help** button in the settings: what every feature and setting does, also readable at [docs/help.md](docs/help.md) |
 
+## Automation
+
+The command line (`prompt-saver <command> ...`) and the local remote-access
+receiver let a script or another program drive Prompt Saver without a human
+at the keyboard. Both are documented, with a full command reference, JSON
+response shapes and worked examples, at [docs/automation.md](docs/automation.md).
+
 ## Building from source
 
 Requirements: [Node.js](https://nodejs.org), [Rust](https://rustup.rs) (MSVC toolchain).

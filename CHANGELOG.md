@@ -43,6 +43,11 @@ the video editor and the introduction tour ship on).
   logged without the password, and a locked prompt stays locked here too. A
   banner stays on screen with the port number and its own off switch while
   the receiver runs.
+- **Automation reference.** `docs/automation.md` documents the command line
+  and the remote access receiver for a script or another program: every
+  command's arguments and JSON response shape, the error codes, the link
+  scheme, and worked examples. `prompt-saver.exe describe` prints the same
+  command list as JSON.
 - **Tags** — label prompts with free-form, colored tags. The editor gets a chip
   row with type-ahead over existing tags and a per-chip color popover; the
   library gets a filter row above the results (multi-select, switchable between

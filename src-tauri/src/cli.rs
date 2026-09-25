@@ -30,7 +30,7 @@ use tauri::{AppHandle, Manager};
 
 const SUBCOMMANDS: &[&str] = &[
     "list", "get", "copy", "add", "edit", "delete", "restore", "tag", "view", "search", "export",
-    "import", "backup", "settings", "version",
+    "import", "backup", "settings", "version", "describe",
 ];
 
 fn looks_like_cli(argv: &[String]) -> bool {
@@ -525,6 +525,7 @@ enum Parsed {
 
 enum Cmd {
     Version,
+    Describe,
     List { tag: Option<String>, favorite: bool, trash: bool, json: bool },
     Get { id: String, json: bool },
     Copy { id: String },
@@ -647,6 +648,10 @@ fn parse(argv: &[String]) -> Result<Parsed, String> {
     }
     let cmd = match head {
         "version" => Cmd::Version,
+        // Machine-facing only: its own JSON self-description, not listed in
+        // top_level_help(). docs/automation.md's command table is generated
+        // from this, never hand-typed -- see command_manifest() below.
+        "describe" => Cmd::Describe,
         "list" => parse_list(&mut a)?,
         "get" => parse_get(&mut a)?,
         "copy" => parse_copy(&mut a)?,
@@ -1070,6 +1075,7 @@ fn exec(store: &mut Store, dir: &Path, cmd: &Cmd, cwd: &Path) -> Outcome {
     }
     match cmd {
         Cmd::Version => Outcome::ok(String::new()), // handled before exec() is reached
+        Cmd::Describe => Outcome::ok(String::new()), // handled before exec() is reached
         Cmd::List { tag, favorite, trash, json } => cmd_list(store, tag.as_deref(), *favorite, *trash, *json),
         Cmd::Get { id, json } => cmd_get(store, id, *json),
         Cmd::Copy { id } => cmd_copy(store, id),
@@ -1659,6 +1665,10 @@ pub(crate) fn run_standalone(argv: &[String], cwd: &Path) -> i32 {
         print_version();
         return 0;
     }
+    if matches!(cmd, Cmd::Describe) {
+        println!("{}", describe_json());
+        return 0;
+    }
     let dir = data_dir_headless();
     let store = load_store_headless(&dir);
     acquire_data_dir_lock(&dir, data_dir_lock_enabled(&store.settings));
@@ -1743,6 +1753,9 @@ pub(crate) async fn run_in_process(app: &AppHandle, argv: Vec<String>, cwd: Path
     };
     if matches!(cmd, Cmd::Version) {
         return (0, format!("{} {}\n", crate::brand::DISPLAY_NAME, env!("CARGO_PKG_VERSION")), String::new());
+    }
+    if matches!(cmd, Cmd::Describe) {
+        return (0, format!("{}\n", describe_json()), String::new());
     }
 
     // Backup restore reuses the real, already-tested command end to end (safety
@@ -1890,6 +1903,90 @@ fn command_help(cmd: &str, sub: Option<&str>) -> String {
         ("version", _) => "prompt-saver version\n\nPrint the app name and version.".to_string(),
         _ => top_level_help(),
     }
+}
+
+// ---------- Machine-readable self-description (`prompt-saver describe`) ----------
+//
+// docs/automation.md's command table is generated from this, never typed by
+// hand a second time: adding a command here without regenerating the doc is
+// caught by tests/automation_doc_check.py (see tests/README.md). The
+// (name, subcommand) pairs below are exactly the ones parse() recognizes;
+// each entry's usage/description text is command_help()'s own text, split at
+// its first blank line, so the two can never drift apart.
+const MANIFEST_ENTRIES: &[(&str, Option<&str>)] = &[
+    ("list", None),
+    ("get", None),
+    ("copy", None),
+    ("add", None),
+    ("edit", None),
+    ("delete", None),
+    ("restore", None),
+    ("tag", Some("list")),
+    ("tag", Some("add")),
+    ("tag", Some("remove")),
+    ("view", Some("list")),
+    ("view", Some("add")),
+    ("view", Some("remove")),
+    ("search", None),
+    ("export", None),
+    ("import", None),
+    ("backup", Some("create")),
+    ("backup", Some("list")),
+    ("backup", Some("restore")),
+    ("settings", Some("get")),
+    ("settings", Some("set")),
+    ("version", None),
+];
+
+// Full names, exactly as they appear in the "name" field below (top-level
+// command, or "<command> <subcommand>") -- the commands that need --yes.
+const MUTATING_COMMAND_NAMES: &[&str] =
+    &["add", "edit", "delete", "restore", "tag add", "tag remove", "view add", "view remove", "import", "backup restore", "settings set"];
+
+#[derive(serde::Serialize)]
+struct CommandSpec {
+    name: String,
+    usage: String,
+    description: String,
+    mutating: bool,
+}
+
+fn command_manifest() -> Vec<CommandSpec> {
+    MANIFEST_ENTRIES
+        .iter()
+        .map(|(name, sub)| {
+            let full_name = match sub {
+                Some(s) => format!("{name} {s}"),
+                None => (*name).to_string(),
+            };
+            let help = command_help(name, *sub);
+            let (usage, description) = match help.split_once("\n\n") {
+                Some((u, d)) => (u.to_string(), d.trim().to_string()),
+                None => (help, String::new()),
+            };
+            let mutating = MUTATING_COMMAND_NAMES.contains(&full_name.as_str());
+            CommandSpec { name: full_name, usage, description, mutating }
+        })
+        .collect()
+}
+
+// The JSON `prompt-saver describe` prints: enough for a program to drive the
+// tool without reading source -- the full command list, and the exit codes
+// every command shares (see top_level_help()).
+fn describe_json() -> String {
+    let doc = serde_json::json!({
+        "app": crate::brand::DISPLAY_NAME,
+        "version": env!("CARGO_PKG_VERSION"),
+        "commands": command_manifest(),
+        "exit_codes": {
+            "0": "ok",
+            "1": "bad invocation",
+            "2": "not found",
+            "3": "store locked or unavailable",
+            "4": "refused",
+        },
+    });
+    serde_json::to_string_pretty(&doc).unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -2706,5 +2803,118 @@ mod tests {
         let dir = TempDir::new("confine-noop");
         assert!(confine_path_arg(&args(&["list"]), dir.path()).is_ok());
         assert!(confine_path_arg(&args(&["get", "p1"]), dir.path()).is_ok());
+    }
+
+    // ---- `describe` / docs/automation-manifest.json ----
+
+    #[test]
+    fn describe_is_recognized_as_cli_and_parses_with_no_arguments() {
+        assert!(looks_like_cli(&args(&["describe"])));
+        assert!(matches!(parse(&args(&["describe"])), Ok(Parsed::Run(Cmd::Describe))));
+    }
+
+    #[test]
+    fn describe_json_is_valid_json_listing_every_manifest_entry_once() {
+        let parsed: serde_json::Value = serde_json::from_str(&describe_json()).expect("describe output must be valid JSON");
+        let commands = parsed["commands"].as_array().expect("commands must be an array");
+        assert_eq!(commands.len(), MANIFEST_ENTRIES.len());
+        assert_eq!(parsed["commands"][0]["name"], "list");
+        assert!(parsed["exit_codes"]["4"].as_str().unwrap().contains("refused"));
+    }
+
+    // The path docs/gen_automation_doc.py and docs/automation_doc_check.py
+    // also read (relative to the crate root, two levels up from src-tauri).
+    fn manifest_fixture_path() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("docs").join("automation-manifest.json")
+    }
+
+    // A command added to MANIFEST_ENTRIES without regenerating
+    // docs/automation-manifest.json (and, downstream, docs/automation.md)
+    // makes this fail immediately, inside the ordinary `cargo test --lib`
+    // run -- nobody has to remember to run the doc check separately.
+    #[test]
+    fn automation_manifest_json_matches_the_generated_source() {
+        let expected = serde_json::to_value(command_manifest()).unwrap();
+        let on_disk = std::fs::read_to_string(manifest_fixture_path()).expect("docs/automation-manifest.json must exist");
+        let on_disk: serde_json::Value = serde_json::from_str(&on_disk).expect("docs/automation-manifest.json must be valid JSON");
+        assert_eq!(
+            on_disk, expected,
+            "docs/automation-manifest.json is stale -- regenerate it with \
+             `cargo test --lib -- --ignored regenerate_automation_manifest_json`, then rerun \
+             `python tests/gen_automation_doc.py`"
+        );
+    }
+
+    // Not run by the ordinary suite (`cargo test --lib` skips `#[ignore]`d
+    // tests) -- this is the "kleines Werkzeug" half that writes the fixture;
+    // `tests/gen_automation_doc.py` is the half that turns it into markdown.
+    #[test]
+    #[ignore]
+    fn regenerate_automation_manifest_json() {
+        let json = serde_json::to_string_pretty(&command_manifest()).unwrap();
+        std::fs::write(manifest_fixture_path(), format!("{json}\n")).expect("failed to write docs/automation-manifest.json");
+    }
+
+    // ---- docs/automation.md's four "Examples" really run, at this same
+    // cargo-test level, and their shape matches what the doc claims. Each
+    // test's name matches the doc's own numbered heading. ----
+
+    #[test]
+    fn docs_example_1_add_matches_the_manual() {
+        let dir = TempDir::new("docs-ex1");
+        let mut store = fixture_store();
+        let out = run_cmd(&mut store, dir.path(), &["add", "--name", "Release checklist", "--text", "1. Bump version...", "--tags", "work,release", "--yes", "--json"]);
+        assert_eq!(out.code, 0, "stderr: {}", out.stderr);
+        let body: serde_json::Value = serde_json::from_str(out.stdout.trim()).expect("add --json must print JSON");
+        assert!(body["id"].as_str().is_some_and(|id| !id.is_empty()), "add --json must print {{\"id\": \"...\"}} as documented");
+        assert_eq!(body.as_object().unwrap().len(), 1, "add --json's object has exactly one field, id");
+    }
+
+    #[test]
+    fn docs_example_2_search_matches_the_manual() {
+        let dir = TempDir::new("docs-ex2");
+        let mut store = fixture_store();
+        let added = run_cmd(&mut store, dir.path(), &["add", "--name", "Release checklist", "--text", "1. Bump version...", "--tags", "work,release", "--yes", "--json"]);
+        let id: String = serde_json::from_str::<serde_json::Value>(added.stdout.trim()).unwrap()["id"].as_str().unwrap().to_string();
+        let out = run_cmd(&mut store, dir.path(), &["search", "release", "--tag", "work", "--json"]);
+        assert_eq!(out.code, 0, "stderr: {}", out.stderr);
+        let rows: Vec<serde_json::Value> = serde_json::from_str(out.stdout.trim()).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["id"], id);
+        assert_eq!(rows[0]["name"], "Release checklist");
+        assert_eq!(rows[0]["tags"], serde_json::json!(["work", "release"]));
+    }
+
+    #[test]
+    fn docs_example_3_fill_a_placeholder_and_copy_matches_the_manual() {
+        let dir = TempDir::new("docs-ex3");
+        let mut store = fixture_store();
+        let added = run_cmd(&mut store, dir.path(), &["add", "--name", "Release checklist", "--text", "Version: {{version}}", "--tags", "work", "--yes", "--json"]);
+        let id: String = serde_json::from_str::<serde_json::Value>(added.stdout.trim()).unwrap()["id"].as_str().unwrap().to_string();
+        let got = run_cmd(&mut store, dir.path(), &["get", &id, "--json"]);
+        assert_eq!(got.code, 0);
+        let detail: serde_json::Value = serde_json::from_str(got.stdout.trim()).unwrap();
+        assert_eq!(detail["text"], "Version: {{version}}");
+        let edited = run_cmd(&mut store, dir.path(), &["edit", &id, "--text", "Version: 2.7.0", "--yes"]);
+        assert_eq!(edited.code, 0, "stderr: {}", edited.stderr);
+        let refetched = run_cmd(&mut store, dir.path(), &["get", &id, "--json"]);
+        let detail2: serde_json::Value = serde_json::from_str(refetched.stdout.trim()).unwrap();
+        assert_eq!(detail2["text"], "Version: 2.7.0", "edit --text must have replaced the placeholder before copy");
+        let copied = run_cmd(&mut store, dir.path(), &["copy", &id]);
+        assert_eq!(copied.code, 0, "stderr: {}", copied.stderr);
+    }
+
+    #[test]
+    fn docs_example_4_backup_create_matches_the_manual() {
+        let dir = TempDir::new("docs-ex4");
+        let mut conn = db_conn_at(dir.path()).expect("open store");
+        let mut written = WrittenRows::new();
+        db_write_prompts(&mut conn, &[], &mut written).ok();
+        let store = fixture_store();
+        let out = cmd_backup_create(&store, dir.path(), Some(10), true);
+        assert_eq!(out.code, 0, "stderr: {}", out.stderr);
+        let body: serde_json::Value = serde_json::from_str(out.stdout.trim()).expect("backup create --json must print JSON");
+        assert!(body["name"].as_str().is_some_and(|n| !n.is_empty()), "backup create --json must print {{\"name\": \"...\"}} as documented");
+        assert_eq!(body.as_object().unwrap().len(), 1, "backup create --json's object has exactly one field, name");
     }
 }

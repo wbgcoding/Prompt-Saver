@@ -1,0 +1,134 @@
+[
+  {
+    "name": "list",
+    "usage": "prompt-saver list [--tag NAME] [--favorite] [--trash] [--json]",
+    "description": "List prompts, one per line as id, name, favorite mark, tags.",
+    "mutating": false
+  },
+  {
+    "name": "get",
+    "usage": "prompt-saver get <id> [--json]",
+    "description": "Show one prompt's fields. Exit 2 if the id does not exist.",
+    "mutating": false
+  },
+  {
+    "name": "copy",
+    "usage": "prompt-saver copy <id>",
+    "description": "Copy a prompt's text to the clipboard. Exit 2 if the id does not exist.",
+    "mutating": false
+  },
+  {
+    "name": "add",
+    "usage": "prompt-saver add --name NAME --text TEXT [--tags a,b] [--favorite] [--notes TEXT] [--color #rrggbb] --yes [--json]",
+    "description": "Add a new prompt. Prints its new id.",
+    "mutating": true
+  },
+  {
+    "name": "edit",
+    "usage": "prompt-saver edit <id> [--name NAME] [--text TEXT] [--tags a,b] [--favorite|--no-favorite] [--notes TEXT] [--color #rrggbb] --yes [--json]",
+    "description": "Change one or more fields of an existing prompt.",
+    "mutating": true
+  },
+  {
+    "name": "delete",
+    "usage": "prompt-saver delete <id> --yes",
+    "description": "Move a prompt to the trash.",
+    "mutating": true
+  },
+  {
+    "name": "restore",
+    "usage": "prompt-saver restore <id> --yes [--json]",
+    "description": "Restore a prompt out of the trash.",
+    "mutating": true
+  },
+  {
+    "name": "tag list",
+    "usage": "prompt-saver tag list [--json]",
+    "description": "List every tag in use with its prompt count.",
+    "mutating": false
+  },
+  {
+    "name": "tag add",
+    "usage": "prompt-saver tag add <id> <tag> --yes",
+    "description": "Add one tag to one prompt.",
+    "mutating": true
+  },
+  {
+    "name": "tag remove",
+    "usage": "prompt-saver tag remove <id> <tag> --yes",
+    "description": "Remove one tag from one prompt.",
+    "mutating": true
+  },
+  {
+    "name": "view list",
+    "usage": "prompt-saver view list [--json]",
+    "description": "List every view.",
+    "mutating": false
+  },
+  {
+    "name": "view add",
+    "usage": "prompt-saver view add <name> [--color #rrggbb] --yes",
+    "description": "Add a new, empty view. Prints its new id.",
+    "mutating": true
+  },
+  {
+    "name": "view remove",
+    "usage": "prompt-saver view remove <id> --yes",
+    "description": "Remove a view (refused for the last remaining one).",
+    "mutating": true
+  },
+  {
+    "name": "search",
+    "usage": "prompt-saver search <query> [--tag NAME] [--json]",
+    "description": "Case-insensitive search over name, text, notes and tags.",
+    "mutating": false
+  },
+  {
+    "name": "export",
+    "usage": "prompt-saver export <path> [--format json|csv|txt] [--ids a,b,c] [--yes]",
+    "description": "Write prompts to a file. --yes is only needed to overwrite an existing file.",
+    "mutating": false
+  },
+  {
+    "name": "import",
+    "usage": "prompt-saver import <path> --yes",
+    "description": "Append prompts read from a file this app exported.",
+    "mutating": true
+  },
+  {
+    "name": "backup create",
+    "usage": "prompt-saver backup create [--keep N] [--json]",
+    "description": "Snapshot the store now. Prints the new backup's name.",
+    "mutating": false
+  },
+  {
+    "name": "backup list",
+    "usage": "prompt-saver backup list [--json]",
+    "description": "List existing backups, newest first.",
+    "mutating": false
+  },
+  {
+    "name": "backup restore",
+    "usage": "prompt-saver backup restore <name> [--scope all|prompts|settings] [--keep N] --yes",
+    "description": "Replace the store with a backup. Always takes a safety snapshot first.",
+    "mutating": true
+  },
+  {
+    "name": "settings get",
+    "usage": "prompt-saver settings get <key> [--json]",
+    "description": "Read one setting. Exit 2 if the key is unknown.",
+    "mutating": false
+  },
+  {
+    "name": "settings set",
+    "usage": "prompt-saver settings set <key> <value> --yes",
+    "description": "Write one setting. The value is read as a whole number/decimal, true/false, or plain text, in that order, unless the key is one of the app's own fixed settings (theme, language, autostart, alwaysOnTop).",
+    "mutating": true
+  },
+  {
+    "name": "version",
+    "usage": "prompt-saver version",
+    "description": "Print the app name and version.",
+    "mutating": false
+  }
+]
