@@ -5,6 +5,11 @@
 //
 // Mirrored (structure, not word-for-word) in docs/help.md — keep both in sync when
 // a category changes.
+//
+// `id` is an optional stable key, present on the handful of articles something
+// outside this file needs to jump straight to (the first-run tour's help buttons,
+// so far) -- unlike `title`, it never changes with a rewrite and stays the same in
+// both languages. Add one only when a new caller needs an anchor.
 
 export const HELP_CONTENT = {
   en: [
@@ -435,6 +440,7 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "Screenshot editor",
+      id: "screenshotEditor",
       whatItIs: "Opens right after a capture, before the shot is saved — crop, mark up, and annotate it before it becomes a tile.",
       howTo: [
         "Take a screenshot; the editor opens automatically over the capture.",
@@ -461,6 +467,7 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "Screen recording",
+      id: "screenRecording",
       whatItIs: "Records a window, a monitor, or a dragged region as a video, next to the screenshot tool.",
       howTo: [
         "Click the record button {icon:record}; pick a window, drag a region, or click empty desktop for the whole screen — same overlay as the screenshot tool.",
@@ -490,6 +497,7 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "Text recognition (OCR)",
+      id: "ocr",
       whatItIs: "Pulls text out of a screenshot or an image file using Windows' own on-device recognizer — fully offline, nothing leaves the machine.",
       howTo: [
         "From the composer — the OCR button {icon:ocr} offers a screenshot or an existing image file.",
@@ -503,6 +511,7 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "Voice dictation",
+      id: "voiceDictation",
       whatItIs: "The microphone button {icon:mic} turns speech into text, recognised entirely on-device.",
       howTo: [
         "Click the microphone icon next to the composer, or in a tile's editor.",
@@ -529,6 +538,7 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "Colour picker & pick history",
+      id: "colorPicker",
       whatItIs: "The colour picker is a pipette that reads any on-screen pixel as hex, RGB, or HSL.",
       howTo: [
         "Click the pipette icon in the composer bar.",
@@ -1048,6 +1058,7 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "Screenshot-Editor",
+      id: "screenshotEditor",
       whatItIs: "Öffnet sich direkt nach einer Aufnahme, bevor der Screenshot gespeichert wird — zum Zuschneiden, Markieren und Beschriften, bevor daraus eine Kachel wird.",
       howTo: [
         "Einen Screenshot aufnehmen; der Editor öffnet sich automatisch über der Aufnahme.",
@@ -1074,6 +1085,7 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "Bildschirmaufnahme",
+      id: "screenRecording",
       whatItIs: "Nimmt ein Fenster, einen Monitor oder einen gezogenen Bereich als Video auf, neben dem Screenshot-Werkzeug.",
       howTo: [
         "Auf den Aufnahme-Knopf {icon:record} klicken; ein Fenster anklicken, einen Bereich ziehen oder auf den freien Desktop klicken für den ganzen Bildschirm — dieselbe Übersicht wie beim Screenshot-Werkzeug.",
@@ -1103,6 +1115,7 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "Texterkennung (OCR)",
+      id: "ocr",
       whatItIs: "Liest mit der geräteeigenen Erkennung von Windows Text aus einem Screenshot oder einer Bilddatei — vollständig offline, nichts verlässt das Gerät.",
       howTo: [
         "Über die Eingabeleiste — der OCR-Button {icon:ocr} bietet einen Screenshot oder eine vorhandene Bilddatei an.",
@@ -1116,6 +1129,7 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "Spracheingabe",
+      id: "voiceDictation",
       whatItIs: "Der Mikrofon-Button {icon:mic} verwandelt Sprache in Text — die Erkennung läuft komplett auf dem Gerät.",
       howTo: [
         "Auf das Mikrofon-Icon neben der Eingabeleiste klicken, oder im Editor einer Kachel.",
@@ -1142,6 +1156,7 @@ export const HELP_CONTENT = {
     {
       section: "basics",
       title: "Farbpipette & Auswahlverlauf",
+      id: "colorPicker",
       whatItIs: "Die Farbpipette liest jeden Bildschirmpixel als Hex, RGB oder HSL aus.",
       howTo: [
         "Auf das Pipetten-Icon in der Eingabeleiste klicken.",
