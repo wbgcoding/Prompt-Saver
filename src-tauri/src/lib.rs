@@ -20623,7 +20623,7 @@ mod keylog {
     use std::collections::VecDeque;
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
+    use std::sync::mpsc::{channel, sync_channel, Receiver, RecvTimeoutError, Sender, SyncSender};
     use std::sync::{Arc, Mutex, OnceLock};
     use std::thread::{self, JoinHandle};
     use std::time::{Duration, Instant};
@@ -20808,6 +20808,15 @@ mod keylog {
     // once that window's own deadline finally arrives.
     const FOCUS_POLL_MS: u64 = 50;
 
+    // A hard cap on how many raw keys can sit in `pending` waiting on a
+    // verdict at once. Under ordinary typing this never gets close -- keys
+    // resolve within SETTLE_MS of their own timestamp. Reaching it means
+    // verdicts have stopped keeping up with the raw key rate for some
+    // reason this thread cannot diagnose from here, and the safe answer is
+    // the same one as any other doubt: gap everything rather than let the
+    // queue (and the memory behind it) grow without bound.
+    const PENDING_CAP: usize = 2_000;
+
     // Ordered log of every completed focus check (`checks`, each stamped by
     // the instant it STARTED, not when it finished) and every focus-change
     // event's own arrival (`arrivals`), both on the `mono_ms()` clock.
@@ -20961,13 +20970,23 @@ mod keylog {
         matches!(vk, VK_TAB | VK_RETURN | VK_ESCAPE)
     }
 
+    // Bounds how many raw keys can sit in the channel between the hook
+    // thread and the consumer before the hook starts dropping them. A
+    // bounded `SyncSender` paired with `try_send` (never `send`) means the
+    // hook thread -- which every keystroke on the whole desktop passes
+    // through -- can never block waiting for room, only drop the newest
+    // event and move on; a dropped key-down simply never taints anything
+    // (see the down/up matching in `Recorder`), and a dropped key-up is no
+    // different from one the consumer already treats as unmatched.
+    const RAW_CHANNEL_CAP: usize = 4_096;
+
     // The hook callback is a bare extern "system" fn -- it cannot capture a
     // closure, so the channel it feeds has to be a process-global. Read once
     // per event and cloned immediately, never held across the send: the
     // callback must return quickly.
-    static RAW_TX: OnceLock<Mutex<Option<Sender<RawKey>>>> = OnceLock::new();
+    static RAW_TX: OnceLock<Mutex<Option<SyncSender<RawKey>>>> = OnceLock::new();
 
-    fn raw_tx_slot() -> &'static Mutex<Option<Sender<RawKey>>> {
+    fn raw_tx_slot() -> &'static Mutex<Option<SyncSender<RawKey>>> {
         RAW_TX.get_or_init(|| Mutex::new(None))
     }
 
@@ -20981,7 +21000,9 @@ mod keylog {
                 let t_ms = mono_ms();
                 if let Ok(guard) = raw_tx_slot().lock() {
                     if let Some(tx) = guard.as_ref() {
-                        let _ = tx.send(RawKey { vk: info.vkCode, down, t_ms, injected });
+                        // try_send: this callback must never block, a full
+                        // channel just means the newest event is dropped.
+                        let _ = tx.try_send(RawKey { vk: info.vkCode, down, t_ms, injected });
                     }
                 }
             }
@@ -21130,6 +21151,34 @@ mod keylog {
         }
     }
 
+    // How long the consumer should block in `recv_timeout` while a key is
+    // pending: never longer than whichever comes first, the pending key's
+    // own settle deadline or the next focus-poll tick, and never negative
+    // (both can already be in the past when this runs a little late, in
+    // which case it returns 0 -- an immediate wake, not a panic from
+    // underflow).
+    fn recv_wait_ms(now: u64, pending_front_t_ms: u64, next_poll_due: u64) -> u64 {
+        pending_front_t_ms.saturating_add(SETTLE_MS).min(next_poll_due).saturating_sub(now)
+    }
+
+    // Whether the pending key at the front of the queue has reached its own
+    // SETTLE_MS deadline and a fresh settle check should run for it. A pure
+    // predicate over absolute time so it gives the same answer regardless
+    // of whether this loop tick was woken by an incoming key or a timeout
+    // -- see consumer_thread_main's own comment on why that distinction
+    // used to matter and must not.
+    fn settle_check_due(pending_front_t_ms: Option<u64>, now: u64) -> bool {
+        pending_front_t_ms.is_some_and(|t| now >= t.saturating_add(SETTLE_MS))
+    }
+
+    // Whether the ~50ms focus poll is due: only meaningful while something
+    // is actually pending (nothing to invalidate a verdict for otherwise),
+    // and again a pure predicate over absolute time, independent of which
+    // branch woke the loop up this tick.
+    fn focus_poll_due(pending_is_empty: bool, now: u64, next_poll_due: u64) -> bool {
+        !pending_is_empty && now >= next_poll_due
+    }
+
     // Resolves as many keys at the FRONT of `pending` as the ledger's
     // current state allows, in order, and stops at the first one `verdict`
     // cannot decide yet. FIFO is safe here: a later key always needs an
@@ -21228,6 +21277,11 @@ mod keylog {
         // any key can possibly be pending, so the very first poll compares
         // against a real baseline rather than an assumed one.
         let mut last_focus = focus_identity(&uia);
+        // The next absolute instant the focus poll is due, tracked
+        // independently of whatever wakes the loop up -- see the
+        // unconditional check/poll block below for why this has to be an
+        // absolute deadline rather than "did the Timeout arm just fire".
+        let mut next_poll_due = mono_ms().saturating_add(FOCUS_POLL_MS);
         loop {
             // Block until either the next raw key, or a timeout -- while
             // keys are pending the timeout is also the ~50ms focus poll
@@ -21237,9 +21291,7 @@ mod keylog {
             // next key.
             let recv_result = match pending.front() {
                 Some(front) => {
-                    let need = front.t_ms.saturating_add(SETTLE_MS);
-                    let deadline_wait = need.saturating_sub(mono_ms());
-                    let wait = deadline_wait.min(FOCUS_POLL_MS);
+                    let wait = recv_wait_ms(mono_ms(), front.t_ms, next_poll_due);
                     rx.recv_timeout(Duration::from_millis(wait))
                 }
                 None => rx.recv().map_err(|_| RecvTimeoutError::Disconnected),
@@ -21265,37 +21317,54 @@ mod keylog {
                         if raw.down && is_focus_moving_key(raw.vk) {
                             ledger.lock().unwrap_or_else(|e| e.into_inner()).push_arrival(raw.t_ms);
                         }
+                        if pending.len() >= PENDING_CAP {
+                            // The queue growing this large means verdicts
+                            // have stopped keeping up with the raw key rate
+                            // for some reason this thread cannot diagnose --
+                            // treated exactly like any other unresolvable
+                            // doubt: gap everything outright (resolved
+                            // below by the ordinary resolve_pending call,
+                            // which drains the whole backlog in one pass
+                            // once fail_closed is set) rather than let
+                            // memory grow without bound.
+                            ledger.lock().unwrap_or_else(|e| e.into_inner()).gap_everything();
+                            append_crash_log("key overlay: pending queue exceeded its cap, gapping every key this session");
+                        }
                         pending.push_back(raw);
                     }
                 }
-                Err(RecvTimeoutError::Timeout) => {
-                    let now = mono_ms();
-                    // Only run the settle check itself once a pending key's
-                    // own deadline has actually arrived -- an earlier
-                    // timeout tick was only the focus poll below, not yet
-                    // due for this.
-                    if pending.front().is_some_and(|front| now >= front.t_ms.saturating_add(SETTLE_MS)) {
-                        let password = focused_password(&uia);
-                        ledger.lock().unwrap_or_else(|e| e.into_inner()).push_check(now, password);
-                    }
-                    // The ~50ms focus poll: while any key is still waiting
-                    // on a verdict, check whether the focused HWND or
-                    // element has moved since the last tick and, if so,
-                    // record it as an arrival the same as a UI Automation
-                    // notification would be. This is what catches a focus
-                    // change during a quiet stretch with no key at all
-                    // driving a settle check, and it is also the fallback
-                    // for whenever AddFocusChangedEventHandler never fired
-                    // to begin with.
-                    if !pending.is_empty() {
-                        let cur = focus_identity(&uia);
-                        if focus_identity_changed(&uia, &last_focus, &cur) {
-                            ledger.lock().unwrap_or_else(|e| e.into_inner()).push_arrival(mono_ms());
-                        }
-                        last_focus = cur;
-                    }
-                }
+                Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => break,
+            }
+            // Both of these run on their OWN absolute deadline every single
+            // iteration, whether it was an incoming key or a timeout that
+            // woke this one up -- never gated to only the Timeout arm.
+            // Hardware key repeat can deliver `Ok(raw)` well under
+            // FOCUS_POLL_MS apart; gating either check to the Timeout arm
+            // let a long enough burst of repeats starve both of them, so a
+            // check landing after the burst ended could end up "confirming"
+            // a field that had actually gone dirty and clean again while
+            // nothing was watching in between.
+            let now = mono_ms();
+            if settle_check_due(pending.front().map(|front| front.t_ms), now) {
+                let password = focused_password(&uia);
+                ledger.lock().unwrap_or_else(|e| e.into_inner()).push_check(now, password);
+            }
+            // The ~50ms focus poll: while any key is still waiting on a
+            // verdict, check whether the focused HWND or element has moved
+            // since the last tick and, if so, record it as an arrival the
+            // same as a UI Automation notification would be. This is what
+            // catches a focus change during a quiet stretch with no key at
+            // all driving a settle check, and it is also the fallback for
+            // whenever AddFocusChangedEventHandler never fired to begin
+            // with.
+            if focus_poll_due(pending.is_empty(), now, next_poll_due) {
+                let cur = focus_identity(&uia);
+                if focus_identity_changed(&uia, &last_focus, &cur) {
+                    ledger.lock().unwrap_or_else(|e| e.into_inner()).push_arrival(mono_ms());
+                }
+                last_focus = cur;
+                next_poll_due = now.saturating_add(FOCUS_POLL_MS);
             }
             resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger);
             // Nothing before the oldest still-pending key's own GUARD_MS
@@ -21382,7 +21451,7 @@ mod keylog {
     }
 
     fn start(hold_ms: u32, start_abs_ms: u64) -> Option<KeyCapture> {
-        let (raw_tx, raw_rx) = channel::<RawKey>();
+        let (raw_tx, raw_rx) = sync_channel::<RawKey>(RAW_CHANNEL_CAP);
         *raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner()) = Some(raw_tx);
         let clock = Arc::new(Mutex::new(ActiveClock::new(start_abs_ms)));
         let cutoff = Arc::new(Mutex::new(None));
@@ -21839,6 +21908,46 @@ mod keylog {
             let started = Instant::now();
             assert_eq!(join_bounded(handle, Duration::from_millis(50)), None);
             assert!(started.elapsed() < Duration::from_millis(500), "must give up at the bound, not wait for the thread");
+        }
+
+        #[test]
+        fn settle_and_poll_deadlines_are_never_starved_by_a_burst_of_ok_arrivals() {
+            // The bug: a settle check or a focus poll used to run only in
+            // the Timeout arm of the consumer's recv match, so a key-repeat
+            // burst under FOCUS_POLL_MS apart -- which keeps hitting the
+            // Ok(raw) arm instead -- could starve both indefinitely. The
+            // fix makes both a pure function of absolute time, so simulating
+            // several Ok arrivals in a row (never a Timeout at all) must
+            // still show both becoming due once enough time has passed.
+            let front_t_ms = 0u64;
+            let mut next_poll_due = FOCUS_POLL_MS;
+            // Three "arrivals" 10ms apart, well under FOCUS_POLL_MS -- a
+            // burst that would previously never let the Timeout arm fire.
+            for now in [10u64, 20, 30] {
+                assert!(!settle_check_due(Some(front_t_ms), now), "not due yet at t={now}");
+                assert!(!focus_poll_due(false, now, next_poll_due), "not due yet at t={now}");
+            }
+            // The settle deadline (SETTLE_MS after the key) is reached
+            // despite every one of those ticks arriving through Ok, not a
+            // Timeout.
+            let settle_due_at = front_t_ms + SETTLE_MS;
+            assert!(settle_check_due(Some(front_t_ms), settle_due_at), "must become due exactly at its own deadline");
+            // Likewise the poll deadline, independently.
+            assert!(focus_poll_due(false, next_poll_due, next_poll_due));
+            next_poll_due += FOCUS_POLL_MS;
+            assert!(!focus_poll_due(false, next_poll_due - 1, next_poll_due), "not due again until the next tick");
+        }
+
+        #[test]
+        fn recv_wait_targets_whichever_deadline_is_sooner_and_never_goes_negative() {
+            // The settle deadline is sooner: front=100 -> settle at 400,
+            // poll at 1000 -> wait for the settle deadline.
+            assert_eq!(recv_wait_ms(0, 100, 1_000), 400);
+            // The poll deadline is sooner.
+            assert_eq!(recv_wait_ms(0, 10_000, 50), 50);
+            // Both deadlines already passed -- an immediate wake, never a
+            // panic from an underflowing subtraction.
+            assert_eq!(recv_wait_ms(10_000, 0, 0), 0);
         }
 
         // --- ActiveClock: pause drops events, and offsets use the
