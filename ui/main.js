@@ -12,6 +12,7 @@ import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, resolveLang, ffmpegDownloadPct, the
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 import { createColorPop } from "./colorpop.js";
 import { snapMove } from "./snap.js";
+import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw } from "./shortcuts.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen, emit } = window.__TAURI__.event;
@@ -303,12 +304,22 @@ const applyBrand = () => {
 };
 applyBrand();
 
+// shortcuts.js has no i18n state of its own -- every call here binds it to
+// this window's own t()/LANG, so every call site just names the action.
+const withShortcut = (el, action) => withShortcutRaw(el, action, t, LANG);
+const shortcutRows = (scope) => rowsForScopeRaw(scope, t, LANG);
+
 function applyI18n() {
   document.documentElement.lang = LANG;
   applyBrand();
   document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll("[data-i18n-ph]").forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
-  document.querySelectorAll("[data-i18n-title]").forEach((el) => { el.title = t(el.dataset.i18nTitle); });
+  // A shortcut-bearing element gets its tooltip built from SHORTCUTS (base
+  // description + key combo) instead of the plain translation.
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    if (el.dataset.shortcut) withShortcut(el, el.dataset.shortcut);
+    else el.title = t(el.dataset.i18nTitle);
+  });
   document.querySelectorAll("[data-i18n-aria]").forEach((el) => { el.setAttribute("aria-label", t(el.dataset.i18nAria)); });
   // Cached video tiles keep their media bar across a language switch — its
   // button labels are not markup, so data-i18n above never reaches them. Walk
@@ -12273,6 +12284,33 @@ let confirmCleanup = null;
 // resolves to the string "alt": a question with two different ways to go ahead
 // (delete the old sync folder, keep it) plus the way out. Left out, the dialog is
 // exactly the two-button one every other caller gets.
+// The "?" overview both editors open -- same modal/modal-narrow/modal-titlebar
+// shell as every other list modal, filled straight from SHORTCUTS.
+let shortcutsModalOpener = null;
+function openShortcutsModal(scope) {
+  shortcutsModalOpener = document.activeElement;
+  const list = $("shortcuts-modal-list");
+  list.innerHTML = "";
+  for (const row of shortcutRows(scope)) {
+    const r = document.createElement("div");
+    r.className = "shortcuts-row";
+    const desc = document.createElement("span");
+    desc.className = "shortcuts-row-desc";
+    desc.textContent = row.desc;
+    const keys = document.createElement("span");
+    keys.className = "shortcuts-row-keys";
+    keys.textContent = row.keys;
+    r.append(desc, keys);
+    list.appendChild(r);
+  }
+  $("shortcuts-modal").classList.remove("hidden");
+}
+function closeShortcutsModal() {
+  $("shortcuts-modal").classList.add("hidden");
+  shortcutsModalOpener?.focus?.();
+  shortcutsModalOpener = null;
+}
+
 function confirmDialog({ title, message, confirmLabel, cancelLabel, altLabel, icon, input, checkboxes, checkboxesOptional = false, danger = true, oneButton = false }) {
   // Restored once this dialog resolves, so a keyboard user's next Tab
   // continues from where they were instead of restarting from the page top.
@@ -18165,10 +18203,10 @@ function bind() {
       b.type = "button";
       b.className = "icon-btn";
       b.dataset.tool = tdef.id;
-      b.title = `${t(tdef.label)} (${tdef.key})`;
       b.setAttribute("aria-label", t(tdef.label));
       b.setAttribute("aria-pressed", "false");
       b.innerHTML = SNIP_TOOL_SVG[tdef.id];
+      withShortcut(b, `snipTool.${tdef.id}`);
       b.addEventListener("click", () => snipEditSetTool(tdef.id));
       snipEditToolsEl.appendChild(b);
     }
@@ -18520,6 +18558,14 @@ function bind() {
   // ---- keyboard: tool shortcuts, undo/redo, Enter/Esc, nudge, pan, before/after ----
   function snipEditKeydown(e) {
     if (snipEdit.classList.contains("hidden")) return;
+    // The shortcuts overview is a sibling overlay, not inside snipEdit's own
+    // DOM subtree, so it needs its own check before the editor's normal Tab
+    // trap and tool shortcuts take over.
+    if (!$("shortcuts-modal").classList.contains("hidden")) {
+      if (e.key === "Tab") { trapTabWithin($("shortcuts-modal"), e); return; }
+      if (e.key === "Escape") { e.preventDefault(); closeShortcutsModal(); return; }
+      return;
+    }
     if (e.key === "Tab") { trapTabWithin(snipEdit, e); return; }
     if (e.key === "Escape") {
       e.preventDefault();
@@ -18680,6 +18726,9 @@ function bind() {
   }
   $("snip-edit-cancel").addEventListener("click", snipEditCancel);
   $("snip-edit-close").addEventListener("click", snipEditCancel);
+  $("snip-edit-shortcuts").addEventListener("click", () => openShortcutsModal("snipEditor"));
+  $("shortcuts-modal-close").addEventListener("click", closeShortcutsModal);
+  $("shortcuts-modal").addEventListener("pointerdown", (e) => { if (e.target === $("shortcuts-modal")) closeShortcutsModal(); });
   $("snip-edit-apply").addEventListener("click", snipEditApply);
   $("snip-edit-copy").addEventListener("click", async () => {
     const dataUrl = snipEditExportDataUrl();
