@@ -6573,7 +6573,8 @@ fn sweep_stale_recordings_in(
         // recording is -- the mp4 may already be attached to a prompt while
         // the editor has not yet consolidated the two into one two-track file.
         let is_referenced = referenced.contains(&norm(&path.to_string_lossy()))
-            || mic_sidecar_video_path(&path).is_some_and(|v| referenced.contains(&norm(&v.to_string_lossy())));
+            || mic_sidecar_video_path(&path).is_some_and(|v| referenced.contains(&norm(&v.to_string_lossy())))
+            || keys_sidecar_video_path(&path).is_some_and(|v| referenced.contains(&norm(&v.to_string_lossy())));
         let Ok(meta) = e.metadata() else { continue };
         let age = meta.modified().ok().and_then(|t| SystemTime::now().duration_since(t).ok());
         let stale_undecided = !is_referenced && age.is_some_and(|a| a >= STALE_TEMP_FILE_AGE);
@@ -20155,6 +20156,20 @@ impl RecWavWriter {
 fn mic_sidecar_video_path(path: &Path) -> Option<PathBuf> {
     let name = path.file_name()?.to_str()?;
     let stem = name.strip_suffix(".mic.wav")?;
+    Some(path.with_file_name(format!("{stem}.mp4")))
+}
+
+// The mp4 sibling of a "<name>.keys.json" sidecar, or None if `path` is not
+// one -- same shape as mic_sidecar_video_path above, kept free of the
+// keylog module (and its cfg(windows) gate) since the stale-recordings sweep
+// this feeds must reason about `.keys.json` on every target, not just
+// Windows. Without this, sweep_stale_recordings_in only ever
+// treated a key-overlay sidecar as unreferenced -- it was deleted out from
+// under a KEPT recording as soon as it aged past the stale window, even
+// though the mp4 itself was correctly kept.
+fn keys_sidecar_video_path(path: &Path) -> Option<PathBuf> {
+    let name = path.file_name()?.to_str()?;
+    let stem = name.strip_suffix(".keys.json")?;
     Some(path.with_file_name(format!("{stem}.mp4")))
 }
 
@@ -37083,6 +37098,42 @@ mod tests {
         );
         assert_eq!(mic_sidecar_video_path(Path::new("C:/rec/2026-09-04_10-00-00.mp4")), None);
         assert_eq!(mic_sidecar_video_path(Path::new("C:/rec/other.wav")), None);
+    }
+
+    #[test]
+    fn keys_sidecar_video_path_only_matches_the_keys_json_suffix() {
+        assert_eq!(
+            keys_sidecar_video_path(Path::new("C:/rec/2026-09-04_10-00-00.keys.json")),
+            Some(PathBuf::from("C:/rec/2026-09-04_10-00-00.mp4"))
+        );
+        assert_eq!(keys_sidecar_video_path(Path::new("C:/rec/2026-09-04_10-00-00.mp4")), None);
+        assert_eq!(keys_sidecar_video_path(Path::new("C:/rec/other.json")), None);
+    }
+
+    // A key-overlay sidecar must never be swept away while its own recording
+    // is still referenced -- the same rule sweep_stale_recordings_in already
+    // gives the mic sidecar, tested below.
+    #[test]
+    fn sweep_stale_recordings_in_keeps_keys_sidecar_of_a_referenced_recording() {
+        let dir = std::env::temp_dir().join(format!("ps-test-keys-sidecar-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let video = dir.join("2026-09-04_12-00-00.mp4");
+        let sidecar = dir.join("2026-09-04_12-00-00.keys.json");
+        fs::write(&video, b"not a real box structure").unwrap();
+        fs::write(&sidecar, b"{}").unwrap();
+        backdate(&video, Duration::from_secs(3600));
+        backdate(&sidecar, Duration::from_secs(3600));
+
+        let mut referenced = std::collections::HashSet::new();
+        referenced.insert(video.to_string_lossy().replace('/', "\\").to_lowercase());
+        let (count, _bytes) = sweep_stale_recordings_in(&dir, &referenced, &[], true, Duration::from_secs(60), None);
+
+        assert_eq!(count, 0, "neither the referenced mp4 nor its key-overlay sidecar may be swept");
+        assert!(video.exists());
+        assert!(sidecar.exists(), "the key-overlay sidecar rides along with its referenced recording");
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     // A mic sidecar must never be swept away while its own recording is still
