@@ -18922,7 +18922,7 @@ mod ocr {
         let script_path = install_script_path(kind, &nonce);
         let _ = fs::remove_file(&result_path); // a stale result must never look fresh
 
-        // finally: the script deletes itself once it is done, elevated or not —
+        // finally: the script deletes itself once it is done, elevated or not;
         // otherwise every install attempt (success, failure, or a declined UAC
         // prompt) left its .ps1 behind in the temp folder forever.
         let script = format!(
@@ -18932,7 +18932,7 @@ mod ocr {
             result = ps_single_quote(&result_path.to_string_lossy()),
             script = ps_single_quote(&script_path.to_string_lossy()),
         );
-        // A launch that never happened has nothing to poll for — drop the nonce
+        // A launch that never happened has nothing to poll for: drop the nonce
         // again so a later result file under that name cannot be believed.
         run_elevated_script(&script_path, &script).inspect_err(|_| finish_request(kind, &tag))
     }
@@ -18971,7 +18971,7 @@ mod ocr {
         drop(lock);
         let code = code.0 as isize;
         if code <= 32 {
-            // The script's own `finally` only runs once PowerShell actually starts —
+            // The script's own `finally` only runs once PowerShell actually starts:
             // a launch failure (including a declined UAC prompt) never gets that far,
             // so the .ps1 would otherwise sit in the temp folder forever.
             let _ = fs::remove_file(script_path);
@@ -19102,7 +19102,7 @@ mod ocr {
     }
 
     // The nonce also keeps two windows (allowMultipleInstances) from overwriting
-    // each other's script/result file for the SAME kind — it is per request, so it
+    // each other's script/result file for the SAME kind: it is per request, so it
     // separates them at least as well as the process id it replaced.
     pub(super) const CAPS_TAG: &str = "caps";
     pub(super) fn caps_result_path(kind: CapKind, nonce: &str) -> PathBuf {
@@ -19194,7 +19194,7 @@ mod ocr {
     // every subsequent call.
     pub(super) fn install_result(kind: CapKind, name: &str) -> Option<OcrInstallResult> {
         let tag = ocr_tag_from_capability_name(kind.prefix(), name).unwrap_or_default();
-        // No nonce means no install of this pack is in flight — whatever happens to
+        // No nonce means no install of this pack is in flight: whatever happens to
         // sit in the temp folder was not written for us.
         let nonce = pending_nonce(kind, &tag)?;
         let path = install_result_path(kind, &nonce);
