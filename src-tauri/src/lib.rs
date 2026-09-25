@@ -9175,7 +9175,7 @@ fn set_view_group_member(
 // no prompt in two folders (the first folder listing it wins), no two folders on the
 // same cell of the same view (the first one keeps it, the next is moved aside by the
 // renderer because its cell is cleared to the origin only if free), and no folder
-// left with fewer than two members — that one dissolves and its prompts become tiles
+// left with fewer than two members: that one dissolves and its prompts become tiles
 // again. Runs on load and after every mutation. Idempotent.
 // `view_ids` rather than `&[View]`: every caller only ever needs to check
 // membership, so passing ids instead of whole views spares a clone of every view's
@@ -9184,7 +9184,7 @@ fn normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], 
     let mut taken: Vec<String> = Vec::new();
     for folder in folders.iter_mut() {
         // A hand-edited/imported cell far outside any real grid (up to u32::MAX)
-        // must not reach the collision loop below — saturating_add stops advancing
+        // must not reach the collision loop below: saturating_add stops advancing
         // once it hits the cap, which would spin the loop forever with the store
         // mutex held (app dead on startup).
         folder.cell[0] = folder.cell[0].min(GRID_MAX);
@@ -9202,7 +9202,7 @@ fn normalize_tile_folders(folders: &mut Vec<TileFolder>, prompt_ids: &[String], 
     // which the renderer resolves to the first free cell anyway.
     let mut cells: Vec<(String, [u32; 2])> = Vec::new();
     for folder in folders.iter_mut() {
-        // Bounded even if every cell in a full grid is already taken — the clamp
+        // Bounded even if every cell in a full grid is already taken: the clamp
         // above keeps this from ever needing more than GRID_MAX steps in practice,
         // but the guard is what actually guarantees termination.
         for _ in 0..=GRID_MAX {
@@ -9231,7 +9231,7 @@ fn save_tile_folder(
     cell: [u32; 2],
     members: Vec<String>,
 ) -> Result<Settings, String> {
-    // A folder may stay unnamed — it then shows the member count alone.
+    // A folder may stay unnamed: it then shows the member count alone.
     let name = folder_name_of(&name)?;
     let color = valid_tag_color(&color)?;
     let mut store = lock(&state);
@@ -9333,10 +9333,10 @@ fn take_out_of_tile_folder(
 }
 
 // Dissolve a grid folder: its prompts become tiles again, nothing is deleted. Each
-// member lands on the first free cell of the folder's view — the folder's own cell is
+// member lands on the first free cell of the folder's view: the folder's own cell is
 // free again by the time this runs, so it is usually one of them. Cells held by any
 // OTHER folder still in that view are excluded too (they live outside view.layouts,
-// so first_free_cell alone would not see them — a member could otherwise be handed a
+// so first_free_cell alone would not see them: a member could otherwise be handed a
 // cell another folder already owns and never actually appear on screen).
 #[tauri::command]
 fn delete_tile_folder(app: AppHandle, state: State<Db>, id: String) -> Settings {
@@ -9385,7 +9385,7 @@ fn get_settings(state: State<Db>) -> Settings {
 // the image itself. A stored image is a PNG data URL of up to ~400 KB, and sending
 // all of them again on every grid rebuild was the single most expensive thing the
 // app did. `has_image` tells the tile an image exists, `image_rev` changes whenever
-// the stored image does — so a copy already cached in the window knows when it went
+// the stored image does: so a copy already cached in the window knows when it went
 // stale. The bytes themselves come from `prompt_image`, one prompt at a time.
 #[derive(Serialize)]
 struct SlimPrompt {
@@ -9418,7 +9418,7 @@ struct SlimPrompt {
     media_height: u32,
     media_size_bytes: u64,
     // Mirrors Prompt.secret. `text`/`variants` above already carry the ciphertext
-    // (locked) or the session-decrypted plain text (unlocked) — see slim_prompts.
+    // (locked) or the session-decrypted plain text (unlocked): see slim_prompts.
     secret: bool,
     // True while `secret` is true and the session vault is not unlocked. The
     // window shows the locked bar and refuses to copy exactly when this is true;
@@ -9478,12 +9478,12 @@ impl From<&Prompt> for SlimPrompt {
 }
 
 // `secret_key` is the already-checked, already-timeout-tested session key (see
-// secret_session_key) — None means locked (no key, or the timeout expired).
+// secret_session_key): None means locked (no key, or the timeout expired).
 // A confidential prompt's ciphertext never reaches the frontend while locked:
 // text/variants are blanked instead of sent as-is, so a locked entry cannot be
 // searched, previewed or copied from the window's own JSON state. Unlocked, the
 // real text is decrypted here and flows exactly like any other prompt from that
-// point on (search finds it, the tile copies it) — nothing else needs to know
+// point on (search finds it, the tile copies it): nothing else needs to know
 // the entry was ever confidential.
 fn slim_prompts(prompts: &[Prompt], secret_key: Option<[u8; 32]>) -> Vec<SlimPrompt> {
     prompts
@@ -9520,7 +9520,7 @@ struct AppState {
     settings: Settings,
 }
 
-// Async: cloning every prompt must not run on the UI thread — a big library would
+// Async: cloning every prompt must not run on the UI thread; a big library would
 // otherwise stall the window on each render.
 #[tauri::command]
 async fn get_state(state: State<'_, Db>) -> Result<AppState, String> {
@@ -9533,7 +9533,7 @@ async fn get_state(state: State<'_, Db>) -> Result<AppState, String> {
 }
 
 // One prompt's stored image, on demand. Empty string = it has none (or the id is
-// gone), which the window treats the same way — nothing to draw.
+// gone), which the window treats the same way: nothing to draw.
 #[tauri::command]
 async fn prompt_image(state: State<'_, Db>, id: String) -> Result<String, String> {
     let store = lock(&state);
@@ -9546,7 +9546,7 @@ async fn prompt_image(state: State<'_, Db>, id: String) -> Result<String, String
 }
 
 // The quick launcher only ever reads id/name/text/color, on a surface that has to
-// be ready the instant its hotkey fires — cloning a whole prompt each (tags, notes,
+// be ready the instant its hotkey fires: cloning a whole prompt each (tags, notes,
 // entries and all) was exactly the wrong cost to pay there. The four fields are
 // small strings, so cloning just those is the actual saving.
 #[derive(Serialize)]
@@ -9597,7 +9597,7 @@ struct ViewCount {
     name: String,
     count: usize,
 }
-// One day's copy count. `ts` is that day's UTC midnight (unix seconds) — the
+// One day's copy count. `ts` is that day's UTC midnight (unix seconds): the
 // frontend already has locale-aware date formatting via Intl, no reason to
 // duplicate it (or pull in a date crate) on the Rust side for a label string.
 #[derive(Serialize)]
@@ -9829,7 +9829,7 @@ async fn usage_stats(app: AppHandle, state: State<'_, Db>, top_n: usize) -> Resu
     let mut never_used: Vec<StatBar> = store
         .prompts
         .iter()
-        // Never copied — not "not lately", so the list means exactly what it says.
+        // Never copied: not "not lately", so the list means exactly what it says.
         .filter(|p| usage.get(&p.id).copied().unwrap_or(0) == 0)
         .filter(|p| !is_archived(p, archive_tag_key.as_deref()))
         .map(|p| StatBar { id: p.id.clone(), name: name_of(p), count: usage.get(&p.id).copied().unwrap_or(0) })
@@ -10376,7 +10376,7 @@ async fn find_duplicates(state: State<'_, Db>, threshold: f64) -> Result<Vec<Dup
     // edge list below becomes the full n^2 triangle. The setting itself never goes
     // below 70 %, so this only bounds what a malformed call could ask for.
     let thr = (threshold / 100.0).clamp(0.5, 1.0);
-    // A rotating prompt is compared on entry 1 (p.text) only, deliberately —
+    // A rotating prompt is compared on entry 1 (p.text) only, deliberately:
     // two prompts that happen to share their FIRST entry but differ in the rest are
     // not "near duplicates" of each other, and comparing every entry pair would
     // turn this already-O(n^2) scan into O(n^2 * entries).
@@ -10649,7 +10649,7 @@ struct BackupInfo {
     prompts: Option<usize>,
     // The prompt names themselves, same "written once, cheap to read back
     // after" treatment as `prompts` above. The snapshot beside it has every row
-    // DPAPI-sealed, so this cache is sealed the same way — plaintext here would hand
+    // DPAPI-sealed, so this cache is sealed the same way: plaintext here would hand
     // anyone copying the data folder to another Windows account the full list of
     // prompt names while the snapshot itself stayed unreadable, which is exactly the
     // protection the seal exists for.
@@ -10691,7 +10691,7 @@ fn backup_prompt_count(folder: &std::path::Path) -> Option<usize> {
     n
 }
 
-// Total characters across a rotating prompt's entry 1 (`text`) and every variant —
+// Total characters across a rotating prompt's entry 1 (`text`) and every variant:
 // what the version history diff and 90-94's auto-advance already treat as "the
 // whole prompt", so the backup list counts the same thing.
 fn prompt_char_count(p: &Prompt) -> usize {
@@ -10699,7 +10699,7 @@ fn prompt_char_count(p: &Prompt) -> usize {
 }
 
 // Decrypt each row (same DPAPI seal `db_load` uses on the live store) and pull out
-// name/size/kind — best-effort, a row that fails to decrypt/parse is skipped rather
+// name/size/kind: best-effort, a row that fails to decrypt/parse is skipped rather
 // than failing the whole list.
 fn read_prompt_names(path: &std::path::Path) -> Vec<BackupPrompt> {
     let Ok(conn) = Connection::open(path) else { return Vec::new() };
@@ -10714,13 +10714,13 @@ fn read_prompt_names(path: &std::path::Path) -> Vec<BackupPrompt> {
 // The names cache carries real prompt titles, so it is DPAPI-sealed like every row in
 // the snapshot it sits beside. `dec_str` passes an un-prefixed value straight through,
 // so a plaintext cache written by an earlier build still reads and is re-sealed on the
-// next write — no migration step needed.
+// next write: no migration step needed.
 fn write_prompt_names(cache: &std::path::Path, items: &[BackupPrompt]) {
     if let Ok(json) = serde_json::to_string(items) {
         let _ = fs::write(cache, enc_str(&json));
     }
 }
-// An older build's cache is a plain Vec<String> — try the current shape first,
+// An older build's cache is a plain Vec<String>: try the current shape first,
 // fall back to strings-with-zero-chars. The bool says whether the fallback fired, so
 // the caller can upgrade the cache file once instead of re-writing it on every read.
 fn read_prompt_names_cache(cache: &std::path::Path) -> (Vec<BackupPrompt>, bool) {
@@ -10736,7 +10736,7 @@ fn read_prompt_names_cache(cache: &std::path::Path) -> (Vec<BackupPrompt>, bool)
     (items, true)
 }
 
-// Same cached-note treatment as `backup_prompt_count` — computed once (here, or
+// Same cached-note treatment as `backup_prompt_count`: computed once (here, or
 // at creation time in `do_backup`) and read straight back after.
 fn backup_prompt_names(folder: &std::path::Path) -> Vec<BackupPrompt> {
     let cache = folder.join(BACKUP_NAMES_FILE);
@@ -10768,7 +10768,7 @@ fn backup_prompt_names(folder: &std::path::Path) -> Vec<BackupPrompt> {
 fn backups_dir(app: &AppHandle) -> std::path::PathBuf {
     data_dir(app).join("backups")
 }
-// A backup folder name is a local_stamp() (digits, '-', '_') — reject anything with
+// A backup folder name is a local_stamp() (digits, '-', '_'): reject anything with
 // path separators or traversal so a crafted name can never escape the backups dir.
 fn valid_backup_name(name: &str) -> bool {
     !name.is_empty()
@@ -10873,7 +10873,7 @@ fn backups_to_drop(names: &[String], keep: usize, gfs: Option<&GfsConfig>) -> Ve
     };
     // The newest `keep` snapshots survive whatever the tiers say. A tier keeps one
     // backup per distinct day, so without this a second backup made the same day
-    // would delete the first one — correct by the letter of the rule, and exactly
+    // would delete the first one: correct by the letter of the rule, and exactly
     // the kind of surprise a backup feature must not produce.
     let mut keep_set: HashSet<String> = names.iter().rev().take(keep).cloned().collect();
     for (count, idx) in [(g.daily, 0), (g.weekly, 1), (g.monthly, 2), (g.yearly, 3)] {
@@ -10881,7 +10881,7 @@ fn backups_to_drop(names: &[String], keep: usize, gfs: Option<&GfsConfig>) -> Ve
             keep_set.insert(n);
         }
     }
-    // Every tier at zero would wipe the lot — keep the newest one instead.
+    // Every tier at zero would wipe the lot: keep the newest one instead.
     if keep_set.is_empty() {
         if let Some(newest) = names.last() {
             keep_set.insert(newest.clone());
@@ -10908,7 +10908,7 @@ fn rotate_backups_at(dir: &std::path::Path, keep: usize, gfs: Option<GfsConfig>)
 // Consistent snapshot of data.db via VACUUM INTO (WAL-safe, no locking games). Writes
 // a temp file first and renames on success, so a failure leaves no partial snapshot.
 // A snapshot is stored gzipped: a vacuumed store is mostly JSON text, so this
-// takes a few MB down to a fraction of that — and ten of them are kept by default.
+// takes a few MB down to a fraction of that: and ten of them are kept by default.
 // `data.db` (uncompressed) is still accepted so older backups keep working.
 const BACKUP_DB_GZ: &str = "data.db.gz";
 // How often the auto-backup job looks at the clock. The shortest interval the UI
@@ -10947,7 +10947,7 @@ fn auto_backup_tick(app: &AppHandle) {
         // A snapshot copies data.db, so anything still collected has to be in it.
         flush_settings(app, &store.settings);
         // The manual "backup now" toast fires from the same command's own
-        // success path in the frontend — the automatic one has no such call site,
+        // success path in the frontend: the automatic one has no such call site,
         // so it needs its own signal here.
         match do_backup(app, keep, gfs_from_settings(&store.settings)) {
             Ok(_) => {
@@ -11044,8 +11044,8 @@ fn do_backup_at(dir: &std::path::Path, root: &std::path::Path, keep: usize, gfs:
             return Err("store-too-large-for-backup".into());
         }
     }
-    // Two snapshots inside the same second — two quick manual backups, or the hour a
-    // DST fallback repeats — must not share a folder: create_dir_all would reuse the
+    // Two snapshots inside the same second: two quick manual backups, or the hour a
+    // DST fallback repeats: must not share a folder: create_dir_all would reuse the
     // existing one and the earlier snapshot would be silently overwritten. create_dir
     // fails on an existing directory, so claiming the name IS the check (no race).
     // stamp_secs() reads only the first three time fields, so the suffix leaves the
@@ -11080,7 +11080,7 @@ fn do_backup_at(dir: &std::path::Path, root: &std::path::Path, keep: usize, gfs:
         let _ = fs::remove_dir_all(&folder);
         return Err(e);
     }
-    // Compress the vacuumed copy, then drop the raw one — never leave both behind.
+    // Compress the vacuumed copy, then drop the raw one: never leave both behind.
     let packed = gzip_to(&tmp, &dest);
     // The count and names are taken from the vacuumed copy while it is still
     // unpacked, so the list never has to decompress a snapshot for either.
@@ -11108,7 +11108,7 @@ fn do_backup_at(dir: &std::path::Path, root: &std::path::Path, keep: usize, gfs:
     Ok(name)
 }
 // A folder name "YYYY-MM-DD_HH-MM-SS" as seconds on a local civil timeline. Two of
-// these subtract cleanly — the zone offset cancels — which is all the schedule needs
+// these subtract cleanly (the zone offset cancels), which is all the schedule needs
 // and avoids trusting a modification time that any sync or antivirus tool may reset.
 fn stamp_secs(name: &str) -> Option<i64> {
     let (date, time) = name.split_once('_')?;
@@ -11142,7 +11142,7 @@ async fn list_backups(app: AppHandle) -> Result<Vec<BackupInfo>, String> {
 }
 
 // Hands the user straight to the snapshot folder. The path is always the app's
-// own backups_dir() — never taken from the frontend — so there is nothing here for a
+// own backups_dir() (never taken from the frontend) so there is nothing here for a
 // crafted argument to redirect; `explorer` gets exactly one argument, no shell involved.
 #[tauri::command]
 fn open_backups_folder(app: AppHandle) -> Result<(), String> {
@@ -11159,7 +11159,7 @@ fn open_backups_folder(app: AppHandle) -> Result<(), String> {
 async fn create_backup(app: AppHandle, state: State<'_, Db>, keep: usize) -> Result<String, String> {
     let store = lock(&state); // no writes race with the VACUUM read
     let gfs = gfs_from_settings(&store.settings);
-    // The snapshot copies data.db — a collected counter write belongs in it.
+    // The snapshot copies data.db: a collected counter write belongs in it.
     flush_settings(&app, &store.settings);
     do_backup(&app, keep, gfs)
 }
@@ -11173,7 +11173,7 @@ async fn delete_backup(app: AppHandle, name: String) -> Result<(), String> {
 }
 
 // Unpack (gunzip if needed) a backup file BESIDE the live store, then prove it is
-// an openable SQLite file. Shared by every restore scope — a snapshot that fails
+// an openable SQLite file. Shared by every restore scope: a snapshot that fails
 // either step must never touch the live database.
 fn stage_and_validate_backup(backup_db: &std::path::Path, dir: &std::path::Path) -> Result<PathBuf, String> {
     let staged = dir.join("data.db.restoring");
@@ -11229,11 +11229,11 @@ fn table_columns(tx: &Transaction, schema: &str, table: &str) -> rusqlite::Resul
 }
 
 // Merge only the tables `scope` asks for from `staged` into the live `target`
-// database, inside one transaction — any failure leaves `target` untouched. "data"
+// database, inside one transaction: any failure leaves `target` untouched. "data"
 // mirrors exactly the tables delete_all_data already treats as data; "settings"
 // touches only the meta['settings'] row, never the meta['copy_log_migrated']
 // migration marker. A table missing from an older backup (e.g. "trash", which
-// arrived later) is skipped rather than failing the whole restore — its live
+// arrived later) is skipped rather than failing the whole restore: its live
 // rows stay put.
 // The three scopes a restore or an import may run in. Both commands parse the
 // string through here so an unrecognised value can never mean "everything" to one
@@ -11256,7 +11256,7 @@ fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: 
                 // A snapshot's table need not have the same columns as today's: one
                 // written before a column was added (prompt_versions and `variants`)
                 // simply has one fewer. `SELECT *` makes the column COUNT part of the
-                // deal and fails such a restore outright — taking every other table
+                // deal and fails such a restore outright: taking every other table
                 // in the same transaction down with it. Copy the columns the two
                 // sides really share instead and let the rest take their defaults.
                 // The list is built from the LIVE table's own column names, so
@@ -11266,7 +11266,7 @@ fn restore_selective(target: &std::path::Path, staged: &std::path::Path, scope: 
                     .into_iter()
                     .filter(|c| backup_cols.iter().any(|b| b.eq_ignore_ascii_case(c)))
                     .collect();
-                // Nothing in common — including the table missing from an older
+                // Nothing in common: including the table missing from an older
                 // backup entirely (e.g. "trash", added in 91). Leave the live rows
                 // alone rather than emptying them for nothing.
                 if shared.is_empty() {
@@ -11369,7 +11369,7 @@ async fn backup_contents(app: AppHandle, name: String) -> Result<BackupContents,
 
 // Restore: snapshot the current store first (safety), then either swap the whole
 // data.db (scope "all") or merge just the requested tables in place (scope "data"/
-// "settings") — either way relaunch after, so nothing can half-apply.
+// "settings"): either way relaunch after, so nothing can half-apply.
 #[tauri::command]
 async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep: usize, scope: String) -> Result<(), String> {
     if !valid_backup_name(&name) {
@@ -11382,10 +11382,10 @@ async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep
     {
         let store = lock(&state);
         let gfs = gfs_from_settings(&store.settings);
-        // The safety snapshot is the fallback if the restore goes wrong — it must
+        // The safety snapshot is the fallback if the restore goes wrong: it must
         // carry the collected counters too, not the state of a second ago.
         flush_settings(&app, &store.settings);
-        // A restore that proceeds without its own undo point is one-way — if the
+        // A restore that proceeds without its own undo point is one-way: if the
         // snapshot itself could not be written (disk full, permissions, locked
         // file), stop here rather than overwrite the live database with nothing
         // to fall back to.
@@ -11396,7 +11396,7 @@ async fn restore_backup(app: AppHandle, state: State<'_, Db>, name: String, keep
         if scope == "all" {
             // Writing straight onto data.db truncates it first, so a disk that fills
             // up (or any I/O error) halfway through would leave the user with
-            // neither the old database nor the restored one — swap via rename instead.
+            // neither the old database nor the restored one: swap via rename instead.
             if let Err(e) = fs::rename(&staged, &target) {
                 let _ = fs::remove_file(&staged);
                 return Err(e.to_string());
@@ -11501,7 +11501,7 @@ fn delete_custom_theme(app: AppHandle, state: State<Db>, id: String) -> Result<S
     Ok(settings)
 }
 
-// Name/base/vars only — never the internal id, so importing a theme on another
+// Name/base/vars only: never the internal id, so importing a theme on another
 // install always creates a fresh one instead of colliding with (or silently
 // overwriting) whatever already has that id there.
 #[derive(Serialize, Deserialize)]
@@ -11543,7 +11543,7 @@ async fn export_custom_theme(app: AppHandle, state: State<'_, Db>, id: String) -
 }
 
 // Reuses save_custom_theme's own validation (name/base/vars) so an imported file
-// is never trusted more than a value typed into the editor by hand — a malformed
+// is never trusted more than a value typed into the editor by hand: a malformed
 // or hand-edited JSON file gets the exact same rejection a bad manual entry would.
 // async: same reasoning as export_custom_theme above.
 #[tauri::command]
@@ -11559,7 +11559,7 @@ async fn import_custom_theme(app: AppHandle, state: State<'_, Db>) -> Result<Set
 }
 
 // The single place that decides what text a copy puts on the clipboard. The
-// private notes are deliberately not part of it — every copy path goes through
+// private notes are deliberately not part of it: every copy path goes through
 // here (or through copy_text with an already-resolved body), so a note can never
 // leak into the clipboard.
 fn copy_payload(p: &Prompt) -> &str {
@@ -11567,11 +11567,11 @@ fn copy_payload(p: &Prompt) -> &str {
 }
 
 // Absolute ceiling regardless of the expert value rotateMaxEntries (a UI-level
-// soft cap on how many the editor lets you ADD) — this is the hard backend floor
+// soft cap on how many the editor lets you ADD): this is the hard backend floor
 // against a corrupted or hand-edited settings/import file.
 const MAX_ROTATE_VARIANTS: usize = 49; // + entry 0 (text) = 50 total, matching rotateMaxEntries' own max
 
-// Trims, drops empty entries and enforces the hard ceiling — "leere Einträge
+// Trims, drops empty entries and enforces the hard ceiling: "leere Einträge
 // werden beim Speichern verworfen" applies to add_prompt/update_prompt alike.
 fn sanitize_variants(list: Vec<String>) -> Vec<String> {
     list.into_iter()
@@ -11582,7 +11582,7 @@ fn sanitize_variants(list: Vec<String>) -> Vec<String> {
 }
 
 // Only "random" is ever stored as anything other than "" (order); a prompt
-// with no variants has nothing to rotate, so its mode is meaningless — keeping it
+// with no variants has nothing to rotate, so its mode is meaningless: keeping it
 // empty avoids a stale mode surviving in storage past the point it can affect anything.
 fn sanitize_rotate_mode(mode: String, variants: &[String]) -> String {
     if variants.is_empty() {
@@ -11594,7 +11594,7 @@ fn sanitize_rotate_mode(mode: String, variants: &[String]) -> String {
     }
 }
 
-// Same reasoning as sanitize_rotate_mode — without variants, auto-advance
+// Same reasoning as sanitize_rotate_mode: without variants, auto-advance
 // has nothing to advance through, so it can never survive as a stored true.
 fn sanitize_rotate_auto(auto: bool, variants: &[String]) -> bool {
     auto && !variants.is_empty()
@@ -11614,22 +11614,22 @@ fn rotation_entry_text(p: &Prompt, idx: usize) -> String {
     }
 }
 
-// Which entry the NEXT copy would use, without touching any state — so a tile's
+// Which entry the NEXT copy would use, without touching any state: so a tile's
 // "next: n/total" badge and the actual copy always agree, no matter how many times
 // this is called between two real copies. The global "rotatingPrompts" flag off, or
-// a prompt with no variants, always resolves to entry 0 — the list stays saved on
+// a prompt with no variants, always resolves to entry 0: the list stays saved on
 // the prompt, it is just not served.
 // A stored pointer/bag that no longer fits the current entry count (edited since)
 // is never trusted blindly: `% total` keeps a stale `rotate_pos` in range, and any
 // bag containing an out-of-range index is treated as absent (discarded on the next
 // rotation_advance) instead of ever indexing past the end.
 // Alongside `idx` (the absolute entry position, used to resolve the text),
-// also returns `pos` — a 1-based "draw number within the current cycle", for a
+// also returns `pos`: a 1-based "draw number within the current cycle", for a
 // badge that counts up 1..total and restarts, instead of random mode's `idx`
 // jumping to an arbitrary absolute position each time. Order mode's `idx` is
 // already such a natural count (the pointer only ever moves forward), so
 // `pos` there is just `idx + 1`; random mode derives it from how many entries
-// remain undrawn in the current shuffle bag (`total - bag.len() + 1`) — a
+// remain undrawn in the current shuffle bag (`total - bag.len() + 1`): a
 // freshly reshuffled, still-untouched bag always holds exactly `total`
 // entries, so the very first upcoming draw of a cycle is always `1`.
 fn rotation_next(p: &Prompt, settings: &Settings) -> (usize, usize, String) {
@@ -11650,15 +11650,15 @@ fn rotation_next(p: &Prompt, settings: &Settings) -> (usize, usize, String) {
     (idx, pos, rotation_entry_text(p, idx))
 }
 
-// Advances the pointer past the entry rotation_next() just reported — call ONLY
+// Advances the pointer past the entry rotation_next() just reported: call ONLY
 // once the copy that used it actually reached the clipboard, so a failed copy never
 // burns an entry. Random mode pops the bag's shown front and, once that empties it
 // (or the bag was stale/absent, per rotation_next's own validity check), reshuffles
-// a fresh permutation of every OTHER index with the just-shown one placed last — a
+// a fresh permutation of every OTHER index with the just-shown one placed last: a
 // full cycle (every entry exactly once) always separates two showings of the same
 // entry, including across the reshuffle boundary.
 fn rotation_advance(p: &Prompt, settings: &mut Settings) {
-    // Same gate as rotation_next() — while the feature is globally off the pointer
+    // Same gate as rotation_next(): while the feature is globally off the pointer
     // must stay frozen, not silently drift, so turning it back on resumes exactly
     // where the user left off instead of landing on an arbitrary position.
     if p.variants.is_empty() || settings.ui_flags.get("rotatingPrompts") == Some(&false) {
@@ -11688,7 +11688,7 @@ fn rotation_advance(p: &Prompt, settings: &mut Settings) {
     }
 }
 
-// Drops both rotation entries once a prompt is gone for good — called from the
+// Drops both rotation entries once a prompt is gone for good: called from the
 // same places that already purge per-prompt state (`purge_ids`), not from the
 // soft "move to trash" step (a trashed-then-restored prompt keeps its position).
 fn rotation_forget(settings: &mut Settings, ids: &[String]) {
@@ -11699,7 +11699,7 @@ fn rotation_forget(settings: &mut Settings, ids: &[String]) {
 }
 
 // The single place that decides whether a text copy goes to the clipboard
-// normally or opens an auto-advance session (Windows only — delayed rendering is a
+// normally or opens an auto-advance session (Windows only: delayed rendering is a
 // Win32 mechanism, see mod clipwatch). `id` is None for a text copy that never
 // carries rotation state (e.g. a resolved placeholder fill copied ad hoc).
 #[cfg(windows)]
@@ -11726,7 +11726,7 @@ fn put_text(_state: &State<Db>, _id: Option<&str>, text: &str) -> bool {
 }
 
 // The most-called command in the app (every tile/pill/hotkey copy goes through it),
-// so it clones only the ONE field the chosen branch actually needs — not the whole
+// so it clones only the ONE field the chosen branch actually needs: not the whole
 // Prompt, which on an image prompt meant cloning that base64 blob on every
 // text-branch check too.
 enum CopyPayload {
@@ -11768,7 +11768,7 @@ async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result
         CopyPayload::Text(text) => put_text(&state, Some(&id), &text),
         CopyPayload::Missing => false,
     };
-    // Only a successful TEXT copy may consume a rotation entry — a failed copy
+    // Only a successful TEXT copy may consume a rotation entry: a failed copy
     // must leave the pointer exactly where it was, and an Image/File payload never
     // showed any entry at all (the copy_image/file_path branches above short-circuit
     // before rotation_next ever runs) so it must not silently advance it either.
@@ -11778,7 +11778,7 @@ async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result
             let p = store.prompts[pos].clone();
             rotation_advance(&p, &mut store.settings);
             // The pointer survives a restart. Collected rather than written per
-            // copy — it is already correct in memory for the next copy.
+            // copy: it is already correct in memory for the next copy.
             save_settings_soon();
             emit_rotation_changed(&app, &p, &store.settings);
         }
@@ -11788,12 +11788,12 @@ async fn copy_prompt(app: AppHandle, state: State<'_, Db>, id: String) -> Result
 
 // What rotation_peek() reports for a "next: n/total" badge or a copy path that
 // needs the resolved text itself (chaining, drag-out, hotkeys, tray, quick-launch)
-// BEFORE it goes through variable resolution — those all peek, resolve, copy_text,
+// BEFORE it goes through variable resolution: those all peek, resolve, copy_text,
 // then commit, so a cancelled variable dialog never burns an entry.
 #[derive(Serialize)]
 struct RotationPeek {
     index: usize,
-    // 1-based "draw number within the current cycle" — see rotation_next.
+    // 1-based "draw number within the current cycle": see rotation_next.
     pos: usize,
     total: usize,
     text: String,
@@ -11816,12 +11816,12 @@ fn rotation_peek(state: State<Db>, id: String) -> Option<RotationPeek> {
 
 // Every window's tile/pill/folder-member badge stays live off ONE event, fired
 // wherever the pointer actually moves (copy_prompt's own success path, this command)
-// — the same "backend decides, frontend just reflects" split as prompt-updated.
+//: the same "backend decides, frontend just reflects" split as prompt-updated.
 #[derive(Serialize, Clone)]
 struct RotationChanged {
     id: String,
     index: usize,
-    // 1-based "draw number within the current cycle" — see rotation_next.
+    // 1-based "draw number within the current cycle": see rotation_next.
     pos: usize,
     total: usize,
     text: String,
@@ -11853,7 +11853,7 @@ fn rotation_commit(app: AppHandle, state: State<Db>, id: String) {
     if let Some(pos) = store.prompts.iter().position(|p| p.id == id) {
         let p = store.prompts[pos].clone();
         rotation_advance(&p, &mut store.settings);
-        // The hottest settings write in the app — this runs on every paste of an
+        // The hottest settings write in the app: this runs on every paste of an
         // auto-advancing prompt, so it is collected instead of hitting the disk.
         save_settings_soon();
         emit_rotation_changed(&app, &p, &store.settings);
@@ -11872,7 +11872,7 @@ fn auto_eligible(p: &Prompt, s: &Settings) -> bool {
         && p.file_path.is_empty()
 }
 
-// Editor's "From the start" button — back to entry 1, same as a freshly
+// Editor's "From the start" button: back to entry 1, same as a freshly
 // created rotating prompt, without touching the entries themselves.
 #[tauri::command]
 fn rotation_reset(app: AppHandle, state: State<Db>, id: String) {
@@ -11884,7 +11884,7 @@ fn rotation_reset(app: AppHandle, state: State<Db>, id: String) {
 // The placeholder round's entry point. The frontend resolves every
 // entry's placeholders ONCE (union of variables across all of them, one dialog)
 // and hands back `resolved` in absolute entry order; this arms entry
-// rotation_next() currently points at and advances the pointer — replacing what
+// rotation_next() currently points at and advances the pointer: replacing what
 // copy_prompt would otherwise have done for this one copy, so it must never be
 // called together with copy_prompt for the same click.
 #[tauri::command]
@@ -11899,7 +11899,7 @@ fn rotation_arm_session(app: AppHandle, state: State<Db>, id: String, resolved: 
     let (idx, _, raw) = rotation_next(&p, &store.settings);
     let text = resolved.get(idx).cloned().unwrap_or(raw);
     rotation_advance(&p, &mut store.settings);
-    save_settings_soon(); // pointer only — collected, see SETTINGS_QUIET_MS
+    save_settings_soon(); // pointer only: collected, see SETTINGS_QUIET_MS
     emit_rotation_changed(&app, &p, &store.settings);
     drop(store);
     #[cfg(windows)]
@@ -11914,7 +11914,7 @@ fn rotation_arm_session(app: AppHandle, state: State<Db>, id: String, resolved: 
 }
 
 // The tile menu / editor Auto toggle switching off while its session is the
-// one running — end it immediately instead of waiting for the next paste/copy.
+// one running: end it immediately instead of waiting for the next paste/copy.
 // A no-op if `id` is not the active session (stale click, already ended itself).
 #[tauri::command]
 fn rotation_end_auto(id: String) {
@@ -11924,10 +11924,10 @@ fn rotation_end_auto(id: String) {
     let _ = id;
 }
 
-// Put arbitrary text on the clipboard — used after filling prompt placeholders,
+// Put arbitrary text on the clipboard: used after filling prompt placeholders,
 // chains, drag-out, hotkeys, tray and quick-launch. `id` is the source
 // prompt when there is one, so an auto-eligible prompt still opens its session
-// even when the actual copy went through variable resolution first — a plain
+// even when the actual copy went through variable resolution first: a plain
 // copy_prompt call for it would have double-resolved the placeholders.
 #[tauri::command]
 async fn copy_text(state: State<'_, Db>, text: String, id: Option<String>) -> Result<bool, String> {
