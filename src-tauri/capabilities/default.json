@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capabilities for main window, floating quick-copy buttons, pill folders, the variable prompt, the quick launcher and the custom tray menu",
-  "windows": ["main", "float-*", "folder-*", "snip-*", "vars-*", "launcher", "tray-menu", "rec-bar", "video-editor"],
+  "description": "Capabilities for main window, floating quick-copy buttons, pill folders, the variable prompt, the quick launcher, the custom tray menu, the screen/video editor windows and the camera-recording window",
+  "windows": ["main", "float-*", "folder-*", "snip-*", "vars-*", "launcher", "tray-menu", "rec-bar", "video-editor", "camera"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

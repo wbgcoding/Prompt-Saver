@@ -6,7 +6,8 @@
 // an ordered operation list (VE.ops), exactly like the screenshot editor's own
 // list, and the export compiles that list into ONE ffmpeg filter graph. That is
 // what makes undo/redo cheap, the preview honest and the export a single pass.
-import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
+import { resolveLang, ffmpegDownloadPct, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, fmtSizeCompact, makeHoldOrTapToggle, trapTabWithin } from "./floatShared.js";
+import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw } from "./shortcuts.js";
 import { applyFloatTheme } from "./floattheme.js";
 import { APP_NAME } from "./brand.js";
 import { createColorPop } from "./colorpop.js";
@@ -188,12 +189,20 @@ function t(key) {
   return applyTermsFn(String(raw).replaceAll("{app}", APP_NAME), LANG);
 }
 
+// Same binding trick main.js uses: shortcuts.js has no i18n state of its own,
+// so every call here is closed over this window's own t()/LANG.
+const withShortcut = (el, action) => withShortcutRaw(el, action, t, LANG);
+const shortcutRows = (scope) => rowsForScopeRaw(scope, t, LANG);
+
 function applyI18n() {
   if (!TXT_READY) return;
   document.documentElement.lang = LANG;
   document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll("[data-i18n-ph]").forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
-  document.querySelectorAll("[data-i18n-title]").forEach((el) => { el.title = t(el.dataset.i18nTitle); });
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    if (el.dataset.shortcut) withShortcut(el, el.dataset.shortcut);
+    else el.title = t(el.dataset.i18nTitle);
+  });
   document.querySelectorAll("[data-i18n-aria]").forEach((el) => { el.setAttribute("aria-label", t(el.dataset.i18nAria)); });
   renderOps();
   renderOverlayList();
@@ -322,17 +331,34 @@ function closeConfirm(answer) {
   resolve(answer);
 }
 
-// Keeps Tab inside the open dialog instead of letting it walk the editor behind it.
-function trapTabWithin(container, e) {
-  const list = [...container.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"]), select, textarea, a[href]')]
-    .filter((el) => !el.disabled && el.offsetParent !== null);
-  if (!list.length) return;
-  const first = list[0], last = list[list.length - 1];
-  if (!container.contains(document.activeElement)) { e.preventDefault(); first.focus(); return; }
-  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+// The "?" overview -- same modal/modal-narrow/modal-titlebar shell as
+// ve-confirm above, filled straight from SHORTCUTS.
+let shortcutsModalOpener = null;
+function openShortcutsModal(scope) {
+  shortcutsModalOpener = document.activeElement;
+  const list = $("shortcuts-modal-list");
+  list.innerHTML = "";
+  for (const row of shortcutRows(scope)) {
+    const r = document.createElement("div");
+    r.className = "shortcuts-row";
+    const desc = document.createElement("span");
+    desc.className = "shortcuts-row-desc";
+    desc.textContent = row.desc;
+    const keys = document.createElement("span");
+    keys.className = "shortcuts-row-keys";
+    keys.textContent = row.keys;
+    r.append(desc, keys);
+    list.appendChild(r);
+  }
+  $("shortcuts-modal").classList.remove("hidden");
+}
+function closeShortcutsModal() {
+  $("shortcuts-modal").classList.add("hidden");
+  if (shortcutsModalOpener?.isConnected && typeof shortcutsModalOpener.focus === "function") shortcutsModalOpener.focus();
+  shortcutsModalOpener = null;
 }
 
+// Keeps Tab inside the open dialog instead of letting it walk the editor behind it.
 $("ve-confirm-ok").addEventListener("click", () => closeConfirm(true));
 $("ve-confirm-cancel").addEventListener("click", () => closeConfirm(false));
 $("ve-confirm-third").addEventListener("click", () => closeConfirm("third"));
@@ -481,8 +507,8 @@ const opsOf = (tool) => VE.ops.filter((o) => o.tool === tool);
 
 function opLabel(op) {
   switch (op.tool) {
-    case "trim": return `${t("veOpTrim")} ${fmtTime(op.startMs)} – ${fmtTime(op.endMs)}`;
-    case "cut": return `${t("veOpCut")} ${fmtTime(op.startMs)} – ${fmtTime(op.endMs)}`;
+    case "trim": return `${t("veOpTrim")} ${fmtTime(op.startMs)}-${fmtTime(op.endMs)}`;
+    case "cut": return `${t("veOpCut")} ${fmtTime(op.startMs)}-${fmtTime(op.endMs)}`;
     case "crop": return `${t("veOpCrop")} ${op.rect.w}×${op.rect.h}`;
     case "speed": return `${t("veOpSpeed")} ${op.rate}×`;
     case "fade": return `${t("veOpFade")} ${op.inMs}/${op.outMs} ms`;
@@ -725,6 +751,8 @@ function renderRegions() {
   $("ve-dim-b").style.width = `${Math.max(0, trackWidth() - msToPx(b))}px`;
   $("ve-trim-a").style.left = `${msToPx(a)}px`;
   $("ve-trim-b").style.left = `${msToPx(b)}px`;
+  setTimeValue($("ve-trim-a"), a, VE.dur);
+  setTimeValue($("ve-trim-b"), b, VE.dur);
 
   const cuts = $("ve-cuts");
   cuts.innerHTML = "";
@@ -733,7 +761,7 @@ function renderRegions() {
     el.className = "ve-cut";
     el.style.left = `${msToPx(Math.min(cut.startMs, cut.endMs))}px`;
     el.style.width = `${Math.max(2, msToPx(Math.abs(cut.endMs - cut.startMs)))}px`;
-    el.title = `${t("veOpCut")} ${fmtTime(cut.startMs)} – ${fmtTime(cut.endMs)}`;
+    el.title = `${t("veOpCut")} ${fmtTime(cut.startMs)}-${fmtTime(cut.endMs)}`;
     cuts.appendChild(el);
   }
 
@@ -744,7 +772,7 @@ function renderRegions() {
     el.className = "ve-ovbar" + (op.id === VE.selOv ? " sel" : "");
     el.style.left = `${msToPx(op.startMs)}px`;
     el.style.width = `${Math.max(3, msToPx(Math.max(0, op.endMs - op.startMs)))}px`;
-    el.title = `${t(overlayLabelKey(op.kind))} ${fmtTime(op.startMs)} – ${fmtTime(op.endMs)}`;
+    el.title = `${t(overlayLabelKey(op.kind))} ${fmtTime(op.startMs)}-${fmtTime(op.endMs)}`;
     bars.appendChild(el);
   }
 
@@ -765,10 +793,20 @@ function renderRegions() {
   document.querySelectorAll(".ve-use-sel").forEach((btn) => { btn.disabled = !VE.sel; });
 }
 
+// Shared by the timeline itself and its two trim handles: a screen reader gets
+// the plain time it would otherwise have to infer from a bare pixel position.
+function setTimeValue(el, ms, durMs) {
+  el.setAttribute("aria-valuemin", "0");
+  el.setAttribute("aria-valuemax", String(Math.round(durMs / 1000)));
+  el.setAttribute("aria-valuenow", String(Math.round(ms / 1000)));
+  el.setAttribute("aria-valuetext", t("a11yTimeOfTotal").replace("{time}", fmtTime(ms)).replace("{total}", fmtTime(durMs)));
+}
+
 function renderPlayhead() {
   $("ve-playhead").style.left = `${msToPx(VE.playhead)}px`;
   $("ve-time").textContent = fmtTime(VE.playhead);
   $("ve-frame").textContent = `#${frameOf(VE.playhead)}`;
+  setTimeValue($("ve-timeline"), VE.playhead, VE.dur);
 }
 
 // ---------------------------------------------------------------- filmstrip + waveform
@@ -1574,6 +1612,8 @@ regionsEl.addEventListener("pointermove", (e) => {
     else drag.live.endMs = clamp(ms, drag.live.startMs + MIN_CLIP_MS, VE.dur);
     $("ve-trim-a").style.left = `${msToPx(drag.live.startMs)}px`;
     $("ve-trim-b").style.left = `${msToPx(drag.live.endMs)}px`;
+    setTimeValue($("ve-trim-a"), drag.live.startMs, VE.dur);
+    setTimeValue($("ve-trim-b"), drag.live.endMs, VE.dur);
     $("ve-dim-a").style.width = `${msToPx(drag.live.startMs)}px`;
     $("ve-dim-b").style.left = `${msToPx(drag.live.endMs)}px`;
     $("ve-dim-b").style.width = `${Math.max(0, trackWidth() - msToPx(drag.live.endMs))}px`;
@@ -1778,7 +1818,7 @@ function updateScaleCurrent() {
     const kbps = videoKbps();
     const durS = totalOutMs() / 1000;
     let text = kbps != null && durS > 0
-      ? t("veScaleCurrent").replace("{size}", fmtSize(Math.round(((kbps + AUDIO_KBPS_ESTIMATE) * 1000 / 8) * durS)))
+      ? t("veScaleCurrent").replace("{size}", fmtSizeCompact(Math.round(((kbps + AUDIO_KBPS_ESTIMATE) * 1000 / 8) * durS)))
       : t("veScaleCurrentNoSize");
     text = text.replace("{sw}", VE.w).replace("{sh}", VE.h).replace("{tw}", scale.w).replace("{th}", scale.h);
     if (scale.w > VE.w || scale.h > VE.h) text += " " + t("veScaleUpscaleNote");
@@ -1792,12 +1832,6 @@ function updateScaleCurrent() {
   $("ve-export-scale-summary").textContent = scale
     ? t("veExportScaleSummary").replace("{w}", scale.w).replace("{h}", scale.h)
     : t("veScaleOff");
-}
-
-function fmtSize(bytes) {
-  if (!bytes) return "";
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // ---------------------------------------------------------------- overlays
@@ -1817,6 +1851,10 @@ function centeredRect(fraction) {
 }
 
 async function addOverlay(kind) {
+  // Same race as startAddVideo: this runs off a button live from the first
+  // paint, and builds its default text and error wording with t() at click
+  // time, so it needs the lazy i18n import landed before it reads any of it.
+  if (!TXT_READY) await textsReady;
   const range = defaultRange();
   const base = { tool: "overlay", id: newId(), kind, ...range };
   let op = null;
@@ -1870,6 +1908,51 @@ async function pickExtraVideo() {
     toast(message);
     return null;
   }
+}
+
+// A camera recording opened alongside its companion screen recording lands
+// here as an aligned overlay instead of through the normal file-picker path
+// (createVideoOverlay above). Placed as a bottom-right picture-in-picture
+// rather than centered, the usual spot for a webcam layer.
+//
+// Alignment: the camera's own sidecar (the durable, on-disk value
+// camera_finish_recording wrote) already carries the final overlay offset --
+// the screen recording's own pause-aware position at the moment the camera
+// started, read live by the Rust side rather than reconstructed here from
+// two wall-clock stamps (a paused span between the two starts would
+// otherwise inflate the offset by however long it lasted).
+async function addAlignedCameraOverlay(path) {
+  if (!path) return;
+  if (VE.ops.some((o) => o.tool === "overlay" && o.kind === "video" && o.path === path)) return;
+  let probe;
+  try {
+    probe = await invoke("probe_extra_video_source", { path });
+  } catch {
+    // The recording still exists on disk -- the overlays panel's own "add a
+    // video" picker reaches it by hand if this automatic probe fails.
+    return;
+  }
+  let startMs = 0;
+  try {
+    const sidecar = await invoke("read_camera_sidecar", { path });
+    if (sidecar && sidecar.overlay_start_ms != null) startMs = sidecar.overlay_start_ms;
+  } catch {
+    // No sidecar -- 0 (both at the same point) is still a sane fallback,
+    // never a missing overlay.
+  }
+  const durationMs = Number(probe.duration_ms) || 0;
+  const w = even(VE.w * 0.3), h = even(VE.h * 0.3);
+  const margin = even(Math.min(VE.w, VE.h) * 0.03);
+  const rect = snapRect({ x: VE.w - w - margin, y: VE.h - h - margin, w, h });
+  const op = {
+    tool: "overlay", id: newId(), kind: "video",
+    startMs, endMs: Math.min(VE.dur, startMs + durationMs || VE.dur),
+    path, rect, opacity: VE.ovImageOpacityDefault ?? 100,
+    volume: 0, loop: false,
+    hasAudio: !!probe.has_audio, videoDurationMs: durationMs,
+  };
+  VE.selOv = op.id;
+  pushOp(op);
 }
 
 function createVideoOverlay({ path, probe }) {
@@ -1987,7 +2070,14 @@ function showClipPositionMenu(picked, x, y) {
 
 // Both destinations share one selection path: pick and validate the file
 // once, then choose where it goes.
+//
+// The limit toast and the whole menu below it are t() calls made at click
+// time, same risk as the restore-edit-state dialog: the button is live the
+// moment the window paints, well before the lazy i18n import behind it has
+// necessarily landed, so a click that fast would otherwise freeze raw i18n
+// keys into the toast and the popup.
 async function startAddVideo(x, y) {
+  if (!TXT_READY) await textsReady;
   const picked = await pickExtraVideo();
   if (!picked) return;
   addVideoPop.innerHTML = "";
@@ -2026,7 +2116,7 @@ function renderOverlayList() {
     const row = document.createElement("button");
     row.type = "button";
     row.className = "ve-ov-row" + (op.id === VE.selOv ? " sel" : "");
-    row.textContent = `${t(overlayLabelKey(op.kind))} · ${fmtTime(op.startMs)} – ${fmtTime(op.endMs)}`;
+    row.textContent = `${t(overlayLabelKey(op.kind))} · ${fmtTime(op.startMs)}-${fmtTime(op.endMs)}`;
     if (op.kind === "video") {
       const bits = [];
       if (!op.hasAudio || !(op.volume > 0)) bits.push(t("veClipMuted"));
@@ -3072,8 +3162,10 @@ function setProgress(pct) {
   $("ve-export-progress").value = clamped;
   $("ve-export-pct").textContent = `${Math.round(clamped)}%`;
   exportEta.feed(clamped);
+  const estimate = exportEta.estimate(VE.etaMinPct, VE.etaMinSecs);
   const etaSpan = $("ve-export-eta");
-  etaSpan.textContent = VE.etaShow ? formatEta(exportEta.estimate(VE.etaMinPct, VE.etaMinSecs), t) : "";
+  etaSpan.textContent = VE.etaShow ? formatEta(estimate, t) : "";
+  $("ve-export-progress").setAttribute("aria-valuetext", a11yProgressText(t, clamped, estimate));
 }
 
 // toClipboard runs the very same export into a throwaway temp file
@@ -3205,12 +3297,18 @@ function noteFfmpeg(err) {
 $("ve-ffmpeg-get").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   btn.disabled = true;
+  btn.setAttribute("role", "progressbar");
+  btn.setAttribute("aria-valuemin", "0");
+  btn.setAttribute("aria-valuemax", "100");
   const dlEta = makeEtaEstimator();
   const unlisten = await listen("ffmpeg-download-progress", (ev) => {
     const pct = ffmpegDownloadPct(ev.payload);
     dlEta.feed(pct);
-    const eta = VE.etaShow ? formatEta(dlEta.estimate(VE.etaMinPct, VE.etaMinSecs), t) : "";
+    const estimate = dlEta.estimate(VE.etaMinPct, VE.etaMinSecs);
+    const eta = VE.etaShow ? formatEta(estimate, t) : "";
     btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
+    btn.setAttribute("aria-valuenow", String(pct));
+    btn.setAttribute("aria-valuetext", a11yProgressText(t, pct, estimate));
   });
   try {
     await invoke("download_ffmpeg");
@@ -3225,6 +3323,11 @@ $("ve-ffmpeg-get").addEventListener("click", async (e) => {
     toast(String(err));
   } finally {
     btn.disabled = false;
+    btn.removeAttribute("role");
+    btn.removeAttribute("aria-valuemin");
+    btn.removeAttribute("aria-valuemax");
+    btn.removeAttribute("aria-valuenow");
+    btn.removeAttribute("aria-valuetext");
     btn.textContent = t("ffmpegOfferConfirm");
     unlisten();
   }
@@ -3246,6 +3349,9 @@ for (const tab of document.querySelectorAll(".ve-tab")) {
 }
 
 $("ve-close").addEventListener("click", () => closeWindow());
+$("ve-shortcuts").addEventListener("click", () => openShortcutsModal("videoEditor"));
+$("shortcuts-modal-close").addEventListener("click", closeShortcutsModal);
+$("shortcuts-modal").addEventListener("pointerdown", (e) => { if (e.target === $("shortcuts-modal")) closeShortcutsModal(); });
 $("ve-undo").addEventListener("click", undo);
 $("ve-redo").addEventListener("click", redo);
 $("ve-play").addEventListener("click", togglePlay);
@@ -3494,11 +3600,17 @@ function updateAudioLabels() {
 // Reflects VE.audio in the two mute buttons/sliders -- needed on every load
 // since resetForNewSource() changes the state without any click happening to
 // trigger audioControl()'s own listener.
+function updateVolumeValueText(volId) {
+  $(volId).setAttribute("aria-valuetext", t("a11yPctOnly").replace("{pct}", $(volId).value));
+}
+
 function syncAudioButtons() {
   $("ve-mute-sys").classList.toggle("ve-muted-btn", VE.audio.sys.mute);
   $("ve-mute-mic").classList.toggle("ve-muted-btn", VE.audio.mic.mute);
   $("ve-vol-sys").value = VE.audio.sys.vol;
   $("ve-vol-mic").value = VE.audio.mic.vol;
+  updateVolumeValueText("ve-vol-sys");
+  updateVolumeValueText("ve-vol-mic");
 }
 
 function audioControl(kind, muteId, volId) {
@@ -3510,6 +3622,7 @@ function audioControl(kind, muteId, volId) {
   });
   $(volId).addEventListener("input", () => {
     VE.audio[kind].vol = Number($(volId).value);
+    updateVolumeValueText(volId);
     applyPreviewSpeed();
     updateExportNote();
   });
@@ -3620,6 +3733,11 @@ document.addEventListener("keydown", (e) => {
     else if (e.key === "Enter") { e.preventDefault(); closeConfirm(true); }
     return;
   }
+  if (!$("shortcuts-modal").classList.contains("hidden")) {
+    if (e.key === "Escape") { e.preventDefault(); closeShortcutsModal(); }
+    else if (e.key === "Tab") trapTabWithin($("shortcuts-modal"), e);
+    return;
+  }
   if (!colorPop.classList.contains("hidden")) {
     if (e.key === "Escape") { e.preventDefault(); closeColorPop(); return; }
     if (e.key === "Tab") { trapTabWithin(colorPop, e); return; }
@@ -3627,6 +3745,10 @@ document.addEventListener("keydown", (e) => {
   if (!ovCtxPop.classList.contains("hidden")) {
     if (e.key === "Escape") { e.preventDefault(); closeOvCtxPop(); return; }
     if (e.key === "Tab") { trapTabWithin(ovCtxPop, e); return; }
+  }
+  if (!addVideoPop.classList.contains("hidden")) {
+    if (e.key === "Escape") { e.preventDefault(); closeAddVideoPop(); return; }
+    if (e.key === "Tab") { trapTabWithin(addVideoPop, e); return; }
   }
   const typing = TYPING.has(document.activeElement?.tagName);
   if (e.key === "Escape") {
@@ -3651,6 +3773,22 @@ document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); setPreviewZoom(VE.previewZoom * VE.zoomStepFactor); return; }
   if ((e.ctrlKey || e.metaKey) && e.key === "-") { e.preventDefault(); setPreviewZoom(VE.previewZoom / VE.zoomStepFactor); return; }
   if ((e.ctrlKey || e.metaKey) && e.key === "0") { e.preventDefault(); resetPreviewZoom(); return; }
+
+  // A focused trim handle takes its own arrow keys instead of stepping the
+  // playhead -- otherwise the two handles below would be reachable by Tab but
+  // never actually movable without a mouse.
+  const focusedId = document.activeElement && document.activeElement.id;
+  if (focusedId === "ve-trim-a" || focusedId === "ve-trim-b") {
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      const dir = e.key === "ArrowLeft" ? -1 : 1;
+      const step = (e.shiftKey ? 1000 : frameMs()) * dir;
+      const trim = opOf("trim") || { startMs: 0, endMs: VE.dur };
+      if (focusedId === "ve-trim-a") setTrim(trim.startMs + step, trim.endMs);
+      else setTrim(trim.startMs, trim.endMs + step);
+      return;
+    }
+  }
 
   // While an overlay is selected the arrow keys move/resize it instead of
   // stepping frames -- frame-stepping moves to comma/period instead, the way
@@ -3862,7 +4000,7 @@ function askRestoreEditState(opCount) {
   });
 }
 
-async function loadRecording(path, originDir) {
+async function loadRecording(path, originDir, overlayPath) {
   if (!path) return;
   // Two "Edit video" clicks in quick succession (this recording, then
   // another before the first has finished probing/muxing) had no way to tell
@@ -3928,6 +4066,7 @@ async function loadRecording(path, originDir) {
   loadStrip();
   scheduleWaves();
   await checkEditState(path, myGen);
+  if (VE.loadGen === myGen) await addAlignedCameraOverlay(overlayPath);
   armEditStateAutosave();
 }
 
@@ -3989,6 +4128,7 @@ listen("settings-changed", () => { invoke("get_settings").then(applySettings).ca
 listen("video-editor-load", async (e) => {
   const path = typeof e.payload === "string" ? e.payload : e.payload?.path;
   const originDir = typeof e.payload === "object" ? e.payload?.origin_dir : "";
+  const overlayPath = typeof e.payload === "object" ? e.payload?.overlay_path : "";
   if (!path || path === VE.src) return;
   // Switching source (clicking "Edit video" on another tile while this
   // window is already open) used to jump straight to loadRecording(), silently
@@ -3998,7 +4138,7 @@ listen("video-editor-load", async (e) => {
     const ok = await veConfirm(t("veCloseTitle"), t("veCloseUnsaved"), t("veDiscard"));
     if (!ok) return;
   }
-  loadRecording(path, originDir);
+  loadRecording(path, originDir, overlayPath);
 });
 listen(EXPORT_PROGRESS_EVENT, (e) => {
   if (!VE.exporting) return;
@@ -4125,15 +4265,17 @@ function applySettings(settings) {
   // into a window that is already up.
   let path = "";
   let originDir = "";
+  let overlayPath = "";
   try {
     const source = await invoke("video_editor_source");
     path = source?.path || "";
     originDir = source?.origin_dir || "";
+    overlayPath = source?.overlay_path || "";
   } catch (_) {
     // No source command yet, or none set: wait for the event instead of showing
     // an error for what is a normal startup order.
   }
-  if (path) await loadRecording(path, originDir);
+  if (path) await loadRecording(path, originDir, overlayPath);
   else $("ve-stage-msg").textContent = t("veNoRecording");
   requestAnimationFrame(tick);
 })();

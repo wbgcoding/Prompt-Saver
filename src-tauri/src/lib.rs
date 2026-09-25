@@ -23,6 +23,7 @@
 // blocking-call audit rather than by a lint sweep.
 
 pub mod brand;
+mod camera;
 mod cli;
 mod remote;
 
@@ -3302,6 +3303,22 @@ fn lock_is_stale(existing: &DataDirLockInfo) -> bool {
 static DATA_DIR_READONLY: AtomicBool = AtomicBool::new(false);
 static DATA_DIR_LOCK_HOST: Mutex<Option<String>> = Mutex::new(None);
 
+// Set by enable_demo_mode()/disable_demo_mode() once each has flushed
+// whatever it needs to flush and is about to flip the "datapath" redirect
+// (to the demo folder, or back to the real one) and call app.restart().
+// Between that flip and the process actually exiting, the exit's own
+// RunEvent::Exit flush (or a 250ms settings_flush_tick landing in the same
+// window) -- or, on the enable side, any ordinary command still in flight --
+// must not be allowed to write anything: at that point db_conn()/data_dir()
+// already resolve to the OTHER store than the one just flushed, and a write
+// there would land real data in the demo store (or demo data in the real
+// one). Reset to false on a failed flip (see both commands' own Err paths) --
+// left on, every save in the process would silently fail forever even though
+// the switch never actually completed. On success it is never cleared
+// explicitly: the process it belongs to is about to be replaced by
+// app.restart(), and the fresh process starts with the default `false` again.
+static DEMO_TRANSITION_LOCKED: AtomicBool = AtomicBool::new(false);
+
 // Decides read-only vs. owned for `dir` and, if owned, claims it. Called once at
 // load_store() and again after set_data_dir() points the app at a different
 // folder. The `dataDirLock` toggle (default on) skips all of this when off,
@@ -3357,6 +3374,12 @@ fn data_dir_lock_status() -> DataDirLockStatus {
 // blocked write emits the same event with the same host name, so the window
 // can show the same clear message no matter which action triggered it.
 fn data_dir_write_blocked(app: &AppHandle) -> bool {
+    // No event emitted here (unlike the readonly case below): the window is
+    // already on its way down for app.restart(), and this is not a condition
+    // the user needs a banner about.
+    if DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed) {
+        return true;
+    }
     if !DATA_DIR_READONLY.load(Ordering::Relaxed) {
         return false;
     }
@@ -3479,6 +3502,20 @@ fn db_conn_init_schema(conn: &Connection) -> bool {
 }
 
 fn db_conn(app: &AppHandle) -> Option<Connection> {
+    // The single choke point EVERY writer goes through, not just the four that
+    // also call data_dir_write_blocked() (save_prompts/save_trash/
+    // save_prompts_and_trash/write_settings_now): db_conn(app) is also called
+    // directly by save_editor_draft, save_edit_state, record_copy's copy_log
+    // append, version snapshots and more, none of which check that flag
+    // themselves. Checking it here instead of (or in addition to) each call
+    // site means enable_demo_mode's/disable_demo_mode's DEMO_TRANSITION_LOCKED
+    // window blocks every one of them, not only the ones already funneled through
+    // data_dir_write_blocked. None here reads exactly like "DB unavailable" to
+    // every existing caller, which already handles it (an error result, or a
+    // JSON-fallback path that goes through data_dir_write_blocked itself).
+    if DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed) {
+        return None;
+    }
     db_conn_at(&data_dir(app))
 }
 
@@ -4048,6 +4085,70 @@ fn db_list_clips(conn: &Connection) -> Vec<ClipItem> {
     out
 }
 
+// load_store()'s half of the relative <-> absolute round trip (the other
+// half is strip_data_dir_prefix right below, its own comment has the full
+// story). Pulled out as its own function, run over both `prompts` and
+// `trash` (a third review finding: only `prompts` was resolved, so a demo
+// attachment that got deleted during the session restored from trash with a
+// bare, unresolvable filename), so it can be unit tested directly without an
+// AppHandle, the same way strip_data_dir_prefix already is.
+fn resolve_relative_file_paths(dir: &Path, rows: &mut [Prompt]) {
+    for p in rows.iter_mut() {
+        if !p.file_path.is_empty() && Path::new(&p.file_path).is_relative() {
+            p.file_path = dir.join(&p.file_path).to_string_lossy().to_string();
+        }
+    }
+}
+
+// The other half of load_store()'s relative -> absolute resolution for
+// `file_path` (see its own comment): reversed right before anything is
+// persisted or exported, so a demo prompt's attachment is never baked into a
+// saved row, a promptSync .md file or an export as an absolute path
+// containing the Windows account name. Only ever touches a path whose PARENT
+// is exactly the live data dir -- the one load_store() itself would have
+// joined on -- so a real attachment (never placed directly inside the data
+// dir by the file picker) is never touched. Every caller of db_write_prompts/
+// db_write_prompts_and_trash, sync_write_all_impl and export_prompts must run
+// its prompts through this first.
+//
+// Gated to actually being in demo mode right now (a third, then a fourth
+// review finding): in portable mode the data dir IS the exe folder, and a
+// custom data dir is common too, so a real user's file picked from directly
+// inside that folder has an absolute path whose parent legitimately equals
+// `dir` — stripping it unconditionally turned a real attachment into a bare
+// filename that broke after any later data-dir move or portable/installed
+// takeover. The first attempt at this gate compared `dir`'s folder NAME
+// against `DEMO_SUBFOLDER`, which still fires for a real (if unlikely) data
+// dir a user happens to have named `prompt-saver-demo` -- `is_demo` is an
+// exact-path comparison instead (`data_dir(app) == default_data_dir(app).
+// join(DEMO_SUBFOLDER)`), computed once by the caller, which already has
+// `app` in scope. Demo mode is the only caller this needs to touch, so it
+// only ever runs there.
+// The exact-path check strip_data_dir_prefix's own comment explains: never a
+// folder-name guess, always the live data dir compared against exactly where
+// demo mode's own redirect would have pointed it.
+fn data_dir_is_demo(app: &AppHandle, dir: &Path) -> bool {
+    dir == default_data_dir(app).join(DEMO_SUBFOLDER)
+}
+
+fn strip_data_dir_prefix<'a>(dir: &Path, is_demo: bool, prompts: &'a [Prompt]) -> std::borrow::Cow<'a, [Prompt]> {
+    if !is_demo {
+        return std::borrow::Cow::Borrowed(prompts);
+    }
+    if !prompts.iter().any(|p| !p.file_path.is_empty() && Path::new(&p.file_path).parent() == Some(dir)) {
+        return std::borrow::Cow::Borrowed(prompts);
+    }
+    let mut out = prompts.to_vec();
+    for p in out.iter_mut() {
+        if Path::new(&p.file_path).parent() == Some(dir) {
+            if let Some(name) = Path::new(&p.file_path).file_name() {
+                p.file_path = name.to_string_lossy().to_string();
+            }
+        }
+    }
+    std::borrow::Cow::Owned(out)
+}
+
 // Returns whether the prompts made it to durable storage (DB or JSON fallback) —
 // callers that follow a save with a destructive step (deleting an orphaned
 // attachment file) must skip that step when this is false, or the deletion can
@@ -4063,13 +4164,15 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
     if store.prompts_locked {
         return false;
     }
+    let dir = data_dir(app);
+    let prompts = strip_data_dir_prefix(&dir, data_dir_is_demo(app, &dir), &store.prompts);
     if let Some(mut conn) = db_conn(app) {
         // The map is only advanced by a committed write, so a failure here leaves it
         // describing exactly what the (rolled-back) table still holds — the JSON
         // fallback below must not touch it either, or the row would count as saved.
         let ok = {
             let mut written = store.written.borrow_mut();
-            db_write_prompts(&mut conn, &store.prompts, &mut written).is_ok()
+            db_write_prompts(&mut conn, &prompts, &mut written).is_ok()
         };
         if ok {
             spawn_sync_write_all(app, store); // Prompt-folders-as-Markdown: no-op unless the feature is on
@@ -4080,7 +4183,7 @@ fn save_prompts(app: &AppHandle, store: &Store) -> bool {
     // DB write on next launch, so a fallback here is not itself data loss. If even
     // this fails (disk full / permission), the change really is lost — leave a
     // diagnosable trace instead of failing silently.
-    if !write_sealed_json(&data_dir(app).join("prompts.json"), &store.prompts) {
+    if !write_sealed_json(&dir.join("prompts.json"), &prompts) {
         append_crash_log("persist failed: prompts could not be written to the database or the JSON fallback");
         let _ = app.emit("persist-failed", "prompts");
         return false;
@@ -4098,9 +4201,11 @@ fn save_trash(app: &AppHandle, store: &Store) -> bool {
     if store.prompts_locked {
         return false;
     }
+    let dir = data_dir(app);
+    let trash = strip_data_dir_prefix(&dir, data_dir_is_demo(app, &dir), &store.trash);
     if let Some(mut conn) = db_conn(app) {
         let mut written = store.written.borrow_mut();
-        if db_write_trash(&mut conn, &store.trash, &mut written).is_ok() {
+        if db_write_trash(&mut conn, &trash, &mut written).is_ok() {
             return true;
         }
     }
@@ -4119,10 +4224,14 @@ fn save_prompts_and_trash(app: &AppHandle, store: &Store) -> bool {
     if store.prompts_locked {
         return false;
     }
+    let dir = data_dir(app);
+    let demo = data_dir_is_demo(app, &dir);
+    let prompts = strip_data_dir_prefix(&dir, demo, &store.prompts);
+    let trash = strip_data_dir_prefix(&dir, demo, &store.trash);
     if let Some(mut conn) = db_conn(app) {
         let ok = {
             let mut written = store.written.borrow_mut();
-            db_write_prompts_and_trash(&mut conn, &store.prompts, &store.trash, &mut written).is_ok()
+            db_write_prompts_and_trash(&mut conn, &prompts, &trash, &mut written).is_ok()
         };
         if ok {
             spawn_sync_write_all(app, store); // Prompt-folders-as-Markdown mirrors prompts, same as save_prompts
@@ -4364,7 +4473,7 @@ fn load_store(app: &AppHandle) -> Store {
         let mut written = WrittenRows::new();
         let (mut prompts, settings_opt, needs_mig, prompt_fails, settings_unreadable) =
             db_load(&conn, &mut written);
-        let (trash, trash_fails) = db_load_trash(&conn, &mut written);
+        let (mut trash, trash_fails) = db_load_trash(&conn, &mut written);
         let decrypt_fails = prompt_fails + trash_fails;
         // Some row (prompts, trash, or settings) could not be read back or decrypted →
         // preserve the raw DB and lock writes to whatever was affected (see
@@ -4523,6 +4632,13 @@ fn load_store(app: &AppHandle) -> Store {
         let (cap, cutoff) = history_cap_and_cutoff(&settings);
         let _ = db_trim_copy(&conn, cap, cutoff);
         migrate_prompts(&mut prompts);
+        // A relative file_path (only ever produced by demo_prompts(), never by the
+        // real attachment picker, which always yields an absolute path) is resolved
+        // against the live data dir here instead of being stored absolute on disk --
+        // see the comment on demo_prompts()'s attachment row and on
+        // resolve_relative_file_paths itself.
+        resolve_relative_file_paths(&dir, &mut prompts);
+        resolve_relative_file_paths(&dir, &mut trash);
         let mut store = Store {
             prompts,
             trash,
@@ -4907,7 +5023,7 @@ fn file_dialog_for(app: &AppHandle, label: &str) -> rfd::FileDialog {
 // Pure label choice: the requested window if it is open, else "main" as a
 // fallback, else nobody. Kept apart from the AppHandle lookup so the choice
 // itself is unit-testable without a live Tauri app.
-fn resolve_dialog_parent_label<'a>(exists: impl Fn(&str) -> bool, label: &'a str) -> Option<&'a str> {
+fn resolve_dialog_parent_label(exists: impl Fn(&str) -> bool, label: &str) -> Option<&str> {
     if exists(label) {
         Some(label)
     } else if exists("main") {
@@ -6592,9 +6708,14 @@ fn sweep_stale_recordings_in(
         // A "<name>.mic.wav" sidecar is referenced whenever its own
         // recording is -- the mp4 may already be attached to a prompt while
         // the editor has not yet consolidated the two into one two-track file.
+        // A "<name>.cam.json" sidecar follows the same rule for its own
+        // video (webm or mp4) -- without this, a camera recording's sidecar
+        // aged out and vanished an hour after it was taken even though the
+        // recording itself was still attached to a saved prompt.
         let is_referenced = referenced.contains(&norm(&path.to_string_lossy()))
             || mic_sidecar_video_path(&path).is_some_and(|v| referenced.contains(&norm(&v.to_string_lossy())))
-            || keys_sidecar_video_path(&path).is_some_and(|v| referenced.contains(&norm(&v.to_string_lossy())));
+            || keys_sidecar_video_path(&path).is_some_and(|v| referenced.contains(&norm(&v.to_string_lossy())))
+            || camera::sidecar_video_path(&path).is_some_and(|v| referenced.contains(&norm(&v.to_string_lossy())));
         let Ok(meta) = e.metadata() else { continue };
         let age = meta.modified().ok().and_then(|t| SystemTime::now().duration_since(t).ok());
         let stale_undecided = !is_referenced && age.is_some_and(|a| a >= STALE_TEMP_FILE_AGE);
@@ -6747,6 +6868,7 @@ fn discarded_stale_in(dir: &Path, age: Duration) -> (u32, u64) {
             // left behind here, orphaned in the trash forever once its video
             // was purged.
             let _ = fs::remove_file(path.with_extension("keys.json"));
+            let _ = fs::remove_file(camera::sidecar_path(&path));
         }
     }
     (count, bytes)
@@ -6776,13 +6898,18 @@ fn protected_recording_paths(app: &AppHandle) -> Vec<PathBuf> {
         out.push(p);
     }
     if let Some(state) = app.try_state::<VideoEditorPending>() {
-        let (src, _origin_dir) = state.lock().clone();
+        let (src, _origin_dir, overlay) = state.lock().clone();
         if !src.is_empty() {
             let src = PathBuf::from(src);
             out.push(src.with_extension("mic.wav"));
             #[cfg(windows)]
             out.push(keylog::sidecar_path(&src));
             out.push(src);
+        }
+        if !overlay.is_empty() {
+            let overlay = PathBuf::from(overlay);
+            out.push(camera::sidecar_path(&overlay));
+            out.push(overlay);
         }
     }
     out
@@ -13870,10 +13997,8 @@ fn sweep_edit_state_conn(conn: &Connection, exists: impl Fn(&str) -> bool, keep_
     for (id, target, updated_at) in rows {
         let gone = !exists(&target);
         let expired = keep_days > 0.0 && updated_at < cutoff;
-        if gone || expired {
-            if conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]).is_ok() {
-                removed += 1;
-            }
+        if (gone || expired) && conn.execute("DELETE FROM edit_state WHERE id = ?1", params![id]).is_ok() {
+            removed += 1;
         }
     }
     removed
@@ -14030,6 +14155,31 @@ async fn set_float_bounds(
 }
 
 // ---------- folder commands ----------
+
+// Repositions a folder pill the same way a mouse drag does -- used by the
+// folder window's own arrow-key move (folder.js), which has no native OS drag
+// gesture to hand this off to the way startDragging() does for a mouse. The
+// existing Moved handler on the folder window (see build_folder_window) is
+// what actually persists the new position, exactly as it does for a drag;
+// this only has to move the window and let that handler fire.
+#[tauri::command]
+async fn set_folder_position(app: AppHandle, id: String, x: f64, y: f64, clamp: Option<bool>) -> Result<(), String> {
+    if [x, y].iter().all(|v: &f64| v.is_finite()) {
+        if let Some(win) = app.get_webview_window(&folder_label(&id)) {
+            let (x, y) = if clamp.unwrap_or(false) {
+                let dpi = win.scale_factor().unwrap_or(1.0);
+                let size = window_rect(&win).map(|r| (r.w, r.h)).unwrap_or((0.0, 0.0));
+                let work = work_rect_at(&app, x * dpi, y * dpi);
+                let (cx, cy) = clamp_to_work(work, size.0, size.1, x * dpi, y * dpi);
+                (cx / dpi, cy / dpi)
+            } else {
+                (x, y)
+            };
+            let _ = win.set_position(tauri::LogicalPosition::new(x, y));
+        }
+    }
+    Ok(())
+}
 
 // What the dragged pill covers: the id it would merge into, every other pill/folder
 // box (for the live highlight), and the dragged pill's own rect.
@@ -16296,7 +16446,16 @@ async fn delete_data_dir(path: String) -> bool {
 // read by any of this: switching demo mode on or off only ever touches the
 // "datapath" redirect file and the demo subfolder next to it.
 
-const DEMO_SUBFOLDER: &str = "demo";
+// An app-specific name, not a generic "demo" -- a folder that name would
+// collide with something a user (portable mode especially) already has
+// beside their data, and build_demo_store's wipe-and-rebuild must never
+// touch a folder it did not create itself (see DEMO_MARKER_FILE).
+const DEMO_SUBFOLDER: &str = "prompt-saver-demo";
+// Written into DEMO_SUBFOLDER the first time this app builds it there;
+// build_demo_store refuses to wipe an existing folder at that path unless
+// this marker is present, so an unrelated folder that merely happens to
+// share the name survives untouched.
+const DEMO_MARKER_FILE: &str = ".prompt-saver-demo-marker";
 const DEMO_POINTER_BACKUP: &str = "datapath.before-demo";
 
 // A small solid-colour picture, generated once and kept as a literal instead
@@ -16350,7 +16509,11 @@ fn demo_prompts(dir: &Path, ffmpeg: Option<&Path>) -> Vec<Prompt> {
         demo_prompt("demo-chain-a", "Erster Baustein", "Der erste Teil einer möglichen Kette."),
         demo_prompt("demo-chain-b", "Zweiter Baustein", "Der zweite Teil einer möglichen Kette."),
         Prompt {
-            file_path: dir.join("Anhang.txt").to_string_lossy().to_string(),
+            // Relative, not dir.join(...): an absolute path here would bake the
+            // Windows account name (part of %APPDATA%) into a row shown in demo
+            // mode's own screenshots. load_store() resolves it back to a real
+            // path at read time.
+            file_path: "Anhang.txt".to_string(),
             ..demo_prompt("demo-attachment", "Angehängte Datei", "")
         },
         demo_prompt("demo-folder-a", "Ordner-Eintrag 1", "Erster Eintrag im Beispielordner."),
@@ -16372,7 +16535,9 @@ fn demo_prompts(dir: &Path, ffmpeg: Option<&Path>) -> Vec<Prompt> {
                 .unwrap_or(false);
             if ok {
                 list.push(Prompt {
-                    file_path: video.to_string_lossy().to_string(),
+                    // Same reasoning as the attachment row above: relative, resolved
+                    // back to a real path by load_store().
+                    file_path: "Videoaufnahme.mp4".to_string(),
                     ..demo_prompt("demo-video", "Videoaufnahme", "")
                 });
             }
@@ -16439,10 +16604,39 @@ fn demo_settings(has_video: bool) -> Settings {
 }
 
 // Wipes and rebuilds the sample store at `dir` from nothing. Never touches
-// anything outside `dir`.
+// anything outside `dir`, and never wipes `dir` itself unless it is either
+// absent or already carries the marker this function itself writes below --
+// a pre-existing, unrelated folder that merely happens to sit at that path
+// is left completely alone.
 fn build_demo_store(dir: &Path, ffmpeg: Option<&Path>) -> Result<(), String> {
-    let _ = fs::remove_dir_all(dir);
+    if dir.is_dir() && !dir.join(DEMO_MARKER_FILE).is_file() {
+        return Err("a folder already exists at the demo data path and was not created by demo mode; refusing to touch it".to_string());
+    }
+    // Delete every entry EXCEPT the marker, one at a time, rather than
+    // remove_dir_all(dir) on the whole folder -- a locked file (data.db held
+    // open by something else) fails one removal and leaves the rest, but a
+    // whole-folder remove_dir_all can fail after already having deleted the
+    // marker along with everything else it managed to remove, leaving a
+    // folder that still exists but no longer carries proof this app made it
+    // -- the guard above would then refuse every later enable forever.
+    // Best-effort per entry: a failure here does not abort the whole rebuild,
+    // it just leaves a stray file that db_write_prompts/db_write_settings
+    // below overwrite anyway (data.db) or that is harmless either way.
+    if dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                if entry.file_name().to_str() == Some(DEMO_MARKER_FILE) {
+                    continue;
+                }
+                let path = entry.path();
+                let _ = if path.is_dir() { fs::remove_dir_all(&path) } else { fs::remove_file(&path) };
+            }
+        }
+    }
     fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    // Written unconditionally, independent of whatever the cleanup above did
+    // or did not manage to remove -- see the comment above it.
+    fs::write(dir.join(DEMO_MARKER_FILE), b"").map_err(|e| e.to_string())?;
     // Not db_conn_at(): its schema-init guard runs only once per process (see
     // its own comment), which is exactly right for the app's single real
     // connection but would silently skip creating the tables here whenever
@@ -16463,19 +16657,170 @@ fn build_demo_store(dir: &Path, ffmpeg: Option<&Path>) -> Result<(), String> {
 // Points `canonical`'s "datapath" redirect at the demo subfolder, after
 // rebuilding it fresh, first saving whatever the redirect held before (a
 // custom folder, or none) so `exit_demo_mode` can put it back exactly.
+// Points `canonical`'s "datapath" redirect at `demo`, first saving whatever
+// the redirect held before (a custom folder, or none) so exit_demo_mode can
+// put it back exactly. Split out of enter_demo_mode so a caller can build the
+// sample store (build_demo_store, possibly running ffmpeg) well before ever
+// touching the redirect -- see enable_demo_mode's own comment.
+fn flip_pointer_to_demo(canonical: &Path, demo: &Path) -> Result<(), String> {
+    let pointer = canonical.join("datapath");
+    let backup = canonical.join(DEMO_POINTER_BACKUP);
+    // Never overwrite an existing backup: one is already there only when a
+    // previous enable never got a matching exit (a crash, or a restart that
+    // landed mid-demo), and it still holds the one pointer value that came
+    // from before demo mode -- the only thing exit_demo_mode must restore.
+    if !backup.exists() {
+        let already_demo = fs::read_to_string(&pointer)
+            .map(|s| Path::new(s.trim()) == demo)
+            .unwrap_or(false);
+        if pointer.exists() && !already_demo {
+            fs::copy(&pointer, &backup).map_err(|e| e.to_string())?;
+        } else {
+            // Either no redirect existed, or the redirect already pointed at the
+            // demo folder itself (nothing legitimate to preserve) -- record "no
+            // redirect before" rather than saving the demo path as the backup.
+            fs::write(&backup, b"").map_err(|e| e.to_string())?;
+        }
+    }
+    fs::write(&pointer, demo.to_string_lossy().as_bytes()).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// Test-only convenience (build + flip together, the shape a caller with
+// nothing else going on wants). enable_demo_mode itself calls
+// build_demo_store and flip_pointer_to_demo separately instead, with the
+// store lock and DEMO_TRANSITION_LOCKED sitting in between them.
+#[cfg(test)]
 fn enter_demo_mode(canonical: &Path, ffmpeg: Option<&Path>) -> Result<PathBuf, String> {
     fs::create_dir_all(canonical).map_err(|e| e.to_string())?;
     let demo = canonical.join(DEMO_SUBFOLDER);
     build_demo_store(&demo, ffmpeg)?;
-    let pointer = canonical.join("datapath");
-    let backup = canonical.join(DEMO_POINTER_BACKUP);
-    if pointer.exists() {
-        fs::copy(&pointer, &backup).map_err(|e| e.to_string())?;
-    } else {
-        fs::write(&backup, b"").map_err(|e| e.to_string())?; // marker: no redirect before
-    }
-    fs::write(&pointer, demo.to_string_lossy().as_bytes()).map_err(|e| e.to_string())?;
+    flip_pointer_to_demo(canonical, &demo)?;
     Ok(demo)
+}
+
+// ---- A real second running instance, not the allowMultipleInstances flag ----
+//
+// enable_demo_mode/disable_demo_mode used to refuse based on the
+// allowMultipleInstances setting alone -- but that flag lives INSIDE the very
+// store being switched (it can be read back from the demo data.db after a
+// redirect flip, or flipped by another instance mid-session), so it is not
+// trustworthy evidence that a second process is not, right now, also holding
+// this data dir open. Instead, every process registers its own pid in
+// `instances/` under the CANONICAL (never redirected) data dir at startup and
+// removes it again on a clean exit; checking for another LIVE pid there is
+// real evidence, independent of anything either process's Settings currently
+// says.
+fn instances_dir(canonical: &Path) -> PathBuf {
+    canonical.join("instances")
+}
+
+fn register_running_instance(canonical: &Path) {
+    let dir = instances_dir(canonical);
+    let _ = fs::create_dir_all(&dir);
+    let _ = fs::write(dir.join(std::process::id().to_string()), b"");
+}
+
+fn unregister_running_instance(canonical: &Path) {
+    let _ = fs::remove_file(instances_dir(canonical).join(std::process::id().to_string()));
+}
+
+// pid_is_alive() itself is shared with promptSync's own lock file (see
+// pid_from_lock/sync_lock_acquire below) -- same liveness probe, different
+// registry. It is not enough here on its own, though: Windows reuses a
+// freed pid, and the gap between a crash (or a task-killed process that
+// never reached RunEvent::Exit) and its stale entry getting pruned can span
+// an entire later session, so a stale entry that happens to name a pid some
+// unrelated later process now holds would read as "alive" forever, wrongly
+// and permanently refusing enable/disable_demo_mode for a user who is
+// actually alone (a third review finding). instance_pid_is_this_exe adds
+// the second check other_instance_running actually needs: not just "is
+// SOME process using this pid", but "is it specifically another running
+// copy of this exe".
+// Never a raw PathBuf == PathBuf (a fourth review finding): Windows paths
+// are case-insensitive on disk, and canonicalize() resolves a subst drive or
+// a junction/symlink down to the same underlying file two differently-
+// spelled paths can both reach -- an exact, case-sensitive compare of the
+// raw strings would wrongly call a real second instance "not this exe" over
+// nothing but spelling. Falls back to a case-folded compare of the raw paths
+// only if either side cannot be canonicalized (e.g. the file was replaced
+// out from under a running process, or an access-denied edge case). Its own
+// function, pulled out of instance_pid_is_this_exe below, so the comparison
+// itself is unit testable without a live pid.
+fn same_exe_path(a: &Path, b: &Path) -> bool {
+    let same = |a: &Path, b: &Path| a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase();
+    match (fs::canonicalize(a), fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => same(&a, &b),
+        _ => same(a, b),
+    }
+}
+
+#[cfg(windows)]
+fn instance_pid_is_this_exe(pid: u32) -> bool {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
+        fn CloseHandle(h: isize) -> i32;
+        fn QueryFullProcessImageNameW(h: isize, flags: u32, buffer: *mut u16, size: *mut u32) -> i32;
+    }
+    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if h == 0 {
+            return false;
+        }
+        let mut buf = [0u16; 512];
+        let mut size = buf.len() as u32;
+        let ok = QueryFullProcessImageNameW(h, 0, buf.as_mut_ptr(), &mut size) != 0;
+        CloseHandle(h);
+        if !ok {
+            return false;
+        }
+        let image = PathBuf::from(String::from_utf16_lossy(&buf[..size as usize]));
+        let Ok(exe) = std::env::current_exe() else {
+            return false;
+        };
+        same_exe_path(&exe, &image)
+    }
+}
+#[cfg(not(windows))]
+fn instance_pid_is_this_exe(_pid: u32) -> bool {
+    true // conservative off Windows: never treat a registered entry as a reused pid
+}
+
+// True when some OTHER process currently has this same install's canonical
+// data dir registered. Prunes a marker only when its pid is actually dead (a
+// crash, or a task-killed process that never reached RunEvent::Exit) -- a
+// fourth review finding: pruning on the image-path check alone as well would
+// delete a REAL other instance's own registry entry the moment
+// instance_pid_is_this_exe cannot confirm it (a permission edge case, or a
+// bug in that check itself), permanently losing this whole safety net for
+// that instance's entry with no way for it to notice and re-register.
+// Failing the image check without the pid being dead still refuses to count
+// it as another instance (the pid is either reused by something unrelated,
+// or genuinely not this exe), it just leaves the marker alone either way.
+fn other_instance_running(canonical: &Path) -> bool {
+    let Ok(entries) = fs::read_dir(instances_dir(canonical)) else {
+        return false;
+    };
+    let me = std::process::id();
+    let mut found = false;
+    for entry in entries.flatten() {
+        let Some(pid) = entry.file_name().to_str().and_then(|s| s.parse::<u32>().ok()) else {
+            continue;
+        };
+        if pid == me {
+            continue;
+        }
+        if !pid_is_alive(pid) {
+            let _ = fs::remove_file(entry.path());
+            continue;
+        }
+        if instance_pid_is_this_exe(pid) {
+            found = true;
+        }
+    }
+    found
 }
 
 // Restores whatever `canonical`'s redirect held before demo mode. The demo
@@ -16485,10 +16830,17 @@ fn enter_demo_mode(canonical: &Path, ffmpeg: Option<&Path>) -> Result<PathBuf, S
 fn exit_demo_mode(canonical: &Path) -> Result<(), String> {
     let pointer = canonical.join("datapath");
     let backup = canonical.join(DEMO_POINTER_BACKUP);
+    let demo = canonical.join(DEMO_SUBFOLDER);
     if !backup.exists() {
-        // Nothing recorded (a restart mid-demo, or exit called twice): the
-        // safest fallback is no redirect at all, never leaving demo active.
-        let _ = fs::remove_file(&pointer);
+        // Nothing recorded (a restart mid-demo, or exit called twice). Only clear
+        // the redirect when it is actually still pointing at the demo folder --
+        // an unrelated custom redirect the backup logic above did not touch must
+        // never be deleted just because the backup happens to be missing, or the
+        // app falls back to opening the canonical (empty) store instead of the
+        // user's real custom folder.
+        if fs::read_to_string(&pointer).map(|s| Path::new(s.trim()) == demo).unwrap_or(false) {
+            let _ = fs::remove_file(&pointer);
+        }
         return Ok(());
     }
     let prev = fs::read_to_string(&backup).map_err(|e| e.to_string())?;
@@ -16507,15 +16859,52 @@ fn exit_demo_mode(canonical: &Path) -> Result<(), String> {
 // lost, then never touched again by anything below.
 #[tauri::command]
 async fn enable_demo_mode(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
+    let canonical = default_data_dir(&app);
+    // A real second process (see other_instance_running's own comment), not
+    // the allowMultipleInstances setting: that flag lives inside the very
+    // store this is about to switch, so it is not trustworthy evidence either
+    // way.
+    if other_instance_running(&canonical) {
+        return Err("demo-mode-multiple-instances".to_string());
+    }
+    // Build the sample store BEFORE the store lock or the redirect are
+    // touched at all: this can run ffmpeg and take real wall-clock time, and
+    // must never sit in front of anything blocked while it does (a second
+    // review finding: the old order flipped the redirect first, so an
+    // ordinary write racing the still-running build landed in the freshly
+    // rebuilt demo store instead of the real one it was meant for).
+    let ffmpeg = ffmpeg_search_path(&app);
+    let demo = canonical.join(DEMO_SUBFOLDER);
+    build_demo_store(&demo, ffmpeg.as_deref())?;
     {
         let store = lock(&state);
         if !store.prompts_locked {
             save_prompts(&app, &store);
         }
         save_settings(&app, &store.settings);
+        // Block every further store write for the rest of this process before
+        // the redirect flips below -- the same guard disable_demo_mode uses in
+        // reverse (db_conn() checks it directly), so nothing racing the flip
+        // can land a real write into the demo store just built, or clobber its
+        // own demoMode=true.
+        DEMO_TRANSITION_LOCKED.store(true, Ordering::Relaxed);
     }
-    let ffmpeg = ffmpeg_search_path(&app);
-    enter_demo_mode(&default_data_dir(&app), ffmpeg.as_deref())?;
+    // Re-checked here, not only at the top: build_demo_store above can run
+    // ffmpeg and take real wall-clock time, during which a second instance
+    // could have started and registered itself (a third review finding) --
+    // the check at the top of this function only rules out one already
+    // running before the build began.
+    if other_instance_running(&canonical) {
+        DEMO_TRANSITION_LOCKED.store(false, Ordering::Relaxed);
+        return Err("demo-mode-multiple-instances".to_string());
+    }
+    // On failure the flag must come back off: left on, every save in this
+    // process would silently fail forever even though demo mode never
+    // actually turned on (a second review finding).
+    if let Err(e) = flip_pointer_to_demo(&canonical, &demo) {
+        DEMO_TRANSITION_LOCKED.store(false, Ordering::Relaxed);
+        return Err(e);
+    }
     app.restart();
 }
 
@@ -16523,8 +16912,34 @@ async fn enable_demo_mode(app: AppHandle, state: State<'_, Db>) -> Result<(), St
 // during the demo session simply stops being read from anywhere: the demo
 // folder is not deleted, only abandoned until the next enable overwrites it.
 #[tauri::command]
-async fn disable_demo_mode(app: AppHandle) -> Result<(), String> {
-    exit_demo_mode(&default_data_dir(&app))?;
+async fn disable_demo_mode(app: AppHandle, state: State<'_, Db>) -> Result<(), String> {
+    let canonical = default_data_dir(&app);
+    if other_instance_running(&canonical) {
+        return Err("demo-mode-multiple-instances".to_string());
+    }
+    {
+        let store = lock(&state);
+        // Flush whatever demo-session settings are still only collected in memory
+        // to disk NOW, under the store lock and while the "datapath" redirect
+        // still points at the demo folder -- so they land in the demo store, not
+        // the real one. Then block every further store write for the rest of
+        // this (about to be replaced) process: db_conn() itself refuses while
+        // this is set, which covers every writer, not only the four that also
+        // call data_dir_write_blocked() (a second review finding). exit_demo_mode
+        // below flips the redirect back to the real store, and after that point
+        // RunEvent::Exit's own flush (app.restart() below triggers it) or the
+        // 250ms settings_flush_tick must not be allowed to write demo settings
+        // (views, sample folder, demoMode=true) over the real ones.
+        flush_settings(&app, &store.settings);
+        DEMO_TRANSITION_LOCKED.store(true, Ordering::Relaxed);
+    }
+    // Same reasoning as enable_demo_mode's own Err path above: left on after a
+    // failed exit, the app stays in demo mode with every save silently
+    // refused forever.
+    if let Err(e) = exit_demo_mode(&canonical) {
+        DEMO_TRANSITION_LOCKED.store(false, Ordering::Relaxed);
+        return Err(e);
+    }
     app.restart();
 }
 
@@ -23063,13 +23478,25 @@ mod recording {
         }
     }
 
+    // Grouped so `start` stays under clippy's argument limit; every field is
+    // still read individually the moment the function body begins.
+    pub struct RecStartOptions {
+        pub show_cursor: bool,
+        pub video_kbps: u32,
+        pub video_fps: u32,
+        pub canvas_ceiling: (u32, u32),
+        pub disk_warn_mb: f64,
+        pub max_min: f64,
+        pub max_mb: f64,
+    }
+
     // show_cursor: the mouse-cursor toggle (ships ON) -- windows-capture's
     // own capture setting, never a manually drawn cursor. audio: neither
     // source active takes the exact original video-only path unchanged.
     pub fn start(
-        target: RecTarget, output_path: PathBuf, show_cursor: bool, audio: AudioConfig, video_kbps: u32, video_fps: u32,
-        canvas_mode: &str, canvas_ceiling: (u32, u32), disk_warn_mb: f64, max_min: f64, max_mb: f64,
+        target: RecTarget, output_path: PathBuf, audio: AudioConfig, canvas_mode: &str, opts: RecStartOptions,
     ) -> Result<RecSession, String> {
+        let RecStartOptions { show_cursor, video_kbps, video_fps, canvas_ceiling, disk_warn_mb, max_min, max_mb } = opts;
         let (native_w, native_h) = resolve_target_size(target)?;
         let audio_active = audio.system || audio.mic;
         // Both sources active used to mean "mixed into the encoder's one
@@ -23367,12 +23794,12 @@ mod recording {
     // reactive notice: the timestamp of the first frame the resize-safety-net
     // had to shrink to keep fitting, or None if that never happened this
     // recording.
-    pub fn stop(
-        session: RecSession,
-    ) -> Result<
-        (PathBuf, u64, Option<String>, Option<PathBuf>, Option<&'static str>, Option<(u32, u32, u32, u32)>, (u32, u32), Option<u64>),
-        String,
-    > {
+    // path, dropped-frame count, encode error, mic sidecar path, canvas note,
+    // used-area crop rect, canvas size, first-resize timestamp -- see the
+    // field-by-field comment above.
+    pub type StopResult = (PathBuf, u64, Option<String>, Option<PathBuf>, Option<&'static str>, Option<(u32, u32, u32, u32)>, (u32, u32), Option<u64>);
+
+    pub fn stop(session: RecSession) -> Result<StopResult, String> {
         let path = session.output_path.clone();
         let mic_wav_path = session.mic_wav_path.clone();
         let canvas_note = session.canvas_note;
@@ -23711,7 +24138,10 @@ async fn start_recording(
     let dir = data_dir(&app).join("recordings");
     let session = tauri::async_runtime::spawn_blocking(move || {
         let out_path = recording::new_output_path(&dir)?;
-        recording::start(target, out_path, show_cursor, audio, video_kbps, video_fps, &canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb)
+        recording::start(
+            target, out_path, audio, &canvas_mode,
+            recording::RecStartOptions { show_cursor, video_kbps, video_fps, canvas_ceiling, disk_warn_mb, max_min, max_mb },
+        )
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -23810,7 +24240,7 @@ async fn switch_recording_target(app: AppHandle, rstate: State<'_, RecordingStat
 
 #[cfg(windows)]
 enum ContinueOutcome {
-    Continued(recording::RecSession, RecordingContinuedPayload),
+    Continued(Box<recording::RecSession>, RecordingContinuedPayload),
     // The switch itself failed after the old file was already closed for
     // good -- there is no way back to "still recording" from there, so this
     // names the finished take instead of a failed no-op (the String is the
@@ -23893,7 +24323,8 @@ async fn finish_and_continue_recording(
         let part_number = REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner()).len() as u32 + 2;
         let out_path = recording::continuation_output_path(&base_path, part_number);
         match recording::start(
-            target, out_path.clone(), show_cursor, audio, video_kbps, video_fps, &canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb,
+            target, out_path.clone(), audio, &canvas_mode,
+            recording::RecStartOptions { show_cursor, video_kbps, video_fps, canvas_ceiling, disk_warn_mb, max_min, max_mb },
         ) {
             Ok(new_session) => {
                 // The new part's own clock zero point: the instant its
@@ -23947,7 +24378,7 @@ async fn finish_and_continue_recording(
                     path: path.to_string_lossy().to_string(),
                     mic_wav_path: mic_wav_path.map(|p| p.to_string_lossy().to_string()),
                 });
-                Ok(ContinueOutcome::Continued(new_session, RecordingContinuedPayload {
+                Ok(ContinueOutcome::Continued(Box::new(new_session), RecordingContinuedPayload {
                     finished_part_path: path.to_string_lossy().to_string(),
                     finished_part_dropped_frames: dropped,
                     finished_part_encode_error: encode_error,
@@ -23993,7 +24424,7 @@ async fn finish_and_continue_recording(
             Err(e)
         }
         Ok(ContinueOutcome::Continued(new_session, payload)) => {
-            *rstate.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(new_session);
+            *rstate.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(*new_session);
             Ok(payload)
         }
         Ok(ContinueOutcome::StoppedInstead(err)) => {
@@ -24400,6 +24831,20 @@ fn set_ui_flag(app: AppHandle, state: State<Db>, key: String, enabled: bool) -> 
     // already collected the moment the switch goes off.
     if key == "errorLog" && !enabled {
         ERROR_LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    }
+    // Turning this ON while demo mode is active is exactly the condition
+    // enable_demo_mode/disable_demo_mode's own real-instance check exists to
+    // prevent (second review, finding 4): a second process that starts once
+    // this is allowed would keep resolving the redirect per write like the
+    // first, so once either flips it, the other's ordinary writes land in
+    // whichever store it does not belong in. Defense in depth alongside that
+    // check, not a replacement for it -- this one is a settings read, not
+    // proof of anything actually running.
+    if key == "allowMultipleInstances" && enabled {
+        let store = lock(&state);
+        if store.settings.ui_flags.get("demoMode").copied().unwrap_or(false) {
+            return Err("demo-mode-active".to_string());
+        }
     }
     // The activation work below (a full backup, then one file per prompt) takes
     // as long as the library is large. It runs on a SNAPSHOT taken under a short
@@ -25454,7 +25899,7 @@ fn download_ffmpeg_blocking(app: &AppHandle) -> Result<String, String> {
             "ffmpeg-download-progress",
             serde_json::json!({ "downloaded": bytes.len() as u64, "total": total }),
         );
-        let pct = if total > 0 { Some(((bytes.len() as u64 * 100) / total) as u32) } else { None };
+        let pct = (bytes.len() as u64 * 100).checked_div(total).map(|v| v as u32);
         push_bg_op(app, "ffmpeg-download", "ffmpeg-download", if pct.is_some() { "running" } else { "indeterminate" }, pct, None);
     }
     if FFMPEG_DOWNLOAD_CANCEL.load(Ordering::SeqCst) {
@@ -25534,7 +25979,9 @@ fn cancel_recording_convert() {
 // stale/superseded recording (the result modal was discarded and a new
 // recording already started) is refused rather than acting on the wrong
 // file.
-static PENDING_REC_CROP: Mutex<Option<(PathBuf, (u32, u32, u32, u32))>> = Mutex::new(None);
+// (recording path, crop rect as x, y, w, h)
+type PendingRecCrop = Option<(PathBuf, (u32, u32, u32, u32))>;
+static PENDING_REC_CROP: Mutex<PendingRecCrop> = Mutex::new(None);
 static REC_CROP_CANCEL: AtomicBool = AtomicBool::new(false);
 
 // Every part a "finish and continue" chain has already closed, oldest first
@@ -26975,12 +27422,19 @@ const VIDEO_WIN_MIN_H: u32 = 520;
 // time would race the webview's first frame, so the window asks for its own
 // target once booted (video_editor_source), and again whenever
 // "video-editor-load" fires for an already-open window.
-struct VideoEditorPending(Mutex<(String, String)>);
+// The third slot (overlay_path) is the camera dual-open: a camera recording
+// whose companion screen recording has already finished lands here instead
+// of staying empty, so the editor can add it as a video overlay itself
+// instead of asking the user to pick it by hand. Its alignment offset is
+// never carried alongside it here -- it lives in the camera recording's own
+// sidecar (camera::CamSidecar::overlay_start_ms), which
+// ui/video.js's addAlignedCameraOverlay reads directly.
+struct VideoEditorPending(Mutex<(String, String, String)>);
 impl VideoEditorPending {
     fn new() -> Self {
-        Self(Mutex::new((String::new(), String::new())))
+        Self(Mutex::new((String::new(), String::new(), String::new())))
     }
-    fn lock(&self) -> std::sync::MutexGuard<'_, (String, String)> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, (String, String, String)> {
         self.0.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
@@ -26989,6 +27443,8 @@ impl VideoEditorPending {
 struct VideoEditorSource {
     path: String,
     origin_dir: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    overlay_path: Option<String>,
 }
 
 // Opens the editor for one recording. A second call while it is already open
@@ -26996,14 +27452,29 @@ struct VideoEditorSource {
 // origin_dir is Some only for a copy made of an externally opened file --
 // see open_file_in_editor.
 #[tauri::command]
-async fn open_video_editor(app: AppHandle, pending: State<'_, VideoEditorPending>, src_path: String, origin_dir: Option<String>) -> Result<(), String> {
+async fn open_video_editor(
+    app: AppHandle,
+    pending: State<'_, VideoEditorPending>,
+    src_path: String,
+    origin_dir: Option<String>,
+    overlay_path: Option<String>,
+) -> Result<(), String> {
     if !PathBuf::from(&src_path).is_file() {
         return Err("recording file not found".to_string());
     }
     let origin_dir = origin_dir.unwrap_or_default();
-    *pending.lock() = (src_path.clone(), origin_dir.clone());
+    // An overlay path that no longer exists (a race with its own cleanup, or
+    // simply never really there) is silently dropped rather than handed to
+    // the editor, which would otherwise show it as a broken overlay op.
+    let overlay_path = overlay_path.filter(|p| PathBuf::from(p).is_file()).unwrap_or_default();
+    *pending.lock() = (src_path.clone(), origin_dir.clone(), overlay_path.clone());
+    let overlay_opt = if overlay_path.is_empty() { None } else { Some(overlay_path) };
     if let Some(win) = app.get_webview_window(VIDEO_WIN_LABEL) {
-        let _ = app.emit_to(VIDEO_WIN_LABEL, "video-editor-load", &VideoEditorSource { path: src_path, origin_dir });
+        let _ = app.emit_to(
+            VIDEO_WIN_LABEL,
+            "video-editor-load",
+            &VideoEditorSource { path: src_path, origin_dir, overlay_path: overlay_opt },
+        );
         let _ = win.show();
         let _ = win.set_focus();
         return Ok(());
@@ -27035,8 +27506,9 @@ async fn open_video_editor(app: AppHandle, pending: State<'_, VideoEditorPending
 
 #[tauri::command]
 fn video_editor_source(pending: State<VideoEditorPending>) -> Option<VideoEditorSource> {
-    let (path, origin_dir) = pending.lock().clone();
-    if path.is_empty() { None } else { Some(VideoEditorSource { path, origin_dir }) }
+    let (path, origin_dir, overlay_path) = pending.lock().clone();
+    let overlay_path = if overlay_path.is_empty() { None } else { Some(overlay_path) };
+    if path.is_empty() { None } else { Some(VideoEditorSource { path, origin_dir, overlay_path }) }
 }
 
 // ---- Open an existing file (not a fresh capture/recording) in whichever
@@ -27315,6 +27787,17 @@ fn move_mic_sidecar_alongside(old_video: &std::path::Path, new_video: &std::path
             }
         }
     }
+    // Same again for the camera sidecar, on whichever of the two recordings
+    // (screen or camera) is the one actually being relocated here.
+    let old_cam = camera::sidecar_path(old_video);
+    if old_cam.is_file() {
+        let new_cam = camera::sidecar_path(new_video);
+        if old_cam != new_cam {
+            if let Err(e) = move_file(&old_cam, &new_cam) {
+                eprintln!("failed to relocate camera sidecar: {e}");
+            }
+        }
+    }
 }
 
 // Shared by Save/Copy: if the file already sits in the target folder
@@ -27489,7 +27972,8 @@ fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::Path) -> Opt
     let dest = trash.join(name);
     move_file(path, &dest).ok()?;
     // A discarded recording takes its mic and key-overlay sidecars (if any)
-    // with it -- best-effort, since most recordings have neither.
+    // with it -- best-effort, since most recordings have neither. Both only
+    // ever exist next to an mp4 (the screen recorder's own container).
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
         if ext.eq_ignore_ascii_case("mp4") {
             let sidecar = path.with_extension("mic.wav");
@@ -27504,6 +27988,13 @@ fn discard_recording_file_in(allowed: &[PathBuf], path: &std::path::Path) -> Opt
                 }
             }
         }
+    }
+    // The camera sidecar takes the same trip, regardless of container --
+    // camera recordings are webm, not mp4, so this cannot sit inside the
+    // ext-gated block above.
+    let cam_sidecar = camera::sidecar_path(path);
+    if cam_sidecar.is_file() {
+        let _ = move_file(&cam_sidecar, &camera::sidecar_path(&dest));
     }
     Some(dest)
 }
@@ -27575,6 +28066,10 @@ fn restore_discarded_recording(dir: String, name: String) -> bool {
     if keys_src.is_file() {
         let _ = move_file(&keys_src, &dst.with_extension("keys.json"));
     }
+    let cam_sidecar_src = camera::sidecar_path(&src);
+    if cam_sidecar_src.is_file() {
+        let _ = move_file(&cam_sidecar_src, &camera::sidecar_path(&dst));
+    }
     true
 }
 
@@ -27592,6 +28087,7 @@ fn delete_discarded_recording_now(dir: String, name: String) -> bool {
     // A manual "delete for good" used to leave the key-overlay
     // sidecar sitting in the trash forever once its video was gone.
     let _ = fs::remove_file(path.with_extension("keys.json"));
+    let _ = fs::remove_file(camera::sidecar_path(&path));
     fs::remove_file(&path).is_ok()
 }
 
@@ -28135,6 +28631,10 @@ async fn export_prompts(
             HashMap::new()
         };
         let resolved: Vec<Prompt> = selected.iter().map(|p| resolved_for_export(p, &remembered, &fixed)).collect();
+        // See strip_data_dir_prefix's own comment: an exported file must never
+        // carry an absolute demo-dir path either.
+        let export_dir = data_dir(&app);
+        let resolved = strip_data_dir_prefix(&export_dir, data_dir_is_demo(&app, &export_dir), &resolved).into_owned();
         let content = match format.as_str() {
             "csv" => to_csv(&resolved),
             "txt" => to_txt(&resolved),
@@ -30603,6 +31103,12 @@ pub fn run() {
                     }));
             }
             sweep_stale_temp_files(); // crash/abnormal-exit leftovers from a previous run
+            // Registered in the CANONICAL dir (never the "datapath" redirect,
+            // which demo mode itself flips) so enable_demo_mode/
+            // disable_demo_mode can tell a real second running instance apart
+            // from the allowMultipleInstances setting -- see
+            // other_instance_running's own comment.
+            register_running_instance(&default_data_dir(&handle));
             let store = load_store(&handle);
             // A one-off pass over whatever the log already holds -- see its own
             // comment for why this cannot just check today's own account name.
@@ -30657,6 +31163,7 @@ pub fn run() {
             app.manage(SyncWriteQueue(Mutex::new(SyncWriteState::default())));
             app.manage(VoiceState(Mutex::new(None), std::sync::atomic::AtomicBool::new(false))); // live dictation session
             app.manage(RecordingState(Mutex::new(None))); // live screen-recording session
+            app.manage(camera::CameraState(Mutex::new(None))); // live camera-recording session
             app.manage(remote::RemoteApiState::new());
             app.manage(remote::PendingLaunchUrl(Default::default()));
             // Same "never starts without a password" rule start() enforces on
@@ -31165,6 +31672,7 @@ pub fn run() {
             resize_float_pill,
             resize_float_media,
             set_float_bounds,
+            set_folder_position,
             float_folder_drop,
             float_drag_hint,
             float_folder_state,
@@ -31326,6 +31834,14 @@ pub fn run() {
             probe_recording,
             probe_extra_video_source,
             read_key_sidecar,
+            camera::open_camera_window,
+            camera::camera_begin_recording,
+            camera::camera_append_chunk,
+            camera::camera_finish_recording,
+            camera::camera_mark_finishing,
+            camera::camera_discard_recording,
+            camera::read_camera_sidecar,
+            camera::camera_screen_elapsed_ms,
             windows_fonts_dir,
             mux_mic_track,
             generate_filmstrip,
@@ -31367,6 +31883,11 @@ pub fn run() {
                 // Backstop for every way out of the app: whatever counter state was
                 // still being collected goes to disk before the process does.
                 flush_settings_now(app);
+                // Matches register_running_instance() in setup() above -- an
+                // orderly exit un-registers this pid immediately; a crash or
+                // task-kill leaves it for other_instance_running() to prune
+                // opportunistically the next time anything checks.
+                unregister_running_instance(&default_data_dir(app));
                 // The timer thread is normally parked for hours; tell it to leave
                 // rather than tearing the process down around a sleeping thread.
                 scheduler::shutdown(Duration::from_millis(SCHEDULER_STOP_WAIT_MS));
@@ -32329,6 +32850,11 @@ fn sync_write_all_impl(app: &AppHandle, prompts: &[Prompt], settings: &Settings)
     if !sync_enabled(settings) {
         return 0;
     }
+    // See strip_data_dir_prefix's own comment: an attachment reference written
+    // to a synced .md file must never carry an absolute demo-dir path either.
+    let sync_source_dir = data_dir(app);
+    let prompts = strip_data_dir_prefix(&sync_source_dir, data_dir_is_demo(app, &sync_source_dir), prompts);
+    let prompts = prompts.as_ref();
     let dir = sync_dir_path(app, settings);
     if let Err(e) = fs::create_dir_all(&dir) {
         append_crash_log(&format!("prompt-sync: the sync folder could not be created: {e}"));
@@ -34976,6 +35502,39 @@ mod tests {
     }
 
     #[test]
+    fn a_paused_span_before_a_later_reader_joins_never_inflates_its_position() {
+        // camera_screen_elapsed_ms (camera.rs) reads this same clock live, at
+        // the moment a camera take starts, to place it on the screen
+        // recording's own timeline. A screen recording paused for a while
+        // before the camera joins must not push that position later than
+        // where the screen recording's own output actually is -- only the
+        // active segments may count, exactly like the ticks assertions
+        // above, just phrased at the "another reader joins later" level this
+        // bug was found at.
+        let clock = RecordClock::new();
+        let t0 = std::time::Instant::now();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        clock.pause();
+        let pause_start = std::time::Instant::now();
+        std::thread::sleep(std::time::Duration::from_millis(200)); // the paused span
+        clock.resume();
+        // Measured, not assumed: a loaded machine can make thread::sleep
+        // overshoot its nominal duration by far more than the two short
+        // active segments below ever could on their own, so the real paused
+        // wall time (however long it actually took) is what gets subtracted,
+        // not the 200ms asked for.
+        let real_pause_ms = pause_start.elapsed().as_millis() as i64;
+        std::thread::sleep(std::time::Duration::from_millis(20)); // the camera joins here
+        let elapsed_ms = clock.now_ticks() / 10_000;
+        let wall_ms = t0.elapsed().as_millis() as i64;
+        assert!(
+            elapsed_ms <= wall_ms - real_pause_ms + 50,
+            "the paused span (~{real_pause_ms}ms of {wall_ms}ms wall time) must not count toward \
+             the camera's join position, got {elapsed_ms}ms"
+        );
+    }
+
+    #[test]
     fn rec_filename_matches_the_spec_pattern() {
         assert_eq!(rec_filename(2026, 9, 3, 8, 5, 9), "rec-2026-09-03_080509.mp4");
         assert_eq!(rec_filename(2026, 12, 31, 23, 59, 0), "rec-2026-12-31_235900.mp4");
@@ -35169,7 +35728,14 @@ mod tests {
         let audio = recording::AudioConfig {
             system: true, mic: false, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0, 0.0, 0.0).expect("start");
+        let session = recording::start(
+            recording::RecTarget::Monitor(0), out, audio, "all",
+            recording::RecStartOptions {
+                show_cursor: true, video_kbps: 12000, video_fps: 30, canvas_ceiling: (8192, 4320),
+                disk_warn_mb: 500.0, max_min: 0.0, max_mb: 0.0,
+            },
+        )
+        .expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -35193,7 +35759,14 @@ mod tests {
         let audio = recording::AudioConfig {
             system: false, mic: true, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0, 0.0, 0.0).expect("start");
+        let session = recording::start(
+            recording::RecTarget::Monitor(0), out, audio, "all",
+            recording::RecStartOptions {
+                show_cursor: true, video_kbps: 12000, video_fps: 30, canvas_ceiling: (8192, 4320),
+                disk_warn_mb: 500.0, max_min: 0.0, max_mb: 0.0,
+            },
+        )
+        .expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -35214,7 +35787,14 @@ mod tests {
         let audio = recording::AudioConfig {
             system: true, mic: true, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0, 0.0, 0.0).expect("start");
+        let session = recording::start(
+            recording::RecTarget::Monitor(0), out, audio, "all",
+            recording::RecStartOptions {
+                show_cursor: true, video_kbps: 12000, video_fps: 30, canvas_ceiling: (8192, 4320),
+                disk_warn_mb: 500.0, max_min: 0.0, max_mb: 0.0,
+            },
+        )
+        .expect("start");
         std::thread::sleep(std::time::Duration::from_secs(4));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -35239,7 +35819,14 @@ mod tests {
             system: true, mic: false, mic_device_id: String::new(), kbps: 192,
         };
         let wall_start = std::time::Instant::now();
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0, 0.0, 0.0).expect("start");
+        let session = recording::start(
+            recording::RecTarget::Monitor(0), out, audio, "all",
+            recording::RecStartOptions {
+                show_cursor: true, video_kbps: 12000, video_fps: 30, canvas_ceiling: (8192, 4320),
+                disk_warn_mb: 500.0, max_min: 0.0, max_mb: 0.0,
+            },
+        )
+        .expect("start");
         std::thread::sleep(std::time::Duration::from_secs(600));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let wall_elapsed = wall_start.elapsed().as_secs_f64();
@@ -35279,7 +35866,14 @@ mod tests {
         let audio = recording::AudioConfig {
             system: false, mic: false, mic_device_id: String::new(), kbps: 192,
         };
-        let session = recording::start(recording::RecTarget::Monitor(0), out, true, audio, 12000, 30, "all", (8192, 4320), 500.0, 0.0, 0.0).expect("start");
+        let session = recording::start(
+            recording::RecTarget::Monitor(0), out, audio, "all",
+            recording::RecStartOptions {
+                show_cursor: true, video_kbps: 12000, video_fps: 30, canvas_ceiling: (8192, 4320),
+                disk_warn_mb: 500.0, max_min: 0.0, max_mb: 0.0,
+            },
+        )
+        .expect("start");
         std::thread::sleep(std::time::Duration::from_secs(2));
         let (path, _dropped, _encode_error, _mic_wav, _canvas_note, _crop_rect, _canvas_size, _resize_crop_at_ms) = recording::stop(session).expect("stop");
         let bytes = std::fs::read(&path).expect("read output file");
@@ -35331,7 +35925,8 @@ mod tests {
             (true, 12000u32, 30u32, "all", (8192u32, 4320u32), 500.0f64, 0.0f64, 0.0f64);
 
         let session1 = recording::start(
-            target, part1_path.clone(), show_cursor, audio.clone(), video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb,
+            target, part1_path.clone(), audio.clone(), canvas_mode,
+            recording::RecStartOptions { show_cursor, video_kbps, video_fps, canvas_ceiling, disk_warn_mb, max_min, max_mb },
         )
         .expect("start part 1");
         // The session retains exactly what it was built with -- this is what
@@ -35351,7 +35946,8 @@ mod tests {
 
         let part2_path = recording::continuation_output_path(&part1_path, 2);
         let session2 = recording::start(
-            target, part2_path.clone(), show_cursor, audio, video_kbps, video_fps, canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb,
+            target, part2_path.clone(), audio, canvas_mode,
+            recording::RecStartOptions { show_cursor, video_kbps, video_fps, canvas_ceiling, disk_warn_mb, max_min, max_mb },
         )
         .expect("start part 2 with the SAME settings as part 1");
         std::thread::sleep(std::time::Duration::from_secs(2));
@@ -38230,7 +38826,7 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let src = dir.join("rec-2026-01-01-00-00-00.mp4");
         fs::write(&src, b"video").unwrap();
-        let moved = discard_recording_file_in(&[dir.clone()], &src).expect("must move, not fail");
+        let moved = discard_recording_file_in(std::slice::from_ref(&dir), &src).expect("must move, not fail");
         // discard_recording_file_in canonicalizes the parent internally (the \\?\
         // extended-length form on Windows) -- canonicalize the expected side too
         // rather than comparing a canonical path against a plain one.
@@ -38247,7 +38843,7 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let src = dir.join("not-a-recording.mp4");
         fs::write(&src, b"video").unwrap();
-        assert!(discard_recording_file_in(&[dir.clone()], &src).is_none());
+        assert!(discard_recording_file_in(std::slice::from_ref(&dir), &src).is_none());
         assert!(src.is_file(), "a refused discard must leave the file untouched");
         let _ = fs::remove_dir_all(&dir);
     }
@@ -38748,7 +39344,7 @@ mod tests {
         backdate(&active, Duration::from_secs(3600));
 
         let empty = std::collections::HashSet::new();
-        let (count, bytes) = sweep_stale_recordings_in(&dir, &empty, &[active.clone()], true, Duration::from_secs(60), None);
+        let (count, bytes) = sweep_stale_recordings_in(&dir, &empty, std::slice::from_ref(&active), true, Duration::from_secs(60), None);
 
         assert_eq!(count, 0);
         assert_eq!(bytes, 0);
@@ -40637,6 +41233,442 @@ mod tests {
         assert_eq!(settings.ui_flags.get("demoMode"), Some(&true));
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // Finding 1 (HIGH, adversarial audit): disable_demo_mode flushes pending
+    // demo settings into the demo dir, under the store lock, BEFORE it flips
+    // the "datapath" redirect back to the real one -- otherwise app.restart()'s
+    // own RunEvent::Exit flush (or the 250ms settings_flush_tick) can resolve
+    // data_dir() AFTER the flip and overwrite the real data.db with demo
+    // settings. This proves the write-then-flip half directly: a settings
+    // write made while the redirect still points at the demo dir lands there,
+    // never in the real store sitting right next to it.
+    #[test]
+    fn demo_settings_written_before_the_flip_land_in_the_demo_dir_not_the_real_one() {
+        let canonical = std::env::temp_dir().join(format!("{}-test-demo-exit-flush", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&canonical);
+        std::fs::create_dir_all(&canonical).unwrap();
+        let real_db = canonical.join("data.db");
+        std::fs::write(&real_db, b"the real store, byte for byte").unwrap();
+        let real_bytes_before = std::fs::read(&real_db).unwrap();
+
+        let demo = enter_demo_mode(&canonical, None).unwrap();
+
+        // Simulate the flush disable_demo_mode does before it calls
+        // exit_demo_mode: at this point the redirect still points at `demo`.
+        let conn = db_conn_at(&demo).unwrap();
+        let changed = Settings { theme: "changed-during-demo".into(), ..Default::default() };
+        db_write_settings(&conn, &changed).unwrap();
+
+        exit_demo_mode(&canonical).unwrap();
+
+        assert_eq!(
+            std::fs::read(&real_db).unwrap(),
+            real_bytes_before,
+            "a settings write made before the redirect flip must never reach the real data.db"
+        );
+        let demo_conn = db_conn_at(&demo).unwrap();
+        let mut written = WrittenRows::new();
+        let (_p, settings, ..) = db_load(&demo_conn, &mut written);
+        assert_eq!(
+            settings.map(|s| s.theme),
+            Some("changed-during-demo".to_string()),
+            "the flush must have actually landed in the demo store"
+        );
+
+        let _ = std::fs::remove_dir_all(&canonical);
+    }
+
+    // The other half of finding 1: DEMO_TRANSITION_LOCKED is the flag
+    // data_dir_write_blocked() AND db_conn() both check first (the second
+    // review's own point: db_conn() is the actual single choke point, not
+    // just the four functions that also call data_dir_write_blocked()) --
+    // this reads it back exactly like settings_locked_command_reports_the_flag
+    // and settings_write_failed_command_reports_the_flag do for their own
+    // flags (db_conn/data_dir_write_blocked themselves need a real AppHandle,
+    // which no unit test in this file constructs).
+    #[test]
+    fn demo_transition_locked_flag_round_trips() {
+        let before = DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed);
+        DEMO_TRANSITION_LOCKED.store(true, Ordering::Relaxed);
+        assert!(DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed));
+        DEMO_TRANSITION_LOCKED.store(false, Ordering::Relaxed);
+        assert!(!DEMO_TRANSITION_LOCKED.load(Ordering::Relaxed));
+        DEMO_TRANSITION_LOCKED.store(before, Ordering::Relaxed);
+    }
+
+    // Kept alive a few seconds and spawned only as this same test binary re-
+    // invoking itself (see other_instance_running_detects_a_live_pid_and_prunes_a_dead_one
+    // below), so instance_pid_is_this_exe's image-path check has something
+    // genuinely matching current_exe() to find, not an unrelated process.
+    #[test]
+    #[ignore]
+    fn __sleep_helper_for_instance_test() {
+        std::thread::sleep(std::time::Duration::from_secs(3));
+    }
+
+    // other_instance_running must tell a real second live process apart from
+    // the allowMultipleInstances setting -- see its own comment for why the
+    // flag was not trustworthy evidence. Uses this test binary's own pid
+    // (always alive) as the "other" instance and a definitely-dead one (a
+    // huge pid unlikely to exist, plus this process's own pid is excluded so
+    // it can never see itself).
+    #[test]
+    #[cfg(windows)]
+    fn other_instance_running_detects_a_live_pid_and_prunes_a_dead_one() {
+        let canonical = std::env::temp_dir().join(format!("{}-test-instance-registry", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&canonical);
+        assert!(!other_instance_running(&canonical), "an empty/missing registry has nothing to find");
+
+        register_running_instance(&canonical);
+        assert!(
+            !other_instance_running(&canonical),
+            "a process must never count itself as a second instance"
+        );
+
+        // A pid a genuinely different copy of THIS exe holds right now -- a
+        // third review finding requires instance_pid_is_this_exe to confirm
+        // the pid's image path, not merely that some process holds it, so
+        // the "other" instance here must actually be this same test binary
+        // re-invoked as a child, kept alive by the sleep helper above.
+        let exe = std::env::current_exe().unwrap();
+        let mut child = std::process::Command::new(&exe)
+            .args(["tests::__sleep_helper_for_instance_test", "--exact", "--ignored", "--test-threads=1"])
+            .spawn()
+            .unwrap();
+        let other_pid = child.id();
+        std::fs::write(instances_dir(&canonical).join(other_pid.to_string()), b"").unwrap();
+        assert!(other_instance_running(&canonical), "a different LIVE copy of this exe must be detected");
+
+        // An obviously stale entry (not a real pid on this machine) must be
+        // pruned rather than perma-blocking every future enable/disable.
+        std::fs::write(instances_dir(&canonical).join("999999999"), b"").unwrap();
+        let _ = other_instance_running(&canonical); // one pass to prune it
+        assert!(
+            !instances_dir(&canonical).join("999999999").exists(),
+            "a dead pid's marker must be pruned opportunistically"
+        );
+
+        let _ = child.kill();
+        let _ = child.wait();
+        unregister_running_instance(&canonical);
+        assert!(
+            !instances_dir(&canonical).join(std::process::id().to_string()).exists(),
+            "unregister must remove this process's own marker"
+        );
+
+        let _ = std::fs::remove_dir_all(&canonical);
+    }
+
+    // A pid reused by an unrelated process (Windows reuses freed pids; the
+    // window between a crash/task-kill and its stale entry getting pruned
+    // can span a whole later session) must not read as "still our instance"
+    // forever -- a third review finding. cmd.exe here stands in for that
+    // unrelated process: it is definitely alive, and definitely not a copy
+    // of this exe, so instance_pid_is_this_exe must refuse it even though
+    // pid_is_alive alone would accept it. The entry must NOT be pruned for
+    // that alone, though (a fourth review finding): pruning here as well as
+    // on a dead pid would delete a REAL second instance's own marker the
+    // moment the image check merely fails to confirm it (a permission edge
+    // case, or a bug in that check), permanently losing this instance's
+    // spot in the registry with nothing to notice and re-register it.
+    #[test]
+    #[cfg(windows)]
+    fn other_instance_running_refuses_a_pid_reused_by_an_unrelated_process() {
+        let canonical = std::env::temp_dir().join(format!("{}-test-instance-registry-reused-pid", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&canonical);
+        std::fs::create_dir_all(instances_dir(&canonical)).unwrap();
+
+        let mut child = std::process::Command::new("cmd").args(["/C", "ping -n 3 127.0.0.1 >NUL"]).spawn().unwrap();
+        let other_pid = child.id();
+        std::fs::write(instances_dir(&canonical).join(other_pid.to_string()), b"").unwrap();
+        assert!(
+            !other_instance_running(&canonical),
+            "a live pid that is not a copy of this exe must never count as another instance"
+        );
+        assert!(
+            instances_dir(&canonical).join(other_pid.to_string()).exists(),
+            "a live pid must never be pruned on the image check alone, only a dead one"
+        );
+
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = std::fs::remove_dir_all(&canonical);
+    }
+
+    // A real second instance running from the exact same exe must still be
+    // recognized when only its casing differs (a fourth review finding:
+    // Windows paths are case-insensitive, an exact PathBuf == PathBuf compare
+    // is not). Uses this test binary's own current_exe() with an uppercased
+    // copy of its path string, since a real differently-cased path to the
+    // same file cannot be constructed portably in a test.
+    #[test]
+    fn same_exe_path_ignores_casing() {
+        let exe = std::env::current_exe().unwrap();
+        let upper = PathBuf::from(exe.to_string_lossy().to_uppercase());
+        assert!(same_exe_path(&exe, &upper), "the same file with different casing must still match");
+    }
+
+    // Two genuinely different files must never match regardless of casing.
+    #[test]
+    fn same_exe_path_refuses_a_different_file() {
+        let exe = std::env::current_exe().unwrap();
+        let other = std::env::temp_dir().join(format!("{}-test-same-exe-path-unrelated.exe", brand::SLUG));
+        assert!(!same_exe_path(&exe, &other));
+    }
+
+    // Finding 2 (HIGH, portable mode): build_demo_store must never delete a
+    // pre-existing folder at the demo subfolder's path unless it carries the
+    // marker this function itself writes -- portable installs put the demo
+    // subfolder beside the exe, where a user could already have an unrelated
+    // folder there (named "demo" under the old, generic subfolder name; the
+    // marker check protects the new app-specific name just as well against
+    // any other collision).
+    #[test]
+    fn build_demo_store_refuses_to_wipe_an_unmarked_existing_folder() {
+        let dir = std::env::temp_dir().join(format!("{}-test-demo-unmarked-folder", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let sentinel = dir.join("not-mine.txt");
+        std::fs::write(&sentinel, b"a user's own file, nothing to do with demo mode").unwrap();
+
+        let result = build_demo_store(&dir, None);
+        assert!(result.is_err(), "an existing, unmarked folder must never be wiped: {result:?}");
+        assert!(sentinel.exists(), "the user's own file must survive");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // A folder build_demo_store itself created (carries the marker) must still
+    // be rebuildable, or every enable after the very first would fail outright.
+    #[test]
+    fn build_demo_store_rebuilds_its_own_marked_folder() {
+        let dir = std::env::temp_dir().join(format!("{}-test-demo-marked-folder", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&dir);
+        build_demo_store(&dir, None).unwrap();
+        std::fs::write(dir.join("left-over.txt"), b"session leftover").unwrap();
+
+        build_demo_store(&dir, None).unwrap();
+        assert!(!dir.join("left-over.txt").exists(), "a marked folder must still be wiped and rebuilt");
+        assert!(dir.join(DEMO_MARKER_FILE).is_file(), "the rebuild must leave the marker in place");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // Finding 3 (N3, second review): a locked file elsewhere in the folder
+    // (data.db held open by something else) must never cost the marker its
+    // life -- the old order (remove_dir_all the whole folder, including the
+    // marker, THEN fail on the locked file) could leave a folder that still
+    // exists but no longer carries proof this app made it, refusing every
+    // later enable forever.
+    #[test]
+    #[cfg(windows)]
+    fn build_demo_store_keeps_its_marker_when_a_file_is_locked() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let dir = std::env::temp_dir().join(format!("{}-test-demo-locked-file", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&dir);
+        build_demo_store(&dir, None).unwrap();
+
+        // share_mode(0) denies every other handle -- including this same
+        // process's own attempt to remove or reopen it -- any access at all.
+        let locked = std::fs::OpenOptions::new().read(true).share_mode(0).open(dir.join("data.db")).unwrap();
+
+        // The rebuild's own data.db step will fail while this handle is open;
+        // what matters here is only that the marker survives it regardless.
+        let _ = build_demo_store(&dir, None);
+        assert!(
+            dir.join(DEMO_MARKER_FILE).is_file(),
+            "the marker must survive a locked file elsewhere in the folder"
+        );
+
+        drop(locked);
+        // Once unlocked, a later enable must not be refused forever either.
+        assert!(build_demo_store(&dir, None).is_ok(), "a retry once the lock clears must succeed");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // Finding 3 (MEDIUM): entering demo mode a second time without an exit in
+    // between (a crash mid-session, or a relaunch that never reached
+    // exit_demo_mode) must never overwrite an already-recorded backup with the
+    // demo path itself -- once that happens there is nothing left to restore
+    // the real custom redirect from.
+    #[test]
+    fn demo_pointer_backup_survives_a_second_enable_without_an_exit() {
+        let canonical = std::env::temp_dir().join(format!("{}-test-demo-backup-vanish", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&canonical);
+        std::fs::create_dir_all(&canonical).unwrap();
+        let custom = canonical.join("elsewhere");
+        std::fs::create_dir_all(&custom).unwrap();
+        std::fs::write(canonical.join("datapath"), custom.to_string_lossy().as_bytes()).unwrap();
+
+        enter_demo_mode(&canonical, None).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(canonical.join(DEMO_POINTER_BACKUP)).unwrap(),
+            custom.to_string_lossy(),
+            "the first enable must save the real custom redirect as the backup"
+        );
+
+        // Re-enter without exiting first: the pointer already points at the
+        // demo folder itself.
+        enter_demo_mode(&canonical, None).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(canonical.join(DEMO_POINTER_BACKUP)).unwrap(),
+            custom.to_string_lossy(),
+            "a second enable must never overwrite the backup with the demo path itself"
+        );
+
+        exit_demo_mode(&canonical).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("datapath")).unwrap(),
+            custom.to_string_lossy(),
+            "switching off must restore the real custom redirect, not the canonical (empty) store"
+        );
+
+        let _ = std::fs::remove_dir_all(&canonical);
+    }
+
+    // The other half of finding 3: if the backup is missing (an exit already
+    // ran, or nothing ever wrote one) and the redirect points somewhere that is
+    // NOT the demo folder, exit_demo_mode must leave it alone rather than
+    // deleting it and falling back to the canonical (empty) store.
+    #[test]
+    fn exit_demo_mode_leaves_an_unrelated_redirect_alone_when_the_backup_is_missing() {
+        let canonical = std::env::temp_dir().join(format!("{}-test-demo-no-backup", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&canonical);
+        std::fs::create_dir_all(&canonical).unwrap();
+        let custom = canonical.join("elsewhere");
+        std::fs::create_dir_all(&custom).unwrap();
+        std::fs::write(canonical.join("datapath"), custom.to_string_lossy().as_bytes()).unwrap();
+        assert!(!canonical.join(DEMO_POINTER_BACKUP).exists());
+
+        exit_demo_mode(&canonical).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(canonical.join("datapath")).unwrap(),
+            custom.to_string_lossy(),
+            "an unrelated redirect must survive when there is no demo backup to restore"
+        );
+
+        let _ = std::fs::remove_dir_all(&canonical);
+    }
+
+    // Finding 5 (LOW): the sample attachment row must never store an absolute
+    // path -- an installed build's data dir sits under
+    // %APPDATA%\<Windows account name>, and demo mode's whole point is to be
+    // shown to other people (screenshots, exports).
+    #[test]
+    fn demo_attachment_path_is_relative_not_absolute() {
+        let dir = std::env::temp_dir().join(format!("{}-test-demo-relative-path", brand::SLUG));
+        let _ = std::fs::remove_dir_all(&dir);
+        build_demo_store(&dir, None).unwrap();
+
+        let conn = db_conn_at(&dir).unwrap();
+        let mut written = WrittenRows::new();
+        let (prompts, ..) = db_load(&conn, &mut written);
+        let attachment = prompts.iter().find(|p| p.id == "demo-attachment").unwrap();
+        assert!(!attachment.file_path.is_empty());
+        assert!(
+            Path::new(&attachment.file_path).is_relative(),
+            "the stored file_path must be relative, not an absolute path containing the user's own account name: {}",
+            attachment.file_path
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // The other half of finding 5 (second review): load_store() resolves the
+    // demo attachment's relative file_path to a real absolute path in memory
+    // so the UI can actually use it -- but the very next unrelated save must
+    // never bake that absolute path back into the database. strip_data_dir_prefix
+    // is what save_prompts (and save_trash/save_prompts_and_trash) run every
+    // prompt through first for exactly this reason: a full round trip
+    // (relative on disk -> absolute in memory, simulating load_store's own
+    // resolution loop -> stripped again before persisting) must land back on
+    // the same relative value it started from, not the resolved one.
+    #[test]
+    fn strip_data_dir_prefix_reverses_load_stores_own_resolution() {
+        let dir = std::env::temp_dir().join(format!("{}-test-demo-strip-prefix", brand::SLUG)).join(DEMO_SUBFOLDER);
+        let _ = std::fs::remove_dir_all(&dir);
+        build_demo_store(&dir, None).unwrap();
+
+        let conn = db_conn_at(&dir).unwrap();
+        let mut written = WrittenRows::new();
+        let (mut prompts, ..) = db_load(&conn, &mut written);
+        let original = prompts.iter().find(|p| p.id == "demo-attachment").unwrap().file_path.clone();
+        assert!(Path::new(&original).is_relative(), "sanity: db_load must still hand back the relative row");
+
+        // Mirror load_store()'s own resolution loop.
+        for p in prompts.iter_mut() {
+            if !p.file_path.is_empty() && Path::new(&p.file_path).is_relative() {
+                p.file_path = dir.join(&p.file_path).to_string_lossy().to_string();
+            }
+        }
+        let resolved = prompts.iter().find(|p| p.id == "demo-attachment").unwrap().file_path.clone();
+        assert!(Path::new(&resolved).is_absolute(), "sanity: the in-memory copy must now be absolute");
+
+        // What save_prompts runs the resolved prompts through right before
+        // db_write_prompts/write_sealed_json ever see them.
+        let stripped = strip_data_dir_prefix(&dir, true, &prompts);
+        let round_tripped = stripped.iter().find(|p| p.id == "demo-attachment").unwrap().file_path.clone();
+        assert_eq!(
+            round_tripped, original,
+            "a save made after load_store()'s own resolution must never persist the absolute path"
+        );
+        assert!(
+            Path::new(&round_tripped).is_relative(),
+            "the persisted value must be relative again: {round_tripped}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // A real (non-demo) attachment's absolute path, whose parent is NOT the
+    // data dir, must never be touched by strip_data_dir_prefix -- it is
+    // already exactly what the file picker produced.
+    #[test]
+    fn strip_data_dir_prefix_leaves_an_unrelated_absolute_path_alone() {
+        let dir = std::env::temp_dir().join(format!("{}-test-strip-prefix-unrelated", brand::SLUG));
+        let real = Prompt { file_path: "C:\\Users\\someone\\Documents\\report.pdf".to_string(), ..test_prompt("real") };
+        let out = strip_data_dir_prefix(&dir, true, std::slice::from_ref(&real));
+        assert_eq!(out[0].file_path, real.file_path);
+    }
+
+    // A trashed demo attachment must resolve to an absolute path exactly like
+    // a live one -- a third review finding: load_store used to only run this
+    // loop over `prompts`, so a demo attachment deleted during the session
+    // restored from trash with the bare, unresolvable filename db_load_trash
+    // handed back, instead of a path under the live data dir.
+    #[test]
+    fn resolve_relative_file_paths_covers_trash_rows_too() {
+        let dir = std::env::temp_dir().join(format!("{}-test-resolve-relative-trash", brand::SLUG));
+        let mut trash = vec![Prompt { file_path: "Anhang.txt".to_string(), ..test_prompt("trashed-attachment") }];
+        resolve_relative_file_paths(&dir, &mut trash);
+        assert_eq!(trash[0].file_path, dir.join("Anhang.txt").to_string_lossy().to_string());
+        assert!(Path::new(&trash[0].file_path).is_absolute());
+    }
+
+    // Portable mode's data dir is the exe folder; a custom data dir is common
+    // too. A real attachment the file picker placed directly inside either
+    // (its absolute path's parent equals the data dir, same as the demo
+    // sample row's) must never be stripped down to a bare filename outside
+    // demo mode -- it would resolve against the wrong folder after any later
+    // data-dir move or portable/installed takeover (a third review finding:
+    // the fix was gating on dir shape alone, so it fired for every user, not
+    // only in demo). Named literally `DEMO_SUBFOLDER` on purpose (a fourth
+    // review finding): the first attempt at this fix compared the folder's
+    // NAME to `DEMO_SUBFOLDER`, which still misfired for a real data dir
+    // that happens to be named that -- only `is_demo` (the caller's own
+    // exact-path comparison against `default_data_dir(app).join(DEMO_
+    // SUBFOLDER)`) may gate this, never the shape of `dir` alone.
+    #[test]
+    fn strip_data_dir_prefix_leaves_a_real_attachment_alone_outside_demo() {
+        let dir = std::env::temp_dir().join(format!("{}-test-strip-prefix-non-demo", brand::SLUG)).join(DEMO_SUBFOLDER);
+        let real = Prompt { file_path: dir.join("report.pdf").to_string_lossy().to_string(), ..test_prompt("real") };
+        assert!(Path::new(&real.file_path).parent() == Some(dir.as_path()), "sanity: parent must equal dir");
+        let out = strip_data_dir_prefix(&dir, false, std::slice::from_ref(&real));
+        assert_eq!(out[0].file_path, real.file_path, "a non-demo data dir must never be stripped, even named exactly like the demo subfolder");
+        assert!(Path::new(&out[0].file_path).is_absolute(), "the real attachment path must stay absolute");
     }
 
     // Adopting an installed store copies its files one by one. If the database
@@ -45134,8 +46166,10 @@ mod tests {
         // order they arrived in. Each job owns its own thread, so nothing bounds
         // how far apart two due times must be to survive real OS scheduling
         // jitter under load; wide gaps keep this a scheduling-order test rather
-        // than a thread-wakeup-latency test.
-        for (name, delay_ms) in [("third", 450u64), ("first", 150), ("second", 300)] {
+        // than a thread-wakeup-latency test. The full suite runs many tests
+        // concurrently, so the gaps are wide (600ms) rather than the original
+        // 150ms — a 150ms gap measurably flaked under that contention.
+        for (name, delay_ms) in [("third", 1800u64), ("first", 600), ("second", 1200)] {
             let log = log.clone();
             s.register_periodic(name, Duration::from_millis(delay_ms), NEVER_AGAIN, move || {
                 log.lock().unwrap_or_else(|e| e.into_inner()).push(name);
@@ -45252,6 +46286,12 @@ mod tests {
     // The census sees every thread in the process, the test harness's own
     // included, so each attempt brackets its measurement with a baseline reading
     // and only accepts a round where the baseline did not move underneath it.
+    // A round is also rejected outright when `with_jobs` itself is off by more
+    // than the four chores: cargo runs every test in this binary concurrently,
+    // so another test's own thread can start or stop in the narrow window
+    // between the two `live_threads()` reads even when the before/after
+    // baseline matches — that used to flake this test under load rather than
+    // prove anything about the Scheduler.
     #[cfg(windows)]
     #[test]
     fn four_chores_cost_four_dedicated_threads() {
@@ -45272,7 +46312,7 @@ mod tests {
             wait_until(|| live_threads() <= before, Duration::from_secs(5));
             let after = live_threads();
 
-            if before == after {
+            if before == after && with_jobs.saturating_sub(before) == CHORES {
                 measured = Some((before, with_jobs));
                 break;
             }

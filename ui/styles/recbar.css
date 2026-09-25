@@ -34,6 +34,17 @@
   50% { opacity: 0.35; }
 }
 
+/* The dot alone is colour only -- this word carries the same "recording"
+   meaning for anyone who cannot tell red from the background. */
+.rec-dot-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--menu-fg);
+  flex: none;
+}
+.rec-bar.paused .rec-dot-label { opacity: 0.45; }
+
 .rec-time { font-size: 13px; min-width: 3.6em; }
 .rec-size { font-size: 12px; opacity: 0.7; min-width: 3.6em; }
 /* Past three quarters of recMaxMb -- same warm color the hotkey/mic

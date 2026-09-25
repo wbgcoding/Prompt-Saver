@@ -8,10 +8,11 @@ import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT,
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
 import { HELP_SKETCHES } from "./helpSketches.js";
-import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
+import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, a11yProgressText, parseFfmpegError, fmtBytes, makeHoldOrTapToggle, trapTabWithin } from "./floatShared.js";
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 import { createColorPop } from "./colorpop.js";
 import { snapMove } from "./snap.js";
+import { withShortcut as withShortcutRaw, rowsForScope as rowsForScopeRaw } from "./shortcuts.js";
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen, emit } = window.__TAURI__.event;
@@ -303,12 +304,22 @@ const applyBrand = () => {
 };
 applyBrand();
 
+// shortcuts.js has no i18n state of its own -- every call here binds it to
+// this window's own t()/LANG, so every call site just names the action.
+const withShortcut = (el, action) => withShortcutRaw(el, action, t, LANG);
+const shortcutRows = (scope) => rowsForScopeRaw(scope, t, LANG);
+
 function applyI18n() {
   document.documentElement.lang = LANG;
   applyBrand();
   document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll("[data-i18n-ph]").forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
-  document.querySelectorAll("[data-i18n-title]").forEach((el) => { el.title = t(el.dataset.i18nTitle); });
+  // A shortcut-bearing element gets its tooltip built from SHORTCUTS (base
+  // description + key combo) instead of the plain translation.
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    if (el.dataset.shortcut) withShortcut(el, el.dataset.shortcut);
+    else el.title = t(el.dataset.i18nTitle);
+  });
   document.querySelectorAll("[data-i18n-aria]").forEach((el) => { el.setAttribute("aria-label", t(el.dataset.i18nAria)); });
   // Cached video tiles keep their media bar across a language switch — its
   // button labels are not markup, so data-i18n above never reaches them. Walk
@@ -727,6 +738,7 @@ const ERROR_MSG_KEYS = {
   "recording-target-switch-timeout": "recTargetSwitchTimeout",
   "file-missing": "openFileMissing",
   "ffmpeg-missing": "recFfmpegMissingHint",
+  "demo-mode-multiple-instances": "demoModeMultipleInstances",
 };
 function errToast(err) {
   const s = String(err);
@@ -859,7 +871,15 @@ function renderBgOpsPop(ops) {
     label.textContent = bgOpLabel(op.kind);
     const pct = document.createElement("span");
     pct.className = "bg-ops-pct";
-    pct.textContent = op.state === "error" ? "–" : op.state === "done" ? "100%" : (op.pct != null ? `${op.pct}%` : "…");
+    const pctNum = op.state === "done" ? 100 : op.pct != null ? op.pct : null;
+    pct.textContent = op.state === "error" ? "—" : op.state === "done" ? "100%" : (op.pct != null ? `${op.pct}%` : "…");
+    if (pctNum != null) {
+      pct.setAttribute("role", "progressbar");
+      pct.setAttribute("aria-valuemin", "0");
+      pct.setAttribute("aria-valuemax", "100");
+      pct.setAttribute("aria-valuenow", String(pctNum));
+      pct.setAttribute("aria-valuetext", t("a11yPctOnly").replace("{pct}", String(pctNum)));
+    }
     row.append(label, pct);
     if (op.target) {
       const openBtn = document.createElement("button");
@@ -1391,6 +1411,10 @@ const FLAG_LABELS = {
   // OFF -- a low-level keyboard hook exists nowhere in this app unless the
   // user turns this on for a specific recording.
   keyOverlay: "flagKeyOverlay",
+  // The record button's right-click "Record camera" entry and its own window.
+  // Ships OFF, like every feature that can turn a camera light on -- see
+  // camera.rs for the WebView2 permission handling this switch gates.
+  cameraRecord: "flagCameraRecord",
   numFieldWheel: "flagNumFieldWheel",
   editStateKeep: "flagEditStateKeep",
   recStopHotkey: "flagRecStopHotkey",
@@ -1782,6 +1806,7 @@ const EXPERT_VALUES = {
   // this row must not change what already happens today.
   recDiskWarnMb: { label: "valRecDiskWarnMb", min: 200, max: 20000, step: 100, def: 500, unit: "MB", gate: "screenRecord" },
   keyOverlayHoldMs: { label: "valKeyOverlayHoldMs", min: 100, max: 2000, step: 50, def: 400, unit: "ms", gate: "keyOverlay" },
+  cameraFramerate: { label: "valCameraFramerate", min: 10, max: 60, step: 5, def: 30, unit: "fps", gate: "cameraRecord" },
   recMaxMin: { label: "valRecMaxMin", min: 0, max: 600, step: 5, def: 0, unit: "min", zeroLabel: "valUnlimited", gate: "screenRecord" },
   recMaxMb: { label: "valRecMaxMb", min: 0, max: 100000, step: 500, def: 0, unit: "MB", zeroLabel: "valUnlimited", gate: "screenRecord" },
   // How many recordings the "export selected" batch dialog encodes at once --
@@ -2080,6 +2105,24 @@ const EXPERT_DROPDOWNS = {
       try { await invoke("set_ui_text", { key: "recMicDevice", value: v }); } catch (e) { errToast(e); }
     },
   },
+  // Which camera the camera window opens with. Options come from
+  // navigator.mediaDevices.enumerateDevices() (cameraDevicesCache, near the
+  // recording wiring below) -- listing devices never turns the camera light
+  // on, only getUserMedia does, so this is safe to populate from the main
+  // window itself. Empty string = the system default camera.
+  cameraDevice: {
+    label: "valCameraDevice",
+    gate: "cameraRecord",
+    def: "",
+    options: () => [["", t("langAuto")], ...cameraDevicesCache.map((d) => [d.id, d.name])],
+    get: () => settings.ui_texts?.cameraDevice || "",
+    set: async (v) => {
+      settings.ui_texts = { ...(settings.ui_texts || {}), cameraDevice: v };
+      try { await invoke("set_ui_text", { key: "cameraDevice", value: v }); } catch (e) { errToast(e); }
+    },
+  },
+  cameraResolution: enumDropdown("cameraResolution", "valCameraResolution",
+    [["480", "optCameraRes480"], ["720", "optCameraRes720"], ["1080", "optCameraRes1080"]], "720", "cameraRecord"),
   // Three quality steps, default "high". Picking a step re-suggests the
   // matching recBitrateKbps default (REC_QUALITY_BITRATE) so the two controls
   // stay in sync without forcing a second manual edit -- the slider still
@@ -2254,7 +2297,7 @@ const EXPERT_TABS = [
     // The recording hotkeys render their own capture row directly (hotkeyRow())
     // instead of a button that jumps to a settings field -- see actionRow()'s
     // "hotkey" branch.
-    { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb", "exportParallel", "keyOverlayHoldMs"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode"], paths: ["recordingDir"],
+    { title: "expGroupRecording", flags: ["screenRecord", { key: "recCursor", gate: "screenRecord" }, { key: "recAudioSystem", gate: "screenRecord" }, { key: "recAudioMic", gate: "screenRecord" }, { key: "recStopHotkey", gate: "screenRecord" }, { key: "recPauseHotkey", gate: "screenRecord" }, { key: "recTrayEntries", gate: "screenRecord" }, { key: "recCropNotice", gate: "screenRecord" }, { key: "recBarSize", gate: "screenRecord" }, { key: "recTargetSwitch", gate: "screenRecord" }, { key: "recAutoCrop", gate: "screenRecord" }, { key: "keyOverlay", gate: "screenRecord" }, "cameraRecord"], values: ["recCountdownS", "recFps", "recAudioKbps", "recBitrateKbps", "recCanvasMaxPx", "recDiskWarnMb", "recMaxMin", "recMaxMb", "exportParallel", "keyOverlayHoldMs", "cameraFramerate"], dropdowns: ["recMicDevice", "recQuality", "recFormat", "recCanvasMode", "cameraDevice", "cameraResolution"], paths: ["recordingDir"],
       actions: [{ id: "rec-stop-hotkey-row", type: "hotkey", hotkeyKey: "recStopHotkey", label: "recStopHotkeyLabel", gate: "recStopHotkey" }, { id: "rec-pause-hotkey-row", type: "hotkey", hotkeyKey: "recPauseHotkey", label: "recPauseHotkeyLabel", gate: "recPauseHotkey" }] },
     { title: "expGroupVideoEditor", flags: ["videoEditor", { key: "veOvRemember", gate: "videoEditor" }, { key: "videoEditSnap", gate: "videoEditor" }], values: ["videoEditUndoMax", "veExportKbpsHigh", "veExportKbpsSmall", "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veExtraClipsMax"], dropdowns: ["veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veOvFont", "veDefaultPanel"], colors: ["veOvColor"], paths: ["videoExportDir"] },
     // What the screenshot editor and the video editor share -- created here so
@@ -2515,6 +2558,7 @@ const EXPERT_TIPS = [
   "recStopHotkey", "recPauseHotkey", "recTrayEntries", "recCropNotice", "recBarSize", "recTargetSwitch",
   "recAutoCrop", "recCanvasMode", "recCanvasMaxPx", "recMaxMin", "recMaxMb", "recDiskWarnMb", "exportParallel",
   "keyOverlay", "keyOverlayHoldMs",
+  "cameraRecord", "cameraDevice", "cameraResolution", "cameraFramerate",
   "videoEditor", "videoEditUndoMax", "veOvRemember", "videoEditSnap",
   "veDefaultFormat", "veDefaultQuality", "veDefaultScale", "veExportKbpsHigh", "veExportKbpsSmall",
   "veFadeMs", "veOvPixelateBlock", "veOvSpotlightDim", "veOvImageOpacity", "veOvColor", "veOvFont",
@@ -2715,6 +2759,7 @@ function flagRow(key) {
       const msg = String(err);
       if (msg.startsWith("sync-backup-failed")) toast(t("syncBackupFailed"));
       else if (msg.startsWith("sync-write-failed")) toast(t("syncWriteFailed"));
+      else if (msg === "demo-mode-active") toast(t("demoModeMultipleInstances"));
       else toast(msg);
       settings.ui_flags = { ...(settings.ui_flags || {}), [key]: !enabled };
       input.checked = !enabled;
@@ -3010,6 +3055,7 @@ let defaultSyncDir = "";
 let defaultRecordingDir = "";
 let ocrLangsCache = []; // [{tag, label}], fetched once at startup (init())
 let micDevicesCache = []; // [{id, name}], fetched once at startup (init())
+let cameraDevicesCache = []; // [{id, name}], fetched once at startup (init())
 // Whether ffmpeg was found (see ffmpeg_status's own doc comment: never probed
 // on app start, only lazily the first time a control that needs it renders --
 // here, the first time the recQuality/recFormat expert rows are built).
@@ -6884,7 +6930,7 @@ async function saveFolder(f, patch) {
 }
 
 // Two tiles dropped on each other become a folder on the target's cell.
-async function newTileFolder(targetId, dropId, cell) {
+async function newTileFolder(memberIds, cell) {
   const name = await confirmDialog({
     title: t("tileFolderNew"),
     message: t("tileFolderNameMsg"),
@@ -6896,7 +6942,7 @@ async function newTileFolder(targetId, dropId, cell) {
   const view = activeView();
   const ok = await saveFolder(
     { id: "", view_id: view.id },
-    { name: String(name).trim(), cell, members: [targetId, dropId] }
+    { name: String(name).trim(), cell, members: memberIds }
   );
   if (ok) {
     recordToolUsage("folder_create");
@@ -7224,7 +7270,7 @@ async function dropIntoFolder(id, host, cell) {
     return;
   }
   if (!host.dataset.id) return;
-  await newTileFolder(host.dataset.id, id, [Number(cell.dataset.col), Number(cell.dataset.row)]);
+  await newTileFolder([host.dataset.id, id], [Number(cell.dataset.col), Number(cell.dataset.row)]);
 }
 
 // `settings.floating` maps every pinned prompt to its pill position, and the backend
@@ -7264,6 +7310,11 @@ function openCtx(id, x, y) {
   ctxEl.querySelector('[data-act="hide"]').classList.toggle("hidden", favView);
   // Nothing to place this prompt into besides the view it is already on.
   ctxEl.querySelector('[data-act="views"]').classList.toggle("hidden", !optFlag("multiViewPrompt") || settings.views.length < 2);
+  // Keyboard path for the mouse drag-onto-a-folder move: favorites' free-form
+  // layout has no grid cell for a folder to occupy, so it stays out of scope
+  // there the same way the mouse gesture already is.
+  const moveFolderBtn = ctxEl.querySelector('[data-act="moveToFolder"]');
+  moveFolderBtn.classList.toggle("hidden", !tileFoldersOn() || favView);
   // Only visible when this prompt actually rotates and both auto gates are on —
   // grey-and-disabled would still be a control the user cannot act on.
   const rmenuBtn = ctxEl.querySelector('[data-act="rotateAutoMenu"]');
@@ -7312,6 +7363,50 @@ function renderViewsPop(id) {
 function openViewsPop(id, rect) {
   renderViewsPop(id);
   placePopover(viewsPop, rect);
+}
+
+// ---- Move a tile into an existing folder by keyboard (the mouse path is a
+// drag onto an armed cell, see dropIntoFolder above) ----
+const moveToFolderPop = document.createElement("div");
+moveToFolderPop.className = "ctx move-to-folder-pop hidden";
+moveToFolderPop.setAttribute("role", "menu");
+document.body.appendChild(moveToFolderPop);
+function closeMoveToFolderPop() {
+  moveToFolderPop.classList.add("hidden");
+}
+function renderMoveToFolderPop(id) {
+  moveToFolderPop.innerHTML = "";
+  const newRow = document.createElement("button");
+  newRow.type = "button";
+  newRow.setAttribute("role", "menuitem");
+  newRow.textContent = t("tileFolderNew");
+  newRow.addEventListener("click", async () => {
+    closeMoveToFolderPop();
+    const cell = layoutOf(activeView())[id];
+    if (!cell) return; // favorites' free-form layout has no cell to replace
+    await newTileFolder([id], cell);
+  });
+  moveToFolderPop.appendChild(newRow);
+  for (const f of foldersOfView(activeView().id)) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.setAttribute("role", "menuitem");
+    row.textContent = folderTitle(f);
+    row.disabled = f.members.includes(id);
+    row.addEventListener("click", async () => {
+      if (row.disabled) return;
+      closeMoveToFolderPop();
+      if (await saveFolder(f, { members: [...f.members, id] })) {
+        await renderGrid(true);
+        toast(t("movedToFolderToast").replace("{folder}", folderTitle(f)));
+      }
+    });
+    moveToFolderPop.appendChild(row);
+  }
+}
+function openMoveToFolderPop(id, rect) {
+  renderMoveToFolderPop(id);
+  placePopover(moveToFolderPop, rect);
 }
 
 // ---- Grid tag filter — header toolbar popover, own Set from the library's ----
@@ -9400,7 +9495,7 @@ async function loadHistory(id) {
     time.textContent = new Date(v.ts * 1000).toLocaleString(LANG);
     const prev = document.createElement("span");
     prev.className = "hist-preview";
-    prev.textContent = (v.name ? v.name + " — " : "") + olderEntries[0].slice(0, HISTORY_PREVIEW_LEN);
+    prev.textContent = (v.name ? v.name + ": " : "") + olderEntries[0].slice(0, HISTORY_PREVIEW_LEN);
     head.append(time, prev);
     if (olderEntries.length > 1) {
       const chip = document.createElement("span");
@@ -12246,6 +12341,33 @@ let confirmCleanup = null;
 // resolves to the string "alt": a question with two different ways to go ahead
 // (delete the old sync folder, keep it) plus the way out. Left out, the dialog is
 // exactly the two-button one every other caller gets.
+// The "?" overview both editors open -- same modal/modal-narrow/modal-titlebar
+// shell as every other list modal, filled straight from SHORTCUTS.
+let shortcutsModalOpener = null;
+function openShortcutsModal(scope) {
+  shortcutsModalOpener = document.activeElement;
+  const list = $("shortcuts-modal-list");
+  list.innerHTML = "";
+  for (const row of shortcutRows(scope)) {
+    const r = document.createElement("div");
+    r.className = "shortcuts-row";
+    const desc = document.createElement("span");
+    desc.className = "shortcuts-row-desc";
+    desc.textContent = row.desc;
+    const keys = document.createElement("span");
+    keys.className = "shortcuts-row-keys";
+    keys.textContent = row.keys;
+    r.append(desc, keys);
+    list.appendChild(r);
+  }
+  $("shortcuts-modal").classList.remove("hidden");
+}
+function closeShortcutsModal() {
+  $("shortcuts-modal").classList.add("hidden");
+  shortcutsModalOpener?.focus?.();
+  shortcutsModalOpener = null;
+}
+
 function confirmDialog({ title, message, confirmLabel, cancelLabel, altLabel, icon, input, checkboxes, checkboxesOptional = false, danger = true, oneButton = false }) {
   // Restored once this dialog resolves, so a keyboard user's next Tab
   // continues from where they were instead of restarting from the page top.
@@ -15321,6 +15443,18 @@ function openHelp() {
   $("help").classList.remove("hidden");
 }
 
+// Opens the help dialog pre-filtered to one article by its stable `id` (see
+// ui/help.js), through the same search field gsOpenHelp uses for a global-search
+// hit -- an anchor is a lookup key, never the (per-language) title text itself.
+function openHelpAt(id) {
+  const cat = helpCategories().find((c) => c.id === id);
+  helpQuery = cat ? cat.title : "";
+  $("help-search").value = helpQuery;
+  helpCollapsed = new Set();
+  renderHelp();
+  $("help").classList.remove("hidden");
+}
+
 async function openJournal() {
   settings = await invoke("get_settings");
   journalQuery = "";
@@ -16373,7 +16507,12 @@ function bind() {
   const openEditorPop = document.createElement("div");
   openEditorPop.className = "ctx open-editor-pop hidden";
   openEditorPop.setAttribute("role", "menu");
-  openEditorPop.innerHTML = '<button type="button" role="menuitem"></button>';
+  openEditorPop.innerHTML =
+    '<button type="button" role="menuitem" id="open-editor-pop-item"></button>' +
+    // A second, camera-only entry on the SAME popover the record button
+    // already opens on right-click -- shown only when cameraRecord is on, so
+    // the default-off feature stays invisible until someone actually enables it.
+    '<button type="button" role="menuitem" id="camera-menu-item" class="hidden"></button>';
   document.body.appendChild(openEditorPop);
   function closeOpenEditorPop() {
     openEditorPop.classList.add("hidden");
@@ -16382,15 +16521,22 @@ function bind() {
   // library's own right-click, below); left empty it means "let the user
   // pick a file", which is what the composer buttons always do.
   let openEditorPopPath = "";
-  function openOpenEditorPopAt(anchorEl, path) {
+  function openOpenEditorPopAt(anchorEl, path, showCamera) {
     openEditorPopPath = path || "";
-    openEditorPop.querySelector("button").textContent = t("openFileInEditor");
+    openEditorPop.querySelector("#open-editor-pop-item").textContent = t("openFileInEditor");
+    const camItem = openEditorPop.querySelector("#camera-menu-item");
+    camItem.classList.toggle("hidden", !showCamera);
+    if (showCamera) camItem.textContent = t("cameraMenuItem");
     placePopover(openEditorPop, anchorEl.getBoundingClientRect());
   }
-  openEditorPop.querySelector("button").addEventListener("click", () => {
+  openEditorPop.querySelector("#open-editor-pop-item").addEventListener("click", () => {
     const path = openEditorPopPath;
     closeOpenEditorPop();
     openExternalFileInEditor(path || undefined);
+  });
+  openEditorPop.querySelector("#camera-menu-item").addEventListener("click", () => {
+    closeOpenEditorPop();
+    invoke("open_camera_window").catch((e) => errToast(e));
   });
   $("snip-btn").addEventListener("contextmenu", (e) => {
     e.preventDefault();
@@ -16398,7 +16544,7 @@ function bind() {
   });
   $("record-btn").addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    openOpenEditorPopAt($("record-btn"));
+    openOpenEditorPopAt($("record-btn"), undefined, optFlag("cameraRecord"));
   });
   // Shared by the composer menu above and the library's own "Open in editor"
   // right-click on an image/video attachment -- existingPath lets the caller
@@ -16434,10 +16580,20 @@ function bind() {
     btn.classList.toggle("is-paused", state === "paused");
   }
   async function syncRecordBtnFromStatus() {
+    // Skipped while the window is hidden (minimized to tray) -- the button
+    // it updates is not visible either, so there is nothing to resync until
+    // the window is shown again, which re-applies the real state on its own.
+    if (document.hidden) return;
     const status = await invoke("recording_status").catch(() => null);
     setRecordBtnState(!status ? "idle" : status.paused ? "paused" : "recording");
   }
   setInterval(syncRecordBtnFromStatus, 5000);
+  // Catches up the moment the window is shown again instead of waiting out
+  // the rest of the 5s poll interval for a state change that happened while
+  // hidden.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) syncRecordBtnFromStatus();
+  });
   listen("recording-cancelled", () => setRecordBtnState("idle"));
   let recCountdownTimer = 0;
   function cancelRecCountdown() {
@@ -18126,10 +18282,10 @@ function bind() {
       b.type = "button";
       b.className = "icon-btn";
       b.dataset.tool = tdef.id;
-      b.title = `${t(tdef.label)} (${tdef.key})`;
       b.setAttribute("aria-label", t(tdef.label));
       b.setAttribute("aria-pressed", "false");
       b.innerHTML = SNIP_TOOL_SVG[tdef.id];
+      withShortcut(b, `snipTool.${tdef.id}`);
       b.addEventListener("click", () => snipEditSetTool(tdef.id));
       snipEditToolsEl.appendChild(b);
     }
@@ -18481,6 +18637,21 @@ function bind() {
   // ---- keyboard: tool shortcuts, undo/redo, Enter/Esc, nudge, pan, before/after ----
   function snipEditKeydown(e) {
     if (snipEdit.classList.contains("hidden")) return;
+    // The shortcuts overview is a sibling overlay, not inside snipEdit's own
+    // DOM subtree, so it needs its own check before the editor's normal Tab
+    // trap and tool shortcuts take over.
+    if (!$("shortcuts-modal").classList.contains("hidden")) {
+      if (e.key === "Tab") { trapTabWithin($("shortcuts-modal"), e); return; }
+      if (e.key === "Escape") { e.preventDefault(); closeShortcutsModal(); return; }
+      return;
+    }
+    // Appended straight to document.body (see its own declaration), so it sits
+    // outside snipEdit's own DOM subtree -- the plain trap below would let Tab
+    // walk back into the editor underneath while this menu is still open.
+    if (!snipCtxPop.classList.contains("hidden")) {
+      if (e.key === "Tab") { trapTabWithin(snipCtxPop, e); return; }
+      if (e.key === "Escape") { e.preventDefault(); closeSnipCtxPop(); return; }
+    }
     if (e.key === "Tab") { trapTabWithin(snipEdit, e); return; }
     if (e.key === "Escape") {
       e.preventDefault();
@@ -18641,6 +18812,9 @@ function bind() {
   }
   $("snip-edit-cancel").addEventListener("click", snipEditCancel);
   $("snip-edit-close").addEventListener("click", snipEditCancel);
+  $("snip-edit-shortcuts").addEventListener("click", () => openShortcutsModal("snipEditor"));
+  $("shortcuts-modal-close").addEventListener("click", closeShortcutsModal);
+  $("shortcuts-modal").addEventListener("pointerdown", (e) => { if (e.target === $("shortcuts-modal")) closeShortcutsModal(); });
   $("snip-edit-apply").addEventListener("click", snipEditApply);
   $("snip-edit-copy").addEventListener("click", async () => {
     const dataUrl = snipEditExportDataUrl();
@@ -19438,7 +19612,7 @@ function bind() {
       // Some snapshot could not be opened or its scrub could not be confirmed
       // written back -- an emergency wipe reporting silent success there would
       // leave the user believing they are clean when they may not be.
-      if (failed > 0) msg += ` — ${t("clipPurgeBackupsFailed").replace("{n}", String(failed))}`;
+      if (failed > 0) msg += `. ${t("clipPurgeBackupsFailed").replace("{n}", String(failed))}`;
       toast(msg);
     }
   });
@@ -19490,6 +19664,7 @@ function bind() {
   const helpEl = $("help");
   $("help-open").addEventListener("click", openHelp);
   $("help-close").addEventListener("click", () => helpEl.classList.add("hidden"));
+  $("help-shortcuts").addEventListener("click", () => openShortcutsModal(["mainWindow", "library"]));
   helpEl.addEventListener("pointerdown", (e) => {
     if (e.target === helpEl) helpEl.classList.add("hidden");
   });
@@ -19809,6 +19984,12 @@ function bind() {
       openViewsPop(id, rect);
       return;
     }
+    if (act === "moveToFolder") {
+      const rect = ctxEl.getBoundingClientRect();
+      closeCtx();
+      openMoveToFolderPop(id, rect);
+      return;
+    }
     closeCtx();
     if (act === "edit") {
       await editPrompt(id);
@@ -19872,6 +20053,7 @@ function bind() {
         !e.target.closest(".folder-tile")) closeTileFolderPop();
     // Opened from the (already-closed) tile context menu, so nothing else needs excluding.
     if (!viewsPop.classList.contains("hidden") && !viewsPop.contains(e.target)) closeViewsPop();
+    if (!moveToFolderPop.classList.contains("hidden") && !moveToFolderPop.contains(e.target)) closeMoveToFolderPop();
     // The toolbar button toggles its own popover, so let its own press through.
     if (!gridTagPop.classList.contains("hidden") && !gridTagPop.contains(e.target) &&
         !e.target.closest("#grid-tag-btn")) closeGridTagPop();
@@ -19913,11 +20095,13 @@ function bind() {
     // just because the tour is still open underneath. Only defer to the tour when
     // nothing is layered above it.
     if (!$("tour-modal").classList.contains("hidden") && $("confirm-modal").classList.contains("hidden")) return;
+    if (!$("shortcuts-modal").classList.contains("hidden")) { trapTabWithin($("shortcuts-modal"), e); return; }
     if (!toolbarMenu.classList.contains("hidden")) { trapTabWithin(toolbarMenu, e); return; }
     if (!miniMenu.classList.contains("hidden")) { trapTabWithin(miniMenu, e); return; }
     if (!viewGroupPop.classList.contains("hidden")) { trapTabWithin(viewGroupPop, e); return; }
     if (!tileFolderPop.classList.contains("hidden")) { trapTabWithin(tileFolderPop, e); return; }
     if (!viewsPop.classList.contains("hidden")) { trapTabWithin(viewsPop, e); return; }
+    if (!moveToFolderPop.classList.contains("hidden")) { trapTabWithin(moveToFolderPop, e); return; }
     if (!gridTagPop.classList.contains("hidden")) { trapTabWithin(gridTagPop, e); return; }
     if (!openEditorPop.classList.contains("hidden")) { trapTabWithin(openEditorPop, e); return; }
     if (!$("lightbox").classList.contains("hidden")) { trapTabWithin($("lightbox"), e); return; }
@@ -19946,11 +20130,13 @@ function bind() {
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (!snipEdit.classList.contains("hidden")) return; // the editor owns Escape while open
+    if (!$("shortcuts-modal").classList.contains("hidden")) { closeShortcutsModal(); return; }
     if (!toolbarMenu.classList.contains("hidden")) { closeToolbarMenu(); return; }
     if (!miniMenu.classList.contains("hidden")) { closeMiniMenu(); return; }
     if (!viewGroupPop.classList.contains("hidden")) { closeViewGroupPop(); return; }
     if (!tileFolderPop.classList.contains("hidden")) { closeTileFolderPop(); return; }
     if (!viewsPop.classList.contains("hidden")) { closeViewsPop(); return; }
+    if (!moveToFolderPop.classList.contains("hidden")) { closeMoveToFolderPop(); return; }
     if (!gridTagPop.classList.contains("hidden")) { closeGridTagPop(); return; }
     if (!openEditorPop.classList.contains("hidden")) { closeOpenEditorPop(); return; }
     if (!$("lightbox").classList.contains("hidden")) closeLightbox();
@@ -20339,12 +20525,18 @@ function bind() {
     const label = btn.textContent;
     const origTitle = btn.title;
     btn.title = t("ffmpegCancelHint");
+    btn.setAttribute("role", "progressbar");
+    btn.setAttribute("aria-valuemin", "0");
+    btn.setAttribute("aria-valuemax", "100");
     const dlEta = makeEtaEstimator();
     const unlisten = await listen("ffmpeg-download-progress", (e) => {
       const pct = ffmpegDownloadPct(e.payload);
       dlEta.feed(pct);
-      const eta = flag("etaShow") ? formatEta(dlEta.estimate(val("etaMinPct"), val("etaMinSecs")), t) : "";
+      const estimate = dlEta.estimate(val("etaMinPct"), val("etaMinSecs"));
+      const eta = flag("etaShow") ? formatEta(estimate, t) : "";
       btn.textContent = t("ffmpegDownloading").replace("{pct}", String(pct)) + (eta ? ` (${eta})` : "");
+      btn.setAttribute("aria-valuenow", String(pct));
+      btn.setAttribute("aria-valuetext", a11yProgressText(t, pct, estimate));
     });
     try {
       await invoke("download_ffmpeg");
@@ -20358,6 +20550,11 @@ function bind() {
       ffmpegBusy = false;
       btn.textContent = label;
       btn.title = origTitle || "";
+      btn.removeAttribute("role");
+      btn.removeAttribute("aria-valuemin");
+      btn.removeAttribute("aria-valuemax");
+      btn.removeAttribute("aria-valuenow");
+      btn.removeAttribute("aria-valuetext");
     }
   };
 
@@ -20590,11 +20787,13 @@ function setupDragDrop() {
 // ---- First-run tour ----
 // Five fixed steps in one shared frame (#tour-modal), content swapped per step.
 // Steps 1-4 are a small hand-drawn illustration + up to three lines of text; step 5
-// is the "optional features" settings table (TOUR_OPTIONS below). Opened two ways:
+// is what else the program can do (TOUR_FEATURES below) plus what is already set
+// up (TOUR_SETUP below). Opened two ways:
 //  - Automatically once, right after the example prompts are seeded on a genuinely
 //    fresh install (maybeOpenFirstRunTour, called from init()'s reveal()). Step 5
 //    buffers its switches in a local draft and only writes what differs from the
-//    shipped default, on Finish. Skip writes nothing but tourSeen.
+//    shipped default (features) or the value the tour opened with (setup), on
+//    Finish. Skip writes nothing but tourSeen.
 //  - Manually via the expert menu's gated "tour-open" action (EXPERT_ACTIONS). Step 5
 //    then writes live, exactly like a normal expert-menu flag row — nothing is
 //    buffered or reset just from reopening it this way.
@@ -20672,18 +20871,34 @@ const TOUR_STEPS = [
 const TOUR_STEP_COUNT = TOUR_STEPS.length + 1; // + the settings step
 const TOUR_LAST_STEP = TOUR_STEP_COUNT - 1;
 
-// Step 5's table — written so a later point (the announced screenshot
-// recording feature) can add its own row with exactly one new line.
-const TOUR_OPTIONS = [
-  { key: "screenshot", labelKey: "flagScreenshot", descKey: "tourOptScreenshot" },
-  { key: "colorPicker", labelKey: "flagColorPicker", descKey: "tourOptPicker" },
-  { key: "ocr", labelKey: "flagOcr", descKey: "tourOptOcr" },
-  { key: "voice", labelKey: "flagVoice", descKey: "tourOptVoice" },
+// Step 5's table — a data structure, not markup, so a later feature is one new
+// row. Each row names the flag it switches, the text describing it, and the
+// help article it points at (ui/help.js, matched by `id`).
+const TOUR_FEATURES = [
+  { flagKey: "screenshot", labelKey: "flagScreenshot", textKey: "tourOptScreenshot", helpAnchor: "screenshotEditor" },
+  { flagKey: "ocr", labelKey: "flagOcr", textKey: "tourOptOcr", helpAnchor: "ocr" },
+  { flagKey: "screenRecord", labelKey: "flagScreenRecord", textKey: "tourOptRecord", helpAnchor: "screenRecording" },
+  { flagKey: "voice", labelKey: "flagVoice", textKey: "tourOptVoice", helpAnchor: "voiceDictation" },
+  { flagKey: "colorPicker", labelKey: "flagColorPicker", textKey: "tourOptPicker", helpAnchor: "colorPicker" },
+];
+
+// Step 5's second section: three things already decided on first launch, shown
+// read-only except a plain switch flip. Not feature flags -- real settings with
+// their own invoke commands, so each row carries its own live-write function.
+const TOUR_SETUP = [
+  { key: "autostart", labelKey: "autostart", textKey: "tourSetAutostart",
+    get: () => settings.autostart === true,
+    setLive: (v) => tourSetSettingLive("set_autostart", "autostart", v) },
+  { key: "autoUpdate", labelKey: "autoUpdate", textKey: "tourSetUpdate",
+    get: () => settings.auto_update !== false,
+    setLive: (v) => tourSetSettingLive("set_auto_update", "auto_update", v) },
 ];
 
 let tourStep = 0;
 let tourFirstRun = false; // draft-buffered (true) vs. live-writing (false) step 5
-let tourDraft = {}; // key -> bool, only meaningful while tourFirstRun is true
+let tourDraft = {}; // flagKey -> bool, only meaningful while tourFirstRun is true
+let tourSetupDraft = {}; // TOUR_SETUP key -> bool, only meaningful while tourFirstRun is true
+let tourSetupInitial = {}; // snapshot of tourSetupDraft at open, to know what actually changed
 
 // Shared by both step-5 modes' "write it now" path: identical to flagRow()'s own
 // change handler (minus the promptSync confirmation, which none of these three need).
@@ -20691,6 +20906,12 @@ async function tourSetFlagLive(key, enabled) {
   settings.ui_flags = { ...(settings.ui_flags || {}), [key]: enabled };
   try { await invoke("set_ui_flag", { key, enabled }); } catch (err) { errToast(err); }
   applyFlags();
+}
+
+// Live-write for a TOUR_SETUP row -- these are real settings fields (autostart,
+// auto_update), each with its own invoke command, not ui_flags.
+async function tourSetSettingLive(cmd, field, enabled) {
+  try { await invoke(cmd, { enabled }); settings[field] = enabled; } catch (err) { errToast(err); }
 }
 
 function renderTourDrawingStep(step) {
@@ -20711,10 +20932,30 @@ function renderTourDrawingStep(step) {
   return wrap;
 }
 
+// Small "?" button next to a feature row, opening the in-app help at the
+// article matching that row's helpAnchor. Lives inside the row's own <label>
+// (same trick as the expert menu's per-row reset button, e.g. valScreenshotDir):
+// stopPropagation keeps the click from also toggling the row's switch.
+function tourHelpButton(anchor) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "icon-btn tour-help-btn";
+  btn.title = t("tourHelpBtn");
+  btn.setAttribute("aria-label", t("tourHelpBtn"));
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1a5 5 0 0 0-1 9.9V12h2v-1.1A5 5 0 0 0 8 1zm0 12.5a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2z"/></svg>';
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeTour();
+    openHelpAt(anchor);
+  });
+  return btn;
+}
+
 function renderTourOptionsStep() {
   const wrap = document.createElement("div");
   wrap.className = "tour-options";
-  for (const opt of TOUR_OPTIONS) {
+  for (const opt of TOUR_FEATURES) {
     const row = document.createElement("label");
     row.className = "field switch-field tour-opt-row";
     const label = document.createElement("span");
@@ -20723,20 +20964,20 @@ function renderTourOptionsStep() {
     name.textContent = t(opt.labelKey);
     const desc = document.createElement("span");
     desc.className = "tour-opt-desc";
-    desc.textContent = t(opt.descKey);
+    desc.textContent = t(opt.textKey);
     label.append(name, desc);
     const note = document.createElement("span");
     note.className = "tour-opt-default";
-    note.textContent = shipsOn(opt.key) ? t("tourDefaultOn") : t("tourDefaultOff");
+    note.textContent = shipsOn(opt.flagKey) ? t("tourDefaultOn") : t("tourDefaultOff");
     const input = document.createElement("input");
     input.type = "checkbox";
     input.className = "switch";
-    input.checked = tourFirstRun ? tourDraft[opt.key] : flagState(opt.key);
+    input.checked = tourFirstRun ? tourDraft[opt.flagKey] : flagState(opt.flagKey);
     input.addEventListener("change", () => {
-      if (tourFirstRun) tourDraft[opt.key] = input.checked;
-      else tourSetFlagLive(opt.key, input.checked);
+      if (tourFirstRun) tourDraft[opt.flagKey] = input.checked;
+      else tourSetFlagLive(opt.flagKey, input.checked);
     });
-    row.append(label, note, input);
+    row.append(label, tourHelpButton(opt.helpAnchor), note, input);
     wrap.appendChild(row);
   }
   const restore = document.createElement("button");
@@ -20745,18 +20986,81 @@ function renderTourOptionsStep() {
   restore.textContent = t("tourRestoreDefaults");
   restore.addEventListener("click", async () => {
     if (tourFirstRun) {
-      tourDraft = Object.fromEntries(TOUR_OPTIONS.map((o) => [o.key, shipsOn(o.key)]));
+      tourDraft = Object.fromEntries(TOUR_FEATURES.map((o) => [o.flagKey, shipsOn(o.flagKey)]));
     } else {
-      for (const opt of TOUR_OPTIONS) await tourSetFlagLive(opt.key, shipsOn(opt.key));
+      for (const opt of TOUR_FEATURES) await tourSetFlagLive(opt.flagKey, shipsOn(opt.flagKey));
     }
     renderTourStep(); // reflect the reset switches (and re-focus Next)
   });
   wrap.appendChild(restore);
+  wrap.appendChild(renderTourSetupSection());
   const foot = document.createElement("p");
   foot.className = "hint tour-options-foot";
   foot.textContent = t("tourFooterNote");
   wrap.appendChild(foot);
   return wrap;
+}
+
+// The second section of step 5: three things already decided on first launch.
+// Autostart and the update check are plain switches sharing the feature rows'
+// buffering; the data folder is read-only here on purpose -- moving it is a
+// multi-step flow of its own, out of place inside the tour.
+function renderTourSetupSection() {
+  const section = document.createElement("div");
+  section.className = "tour-setup";
+  const heading = document.createElement("div");
+  heading.className = "tour-setup-heading";
+  heading.textContent = t("tourSetupHeading");
+  section.appendChild(heading);
+  // Autostart and the update check side by side -- two switches sharing one
+  // row's height instead of two, the difference that keeps step 5 within the
+  // measured min-height budget every other step already fits.
+  const pair = document.createElement("div");
+  pair.className = "tour-setup-pair";
+  for (const opt of TOUR_SETUP) {
+    const row = document.createElement("label");
+    row.className = "field switch-field tour-setup-row";
+    const label = document.createElement("span");
+    label.className = "tour-opt-label";
+    const name = document.createElement("b");
+    name.textContent = t(opt.labelKey);
+    const desc = document.createElement("span");
+    desc.className = "tour-opt-desc";
+    desc.textContent = t(opt.textKey);
+    label.append(name, desc);
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.className = "switch";
+    input.checked = tourFirstRun ? tourSetupDraft[opt.key] : opt.get();
+    input.addEventListener("change", () => {
+      if (tourFirstRun) tourSetupDraft[opt.key] = input.checked;
+      else opt.setLive(input.checked);
+    });
+    row.append(label, input);
+    pair.appendChild(row);
+  }
+  section.appendChild(pair);
+  const dataRow = document.createElement("div");
+  dataRow.className = "field tour-setup-row tour-setup-datadir";
+  const dataLabel = document.createElement("span");
+  dataLabel.className = "tour-opt-label";
+  const dataName = document.createElement("b");
+  dataName.textContent = t("tourSetDataDir");
+  const dataPath = document.createElement("span");
+  dataPath.className = "tour-opt-desc";
+  dataPath.textContent = currentDataDir;
+  dataLabel.append(dataName, dataPath);
+  const dataChange = document.createElement("button");
+  dataChange.type = "button";
+  dataChange.className = "ghost-btn tour-setup-change-btn";
+  dataChange.textContent = t("tourSetDataDirChange");
+  dataChange.addEventListener("click", () => {
+    closeTour();
+    jumpToExpertSetting("dataDir", "paths");
+  });
+  dataRow.append(dataLabel, dataChange);
+  section.appendChild(dataRow);
+  return section;
 }
 
 function renderTourStep() {
@@ -20792,16 +21096,6 @@ function tourGoto(i) {
 // the container instead of escaping to the page behind it. Declared at top
 // level so both bind()'s screenshot-editor code and the tour code below can
 // call it without a second implementation.
-function trapTabWithin(container, e) {
-  const list = [...container.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"]), select, textarea, a[href]')]
-    .filter((el) => !el.disabled && el.offsetParent !== null);
-  if (!list.length) return;
-  const first = list[0], last = list[list.length - 1];
-  if (!container.contains(document.activeElement)) { e.preventDefault(); first.focus(); return; }
-  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-}
-
 function tourKeydown(e) {
   // A confirmation dialog on top (tourAskSkip) owns every key while it is open --
   // otherwise Escape would close both it and the tour underneath on one press.
@@ -20840,7 +21134,9 @@ function tourMeasureMaxStepHeight() {
 async function openTour({ firstRun }) {
   tourFirstRun = firstRun;
   tourStep = 0;
-  tourDraft = firstRun ? Object.fromEntries(TOUR_OPTIONS.map((o) => [o.key, shipsOn(o.key)])) : {};
+  tourDraft = firstRun ? Object.fromEntries(TOUR_FEATURES.map((o) => [o.flagKey, shipsOn(o.flagKey)])) : {};
+  tourSetupDraft = firstRun ? Object.fromEntries(TOUR_SETUP.map((o) => [o.key, o.get()])) : {};
+  tourSetupInitial = firstRun ? { ...tourSetupDraft } : {};
   $("tour-modal").classList.remove("hidden");
   const maxH = tourMeasureMaxStepHeight();
   document.documentElement.style.setProperty("--tour-step-min-h", `${Math.ceil(maxH)}px`);
@@ -20874,11 +21170,16 @@ async function tourAskSkip() {
 
 // Only the switches that differ from the shipped default get written — an
 // untouched draft leaves ui_flags exactly as it was, so a later default change
-// still reaches this install.
+// still reaches this install. The setup rows have no shipped default to compare
+// against (autostart/auto_update are real settings) — they compare against
+// whatever they actually were when the tour opened instead.
 async function tourFinishDraft() {
-  for (const opt of TOUR_OPTIONS) {
-    const shipped = shipsOn(opt.key);
-    if (tourDraft[opt.key] !== shipped) await tourSetFlagLive(opt.key, tourDraft[opt.key]);
+  for (const opt of TOUR_FEATURES) {
+    const shipped = shipsOn(opt.flagKey);
+    if (tourDraft[opt.flagKey] !== shipped) await tourSetFlagLive(opt.flagKey, tourDraft[opt.flagKey]);
+  }
+  for (const opt of TOUR_SETUP) {
+    if (tourSetupDraft[opt.key] !== tourSetupInitial[opt.key]) await opt.setLive(tourSetupDraft[opt.key]);
   }
 }
 
@@ -21084,6 +21385,15 @@ async function init() {
     // Microphone list for recMicDevice -- fetched once, cached, "Automatic"
     // (system default) is always prepended separately (see EXPERT_DROPDOWNS.recMicDevice above).
     invoke("list_mic_devices").then((devs) => { micDevicesCache = devs || []; }).catch(() => {});
+    // Camera list for EXPERT_DROPDOWNS.cameraDevice above -- a browser API
+    // call, not a Rust round trip, and safe to make from this window: listing
+    // devices never opens a stream, so no camera light and no permission
+    // prompt happens here.
+    navigator.mediaDevices?.enumerateDevices?.()
+      .then((devs) => {
+        cameraDevicesCache = devs.filter((d) => d.kind === "videoinput").map((d, i) => ({ id: d.deviceId, name: d.label || `${t("cameraMenuItem")} ${i + 1}` }));
+      })
+      .catch(() => {});
     invoke("voice_languages").then((langs) => { voiceLangsCache = langs || []; }).catch(() => {});
     // Re-applies flags once this resolves so no-voice-engine reflects reality
     // (the optimistic default above assumes support until this says otherwise).

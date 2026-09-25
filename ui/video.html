@@ -16,6 +16,9 @@
   <div class="ve-titlebar" data-tauri-drag-region>
     <span class="ve-titlebar-label" data-i18n="veTitle">Video editor</span>
     <span id="ve-file" class="ve-file"></span>
+    <button id="ve-shortcuts" class="icon-btn" type="button" data-tauri-drag-region="false" data-i18n-title="shortcutsTitle" data-i18n-aria="shortcutsTitle">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M9.2 9.5a2.8 2.8 0 1 1 3.9 2.6c-.9.4-1.4 1-1.4 2.1"/><circle cx="12" cy="16.6" r="1" fill="currentColor" stroke="none"/></svg>
+    </button>
     <button id="ve-close" class="icon-btn ve-close" type="button" data-tauri-drag-region="false" data-i18n-title="close" data-i18n-aria="close">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/></svg>
     </button>
@@ -45,14 +48,14 @@
         <!-- Shown only once actually zoomed in (applyPreviewTransform
              toggles "hidden"); scroll/drag on the picture itself zoom and pan it. -->
         <div id="ve-preview-zoom" class="ve-preview-zoom hidden">
-          <button id="ve-preview-zoom-out" class="icon-btn" type="button" data-i18n-title="vePreviewZoomOut" data-i18n-aria="vePreviewZoomOut">
+          <button id="ve-preview-zoom-out" class="icon-btn" type="button" data-i18n-title="vePreviewZoomOut" data-i18n-aria="vePreviewZoomOut" data-shortcut="vePreviewZoomOut">
             <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 21l-4.3-4.3M8 11h6"/></svg>
           </button>
           <span id="ve-preview-zoom-val">100%</span>
-          <button id="ve-preview-zoom-in" class="icon-btn" type="button" data-i18n-title="vePreviewZoomIn" data-i18n-aria="vePreviewZoomIn">
+          <button id="ve-preview-zoom-in" class="icon-btn" type="button" data-i18n-title="vePreviewZoomIn" data-i18n-aria="vePreviewZoomIn" data-shortcut="vePreviewZoomIn">
             <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg>
           </button>
-          <button id="ve-preview-zoom-reset" class="icon-btn" type="button" data-i18n-title="veResetZoom" data-i18n-aria="veResetZoom">
+          <button id="ve-preview-zoom-reset" class="icon-btn" type="button" data-i18n-title="veResetZoom" data-i18n-aria="veResetZoom" data-shortcut="vePreviewZoomReset">
             <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7Z"/></svg>
           </button>
         </div>
@@ -60,20 +63,20 @@
       <div id="ve-nudge-hint" class="ve-nudge-hint hidden" data-i18n="veNudgeHint"></div>
 
       <div class="ve-transport">
-        <button id="ve-to-start" class="icon-btn" type="button" data-i18n-title="veToStart" data-i18n-aria="veToStart">
+        <button id="ve-to-start" class="icon-btn" type="button" data-i18n-title="veToStart" data-i18n-aria="veToStart" data-shortcut="veSeekStart">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6 5h2v14H6V5Zm12 0v14l-9-7 9-7Z"/></svg>
         </button>
-        <button id="ve-prev-frame" class="icon-btn" type="button" data-i18n-title="vePrevFrame" data-i18n-aria="vePrevFrame">
+        <button id="ve-prev-frame" class="icon-btn" type="button" data-i18n-title="vePrevFrame" data-i18n-aria="vePrevFrame" data-shortcut="veStepPrev">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M15 5v14l-9-7 9-7Zm3 0h2v14h-2V5Z"/></svg>
         </button>
-        <button id="ve-play" class="icon-btn ve-play" type="button" data-i18n-title="vePlay" data-i18n-aria="vePlay">
+        <button id="ve-play" class="icon-btn ve-play" type="button" data-i18n-title="vePlay" data-i18n-aria="vePlay" data-shortcut="vePlayPause">
           <svg id="ve-play-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7L8 5Z"/></svg>
           <svg id="ve-pause-icon" class="hidden" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M8 5h3v14H8V5Zm5 0h3v14h-3V5Z"/></svg>
         </button>
-        <button id="ve-next-frame" class="icon-btn" type="button" data-i18n-title="veNextFrame" data-i18n-aria="veNextFrame">
+        <button id="ve-next-frame" class="icon-btn" type="button" data-i18n-title="veNextFrame" data-i18n-aria="veNextFrame" data-shortcut="veStepNext">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M9 5l9 7-9 7V5Zm-5 0h2v14H4V5Z"/></svg>
         </button>
-        <button id="ve-to-end" class="icon-btn" type="button" data-i18n-title="veToEnd" data-i18n-aria="veToEnd">
+        <button id="ve-to-end" class="icon-btn" type="button" data-i18n-title="veToEnd" data-i18n-aria="veToEnd" data-shortcut="veSeekEnd">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M16 5h2v14h-2V5ZM6 5l9 7-9 7V5Z"/></svg>
         </button>
 
@@ -126,26 +129,26 @@
       </div>
 
       <div class="ve-tools">
-        <button id="ve-mark-in" class="ghost-btn" type="button" data-i18n="veMarkIn" data-i18n-title="veMarkInTip">Mark in</button>
-        <button id="ve-mark-out" class="ghost-btn" type="button" data-i18n="veMarkOut" data-i18n-title="veMarkOutTip">Mark out</button>
+        <button id="ve-mark-in" class="ghost-btn" type="button" data-i18n="veMarkIn" data-i18n-title="veMarkInTip" data-shortcut="veMarkIn">Mark in</button>
+        <button id="ve-mark-out" class="ghost-btn" type="button" data-i18n="veMarkOut" data-i18n-title="veMarkOutTip" data-shortcut="veMarkOut">Mark out</button>
         <button id="ve-trim-set" class="ghost-btn" type="button" data-i18n="veTrimToSel" data-i18n-title="veTrimToSelTip">Trim to selection</button>
-        <button id="ve-cut-add" class="ghost-btn" type="button" data-i18n="veCutSel" data-i18n-title="veCutSelTip">Cut out selection</button>
+        <button id="ve-cut-add" class="ghost-btn" type="button" data-i18n="veCutSel" data-i18n-title="veCutSelTip" data-shortcut="veCutSel">Cut out selection</button>
         <button id="ve-sel-clear" class="ghost-btn" type="button" data-i18n="veSelClear" data-i18n-title="veSelClearTip">Clear selection</button>
         <button id="ve-still" class="ghost-btn" type="button" data-i18n="veStill" data-i18n-title="veStillTip">Export frame</button>
 
         <span class="ve-spacer"></span>
 
-        <button id="ve-zoom-out" class="icon-btn" type="button" data-i18n-title="veZoomOut" data-i18n-aria="veZoomOut">
+        <button id="ve-zoom-out" class="icon-btn" type="button" data-i18n-title="veZoomOut" data-i18n-aria="veZoomOut" data-shortcut="veTimelineZoomOut">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 21l-4.3-4.3M8 11h6"/></svg>
         </button>
         <span id="ve-zoom-val" class="ve-zoom-val">100%</span>
-        <button id="ve-zoom-in" class="icon-btn" type="button" data-i18n-title="veZoomIn" data-i18n-aria="veZoomIn">
+        <button id="ve-zoom-in" class="icon-btn" type="button" data-i18n-title="veZoomIn" data-i18n-aria="veZoomIn" data-shortcut="veTimelineZoomIn">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg>
         </button>
         <button id="ve-zoom-fit" class="ghost-btn" type="button" data-i18n="veZoomFit" data-i18n-title="veZoomFitTip">Fit</button>
         <span class="ve-sep" aria-hidden="true"></span>
         <span id="ve-original-badge" class="ve-original-badge hidden" data-i18n="originalBadge"></span>
-        <button id="ve-original" class="icon-btn" type="button" data-i18n-title="showOriginalTip" data-i18n-aria="showOriginal">
+        <button id="ve-original" class="icon-btn" type="button" data-i18n-title="showOriginalTip" data-i18n-aria="showOriginal" data-shortcut="veShowOriginal">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
         </button>
       </div>
@@ -189,7 +192,7 @@
               <label class="field"><span data-i18n="veCropW">Width</span><input id="ve-crop-w" class="modal-input" type="number" min="2" step="2" /></label>
               <label class="field"><span data-i18n="veCropH">Height</span><input id="ve-crop-h" class="modal-input" type="number" min="2" step="2" /></label>
             </div>
-            <p class="modal-hint" data-i18n="veCropEvenHint">Width and height always snap to even numbers — video encoders require it.</p>
+            <p class="modal-hint" data-i18n="veCropEvenHint">Width and height always snap to even numbers, since video encoders require it.</p>
             <button id="ve-crop-reset" class="ghost-btn ve-wide" type="button" data-i18n="veCropReset">Reset to full frame</button>
           </div>
 
@@ -229,7 +232,7 @@
               <input id="ve-scale-lock" class="switch" type="checkbox" checked />
             </label>
           </div>
-          <p class="modal-hint" data-i18n="veCropEvenHint">Width and height always snap to even numbers — video encoders require it.</p>
+          <p class="modal-hint" data-i18n="veCropEvenHint">Width and height always snap to even numbers, since video encoders require it.</p>
           <div id="ve-scale-presets" class="ve-steps" role="group" data-i18n-aria="veScaleGroup"></div>
         </section>
 
@@ -320,10 +323,10 @@
       <div class="ve-ops">
         <div class="ve-ops-head">
           <span class="ve-h ve-h-flat" data-i18n="veOps">Operations</span>
-          <button id="ve-undo" class="icon-btn" type="button" data-i18n-title="veUndoTip" data-i18n-aria="undo" disabled>
+          <button id="ve-undo" class="icon-btn" type="button" data-i18n-title="veUndoTip" data-i18n-aria="undo" data-shortcut="veUndo" disabled>
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M7 7 3 11l4 4M3 11h11a6 6 0 0 1 0 12h-2"/></svg>
           </button>
-          <button id="ve-redo" class="icon-btn" type="button" data-i18n-title="veRedoTip" data-i18n-aria="redo" disabled>
+          <button id="ve-redo" class="icon-btn" type="button" data-i18n-title="veRedoTip" data-i18n-aria="redo" data-shortcut="veRedo" disabled>
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M17 7l4 4-4 4M21 11H10a6 6 0 0 0 0 12h2"/></svg>
           </button>
         </div>
@@ -345,6 +348,22 @@
         <button id="ve-confirm-third" class="ghost-btn danger-confirm hidden" type="button"></button>
         <button id="ve-confirm-ok" class="primary-btn" type="button"></button>
       </div>
+    </div>
+  </div>
+
+  <!-- Same shape as the main window's shortcuts overview; this window cannot
+       reach that one either, so it carries its own with identical markup. -->
+  <div id="shortcuts-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal modal-narrow">
+      <div class="modal-titlebar">
+        <h2 class="modal-title" data-i18n="shortcutsTitle">Keyboard shortcuts</h2>
+        <button id="shortcuts-modal-close" class="icon-btn modal-x" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">
+            <path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z"/>
+          </svg>
+        </button>
+      </div>
+      <div id="shortcuts-modal-list" class="shortcuts-list"></div>
     </div>
   </div>
 

@@ -418,6 +418,7 @@ body.noflag-showJournal #journal-btn { display: none; }
 .view-group-item { display: flex; align-items: center; gap: 8px; }
 /* Same list-of-views look as the group popover, same row cap. */
 .views-pop { min-width: 210px; z-index: 90; max-height: calc(var(--view-group-rows, 8) * 34px + 12px); overflow-y: auto; }
+.move-to-folder-pop { min-width: 180px; z-index: 90; max-height: 280px; overflow-y: auto; }
 .view-group-item-name {
   flex: 1 1 auto;
   display: flex;
@@ -4486,13 +4487,35 @@ body.drag-over::after {
 .tour-art svg { display: block; width: 100%; height: 100%; }
 .tour-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .tour-text p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--fg); }
-.tour-options { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.tour-options { display: flex; flex-direction: column; gap: 3px; width: 100%; }
 .tour-opt-label { display: flex; flex-direction: column; gap: 1px; flex: 1; }
 .tour-opt-label b { font-size: 13px; font-weight: 600; }
 .tour-opt-desc { font-size: 11px; color: var(--muted); font-weight: 400; line-height: 1.3; }
 .tour-opt-default { font-size: 11px; color: var(--muted); flex: 0 0 auto; white-space: nowrap; }
-.tour-restore-btn { align-self: flex-start; padding: 4px 10px; font-size: 12px; }
-.tour-options-foot { margin: 2px 0 0; font-size: 11px; }
+/* Narrower gap than the base .switch-field's 12px -- a fourth row child (the
+   help button) must not steal enough width from the label to push its text
+   onto an extra line, which would fight the measured-min-height mechanism. */
+.tour-opt-row { gap: 6px; }
+.tour-help-btn { padding: 2px; flex: 0 0 auto; }
+.tour-help-btn > svg { width: 12px; height: 12px; }
+.tour-restore-btn { align-self: flex-start; padding: 3px 9px; font-size: 11px; }
+/* Second step-5 section: what is already decided on first launch. Rows
+   stay a notch tighter than the feature rows above -- three more lines must
+   fit under them without pushing the card into scrolling. */
+.tour-setup { display: flex; flex-direction: column; gap: 0; width: 100%; margin-top: 0; }
+.tour-setup-heading { font-size: 11px; font-weight: 600; color: var(--muted); margin: 0 0 1px; line-height: 1.15; }
+/* Autostart and the update check share one row's height instead of two. */
+.tour-setup-pair { display: flex; gap: 14px; align-items: flex-start; }
+.tour-setup-pair .tour-setup-row { flex: 1 1 0; min-width: 0; }
+.tour-setup-row { padding: 0; }
+.tour-setup-row .switch { zoom: 0.65; }
+.tour-setup-row .tour-opt-label { gap: 0; }
+.tour-setup-row .tour-opt-label b { font-size: 11.5px; line-height: 1.1; }
+.tour-setup-row .tour-opt-desc { font-size: 10px; line-height: 1.05; }
+.tour-setup-datadir { align-items: center; cursor: default; gap: 8px; }
+.tour-setup-datadir .tour-opt-desc { overflow-wrap: anywhere; }
+.tour-setup-change-btn { flex: 0 0 auto; padding: 2px 8px; font-size: 10.5px; }
+.tour-options-foot { margin: 1px 0 0; font-size: 11px; }
 .tour-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; }
 .tour-dots { display: flex; align-items: center; gap: 6px; }
 .tour-dot { appearance: none; border: none; background: none; padding: 2px; font-size: 14px; line-height: 1; color: var(--accent); cursor: pointer; opacity: 0.5; }
@@ -5139,6 +5162,13 @@ button.tag-chip:hover { border-color: var(--accent); }
    apart, not the two buttons apart from each other. */
 .import-preview-actions { flex: 0 0 auto; display: flex; gap: 6px; }
 .import-preview-actions .ghost-btn { padding: 3px 8px; font-size: 12px; }
+
+/* Keyboard shortcuts overview -- one row per action, same list shape as the
+   import preview above. */
+.shortcuts-list { display: flex; flex-direction: column; gap: 2px; max-height: 360px; overflow-y: auto; min-height: 0; }
+.shortcuts-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 6px; border-radius: 6px; }
+.shortcuts-row-desc { flex: 1; min-width: 0; font-size: 13px; }
+.shortcuts-row-keys { flex: 0 0 auto; font-size: 12px; color: var(--muted); font-family: monospace; }
 /* Select all/none above a checkbox-per-row preview (the folder import). */
 .import-preview-list-head { display: flex; gap: 8px; margin-bottom: 4px; }
 /* Batch export dialog's chosen-destination line; video.css has its own copy
@@ -5245,3 +5275,16 @@ body.noflag-customThemes .theme-edit-btn { display: none; }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pop-in { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* Screen-reader-only text: present for assistive tech, invisible on screen. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

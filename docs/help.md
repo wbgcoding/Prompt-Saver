@@ -1,7 +1,7 @@
 # Help
 
 The same content shown in the app's own **Help** menu (Settings → Help), kept here so
-it's readable without installing anything. English and German only — the in-app
+it's readable without installing anything. English and German only. The in-app
 version follows the same rule and falls back to English in every other language.
 
 ## Basics
@@ -10,14 +10,14 @@ version follows the same rule and falls back to English in every other language.
 
 A tile is a saved item on the grid. Double-click an empty grid cell (or the plus
 button) to create one, click any tile to copy it. Three sample tiles (an email with
-placeholders, an image, and a Markdown template) are already there on first launch —
+placeholders, an image, and a Markdown template) are already there on first launch;
 a button above the grid removes them with one click once they're no longer needed.
 
 ### Introduction tour
 
 A five-step walkthrough shown once on first launch, right after the sample tiles
 appear. The last step offers to switch on the screenshot editor, colour picker,
-OCR or voice dictation right there — nothing is written until the tour actually
+OCR or voice dictation right there. Nothing is written until the tour actually
 finishes. Escape or "Skip" asks to confirm first instead of closing right away.
 Reopen it anytime from the expert menu; reopened this way, a switch on that
 last step takes effect immediately instead of waiting for a Finish click.
@@ -27,23 +27,23 @@ last step takes effect immediately instead of waiting for a Finish click.
 Beyond plain text, a tile can carry an attached file, a screenshot, or a picked
 screen colour.
 
-- File attach — clicking the tile copies the file itself, not text
-- Screenshot tool — capture a region or a whole window straight into a new tile
-- Colour picker — pick any on-screen pixel, copies as hex/RGB/HSL
-- Drag and drop — drop a file or image straight onto the grid
+- File attach: clicking the tile copies the file itself, not text
+- Screenshot tool: capture a region or a whole window straight into a new tile
+- Colour picker: pick any on-screen pixel, copies as hex/RGB/HSL
+- Drag and drop: drop a file or image straight onto the grid
 
 ### Variables & placeholders
 
 Placeholder markup inside a tile's text opens a small popup asking for each value
 before the finished text reaches the clipboard.
 
-- Dynamic placeholders — `{#{/date\}#}`, `{#{/time\}#}`, `{#{/clipboard\}#}`
+- Dynamic placeholders: `{#{/date\}#}`, `{#{/time\}#}`, `{#{/clipboard\}#}`
   fill themselves in, no popup; their own slash-fenced syntax (not the plain
-  `{#{date}#}` form) is what triggers it — insert them from the chip buttons
+  `{#{date}#}` form) is what triggers it; insert them from the chip buttons
   under the editor's text box rather than typing them by hand
-- Choice placeholders — a dropdown of preset values instead of free text
-- Remember choices — the popup pre-fills the last answer for that tile
-- Popup in its own window — useful with the floating buttons, where the main
+- Choice placeholders: a dropdown of preset values instead of free text
+- Remember choices: the popup pre-fills the last answer for that tile
+- Popup in its own window: useful with the floating buttons, where the main
   window may be hidden
 - Fixed values (off by default, expert menu): a maintained list of name and
   value pairs the popup suggests for a matching placeholder, one step below a
@@ -58,12 +58,12 @@ before the finished text reaches the clipboard.
 ### The editor
 
 The editor is a plain text box by default; a few opt-in features (**Markdown
-preview**, **private notes** — both off by default) add structure and history to it:
+preview**, **private notes**: both off by default) add structure and history to it:
 a rendered Markdown preview with syntax-highlighted code blocks, a full version
 history, and a private note field never copied or exported with the text.
 
 For a file/PDF/video tile that also carries its own stored preview picture, the
-image shown above the file row is only that tile's preview — the attached file
+image shown above the file row is only that tile's preview; the attached file
 below it is a separate thing, and copying the tile puts the file's path on the
 clipboard, never the picture.
 
@@ -80,7 +80,7 @@ still there the next time the app starts, it asks once whether to restore it.
 
 ### The grid
 
-The main window's grid is a free-placement board of tiles — up to 20×20 cells by
+The main window's grid is a free-placement board of tiles, up to 20×20 cells by
 default (adjustable to 200×200 in the expert menu), with its own layout per view.
 Drag a tile to any empty cell, or drop it on an occupied one to swap the two; the
 grid never rearranges itself on its own. Drop a tile on a view tab above the grid
@@ -91,7 +91,7 @@ moment, so the drop can target a view inside.
 ### Screenshot tool
 
 Captures part or all of the screen straight into a new tile. Drag a region, or
-click a window to capture it whole — even a normally-protected one like the Task
+click a window to capture it whole, even a normally-protected one like the Task
 Manager. The app's own windows are hidden for the moment of capture so they never
 end up in the shot; the confirmation dialog then offers saving it as a tile, saving
 it as a file, or leaving it on the clipboard.
@@ -99,7 +99,7 @@ it as a file, or leaving it on the clipboard.
 Before that dialog, an editor opens on the capture (on by default): crop, a
 freehand pen and highlighter marker, straight lines and arrows, rectangles and
 ellipses, text labels, numbered step markers, a pixelate tool for blurring out
-sensitive details, and a spotlight that dims everything outside a chosen area —
+sensitive details, and a spotlight that dims everything outside a chosen area,
 with undo/redo. Zoom in for pixel-precise work and pan around with the Hand
 tool (or hold Space, or the middle mouse button) while zoomed in. Resize
 changes the image's actual pixel size (not just the view): set a width,
@@ -122,10 +122,10 @@ button next to the screenshot tool. MP4 (H.264) is always what gets written
 while recording; three quality steps trade file size for detail before you
 start:
 
-- **Small** — a compact bitrate (4000 kbps by default), for quick clips.
-- **High** (the default) — a higher bitrate (12000 kbps by default), for a
+- **Small**: a compact bitrate (4000 kbps by default), for quick clips.
+- **High** (the default): a higher bitrate (12000 kbps by default), for a
   sharper picture.
-- **Lossless** — recorded at the same native bitrate as your current step,
+- **Lossless**: recorded at the same native bitrate as your current step,
   then automatically re-encoded losslessly once the recording stops. This can
   run into several gigabytes for longer recordings.
 
@@ -139,8 +139,8 @@ A format setting picks what the finished file ends up as: MP4 needs nothing
 further; WebM, AVI, MOV and MKV are produced by converting the MP4 afterward,
 keeping its audio. GIF, animated WebP and APNG are converted the same way but
 capped at 30 seconds and without audio. Converting to anything other than
-MP4, or to lossless MP4, needs ffmpeg — a separate, GPL-licensed tool the app
-does not ship with its portable build. If it is missing, the format and
+MP4, or to lossless MP4, needs ffmpeg (a separate, GPL-licensed tool the app
+does not ship with its portable build). If it is missing, the format and
 quality controls say so directly and offer to fetch it (a one-time download,
 only ever with your consent); an installed build already carries it and never
 needs to download anything. A failed or cancelled conversion always leaves
@@ -153,7 +153,7 @@ Clicking the record button opens the same frozen-desktop overlay a screenshot
 uses: click a window, drag a region, or click empty desktop for the whole
 screen. An optional countdown toast then counts down before capture actually
 starts (3 seconds by default, adjustable in the expert menu, 0 turns it off).
-A small floating control bar then follows the recording — a red dot, elapsed
+A small floating control bar then follows the recording: a red dot, elapsed
 time, live file size, Pause/Resume, Stop and a discard (cancel) button. It
 follows a moved recorded window and is itself excluded from the recording no
 matter what, even if the recording happens to include the monitor the bar
@@ -161,11 +161,11 @@ sits on.
 
 System audio and microphone audio (pick a device in the expert menu) both
 record on by default, each into its own track. The microphone track is
-captured but not mixed in audibly — it only becomes part of what you hear
+captured but not mixed in audibly; it only becomes part of what you hear
 once you bring it in yourself, from the video editor below. Turn microphone
 capture off in the expert menu if you would rather it never records at all.
 If the microphone is unplugged mid-recording, the picture and system audio
-keep going — the control bar's microphone icon switches to a "lost" state
+keep going; the control bar's microphone icon switches to a "lost" state
 instead of stopping anything.
 
 A running recording can also be stopped or paused/resumed from anywhere via
@@ -175,7 +175,7 @@ recording is actually running) and from the tray menu.
 Stopping leads into a dialog offering Save, Save as…, Copy, Edit and Discard.
 Save and Copy use one shared recording folder (changeable here or in the
 expert menu); Edit opens the clip in the video editor below without deciding
-its fate yet — closing that dialog afterward without ever saving or copying
+its fate yet; closing that dialog afterward without ever saving or copying
 still discards the file, exactly as if Edit had never been clicked. If the
 chosen format or quality step needs converting the MP4 first, the dialog
 shows a short "Converting…" status instead of a preview (click it to cancel);
@@ -184,8 +184,8 @@ original recording rather than losing it. If the window being recorded
 closes on its own, the recording stops automatically and keeps whatever was
 captured up to that point.
 
-A recording that never reached its own stop path — a crash, a forced
-shutdown — leaves behind a file with no usable video track. The app checks
+A recording that never reached its own stop path (a crash, a forced
+shutdown) leaves behind a file with no usable video track. The app checks
 for these in the background and removes them once they clear a short grace
 period, so a just-stopped recording that is still finalising is never
 touched; both the grace period and the check interval are adjustable in the
@@ -201,27 +201,42 @@ menu.
 An optional keys overlay (off by default, in the expert menu) records which
 keys are pressed anywhere on the screen while a recording runs, so a tutorial
 can show them afterward with the video editor's own "Keys" overlay. Only key
-identifiers and their timestamps are ever recorded, never any text — a
-focused password field is skipped for as long as it stays focused and shows
+identifiers and their timestamps are ever recorded, never any text;
+a focused password field is skipped for as long as it stays focused and shows
 as a gap instead. In text fields only shortcuts are shown, like Ctrl+C or
 Enter. What you type stays out of the video. How long a released key stays
 visible is adjustable in the expert menu.
+
+An optional camera recording (off by default, in the expert menu) adds a
+"Record camera" entry to the record button's right-click menu. It opens its
+own small window with a live preview, its own Start/Pause/Stop, an audio
+source, a resolution choice and a target folder: the same controls the
+screen recorder itself has. A camera-shaped window with no visible preview
+or indicator never happens: the window itself, or its status dot in the
+recording bar, always shows while the camera is live. It records to its own
+file, never burned into a screen recording, so either can be repositioned
+later. If a screen recording is running at the same time, both share the
+same start point; the video editor then opens on the screen recording with
+the camera laid on top as an aligned overlay once both are finished. With no
+screen recording running, the camera take is its own zero point and opens on
+its own. Default camera, resolution and frame rate are all adjustable in the
+expert menu.
 
 ### Video editor
 
 On by default, reachable from a recording's own result dialog (the Edit
 button above) or from any video prompt's right-click menu ("Edit video"). It
 opens the clip in its own window with a live preview and no processing until
-you actually export — trim and cut (frame-exact, keeps the original quality
+you actually export: trim and cut (frame-exact, keeps the original quality
 when nothing else changes), crop, change speed, fade in/out, resize (typed
 width/height or a percentage, an aspect-ratio lock, and quick presets from
-4K down to 25% — a preset never enlarges past the source, but the percent
+4K down to 25%; a preset never enlarges past the source, but the percent
 field and free typing can, for upscaling on purpose), and overlay images,
 freeze-frames, text, pixelation, a spotlight or a keys overlay (four
 keyboard-layout presets plus a free selection of keys, filled from a
 recording's own key data if it captured any) anywhere on the timeline. A
 filmstrip and waveform give you a zoomable overview to navigate by. The preview itself also zooms (scroll wheel, up to 8×) and pans by
-dragging — the middle mouse button always, the left button once zoomed in —
+dragging (the middle mouse button always, the left button once zoomed in)
 for placing a small overlay precisely on a large recording. Exporting
 re-encodes once, with a few ready-made presets (unchanged
 quality, a smaller size for chat, or an animated GIF) that remember your last
@@ -231,8 +246,8 @@ GIF, WebP and APNG carry no sound at all (the source audio stays untouched in
 the original recording) and warn past ten seconds, since all three grow large
 fast. Undo/redo covers every editing step, with an adjustable limit in the
 expert menu. A failed export shows the actual reason in plain language, with
-the raw ffmpeg log reachable underneath in a closed "Technical details" row —
-never the log itself as the message. A second video can be added too — "Add
+the raw ffmpeg log reachable underneath in a closed "Technical details" row,
+never the log itself as the message. A second video can be added too: "Add
 a video" offers it either as another overlay (its own rectangle, time range
 and volume, muted by default) or as a whole extra section spliced in at the
 start, the end or the current position; each extra source is checked once
@@ -246,7 +261,7 @@ Ctrl+Y (or Ctrl+Shift+Z) undo and redo through the same button pair. In the
 screenshot editor, clicking an existing rectangle, ellipse, line or arrow
 selects it and shows the same handles as dragging one out fresh. The video
 editor keeps selecting its overlays from its own list instead, since it only
-draws an overlay's handles once that overlay is already selected — the two
+draws an overlay's handles once that overlay is already selected; the two
 toolbars stay where they are too, a bar on top for the screenshot editor and
 a side column next to the timeline for the video editor, because the
 timeline needs the room the screenshot editor doesn't.
@@ -254,7 +269,7 @@ timeline needs the room the screenshot editor doesn't.
 Right-clicking a shape (screenshot editor) or an overlay's row (video editor)
 opens a small menu to duplicate or delete it. A duplicate keeps the same
 values and time range and is offset a little so it sits next to the
-original instead of exactly on top of it — how far, in an expert setting
+original instead of exactly on top of it; how far is set in an expert setting
 shared by both editors. In the video editor, the colour, thickness, opacity
 and font size a new overlay starts with also follow whatever was last used
 for that same kind (image, frame, text, pixelation or spotlight), across
@@ -302,20 +317,20 @@ None of it touches the export.
 
 On by default. A button on the composer and in the screenshot dialog pulls the
 text out of a screenshot or an image file, entirely on this device via Windows'
-own text recognizer — nothing is uploaded or sent anywhere. The composer button
+own text recognizer; nothing is uploaded or sent anywhere. The composer button
 opens a small menu: from an image file, or from a screenshot you take right now.
-It needs a Windows language pack — see "Language packs" below for how that
+It needs a Windows language pack: see "Language packs" below for how that
 install works. Recognized text can auto-copy to the clipboard and auto-join
 wrapped lines into full sentences, both adjustable.
 
 ### Voice dictation
 
 On by default. A microphone button on the composer and in the edit dialog turns
-speech into text using Windows' own on-device recognizer — nothing is uploaded
+speech into text using Windows' own on-device recognizer; nothing is uploaded
 unless online recognition is explicitly allowed (off by default; a one-time
 dialog asks the first time it's actually needed). Click to start: the button
 turns the accent colour and pulses while listening, and its title switches from
-"Dictate" to "Stop dictating" — a second click, Escape in the field, saving the
+"Dictate" to "Stop dictating"; a second click, Escape in the field, saving the
 prompt, or closing the window all end the session the same way. Text lands at
 the cursor (or always at the end, an expert setting) and can stop itself after
 a few seconds of silence.
@@ -326,15 +341,15 @@ Windows already placed them itself: "comma", "period", "question mark",
 "open paren"/"close paren" and "percent" for punctuation, "new line", "new
 paragraph" and "tab" for layout, each glued to the word before it with no
 extra space. Saying "literal" dictates the very next word as-is, instead of
-matching it as a command — useful for actually saying "comma" out loud. The
+matching it as a command, useful for actually saying "comma" out loud. The
 word right after a period, question mark, exclamation mark or paragraph break
 is capitalized automatically. **The exact word matters**: only these specific
-command words (in the app's own language) are recognized — anything else is
+command words (in the app's own language) are recognized; anything else is
 just dictated as plain text.
 
-Like OCR, it needs a Windows language pack — see "Language packs" below, same
+Like OCR, it needs a Windows language pack: see "Language packs" below, same
 dialog either way. A global hotkey (off by default, in the expert menu) can
-start or stop a session from anywhere without bringing the window forward —
+start or stop a session from anywhere without bringing the window forward;
 the finished text goes to the clipboard, is pasted into whatever app was
 active, or lands in the composer, whichever the setting picks.
 
@@ -345,19 +360,19 @@ share one install dialog. The recognition-language dropdown offers a download
 the first time a chosen language has no pack installed; installing needs
 administrator rights, and Windows asks for them once through its own
 confirmation prompt. The dropdown's "Manage languages…" entry reopens that
-same dialog any time, listing what's installed and what's available — on most
+same dialog any time, listing what's installed and what's available; on most
 systems listing needs no special rights, but on some Windows builds it does
 too, and the dialog offers to run the listing itself with administrator
 rights instead of coming up blank; that step only lists packs, it installs
 nothing. A background check flags a pack whose version changed or that a
-Windows update silently removed, without asking to reinstall right away —
+Windows update silently removed, without asking to reinstall right away:
 "remind me later" dismisses it for a while, or the background check can be
 switched off entirely.
 
 ### Colour picker & pick history
 
 A pipette that freezes the screen, magnifies the pixel under the cursor, and copies
-it as hex, rgb, or hsl. Right-click the pipette icon to reopen the last few picks —
+it as hex, rgb, or hsl. Right-click the pipette icon to reopen the last few picks;
 the history is mirrored into settings, so it survives a restart too.
 
 ### Rotating tiles
@@ -371,12 +386,12 @@ as one text.
 | several wordings of the same prompt | rotation |
 | several different prompts, one after another | chaining |
 
-A tile can hold a list of texts instead of one — each copy serves the next entry,
+A tile can hold a list of texts instead of one: each copy serves the next entry,
 in order or shuffled without repeats, instead of always the same text. On by
 default; the per-tile switch sits under Advanced options in the editor.
 
 - A small badge counts up (like "2/5") on a tile, floating pill, or pill-folder
-  member — a grid-folder member shows only its file-type icon instead. In order
+  member; a grid-folder member shows only its file-type icon instead. In order
   mode it is the absolute position; in shuffle mode it counts draws within the
   current cycle and restarts at 1 once every entry has been shown once, rather
   than jumping to an arbitrary position
@@ -387,7 +402,7 @@ An eligible tile (2+ entries, no image/file attached) can also **auto-advance on
 paste**: switch it on with the Auto button next to the order/random control, or
 from a tile's right-click menu once both the per-tile and the app-wide switch
 allow it. With auto-advance on, the next entry loads on every real Ctrl+V or
-right-click-Paste, not only when copying again — the badge picks up an accent
+right-click-Paste, not only when copying again; the badge picks up an accent
 while a session is running. Placeholders still work; the popup asks once per
 session and the same values are reused for every entry. Five expert-menu
 settings (all under the same toggle) tune the session timeout and the timing
@@ -411,11 +426,11 @@ fast too often pauses the session with a toast instead of looping.
   earlier in the chain answers a placeholder it needs, though the chain can
   still be started. Drag a row to reorder the chain right there. Switchable
   off on its own in the expert menu.
-- Per-tile hotkeys — copy a specific tile from anywhere, without opening the app
-- Drag-out — hold the modifier key and drag a tile onto another window to paste
+- Per-tile hotkeys: copy a specific tile from anywhere, without opening the app
+- Drag-out: hold the modifier key and drag a tile onto another window to paste
   directly, no clipboard round-trip. An expert switch swaps the two gestures, so a
   plain drag leaves the app and the key moves the tile instead.
-- Auto-paste — after copying, the app switches to the last active window and
+- Auto-paste: after copying, the app switches to the last active window and
   presses paste automatically
 - Copy formatted: a second copy entry, in the tile's right-click menu and in
   the editor, only offered for a prompt whose text actually contains Markdown
@@ -435,14 +450,14 @@ fast too often pauses the session with a toast instead of looping.
 ### Hotkeys
 
 Two independent kinds: one global combination that opens the quick launcher
-(default Ctrl+Alt+P), and a combination per tile that copies — and optionally
-pastes — that one tile directly. A combination must include Ctrl or Alt; the
+(default Ctrl+Alt+P), and a combination per tile that copies, and optionally
+pastes, that one tile directly. A combination must include Ctrl or Alt; the
 app hotkey always wins a conflict, and among tiles the first one in the list
 keeps a combination two tiles happen to share. Importing a backup that carries
 a colliding hotkey drops the losing one instead of failing the import.
 
-"All hotkeys", next to the global hotkey field in Settings, lists every hotkey —
-global and per-tile — in one searchable, live-rebindable list, so rebinding or
+"All hotkeys", next to the global hotkey field in Settings, lists every hotkey,
+global and per-tile, in one searchable, live-rebindable list, so rebinding or
 clearing one no longer means opening that tile's editor.
 
 A tile with its own hotkey shows a small keyboard symbol.
@@ -451,7 +466,7 @@ A tile with its own hotkey shows a small keyboard symbol.
 
 Off by default. When switched on, everything copied anywhere on the system (not
 just from this app) is logged into an inbox that can be reviewed and turned into
-tiles later — a minimum-length filter and an inbox cap keep it from growing
+tiles later; a minimum-length filter and an inbox cap keep it from growing
 unbounded.
 
 ### Copy history
@@ -464,7 +479,7 @@ per-entry delete, and usage statistics including a 14-day activity chart.
 
 ### Library & search
 
-The library lists every tile as a searchable, filterable list — fuzzy search,
+The library lists every tile as a searchable, filterable list: fuzzy search,
 smart sort (most-used / most-recent), and type/colour filters. Type -word to
 exclude matches, or tag:word / var:word to search only tags or placeholder
 names. A star next to the search field saves the current query, tag filters
@@ -484,7 +499,7 @@ The magnifier icon in the toolbar, or Ctrl+K, opens an overlay that searches
 prompts, copy history, attachments, views, settings and help all at once,
 each in its own group with up to five hits and a "show more". Arrow keys
 move the highlight across group boundaries; Enter runs the fitting action for
-whatever is highlighted — copies a prompt or history entry, opens an
+whatever is highlighted: copies a prompt or history entry, opens an
 attachment, switches to a view, opens and highlights a setting, or opens the
 matching help topic. The field remembers the last five searches and shows
 them when it is empty. Escape, a click outside the card, or the icon again
@@ -500,7 +515,7 @@ of tags, matching any or all of them.
 
 Off by default in the expert menu. Marks a tile as archived instead of deleting
 it: it disappears from the library list and the grid, but export, backup and
-search still treat it like any other tile — a query still finds it. A toggle
+search still treat it like any other tile; a query still finds it. A toggle
 above the library list brings archived tiles back into view. Archive or
 unarchive a tile from its right-click menu, or several at once from the
 library's batch bar.
@@ -518,7 +533,7 @@ several views. View groups turn views into tabs instead of a dropdown.
 ### Tile behaviour & appearance
 
 Tile menu, drag-to-reorder, hover lift, type badges, shadows, gradients, rounded
-corners, bold/uppercase/monospace text — behaviour and pure looks, all adjustable.
+corners, bold/uppercase/monospace text: behaviour and pure looks, all adjustable.
 Tile, folder, view-tab and message text on a coloured area picks black or white
 automatically; the expert menu can switch this off (always white) or move the
 brightness cutoff where black text starts.
@@ -567,7 +582,7 @@ menu caps how many matches it lists at once.
 ### Standalone: Quick launcher
 
 A small always-on-top popup (default hotkey Ctrl+Alt+P) with fuzzy search across
-every tile's name and text — pick one and it copies immediately, no need to bring
+every tile's name and text; pick one and it copies immediately, no need to bring
 the main window forward.
 
 ## Look and feel
@@ -581,7 +596,7 @@ saves the result as a custom theme.
 ### Standalone: Theme editor
 
 Starts from any built-in theme, changes individual colours, and saves the result
-as a new theme — the original stays untouched.
+as a new theme; the original stays untouched.
 
 ### Scaling & zoom
 
@@ -594,7 +609,7 @@ Delay, auto-hide timeout, and width are all adjustable.
 
 ### Toolbar
 
-Which buttons the header and composer bar show — quick grid-size control,
+Which buttons the header and composer bar show: quick grid-size control,
 library/history/pin buttons, multiple views, and view groups.
 
 ## System and data
@@ -617,11 +632,11 @@ like any other.
 
 Everything the database holds is sealed with Windows' own per-account
 encryption, so another account on the same PC cannot read it. Very rarely
-Windows refuses to do that — almost always a damaged user profile or account. In
+Windows refuses to do that, almost always a damaged user profile or account. In
 that case saving keeps working, but the data is written in readable form rather
 than being silently lost, and the app says so: once in a dialog at startup, and
 permanently as a red row at the top of this privacy group for as long as it is
-true. That row has no off switch on purpose — it describes what is on disk right
+true. That row has no off switch on purpose: it describes what is on disk right
 now, not a tip. Repair the Windows profile (or sign in on a healthy account) and
 the next save that succeeds seals everything again by itself; nothing needs to be
 re-entered.
@@ -640,7 +655,7 @@ always keeps it encrypted.
 
 Separately, if the saved settings themselves turn out to be unreadable or
 corrupted on disk (extremely rare), the app shows defaults instead of guessing
-and refuses to save any settings change until this is resolved — the original,
+and refuses to save any settings change until this is resolved; the original,
 possibly-recoverable data is never overwritten. A backup of the raw database is
 made automatically, and a permanent warning row (also with no off switch)
 appears in this same privacy group for as long as it is true. A factory reset
@@ -650,7 +665,7 @@ If a settings save itself cannot be written to disk (data folder full, no
 write permission), changes stay active for the rest of the session but are
 lost on restart. The app says so the same way: once in a dialog, and as a
 permanent row in this privacy group for as long as the last save is still
-failing — it clears itself the moment a save reaches disk again.
+failing; it clears itself the moment a save reaches disk again.
 
 ### Demo mode
 
@@ -674,12 +689,12 @@ Update checks (never installs without asking), keyboard navigation, allowing
 multiple instances at once, and where the data folder lives. A long export,
 conversion, ffmpeg download, backup or import fills the app's taskbar icon
 with its progress, and shows a plain "about X left" estimate once enough of
-it has run for the guess to mean something — both switchable off.
+it has run for the guess to mean something, both switchable off.
 
 ### Data maintenance
 
 Duplicate finder, trash (with its own retention setting), CSV/TXT export, and
-full backup export/import — reached from the expert menu's data group. The
+full backup export/import, all reached from the expert menu's data group. The
 duplicate finder also has shortcuts in the settings dialog, next to import
 and export, and in the header of All prompts, so it does not take opening the
 expert menu to find it.
@@ -688,7 +703,7 @@ expert menu to find it.
 
 A deleted tile goes to the trash first, not straight to permanent deletion.
 Retention is in days (0 means keep forever). Restoring places the tile in the
-active view's first free cell — not necessarily its original view or cell — and
+active view's first free cell, not necessarily its original view or cell, and
 does not bring back a floating button, folder membership, or hotkey it had before
 deletion; those need setting up again.
 
@@ -697,7 +712,7 @@ deletion; those need setting up again.
 A few actions outside the tile trash carry their own one-step Undo button on the
 confirmation message: deleting a view, clearing the copy history, clearing the
 clipboard inbox, deleting a tag, and a batch delete or batch tag change in the
-library. There is only ever one undo waiting — a later destructive action
+library. There is only ever one undo waiting; a later destructive action
 replaces it, and the button disappears once the message itself does. Turn it
 off in the expert menu if you would rather the message stayed a plain
 confirmation.
@@ -717,10 +732,10 @@ menu.
 
 ### Import & export
 
-Plain CSV/TXT export for the text alone, or a full backup file with everything —
+Plain CSV/TXT export for the text alone, or a full backup file with everything:
 tiles, views, layouts, colours, styles, and language. A CSV/TXT import shows a
-preview first — every incoming item's name and whether it would land as a
-duplicate — before anything is written; a full backup restores directly. If
+preview first: every incoming item's name and whether it would land as a
+duplicate, before anything is written; a full backup restores directly. If
 the file changes after the preview is shown, confirming the import is refused
 rather than importing something different from what was previewed.
 
@@ -737,11 +752,11 @@ settings.
 ### Markdown folder sync (beta)
 
 An optional, off-by-default mirror that writes every text tile as its own
-readable `.md` file in a chosen folder, alongside the encrypted database —
+readable `.md` file in a chosen folder, alongside the encrypted database,
 including which view, grid cell, and folder it sits in. A view or folder named in
 an incoming file that does not exist yet on this machine is created
 automatically, matched by name.
-**The `.md` files are plain text** — unlike the database, anyone with access to
+**The `.md` files are plain text**: unlike the database, anyone with access to
 that folder can read the content, so a synced or shared folder should be avoided
 for anything sensitive. A tile with an attached file, image, or PDF syncs as a
 reference: the header carries the path and the PDF page, never the file itself. A
@@ -873,15 +888,15 @@ error.
 
 ### Updates & security
 
-On by default, and — together with a first-run download of the Microsoft
-WebView2 installer if that runtime is missing — one of the only two kinds of
+On by default, and, together with a first-run download of the Microsoft
+WebView2 installer if that runtime is missing, one of the only two kinds of
 network traffic the app makes on its own. A downloaded update is verified
 against a published checksum before it runs; a missing or mismatching checksum
 blocks the install instead of running an unverified file. The third and last
 kind is ffmpeg, used for video export/conversion: an installed build ships it
 and never touches the network for it, while a portable build offers a one-time
 download only when a video feature actually needs it and only with your
-explicit consent — never automatically, never in the background.
+explicit consent, never automatically, never in the background.
 
 A small "what's new" notice appears once after an update, listing what
 changed since the version you last saw; its list ships with the app, so
@@ -890,14 +905,14 @@ Reopen the current version's list any time from the About dialog.
 
 ### Common questions
 
-- *My screenshot of this app came out empty* — the screen-capture exclusion
+- *My screenshot of this app came out empty*: the screen-capture exclusion
   privacy setting is working as intended; turn it off in the expert menu if
   that's not wanted
-- *The app won't start* — it needs the Microsoft WebView2 runtime; the installer
+- *The app won't start*: it needs the Microsoft WebView2 runtime; the installer
   offers it automatically if missing
-- *I can't find a setting* — check the expert menu's search box first; it scans
+- *I can't find a setting*: check the expert menu's search box first; it scans
   every tab at once
-- *A hotkey doesn't do anything* — another app may already hold that combination;
+- *A hotkey doesn't do anything*: another app may already hold that combination;
   the editor explains this instead of accepting it silently
 
 ### Standalone: Backup manager
@@ -915,8 +930,8 @@ with a short list of the ones never used, all counted locally and included in
 the export.
 
 A retention section lists one row per kind of data this app keeps around on
-its own — trash, copy history, the clipboard inbox, recordings, discarded
-recordings, temporary exports, and unfinished-edit states — with how much is
+its own (trash, copy history, the clipboard inbox, recordings, discarded
+recordings, temporary exports, and unfinished-edit states), with how much is
 there right now, how long it is kept, a button to clean it up on the spot, and
 a button that jumps straight to the matching expert-menu setting. The numbers
 are measured in the background and labelled with when that happened, the same
@@ -935,25 +950,25 @@ snapshot.
 ## Hilfe (Deutsch)
 
 Derselbe Inhalt wie oben, wie er auch im Hilfe-Menü der App steht (Einstellungen →
-Hilfe). Nur Englisch und Deutsch — jede andere Sprache in der App fällt auf
+Hilfe). Nur Englisch und Deutsch. Jede andere Sprache in der App fällt auf
 Englisch zurück.
 
-**Erste Schritte** — Eine Kachel ist ein gespeicherter Eintrag im Raster. Doppelklick
+**Erste Schritte**: Eine Kachel ist ein gespeicherter Eintrag im Raster. Doppelklick
 auf eine leere Rasterzelle (oder der Plus-Button) legt eine an, ein Klick kopiert sie.
 Drei Beispielkacheln (E-Mail mit Platzhaltern, Bild, Markdown-Vorlage) sind beim
-ersten Start bereits da — ein Button über dem Raster entfernt sie mit einem Klick.
+ersten Start bereits da; ein Button über dem Raster entfernt sie mit einem Klick.
 
-**Einführungstour** — fünf Schritte beim ersten Start, direkt nach den
+**Einführungstour**: fünf Schritte beim ersten Start, direkt nach den
 Beispielkacheln; der letzte Schritt bietet an, Screenshot-Editor, Farbpipette,
-OCR oder Spracheingabe gleich einzuschalten — geschrieben wird erst, wenn die
+OCR oder Spracheingabe gleich einzuschalten; geschrieben wird erst, wenn die
 Tour tatsächlich beendet ist. Escape oder „Überspringen" fragt zuerst nach, statt
-sofort zu schließen. Jederzeit erneut aufrufbar über das Experten-Menü — dort
+sofort zu schließen. Jederzeit erneut aufrufbar über das Experten-Menü: dort
 wirkt ein Schalter auf dem letzten Schritt sofort statt erst bei „Fertig".
 
-**Kacheln anlegen** — Dateianhang, Screenshot-Werkzeug, Farbpipette (aus),
+**Kacheln anlegen**: Dateianhang, Screenshot-Werkzeug, Farbpipette (aus),
 Ziehen & Ablegen.
 
-**Variablen & Platzhalter** — `{#{Name}#}` im Text öffnet beim Kopieren ein Popup
+**Variablen & Platzhalter**: `{#{Name}#}` im Text öffnet beim Kopieren ein Popup
 für jeden Wert. Dynamische Platzhalter (`{#{date}#}`, `{#{time}#}`,
 `{#{clipboard}#}`) füllen sich selbst. Feste Werte (im Experten-Menü, aus)
 schlagen für einen passenden Namen eine gepflegte Liste von Werten vor, nur
@@ -964,7 +979,7 @@ eingesetzt, bevor er getippt oder übernommen wird.
 <svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><text x="30" y="45" font-size="15" fill="currentColor" text-anchor="start">{#{Kunde=Meier|Meier,Schulz}#}</text><line x1="65" y1="55" x2="65" y2="80" stroke="currentColor" stroke-width="1"/><text x="65" y="95" font-size="11" fill="currentColor" text-anchor="middle">Name</text><line x1="118" y1="55" x2="150" y2="80" stroke="currentColor" stroke-width="1"/><text x="150" y="95" font-size="11" fill="currentColor" text-anchor="middle">Vorgabe</text><line x1="240" y1="55" x2="260" y2="80" stroke="currentColor" stroke-width="1"/><text x="260" y="95" font-size="11" fill="currentColor" text-anchor="middle">Auswahlliste</text></svg>
 </p>
 
-**Der Editor** — Markdown-Vorschau, Syntax-Hervorhebung, Versionsverlauf, private
+**Der Editor**: Markdown-Vorschau, Syntax-Hervorhebung, Versionsverlauf, private
 Notizen (Markdown-Vorschau und Notizen standardmäßig aus). Bei einer Datei-Kachel
 mit eigenem Vorschaubild: das Bild über der Dateizeile ist nur die Kachel-Vorschau,
 der Anhang darunter ist eine eigene Sache, kopiert wird immer nur der Dateipfad.
@@ -980,18 +995,18 @@ Text, nie ein angehängtes Bild, und Speichern oder Abbrechen entfernt den
 Entwurf sofort wieder. Ist beim nächsten Start noch ein Entwurf vorhanden, wird
 einmal gefragt, ob er wiederhergestellt werden soll.
 
-**Das Raster** — freie Platzierung, standardmäßig bis 20×20 Zellen (im
+**Das Raster**: freie Platzierung, standardmäßig bis 20×20 Zellen (im
 Experten-Menü bis 200×200 einstellbar), eigenes Layout je Ansicht. Eine Kachel
 auf einen Ansichtsreiter über dem Raster gezogen verschiebt sie in diese
 Ansicht, mit gedrückter Strg-Taste wird stattdessen kopiert und sie bleibt in
 beiden. Über einer eingeklappten Ansichtsgruppe verweilt klappt diese nach
 kurzer Zeit auf, damit sich in eine Ansicht darin ablegen lässt.
 
-**Screenshot-Werkzeug** — Bereich oder ganzes Fenster (auch geschützte wie den
+**Screenshot-Werkzeug**: Bereich oder ganzes Fenster (auch geschützte wie den
 Task-Manager) direkt zu einer neuen Kachel. Davor öffnet sich standardmäßig ein
 Editor: Zuschneiden, Stift, Marker, Linien, Pfeile, Rechtecke, Ellipsen, Text,
 nummerierte Schritte, Pixelieren und ein Spotlight, das alles außerhalb eines
-Bereichs abdunkelt — mit Rückgängig/Wiederholen. Zum Heranzoomen für
+Bereichs abdunkelt, mit Rückgängig/Wiederholen. Zum Heranzoomen für
 pixelgenaues Arbeiten lässt sich das Bild mit dem Hand-Werkzeug (oder
 gehaltener Leertaste bzw. der mittleren Maustaste) verschieben. Die
 Größenänderung ändert die tatsächliche Pixelgröße des Bildes (nicht nur die
@@ -999,10 +1014,10 @@ Ansicht): Breite, Höhe oder Prozentwert einstellbar, mit Voreinstellungen für
 25/50/200 % und "auf 1920 Breite anpassen"; sie ist selbst ein rückgängig
 machbarer Schritt.
 
-**Bildschirmaufnahme** — nimmt ein Fenster, einen Monitor oder einen gezogenen
+**Bildschirmaufnahme**: nimmt ein Fenster, einen Monitor oder einen gezogenen
 Bereich als Video auf, über den Aufnahme-Knopf neben dem Screenshot-Werkzeug.
 Aufgenommen wird immer MP4 (H.264); drei Qualitätsstufen wählen davor die
-Bitrate: Klein (4000 kbps), Hoch (12000 kbps, Standard) und Verlustfrei — dabei
+Bitrate: Klein (4000 kbps), Hoch (12000 kbps, Standard) und Verlustfrei; dabei
 wird mit der aktuellen Bitrate aufgenommen und die Aufnahme danach automatisch
 verlustfrei neu kodiert, was bei längeren Aufnahmen mehrere Gigabyte groß
 werden kann. Ein Bitratenregler neben der Qualitätsstufe passt Klein/Hoch
@@ -1013,7 +1028,7 @@ animiertes WebP und APNG entstehen ebenso, sind aber auf 30 Sekunden begrenzt
 und ohne Ton. Für alles außer MP4 sowie für Verlustfrei wird ffmpeg gebraucht, ein
 separates, GPL-lizenziertes Werkzeug; fehlt es, sagen Format- und
 Qualitätsauswahl das direkt und bieten den Download an (einmalig, nur mit
-Zustimmung) — eine installierte Version bringt es bereits mit. Eine
+Zustimmung); eine installierte Version bringt es bereits mit. Eine
 fehlgeschlagene oder abgebrochene Umwandlung lässt die ursprüngliche
 MP4-Aufnahme immer unangetastet. Ein Fehlschlag nennt den eigentlichen Grund
 in Klartext (Datei unvollständig, kein Platz mehr und so weiter) statt einer
@@ -1033,7 +1048,7 @@ laufen Bild und Systemton weiter, das Mikrofon-Symbol zeigt nur „verloren".
 Stopp führt in denselben Anheften/Speichern/Verwerfen-Dialog wie ein
 Screenshot; braucht das gewählte Format oder die Qualitätsstufe eine
 Umwandlung, zeigt der Dialog zuerst „Wird konvertiert…" (anklicken zum
-Abbrechen) statt einer Vorschau — eine fehlgeschlagene oder abgebrochene
+Abbrechen) statt einer Vorschau; eine fehlgeschlagene oder abgebrochene
 Umwandlung fällt immer auf die unangetastete Originalaufnahme zurück.
 Schließt sich das aufgenommene Fenster von selbst, stoppt die Aufnahme
 automatisch und behält, was bis dahin aufgenommen wurde. Der
@@ -1044,13 +1059,29 @@ gleichzeitig laufen, ist im Experten-Menü einstellbar. Eine Tastenanzeige
 (Standard aus, im Expertenmenü) zeichnet während einer Aufnahme systemweit
 mit, welche Tasten gedrückt werden, damit eine Anleitung sie hinterher über
 die „Tasten"-Überlagerung des Video-Editors zeigen kann. Aufgezeichnet werden
-nur Tastenkennungen mit Zeitstempeln, nie ein Textinhalt — ein fokussiertes
+nur Tastenkennungen mit Zeitstempeln, nie ein Textinhalt; ein fokussiertes
 Passwortfeld wird für diese Zeit ausgelassen und erscheint als Lücke. In
 Textfeldern erscheinen nur Tastenkürzel, etwa Strg+C oder Enter. Was du
 tippst, bleibt aus dem Video. Wie lange eine losgelassene Taste sichtbar
 bleibt, ist im Expertenmenü einstellbar.
 
-**Screenshot- und Video-Editor** — arbeiten bei den gemeinsamen Werkzeugen
+Eine optionale Kameraaufnahme (Standard aus, im Expertenmenü) fügt dem
+Rechtsklickmenü des Aufnahme-Knopfs den Eintrag „Kamera aufnehmen" hinzu. Sie
+öffnet ein eigenes kleines Fenster mit Live-Vorschau, eigenem
+Start/Pause/Stopp, einer Tonquelle, einer Auflösungswahl und einem
+Zielordner: denselben Bedienelementen wie die Bildschirmaufnahme selbst. Ein
+Kamerafenster ohne sichtbare Vorschau oder Anzeige gibt es nie: Entweder das
+Fenster selbst oder sein Statuspunkt in der Bedienleiste zeigt immer, solange
+die Kamera läuft. Sie zeichnet in eine eigene Datei auf, nie ins Bild der
+Bildschirmaufnahme eingebrannt, damit beide später frei positioniert werden
+können. Läuft gleichzeitig eine Bildschirmaufnahme, teilen sich beide
+denselben Startpunkt; der Video-Editor öffnet dann die Bildschirmaufnahme mit
+der Kamera deckungsgleich als Überlagerung obenauf, sobald beide fertig sind.
+Läuft keine Bildschirmaufnahme, ist die Kameraaufnahme ihr eigener Nullpunkt
+und öffnet sich allein. Standardkamera, Auflösung und Bildrate sind alle im
+Expertenmenü einstellbar.
+
+**Screenshot- und Video-Editor**: arbeiten bei den gemeinsamen Werkzeugen
 gleich: Strg+Plus, Strg+Minus und Strg+0 zoomen in beiden hinein, heraus und
 passen die Ansicht ein; Strg+Z, Strg+Y (oder Strg+Umschalt+Z) machen mit
 demselben Knopfpaar rückgängig oder wiederholen. Im Screenshot-Editor wählt
@@ -1062,7 +1093,7 @@ sie schon ausgewählt ist; die Werkzeugleisten selbst bleiben ebenfalls an
 ihrem Platz, oben beim Screenshot-Editor, seitlich neben der Zeitleiste beim
 Video-Editor, weil die Zeitleiste den Platz braucht, den der
 Screenshot-Editor nicht hat. Im Video-Editor lässt sich außerdem ein zweites
-Video einfügen — „Video hinzufügen" bietet es entweder als weitere
+Video einfügen: „Video hinzufügen" bietet es entweder als weitere
 Überlagerung (eigenes Rechteck, eigener Zeitbereich, eigene Lautstärke,
 standardmäßig stumm) oder als ganzen zusätzlichen Abschnitt am Anfang, am
 Ende oder an der aktuellen Stelle; jede zusätzliche Quelle wird beim
@@ -1077,8 +1108,8 @@ später verschoben oder gelöscht wird, bis zu einer Höchstzahl je Projekt
 Ein Rechtsklick auf eine Form (Screenshot-Editor) oder die Zeile einer
 Überlagerung (Video-Editor) öffnet ein kleines Menü zum Duplizieren oder
 Löschen. Ein Duplikat behält Werte und Zeitbereich und wird ein Stück
-verschoben, damit es neben dem Original liegt statt genau darauf — wie weit,
-in einer Expertenzeile, die sich beide Editoren teilen. Im Video-Editor
+verschoben, damit es neben dem Original liegt statt genau darauf. Wie weit, legt
+eine Expertenzeile fest, die sich beide Editoren teilen. Im Video-Editor
 richten sich Farbe, Stärke, Deckkraft und Schriftgröße einer neuen
 Überlagerung außerdem nach dem, was für dieselbe Art (Bild, Rahmen, Text,
 Verpixeln oder Spotlight) zuletzt benutzt wurde, auch über einen Neustart
@@ -1122,36 +1153,36 @@ Auflösung zeigt die laufende Vorschau ohnehin nie), der laufende Schnitt
 bleibt dabei bestehen, weil ein Sprung an eine herausgeschnittene Stelle nur
 verwirren würde. Der Export bleibt davon unberührt.
 
-**Texterkennung (OCR)** — standardmäßig an; liest per Knopf in der Leiste und
+**Texterkennung (OCR)**: standardmäßig an; liest per Knopf in der Leiste und
 im Screenshot-Dialog Text aus einem Screenshot oder einer Bilddatei, komplett
 offline über die eigene Texterkennung von Windows. Der Knopf in der Leiste öffnet
 ein kleines Menü: aus einer Bilddatei oder aus einem Screenshot. Erkannter Text
 kann automatisch kopiert und umgebrochene Zeilen zu ganzen Sätzen zusammengefügt
-werden, beides einstellbar. Braucht ein Windows-Sprachpaket — siehe
-„Sprachpakete" unten.
+werden, beides einstellbar. Braucht ein Windows-Sprachpaket (siehe
+„Sprachpakete" unten).
 
-**Spracheingabe** — standardmäßig an; der Mikrofon-Knopf neben der Eingabeleiste
+**Spracheingabe**: standardmäßig an; der Mikrofon-Knopf neben der Eingabeleiste
 und im Kachel-Editor verwandelt Sprache in Text, komplett auf dem Gerät über die
 eigene Spracherkennung von Windows. Gesprochene Satzzeichen-Wörter („Komma",
 „neue Zeile" …) werden zu echten Zeichen; „wörtlich" vor einem Wort tippt es
 statt es als Befehl zu erkennen. Ein optionaler globaler Kurzbefehl startet und
 stoppt eine Aufnahme, ohne das Fenster zu öffnen. Braucht ebenfalls ein
-Windows-Sprachpaket — derselbe Dialog wie bei OCR.
+Windows-Sprachpaket (derselbe Dialog wie bei OCR).
 
-**Sprachpakete** — Texterkennung und Spracheingabe teilen sich Windows' eigene
+**Sprachpakete**: Texterkennung und Spracheingabe teilen sich Windows' eigene
 Sprachpakete und denselben Installationsdialog. Die App bietet den Download beim
 ersten Bedarf an; die Installation braucht Administratorrechte (übliche
 Windows-Bestätigung). „Sprachen verwalten…" im Sprachen-Dropdown listet
 Installiertes und Verfügbares und startet Installation/Update erneut; das
 Auflisten selbst braucht normalerweise keine Sonderrechte, auf manchen
-Windows-Systemen aber doch — der Dialog sagt das dann offen und bietet an, die
+Windows-Systemen aber doch; der Dialog sagt das dann offen und bietet an, die
 Abfrage mit Administratorrechten auszuführen, statt leer zu bleiben. Dabei wird
 nur aufgelistet, nichts installiert. Eine Hintergrundprüfung meldet ein Paket,
 dessen Version sich geändert hat oder das ein Windows-Update entfernt hat, ohne
-gleich zur Neuinstallation aufzufordern — „später erinnern" blendet den Hinweis
+gleich zur Neuinstallation aufzufordern: „später erinnern" blendet den Hinweis
 vorübergehend aus, oder die Prüfung lässt sich ganz abschalten.
 
-**Farbpipette & Auswahlverlauf** — Pixel als Hex/RGB/HSL kopieren; die letzten
+**Farbpipette & Auswahlverlauf**: Pixel als Hex/RGB/HSL kopieren; die letzten
 Auswahlen überstehen einen Neustart. Standardmäßig aus.
 
 **Rotation und Kette:** zwei verschiedene Dinge. Rotation ändert den Text
@@ -1162,14 +1193,14 @@ EINER Kachel, Kette kopiert MEHRERE verschiedene Kacheln zusammen.
 | verschiedene Formulierungen desselben Prompts | Rotation |
 | mehrere verschiedene Prompts hintereinander | Kette |
 
-**Wechselnde Kacheln** — eine Kachel trägt eine Liste von Texten, jede Kopie
+**Wechselnde Kacheln**: eine Kachel trägt eine Liste von Texten, jede Kopie
 liefert den nächsten Eintrag (Reihenfolge oder Zufall). Standardmäßig an; der
 Schalter pro Kachel sitzt im Editor unter Erweiterte Optionen. Ein Badge auf
-Kachel/Pille/Pillen-Ordner-Mitglied zählt hoch — im Zufalls-Modus die Ziehungen
+Kachel/Pille/Pillen-Ordner-Mitglied zählt hoch: im Zufalls-Modus die Ziehungen
 im aktuellen Durchlauf statt einer springenden Position; übersteht Neustart und
 Sicherung, aber keinen CSV/TXT-Import (neue Kachel, neuer Zeiger). Eine geeignete
 Kachel (2+ Einträge, kein Bild/Datei) kann zusätzlich **beim Einfügen
-automatisch weiterschalten** — Auto-Knopf im Editor oder Rechtsklickmenü,
+automatisch weiterschalten**: Auto-Knopf im Editor oder Rechtsklickmenü,
 solange Kachel- und App-Schalter beide an sind. Bei jedem echten Einfügen
 rückt der nächste Eintrag nach, nicht nur beim Kopieren; das Abzeichen zeigt
 eine Akzentfarbe, solange die Sitzung läuft. Platzhalter werden einmal pro
@@ -1177,7 +1208,7 @@ Sitzung abgefragt, dieselben Werte gelten für jeden Eintrag. Fünf
 Experteneinstellungen regeln Zeitlimit und Erkennungsfenster; zu schnelles,
 zu häufiges Einfügen pausiert die Sitzung mit einem Hinweis statt zu wiederholen.
 
-**Kopieren** — Verketten (mehrere verschiedene Kacheln als ein Text, anders als
+**Kopieren**: Verketten (mehrere verschiedene Kacheln als ein Text, anders als
 Rotation oben; auch direkt über ein Kettensymbol an der Kachel, einzeln
 abschaltbar unter Kacheln & Kopieren im Experten-Menü). Beim Verketten zeigt
 eine Leiste über dem Raster die gewählten
@@ -1200,7 +1231,7 @@ weiterhin genau den Markdown-Text bekommt wie bei einer normalen Kopie.
 <svg viewBox="0 0 560 90" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="30" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="80" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 1</text><rect x="230" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 2</text><rect x="430" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="480" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 3</text><line x1="130" y1="37" x2="217" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 215 33 L 225 37 L 215 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="177" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{X}#}</text><line x1="330" y1="37" x2="417" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 415 33 L 425 37 L 415 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="377" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{Y}#}</text></svg>
 </p>
 
-**Hotkeys** — ein globaler Hotkey öffnet den Schnellstarter (Standard
+**Hotkeys**: ein globaler Hotkey öffnet den Schnellstarter (Standard
 Strg+Alt+P), ein eigener Hotkey pro Kachel kopiert (und fügt optional ein). Bei
 einer Kollision gewinnt der App-Hotkey, sonst die erste Kachel in der Liste.
 "Alle Hotkeys" neben dem globalen Feld listet jeden Hotkey durchsuchbar auf und
@@ -1220,28 +1251,28 @@ gehört immer nur zu einem Raster-Ordner gleichzeitig.
 <svg viewBox="0 0 560 120" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="20" y="20" width="150" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="30" y="30" width="40" height="16" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="74" y="30" width="40" height="16" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="30" y="52" width="120" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="95" y="108" font-size="11" fill="currentColor" text-anchor="middle">Ansichtsgruppe</text><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Pill-Ordner</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Kachel-Ordner</text></svg>
 </p>
 
-**Taskleistenmenü** — Zuletzt kopiert, Favoriten. Erscheint als abgerundetes,
+**Taskleistenmenü**: Zuletzt kopiert, Favoriten. Erscheint als abgerundetes,
 zum Thema passendes Fenster statt des einfachen Windows-Menüs; im Expertenmenü
 lässt sich bei Bedarf auf das einfache Systemmenü zurückschalten. Dort auch
 einstellbar: die maximale Länge eines Eintragsnamens.
 
-**Zwischenablage-Überwachung** — aus, protokolliert bei Bedarf alles Kopierte im
+**Zwischenablage-Überwachung**: aus, protokolliert bei Bedarf alles Kopierte im
 System.
 
-**Kachel-Verhalten & -Aussehen** — Menü, Umsortieren, Hover-Anhebung, Optik. Die
+**Kachel-Verhalten & -Aussehen**: Menü, Umsortieren, Hover-Anhebung, Optik. Die
 Schrift auf Kacheln, Ordnern, Ansichts-Reitern und Meldungen wählt automatisch
 Schwarz oder Weiß; im Expertenmenü lässt sich das abschalten (immer Weiß) oder
 die Helligkeitsschwelle für Schwarz verschieben.
 
-**Tooltips** — Verzögerung, Ausblenden, Breite.
+**Tooltips**: Verzögerung, Ausblenden, Breite.
 
-**Favoriten** — Stern-Markierung, eigene Favoriten-Ansicht.
+**Favoriten**: Stern-Markierung, eigene Favoriten-Ansicht.
 
-**Skalierung & Zoom** — UI-, Dialog-, Editor- und Icon-Größe getrennt einstellbar.
+**Skalierung & Zoom**: UI-, Dialog-, Editor- und Icon-Größe getrennt einstellbar.
 
-**Aussehen & Themes** — sieben mitgelieferte Themes, optionaler Theme-Editor.
+**Aussehen & Themes**: sieben mitgelieferte Themes, optionaler Theme-Editor.
 
-**Bibliothek & Suche** — unscharfe Suche, intelligente Sortierung, Filter,
+**Bibliothek & Suche**: unscharfe Suche, intelligente Sortierung, Filter,
 `tag:`/`var:`-Suchpräfixe (mit `-` auch verneint). Ein Stern neben dem Suchfeld
 speichert Anfrage, Tag-Filter und Sortierung als Kachel darüber; Rechtsklick
 bietet Umbenennen und Löschen, Ziehen sortiert die Zeile um. Standardmäßig
@@ -1256,32 +1287,32 @@ eine Überlagerung, die Prompts, Kopierverlauf, Anhänge, Ansichten,
 Einstellungen und Hilfe zugleich durchsucht, jede Quelle in ihrer eigenen
 Gruppe mit bis zu fünf Treffern und „weitere anzeigen". Pfeiltasten bewegen
 die Markierung über Gruppengrenzen hinweg; Eingabetaste löst die passende
-Aktion aus — kopiert einen Prompt oder Verlaufseintrag, öffnet einen Anhang,
+Aktion aus: kopiert einen Prompt oder Verlaufseintrag, öffnet einen Anhang,
 wechselt die Ansicht, öffnet und markiert eine Einstellung, oder öffnet das
 passende Hilfethema. Das Feld merkt sich die letzten fünf Suchen und zeigt
 sie, wenn es leer ist. Escape, ein Klick daneben oder das Symbol schließen
 die Überlagerung wieder. Ein Schalter im Experten-Menü stellt sie ab, dazu
 ein Wert für die Trefferzahl je Gruppe vor „weitere anzeigen".
 
-**Tags** — freie Schlagwörter, UND/ODER-Filter.
+**Tags**: freie Schlagwörter, UND/ODER-Filter.
 
-**Archiv** — Standardmäßig aus. Markiert eine Kachel als archiviert statt sie zu
+**Archiv**: Standardmäßig aus. Markiert eine Kachel als archiviert statt sie zu
 löschen; sie verschwindet aus Bibliothek und Raster, bleibt aber über Suche,
 Export und Sicherung erreichbar. Ein Schalter über der Liste holt archivierte
 Kacheln zurück; archivieren/entarchivieren geht per Rechtsklickmenü oder aus
 der Sammelleiste der Bibliothek.
 
-**Kopierverlauf** — Protokoll, Gruppierung, Aufbewahrung, Einzeleintrag löschen,
+**Kopierverlauf**: Protokoll, Gruppierung, Aufbewahrung, Einzeleintrag löschen,
 Statistik mit 14-Tage-Diagramm.
 
-**Medien** — Video-Steuerung, Graustufen/Abdunkeln. Bibliothek und Kopierverlauf
+**Medien**: Video-Steuerung, Graustufen/Abdunkeln. Bibliothek und Kopierverlauf
 zeigen außerdem die Länge eines Videos auf seinem Vorschaubild sowie Auflösung
 und Dateigröße in der Kurzhilfe; ältere Anhänge holen das im Hintergrund nach,
 sobald sie zum ersten Mal angezeigt werden. Das Hauptraster bleibt unverändert.
 
-**Werkzeugleiste** — welche Buttons Kopf- und Composer-Leiste zeigen.
+**Werkzeugleiste**: welche Buttons Kopf- und Composer-Leiste zeigen.
 
-**Datenschutz** — Bildschirmaufnahme-Ausschluss (an), Weichzeichnen, Namen
+**Datenschutz**: Bildschirmaufnahme-Ausschluss (an), Weichzeichnen, Namen
 verbergen, Abdunkeln. Eine optionale, standardmäßig ausgeschaltete Einstellung
 liest Text aus einem angehängten Bild, damit die Bibliothekssuche ihn auch
 findet, und ein Treffer nur dort trägt die Kennzeichnung "im Bild gefunden". Der
@@ -1295,11 +1326,11 @@ Version 2004 (Build 19041); auf einem älteren Windows wird er still ignoriert
 und das Fenster wie jedes andere aufgenommen. Alles in der Datenbank ist mit
 der kontogebundenen
 Windows-Verschlüsselung versiegelt; ein anderes Konto am selben PC kann es also
-nicht lesen. Sehr selten verweigert Windows das — fast immer wegen eines
+nicht lesen. Sehr selten verweigert Windows das, fast immer wegen eines
 beschädigten Benutzerprofils oder Kontos. Dann wird weiter gespeichert, aber im
 Klartext statt still verloren, und die App sagt es: einmal als Hinweis beim
 Start und dauerhaft als rote Zeile oben in dieser Gruppe, solange es zutrifft.
-Diese Zeile hat bewusst keinen Schalter — sie beschreibt, was gerade auf der
+Diese Zeile hat bewusst keinen Schalter: sie beschreibt, was gerade auf der
 Festplatte liegt. Ist das Windows-Profil repariert, verschlüsselt der nächste
 erfolgreiche Speichervorgang wieder alles von selbst; nichts muss neu erfasst
 werden.
@@ -1322,7 +1353,7 @@ Sicherung behält sie immer verschlüsselt.
 Getrennt davon: Sollten die gespeicherten Einstellungen selbst auf der
 Festplatte unlesbar oder beschädigt sein (sehr selten), zeigt die App
 Standardwerte an, statt zu raten, und verweigert jede Einstellungsänderung, bis
-das behoben ist — die ursprünglichen, möglicherweise noch rettbaren Daten
+das behoben ist; die ursprünglichen, möglicherweise noch rettbaren Daten
 werden nie überschrieben. Es wird automatisch eine Sicherung der rohen
 Datenbank angelegt, und eine dauerhafte Warnzeile (ebenfalls ohne Schalter)
 erscheint in derselben Datenschutz-Gruppe, solange es zutrifft. Ein Werksreset
@@ -1333,7 +1364,7 @@ Kann ein Einstellungs-Speichervorgang selbst nicht auf die Festplatte
 geschrieben werden (Datenordner voll, keine Schreibrechte), bleiben Änderungen
 für den Rest der Sitzung aktiv, gehen aber beim Neustart verloren. Die App
 sagt das genauso: einmal als Hinweis, und als dauerhafte Zeile in dieser
-Datenschutz-Gruppe, solange der letzte Speichervorgang fehlschlägt — sie
+Datenschutz-Gruppe, solange der letzte Speichervorgang fehlschlägt; sie
 verschwindet von selbst, sobald wieder erfolgreich gespeichert wird.
 
 **Vorführung**: Ein Schalter im Experten-Menü (Reiter System) schaltet das
@@ -1352,30 +1383,30 @@ Beispielbestand ist auch die Vorlage für das Bild in diesem Hilfefenster und
 für `docs/screenshot.png`: der genaue Ablauf steht im Abschnitt „Building
 from source" der README.
 
-**System** — Updates, Tastatur-Navigation, mehrere Instanzen, Datenordner.
+**System**: Updates, Tastatur-Navigation, mehrere Instanzen, Datenordner.
 Lange Vorgänge (Export, Umwandlung, ffmpeg-Download, Sicherung, Import) füllen
-das Taskleistensymbol und zeigen ab einer eingestellten Schwelle „noch etwa …" —
+das Taskleistensymbol und zeigen ab einer eingestellten Schwelle „noch etwa …",
 beides abschaltbar.
 
-**Datenwartung** — Duplikatfinder, Papierkorb, Import/Export. Der Duplikatfinder
+**Datenwartung**: Duplikatfinder, Papierkorb, Import/Export. Der Duplikatfinder
 hat zusätzlich Abkürzungen im Einstellungsdialog, direkt neben Import und
 Export, und in der Kopfleiste von „Alle Prompts“, damit man dafür nicht erst
 das Expertenmenü öffnen muss.
 
-**Papierkorb & Kacheln wiederherstellen** — gelöschte Kacheln landen zuerst im
+**Papierkorb & Kacheln wiederherstellen**: gelöschte Kacheln landen zuerst im
 Papierkorb (Aufbewahrung in Tagen, 0 = für immer). Wiederherstellen legt in die
 erste freie Zelle der aktiven Ansicht, nicht zwingend an den Originalplatz, und
 ohne Pille, Ordner-Mitgliedschaft oder Hotkey von vorher.
 
-**Rückgängig** — einige Aktionen außerhalb des Kachel-Papierkorbs tragen einen
+**Rückgängig**: einige Aktionen außerhalb des Kachel-Papierkorbs tragen einen
 eigenen Rückgängig-Knopf direkt auf der Meldung: eine Ansicht löschen, den
 Kopierverlauf leeren, den Zwischenablage-Eingang leeren, einen Tag löschen, und
 eine Sammellöschung oder Sammeländerung von Tags in der Bibliothek. Es wartet
-immer nur eine einzige Rücknahme — eine spätere zerstörende Aktion ersetzt sie,
+immer nur eine einzige Rücknahme; eine spätere zerstörende Aktion ersetzt sie,
 und der Knopf verschwindet mit der Meldung selbst. Im Expertenmenü lässt sich
 das abschalten, dann bleibt die Meldung eine reine Bestätigung.
 
-**Duplikatfinder** — findet textlich sehr ähnliche Kacheln nach
+**Duplikatfinder**: findet textlich sehr ähnliche Kacheln nach
 Ähnlichkeitswert, keine exakte Übereinstimmung nötig, löscht nichts von sich
 aus. Eine wechselnde Kachel wird nur nach ihrem ersten Eintrag verglichen.
 Derselbe Ähnlichkeitswert steuert auch einen stillen Hinweis nach dem
@@ -1384,7 +1415,7 @@ seinen Namen mit einem Knopf zum Öffnen und einem zum Vergleichen. Sie hält
 das Speichern nie auf und fragt nichts, wer sie ignoriert verliert nichts.
 Beide teilen sich eine Schwelle im Expertenmenü.
 
-**Import & Export** — CSV/TXT nur für den reinen Text, volle Sicherung für
+**Import & Export**: CSV/TXT nur für den reinen Text, volle Sicherung für
 alles. Ein CSV/TXT-Import zeigt vorher eine Vorschau mit Name und
 Duplikat-Kennzeichnung; eine volle Sicherung stellt direkt wieder her. Ändert
 sich die Datei nach der Vorschau, wird der Import verweigert statt etwas
@@ -1400,13 +1431,13 @@ graut aus, was nicht gelesen werden konnte (zu groß oder kein reiner Text),
 mit dem Grund dafür. Wie tief in Unterordner gesucht wird und bei wie vielen
 Dateien Schluss ist, sind beides Einstellungen im Expertenmenü.
 
-**Markdown-Ordner-Sync (Beta)** — spiegelt jede Text-Kachel als lesbare
+**Markdown-Ordner-Sync (Beta)**: spiegelt jede Text-Kachel als lesbare
 `.md`-Datei in einem gewählten Ordner, inklusive Ansicht, Rasterzelle und
 Ordner. Angehängte Dateien, Bilder und PDFs wandern als Verweis mit (Pfad und
 PDF-Seite im Kopf, nie die Datei selbst); ein direkt eingefügter Screenshot hat
 keinen Pfad und bleibt nur in der Datenbank. Eine in einer eingehenden Datei
 genannte Ansicht oder ein Ordner, den es auf diesem Rechner noch nicht gibt,
-wird automatisch angelegt, per Namensabgleich. **Die Dateien sind Klartext** —
+wird automatisch angelegt, per Namensabgleich. **Die Dateien sind Klartext**:
 anders als die Datenbank, also kein synchronisierter oder geteilter Ordner für
 Sensibles. Im Expertenmenü lässt sich einstellen, wie oft der Sync-Ordner auf
 außerhalb der App bearbeitete Dateien geprüft wird.
@@ -1440,7 +1471,7 @@ geschieht nie stillschweigend:
   unter dem Ordner im Expertenmenü nennt den letzten gelesenen Stand, die Zahl
   der Dateien und den Grund der Pause.
 
-**Das Experten-Menü** — jede Funktion hat einen Schalter mit ihren Parametern
+**Das Experten-Menü**: jede Funktion hat einen Schalter mit ihren Parametern
 direkt darunter. Die Suche durchsucht alle Tabs auf einmal; ausgeschaltete
 Funktionen tragen ein kleines Punkt-Abzeichen. Zurücksetzen auf drei Ebenen:
 ein Wert, eine ganze Gruppe, oder alles auf einmal.
@@ -1454,10 +1485,10 @@ etwas einzuschalten, das Daten nach außen gibt oder Kosten verursacht
 wie viele Einstellungen sich ändern, und nennt die zehn wichtigsten davon. Ein
 Profil schreibt einmal und bleibt danach kein eigener Zustand.
 
-**Tastaturbedienung** — Pfeiltasten bewegen einen Fokusring über das Raster
+**Tastaturbedienung**: Pfeiltasten bewegen einen Fokusring über das Raster
 (an), Enter oder Leertaste kopiert die fokussierte Kachel.
 
-**Wo die Daten liegen** — eine lokale SQLite-Datenbank (plus ihre kleine
+**Wo die Daten liegen**: eine lokale SQLite-Datenbank (plus ihre kleine
 WAL-Datei). Installiert: unter AppData, im Experten-Menü einsehbar und
 änderbar. Portabel: direkt neben der exe. Der Wechsel zwischen beiden wird
 erkannt und als einmalige Migration angeboten.
@@ -1521,7 +1552,7 @@ ist die vollständige Referenz: jeder Befehl mit seinen Argumenten und der Form
 seiner JSON-Antwort, die Fehlercodes, das Link-Schema und durchgerechnete
 Beispiele, nichts davon muss durch Ausprobieren herausgefunden werden.
 
-**Updates & Sicherheit** — standardmäßig an, einzige eigene
+**Updates & Sicherheit**: standardmäßig an, einzige eigene
 Netzwerkaktivität außer einem einmaligen WebView2-Installer-Download, falls
 die Laufzeit fehlt. Ein heruntergeladenes Update wird vor der Installation
 gegen eine veröffentlichte Prüfsumme geprüft.
@@ -1531,16 +1562,16 @@ der zuletzt gesehenen Version geändert hat; die Liste liegt bereits im
 Programm, nur ihr Knopf „Von GitHub aktualisieren" braucht Netz. Über den
 Über-Dialog jederzeit für die laufende Version erneut aufrufbar.
 
-**Häufige Fragen** — Bildschirmaufnahme dieser App leer? Der
+**Häufige Fragen**: Bildschirmaufnahme dieser App leer? Der
 Datenschutz-Ausschluss wirkt wie vorgesehen, im Experten-Menü abschaltbar. App
 startet nicht? Die WebView2-Laufzeit fehlt, der Installer bietet sie an.
 Einstellung nicht gefunden? Die Suche im Experten-Menü durchsucht alle Tabs
 auf einmal. Hotkey tut nichts? Eine andere App hält die Kombination
 vermutlich schon.
 
-**Eigenständig: Backup-Manager** — verschlüsselte Backups, GFS-Aufbewahrung,
+**Eigenständig: Backup-Manager.** Verschlüsselte Backups, GFS-Aufbewahrung,
 gezieltes Wiederherstellen. Im selben Fenster außerdem eine
-Nutzungsstatistik (Summen, 14-Tage-Diagramm, meistgenutzte Kacheln) —
+Nutzungsstatistik (Summen, 14-Tage-Diagramm, meistgenutzte Kacheln),
 unabhängig von den Backups selbst, mit einem eigenen Knopf, um die Statistik
 als CSV, TXT oder JSON zu exportieren, sowie ein Speicherbereich, der zeigt,
 wie viel Platz Datenbank, Anhänge, Bildschirmfotos, Aufnahmen, Sicherungen,
@@ -1549,9 +1580,9 @@ um einen aufgeführten Ordner zu öffnen. Die Nutzungsstatistik listet außerdem
 die meistgenutzten Werkzeuge auf, von Bildschirmfotos bis Sicherungen, mit
 einer kurzen Liste der noch nie benutzten. Alles wird rein lokal gezählt und
 ist im Export enthalten. Ein Aufbewahrungsbereich listet eine Zeile je Art
-von Daten, die diese App selbst aufhebt — Papierkorb, Kopierverlauf,
+von Daten, die diese App selbst aufhebt (Papierkorb, Kopierverlauf,
 Zwischenablage-Eingang, Aufnahmen, verworfene Aufnahmen, temporäre Exporte
-und unfertige Bearbeitungsstände — mit dem aktuellen Stand, wie lange er
+und unfertige Bearbeitungsstände), mit dem aktuellen Stand, wie lange er
 bleibt, einem Knopf zum sofortigen Aufräumen und einem Knopf, der direkt zur
 zugehörigen Einstellung im Experten-Menü springt. Die Zahlen werden im
 Hintergrund ermittelt und mit dem Zeitpunkt der Messung beschriftet, genau
@@ -1565,8 +1596,8 @@ nach Namen und nach jeder Spalte sortierbar, mit einem Knopf, um genau
 diesen einen Prompt direkt aus der Liste wiederherzustellen statt der
 ganzen Sicherung.
 
-**Eigenständig: Schnellstarter** — Strg+Alt+P, unscharfe Suche, sofortiges Kopieren.
+**Eigenständig: Schnellstarter.** Strg+Alt+P, unscharfe Suche, sofortiges Kopieren.
 
-**Eigenständig: Mehrfachansichten** — mehrere Rasterseiten, Ansichtsgruppen als Reiter.
+**Eigenständig: Mehrfachansichten.** Mehrere Rasterseiten, Ansichtsgruppen als Reiter.
 
-**Eigenständig: Theme-Editor** — eigene Farbvarianten bestehender Themes.
+**Eigenständig: Theme-Editor.** Eigene Farbvarianten bestehender Themes.

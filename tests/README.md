@@ -18,8 +18,12 @@ soon as the run has been evaluated; only `target/release/` ships.
 | `node tests/eta_check.js` | `makeEtaEstimator()`/`formatEta()`: nothing shows before `minPct`/`minSecs`, a mid-run pause does not skew the average rate, and the seconds/minutes/over-an-hour wording tiers land where expected. |
 | `node tests/ink_check.js` | `applyFloatTheme()`'s readable-ink rule: the black/white split follows `autoInk`/`inkThreshold` from a `theme-changed` event and from one `ink_prefs()` fetch at load, not the old fixed 0.179 cutoff. |
 | `python tests/source_hygiene.py` | No tracked source file outside `tests/` carries a work-item number, an AI-tool name or an internal planning-doc filename in a comment. |
+| `python tests/no_emdash.py` | No em dash, en dash, horizontal bar or figure dash in `ui/i18n.js`, `ui/help.js`, `docs/help.md`, `README.md` or any `ui/*.js`/`ui/*.html` file's visible text (comments excluded). Known-good exceptions live in its `EXCEPTIONS` list with a reason each. |
 | `python tests/flag_polarity.py` | Every `flag-<key>` / `noflag-<key>` class in a stylesheet or in markup belongs to the registry its prefix implies. |
 | `python tests/tooltip_check.py` | No icon-only control without a tooltip or an accessible name, in any window. |
+| `python tests/a11y_check.py` | Over all nine windows: no icon-only control without a name, every value-bearing control (timeline, trim handles, volume sliders, background-jobs percent) wired to `aria-valuenow`, exactly one live region per window, every popover/menu shown via `classList.toggle("hidden", ...)` also trapped by `trapTabWithin(...)`, every window's stylesheets covered by a `prefers-reduced-motion` block. A manual Windows Narrator pass over the timeline and the video export is still needed on top of this. |
+| `python tests/shortcut_check.py` | Every `ui/shortcuts.js` action resolves to a real i18n key, no key combo is bound twice in one scope, every `data-shortcut` button carries `data-i18n-title` so it actually shows the key, every `withShortcut()` call (static or dynamic) names a real action, and every non-alt action is shown by at least one button. |
+| `python tests/tour_check.py` | Every first-run tour `TOUR_FEATURES` row (`ui/main.js`) points at a flag that actually exists in the flag registry and a text key that actually exists in `en` `i18n.js`. |
 | `python tests/contrast_check.py` | WCAG text, border and focus-ring contrast across every theme and window, accounting for a dark text-shadow halo where one covers the text. |
 | `python tests/expert_menu_check.py` | Every expert tab entry exists once, no `gate:` on an unknown flag, nothing unreachable, every `DEPENDENCIES` pair really carries the parent's gate in the parent's own group; every `EXPERT_NOTICES` entry is declared, shown by exactly one group, has both its strings, and never doubles as a flag key. |
 | `python tests/settings_directory_check.py` | Every `SETTINGS_DIRECTORY` entry (the expert search's cross-area hits: normal settings, toolbar, library, backups) points at a real element and a real i18n key; every real setting control in `#settings-main` is either in the directory or explicitly whitelisted as not a setting. |
@@ -35,6 +39,13 @@ Covers line **and** block comments (`/* */`, `<!-- -->`), the spelled-out forms
 blanked first, so a URL in code is never read as a comment. Known-good exceptions live
 in its `EXCEPTIONS` list with a reason each. This is a permanent gate, not a one-time
 cleanup.
+
+### `no_emdash.py` in detail
+Strips `//` and `/* */` / `<!-- -->` comments before scanning a `.js`/`.html` file (a
+comment is out of scope on purpose, cleaned up separately later), then flags any of the
+four dash characters left in the visible text: string literals, markup, and every line of
+`docs/help.md` and `README.md`. A plain ASCII hyphen (e.g. a `00:12-00:34` time range) is
+not one of the four and never trips it.
 
 ### `flag_polarity.py` in detail
 A default-off feature gated on `noflag-` (or the reverse) parses fine, passes every

@@ -550,6 +550,18 @@ the video editor and the introduction tour ship on).
   keyboard, game keys) plus a free selection, sharing the same range,
   duplicate, snap and export as every other overlay. How long a released key
   stays visible is adjustable in the expert menu.
+- **Camera recording** (expert menu, off by default). A "Record camera"
+  entry on the record button's right-click menu opens its own small window
+  with a live preview and its own Start/Pause/Stop, audio source, resolution
+  and target folder. The window itself, or its status dot in the recording
+  bar, is always visible while the camera runs — no silent camera. It
+  records to its own file, never burned into a screen recording, so either
+  can be repositioned later. Running alongside a screen recording, both
+  share the same start point, and the video editor opens the screen
+  recording with the camera laid on top as an aligned overlay once both are
+  finished; with no screen recording running, the camera take is its own
+  zero point and opens on its own. Default camera, resolution and frame
+  rate are all adjustable in the expert menu.
 
 ### Improved
 
