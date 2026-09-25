@@ -64,6 +64,7 @@ export const HELP_CONTENT = {
       settings: [
         "Dynamic placeholders, choice placeholders, remember choices, popup in its own window — Expert menu → Features → Placeholders",
       ],
+      sketches: ["placeholderAnatomy"],
     },
     {
       section: "basics",
@@ -90,6 +91,7 @@ export const HELP_CONTENT = {
       whatHappens:
         "A short confirmation bubble or flash confirms the copy. Chaining, clicking several tiles in a row, combines them into one clipboard entry instead of overwriting each other; hovering a text tile also shows a small chain icon next to its selection checkbox that starts a chain with that tile first. Chaining is not the same as rotation: chaining combines several different tiles, rotation changes what a single tile holds from copy to copy (see Rotating tiles).",
       settings: ["Chaining, and the chain icon shown on a tile: Expert menu → Features → Tiles & copying", "Per-tile hotkeys, auto-paste, drag-out, close-on-copy: Expert menu → Features → Copying", "Which key drags a tile out, and whether that key drags out or moves it — Expert menu → Features → Copying"],
+      sketches: ["flowToTarget", "chainSteps"],
     },
     {
       section: "alwaysOnTop",
@@ -116,6 +118,7 @@ export const HELP_CONTENT = {
         "A pill or grid folder shows up to four member previews and a count, dragging a member out frees it, and it dissolves once one member is left; a tile belongs to only one grid folder at a time. A group tab instead opens the list of its views when clicked.",
       settings: ["Pill folders, grid folders — Expert menu → Features → Floating buttons & folders", "View groups — Expert menu → Features → Views and quick grid"],
       tip: "All three kinds are on out of the box; switch any of them off in the expert menu if items are never grouped that way.",
+      sketches: ["folderTypes"],
     },
     {
       section: "alwaysOnTop",
@@ -482,6 +485,7 @@ export const HELP_CONTENT = {
       whatHappens:
         "Nothing is processed until you export: the live preview plays your edits directly. A filmstrip and waveform give a zoomable overview of the whole clip for frame-exact navigation. The preview itself also zooms with the scroll wheel (up to 8×) and pans by dragging — the middle mouse button always, the left button once zoomed in — for placing a small overlay precisely on a large recording. A few ready-made export presets (unchanged quality, a smaller size for chat, an animated GIF) remember your last choice. Besides MP4, WebM and GIF, the export format list also offers AVI, MOV, MKV, animated WebP and APNG, each with a short note on what it's for; GIF, WebP and APNG never carry audio, warn once the clip runs past ten seconds, and are capped to a maximum resolution since all three grow large fast. Undo/redo covers every editing step, capped by an adjustable limit.",
       settings: ["Video editor, undo limit — Expert menu → Features → Create prompts"],
+      sketches: ["editorTimeline"],
     },
     {
       section: "basics",
@@ -672,6 +676,7 @@ export const HELP_CONTENT = {
       settings: [
         "Dynamische Platzhalter, Auswahl-Platzhalter, Auswahl merken, Popup im eigenen Fenster — Experten-Menü → Funktionen → Variablen",
       ],
+      sketches: ["placeholderAnatomy"],
     },
     {
       section: "basics",
@@ -698,6 +703,7 @@ export const HELP_CONTENT = {
       whatHappens:
         "Eine kurze Bestätigungsblase oder ein Aufblinken bestätigt den Kopiervorgang. Verketten, mehrere Kacheln hintereinander anklicken, fasst sie zu einem Eintrag in der Zwischenablage zusammen, statt sie zu überschreiben; beim Überfahren einer Text-Kachel erscheint zusätzlich ein kleines Ketten-Symbol neben ihrer Auswahlbox, das direkt eine Kette mit dieser Kachel beginnt. Verketten ist nicht dasselbe wie Rotation: Verketten fasst mehrere verschiedene Kacheln zusammen, Rotation ändert, was eine einzelne Kachel von Kopie zu Kopie enthält (siehe Wechselnde Kacheln).",
       settings: ["Verketten und das Ketten-Symbol an der Kachel: Experten-Menü → Funktionen → Kacheln & Kopieren", "Eigene Hotkeys pro Kachel, Auto-Paste, Drag-out, Schließen-nach-Kopieren: Experten-Menü → Funktionen → Kopieren", "Welche Taste eine Kachel herauszieht und ob diese Taste herauszieht oder sie verschiebt — Experten-Menü → Funktionen → Kopieren"],
+      sketches: ["flowToTarget", "chainSteps"],
     },
     {
       section: "alwaysOnTop",
@@ -724,6 +730,7 @@ export const HELP_CONTENT = {
         "Ein Pillen- oder Raster-Ordner zeigt bis zu vier Vorschauen seiner Mitglieder und eine Anzahl; das Herausziehen eines Mitglieds gibt es frei, und der Ordner löst sich auf, sobald nur noch eines übrig ist. Eine Kachel gehört immer nur zu einem Raster-Ordner gleichzeitig. Ein Gruppen-Tab öffnet stattdessen beim Anklicken die Liste seiner Ansichten.",
       settings: ["Pillen-Ordner, Raster-Ordner — Experten-Menü → Funktionen → Schwebende Buttons & Ordner", "Ansichtsgruppen — Experten-Menü → Funktionen → Ansichten und Schnellraster"],
       tip: "Alle drei Arten sind ab Werk an; jede einzeln im Experten-Menü abschaltbar, wenn Elemente so nie gruppiert werden sollen.",
+      sketches: ["folderTypes"],
     },
     {
       section: "alwaysOnTop",
@@ -1091,6 +1098,7 @@ export const HELP_CONTENT = {
       whatHappens:
         "Bis zum Export wird nichts verarbeitet: Die Live-Vorschau spielt die Bearbeitungen direkt ab. Filmstreifen und Wellenform geben eine zoombare Übersicht über den ganzen Clip für bildgenaue Navigation. Die Vorschau selbst zoomt außerdem mit dem Mausrad (bis 8×) und lässt sich durch Ziehen verschieben — mit der mittleren Maustaste immer, mit der linken sobald hineingezoomt ist —, um ein kleines Overlay bei einer großen Aufnahme genau zu platzieren. Ein paar fertige Export-Voreinstellungen (unveränderte Qualität, kleiner für Chat, animiertes GIF) merken sich die letzte Wahl. Neben MP4, WebM und GIF bietet die Formatauswahl beim Export auch AVI, MOV, MKV, animiertes WebP und APNG, jeweils mit einem kurzen Hinweis, wofür es gedacht ist; GIF, WebP und APNG haben nie Ton, warnen ab zehn Sekunden Länge und sind auf eine Höchstauflösung begrenzt, da alle drei schnell groß werden. Rückgängig/Wiederholen deckt jeden Bearbeitungsschritt ab, begrenzt durch ein einstellbares Limit.",
       settings: ["Video-Editor, Rückgängig-Limit — Experten-Menü → Funktionen → Prompts erstellen"],
+      sketches: ["editorTimeline"],
     },
     {
       section: "basics",

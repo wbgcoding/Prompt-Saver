@@ -51,6 +51,10 @@ before the finished text reaches the clipboard.
   field's placeholder text, marked with a small pin, never inserted until it
   is typed or picked.
 
+<p>
+<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><text x="30" y="45" font-size="15" fill="currentColor" text-anchor="start">{#{Kunde=Meier|Meier,Schulz}#}</text><line x1="65" y1="55" x2="65" y2="80" stroke="currentColor" stroke-width="1"/><text x="65" y="95" font-size="11" fill="currentColor" text-anchor="middle">Name</text><line x1="118" y1="55" x2="150" y2="80" stroke="currentColor" stroke-width="1"/><text x="150" y="95" font-size="11" fill="currentColor" text-anchor="middle">Default</text><line x1="240" y1="55" x2="260" y2="80" stroke="currentColor" stroke-width="1"/><text x="260" y="95" font-size="11" fill="currentColor" text-anchor="middle">Choice list</text></svg>
+</p>
+
 ### The editor
 
 The editor is a plain text box by default; a few opt-in features (**Markdown
@@ -279,6 +283,10 @@ resolution never show in the live preview to begin with), and the current
 cuts stay in effect, since jumping to a cut-out moment would only confuse.
 None of it touches the export.
 
+<p>
+<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="60" y="15" width="120" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="120" y="34" font-size="10" fill="currentColor" text-anchor="middle">Overlay</text><rect x="20" y="55" width="520" height="22" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="180" y1="55" x2="180" y2="77" stroke="currentColor" stroke-width="1.5"/><line x1="340" y1="55" x2="340" y2="77" stroke="currentColor" stroke-width="1.5"/><text x="180" y="95" font-size="10" fill="currentColor" text-anchor="middle">Cut mark</text><path d="M 20 115 q 15 -15 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0" fill="none" stroke="currentColor" stroke-width="1"/><text x="480" y="95" font-size="10" fill="currentColor" text-anchor="middle">Audio track</text><text x="290" y="12" font-size="10" fill="currentColor" text-anchor="middle">Timeline</text></svg>
+</p>
+
 ### Text recognition (OCR)
 
 On by default. A button on the composer and in the screenshot dialog pulls the
@@ -405,6 +413,14 @@ fast too often pauses the session with a toast instead of looping.
   shows the formatting, while a plain text field still gets exactly the
   Markdown source a normal copy would have given it
 
+<p>
+<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="20" y="15" width="110" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="75" y="36" font-size="11" fill="currentColor" text-anchor="middle">Create prompt</text><line x1="130" y1="32" x2="187" y2="32" stroke="currentColor" stroke-width="1.5"/><path d="M 185 28 L 195 32 L 185 36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><rect x="195" y="15" width="170" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="36" font-size="11" fill="currentColor" text-anchor="middle">Copy</text><line x1="365" y1="32" x2="422" y2="32" stroke="currentColor" stroke-width="1.5"/><path d="M 420 28 L 430 32 L 420 36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><rect x="430" y="15" width="110" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="485" y="36" font-size="11" fill="currentColor" text-anchor="middle">Paste</text><line x1="280" y1="49" x2="280" y2="70" stroke="currentColor" stroke-width="1" stroke-dasharray="2 2"/><rect x="60" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="117" y="99" font-size="10" fill="currentColor" text-anchor="middle">Tile</text><rect x="190" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="247" y="99" font-size="10" fill="currentColor" text-anchor="middle">Hotkey</text><rect x="320" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="377" y="99" font-size="10" fill="currentColor" text-anchor="middle">Floating button</text><rect x="450" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="507" y="99" font-size="10" fill="currentColor" text-anchor="middle">Tray</text></svg>
+</p>
+
+<p>
+<svg viewBox="0 0 560 90" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="30" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="80" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 1</text><rect x="230" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 2</text><rect x="430" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="480" y="41" font-size="11" fill="currentColor" text-anchor="middle">Step 3</text><line x1="130" y1="37" x2="217" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 215 33 L 225 37 L 215 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="177" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{X}#}</text><line x1="330" y1="37" x2="417" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 415 33 L 425 37 L 415 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="377" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{Y}#}</text></svg>
+</p>
+
 ### Hotkeys
 
 Two independent kinds: one global combination that opens the quick launcher
@@ -504,6 +520,10 @@ One gesture works in three places: drop one onto another to gather it into a
 folder. A view tab dropped onto another view tab makes a group tab. A floating
 button dropped onto another makes a pill folder. A tile dropped onto another
 tile makes a grid folder, and belongs to only one grid folder at a time.
+
+<p>
+<svg viewBox="0 0 560 120" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="20" y="20" width="150" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="30" y="30" width="40" height="16" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="74" y="30" width="40" height="16" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="30" y="52" width="120" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="95" y="108" font-size="11" fill="currentColor" text-anchor="middle">View group</text><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Pill folder</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Grid folder</text></svg>
+</p>
 
 ### Tray
 
@@ -900,6 +920,10 @@ schlagen für einen passenden Namen eine gepflegte Liste von Werten vor, nur
 als Platzhaltertext im Feld, mit einer kleinen Stecknadel markiert, nie
 eingesetzt, bevor er getippt oder übernommen wird.
 
+<p>
+<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><text x="30" y="45" font-size="15" fill="currentColor" text-anchor="start">{#{Kunde=Meier|Meier,Schulz}#}</text><line x1="65" y1="55" x2="65" y2="80" stroke="currentColor" stroke-width="1"/><text x="65" y="95" font-size="11" fill="currentColor" text-anchor="middle">Name</text><line x1="118" y1="55" x2="150" y2="80" stroke="currentColor" stroke-width="1"/><text x="150" y="95" font-size="11" fill="currentColor" text-anchor="middle">Vorgabe</text><line x1="240" y1="55" x2="260" y2="80" stroke="currentColor" stroke-width="1"/><text x="260" y="95" font-size="11" fill="currentColor" text-anchor="middle">Auswahlliste</text></svg>
+</p>
+
 **Der Editor** — Markdown-Vorschau, Syntax-Hervorhebung, Versionsverlauf, private
 Notizen (Markdown-Vorschau und Notizen standardmäßig aus). Bei einer Datei-Kachel
 mit eigenem Vorschaubild: das Bild über der Dateizeile ist nur die Kachel-Vorschau,
@@ -997,6 +1021,10 @@ Ende oder an der aktuellen Stelle; jede zusätzliche Quelle wird beim
 Auswählen einmal geprüft und bleibt sichtbar als fehlend markiert, falls sie
 später verschoben oder gelöscht wird, bis zu einer Höchstzahl je Projekt
 (ab Werk acht, einstellbar im Expertenmenü).
+
+<p>
+<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="60" y="15" width="120" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="120" y="34" font-size="10" fill="currentColor" text-anchor="middle">Überlagerung</text><rect x="20" y="55" width="520" height="22" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="180" y1="55" x2="180" y2="77" stroke="currentColor" stroke-width="1.5"/><line x1="340" y1="55" x2="340" y2="77" stroke="currentColor" stroke-width="1.5"/><text x="180" y="95" font-size="10" fill="currentColor" text-anchor="middle">Schnittmarke</text><path d="M 20 115 q 15 -15 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0 t 30 0" fill="none" stroke="currentColor" stroke-width="1"/><text x="480" y="95" font-size="10" fill="currentColor" text-anchor="middle">Tonspur</text><text x="290" y="12" font-size="10" fill="currentColor" text-anchor="middle">Zeitleiste</text></svg>
+</p>
 
 Ein Rechtsklick auf eine Form (Screenshot-Editor) oder die Zeile einer
 Überlagerung (Video-Editor) öffnet ein kleines Menü zum Duplizieren oder
@@ -1116,6 +1144,14 @@ Markdown-Fassung eine gerenderte Fassung in die Zwischenablage, sodass Word,
 Outlook oder ein Browser die Formatierung sehen, ein reines Textfeld aber
 weiterhin genau den Markdown-Text bekommt wie bei einer normalen Kopie.
 
+<p>
+<svg viewBox="0 0 560 130" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="20" y="15" width="110" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="75" y="36" font-size="11" fill="currentColor" text-anchor="middle">Prompt anlegen</text><line x1="130" y1="32" x2="187" y2="32" stroke="currentColor" stroke-width="1.5"/><path d="M 185 28 L 195 32 L 185 36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><rect x="195" y="15" width="170" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="36" font-size="11" fill="currentColor" text-anchor="middle">kopieren</text><line x1="365" y1="32" x2="422" y2="32" stroke="currentColor" stroke-width="1.5"/><path d="M 420 28 L 430 32 L 420 36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><rect x="430" y="15" width="110" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="485" y="36" font-size="11" fill="currentColor" text-anchor="middle">einfügen</text><line x1="280" y1="49" x2="280" y2="70" stroke="currentColor" stroke-width="1" stroke-dasharray="2 2"/><rect x="60" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="117" y="99" font-size="10" fill="currentColor" text-anchor="middle">Kachel</text><rect x="190" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="247" y="99" font-size="10" fill="currentColor" text-anchor="middle">Tastenkürzel</text><rect x="320" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="377" y="99" font-size="10" fill="currentColor" text-anchor="middle">Schwebeknopf</text><rect x="450" y="78" width="115" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="507" y="99" font-size="10" fill="currentColor" text-anchor="middle">Infobereich</text></svg>
+</p>
+
+<p>
+<svg viewBox="0 0 560 90" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="30" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="80" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 1</text><rect x="230" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="280" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 2</text><rect x="430" y="20" width="100" height="34" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="480" y="41" font-size="11" fill="currentColor" text-anchor="middle">Schritt 3</text><line x1="130" y1="37" x2="217" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 215 33 L 225 37 L 215 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="177" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{X}#}</text><line x1="330" y1="37" x2="417" y2="37" stroke="currentColor" stroke-width="1.5"/><path d="M 415 33 L 425 37 L 415 41" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><text x="377" y="25" font-size="10" fill="currentColor" text-anchor="middle">{#{Y}#}</text></svg>
+</p>
+
 **Hotkeys** — ein globaler Hotkey öffnet den Schnellstarter (Standard
 Strg+Alt+P), ein eigener Hotkey pro Kachel kopiert (und fügt optional ein). Bei
 einer Kollision gewinnt der App-Hotkey, sonst die erste Kachel in der Liste.
@@ -1131,6 +1167,10 @@ einem Ordner zusammen. Ein Ansichts-Reiter auf einen anderen ergibt einen
 Gruppen-Reiter. Ein schwebender Button auf einen anderen ergibt einen
 Pillen-Ordner. Eine Kachel auf eine andere ergibt einen Raster-Ordner, und
 gehört immer nur zu einem Raster-Ordner gleichzeitig.
+
+<p>
+<svg viewBox="0 0 560 120" xmlns="http://www.w3.org/2000/svg" role="img"><rect x="20" y="20" width="150" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="30" y="30" width="40" height="16" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="74" y="30" width="40" height="16" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="30" y="52" width="120" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="95" y="108" font-size="11" fill="currentColor" text-anchor="middle">Ansichtsgruppe</text><circle cx="255" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="295" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="335" cy="45" r="16" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="295" y="108" font-size="11" fill="currentColor" text-anchor="middle">Pill-Ordner</text><rect x="430" y="20" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="430" y1="55" x2="530" y2="55" stroke="currentColor" stroke-width="1"/><line x1="480" y1="20" x2="480" y2="90" stroke="currentColor" stroke-width="1"/><text x="480" y="108" font-size="11" fill="currentColor" text-anchor="middle">Kachel-Ordner</text></svg>
+</p>
 
 **Taskleistenmenü** — Zuletzt kopiert, Favoriten. Erscheint als abgerundetes,
 zum Thema passendes Fenster statt des einfachen Windows-Menüs; im Expertenmenü

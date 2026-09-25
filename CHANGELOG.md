@@ -173,6 +173,11 @@ the video editor and the introduction tour ship on).
   ranks title hits above body hits, highlights the matching words, shows which
   chapter each result belongs to, and collapses results down to one line each
   so a broad search stays scannable instead of a wall of expanded text.
+- **Diagrams in the help window**: five small hand-drawn diagrams (the way to
+  copy a prompt, the three folder kinds, a placeholder's parts, the video
+  editor timeline, a chain of steps) next to the articles they belong to,
+  drawn in the current theme's own colours instead of a screenshot that would
+  go stale with the next redesign. Off switches back to text only.
 - **Twenty-one settings that were fixed constants are now expert values**: the
   colour-history swatch size, the colour-picker loupe grid size, screenshot
   quality and an optional capture delay, a rotating prompt's tooltip preview

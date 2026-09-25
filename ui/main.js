@@ -7,6 +7,7 @@ import { IMAGE_EXT, mediaKind, buildMediaBar, applyVideoPrefs, setMediaDefaults 
 import { COOLDOWN_MS_DEFAULT, AUTO_PASTE_DELAY_MS_DEFAULT, DBL_CLICK_MS_DEFAULT, DRAG_THRESHOLD_DEFAULT, COPY_SOUND_VOLUME_DEFAULT } from "./copyDefaults.js";
 import { EXAMPLE_IMAGE_DATA_URL } from "./exampleAssets.js";
 import { HELP_CONTENT } from "./help.js";
+import { HELP_SKETCHES } from "./helpSketches.js";
 import { DRAG_OUT_MODS, FOLDER_SVG, fileUri, resolveLang, ffmpegDownloadPct, themeColorScheme, playCopySound, numberField, makeEtaEstimator, formatEta, parseFfmpegError, fmtBytes, makeHoldOrTapToggle } from "./floatShared.js";
 import { placePopover, placePopoverAt, setPopoverPad } from "./popover.js";
 import { createColorPop } from "./colorpop.js";
@@ -1326,9 +1327,11 @@ const FLAG_LABELS = {
   // switched off on its own. Both ship default on.
   backupBeforeReset: "flagBackupBeforeReset",
   backupBeforeDelete: "flagBackupBeforeDelete",
-  // Help panel — the tip line under each article, and search-hit highlighting.
+  // Help panel: the tip line under each article, search-hit highlighting, and
+  // the diagrams next to a handful of articles.
   helpTips: "flagHelpTips",
   helpHighlight: "flagHelpHighlight",
+  helpSketches: "flagHelpSketches",
   // Word-level diff in the version-history expanded view.
   historyDiff: "flagHistoryDiff",
   // Sub-toggles of ocr (OPT_FLAG_LABELS, default off), themselves default on.
@@ -2268,7 +2271,7 @@ const EXPERT_TABS = [
     { title: "expGroupPrivacy", notices: ["storeUnsealed", "settingsLocked", "settingsWriteFailed"], flags: ["allowScreenshot", "blurTilesUntilHover", "blurMediaUntilHover", "hideTileNames", "tilesHoverDim", "secretPrompts"], values: ["tileBlur", "mediaBlur", "tilesHoverOpacity", "secretTimeoutMin"] },
     { title: "expGroupSystem", notices: ["dataDirReadOnly"], flags: ["showUpdates", { key: "checkUpdateOnStart", gate: "showUpdates" }, { key: "whatsNew", gate: "showUpdates" }, "keyboardNav", "allowMultipleInstances", "dataDirLock", "taskbarProgress", "etaShow"], values: ["kbFocusFadeMs", "etaMinPct", "etaMinSecs", "bgDoneKeepMin"], selects: ["updateCheckH"], paths: ["dataDir"],
       actions: [{ id: "ffmpeg-download", label: "ffmpegDownloadAction" }] },
-    { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "firstRunTour"],
+    { title: "expGroupHelp", flags: ["helpTips", "helpHighlight", "helpSketches", "firstRunTour"],
       actions: [{ id: "tour-open", label: "tourOpenAction", gate: "firstRunTour" }] },
     { title: "expGroupData", flags: ["dupFinder", { key: "dupImportCheck", gate: "dupFinder" }, "similarHint", "backupBeforeReset", "backupBeforeDelete", "importExport", "recSweepBroken", "undoToast", "errorLog"], values: ["similarThreshold", "importFolderDepth", "importFolderMax", "disarmMs", "recBrokenGraceMin", "recSweepEveryMin", "recDiscardKeepH", "videoClipTtlMin", "errorLogKeepKb", "undoToastMs", "errorLogMax"], selects: ["trashRetentionDays", "recordingRetentionDays"],
       actions: [{ id: "dupes-open", label: "dupTitle", gate: "dupFinder" }, { id: "trash-open", label: "trashTitle" }, { id: "rec-sweep-now", label: "recSweepNowAction", gate: "recSweepBroken" }, { id: "settings-export", label: "settingsExportAction" }, { id: "settings-import", label: "settingsImportAction" }, { id: "ocr-index-backfill", label: "ocrIndexBackfillAction", gate: "ocrIndex" }, { id: "float-recall", label: "floatRecallAction", gate: "floating" }, { id: "error-log-open", label: "errorLogAction" }] },
@@ -2517,7 +2520,7 @@ const EXPERT_TIPS = [
   "tileFolders", "tileFolderZone", "tileFolderHoverMs", "tileFolderCols",
   "rotatingPrompts", "rotateDefaultMode", "rotateMaxEntries", "rotateBadge", "rotateTipLen",
   "rotateAuto", "rotateAutoTimeoutMin", "rotateAutoSettleMs", "rotateAutoCooldownMs", "rotateAutoInputMs", "rotateAutoRearmMax",
-  "helpTips", "helpHighlight", "firstRunTour",
+  "helpTips", "helpHighlight", "helpSketches", "firstRunTour",
   // Tiles / copying
   "tilePreview", "tileMenu", "typeBadges", "tileHotkeyBadge", "copyBubble", "copyFlash", "tilePressScale", "chainPrompts", "chainLock", "chainQuickStart", "chainStartAlwaysVisible", "chainVarCheck", "autoPasteEnter", "hideWindowOnCopy",
   "promptHotkeys", "promptHotkeyPaste", "dragOut", "dragOutInvert", "dragOutModifier",
@@ -15164,6 +15167,19 @@ function renderHelp() {
         ol.appendChild(li);
       }
       body.appendChild(ol);
+    }
+    if (cat.sketches && cat.sketches.length && flag("helpSketches")) {
+      // Sketches only ship English/German labels, matching help.js's own EN/DE
+      // scope -- every other language falls back to the English drawing.
+      const sketchLang = LANG === "de" ? "de" : "en";
+      for (const id of cat.sketches) {
+        const draw = HELP_SKETCHES[id];
+        if (!draw) continue;
+        const fig = document.createElement("div");
+        fig.className = "help-sketch";
+        fig.innerHTML = draw(sketchLang);
+        body.appendChild(fig);
+      }
     }
     if (cat.whatHappens) {
       const wh = document.createElement("p");

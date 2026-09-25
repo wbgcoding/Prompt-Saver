@@ -414,6 +414,7 @@ PROBE = """
         if (tabs.length < 2) out.errors.push('the help menu shows too few section tabs (' + tabs.length + ')');
         let totalGroups = 0;
         let sawTip = false;
+        let sawSketch = false;
         const seenTitles = new Set();
         for (let i = 0; i < tabs.length; i++) {
           document.querySelectorAll('#help-tabs-bar .expert-tab')[i].click();
@@ -426,6 +427,7 @@ PROBE = """
           const empties = here.filter(g => !g.querySelector('.help-overview').textContent.trim());
           if (empties.length) out.errors.push(empties.length + ' help category has an empty overview (tab ' + i + ')');
           if (document.querySelector('#help-body .help-tip')) sawTip = true;
+          if (document.querySelector('#help-body .help-sketch svg')) sawSketch = true;
           for (const g of here) {
             const t = g.querySelector('.help-group-title-text');
             if (t) seenTitles.add(t.textContent.trim());
@@ -439,6 +441,7 @@ PROBE = """
           out.errors.push('the help menu shows too few categories across all tabs (' + totalGroups + ')');
         }
         if (!sawTip) out.errors.push('no help category shows a tip callout');
+        if (!sawSketch) out.errors.push('no help category shows a diagram');
         const search = document.getElementById('help-search');
         // Multi-word query whose words are not literally adjacent anywhere — only the
         // term-AND-logic search (73) finds it, a plain includes() search finds nothing.
