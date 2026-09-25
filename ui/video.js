@@ -1817,6 +1817,10 @@ function centeredRect(fraction) {
 }
 
 async function addOverlay(kind) {
+  // Same race as startAddVideo: this runs off a button live from the first
+  // paint, and builds its default text and error wording with t() at click
+  // time, so it needs the lazy i18n import landed before it reads any of it.
+  if (!TXT_READY) await textsReady;
   const range = defaultRange();
   const base = { tool: "overlay", id: newId(), kind, ...range };
   let op = null;
@@ -1987,7 +1991,14 @@ function showClipPositionMenu(picked, x, y) {
 
 // Both destinations share one selection path: pick and validate the file
 // once, then choose where it goes.
+//
+// The limit toast and the whole menu below it are t() calls made at click
+// time, same risk as the restore-edit-state dialog: the button is live the
+// moment the window paints, well before the lazy i18n import behind it has
+// necessarily landed, so a click that fast would otherwise freeze raw i18n
+// keys into the toast and the popup.
 async function startAddVideo(x, y) {
+  if (!TXT_READY) await textsReady;
   const picked = await pickExtraVideo();
   if (!picked) return;
   addVideoPop.innerHTML = "";
