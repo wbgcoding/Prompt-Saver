@@ -11342,7 +11342,11 @@ EDIT_STATE_PROBE = """
   };
   try {
     const overlay = document.getElementById('ve-confirm');
-    const shown = await until(() => overlay && !overlay.classList.contains('hidden'));
+    // The dialog only opens once loadRecording's own probe/mux/texts-ready
+    // chain has fully settled -- generous relative to the default 5s used
+    // elsewhere in this file (still well inside the page's 30s virtual-time
+    // budget), since a shorter budget here measurably flaked under load.
+    const shown = await until(() => overlay && !overlay.classList.contains('hidden'), 300);
     if (!shown) {
       errs.push(which + 'the restore dialog never opened although a saved edit state was planted');
     } else {
@@ -13016,22 +13020,30 @@ EXTRA_CLIPS_MAX_PROBE = """
     }
     await window.__TAURI__.core.invoke('set_ui_value', { key: 'veExtraClipsMax', value: 1 });
     window.__FIRE__('settings-changed');
-    await sleep(50);
 
+    // Every wait below polls the real DOM state instead of sleeping a fixed
+    // guess -- a fixed sleep here was too short under load (many probes
+    // running at once), flaking this whole check.
     document.getElementById('ve-add-video').click();
-    await sleep(30);
-    let pickPop = document.getElementById('ve-add-video-pop');
+    let pickPop = null;
+    await until(() => {
+      pickPop = document.getElementById('ve-add-video-pop');
+      return pickPop && !pickPop.classList.contains('hidden') && pickPop.querySelectorAll('button').length === 2;
+    }, 100);
     if (!pickPop || pickPop.classList.contains('hidden') || pickPop.querySelectorAll('button').length !== 2) {
       errs.push('475: lowering the limit to one still blocked the first extra source');
     } else {
       pickPop.querySelectorAll('button')[1].click(); // as its own section
-      await sleep(30);
-      const posButtons = pickPop.querySelectorAll('button');
+      let posButtons = [];
+      await until(() => {
+        posButtons = pickPop.querySelectorAll('button');
+        return !pickPop.classList.contains('hidden') && posButtons.length === 3;
+      }, 100);
       if (pickPop.classList.contains('hidden') || posButtons.length !== 3) {
         errs.push('475: choosing as its own section did not open the position choice');
       } else {
         posButtons[1].click(); // at the end
-        await sleep(30);
+        await until(() => document.querySelectorAll('#ve-clip-list .ve-op-row').length === 1, 100);
       }
     }
     const afterFirst = document.querySelectorAll('#ve-clip-list .ve-op-row').length;
@@ -13040,13 +13052,13 @@ EXTRA_CLIPS_MAX_PROBE = """
     }
 
     document.getElementById('ve-add-video').click();
-    await sleep(30);
+    const toastEl = document.getElementById('ve-toast');
+    await until(() => !toastEl.classList.contains('hidden'), 100);
     pickPop = document.getElementById('ve-add-video-pop');
     const popOpened = pickPop && !pickPop.classList.contains('hidden') && pickPop.querySelectorAll('button').length;
     if (popOpened) {
       errs.push('475: a second extra source was still allowed once the lowered limit of one was reached');
     }
-    const toastEl = document.getElementById('ve-toast');
     if (toastEl.classList.contains('hidden') || !toastEl.textContent || !toastEl.textContent.includes('1')) {
       errs.push('475: the limit toast did not report the lowered value of one, got: ' + toastEl.textContent);
     }
