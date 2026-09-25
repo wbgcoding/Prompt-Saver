@@ -22346,7 +22346,15 @@ enum ContinueOutcome {
 async fn finish_and_continue_recording(
     app: AppHandle,
     rstate: State<'_, RecordingState>,
+    db: State<'_, Db>,
 ) -> Result<RecordingContinuedPayload, String> {
+    // Read once, same as start_recording -- keyOverlay's setting is not
+    // re-resolved off the closing session (it carries no copy of it), and
+    // restarting capture for the continuation part needs it.
+    let (key_overlay_on, key_overlay_hold_ms) = {
+        let g = db.lock().unwrap_or_else(|e| e.into_inner());
+        (keylog::enabled(&g.settings.ui_flags), keylog::hold_ms(&g.settings.ui_values))
+    };
     let session = {
         let mut guard = rstate.0.lock().unwrap_or_else(|e| e.into_inner());
         let s = guard.take().ok_or_else(|| "no active recording".to_string())?;
@@ -22392,6 +22400,17 @@ async fn finish_and_continue_recording(
             target, out_path.clone(), show_cursor, audio, video_kbps, video_fps, &canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb,
         ) {
             Ok(new_session) => {
+                // Close out the part that just finished -- its own
+                // sidecar, timed from ITS OWN start -- before the new capture
+                // for the continuation part begins. The old code never
+                // stopped/restarted keylog across this switch at all: the one
+                // hook+consumer pair (maybe_start is a no-op while a capture
+                // is already running) just kept going, so every earlier
+                // part's sidecar was empty and the very LAST part's sidecar
+                // ended up holding the whole chain's keys, timed from the
+                // FIRST part's start.
+                keylog::maybe_stop_and_write(&path);
+                keylog::maybe_start(key_overlay_on, key_overlay_hold_ms);
                 // The switch worked -- this part is now an interim one with no
                 // result dialog of its own, so its crop (if any) runs right away
                 // in the background instead of waiting on
@@ -22480,8 +22499,8 @@ async fn finish_and_continue_recording(
 }
 #[cfg(not(windows))]
 #[tauri::command]
-async fn finish_and_continue_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<RecordingContinuedPayload, String> {
-    let _ = (app, rstate);
+async fn finish_and_continue_recording(app: AppHandle, rstate: State<'_, RecordingState>, db: State<'_, Db>) -> Result<RecordingContinuedPayload, String> {
+    let _ = (app, rstate, db);
     Err("recording is only available on Windows".to_string())
 }
 
