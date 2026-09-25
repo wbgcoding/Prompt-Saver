@@ -20618,13 +20618,15 @@ struct RecordingContinuedPayload {
 // events for as long as it stays focused.
 #[cfg(windows)]
 mod keylog {
-    use super::{append_crash_log, now_ms};
+    use super::append_crash_log;
     use serde::{Deserialize, Serialize};
+    use std::collections::VecDeque;
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::sync::mpsc::{channel, Receiver, Sender};
+    use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
     use std::sync::{Arc, Mutex, OnceLock};
     use std::thread::{self, JoinHandle};
+    use std::time::{Duration, Instant};
     use windows::core::{implement, Interface};
     use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
     use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED};
@@ -20647,6 +20649,21 @@ mod keylog {
     // slow but healthy app, short enough that a genuinely hung one never
     // blocks a recording from stopping for more than about two seconds.
     const UIA_TIMEOUT_MS: u32 = 2000;
+
+    static CLOCK_START: OnceLock<Instant> = OnceLock::new();
+
+    // A monotonic milliseconds clock, immune to a wall-clock jump (NTP, DST,
+    // the user setting the system clock back). `now_ms()` (SystemTime) can
+    // move backward; if it did, a later check could look "older" than an
+    // earlier one and state_at/the verdict algorithm below would silently
+    // pick a stale entry over a fresh one. EVERY keylog timestamp -- the
+    // hook, the UI Automation handler, the consumer's checks, ActiveClock,
+    // and the `start_abs_ms`/cutoff instants a caller outside this module
+    // passes in -- is stamped from this SAME clock; mixing it with
+    // `now_ms()` anywhere in here would silently corrupt every comparison.
+    pub fn mono_ms() -> u64 {
+        CLOCK_START.get_or_init(Instant::now).elapsed().as_millis() as u64
+    }
 
     #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
     pub struct KeyEvent {
@@ -20709,18 +20726,19 @@ mod keylog {
         }
     }
 
-    // Wall-clock elapsed-since-recording-start pause tracking -- pure and
-    // independent of any Windows API, so pause/resume behaviour is directly
-    // unit-testable. keylog used to keep recording straight
-    // through a pause with raw wall-clock offsets, so a paused stretch (and
-    // anything typed during it) leaked into the sidecar at the wrong time.
-    // A key struck while paused is dropped outright here -- pause means "we
-    // know nothing should be recorded," which is a different, stronger
-    // statement than a gap ("we do not know the focus state").
+    // Monotonic-clock elapsed-since-recording-start pause tracking -- pure
+    // and independent of any Windows API, so pause/resume behaviour is
+    // directly unit-testable. keylog used to keep recording straight
+    // through a pause with raw offsets, so a paused stretch (and anything
+    // typed during it) leaked into the sidecar at the wrong time. A key
+    // struck while paused is dropped outright here -- pause means "we know
+    // nothing should be recorded," which is a different, stronger statement
+    // than a gap ("we do not know the focus state"). Every timestamp here
+    // comes from `mono_ms()`, never `now_ms()` -- see `mono_ms`'s own doc.
     #[derive(Default)]
     struct ActiveClock {
         start_abs_ms: u64,
-        // Every paused span so far, in wall-clock ms: a closed one once
+        // Every paused span so far, in monotonic ms: a closed one once
         // resume() runs, at most one still-open one (`None` end) while
         // actually paused.
         pauses: Vec<(u64, Option<u64>)>,
@@ -20745,7 +20763,7 @@ mod keylog {
             }
         }
 
-        // Whether the wall-clock instant `t_ms` fell inside a paused span --
+        // Whether the monotonic instant `t_ms` fell inside a paused span --
         // judged against the key's OWN timestamp, not against "are we paused
         // right now", so a key queued up just before a pause is never
         // mistakenly dropped because the consumer got to it late.
@@ -20753,7 +20771,7 @@ mod keylog {
             self.pauses.iter().any(|(s, e)| t_ms >= *s && e.map_or(true, |e| t_ms < e))
         }
 
-        // Active-recording-elapsed ms at `t_ms`: wall-clock elapsed since
+        // Active-recording-elapsed ms at `t_ms`: monotonic elapsed since
         // start minus every paused span up to that point -- the same clock
         // basis the video track itself uses, so a stored key timestamp lines
         // up with the frame it was actually struck during.
@@ -20770,63 +20788,105 @@ mod keylog {
         }
     }
 
-    // Ordered, append-only log of confirmed password-field states, each
-    // stamped with the wall-clock instant it became true. Replaces the old
-    // per-HWND "not password" cache: Chromium, Edge, Electron, WebView2, WPF
-    // and UWP all host an entire page/form in ONE HWND, so caching an
-    // answer by HWND alone let a password field focused
-    // right after a username field in the same HWND go undetected forever --
-    // the cache never saw a "new" HWND to invalidate on. Every entry here
-    // instead comes from the FOCUSED ELEMENT actually changing (UI
-    // Automation's focus-changed event, see FocusHandler below) or from a
-    // fresh per-key-down recheck, so an in-page field switch invalidates
-    // exactly as reliably as a cross-window one -- there is no HWND-shaped
-    // key for a stale answer to hide behind at all.
-    //
-    // Querying by the KEY's OWN timestamp also fixes a second,
-    // subtler race: judging a key against focus state at CONSUMPTION time
-    // (when the consumer thread gets around to it) let a slow first UIA call
-    // misjudge keys typed in between against a focus that had already moved
-    // on. `state_at` instead looks up what was confirmed true at the key's
-    // own instant, so consumer lag can delay a verdict but never corrupt it.
+    // How long after a key a focus check must have STARTED before that
+    // check is old enough to actually speak for the key (the "settle"
+    // delay), and how far around every focus-change arrival nothing is ever
+    // trusted at all (the "guard"/"blind" window). Both replace the earlier
+    // both-sides rule, which judged a key from only two points -- the state
+    // right before it and one recheck run for it -- and so could still
+    // clear a key on a side that was never actually re-examined at all: the
+    // per-key recheck ran at CONSUMPTION time, which can lag well behind the
+    // key itself, and everything the focus did in the meantime was invisible
+    // to a two-point check.
+    const SETTLE_MS: u64 = 300;
+    const GUARD_MS: u64 = 300;
+
+    // Ordered log of every completed focus check (`checks`, each stamped by
+    // the instant it STARTED, not when it finished) and every focus-change
+    // event's own arrival (`arrivals`), both on the `mono_ms()` clock.
+    // Replaces the old per-HWND "not password" cache -- Chromium, Edge,
+    // Electron, WebView2, WPF and UWP all host an entire page/form in ONE
+    // HWND, so caching an answer by HWND alone let a password field focused
+    // right after a username field in the same HWND go undetected forever,
+    // the cache never saw a "new" HWND to invalidate on -- and also the
+    // earlier `FocusTimeline`'s two-point both-sides rule (see `verdict`
+    // below for why a single "before" and "after" point was not enough).
     #[derive(Default)]
-    struct FocusTimeline {
-        // Insertion keeps this sorted by t_ms even if a slow recheck lands
-        // out of order relative to a newer event.
-        entries: Vec<(u64, bool)>,
+    struct Ledger {
+        checks: Vec<(u64, bool)>, // (start_ms, is_password)
+        arrivals: Vec<u64>,
     }
 
-    impl FocusTimeline {
-        fn push(&mut self, t_ms: u64, password: bool) {
-            let pos = self.entries.partition_point(|(t, _)| *t <= t_ms);
-            self.entries.insert(pos, (t_ms, password));
+    impl Ledger {
+        fn push_check(&mut self, start_ms: u64, is_password: bool) {
+            let pos = self.checks.partition_point(|(t, _)| *t <= start_ms);
+            self.checks.insert(pos, (start_ms, is_password));
         }
 
-        // The password state confirmed to be in effect AT t_ms -- the last
-        // entry at or before it. None means no check had completed yet by
-        // that time: fail closed, the caller must treat that as "password",
-        // never as "probably fine."
-        fn state_at(&self, t_ms: u64) -> Option<bool> {
-            let pos = self.entries.partition_point(|(t, _)| *t <= t_ms);
-            if pos == 0 {
-                None
-            } else {
-                Some(self.entries[pos - 1].1)
-            }
+        fn push_arrival(&mut self, arrival_ms: u64) {
+            let pos = self.arrivals.partition_point(|t| *t <= arrival_ms);
+            self.arrivals.insert(pos, arrival_ms);
+        }
+
+        // The EARLIEST completed check that started late enough (t +
+        // SETTLE_MS or later) to actually speak for a key struck at `t`.
+        // None means no such check exists YET: the caller must keep
+        // waiting for one, never assume "probably fine" just because time
+        // is short.
+        fn qualifying_check(&self, t: u64) -> Option<(u64, bool)> {
+            let need = t.saturating_add(SETTLE_MS);
+            self.checks.iter().copied().find(|(start, _)| *start >= need)
+        }
+
+        // Whether a "password" check, or a focus-change arrival, lies
+        // anywhere in [from, to] -- checked separately from the single
+        // qualifying check above, because a check that itself said "not
+        // password" can still be sitting right next to a focus change (or
+        // another, dirtier check) that happened in between and that the
+        // qualifying check alone, being a single point, cannot see.
+        fn window_is_dirty(&self, from: u64, to: u64) -> bool {
+            let bad_check = self.checks.iter().any(|(t, is_pw)| *is_pw && *t >= from && *t <= to);
+            let bad_arrival = self.arrivals.iter().any(|t| *t >= from && *t <= to);
+            bad_check || bad_arrival
+        }
+
+        // The blind window around any focus-change arrival: GUARD_MS
+        // before it through SETTLE_MS after -- unconditional, regardless of
+        // what any individual check says. UI Automation's own notification
+        // can itself lag the real focus change by a similar margin
+        // (Chromium/Electron/WebView2 accessibility trees update
+        // asynchronously), so a check landing just outside this window is
+        // not automatically trustworthy either -- rules 1 and 2 still apply
+        // on top of it.
+        fn in_blind_window(&self, t: u64) -> bool {
+            self.arrivals.iter().any(|a| t >= a.saturating_sub(GUARD_MS) && t <= a.saturating_add(SETTLE_MS))
         }
     }
 
-    // The both-sides rule: a key is only ever treated as "not password" when
-    // BOTH the state confirmed before it and the state confirmed right after
-    // it (this key's own synchronous recheck, at the latest) agree it was
-    // not a password field. A single-sided check -- trusting only whichever
-    // side happened to be available -- let a key typed right after a real
-    // focus change inherit a stale answer from before the change, since a
-    // slow focus-changed event or a recheck that only informs the NEXT key
-    // can each leave one side unconfirmed exactly when it matters most.
-    // Either side missing or true is enough to gap: doubt never records.
-    fn should_gap(entry_before: bool, entry_after: bool, injected: bool) -> bool {
-        entry_before || entry_after || injected
+    // The binding verdict algorithm. `Some(true)` = gap, `Some(false)` =
+    // record, `None` = not enough information exists YET (the caller must
+    // keep the key pending and wait for a later check) -- never treated as
+    // "record", only ever eventually resolved to a gap if nothing ever
+    // qualifies (see `verdict_at_stop`).
+    fn verdict(ledger: &Ledger, t: u64, injected: bool) -> Option<bool> {
+        if injected {
+            return Some(true);
+        }
+        if ledger.in_blind_window(t) {
+            return Some(true);
+        }
+        let (check_time, is_password) = ledger.qualifying_check(t)?;
+        if is_password {
+            return Some(true);
+        }
+        Some(ledger.window_is_dirty(t.saturating_sub(GUARD_MS), check_time))
+    }
+
+    // Called only once the capture is stopping and no further check will
+    // ever arrive: a key `verdict` still cannot decide is gapped, the same
+    // as any other doubt, never assumed safe just because time ran out.
+    fn verdict_at_stop(ledger: &Ledger, t: u64, injected: bool) -> bool {
+        verdict(ledger, t, injected).unwrap_or(true)
     }
 
     // finish_and_continue_recording's cutoff: once a switch instant has been
@@ -20865,7 +20925,7 @@ mod keylog {
                 let info = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
                 let down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
                 let injected = (info.flags.0 & LLKHF_INJECTED.0) != 0;
-                let t_ms = now_ms();
+                let t_ms = mono_ms();
                 if let Ok(guard) = raw_tx_slot().lock() {
                     if let Some(tx) = guard.as_ref() {
                         let _ = tx.send(RawKey { vk: info.vkCode, down, t_ms, injected });
@@ -20897,11 +20957,11 @@ mod keylog {
     }
 
     // The CURRENT focused-control password state, resolved fresh every call
-    // -- no cache of any kind, HWND-keyed or otherwise (see FocusTimeline's
-    // doc for why that used to be unsafe). Called both by the UIA
-    // focus-changed event handler and by the consumer's own per-key-down
-    // recheck, so there is exactly one code path deciding "is this a
-    // password field" no matter which of the two triggered it.
+    // -- no cache of any kind, HWND-keyed or otherwise (see Ledger's doc for
+    // why that used to be unsafe). Called both by the UIA focus-changed
+    // event handler and by the consumer's own scheduled checks, so there is
+    // exactly one code path deciding "is this a password field" no matter
+    // which of the two triggered it.
     fn focused_password(uia: &Option<IUIAutomation>) -> bool {
         let fg = unsafe { GetForegroundWindow() };
         let mut gti = GUITHREADINFO { cbSize: std::mem::size_of::<GUITHREADINFO>() as u32, ..Default::default() };
@@ -20936,33 +20996,62 @@ mod keylog {
     // calls this the moment the focused ELEMENT changes
     // anywhere on the desktop, in or out of process, same HWND or not. Each
     // firing re-resolves the password state through the exact same
-    // `focused_password` path as the per-key-down recheck and appends it to
-    // the shared timeline with its own timestamp -- an in-page field switch
-    // (one HWND, two different controls) invalidates just as reliably as
-    // switching windows, because nothing here is keyed by HWND at all.
+    // `focused_password` path as the consumer's own scheduled checks and
+    // records both its arrival and its result in the shared ledger -- an
+    // in-page field switch (one HWND, two different controls) invalidates
+    // just as reliably as switching windows, because nothing here is keyed
+    // by HWND at all.
     #[implement(IUIAutomationFocusChangedEventHandler)]
     struct FocusHandler {
-        timeline: Arc<Mutex<FocusTimeline>>,
+        ledger: Arc<Mutex<Ledger>>,
         uia: IUIAutomation,
     }
 
     impl IUIAutomationFocusChangedEventHandler_Impl for FocusHandler_Impl {
         fn HandleFocusChangedEvent(&self, _sender: Option<&IUIAutomationElement>) -> windows::core::Result<()> {
-            // Stamp the instant the OS actually told us focus changed,
-            // BEFORE spending any time on the check itself, with a
-            // fail-closed placeholder -- a key struck while this check is
-            // still running (it can take up to UIA_TIMEOUT_MS) must see
-            // "password" for that whole window, not for a window that only
-            // starts once the check happens to return. Deliberately ignores
-            // `_sender` and re-derives through the
-            // GetForegroundWindow/GetGUIThreadInfo path instead -- one
-            // source of truth, and it also picks up the ES_PASSWORD legacy
-            // fallback that a bare element reference cannot.
-            let arrived_at = now_ms();
-            self.timeline.lock().unwrap_or_else(|e| e.into_inner()).push(arrived_at, true);
+            // The arrival instant is recorded FIRST, before the check
+            // itself runs -- the blind window and the dirty-window scan
+            // both key off this arrival time, never off whenever
+            // CurrentIsPassword happens to finish (it can take up to
+            // UIA_TIMEOUT_MS). Deliberately ignores `_sender` and
+            // re-derives through the GetForegroundWindow/GetGUIThreadInfo
+            // path instead -- one source of truth, and it also picks up
+            // the ES_PASSWORD legacy fallback that a bare element
+            // reference cannot.
+            let arrived_at = mono_ms();
+            self.ledger.lock().unwrap_or_else(|e| e.into_inner()).push_arrival(arrived_at);
             let password = focused_password(&Some(self.uia.clone()));
-            self.timeline.lock().unwrap_or_else(|e| e.into_inner()).push(arrived_at, password);
+            // This check is recorded as having STARTED at the arrival
+            // instant, not whenever it happened to finish -- it
+            // conceptually began the moment focus was noticed.
+            self.ledger.lock().unwrap_or_else(|e| e.into_inner()).push_check(arrived_at, password);
             Ok(())
+        }
+    }
+
+    // Resolves as many keys at the FRONT of `pending` as the ledger's
+    // current state allows, in order, and stops at the first one `verdict`
+    // cannot decide yet. FIFO is safe here: a later key always needs an
+    // even-later qualifying check than an earlier one (SETTLE_MS is added
+    // to the key's OWN timestamp), so the front of this queue can never be
+    // stuck behind a later key that happens to resolve first.
+    fn resolve_pending(pending: &mut VecDeque<RawKey>, rec: &mut Recorder, clock: &Mutex<ActiveClock>, cutoff: &Mutex<Option<u64>>, ledger: &Mutex<Ledger>) {
+        while let Some(front) = pending.front() {
+            let cutoff_ms = *cutoff.lock().unwrap_or_else(|e| e.into_inner());
+            // A cutoff can be set AFTER a key was already queued here (the
+            // switch instant is only known once finish_and_continue_recording
+            // actually runs) -- checked fresh on every resolution pass, not
+            // only once at push time.
+            let gap = if past_cutoff(front.t_ms, cutoff_ms) {
+                Some(true)
+            } else {
+                let guard = ledger.lock().unwrap_or_else(|e| e.into_inner());
+                verdict(&guard, front.t_ms, front.injected)
+            };
+            let Some(gap) = gap else { break };
+            let raw = pending.pop_front().expect("front already confirmed present above");
+            let t_ms = clock.lock().unwrap_or_else(|e| e.into_inner()).active_ms(raw.t_ms);
+            rec.record(raw.vk, raw.down, t_ms, gap);
         }
     }
 
@@ -20972,7 +21061,7 @@ mod keylog {
             // message pump for cross-thread calls (the focus-changed event
             // above fires from a different thread) to ever be delivered, and
             // this thread runs no pump beyond its own blocking channel
-            // recv() loop. MTA calls land directly instead.
+            // recv()/recv_timeout() loop. MTA calls land directly instead.
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
         }
         let uia: Option<IUIAutomation> = unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) }.ok();
@@ -20986,76 +21075,86 @@ mod keylog {
                 }
             }
         }
-        let timeline = Arc::new(Mutex::new(FocusTimeline::default()));
+        let ledger = Arc::new(Mutex::new(Ledger::default()));
         // Confirm the focus state once, synchronously, before the first key
-        // can possibly be judged -- see FocusTimeline::state_at: a key
-        // stamped earlier than this first entry has no confirmed state and
-        // is gapped rather than guessed at.
-        timeline.lock().unwrap_or_else(|e| e.into_inner()).push(now_ms(), focused_password(&uia));
+        // can possibly be judged -- see Ledger::qualifying_check: a key with
+        // no check starting at or after its own SETTLE_MS deadline has no
+        // qualifying check at all yet, and is never guessed at.
+        ledger.lock().unwrap_or_else(|e| e.into_inner()).push_check(mono_ms(), focused_password(&uia));
         let focus_handler: Option<IUIAutomationFocusChangedEventHandler> =
-            uia.as_ref().map(|uia| FocusHandler { timeline: timeline.clone(), uia: uia.clone() }.into());
+            uia.as_ref().map(|uia| FocusHandler { ledger: ledger.clone(), uia: uia.clone() }.into());
         if let (Some(uia), Some(handler)) = (&uia, &focus_handler) {
             if unsafe { uia.AddFocusChangedEventHandler(None, handler) }.is_err() {
-                // Not fatal: every key still gets its own synchronous
-                // recheck below (the "entry after" half of the both-sides
-                // rule), so this only loses the event-driven half, not
+                // Not fatal: the loop below still schedules its own checks
+                // on a timer regardless of whether any focus-changed event
+                // ever arrives, so this only loses the event-driven half
+                // (and the extra blind windows it would have added), not
                 // fail-closed correctness -- but it is worth knowing about.
-                append_crash_log("key overlay: could not register the UI Automation focus-changed handler, relying on per-key rechecks only");
+                append_crash_log("key overlay: could not register the UI Automation focus-changed handler, relying on scheduled checks only");
             }
         }
 
         let mut rec = Recorder::default();
-        while let Ok(raw) = rx.recv() {
-            let (paused, t_ms) = {
-                let c = clock.lock().unwrap_or_else(|e| e.into_inner());
-                (c.is_paused_at(raw.t_ms), c.active_ms(raw.t_ms))
+        // Keys not yet resolved by the verdict algorithm -- see
+        // `resolve_pending`. A key sits here until a check has STARTED at
+        // least SETTLE_MS after it, which is inherently a delay: the
+        // consumer cannot decide a key's fate the instant it arrives.
+        let mut pending: VecDeque<RawKey> = VecDeque::new();
+        loop {
+            // Block until either the next raw key, or -- if a pending key's
+            // own SETTLE_MS deadline arrives first with no fresh
+            // focus-changed event to show for it -- a timeout, so a quiet
+            // stretch of typing still resolves instead of waiting forever
+            // for an event that may never come.
+            let recv_result = match pending.front() {
+                Some(front) => {
+                    let need = front.t_ms.saturating_add(SETTLE_MS);
+                    let wait = Duration::from_millis(need.saturating_sub(mono_ms()));
+                    rx.recv_timeout(wait)
+                }
+                None => rx.recv().map_err(|_| RecvTimeoutError::Disconnected),
             };
-            if paused {
-                // Nothing happened here as far as the recording is
-                // concerned -- dropped outright, not even a gap (a gap means
-                // doubt; a pause means certainty that this moment is not
-                // part of the active recording at all). In practice the
-                // hook is uninstalled for the whole pause too (see
-                // KeyCapture::hook), so this only ever catches the sliver of
-                // events already in flight the instant pause() tore it down.
-                continue;
+            match recv_result {
+                Ok(raw) => {
+                    let paused = clock.lock().unwrap_or_else(|e| e.into_inner()).is_paused_at(raw.t_ms);
+                    if paused {
+                        // Nothing happened here as far as the recording is
+                        // concerned -- dropped outright, not even a gap (a
+                        // gap means doubt; a pause means certainty that this
+                        // moment is not part of the active recording at
+                        // all). In practice the hook is uninstalled for the
+                        // whole pause too (see KeyCapture::hook), so this
+                        // only ever catches the sliver of events already in
+                        // flight the instant pause() tore it down.
+                    } else {
+                        pending.push_back(raw);
+                    }
+                }
+                Err(RecvTimeoutError::Timeout) => {
+                    // Nobody else is going to check for us -- run one so the
+                    // pending key whose deadline just arrived (and anything
+                    // else waiting behind it) can actually be resolved.
+                    let start = mono_ms();
+                    let password = focused_password(&uia);
+                    ledger.lock().unwrap_or_else(|e| e.into_inner()).push_check(start, password);
+                }
+                Err(RecvTimeoutError::Disconnected) => break,
             }
-            let cutoff_ms = *cutoff.lock().unwrap_or_else(|e| e.into_inner());
-            if past_cutoff(raw.t_ms, cutoff_ms) {
-                // finish_and_continue_recording told this capture the exact
-                // instant it was about to close this file -- a key at or
-                // after that instant belongs to the switch itself (or to the
-                // next part), not to this one, so it is gapped without
-                // spending a UIA call on it.
-                rec.record(raw.vk, raw.down, t_ms, true);
-                continue;
-            }
-            let stopping = raw_tx_slot().lock().map(|g| g.is_none()).unwrap_or(true);
-            if stopping {
-                // stop() has already cleared the sender -- only the handful
-                // of events already queued when it did still arrive here.
-                // A hung target app must not turn each leftover event into
-                // its own ~2s UIA timeout right when the user is waiting for
-                // the recording to actually stop, so everything past this
-                // point is gapped outright instead of rechecked.
-                rec.record(raw.vk, raw.down, t_ms, true);
-                continue;
-            }
-            // Both-sides rule: gap the key unless the state confirmed
-            // BEFORE it (an earlier focus-changed event or an earlier key's
-            // own recheck) AND the state confirmed immediately AFTER it
-            // (this key's own recheck, run right now) both say "not
-            // password". A single-sided check let a key typed right after a
-            // real focus change -- before the focus-changed event had
-            // arrived, or before this same key's own recheck had happened
-            // -- inherit a stale "not password" answer left over from
-            // before the change; the recheck used to be stamped strictly
-            // after the key it was judging, so it could never inform that
-            // key's own verdict, only a later one's.
-            let entry_before = timeline.lock().unwrap_or_else(|e| e.into_inner()).state_at(raw.t_ms).unwrap_or(true);
-            let entry_after = focused_password(&uia);
-            timeline.lock().unwrap_or_else(|e| e.into_inner()).push(now_ms(), entry_after);
-            rec.record(raw.vk, raw.down, t_ms, should_gap(entry_before, entry_after, raw.injected));
+            resolve_pending(&mut pending, &mut rec, &clock, &cutoff, &ledger);
+        }
+        // The channel is gone -- stop() already uninstalled the hook and no
+        // further check will ever run, so nothing still pending gets to
+        // wait any longer. A hung target application must not turn each
+        // leftover key into its own live UIA timeout right when the user is
+        // waiting for the recording to actually stop; `verdict_at_stop`
+        // still honors a qualifying check that already completed in time,
+        // but never starts a new one.
+        for raw in pending {
+            let ledger = ledger.lock().unwrap_or_else(|e| e.into_inner());
+            let gap = verdict_at_stop(&ledger, raw.t_ms, raw.injected);
+            drop(ledger);
+            let t_ms = clock.lock().unwrap_or_else(|e| e.into_inner()).active_ms(raw.t_ms);
+            rec.record(raw.vk, raw.down, t_ms, gap);
         }
         if let (Some(uia), Some(handler)) = (&uia, &focus_handler) {
             if unsafe { uia.RemoveFocusChangedEventHandler(handler) }.is_err() {
@@ -21105,9 +21204,10 @@ mod keylog {
         // than merely dropping events past it, so nothing about the pause
         // window ever depends on the consumer catching everything the OS
         // still delivers -- the OS delivers nothing at all. The consumer
-        // thread, its Recorder-in-progress, the FocusTimeline and the UIA
-        // focus-changed registration all stay alive across a pause/resume,
-        // untouched; only the hook comes down and goes back up.
+        // thread, its Recorder-in-progress, the pending-keys queue, the
+        // Ledger and the UIA focus-changed registration all stay alive
+        // across a pause/resume, untouched; only the hook comes down and
+        // goes back up.
         hook: Option<HookHandle>,
         consumer_thread: JoinHandle<KeySidecar>,
         hold_ms: u32,
@@ -21171,7 +21271,7 @@ mod keylog {
     pub fn pause() {
         let mut guard = slot().lock().unwrap_or_else(|e| e.into_inner());
         if let Some(cap) = guard.as_mut() {
-            cap.clock.lock().unwrap_or_else(|e| e.into_inner()).pause(now_ms());
+            cap.clock.lock().unwrap_or_else(|e| e.into_inner()).pause(mono_ms());
             if let Some(hook) = cap.hook.take() {
                 uninstall_hook(hook);
             }
@@ -21181,7 +21281,7 @@ mod keylog {
     pub fn resume() {
         let mut guard = slot().lock().unwrap_or_else(|e| e.into_inner());
         if let Some(cap) = guard.as_mut() {
-            cap.clock.lock().unwrap_or_else(|e| e.into_inner()).resume(now_ms());
+            cap.clock.lock().unwrap_or_else(|e| e.into_inner()).resume(mono_ms());
             if cap.hook.is_none() {
                 cap.hook = install_hook();
                 if cap.hook.is_none() {
@@ -21230,11 +21330,11 @@ mod keylog {
 
     // Never a second hook: a capture already running for this process is left
     // alone rather than layering a new one on top. `start_abs_ms` is the
-    // clock's zero point -- ordinary starts pass `now_ms()`, but
-    // finish_and_continue_recording passes the exact switch instant instead,
-    // so the new part's offsets start counting from the same instant the old
-    // part was told to stop claiming keys (see cut_off_at), not from
-    // whenever this call happens to run a little later.
+    // clock's zero point, always on the `mono_ms()` clock -- ordinary
+    // starts pass `keylog::mono_ms()`, but finish_and_continue_recording
+    // passes the instant its OWN new capture actually started instead, so
+    // the new part's offsets start counting from when video capture really
+    // began, not from whenever this call happens to run relative to it.
     pub fn maybe_start(is_enabled: bool, hold_ms: u32, start_abs_ms: u64) {
         if !is_enabled {
             return;
@@ -21311,7 +21411,7 @@ mod keylog {
         fn the_switch_off_default_never_starts_a_capture() {
             let flags = std::collections::HashMap::new();
             assert!(!enabled(&flags)); // absent -- "aus" is the shipped default
-            maybe_start(enabled(&flags), 400, now_ms());
+            maybe_start(enabled(&flags), 400, mono_ms());
             assert!(slot().lock().unwrap().is_none());
         }
 
@@ -21353,21 +21453,6 @@ mod keylog {
             assert_eq!(p, PathBuf::from("C:/data/recordings/rec-1.keys.json"));
         }
 
-        // The both-sides rule: only "not password" on BOTH sides clears
-        // a key. Any single side saying "password", or an injected key, gaps
-        // it -- this is what stops a key typed right after a real focus
-        // change from inheriting a stale "not password" answer left over
-        // from before the change, since the old, single-sided check could
-        // clear a key on whichever side happened to already be confirmed.
-        #[test]
-        fn should_gap_requires_both_sides_to_agree_it_was_not_a_password_field() {
-            assert!(!should_gap(false, false, false)); // both sides confirm: recorded
-            assert!(should_gap(true, false, false)); // before says password
-            assert!(should_gap(false, true, false)); // after says password
-            assert!(should_gap(true, true, false)); // both say password
-            assert!(should_gap(false, false, true)); // injected, regardless of focus
-        }
-
         #[test]
         fn past_cutoff_only_fires_once_a_cutoff_is_actually_set() {
             assert!(!past_cutoff(1_000, None)); // no switch in progress: nothing is cut off
@@ -21378,14 +21463,14 @@ mod keylog {
 
         // An injected (synthetic) key is gapped exactly like a
         // password field, regardless of what focus reports -- the consumer
-        // ORs `password || raw.injected` before calling record(), so the
-        // one gap-producing branch already tested above for passwords is the
+        // records `verdict`'s answer before calling record(), so the one
+        // gap-producing branch already tested above for passwords is the
         // same branch this exercises for injected input.
         #[test]
         fn an_injected_key_is_gapped_the_same_way_a_password_field_is() {
             let mut rec = Recorder::default();
             rec.record(0x41, true, 0, false);
-            let injected_or_password = true; // stands for `password || raw.injected`
+            let injected_or_password = true; // stands for verdict()'s Some(true)
             rec.record(0x56, true, 50, injected_or_password); // a password-manager auto-type
             rec.record(0x56, false, 55, injected_or_password);
             rec.record(0x42, true, 200, false);
@@ -21393,57 +21478,86 @@ mod keylog {
             assert_eq!(rec.sidecar.gaps, vec![Gap { start_ms: 50, end_ms: 55 }]);
         }
 
-        // --- FocusTimeline: no per-HWND cache, and each key is judged by
-        // focus state AT ITS OWN TIMESTAMP rather than at consumption time.
-        // Both live entirely in this pure structure, so both are directly
-        // testable without a real hook, a real window or real UI Automation.
+        // --- The binding verdict algorithm (Ledger + verdict): a delayed
+        // verdict with a settle check, a guard window scanned for anything
+        // dirty in between, and a blind window around every focus change.
+        // All pure, so directly testable without a real hook, a real
+        // window or real UI Automation.
 
         #[test]
-        fn focus_timeline_has_no_confirmed_state_before_the_first_check_completes() {
-            let timeline = FocusTimeline::default();
-            // "Gap every key older than the last completed
-            // check" -- with zero checks completed, every key is older than
-            // that (nonexistent) first one.
-            assert_eq!(timeline.state_at(0), None);
-            assert_eq!(timeline.state_at(1_000_000), None);
+        fn verdict_is_pending_until_a_check_has_started_late_enough_to_speak_for_the_key() {
+            // A key at t=0 needs a check that STARTED at t>=300 (SETTLE_MS).
+            // A check that started before that deadline is not enough, no
+            // matter what it says -- the caller must keep waiting.
+            let mut ledger = Ledger::default();
+            ledger.push_check(0, false);
+            assert_eq!(verdict(&ledger, 0, false), None, "a same-instant check does not qualify");
+            ledger.push_check(299, false);
+            assert_eq!(verdict(&ledger, 0, false), None, "still one ms short of the settle deadline");
+            ledger.push_check(300, false);
+            assert_eq!(verdict(&ledger, 0, false), Some(false), "a check starting exactly at the deadline qualifies");
         }
 
         #[test]
-        fn focus_timeline_invalidates_on_every_pushed_change_never_a_cached_hwnd() {
-            // No HWND appears anywhere in FocusTimeline's own shape -- this
-            // is the structural fix: a within-window focus
-            // move from a username field to a password field is just a
-            // second push with a different value, indistinguishable here
-            // from a cross-window move.
-            let mut timeline = FocusTimeline::default();
-            timeline.push(0, false); // username field focused
-            timeline.push(50, true); // password field focused, same window
-            timeline.push(120, false); // focus leaves the password field
-            assert_eq!(timeline.state_at(25), Some(false));
-            assert_eq!(timeline.state_at(75), Some(true));
-            assert_eq!(timeline.state_at(150), Some(false));
+        fn verdict_records_normal_typing_once_a_stable_field_has_a_qualifying_check() {
+            let mut ledger = Ledger::default();
+            ledger.push_check(0, false); // the capture-start confirmation
+            ledger.push_check(400, false); // a later check, no focus change in between
+            assert_eq!(verdict(&ledger, 50, false), Some(false));
         }
 
         #[test]
-        fn focus_timeline_judges_a_key_by_its_own_timestamp_not_by_a_later_check() {
-            // A key struck at t=10 must be judged by the focus
-            // state that held AT t=10, even though by the time the consumer
-            // gets around to querying it a much later check (t=200) has
-            // already landed and says something different.
-            let mut timeline = FocusTimeline::default();
-            timeline.push(0, false);
-            timeline.push(200, true); // a slow UIA call finally completes here
-            assert_eq!(timeline.state_at(10), Some(false), "a key typed before the slow check must not inherit its answer");
-            assert_eq!(timeline.state_at(250), Some(true));
+        fn verdict_gaps_a_key_typed_right_before_the_ui_automation_event_arrives() {
+            // Tab into a password field, then type the first character
+            // before UI Automation's own focus-changed event has even
+            // arrived -- the arrival's blind window still gaps it, because
+            // the window reaches GUARD_MS BEFORE the arrival too.
+            let mut ledger = Ledger::default();
+            ledger.push_check(0, false);
+            let key_t = 250;
+            let arrival = 260; // the Tab's own event arrives just after the key
+            ledger.push_arrival(arrival);
+            ledger.push_check(arrival, true); // the field turned out to be a password field
+            ledger.push_check(700, true); // any later check while still in the field
+            assert_eq!(verdict(&ledger, key_t, false), Some(true));
         }
 
         #[test]
-        fn focus_timeline_query_stays_correct_even_if_a_recheck_lands_out_of_order() {
-            let mut timeline = FocusTimeline::default();
-            timeline.push(100, true);
-            timeline.push(40, false); // a recheck stamped earlier, arriving after
-            assert_eq!(timeline.state_at(70), Some(false));
-            assert_eq!(timeline.state_at(150), Some(true));
+        fn verdict_gaps_every_char_of_a_lagging_consumers_tab_in_pin_tab_out() {
+            // Tab in, type a PIN, Tab out -- even once the consumer catches
+            // up and finds "not password" checks on BOTH sides of a PIN
+            // character (because it only got around to checking well after
+            // the Tab-out), the blind windows around the two arrivals still
+            // gap every character in between.
+            let mut ledger = Ledger::default();
+            ledger.push_check(0, false);
+            let tab_in = 10;
+            ledger.push_arrival(tab_in);
+            ledger.push_check(tab_in, true);
+            let pin_chars = [50u64, 70, 90, 110];
+            let tab_out = 200;
+            ledger.push_arrival(tab_out);
+            ledger.push_check(tab_out, false);
+            ledger.push_check(900, false); // the lagging consumer's own late recheck
+            for t in pin_chars {
+                assert!(verdict(&ledger, t, false) == Some(true), "PIN char at {t} must gap");
+            }
+        }
+
+        #[test]
+        fn verdict_at_stop_gaps_a_key_with_no_qualifying_check_instead_of_waiting_forever() {
+            let mut ledger = Ledger::default();
+            ledger.push_check(0, false); // far too early to qualify for a key at t=1000
+            assert_eq!(verdict(&ledger, 1_000, false), None, "still pending under the normal algorithm");
+            assert!(verdict_at_stop(&ledger, 1_000, false), "stopping must resolve doubt as a gap, never as recorded");
+        }
+
+        #[test]
+        fn verdict_at_stop_still_honors_a_qualifying_check_that_already_completed() {
+            let mut ledger = Ledger::default();
+            ledger.push_check(0, false);
+            ledger.push_check(400, false);
+            assert!(!verdict_at_stop(&ledger, 50, false), "a real, already-completed answer is not thrown away just because the capture is stopping");
         }
 
         // --- ActiveClock: pause drops events, and offsets use the
