@@ -20589,17 +20589,30 @@ mod keylog {
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::sync::mpsc::{channel, Receiver, Sender};
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::{Arc, Mutex, OnceLock};
     use std::thread::{self, JoinHandle};
+    use windows::core::{implement, Interface};
     use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
-    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED};
+    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED};
     use windows::Win32::System::Threading::GetCurrentThreadId;
-    use windows::Win32::UI::Accessibility::{CUIAutomation, IUIAutomation};
+    use windows::Win32::UI::Accessibility::{
+        CUIAutomation, IUIAutomation, IUIAutomation2, IUIAutomationElement, IUIAutomationFocusChangedEventHandler,
+        IUIAutomationFocusChangedEventHandler_Impl,
+    };
     use windows::Win32::UI::WindowsAndMessaging::{
         CallNextHookEx, GetForegroundWindow, GetGUIThreadInfo, GetMessageW, GetWindowLongW, GetWindowThreadProcessId,
         PostThreadMessageW, SetWindowsHookExW, UnhookWindowsHookEx, ES_PASSWORD, GUITHREADINFO, GWL_STYLE, KBDLLHOOKSTRUCT,
-        MSG, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
+        LLKHF_INJECTED, MSG, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
     };
+
+    // How long a single UI Automation call may hang before it gives up --
+    // Without this, a target application that stops pumping
+    // messages (hung, debugger-broken, a modal native dialog on a
+    // different apartment) stalls the consumer thread indefinitely, which
+    // in turn stalls stop() waiting for it to join. Generous enough for a
+    // slow but healthy app, short enough that a genuinely hung one never
+    // blocks a recording from stopping for more than about two seconds.
+    const UIA_TIMEOUT_MS: u32 = 2000;
 
     #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
     pub struct KeyEvent {
@@ -20631,10 +20644,13 @@ mod keylog {
         400
     }
 
-    // Pure state machine turning a raw (vk, down, t_ms, password-at-that-
+    // Pure state machine turning a raw (vk, down, t_ms, blocked-at-that-
     // instant) stream into the stored sidecar shape. Deliberately free of any
     // Windows API so it is directly unit-testable without a real hook or a
-    // real focused control.
+    // real focused control. `blocked` covers both reasons a key must never be
+    // stored: a password field was focused at that instant, or the key was
+    // synthetic (OS-injected) input rather than something a person typed --
+    // either one lands in a gap, never as an event.
     #[derive(Default)]
     struct Recorder {
         sidecar: KeySidecar,
@@ -20642,8 +20658,8 @@ mod keylog {
     }
 
     impl Recorder {
-        fn record(&mut self, vk: u32, down: bool, t_ms: u64, password: bool) {
-            if password {
+        fn record(&mut self, vk: u32, down: bool, t_ms: u64, blocked: bool) {
+            if blocked {
                 if self.in_gap {
                     if let Some(last) = self.sidecar.gaps.last_mut() {
                         last.end_ms = t_ms;
@@ -20659,10 +20675,123 @@ mod keylog {
         }
     }
 
+    // Wall-clock elapsed-since-recording-start pause tracking -- pure and
+    // independent of any Windows API, so pause/resume behaviour is directly
+    // unit-testable. keylog used to keep recording straight
+    // through a pause with raw wall-clock offsets, so a paused stretch (and
+    // anything typed during it) leaked into the sidecar at the wrong time.
+    // A key struck while paused is dropped outright here -- pause means "we
+    // know nothing should be recorded," which is a different, stronger
+    // statement than a gap ("we do not know the focus state").
+    #[derive(Default)]
+    struct ActiveClock {
+        start_abs_ms: u64,
+        // Every paused span so far, in wall-clock ms: a closed one once
+        // resume() runs, at most one still-open one (`None` end) while
+        // actually paused.
+        pauses: Vec<(u64, Option<u64>)>,
+    }
+
+    impl ActiveClock {
+        fn new(start_abs_ms: u64) -> Self {
+            Self { start_abs_ms, pauses: Vec::new() }
+        }
+
+        fn pause(&mut self, now: u64) {
+            if !matches!(self.pauses.last(), Some((_, None))) {
+                self.pauses.push((now, None));
+            }
+        }
+
+        fn resume(&mut self, now: u64) {
+            if let Some(last) = self.pauses.last_mut() {
+                if last.1.is_none() {
+                    last.1 = Some(now);
+                }
+            }
+        }
+
+        // Whether the wall-clock instant `t_ms` fell inside a paused span --
+        // judged against the key's OWN timestamp, not against "are we paused
+        // right now", so a key queued up just before a pause is never
+        // mistakenly dropped because the consumer got to it late.
+        fn is_paused_at(&self, t_ms: u64) -> bool {
+            self.pauses.iter().any(|(s, e)| t_ms >= *s && e.map_or(true, |e| t_ms < e))
+        }
+
+        // Active-recording-elapsed ms at `t_ms`: wall-clock elapsed since
+        // start minus every paused span up to that point -- the same clock
+        // basis the video track itself uses, so a stored key timestamp lines
+        // up with the frame it was actually struck during.
+        fn active_ms(&self, t_ms: u64) -> u64 {
+            let mut paused = 0u64;
+            for (s, e) in &self.pauses {
+                if *s >= t_ms {
+                    continue;
+                }
+                let end = e.unwrap_or(t_ms).min(t_ms);
+                paused += end.saturating_sub(*s);
+            }
+            t_ms.saturating_sub(self.start_abs_ms).saturating_sub(paused)
+        }
+    }
+
+    // Ordered, append-only log of confirmed password-field states, each
+    // stamped with the wall-clock instant it became true. Replaces the old
+    // per-HWND "not password" cache: Chromium, Edge, Electron, WebView2, WPF
+    // and UWP all host an entire page/form in ONE HWND, so caching an
+    // answer by HWND alone let a password field focused
+    // right after a username field in the same HWND go undetected forever --
+    // the cache never saw a "new" HWND to invalidate on. Every entry here
+    // instead comes from the FOCUSED ELEMENT actually changing (UI
+    // Automation's focus-changed event, see FocusHandler below) or from a
+    // fresh per-key-down recheck, so an in-page field switch invalidates
+    // exactly as reliably as a cross-window one -- there is no HWND-shaped
+    // key for a stale answer to hide behind at all.
+    //
+    // Querying by the KEY's OWN timestamp also fixes a second,
+    // subtler race: judging a key against focus state at CONSUMPTION time
+    // (when the consumer thread gets around to it) let a slow first UIA call
+    // misjudge keys typed in between against a focus that had already moved
+    // on. `state_at` instead looks up what was confirmed true at the key's
+    // own instant, so consumer lag can delay a verdict but never corrupt it.
+    #[derive(Default)]
+    struct FocusTimeline {
+        // Insertion keeps this sorted by t_ms even if a slow recheck lands
+        // out of order relative to a newer event.
+        entries: Vec<(u64, bool)>,
+    }
+
+    impl FocusTimeline {
+        fn push(&mut self, t_ms: u64, password: bool) {
+            let pos = self.entries.partition_point(|(t, _)| *t <= t_ms);
+            self.entries.insert(pos, (t_ms, password));
+        }
+
+        // The password state confirmed to be in effect AT t_ms -- the last
+        // entry at or before it. None means no check had completed yet by
+        // that time: fail closed, the caller must treat that as "password",
+        // never as "probably fine."
+        fn state_at(&self, t_ms: u64) -> Option<bool> {
+            let pos = self.entries.partition_point(|(t, _)| *t <= t_ms);
+            if pos == 0 {
+                None
+            } else {
+                Some(self.entries[pos - 1].1)
+            }
+        }
+    }
+
     struct RawKey {
         vk: u32,
         down: bool,
         t_ms: u64,
+        // LLKHF_INJECTED: a password manager's auto-type, a
+        // remote-control tool, or any other synthetic SendInput stream sets
+        // this. Real typing hits a password field first and gets gapped by
+        // that check anyway; injected input skips straight to being gapped
+        // here since it never went through a person's fingers at all.
+        injected: bool,
     }
 
     // The hook callback is a bare extern "system" fn -- it cannot capture a
@@ -20681,10 +20810,11 @@ mod keylog {
             if matches!(msg, WM_KEYDOWN | WM_KEYUP | WM_SYSKEYDOWN | WM_SYSKEYUP) {
                 let info = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
                 let down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
+                let injected = (info.flags.0 & LLKHF_INJECTED.0) != 0;
                 let t_ms = now_ms();
                 if let Ok(guard) = raw_tx_slot().lock() {
                     if let Some(tx) = guard.as_ref() {
-                        let _ = tx.send(RawKey { vk: info.vkCode, down, t_ms });
+                        let _ = tx.send(RawKey { vk: info.vkCode, down, t_ms, injected });
                     }
                 }
             }
@@ -20712,12 +20842,13 @@ mod keylog {
         }
     }
 
-    struct FocusCache {
-        hwnd: isize,
-        password: bool,
-    }
-
-    fn focused_password(cache: &mut Option<FocusCache>, uia: &Option<IUIAutomation>) -> bool {
+    // The CURRENT focused-control password state, resolved fresh every call
+    // -- no cache of any kind, HWND-keyed or otherwise (see FocusTimeline's
+    // doc for why that used to be unsafe). Called both by the UIA
+    // focus-changed event handler and by the consumer's own per-key-down
+    // recheck, so there is exactly one code path deciding "is this a
+    // password field" no matter which of the two triggered it.
+    fn focused_password(uia: &Option<IUIAutomation>) -> bool {
         let fg = unsafe { GetForegroundWindow() };
         let mut gti = GUITHREADINFO { cbSize: std::mem::size_of::<GUITHREADINFO>() as u32, ..Default::default() };
         let tid = unsafe { GetWindowThreadProcessId(fg, None) };
@@ -20726,15 +20857,7 @@ mod keylog {
         } else {
             fg
         };
-        let key = focus_hwnd.0 as isize;
-        if let Some(c) = cache {
-            if c.hwnd == key {
-                return c.password;
-            }
-        }
-        let password = detect_password(focus_hwnd, uia);
-        *cache = Some(FocusCache { hwnd: key, password });
-        password
+        detect_password(focus_hwnd, uia)
     }
 
     // FAIL CLOSED throughout: any doubt (UI Automation unreachable, the call
@@ -20755,17 +20878,95 @@ mod keylog {
         (unsafe { GetWindowLongW(hwnd, GWL_STYLE) } & ES_PASSWORD) != 0
     }
 
-    fn consumer_thread_main(rx: Receiver<RawKey>, start_abs_ms: u64) -> KeySidecar {
+    // The UI Automation focus-changed event's own handler object: the OS
+    // calls this the moment the focused ELEMENT changes
+    // anywhere on the desktop, in or out of process, same HWND or not. Each
+    // firing re-resolves the password state through the exact same
+    // `focused_password` path as the per-key-down recheck and appends it to
+    // the shared timeline with its own timestamp -- an in-page field switch
+    // (one HWND, two different controls) invalidates just as reliably as
+    // switching windows, because nothing here is keyed by HWND at all.
+    #[implement(IUIAutomationFocusChangedEventHandler)]
+    struct FocusHandler {
+        timeline: Arc<Mutex<FocusTimeline>>,
+        uia: IUIAutomation,
+    }
+
+    impl IUIAutomationFocusChangedEventHandler_Impl for FocusHandler_Impl {
+        fn HandleFocusChangedEvent(&self, _sender: Option<&IUIAutomationElement>) -> windows::core::Result<()> {
+            // Deliberately ignores `_sender` and re-derives through the
+            // GetForegroundWindow/GetGUIThreadInfo path instead -- one
+            // source of truth, and it also picks up the ES_PASSWORD legacy
+            // fallback that a bare element reference cannot.
+            let password = focused_password(&Some(self.uia.clone()));
+            self.timeline.lock().unwrap_or_else(|e| e.into_inner()).push(now_ms(), password);
+            Ok(())
+        }
+    }
+
+    fn consumer_thread_main(rx: Receiver<RawKey>, clock: Arc<Mutex<ActiveClock>>) -> KeySidecar {
         unsafe {
-            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            // MTA, not STA: an apartment-threaded COM object needs its own
+            // message pump for cross-thread calls (the focus-changed event
+            // above fires from a different thread) to ever be delivered, and
+            // this thread runs no pump beyond its own blocking channel
+            // recv() loop. MTA calls land directly instead.
+            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
         }
         let uia: Option<IUIAutomation> = unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) }.ok();
-        let mut cache: Option<FocusCache> = None;
+        // Bound every UIA call this thread makes -- a hung target app must
+        // never stall key processing (and therefore stop()) indefinitely.
+        if let Some(uia) = &uia {
+            if let Ok(uia2) = uia.cast::<IUIAutomation2>() {
+                unsafe {
+                    let _ = uia2.SetConnectionTimeout(UIA_TIMEOUT_MS);
+                    let _ = uia2.SetTransactionTimeout(UIA_TIMEOUT_MS);
+                }
+            }
+        }
+        let timeline = Arc::new(Mutex::new(FocusTimeline::default()));
+        // Confirm the focus state once, synchronously, before the first key
+        // can possibly be judged -- see FocusTimeline::state_at: a key
+        // stamped earlier than this first entry has no confirmed state and
+        // is gapped rather than guessed at.
+        timeline.lock().unwrap_or_else(|e| e.into_inner()).push(now_ms(), focused_password(&uia));
+        let focus_handler: Option<IUIAutomationFocusChangedEventHandler> =
+            uia.as_ref().map(|uia| FocusHandler { timeline: timeline.clone(), uia: uia.clone() }.into());
+        if let (Some(uia), Some(handler)) = (&uia, &focus_handler) {
+            unsafe {
+                let _ = uia.AddFocusChangedEventHandler(None, handler);
+            }
+        }
+
         let mut rec = Recorder::default();
         while let Ok(raw) = rx.recv() {
-            let password = focused_password(&mut cache, &uia);
-            let t_ms = raw.t_ms.saturating_sub(start_abs_ms);
-            rec.record(raw.vk, raw.down, t_ms, password);
+            let (paused, t_ms) = {
+                let c = clock.lock().unwrap_or_else(|e| e.into_inner());
+                (c.is_paused_at(raw.t_ms), c.active_ms(raw.t_ms))
+            };
+            if paused {
+                // Nothing happened here as far as the recording is
+                // concerned -- dropped outright, not even a gap (a gap means
+                // doubt; a pause means certainty that this moment is not
+                // part of the active recording at all).
+                continue;
+            }
+            if raw.down {
+                // Cheap per-key-down recheck (an "if cheap"
+                // robustness leg): confirms the timeline even if a
+                // focus-changed event was missed, delayed, or UIA never
+                // initialized at all (uia is None, so this and the event
+                // handler both fail closed via detect_password's own
+                // doubt-means-password rule).
+                timeline.lock().unwrap_or_else(|e| e.into_inner()).push(now_ms(), focused_password(&uia));
+            }
+            let password = timeline.lock().unwrap_or_else(|e| e.into_inner()).state_at(raw.t_ms).unwrap_or(true);
+            rec.record(raw.vk, raw.down, t_ms, password || raw.injected);
+        }
+        if let (Some(uia), Some(handler)) = (&uia, &focus_handler) {
+            unsafe {
+                let _ = uia.RemoveFocusChangedEventHandler(handler);
+            }
         }
         unsafe {
             CoUninitialize();
@@ -20778,26 +20979,48 @@ mod keylog {
         consumer_thread: JoinHandle<KeySidecar>,
         thread_id: u32,
         hold_ms: u32,
+        clock: Arc<Mutex<ActiveClock>>,
     }
 
     fn start(hold_ms: u32) -> Option<KeyCapture> {
         let (raw_tx, raw_rx) = channel::<RawKey>();
         *raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner()) = Some(raw_tx);
         let start_abs_ms = now_ms();
+        let clock = Arc::new(Mutex::new(ActiveClock::new(start_abs_ms)));
         let (ready_tx, ready_rx) = channel::<Result<u32, String>>();
-        let hook_thread = thread::Builder::new().name("key-overlay-hook".into()).spawn(move || hook_thread_main(ready_tx)).ok()?;
+        let hook_thread = match thread::Builder::new().name("key-overlay-hook".into()).spawn(move || hook_thread_main(ready_tx)) {
+            Ok(t) => t,
+            Err(_) => {
+                *raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
+                return None;
+            }
+        };
         let thread_id = match ready_rx.recv() {
             Ok(Ok(tid)) => tid,
             _ => {
                 let _ = hook_thread.join();
+                *raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
                 return None;
             }
         };
-        let consumer_thread = thread::Builder::new()
-            .name("key-overlay-consumer".into())
-            .spawn(move || consumer_thread_main(raw_rx, start_abs_ms))
-            .ok()?;
-        Some(KeyCapture { hook_thread, consumer_thread, thread_id, hold_ms })
+        let clock2 = clock.clone();
+        // A failure here used to leave the hook installed and
+        // running forever (its thread detached with no way back to it,
+        // RAW_TX still set) while the caller saw no capture at all -- the
+        // hook must come down the same way stop() brings it down whenever
+        // the consumer that was supposed to read it never gets to exist.
+        let consumer_thread = match thread::Builder::new().name("key-overlay-consumer".into()).spawn(move || consumer_thread_main(raw_rx, clock2)) {
+            Ok(t) => t,
+            Err(_) => {
+                unsafe {
+                    let _ = PostThreadMessageW(thread_id, WM_QUIT, WPARAM(0), LPARAM(0));
+                }
+                let _ = hook_thread.join();
+                *raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
+                return None;
+            }
+        };
+        Some(KeyCapture { hook_thread, consumer_thread, thread_id, hold_ms, clock })
     }
 
     fn stop(capture: KeyCapture) -> KeySidecar {
@@ -20812,6 +21035,21 @@ mod keylog {
         let mut sidecar = capture.consumer_thread.join().unwrap_or_default();
         sidecar.hold_ms = capture.hold_ms;
         sidecar
+    }
+
+    // The pause/resume hotkeys and buttons drive these -- see ActiveClock's
+    // own doc for why a paused stretch must never reach the sidecar. A no-op
+    // when no capture is running (keyOverlay off, or nothing to pause yet).
+    pub fn pause() {
+        if let Some(cap) = slot().lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            cap.clock.lock().unwrap_or_else(|e| e.into_inner()).pause(now_ms());
+        }
+    }
+
+    pub fn resume() {
+        if let Some(cap) = slot().lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            cap.clock.lock().unwrap_or_else(|e| e.into_inner()).resume(now_ms());
+        }
     }
 
     pub fn sidecar_path(output_path: &Path) -> PathBuf {
@@ -20956,6 +21194,137 @@ mod keylog {
         fn sidecar_path_sits_next_to_the_recording_as_its_own_extension() {
             let p = sidecar_path(Path::new("C:/data/recordings/rec-1.mp4"));
             assert_eq!(p, PathBuf::from("C:/data/recordings/rec-1.keys.json"));
+        }
+
+        // An injected (synthetic) key is gapped exactly like a
+        // password field, regardless of what focus reports -- the consumer
+        // ORs `password || raw.injected` before calling record(), so the
+        // one gap-producing branch already tested above for passwords is the
+        // same branch this exercises for injected input.
+        #[test]
+        fn an_injected_key_is_gapped_the_same_way_a_password_field_is() {
+            let mut rec = Recorder::default();
+            rec.record(0x41, true, 0, false);
+            let injected_or_password = true; // stands for `password || raw.injected`
+            rec.record(0x56, true, 50, injected_or_password); // a password-manager auto-type
+            rec.record(0x56, false, 55, injected_or_password);
+            rec.record(0x42, true, 200, false);
+            assert_eq!(rec.sidecar.events.len(), 2);
+            assert_eq!(rec.sidecar.gaps, vec![Gap { start_ms: 50, end_ms: 55 }]);
+        }
+
+        // --- FocusTimeline: no per-HWND cache, and each key is judged by
+        // focus state AT ITS OWN TIMESTAMP rather than at consumption time.
+        // Both live entirely in this pure structure, so both are directly
+        // testable without a real hook, a real window or real UI Automation.
+
+        #[test]
+        fn focus_timeline_has_no_confirmed_state_before_the_first_check_completes() {
+            let timeline = FocusTimeline::default();
+            // "Gap every key older than the last completed
+            // check" -- with zero checks completed, every key is older than
+            // that (nonexistent) first one.
+            assert_eq!(timeline.state_at(0), None);
+            assert_eq!(timeline.state_at(1_000_000), None);
+        }
+
+        #[test]
+        fn focus_timeline_invalidates_on_every_pushed_change_never_a_cached_hwnd() {
+            // No HWND appears anywhere in FocusTimeline's own shape -- this
+            // is the structural fix: a within-window focus
+            // move from a username field to a password field is just a
+            // second push with a different value, indistinguishable here
+            // from a cross-window move.
+            let mut timeline = FocusTimeline::default();
+            timeline.push(0, false); // username field focused
+            timeline.push(50, true); // password field focused, same window
+            timeline.push(120, false); // focus leaves the password field
+            assert_eq!(timeline.state_at(25), Some(false));
+            assert_eq!(timeline.state_at(75), Some(true));
+            assert_eq!(timeline.state_at(150), Some(false));
+        }
+
+        #[test]
+        fn focus_timeline_judges_a_key_by_its_own_timestamp_not_by_a_later_check() {
+            // A key struck at t=10 must be judged by the focus
+            // state that held AT t=10, even though by the time the consumer
+            // gets around to querying it a much later check (t=200) has
+            // already landed and says something different.
+            let mut timeline = FocusTimeline::default();
+            timeline.push(0, false);
+            timeline.push(200, true); // a slow UIA call finally completes here
+            assert_eq!(timeline.state_at(10), Some(false), "a key typed before the slow check must not inherit its answer");
+            assert_eq!(timeline.state_at(250), Some(true));
+        }
+
+        #[test]
+        fn focus_timeline_query_stays_correct_even_if_a_recheck_lands_out_of_order() {
+            let mut timeline = FocusTimeline::default();
+            timeline.push(100, true);
+            timeline.push(40, false); // a recheck stamped earlier, arriving after
+            assert_eq!(timeline.state_at(70), Some(false));
+            assert_eq!(timeline.state_at(150), Some(true));
+        }
+
+        // --- ActiveClock: pause drops events, and offsets use the
+        // active-recording clock, not wall time.
+
+        #[test]
+        fn active_clock_with_no_pause_is_plain_elapsed_wall_time() {
+            let clock = ActiveClock::new(1_000);
+            assert!(!clock.is_paused_at(1_500));
+            assert_eq!(clock.active_ms(1_500), 500);
+        }
+
+        #[test]
+        fn active_clock_marks_a_key_struck_during_a_closed_pause_as_paused() {
+            let mut clock = ActiveClock::new(0);
+            clock.pause(100);
+            clock.resume(300);
+            assert!(!clock.is_paused_at(50));
+            assert!(clock.is_paused_at(150));
+            assert!(clock.is_paused_at(299));
+            assert!(!clock.is_paused_at(300));
+            assert!(!clock.is_paused_at(400));
+        }
+
+        #[test]
+        fn active_clock_marks_a_key_struck_during_a_still_open_pause_as_paused() {
+            let mut clock = ActiveClock::new(0);
+            clock.pause(100);
+            // Never resumed -- anything after the pause started must still
+            // read as paused, not just the interval up to "now".
+            assert!(clock.is_paused_at(100));
+            assert!(clock.is_paused_at(10_000));
+        }
+
+        #[test]
+        fn active_clock_subtracts_paused_spans_from_the_elapsed_offset() {
+            let mut clock = ActiveClock::new(0);
+            clock.pause(1_000);
+            clock.resume(3_000); // 2000ms paused
+            // A moment 4000ms after start, 2000ms of which was paused, is
+            // 2000ms of ACTIVE recording time -- the same basis the video
+            // track's own clock uses, per RecordClock's own invariant.
+            assert_eq!(clock.active_ms(4_000), 2_000);
+        }
+
+        #[test]
+        fn active_clock_ignores_a_pause_that_starts_after_the_queried_instant() {
+            let mut clock = ActiveClock::new(0);
+            clock.pause(5_000);
+            clock.resume(6_000);
+            assert_eq!(clock.active_ms(1_000), 1_000, "a later pause must not affect an earlier timestamp's offset");
+        }
+
+        #[test]
+        fn active_clock_a_pause_called_twice_in_a_row_does_not_open_a_second_span() {
+            let mut clock = ActiveClock::new(0);
+            clock.pause(100);
+            clock.pause(150); // e.g. a stale double-click of the pause button
+            clock.resume(300);
+            assert_eq!(clock.pauses.len(), 1);
+            assert_eq!(clock.active_ms(400), 200);
         }
     }
 }
