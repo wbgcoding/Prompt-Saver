@@ -19578,6 +19578,7 @@ function bind() {
   const helpEl = $("help");
   $("help-open").addEventListener("click", openHelp);
   $("help-close").addEventListener("click", () => helpEl.classList.add("hidden"));
+  $("help-shortcuts").addEventListener("click", () => openShortcutsModal(["mainWindow", "library"]));
   helpEl.addEventListener("pointerdown", (e) => {
     if (e.target === helpEl) helpEl.classList.add("hidden");
   });
@@ -20001,6 +20002,7 @@ function bind() {
     // just because the tour is still open underneath. Only defer to the tour when
     // nothing is layered above it.
     if (!$("tour-modal").classList.contains("hidden") && $("confirm-modal").classList.contains("hidden")) return;
+    if (!$("shortcuts-modal").classList.contains("hidden")) { trapTabWithin($("shortcuts-modal"), e); return; }
     if (!toolbarMenu.classList.contains("hidden")) { trapTabWithin(toolbarMenu, e); return; }
     if (!miniMenu.classList.contains("hidden")) { trapTabWithin(miniMenu, e); return; }
     if (!viewGroupPop.classList.contains("hidden")) { trapTabWithin(viewGroupPop, e); return; }
@@ -20034,6 +20036,7 @@ function bind() {
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (!snipEdit.classList.contains("hidden")) return; // the editor owns Escape while open
+    if (!$("shortcuts-modal").classList.contains("hidden")) { closeShortcutsModal(); return; }
     if (!toolbarMenu.classList.contains("hidden")) { closeToolbarMenu(); return; }
     if (!miniMenu.classList.contains("hidden")) { closeMiniMenu(); return; }
     if (!viewGroupPop.classList.contains("hidden")) { closeViewGroupPop(); return; }
