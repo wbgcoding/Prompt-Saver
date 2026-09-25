@@ -22884,6 +22884,12 @@ fn pause_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result<
         }
         recording::pause(session);
         session.phase = RecPhase::Paused;
+        // The key-overlay capture used to keep running straight
+        // through a pause -- this drops every key struck while paused and
+        // freezes the active-recording clock keys are timed against, the
+        // same freeze-on-pause behaviour RecordClock already gives the video
+        // track.
+        keylog::pause();
     }
     apply_tray_menu(&app); // the tray's Pause row switches to Resume
     Ok(())
@@ -22906,6 +22912,7 @@ fn resume_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> Result
         }
         recording::resume(session);
         session.phase = RecPhase::Recording;
+        keylog::resume();
     }
     apply_tray_menu(&app); // the tray's Resume row switches back to Pause
     Ok(())
