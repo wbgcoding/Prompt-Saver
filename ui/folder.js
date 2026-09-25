@@ -160,7 +160,7 @@ function renderIcon() {
   const shown = names.slice(0, 2).join(", ");
   const rest = names.length - 2;
   const who = shown && rest > 0 ? `${shown} +${rest}` : shown;
-  iconEl.title = [state.name, who, many].filter(Boolean).join(" — ");
+  iconEl.title = [state.name, who, many].filter(Boolean).join(" · ");
 }
 
 // Popover size for the open grid, from the column count and the folder's own scale.

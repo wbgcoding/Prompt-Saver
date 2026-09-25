@@ -517,8 +517,8 @@ const opsOf = (tool) => VE.ops.filter((o) => o.tool === tool);
 
 function opLabel(op) {
   switch (op.tool) {
-    case "trim": return `${t("veOpTrim")} ${fmtTime(op.startMs)} – ${fmtTime(op.endMs)}`;
-    case "cut": return `${t("veOpCut")} ${fmtTime(op.startMs)} – ${fmtTime(op.endMs)}`;
+    case "trim": return `${t("veOpTrim")} ${fmtTime(op.startMs)}-${fmtTime(op.endMs)}`;
+    case "cut": return `${t("veOpCut")} ${fmtTime(op.startMs)}-${fmtTime(op.endMs)}`;
     case "crop": return `${t("veOpCrop")} ${op.rect.w}×${op.rect.h}`;
     case "speed": return `${t("veOpSpeed")} ${op.rate}×`;
     case "fade": return `${t("veOpFade")} ${op.inMs}/${op.outMs} ms`;
@@ -769,7 +769,7 @@ function renderRegions() {
     el.className = "ve-cut";
     el.style.left = `${msToPx(Math.min(cut.startMs, cut.endMs))}px`;
     el.style.width = `${Math.max(2, msToPx(Math.abs(cut.endMs - cut.startMs)))}px`;
-    el.title = `${t("veOpCut")} ${fmtTime(cut.startMs)} – ${fmtTime(cut.endMs)}`;
+    el.title = `${t("veOpCut")} ${fmtTime(cut.startMs)}-${fmtTime(cut.endMs)}`;
     cuts.appendChild(el);
   }
 
@@ -780,7 +780,7 @@ function renderRegions() {
     el.className = "ve-ovbar" + (op.id === VE.selOv ? " sel" : "");
     el.style.left = `${msToPx(op.startMs)}px`;
     el.style.width = `${Math.max(3, msToPx(Math.max(0, op.endMs - op.startMs)))}px`;
-    el.title = `${t(overlayLabelKey(op.kind))} ${fmtTime(op.startMs)} – ${fmtTime(op.endMs)}`;
+    el.title = `${t(overlayLabelKey(op.kind))} ${fmtTime(op.startMs)}-${fmtTime(op.endMs)}`;
     bars.appendChild(el);
   }
 
@@ -2118,7 +2118,7 @@ function renderOverlayList() {
     const row = document.createElement("button");
     row.type = "button";
     row.className = "ve-ov-row" + (op.id === VE.selOv ? " sel" : "");
-    row.textContent = `${t(overlayLabelKey(op.kind))} · ${fmtTime(op.startMs)} – ${fmtTime(op.endMs)}`;
+    row.textContent = `${t(overlayLabelKey(op.kind))} · ${fmtTime(op.startMs)}-${fmtTime(op.endMs)}`;
     if (op.kind === "video") {
       const bits = [];
       if (!op.hasAudio || !(op.volume > 0)) bits.push(t("veClipMuted"));
