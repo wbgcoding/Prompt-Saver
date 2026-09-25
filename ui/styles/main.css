@@ -309,6 +309,7 @@ body.noflag-showJournal #journal-btn { display: none; }
   background: var(--view-color);
   border-color: var(--view-color);
   color: var(--view-ink, #fff);
+  text-shadow: var(--ink-shadow, none);
   box-shadow: none;
 }
 /* The grid itself outlined in the active view's color (expert opt, off
@@ -1848,6 +1849,7 @@ body.chain-mode .tile.chain-skip { opacity: 0.4; filter: grayscale(0.6); pointer
 .flag-editorMonospace .modal-text { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
 .flag-toolbarHoverDim .header { opacity: 0.5; transition: opacity var(--transition); }
 .flag-toolbarHoverDim .header:hover, .flag-toolbarHoverDim .header:focus-within { opacity: 1; }
+.tile-name, .folder-mini-cell { text-shadow: var(--ink-shadow, none); }
 .flag-tileTextShadow .tile-name { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 /* Appearance extras */
 .flag-compactTiles .tile { padding: 2px; }

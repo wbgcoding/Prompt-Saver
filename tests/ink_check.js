@@ -52,6 +52,7 @@ const check = (label, actual, expected) => {
   if (actual !== expected) problems.push(`${label}: got ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`);
 };
 const pillFg = () => document.documentElement.style.getPropertyValue("--pill-fg");
+const pillInkShadow = () => document.documentElement.style.getPropertyValue("--pill-ink-shadow");
 
 // A microtask tick, so a `.then(setInk)` chain already scheduled gets to run
 // before the next assertion reads its effect.
@@ -69,6 +70,18 @@ async function run() {
   check("threshold 60: #4a7dd8 stays white (red under the old fixed 0.179 split)", pillFg(), "#fff");
   applyFloatTheme("dark", { accent: "#ffd54f" });
   check("threshold 60: #ffd54f (light amber) turns black", pillFg(), "#000");
+
+  // The dark halo behind white text: none where black text was already
+  // picked, none on a colour dark enough that white reads fine on its own,
+  // and the halo value on a colour past the contrast crossover but still
+  // under the threshold (so it keeps white text, just with help).
+  applyFloatTheme("dark", { accent: "#ffffff" });
+  check("threshold 60: #ffffff (black text) gets no halo", pillInkShadow(), "none");
+  applyFloatTheme("dark", { accent: "#4fa3e0" });
+  check("threshold 60: #4fa3e0 (white text, past the crossover) gets a halo",
+    pillInkShadow(), "0 0 2px rgba(0, 0, 0, 0.85), 0 1px 3px rgba(0, 0, 0, 0.7)");
+  applyFloatTheme("dark", { accent: "#202020" });
+  check("threshold 60: #202020 (dark enough for white on its own) gets no halo", pillInkShadow(), "none");
 
   // A later theme-changed event can still flip the switch off, live.
   themeHandler({ payload: { ink: { auto: false, threshold: 60 } } });

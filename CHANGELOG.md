@@ -1281,6 +1281,8 @@ the video editor and the introduction tour ship on).
 - **Chaining moved from the Copying group to Tiles & copying in the expert
   menu**, next to the other tile settings, so the chain icon on a tile is
   easier to find. No setting was removed or renamed, only regrouped.
+- White text on light colours gets a dark halo so it stays readable; the
+  threshold for black text is unchanged.
 
 ## 2.6.3 (2026-07-26)
 

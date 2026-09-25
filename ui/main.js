@@ -586,14 +586,27 @@ const TOAST_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden=
 // (autoInk), the text is always white; switched on, black only above the
 // expert-tunable inkThreshold (a plain WCAG 0.179 split flipped black text
 // onto medium colors that read as too dark for black text).
-function readableInk(hex) {
+function hexLuminance(hex) {
   const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ""));
-  if (!m) return "#fff";
-  if (!flag("autoInk")) return "#fff";
+  if (!m) return null;
   const n = parseInt(m[1], 16);
   const lin = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  const l = 0.2126 * lin(((n >> 16) & 255) / 255) + 0.7152 * lin(((n >> 8) & 255) / 255) + 0.0722 * lin((n & 255) / 255);
+  return 0.2126 * lin(((n >> 16) & 255) / 255) + 0.7152 * lin(((n >> 8) & 255) / 255) + 0.0722 * lin((n & 255) / 255);
+}
+
+function readableInk(hex) {
+  const l = hexLuminance(hex);
+  if (l === null) return "#fff";
+  if (!flag("autoInk")) return "#fff";
   return l > val("inkThreshold") / 100 ? "#000" : "#fff";
+}
+
+// White ink stays white up to the user's threshold (a deliberate look), but
+// on a colour past the contrast crossover it gets a dark halo so it reads.
+const INK_HALO = "0 0 2px rgba(0, 0, 0, 0.85), 0 1px 3px rgba(0, 0, 0, 0.7)";
+function inkShadow(hex) {
+  const l = hexLuminance(hex);
+  return l !== null && l > 0.179 && readableInk(hex) === "#fff" ? INK_HALO : "none";
 }
 
 // Optional action: { label, onClick } adds a button and keeps the toast longer.
@@ -4605,6 +4618,7 @@ function viewTabEl(v) {
     btn.classList.add("colored");
     btn.style.setProperty("--view-color", v.color);
     btn.style.setProperty("--view-ink", readableInk(v.color));
+    btn.style.setProperty("--ink-shadow", inkShadow(v.color));
   }
   // The name lives in its own span so the merge preview can shrink it back into the
   // tab the way a folder tab's spans already do.
@@ -6215,6 +6229,7 @@ function buildTile(p) {
     tile.style.background = p.color;
     tile.style.borderColor = p.color;
     tile.style.color = readableInk(p.color);
+    tile.style.setProperty("--ink-shadow", inkShadow(p.color));
   }
 
   const name = document.createElement("span");
@@ -6870,6 +6885,8 @@ function pickTileFolderColor(f, anchor) {
       tile.style.background = hex;
       tile.style.borderColor = hex;
       tile.style.color = hex ? readableInk(hex) : "";
+      if (hex) tile.style.setProperty("--ink-shadow", inkShadow(hex));
+      else tile.style.removeProperty("--ink-shadow");
     }
     clearTimeout(folderColorTimer);
     // Re-read the folder on write: the settings object was replaced in between.
@@ -6920,6 +6937,7 @@ function buildFolderTile(f) {
     tile.style.background = f.color;
     tile.style.borderColor = f.color;
     tile.style.color = readableInk(f.color);
+    tile.style.setProperty("--ink-shadow", inkShadow(f.color));
   }
   const mini = document.createElement("span");
   mini.className = "folder-mini";
@@ -6930,7 +6948,8 @@ function buildFolderTile(f) {
     if (p.color) {
       face.style.background = p.color;
       face.style.color = readableInk(p.color);
-    }
+      face.style.setProperty("--ink-shadow", inkShadow(p.color));
+    } else face.style.setProperty("--ink-shadow", "none");
     const faceImg = imageOf(p);
     if (faceImg) {
       const img = document.createElement("img");
