@@ -15059,7 +15059,7 @@ struct SnipWindow {
 // ---- Fast screen capture via GDI (one BitBlt; no per-monitor DXGI setup) ----
 
 // Capture a screen rectangle (global physical px) with GDI BitBlt. Immediate (no
-// DXGI latency) and includes every visible window — elevated ones too.
+// DXGI latency) and includes every visible window: elevated ones too.
 #[cfg(windows)]
 fn capture_screen_rect(x: i32, y: i32, w: i32, h: i32) -> Option<image::RgbaImage> {
     #[link(name = "user32")]
@@ -15087,7 +15087,7 @@ fn capture_screen_rect(x: i32, y: i32, w: i32, h: i32) -> Option<image::RgbaImag
     const SRCCOPY: u32 = 0x00CC_0020;
     // Reject non-positive or absurdly large rects: keep w*h*4 a sane allocation so
     // a spoofed/extreme virtual-screen metric can never abort the process on OOM.
-    // 300M px ≈ 1.2 GB RGBA — far above any real multi-monitor desktop.
+    // 300M px ≈ 1.2 GB RGBA: far above any real multi-monitor desktop.
     if w <= 0 || h <= 0 || (w as u64) * (h as u64) > 300_000_000 {
         return None;
     }
@@ -15099,7 +15099,7 @@ fn capture_screen_rect(x: i32, y: i32, w: i32, h: i32) -> Option<image::RgbaImag
         let mem = CreateCompatibleDC(screen);
         let bmp = CreateCompatibleBitmap(screen, w, h);
         let old = SelectObject(mem, bmp);
-        // SRCCOPY only (no CAPTUREBLT — it forces a slow full recomposite). The
+        // SRCCOPY only (no CAPTUREBLT: it forces a slow full recomposite). The
         // DWM-composited desktop already includes every normal/elevated window.
         let blt_ok = BitBlt(mem, 0, 0, w, h, screen, x, y, SRCCOPY) != 0;
         // Deselect the bitmap before GetDIBits (required by the API).
@@ -15132,7 +15132,7 @@ fn capture_screen_rect(x: i32, y: i32, w: i32, h: i32) -> Option<image::RgbaImag
         if got == 0 {
             return None;
         }
-        // GDI returns BGRA; convert to RGBA and force opaque alpha. Parallelized —
+        // GDI returns BGRA; convert to RGBA and force opaque alpha. Parallelized:
         // a multi-monitor capture is tens of millions of pixels, so a serial swap
         // was a big slice of the freeze time.
         use rayon::prelude::*;
@@ -15201,8 +15201,8 @@ fn freeze_desktop() -> Result<(image::RgbaImage, i32, i32), String> {
 
 // A monitor's global physical origin -> where its capture starts inside the
 // stitched frozen image. The virtual desktop's origin is negative as soon as a
-// monitor sits left of or above the primary, so this shift — not any DPI scale
-// factor — is what makes a pixel on a differently scaled second monitor address
+// monitor sits left of or above the primary, so this shift: not any DPI scale
+// factor: is what makes a pixel on a differently scaled second monitor address
 // the byte the capture actually holds. Every frozen coordinate is physical.
 fn stitch_offset(global: i32, origin: i32) -> i64 {
     (global - origin) as i64
@@ -15210,7 +15210,7 @@ fn stitch_offset(global: i32, origin: i32) -> i64 {
 
 // ---------- colour picker ----------
 // Same freeze + overlay as the snipping tool; the overlay just runs in pick mode.
-// The picked value goes to the CLIPBOARD ONLY — no prompt, no copy history.
+// The picked value goes to the CLIPBOARD ONLY: no prompt, no copy history.
 
 // Loupe magnification + output notation, straight from the expert menu.
 struct PickCfg {
@@ -15242,7 +15242,7 @@ fn rgb_to_hex(r: u8, g: u8, b: u8) -> String {
 
 // The last picked colours, newest first. Recorded here rather than in the
 // overlay page, because this is the side that knows what actually reached the
-// clipboard — a hidden or reloaded webview cannot lose the list. Kept in memory
+// clipboard: a hidden or reloaded webview cannot lose the list. Kept in memory
 // for the running session, mirrored into `ui_texts["pickHistory"]` (comma-joined
 // hex) so it survives a restart; the mirror is the only thing ever written to disk.
 const PICK_HISTORY_DEFAULT: usize = 5;
@@ -15288,7 +15288,7 @@ fn pick_history_hex() -> Vec<String> {
         .collect()
 }
 
-// One-time load from the persisted mirror — called once when the store loads.
+// One-time load from the persisted mirror: called once when the store loads.
 fn load_pick_history(settings: &Settings) {
     let max = pick_history_max(settings);
     let mut hist = PICK_HISTORY.lock().unwrap_or_else(|e| e.into_inner());
@@ -15351,7 +15351,7 @@ fn sample_frozen(caps: &[MonitorCap], x: i32, y: i32) -> Option<[u8; 3]> {
 }
 
 // One rectangular patch of the frozen desktop as packed RGB, row by row. The rect
-// must lie fully inside the image — a caller that clamped badly gets nothing back
+// must lie fully inside the image: a caller that clamped badly gets nothing back
 // rather than a silently shifted patch.
 fn crop_rgb(img: &image::RgbaImage, x: u32, y: u32, w: u32, h: u32) -> Vec<u8> {
     let (iw, ih) = img.dimensions();
@@ -15376,20 +15376,20 @@ fn crop_rgb(img: &image::RgbaImage, x: u32, y: u32, w: u32, h: u32) -> Vec<u8> {
 struct ColorPick {
     text: String,
     hex: String,
-    // All three notations, pre-formatted — so the toast can offer them as
+    // All three notations, pre-formatted: so the toast can offer them as
     // separate copy-this-format chips without duplicating format_color() in JS.
     rgb: String,
     hsl: String,
 }
 
 // Longest tile edge the overlay may ask for. The loupe needs a few dozen pixels
-// around the cursor, so this is generous — but it is also the cap that stops a
+// around the cursor, so this is generous: but it is also the cap that stops a
 // bogus request from allocating a desktop-sized buffer.
 const PICK_TILE_MAX: u32 = 512;
 
 // Hand the overlay ONE patch of the frozen desktop as packed RGB (3 bytes per
 // pixel, row order). The loupe samples locally, so it caches a patch and only asks
-// again when the cursor nears its edge — shipping the whole desktop instead cost a
+// again when the cursor nears its edge: shipping the whole desktop instead cost a
 // ~58 MB transfer on a multi-monitor setup, which is what made the picker slow to
 // open. Empty outside a pick session or for a rect that is not fully on the frame.
 #[tauri::command]
@@ -15456,7 +15456,7 @@ async fn pick_color(app: AppHandle, state: State<'_, SnipState>, x: i32, y: i32)
     Ok(text)
 }
 
-// The popover behind #picker-btn's right-click — the persisted history,
+// The popover behind #picker-btn's right-click: the persisted history,
 // respecting a cap the user may have lowered since the last pick.
 #[tauri::command]
 fn pick_history(app: AppHandle) -> Vec<String> {
@@ -15485,7 +15485,7 @@ fn copy_pick_history_entry(app: AppHandle, hex: String) -> Result<String, String
     Ok(text)
 }
 
-// Build the (hidden) snip overlay window — borderless WS_POPUP, no shadow, fixed
+// Build the (hidden) snip overlay window: borderless WS_POPUP, no shadow, fixed
 // size, always-on-top. Created once and reused across snips so the WebView2
 // cold-start is paid a single time. A Destroyed handler clears the session and
 // restores the app's windows if the overlay is ever torn down.
@@ -15535,7 +15535,7 @@ async fn open_snip(
 }
 
 // The very same freeze + overlay, opened in colour-pick mode. Reusing the
-// pipeline is what makes the picker pixel-exact and DPI-correct for free — the
+// pipeline is what makes the picker pixel-exact and DPI-correct for free: the
 // frozen frame is taken BEFORE the overlay shows, so the overlay is never in its
 // own capture source.
 #[tauri::command]
@@ -15592,7 +15592,7 @@ async fn begin_capture(
 ) -> Result<(), String> {
     // Atomically claim the session. If one is already active and its overlay still
     // exists, surface that instead of starting a second. (Stale flag with no
-    // window — e.g. the overlay was destroyed — falls through: reclaim and start.)
+    // window (e.g. the overlay was destroyed) falls through: reclaim and start.)
     if SNIP_ACTIVE
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
         .is_err()
@@ -15633,12 +15633,12 @@ async fn begin_capture(
     // revealed. A short settle lets the hide reach the screen first.
     let had_visible = set_app_windows_hidden(&app, true);
     // Nothing was on screen to hide, so there is nothing the freeze could catch
-    // mid-hide either — the settle delay only matters when we just hid something.
+    // mid-hide either: the settle delay only matters when we just hid something.
     if had_visible {
         tokio::time::sleep(std::time::Duration::from_millis(30)).await;
     }
     // An optional extra delay before the freeze, so an opened menu can be
-    // captured too. Screenshot path only — the colour picker needs the frozen
+    // captured too. Screenshot path only: the colour picker needs the frozen
     // desktop as fast as possible.
     if !pick && snip_delay > 0 {
         tokio::time::sleep(std::time::Duration::from_millis(snip_delay)).await;
@@ -15659,7 +15659,7 @@ async fn begin_capture(
     let slot = preview.0.clone();
     *slot.lock().unwrap_or_else(|e| e.into_inner()) = None;
     tauri::async_runtime::spawn_blocking(move || {
-        // Encode the capture at NATIVE resolution — pixel-sharp overlay, no downscale.
+        // Encode the capture at NATIVE resolution: pixel-sharp overlay, no downscale.
         let bg = encode_snip_jpeg(enc_img.as_raw(), total_w, total_h, if pick { PICK_Q } else { snip_q }).map(|j| {
             let (src, is_file) = match write_snip_preview(&j) {
                 Some(path) => (path, true),
@@ -15690,7 +15690,7 @@ async fn begin_capture(
     });
 
     // Reuse the overlay if it already exists. A long-idle HIDDEN WebView2 is heavily
-    // background-throttled (clamped timers, paused rAF/IPC) — THAT, not cold-start, is
+    // background-throttled (clamped timers, paused rAF/IPC): THAT, not cold-start, is
     // why the first snip lagged behind a retry (whose webview was shown moments ago).
     // So wake it WITHOUT a flash: show it 2×2 off-screen, which flips the page to
     // "visible" and resumes its JS at full speed. snip_present (fired on the frozen
@@ -15698,8 +15698,8 @@ async fn begin_capture(
     // and flash-free. Same path for the first snip and every retry → same speed.
     if let Some(win) = app.get_webview_window("snip-0") {
         // Park it at FULL size but just off-screen (below everything), shown so the
-        // webview un-throttles and paints. snip_present then only MOVES it on-screen —
-        // no resize, no DPI re-assert — so the reveal can't flicker.
+        // webview un-throttles and paints. snip_present then only MOVES it on-screen:
+        // no resize, no DPI re-assert: so the reveal can't flicker.
         let _ = win.set_size(PhysicalSize::new(total_w, total_h));
         let _ = win.set_position(PhysicalPosition::new(min_x, min_y + total_h as i32 + 100));
         let _ = win.show();
@@ -15745,7 +15745,7 @@ async fn reveal_snip(app: &AppHandle) {
     };
     if let Some(win) = app.get_webview_window("snip-0") {
         // Already full-size (parked off-screen on reuse), so this moves it on-screen in
-        // one shot — no resize, no re-assert → no flicker. The frozen image is already
+        // one shot: no resize, no re-assert → no flicker. The frozen image is already
         // decoded (snip_present fires on its onload). set_size covers the cold path.
         let _ = win.set_size(PhysicalSize::new(total_w, total_h));
         let _ = win.set_position(PhysicalPosition::new(min_x, min_y));
@@ -15780,7 +15780,7 @@ fn spawn_reveal_watchdog(app: AppHandle) {
 }
 
 // The overlay page asks this on load: begin a session immediately only if one is
-// already active (the cold-build path), otherwise stay idle — this is what lets the
+// already active (the cold-build path), otherwise stay idle: this is what lets the
 // window be pre-warmed at startup without auto-triggering a bogus snip. Reused
 // windows are driven per-snip by the "snip-begin" event instead.
 #[tauri::command]
@@ -15789,7 +15789,7 @@ fn snip_should_begin() -> bool {
 }
 
 // Visible top-level windows overlapping the virtual desktop, topmost first, in
-// stitched-image physical pixels — for hover highlight + single-window capture.
+// stitched-image physical pixels: for hover highlight + single-window capture.
 #[tauri::command]
 fn snip_windows(state: State<SnipState>, index: usize) -> Vec<SnipWindow> {
     // Read the stitched origin/bounds, then drop the lock before the OS-wide
@@ -15828,16 +15828,16 @@ fn snip_windows(state: State<SnipState>, index: usize) -> Vec<SnipWindow> {
     out
 }
 
-// Overlay preview JPEG quality (encoded at native resolution — pixel-sharp) is the
+// Overlay preview JPEG quality (encoded at native resolution: pixel-sharp) is the
 // expert-tunable snipQuality value now (default 80), read as snip_q in begin_capture.
 // The colour picker shows the frozen desktop as the reference for the colour it is
 // about to copy, so its background must not carry JPEG's subsampled chroma: below
 // quality 90 the encoder halves the colour resolution, which is exactly the "washed
-// out" look. 92 keeps full chroma (4:4:4). Measured cost: ~1.6x the q80 encode — paid
+// out" look. 92 keeps full chroma (4:4:4). Measured cost: ~1.6x the q80 encode; paid
 // only when the pipette is opened, never on the screenshot path.
 const PICK_Q: u8 = 92;
 // Saved-button JPEG quality: higher (crisp text) but still a fraction of a PNG's
-// size + encode time — a full-res PNG data URL used to stall the whole app on save.
+// size + encode time: a full-res PNG data URL used to stall the whole app on save.
 // Default for the expert-tunable snipSaveQuality (read in finalize_capture) --
 // also mirrored by SNIP_EDIT_EXPORT_Q in main.js for the post-edit re-export,
 // so both sides of the same screenshot's lifetime share one visible quality.
@@ -16185,7 +16185,7 @@ async fn delete_screenshot_file(state: State<'_, Db>, path: String) -> Result<bo
         return Ok(false);
     }
     // Defense in depth: only ever delete inside a folder we actually save screenshots
-    // to (the configured/default screenshot dir, or temp) — never an arbitrary location
+    // to (the configured/default screenshot dir, or temp): never an arbitrary location
     // a matching file name could otherwise point at.
     let parent = match p.parent().and_then(|d| d.canonicalize().ok()) {
         Some(d) => d,
@@ -16199,7 +16199,7 @@ async fn delete_screenshot_file(state: State<'_, Db>, path: String) -> Result<bo
     Ok(in_allowed && fs::remove_file(p).is_ok())
 }
 
-// Screenshot editor "Copy" / re-apply-to-clipboard after "Apply" — the
+// Screenshot editor "Copy" / re-apply-to-clipboard after "Apply": the
 // edited image never goes through finalize_capture, so it needs its own thin
 // path onto the existing copy_image_to_clipboard helper.
 #[tauri::command]
@@ -16240,12 +16240,12 @@ fn current_data_dir(app: AppHandle) -> String {
     data_dir(&app).to_string_lossy().to_string()
 }
 
-// The exact folder the last set_data_dir moved AWAY from — the only directory
+// The exact folder the last set_data_dir moved AWAY from: the only directory
 // delete_data_dir is allowed to clean, so the webview can never point that command
 // at another app's folder full of same-named files (settings.json / data.db).
 static LAST_OLD_DATA_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
-// Plain recursive copy — used to bring backups/ along on a data-dir move/adopt,
+// Plain recursive copy: used to bring backups/ along on a data-dir move/adopt,
 // which only ever copied the store files themselves (data.db/prompts.json/
 // settings.json), leaving the Backup panel showing 0 snapshots at the new location.
 fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
@@ -16279,7 +16279,7 @@ fn copy_store_files(src: &Path, dst: &Path, landed: &mut bool) -> Result<(), Str
 
 // The disk half of a data-folder move, kept free of the AppHandle so the ORDER of
 // its steps can be tested: flush the live state into the folder being left, copy
-// the store across, point future launches at the new folder — and only once all of
+// the store across, point future launches at the new folder: and only once all of
 // that has landed, mark the old folder as the one delete_data_dir may clean. Every
 // step aborts the move, with that permission left unset: until the copy is
 // complete, the old folder can still be the only place the current data exists, so
@@ -16310,7 +16310,7 @@ fn move_store_dir(
         // already succeeded by this point.
         let old_backups = current.join("backups");
         // The new folder could itself be a descendant of old_backups (a user browsing
-        // into it and picking, say, its own backups/ subfolder) — copying a directory
+        // into it and picking, say, its own backups/ subfolder): copying a directory
         // into its own descendant recurses into what it just created and never stops.
         if old_backups.is_dir() && !new.starts_with(&old_backups) {
             if let Err(e) = copy_dir_all(&old_backups, &new.join("backups")) {
@@ -16323,7 +16323,7 @@ fn move_store_dir(
     fs::write(pointer_dir.join("datapath"), new.to_string_lossy().as_bytes())
         .map_err(|e| e.to_string())?;
     // Everything the move consists of has landed, so the folder we came from is now
-    // a redundant copy — and the only one delete_data_dir is allowed to clean.
+    // a redundant copy: and the only one delete_data_dir is allowed to clean.
     *LAST_OLD_DATA_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(current.to_path_buf());
     Ok(())
 }
@@ -16351,7 +16351,7 @@ async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: String) -> Resu
     let mut flush = || -> Result<(), String> {
         {
             let store = lock(&state);
-            // A locked store refuses prompt writes on purpose — rows it could not
+            // A locked store refuses prompt writes on purpose: rows it could not
             // read are still in the file, and the copy below brings them along
             // untouched. That is not a failed flush.
             if !store.prompts_locked && !save_prompts(&app, &store) {
@@ -16368,7 +16368,7 @@ async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: String) -> Resu
         }
         Ok(())
     };
-    // From the next db_conn on, "the database" is a different file — either the
+    // From the next db_conn on, "the database" is a different file: either the
     // store just copied across or one already living there. Neither is described by
     // what the old folder's rows hashed to.
     let mut rebind = || lock(&state).forget_written_rows();
@@ -16383,14 +16383,14 @@ async fn set_data_dir(app: AppHandle, state: State<'_, Db>, dir: String) -> Resu
 }
 
 // Delete the store files in a folder (old location after a move). Only ever
-// removes our known data files — never the folder itself or anything else.
+// removes our known data files: never the folder itself or anything else.
 #[tauri::command]
 async fn delete_data_dir(path: String) -> bool {
     let dir = PathBuf::from(&path);
     if !dir.is_dir() {
         return false;
     }
-    // Only ever clean the folder set_data_dir just moved away from — never an
+    // Only ever clean the folder set_data_dir just moved away from: never an
     // arbitrary webview-supplied directory that happens to hold same-named files.
     let allowed = LAST_OLD_DATA_DIR
         .lock()
@@ -16952,7 +16952,7 @@ async fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Opt
         return Err("empty region".to_string());
     }
 
-    // "Screenshot" + a precise timestamp (+ the source app for a window shot) — the
+    // "Screenshot" + a precise timestamp (+ the source app for a window shot): the
     // button name and the optional folder file share the same stamp.
     let stamp = local_stamp();
     let label = app_name.as_deref().map(clean_app_name).filter(|s| !s.is_empty());
@@ -16961,7 +16961,7 @@ async fn finalize_capture(app: &AppHandle, crop: image::RgbaImage, app_name: Opt
         None => (format!("Screenshot {}", stamp), format!("Screenshot-{}", stamp)),
     };
 
-    // Default: temp-only — the shot lives only as an in-app prompt (encrypted,
+    // Default: temp-only; the shot lives only as an in-app prompt (encrypted,
     // removed when the prompt is deleted). The folder copy is opt-in and honors
     // a custom screenshot directory (expert menu).
     let (save_to_folder, custom_dir, save_q, format) = app
@@ -17116,7 +17116,7 @@ fn luma_range(img: &image::RgbaImage) -> Option<(i32, i32)> {
     Some((min_l, max_l))
 }
 
-// True when a direct PrintWindow capture looks blocked — near black OR perfectly
+// True when a direct PrintWindow capture looks blocked: near black OR perfectly
 // uniform. Used only to decide whether to fall back to the frozen screen, where a
 // uniform-but-valid window still ends up captured.
 fn capture_looks_bad(img: &image::RgbaImage) -> bool {
@@ -17126,7 +17126,7 @@ fn capture_looks_bad(img: &image::RgbaImage) -> bool {
     }
 }
 
-// True when the FINAL crop is unusable — empty or pure black. Protected windows
+// True when the FINAL crop is unusable: empty or pure black. Protected windows
 // (Task Manager, secured dialogs) that even the frozen screen could not capture
 // end up black; such a defective image must never be saved (we error instead).
 fn capture_is_blank(img: &image::RgbaImage) -> bool {
@@ -17214,7 +17214,7 @@ fn show_window(hwnd: isize, cmd: i32) {
 
 // True when the window belongs to a higher-integrity / elevated process (e.g.
 // Task Manager). Such windows block PrintWindow, which can return a misleading
-// part-black image instead of failing cleanly — so we skip the direct path for
+// part-black image instead of failing cleanly: so we skip the direct path for
 // them and capture via the frozen desktop / minimize workaround, which work
 // regardless of elevation. Heuristic: a medium-integrity caller cannot open an
 // elevated process for PROCESS_QUERY_INFORMATION (access denied).
@@ -17246,10 +17246,10 @@ fn window_is_protected(id: u32) -> bool {
     }
 }
 
-// Capture the chosen window. PrintWindow first — it grabs the window's own
+// Capture the chosen window. PrintWindow first: it grabs the window's own
 // content, excluding anything stacked on top (clean for normal windows).
 // Protected/elevated windows (e.g. Task Manager) block PrintWindow. If nothing
-// covers the target, crop the frozen desktop (taken with our windows hidden) —
+// covers the target, crop the frozen desktop (taken with our windows hidden):
 // a GDI grab contains even elevated windows, with no flicker. If other windows
 // DO cover it, the freeze has them baked in, so run the workaround: hide our
 // overlay, minimize the covering windows, grab the now-clear area live, then
@@ -17281,7 +17281,7 @@ async fn capture_window(
             false
         }
     };
-    // 1. Direct PrintWindow — best for normal windows (own content, no overlays).
+    // 1. Direct PrintWindow: best for normal windows (own content, no overlays).
     // Skipped for elevated windows: PrintWindow is unreliable there and can pass
     // the quality check with a wrong image, so route them to the robust paths.
     let direct = if protected {
@@ -17365,7 +17365,7 @@ async fn capture_window(
 }
 
 // Open the project's GitHub page in the default browser (app logo → repo,
-// version label → releases). The URLs are hardcoded — the webview can never open
+// version label → releases). The URLs are hardcoded: the webview can never open
 // an arbitrary address.
 #[tauri::command]
 fn open_repo(page: Option<String>) -> Result<(), String> {
@@ -17408,8 +17408,8 @@ fn zoom_min_size(factor: f64, cap: (u32, u32)) -> (u32, u32) {
 
 // Scale the whole main-window UI with the browser's native zoom (like Ctrl +/-).
 // Native zoom keeps event coordinates and getBoundingClientRect in one coordinate
-// space, so — unlike a CSS `zoom` on <body> — it never desyncs popup positioning
-// or grid hit-testing. Clamped to the slider's 75–300% range (the slider,
+// space, so (unlike a CSS `zoom` on <body>) it never desyncs popup positioning
+// or grid hit-testing. Clamped to the slider's 75: 300% range (the slider,
 // ui/main.js EXPERT_TABS uiScale, has always had a 75% floor).
 #[tauri::command]
 fn set_ui_zoom(app: AppHandle, factor: f64) -> Result<(), String> {
@@ -17419,17 +17419,17 @@ fn set_ui_zoom(app: AppHandle, factor: f64) -> Result<(), String> {
         // See zoom_min_size: without this, the fixed 680x460 OS minimum leaves
         // fewer and fewer CSS pixels visible as zoom climbs (250% => 272x184,
         // header/composer become unreachable). Grow the window's minimum by the
-        // same factor — and the window itself, if it is currently smaller than
-        // that — so the header/composer stay reachable at any zoom level.
+        // same factor: and the window itself, if it is currently smaller than
+        // that: so the header/composer stay reachable at any zoom level.
         // The window may sit on any monitor by now (this runs live, not just at
-        // startup) — cap against the monitor it is actually on, not always the
+        // startup): cap against the monitor it is actually on, not always the
         // primary one, falling back to primary if that can't be read either.
         let cap = monitor_cap(win.current_monitor().ok().flatten().or_else(|| win.primary_monitor().ok().flatten()));
         let (min_w, min_h) = zoom_min_size(f, cap);
         let _ = win.set_min_size(Some(tauri::LogicalSize::new(min_w, min_h)));
         if let Ok(size) = win.outer_size() {
             let scale = win.scale_factor().unwrap_or(1.0);
-            // Round like zoom_min_size does (not truncate) — otherwise a window
+            // Round like zoom_min_size does (not truncate): otherwise a window
             // whose true logical size sits right at the new minimum can read 1px
             // under it here, and the set_size call below would then shave that
             // truncated value off the OTHER (already-fine) dimension too.
@@ -17603,7 +17603,7 @@ const MAX_OCR_IMAGE_BYTES: u64 = 200 * 1024 * 1024; // a single image, not a who
 const MAX_IMAGE_DATA_URL_BYTES: u64 = 200 * 1024 * 1024;
 const OCR_IMAGE_EXTS: [&str; 5] = ["png", "jpg", "jpeg", "bmp", "webp"];
 
-// Shared oversized-input guard for a data URL decoded straight from IPC —
+// Shared oversized-input guard for a data URL decoded straight from IPC:
 // each caller supplies its own ceiling (OCR keeps its own MAX_OCR_IMAGE_BYTES).
 fn data_url_within_limit(data_url: &str, limit: u64) -> bool {
     data_url.len() as u64 <= limit
