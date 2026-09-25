@@ -20686,6 +20686,9 @@ async function init() {
         await warnDataDirSyncFolder();
         await maybeOpenFirstRunTour(sealWarned);
         await maybeOfferEditorDraftRecovery();
+        // A promptsaver:// link that started this process waits in the backend
+        // until this listener side is up; ask for it only now.
+        invoke("run_pending_launch_url").catch(() => {});
       });
     };
     setTimeout(reveal, 1500);
