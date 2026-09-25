@@ -21049,8 +21049,10 @@ mod keylog {
     use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
     use windows::Win32::UI::Accessibility::{
         CUIAutomation, IUIAutomation, IUIAutomation2, IUIAutomationElement, IUIAutomationFocusChangedEventHandler,
-        IUIAutomationFocusChangedEventHandler_Impl, IUIAutomationTextPattern, IUIAutomationValuePattern, UIA_DocumentControlTypeId,
-        UIA_EditControlTypeId, UIA_TextPatternId, UIA_ValuePatternId,
+        IUIAutomationFocusChangedEventHandler_Impl, IUIAutomationTextPattern, IUIAutomationValuePattern, UIA_CONTROLTYPE_ID,
+        UIA_ButtonControlTypeId, UIA_CheckBoxControlTypeId, UIA_HyperlinkControlTypeId, UIA_ImageControlTypeId, UIA_ListItemControlTypeId,
+        UIA_MenuItemControlTypeId, UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId, UIA_SliderControlTypeId, UIA_TabItemControlTypeId,
+        UIA_TextPatternId, UIA_ThumbControlTypeId, UIA_ToolBarControlTypeId, UIA_TreeItemControlTypeId, UIA_ValuePatternId,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
         CallNextHookEx, GetForegroundWindow, GetGUIThreadInfo, GetMessageW, GetWindowLongW, GetWindowThreadProcessId,
@@ -21853,21 +21855,47 @@ mod keylog {
     // Whether the focused element can be POSITIVELY ruled out as a
     // text-entry control -- the only way FieldClass::NonText is ever
     // reached. Everything else, including every shape of doubt, falls to
-    // FieldClass::Text in `classify_field`: an Edit or Document control
-    // type, an editable ValuePattern, or a TextPattern present at all (its
-    // own read-only state is not reliably queryable through classic UI
-    // Automation, so its mere presence is treated as "could be editable")
-    // all say "text" outright, and a missing UI Automation object, a
-    // GetFocusedElement/CurrentControlType failure, or any other unreadable
-    // property says "cannot positively rule it out" -- which is exactly
-    // the same doubt.
+    // FieldClass::Text in `classify_field`.
+    //
+    // NEW-3: this used to be "not Edit/Document and exposes no
+    // ValuePattern/TextPattern" -- absence of evidence, not a positive
+    // classification. A custom-drawn terminal (PuTTY/KiTTY), an RDP/VNC
+    // remote session window, or any Qt/Java/game window with no
+    // accessibility provider at all surfaces as a bare Pane/Window/Custom
+    // element with none of those patterns either, and used to be
+    // (mis)classified NonText -- typed characters, including an SSH or RDP
+    // password, went through in full. Inverted to a POSITIVE allow-list
+    // instead: only a control type that structurally cannot accept text
+    // input counts as non-text; a Pane, Window, Custom, Group, an unknown
+    // type, or any CurrentControlType/GetFocusedElement failure all fall
+    // through to Text, same as before.
+    fn is_non_text_control_type(control_type: UIA_CONTROLTYPE_ID) -> bool {
+        control_type == UIA_ButtonControlTypeId
+            || control_type == UIA_CheckBoxControlTypeId
+            || control_type == UIA_RadioButtonControlTypeId
+            || control_type == UIA_MenuItemControlTypeId
+            || control_type == UIA_TabItemControlTypeId
+            || control_type == UIA_ListItemControlTypeId
+            || control_type == UIA_TreeItemControlTypeId
+            || control_type == UIA_SliderControlTypeId
+            || control_type == UIA_ScrollBarControlTypeId
+            || control_type == UIA_HyperlinkControlTypeId
+            || control_type == UIA_ImageControlTypeId
+            || control_type == UIA_ToolBarControlTypeId
+            || control_type == UIA_ThumbControlTypeId
+    }
+
     fn is_confidently_non_text(uia: &Option<IUIAutomation>) -> bool {
         let Some(uia) = uia else { return false };
         let Ok(el) = (unsafe { uia.GetFocusedElement() }) else { return false };
         let Ok(control_type) = (unsafe { el.CurrentControlType() }) else { return false };
-        if control_type == UIA_EditControlTypeId || control_type == UIA_DocumentControlTypeId {
+        if !is_non_text_control_type(control_type) {
             return false;
         }
+        // Even an allow-listed control type is not trusted blindly: one
+        // that additionally exposes an editable ValuePattern, or any
+        // TextPattern at all, still falls through to Text -- this only ever
+        // narrows the allow-list further, never widens it.
         if let Ok(value_pattern) = unsafe { el.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) } {
             match unsafe { value_pattern.CurrentIsReadOnly() } {
                 Ok(read_only) if !read_only.as_bool() => return false, // editable ValuePattern -- text
@@ -22437,6 +22465,10 @@ mod keylog {
     #[cfg(test)]
     mod tests {
         use super::*;
+        // Only exercised by the NEW-3 Pane/Custom test below -- imported
+        // here, not in the outer module's own `use`, so a non-test build
+        // does not carry an unused-import warning for them.
+        use windows::Win32::UI::Accessibility::{UIA_CustomControlTypeId, UIA_PaneControlTypeId};
 
         #[test]
         fn recorder_stores_identifiers_with_timestamps_only() {
@@ -22787,6 +22819,49 @@ mod keylog {
             // entry, so this must fall through to the normal ctrl/alt/win
             // shortcut rule instead of the numpad-specific one.
             assert!(!resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x66, scan: 0x4D, extended: false }, true, true, true), "Ctrl+Alt+Win+Numpad6 is an ordinary shortcut combo, not character entry");
+        }
+
+        // --- NEW-3: only a structurally non-text UIA control type may ever
+        // resolve to FieldClass::NonText; everything else, including a bare
+        // Pane/Custom element such as PuTTY or an RDP/VNC session, is Text.
+
+        #[test]
+        fn every_allow_listed_control_type_is_non_text() {
+            for ct in [
+                UIA_ButtonControlTypeId,
+                UIA_CheckBoxControlTypeId,
+                UIA_RadioButtonControlTypeId,
+                UIA_MenuItemControlTypeId,
+                UIA_TabItemControlTypeId,
+                UIA_ListItemControlTypeId,
+                UIA_TreeItemControlTypeId,
+                UIA_SliderControlTypeId,
+                UIA_ScrollBarControlTypeId,
+                UIA_HyperlinkControlTypeId,
+                UIA_ImageControlTypeId,
+                UIA_ToolBarControlTypeId,
+                UIA_ThumbControlTypeId,
+            ] {
+                assert!(is_non_text_control_type(ct));
+            }
+        }
+
+        #[test]
+        fn a_putty_like_pane_or_custom_control_drops_typed_letters() {
+            // PuTTY/KiTTY, an RDP/VNC remote session window, or any
+            // Qt/Java/game window with no accessibility provider at all
+            // surfaces as a bare Pane or Custom element -- neither is
+            // allow-listed, so both must fall through to Text, not be
+            // (mis)classified NonText the way absence-of-evidence used to.
+            assert!(!is_non_text_control_type(UIA_PaneControlTypeId));
+            assert!(!is_non_text_control_type(UIA_CustomControlTypeId));
+            // Which, through the same verdict pipeline every other Text
+            // field uses, means a typed letter -- an SSH or RDP password
+            // character -- is gapped, never stored.
+            assert!(
+                resolve_verdict(Verdict::TextOnly, KeyId { vk: 0x41, scan: 0x1E, extended: false }, false, false, false),
+                "a PuTTY-like Pane/Custom window's typed letters must be gapped, not recorded"
+            );
         }
 
         #[test]
