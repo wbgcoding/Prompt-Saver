@@ -23068,7 +23068,7 @@ async fn finish_and_continue_recording(
         // recording::stop returns, which can take a moment to flush the
         // encoder) is what keeps the old part's own last keys from bleeding
         // in and the new part's clock from starting late.
-        let switch_instant_ms = now_ms();
+        let switch_instant_ms = keylog::mono_ms();
         keylog::cut_off_at(switch_instant_ms);
         let (path, dropped, encode_error, mic_wav_path, canvas_note, crop_rect, canvas_size, resize_crop_at_ms) =
             recording::stop(session)?;
@@ -23079,6 +23079,17 @@ async fn finish_and_continue_recording(
             target, out_path.clone(), show_cursor, audio, video_kbps, video_fps, &canvas_mode, canvas_ceiling, disk_warn_mb, max_min, max_mb,
         ) {
             Ok(new_session) => {
+                // The new part's own clock zero point: the instant its
+                // capture actually came up, not `switch_instant_ms` (that
+                // one only marks when the OLD capture was cut off, taken
+                // BEFORE recording::stop -- encoder/capture setup inside
+                // recording::start above can easily take longer than that,
+                // which used to make every part-2-onward sidecar's offsets
+                // early by the whole switch duration). Keys typed in
+                // between the two instants are never captured by either
+                // side at all: the old capture is cut off, and this one's
+                // hook does not exist until maybe_start below installs it.
+                let new_start_ms = keylog::mono_ms();
                 // Close out the part that just finished -- its own
                 // sidecar, timed from ITS OWN start -- before the new capture
                 // for the continuation part begins. The old code never
@@ -23089,12 +23100,7 @@ async fn finish_and_continue_recording(
                 // ended up holding the whole chain's keys, timed from the
                 // FIRST part's start.
                 keylog::maybe_stop_and_write(&path);
-                // The new part's clock starts at the same switch instant the
-                // old part was cut off at, not at whenever this line happens
-                // to run after recording::start's own setup work -- so the
-                // two parts' offsets meet exactly at the switch with no gap
-                // and no overlap.
-                keylog::maybe_start(key_overlay_on, key_overlay_hold_ms, switch_instant_ms);
+                keylog::maybe_start(key_overlay_on, key_overlay_hold_ms, new_start_ms);
                 // The switch worked -- this part is now an interim one with no
                 // result dialog of its own, so its crop (if any) runs right away
                 // in the background instead of waiting on
