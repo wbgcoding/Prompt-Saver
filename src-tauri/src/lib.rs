@@ -20553,6 +20553,20 @@ struct RecordingPartInfo {
     mic_wav_path: Option<String>,
 }
 
+// A cancel discards the WHOLE take, not just its current file -- every
+// earlier part a "finish and continue" chain already closed goes with it,
+// video, mic audio and its own key-overlay sidecar all three. Best-effort: a
+// missing file (already moved/deleted by the user) is not a reason to fail
+// an otherwise-successful cancel.
+#[cfg(windows)]
+fn remove_recording_part_files(part: &RecordingPartInfo) {
+    let _ = std::fs::remove_file(&part.path);
+    if let Some(w) = &part.mic_wav_path {
+        let _ = std::fs::remove_file(w);
+    }
+    let _ = std::fs::remove_file(keylog::sidecar_path(Path::new(&part.path)));
+}
+
 #[derive(serde::Serialize, Clone)]
 struct RecordingContinuedPayload {
     // The just-finished part's own outcome -- surfaced here (rather than only
@@ -23058,10 +23072,7 @@ async fn cancel_recording(app: AppHandle, rstate: State<'_, RecordingState>) -> 
         // Best-effort from here: a missing file (already moved/deleted by the
         // user) is not a reason to fail an otherwise-successful cancel.
         for part in std::mem::take(&mut *REC_SESSION_PARTS.lock().unwrap_or_else(|e| e.into_inner())) {
-            let _ = std::fs::remove_file(&part.path);
-            if let Some(w) = &part.mic_wav_path {
-                let _ = std::fs::remove_file(w);
-            }
+            remove_recording_part_files(&part);
         }
         Ok(())
     })
@@ -37201,6 +37212,28 @@ mod tests {
         let dir_s = dir.to_string_lossy().to_string();
         assert!(delete_discarded_recording_now(dir_s, "rec-x.mp4".to_string()));
         assert!(!trash.join("rec-x.keys.json").exists(), "a purge for good must not leave the key-overlay sidecar behind");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // A cancel after finish-and-continue used to delete an earlier
+    // part's video and mic audio but leave its key-overlay sidecar behind --
+    // the one file a "fully discarded" take would otherwise still keep.
+    #[cfg(windows)]
+    #[test]
+    fn remove_recording_part_files_takes_the_key_overlay_sidecar_with_it() {
+        let dir = std::env::temp_dir().join(format!("ps-cancel-part-keys-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let video = dir.join("rec-part-2.mp4");
+        let mic = dir.join("rec-part-2.mic.wav");
+        let keys = dir.join("rec-part-2.keys.json");
+        fs::write(&video, b"video").unwrap();
+        fs::write(&mic, b"mic").unwrap();
+        fs::write(&keys, b"{}").unwrap();
+        let part = RecordingPartInfo { path: video.to_string_lossy().to_string(), mic_wav_path: Some(mic.to_string_lossy().to_string()) };
+        remove_recording_part_files(&part);
+        assert!(!video.exists());
+        assert!(!mic.exists());
+        assert!(!keys.exists(), "cancelling a take must not leave an earlier part's recorded keys behind");
         let _ = fs::remove_dir_all(&dir);
     }
 
