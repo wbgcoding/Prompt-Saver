@@ -21157,26 +21157,43 @@ mod keylog {
     }
 
     fn consumer_thread_main(rx: Receiver<RawKey>, clock: Arc<Mutex<ActiveClock>>, cutoff: Arc<Mutex<Option<u64>>>) -> KeySidecar {
-        unsafe {
-            // MTA, not STA: an apartment-threaded COM object needs its own
-            // message pump for cross-thread calls (the focus-changed event
-            // above fires from a different thread) to ever be delivered, and
-            // this thread runs no pump beyond its own blocking channel
-            // recv()/recv_timeout() loop. MTA calls land directly instead.
-            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-        }
-        let uia: Option<IUIAutomation> = unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) }.ok();
-        // Bound every UIA call this thread makes -- a hung target app must
-        // never stall key processing (and therefore stop()) indefinitely.
-        if let Some(uia) = &uia {
-            if let Ok(uia2) = uia.cast::<IUIAutomation2>() {
-                unsafe {
-                    let _ = uia2.SetConnectionTimeout(UIA_TIMEOUT_MS);
-                    let _ = uia2.SetTransactionTimeout(UIA_TIMEOUT_MS);
-                }
+        // MTA, not STA: an apartment-threaded COM object needs its own
+        // message pump for cross-thread calls (the focus-changed event
+        // above fires from a different thread) to ever be delivered, and
+        // this thread runs no pump beyond its own blocking channel
+        // recv()/recv_timeout() loop. MTA calls land directly instead.
+        //
+        // Every step from here through the two timeout setters must
+        // actually succeed before this thread makes a single further UIA
+        // call: SetConnectionTimeout/SetTransactionTimeout exist precisely
+        // to keep a hung target application from blocking a UIA call (and
+        // therefore stop()) forever, so if they cannot be confirmed to be
+        // in effect, no UIA call is safe to make at all -- `uia` is thrown
+        // away and every check falls back to `focused_password`'s own
+        // fail-closed answer for a missing UI Automation object.
+        let co_init_ok = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }.is_ok();
+        let mut uia: Option<IUIAutomation> = None;
+        let mut uia_ready = false;
+        if co_init_ok {
+            uia = unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) }.ok();
+            if let Some(candidate) = &uia {
+                uia_ready = match candidate.cast::<IUIAutomation2>() {
+                    Ok(uia2) => unsafe { uia2.SetConnectionTimeout(UIA_TIMEOUT_MS).is_ok() && uia2.SetTransactionTimeout(UIA_TIMEOUT_MS).is_ok() },
+                    Err(_) => false,
+                };
             }
         }
+        if !uia_ready {
+            uia = None;
+        }
         let ledger = Arc::new(Mutex::new(Ledger::default()));
+        if !uia_ready {
+            // Same fail-closed outcome as a failed handler registration
+            // below, reached here instead because there is no bounded UIA
+            // object to even try registering a handler on.
+            ledger.lock().unwrap_or_else(|e| e.into_inner()).gap_everything();
+            append_crash_log("key overlay: could not set up UI Automation with a bounded timeout, gapping every key this session");
+        }
         // Confirm the focus state once, synchronously, before the first key
         // can possibly be judged -- see Ledger::qualifying_check: a key with
         // no check starting at or after its own SETTLE_MS deadline has no
@@ -21311,8 +21328,13 @@ mod keylog {
         // already-torn-down apartment.
         drop(focus_handler);
         drop(uia);
-        unsafe {
-            CoUninitialize();
+        if co_init_ok {
+            // Only ever balanced against a CoInitializeEx that actually
+            // succeeded -- calling this after a failed init would be its
+            // own COM misuse on top of whatever made init fail.
+            unsafe {
+                CoUninitialize();
+            }
         }
         rec.sidecar
     }
@@ -21389,6 +21411,30 @@ mod keylog {
         Some(KeyCapture { hook: Some(hook), consumer_thread, hold_ms, clock, cutoff })
     }
 
+    // How long stop() waits for the consumer thread before giving up on it
+    // -- generous for a real UIA round-trip, but never unbounded. A hung
+    // provider must never be able to freeze the app's own "stop recording"
+    // action just because this thread happened to be blocked inside a UIA
+    // call when it was asked to.
+    const STOP_JOIN_BOUND_MS: u64 = 5_000;
+
+    // Polls `is_finished()` rather than blocking on `join()` itself, which
+    // has no timeout of its own. On a timeout the handle is simply dropped
+    // (never joined), which detaches the thread -- it keeps running to
+    // completion on its own instead of the caller waiting on it. Generic
+    // and Windows-API-free on purpose, so the bound itself is directly
+    // testable with an ordinary thread.
+    fn join_bounded<T: Send + 'static>(handle: JoinHandle<T>, bound: Duration) -> Option<T> {
+        let deadline = Instant::now() + bound;
+        while !handle.is_finished() {
+            if Instant::now() >= deadline {
+                return None;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        handle.join().ok()
+    }
+
     fn stop(mut capture: KeyCapture) -> KeySidecar {
         // Already unhooked when stop() catches a still-paused capture --
         // nothing to tear down there, the consumer is just blocked on
@@ -21398,9 +21444,16 @@ mod keylog {
         }
         // Dropping the sender (clearing the slot) closes the channel, which
         // ends the consumer thread's recv() loop so it returns the finished
-        // sidecar below.
+        // sidecar below -- unless it is stuck somewhere that never reads
+        // the channel at all, which is exactly what the bound below is for.
         *raw_tx_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
-        let mut sidecar = capture.consumer_thread.join().unwrap_or_default();
+        let mut sidecar = match join_bounded(capture.consumer_thread, Duration::from_millis(STOP_JOIN_BOUND_MS)) {
+            Some(sidecar) => sidecar,
+            None => {
+                append_crash_log("key overlay: consumer thread did not stop in time, detaching it and reporting no captured keys");
+                KeySidecar::default()
+            }
+        };
         sidecar.hold_ms = capture.hold_ms;
         sidecar
     }
@@ -21762,6 +21815,30 @@ mod keylog {
             assert!(ledger.arrivals.len() < arrivals_before, "the ancient arrival must actually be gone");
             assert_eq!(verdict(&ledger, resolved_key, false), before_resolved, "pruning must never change an already-settled verdict");
             assert_eq!(verdict(&ledger, pending_key, false), before_pending, "pruning must never change a still-pending verdict either");
+        }
+
+        #[test]
+        fn join_bounded_returns_the_result_once_the_thread_actually_finishes() {
+            let handle = thread::spawn(|| {
+                thread::sleep(Duration::from_millis(20));
+                42
+            });
+            assert_eq!(join_bounded(handle, Duration::from_millis(2_000)), Some(42));
+        }
+
+        #[test]
+        fn join_bounded_gives_up_and_detaches_a_thread_that_outlives_the_bound() {
+            // A thread that runs well past the bound -- standing in for a
+            // consumer stuck inside a hung UIA call. join_bounded must
+            // return quickly with None rather than waiting for it, letting
+            // the thread finish on its own in the background.
+            let handle = thread::spawn(|| {
+                thread::sleep(Duration::from_millis(500));
+                "done"
+            });
+            let started = Instant::now();
+            assert_eq!(join_bounded(handle, Duration::from_millis(50)), None);
+            assert!(started.elapsed() < Duration::from_millis(500), "must give up at the bound, not wait for the thread");
         }
 
         // --- ActiveClock: pause drops events, and offsets use the
