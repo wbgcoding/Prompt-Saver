@@ -34734,8 +34734,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
-    // "uebernehmen" (adopt): the copy lands, the source is untouched, and — since
-    // the same source is asked about — a remembered decision stops a second offer.
+    // "uebernehmen" (adopt): the copy lands, the source is untouched, and; since
+    // the same source is asked about: a remembered decision stops a second offer.
     #[test]
     fn takeover_decision_adopt_is_remembered_and_stops_a_future_offer() {
         let root = std::env::temp_dir().join(format!("{}-test-takeover-decision-adopt", brand::SLUG));
@@ -35323,7 +35323,7 @@ mod tests {
         }
         std::fs::write(&planted, br#"{"error":"forged"}"#).unwrap();
         // `second` is the pending nonce and no file exists under it, so this is
-        // "still running" — the planted file must not be read at all.
+        // "still running": the planted file must not be read at all.
         assert!(matches!(ocr::elevated_capabilities_result(ocr::CapKind::Ocr), Ok(None)));
         assert!(planted.exists(), "a file the app never asked for must be left untouched");
         let _ = std::fs::remove_file(&planted);
@@ -35466,7 +35466,7 @@ mod tests {
 
     // import_prompts refuses a file that changed since preview_import hashed
     // it (the real gate is a one-line `!=` compare in import_prompts itself,
-    // which needs a live AppHandle to exercise directly — this proves the
+    // which needs a live AppHandle to exercise directly: this proves the
     // hash it compares against actually distinguishes an edited file from
     // the original and is stable for an unchanged one).
     #[test]
@@ -35480,7 +35480,7 @@ mod tests {
     #[test]
     fn a_theme_that_no_longer_ships_falls_back_to_system() {
         let mut s = Settings::default();
-        // Themes dropped in 2.7.0 — an installation set to one of them must still
+        // Themes dropped in 2.7.0: an installation set to one of them must still
         // start with a full set of colour tokens.
         for gone in ["gradient", "sunset", "forest", "midnight", "retro", "lavender", "candy", "coffee"] {
             assert_eq!(theme_base_of(&s, gone), "system", "{gone} should fall back");
@@ -35499,7 +35499,7 @@ mod tests {
 
     #[test]
     fn stored_ai_theme_migrates_to_neon_not_system() {
-        // "ai" was renamed to "neon" — a saved preference must land on the
+        // "ai" was renamed to "neon": a saved preference must land on the
         // renamed theme, not fall through known_theme() to "system".
         let mut s = Settings { theme: "ai".into(), ..Default::default() };
         s.custom_themes.push(CustomTheme {
@@ -35620,10 +35620,10 @@ mod tests {
         assert_eq!(updated.color, p.color);
         assert_eq!(updated.tags, p.tags);
         assert_eq!(updated.notes, p.notes);
-        // The closing newline the writer adds is the file's, not the prompt's — a
+        // The closing newline the writer adds is the file's, not the prompt's: a
         // round trip must hand back exactly the text that went in.
         assert_eq!(updated.text, "Hello\nWorld");
-        // Re-serializing the round-tripped prompt must be byte-identical — otherwise
+        // Re-serializing the round-tripped prompt must be byte-identical: otherwise
         // sync_write_all()'s "only write if content differs" guard would loop forever.
         assert_eq!(prompt_to_md(&updated, &SyncPlacement::default()), content);
     }
@@ -35812,7 +35812,7 @@ mod tests {
     }
 
     // Re-importing a placement that already matches (only the prompt's TEXT
-    // changed on the other machine, not its position) must leave the cell alone —
+    // changed on the other machine, not its position) must leave the cell alone:
     // sync_resolve_cell must not see the prompt's own existing entry as a
     // collision with itself.
     #[test]
@@ -35877,7 +35877,7 @@ mod tests {
     }
 
     // A field the key is entirely ABSENT for (as opposed to present-but-empty)
-    // means "this file predates the six placement fields" — must NOT be read as a
+    // means "this file predates the six placement fields": must NOT be read as a
     // leave instruction, or every legacy sync file would strip every prompt out
     // of every folder the moment this version first polls it.
     #[test]
@@ -35891,7 +35891,7 @@ mod tests {
     }
 
     // An unusable folder name (rejected by folder_name_of) must fall through to
-    // plain grid placement instead of claiming grid_placed=true for nothing — a
+    // plain grid placement instead of claiming grid_placed=true for nothing: a
     // brand-new prompt imported this way would otherwise land nowhere at all,
     // invisible in every view.
     #[test]
@@ -35952,7 +35952,7 @@ mod tests {
         let mut folders = vec![test_tile_folder("f1", "v1", [0, 0], &["p1"])];
         sync_normalize_tile_folders(&mut folders, &ids, &view_ids);
         assert_eq!(folders.len(), 1, "a still-forming folder must survive a sync-triggered normalize");
-        // But a genuinely empty folder (its only member vanished) still goes —
+        // But a genuinely empty folder (its only member vanished) still goes:
         // and the general, UI-facing normalize still dissolves anything under 2.
         let mut empty = vec![test_tile_folder("f2", "v1", [1, 0], &["gone"])];
         sync_normalize_tile_folders(&mut empty, &ids, &view_ids);
