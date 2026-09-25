@@ -8,7 +8,8 @@
 </head>
 <body>
   <div id="bar" class="rec-bar">
-    <span id="dot" class="rec-dot"></span>
+    <span id="dot" class="rec-dot" aria-hidden="true"></span>
+    <span id="dot-label" class="rec-dot-label" data-i18n="recLiveLabel">REC</span>
     <span id="time" class="rec-time">00:00</span>
     <span id="size" class="rec-size"></span>
     <button id="audio-sys" type="button" class="rec-audio rec-audio-btn hidden">
@@ -67,6 +68,8 @@
       </svg>
     </button>
   </div>
+
+  <div id="live" class="sr-only" role="status" aria-live="polite"></div>
 
   <script type="module" src="recbar.js"></script>
 </body>

@@ -18,6 +18,7 @@ const { listen } = window.__TAURI__.event;
 const { getCurrentWebviewWindow } = window.__TAURI__.webviewWindow;
 
 const appWin = getCurrentWebviewWindow();
+let copiedText = ""; // localized "Copied!", re-announced on every copy (see showCopied)
 const promptId = appWin.label.replace(/^float-/, "");
 
 const pill = document.getElementById("pill");
@@ -196,7 +197,8 @@ async function applyTexts(s) {
   const { applyTerms } = await import("./terms.js");
   const t = Object.fromEntries(
     Object.entries(TXT[lang]).map(([k, v]) => [k, applyTerms(v, lang)]));
-  document.getElementById("feedback").textContent = t.copied;
+  copiedText = t.copied;
+  document.getElementById("feedback").textContent = copiedText;
   document.getElementById("size-label").textContent = t.size;
   // Localized tooltip for the S/M/L size buttons (visible letters stay universal).
   for (const b of document.querySelectorAll(".size-row [data-scale]")) {
@@ -513,6 +515,11 @@ function showCopied() {
   const fb = document.getElementById("feedback");
   if (copySize > 0) fb.style.fontSize = `${copySize}px`;
   else fitText(fb, pill.clientWidth - 10, pill.clientHeight - 6, 120);
+  // Cleared and reset rather than left alone: the text never actually changed
+  // since the pill was made, so a screen reader needs an actual mutation to
+  // announce it again on a second copy in a row.
+  fb.textContent = "";
+  fb.textContent = copiedText;
   pill.classList.add("copied");
   clearTimeout(copiedTimer);
   copiedTimer = setTimeout(() => pill.classList.remove("copied"), COPIED_MS);

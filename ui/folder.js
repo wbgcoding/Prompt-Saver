@@ -315,6 +315,9 @@ function flash(id) {
     setTimeout(() => tile.classList.remove("copied"), COPIED_MS);
   }
   if (copySoundOn) playCopySound(copySoundVolume);
+  const live = document.getElementById("live");
+  live.textContent = "";
+  live.textContent = TXT.copied;
 }
 
 async function copyMember(id) {
