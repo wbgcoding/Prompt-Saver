@@ -1116,6 +1116,11 @@ the video editor and the introduction tour ship on).
   complete the same prompt, so a one-off decline now offers "try again"; only
   a computer whose policy blocks the prompt outright shows the "blocked"
   message with no retry button.
+- **The compare view could open behind the duplicate finder, the raised
+  library or the edit dialog's similar-prompt hint**, and Escape closed
+  whichever of those sat underneath it instead of the compare view itself.
+  It now always stacks above the dialog it was opened from, and both Tab and
+  Escape reach it first.
 
 ### Security
 
@@ -1261,6 +1266,8 @@ the video editor and the introduction tour ship on).
 - **The screenshot editor's zoom step and maximum zoom are now tunable in the
   expert menu** and match the video editor's own defaults, replacing its
   separate hardcoded values.
+- **The duplicate finder's compare view now shows one "keep this one" button
+  under each entry** instead of a row of identical buttons below both columns.
 
 ## 2.6.3 (2026-07-26)
 
