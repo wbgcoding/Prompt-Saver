@@ -2710,6 +2710,7 @@ function flagRow(key) {
       const msg = String(err);
       if (msg.startsWith("sync-backup-failed")) toast(t("syncBackupFailed"));
       else if (msg.startsWith("sync-write-failed")) toast(t("syncWriteFailed"));
+      else if (msg === "demo-mode-active") toast(t("demoModeMultipleInstances"));
       else toast(msg);
       settings.ui_flags = { ...(settings.ui_flags || {}), [key]: !enabled };
       input.checked = !enabled;
